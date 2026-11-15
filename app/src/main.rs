@@ -9,6 +9,7 @@ mod collaborator;
 mod collaborator_ui;
 mod editor;
 mod feedback;
+mod gl_env;
 mod h2;
 mod history_filter;
 mod net;
@@ -273,6 +274,9 @@ fn schedule_grab(ctx: &egui::Context, path: &PathBuf, rect: egui::Rect, done: Ar
 }
 
 fn main() {
+    // Must run before any thread or window exists (see gl_env for why).
+    gl_env::apply();
+
     let mut screenshot: Option<PathBuf> = None;
     let args: Vec<String> = std::env::args().collect();
     let mut i = 1;

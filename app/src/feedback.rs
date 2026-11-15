@@ -88,7 +88,7 @@ impl Toasts {
                         .show(ui, |ui| {
                             ui.horizontal(|ui| {
                                 ui.label(RichText::new(t.text.clone()).size(12.0).color(t.level.colour()));
-                                if ui.small_button("✕").clicked() {
+                                if ui.small_button("\u{00D7}").clicked() {
                                     dismiss = Some(i);
                                 }
                             });

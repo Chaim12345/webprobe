@@ -56,7 +56,22 @@ pub fn status_color(s: &str) -> Color32 {
 }
 
 pub fn apply(ctx: &egui::Context) {
+    install_fonts(ctx);
     apply_as(ctx, Palette::Dark, Density::Comfortable, 1.0);
+}
+
+/// egui's proportional faces lack some arrows and symbols the UI prints, and a
+/// missing glyph draws as a box. Hack (the bundled monospace face) has them, so
+/// it joins the proportional family as a last-resort fallback. Call once at
+/// start-up: replacing the fonts rebuilds the glyph atlas.
+pub fn install_fonts(ctx: &egui::Context) {
+    let mut fonts = egui::FontDefinitions::default();
+    if let Some(family) = fonts.families.get_mut(&egui::FontFamily::Proportional) {
+        if !family.iter().any(|name| name == "Hack") {
+            family.push("Hack".to_owned());
+        }
+    }
+    ctx.set_fonts(fonts);
 }
 
 // ---------- design tokens (M-01) ----------
@@ -315,4 +330,40 @@ pub fn set_appearance(palette: Palette, density: Density, font_scale: f32) {
 pub fn apply_current(ctx: &egui::Context) {
     let (palette, density, scale) = appearance();
     apply_as(ctx, palette, density, scale);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every non-ASCII character the UI prints. Add one here when you print a new one.
+    const UI_GLYPHS: &[char] = &[
+        '\u{2192}', // right arrow
+        '\u{2014}', // em dash
+        '\u{2026}', // ellipsis
+        '\u{00B7}', // middle dot
+        '\u{00D7}', // multiplication sign
+        '\u{2191}', // up arrow
+        '\u{2193}', // down arrow
+        '\u{25BE}', // small down triangle
+        '\u{2195}', // up-down arrow (table sort hint)
+        '\u{25BC}', // down triangle (table sort arrow)
+    ];
+
+    fn missing(ctx: &egui::Context) -> Vec<char> {
+        // Fonts are (re)built at the start of a pass.
+        let _ = ctx.run(egui::RawInput::default(), |_| {});
+        let font = egui::FontId::proportional(13.0);
+        ctx.fonts(|f| UI_GLYPHS.iter().copied().filter(|&c| !f.has_glyph(&font, c)).collect())
+    }
+
+    #[test]
+    fn every_glyph_the_ui_prints_can_be_drawn() {
+        let stock = egui::Context::default();
+        eprintln!("missing with egui's stock fonts: {:?}", missing(&stock));
+        let ctx = egui::Context::default();
+        install_fonts(&ctx);
+        let missing = missing(&ctx);
+        assert!(missing.is_empty(), "these would draw as boxes: {missing:?}");
+    }
 }

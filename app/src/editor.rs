@@ -333,12 +333,6 @@ pub fn message_view_inner(
         });
 }
 
-/// Read-only view for raw bytes (lossy UTF-8), used for hex/raw previews.
-pub fn bytes_view(ui: &mut Ui, id: &str, bytes: &[u8], limit: usize, state: &mut EditorState) {
-    let text = String::from_utf8_lossy(&bytes[..bytes.len().min(limit)]).into_owned();
-    message_view(ui, id, &text, state);
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

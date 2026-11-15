@@ -1009,6 +1009,12 @@ pub fn set_listeners(shared: &Arc<Shared>, specs: Vec<ListenerSpec>) -> Result<(
     Ok(())
 }
 
+/// The extra listeners' configuration, for editing and re-applying with
+/// `set_listeners`.
+pub fn listener_specs(shared: &Arc<Shared>) -> Vec<ListenerSpec> {
+    shared.listeners.lock().unwrap().iter().map(|l| l.spec.clone()).collect()
+}
+
 /// Listener status for the UI: primary listener plus extras, each as
 /// (address, running, last error).
 pub fn listener_status(shared: &Arc<Shared>) -> Vec<(String, bool, Option<String>)> {
@@ -2407,6 +2413,10 @@ mod tests {
         // primary + one extra
         assert_eq!(status.len(), 2);
         assert!(status[1].0.ends_with(":8081"));
+        assert_eq!(
+            listener_specs(&shared),
+            vec![ListenerSpec { bind: "127.0.0.1".into(), port: 8081 }]
+        );
     }
 
     /// A-07: replacing the listener set leaves history intact.

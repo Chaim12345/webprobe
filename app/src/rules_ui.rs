@@ -24,7 +24,7 @@ pub fn rules_editor(ui: &mut egui::Ui, rules: &mut Vec<MrRule>, request_side: bo
     }
 
     let count = rules.len();
-    egui::ScrollArea::horizontal().show(ui, |scroll_ui| {
+    egui::ScrollArea::horizontal().id_salt(("mr_scroll", request_side)).show(ui, |scroll_ui| {
         egui::Grid::new(("mr_rules", request_side))
             .striped(true)
             .num_columns(8)

@@ -87,6 +87,12 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
             run_shortcut(app, idx);
         }
     }
+    // Command palette (Ctrl+K) and the Settings window are drawn above every tab.
+    if let Some(idx) = crate::shortcuts::palette_ui(&mut app.palette, &mut app.shortcuts, ctx) {
+        run_shortcut(app, idx);
+    }
+    settings_window(app, ctx);
+    app.toasts.show(ctx);
 
     egui::TopBottomPanel::top("main_bar")
         .exact_height(30.0)
@@ -249,14 +255,44 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
             Tab::Scanner => scanner(app, ui),
             Tab::Intruder => intruder(app, ui),
             Tab::Repeater => repeater(app, ui),
-            Tab::Sequencer => sequencer(app, ui),
+            Tab::Sequencer => crate::tools::sequencer(app, ui),
             Tab::Comparer => comparer(app, ui),
-            Tab::Sessions => sessions(app, ui),
+            Tab::Sessions => crate::tools::sessions(app, ui),
             Tab::Decoder => decoder(app, ui),
-            Tab::Search => search(app, ui),
-            Tab::Collaborator => crate::collaborator_ui::collaborator(app, ui),
-            Tab::Extensions => extensions(app, ui),
+            Tab::Search => crate::tools::search(app, ui),
+            Tab::Collaborator => crate::collaborator_ui::show(&mut app.collab_state, ui),
+            Tab::Extensions => crate::tools::extensions(app, ui),
         });
+}
+
+/// Most matching history rows laid out in one go. Older rows stay in the model,
+/// they are just not drawn (N-02).
+const HISTORY_RENDER_LIMIT: usize = 1000;
+
+/// The rows the history table shows: newest first, filtered, sorted, then capped.
+/// The order of those steps is the contract: the filter and the sort see the
+/// whole list and only the result is cut, otherwise an old match or the true
+/// top of a sort would silently vanish behind the cap. Pure, so it is tested.
+fn history_view(
+    history: &[net::HistEntry],
+    keep: impl Fn(&net::HistEntry) -> bool,
+    sort: &table::TableState,
+) -> (Vec<net::HistEntry>, bool) {
+    let mut rows: Vec<net::HistEntry> = history.iter().rev().filter(|e| keep(e)).cloned().collect();
+    table::sort_rows(&mut rows, sort, |e, col| match col {
+        0 => format!("{:020}", e.id),
+        1 => e.method.clone(),
+        2 => format!("{}:{:05}", e.host, e.port),
+        3 => e.path.clone(),
+        4 => e.status.clone(),
+        5 => format!("{:010}", e.resp_len),
+        6 => crate::history_filter::HistoryFilter::mime_of(e),
+        7 => if e.https { "https".to_string() } else { "http".to_string() },
+        _ => String::new(),
+    });
+    let truncated = rows.len() > HISTORY_RENDER_LIMIT;
+    rows.truncate(HISTORY_RENDER_LIMIT);
+    (rows, truncated)
 }
 
 /// Proxy > HTTP history (B-01).
@@ -282,30 +318,10 @@ fn proxy_history(app: &mut App, ui: &mut Ui) {
         app.hist_table.sort_asc,
     );
     let (rows, truncated) = if key != app.hist_cache_key || total < app.hist_cache_len {
-        let mut rows: Vec<net::HistEntry> = {
+        let (rows, truncated) = {
             let history = app.shared.history.lock().unwrap();
-            let filter = &app.hist_filter;
-            let shared = &app.shared;
-            history
-                .iter()
-                .rev()
-                .filter(|e| filter.matches(e, shared))
-                .cloned()
-                .collect()
+            history_view(&history, |e| app.hist_filter.matches(e, &app.shared), &app.hist_table)
         };
-        table::sort_rows(&mut rows, &app.hist_table, |e, col| match col {
-            0 => format!("{:020}", e.id),
-            1 => e.method.clone(),
-            2 => format!("{}:{:05}", e.host, e.port),
-            3 => e.path.clone(),
-            4 => e.status.clone(),
-            5 => format!("{:010}", e.resp_len),
-            6 => crate::history_filter::HistoryFilter::mime_of(e),
-            7 => if e.https { "https".to_string() } else { "http".to_string() },
-            _ => String::new(),
-        });
-        let truncated = rows.len() > HISTORY_RENDER_LIMIT;
-        rows.truncate(HISTORY_RENDER_LIMIT);
         app.hist_cache_len = total;
         app.hist_cache = rows;
         app.hist_cache_truncated = truncated;
@@ -314,6 +330,18 @@ fn proxy_history(app: &mut App, ui: &mut Ui) {
     } else {
         (app.hist_cache.clone(), app.hist_cache_truncated)
     };
+
+    // B-01 filter bar, between the sub-tabs and the table. An edit is picked up
+    // by the cache key on the next frame (the app repaints continuously).
+    let regex_broken = app.hist_filter.ui(ui, &app.shared, rows.len(), total);
+    if regex_broken {
+        ui.label(
+            RichText::new("That is not a valid regular expression.")
+                .size(11.0)
+                .color(c(theme::BAD)),
+        );
+    }
+    ui.add_space(2.0);
 
     let columns = [
         table::Column::right("#", 46.0),
@@ -455,6 +483,8 @@ fn proxy_options(app: &mut App, ui: &mut Ui) {
             }
         }
     });
+    ui.add_space(8.0);
+    listeners_panel(app, ui, true);
     ui.add_space(10.0);
     facts(ui, &[
         ("connect timeout", "120 s (ProjectDefaults.json)"),
@@ -1021,7 +1051,7 @@ fn run_shortcut(app: &mut App, idx: usize) {
             }
             send_history_to_intruder(app);
         }
-        "forward_intercepted_proxy_message" => intercept_forward(app),
+        "forward_intercepted_proxy_message" => net::intercept_forward(&app.shared, false),
         "toggle_proxy_interception" => {
             let now = !app.shared.intercept_on.load(Ordering::SeqCst);
             app.shared.intercept_on.store(now, Ordering::SeqCst);
@@ -1097,12 +1127,423 @@ pub fn send_history_to_intruder(app: &mut App) {
     }
 }
 
+/// A muted one-line explanation under a heading.
+fn hint(ui: &mut Ui, text: &str) {
+    ui.label(
+        RichText::new(text)
+            .size(11.0)
+            .color(c(theme::MONO4)),
+    );
+}
+
+// ================= Proxy =================
+
+/// Small inline sub-tab strip. Returns the newly selected index, if any.
+fn sub_tabs(ui: &mut Ui, labels: &[&str], current: usize) -> Option<usize> {
+    let mut picked = None;
+    ui.horizontal(|ui| {
+        for (i, label) in labels.iter().enumerate() {
+            let sel = i == current;
+            let text = RichText::new(*label)
+                .size(12.5)
+                .color(c(if sel { theme::ORANGE } else { theme::MONO6 }));
+            if ui.selectable_label(sel, text).clicked() {
+                picked = Some(i);
+            }
+            ui.add_space(4.0);
+        }
+    });
+    picked
+}
+
+fn proxy(app: &mut App, ui: &mut Ui) {
+    let waiting = app.shared.count_waiting();
+    let on = app.shared.intercept_on.load(Ordering::SeqCst);
+    ui.horizontal(|ui| {
+        let label = if on {
+            "Intercept is ON - click to turn off"
+        } else {
+            "Intercept is OFF - click to turn on"
+        };
+        let text = RichText::new(label)
+            .color(c(if on { theme::ORANGE } else { theme::MONO6 }))
+            .size(13.0);
+        if ui.button(text).clicked() {
+            app.shared.intercept_on.store(!on, Ordering::SeqCst);
+        }
+        ui.add_space(12.0);
+        ui.label(
+            RichText::new(format!("held: {waiting}"))
+                .size(12.0)
+                .color(c(theme::MONO6)),
+        );
+    });
+    ui.add_space(6.0);
+
+    if let Some(sub) = sub_tabs(ui, &["Intercept", "HTTP history", "WebSockets", "Options"], app.proxy_sub) {
+        app.proxy_sub = sub;
+    }
+    match app.proxy_sub {
+        0 => proxy_intercept(app, ui),
+        1 => proxy_history(app, ui),
+        2 => crate::tools::websocket_history(app, ui),
+        _ => proxy_options(app, ui),
+    }
+}
+
+fn proxy_intercept(app: &mut App, ui: &mut Ui) {
+    let held = {
+        let mut q = app.shared.queue.lock().unwrap();
+        q.pop()
+    };
+
+    let Some(mut item) = held else {
+        ui.add_space(24.0);
+        hint(ui, "Nothing held.");
+        return;
+    };
+
+    ui.label(
+        RichText::new(format!("{}://{}:{}{}", if item.port == 443 { "https" } else { "http" }, item.host, item.port, ""))
+            .monospace()
+            .size(12.0)
+            .color(c(theme::HEADER_BLUE)),
+    );
+    ui.add_space(4.0);
+    ui.label(
+        RichText::new("Edit the message, then Forward; or Drop it. Nothing reaches the server until you forward.")
+            .size(11.0)
+            .color(c(theme::MONO4)),
+    );
+    ui.add_space(6.0);
+    editor::message_editor(ui, "intercept_edit", &mut item.edited, 16, &mut app.intercept_editor);
+    ui.add_space(6.0);
+    ui.horizontal(|ui| {
+        if ui.button(RichText::new("Forward").color(c(theme::GOOD))).clicked() {
+            let _ = item.tx.send(Some(item.edited.clone()));
+            app.shared.log(&format!("forwarded {} request", item.host));
+        }
+        if ui.button(RichText::new("Drop").color(c(theme::BAD))).clicked() {
+            let _ = item.tx.send(None);
+            app.shared.log(&format!("dropped {} request", item.host));
+        }
+        ui.add_space(10.0);
+        hint(ui, "Forwarding is final: the request is sent and the response is recorded.");
+    });
+}
+
+// ================= Listeners (A-07) =================
+
+/// Every proxy listener with its state. The first row is the primary listener
+/// (the port box in Proxy > Options); the rest are extra bind:port pairs.
+/// `editable` adds the add/remove controls. A failed bind shows its error here
+/// instead of a quiet status dot.
+fn listeners_panel(app: &mut App, ui: &mut Ui, editable: bool) {
+    ui.label(RichText::new("Listeners").size(13.0).strong().color(c(theme::MONO7)));
+    ui.add_space(2.0);
+    let mut remove: Option<usize> = None;
+    for (i, (addr, running, error)) in net::listener_status(&app.shared).iter().enumerate() {
+        ui.horizontal(|ui| {
+            let (word, colour) = if *running { ("running", theme::GOOD) } else { ("stopped", theme::BAD) };
+            ui.label(RichText::new(word).size(11.5).color(c(colour)));
+            ui.label(RichText::new(addr.as_str()).monospace().size(12.0).color(c(theme::EDITOR_TEXT)));
+            if let Some(err) = error {
+                ui.label(RichText::new(err.as_str()).size(11.5).color(c(theme::BAD)));
+            }
+            if editable && i > 0 && ui.small_button("Remove").clicked() {
+                remove = Some(i - 1);
+            }
+        });
+    }
+    if let Some(index) = remove {
+        let mut specs = net::listener_specs(&app.shared);
+        specs.remove(index);
+        if let Err(e) = net::set_listeners(&app.shared, specs) {
+            feedback::toast(feedback::Level::Error, e);
+        }
+    }
+    if !editable {
+        return;
+    }
+
+    // The draft row lives in egui's temp memory, so it needs no App field.
+    let id = ui.id().with("new_listener");
+    let (mut bind, mut port): (String, String) = ui
+        .data_mut(|d| d.get_temp(id))
+        .unwrap_or_else(|| ("127.0.0.1".to_string(), String::new()));
+    ui.horizontal(|ui| {
+        ui.label(RichText::new("bind").size(12.0).color(c(theme::MONO6)));
+        ui.add(egui::TextEdit::singleline(&mut bind).desired_width(120.0).font(egui::TextStyle::Monospace));
+        ui.label(RichText::new("port").size(12.0).color(c(theme::MONO6)));
+        ui.add(egui::TextEdit::singleline(&mut port).desired_width(60.0).font(egui::TextStyle::Monospace));
+        if ui.button("Add listener").clicked() {
+            match port.trim().parse::<u16>() {
+                Ok(p) => {
+                    let mut specs = net::listener_specs(&app.shared);
+                    specs.push(net::ListenerSpec { bind: bind.trim().to_string(), port: p });
+                    match net::set_listeners(&app.shared, specs) {
+                        Ok(()) => {
+                            feedback::toast(
+                                feedback::Level::Success,
+                                format!("Listener added on {}:{p}", bind.trim()),
+                            );
+                            port.clear();
+                        }
+                        Err(e) => feedback::toast(feedback::Level::Error, e),
+                    }
+                }
+                Err(_) => feedback::toast(feedback::Level::Error, "Port must be 1-65535"),
+            }
+        }
+    });
+    ui.data_mut(|d| d.insert_temp(id, (bind, port)));
+    hint(ui, "Extra listeners keep the history and every other setting; the primary port is set above.");
+}
+
+// ================= Settings window =================
+
+/// Which page of the Settings window is showing (Burp: Settings is its own
+/// window, not a tab).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum SettingsPane {
+    Appearance,
+    Hotkeys,
+}
+
+fn settings_window(app: &mut App, ctx: &egui::Context) {
+    if !app.settings_open {
+        return;
+    }
+    let mut open = app.settings_open;
+    let mut close = false;
+    egui::Window::new("Settings")
+        .open(&mut open)
+        .default_pos(ctx.screen_rect().center() - egui::vec2(310.0, 260.0))
+        .resizable(true)
+        .default_width(620.0)
+        .default_height(520.0)
+        .show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                for (name, pane) in [
+                    ("Appearance", SettingsPane::Appearance),
+                    ("Hotkeys", SettingsPane::Hotkeys),
+                ] {
+                    if ui.selectable_label(app.settings_help == pane, name).clicked() {
+                        app.settings_help = pane;
+                    }
+                }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.small_button("Close").clicked() {
+                        close = true;
+                    }
+                });
+            });
+            ui.separator();
+            match app.settings_help {
+                SettingsPane::Appearance => crate::tools::appearance_options(ui),
+                SettingsPane::Hotkeys => crate::shortcuts::settings_panel(app, ui),
+            }
+        });
+    if !open || close {
+        app.settings_open = false;
+    }
+}
+
+// ================= Dashboard =================
+
+fn dashboard(app: &mut App, ui: &mut Ui) {
+    // M-07: first-run checklist, then the live counters.
+    if !app.onboarding_hidden && crate::onboarding::panel(app, ui) {
+        // panel() returns true once the user dismissed it
+    }
+
+    let total = app.shared.history.lock().map(|h| h.len()).unwrap_or(0);
+    let issues = app.shared.issues.lock().map(|i| i.len()).unwrap_or(0);
+    let scope = app.shared.scope.lock().map(|s| s.len()).unwrap_or(0);
+    let waiting = app.shared.count_waiting();
+
+    ui.add_space(6.0);
+    ui.label(RichText::new("Overview").size(15.0).strong().color(c(theme::MONO7)));
+    ui.add_space(6.0);
+    ui.horizontal(|ui| {
+        for (label, value, colour) in [
+            ("history entries", total, theme::EDITOR_TEXT),
+            ("issues", issues, theme::ORANGE),
+            ("scope rules", scope, theme::METHOD_OTHER),
+            ("held requests", waiting, theme::WARN),
+        ] {
+            egui::Frame::none()
+                .fill(c(theme::MONO1X))
+                .inner_margin(egui::Margin::same(10.0))
+                .stroke(egui::Stroke::new(1.0, c(theme::MONO2)))
+                .show(ui, |ui| {
+                    ui.vertical(|ui| {
+                        ui.label(RichText::new(value.to_string()).size(22.0).strong().color(c(colour)));
+                        ui.label(RichText::new(label).size(11.5).color(c(theme::MONO6)));
+                    });
+                });
+            ui.add_space(8.0);
+        }
+    });
+
+    ui.add_space(12.0);
+    listeners_panel(app, ui, false);
+
+    ui.add_space(12.0);
+    ui.label(RichText::new("Jump to").size(13.0).strong().color(c(theme::MONO7)));
+    ui.add_space(4.0);
+    ui.horizontal(|ui| {
+        for (name, tab) in TABS.iter() {
+            if *tab == Tab::Dashboard {
+                continue;
+            }
+            if ui.button(*name).clicked() {
+                app.tab = *tab;
+            }
+        }
+    });
+
+    ui.add_space(12.0);
+    ui.label(RichText::new("Project").size(13.0).strong().color(c(theme::MONO7)));
+    ui.add_space(4.0);
+    crate::tools::project_controls(app, ui);
+
+    ui.add_space(12.0);
+    ui.label(RichText::new("Recent activity").size(13.0).strong().color(c(theme::MONO7)));
+    ui.add_space(4.0);
+    let events: Vec<String> = app
+        .shared
+        .events
+        .lock()
+        .map(|e| e.iter().rev().take(12).cloned().collect())
+        .unwrap_or_default();
+    if events.is_empty() {
+        hint(ui, "nothing recorded yet");
+    } else {
+        egui::ScrollArea::vertical().max_height(220.0).show(ui, |ui| {
+            for ev in &events {
+                ui.label(RichText::new(ev.clone()).monospace().size(11.5).color(c(theme::MONO6)));
+            }
+        });
+    }
+}
+
+// ================= Target =================
+
+fn target(app: &mut App, ui: &mut Ui) {
+    ui.horizontal(|ui| {
+        ui.label(RichText::new("Target").size(15.0).strong().color(c(theme::MONO7)));
+        ui.add_space(10.0);
+        ui.label(
+            RichText::new(format!("{} hosts", app.target_hosts.len()))
+                .size(11.5)
+                .color(c(theme::MONO6)),
+        );
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui.button("Add to scope").clicked() {
+                if let Some(host) = app.target_host_sel.clone() {
+                    app.shared.scope.lock().unwrap().push(net::ScopeRule {
+                        enabled: true,
+                        include: true,
+                        pattern: regex::escape(&host),
+                        is_regex: true,
+                    });
+                    app.shared.log(&format!("added {host} to scope"));
+                }
+            }
+        });
+    });
+    ui.add_space(4.0);
+    hint(ui, "The site map is built from the proxy history: one leaf per request, grouped by host.");
+    ui.add_space(4.0);
+    egui::CollapsingHeader::new(RichText::new("Target scope").size(13.0).strong().color(c(theme::MONO7)))
+        .default_open(true)
+        .show(ui, |ui| crate::tools::scope_editor(app, ui));
+
+    // Rebuild the host list from the history when it grew (N-02: only on change).
+    let total = app.shared.history.lock().map(|h| h.len()).unwrap_or(0);
+    if total != app.map_cache_len {
+        app.map_cache_len = total;
+        let history = app.shared.history.lock().unwrap();
+        let mut hosts: Vec<String> = history.iter().map(|e| e.host.clone()).collect();
+        hosts.sort();
+        hosts.dedup();
+        app.target_hosts = hosts;
+        app.target_items = history
+            .iter()
+            .map(|e| (e.host.clone(), e.method.clone(), e.path.clone(), e.id))
+            .collect();
+    }
+
+    let columns = [
+        table::Column::new("Host", 220.0),
+        table::Column::new("Method", 60.0),
+        table::Column::new("Path", 420.0),
+    ];
+    ui.add_space(4.0);
+    egui::ScrollArea::vertical().max_height(150.0).show(ui, |ui| {
+        ui.horizontal_wrapped(|ui| {
+            for host in &app.target_hosts {
+                let sel = app.target_host_sel.as_deref() == Some(host.as_str());
+                if ui.selectable_label(sel, host.as_str()).clicked() {
+                    app.target_host_sel = Some(host.clone());
+                }
+            }
+        });
+    });
+    ui.add_space(6.0);
+
+    let selected = app.target_host_sel.clone();
+    let rows: Vec<(String, String, String, u64)> = app
+        .target_items
+        .iter()
+        .filter(|(host, _, _, _)| selected.as_deref().map(|h| h == host).unwrap_or(true))
+        .cloned()
+        .collect();
+    let mut state = app.target_table.clone();
+    let mut choice = None;
+    let row_h = theme::appearance().1.row_height();
+    table::data_table(ui, "target_items", &columns, &rows, &mut state, row_h, |row, ui| {
+        let clicked = ui
+            .horizontal(|ui| {
+                table::cell(ui, &columns[0], row.0.clone(), Some(c(theme::EDITOR_TEXT)), row_h);
+                table::cell(ui, &columns[1], row.1.clone(), Some(theme::method_color(&row.1)), row_h);
+                table::cell(ui, &columns[2], row.2.clone(), Some(c(theme::EDITOR_TEXT)), row_h);
+            })
+            .response
+            .interact(egui::Sense::click())
+            .clicked();
+        if clicked {
+            choice = Some(row.3);
+        }
+    });
+    app.target_table = state;
+    if let Some(id) = choice {
+        app.history_sel = Some(id);
+        app.tab = crate::ui::Tab::Proxy;
+        app.proxy_sub = 1;
+    }
+}
+
+// ================= Comparer =================
+
+/// The two-sided editor and the exact line diff live in `analysis_ui`; this only
+/// supplies the selected history entry for its "selected request/response" buttons.
+fn comparer(app: &mut App, ui: &mut Ui) {
+    let selected = app.history_sel.and_then(|id| {
+        app.shared.history.lock().ok().and_then(|h| h.iter().find(|e| e.id == id).cloned())
+    });
+    crate::analysis_ui::show_comparer(&mut app.comparer_state, selected, ui);
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{history_rows, HISTORY_RENDER_LIMIT};
+    use super::{history_view, HISTORY_RENDER_LIMIT};
+    use crate::net::HistEntry;
+    use crate::table::TableState;
 
-    fn entry(id: u64, host: &str) -> crate::net::HistEntry {
-        crate::net::HistEntry {
+    fn entry(id: u64, host: &str) -> HistEntry {
+        HistEntry {
             id,
             ts: 0,
             method: "GET".to_string(),
@@ -1124,14 +1565,13 @@ mod tests {
             .map(|id| entry(id, if id == 1 { "old.example" } else { "other.example" }))
             .collect();
 
-        let mut state = crate::table::TableState::new();
-        state.filter = "OLD.EXAMPLE".to_string();
-        let (rows, truncated) = history_rows(&history, &state);
+        // The only match is the oldest entry, far behind the render cap.
+        let (rows, truncated) =
+            history_view(&history, |e| e.host.contains("old.example"), &TableState::new());
         assert_eq!(rows.iter().map(|row| row.id).collect::<Vec<_>>(), [1]);
         assert!(!truncated);
 
-        let state = crate::table::TableState::new();
-        let (rows, truncated) = history_rows(&history, &state);
+        let (rows, truncated) = history_view(&history, |_| true, &TableState::new());
         assert_eq!(rows.len(), HISTORY_RENDER_LIMIT);
         assert!(truncated);
         assert_eq!(rows.first().unwrap().id, HISTORY_RENDER_LIMIT as u64 + 1);
@@ -1142,12 +1582,26 @@ mod tests {
     fn history_sorts_by_method_before_limiting() {
         let mut history: Vec<_> = (1..=5).map(|id| entry(id, "example.test")).collect();
         history[0].method = "POST".to_string();
-        let mut state = crate::table::TableState::new();
+        let mut state = TableState::new();
         state.sort_col = 1;
         state.sort_asc = true;
-        let (rows, _) = history_rows(&history, &state);
+        let (rows, _) = history_view(&history, |_| true, &state);
         // Ascending by method: GET rows keep newest-first order, POST sorts last.
         assert_eq!(rows[0].method, "GET");
         assert_eq!(rows[4].method, "POST");
+    }
+
+    #[test]
+    fn the_cap_applies_after_the_sort() {
+        let mut history: Vec<_> = (1..=(HISTORY_RENDER_LIMIT as u64 + 1))
+            .map(|id| entry(id, "example.test"))
+            .collect();
+        history[0].method = "POST".to_string(); // the oldest entry, behind the cap
+        let mut state = TableState::new();
+        state.sort_col = 1;
+        state.sort_asc = false; // POST first
+        let (rows, truncated) = history_view(&history, |_| true, &state);
+        assert!(truncated);
+        assert_eq!(rows[0].id, 1, "the sort must see the whole list before the cap");
     }
 }
