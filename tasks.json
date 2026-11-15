@@ -9,8 +9,8 @@
   "p2": 5,
   "by_status": {
    "done": 19,
-   "in_progress": 4,
-   "todo": 69
+   "in_progress": 5,
+   "todo": 68
   }
  },
  "tasks": [
@@ -130,7 +130,8 @@
    "title": "Response views",
    "acceptance": "Raw / Params / Headers / Hex / Render (HTML) with correct entity decoding; JSON/XML pretty view; image preview",
    "effort": "M",
-   "status": "todo"
+   "status": "todo",
+   "evidence": "P-05 added the history columns and derived fields; B-03 owns the response views (Pretty, Renderer) and the remaining message-pane work."
   },
   {
    "id": "B-04",
@@ -787,11 +788,12 @@
    "title": "HTTP history columns and views",
    "acceptance": "Add Params, Edited, Extension and Title columns; Pretty and Renderer views in the message pane; column chooser exposes all of them",
    "effort": "M",
-   "status": "todo",
+   "status": "in_progress",
    "depends_on": [
     "B-01",
     "B-03"
-   ]
+   ],
+   "evidence": "HistEntry gained params, edited, extension, title, cookies, listener_port; computed once at insert by net::derive_history_fields (query/body/cookie, URL extension, HTML <title>, Set-Cookie join, listener port); record() takes listener_port; project restore recomputes them. History table now 14 columns (# Method Host URL Status Length MIME Extension Title TLS Cookies Port Params Edited) with matching sort keys; live shot p05-history2.png (40 of 40, Params yes on seeded even ids). REMAINING: Pretty and Renderer views in the message pane (moved to B-03). 118 tests pass."
   },
   {
    "id": "P-06",

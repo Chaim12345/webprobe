@@ -344,6 +344,12 @@ fn main() {
                 resp_raw: Some(resp.into_bytes()),
                 https: i % 3 == 0,
                 note: None,
+                params: i % 2 == 0,
+                edited: false,
+                extension: "json".to_string(),
+                title: String::new(),
+                cookies: String::new(),
+                listener_port: 6566,
             });
         }
         shared.next_id.store(base + n as u64, Ordering::SeqCst);

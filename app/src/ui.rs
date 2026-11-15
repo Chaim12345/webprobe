@@ -288,7 +288,13 @@ fn history_view(
         4 => e.status.clone(),
         5 => format!("{:010}", e.resp_len),
         6 => crate::history_filter::HistoryFilter::mime_of(e),
-        7 => if e.https { "https".to_string() } else { "http".to_string() },
+        7 => e.extension.clone(),
+        8 => e.title.clone(),
+        9 => if e.https { "https".to_string() } else { "http".to_string() },
+        10 => e.cookies.clone(),
+        11 => format!("{:05}", e.listener_port),
+        12 => if e.params { "1".to_string() } else { String::new() },
+        13 => if e.edited { "1".to_string() } else { String::new() },
         _ => String::new(),
     });
     let truncated = rows.len() > HISTORY_RENDER_LIMIT;
@@ -348,11 +354,17 @@ fn proxy_history(app: &mut App, ui: &mut Ui) {
         table::Column::right("#", 46.0),
         table::Column::new("Method", 62.0),
         table::Column::new("Host", 190.0),
-        table::Column::new("URL", 260.0),
+        table::Column::new("URL", 240.0),
         table::Column::right("Status", 54.0),
         table::Column::right("Length", 70.0),
         table::Column::new("MIME", 150.0),
+        table::Column::new("Extension", 72.0),
+        table::Column::new("Title", 170.0),
         table::Column::new("TLS", 52.0),
+        table::Column::new("Cookies", 120.0),
+        table::Column::right("Port", 56.0),
+        table::Column::new("Params", 56.0),
+        table::Column::new("Edited", 56.0),
     ];
 
     table::column_chooser(ui, &columns, &mut app.hist_table);
@@ -421,7 +433,13 @@ fn proxy_history(app: &mut App, ui: &mut Ui) {
                     (4, e.status.clone(), Some(theme::status_color(&e.status))),
                     (5, e.resp_len.to_string(), Some(c(theme::EDITOR_TEXT))),
                     (6, crate::history_filter::HistoryFilter::mime_of(e), Some(c(theme::MONO6))),
-                    (7, if e.https { "https" } else { "http" }.to_string(), Some(c(theme::MONO6))),
+                    (7, e.extension.clone(), Some(c(theme::MONO6))),
+                    (8, e.title.clone(), Some(c(theme::EDITOR_TEXT))),
+                    (9, if e.https { "https" } else { "http" }.to_string(), Some(c(theme::MONO6))),
+                    (10, e.cookies.clone(), Some(c(theme::MONO6))),
+                    (11, e.listener_port.to_string(), Some(c(theme::MONO6))),
+                    (12, if e.params { "yes".to_string() } else { String::new() }, Some(c(theme::MONO6))),
+                    (13, if e.edited { "yes".to_string() } else { String::new() }, Some(c(theme::MONO6))),
                 ];
                 table::cells(ui, &columns, &col_state, row_height, &cells);
             })
@@ -1628,6 +1646,12 @@ mod tests {
             resp_raw: None,
             https: false,
             note: None,
+            params: false,
+            edited: false,
+            extension: String::new(),
+            title: String::new(),
+            cookies: String::new(),
+            listener_port: 0,
         }
     }
 

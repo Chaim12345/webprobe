@@ -1,9 +1,10 @@
 # Plan
 
-1. [done] Epic A, M, B-01 done; P-13/P-14 (render fix, wiring repair); tasks.json now 90 tasks (18 done, 4 in progress) — commits 10bafe7, 6a969c1, ef70eb0
-2. [done] Live Burp gap analysis + UI PRD (docs/PRD-UI.md, 83 UI-* requirements) + backend PRD (docs/PRD-BACKEND.md, BE-* requirements) — built from live captures and the 364 doc pages in the jar; each requirement maps to a task id and a status
-3. [doing] P-10 wire Intruder UI to intruder.rs, then C-03 payload types, C-04 processing, C-05 grep/results, C-06 runner+pools — BE-IN-01/02 engine done; BE-IN-03..08 missing
-4. [todo] UI shell batch: P-01 menu bar, P-02 tab row, P-03 Settings dialog with Proxy page — UI-SH-01..07, UI-ST-01..10
-5. [todo] Message editor + history: P-05 columns, B-03 Pretty/Render, P-04 Repeater layout + Inspector — UI-ME-*, UI-PX-05, UI-RP-*
-6. [todo] Backend engines with no UI: F codec+pipeline, H cookie jar/macros, J project v2 + Burp config import, D insertion points/checks — BE-DC, BE-SS, BE-PJ/CF, BE-SC
-7. [todo] Deobfuscation refresh for build 52685 and extension host decision (K-02) — ZKM renames per build; Montoya host needs a JVM decision
+1. [done] Epic A, M, B-01; P-13/P-14 render fix + wiring repair; P-10 Intruder attack-type UI + generic matrix runner; C-01 done — commits 10bafe7, 6a969c1, ef70eb0, 0ab9711, b0978f8
+2. [done] Live Burp gap analysis + UI PRD + backend PRD + Obscura evaluation (P-15/P-16) — docs/PRD-UI.md, docs/PRD-BACKEND.md, docs/EVAL-OBSCURA.md
+3. [doing] P-05 HTTP history columns and derived fields (in build/test now: Params, Edited, Extension, Title, Cookies, Listener port) — BE-HS-01/02; build green, test run in flight
+4. [todo] UI shell batch P-01 menu bar, P-02 tab row, P-03 Settings dialog — UI-SH-*, UI-ST-*
+5. [todo] Repeater P-04 layout + Inspector, B-03 Pretty/Render views, B-02 editable history pane — UI-ME-*, UI-RP-*
+6. [todo] Intruder depth C-03 payload types, C-04 processing, C-05 grep/results, C-06 runner pools, Add § editor — P-10 remainder
+7. [todo] Backend engines F codec+pipeline, H cookie jar/macros, J project v2 + Burp config import, D insertion points/checks — BE-DC, BE-SS, BE-PJ/CF, BE-SC
+8. [todo] Deobfuscation refresh + extension host decision — re/mapping; K-02

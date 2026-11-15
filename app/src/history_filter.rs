@@ -202,6 +202,12 @@ mod tests {
             resp_raw: if resp.is_empty() { None } else { Some(resp) },
             https: false,
             note: None,
+            params: false,
+            edited: false,
+            extension: String::new(),
+            title: String::new(),
+            cookies: String::new(),
+            listener_port: 0,
         }
     }
 

@@ -31,6 +31,19 @@ pub struct HistEntry {
     pub req_raw: Vec<u8>,
     pub resp_raw: Option<Vec<u8>>,
     pub note: Option<String>,
+    /// Derived once at insert (P-05), so a table frame never recomputes them.
+    /// Whether the request carries a query string, body parameters or cookies.
+    pub params: bool,
+    /// Whether the user edited the message (intercept, match/replace).
+    pub edited: bool,
+    /// URL file extension (lower case, no dot); empty when there is none.
+    pub extension: String,
+    /// HTML <title> text, empty for non-HTML responses.
+    pub title: String,
+    /// Cookies set by the response, "name=value" pairs joined by "; ".
+    pub cookies: String,
+    /// Listener port the request arrived on.
+    pub listener_port: u16,
 }
 
 pub struct InterceptItem {
@@ -1136,7 +1149,42 @@ fn path_of(parts: &util::HttpParts) -> String {
     if parts.path.is_empty() { "/".into() } else { parts.path.clone() }
 }
 
-fn record(shared: &Shared, req: &[u8], resp: Option<Vec<u8>>, note: Option<String>, default_port: u16, https: bool) {
+/// Derived history fields (P-05), computed once at insert: (params, extension, title, cookies).
+pub fn derive_history_fields(e: &HistEntry) -> (bool, String, String, String) {
+    let parts = util::parse_http(&e.req_raw);
+    let query = parts.path.split_once('?').map(|(_, q)| q).unwrap_or("");
+    let body = e.req_raw.get(parts.head_len..).unwrap_or(&[]);
+    let ct = util::get_header(&parts.headers, "Content-Type").unwrap_or_default().to_ascii_lowercase();
+    let body_params = ct.contains("application/x-www-form-urlencoded") && !body.is_empty();
+    let params = !query.is_empty() || body_params || util::get_header(&parts.headers, "Cookie").is_some();
+
+    let path = parts.path.split('?').next().unwrap_or("");
+    let extension = path.rsplit('.').next().filter(|_| path.contains('.')).map(|x| x.to_ascii_lowercase()).unwrap_or_default();
+
+    let mut title = String::new();
+    let mut cookies = String::new();
+    if let Some(resp) = &e.resp_raw {
+        let rp = util::parse_http(resp);
+        let ct = util::get_header(&rp.headers, "Content-Type").unwrap_or_default().to_ascii_lowercase();
+        if ct.contains("html") {
+            let body = String::from_utf8_lossy(resp.get(rp.head_len..).unwrap_or(&[]));
+            if let (Some(a), Some(b)) = (body.find("<title"), body.find("</title>")) {
+                let inner = &body[a..b];
+                if let Some(gt) = inner.find('>') {
+                    title = inner[gt + 1..].trim().to_string();
+                }
+            }
+        }
+        let set = rp.headers.iter().filter(|(k, _)| k.eq_ignore_ascii_case("Set-Cookie"))
+            .map(|(_, v)| v.split(';').next().unwrap_or("").trim().to_string())
+            .filter(|v| !v.is_empty())
+            .collect::<Vec<_>>();
+        cookies = set.join("; ");
+    }
+    (params, extension, title, cookies)
+}
+
+fn record(shared: &Shared, req: &[u8], resp: Option<Vec<u8>>, note: Option<String>, default_port: u16, https: bool, listener_port: u16) {
     // History shows the decoded message: chunked bodies reassembled and
     // content coding removed (MECHANICS.md A-01/A-02). The bytes forwarded to
     // the server or client are untouched.
@@ -1170,7 +1218,19 @@ fn record(shared: &Shared, req: &[u8], resp: Option<Vec<u8>>, note: Option<Strin
         req_raw: req.to_vec(),
         resp_raw: resp,
         note,
+        params: false,
+        edited: false,
+        extension: String::new(),
+        title: String::new(),
+        cookies: String::new(),
+        listener_port,
     };
+    let mut e = e;
+    let derived = derive_history_fields(&e);
+    e.params = derived.0;
+    e.extension = derived.1;
+    e.title = derived.2;
+    e.cookies = derived.3;
     shared.push_history(e.clone());
     // live passive audit (AuditDefaults.json: scan_type_passive enabled),
     // bounded by the crawler's unique-location cap (CrawlDefaults.json: 1500)
@@ -1353,7 +1413,7 @@ fn handle_websocket(shared: Arc<Shared>, mut client: TcpStream, req: Vec<u8>) {
     }
     push_ws(&shared, &host, "handshake", "request", &req_out);
     push_ws(&shared, &host, "handshake", "response", &response);
-    record(&shared, &req_out, Some(response.clone()), None, 80, false);
+    record(&shared, &req_out, Some(response.clone()), None, 80, false, shared.proxy_port.load(Ordering::SeqCst));
     if util::parse_http(&response).status != "101" {
         shared.log(&format!("WebSocket upgrade for {host}:{port} was not accepted"));
         return;
@@ -1467,7 +1527,7 @@ fn handle_tls_websocket(
     }
     push_ws(&shared, &host, "handshake", "request", &req_out);
     push_ws(&shared, &host, "handshake", "response", &response);
-    record(&shared, &req_out, Some(response.clone()), None, 443, true);
+    record(&shared, &req_out, Some(response.clone()), None, 443, true, shared.proxy_port.load(Ordering::SeqCst));
     if util::parse_http(&response).status != "101" {
         return;
     }
@@ -1714,7 +1774,7 @@ fn upstream_and_deliver<S: ProxyIo>(
             .unwrap_or("")
             .trim()
             .to_string();
-        record(shared, &req, Some(resp), None, default_port, use_tls);
+        record(shared, &req, Some(resp), None, default_port, use_tls, shared.proxy_port.load(Ordering::SeqCst));
         shared.log(&format!("Served the local setup page for {host} -> {status}"));
         return;
     }
@@ -1732,7 +1792,7 @@ fn upstream_and_deliver<S: ProxyIo>(
             let status = util::parse_http(&resp).first.split_whitespace().nth(1).unwrap_or("").to_string();
             let _ = stream.write_all(&resp);
             let _ = stream.flush();
-            record(shared, &req_out, Some(resp), None, default_port, use_tls);
+            record(shared, &req_out, Some(resp), None, default_port, use_tls, shared.proxy_port.load(Ordering::SeqCst));
             shared.log(&format!(
                 "Proxied {} {host}:{port}{} -> {}{}",
                 parts.method,
@@ -1746,7 +1806,7 @@ fn upstream_and_deliver<S: ProxyIo>(
             let msg = format!("HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nWebProbe: upstream failed: {err}");
             let _ = stream.write_all(msg.as_bytes());
             let note = up.error.clone().unwrap_or_else(|| "failed".into());
-            record(shared, &req_out, None, Some(note), default_port, use_tls);
+            record(shared, &req_out, None, Some(note), default_port, use_tls, shared.proxy_port.load(Ordering::SeqCst));
             shared.log(&format!("Proxy error for {host}:{port}: {err}"));
         }
     }
@@ -2465,6 +2525,12 @@ mod tests {
             req_raw: Vec::new(),
             resp_raw: None,
             note: None,
+            params: false,
+            edited: false,
+            extension: String::new(),
+            title: String::new(),
+            cookies: String::new(),
+            listener_port: 0,
         });
         assert!(set_listeners(&shared, vec![ListenerSpec { bind: "127.0.0.1".into(), port: free_port() }]).is_ok());
         std::thread::sleep(Duration::from_millis(600));

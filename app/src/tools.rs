@@ -600,7 +600,20 @@ pub fn project_controls(app: &mut App, ui: &mut Ui) {
                         req_raw: h.request.clone().into_bytes(),
                         resp_raw: h.response.clone().map(|r| r.into_bytes()),
                         note: h.note.clone(),
+                        params: false,
+                        edited: false,
+                        extension: String::new(),
+                        title: String::new(),
+                        cookies: String::new(),
+                        listener_port: 0,
                     }).collect();
+                    for e in app.shared.history.lock().unwrap().iter_mut() {
+                        let (params, extension, title, cookies) = crate::net::derive_history_fields(e);
+                        e.params = params;
+                        e.extension = extension;
+                        e.title = title;
+                        e.cookies = cookies;
+                    }
                     *app.shared.mr_request.lock().unwrap() = data.match_request.iter().filter(|r| r.kind == "request").map(net_rule).collect();
                     *app.shared.mr_response.lock().unwrap() = data.match_response.iter().filter(|r| r.kind == "response").map(net_rule).collect();
                     *app.shared.scope.lock().unwrap() = data.scope.iter().map(|s| net::ScopeRule {
