@@ -187,11 +187,11 @@ Every task must end with an automated check and a `mechanics.json` claim where i
 
 | ID | Task | Acceptance criteria | Effort |
 |---|---|---|---|
-| B-01 | History table with filter/sort/columns | Filter bar (text, regex, method, status, MIME, in-scope), sortable columns, column chooser, resizable widths, sticky header, virtualized rendering above 10k rows | L |
-| B-02 | Message editor | Raw editor with syntax highlighting, line numbers, wrap toggle, font size, find-in-message, hex edit; request editable in place and sendable | L |
+| B-01 ✅ | History table with filter/sort/columns | Filter bar (text, regex, method, status, MIME, in-scope), sortable columns, column chooser, resizable widths, sticky header, virtualized rendering above 10k rows | L |
+| B-02 🚧 | Message editor | Raw editor with syntax highlighting, line numbers, wrap toggle, font size, find-in-message, hex edit; request editable in place and sendable | L |
 | B-03 | Response views | Raw / Params / Headers / Hex / Render (HTML) with correct entity decoding; JSON/XML pretty view; image preview | M |
 | B-04 | Context menus | Right-click menus for history, site map, repeater, issues, decoder results; copy/save/send-to/add-to-scope | M |
-| B-05 | Resizable layout + status bar | Splitters between every pane; status bar with listener, intercept, queue, scan/attack progress, last error; layout persisted | L |
+| B-05 🚧 | Resizable layout + status bar | Splitters between every pane; status bar with listener, intercept, queue, scan/attack progress, last error; layout persisted | L |
 | B-06 | Site map tree | Branch/leaf tree with method, URL, status, length, comment; expand/collapse, filter, scope colouring, annotations | L |
 | B-07 | Multi-select and bulk actions | Select ranges with shift/ctrl; bulk send-to, export, add-to-scope, delete | M |
 | B-08 | Proxy options UI | Listener, interception (request/response/WebSocket), match & replace import/export, upstream per-host rules, TLS/HTTP settings | L |
@@ -201,8 +201,8 @@ Every task must end with an automated check and a `mechanics.json` claim where i
 
 | ID | Task | Acceptance criteria | Effort |
 |---|---|---|---|
-| C-01 | Four attack types | Sniper, battering ram, pitchfork, cluster bomb produce the correct request matrix; tests assert counts and payload placement | M |
-| C-02 | Payload positions | Auto-mark, clear, add-from-selection, marker highlighting, multiple positions per request | M |
+| C-01 🚧 | Four attack types | Sniper, battering ram, pitchfork, cluster bomb produce the correct request matrix; tests assert counts and payload placement | M |
+| C-02 🚧 | Payload positions | Auto-mark, clear, add-from-selection, marker highlighting, multiple positions per request | M |
 | C-03 | Payload sets | Simple list, runtime file, custom iterator, brute forcer, case modification, numbers, dates, usernames, null payloads, character frobber | L |
 | C-04 | Payload processing | Prefix/suffix, substring, encode (URL/Base64/HTML/hex), hash, regex, skip; ordered pipeline | M |
 | C-05 | Result analysis | Grep match, grep extract, grep capture, grep payloads; configurable result columns; per-row detail | L |
@@ -345,3 +345,26 @@ Start a follow-up round with a request like:
 
 Each round should end with: build passes, screenshot check passes, mechanics claims for the new behaviour, and
 a short `PROGRESS.md` entry naming the tasks completed and the next task.
+
+## 7. Gaps found by running real Burp Pro v2026.7.3 on Xvfb (2026-11-15)
+
+Method: the reference jar was launched from `/opt/BurpSuite` on its own display, every tab/menu/dialog was captured and compared with WebProbe at 1440x900. Full write-up: `qa/GAP-REPORT-2026-11-15.md`. 🚧 = in progress.
+
+### Epic P — Live Burp parity gaps (P0 unless noted)
+
+| ID | Task | Acceptance criteria | Effort |
+|---|---|---|---|
+| P-01 | Top menu bar (P0) | Burp, Project, Intruder, Repeater, View, Help menus in the window chrome; Burp menu lists Search, Settings, Configuration library, User settings >, Log in, Exit; every item either works or is disabled with a reason; shortcuts shown beside items match shortcuts.rs | M |
+| P-02 | Tab bar and global controls parity (P1) | Single tab row in Burp order (Dashboard, Target, Proxy, Intruder, Repeater, Collaborator, Sequencer, Decoder, Comparer, Logger, Organizer, Extensions, Discover) with no 'More tools' overflow at 1440 px; top-right global search, settings gear and browser launcher; active tab shown with an underline | M |
+| P-03 | Settings dialog parity (P0) | Searchable dialog with All/User/Project filter pills and a category tree (Tools: Proxy, Intruder, Repeater, Sequencer, Comparer; Project; Sessions; Network; User interface; Suite; Extensions; Configuration library); Proxy page has a listeners table (Running, Interface, Invisible, Redirect, Certificate, TLS protocols) with Add/Edit/Remove, CA import/export/regenerate, request-interception rules table with Up/Down | L |
+| P-04 | Repeater layout parity (P0) | Numbered tabs with close and '+', primary Send, Cancel, back/forward history, Target field with edit action, Request | Response | Inspector panes with side-by-side/stacked/tabbed toggles, Pretty/Raw/Hex views, wrap/non-printable/newline toggles, search bar with highlight count, right dock (Inspector, Notes, Explanations, Custom actions), status line | L |
+| P-05 | HTTP history columns and views (P0) | Add Params, Edited, Extension and Title columns; Pretty and Renderer views in the message pane; column chooser exposes all of them | M |
+| P-06 | Intercept bar parity (P1) | Intercept on/off toggle, Forward and Drop as split buttons with dropdown actions (forward all, drop all), Open browser, help and overflow menu; empty state text explaining intercept | S |
+| P-07 | Decoder layout and operations (P1) | Text/Hex input toggle; 'Decode as', 'Encode as' and 'Hash' dropdowns; Smart decode; chained output panes | M |
+| P-08 | Comparer item tables (P1) | Two item tables (# / Length / Data) with Paste, Load, Remove, Clear and Compare Words / Bytes buttons | M |
+| P-09 | Dashboard task model (P1) | Task cards (live audit, live crawl, scans) with pause/resume, issue counters and Summary / Audit items / Issues / Event log / Logger / Audit log tabs; 'Task execution is paused' banner | L |
+| P-10 | Wire Intruder UI to intruder.rs (P0) | Attack-type selector, Auto/Add/Clear position buttons with marker highlighting, one payload set per position, request count preview with the limit error shown, runner replaces net::start_attack; empty-state text 'To get started, send a request to Intruder from anywhere in Burp' | M |
+| P-11 | Light theme as the default option (P2) | Light palette matches Burp's default look (flat white, orange underline accent) and is selectable in Settings; dark remains available | S |
+| P-12 | Known small defects (P2) | Target scope header repeats its inner 'Scope' label; onboarding counts seeded history as real HTTPS traffic; selection stays on a row the filter hides; Burp history comparison needs a populated Burp table (listener answered but history stayed empty) | S |
+| P-13 ✅ | WSL2 rendering fix and live QA driver (P0) | App opens a window on WSL2/Xvfb without env tweaks; QA driver clicks, types, scrolls and screenshots; policy tested | M |
+| P-14 ✅ | Repair UI wiring lost in a bad edit (P0) | Filter bar, Comparer, Target scope, project controls, listener status/editor and appearance options are all reachable again; no dead helpers left | M |

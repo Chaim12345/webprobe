@@ -77,3 +77,9 @@ Verification: `cargo test` → 52 passed, 0 failed. `cargo build` clean.
   with the CA in both formats (/webprobe-ca.pem, /webprobe-ca.der) and the real listener port. "Send sample
   traffic" routes one request through the listener and reports the status line. Dashboard panel with Hide, docs
   links to the public pages, and an explicit note that WebProbe has no bundled browser (L-05). 91 tests pass.
+
+- P-13 ✅ WSL2 rendering fix + QA driver (2026-11-15) — root cause was LIBGL_ALWAYS_INDIRECT=1 from ~/.zshrc plus no /dev/dri render node (Mesa 26 fell through to zink). app/src/gl_env.rs repairs the process environment before any window exists; qa/qa.sh drives the live window on Xvfb (proxy 6566, never 8080/8081). 107 tests then.
+- P-14 ✅ UI wiring repair — a bad edit had dropped calls into tested helpers (history filter bar, Comparer, scope editor, project controls, listeners, appearance); restored from the dead-code warnings, one history_view pipeline, unique scroll ids, glyph fallback font.
+- B-01 ✅ History table — filter/sort/columns/virtualization verified live. B-02, B-05, C-01, C-02 in progress (see tasks.json evidence).
+- Intruder engine core (C-01/C-02): app/src/intruder.rs, 10 tests, 117 pass. Not yet wired to the tab (P-10).
+- Gap analysis vs live Burp Pro v2026.7.3: 12 new open tasks P-01..P-12 in TASKS.md section 7 and tasks.json (qa/GAP-REPORT-2026-11-15.md).
