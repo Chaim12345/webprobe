@@ -116,6 +116,8 @@ pub struct App {
     pub macro_name: String,
     pub macro_request: String,
     pub rep_sel: usize,
+    /// Repeater response view: 0 Raw, 1 Hex, 2 Pretty (P-04).
+    pub rep_view: usize,
     pub port_txt: String,
     pub frames: usize,
     pub saved: bool,
@@ -498,6 +500,7 @@ fn main() {
         macro_name: "Macro 1".to_string(),
         macro_request: "GET /login HTTP/1.1\r\nHost: example.com\r\n\r\n".to_string(),
         rep_sel: 0,
+        rep_view: 0,
         port_txt,
         frames: 0,
         saved: false,

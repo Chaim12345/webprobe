@@ -1,0 +1,497 @@
+{
+  "id": "ev_0052998d1dfa1e0007be65d224506ad36e437802f3d6b40475b710f079577d92",
+  "subject": {
+    "kind": "jar",
+    "sha256": "3d4b9ce5459486510d48a1ec216b8fc9340ed647725f6fef0501e02760574dd9",
+    "name": "burpsuite-named.jar"
+  },
+  "operation": "java_classes_find",
+  "params": {
+    "include_methods": false,
+    "limit": 40,
+    "offset": 0,
+    "path": null,
+    "query": "payload"
+  },
+  "result": {
+    "classes": [
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/IIntruderPayloadGenerator.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/IIntruderPayloadGenerator",
+        "matched_methods": [],
+        "methods": 3,
+        "name": "burp.IIntruderPayloadGenerator",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/IIntruderPayloadGeneratorFactory.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/IIntruderPayloadGeneratorFactory",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.IIntruderPayloadGeneratorFactory",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/IIntruderPayloadProcessor.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/IIntruderPayloadProcessor",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.IIntruderPayloadProcessor",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "entry": "burp/agentic/toolargs/CreateCollaboratorPayloadArgs.class",
+        "fields": 1,
+        "interfaces": [],
+        "internal": "burp/agentic/toolargs/CreateCollaboratorPayloadArgs",
+        "matched_methods": [],
+        "methods": 5,
+        "name": "burp.agentic.toolargs.CreateCollaboratorPayloadArgs",
+        "superclass": "java.lang.Record"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "entry": "burp/agentic/toolargs/CreateFuzzPayloadListArgs.class",
+        "fields": 1,
+        "interfaces": [],
+        "internal": "burp/agentic/toolargs/CreateFuzzPayloadListArgs",
+        "matched_methods": [],
+        "methods": 5,
+        "name": "burp.agentic.toolargs.CreateFuzzPayloadListArgs",
+        "superclass": "java.lang.Record"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "entry": "burp/agentic/toolargs/GetFuzzPayloadListsArgs.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/agentic/toolargs/GetFuzzPayloadListsArgs",
+        "matched_methods": [],
+        "methods": 4,
+        "name": "burp.agentic.toolargs.GetFuzzPayloadListsArgs",
+        "superclass": "java.lang.Record"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/collaborator/CollaboratorPayload.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/collaborator/CollaboratorPayload",
+        "matched_methods": [],
+        "methods": 4,
+        "name": "burp.api.montoya.collaborator.CollaboratorPayload",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/collaborator/CollaboratorPayloadGenerator.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/collaborator/CollaboratorPayloadGenerator",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "burp.api.montoya.collaborator.CollaboratorPayloadGenerator",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "final",
+          "enum"
+        ],
+        "entry": "burp/api/montoya/collaborator/PayloadOption.class",
+        "fields": 2,
+        "interfaces": [],
+        "internal": "burp/api/montoya/collaborator/PayloadOption",
+        "matched_methods": [],
+        "methods": 5,
+        "name": "burp.api.montoya.collaborator.PayloadOption",
+        "superclass": "java.lang.Enum"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/intruder/GeneratedPayload.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/intruder/GeneratedPayload",
+        "matched_methods": [],
+        "methods": 4,
+        "name": "burp.api.montoya.intruder.GeneratedPayload",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/intruder/PayloadData.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/intruder/PayloadData",
+        "matched_methods": [],
+        "methods": 3,
+        "name": "burp.api.montoya.intruder.PayloadData",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/intruder/PayloadGenerator.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/intruder/PayloadGenerator",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "burp.api.montoya.intruder.PayloadGenerator",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/intruder/PayloadGeneratorProvider.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/intruder/PayloadGeneratorProvider",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.api.montoya.intruder.PayloadGeneratorProvider",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "final",
+          "enum"
+        ],
+        "entry": "burp/api/montoya/intruder/PayloadProcessingAction.class",
+        "fields": 3,
+        "interfaces": [],
+        "internal": "burp/api/montoya/intruder/PayloadProcessingAction",
+        "matched_methods": [],
+        "methods": 5,
+        "name": "burp.api.montoya.intruder.PayloadProcessingAction",
+        "superclass": "java.lang.Enum"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/intruder/PayloadProcessingResult.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/intruder/PayloadProcessingResult",
+        "matched_methods": [],
+        "methods": 5,
+        "name": "burp.api.montoya.intruder.PayloadProcessingResult",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/intruder/PayloadProcessor.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/intruder/PayloadProcessor",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.api.montoya.intruder.PayloadProcessor",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "com/fasterxml/jackson/core/util/RequestPayload.class",
+        "fields": 5,
+        "interfaces": [
+          "java.io.Serializable"
+        ],
+        "internal": "com/fasterxml/jackson/core/util/RequestPayload",
+        "matched_methods": [],
+        "methods": 6,
+        "name": "com.fasterxml.jackson.core.util.RequestPayload",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "entry": "com/nimbusds/jose/Payload.class",
+        "fields": 8,
+        "interfaces": [
+          "java.io.Serializable"
+        ],
+        "internal": "com/nimbusds/jose/Payload",
+        "matched_methods": [],
+        "methods": 16,
+        "name": "com.nimbusds.jose.Payload",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "final",
+          "enum"
+        ],
+        "entry": "com/nimbusds/jose/Payload$Origin.class",
+        "fields": 7,
+        "interfaces": [],
+        "internal": "com/nimbusds/jose/Payload$Origin",
+        "matched_methods": [],
+        "methods": 4,
+        "name": "com.nimbusds.jose.Payload$Origin",
+        "superclass": "java.lang.Enum"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "com/nimbusds/jose/PayloadTransformer.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "com/nimbusds/jose/PayloadTransformer",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "com.nimbusds.jose.PayloadTransformer",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "com/sun/jna/platform/unix/aix/Perfstat$perfstat_protocol_t$AnonymousUnionPayload.class",
+        "fields": 11,
+        "interfaces": [],
+        "internal": "com/sun/jna/platform/unix/aix/Perfstat$perfstat_protocol_t$AnonymousUnionPayload",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "com.sun.jna.platform.unix.aix.Perfstat$perfstat_protocol_t$AnonymousUnionPayload",
+        "superclass": "com.sun.jna.Union"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "com/sun/jna/platform/win32/WinNT$SYSTEM_LOGICAL_PROCESSOR_INFORMATION$AnonymousUnionPayload.class",
+        "fields": 4,
+        "interfaces": [],
+        "internal": "com/sun/jna/platform/win32/WinNT$SYSTEM_LOGICAL_PROCESSOR_INFORMATION$AnonymousUnionPayload",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "com.sun.jna.platform.win32.WinNT$SYSTEM_LOGICAL_PROCESSOR_INFORMATION$AnonymousUnionPayload",
+        "superclass": "com.sun.jna.Union"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "org/bouncycastle/crypto/agreement/ecjpake/ECJPAKERound1Payload.class",
+        "fields": 5,
+        "interfaces": [],
+        "internal": "org/bouncycastle/crypto/agreement/ecjpake/ECJPAKERound1Payload",
+        "matched_methods": [],
+        "methods": 6,
+        "name": "org.bouncycastle.crypto.agreement.ecjpake.ECJPAKERound1Payload",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "org/bouncycastle/crypto/agreement/ecjpake/ECJPAKERound2Payload.class",
+        "fields": 3,
+        "interfaces": [],
+        "internal": "org/bouncycastle/crypto/agreement/ecjpake/ECJPAKERound2Payload",
+        "matched_methods": [],
+        "methods": 4,
+        "name": "org.bouncycastle.crypto.agreement.ecjpake.ECJPAKERound2Payload",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "org/bouncycastle/crypto/agreement/ecjpake/ECJPAKERound3Payload.class",
+        "fields": 2,
+        "interfaces": [],
+        "internal": "org/bouncycastle/crypto/agreement/ecjpake/ECJPAKERound3Payload",
+        "matched_methods": [],
+        "methods": 3,
+        "name": "org.bouncycastle.crypto.agreement.ecjpake.ECJPAKERound3Payload",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "org/bouncycastle/crypto/agreement/jpake/JPAKERound1Payload.class",
+        "fields": 5,
+        "interfaces": [],
+        "internal": "org/bouncycastle/crypto/agreement/jpake/JPAKERound1Payload",
+        "matched_methods": [],
+        "methods": 6,
+        "name": "org.bouncycastle.crypto.agreement.jpake.JPAKERound1Payload",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "org/bouncycastle/crypto/agreement/jpake/JPAKERound2Payload.class",
+        "fields": 3,
+        "interfaces": [],
+        "internal": "org/bouncycastle/crypto/agreement/jpake/JPAKERound2Payload",
+        "matched_methods": [],
+        "methods": 4,
+        "name": "org.bouncycastle.crypto.agreement.jpake.JPAKERound2Payload",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "org/bouncycastle/crypto/agreement/jpake/JPAKERound3Payload.class",
+        "fields": 2,
+        "interfaces": [],
+        "internal": "org/bouncycastle/crypto/agreement/jpake/JPAKERound3Payload",
+        "matched_methods": [],
+        "methods": 3,
+        "name": "org.bouncycastle.crypto.agreement.jpake.JPAKERound3Payload",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "org/bouncycastle/oer/its/etsi103097/EtsiTs103097DataSignedExternalPayload.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "org/bouncycastle/oer/its/etsi103097/EtsiTs103097DataSignedExternalPayload",
+        "matched_methods": [],
+        "methods": 3,
+        "name": "org.bouncycastle.oer.its.etsi103097.EtsiTs103097DataSignedExternalPayload",
+        "superclass": "org.bouncycastle.oer.its.etsi103097.EtsiTs103097Data"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "org/bouncycastle/oer/its/ieee1609dot2/SignedDataPayload.class",
+        "fields": 2,
+        "interfaces": [],
+        "internal": "org/bouncycastle/oer/its/ieee1609dot2/SignedDataPayload",
+        "matched_methods": [],
+        "methods": 7,
+        "name": "org.bouncycastle.oer.its.ieee1609dot2.SignedDataPayload",
+        "superclass": "org.bouncycastle.asn1.ASN1Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "org/bouncycastle/oer/its/ieee1609dot2/SignedDataPayload$Builder.class",
+        "fields": 2,
+        "interfaces": [],
+        "internal": "org/bouncycastle/oer/its/ieee1609dot2/SignedDataPayload$Builder",
+        "matched_methods": [],
+        "methods": 4,
+        "name": "org.bouncycastle.oer.its.ieee1609dot2.SignedDataPayload$Builder",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [],
+        "entry": "org/bouncycastle/tls/HeartbeatMessage$PayloadBuffer.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "org/bouncycastle/tls/HeartbeatMessage$PayloadBuffer",
+        "matched_methods": [],
+        "methods": 3,
+        "name": "org.bouncycastle.tls.HeartbeatMessage$PayloadBuffer",
+        "superclass": "java.io.ByteArrayOutputStream"
+      }
+    ],
+    "classes_total": 54868,
+    "matches": 32,
+    "query": "payload"
+  },
+  "summary": "32 of 54868 classes match \"payload\" ; showing 32.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 32,
+    "total": 32
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/tmp/opencode/named/burpsuite-named.jar"
+    }
+  ],
+  "links": []
+}

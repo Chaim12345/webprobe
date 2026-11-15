@@ -978,22 +978,81 @@ fn repeater(app: &mut App, ui: &mut Ui) {
         }
     });
     ui.add_space(4.0);
-    ui.label(RichText::new("Response").size(12.0).color(c(theme::MONO6)));
-    let resp = {
+    let (resp, result_line, req) = {
         let reps = app.shared.repeaters.lock().unwrap();
         let i = app.rep_sel.min(reps.len().saturating_sub(1));
-        reps[i].response.clone()
+        (reps[i].response.clone(), reps[i].result_line.clone(), reps[i].request.clone())
     };
-    match resp {
+    ui.horizontal(|ui| {
+        ui.label(RichText::new("Response").size(12.0).color(c(theme::MONO6)));
+        if let Some(v) = sub_tabs(ui, &["Raw", "Hex", "Pretty"], app.rep_view) {
+            app.rep_view = v;
+        }
+        if !result_line.is_empty() {
+            ui.label(RichText::new(result_line).size(11.5).color(c(theme::MONO6)));
+        }
+    });
+    match resp.clone() {
         Some(r) => {
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                let parts = util::parse_http(&r);
-                ui.label(RichText::new(parts.first.clone()).monospace().size(12.5).color(c(theme::HEADER_BLUE)));
-                ui.monospace(RichText::new(String::from_utf8_lossy(&r).into_owned()).size(12.0).color(c(theme::EDITOR_TEXT)));
+            let parts = util::parse_http(&r);
+            ui.label(RichText::new(parts.first.clone()).monospace().size(12.5).color(c(theme::HEADER_BLUE)));
+            egui::ScrollArea::vertical().max_height(half).show(ui, |ui| match app.rep_view {
+                1 => {
+                    ui.monospace(RichText::new(util::hex_view(&r, 16384)).size(12.0).color(c(theme::EDITOR_TEXT)));
+                }
+                2 => {
+                    let body = r.get(parts.head_len..).unwrap_or(&[]);
+                    let pretty = serde_json::from_slice::<serde_json::Value>(body)
+                        .ok()
+                        .and_then(|v| serde_json::to_string_pretty(&v).ok());
+                    match pretty {
+                        Some(text) => ui.monospace(RichText::new(text).size(12.0).color(c(theme::EDITOR_TEXT))),
+                        None => ui.monospace(RichText::new(String::from_utf8_lossy(&r).into_owned()).size(12.0).color(c(theme::EDITOR_TEXT))),
+                    };
+                }
+                _ => {
+                    ui.monospace(RichText::new(String::from_utf8_lossy(&r).into_owned()).size(12.0).color(c(theme::EDITOR_TEXT)));
+                }
             });
         }
         None => hint(ui, "no response yet"),
     }
+
+    // P-04: Inspector - the parsed request and response without leaving the tab.
+    egui::CollapsingHeader::new(RichText::new("Inspector").size(12.5).color(c(theme::MONO6)))
+        .default_open(false)
+        .show(ui, |ui| {
+            let rp = util::parse_http(req.as_bytes());
+            ui.label(RichText::new("Request line").size(11.0).color(c(theme::MONO4)));
+            ui.monospace(RichText::new(rp.first.clone()).size(11.5).color(c(theme::HEADER_BLUE)));
+            let query = rp.path.split_once('?').map(|(_, q)| q).unwrap_or("");
+            if !query.is_empty() {
+                ui.label(RichText::new("Query").size(11.0).color(c(theme::MONO4)));
+                for kv in query.split('&').filter(|s| !s.is_empty()) {
+                    let (k, v) = kv.split_once('=').unwrap_or((kv, ""));
+                    ui.monospace(RichText::new(format!("{k} = {v}")).size(11.5).color(c(theme::EDITOR_TEXT)));
+                }
+            }
+            ui.label(RichText::new("Request headers").size(11.0).color(c(theme::MONO4)));
+            egui::Grid::new("rep_req_headers").striped(true).num_columns(2).show(ui, |ui| {
+                for (k, v) in &rp.headers {
+                    ui.monospace(RichText::new(k.clone()).size(11.5).color(c(theme::HEADER_BLUE)));
+                    ui.monospace(RichText::new(v.clone()).size(11.5).color(c(theme::EDITOR_TEXT)));
+                    ui.end_row();
+                }
+            });
+            if let Some(r) = &resp {
+                let sp = util::parse_http(r);
+                ui.label(RichText::new("Response headers").size(11.0).color(c(theme::MONO4)));
+                egui::Grid::new("rep_resp_headers").striped(true).num_columns(2).show(ui, |ui| {
+                    for (k, v) in &sp.headers {
+                        ui.monospace(RichText::new(k.clone()).size(11.5).color(c(theme::HEADER_BLUE)));
+                        ui.monospace(RichText::new(v.clone()).size(11.5).color(c(theme::EDITOR_TEXT)));
+                        ui.end_row();
+                    }
+                });
+            }
+        });
 }
 
 fn repeater_send(app: &mut App) {

@@ -1,0 +1,58 @@
+{
+  "id": "ev_729fc04401a2502894ed32e36d0219eba4e18ed6ea0a42d8ad55fea4fc3878b0",
+  "subject": {
+    "kind": "jar",
+    "sha256": "3d4b9ce5459486510d48a1ec216b8fc9340ed647725f6fef0501e02760574dd9",
+    "name": "burpsuite-named.jar"
+  },
+  "operation": "java_classes_find",
+  "params": {
+    "include_methods": true,
+    "limit": 3,
+    "offset": 0,
+    "path": null,
+    "query": "Z_so"
+  },
+  "result": {
+    "classes": [
+      {
+        "access": [
+          "synthetic"
+        ],
+        "entry": "burp/Z_so.class",
+        "fields": 1,
+        "interfaces": [],
+        "internal": "burp/Z_so",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "burp.Z_so",
+        "superclass": "java.lang.Object"
+      }
+    ],
+    "classes_total": 54868,
+    "matches": 1,
+    "query": "Z_so"
+  },
+  "summary": "1 of 54868 classes match \"Z_so\" ; showing 1.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 1,
+    "total": 1
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/tmp/opencode/named/burpsuite-named.jar"
+    }
+  ],
+  "links": []
+}

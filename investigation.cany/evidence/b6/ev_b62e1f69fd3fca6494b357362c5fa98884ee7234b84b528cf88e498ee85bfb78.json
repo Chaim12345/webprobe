@@ -1,0 +1,3899 @@
+{
+  "id": "ev_b62e1f69fd3fca6494b357362c5fa98884ee7234b84b528cf88e498ee85bfb78",
+  "subject": {
+    "kind": "jar",
+    "sha256": "510bf1c87c766f09c3c20d3ef75e7a6978e60dd38346965dd4836ce64417becf",
+    "name": "burpsuite.jar"
+  },
+  "operation": "core_archive_show",
+  "params": {
+    "if_tampered": true,
+    "limit": 500,
+    "max_depth": 3,
+    "max_entries": 200000,
+    "max_total_bytes": 4294967296,
+    "offset": 0,
+    "path": "/opt/BurpSuite/burpsuite.jar"
+  },
+  "result": {
+    "by_kind": {
+      "binary": 165,
+      "css": 30,
+      "directory": 3193,
+      "elf": 23,
+      "gif": 65,
+      "html": 1425,
+      "jar": 41,
+      "java-class": 61846,
+      "javascript": 46,
+      "jpeg": 30,
+      "json": 294,
+      "macho": 4,
+      "macho-fat": 1,
+      "pe": 7,
+      "png": 453,
+      "source-map": 23,
+      "svg": 1829,
+      "text": 1037,
+      "xml": 28,
+      "zip": 2
+    },
+    "containers": [
+      {
+        "declared": 61682,
+        "entries": 61682,
+        "kind": "jar",
+        "path": "",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 932,
+        "entries": 932,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 14,
+        "entries": 14,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/java-tooling-plugin-2.0.1.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 218,
+        "entries": 218,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/org.apache.felix.scr-2.2.6.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 45,
+        "entries": 45,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/org.eclipse.compare.core-3.8.0.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 105,
+        "entries": 105,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/org.eclipse.core.commands-3.12.100.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 65,
+        "entries": 65,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/org.eclipse.core.contenttype-3.9.400.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 68,
+        "entries": 68,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/org.eclipse.core.expressions-3.9.400.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 54,
+        "entries": 54,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/org.eclipse.core.filesystem-1.10.400.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 9,
+        "entries": 9,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/org.eclipse.core.filesystem.macosx-1.3.400.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 64,
+        "entries": 64,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/org.eclipse.core.jobs-3.15.300.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 416,
+        "entries": 416,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/org.eclipse.core.resources-3.20.200.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 13,
+        "entries": 13,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/org.eclipse.core.resources-3.20.200.jar!/ant_tasks/resources-ant.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 43,
+        "entries": 43,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/org.eclipse.core.runtime-3.31.100.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 33,
+        "entries": 33,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/org.eclipse.core.variables-3.6.400.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 272,
+        "entries": 272,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/org.eclipse.debug.core-3.21.400.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 52,
+        "entries": 52,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/org.eclipse.equinox.app-1.7.100.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 98,
+        "entries": 98,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/org.eclipse.equinox.common-3.19.100.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 78,
+        "entries": 78,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/org.eclipse.equinox.preferences-3.11.100.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 113,
+        "entries": 113,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/org.eclipse.equinox.registry-3.12.100.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 1484,
+        "entries": 1484,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/org.eclipse.jdt.core-3.38.0.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 15,
+        "entries": 15,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/org.eclipse.jdt.core-3.38.0.jar!/jdtCompilerAdapter.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 10,
+        "entries": 10,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/org.eclipse.jdt.debug-3.21.400.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 467,
+        "entries": 467,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/org.eclipse.jdt.debug-3.21.400.jar!/jdimodel.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 187,
+        "entries": 187,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/org.eclipse.jdt.launching-3.22.0.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 62,
+        "entries": 62,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/org.eclipse.jdt.launching-3.22.0.jar!/lib/javaagent-shaded.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 12,
+        "entries": 12,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/org.eclipse.jdt.launching-3.22.0.jar!/lib/launchingsupport.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 21,
+        "entries": 21,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/org.eclipse.jdt.launching.macosx-3.6.300.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 911,
+        "entries": 911,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/org.eclipse.osgi-3.20.0.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 269,
+        "entries": 269,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/org.eclipse.team.core-3.10.0.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 236,
+        "entries": 236,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/org.eclipse.text-3.14.100.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 83,
+        "entries": 83,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/org.osgi.service.component-1.5.1.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 27,
+        "entries": 27,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/org.osgi.service.prefs-1.1.2.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 26,
+        "entries": 26,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/org.osgi.util.function-1.0.0.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 47,
+        "entries": 47,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/org.osgi.util.promise-1.0.0.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 54,
+        "entries": 54,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/osgi.annotation-8.0.1.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 911,
+        "entries": 911,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/framework/org.eclipse.osgi-3.20.0.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 14,
+        "entries": 14,
+        "kind": "zip",
+        "path": "resources/ExtensionTemplateProject.zip!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 55,
+        "entries": 55,
+        "kind": "jar",
+        "path": "resources/ExtensionTemplateProject.zip!/gradle/wrapper/gradle-wrapper.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 70,
+        "entries": 70,
+        "kind": "jar",
+        "path": "resources/Infiltrator/burp_infiltrator_java.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 31,
+        "entries": 31,
+        "kind": "zip",
+        "path": "resources/Infiltrator/burp_infiltrator_java.jar!/instrumentation.zip!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 505,
+        "entries": 505,
+        "kind": "jar",
+        "path": "resources/Tooling/libraries/montoya-api-javadoc.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 333,
+        "entries": 333,
+        "kind": "jar",
+        "path": "resources/Tooling/libraries/montoya-api-sources.jar!/",
+        "truncated": false,
+        "zip64": false
+      },
+      {
+        "declared": 338,
+        "entries": 338,
+        "kind": "jar",
+        "path": "resources/Tooling/libraries/montoya-api.jar!/",
+        "truncated": false,
+        "zip64": false
+      }
+    ],
+    "content_id": "inv_05369211063424a84c7f11b0eb22d187f08470447dd0c911e40810c8c401ea22",
+    "contradictions": [],
+    "entries": [
+      {
+        "depth": 0,
+        "kind": "directory",
+        "path": "META-INF",
+        "size": 0
+      },
+      {
+        "depth": 0,
+        "kind": "text",
+        "path": "META-INF/MANIFEST.MF",
+        "role": "signature",
+        "sha256": "8cb03f31c672ee14cab090688679d947b45d1d2c804828d9921111df72d2c947",
+        "size": 479
+      },
+      {
+        "depth": 0,
+        "kind": "directory",
+        "path": "META-INF/java-tooling",
+        "size": 0
+      },
+      {
+        "depth": 0,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi",
+        "size": 0
+      },
+      {
+        "depth": 0,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles",
+        "size": 0
+      },
+      {
+        "depth": 0,
+        "kind": "jar",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar",
+        "sha256": "97c566b120009c203a2fc8b291f4a9adbc171cf1ccb70f06f6b4e1828c00ce8e",
+        "size": 3285717
+      },
+      {
+        "depth": 1,
+        "kind": "text",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/META-INF/MANIFEST.MF",
+        "role": "signature",
+        "sha256": "f08e4ca13a722ae2980a927818ae291f1761167decf8885889496eb3d06b3358",
+        "size": 128987
+      },
+      {
+        "depth": 1,
+        "kind": "text",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/META-INF/ECLIPSE_.SF",
+        "role": "signature",
+        "sha256": "3bb8a26ad0446e6e2aa240b1fbc5d0c752df804660ff15ab936c642903f05d5f",
+        "size": 123277
+      },
+      {
+        "depth": 1,
+        "kind": "binary",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/META-INF/ECLIPSE_.RSA",
+        "role": "signature",
+        "sha256": "230aa26b3951dd95f25daf2b444221a2b25080a96edef3c0406321debefe5904",
+        "size": 11770
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/META-INF",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/META-INF/services",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "text",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/META-INF/eclipse.inf",
+        "sha256": "1521d36bae3b81848e0a99547e22537e92816d1ce8f447089c729a7cfeaa6158",
+        "size": 65
+      },
+      {
+        "depth": 1,
+        "kind": "text",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/META-INF/services/javax.tools.JavaCompiler",
+        "sha256": "800e9bd4e4086bc9051713f230f8a8fc21a464678227cd25e3c028a821108e4e",
+        "size": 72
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/core",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/core/compiler",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/core/compiler/batch",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/antadapter",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/dispatch",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/util",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/codegen",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/flow",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/impl",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/lookup",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/parser",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/parser/diagnose",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/parser/unicode",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/parser/unicode10",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/parser/unicode11",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/parser/unicode12_1",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/parser/unicode13",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/parser/unicode6",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/parser/unicode6_2",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/parser/unicode7",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/parser/unicode8",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/problem",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/tool",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "directory",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/util",
+        "size": 0
+      },
+      {
+        "depth": 1,
+        "kind": "text",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/.api_description",
+        "sha256": "0798bcf9dcb205a56d6afbd6d8458b53ae3500fae2423943d61e6ae5b122f7f8",
+        "size": 623
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/core/JDTCompilerAdapter$1.class",
+        "sha256": "77c32d243b0ff61328e3b638e54102b6b563e464b7b23688fedd9736a1a2f1b3",
+        "size": 898
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/core/JDTCompilerAdapter.class",
+        "sha256": "3971c3cd4402c7b745c2c0b46886e5e43918c146fd0cfabc771d40deaa63bd7d",
+        "size": 15158
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/core/compiler/CategorizedProblem.class",
+        "sha256": "96ae72721cb41db175de260db69d5477737668755076d1ac5d11cbc6881fe288",
+        "size": 1725
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/core/compiler/CharOperation.class",
+        "sha256": "5bb571e7dfa757f3c6efcaf6ec5e42cd60744fd268015ef9afac92f5dd4a692e",
+        "size": 25682
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/core/compiler/CompilationProgress.class",
+        "sha256": "20f6d29bbcb3ee458590360bb4e05a71eb80d88eff280389003fe4715dcc985f",
+        "size": 478
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/core/compiler/IProblem.class",
+        "sha256": "81278aa3c8a8922a62d60e224d3edb9d55118f1c55785d550c7b8ef362b58471",
+        "size": 54908
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/core/compiler/InvalidInputException.class",
+        "sha256": "32d2ccb240ca7886b5a2469772b369169b4533c0c24899b6b015287c474b3e74",
+        "size": 560
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/core/compiler/SubwordMatcher.class",
+        "sha256": "85c65edff2acdbbd9eb40edb98bf72e4442d44a40e29f6907b092436e6ba325c",
+        "size": 3198
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/core/compiler/SubwordMatcher$Case.class",
+        "sha256": "9f7a823ec406de32021a1307a41148459427e66df5514f4b0536caae61855dc1",
+        "size": 1299
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/core/compiler/batch/BatchCompiler.class",
+        "sha256": "6ac0f714facf1dc39124aae7ea05653feaf860d4c5f140dc66901f6f09654950",
+        "size": 1097
+      },
+      {
+        "depth": 1,
+        "kind": "text",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/core/README.md",
+        "sha256": "445e8ba6993041507c0c443f1f1da986cf3addb2ea5eb3846395616248d16501",
+        "size": 4339
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/antadapter/AntAdapterMessages.class",
+        "sha256": "93814c70a1e0e465f9c853dffc9b6ef58d1c9da2491f58ffafbdc393fd5826cb",
+        "size": 2246
+      },
+      {
+        "depth": 1,
+        "kind": "text",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/antadapter/messages.properties",
+        "sha256": "dc37580c8468d7cff0ebc70cf39828d3a90fd1bb1fe3b8a19c5fb6636a09f2bc",
+        "size": 1571
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ASTVisitor.class",
+        "sha256": "5977921f9953b509883371bca67df60692c9c2eb5215b11ad716da765007bccb",
+        "size": 64691
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/AbstractAnnotationProcessorManager.class",
+        "sha256": "8a8c5d5796798abcdb65bd5fd60b620403ad23f049a089087d4329141331fe55",
+        "size": 1135
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ClassFile$2.class",
+        "sha256": "c3cd506f833f9e0473c6418e5316fd78524c07f10fc487b645771fcc1c3b96ee",
+        "size": 1331
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ClassFile.class",
+        "sha256": "e0e9f374a5702920ed2d5db587ea00bd73397511afa68ac7dbe9c0bab80ef519",
+        "size": 168219
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ClassFile$3.class",
+        "sha256": "2937452edb7cc50c28630f3776ca31f999fb2ac0bd01df0c53e8b54ad3183453",
+        "size": 1292
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ClassFile$1.class",
+        "sha256": "3cf8cd69049c7ada0d6ff93dfd2118da179282a1442d43454f8daf81abceaa4a",
+        "size": 1711
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ClassFilePool.class",
+        "sha256": "155299fd38abee63eff21d77534e4650be92821cda9d2af5e1cdef7f48b0c36e",
+        "size": 2734
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/CompilationResult$1.class",
+        "sha256": "396f607e91ce66b0db379fb00f92d57fa9140d74d926c0bd96b23991e90ed8d3",
+        "size": 773
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/CompilationResult.class",
+        "sha256": "eb1f9147413a0660a12ad9742f8bbfe5b3258998e984e4e6471c0a9df66c150e",
+        "size": 12379
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/Compiler$1.class",
+        "sha256": "f9268a16a86311be951f3beaad05146b312394da6638a1be5dbd04f7cb6634d5",
+        "size": 1618
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/Compiler.class",
+        "sha256": "b961ef4042b0834367f83528a8f5de4151422177e297ae742906983ac4f1d686",
+        "size": 28804
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/Compiler$APTProblem.class",
+        "sha256": "57d371ee2a54385565cd9f9713132da4bd997023a8f28bc7d47c920c993ba99e",
+        "size": 774
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/DefaultErrorHandlingPolicies.class",
+        "sha256": "845be10c5c955e6d005f088e77aef9933d96d2523e70d5632877fda932923ae6",
+        "size": 1287
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/DefaultErrorHandlingPolicies$4.class",
+        "sha256": "a1fa04452c3696d47d4b64f4fdd26fa7344566b834a319b6f561d9f69d142053",
+        "size": 915
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/DefaultErrorHandlingPolicies$3.class",
+        "sha256": "f0da4c301d6d9da1ae39aeac8af4ed12f6bd992cd93231c78697e3f6cd4e5066",
+        "size": 912
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/DefaultErrorHandlingPolicies$5.class",
+        "sha256": "b40e3407f29fd2c7f3ad583282cb88dcc753158681755b374a57e45cae05c882",
+        "size": 910
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/DefaultErrorHandlingPolicies$1.class",
+        "sha256": "1ada20cd6167e1519e0d20ba9713e4f3a4b87f21b922849d79ff05ffcaf41d5a",
+        "size": 913
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/DefaultErrorHandlingPolicies$2.class",
+        "sha256": "6043c03d4926acd76f52496d85acc4e5cc86d1611e815bcd32935907e393534d",
+        "size": 909
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/GenericAstVisitor.class",
+        "sha256": "5bf551caec00ab49da60bc22a288047a0ce3e4414e455de7e784454424d8a910",
+        "size": 36451
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ICompilerRequestor.class",
+        "sha256": "de413e895289789b34d9192b12e453369ffc8c26a25ab105f0c62422fde20755",
+        "size": 233
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/IDebugRequestor.class",
+        "sha256": "dc697d9bc06c0d2fa27b804c01ba658f608161d97b59394465e7dc47e75fe3ab",
+        "size": 319
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/IErrorHandlingPolicy.class",
+        "sha256": "006e6505b81922f1e73e04e66b42ecf532524e5e3ef851a62bc96072ac7a8179",
+        "size": 240
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/IProblemFactory.class",
+        "sha256": "8386434b604bbb459961e75340c024e19a53e2f4c38f68bc973ef9ceecaa3db3",
+        "size": 548
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ProcessTaskManager.class",
+        "sha256": "df9ac10e4337feed5e25acb221de03748c202719eabf400e5f8488dd196805ec",
+        "size": 5012
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ReadManager.class",
+        "sha256": "1991a6c51f29110b7fa0f12a2c54b57d30eee5a5b2c894d3352b38db7f7da749",
+        "size": 3904
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/dispatch/AnnotationDiscoveryVisitor.class",
+        "sha256": "6b8cdd6a0c2aed178bad471f11bd9045e6f7319aba4a290872f227e2447df058",
+        "size": 11161
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/dispatch/AptProblem.class",
+        "sha256": "c20c25a972b2c89b33612324ca58ba8f1e9fb01886e2812afa32c766127feaf2",
+        "size": 1315
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/dispatch/BaseAnnotationProcessorManager.class",
+        "sha256": "56830c460585d21010286764422f3072ae6138b005ee7f34a7c9fe29e223df42",
+        "size": 5428
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/dispatch/BaseMessagerImpl.class",
+        "sha256": "ecfb5b7fe78dfc43bf9a9b3f6b24a717beaf79a350ee372941427c25b231478a",
+        "size": 11989
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/dispatch/BaseProcessingEnvImpl.class",
+        "sha256": "e180fea2e8f2e9e766d815fbb98672c5e8b0361dec38ec79f487ddca69da41a6",
+        "size": 7223
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/dispatch/BatchAnnotationProcessorManager.class",
+        "sha256": "6166c2a8bd1c80e4e1b0113bfcf9a189e75848cc9a290d4baeb4ee03f392a362",
+        "size": 9666
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/dispatch/BatchFilerImpl.class",
+        "sha256": "0364c2043286d5d56a404412c06ad113b08d6301c9b1e2afd36cee01d1273781",
+        "size": 7138
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/dispatch/BatchMessagerImpl.class",
+        "sha256": "c51376d390ea007fd691c97117faa54a037e36faf16386fecabc087f513a9573",
+        "size": 2791
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/dispatch/BatchProcessingEnvImpl.class",
+        "sha256": "6a5575a21aa0f70740485cfc00fda55d6ac312226e277939aa637bb580b28412",
+        "size": 5943
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/dispatch/HookedJavaFileObject.class",
+        "sha256": "1549dba1de4238ab529ec9ff4c00b9bd9f5bd18172410502af277b373b762d54",
+        "size": 5287
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/dispatch/HookedJavaFileObject$ForwardingWriter.class",
+        "sha256": "a4821a62ed4eb568475335abe1852e4a28db744e22b7d0043f29e9602b479d0b",
+        "size": 3759
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/dispatch/HookedJavaFileObject$ForwardingOutputStream.class",
+        "sha256": "eb0d9bb7ca90f6aabdbf1bce0a11bd0a7cf82b7c647030e9535d4e9d18cd958f",
+        "size": 2683
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/dispatch/IProcessorProvider.class",
+        "sha256": "61f80fae964fa60a846509045715e4076977e560085de3acc5f3ff87a2fef5a2",
+        "size": 524
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/dispatch/ProcessorInfo.class",
+        "sha256": "9bb2f083b79c75d9ede3a6d6cfc84a020a7a0d496d29e09b9cf4dbfb642e2b09",
+        "size": 4253
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/dispatch/RoundDispatcher.class",
+        "sha256": "6030f6a63e288e77e804958ae7e41513a6e455ffb3d23dfccd8a5a816b110edb",
+        "size": 5553
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/dispatch/RoundEnvImpl.class",
+        "sha256": "79f63246a82022894f5f9520924c8194a381e79e4799b90ab75f5f35d4af37be",
+        "size": 12085
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/AnnotationMemberValue.class",
+        "sha256": "45889e8c71857de1c903f9ed95bb69ecb2f5f80c97d72eebd690368462314b49",
+        "size": 1263
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/AnnotationMirrorImpl.class",
+        "sha256": "c3eeeff9222e0a4ee7a56253c8fadb27f674742ff0dc05362c5d5a96bccab926",
+        "size": 16711
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/AnnotationValueImpl.class",
+        "sha256": "c5c5dc1f0f349868880f77f95c87920a4c71edb81b73a470f09beefde00e7bc1",
+        "size": 9676
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/ArrayTypeImpl.class",
+        "sha256": "a94cde4d8dcf4fc91a25d53fa5aac2680ad95a7eb895475aa8aa210c8136fa85",
+        "size": 3031
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/DeclaredTypeImpl.class",
+        "sha256": "0839a360055469cfd7229884b7b33489f65dc52326bc8fd382a664b11a2859e8",
+        "size": 5184
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/ElementImpl.class",
+        "sha256": "2759588ae5c7b30f8c6d3dd6a3111dd84668eca03c4bc8bf8f099b9d11439978",
+        "size": 5114
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/ElementsImpl.class",
+        "sha256": "a68c12ea129b845e37e2d02fca9c76c169b168327045a456517ff90eb342638d",
+        "size": 26319
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/ElementsImpl9.class",
+        "sha256": "9278d974e2ccc9994791ba2ee919153cbd9eb9d215ce2a5d2f4557caf1fe1c48",
+        "size": 15288
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/ErrorTypeElement.class",
+        "sha256": "dc70d2419efea119d388af771a42a6c4a840af6a261575f7b8f22f7fbcd93d0e",
+        "size": 5083
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/ErrorTypeImpl.class",
+        "sha256": "964730501fc9b928e3f8c7549b37962c5ffb8ba4a409a17510244708908f65fa",
+        "size": 5089
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/ExecutableElementImpl.class",
+        "sha256": "fa010954dcc086711bbafd343d66ea5a16db28a90bc35f4f40aafd5d5460cae8",
+        "size": 13362
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/ExecutableTypeImpl.class",
+        "sha256": "37a9a7fdddcccee758be219c16ab3fb0ebffbab8b276f898b9d72cd3f1a66345",
+        "size": 5466
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/Factory.class",
+        "sha256": "655ea1eda12c24efcd13e4ead93c39555b31368fd051e57c5c19a946afd25020",
+        "size": 29664
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/IElementInfo.class",
+        "sha256": "c5ec96304b393a3dc558267ba8bbef710126d196638709983b9581dc1f433580",
+        "size": 194
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/ModuleElementImpl.class",
+        "sha256": "d1e1725c0ce37ca47dcfac70332734d8214c2a76235e8379d369d07f029bd1c5",
+        "size": 8977
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/ModuleElementImpl$OpensDirectiveImpl.class",
+        "sha256": "642c8333ebad46137c5b98b0fbf25ad7281f1b1255aa6ad569d1c686b8ae577e",
+        "size": 2719
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/ModuleElementImpl$UsesDirectiveImpl.class",
+        "sha256": "464c6a6d66b00c498979d2808bc3c15f4b6e02d1b75d7de3eee3586ccf8d4450",
+        "size": 2640
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/ModuleElementImpl$ProvidesDirectiveImpl.class",
+        "sha256": "78014ff4f5f950180ff51b63dc9faf1f18f19416b42acbd2121cbf9d2c579ce4",
+        "size": 3988
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/ModuleElementImpl$RequiresDirectiveImpl.class",
+        "sha256": "9a6e095815e9a2950fd48ec53ac5fad0c512b0028f4ffdf9605531222fc0b53f",
+        "size": 2980
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/ModuleElementImpl$ExportsDirectiveImpl.class",
+        "sha256": "74760547b8d7071cb3413f0eace943896a43451ef0199b89bc60392eef529ee8",
+        "size": 3305
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/ModuleElementImpl$PackageDirectiveImpl.class",
+        "sha256": "b7070c18c508df32ac09000b52ee92b808bd69ce7354baaaf17c82da92e6e07f",
+        "size": 3030
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/NameImpl.class",
+        "sha256": "bbd9623d4c6f5393ce5d626d986250d94aad4b32ab3e8b04afeed90003b4a1ed",
+        "size": 1756
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/NoTypeImpl.class",
+        "sha256": "2882d3f3a764a4f7af7c3b6fe7b3340fae8298b6eddde4e032d548929d60bb7c",
+        "size": 5126
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/NoTypeImpl$1.class",
+        "sha256": "2042e4feed461c3ae89bc22a76bc9ecf8ba9e2cf6c3e391f6596a189a5c8d6a7",
+        "size": 722
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/PackageElementImpl.class",
+        "sha256": "fa0040bef1235603f8366750e3331343a9b10352bfa0bfc6aca85fe45a3335f7",
+        "size": 7288
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/PrimitiveTypeImpl.class",
+        "sha256": "33fd93cc91dc5a2b97fbf09a01e71a50532ceec7d9c1c7823ddcab56d6d60edc",
+        "size": 3464
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/RecordComponentElementImpl.class",
+        "sha256": "3b637808e82318835e16e6cd619adb1f82865db95d57ebf2564e8e530684440b",
+        "size": 2863
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/TypeElementImpl$SourceLocationComparator.class",
+        "sha256": "a8c578bff85ca79f8cfea3a8a9fe58d1b489f82eab672464548614d829e48f01",
+        "size": 5543
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/TypeElementImpl.class",
+        "sha256": "62ce19b7a65aae6147bad2cf982559e507f121db07b526f3195fb91580472e85",
+        "size": 13266
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/TypeMirrorImpl.class",
+        "sha256": "f440a74a5895382be01c5d27ac2c6e7276568e6998ed7febbcb84ea40e0eacc0",
+        "size": 5043
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/TypeParameterElementImpl.class",
+        "sha256": "52c21c43b6cf27ad71b45eb7651720a1365fa5eec6fc6cfeb72d534e7458bc91",
+        "size": 7975
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/TypeVariableImpl.class",
+        "sha256": "39f1b0e37c398af2f63e45b26d14768423aed308c17203a6f5cfa7809f5e54c5",
+        "size": 3317
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/TypesImpl$4.class",
+        "sha256": "783ff63678194e907c8b254aa4f648dc9e965753fd714835aaac877d0a5e4c28",
+        "size": 2248
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/TypesImpl.class",
+        "sha256": "5ec40a31acc87db4bc47acaed2e1c9ff0ea3283d46c6621aa2caa8216d8079a1",
+        "size": 19987
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/TypesImpl$MemberInTypeFinder.class",
+        "sha256": "7e32ac4fb4604610988fdb48c5b658ab30577e28d84bdbff54716dd58d97030b",
+        "size": 455
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/TypesImpl$2.class",
+        "sha256": "b5e354e790ec523bb28cfd34bbc3f118feae6ed541e19277233d3c48b367699b",
+        "size": 2710
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/TypesImpl$3.class",
+        "sha256": "721f30ab85aaace75ad1eddebdef15752c6808ebc4e21007bb7a7edc5d259c97",
+        "size": 2453
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/TypesImpl$1.class",
+        "sha256": "477b61163d340c7cce8fbad7a836f8d03ca530ceba1a49cad03bf7628d7fbb7d",
+        "size": 2592
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/VariableElementImpl.class",
+        "sha256": "ae47c2a8d8965c62c11b7bb669fad9c04b0f938c03b02b329fbf95187ad5350f",
+        "size": 7389
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/model/WildcardTypeImpl.class",
+        "sha256": "0c7900741907db506e987828d26ef3abc156c52c1cb6fb1f4f7c9f457e675553",
+        "size": 2778
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/util/EclipseFileManager.class",
+        "sha256": "cb9e986cecc6c05207573f2b9510c394248966a422d8adf4351d397016ec10fc",
+        "size": 2012
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/apt/util/ManyToMany.class",
+        "sha256": "dbb85cd8c10377268f5ace29fb27fdd3c1101532d1da04bab75d9c69c6086ecd",
+        "size": 7833
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/AND_AND_Expression.class",
+        "sha256": "5f2368c7a9157185a14795c3eb51cf001497b65c5758a747391f9e4ac295b9c3",
+        "size": 10117
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ASTNode.class",
+        "sha256": "46fc5d62b76b1fa24f84036b3a4bee4b950161ce914d9df84b14653a120a8dd2",
+        "size": 49080
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/AbstractMethodDeclaration.class",
+        "sha256": "4f3c34f5635f61f933991fa7a5a62ad5c5f50b2d9649c2d93bd9548a3aca190d",
+        "size": 26773
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/AbstractVariableDeclaration.class",
+        "sha256": "79b53fcc747fb645ec657baa019012fbe837ba4e3ba15f24d6c6bb0f0616e43d",
+        "size": 4651
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/AllocationExpression.class",
+        "sha256": "358f1cabc26ad1d050eb12bded485f9084de689e19d18a65a1bfdb996a3c1971",
+        "size": 37277
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/Annotation$1LocationCollector.class",
+        "sha256": "b45133f604b28f35a46bc2adf3ba9562c78461e3b721be22006e22d2f093bc78",
+        "size": 8223
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/Annotation.class",
+        "sha256": "0d1bc33e35bf9bcc6c3dcd7208f2da481339744ff688376005c2fdd3a338f09c",
+        "size": 37878
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/Annotation$AnnotationTargetAllowed.class",
+        "sha256": "36be0c4ef8ebe81c1eea1810887d5835fc0f2095964db1bc33a4298786a94f1e",
+        "size": 1542
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/Annotation$1MissingTargetBuilder.class",
+        "sha256": "51d3476eb444077b28ea20c442550118ae811f0407230a2b85e955c3a62ddc68",
+        "size": 1959
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/AnnotationMethodDeclaration.class",
+        "sha256": "101dcf9e0bcae9cf4681aa3275e7121dcd4aec82abff3b143e036edfb9af4ccf",
+        "size": 7304
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/Argument.class",
+        "sha256": "ffc2ea5b5c7fbe26665ae04c1673daa8798d4995437561eaa8e3bd212e33884f",
+        "size": 13822
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ArrayAllocationExpression.class",
+        "sha256": "deaea04d70d211a8292135f769b7d08e51156e0f8ee1f781643ed619943bc379",
+        "size": 11614
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ArrayInitializer.class",
+        "sha256": "c3417fd2a300fbc89611b60996de370f29ebc95e48f99148a852fe1a40988010",
+        "size": 10651
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ArrayQualifiedTypeReference.class",
+        "sha256": "0e368b82c56bf6d3e17c3a00755ad6cd3fbd85fb0c24536c540afbb31411d12a",
+        "size": 8278
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ArrayReference.class",
+        "sha256": "1568db83640f572a2cf93da38fb2f95dcd18da492f8d9fc305ce8c6aa86f6065",
+        "size": 10744
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ArrayTypeReference.class",
+        "sha256": "5eeef24016b09e1c90ee94ccaba4effb73fb224e04d52a1e8ca119cf8a6f27fe",
+        "size": 12689
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/AssertStatement.class",
+        "sha256": "13cc48d2703379d9cfb5f98c6af53cc4a7a87f28ac9d6c3950ca95abc7c826fc",
+        "size": 11347
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/Assignment.class",
+        "sha256": "927cd4c75a9add18c7e4c0babfafc729688bea990f534334b5937073a9b50f3d",
+        "size": 15905
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/BinaryExpression.class",
+        "sha256": "25ac663535c13a195ae9164b16bddc104d5c1c6f42af29cee45b2a2abbf29bd1",
+        "size": 28138
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/Block.class",
+        "sha256": "bdc13ee4fc25808ca1ab16378e5c7efaf57e50a367a75edbad01cc417a7ed879",
+        "size": 7119
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/BranchStatement.class",
+        "sha256": "5acee4553bc3c9ac8f15d5f91e1c5fe759c162d64cec914fb422d4af68fc8453",
+        "size": 3282
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/BreakStatement.class",
+        "sha256": "3f443cb4df65c86f89a99254cd796c28997d7d60996d4f897388c31a3e41cb12",
+        "size": 5609
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/CaseStatement$ResolvedCase.class",
+        "sha256": "665c83de95b47c847907dc49a2c68388c0c110866102406a13d17168dd36166a",
+        "size": 2406
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/CaseStatement.class",
+        "sha256": "39427efb57d032cf595e39291917f5d6a91251c111133385fe71e22738d2a5a6",
+        "size": 21405
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/CastExpression.class",
+        "sha256": "5128ae207d6a784e313aecd71580549f1e8eaefa5c1d27709cf5f624edf7c0c0",
+        "size": 25456
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/CastExpression$1.class",
+        "sha256": "d1d004c2faf9ac33a7a87f940eb2a8a2e3e947c63ea38fd8ec2c1104f8ecf041",
+        "size": 3207
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/CharLiteral.class",
+        "sha256": "0eb076eff937636a78fc15ee87840165000235d3f099c1db0c3da46731bb7c3f",
+        "size": 3084
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ClassLiteralAccess.class",
+        "sha256": "11227514b7c2a684994d567a0dd95d0ee63ea404b1b9f4637e9be1f2db20e2f7",
+        "size": 7461
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/Clinit.class",
+        "sha256": "fb5bffd86ff9eb5615e88b90489aefe680b3409b177066b7d6d7e3c80227468a",
+        "size": 15601
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/CombinedBinaryExpression.class",
+        "sha256": "cbfa0faed2a1941a69312b5f1aafb28d20ed706a861d1ad25bb0f143509699bb",
+        "size": 9808
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/CompactConstructorDeclaration.class",
+        "sha256": "84fad608e8e67f13b4b79f6b445115957a1982b5d146a8b4a199081fd4650580",
+        "size": 5858
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/CompilationUnitDeclaration$1.class",
+        "sha256": "2b59c651547ce68d134c7a3ed9087d88bd698fd488ec6f8a1f785532044d9ed9",
+        "size": 931
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/CompilationUnitDeclaration.class",
+        "sha256": "d879f31d45ac316ab3fc442252ec76f8d76953fb080e0285dd38a1835eed9074",
+        "size": 27292
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/CompoundAssignment.class",
+        "sha256": "ebd2026f1c5d7e0ebe0d1cc7537840caba3c41b61c3bbaafc3e3f2cf7d7030e5",
+        "size": 10148
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ConditionalExpression.class",
+        "sha256": "624afe28b1ce3995cf156dacc2f2b5b3625dd8fb1a59fc11163bd574e5833b0a",
+        "size": 24950
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ConstructorDeclaration$1MarkAllExpressionsPreConVisitor.class",
+        "sha256": "985b173964871280ce53dd20ef9e871a9c9557bf64f2687e29b4627b4de24efd",
+        "size": 2051
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ConstructorDeclaration.class",
+        "sha256": "0bf69ad845a6e2aa3361bb5d06109cd2a9fb2b5a4e5c15d9d2632437ec88b6cc",
+        "size": 33534
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ContainerAnnotation.class",
+        "sha256": "f301be679c975f3c102f3bf9ee754dc1f97904b3bc4568bed14060dd98684ad3",
+        "size": 5814
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ContinueStatement.class",
+        "sha256": "7fb436494f2b7ff55f0460d501933315a786b27810a984ad1fe1a3119dc50ec0",
+        "size": 5708
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/DoStatement.class",
+        "sha256": "7fc3bd0d4555cd9c408a11ed92f9f95b5e68bcd2c2211008ef2d767f55b202c8",
+        "size": 11382
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/DoubleLiteral.class",
+        "sha256": "2ccb285f15d56910fa830a287cdefa0bf05d7adb90bc65d0347ff14bc0451201",
+        "size": 3635
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/EitherOrMultiPattern.class",
+        "sha256": "411c0847fae6f6cc7c542362f4a3956bc3b3ac03fd57648661ee4bd7d60d0821",
+        "size": 5676
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/EmptyStatement.class",
+        "sha256": "79aceadf0d69178858be436db49a6e12392c39d294ae4b70a458437a273587d1",
+        "size": 3339
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/EqualExpression.class",
+        "sha256": "d2d0a156bf831eea759140616b1bddd9cefec060d0102143172593e8aefb75f7",
+        "size": 23056
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ExplicitConstructorCall.class",
+        "sha256": "c73b7d62e57aa20897b605bbf0d211cf7a66491c78a30cbbdde31093ab5ac571",
+        "size": 22665
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ExportsStatement.class",
+        "sha256": "3d5d399c2b0599bba4e487f46f1fa2661f5354c19793caa4d0751b9033b44ddd",
+        "size": 1199
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/Expression.class",
+        "sha256": "6e7d3efb43cbbb2f44f6b06eb347051f608cba9a1062e80bb83b5df6db5aee2f",
+        "size": 35329
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ExpressionContext$5.class",
+        "sha256": "3b967639d2f6541a227a1e7ecd9b351dbd2567399773dbcb4d869243bb4943a1",
+        "size": 692
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ExpressionContext$2.class",
+        "sha256": "a83373da49061691c322e0bf9b083c104f274731973913f885c968a2ddfaa9ce",
+        "size": 695
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ExpressionContext$3.class",
+        "sha256": "eb736afc8f00a7bc2e7aaec3a8764367655b9f3662ebe765eed66ec4d97cf5f7",
+        "size": 692
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ExpressionContext.class",
+        "sha256": "3a70040b0cf4c4a482f54d25020ac734ad777b5b077fc516af1a891d8c0429f1",
+        "size": 1922
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ExpressionContext$4.class",
+        "sha256": "8647f8cc382b5f052491835c7d77cf7f2cd59e1c12964f184b207a8a06c8f6ff",
+        "size": 695
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ExpressionContext$1.class",
+        "sha256": "9edb7b2ca900205a751d49409518ca51c232ab94539ab504961bfb1c8e955061",
+        "size": 695
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ExtendedStringLiteral.class",
+        "sha256": "e1f504e40e8931ed1443520be3194a054f63542ff5bd2124bc7bcde47b70c291",
+        "size": 1785
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/FakeDefaultLiteral.class",
+        "sha256": "1cf504cd47cf34134bc8ad3b7fcadbb973967c72cef5383f7866ba4490947098",
+        "size": 1268
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/FakedTrackingVariable$1.class",
+        "sha256": "c3928800e8eff929e98fae54ba8a0281bbe328a729d8c4d25e46116ac203f437",
+        "size": 4093
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/FakedTrackingVariable$IteratorForReporting$Stage.class",
+        "sha256": "d21ad45ba3825dd21d264a446f88ed74f18426fc55af662cffe25dcc8d3c5639",
+        "size": 1763
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/FakedTrackingVariable.class",
+        "sha256": "3720ab91ca96745c146c04cd40beb441c425d0ecf4989abd8edfb96285e858e4",
+        "size": 44038
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/FakedTrackingVariable$IteratorForReporting.class",
+        "sha256": "2a8eb0579c3355e6d30f6c1ea8fb58e2114be5ec2067df1fb27b4df7d2c6f106",
+        "size": 5070
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/FalseLiteral.class",
+        "sha256": "2e804f5677ef8b253f0e37e5318ccfcb53039eb4bc344d8c346ab7cc122348db",
+        "size": 3150
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/FieldDeclaration.class",
+        "sha256": "2f68ff832bef4387c4729d052fd70da18f2c92f4132abe838fcd1e26e368e550",
+        "size": 18295
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/FieldReference.class",
+        "sha256": "9a976e74397fec9b66d24bac0a0db2173b0e778056b498fdf5bf71ba7fbfba1e",
+        "size": 26587
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/FloatLiteral.class",
+        "sha256": "16af4ec45ce18a29126960620a1eb0cf20b4cdf9eabe680a5aafb852cac2cd2e",
+        "size": 3607
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ForStatement.class",
+        "sha256": "33e57d4251e54d1316bce15a2e2ceec1b5aeef0e67ee151de2fc634961db4011",
+        "size": 15907
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ForeachStatement.class",
+        "sha256": "1d3e9d8b839b39627aeb629682ed7e2ab1084195a7f480494f5e01d97e92534e",
+        "size": 21888
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/FunctionalExpression$VisibilityInspector.class",
+        "sha256": "eb4fe2865f2a44e53d604426a86adf4755c14870054b27cd939d049f8dbc86e0",
+        "size": 3122
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/FunctionalExpression$1BridgeCollector.class",
+        "sha256": "ccb3c9530ad9c1c8d358e7bcfb5b2a335a76c3e793b540e5e25928c9ede9610d",
+        "size": 4620
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/FunctionalExpression.class",
+        "sha256": "051512ec6ea7a0f1e0dfcf1ae691e0d85f6454e16b80804b7165bd75218c939f",
+        "size": 10941
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/GuardedPattern.class",
+        "sha256": "0bedc3c75980a13560a5b31c37aa3ca014001551a126787bdb4996fd1f71eadf",
+        "size": 6967
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/IJavadocTypeReference.class",
+        "sha256": "341a87cdf1ef23ced17d75089aa110dbf8f3e270894763363cfd3e0c6651e10a",
+        "size": 221
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/IPolyExpression.class",
+        "sha256": "03465b52fd5fa9740952ed5d678dae48255e7f996d46a3ef9e0b1e1c2a8e4c5f",
+        "size": 1663
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/IfStatement.class",
+        "sha256": "e0fbdba9342d263a63833a2976d655dba1374ec4f444df4a88a11c72f66fe800",
+        "size": 12646
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ImplicitTypeDeclaration.class",
+        "sha256": "ce62bed091d837bf0a331bd3d1a7e6ba9d1d28f64f05aced871b1acc0cb70b2e",
+        "size": 3148
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ImportReference.class",
+        "sha256": "2e75f310f91ecaad0c1421b90ab69024be04a88b621e21584ae79842e24bc9df",
+        "size": 4790
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/Initializer.class",
+        "sha256": "9a2798f758f18426c76444f060a6a22b85953af27cd56ecf917c6e0325979d81",
+        "size": 7612
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/InstanceOfExpression.class",
+        "sha256": "c0eabac2e9ed01e2867c18fffac5b8c8f379a48aa39d0df039d506fd7c964230",
+        "size": 15269
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/IntLiteral.class",
+        "sha256": "9c1d19830afb29f7581113308e80d23deaef2acb49debf055490954b0fc0ef8b",
+        "size": 5368
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/IntLiteralMinValue.class",
+        "sha256": "14971ca19dce30d1ee0109919441054a5d1d2bc7a26b6982e2fa188dedcc803e",
+        "size": 954
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/IntersectionCastTypeReference.class",
+        "sha256": "7db3f45ce89e352ec4338dbd00b3d08134355c40f529e585d249ba8a706c0cec",
+        "size": 7528
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/Invocation.class",
+        "sha256": "41c7a35c70207ef7fcce44f7802dbc9427f8f60b315d8531d9e8fb7bc099198f",
+        "size": 3199
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/Javadoc.class",
+        "sha256": "bcc922cc398759a0bcceeffe50a25f1a306b90bfaf226bee4a109f9a1b4cb282",
+        "size": 35816
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/JavadocAllocationExpression.class",
+        "sha256": "30b07d22ce46ade65e2fabfbc1119c5da50ae80b5a13bce8081be9c381051982",
+        "size": 9664
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/JavadocArgumentExpression.class",
+        "sha256": "a8a520651698d56b558116ae2ff287453d396724c9d6c5e4f5750ef574020099",
+        "size": 6322
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/JavadocArrayQualifiedTypeReference.class",
+        "sha256": "70291b97cd83aa67199269abd8f7ae4088b93693f70e4ecd3150be17b5cb6829",
+        "size": 3131
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/JavadocArraySingleTypeReference.class",
+        "sha256": "db55616cb326373b7efa6654388365729ba580e7fefd1a77675cfc103e9359bd",
+        "size": 2876
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/JavadocFieldReference.class",
+        "sha256": "14577d93d21661585df28e2f55f2265cd36151f2f2b7140f83c8da5fa3f9d87a",
+        "size": 7711
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/JavadocImplicitTypeReference.class",
+        "sha256": "79c5e6eed661290e0228e829191552bdff43716421e76ad8c3d3c421546bec9f",
+        "size": 5885
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/JavadocMessageSend.class",
+        "sha256": "6b2380e17290ab0c3137401468ea5a5f9153f76db9f92539802402ef378150df",
+        "size": 9555
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/JavadocModuleReference.class",
+        "sha256": "d2ea58da9631ac01b624c0d5c6e71383e2bc42c2630ea64bb8bc4f7def715e25",
+        "size": 6731
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/JavadocQualifiedTypeReference.class",
+        "sha256": "dc343469dfc66b0f7730c2a479165e3fbc9a1f6b0d684a8bc8830eb88ca5bb8b",
+        "size": 6412
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/JavadocReturnStatement.class",
+        "sha256": "4d2061d5a821082ca233458f29b1a0f010f50c919fb8bcfa639f9c34cd1a583a",
+        "size": 3708
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/JavadocSingleNameReference.class",
+        "sha256": "5b4daf634a74877cb67bca7fe4a94503001d3b3c4b2d2da323ee30dfa220ca12",
+        "size": 3915
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/JavadocSingleTypeReference.class",
+        "sha256": "d93a8ba5a272d35407def3cbe54a36b5445405eec8151e84978c76f9fd95ec93",
+        "size": 6493
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/LabeledStatement.class",
+        "sha256": "1d64ae49cb15791b7522a4c36ca6f6c41eda2a0f4deb6d3cb0069c3226e8da97",
+        "size": 6377
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/LambdaExpression.class",
+        "sha256": "e0dd0560373f399d1ff9ac52d3962f5ed12bc40b8464243be64f5688e16d6c2f",
+        "size": 55090
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/Literal.class",
+        "sha256": "c018047d7587d673387691826963547597cd1acdeaf4dc0ff92fff4ce1be2d86",
+        "size": 2234
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/LambdaExpression$1LambdaTypeBinding.class",
+        "sha256": "36a299afecf0bf6370d069fa7723beeda02c36a6608cef7b2394e9930737dae4",
+        "size": 2509
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/LambdaExpression$1ResultsAnalyser.class",
+        "sha256": "ab19f9789b36a4d0a56724d346d76dc3426f347fc189d1eee7a191591dbcbfaf",
+        "size": 2675
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/LambdaExpression$1NotPertientToApplicability.class",
+        "sha256": "62624cbe6b0848b319ea439640e260fc253d5e6adb7fc485fcfbc9d25a0a0317",
+        "size": 949
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/LambdaExpression$CopyFailureException.class",
+        "sha256": "931628100cb315d9a5200ae5920c70aa0b4587d845b900806a835c030ca5051b",
+        "size": 598
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/LambdaExpression$1ShapeComputer.class",
+        "sha256": "c6d934e99d6e16d21c163da611c3835eed2f4c5a288b60d2c29d18466f91ebe6",
+        "size": 2131
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/LambdaExpression$LocalTypeSubstitutor.class",
+        "sha256": "33d9ad4d8728789f8ce861391c27eed35e84a9acadf556b743b14cea0dfd49ee",
+        "size": 2994
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/LambdaExpression$CompatibilityResult.class",
+        "sha256": "399f764ad0a8cc22295ec338810af49f7f01e7bb60b10b9527c156edfcbeeb32",
+        "size": 1483
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/LocalDeclaration.class",
+        "sha256": "8996b4523dcca0caa11459da49cec6f732b81e0fd760eed5109dc7aa71ccca6c",
+        "size": 22244
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/LocalDeclaration$1.class",
+        "sha256": "afb73c952178bb097b9cd1b094144f3250b1e79bbbfb41c01c26c8698528fbf0",
+        "size": 1922
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/LongLiteral.class",
+        "sha256": "7eb80c9f920a3da40f56e3ea40e95ba8501d6d9c3a6f105f2a28d2589813c538",
+        "size": 5212
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/LongLiteralMinValue.class",
+        "sha256": "cb64ad48e0e830916a0de8e9d97064c354badadde96b618abd3d46f15118db95",
+        "size": 1037
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/MagicLiteral.class",
+        "sha256": "39bda7a79ee8e302ecc9695a3dcbeae132b9bd53a4c4ab75211191a9672ed05c",
+        "size": 573
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/MarkerAnnotation.class",
+        "sha256": "9240b32ffe76f3635eff10c7dbad28c088b5035cb39c85f74841efb6ec02f138",
+        "size": 2175
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/MemberValuePair$1.class",
+        "sha256": "a7effea28b1eb9b1bafd61c3e056a5cec254943aebc86776d54d16bd7a03d3a0",
+        "size": 1429
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/MemberValuePair.class",
+        "sha256": "6a867e6c5fa0145375572b0cb4a0a51cf6f0162941094556a8017a739051fc82",
+        "size": 9659
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/MessageSend$AssertUtil.class",
+        "sha256": "0904889fcd1ed06f3c0dfd6c560f4a97a00c4019c2b6ff080b1f2e62c82dc9f1",
+        "size": 1698
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/MessageSend.class",
+        "sha256": "7daf37ebefbd2702ac551f37c1a3123ca17253c955ddec8fedcc678560db9595",
+        "size": 52807
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/MethodDeclaration.class",
+        "sha256": "f008fee1c3d78d37003adbc24bee87fa5e03f967547a6aa6309fdabc5a07dc3b",
+        "size": 19797
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ModuleDeclaration.class",
+        "sha256": "58bc7de3bf98d4fd1ad489b36d1a564c00153e240e8f77e16f5ad3320b77da76",
+        "size": 20580
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ModuleReference.class",
+        "sha256": "a926f14dead102def0d921de2772975c83ed05f856b26d4a6afe85a275ddcca8",
+        "size": 1817
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ModuleStatement.class",
+        "sha256": "885631bdab3a40a759b6e204345dea091b6000756211ccb556fc0d3c759f8345",
+        "size": 468
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/NameReference.class",
+        "sha256": "7732b2b3acc4e4977782eebadc1d79eef7b12b40b6d8068a1550b9dcb9f2ac07",
+        "size": 6351
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/NameReference$1.class",
+        "sha256": "3f25ba19c4b232d1b08433a7078987f5ffdd18230f201c3804c1c17628feefdc",
+        "size": 1588
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/NormalAnnotation.class",
+        "sha256": "01ebb375508495587b67ca3973cce9610354c6b45acf122bc2bd83a743739cf2",
+        "size": 3578
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/NullAnnotationMatching$SearchContradictions.class",
+        "sha256": "2e301445da6ede9c72633fbafcd1eff5a3b5ee471ba1a550fceceb9126e2db16",
+        "size": 2854
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/NullAnnotationMatching$1.class",
+        "sha256": "6bd28b02af29999245bbe750ef6f7f77e25826c846b5d9ace4c6328757076d12",
+        "size": 2275
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/NullAnnotationMatching$Severity.class",
+        "sha256": "435c8740e194cc9e797ca537d3ef611061911f24141c6cd5819811db1a72cf69",
+        "size": 2027
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/NullAnnotationMatching$CheckMode.class",
+        "sha256": "134167d0a2a30446c5867d2b6e21ca04781577e60a679d1cccee00e828952a3d",
+        "size": 2225
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/NullAnnotationMatching$CheckMode$1.class",
+        "sha256": "7135f1791a85d394b81d23704600550aa078bedcf22f24c7610aeb5e00c6257b",
+        "size": 723
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/NullAnnotationMatching$CheckMode$3.class",
+        "sha256": "7d1276aac30101b043c86bd0828b00cc58b070e7cade1b305fb3b3e7536bd8cb",
+        "size": 967
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/NullAnnotationMatching.class",
+        "sha256": "b51215674b27701f34b9bf6a4c48cc4e61ab2591c08327cbfba49edbbd1ec412",
+        "size": 27557
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/NullAnnotationMatching$CheckMode$2.class",
+        "sha256": "17832d767b8b4a622710a2d6fdd91c3f5e1a84241bc18193266b6026f3b783da",
+        "size": 874
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/NullLiteral.class",
+        "sha256": "0b81e226d817f9757b2047d35e2445a99ae0bd41136f4f3b2aa89e29394feac5",
+        "size": 2950
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/NumberLiteral.class",
+        "sha256": "93f9c2524bdc8b21869184ed5ff43e85dde72c2d12fa186ba2512af0e6cc30c0",
+        "size": 1788
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/OR_OR_Expression.class",
+        "sha256": "9d3910ce5fea722c0b347e2b3d776de6c6bcf28568d2e89ececedf58e30a4a15",
+        "size": 10168
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/OpensStatement.class",
+        "sha256": "29a121db340b0850f5711b1d36d04cfca7a36f407774624e25271b120752c87e",
+        "size": 1417
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/OperatorExpression$1Decode.class",
+        "sha256": "485cf34fa90b84b63a4229513eb6cffef177576d1949368bf5ac56ca00a4dda3",
+        "size": 1922
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/OperatorExpression.class",
+        "sha256": "6094aa793953e193042d004e47789799caec27e1c650a641617c91beb2bd9e79",
+        "size": 9926
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/OperatorIds.class",
+        "sha256": "980bdf3fe8ff2bd60508ec0fe849898c29d6b180c710791d69559315fa6d9fc4",
+        "size": 990
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/PackageVisibilityStatement.class",
+        "sha256": "ad9094731f749ed58c488aab512e14716a7a44f4f9cb560b376300fd141653c7",
+        "size": 4453
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ParameterizedQualifiedTypeReference.class",
+        "sha256": "702e357fc1874ccb9df3c1eb5323b9940d12caea6172dc3da59ccb798f1d6cf0",
+        "size": 22021
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ParameterizedSingleTypeReference.class",
+        "sha256": "58c49daf559c54245e5e00356229954848a812419cd87f7bf72dd7a516a32e53",
+        "size": 19346
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/Pattern.class",
+        "sha256": "ef37b4c8d510a926805fda2465e37e78f5e3de39ae28b0a109e9bc6e0888263a",
+        "size": 4809
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/PostfixExpression.class",
+        "sha256": "531070f0611ed97dad887514891cd49a2835925ee188eaefbf1d55c6128ab3ee",
+        "size": 3135
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/PrefixExpression.class",
+        "sha256": "0e42cd22f9e420b4dba78a2a5962c6c04c019dd5a8a69549bd695d6c9038d319",
+        "size": 2273
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ProvidesStatement.class",
+        "sha256": "5ac707a8c64b390a289ed7eb67ccec574be1da258a163f74558bd173073fb936",
+        "size": 6676
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/QualifiedAllocationExpression.class",
+        "sha256": "bbe2df1b052215204bf446bc3c1fa2006741ef7e1a33f8e16ba5d82243a8b511",
+        "size": 29201
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/QualifiedAllocationExpression$1ValidityInspector.class",
+        "sha256": "f20cdbbdc4a19b23c71b05d6120bbf4832dc0c12d6ab7ba15805ff6a5949fc22",
+        "size": 4534
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/QualifiedNameReference.class",
+        "sha256": "b2334655b306199c15cb21d6982a308f97dd864002bfc9dd9a99e46f617ab58e",
+        "size": 36595
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/QualifiedSuperReference.class",
+        "sha256": "17ccb3e66d3260b4fd9deb7986abcc3416a74348b9cc74d41a5173a61d480e7c",
+        "size": 6185
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/QualifiedThisReference.class",
+        "sha256": "034eb1b1c237d08a60cc9f19127b603b31237a80ab1e632a06c0586f71b24af2",
+        "size": 8454
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/QualifiedTypeReference.class",
+        "sha256": "8aed6637151dc4f821a6cc0477196fc5acfbd4a7db5221a891018f32626d5787",
+        "size": 14062
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/Receiver.class",
+        "sha256": "13cc6f0fd66b477e0a388ffd64e0dd50e5b9fbe08aecb6260ad4e65a268a2ffc",
+        "size": 1620
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/RecordComponent.class",
+        "sha256": "848920fcf2d9a7b6ea6e4675dea00e2894584a3026c459c683c8511c8ef7f499",
+        "size": 7405
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/RecordPattern.class",
+        "sha256": "ed4ae6b87a4b1ae3833ebe70ead5c74231a93f31881ef79bdc997567dcd12abf",
+        "size": 13459
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/Reference.class",
+        "sha256": "aec4621fa2430cef60b8c0de2dde1464991702f343fd8d6bfdcaaa332635d289",
+        "size": 9666
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ReferenceExpression.class",
+        "sha256": "406e41f8c135b2839e4bf2bf32485dec7d579f78e5121345167aa561a2306adc",
+        "size": 54319
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ReferenceExpression$2.class",
+        "sha256": "e614b82bbab425917260abbb4932326ae8993e9d9832b61bcb287a87f52db644",
+        "size": 1519
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ReferenceExpression$1.class",
+        "sha256": "d644f2f9bcbb129a1cea951e954ab075f386b674737dbd3241c18c8f42a3cfd6",
+        "size": 2205
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/RequiresStatement.class",
+        "sha256": "876bada950342e6ddd6dca36c3abfbaa95352f698ade680688fabfe623123fa8",
+        "size": 2251
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ReturnStatement.class",
+        "sha256": "8fd4581fbf8948efb3a2e631bf6ad8113c27a4b9903f9d45432f6e2fd516caa1",
+        "size": 18307
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/SingleMemberAnnotation.class",
+        "sha256": "f41736ab09156ec595df2c801f3af54bf08510ab6b1f0f8e46f65b1c5919e479",
+        "size": 3391
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/SingleNameReference.class",
+        "sha256": "d173a974eee2ff9867c1983c2b482409a163eb029d6cb7c2750630ad952cad48",
+        "size": 34329
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/SingleTypeReference.class",
+        "sha256": "6b70403d6e69ac650e5c27a9193cc583ac68abbb6677c3cdc70d84d08adca4bf",
+        "size": 9304
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/Statement$3.class",
+        "sha256": "37f123033c3f85351bc45c153d98eb337132c4bd186ee4bdd81be632dca8ab16",
+        "size": 1617
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/Statement$1.class",
+        "sha256": "665a7da35882afdea17e790b79cda99cd7bdfc881cf12cf92267a3bdd6deb5a0",
+        "size": 3970
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/Statement$2.class",
+        "sha256": "82a69f5e1088760017c33b12e58445a70b152866162bfd933cdf7fbdb4f70fd5",
+        "size": 1381
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/Statement.class",
+        "sha256": "4f405d475bead3ad6adf42d44cd57f8a815b1059cd0b1b6047ec423cf790f683",
+        "size": 19828
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/StringLiteral.class",
+        "sha256": "b5d0b8ba21ce4d23edcc585e995124b1d91756f869167580e6757ad03507e58a",
+        "size": 5517
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/StringLiteralConcatenation.class",
+        "sha256": "713462af139a2a97727d5a95b38988f59fc633bf57d42e9711f7bce2af943dd7",
+        "size": 3088
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/StringTemplate.class",
+        "sha256": "ad351f1d5a7d834121152925f2c7966ec53c426362bf43aab4e8019afdc54e97",
+        "size": 6966
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/SubRoutineStatement.class",
+        "sha256": "958fdb26d923571c1d8878e793eb6c9e3a3ee56f2a5bb636fba52d089ef3fdbc",
+        "size": 2691
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/SuperReference.class",
+        "sha256": "a57559cb737d5015a7a37d1c9cb3e1ca05bf48df28f41d9ca943118a8f23e5d0",
+        "size": 3425
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/SwitchExpression.class",
+        "sha256": "8b1453c260c42d850740ea0384ac2811d60da2c434f0a4a1f8549138116a2a8c",
+        "size": 29947
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/SwitchStatement$CoverageCheckerVisitor.class",
+        "sha256": "d373b51335ebc97304a85149d39668553eadbec9cdfe798c6112239b51eb600e",
+        "size": 2750
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/SwitchStatement$NodeVisitor.class",
+        "sha256": "1496632170ad0a8044a4912eb66dbdb758c78291ff73c3b1d077f13d0e553c80",
+        "size": 2825
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/SwitchStatement$1StringSwitchCase.class",
+        "sha256": "bb640469427185475caca17b328a473f1235dd03c8defba9473fe91f883ce85d",
+        "size": 1956
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/SwitchStatement.class",
+        "sha256": "fb7974a5b19d765dc4184df7b79f8a4055e6be17f55817ad37ece93b62fddf83",
+        "size": 47629
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/SwitchStatement$TNode.class",
+        "sha256": "70dc3d455743869c53ea9f80c922e3e23ceadf5f9e5c6c88257b3ab1e7995a97",
+        "size": 4175
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/SwitchStatement$RecordPatternNode.class",
+        "sha256": "d12b3fc16bbab3853b04317fa76cf4ca47d9ac3decc487429ff283738335f216",
+        "size": 2621
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/SwitchStatement$PatternNode.class",
+        "sha256": "3b2a83c828c5bea63f68edd369eff143df3ea63df2e60be98258c4154c0071ea",
+        "size": 3224
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/SwitchStatement$RNode.class",
+        "sha256": "ba867075c180a92ea3f25f14798f30cda5515616e9528b178427c3dcdd945401",
+        "size": 3638
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/SwitchStatement$Node.class",
+        "sha256": "4c40906764ce84f14f08053c3c5c8895315ecaf7bff0d82633758c7cbf090a43",
+        "size": 1255
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/SynchronizedStatement.class",
+        "sha256": "b9a5c2ef34776905d9179488bbca30a3faaaaf4803602b22988f2013adbe6416",
+        "size": 10299
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/TemplateExpression.class",
+        "sha256": "7ddfbe4224497e673dc214ddbd1a686850ff2614e2791adfba8d68d767c6bc3d",
+        "size": 5066
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/TextBlock.class",
+        "sha256": "e1164100bbe58c9fffba9e58077da5e75857832b2da3e8e0e181103dba0e8019",
+        "size": 6300
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ThisReference.class",
+        "sha256": "8fdfcec78b3bc03a3db5539772d97e8b0436b01194d5170147d55d650afa2fe4",
+        "size": 8069
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/ThrowStatement.class",
+        "sha256": "27065f795ab3587d95c3b3330a7c09c75b266ea122dae47590df95ed9f2ad074",
+        "size": 5840
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/TrueLiteral.class",
+        "sha256": "4ec05b1bc6ccbe9346c4f9129f95c663c47c87f776f212840ada3f167e4c295b",
+        "size": 3139
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/TryStatement.class",
+        "sha256": "2cf2e22ea63b925385a6db36322ef62a35221bb7b9bc89654eaa8f27f4804e8c",
+        "size": 39468
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/TypeDeclaration.class",
+        "sha256": "5633be5276844275de3206f619859df8c7c383ce8148351726940797c138b932",
+        "size": 60722
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/TypeParameter.class",
+        "sha256": "6ef3db1cc438ba5ce477e4ec76951e631bddf10afcde48037e9ec4d5780eb2c7",
+        "size": 12284
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/TypePattern.class",
+        "sha256": "e456b328355fa5c27590b21212e29488b490c78abad2fc0a1ee356d1676b4f8c",
+        "size": 8643
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/TypePattern$1.class",
+        "sha256": "8509d339dfc7dc60d49032b736c69f29118850d874b2a44adddbb897510f139c",
+        "size": 802
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/TypeReference.class",
+        "sha256": "859dcd0c26e82f080b7281aa27137d501d666aea00fa17ed1750cc4b4a50f5aa",
+        "size": 25153
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/TypeReference$AnnotationPosition.class",
+        "sha256": "f13e39abe0caf2be006af752f89e220eb91767c7676a348a7d87179726e255a3",
+        "size": 1467
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/TypeReference$AnnotationCollector.class",
+        "sha256": "ef37f5402a62a8edfa124ff7fde453534f613492a6191527d384c906bb4141ea",
+        "size": 9408
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/UnaryExpression.class",
+        "sha256": "c052b55076be11b48d8e048d89dea9a7d2dd0c43654de05369362a2f8deb83bb",
+        "size": 10747
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/UnionTypeReference.class",
+        "sha256": "1a63c2e561d83a7d9d59470c25343c5385c1c35c5212a37b0e1157571cbdbb86",
+        "size": 5798
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/UnlikelyArgumentCheck.class",
+        "sha256": "34d8dec371295ea8403f64fd62b58d12a0ec1bf4fef5a8a0d68b86b92d5d297a",
+        "size": 6753
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/UsesStatement.class",
+        "sha256": "f760a892876ddbd55e4e06125b6f9e5f10ad385da52bce7b9a02e14574f0f468",
+        "size": 995
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/WhileStatement.class",
+        "sha256": "bbdccd5eb4a24daaef3db411cfff22cc4171bdacfe34fb59ad0b859505f12804",
+        "size": 12557
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/Wildcard.class",
+        "sha256": "a81c65c2ff56bb6edb9cbe52a2e0592ec497d28a8b1c56d52b01711b9b715079",
+        "size": 6707
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/ast/YieldStatement.class",
+        "sha256": "72222acc497e6328d170115d5f40449ad25ba7b632e1fd66537a689de6bac42a",
+        "size": 12174
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/BasicModule$Service.class",
+        "sha256": "07723331a56578fae3d6f1780db11ddd01a201bc52456d37687f1392c57d6653",
+        "size": 1292
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/BasicModule.class",
+        "sha256": "619c8ddc4523f7ecc26bc267a849d4fdd3f5c8640411f31f2e6d3800e4322f9f",
+        "size": 8846
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/BatchCompilerRequestor.class",
+        "sha256": "4e2374276e6eaeaf457b8e0fa7ee16f606349ba322d09f08fcf521c5dbf6a0f8",
+        "size": 2084
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/ClasspathDirectory$1.class",
+        "sha256": "4548cceae57a8ad0e0be1db408c27fde5b9c5cb028cbd5252efbf4e813753667",
+        "size": 1162
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/ClasspathDirectory.class",
+        "sha256": "cc90c28f95b217bb14b0015d14adb316d2314641c32941a308bd966cf32ce079",
+        "size": 17988
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/ClasspathDirectory$2.class",
+        "sha256": "0aa4ab175067d55639baa93524ab8afc8ee579631df0645f310ef5ca8e15581f",
+        "size": 2039
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/ClasspathJar.class",
+        "sha256": "58acbb54eee8d498c594a2741ec0b5f8bded677c3847a57c4fbdb7eda29cca72",
+        "size": 14013
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/ClasspathJep247$1.class",
+        "sha256": "b7c757c0786c1b5fadede6e70e57617317b20ce4791a25b8705cba20cf79f475",
+        "size": 3195
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/ClasspathJep247$2.class",
+        "sha256": "3fcbafe63453b0f98a24eb4b44f4add62b0f484e3bc15b514c84f83661e24b73",
+        "size": 2488
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/ClasspathJep247.class",
+        "sha256": "17c05d3ceb801d7a2a1479c6a28b54533bdd8b4af82d1e74dc461c7e64d63ccb",
+        "size": 13131
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/ClasspathJep247Jdk12$2.class",
+        "sha256": "57224268e64675d7d1b7355985d20d1aec922a3ae5f2533f86f9cb279ce9c881",
+        "size": 2518
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/ClasspathJep247Jdk12$1.class",
+        "sha256": "f94ec9ecb2263d54ba0863a49cee9cd8f9d156c36e4c7a96637c38a608fd165d",
+        "size": 3249
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/ClasspathJep247Jdk12.class",
+        "sha256": "505409d1cd89458020fa6d242adb16badd68755ae88df6197cfb8a451148a399",
+        "size": 14827
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/ClasspathJmod.class",
+        "sha256": "34e3a7d827c7bb39f244a8a9858a3285dbb3890e805c2e6d8d6ad7c2b6152d56",
+        "size": 9224
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/ClasspathJrt$2.class",
+        "sha256": "c215e2ec6cf20167af5be7566078b54924838caf300f8b1d0a7678a96be2b455",
+        "size": 2883
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/ClasspathJrt.class",
+        "sha256": "509799ce4511469766e07e7c5872c1010bd6c9f0af9896ae5b5417d23a5064bb",
+        "size": 16276
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/ClasspathJrt$1.class",
+        "sha256": "c4f2823946a3c809a186306045f43ca9f8a796df8fde4d4c72dfd1eb622a29ab",
+        "size": 3099
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/ClasspathJsr199.class",
+        "sha256": "d36286844eac82be62fe5c5c31b31f6b2b456ea5a32a07152da445861df0cc63",
+        "size": 9766
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/ClasspathLocation.class",
+        "sha256": "fb0199b6d3f2eae4d4d497296f8279a1aebbced347de7cb71440618baa9bdc15",
+        "size": 9154
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/ClasspathMultiReleaseJar.class",
+        "sha256": "29b5c9ef4b8a05e580a34785aa17a07eaf887f3bd44116db899fc5cf0f5b7846",
+        "size": 7796
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/ClasspathMultiReleaseJar$1.class",
+        "sha256": "7d88189fe70452beddb417e8546a74cfbdf3f56c18d9959e647d06b4cc61ab81",
+        "size": 2502
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/ClasspathSourceJar.class",
+        "sha256": "63b068946a946c12c69c167fa9190725b81103675fd3196a21cf8813381099ab",
+        "size": 3779
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/CompilationUnit.class",
+        "sha256": "936dcabe3a56e5552604e8455fe836764c01a5a238c3b48bedbfbcc6b602b911",
+        "size": 4979
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/FileFinder.class",
+        "sha256": "9fe5f57c1f6243dcdc67254990d5242c979caa8d0ad49788301c7aec17c145b6",
+        "size": 1975
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/FileSystem$ClasspathSectionProblemReporter.class",
+        "sha256": "db44f9ede6e39c11edc69d877b57c71c757258714f72b16202cdcfd12fa19a4f",
+        "size": 407
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/FileSystem.class",
+        "sha256": "15bad1a1b2076ab625ac810212d1ab5e0fa89d3d3232a0ce3bf8827a64d7ecd8",
+        "size": 30642
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/FileSystem$ClasspathNormalizer.class",
+        "sha256": "cdcf51ce40d10711c9e703d9c097b76209073a0e2a16202a52b76b9ed2082498",
+        "size": 1733
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/FileSystem$Classpath.class",
+        "sha256": "0fe987e95b165e1de47e6cd8e0b5071066ad1a53c7e3070ce9557b7001188e45",
+        "size": 2939
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/Main$3.class",
+        "sha256": "783454a5f2f3e8ee3beb6f4cb20559c34b929dc8c4ccaae079f100f3574be73d",
+        "size": 1418
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/Main$2.class",
+        "sha256": "51428b7784a9eee61ab607c60eb810f963d334e78b6f0d670a3a8a4fe533829f",
+        "size": 1002
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/Main.class",
+        "sha256": "032ffd2ff28b804ee8c4345f49c47ae1e745f953a2c96d8990547879f9e8ff55",
+        "size": 110979
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/Main$ResourceBundleFactory.class",
+        "sha256": "6bdff3aa3c4f27422e99de45c74c611fa87b404a829b89d84f18c0ca590472c8",
+        "size": 1284
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/Main$Logger$1.class",
+        "sha256": "3e2048c496d49efd96d79f09f6cc0c695278405849156bf1a91d848dfc6402fe",
+        "size": 1665
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/Main$Logger.class",
+        "sha256": "ec73d2febeb9e943ff571378356b2f414fa4c25616faf636166a1f05eb14c271",
+        "size": 34486
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/Main$1.class",
+        "sha256": "df8e5581b47841f8132ac91222f4c46a593cba923bf2bf3931baedd6e044ea3b",
+        "size": 850
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/ModuleFinder.class",
+        "sha256": "c02eaea962fb8b1cc9c6ecec10f20b7a589286bd99972043efd9e0c2e205f46f",
+        "size": 13993
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/ModuleFinder$AddExport.class",
+        "sha256": "6545f5e3bb65779a90978e30303f8f001a21bc76ed6917b0015b15ba33402066",
+        "size": 914
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/ModuleFinder$1.class",
+        "sha256": "7114d73a902584e956309f0f7fd138ef412862aabcd9ae6c9dff53b4c4a7b829",
+        "size": 1337
+      },
+      {
+        "depth": 1,
+        "kind": "text",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/batch/messages.properties",
+        "sha256": "9b2680c10dd7778c9803939ff98d3d520f66001b47e43111ae1a1d6a38381ecc",
+        "size": 32671
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/AnnotationInfo.class",
+        "sha256": "c2a7f69d5bca54777e52b414cd5f2761eb744f5459bdf1cb3f2eb59382e9cd7a",
+        "size": 11939
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/AnnotationMethodInfo.class",
+        "sha256": "230ac8852f838fb15f670b505b00c94f95bd9ba3f7c559eb34295dedf50451e0",
+        "size": 5068
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/AnnotationMethodInfoWithAnnotations.class",
+        "sha256": "870ee5a2b38330c9fc122341a8e7ad7549803ff9f920e457a574540fb619f488",
+        "size": 1549
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/AnnotationMethodInfoWithTypeAnnotations.class",
+        "sha256": "4da6da40318ab32c8dd5096d76a67d60a10b2c0e828bc3131f7175c0f405973f",
+        "size": 1781
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/BinaryTypeFormatter.class",
+        "sha256": "ddb7c9a43be6a8d418b191d8a6b83ce8e3155bbeb772b4f51411166bc6d6ef6a",
+        "size": 5985
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/ClassFileConstants.class",
+        "sha256": "53053e38bf297ce3531eebed58bc6bec18cfc4e38a49f8ea1398e04a398d68d7",
+        "size": 5847
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/ClassFileReader.class",
+        "sha256": "0e9775bd9f1a6402ee2854d4297c9b3dc63bf442b7774a3c5c1a9e0287b50b75",
+        "size": 35558
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/ClassFileStruct.class",
+        "sha256": "cca04833c6b031749b6bf4c545f443bb6688f57f04aaa52bd3c0cb63f9c07614",
+        "size": 2446
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/ClassFormatException.class",
+        "sha256": "635d55eb5c09838d816922f1b0a2a3e6ffcb158c4e4ec596127b94bd0c858276",
+        "size": 3594
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/ComponentInfoWithAnnotation.class",
+        "sha256": "728d709954fb86eb48328e64facea525dc8ef14d068e0b848c8e3eb3820c22bb",
+        "size": 2512
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/ComponentInfoWithTypeAnnotation.class",
+        "sha256": "4bd2dac57150718de22f4e7968fbdbd4a0621bd3132d59ad9019789a4a825002",
+        "size": 2502
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/ElementValuePairInfo.class",
+        "sha256": "ca5a10b1b30a3cb01cf766ea3298cff3d228374f0ae0c671cfda29996b1c38c4",
+        "size": 2265
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/ExternalAnnotationDecorator.class",
+        "sha256": "988a33d7ab7bbaf5c957a577d4e59a146386ca4f5f02a0bf0305b9cf62daae3b",
+        "size": 9678
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/ExternalAnnotationDecorator$ZipFileProducer.class",
+        "sha256": "a4bcc33e8c0c3b1a9c1af84fe5efb6a85a6fdfaea7e9b8ee0ad60f745341101f",
+        "size": 432
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/ExternalAnnotationProvider$SingleMarkerAnnotation.class",
+        "sha256": "2c6c48741717ce67575ab2a6130151512b8eead8e60ddef0a5138965406dc758",
+        "size": 1283
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/ExternalAnnotationProvider$FieldAnnotationWalker.class",
+        "sha256": "58d819fbfa5ef5786c4c6166e31961e6a5a75902a5af4a5fa8a4baba7f4cd58c",
+        "size": 1790
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/ExternalAnnotationProvider$BasicAnnotationWalker.class",
+        "sha256": "7f876e2790ddf8a99b87f781915e38979b475ece3821fc4f3d2cc25cb65a884b",
+        "size": 4612
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/ExternalAnnotationProvider$2.class",
+        "sha256": "3c1c81a1454cf30c9028a83f32487fd4924352109104f125ffb6f18c197245ae",
+        "size": 1329
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/ExternalAnnotationProvider$MethodAnnotationWalker.class",
+        "sha256": "ee4c1ae1c5b90ac0e41ce1540fa46239ef3c54e4b7af3b25dfb0dee3bd7e97a5",
+        "size": 3980
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/ExternalAnnotationProvider$TypeParametersAnnotationWalker.class",
+        "sha256": "d073aebbe3b40eb0c6b8bc4a638c6a2fb2d26176e0c153a943d388ff3e870106",
+        "size": 5330
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/ExternalAnnotationProvider$SuperTypesAnnotationWalker.class",
+        "sha256": "549200d0addb709e16580292018b9897a40f1bf347ddfc4736f75a1893d32c17",
+        "size": 1987
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/ExternalAnnotationProvider$1.class",
+        "sha256": "833eeb90f3c5a416aba38367b58054d39bb69a5135f8ce6ff0b8ee3603dfcb39",
+        "size": 1330
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/ExternalAnnotationProvider$DispatchingAnnotationWalker.class",
+        "sha256": "193a5ce1108b674c26a00cc641872f648036e5d8c614f7d382b470cbe7ba5caf",
+        "size": 4279
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/ExternalAnnotationProvider.class",
+        "sha256": "e09c384a92ca460ac0ea6321b165224189093a4335105a1c21aeaadbaa3f2931",
+        "size": 11013
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/ExternalAnnotationProvider$IMethodAnnotationWalker.class",
+        "sha256": "de8a7a89cc09f9893b90c36877e84526766ac97ff80eab893e5f968e57facb33",
+        "size": 452
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/FieldInfo.class",
+        "sha256": "175e8e713270b992f9d29afb5112a09531f4693eeb40c5a2cad7e3bdbfca36c7",
+        "size": 13434
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/FieldInfoWithAnnotation.class",
+        "sha256": "df8744c36a618c6b61a0bb4f1d1cd7bdd67b4b8099848c87d9e4475fc7083b2e",
+        "size": 2672
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/FieldInfoWithTypeAnnotation.class",
+        "sha256": "3c0f4be79385bce2b765b4fbf6cb953c4d4c0b8c0b5bf54e536d4f0148e339ff",
+        "size": 2456
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/InnerClassInfo.class",
+        "sha256": "400eeb155330e688a81eda41595135a6b429db99217a68c2f820276fbec6264e",
+        "size": 2555
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/JavaBinaryNames.class",
+        "sha256": "4982ceec4a13f45d2747be3990eb9efcf053bd7a5b349c261103fb1757c6b4a3",
+        "size": 591
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/MethodInfo.class",
+        "sha256": "f84a3e9463125b7b9a181560c7748d6f307e84c24d8c79e01392c9cddefe43cf",
+        "size": 14387
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/MethodInfoWithAnnotations.class",
+        "sha256": "347907ea64131f57fa2bbe6495581ecc5bd02afb332a54fae8d3159650e244a3",
+        "size": 1844
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/MethodInfoWithParameterAnnotations.class",
+        "sha256": "d0dd197301eb991dca7f1cb10be87df47f6fd71158055d922d2d9e08a580beb4",
+        "size": 2993
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/MethodInfoWithTypeAnnotations.class",
+        "sha256": "bbb5a66d521f6489f31ae299f7acebc69f73a7fb9d5419409d973ed78149afbf",
+        "size": 1887
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/ModuleInfo.class",
+        "sha256": "c9449bdde014ac7b882b7ca94eb013736dc771218dc40989bc899c5236fb3d4c",
+        "size": 8801
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/ModuleInfo$ServiceInfo.class",
+        "sha256": "744bf88d37e826302bb7dafca52a52dd8a913b33723c63e90a5c40dcf50d8892",
+        "size": 983
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/ModuleInfo$PackageExportInfo.class",
+        "sha256": "693e5cc61c5ead75c936e67e4e01af4bb37604646b24a44fb46746daabaa24de",
+        "size": 1734
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/ModuleInfo$ModuleReferenceInfo.class",
+        "sha256": "a4a209046e0f76b0bed00e9ee7724eabcce5d0a0e81e128a294c451d89c5a646",
+        "size": 1680
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/NonNullDefaultAwareTypeAnnotationWalker.class",
+        "sha256": "90ff714c63f0447a5102c7d55998bcd21166858b42d71d356379eb9ca1f2ce6b",
+        "size": 8244
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/NonNullDefaultAwareTypeAnnotationWalker$1.class",
+        "sha256": "5d988a4c0ad01c68021493032ef9d7d2f72ab41b0caf0e9dadf26ce7784818e0",
+        "size": 1107
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/RecordComponentInfo.class",
+        "sha256": "055660c983da94b900829c12f19e78cf666d9f28cd1ee3f3bf8ae4ea758f0365",
+        "size": 7522
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/TypeAnnotationInfo.class",
+        "sha256": "d050e7db53810bd5ee79eb8871d86beb4b0c1f3cadbd652bb0cdf7a184338cc9",
+        "size": 4340
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/classfmt/TypeAnnotationWalker.class",
+        "sha256": "222610f13830700c58abc6e1a68f40667355ce481557745eedd862c721cbb449",
+        "size": 6820
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/codegen/AnnotationContext.class",
+        "sha256": "0dd65455e93bdc65aead1f1aa74990301b64916eb7dfd4882c4ae5c8598455b9",
+        "size": 1857
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/codegen/AnnotationTargetTypeConstants.class",
+        "sha256": "c7b36d840a900bbc1b2a54b82c0e2c75646979070c0f19bde7162f5697a8778a",
+        "size": 1318
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/codegen/AttributeNamesConstants.class",
+        "sha256": "70c87d94364296cce4765b96b9f2113de1052157a6c0e5f534b6afe52a4855fe",
+        "size": 2594
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/codegen/BranchLabel.class",
+        "sha256": "86a6c953619835aee7d9913d67d1799f9b1fb7098570fdaee624ba7df3efe851",
+        "size": 8237
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/codegen/CachedIndexEntry.class",
+        "sha256": "c348bb470daefb634d62f3f1d4dfb316e49aacf48c051675faba739db8479821",
+        "size": 473
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/codegen/CaseLabel.class",
+        "sha256": "1fe450f6fa5aa90570c9b9ff2797a84f82b18aa083bcd7747de45dc3a4041dec",
+        "size": 1947
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/codegen/CharArrayCache.class",
+        "sha256": "857b9d9d84b48d2059f783efe81d8a2b8d6b10d45538f6d032ed61a2f93a4559",
+        "size": 3148
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/codegen/CodeStream.class",
+        "sha256": "87291d26cceb443c3c70ec90257e16139a5117b8dc90f4c9e71b220a9d9093b3",
+        "size": 141322
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/codegen/ConstantPool.class",
+        "sha256": "70a37dc093bf7b1fe10628cf757e32e97a43188214ac8284e81897d4872287f0",
+        "size": 41119
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/codegen/DoubleCache.class",
+        "sha256": "b7a3afdf5046b42a900894ce5992bedfa2cdb7ba76a3e083d43fe2bdc5004e51",
+        "size": 2619
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/codegen/ExceptionLabel.class",
+        "sha256": "989da185474db10f3e9681ee0410735f909c4ef2f873dc5d9f5e8b28de9a500a",
+        "size": 3687
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/codegen/FloatCache.class",
+        "sha256": "aa6c4d963bec6f5f4856e084ad82ac034f6a243dbc60dc2f5e88ae698b22f688",
+        "size": 2575
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/codegen/IntegerCache.class",
+        "sha256": "36b5130ad8ef7ce7f14580f25719da4e10ceee6139e05dd3cec8402da642e150",
+        "size": 2617
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/codegen/Label.class",
+        "sha256": "7b2904c0c1e90bca7481c3b260eae3c63ef72fac556d3051b22e8f6be772174e",
+        "size": 678
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/codegen/LongCache.class",
+        "sha256": "cb82e409694f9daf7481140c161f869b3a61806ad5479ab888b31bef6bddece3",
+        "size": 2704
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/codegen/MultiCatchExceptionLabel.class",
+        "sha256": "5847667c56be803323ea1212ca380f9f78e4db1e8e1dc23ecf9ebaf051593b46",
+        "size": 2740
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/codegen/ObjectCache.class",
+        "sha256": "2b28d56348dc874fef2d097c0bc4dfdbef9f0e736308ac5e6e62f46148d1fde6",
+        "size": 2584
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/codegen/Opcodes.class",
+        "sha256": "756b656634ebcf6b9224cfbd9b0dce8ee73cc0e19360fe39c337ea1ccc3aef85",
+        "size": 7079
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/codegen/OperandStack.class",
+        "sha256": "b2258d9f9c8ea75874161ca48866503c9896c95033ff910764ca87e22162e29c",
+        "size": 3676
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/codegen/OperandStack$NullStack.class",
+        "sha256": "83d8a43fd876feb00689e1ffbd63374abc42bf563a483e57df1789ea2ca4d8e6",
+        "size": 1564
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/codegen/StackMapFrame.class",
+        "sha256": "6f26f9940166bcad7f59b4972bf8ee62cf87c8e67d3aa610449718f905f3907a",
+        "size": 9230
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/codegen/StackMapFrameCodeStream.class",
+        "sha256": "d61b242048666a630917deabfaa561168bff54ba12dfcc5c464f48b9fee922ca",
+        "size": 12479
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/codegen/StackMapFrameCodeStream$ExceptionMarker.class",
+        "sha256": "625c61f79b5f9063cee09245f869c99dcd9a86cfa5b2ddc668f362ec0fce14a8",
+        "size": 2019
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/codegen/StackMapFrameCodeStream$FramePosition.class",
+        "sha256": "de52f919a7a17300cc6528d006067f114eebf52843039ac7b0b61b1b8e5341f6",
+        "size": 565
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/codegen/TypeAnnotationCodeStream.class",
+        "sha256": "251a9ad8ff8673ca856057c27412de15311dac8d9cbba343a9573b00a4c1c544",
+        "size": 5848
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/codegen/VerificationTypeInfo.class",
+        "sha256": "499f863efa2f7b8bbd2c1c887021ce9cc424e066672e5349285edbe31100d710",
+        "size": 4964
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/AccessRestriction.class",
+        "sha256": "e238c0a77f8f4544afc1c82fa4084770815a54998d7227849969052b740df09a",
+        "size": 1035
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/AccessRule.class",
+        "sha256": "f3f6f5061ed583ace4b32bfa5fe4ea405e6f8b6e9843a8b69c9aa7b9db1c7bdd",
+        "size": 1910
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/AccessRuleSet.class",
+        "sha256": "e05e8c3fe0c730982011a8d078c623e6d617dd8a8bf476f2172944a341e04e01",
+        "size": 3460
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/AutomaticModuleNaming.class",
+        "sha256": "906d502bc63523ef0f5373203b2dab976e79f70132480e4210334cbe570fb74e",
+        "size": 3088
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/ClassSignature.class",
+        "sha256": "fcb456f8fb0cdb1c31619db0d85cede388bccb7507a7981da72b8d12a60f5e06",
+        "size": 1374
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/EnumConstantSignature.class",
+        "sha256": "19d81214abb7ded340a3ae48a1f8ba45da9de60cbc7ab92a0fd8c2f0870d77dc",
+        "size": 1559
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/IBinaryAnnotation.class",
+        "sha256": "ee92683ea58929fe1b4ef674312cf0a1b23aa49064754e92377d83e5fb518d8d",
+        "size": 622
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/IBinaryElementValuePair.class",
+        "sha256": "d90e8362ebc4add2bb22f9afbe5d05f50146ecc786d3e4f89d8eab0e818be5b4",
+        "size": 232
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/IBinaryField.class",
+        "sha256": "a61cd277594a7d53618b23a9434685b442201be79b2df28521df19d71f51ccbe",
+        "size": 623
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/IBinaryInfo.class",
+        "sha256": "7569d9edf1ebc7c6995602b00dc3d08db46f99c80d544d62cb7b54bd4b5333b8",
+        "size": 199
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/IBinaryMethod.class",
+        "sha256": "4e19e349132c969a74d3fa4337e25e3a6aaa216fd5bba10605da7d6c3f18ee5b",
+        "size": 1577
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/IBinaryModule.class",
+        "sha256": "7cfa7868c3dbd039fb91a018f750de713add7d8863abe81c65167c68dc0d18ab",
+        "size": 406
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/IBinaryNestedType.class",
+        "sha256": "5a9f7f8c7d8b3fdec2f98b615bf2627635a575a0dba35d95b4c943620b03f9f9",
+        "size": 238
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/IBinaryType.class",
+        "sha256": "5b3413b6e68b3dcb631e4e6c2ecfd78ed7cc79126bb9344f877ba927164b58cc",
+        "size": 2694
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/IBinaryTypeAnnotation.class",
+        "sha256": "441fb9ce4136e85ebb91ea7c57a0fafb7b62d2bf62a63eddb020fd3f14784bdc",
+        "size": 613
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/ICompilationUnit.class",
+        "sha256": "ab276bf8df0ded72090cb1b85adb06be1cc1287013cbe260b58601926b40d4bd",
+        "size": 1293
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/IDependent.class",
+        "sha256": "fc5eefc47ca96a0e64eeeba27316a0ac8cd20d67157ef6b5bde964312a1e6f91",
+        "size": 236
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/IElementInfo.class",
+        "sha256": "c0401013b340e7afaaf8b2d84345785ab0bbe7007dfcd8b0496ec1a28ee8bf13",
+        "size": 143
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/IGenericField.class",
+        "sha256": "eb5c7fdcb6ac4c37a0337b34b0e83fb773d749a374085b6cef4df78599a02645",
+        "size": 174
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/IGenericMethod.class",
+        "sha256": "d87c1288d46ee02c817557887eae0ab7951a02eba11bb70d83bc75c6e8389fb3",
+        "size": 241
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/IGenericType.class",
+        "sha256": "51876294b6da950b11409b69f689674dc51aae9dc54cbc5f1369d1861db7fead",
+        "size": 257
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/IModule.class",
+        "sha256": "44ef12b1c57db21e36bdddbc02cb6c79e0c3a1933835f29956aba59adca56ff0",
+        "size": 2701
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/IModule$IPackageExport.class",
+        "sha256": "930eeeb36ffe5ebfaf70e72f86785c328233be6d721dbeac72feee8e6d2038fd",
+        "size": 591
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/IModule$IModuleReference.class",
+        "sha256": "28dfb672b5bdd22f048cb4fadc216150dc6677874185427f7dbf65d0aaf2b128",
+        "size": 728
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/IModule$IService.class",
+        "sha256": "10f80d8f515a281a3e99cdc0853304862b03293fcec959cc8ae6ac478d3142bb",
+        "size": 299
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/IModule$1AutoModule.class",
+        "sha256": "ff4beb48f4dc1caee07afe811855a55fb243b4860d430c902662ff257fe53ad0",
+        "size": 2124
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/IModuleAwareNameEnvironment$LookupStrategy$1.class",
+        "sha256": "261c9febecc87137fdf3fababeca452f781b111f96c5250385541c971ebe59ed",
+        "size": 1461
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/IModuleAwareNameEnvironment$LookupStrategy$3.class",
+        "sha256": "fc2231e2fe726afe39adfedb71913dc3f5b1c76d7fa0d816cdbed7688becd40e",
+        "size": 1178
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/IModuleAwareNameEnvironment$LookupStrategy.class",
+        "sha256": "df368d8cdbcdf0ef1316b22a4b46c943325312b41cb25d7015d98ecc311fea8d",
+        "size": 4360
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/IModuleAwareNameEnvironment$LookupStrategy$4.class",
+        "sha256": "b483c8dd835005859ab1d669112a4f5f12630f29613f0b87a66266a66c228029",
+        "size": 1294
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/IModuleAwareNameEnvironment.class",
+        "sha256": "1b060a7f15a28f9fe2a9db2bd083aeec30025ca6b4d6cfd161b89757cc5c2ee0",
+        "size": 3143
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/IModuleAwareNameEnvironment$LookupStrategy$2.class",
+        "sha256": "3651b8fa82d7e5b4329125372889a54ff3e7705471e02136874af39b7430edfa",
+        "size": 1259
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/IModulePathEntry.class",
+        "sha256": "99d5b3be4d74805681a75af1793cb7e146cf8b377ab98d964cfc3a5841f3c468",
+        "size": 1281
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/IMultiModuleEntry.class",
+        "sha256": "5b12b7cf3bd01326a8f000b37c83628e76b39b4a49c40b14712971d033d9619a",
+        "size": 472
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/INameEnvironment.class",
+        "sha256": "06cfe719ebe47938d2338ef772fe8213370e7e5225fcde61b36534139eca3fd6",
+        "size": 373
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/INameEnvironmentExtension.class",
+        "sha256": "3304d3e95ddd1d75c96909a6c3be098ac931f994fd03bc5f6fca800cea86af0b",
+        "size": 691
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/IRecordComponent.class",
+        "sha256": "be4a2badb8eb4bda8aba965d2f0037500f4b2800b099178a4aaecb0a9ab54d01",
+        "size": 209
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/ISourceField.class",
+        "sha256": "c17013c2a5e6bb5d589fe65269f600fcce6f3edfb3ff20e300218345bd310f47",
+        "size": 397
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/ISourceImport.class",
+        "sha256": "537a1329c6f7feda5262317f6de71790291e5fb729497be0e4e77374d32f14c1",
+        "size": 244
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/ISourceMethod.class",
+        "sha256": "5213cdc32b84b64c8b8b1fcffcc409e6a6ce9473a9a4a57ced5fcc0e20f030ef",
+        "size": 486
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/ISourceModule.class",
+        "sha256": "74acbb32b74a1851a9b203a14a7a6a9f884d5354ce3669f1ed6346e793890989",
+        "size": 288
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/ISourceType.class",
+        "sha256": "edd429c321247e897fdbad4ff6f01f16f7f3f9d7255e42e074e1e4bdc132d248",
+        "size": 1037
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/ITypeAnnotationWalker$1.class",
+        "sha256": "0b51c3ee69adec0ed61857f38471abc33fb82cc66e970061cfcf7cf730d502ba",
+        "size": 2340
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/ITypeAnnotationWalker.class",
+        "sha256": "0dbfe900ba1c6f6cd79ed14e9b8b8545cb7c390dd456eae168c0e22b3bcbd79e",
+        "size": 1459
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/IUpdatableModule$UpdateKind.class",
+        "sha256": "6b7b066e62d853061b43661e303a4bada8929180a5bc8a7fea8038429a58e65e",
+        "size": 1360
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/IUpdatableModule$AddReads.class",
+        "sha256": "18b73d8d89d0a7040ebd2668262f147b80567d01956bb2615c776bc6fbdd6341",
+        "size": 2425
+      },
+      {
+        "depth": 1,
+        "kind": "java-class",
+        "path": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar!/org/eclipse/jdt/internal/compiler/env/IUpdatableModule$UpdatesByKind.class",
+        "sha256": "02cb75e739266274f54b05e3d11f6e484a26d9b983d218debcbc47f9d48505a5",
+        "size": 3626
+      }
+    ],
+    "entries_total": 70542,
+    "files": 67349,
+    "hashed_bytes": 335919593,
+    "path": "/opt/BurpSuite/burpsuite.jar",
+    "root": "burpsuite.jar",
+    "root_kind": "jar",
+    "truncated": false,
+    "unopened_nested": 0
+  },
+  "summary": "burpsuite.jar (jar) holds 67349 files in 70542 entries; 43 nested container(s).",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [
+    {
+      "code": "no_disk_images",
+      "message": "Disk images (DMG), installers (PKG/MSI) and compressed tarballs are listed as single files, not opened."
+    }
+  ],
+  "coverage": {
+    "status": "partial",
+    "examined": 500,
+    "total": 70542,
+    "next_offset": 500
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/opt/BurpSuite/burpsuite.jar"
+    }
+  ],
+  "links": []
+}

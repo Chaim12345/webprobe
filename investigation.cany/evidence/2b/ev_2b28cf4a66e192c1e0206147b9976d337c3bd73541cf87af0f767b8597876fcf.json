@@ -1,0 +1,458 @@
+{
+  "id": "ev_2b28cf4a66e192c1e0206147b9976d337c3bd73541cf87af0f767b8597876fcf",
+  "subject": {
+    "kind": "jar",
+    "sha256": "3d4b9ce5459486510d48a1ec216b8fc9340ed647725f6fef0501e02760574dd9",
+    "name": "burpsuite-named.jar"
+  },
+  "operation": "java_classes_find",
+  "params": {
+    "include_methods": true,
+    "limit": 12,
+    "offset": 0,
+    "path": null,
+    "query": "intruder"
+  },
+  "result": {
+    "classes": [
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/IBurpExtenderCallbacks.class",
+        "fields": 11,
+        "interfaces": [],
+        "internal": "burp/IBurpExtenderCallbacks",
+        "matched_methods": [
+          {
+            "name": "registerIntruderPayloadGeneratorFactory",
+            "signature": "public abstract void registerIntruderPayloadGeneratorFactory(burp.IIntruderPayloadGeneratorFactory)"
+          },
+          {
+            "name": "getIntruderPayloadGeneratorFactories",
+            "signature": "public abstract java.util.List getIntruderPayloadGeneratorFactories()"
+          },
+          {
+            "name": "removeIntruderPayloadGeneratorFactory",
+            "signature": "public abstract void removeIntruderPayloadGeneratorFactory(burp.IIntruderPayloadGeneratorFactory)"
+          },
+          {
+            "name": "registerIntruderPayloadProcessor",
+            "signature": "public abstract void registerIntruderPayloadProcessor(burp.IIntruderPayloadProcessor)"
+          },
+          {
+            "name": "getIntruderPayloadProcessors",
+            "signature": "public abstract java.util.List getIntruderPayloadProcessors()"
+          },
+          {
+            "name": "removeIntruderPayloadProcessor",
+            "signature": "public abstract void removeIntruderPayloadProcessor(burp.IIntruderPayloadProcessor)"
+          },
+          {
+            "name": "sendToIntruder",
+            "signature": "public abstract void sendToIntruder(java.lang.String, int, boolean, byte[])"
+          },
+          {
+            "name": "sendToIntruder",
+            "signature": "public abstract void sendToIntruder(java.lang.String, int, boolean, byte[], java.util.List)"
+          }
+        ],
+        "methods": 97,
+        "name": "burp.IBurpExtenderCallbacks",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/IIntruderAttack.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/IIntruderAttack",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.IIntruderAttack",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/IIntruderPayloadGenerator.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/IIntruderPayloadGenerator",
+        "matched_methods": [],
+        "methods": 3,
+        "name": "burp.IIntruderPayloadGenerator",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/IIntruderPayloadGeneratorFactory.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/IIntruderPayloadGeneratorFactory",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.IIntruderPayloadGeneratorFactory",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/IIntruderPayloadProcessor.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/IIntruderPayloadProcessor",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.IIntruderPayloadProcessor",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Z_f2.class",
+        "fields": 27,
+        "interfaces": [
+          "burp.IBurpExtenderCallbacks"
+        ],
+        "internal": "burp/Z_f2",
+        "matched_methods": [
+          {
+            "name": "sendToIntruder",
+            "signature": "public void sendToIntruder(java.lang.String, int, boolean, byte[])"
+          },
+          {
+            "name": "sendToIntruder",
+            "signature": "public void sendToIntruder(java.lang.String, int, boolean, byte[], java.util.List)"
+          },
+          {
+            "name": "registerIntruderPayloadGeneratorFactory",
+            "signature": "public void registerIntruderPayloadGeneratorFactory(burp.IIntruderPayloadGeneratorFactory)"
+          },
+          {
+            "name": "getIntruderPayloadGeneratorFactories",
+            "signature": "public java.util.List getIntruderPayloadGeneratorFactories()"
+          },
+          {
+            "name": "removeIntruderPayloadGeneratorFactory",
+            "signature": "public void removeIntruderPayloadGeneratorFactory(burp.IIntruderPayloadGeneratorFactory)"
+          },
+          {
+            "name": "registerIntruderPayloadProcessor",
+            "signature": "public void registerIntruderPayloadProcessor(burp.IIntruderPayloadProcessor)"
+          },
+          {
+            "name": "getIntruderPayloadProcessors",
+            "signature": "public java.util.List getIntruderPayloadProcessors()"
+          },
+          {
+            "name": "removeIntruderPayloadProcessor",
+            "signature": "public void removeIntruderPayloadProcessor(burp.IIntruderPayloadProcessor)"
+          },
+          {
+            "name": "lambda$removeIntruderPayloadProcessor$49",
+            "signature": "private void lambda$removeIntruderPayloadProcessor$49(burp.IIntruderPayloadProcessor)"
+          },
+          {
+            "name": "lambda$registerIntruderPayloadProcessor$48",
+            "signature": "private void lambda$registerIntruderPayloadProcessor$48(burp.IIntruderPayloadProcessor)"
+          },
+          {
+            "name": "lambda$removeIntruderPayloadGeneratorFactory$47",
+            "signature": "private void lambda$removeIntruderPayloadGeneratorFactory$47(burp.IIntruderPayloadGeneratorFactory)"
+          },
+          {
+            "name": "lambda$registerIntruderPayloadGeneratorFactory$46",
+            "signature": "private void lambda$registerIntruderPayloadGeneratorFactory$46(burp.IIntruderPayloadGeneratorFactory)"
+          },
+          {
+            "name": "lambda$sendToIntruder$2",
+            "signature": "private void lambda$sendToIntruder$2(java.lang.String, byte[], int, boolean, java.util.List)"
+          }
+        ],
+        "methods": 157,
+        "name": "burp.Z_f2",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Z_gh.class",
+        "fields": 3,
+        "interfaces": [
+          "burp.IBurpExtenderCallbacks"
+        ],
+        "internal": "burp/Z_gh",
+        "matched_methods": [
+          {
+            "name": "registerIntruderPayloadGeneratorFactory",
+            "signature": "public void registerIntruderPayloadGeneratorFactory(burp.IIntruderPayloadGeneratorFactory)"
+          },
+          {
+            "name": "getIntruderPayloadGeneratorFactories",
+            "signature": "public java.util.List getIntruderPayloadGeneratorFactories()"
+          },
+          {
+            "name": "removeIntruderPayloadGeneratorFactory",
+            "signature": "public void removeIntruderPayloadGeneratorFactory(burp.IIntruderPayloadGeneratorFactory)"
+          },
+          {
+            "name": "registerIntruderPayloadProcessor",
+            "signature": "public void registerIntruderPayloadProcessor(burp.IIntruderPayloadProcessor)"
+          },
+          {
+            "name": "getIntruderPayloadProcessors",
+            "signature": "public java.util.List getIntruderPayloadProcessors()"
+          },
+          {
+            "name": "removeIntruderPayloadProcessor",
+            "signature": "public void removeIntruderPayloadProcessor(burp.IIntruderPayloadProcessor)"
+          },
+          {
+            "name": "sendToIntruder",
+            "signature": "public void sendToIntruder(java.lang.String, int, boolean, byte[])"
+          },
+          {
+            "name": "sendToIntruder",
+            "signature": "public void sendToIntruder(java.lang.String, int, boolean, byte[], java.util.List)"
+          }
+        ],
+        "methods": 100,
+        "name": "burp.Z_gh",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zcnf.class",
+        "fields": 15,
+        "interfaces": [
+          "burp.Zaws",
+          "burp.Zawl",
+          "burp.Zk8k"
+        ],
+        "internal": "burp/Zcnf",
+        "matched_methods": [
+          {
+            "name": "lambda$parseIntruderResult$5",
+            "signature": "private static void lambda$parseIntruderResult$5(java.util.List, java.lang.String)"
+          },
+          {
+            "name": "lambda$createSendToIntruderButton$4",
+            "signature": "private void lambda$createSendToIntruderButton$4(java.lang.String, java.awt.event.ActionEvent)"
+          }
+        ],
+        "methods": 21,
+        "name": "burp.Zcnf",
+        "superclass": "burp.Zcit"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zdua.class",
+        "fields": 2,
+        "interfaces": [
+          "burp.api.montoya.intruder.Intruder"
+        ],
+        "internal": "burp/Zdua",
+        "matched_methods": [
+          {
+            "name": "sendToIntruder",
+            "signature": "public void sendToIntruder(burp.api.montoya.http.HttpService, burp.api.montoya.intruder.HttpRequestTemplate)"
+          },
+          {
+            "name": "sendToIntruder",
+            "signature": "public void sendToIntruder(burp.api.montoya.http.HttpService, burp.api.montoya.intruder.HttpRequestTemplate, java.lang.String)"
+          },
+          {
+            "name": "sendToIntruder",
+            "signature": "public void sendToIntruder(burp.api.montoya.http.message.requests.HttpRequest)"
+          },
+          {
+            "name": "sendToIntruder",
+            "signature": "public void sendToIntruder(burp.api.montoya.http.message.requests.HttpRequest, java.lang.String)"
+          },
+          {
+            "name": "lambda$sendToIntruder$3",
+            "signature": "private void lambda$sendToIntruder$3(burp.api.montoya.http.message.requests.HttpRequest, java.lang.String)"
+          },
+          {
+            "name": "lambda$sendToIntruder$2",
+            "signature": "private void lambda$sendToIntruder$2(burp.api.montoya.http.message.requests.HttpRequest)"
+          },
+          {
+            "name": "lambda$sendToIntruder$1",
+            "signature": "private void lambda$sendToIntruder$1(burp.api.montoya.http.HttpService, burp.api.montoya.intruder.HttpRequestTemplate, java.lang.String)"
+          },
+          {
+            "name": "lambda$sendToIntruder$0",
+            "signature": "private void lambda$sendToIntruder$0(burp.api.montoya.http.HttpService, burp.api.montoya.intruder.HttpRequestTemplate)"
+          }
+        ],
+        "methods": 11,
+        "name": "burp.Zdua",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zdug.class",
+        "fields": 1,
+        "interfaces": [],
+        "internal": "burp/Zdug",
+        "matched_methods": [
+          {
+            "name": "lambda$newRequestFromIntruder$2",
+            "signature": "private static void lambda$newRequestFromIntruder$2(burp.Zddw, burp.Zavp, burp.Zavp, burp.Zma7)"
+          }
+        ],
+        "methods": 9,
+        "name": "burp.Zdug",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zedj.class",
+        "fields": 7,
+        "interfaces": [
+          "burp.IBurpExtenderCallbacks"
+        ],
+        "internal": "burp/Zedj",
+        "matched_methods": [
+          {
+            "name": "registerIntruderPayloadGeneratorFactory",
+            "signature": "public void registerIntruderPayloadGeneratorFactory(burp.IIntruderPayloadGeneratorFactory)"
+          },
+          {
+            "name": "getIntruderPayloadGeneratorFactories",
+            "signature": "public java.util.List getIntruderPayloadGeneratorFactories()"
+          },
+          {
+            "name": "removeIntruderPayloadGeneratorFactory",
+            "signature": "public void removeIntruderPayloadGeneratorFactory(burp.IIntruderPayloadGeneratorFactory)"
+          },
+          {
+            "name": "registerIntruderPayloadProcessor",
+            "signature": "public void registerIntruderPayloadProcessor(burp.IIntruderPayloadProcessor)"
+          },
+          {
+            "name": "getIntruderPayloadProcessors",
+            "signature": "public java.util.List getIntruderPayloadProcessors()"
+          },
+          {
+            "name": "removeIntruderPayloadProcessor",
+            "signature": "public void removeIntruderPayloadProcessor(burp.IIntruderPayloadProcessor)"
+          },
+          {
+            "name": "sendToIntruder",
+            "signature": "public void sendToIntruder(java.lang.String, int, boolean, byte[])"
+          },
+          {
+            "name": "sendToIntruder",
+            "signature": "public void sendToIntruder(java.lang.String, int, boolean, byte[], java.util.List)"
+          }
+        ],
+        "methods": 103,
+        "name": "burp.Zedj",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zfu0.class",
+        "fields": 4,
+        "interfaces": [
+          "burp.IBurpExtenderCallbacks"
+        ],
+        "internal": "burp/Zfu0",
+        "matched_methods": [
+          {
+            "name": "registerIntruderPayloadGeneratorFactory",
+            "signature": "public void registerIntruderPayloadGeneratorFactory(burp.IIntruderPayloadGeneratorFactory)"
+          },
+          {
+            "name": "getIntruderPayloadGeneratorFactories",
+            "signature": "public java.util.List getIntruderPayloadGeneratorFactories()"
+          },
+          {
+            "name": "removeIntruderPayloadGeneratorFactory",
+            "signature": "public void removeIntruderPayloadGeneratorFactory(burp.IIntruderPayloadGeneratorFactory)"
+          },
+          {
+            "name": "registerIntruderPayloadProcessor",
+            "signature": "public void registerIntruderPayloadProcessor(burp.IIntruderPayloadProcessor)"
+          },
+          {
+            "name": "getIntruderPayloadProcessors",
+            "signature": "public java.util.List getIntruderPayloadProcessors()"
+          },
+          {
+            "name": "removeIntruderPayloadProcessor",
+            "signature": "public void removeIntruderPayloadProcessor(burp.IIntruderPayloadProcessor)"
+          },
+          {
+            "name": "sendToIntruder",
+            "signature": "public void sendToIntruder(java.lang.String, int, boolean, byte[])"
+          },
+          {
+            "name": "sendToIntruder",
+            "signature": "public void sendToIntruder(java.lang.String, int, boolean, byte[], java.util.List)"
+          }
+        ],
+        "methods": 99,
+        "name": "burp.Zfu0",
+        "superclass": "java.lang.Object"
+      }
+    ],
+    "classes_total": 54868,
+    "matches": 36,
+    "query": "intruder"
+  },
+  "summary": "36 of 54868 classes match \"intruder\" ; showing 12.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "partial",
+    "examined": 12,
+    "total": 36,
+    "next_offset": 12
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/tmp/opencode/named/burpsuite-named.jar"
+    }
+  ],
+  "links": []
+}

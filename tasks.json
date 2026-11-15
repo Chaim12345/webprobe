@@ -9,8 +9,8 @@
   "p2": 5,
   "by_status": {
    "done": 19,
-   "in_progress": 6,
-   "todo": 67
+   "in_progress": 7,
+   "todo": 66
   }
  },
  "tasks": [
@@ -776,11 +776,12 @@
    "title": "Repeater layout parity",
    "acceptance": "Numbered tabs with close and '+', primary Send, Cancel, back/forward history, Target field with edit action, Request | Response | Inspector panes with side-by-side/stacked/tabbed toggles, Pretty/Raw/Hex views, wrap/non-printable/newline toggles, search bar with highlight count, right dock (Inspector, Notes, Explanations, Custom actions), status line",
    "effort": "L",
-   "status": "todo",
+   "status": "in_progress",
    "depends_on": [
     "E-01",
     "E-04"
-   ]
+   ],
+   "evidence": "Repeater now has numbered tab + '+', primary Send (Ctrl+Space), Raw/Hex/Pretty response sub-tabs, a status line (e.g. '200 | 85 bytes | 1 ms'), and an Inspector collapsible with request line, query params, request headers and response headers. Live test 2026-11-15: seeded request to local origin, Ctrl+Space sent it, response 200 with JSON body; shot p04-repeater-raw.png. REMAINING: tab close/rename/reorder/groups, Cancel, back/forward history, Target field with edit, layout toggles, follow redirects. 118 tests pass."
   },
   {
    "id": "P-05",
