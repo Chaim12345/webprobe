@@ -1,0 +1,66 @@
+# Runtime-decoded string evidence for build 52685.
+# Source: /root/burp-re/tools/RuntimeStringDump.java (ASM finds a(int,int) call
+# sites, then calls Burp's own decryptor), so every value here is what the
+# class actually decrypts at run time, not a guess from the bytecode.
+# class	decoded_strings
+burp/StartBurp	true | java.awt.headless | jdk.tls.allowUnsafeServerCertChange | jdk.tls.maxCertificateChainLength | Debug ID: | Burp Version: | apple.awt.application.name | Burp Suite | burp.testing
+burp/Z_00	run macro: | macro_serial_number | update_with_params | match_params | all_params_except | specified_params | tolerate_url_mismatch | update_with_cookies | invoke_extension_action | extension_action | No matching macro found for serial number
+burp/Z_02	validation_action | macro_serial_number | validate_every_num_requests | request_count | inspect_http_headers | inspect_response_body | inspect_redirection_url | look_for | match_type | regex | literal | case_sensitive
+burp/Z_04	updatesdisabledforaweeksince | updatesdisabledforversion-%s | true | updatesdisabledforbetaversions | latest-update-version | suppressupdatedialog
+burp/Z_0a	Set the header: %s: %s | name | value | add_if_not_present
+burp/Z_0b	NO_FOLLOWUPS | DO_FOLLOWUPS
+burp/Z_0c	parameter | Set the | name | value | add_if_not_present | add_as
+burp/Z_0d	burp.Zfiq | burp | burp.Ztik
+burp/Z_0h	run post-request macro: | macro_serial_number | update_with_params | match_params | all_params_except | specified_params | pass_back | final_response | current_response | No matching macro found for serial number
+burp/Z_0i	Invoke the extension handler: | action_name
+burp/Z_0l	burp.Z_ao | burp | burp.Zlrn
+burp/Z_0p	match_cookies | all_cookies_except | specified_cookies
+burp/Z_0x	match | replacement | is_regex_match
+burp/Z_0y	type | enabled
+burp/Z_0z	burp.Ztht | burp | burp.Zgqj | burp.Zlxh | burp.Zjus
+burp/Z_13	LabelAndStartIndex{label=
+burp/Z_1r	FullUrlActionDescriptorMatcher{url=
+burp/Z_26	burp.Zfdr | burp.Zdwx | burp.Zdjb | burp | burp.Zzlf
+burp/Z_27	burp.Z_os | burp.Z_sa | burp | burp.Zmse | burp.Zuga | burp.Zfzc | burp.Ztva | burp.Zgtu | burp.Zuug | burp.Zjj | burp.Zjud
+burp/Z_29	MontoyaApi.WebSockets.registerWebSocketCreationHandler | MontoyaApi.WebSockets.createWebSocket(HttpService, String) | MontoyaApi.WebSockets.createWebSocket(HttpRequest)
+burp/Z_2_	burp | burp.Zfth
+burp/Z_2d	burp.Zlbb | burp
+burp/Z_2f	burp.Zjre | burp.Zfob | burp
+burp/Z_2n	burp.Zjew | burp | burp.Zeuj | burp.Zjvw | burp.Zudy
+burp/Z_36	burp:// | http:// | https://
+burp/Z_3g	Referer | example.com/ | example | .com
+burp/Z_3i	burp.Zltl | burp | burp.Zasg | os.name | user.name | defineClass | burp.ary | burp.Zdo
+burp/Z_3v	Invalid JSON | Unable to parse JSON | vulnerabilities | atOrAbove | below | info | identifiers | extractors | func | filename | filecontent | No extractors found in library!
+burp/Z_3w	name | function | location | source | additionalSources
+burp/Z_4	BadMessageException | burp | burp.Zudy
+burp/Z_47	Editor cannot be null | Display name cannot be null | UI component cannot be null
+burp/Z_4a	Custom... | Timeout: | seconds | Set timeout | Never
+burp/Z_4d	installing | installed | Extension
+burp/Z_4i	burp | burp.Zula | burp.Zffq | defineClass | burp.elb | burp.Zjrc | burp.Ztii
+burp/Z_4j	email
+burp/Z_4l	burp-dom-callbacks.local | POST | Content-Type: text/plain;charset=UTF-8 | securityToken
+burp/Z_4r	burp.Zzhy | BadMessageException | burp
+burp/Z_50	Error reading runtime payloads file | Unable to open runtime payloads file:
+burp/Z_53	Processing macro item: | Updated 1 cookie in macro request from cookie jar | Updated | cookies from cookie jar | Failed to derive new value for parameter: | Derived new value for parameter: | Issuing macro request | Added 1 cookie from macro response to cookie jar | Added | cookies from macro response to cookie jar
+burp/Z_5a	task-%d-active-worker | Active work queue | Priority passive work queue | Active workers | Closed
+burp/Z_5r	area | base | embed | input | link | meta | param | source | track
+burp/Z_65	Config key cannot be null | SELECTION | Selection | REQUEST_ATTRIBUTES | Request attributes | request_attributes | REQUEST_QUERY_PARAMETERS | Request query parameters | request_query_parameters | REQUEST_BODY_PARAMETERS | Request body parameters | request_body_parameters
+burp/Z_66	cursor | tabSize
+burp/Z_6b	project_options.ai.use_user_options | project_options.ai.enabled
+burp/Z_6j	burp.Zayg | burp | burp.Ztrn
+burp/Z_6k	user-agent | referer
+burp/Z_6o	burp | burp.Zlbb | burp.Zmwp
+burp/Z_6q	burp.Z_wb | burp | burp.Zjxy | burp.Zthp | burp.Zjkp | burp.Zzio | burp.Zgqj | burp.Ztse | burp.Ztzi | burp.Z_sa | burp.Zzvq
+burp/Z_6y	Are you sure you want to delete ' | It hasn't been saved to your Bambda library and will be permanently deleted.
+burp/Z_6z	Expected CrawlData.getRecordedLogins() to be a List; got | Expected CrawlData.loginCredentialsList() to be a List; got | Duplicate auth label in applicationLogins: | Retest blob references auth labels not provided in applicationLogins: | Auth label | has type | in blob but | in applicationLogins | recorded | usernamePassword
+burp/Z_72	burp.Zjkp | burp | os.name | user.name | burp.Zkju
+burp/Z_73	Burp.RSyntaxTextAreaUI.actionMap | Burp.RSyntaxTextAreaUI.inputMap | RSTA.syntaxScheme | RTA.prettifiedProperty | RTA.displayNonPrintableCharsProperty
+burp/Z_79	burp.Ztio | burp | burp.Zlyv
+burp/Z_7p	os.name | user.name | burp | BadMessageException | burp.Zaxw
+burp/Z_7q	Bulk send
+burp/Z_7s	RTextAreaUI is for instances of RTextArea only! | nimbusSelectionBackground | textHighlight | nimbusSelectedText | textHighlightText | nimbusDisabledText | textInactiveText | Burp.RTextAreaKeymap | default | Name | Burp.RTextAreaUI.actionMap | requestFocus
+burp/Z_7z	burp.Zfea | burp.Zudt | burp
+burp/Z_89	burp.Zuub | burp
+burp/Z_8_	blob-delivery-worker | Blob delivery worker exiting: failed to build HTTP client for %s: %s | Worker error for issue serial number %d: %s | Content-Type | application/octet-stream | X-Issue-Serial-Number | Delivered blob for issue serial number %d to %s | Abandoned blob delivery for issue serial number %d due to non-retriable HTTP %d | Abandoned blob delivery for issue serial number %d after %d attempts | https
+burp/Z_8b	http | https
+burp/Z_8d	os.name | user.name | burp | burp.Ztje

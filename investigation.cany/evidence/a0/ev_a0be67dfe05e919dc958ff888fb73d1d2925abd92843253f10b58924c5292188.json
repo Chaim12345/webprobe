@@ -1,0 +1,926 @@
+{
+  "id": "ev_a0be67dfe05e919dc958ff888fb73d1d2925abd92843253f10b58924c5292188",
+  "subject": {
+    "kind": "jar",
+    "sha256": "510bf1c87c766f09c3c20d3ef75e7a6978e60dd38346965dd4836ce64417becf",
+    "name": "burpsuite.jar"
+  },
+  "operation": "core_archive_extract",
+  "params": {
+    "max_bytes": 200000000,
+    "max_files": 400,
+    "path": "/opt/BurpSuite/burpsuite.jar"
+  },
+  "result": {
+    "bytes_written": 17108373,
+    "contradictions": [],
+    "files_written": 400,
+    "output_directory": "/tmp/craft-anything-extract-2cb264c6f483ca9d",
+    "skipped": [
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/teletrust/TeleTrusTNamedCurves$13.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/teletrust/TeleTrusTNamedCurves$14.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/teletrust/TeleTrusTNamedCurves$2.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/teletrust/TeleTrusTNamedCurves$3.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/teletrust/TeleTrusTNamedCurves$4.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/teletrust/TeleTrusTNamedCurves$5.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/teletrust/TeleTrusTNamedCurves$6.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/teletrust/TeleTrusTNamedCurves$7.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/teletrust/TeleTrusTNamedCurves$8.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/teletrust/TeleTrusTNamedCurves$9.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/teletrust/TeleTrusTNamedCurves.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/teletrust/TeleTrusTObjectIdentifiers.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x509/AlgorithmIdentifier.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x509/SubjectPublicKeyInfo.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/ECNamedCurveTable.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/X962NamedCurves$1.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/X962NamedCurves$10.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/X962NamedCurves$11.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/X962NamedCurves$12.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/X962NamedCurves$13.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/X962NamedCurves$14.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/X962NamedCurves$15.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/X962NamedCurves$16.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/X962NamedCurves$17.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/X962NamedCurves$18.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/X962NamedCurves$19.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/X962NamedCurves$2.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/X962NamedCurves$20.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/X962NamedCurves$21.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/X962NamedCurves$22.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/X962NamedCurves$23.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/X962NamedCurves$3.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/X962NamedCurves$4.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/X962NamedCurves$5.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/X962NamedCurves$6.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/X962NamedCurves$7.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/X962NamedCurves$8.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/X962NamedCurves$9.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/X962NamedCurves.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/X962Parameters.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/X9Curve.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/X9ECParameters.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/X9ECParametersHolder.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/X9ECPoint.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/X9FieldElement.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/X9FieldID.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/X9IntegerConverter.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/asn1/x9/X9ObjectIdentifiers.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/AsymmetricCipherKeyPair.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/AsymmetricCipherKeyPairGenerator.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/BlockCipher.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/CipherParameters.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/CryptoServiceConstraintsException.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/CryptoServiceProperties.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/CryptoServicePurpose.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/CryptoServicesConstraints.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/CryptoServicesPermission.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/CryptoServicesRegistrar$1.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/CryptoServicesRegistrar$2.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/CryptoServicesRegistrar$3.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/CryptoServicesRegistrar$Property.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/CryptoServicesRegistrar$ThreadLocalSecureRandomProvider.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/CryptoServicesRegistrar.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/DataLengthException.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/DefaultMultiBlockCipher.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/DerivationFunction.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/DerivationParameters.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/Digest.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/EncodableService.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ExtendedDigest.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/KeyGenerationParameters.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/Mac.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/MultiBlockCipher.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/OutputLengthException.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/RuntimeCryptoException.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/SavableDigest.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/SecureRandomProvider.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/SkippingCipher.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/SkippingStreamCipher.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/StreamBlockCipher.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/StreamCipher.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/Xof.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/constraints/DefaultServiceProperties.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/digests/EncodableDigest.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/digests/GeneralDigest.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/digests/KeccakDigest.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/digests/LongDigest.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/digests/SHA256Digest.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/digests/SHA384Digest.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/digests/SHA3Digest.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/digests/SHA512Digest.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/digests/SHA512tDigest.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/digests/SHAKEDigest.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/digests/Utils$DefaultProperties.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/digests/Utils$DefaultPropertiesWithPRF.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/digests/Utils.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ec/CustomNamedCurves$1.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ec/CustomNamedCurves$10.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ec/CustomNamedCurves$11.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ec/CustomNamedCurves$12.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ec/CustomNamedCurves$13.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ec/CustomNamedCurves$14.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ec/CustomNamedCurves$15.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ec/CustomNamedCurves$16.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ec/CustomNamedCurves$17.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ec/CustomNamedCurves$18.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ec/CustomNamedCurves$19.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ec/CustomNamedCurves$2.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ec/CustomNamedCurves$20.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ec/CustomNamedCurves$21.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ec/CustomNamedCurves$22.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ec/CustomNamedCurves$23.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ec/CustomNamedCurves$24.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ec/CustomNamedCurves$25.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ec/CustomNamedCurves$26.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ec/CustomNamedCurves$27.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ec/CustomNamedCurves$28.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ec/CustomNamedCurves$29.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ec/CustomNamedCurves$3.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ec/CustomNamedCurves$30.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ec/CustomNamedCurves$31.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ec/CustomNamedCurves$32.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ec/CustomNamedCurves$4.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ec/CustomNamedCurves$5.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ec/CustomNamedCurves$6.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ec/CustomNamedCurves$7.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ec/CustomNamedCurves$8.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ec/CustomNamedCurves$9.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/ec/CustomNamedCurves.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/engines/AESEngine.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/engines/Utils.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/generators/MGF1BytesGenerator.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/macs/HMac.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/modes/CTRModeCipher.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/modes/SICBlockCipher.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/params/AsymmetricKeyParameter.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/params/DHParameters.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/params/DHValidationParameters.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/params/DSAParameters.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/params/DSAValidationParameters.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/params/ECDomainParameters.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/params/ECKeyParameters.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/params/ECNamedDomainParameters.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/params/ECPrivateKeyParameters.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/params/ECPublicKeyParameters.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/params/KeyParameter.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/params/MGFParameters.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/crypto/params/ParametersWithIV.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/internal/asn1/cryptlib/CryptlibObjectIdentifiers.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/internal/asn1/isara/IsaraObjectIdentifiers.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/internal/asn1/oiw/OIWObjectIdentifiers.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/internal/asn1/rosstandart/RosstandartObjectIdentifiers.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jcajce/interfaces/BCKey.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jcajce/interfaces/MLKEMKey.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jcajce/interfaces/MLKEMPrivateKey.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jcajce/interfaces/MLKEMPublicKey.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jcajce/provider/asymmetric/mlkem/BCMLKEMPrivateKey.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jcajce/provider/asymmetric/mlkem/BCMLKEMPublicKey.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jcajce/provider/asymmetric/mlkem/MLKEMKeyFactorySpi$MLKEM1024.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jcajce/provider/asymmetric/mlkem/MLKEMKeyFactorySpi$MLKEM512.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jcajce/provider/asymmetric/mlkem/MLKEMKeyFactorySpi$MLKEM768.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jcajce/provider/asymmetric/mlkem/MLKEMKeyFactorySpi.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jcajce/provider/asymmetric/mlkem/Utils.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jcajce/provider/asymmetric/util/EC5Util$CustomCurves.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jcajce/provider/asymmetric/util/EC5Util.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jcajce/provider/asymmetric/util/ECUtil.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jcajce/provider/config/ConfigurableProvider.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jcajce/provider/config/ProviderConfiguration.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jcajce/provider/config/ProviderConfigurationPermission.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jcajce/provider/symmetric/util/ClassUtil$1.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jcajce/provider/symmetric/util/ClassUtil.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jcajce/provider/util/AlgorithmProvider.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jcajce/provider/util/AsymmetricKeyInfoConverter.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jcajce/spec/DHDomainParameterSpec.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jcajce/spec/MLKEMParameterSpec.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jcajce/spec/MLKEMPrivateKeySpec.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jcajce/spec/MLKEMPublicKeySpec.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jcajce/util/SpecUtil$1.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jcajce/util/SpecUtil$2.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jcajce/util/SpecUtil.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jce/ECGOST3410NamedCurveTable.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jce/interfaces/ECKey.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jce/interfaces/ECPrivateKey.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jce/interfaces/ECPublicKey.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jce/provider/BouncyCastleProvider$1.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jce/provider/BouncyCastleProvider$2.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jce/provider/BouncyCastleProvider$JcaCryptoService.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jce/provider/BouncyCastleProvider.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jce/provider/BouncyCastleProviderConfiguration.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jce/spec/ECNamedCurveParameterSpec.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jce/spec/ECNamedCurveSpec.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jce/spec/ECParameterSpec.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jsse/BCApplicationProtocolSelector.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jsse/BCExtendedSSLSession.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jsse/BCSNIHostName$BCSNIHostNameMatcher.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jsse/BCSNIHostName.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jsse/BCSNIMatcher.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jsse/BCSNIServerName.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jsse/BCSSLConnection.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jsse/BCSSLEngine.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jsse/BCSSLParameters.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jsse/BCSSLSocket.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jsse/BCStandardConstants.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jsse/BCX509ExtendedKeyManager.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jsse/BCX509ExtendedTrustManager.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jsse/BCX509Key.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jsse/java/security/BCAlgorithmConstraints.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jsse/java/security/BCCryptoPrimitive.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jsse/provider/AbstractAlgorithmConstraints.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jsse/provider/AlgorithmDecomposer.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jsse/provider/BouncyCastleJsseProvider$1.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jsse/provider/BouncyCastleJsseProvider$10.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jsse/provider/BouncyCastleJsseProvider$2.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jsse/provider/BouncyCastleJsseProvider$3.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jsse/provider/BouncyCastleJsseProvider$4.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jsse/provider/BouncyCastleJsseProvider$5.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jsse/provider/BouncyCastleJsseProvider$6.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jsse/provider/BouncyCastleJsseProvider$7.class",
+        "reason": "file count or size limit reached"
+      },
+      {
+        "path": "META-INF/versions/9/org/bouncycastle/jsse/provider/BouncyCastleJsseProvider$8.class",
+        "reason": "file count or size limit reached"
+      }
+    ]
+  },
+  "summary": "Extracted 400 files (17108373 bytes) from burpsuite.jar into /tmp/craft-anything-extract-2cb264c6f483ca9d; skipped 219.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [
+    {
+      "code": "nested_not_extracted",
+      "message": "Archives inside the archive are written as files, not unpacked; run core_archive_extract on them."
+    }
+  ],
+  "coverage": {
+    "status": "partial",
+    "examined": 400,
+    "total": 619
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/tmp/craft-anything-extract-2cb264c6f483ca9d",
+      "label": "output folder"
+    }
+  ],
+  "links": []
+}

@@ -1,0 +1,430 @@
+{
+  "id": "ev_9cef4b7511736beefa06286f3fb52180536afd0d473d229800f5f802cec355fa",
+  "subject": {
+    "kind": "jar",
+    "sha256": "3d4b9ce5459486510d48a1ec216b8fc9340ed647725f6fef0501e02760574dd9",
+    "name": "burpsuite-named.jar"
+  },
+  "operation": "java_method_show",
+  "params": {
+    "class_name": "burp.HotkeyRegistry",
+    "decompile": true,
+    "descriptor": null,
+    "limit": 2000,
+    "method_name": "applyBinding",
+    "offset": 0,
+    "path": null
+  },
+  "result": {
+    "access": [
+      "private"
+    ],
+    "class": "burp.HotkeyRegistry",
+    "descriptor": "(III)V",
+    "entry": "burp/HotkeyRegistry.class",
+    "exception_table": [],
+    "instructions": [
+      {
+        "len": 3,
+        "offset": "0000",
+        "opcode": "0xb2",
+        "text": "getstatic burp.KeyChordFormatter.ZW:int"
+      },
+      {
+        "len": 1,
+        "offset": "0003",
+        "opcode": "0x1b",
+        "text": "iload_1"
+      },
+      {
+        "len": 1,
+        "offset": "0004",
+        "opcode": "0x80",
+        "text": "ior"
+      },
+      {
+        "len": 1,
+        "offset": "0005",
+        "opcode": "0x1c",
+        "text": "iload_2"
+      },
+      {
+        "len": 3,
+        "offset": "0006",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.KeyChordFormatter.format(II)Ljava/lang/String;"
+      },
+      {
+        "len": 2,
+        "offset": "0009",
+        "opcode": "0x3a",
+        "text": "astore 4"
+      },
+      {
+        "len": 1,
+        "offset": "000b",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "000c",
+        "opcode": "0xb4",
+        "text": "getfield burp.HotkeyRegistry.Zz:burp.CommandRegistry"
+      },
+      {
+        "len": 1,
+        "offset": "000f",
+        "opcode": "0x1d",
+        "text": "iload_3"
+      },
+      {
+        "len": 3,
+        "offset": "0010",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.CommandRegistry.ZB(I)Lburp/Command;"
+      },
+      {
+        "len": 2,
+        "offset": "0013",
+        "opcode": "0x3a",
+        "text": "astore 5"
+      },
+      {
+        "len": 1,
+        "offset": "0015",
+        "opcode": "0x01",
+        "text": "aconst_null"
+      },
+      {
+        "len": 1,
+        "offset": "0016",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0017",
+        "opcode": "0xb4",
+        "text": "getfield burp.HotkeyRegistry.Z_:java.util.Map"
+      },
+      {
+        "len": 2,
+        "offset": "001a",
+        "opcode": "0x19",
+        "text": "aload 4"
+      },
+      {
+        "len": 5,
+        "offset": "001c",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.Map.get(Ljava/lang/Object;)Ljava/lang/Object;"
+      },
+      {
+        "len": 3,
+        "offset": "0021",
+        "opcode": "0xa6",
+        "text": "if_acmpne 40"
+      },
+      {
+        "len": 1,
+        "offset": "0024",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 3,
+        "offset": "0025",
+        "opcode": "0xa7",
+        "text": "goto 41"
+      },
+      {
+        "len": 1,
+        "offset": "0028",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 3,
+        "offset": "0029",
+        "opcode": "0xb2",
+        "text": "getstatic net.portswigger.Zyu.Zi:net.portswigger.Zyu"
+      },
+      {
+        "len": 2,
+        "offset": "002c",
+        "opcode": "0x19",
+        "text": "aload 4"
+      },
+      {
+        "len": 3,
+        "offset": "002e",
+        "opcode": "0xb8",
+        "text": "invokestatic net.portswigger.Zgj.ZN(ZLnet/portswigger/Zyu;Ljava/lang/String;)V"
+      },
+      {
+        "len": 1,
+        "offset": "0031",
+        "opcode": "0x01",
+        "text": "aconst_null"
+      },
+      {
+        "len": 1,
+        "offset": "0032",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0033",
+        "opcode": "0xb4",
+        "text": "getfield burp.HotkeyRegistry.Zp:java.util.Map"
+      },
+      {
+        "len": 2,
+        "offset": "0036",
+        "opcode": "0x19",
+        "text": "aload 5"
+      },
+      {
+        "len": 5,
+        "offset": "0038",
+        "opcode": "0xb9",
+        "text": "invokeinterface burp.Command.commandId()I"
+      },
+      {
+        "len": 3,
+        "offset": "003d",
+        "opcode": "0xb8",
+        "text": "invokestatic java.lang.Integer.valueOf(I)Ljava/lang/Integer;"
+      },
+      {
+        "len": 5,
+        "offset": "0040",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.Map.get(Ljava/lang/Object;)Ljava/lang/Object;"
+      },
+      {
+        "len": 3,
+        "offset": "0045",
+        "opcode": "0xa6",
+        "text": "if_acmpne 76"
+      },
+      {
+        "len": 1,
+        "offset": "0048",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 3,
+        "offset": "0049",
+        "opcode": "0xa7",
+        "text": "goto 77"
+      },
+      {
+        "len": 1,
+        "offset": "004c",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 3,
+        "offset": "004d",
+        "opcode": "0xb2",
+        "text": "getstatic net.portswigger.Zyu.Zi:net.portswigger.Zyu"
+      },
+      {
+        "len": 2,
+        "offset": "0050",
+        "opcode": "0x19",
+        "text": "aload 5"
+      },
+      {
+        "len": 5,
+        "offset": "0052",
+        "opcode": "0xb9",
+        "text": "invokeinterface burp.Command.commandId()I"
+      },
+      {
+        "len": 1,
+        "offset": "0057",
+        "opcode": "0x85",
+        "text": "i2l"
+      },
+      {
+        "len": 2,
+        "offset": "0058",
+        "opcode": "0x19",
+        "text": "aload 5"
+      },
+      {
+        "len": 5,
+        "offset": "005a",
+        "opcode": "0xb9",
+        "text": "invokeinterface burp.Command.label()Ljava/lang/String;"
+      },
+      {
+        "len": 3,
+        "offset": "005f",
+        "opcode": "0xb8",
+        "text": "invokestatic net.portswigger.Zgj.Zm(ZLnet/portswigger/Zyu;JLjava/lang/String;)V"
+      },
+      {
+        "len": 1,
+        "offset": "0062",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0063",
+        "opcode": "0xb4",
+        "text": "getfield burp.HotkeyRegistry.Z_:java.util.Map"
+      },
+      {
+        "len": 2,
+        "offset": "0066",
+        "opcode": "0x19",
+        "text": "aload 4"
+      },
+      {
+        "len": 2,
+        "offset": "0068",
+        "opcode": "0x19",
+        "text": "aload 5"
+      },
+      {
+        "len": 5,
+        "offset": "006a",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.Map.put(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;"
+      },
+      {
+        "len": 1,
+        "offset": "006f",
+        "opcode": "0x57",
+        "text": "pop"
+      },
+      {
+        "len": 1,
+        "offset": "0070",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0071",
+        "opcode": "0xb4",
+        "text": "getfield burp.HotkeyRegistry.Zp:java.util.Map"
+      },
+      {
+        "len": 1,
+        "offset": "0074",
+        "opcode": "0x1d",
+        "text": "iload_3"
+      },
+      {
+        "len": 3,
+        "offset": "0075",
+        "opcode": "0xb8",
+        "text": "invokestatic java.lang.Integer.valueOf(I)Ljava/lang/Integer;"
+      },
+      {
+        "len": 1,
+        "offset": "0078",
+        "opcode": "0x1b",
+        "text": "iload_1"
+      },
+      {
+        "len": 1,
+        "offset": "0079",
+        "opcode": "0x1c",
+        "text": "iload_2"
+      },
+      {
+        "len": 3,
+        "offset": "007a",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.ObfuscationNoise.ZL(II)Ljavax/swing/KeyStroke;"
+      },
+      {
+        "len": 5,
+        "offset": "007d",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.Map.put(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;"
+      },
+      {
+        "len": 1,
+        "offset": "0082",
+        "opcode": "0x57",
+        "text": "pop"
+      },
+      {
+        "len": 1,
+        "offset": "0083",
+        "opcode": "0xb1",
+        "text": "return"
+      }
+    ],
+    "instructions_total": 57,
+    "listing": "0000: getstatic burp.KeyChordFormatter.ZW:int\n0003: iload_1\n0004: ior\n0005: iload_2\n0006: invokestatic burp.KeyChordFormatter.format(II)Ljava/lang/String;\n0009: astore 4\n000b: aload_0\n000c: getfield burp.HotkeyRegistry.Zz:burp.CommandRegistry\n000f: iload_3\n0010: invokevirtual burp.CommandRegistry.ZB(I)Lburp/Command;\n0013: astore 5\n0015: aconst_null\n0016: aload_0\n0017: getfield burp.HotkeyRegistry.Z_:java.util.Map\n001a: aload 4\n001c: invokeinterface java.util.Map.get(Ljava/lang/Object;)Ljava/lang/Object;\n0021: if_acmpne 40\n0024: iconst_1\n0025: goto 41\n0028: iconst_0\n0029: getstatic net.portswigger.Zyu.Zi:net.portswigger.Zyu\n002c: aload 4\n002e: invokestatic net.portswigger.Zgj.ZN(ZLnet/portswigger/Zyu;Ljava/lang/String;)V\n0031: aconst_null\n0032: aload_0\n0033: getfield burp.HotkeyRegistry.Zp:java.util.Map\n0036: aload 5\n0038: invokeinterface burp.Command.commandId()I\n003d: invokestatic java.lang.Integer.valueOf(I)Ljava/lang/Integer;\n0040: invokeinterface java.util.Map.get(Ljava/lang/Object;)Ljava/lang/Object;\n0045: if_acmpne 76\n0048: iconst_1\n0049: goto 77\n004c: iconst_0\n004d: getstatic net.portswigger.Zyu.Zi:net.portswigger.Zyu\n0050: aload 5\n0052: invokeinterface burp.Command.commandId()I\n0057: i2l\n0058: aload 5\n005a: invokeinterface burp.Command.label()Ljava/lang/String;\n005f: invokestatic net.portswigger.Zgj.Zm(ZLnet/portswigger/Zyu;JLjava/lang/String;)V\n0062: aload_0\n0063: getfield burp.HotkeyRegistry.Z_:java.util.Map\n0066: aload 4\n0068: aload 5\n006a: invokeinterface java.util.Map.put(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;\n006f: pop\n0070: aload_0\n0071: getfield burp.HotkeyRegistry.Zp:java.util.Map\n0074: iload_3\n0075: invokestatic java.lang.Integer.valueOf(I)Ljava/lang/Integer;\n0078: iload_1\n0079: iload_2\n007a: invokestatic burp.ObfuscationNoise.ZL(II)Ljavax/swing/KeyStroke;\n007d: invokeinterface java.util.Map.put(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;\n0082: pop\n0083: return",
+    "max_locals": 6,
+    "max_stack": 5,
+    "method": "burp.HotkeyRegistry.applyBinding(III)V",
+    "overloads": [
+      "(III)V"
+    ],
+    "pseudo_java": {
+      "code": "private void applyBinding(int, int, int) {\n    v4 = KeyChordFormatter.format((KeyChordFormatter.ZW | v1), v2);\n    v5 = this.Zz.ZB(v3);\n    if (null == this.Z_.get(v4)) {\n    } else {\n    }\n    Zgj.ZN(0, Zyu.Zi, v4);\n    if (null == this.Zp.get(Integer.valueOf(v5.commandId()))) {\n    } else {\n    }\n    Zgj.Zm(0, Zyu.Zi, (long) v5.commandId(), v5.label());\n    this.Z_.put(v4, v5);\n    this.Zp.put(Integer.valueOf(v3), ObfuscationNoise.ZL(v1, v2));\n    return;\n}",
+      "confidence": "inferred",
+      "fully_structured": true,
+      "signature": "private void applyBinding(int, int, int)"
+    },
+    "signature": "private void applyBinding(int, int, int)",
+    "throws": []
+  },
+  "summary": "burp.HotkeyRegistry.applyBinding(III)V (burp/HotkeyRegistry.class): 57 instructions.",
+  "confidence": "inferred",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [
+    {
+      "code": "decompiler_inferred",
+      "message": "This pseudo-Java is reconstructed from bytecode by Craft Anything's built-in decompiler; it is a best guess, not the original source. The bytecode disassembly is the evidence."
+    },
+    {
+      "code": "generics_erased",
+      "message": "Generic type arguments are erased in bytecode and are not shown."
+    },
+    {
+      "code": "names_and_types_inferred",
+      "message": "Local variables are named v0, v1, … (no debug names); their declared types are not reconstructed."
+    },
+    {
+      "code": "desugaring_not_reversed",
+      "message": "Synthetic members, lambda/invokedynamic desugaring, enum scaffolding and string-switch hashing are not turned back into source."
+    }
+  ],
+  "coverage": {
+    "status": "complete",
+    "examined": 57,
+    "total": 57
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/tmp/opencode/named/burpsuite-named.jar"
+    },
+    {
+      "kind": "method",
+      "value": "burp.HotkeyRegistry.applyBinding(III)V"
+    }
+  ],
+  "links": []
+}

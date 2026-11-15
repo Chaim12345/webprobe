@@ -1,0 +1,6 @@
+# This machine's rustup proxy for rustc is broken (stable toolchain entry is
+# "not applicable"); point cargo at the working system rustc directly.
+# Also bypass sccache, whose -vV probe inherits that broken rustc resolution.
+[build]
+rustc = "/usr/bin/rustc"
+rustc-wrapper = ""

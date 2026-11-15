@@ -1,0 +1,429 @@
+{
+  "version": 4,
+  "name": "burpsuite",
+  "request": "Make my own version of this app",
+  "target": {
+    "kind": "local",
+    "path": "/opt/BurpSuite/burpsuite.jar"
+  },
+  "stack": "Rust + egui (eframe)",
+  "status": "stopped",
+  "note": "Paused. Send a message to continue.",
+  "created_ms": 1794317388167,
+  "updated_ms": 1794736599823,
+  "checks": [
+    {
+      "round": 1,
+      "check": "build",
+      "passed": true,
+      "similarity": null,
+      "note": "Build succeeded.",
+      "artifacts": [],
+      "at_ms": 1794322437143
+    },
+    {
+      "round": 1,
+      "check": "app-screenshot",
+      "passed": true,
+      "similarity": null,
+      "note": "The program starts and draws (1440×900).",
+      "artifacts": [
+        "checks/round-0/screenshot.png"
+      ],
+      "at_ms": 1794322454693
+    },
+    {
+      "round": 1,
+      "check": "mechanics",
+      "passed": true,
+      "similarity": null,
+      "note": "app/mechanics.json has 34 values (31 with a source, 3 estimated).",
+      "artifacts": [],
+      "at_ms": 1794322454703,
+      "claims": [
+        {
+          "title": "connect timeout (120000) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "read timeout (120000) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "open-ended response timeout (10000) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "dns resolution timeout (300000) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "concurrent request limit (10) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "throttle interval (500) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "message editor font size (13) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "ui font size (13) is used in the code",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "round": 2,
+      "check": "build",
+      "passed": true,
+      "similarity": null,
+      "note": "Build succeeded.",
+      "artifacts": [],
+      "at_ms": 1794323701911
+    },
+    {
+      "round": 2,
+      "check": "app-screenshot",
+      "passed": true,
+      "similarity": null,
+      "note": "The program starts and draws (1440×900).",
+      "artifacts": [
+        "checks/round-0/screenshot.png"
+      ],
+      "at_ms": 1794323707105
+    },
+    {
+      "round": 2,
+      "check": "mechanics",
+      "passed": true,
+      "similarity": null,
+      "note": "app/mechanics.json has 44 values (41 with a source, 3 estimated).",
+      "artifacts": [],
+      "at_ms": 1794323707116,
+      "claims": [
+        {
+          "title": "connect timeout (120000) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "read timeout (120000) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "open-ended response timeout (10000) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "dns resolution timeout (300000) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "concurrent request limit (10) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "throttle interval (500) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "message editor font size (13) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "ui font size (13) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "max insertion points per base request (30) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "crawl max link depth (4) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "crawl max unique locations (1500) is used in the code",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "round": 3,
+      "check": "build",
+      "passed": true,
+      "similarity": null,
+      "note": "Build succeeded.",
+      "artifacts": [],
+      "at_ms": 1794324298247
+    },
+    {
+      "round": 3,
+      "check": "app-screenshot",
+      "passed": true,
+      "similarity": null,
+      "note": "The program starts and draws (1440×900).",
+      "artifacts": [
+        "checks/round-0/screenshot.png"
+      ],
+      "at_ms": 1794324305034
+    },
+    {
+      "round": 3,
+      "check": "mechanics",
+      "passed": true,
+      "similarity": null,
+      "note": "app/mechanics.json has 47 values (44 with a source, 3 estimated).",
+      "artifacts": [],
+      "at_ms": 1794324305050,
+      "claims": [
+        {
+          "title": "connect timeout (120000) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "read timeout (120000) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "open-ended response timeout (10000) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "dns resolution timeout (300000) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "concurrent request limit (10) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "throttle interval (500) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "message editor font size (13) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "ui font size (13) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "max insertion points per base request (30) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "crawl max link depth (4) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "crawl max unique locations (1500) is used in the code",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "round": 4,
+      "check": "build",
+      "passed": true,
+      "similarity": null,
+      "note": "Build succeeded.",
+      "artifacts": [],
+      "at_ms": 1794326919715
+    },
+    {
+      "round": 4,
+      "check": "app-screenshot",
+      "passed": true,
+      "similarity": null,
+      "note": "The program starts and draws (1440×900).",
+      "artifacts": [
+        "checks/round-0/screenshot.png"
+      ],
+      "at_ms": 1794326960385
+    },
+    {
+      "round": 4,
+      "check": "mechanics",
+      "passed": true,
+      "similarity": null,
+      "note": "app/mechanics.json has 54 values (54 with a source, 0 estimated).",
+      "artifacts": [],
+      "at_ms": 1794326960398,
+      "claims": [
+        {
+          "title": "connect timeout (120000) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "read timeout (120000) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "open-ended response timeout (10000) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "dns resolution timeout (300000) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "concurrent request limit (10) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "throttle interval (500) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "message editor font size (13) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "ui font size (13) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "tls rsa key size (2048) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "ca serial width (32) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "max insertion points per base request (30) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "crawl max link depth (4) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "crawl max unique locations (1500) is used in the code",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "round": 5,
+      "check": "build",
+      "passed": true,
+      "similarity": null,
+      "note": "Build succeeded.",
+      "artifacts": [],
+      "at_ms": 1794403587217
+    },
+    {
+      "round": 5,
+      "check": "app-screenshot",
+      "passed": false,
+      "similarity": null,
+      "note": "The program didn't save a picture with --screenshot. The operation was cancelled. Give the program a `--screenshot <file.png>` option: start normally, draw about 120 frames, save the window's picture as a PNG to that file and exit. With the option, open the window without taking focus, so a check never gets in the way of what the person is doing, and on Windows also behind other windows (a covered window still draws there; on macOS and Linux it may stop drawing, so don't lower it there). Keep it drawing while it isn't focused, or the picture never comes. In egui: `ViewportBuilder::with_active(false)`, on Windows `with_window_level(WindowLevel::AlwaysOnBottom)`, and on macOS `with_activate_ignoring_other_apps(false)` through `NativeOptions::event_loop_builder`; in Unity, `Application.runInBackground = true`; other stacks, their own way. Started without the option, the program opens as usual. Craft Anything runs it that way after each build to check the result, and a build without the option, or with a blank picture, doesn't pass. Try it yourself: run it with a file inside app/ (for example app/shots/now.png) and check that it saves the picture.",
+      "artifacts": [],
+      "at_ms": 1794403592949
+    },
+    {
+      "round": 6,
+      "check": "build",
+      "passed": true,
+      "similarity": null,
+      "note": "Build succeeded.",
+      "artifacts": [],
+      "at_ms": 1794405828454
+    },
+    {
+      "round": 6,
+      "check": "app-screenshot",
+      "passed": true,
+      "similarity": null,
+      "note": "The program starts and draws (1440×900).",
+      "artifacts": [
+        "checks/round-0/screenshot.png"
+      ],
+      "at_ms": 1794405840313
+    },
+    {
+      "round": 6,
+      "check": "mechanics",
+      "passed": true,
+      "similarity": null,
+      "note": "app/mechanics.json has 62 values (62 with a source, 0 estimated).",
+      "artifacts": [],
+      "at_ms": 1794405840324,
+      "claims": [
+        {
+          "title": "connect timeout (120000) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "read timeout (120000) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "open-ended response timeout (10000) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "dns resolution timeout (300000) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "concurrent request limit (10) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "throttle interval (500) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "message editor font size (13) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "ui font size (13) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "tls rsa key size (2048) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "ca serial width (32) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "max insertion points per base request (30) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "crawl max link depth (4) is used in the code",
+          "passed": true
+        },
+        {
+          "title": "crawl max unique locations (1500) is used in the code",
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "agent_session": null,
+  "agent_session_by": "opencode",
+  "allowed_actions": [],
+  "last_reply": "No further changes needed. Both concerns were accounted for:\n\n- Existing history, payload, and HTTPS findings were revalidated, not treated as unresolved.\n- Obfuscated Comparer/Sequencer internals were not presented as verified algorithms.\n- Status colors now use exact theme palette values but remain labeled as a WebProbe-specific mapping.\n- Remaining limitations are documented as custom or simplified rather than pending estimates.",
+  "asset_budget_usd": 5.0,
+  "generate_assets": false,
+  "questions": "decide",
+  "approvals": {
+    "web": "allow",
+    "commands": "allow",
+    "outside_files": "allow",
+    "publish": "allow",
+    "delete_outside": "allow",
+    "system": "allow",
+    "other_tools": "allow"
+  }
+}

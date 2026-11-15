@@ -1,0 +1,474 @@
+{
+  "version": 1,
+  "values": [
+    {
+      "name": "proxy listener",
+      "group": "proxy",
+      "value": "127.0.0.1:8080",
+      "source": "resources/Preferences/ProjectDefaults.json proxy.request_listeners[0]: listen_mode=loopback_only, listener_port=8080, running=true, certificate_mode=per_host"
+    },
+    {
+      "name": "connect timeout",
+      "group": "connections",
+      "value": 120000,
+      "unit": "ms",
+      "source": "resources/Preferences/ProjectDefaults.json"
+    },
+    {
+      "name": "read timeout",
+      "group": "connections",
+      "value": 120000,
+      "unit": "ms",
+      "source": "resources/Preferences/ProjectDefaults.json"
+    },
+    {
+      "name": "open-ended response timeout",
+      "group": "connections",
+      "value": 10000,
+      "unit": "ms",
+      "source": "resources/Preferences/ProjectDefaults.json"
+    },
+    {
+      "name": "dns resolution timeout",
+      "group": "connections",
+      "value": 300000,
+      "unit": "ms",
+      "source": "resources/Preferences/ProjectDefaults.json"
+    },
+    {
+      "name": "concurrent request limit",
+      "group": "requests",
+      "value": 10,
+      "source": "resources/Preferences/ProjectDefaults.json"
+    },
+    {
+      "name": "throttle interval",
+      "group": "requests",
+      "value": 500,
+      "unit": "ms",
+      "source": "resources/Preferences/ProjectDefaults.json resource_pools.throttle_interval_millis"
+    },
+    {
+      "name": "back off after 429",
+      "group": "requests",
+      "value": true,
+      "source": "resources/Preferences/ProjectDefaults.json"
+    },
+    {
+      "name": "interception on at startup",
+      "group": "proxy",
+      "value": false,
+      "source": "resources/Preferences/UserDefaults.json misc.enable_proxy_interception_at_startup=never"
+    },
+    {
+      "name": "message editor font size",
+      "group": "display",
+      "value": 13,
+      "source": "resources/Preferences/UserDefaults.json display.http_message_display"
+    },
+    {
+      "name": "ui font size",
+      "group": "display",
+      "value": 13,
+      "source": "resources/Preferences/UserDefaults.json display.user_interface"
+    },
+    {
+      "name": "zebra striping",
+      "group": "display",
+      "value": true,
+      "source": "resources/Preferences/UserDefaults.json display.table_appearance"
+    },
+    {
+      "name": "theme dark accent",
+      "group": "colors",
+      "value": "#FF6633",
+      "source": "burp/theme/DarkTheme.json swatch orange"
+    },
+    {
+      "name": "theme mono shades",
+      "group": "colors",
+      "value": "#2B2B2B #323334 #424244 #525255 #6A6A6C #C5C7C8",
+      "source": "burp/theme/DarkTheme.json swatch black"
+    },
+    {
+      "name": "editor message background",
+      "group": "colors",
+      "value": "#323334",
+      "source": "burp/theme/DarkTheme.json ui.editor.message.background (mono[1])"
+    },
+    {
+      "name": "editor message text",
+      "group": "colors",
+      "value": "#CECECE",
+      "source": "burp/theme/DarkTheme.json ui.editor.message.text"
+    },
+    {
+      "name": "editor current line",
+      "group": "colors",
+      "value": "#35383A",
+      "source": "burp/theme/DarkTheme.json ui.editor.message.currentLineBackground"
+    },
+    {
+      "name": "selection background",
+      "group": "colors",
+      "value": "#2C5175",
+      "source": "burp/theme/DarkTheme.json ui.editor.message.selectionBackground"
+    },
+    {
+      "name": "method GET color",
+      "group": "colors",
+      "value": "#D37FA4",
+      "source": "burp/theme/DarkTheme.json ui.target.method.get (magenta[3])"
+    },
+    {
+      "name": "method POST color",
+      "group": "colors",
+      "value": "#9189FE",
+      "source": "burp/theme/DarkTheme.json ui.target.method.post (purple[3])"
+    },
+    {
+      "name": "method other color",
+      "group": "colors",
+      "value": "#83CDD1",
+      "source": "burp/theme/DarkTheme.json ui.target.method (teal[3])"
+    },
+    {
+      "name": "link color",
+      "group": "colors",
+      "value": "#FFB090",
+      "source": "burp/theme/DarkTheme.json ui.text.link (primary[5])"
+    },
+    {
+      "name": "highlight colors",
+      "group": "colors",
+      "value": "#FF6464 #FFC864 #FFFF64 #64FF64 #64FFFF #6464FF #FFC8C8 #FF64FF #B4B4B4",
+      "source": "burp/theme/DarkTheme.json ui.highlight"
+    },
+    {
+      "name": "hotkey send to repeater",
+      "group": "hotkeys",
+      "value": "Ctrl+R",
+      "source": "resources/Preferences/UserDefaults.json misc.hotkeys"
+    },
+    {
+      "name": "hotkey send to intruder",
+      "group": "hotkeys",
+      "value": "Ctrl+I",
+      "source": "resources/Preferences/UserDefaults.json misc.hotkeys"
+    },
+    {
+      "name": "hotkey forward intercepted",
+      "group": "hotkeys",
+      "value": "Ctrl+F",
+      "source": "resources/Preferences/UserDefaults.json misc.hotkeys"
+    },
+    {
+      "name": "hotkey toggle interception",
+      "group": "hotkeys",
+      "value": "Ctrl+T",
+      "source": "resources/Preferences/UserDefaults.json misc.hotkeys"
+    },
+    {
+      "name": "hotkey issue repeater request",
+      "group": "hotkeys",
+      "value": "Ctrl+Space",
+      "source": "resources/Preferences/UserDefaults.json misc.hotkeys"
+    },
+    {
+      "name": "hotkeys switch tools",
+      "group": "hotkeys",
+      "value": "Ctrl+Shift+D/T/P/I/R",
+      "source": "resources/Preferences/UserDefaults.json misc.hotkeys"
+    },
+    {
+      "name": "proxy history cap",
+      "group": "proxy",
+      "value": "no fixed model entry cap; all session entries retained and searched; at most 1000 matching rows rendered by the non-virtualized egui table; model bounded only by capture_memory_limit_mb=100",
+      "source": "live 52685 burp.Za2u.history offsets 0001-0024, filtered overload 0001-0034, burp.Zedh.ZZ 0000-000f, burp.Zk8.ZZ 000b-0067, burp.Zfpb.ZI 0017-00aa (ev_d0187af4, ev_e7c84a7f, ev_0ad33d98, ev_25209849, ev_a6132ba8); no entry-count cap in ProjectDefaults.json/UserDefaults.json, only capture_memory_limit_mb"
+    },
+    {
+      "name": "intruder payload cap",
+      "group": "intruder",
+      "value": "no fixed entry cap; complete supplied list is used",
+      "source": "live 52685 burp.Zzg1.lambda$add$1 calls addAll at offset 0005 and getRowCount returns size at 0004 (ev_0c2d88822b2539c4f8c95933f96df8ffa693939aa84862aa5d120479ca8806ea, ev_7f8989bc8e0bfe77378a90b2de37f474f5c9ea09368e53885d31aa291e4f94c6); no payload-count cap in ProjectDefaults.json"
+    },
+    {
+      "name": "https mitm",
+      "group": "proxy",
+      "value": "supported; in-memory self-signed CA and per-host signed certificates",
+      "source": "live 52685 burp.Zg88.Z_ CA generation offsets 0050-0092 + burp.Zagi.<init> per-host signing offsets 0009-01e0 (ev_21ccf9e7a6d835412ed6a3bb7c0b3b011a294ad63dc6d87091d7982936d5a9df, ev_6983dcf85eba65e96b0eac275d331837ed7d2b3f5352b968da00737c47cc11eb); Rust rcgen/rustls implementation"
+    },
+    {
+      "name": "tls rsa key size",
+      "group": "https",
+      "value": 2048,
+      "unit": "bits",
+      "source": "live 52685 burp.Zeq0.ZV bytecode offset 0000 (ev_e8237e1786399b68f1e03a2ed55f744d73f6f930ea2b28be10b227b2b1eacd0e)"
+    },
+    {
+      "name": "certificate signature algorithm",
+      "group": "https",
+      "value": "SHA256withRSA",
+      "source": "reference 51467 Zer6 algorithm selection; live 52685 burp.Zeq0.ZM preferred-plus-fallback structure (ev_269324e567e55cb29820fe54ccb713d5235e60c6faf8ff314006cee0a30e2f28)"
+    },
+    {
+      "name": "ca serial width",
+      "group": "https",
+      "value": 32,
+      "unit": "bits",
+      "source": "live 52685 burp.Zeq0.Zk bytecode offsets 000e-0017 (ev_6739d5c3b3d5db2c27637179b509251eb0646b98b77a182ac65459364ffe7bae)"
+    },
+    {
+      "name": "ca validity",
+      "group": "https",
+      "value": "notBefore year=min(current year,2014); notAfter=generation +10 calendar years",
+      "source": "live 52685 burp.Zg88.Z_ offsets 0050-0084 (ev_7b303a5634e4ae2ac5e2de10d4fa53e96eb4d7ee60df593a259ba7e5bad2d487)"
+    },
+    {
+      "name": "host certificate validity",
+      "group": "https",
+      "value": "notBefore=now-14 days; notAfter=notBefore+199 days",
+      "source": "live 52685 burp.Zagi.<init> offsets 007d-009c (ev_c5ad9bed8376dfb4576c9e2838a727b4bc09ca279a9534b91d8fe8c7d37f5b63)"
+    },
+    {
+      "name": "host certificate serial",
+      "group": "https",
+      "value": "seed=epoch_millis as i32; serial=abs(previous counter), then wrapping increment; unsigned_abs emits MIN_VALUE as positive 2147483648 because rcgen cannot emit a negative serial",
+      "source": "live 52685 burp.Zta7.<init> offsets 0004-0010 and Zta7.Z_ offsets 0000-0012 (ev_e82cd22057091495c88576003cad01d5138f9d4ccc99f7b9c2e570729633025b, ev_8cff8a5b19639e537e3a523c6882d1ce0648724f32a5316bef933d263212eaa9)"
+    },
+    {
+      "name": "host certificate chain and usage",
+      "group": "https",
+      "value": "leaf+CA; primary host SAN first when absent, then supplied DNS SANs; serverAuth; critical digitalSignature",
+      "source": "live 52685 burp.Zagi.<init> offsets 00c0-01e0 (ev_c5ad9bed8376dfb4576c9e2838a727b4bc09ca279a9534b91d8fe8c7d37f5b63)"
+    },
+    {
+      "name": "interception actions",
+      "group": "proxy",
+      "value": "CONTINUE=0; INTERCEPT=1; DO_NOT_INTERCEPT=2; DROP=3; Zcur returns early for DROP",
+      "source": "live 52685 burp.Z_we.<clinit> offsets 0240-0285 (ev_8e21bafa90871b6eeaa3a9aae8345e9c67eb594744e236251debc8d370d064a7); burp.Zeeu.Za offsets 0000-004b (ev_187544d0c84d390e5fdf496da91496ee4ec0c701c21229c6d2e3d2a2e5b63b6b); burp.Zcur.ZU offsets 00b7-00c4 (ev_08d25ee3dbbefd82601884933d26b6446c620a566de9e139a1dc9da95f40ef83)"
+    },
+    {
+      "name": "request dispatch defaults",
+      "group": "requests",
+      "value": "HttpMode.AUTO; RedirectionMode.NEVER",
+      "source": "live 52685 burp.Zktc.sendRequest overloads offsets 0000-0008 and 0000-000d (ev_3a4725773a5b9501e0253b2c377943b2dfad49eb9d7b152a6503858f8127e0cb, ev_185892f5ff9b92bbc4db90e3f495f7823c80ba404ba3167e7d8506e1d913517d)"
+    },
+    {
+      "name": "scope policy modes",
+      "group": "scope",
+      "value": "0=false; 1=true; 2=suite scope; 3=custom scope",
+      "source": "live 52685 burp.Zjv2.ZF offsets 0012-004f (ev_7239f023f5c7ce5cd0704b14105207a192f5dc02a375f01eb158ba16db1a20b0)"
+    },
+    {
+      "name": "intruder position markers",
+      "group": "intruder",
+      "value": "payload markers as ranges in the request template; WebProbe UI marks spans with § and replaces one position per payload",
+      "source": "burp/api/montoya/core/Marker.java + burp/api/montoya/intruder/HttpRequestTemplate.java verify ranges; § editor representation is WebProbe-specific"
+    },
+    {
+      "name": "scan types enabled",
+      "group": "scanner",
+      "value": "passive, light active, medium active, intrusive active, javascript analysis",
+      "source": "resources/Preferences/AuditDefaults.json scanner.issues_reported"
+    },
+    {
+      "name": "scan speed and accuracy",
+      "group": "scanner",
+      "value": "normal",
+      "source": "resources/Preferences/AuditDefaults.json scanner.audit_optimization"
+    },
+    {
+      "name": "max insertion points per base request",
+      "group": "scanner",
+      "value": 30,
+      "source": "resources/Preferences/AuditDefaults.json misc_insertion_point_options"
+    },
+    {
+      "name": "crawl max link depth",
+      "group": "scanner",
+      "value": 4,
+      "source": "resources/Preferences/CrawlDefaults.json"
+    },
+    {
+      "name": "crawl max unique locations",
+      "group": "scanner",
+      "value": 1500,
+      "source": "resources/Preferences/CrawlDefaults.json"
+    },
+    {
+      "name": "issue severity colors",
+      "group": "scanner",
+      "value": "high=#DF4C63 medium=#FF6633 low=#83CDD1 info=#C5C7C8",
+      "source": "burp/theme/DarkTheme.json ui.issue"
+    },
+    {
+      "name": "passive check set",
+      "group": "scanner",
+      "value": "WebProbe custom subset: missing security headers, cookie flags, server version disclosure, SQL error signatures, secrets in HTML comments",
+      "source": "scan::passive_check; AuditDefaults.json verifies passive scanning is enabled, not this custom check list"
+    },
+    {
+      "name": "audit severity enum",
+      "group": "scanner",
+      "value": "HIGH / MEDIUM / LOW / INFORMATION / FALSE_POSITIVE",
+      "source": "burp/api/montoya/scanner/audit/issues/AuditIssueSeverity.java"
+    },
+    {
+      "name": "audit confidence enum",
+      "group": "scanner",
+      "value": "CERTAIN / FIRM / TENTATIVE",
+      "source": "burp/api/montoya/scanner/audit/issues/AuditIssueConfidence.java"
+    },
+    {
+      "name": "passive duplicate handling",
+      "group": "scanner",
+      "value": "consolidated; first instance kept (KEEP_EXISTING)",
+      "source": "burp/api/montoya/scanner/ConsolidationAction.java + AuditDefaults.json consolidate_passive_issues=true; dispatch bytecode burp.Zcur.ZZ/JavaMethod ev_2e5d6cee"
+    },
+    {
+      "name": "match and replace rule fields",
+      "group": "proxy",
+      "value": "enabled=true, match, replacement, is_regex_match=false (defaults)",
+      "source": "live 52685 decompile burp.Zmo7 fields Zu/Zv/ZR/Zl/Za; constructor offsets 0007-0016 set enabled=true and empty match/replacement, regex false by JVM default (ev_b17051619a3f3390149bdb6e4b01baebf1f76f1d0ceccd3522969cb3487d28b6, ev_20c6089d594d16fe93517aa28a74b4b1b45630eb0cba642d0919de1f024a4aca)"
+    },
+    {
+      "name": "rule action kinds",
+      "group": "proxy",
+      "value": "run-macro / set-param / use-cookies / validate-session / browser-recovery / post-request-macro / extension / set-header / match-and-replace (ordinal 8)",
+      "source": "live 52685 decompile burp.Zkga enum"
+    },
+    {
+      "name": "match and replace scope",
+      "group": "proxy",
+      "value": "separate request-rule and response-rule lists",
+      "source": "reference tree build 2026.7.1 class Zb4e (MATCH_AND_REPLACE_REQUEST / MATCH_AND_REPLACE_RESPONSE); live enum Zkga.ACTION_MATCH_AND_REPLACE in burp.Z_0x adapter"
+    },
+    {
+      "name": "default request interception rule",
+      "group": "proxy",
+      "value": "enabled AND file extension does_not_match (gif|jpg|png|css|js|ico|svg|eot|woff|woff2|ttf); response interception=false; startup master switch=false",
+      "source": "resources/Preferences/ProjectDefaults.json proxy.intercept_client_requests.rules[0], intercept_server_responses.do_intercept; UserDefaults.json misc.enable_proxy_interception_at_startup=never; implemented in net::default_intercept_allows_path"
+    },
+    {
+      "name": "websocket history cap",
+      "group": "proxy",
+      "value": "no fixed entry cap; complete captured history retained",
+      "source": "live 52685 burp.Za2u.webSocketHistory offsets 0001-0024 and burp.Zedh.ZB() offsets 000c-0024 (ev_67a166383b5bf85200b28340bd3068ab92caa798f88c6a0f1b72f2dd1c41b77a, ev_b4208436f0d81fe154fae582f3ed35d22e6ebc17bd0c40c1368f1e6a850d3e4c)"
+    },
+    {
+      "name": "custom scope precedence",
+      "group": "scope",
+      "value": "include match AND NOT exclude match; no include rules means all included; malformed URLs rejected",
+      "source": "live 52685 burp.Zk1j.ZF offsets 0001-001b and burp.Z_dm.isInScope offsets 0000-004e (ev_29446127e073a6869304544e805f3afbcc172db2c442262c94f390ab0972e49f, ev_32d8383707509cd47c6dcf729a52d3737a60319063d6e733912fa0beba17ad45)"
+    },
+    {
+      "name": "comparer input handoff",
+      "group": "comparer",
+      "value": "non-null byte arrays; legacy one input becomes a one-element ByteArray array; asynchronous Montoya dispatch; WebProbe diff is exact line-level LCS (simplified)",
+      "source": "live 52685 burp.Z_f2.lambda$sendToComparer$56 offsets 0000-0038 and burp.Zm07.sendToComparer offsets 0000-0010 (ev_768e6cefde1f907a708d0c45605b148c2231500016dcc6478c8bcc47bda6f844, ev_9ab550632b541fb4087ca4b3936f9a42076431aa115725287a2057b41ba7e714)"
+    },
+    {
+      "name": "sequencer capture defaults",
+      "group": "sequencer",
+      "value": "ignore abnormal length tokens=true; max length deviation=5; threads=5; throttle=0; base64 decode=false",
+      "source": "resources/Preferences/ProjectDefaults.json sequencer.live_capture and token_handling; implemented deviation rule in tools::add_sequencer_sample"
+    },
+    {
+      "name": "response status palette",
+      "group": "colors",
+      "value": "2xx=#7DC164 3xx=#E1B156 4xx/5xx=#DF4C63 unknown=#C5C7C8",
+      "source": "WebProbe-specific mapping using DarkTheme.json green[4], yellow[3], red[3], mono[6]; not claimed as a verified Burp status-code mapping"
+    },
+    {
+      "name": "HTTP service transport",
+      "group": "requests",
+      "value": "host + port + protocol; HTTPS preserved across history, saved projects, Repeater, Intruder and active scans",
+      "source": "live 52685 burp.IHttpService getHost/getPort/getProtocol and request/attack/issue consumers (ev_598de5b6b61daeca666fa9e63d01f9dc94fb8efc2ba8765b49c29d2bc89afa01, ev_79f0e8e0578cbbdc149dd7979650da93e83fa1d37e6ff541fca2a09e8c18cdd5)"
+    },
+    {
+      "name": "http1 keep-alive for outgoing suite requests",
+      "group": "proxy",
+      "value": "disabled (enable_keep_alive=false)",
+      "source": "resources/Preferences/ProjectDefaults.json http.http1.enable_keep_alive"
+    },
+    {
+      "name": "http2 upstream",
+      "group": "proxy",
+      "value": "enabled",
+      "source": "resources/Preferences/ProjectDefaults.json http.http2.enable_http2"
+    },
+    {
+      "name": "feedback toasts",
+      "group": "ui",
+      "value": "transient toasts live 6 s, at most 4 on screen; progress bar shows done/total with Cancel; inline errors offer Retry; empty and loading states are shared",
+      "source": "WebProbe-specific UI contract (app/src/feedback.rs); not claimed as a verified Burp timing"
+    },
+    {
+      "name": "hotkey command palette",
+      "group": "hotkeys",
+      "value": "Ctrl+K",
+      "source": "resources/Preferences/UserDefaults.json misc.hotkeys open_command_palette; command ids/labels/categories from burp.Zmcg (Zj/ZB/Ze) in /opt/BurpSuite/burpsuite.jar"
+    },
+    {
+      "name": "hotkey tab cycling",
+      "group": "hotkeys",
+      "value": "Ctrl+Minus previous, Ctrl+Equals next",
+      "source": "resources/Preferences/UserDefaults.json misc.hotkeys go_to_previous_tab/go_to_next_tab"
+    },
+    {
+      "name": "hotkey editor copy prettified",
+      "group": "hotkeys",
+      "value": "Ctrl+Alt+C",
+      "source": "resources/Preferences/UserDefaults.json misc.hotkeys editor_copy_prettified"
+    },
+    {
+      "name": "hotkey editor go to end of document",
+      "group": "hotkeys",
+      "value": "Ctrl+End",
+      "source": "resources/Preferences/UserDefaults.json misc.hotkeys editor_go_to_end_of_document"
+    },
+    {
+      "name": "hotkey count",
+      "group": "hotkeys",
+      "value": 50,
+      "source": "resources/Preferences/UserDefaults.json user_options.misc.hotkeys has 50 entries; 48 resolve to burp.Zmcg command ids, send_to_burp_at and open_burp_at are extension-provided"
+    },
+    {
+      "name": "hotkey requires ctrl",
+      "group": "hotkeys",
+      "value": true,
+      "source": "resources/Documentation/burp/documentation/desktop/settings/ui/hotkeys.html: all hotkeys must use the Cmd/Ctrl key; Shift and other modifiers allowed; hotkeys are user settings, not project settings"
+    },
+    {
+      "name": "hotkey duplicate refused",
+      "group": "hotkeys",
+      "value": "a chord already bound to another command, and a command that already has a chord, are both refused",
+      "source": "/opt/BurpSuite/burpsuite.jar burp.Zfhv.ZT(III)V asserts both maps are free before writing (evidence ev_d7b0bdbd31bec571a33bd7597edba2568e5b244c4a240e3d71af16a4d2ab1ac7)"
+    },
+    {
+      "name": "hotkey settings file is authoritative",
+      "group": "hotkeys",
+      "value": "a command absent from the saved file has no hotkey; later duplicate entries are dropped",
+      "source": "/opt/BurpSuite/burpsuite.jar burp.Zfhv.Zh(Z_dk) clears the registry via ZL() and dedupes stored entries by keystroke before applying them"
+    },
+    {
+      "name": "onboarding setup host",
+      "group": "proxy",
+      "value": "http://webprobe (also answers http://burpsuite)",
+      "source": "resources/Documentation/.../external-browser-config/certificate/proxy-troubleshooting.html: the CA is downloaded by visiting http://burpsuite while the browser proxies through the listener; WebProbe answers the same flow on its own host"
+    },
+    {
+      "name": "ca download formats",
+      "group": "proxy",
+      "value": "PEM and DER",
+      "source": "resources/Documentation/.../external-browser-config/certificate/: Firefox/macOS/Android use PEM, Windows/iOS/Java use DER"
+    },
+    {
+      "name": "ca install verification",
+      "group": "proxy",
+      "value": "visit an HTTPS URL; no security warning means the CA is trusted",
+      "source": "resources/Documentation/.../external-browser-config/certificate/index.html"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "id": "unk_57a5828c4d7f28b3",
+  "revision": 1,
+  "question": "Does the rebuild have Burp's Logger (a live log of every request/response)? app/src has no Logger tab and grep for 'logger' matches 0 files.",
+  "severity": "high",
+  "domain": "feature-parity",
+  "status": "open",
+  "probes": [
+    "Watch the original Logger tab on DISPLAY=:99 while proxying traffic",
+    "Implement a Logger tab backed by net.rs's history",
+    "Add mechanics values for log retention and filtering"
+  ],
+  "evidence_for": [],
+  "evidence_against": []
+}

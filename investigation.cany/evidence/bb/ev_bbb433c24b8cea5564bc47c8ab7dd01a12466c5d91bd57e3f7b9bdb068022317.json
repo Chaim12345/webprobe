@@ -1,0 +1,152 @@
+{
+  "id": "ev_bbb433c24b8cea5564bc47c8ab7dd01a12466c5d91bd57e3f7b9bdb068022317",
+  "subject": {
+    "kind": "jar",
+    "sha256": "510bf1c87c766f09c3c20d3ef75e7a6978e60dd38346965dd4836ce64417becf",
+    "name": "burpsuite.jar"
+  },
+  "operation": "java_classes_find",
+  "params": {
+    "include_methods": true,
+    "limit": 60,
+    "offset": 0,
+    "path": null,
+    "query": "keyStroke"
+  },
+  "result": {
+    "classes": [
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "entry": "burp/Z_sf.class",
+        "fields": 12,
+        "interfaces": [
+          "burp.Zq0"
+        ],
+        "internal": "burp/Z_sf",
+        "matched_methods": [
+          {
+            "name": "keyStroke",
+            "signature": "public javax.swing.KeyStroke keyStroke()"
+          }
+        ],
+        "methods": 16,
+        "name": "burp.Z_sf",
+        "superclass": "java.lang.Record"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "entry": "burp/Zaxt.class",
+        "fields": 11,
+        "interfaces": [
+          "burp.Zq0"
+        ],
+        "internal": "burp/Zaxt",
+        "matched_methods": [
+          {
+            "name": "keyStroke",
+            "signature": "public javax.swing.KeyStroke keyStroke()"
+          }
+        ],
+        "methods": 15,
+        "name": "burp.Zaxt",
+        "superclass": "java.lang.Record"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "entry": "burp/Zj45.class",
+        "fields": 11,
+        "interfaces": [
+          "burp.Zq0"
+        ],
+        "internal": "burp/Zj45",
+        "matched_methods": [
+          {
+            "name": "keyStroke",
+            "signature": "public javax.swing.KeyStroke keyStroke()"
+          }
+        ],
+        "methods": 16,
+        "name": "burp.Zj45",
+        "superclass": "java.lang.Record"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zmw8.class",
+        "fields": 4,
+        "interfaces": [
+          "java.lang.Iterable"
+        ],
+        "internal": "burp/Zmw8",
+        "matched_methods": [
+          {
+            "name": "lambda$isKeystrokeDuplicate$3",
+            "signature": "private static boolean lambda$isKeystrokeDuplicate$3(javax.swing.KeyStroke, burp.Zz68)"
+          },
+          {
+            "name": "lambda$isKeystrokeDuplicate$2",
+            "signature": "private static boolean lambda$isKeystrokeDuplicate$2(burp.Zz68, burp.Zz68)"
+          }
+        ],
+        "methods": 12,
+        "name": "burp.Zmw8",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/Zq0.class",
+        "fields": 1,
+        "interfaces": [],
+        "internal": "burp/Zq0",
+        "matched_methods": [
+          {
+            "name": "keyStroke",
+            "signature": "public abstract javax.swing.KeyStroke keyStroke()"
+          }
+        ],
+        "methods": 17,
+        "name": "burp.Zq0",
+        "superclass": "java.lang.Object"
+      }
+    ],
+    "classes_total": 54868,
+    "matches": 5,
+    "query": "keyStroke"
+  },
+  "summary": "5 of 54868 classes match \"keyStroke\" ; showing 5.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 5,
+    "total": 5
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/opt/BurpSuite/burpsuite.jar"
+    }
+  ],
+  "links": []
+}

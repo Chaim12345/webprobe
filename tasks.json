@@ -1,0 +1,727 @@
+{
+  "project": "webprobe",
+  "generated": "2026-11-12",
+  "source": "TASKS.md",
+  "summary": {
+    "total": 76,
+    "p0": 54,
+    "p1": 19,
+    "p2": 3
+  },
+  "tasks": [
+    {
+      "id": "A-01",
+      "epic": "A — HTTP engine correctness",
+      "priority": "P0",
+      "title": "Decode `Transfer-Encoding: chunked` for requests and responses",
+      "acceptance": "Chunked bodies are reassembled before storage/display; `Content-Length` and byte counts are correct; tests cover single/multi-chunk and trailers",
+      "effort": "M",
+      "status": "done",
+      "completed": "2026-11-12",
+      "evidence": "app/src/codec.rs (chunked/codec + normalize + tests), app/src/net.rs (pool/keep-alive + proxy integration tests), app/src/util.rs (parse_http folding/dup/absolute-form tests); 52 cargo tests pass"
+    },
+    {
+      "id": "A-02",
+      "epic": "A — HTTP engine correctness",
+      "priority": "P0",
+      "title": "Decode `Content-Encoding: gzip`, `deflate`, `br`",
+      "acceptance": "Compressed response bodies are decoded for passive checks and display; original encoding kept for forwarding; tests per codec",
+      "effort": "M",
+      "status": "done",
+      "completed": "2026-11-12",
+      "evidence": "app/src/codec.rs (chunked/codec + normalize + tests), app/src/net.rs (pool/keep-alive + proxy integration tests), app/src/util.rs (parse_http folding/dup/absolute-form tests); 52 cargo tests pass"
+    },
+    {
+      "id": "A-03",
+      "epic": "A — HTTP engine correctness",
+      "priority": "P0",
+      "title": "Keep-alive and connection reuse",
+      "acceptance": "Upstream connections are pooled per host; `Connection: close` is not forced; pipelining is off; tests assert socket reuse",
+      "effort": "M",
+      "status": "done",
+      "completed": "2026-11-12",
+      "evidence": "app/src/codec.rs (chunked/codec + normalize + tests), app/src/net.rs (pool/keep-alive + proxy integration tests), app/src/util.rs (parse_http folding/dup/absolute-form tests); 52 cargo tests pass"
+    },
+    {
+      "id": "A-04",
+      "epic": "A — HTTP engine correctness",
+      "priority": "P0",
+      "title": "Robust HTTP/1.x parsing",
+      "acceptance": "Absolute-form, origin-form, header folding, duplicate headers, `Content-Length` + chunked conflict, 4 MiB+ bodies; malformed input never panics",
+      "effort": "M",
+      "status": "done",
+      "completed": "2026-11-12",
+      "evidence": "app/src/codec.rs (chunked/codec + normalize + tests), app/src/net.rs (pool/keep-alive + proxy integration tests), app/src/util.rs (parse_http folding/dup/absolute-form tests); 52 cargo tests pass"
+    },
+    {
+      "id": "A-05",
+      "epic": "A — HTTP engine correctness",
+      "priority": "P0",
+      "title": "HTTP/2 upstream and h2c",
+      "acceptance": "Requests negotiate h2 over TLS via ALPN and h2c when offered; HTTP/2 responses are stored with a normalized HTTP/1.1 view; tests against a local h2 server",
+      "effort": "L",
+      "status": "done",
+      "completed": "2026-11-12",
+      "evidence": "app/src/h2.rs (sync HTTP/2 client: preface/SETTINGS/HEADERS+HPACK/DATA/flow-control, normalization to HTTP/1.1), net.rs (ALPN h2 in tls_upstream, try_h2c_upgrade + fallback), tls.rs (server_config_with_alpn); tests: h2c upgrade roundtrip, h2c decline fallback, TLS ALPN h2 roundtrip; 57 tests pass"
+    },
+    {
+      "id": "A-06",
+      "epic": "A — HTTP engine correctness",
+      "priority": "P0",
+      "title": "TLS pass-through and mTLS",
+      "acceptance": "Host exclusion list bypasses MITM; client certificates can be configured per host; tests with a local TLS server",
+      "effort": "M",
+      "status": "done",
+      "completed": "2026-11-12",
+      "evidence": "net.rs: tls_bypass list (exact + *.wildcard) with relay_tunnel byte pass-through in handle_connect; ClientCertRule + tls_client_config per-host mTLS upstream; tls.rs: client_auth_config, MitmAuthority::client_certificate, server_config_with_client_auth; tests: tls_bypass_relays_raw_bytes, client_certificate_presented_to_mtls_server, host_matching_exact_and_wildcard; 60 tests pass"
+    },
+    {
+      "id": "A-07",
+      "epic": "A — HTTP engine correctness",
+      "priority": "P0",
+      "title": "Proxy listener options",
+      "acceptance": "Multiple listeners, bind address, port validation/restart without losing history; status shown in UI",
+      "effort": "M",
+      "status": "done",
+      "completed": "2026-11-12",
+      "evidence": "net.rs: ListenerSpec/ListenerState + extra listener workers (non-blocking accept, generation-based restart), set_listeners validation (empty bind/port 0/duplicates), listener_status snapshot; ui.rs dashboard shows every listener + error; tests: extra_listener_serves_traffic, listener_validation, listener_restart_keeps_history"
+    },
+    {
+      "id": "A-08",
+      "epic": "A — HTTP engine correctness",
+      "priority": "P0",
+      "title": "Invisible proxying",
+      "acceptance": "Reconstruct origin-form requests from absolute-form and Host; non-proxy clients work; tests for both forms",
+      "effort": "M",
+      "status": "done",
+      "completed": "2026-11-12",
+      "evidence": "net.rs host_of already routes origin-form via Host header (invisible proxying); tests: invisible_proxying_uses_host_header (origin-form + Host routed, upstream sees origin-form), absolute_form_forwarded_as_origin_form"
+    },
+    {
+      "id": "B-01",
+      "epic": "B — Proxy UI and message editing",
+      "priority": "P0",
+      "title": "History table with filter/sort/columns",
+      "acceptance": "Filter bar (text, regex, method, status, MIME, in-scope), sortable columns, column chooser, resizable widths, sticky header, virtualized rendering above 10k rows",
+      "effort": "L",
+      "status": "todo"
+    },
+    {
+      "id": "B-02",
+      "epic": "B — Proxy UI and message editing",
+      "priority": "P0",
+      "title": "Message editor",
+      "acceptance": "Raw editor with syntax highlighting, line numbers, wrap toggle, font size, find-in-message, hex edit; request editable in place and sendable",
+      "effort": "L",
+      "status": "todo"
+    },
+    {
+      "id": "B-03",
+      "epic": "B — Proxy UI and message editing",
+      "priority": "P0",
+      "title": "Response views",
+      "acceptance": "Raw / Params / Headers / Hex / Render (HTML) with correct entity decoding; JSON/XML pretty view; image preview",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "B-04",
+      "epic": "B — Proxy UI and message editing",
+      "priority": "P0",
+      "title": "Context menus",
+      "acceptance": "Right-click menus for history, site map, repeater, issues, decoder results; copy/save/send-to/add-to-scope",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "B-05",
+      "epic": "B — Proxy UI and message editing",
+      "priority": "P0",
+      "title": "Resizable layout + status bar",
+      "acceptance": "Splitters between every pane; status bar with listener, intercept, queue, scan/attack progress, last error; layout persisted",
+      "effort": "L",
+      "status": "todo"
+    },
+    {
+      "id": "B-06",
+      "epic": "B — Proxy UI and message editing",
+      "priority": "P0",
+      "title": "Site map tree",
+      "acceptance": "Branch/leaf tree with method, URL, status, length, comment; expand/collapse, filter, scope colouring, annotations",
+      "effort": "L",
+      "status": "todo"
+    },
+    {
+      "id": "B-07",
+      "epic": "B — Proxy UI and message editing",
+      "priority": "P0",
+      "title": "Multi-select and bulk actions",
+      "acceptance": "Select ranges with shift/ctrl; bulk send-to, export, add-to-scope, delete",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "B-08",
+      "epic": "B — Proxy UI and message editing",
+      "priority": "P0",
+      "title": "Proxy options UI",
+      "acceptance": "Listener, interception (request/response/WebSocket), match & replace import/export, upstream per-host rules, TLS/HTTP settings",
+      "effort": "L",
+      "status": "todo"
+    },
+    {
+      "id": "B-09",
+      "epic": "B — Proxy UI and message editing",
+      "priority": "P0",
+      "title": "WebSocket interception",
+      "acceptance": "Hold, edit and forward frames; WebSocket history with filters and search; TLS WebSocket relay verified",
+      "effort": "L",
+      "status": "todo"
+    },
+    {
+      "id": "C-01",
+      "epic": "C — Intruder parity",
+      "priority": "P0",
+      "title": "Four attack types",
+      "acceptance": "Sniper, battering ram, pitchfork, cluster bomb produce the correct request matrix; tests assert counts and payload placement",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "C-02",
+      "epic": "C — Intruder parity",
+      "priority": "P0",
+      "title": "Payload positions",
+      "acceptance": "Auto-mark, clear, add-from-selection, marker highlighting, multiple positions per request",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "C-03",
+      "epic": "C — Intruder parity",
+      "priority": "P0",
+      "title": "Payload sets",
+      "acceptance": "Simple list, runtime file, custom iterator, brute forcer, case modification, numbers, dates, usernames, null payloads, character frobber",
+      "effort": "L",
+      "status": "todo"
+    },
+    {
+      "id": "C-04",
+      "epic": "C — Intruder parity",
+      "priority": "P0",
+      "title": "Payload processing",
+      "acceptance": "Prefix/suffix, substring, encode (URL/Base64/HTML/hex), hash, regex, skip; ordered pipeline",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "C-05",
+      "epic": "C — Intruder parity",
+      "priority": "P0",
+      "title": "Result analysis",
+      "acceptance": "Grep match, grep extract, grep capture, grep payloads; configurable result columns; per-row detail",
+      "effort": "L",
+      "status": "todo"
+    },
+    {
+      "id": "C-06",
+      "epic": "C — Intruder parity",
+      "priority": "P0",
+      "title": "Attack control",
+      "acceptance": "Pause/resume/stop, concurrency, throttle, resource pool, retry/backoff, progress",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "C-07",
+      "epic": "C — Intruder parity",
+      "priority": "P0",
+      "title": "Results I/O",
+      "acceptance": "Save/export results (CSV/XML), send row to Repeater/Comparer, copy as curl",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "D-01",
+      "epic": "D — Scanner parity",
+      "priority": "P0",
+      "title": "Crawl engine",
+      "acceptance": "Follow links, forms, scripts, redirects; depth/location caps; scope rules; produce a site map; tests on a local multi-page fixture",
+      "effort": "L",
+      "status": "todo"
+    },
+    {
+      "id": "D-02",
+      "epic": "D — Scanner parity",
+      "priority": "P0",
+      "title": "Audit check library",
+      "acceptance": "≥ 40 checks with severity, confidence, description, remediation, references; unit tests per check with positive/negative fixtures",
+      "effort": "L",
+      "status": "todo"
+    },
+    {
+      "id": "D-03",
+      "epic": "D — Scanner parity",
+      "priority": "P0",
+      "title": "Insertion points",
+      "acceptance": "Query, body, headers, cookies, path segments, multipart; max 30 per base request; tests per point type",
+      "effort": "L",
+      "status": "todo"
+    },
+    {
+      "id": "D-04",
+      "epic": "D — Scanner parity",
+      "priority": "P0",
+      "title": "Scan configuration",
+      "acceptance": "Crawl/audit/optimization/insertion-point/speed settings; persisted; check selection",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "D-05",
+      "epic": "D — Scanner parity",
+      "priority": "P0",
+      "title": "Task queue",
+      "acceptance": "New scan, pause/resume/cancel, per-task progress, live audit/crawl, queue persistence",
+      "effort": "L",
+      "status": "todo"
+    },
+    {
+      "id": "D-06",
+      "epic": "D — Scanner parity",
+      "priority": "P0",
+      "title": "Issue activity",
+      "acceptance": "Group by host/issue, filter by severity/confidence, evidence, detail view, false-positive marking",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "D-07",
+      "epic": "D — Scanner parity",
+      "priority": "P0",
+      "title": "Reporting",
+      "acceptance": "Export HTML/CSV/XML; summary + detail; severity/confidence tables; remediation text",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "D-08",
+      "epic": "D — Scanner parity",
+      "priority": "P0",
+      "title": "Collaborator integration",
+      "acceptance": "Active checks generate OAST payloads and confirm interactions; blind SSRF/XXE/OOB findings",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "E-01",
+      "epic": "E — Repeater parity",
+      "priority": "P0",
+      "title": "Request/response editors",
+      "acceptance": "Raw, Params, Headers, Hex, Render; editable request; syntax highlighting; find",
+      "effort": "L",
+      "status": "todo"
+    },
+    {
+      "id": "E-02",
+      "epic": "E — Repeater parity",
+      "priority": "P0",
+      "title": "Follow redirects",
+      "acceptance": "Never / on-site / always; \"follow and enumerate\"; redirect chain shown",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "E-03",
+      "epic": "E — Repeater parity",
+      "priority": "P0",
+      "title": "Send-to and copy",
+      "acceptance": "Send to Intruder, Comparer, Decoder, Scanner; copy as curl, Python requests, raw; save item",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "E-04",
+      "epic": "E — Repeater parity",
+      "priority": "P0",
+      "title": "Tab management",
+      "acceptance": "Rename, close, reorder, duplicate, persisted order and contents",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "E-05",
+      "epic": "E — Repeater parity",
+      "priority": "P0",
+      "title": "Compare",
+      "acceptance": "Diff current response against previous; request diff; send both sides to Comparer",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "E-06",
+      "epic": "E — Repeater parity",
+      "priority": "P0",
+      "title": "Editing helpers",
+      "acceptance": "Paste URL, change method, URL-encode as you type, content-type-aware body editing",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "F-01",
+      "epic": "F — Decoder and Comparer",
+      "priority": "P1",
+      "title": "Decoder operations",
+      "acceptance": "Smart decode, MD5/SHA-1/SHA-256, ROT13, ASCII hex, URL/Base64/HTML/hex, construct",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "F-02",
+      "epic": "F — Decoder and Comparer",
+      "priority": "P1",
+      "title": "Decoder pipeline",
+      "acceptance": "Multi-stage encode/decode chain with editable stages and live output",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "F-03",
+      "epic": "F — Decoder and Comparer",
+      "priority": "P1",
+      "title": "Comparer modes",
+      "acceptance": "Word, byte and character diff; merge; export; three-way compare",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "G-01",
+      "epic": "G — Sequencer",
+      "priority": "P1",
+      "title": "Live capture",
+      "acceptance": "Capture tokens over TLS and plain HTTP, auto-capture N samples, ignore-abnormal toggle",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "G-02",
+      "epic": "G — Sequencer",
+      "priority": "P1",
+      "title": "Analysis depth",
+      "acceptance": "Character-level and bit-level entropy, FIPS-style tests, confidence rating, charts",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "G-03",
+      "epic": "G — Sequencer",
+      "priority": "P1",
+      "title": "Export",
+      "acceptance": "Results to CSV/JSON; sample set save/load",
+      "effort": "S",
+      "status": "todo"
+    },
+    {
+      "id": "H-01",
+      "epic": "H — Sessions and macros",
+      "priority": "P1",
+      "title": "Cookie jar",
+      "acceptance": "Shared cookie store updated from responses and sent on matching requests; per-domain rules",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "H-02",
+      "epic": "H — Sessions and macros",
+      "priority": "P1",
+      "title": "Macro recorder",
+      "acceptance": "Record a proxy-driven sequence, parameterize values, replay, save/load",
+      "effort": "L",
+      "status": "todo"
+    },
+    {
+      "id": "H-03",
+      "epic": "H — Sessions and macros",
+      "priority": "P1",
+      "title": "Recorded login sequences",
+      "acceptance": "Capture login, extract token, apply to session rules; validate session",
+      "effort": "L",
+      "status": "todo"
+    },
+    {
+      "id": "H-04",
+      "epic": "H — Sessions and macros",
+      "priority": "P1",
+      "title": "Session rule actions",
+      "acceptance": "Set header, set cookie, run macro, validate session, browser recovery, post-request match/replace",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "I-01",
+      "epic": "I — Collaborator / OAST",
+      "priority": "P0",
+      "title": "Payload generation",
+      "acceptance": "HTTP, DNS and SMTP payloads with unique IDs; copy/insert into requests",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "I-02",
+      "epic": "I — Collaborator / OAST",
+      "priority": "P0",
+      "title": "Interaction polling",
+      "acceptance": "Poll public relay or self-hosted server; list HTTP/DNS/SMTP interactions with source IP and timing",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "I-03",
+      "epic": "I — Collaborator / OAST",
+      "priority": "P0",
+      "title": "Scanner integration",
+      "acceptance": "Blind checks use generated payloads and raise findings on interaction",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "I-04",
+      "epic": "I — Collaborator / OAST",
+      "priority": "P0",
+      "title": "Private instance",
+      "acceptance": "Configurable server, polling interval, retention, secret; docs for self-hosting",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "J-01",
+      "epic": "J — Project, settings and state",
+      "priority": "P1",
+      "title": "Full-state project file",
+      "acceptance": "Version 2 format: settings, proxy config, CA metadata, scanner config, task queue, UI layout, editor buffers",
+      "effort": "L",
+      "status": "todo"
+    },
+    {
+      "id": "J-02",
+      "epic": "J — Project, settings and state",
+      "priority": "P1",
+      "title": "Autosave and recovery",
+      "acceptance": "Periodic autosave, crash recovery prompt, temp project support",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "J-03",
+      "epic": "J — Project, settings and state",
+      "priority": "P1",
+      "title": "Settings UI",
+      "acceptance": "Searchable settings with sections, import/export, restore defaults, per-setting reset",
+      "effort": "L",
+      "status": "todo"
+    },
+    {
+      "id": "J-04",
+      "epic": "J — Project, settings and state",
+      "priority": "P1",
+      "title": "New/open project flow",
+      "acceptance": "Start screen, recent projects, new temporary project, project integrity checks",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "K-01",
+      "epic": "K — Extensions",
+      "priority": "P2",
+      "title": "Native extension API",
+      "acceptance": "Stable Rust/WASM ABI for custom tabs, issue definitions, request/response hooks; example extension",
+      "effort": "L",
+      "status": "todo"
+    },
+    {
+      "id": "K-02",
+      "epic": "K — Extensions",
+      "priority": "P2",
+      "title": "JVM/Montoya host",
+      "acceptance": "Embed a JVM (JNI) or a subprocess host; load a subset of Montoya API; sandbox and error reporting",
+      "effort": "L",
+      "status": "todo"
+    },
+    {
+      "id": "K-03",
+      "epic": "K — Extensions",
+      "priority": "P2",
+      "title": "Extension manager",
+      "acceptance": "Install/enable/disable/remove, dependency view, BApp-like catalogue (no copied assets)",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "L-01",
+      "epic": "L — Engagement and utility features",
+      "priority": "P1",
+      "title": "CSRF PoC generator",
+      "acceptance": "Generate an HTML form PoC from a request; copy/download",
+      "effort": "S",
+      "status": "todo"
+    },
+    {
+      "id": "L-02",
+      "epic": "L — Engagement and utility features",
+      "priority": "P1",
+      "title": "Engagement tools",
+      "acceptance": "Find comments, find scripts, find references, copy URLs, copy as curl",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "L-03",
+      "epic": "L — Engagement and utility features",
+      "priority": "P1",
+      "title": "Content discovery",
+      "acceptance": "Wordlist-based path discovery with extension set, recursion, scope, result table",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "L-04",
+      "epic": "L — Engagement and utility features",
+      "priority": "P1",
+      "title": "Logger",
+      "acceptance": "Global traffic log across tools with filters, search, export; independent of Proxy history",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "L-05",
+      "epic": "L — Engagement and utility features",
+      "priority": "P1",
+      "title": "Embedded browser",
+      "acceptance": "Launch a configured Chromium for proxy testing, or a documented \"use your browser\" flow",
+      "effort": "L",
+      "status": "todo"
+    },
+    {
+      "id": "M-01",
+      "epic": "M — UI/UX system",
+      "priority": "P0",
+      "title": "Design tokens",
+      "acceptance": "One token module for colour, spacing, radius, typography, density; no ad-hoc hex in widgets",
+      "effort": "M",
+      "status": "done",
+      "completed": "2026-11-12",
+      "evidence": "theme.rs: full token module — spacing (XS..XL), radius, typography scale (H1/H2/body/small/mono), named colors (URL_KEY/URL_VALUE/SELECTION_SUBTLE); all widget hex inlined colors replaced by tokens; widgets use theme constants"
+    },
+    {
+      "id": "M-02",
+      "epic": "M — UI/UX system",
+      "priority": "P0",
+      "title": "Table component",
+      "acceptance": "Shared sortable/filterable/virtualized table used by Proxy, Target, Scanner, Intruder, Collaborator",
+      "effort": "L",
+      "status": "done",
+      "completed": "2026-11-12",
+      "evidence": "app/src/table.rs: Column/TableState + sort_rows/filter_rows + table_body/data_table virtualized via ScrollArea::show_rows with clickable rows and header sorting; wired into Proxy history, Target requests, Scanner issues, Intruder results and Collaborator interactions (table + detail pane); ui.rs history_rows sorts before the 1000-row render cap; tests cover sort asc/desc, stable order, case-insensitive filter, empty filter"
+    },
+    {
+      "id": "M-03",
+      "epic": "M — UI/UX system",
+      "priority": "P0",
+      "title": "Editor component",
+      "acceptance": "Shared message editor/view used by Proxy, Repeater, Intruder, Sequencer, Decoder",
+      "effort": "L",
+      "status": "done",
+      "completed": "2026-11-12",
+      "evidence": "app/src/editor.rs: EditorState (wrap/search), message_editor (monospace code editor + find count), message_view (tinted head lines, single-block body), bytes_view; split_message/match_count helpers; wired into Proxy detail raw view, Proxy intercept, Repeater, Intruder, Sequencer manual samples and Decoder; tests cover CRLF/LF splitting, headless messages, case-insensitive match counting"
+    },
+    {
+      "id": "M-04",
+      "epic": "M — UI/UX system",
+      "priority": "P0",
+      "title": "Feedback and errors",
+      "acceptance": "Progress bars, cancel buttons, toasts, inline errors, retry actions, empty/loading states",
+      "effort": "M",
+      "status": "done",
+      "completed": "2026-11-12",
+      "evidence": "app/src/feedback.rs: Toasts queue (6 s TTL, max 4, dismiss), process-wide toast() + drain for worker threads, progress bar with Cancel, inline_error with Retry, empty_state and loading; wired into main.rs frame loop, project save/restore, Scanner start/cancel/finish plus progress, Intruder progress/cancel and empty state, target site-map loading/empty and filter-empty states, Repeater inline error + Retry + completion toasts, listener bind-failure toast, scan-start warning when no request is selected; tests cover TTL expiry, cap, queue drain; 77 tests pass"
+    },
+    {
+      "id": "M-05",
+      "epic": "M — UI/UX system",
+      "priority": "P0",
+      "title": "Theming and density",
+      "acceptance": "Dark/light/high-contrast, compact/comfortable, font size, persisted",
+      "effort": "M",
+      "status": "done",
+      "completed": "2026-11-12",
+      "evidence": "theme.rs: Palette (dark/light/high_contrast) + Density (compact/comfortable) + font scale; apply_as(ctx,palette,density,scale) applied every frame; live appearance statics (set_appearance/appearance); persisted in ProjectData.appearance (serde defaults, old files load fine); appearance editor (palette/density/font size) in tools.rs dashboard; 65 tests pass"
+    },
+    {
+      "id": "M-06",
+      "epic": "M — UI/UX system",
+      "priority": "P0",
+      "title": "Keyboard and accessibility",
+      "acceptance": "Shortcut help overlay, customizable hotkeys, focus order, contrast, screen-reader labels",
+      "effort": "M",
+      "status": "done",
+      "completed": "2026-11-15",
+      "evidence": "shortcuts.rs: ACTIONS is Burp build 52685's own 50-pair table, read from resources/Preferences/UserDefaults.json user_options.misc.hotkeys and joined to burp.Zmcg ids/labels (Zj()=label, ZB()=id, Ze()=category); 48 of 50 map, the 2 misses (send_to_burp_at/open_burp_at) are extension-provided. Chord::parse enforces Burp's rule that every hotkey uses Ctrl (shipped docs settings/ui/hotkeys.html) and round-trips all 50 defaults. Shortcuts::set refuses a chord used by another action AND an action that already has a chord, matching burp.Zfhv.ZT (evidence ev_7dbf2c50b84b2abd63c5e2a9d791530ac9fd90e09a80d33f9f974724ef3ff761). Persistence is user-level (~/.config/webprobe/hotkeys.json) and file-authoritative like burp.Zfhv.Zh (ev_e199c6630d23d2f9df87cc0c3add80d5f8320325e3d630de68b7c3ad3767135f), so an unbound action stays unbound. Command palette Ctrl+K lists wired commands recents-first with category and chord, arrows navigate, Enter runs, Escape closes; capture mode consumes the key event so it never fires a command. Settings window (top bar) hosts Appearance + Hotkeys with per-row Clear/Reset, duplicate and save errors shown inline. Focus: only Wired chords are consumed, so Ctrl+C/V/X/Z/Y/A and word navigation reach the focused editor (egui handles those natively). 86 tests pass; verified by rendering the Settings and palette screenshots."
+    },
+    {
+      "id": "M-07",
+      "epic": "M — UI/UX system",
+      "priority": "P0",
+      "title": "Onboarding",
+      "acceptance": "First-run CA/proxy setup, verification checklist, sample traffic, docs links",
+      "effort": "M",
+      "status": "done",
+      "completed": "2026-11-15",
+      "evidence": "onboarding.rs: checks() derives the four checklist lines from live state (listener_running, history length, count of https exchanges, intercept flag) so it cannot claim a step that is not true. The proxy answers http://webprobe (and http://burpsuite, so a Burp tutorial still works) locally instead of forwarding upstream, serving a setup page with the CA in PEM (/webprobe-ca.pem) and DER (/webprobe-ca.der) plus the listener port, matching the shipped docs: certificate/index.html says the CA is fetched through the proxy and confirmed by visiting an HTTPS URL with no warning, proxy-troubleshooting.html documents http://burpsuite and the 127.0.0.1:8080 listener. sample_traffic() routes one real request through the listener and toasts the status line. Dashboard panel with Hide; docs links go to the public documentation, and the module records that WebProbe has no bundled browser (L-05) instead of pretending otherwise. Tests: setup hosts answered locally, CA content types, page documents both paths and the real port, and sample traffic reaching the listener end to end."
+    },
+    {
+      "id": "N-01",
+      "epic": "N — Quality, performance and build",
+      "priority": "P0",
+      "title": "Parser/engine tests",
+      "acceptance": "Unit + integration tests for chunked, gzip, keep-alive, h2, TLS, proxy; run in CI",
+      "effort": "L",
+      "status": "todo"
+    },
+    {
+      "id": "N-02",
+      "epic": "N — Quality, performance and build",
+      "priority": "P0",
+      "title": "Performance",
+      "acceptance": "10k history entries and 1k site-map nodes render at 60 fps; no per-frame full-list scans",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "N-03",
+      "epic": "N — Quality, performance and build",
+      "priority": "P0",
+      "title": "Fuzzing",
+      "acceptance": "Malformed HTTP/TLS/WebSocket inputs never panic or hang; fuzz targets in CI",
+      "effort": "M",
+      "status": "todo"
+    },
+    {
+      "id": "N-04",
+      "epic": "N — Quality, performance and build",
+      "priority": "P0",
+      "title": "Builder reliability",
+      "acceptance": "Fix the `omp` model-routing 404s (glm-5.3 / kimi-k3.1) so rounds complete; add a working fallback",
+      "effort": "S",
+      "status": "todo"
+    },
+    {
+      "id": "N-05",
+      "epic": "N — Quality, performance and build",
+      "priority": "P0",
+      "title": "Release build",
+      "acceptance": "`cargo build --release` under 3 minutes; binary starts in under 1 s; screenshot check passes",
+      "effort": "S",
+      "status": "todo"
+    }
+  ]
+}

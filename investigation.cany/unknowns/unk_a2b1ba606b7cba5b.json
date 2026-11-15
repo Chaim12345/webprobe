@@ -1,0 +1,14 @@
+{
+  "id": "unk_a2b1ba606b7cba5b",
+  "revision": 1,
+  "question": "Hotkeys: mechanics lists 6 hotkey values. Does the rebuild cover the full keyboard map (Ctrl+R, Ctrl+T, Ctrl+I, etc.)?",
+  "severity": "low",
+  "domain": "feature-parity",
+  "status": "open",
+  "probes": [
+    "List the original's shortcuts from its preferences",
+    "Compare with handle_hotkeys in ui.rs"
+  ],
+  "evidence_for": [],
+  "evidence_against": []
+}

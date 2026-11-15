@@ -1,0 +1,564 @@
+{
+  "id": "ev_4fa1870e7e7bebf82a8b2272c0e89253051c329bcac7826a1a08669f5faa87b6",
+  "subject": {
+    "kind": "jar",
+    "sha256": "510bf1c87c766f09c3c20d3ef75e7a6978e60dd38346965dd4836ce64417becf",
+    "name": "burpsuite.jar"
+  },
+  "operation": "java_classes_find",
+  "params": {
+    "include_methods": true,
+    "limit": 60,
+    "offset": 0,
+    "path": null,
+    "query": "HotKey"
+  },
+  "result": {
+    "classes": [
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zcio.class",
+        "fields": 14,
+        "interfaces": [
+          "burp.Ztbx"
+        ],
+        "internal": "burp/Zcio",
+        "matched_methods": [
+          {
+            "name": "lambda$addBambdaHotKeys$6",
+            "signature": "private void lambda$addBambdaHotKeys$6(burp.Zk58, burp.Zg5k)"
+          },
+          {
+            "name": "lambda$addBambdaHotKeys$5",
+            "signature": "private void lambda$addBambdaHotKeys$5(burp.Zg5k, burp.Z_r)"
+          },
+          {
+            "name": "lambda$addBambdaHotKeys$4",
+            "signature": "private void lambda$addBambdaHotKeys$4(burp.Zk58)"
+          },
+          {
+            "name": "lambda$addBambdaHotKeys$3",
+            "signature": "private void lambda$addBambdaHotKeys$3(burp.Zkx0)"
+          },
+          {
+            "name": "lambda$addBambdaHotKeys$2",
+            "signature": "private void lambda$addBambdaHotKeys$2(burp.Zkx0)"
+          }
+        ],
+        "methods": 30,
+        "name": "burp.Zcio",
+        "superclass": "burp.Zcit"
+      },
+      {
+        "access": [],
+        "entry": "burp/Ze40.class",
+        "fields": 3,
+        "interfaces": [],
+        "internal": "burp/Ze40",
+        "matched_methods": [
+          {
+            "name": "lambda$hasHotKey$0",
+            "signature": "private static boolean lambda$hasHotKey$0(java.lang.String, burp.Zlk4)"
+          }
+        ],
+        "methods": 11,
+        "name": "burp.Ze40",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zfhv.class",
+        "fields": 7,
+        "interfaces": [
+          "burp.Zmbe"
+        ],
+        "internal": "burp/Zfhv",
+        "matched_methods": [
+          {
+            "name": "lambda$hotkeysWithRemovedDefaults$4",
+            "signature": "private static void lambda$hotkeysWithRemovedDefaults$4(java.util.List, burp.Zlo6, java.lang.Integer)"
+          },
+          {
+            "name": "lambda$hotkeysWithAddedDefaults$3",
+            "signature": "private static boolean lambda$hotkeysWithAddedDefaults$3(java.util.Map, burp.Zz68)"
+          },
+          {
+            "name": "lambda$hotkeysWithAddedDefaults$2",
+            "signature": "private static boolean lambda$hotkeysWithAddedDefaults$2(java.util.Set, burp.Zz68)"
+          },
+          {
+            "name": "lambda$hotkeysWithAddedDefaults$1",
+            "signature": "private static burp.Zz68 lambda$hotkeysWithAddedDefaults$1(burp.Zz68, burp.Zz68)"
+          },
+          {
+            "name": "lambda$hotkeysWithAddedDefaults$0",
+            "signature": "private static boolean lambda$hotkeysWithAddedDefaults$0(burp.Zz68)"
+          }
+        ],
+        "methods": 27,
+        "name": "burp.Zfhv",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zfwa.class",
+        "fields": 13,
+        "interfaces": [
+          "burp.api.montoya.ui.UserInterface"
+        ],
+        "internal": "burp/Zfwa",
+        "matched_methods": [
+          {
+            "name": "registerHotKeyHandler",
+            "signature": "public burp.api.montoya.core.Registration registerHotKeyHandler(burp.api.montoya.ui.hotkey.HotKeyContext, java.lang.String, burp.api.montoya.ui.hotkey.HotKeyHandler)"
+          },
+          {
+            "name": "registerHotKeyHandler",
+            "signature": "public burp.api.montoya.core.Registration registerHotKeyHandler(burp.api.montoya.ui.hotkey.HotKey, burp.api.montoya.ui.hotkey.HotKeyHandler)"
+          },
+          {
+            "name": "registerHotKeyHandler",
+            "signature": "public burp.api.montoya.core.Registration registerHotKeyHandler(burp.api.montoya.ui.hotkey.HotKeyContext, burp.api.montoya.ui.hotkey.HotKey, burp.api.montoya.ui.hotkey.HotKeyHandler)"
+          }
+        ],
+        "methods": 25,
+        "name": "burp.Zfwa",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zgd7.class",
+        "fields": 3,
+        "interfaces": [
+          "burp.api.montoya.ui.UserInterface"
+        ],
+        "internal": "burp/Zgd7",
+        "matched_methods": [
+          {
+            "name": "registerHotKeyHandler",
+            "signature": "public burp.api.montoya.core.Registration registerHotKeyHandler(burp.api.montoya.ui.hotkey.HotKeyContext, java.lang.String, burp.api.montoya.ui.hotkey.HotKeyHandler)"
+          },
+          {
+            "name": "registerHotKeyHandler",
+            "signature": "public burp.api.montoya.core.Registration registerHotKeyHandler(burp.api.montoya.ui.hotkey.HotKey, burp.api.montoya.ui.hotkey.HotKeyHandler)"
+          },
+          {
+            "name": "registerHotKeyHandler",
+            "signature": "public burp.api.montoya.core.Registration registerHotKeyHandler(burp.api.montoya.ui.hotkey.HotKeyContext, burp.api.montoya.ui.hotkey.HotKey, burp.api.montoya.ui.hotkey.HotKeyHandler)"
+          }
+        ],
+        "methods": 23,
+        "name": "burp.Zgd7",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zgu6.class",
+        "fields": 2,
+        "interfaces": [],
+        "internal": "burp/Zgu6",
+        "matched_methods": [
+          {
+            "name": "lambda$isSendToCustomScanCheckTesterHotkeyRegistered$0",
+            "signature": "private static boolean lambda$isSendToCustomScanCheckTesterHotkeyRegistered$0(burp.Zz68)"
+          }
+        ],
+        "methods": 5,
+        "name": "burp.Zgu6",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zj30.class",
+        "fields": 2,
+        "interfaces": [
+          "burp.api.montoya.ui.UserInterface"
+        ],
+        "internal": "burp/Zj30",
+        "matched_methods": [
+          {
+            "name": "registerHotKeyHandler",
+            "signature": "public burp.api.montoya.core.Registration registerHotKeyHandler(burp.api.montoya.ui.hotkey.HotKeyContext, java.lang.String, burp.api.montoya.ui.hotkey.HotKeyHandler)"
+          },
+          {
+            "name": "registerHotKeyHandler",
+            "signature": "public burp.api.montoya.core.Registration registerHotKeyHandler(burp.api.montoya.ui.hotkey.HotKey, burp.api.montoya.ui.hotkey.HotKeyHandler)"
+          },
+          {
+            "name": "registerHotKeyHandler",
+            "signature": "public burp.api.montoya.core.Registration registerHotKeyHandler(burp.api.montoya.ui.hotkey.HotKeyContext, burp.api.montoya.ui.hotkey.HotKey, burp.api.montoya.ui.hotkey.HotKeyHandler)"
+          }
+        ],
+        "methods": 23,
+        "name": "burp.Zj30",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zj3g.class",
+        "fields": 7,
+        "interfaces": [],
+        "internal": "burp/Zj3g",
+        "matched_methods": [
+          {
+            "name": "lambda$getHotKeysHierarchyListener$0",
+            "signature": "private void lambda$getHotKeysHierarchyListener$0(java.awt.event.HierarchyEvent)"
+          }
+        ],
+        "methods": 10,
+        "name": "burp.Zj3g",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zlaz.class",
+        "fields": 1,
+        "interfaces": [
+          "burp.api.montoya.ui.UserInterface"
+        ],
+        "internal": "burp/Zlaz",
+        "matched_methods": [
+          {
+            "name": "registerHotKeyHandler",
+            "signature": "public burp.api.montoya.core.Registration registerHotKeyHandler(burp.api.montoya.ui.hotkey.HotKeyContext, java.lang.String, burp.api.montoya.ui.hotkey.HotKeyHandler)"
+          },
+          {
+            "name": "registerHotKeyHandler",
+            "signature": "public burp.api.montoya.core.Registration registerHotKeyHandler(burp.api.montoya.ui.hotkey.HotKey, burp.api.montoya.ui.hotkey.HotKeyHandler)"
+          },
+          {
+            "name": "registerHotKeyHandler",
+            "signature": "public burp.api.montoya.core.Registration registerHotKeyHandler(burp.api.montoya.ui.hotkey.HotKeyContext, burp.api.montoya.ui.hotkey.HotKey, burp.api.montoya.ui.hotkey.HotKeyHandler)"
+          }
+        ],
+        "methods": 24,
+        "name": "burp.Zlaz",
+        "superclass": "burp.Zla0"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zm90.class",
+        "fields": 2,
+        "interfaces": [
+          "burp.api.montoya.ui.hotkey.HotKey"
+        ],
+        "internal": "burp/Zm90",
+        "matched_methods": [
+          {
+            "name": "hotkey",
+            "signature": "public java.lang.String hotkey()"
+          }
+        ],
+        "methods": 5,
+        "name": "burp.Zm90",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zmw8.class",
+        "fields": 4,
+        "interfaces": [
+          "java.lang.Iterable"
+        ],
+        "internal": "burp/Zmw8",
+        "matched_methods": [
+          {
+            "name": "lambda$getConfiguredHotkeys$0",
+            "signature": "private static boolean lambda$getConfiguredHotkeys$0(burp.Zz68)"
+          }
+        ],
+        "methods": 12,
+        "name": "burp.Zmw8",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Ztrr.class",
+        "fields": 8,
+        "interfaces": [
+          "burp.api.montoya.internal.MontoyaObjectFactory"
+        ],
+        "internal": "burp/Ztrr",
+        "matched_methods": [
+          {
+            "name": "hotkey",
+            "signature": "public burp.api.montoya.ui.hotkey.HotKey hotkey(java.lang.String, java.lang.String)"
+          }
+        ],
+        "methods": 165,
+        "name": "burp.Ztrr",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zzz0.class",
+        "fields": 43,
+        "interfaces": [
+          "burp.Zlqv"
+        ],
+        "internal": "burp/Zzz0",
+        "matched_methods": [
+          {
+            "name": "lambda$registerHotKeyHandler$2",
+            "signature": "private void lambda$registerHotKeyHandler$2(burp.Zzsz, burp.Z_d0)"
+          }
+        ],
+        "methods": 75,
+        "name": "burp.Zzz0",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/internal/MontoyaObjectFactory.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/internal/MontoyaObjectFactory",
+        "matched_methods": [
+          {
+            "name": "hotkey",
+            "signature": "public abstract burp.api.montoya.ui.hotkey.HotKey hotkey(java.lang.String, java.lang.String)"
+          }
+        ],
+        "methods": 161,
+        "name": "burp.api.montoya.internal.MontoyaObjectFactory",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/ui/UserInterface.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/ui/UserInterface",
+        "matched_methods": [
+          {
+            "name": "registerHotKeyHandler",
+            "signature": "public abstract burp.api.montoya.core.Registration registerHotKeyHandler(burp.api.montoya.ui.hotkey.HotKeyContext, java.lang.String, burp.api.montoya.ui.hotkey.HotKeyHandler)"
+          },
+          {
+            "name": "registerHotKeyHandler",
+            "signature": "public abstract burp.api.montoya.core.Registration registerHotKeyHandler(burp.api.montoya.ui.hotkey.HotKey, burp.api.montoya.ui.hotkey.HotKeyHandler)"
+          },
+          {
+            "name": "registerHotKeyHandler",
+            "signature": "public abstract burp.api.montoya.core.Registration registerHotKeyHandler(burp.api.montoya.ui.hotkey.HotKeyContext, burp.api.montoya.ui.hotkey.HotKey, burp.api.montoya.ui.hotkey.HotKeyHandler)"
+          }
+        ],
+        "methods": 20,
+        "name": "burp.api.montoya.ui.UserInterface",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/ui/hotkey/HotKey.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/ui/hotkey/HotKey",
+        "matched_methods": [
+          {
+            "name": "hotkey",
+            "signature": "public abstract java.lang.String hotkey()"
+          },
+          {
+            "name": "hotKey",
+            "signature": "public static burp.api.montoya.ui.hotkey.HotKey hotKey(java.lang.String, java.lang.String)"
+          }
+        ],
+        "methods": 3,
+        "name": "burp.api.montoya.ui.hotkey.HotKey",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "final",
+          "enum"
+        ],
+        "entry": "burp/api/montoya/ui/hotkey/HotKeyContext.class",
+        "fields": 6,
+        "interfaces": [],
+        "internal": "burp/api/montoya/ui/hotkey/HotKeyContext",
+        "matched_methods": [],
+        "methods": 5,
+        "name": "burp.api.montoya.ui.hotkey.HotKeyContext",
+        "superclass": "java.lang.Enum"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/ui/hotkey/HotKeyEvent.class",
+        "fields": 0,
+        "interfaces": [
+          "burp.api.montoya.ui.contextmenu.ComponentEvent",
+          "burp.api.montoya.core.ToolSource",
+          "burp.api.montoya.ui.contextmenu.InvocationSource"
+        ],
+        "internal": "burp/api/montoya/ui/hotkey/HotKeyEvent",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.api.montoya.ui.hotkey.HotKeyEvent",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/ui/hotkey/HotKeyHandler.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/ui/hotkey/HotKeyHandler",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "burp.api.montoya.ui.hotkey.HotKeyHandler",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "com/sun/jna/platform/mac/Carbon.class",
+        "fields": 5,
+        "interfaces": [
+          "com.sun.jna.Library"
+        ],
+        "internal": "com/sun/jna/platform/mac/Carbon",
+        "matched_methods": [
+          {
+            "name": "RegisterEventHotKey",
+            "signature": "public abstract int RegisterEventHotKey(int, int, com.sun.jna.platform.mac.Carbon$EventHotKeyID$ByValue, com.sun.jna.Pointer, int, com.sun.jna.ptr.PointerByReference)"
+          },
+          {
+            "name": "UnregisterEventHotKey",
+            "signature": "public abstract int UnregisterEventHotKey(com.sun.jna.Pointer)"
+          }
+        ],
+        "methods": 7,
+        "name": "com.sun.jna.platform.mac.Carbon",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "com/sun/jna/platform/mac/Carbon$EventHotKeyID.class",
+        "fields": 2,
+        "interfaces": [],
+        "internal": "com/sun/jna/platform/mac/Carbon$EventHotKeyID",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "com.sun.jna.platform.mac.Carbon$EventHotKeyID",
+        "superclass": "com.sun.jna.Structure"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "com/sun/jna/platform/mac/Carbon$EventHotKeyID$ByValue.class",
+        "fields": 0,
+        "interfaces": [
+          "com.sun.jna.Structure$ByValue"
+        ],
+        "internal": "com/sun/jna/platform/mac/Carbon$EventHotKeyID$ByValue",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "com.sun.jna.platform.mac.Carbon$EventHotKeyID$ByValue",
+        "superclass": "com.sun.jna.platform.mac.Carbon$EventHotKeyID"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "com/sun/jna/platform/win32/User32.class",
+        "fields": 8,
+        "interfaces": [
+          "com.sun.jna.win32.StdCallLibrary",
+          "com.sun.jna.platform.win32.WinUser",
+          "com.sun.jna.platform.win32.WinNT"
+        ],
+        "internal": "com/sun/jna/platform/win32/User32",
+        "matched_methods": [
+          {
+            "name": "RegisterHotKey",
+            "signature": "public abstract boolean RegisterHotKey(com.sun.jna.platform.win32.WinDef$HWND, int, int, int)"
+          },
+          {
+            "name": "UnregisterHotKey",
+            "signature": "public abstract boolean UnregisterHotKey(com.sun.jna.Pointer, int)"
+          }
+        ],
+        "methods": 111,
+        "name": "com.sun.jna.platform.win32.User32",
+        "superclass": "java.lang.Object"
+      }
+    ],
+    "classes_total": 54868,
+    "matches": 23,
+    "query": "HotKey"
+  },
+  "summary": "23 of 54868 classes match \"HotKey\" ; showing 23.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 23,
+    "total": 23
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/opt/BurpSuite/burpsuite.jar"
+    }
+  ],
+  "links": []
+}

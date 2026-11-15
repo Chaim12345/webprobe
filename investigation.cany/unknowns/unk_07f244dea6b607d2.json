@@ -1,0 +1,14 @@
+{
+  "id": "unk_07f244dea6b607d2",
+  "revision": 1,
+  "question": "mechanics.json claims 62 values with 62 sources and 0 estimated, yet the build omits whole tools. Is every source actually verified against the code, or are some asserted from UI text?",
+  "severity": "high",
+  "domain": "mechanics-accuracy",
+  "status": "open",
+  "probes": [
+    "Re-check a sample of 10 mechanics values against the decompiled functions",
+    "Mark any value that came from UI text as estimated"
+  ],
+  "evidence_for": [],
+  "evidence_against": []
+}

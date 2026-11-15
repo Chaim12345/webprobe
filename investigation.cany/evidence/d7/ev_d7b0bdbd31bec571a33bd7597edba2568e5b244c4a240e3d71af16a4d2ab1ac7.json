@@ -1,0 +1,137 @@
+{
+  "id": "ev_d7b0bdbd31bec571a33bd7597edba2568e5b244c4a240e3d71af16a4d2ab1ac7",
+  "subject": {
+    "kind": "jar",
+    "sha256": "510bf1c87c766f09c3c20d3ef75e7a6978e60dd38346965dd4836ce64417becf",
+    "name": "burpsuite.jar"
+  },
+  "operation": "java_classes_find",
+  "params": {
+    "include_methods": false,
+    "limit": 100,
+    "offset": 0,
+    "path": null,
+    "query": "hotkey"
+  },
+  "result": {
+    "classes": [
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/ui/hotkey/HotKey.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/ui/hotkey/HotKey",
+        "matched_methods": [],
+        "methods": 3,
+        "name": "burp.api.montoya.ui.hotkey.HotKey",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "final",
+          "enum"
+        ],
+        "entry": "burp/api/montoya/ui/hotkey/HotKeyContext.class",
+        "fields": 6,
+        "interfaces": [],
+        "internal": "burp/api/montoya/ui/hotkey/HotKeyContext",
+        "matched_methods": [],
+        "methods": 5,
+        "name": "burp.api.montoya.ui.hotkey.HotKeyContext",
+        "superclass": "java.lang.Enum"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/ui/hotkey/HotKeyEvent.class",
+        "fields": 0,
+        "interfaces": [
+          "burp.api.montoya.ui.contextmenu.ComponentEvent",
+          "burp.api.montoya.core.ToolSource",
+          "burp.api.montoya.ui.contextmenu.InvocationSource"
+        ],
+        "internal": "burp/api/montoya/ui/hotkey/HotKeyEvent",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.api.montoya.ui.hotkey.HotKeyEvent",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/ui/hotkey/HotKeyHandler.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/ui/hotkey/HotKeyHandler",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "burp.api.montoya.ui.hotkey.HotKeyHandler",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "com/sun/jna/platform/mac/Carbon$EventHotKeyID.class",
+        "fields": 2,
+        "interfaces": [],
+        "internal": "com/sun/jna/platform/mac/Carbon$EventHotKeyID",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "com.sun.jna.platform.mac.Carbon$EventHotKeyID",
+        "superclass": "com.sun.jna.Structure"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "com/sun/jna/platform/mac/Carbon$EventHotKeyID$ByValue.class",
+        "fields": 0,
+        "interfaces": [
+          "com.sun.jna.Structure$ByValue"
+        ],
+        "internal": "com/sun/jna/platform/mac/Carbon$EventHotKeyID$ByValue",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "com.sun.jna.platform.mac.Carbon$EventHotKeyID$ByValue",
+        "superclass": "com.sun.jna.platform.mac.Carbon$EventHotKeyID"
+      }
+    ],
+    "classes_total": 54868,
+    "matches": 6,
+    "query": "hotkey"
+  },
+  "summary": "6 of 54868 classes match \"hotkey\" ; showing 6.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 6,
+    "total": 6
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/opt/BurpSuite/burpsuite.jar"
+    }
+  ],
+  "links": []
+}

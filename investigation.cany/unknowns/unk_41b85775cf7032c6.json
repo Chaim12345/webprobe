@@ -1,0 +1,14 @@
+{
+  "id": "unk_41b85775cf7032c6",
+  "revision": 1,
+  "question": "Does the rebuild implement Match & Replace rules (request/response rewriting)? grep for match_replace finds nothing.",
+  "severity": "medium",
+  "domain": "feature-parity",
+  "status": "open",
+  "probes": [
+    "Open the original's Proxy > Options > Match and replace",
+    "Implement a rule list applied in net.rs on both directions"
+  ],
+  "evidence_for": [],
+  "evidence_against": []
+}

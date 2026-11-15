@@ -1,0 +1,14 @@
+{
+  "id": "unk_b5d66c6c635b412b",
+  "revision": 1,
+  "question": "Does the rebuild implement the Montoya extension API so Java extensions can be loaded? No extension runtime exists.",
+  "severity": "medium",
+  "domain": "feature-parity",
+  "status": "open",
+  "probes": [
+    "Install a sample Montoya extension in the original",
+    "Define which extension API surface (if any) to support"
+  ],
+  "evidence_for": [],
+  "evidence_against": []
+}

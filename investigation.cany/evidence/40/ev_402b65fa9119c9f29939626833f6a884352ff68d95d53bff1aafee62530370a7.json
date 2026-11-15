@@ -1,0 +1,44 @@
+{
+  "id": "ev_402b65fa9119c9f29939626833f6a884352ff68d95d53bff1aafee62530370a7",
+  "subject": {
+    "kind": "jar",
+    "sha256": "510bf1c87c766f09c3c20d3ef75e7a6978e60dd38346965dd4836ce64417becf",
+    "name": "burpsuite.jar"
+  },
+  "operation": "java_classes_find",
+  "params": {
+    "include_methods": false,
+    "limit": 50,
+    "offset": 0,
+    "path": null,
+    "query": "toast"
+  },
+  "result": {
+    "classes": [],
+    "classes_total": 54868,
+    "matches": 0,
+    "query": "toast"
+  },
+  "summary": "0 of 54868 classes match \"toast\" ; showing 0.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 0,
+    "total": 0
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/opt/BurpSuite/burpsuite.jar"
+    }
+  ],
+  "links": []
+}

@@ -1,0 +1,14 @@
+{
+  "id": "unk_7c283f511a86289a",
+  "revision": 1,
+  "question": "Does the rebuild have an Organizer (grouping and annotating requests)? grep finds no Organizer implementation.",
+  "severity": "low",
+  "domain": "feature-parity",
+  "status": "open",
+  "probes": [
+    "Use the original's Organizer tab with demo traffic",
+    "Implement an Organizer panel over the existing history"
+  ],
+  "evidence_for": [],
+  "evidence_against": []
+}

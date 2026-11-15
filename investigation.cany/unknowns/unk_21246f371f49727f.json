@@ -1,0 +1,15 @@
+{
+  "id": "unk_21246f371f49727f",
+  "revision": 1,
+  "question": "Does the rebuild's proxy speak HTTP/2? No h2/HTTP-2 reference exists in any source file, so HTTP/2 sites are downgraded or broken.",
+  "severity": "high",
+  "domain": "feature-parity",
+  "status": "open",
+  "probes": [
+    "Proxy an HTTP/2 site and compare the original's history entries",
+    "Add h2 support (hyper upgrade) to net.rs",
+    "Verify ALPN advertisement on the TLS path"
+  ],
+  "evidence_for": [],
+  "evidence_against": []
+}

@@ -1,0 +1,87 @@
+{
+  "id": "ev_be3a51c8d4e218a99b4572c956bbb5316e318ea30162faa60f49533305fa5740",
+  "subject": {
+    "kind": "jar",
+    "sha256": "510bf1c87c766f09c3c20d3ef75e7a6978e60dd38346965dd4836ce64417becf",
+    "name": "burpsuite.jar"
+  },
+  "operation": "java_classes_find",
+  "params": {
+    "include_methods": false,
+    "limit": 100,
+    "offset": 0,
+    "path": null,
+    "query": "shortcut"
+  },
+  "result": {
+    "classes": [
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "com/formdev/flatlaf/ui/FlatFileChooserUI$FlatShortcutsPanel.class",
+        "fields": 9,
+        "interfaces": [
+          "java.beans.PropertyChangeListener",
+          "javax.swing.Scrollable"
+        ],
+        "internal": "com/formdev/flatlaf/ui/FlatFileChooserUI$FlatShortcutsPanel",
+        "matched_methods": [],
+        "methods": 13,
+        "name": "com.formdev.flatlaf.ui.FlatFileChooserUI$FlatShortcutsPanel",
+        "superclass": "javax.swing.JToolBar"
+      },
+      {
+        "access": [],
+        "entry": "com/formdev/flatlaf/ui/FlatFileChooserUI$ShortcutIcon.class",
+        "fields": 3,
+        "interfaces": [
+          "javax.swing.Icon"
+        ],
+        "internal": "com/formdev/flatlaf/ui/FlatFileChooserUI$ShortcutIcon",
+        "matched_methods": [],
+        "methods": 4,
+        "name": "com.formdev.flatlaf.ui.FlatFileChooserUI$ShortcutIcon",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "net/portswigger/devtools/protocol/types/page/Shortcut.class",
+        "fields": 2,
+        "interfaces": [],
+        "internal": "net/portswigger/devtools/protocol/types/page/Shortcut",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "net.portswigger.devtools.protocol.types.page.Shortcut",
+        "superclass": "java.lang.Object"
+      }
+    ],
+    "classes_total": 54868,
+    "matches": 3,
+    "query": "shortcut"
+  },
+  "summary": "3 of 54868 classes match \"shortcut\" ; showing 3.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 3,
+    "total": 3
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/opt/BurpSuite/burpsuite.jar"
+    }
+  ],
+  "links": []
+}

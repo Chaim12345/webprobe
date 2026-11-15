@@ -1,0 +1,14 @@
+{
+  "id": "unk_4efba175ea5170f8",
+  "revision": 1,
+  "question": "The WebSocket history view is 24 lines (websocket_history) - likely a list only. Does it decode frames, filter and let a user edit/replay them?",
+  "severity": "medium",
+  "domain": "feature-parity",
+  "status": "open",
+  "probes": [
+    "Open the original's Proxy > WebSockets history with live traffic",
+    "Compare frame decoding, filtering and editing"
+  ],
+  "evidence_for": [],
+  "evidence_against": []
+}

@@ -1,0 +1,610 @@
+{
+  "id": "ev_dbfd2a3f1e06b92d9fa4b1e971d6a930e5b2f2ea4ff60b2868646e524a59eae7",
+  "subject": {
+    "kind": "jar",
+    "sha256": "510bf1c87c766f09c3c20d3ef75e7a6978e60dd38346965dd4836ce64417becf",
+    "name": "burpsuite.jar"
+  },
+  "operation": "java_classes_find",
+  "params": {
+    "include_methods": true,
+    "limit": 30,
+    "offset": 0,
+    "path": null,
+    "query": "setStatus"
+  },
+  "result": {
+    "classes": [
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "com/install4j/api/context/DefaultUnattendedProgressInterface.class",
+        "fields": 1,
+        "interfaces": [
+          "com.install4j.api.context.UnattendedProgressInterface"
+        ],
+        "internal": "com/install4j/api/context/DefaultUnattendedProgressInterface",
+        "matched_methods": [
+          {
+            "name": "setStatusMessage",
+            "signature": "public void setStatusMessage(java.lang.String)"
+          }
+        ],
+        "methods": 14,
+        "name": "com.install4j.api.context.DefaultUnattendedProgressInterface",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "com/install4j/api/context/ProgressInterface.class",
+        "fields": 7,
+        "interfaces": [],
+        "internal": "com/install4j/api/context/ProgressInterface",
+        "matched_methods": [
+          {
+            "name": "setStatusMessage",
+            "signature": "public abstract void setStatusMessage(java.lang.String)"
+          }
+        ],
+        "methods": 12,
+        "name": "com.install4j.api.context.ProgressInterface",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "com/install4j/runtime/beans/actions/control/SetMessageAction.class",
+        "fields": 4,
+        "interfaces": [],
+        "internal": "com/install4j/runtime/beans/actions/control/SetMessageAction",
+        "matched_methods": [
+          {
+            "name": "setStatusMessage",
+            "signature": "public void setStatusMessage(java.lang.String)"
+          }
+        ],
+        "methods": 11,
+        "name": "com.install4j.runtime.beans.actions.control.SetMessageAction",
+        "superclass": "com.install4j.runtime.beans.actions.SystemInstallOrUninstallAction"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "com/install4j/runtime/beans/formcomponents/ProgressComponent.class",
+        "fields": 8,
+        "interfaces": [
+          "com.install4j.api.context.ProgressInterface"
+        ],
+        "internal": "com/install4j/runtime/beans/formcomponents/ProgressComponent",
+        "matched_methods": [
+          {
+            "name": "setStatusVisible",
+            "signature": "public void setStatusVisible(boolean)"
+          },
+          {
+            "name": "setStatusMessage",
+            "signature": "public void setStatusMessage(java.lang.String)"
+          }
+        ],
+        "methods": 36,
+        "name": "com.install4j.runtime.beans.formcomponents.ProgressComponent",
+        "superclass": "com.install4j.runtime.beans.formcomponents.SystemFormComponent"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "com/install4j/runtime/installer/frontend/GUIProgressInterface.class",
+        "fields": 0,
+        "interfaces": [
+          "com.install4j.api.context.ProgressInterface"
+        ],
+        "internal": "com/install4j/runtime/installer/frontend/GUIProgressInterface",
+        "matched_methods": [
+          {
+            "name": "setStatusMessage",
+            "signature": "public void setStatusMessage(java.lang.String)"
+          }
+        ],
+        "methods": 11,
+        "name": "com.install4j.runtime.installer.frontend.GUIProgressInterface",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "com/install4j/runtime/installer/frontend/NoPercentageProgressDelegate.class",
+        "fields": 1,
+        "interfaces": [
+          "com.install4j.api.context.ProgressInterface"
+        ],
+        "internal": "com/install4j/runtime/installer/frontend/NoPercentageProgressDelegate",
+        "matched_methods": [
+          {
+            "name": "setStatusMessage",
+            "signature": "public void setStatusMessage(java.lang.String)"
+          }
+        ],
+        "methods": 11,
+        "name": "com.install4j.runtime.installer.frontend.NoPercentageProgressDelegate",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "com/install4j/runtime/installer/frontend/ProgressAdapter.class",
+        "fields": 5,
+        "interfaces": [
+          "com.install4j.api.context.ProgressInterface",
+          "com.exe4j.runtime.util.FileUtil$CopyProgressListener"
+        ],
+        "internal": "com/install4j/runtime/installer/frontend/ProgressAdapter",
+        "matched_methods": [
+          {
+            "name": "setStatusMessage",
+            "signature": "public void setStatusMessage(java.lang.String)"
+          }
+        ],
+        "methods": 14,
+        "name": "com.install4j.runtime.installer.frontend.ProgressAdapter",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "com/install4j/runtime/installer/frontend/ProgressDelegate.class",
+        "fields": 1,
+        "interfaces": [
+          "com.install4j.api.context.ProgressInterface"
+        ],
+        "internal": "com/install4j/runtime/installer/frontend/ProgressDelegate",
+        "matched_methods": [
+          {
+            "name": "setStatusMessage",
+            "signature": "public void setStatusMessage(java.lang.String)"
+          }
+        ],
+        "methods": 13,
+        "name": "com.install4j.runtime.installer.frontend.ProgressDelegate",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "com/install4j/runtime/installer/frontend/RollbackProgressInterface.class",
+        "fields": 2,
+        "interfaces": [
+          "com.install4j.api.context.ProgressInterface"
+        ],
+        "internal": "com/install4j/runtime/installer/frontend/RollbackProgressInterface",
+        "matched_methods": [
+          {
+            "name": "setStatusMessage",
+            "signature": "public void setStatusMessage(java.lang.String)"
+          }
+        ],
+        "methods": 13,
+        "name": "com.install4j.runtime.installer.frontend.RollbackProgressInterface",
+        "superclass": "com.install4j.runtime.util.CustomDialog"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "com/install4j/runtime/installer/frontend/SplashProgressInterface.class",
+        "fields": 10,
+        "interfaces": [
+          "com.install4j.api.context.UnattendedProgressInterface"
+        ],
+        "internal": "com/install4j/runtime/installer/frontend/SplashProgressInterface",
+        "matched_methods": [
+          {
+            "name": "setStatusMessage",
+            "signature": "public void setStatusMessage(java.lang.String)"
+          }
+        ],
+        "methods": 21,
+        "name": "com.install4j.runtime.installer.frontend.SplashProgressInterface",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "com/install4j/runtime/installer/frontend/components/ProgressDisplay.class",
+        "fields": 9,
+        "interfaces": [],
+        "internal": "com/install4j/runtime/installer/frontend/components/ProgressDisplay",
+        "matched_methods": [
+          {
+            "name": "setStatusMessage",
+            "signature": "public void setStatusMessage(java.lang.String)"
+          },
+          {
+            "name": "setStatusVisible",
+            "signature": "public void setStatusVisible(boolean)"
+          },
+          {
+            "name": "lambda$setStatusVisible$2",
+            "signature": "private synthetic void lambda$setStatusVisible$2(boolean)"
+          },
+          {
+            "name": "lambda$setStatusMessage$0",
+            "signature": "private synthetic void lambda$setStatusMessage$0(java.lang.String)"
+          }
+        ],
+        "methods": 26,
+        "name": "com.install4j.runtime.installer.frontend.components.ProgressDisplay",
+        "superclass": "com.install4j.runtime.util.CustomPanel"
+      },
+      {
+        "access": [],
+        "entry": "com/install4j/runtime/installer/frontend/headless/UnattendedScreenExecutor$NullProgressInterface.class",
+        "fields": 1,
+        "interfaces": [],
+        "internal": "com/install4j/runtime/installer/frontend/headless/UnattendedScreenExecutor$NullProgressInterface",
+        "matched_methods": [
+          {
+            "name": "setStatusMessage",
+            "signature": "public void setStatusMessage(java.lang.String)"
+          }
+        ],
+        "methods": 7,
+        "name": "com.install4j.runtime.installer.frontend.headless.UnattendedScreenExecutor$NullProgressInterface",
+        "superclass": "com.install4j.api.context.DefaultUnattendedProgressInterface"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "com/install4j/runtime/installer/helper/applaunch/ProgressInterfaceWrapper.class",
+        "fields": 6,
+        "interfaces": [
+          "com.install4j.api.context.ProgressInterface"
+        ],
+        "internal": "com/install4j/runtime/installer/helper/applaunch/ProgressInterfaceWrapper",
+        "matched_methods": [
+          {
+            "name": "setStatusMessage",
+            "signature": "public void setStatusMessage(java.lang.String)"
+          }
+        ],
+        "methods": 11,
+        "name": "com.install4j.runtime.installer.helper.applaunch.ProgressInterfaceWrapper",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [],
+        "entry": "com/install4j/runtime/installer/helper/comm/impl/HelperProgressInterface.class",
+        "fields": 5,
+        "interfaces": [
+          "com.install4j.api.context.ProgressInterface",
+          "java.io.Serializable"
+        ],
+        "internal": "com/install4j/runtime/installer/helper/comm/impl/HelperProgressInterface",
+        "matched_methods": [
+          {
+            "name": "setStatusMessage",
+            "signature": "public void setStatusMessage(java.lang.String)"
+          },
+          {
+            "name": "lambda$setStatusMessage$2f8e67a8$1",
+            "signature": "private static synthetic void lambda$setStatusMessage$2f8e67a8$1(java.lang.String, com.install4j.api.context.Context)"
+          }
+        ],
+        "methods": 22,
+        "name": "com.install4j.runtime.installer.helper.comm.impl.HelperProgressInterface",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "com/install4j/runtime/installer/helper/console/ConsoleImpl.class",
+        "fields": 7,
+        "interfaces": [
+          "com.install4j.api.screens.Console"
+        ],
+        "internal": "com/install4j/runtime/installer/helper/console/ConsoleImpl",
+        "matched_methods": [
+          {
+            "name": "setStatusMessage",
+            "signature": "public void setStatusMessage(java.lang.String)"
+          }
+        ],
+        "methods": 52,
+        "name": "com.install4j.runtime.installer.helper.console.ConsoleImpl",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "com/install4j/runtime/installer/helper/console/RichConsoleImpl.class",
+        "fields": 6,
+        "interfaces": [],
+        "internal": "com/install4j/runtime/installer/helper/console/RichConsoleImpl",
+        "matched_methods": [
+          {
+            "name": "setStatusMessage",
+            "signature": "public void setStatusMessage(java.lang.String)"
+          }
+        ],
+        "methods": 31,
+        "name": "com.install4j.runtime.installer.helper.console.RichConsoleImpl",
+        "superclass": "com.install4j.runtime.installer.helper.console.ConsoleImpl"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "com/install4j/runtime/installer/helper/content/apache/archivers/tar/TarArchiveEntry.class",
+        "fields": 37,
+        "interfaces": [
+          "com.install4j.runtime.installer.helper.content.apache.archivers.ArchiveEntry",
+          "com.install4j.runtime.installer.helper.content.apache.archivers.tar.TarConstants",
+          "com.install4j.runtime.installer.helper.content.apache.archivers.EntryStreamOffsets"
+        ],
+        "internal": "com/install4j/runtime/installer/helper/content/apache/archivers/tar/TarArchiveEntry",
+        "matched_methods": [
+          {
+            "name": "setStatusChangeTime",
+            "signature": "public void setStatusChangeTime(java.nio.file.attribute.FileTime)"
+          }
+        ],
+        "methods": 121,
+        "name": "com.install4j.runtime.installer.helper.content.apache.archivers.tar.TarArchiveEntry",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "final"
+        ],
+        "entry": "io/opentelemetry/api/trace/PropagatedSpan.class",
+        "fields": 2,
+        "interfaces": [
+          "io.opentelemetry.api.trace.Span"
+        ],
+        "internal": "io/opentelemetry/api/trace/PropagatedSpan",
+        "matched_methods": [
+          {
+            "name": "setStatus",
+            "signature": "public io.opentelemetry.api.trace.Span setStatus(io.opentelemetry.api.trace.StatusCode)"
+          },
+          {
+            "name": "setStatus",
+            "signature": "public io.opentelemetry.api.trace.Span setStatus(io.opentelemetry.api.trace.StatusCode, java.lang.String)"
+          }
+        ],
+        "methods": 23,
+        "name": "io.opentelemetry.api.trace.PropagatedSpan",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "io/opentelemetry/api/trace/Span.class",
+        "fields": 0,
+        "interfaces": [
+          "io.opentelemetry.context.ImplicitContextKeyed"
+        ],
+        "internal": "io/opentelemetry/api/trace/Span",
+        "matched_methods": [
+          {
+            "name": "setStatus",
+            "signature": "public io.opentelemetry.api.trace.Span setStatus(io.opentelemetry.api.trace.StatusCode)"
+          },
+          {
+            "name": "setStatus",
+            "signature": "public abstract io.opentelemetry.api.trace.Span setStatus(io.opentelemetry.api.trace.StatusCode, java.lang.String)"
+          }
+        ],
+        "methods": 32,
+        "name": "io.opentelemetry.api.trace.Span",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "entry": "io/opentelemetry/instrumentation/api/incubator/builder/internal/DefaultHttpClientInstrumenterBuilder.class",
+        "fields": 12,
+        "interfaces": [],
+        "internal": "io/opentelemetry/instrumentation/api/incubator/builder/internal/DefaultHttpClientInstrumenterBuilder",
+        "matched_methods": [
+          {
+            "name": "setStatusExtractor",
+            "signature": "public io.opentelemetry.instrumentation.api.incubator.builder.internal.DefaultHttpClientInstrumenterBuilder setStatusExtractor(java.util.function.Function)"
+          }
+        ],
+        "methods": 20,
+        "name": "io.opentelemetry.instrumentation.api.incubator.builder.internal.DefaultHttpClientInstrumenterBuilder",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "entry": "io/opentelemetry/instrumentation/api/incubator/builder/internal/DefaultHttpServerInstrumenterBuilder.class",
+        "fields": 12,
+        "interfaces": [],
+        "internal": "io/opentelemetry/instrumentation/api/incubator/builder/internal/DefaultHttpServerInstrumenterBuilder",
+        "matched_methods": [
+          {
+            "name": "setStatusExtractor",
+            "signature": "public io.opentelemetry.instrumentation.api.incubator.builder.internal.DefaultHttpServerInstrumenterBuilder setStatusExtractor(java.util.function.Function)"
+          }
+        ],
+        "methods": 16,
+        "name": "io.opentelemetry.instrumentation.api.incubator.builder.internal.DefaultHttpServerInstrumenterBuilder",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "io/opentelemetry/instrumentation/api/instrumenter/SpanStatusBuilder.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "io/opentelemetry/instrumentation/api/instrumenter/SpanStatusBuilder",
+        "matched_methods": [
+          {
+            "name": "setStatus",
+            "signature": "public io.opentelemetry.instrumentation.api.instrumenter.SpanStatusBuilder setStatus(io.opentelemetry.api.trace.StatusCode)"
+          },
+          {
+            "name": "setStatus",
+            "signature": "public abstract io.opentelemetry.instrumentation.api.instrumenter.SpanStatusBuilder setStatus(io.opentelemetry.api.trace.StatusCode, java.lang.String)"
+          }
+        ],
+        "methods": 2,
+        "name": "io.opentelemetry.instrumentation.api.instrumenter.SpanStatusBuilder",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "final"
+        ],
+        "entry": "io/opentelemetry/instrumentation/api/instrumenter/SpanStatusBuilderImpl.class",
+        "fields": 1,
+        "interfaces": [
+          "io.opentelemetry.instrumentation.api.instrumenter.SpanStatusBuilder"
+        ],
+        "internal": "io/opentelemetry/instrumentation/api/instrumenter/SpanStatusBuilderImpl",
+        "matched_methods": [
+          {
+            "name": "setStatus",
+            "signature": "public io.opentelemetry.instrumentation.api.instrumenter.SpanStatusBuilder setStatus(io.opentelemetry.api.trace.StatusCode, java.lang.String)"
+          }
+        ],
+        "methods": 2,
+        "name": "io.opentelemetry.instrumentation.api.instrumenter.SpanStatusBuilderImpl",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "final"
+        ],
+        "entry": "io/opentelemetry/sdk/trace/SdkSpan.class",
+        "fields": 21,
+        "interfaces": [
+          "io.opentelemetry.sdk.trace.ReadWriteSpan"
+        ],
+        "internal": "io/opentelemetry/sdk/trace/SdkSpan",
+        "matched_methods": [
+          {
+            "name": "setStatus",
+            "signature": "public io.opentelemetry.sdk.trace.ReadWriteSpan setStatus(io.opentelemetry.api.trace.StatusCode, java.lang.String)"
+          },
+          {
+            "name": "setStatus",
+            "signature": "public bridge synthetic io.opentelemetry.api.trace.Span setStatus(io.opentelemetry.api.trace.StatusCode, java.lang.String)"
+          }
+        ],
+        "methods": 46,
+        "name": "io.opentelemetry.sdk.trace.SdkSpan",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "net/portswigger/opentelemetry/utils/span/AutoCloseableSpan.class",
+        "fields": 3,
+        "interfaces": [
+          "io.opentelemetry.api.trace.Span",
+          "java.lang.AutoCloseable"
+        ],
+        "internal": "net/portswigger/opentelemetry/utils/span/AutoCloseableSpan",
+        "matched_methods": [
+          {
+            "name": "setStatus",
+            "signature": "public io.opentelemetry.api.trace.Span setStatus(io.opentelemetry.api.trace.StatusCode, java.lang.String)"
+          }
+        ],
+        "methods": 14,
+        "name": "net.portswigger.opentelemetry.utils.span.AutoCloseableSpan",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "org/bouncycastle/asn1/cmc/CMCStatusInfoBuilder.class",
+        "fields": 4,
+        "interfaces": [],
+        "internal": "org/bouncycastle/asn1/cmc/CMCStatusInfoBuilder",
+        "matched_methods": [
+          {
+            "name": "setStatusString",
+            "signature": "public org.bouncycastle.asn1.cmc.CMCStatusInfoBuilder setStatusString(java.lang.String)"
+          }
+        ],
+        "methods": 6,
+        "name": "org.bouncycastle.asn1.cmc.CMCStatusInfoBuilder",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "org/bouncycastle/asn1/cmc/CMCStatusInfoV2Builder.class",
+        "fields": 4,
+        "interfaces": [],
+        "internal": "org/bouncycastle/asn1/cmc/CMCStatusInfoV2Builder",
+        "matched_methods": [
+          {
+            "name": "setStatusString",
+            "signature": "public org.bouncycastle.asn1.cmc.CMCStatusInfoV2Builder setStatusString(java.lang.String)"
+          }
+        ],
+        "methods": 7,
+        "name": "org.bouncycastle.asn1.cmc.CMCStatusInfoV2Builder",
+        "superclass": "java.lang.Object"
+      }
+    ],
+    "classes_total": 54868,
+    "matches": 27,
+    "query": "setStatus"
+  },
+  "summary": "27 of 54868 classes match \"setStatus\" ; showing 27.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 27,
+    "total": 27
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/opt/BurpSuite/burpsuite.jar"
+    }
+  ],
+  "links": []
+}

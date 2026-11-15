@@ -1,0 +1,186 @@
+{
+  "id": "ev_3487104eef77e72234e19c64db27a08c1619bb920fe8071051adfcb2de85b5c1",
+  "subject": {
+    "kind": "jar",
+    "sha256": "510bf1c87c766f09c3c20d3ef75e7a6978e60dd38346965dd4836ce64417becf",
+    "name": "burpsuite.jar"
+  },
+  "operation": "java_class_show",
+  "params": {
+    "class_name": "burp.Zm90",
+    "decompile": true,
+    "path": null
+  },
+  "result": {
+    "access": [
+      "public"
+    ],
+    "annotations": [],
+    "entry": "burp/Zm90.class",
+    "fields": [
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljava/lang/String;",
+        "name": "ZU",
+        "signature": null,
+        "type": "java.lang.String"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljava/lang/String;",
+        "name": "ZQ",
+        "signature": null,
+        "type": "java.lang.String"
+      }
+    ],
+    "inner_classes": [],
+    "interfaces": [
+      "burp.api.montoya.ui.hotkey.HotKey"
+    ],
+    "internal": "burp/Zm90",
+    "java_version": "Java 21",
+    "methods": [
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 15,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;Ljava/lang/String;)V",
+        "max_locals": 3,
+        "max_stack": 2,
+        "name": "<init>",
+        "signature": "public <init>(java.lang.String, java.lang.String)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 5,
+        "deprecated": false,
+        "descriptor": "()Ljava/lang/String;",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "name",
+        "signature": "public java.lang.String name()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 5,
+        "deprecated": false,
+        "descriptor": "()Ljava/lang/String;",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "hotkey",
+        "signature": "public java.lang.String hotkey()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 56,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/Object;)Z",
+        "max_locals": 3,
+        "max_stack": 2,
+        "name": "equals",
+        "signature": "public boolean equals(java.lang.Object)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 22,
+        "deprecated": false,
+        "descriptor": "()I",
+        "max_locals": 1,
+        "max_stack": 4,
+        "name": "hashCode",
+        "signature": "public int hashCode()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      }
+    ],
+    "name": "burp.Zm90",
+    "pseudo_java": "public class burp.Zm90 implements burp.api.montoya.ui.hotkey.HotKey {\n    private final java.lang.String ZU;\n    private final java.lang.String ZQ;\n\n    public <init>(java.lang.String, java.lang.String){\n        this.ZU = v1;\n        this.ZQ = v2;\n        return;\n    }\n\n\n    public java.lang.String name(){\n        return this.ZU;\n    }\n\n\n    public java.lang.String hotkey(){\n        return this.ZQ;\n    }\n\n\n    public boolean equals(java.lang.Object){\n        if (v1 != null) {\n            if (this.getClass() == v1.getClass()) goto L15;\n        }\n        return 0;\n        L15:\n        v2 = (Zm90) v1;\n        if (Objects.equals(this.ZU, v2.ZU) != 0) {\n            if (Objects.equals(this.ZQ, v2.ZQ) == 0) goto L37;\n        } else {\n        }\n        L37:\n        return 0;\n    }\n\n\n    public int hashCode(){\n        new Object[2][0] = this.ZU;\n        new Object[2][1] = this.ZQ;\n        return Objects.hash(new Object[2]);\n    }\n\n}\n",
+    "signature": null,
+    "source_file": null,
+    "superclass": "java.lang.Object",
+    "version": {
+      "major": 65,
+      "minor": 0
+    }
+  },
+  "summary": "burp.Zm90 (Java 21) extends Object: 2 fields, 5 methods.",
+  "confidence": "inferred",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [
+    {
+      "code": "decompiler_inferred",
+      "message": "This pseudo-Java is reconstructed from bytecode by Craft Anything's built-in decompiler; it is a best guess, not the original source. The bytecode disassembly is the evidence."
+    },
+    {
+      "code": "generics_erased",
+      "message": "Generic type arguments are erased in bytecode and are not shown."
+    },
+    {
+      "code": "names_and_types_inferred",
+      "message": "Local variables are named v0, v1, … (no debug names); their declared types are not reconstructed."
+    },
+    {
+      "code": "desugaring_not_reversed",
+      "message": "Synthetic members, lambda/invokedynamic desugaring, enum scaffolding and string-switch hashing are not turned back into source."
+    },
+    {
+      "code": "control_flow_partly_structured",
+      "message": "Some methods contain control flow shown with labels and goto statements."
+    }
+  ],
+  "coverage": {
+    "status": "complete",
+    "examined": 1,
+    "total": 1
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/opt/BurpSuite/burpsuite.jar"
+    },
+    {
+      "kind": "class",
+      "value": "burp/Zm90"
+    }
+  ],
+  "links": []
+}

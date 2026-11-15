@@ -1,0 +1,60 @@
+{
+  "id": "ev_22b3b46f1e2575d595a572a2832c8e9fac355e2a1dc73544da7b57dc793f0ad4",
+  "subject": {
+    "kind": "jar",
+    "sha256": "510bf1c87c766f09c3c20d3ef75e7a6978e60dd38346965dd4836ce64417becf",
+    "name": "burpsuite.jar"
+  },
+  "operation": "java_classes_find",
+  "params": {
+    "include_methods": false,
+    "limit": 200,
+    "offset": 0,
+    "path": null,
+    "query": "KeyHandler"
+  },
+  "result": {
+    "classes": [
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/ui/hotkey/HotKeyHandler.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/ui/hotkey/HotKeyHandler",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "burp.api.montoya.ui.hotkey.HotKeyHandler",
+        "superclass": "java.lang.Object"
+      }
+    ],
+    "classes_total": 54868,
+    "matches": 1,
+    "query": "KeyHandler"
+  },
+  "summary": "1 of 54868 classes match \"KeyHandler\" ; showing 1.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 1,
+    "total": 1
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/opt/BurpSuite/burpsuite.jar"
+    }
+  ],
+  "links": []
+}

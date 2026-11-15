@@ -1,0 +1,14 @@
+{
+  "id": "unk_95e4c804ed404aee",
+  "revision": 1,
+  "question": "Does the rebuild ship Burp's BApp Store? grep for 'bapp' finds nothing.",
+  "severity": "low",
+  "domain": "feature-parity",
+  "status": "open",
+  "probes": [
+    "List the original's BApp Store entries",
+    "Decide whether to reimplement or document as out of scope"
+  ],
+  "evidence_for": [],
+  "evidence_against": []
+}

@@ -1,0 +1,14 @@
+{
+  "id": "unk_71c873a1e064539e",
+  "revision": 1,
+  "question": "Does the rebuilt app log every request/response like Burp Logger? No Logger tab exists in app/src (logger: 0 files).",
+  "severity": "high",
+  "domain": "feature-parity",
+  "status": "open",
+  "probes": [
+    "Confirm the original Logger behaviour from the live app",
+    "Implement a Logger tab fed by net.rs"
+  ],
+  "evidence_for": [],
+  "evidence_against": []
+}

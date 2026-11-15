@@ -1,0 +1,49 @@
+{
+  "id": "ev_e3e342cadafc68cecc2715b141627971ca37cdfd0290fcbce47a5c737ca73e05",
+  "subject": {
+    "kind": "zip",
+    "sha256": "ec6d420b8768fc6162c6b08ed58063bdfb47feb5f2487758a145a574c99c2f3e",
+    "name": "docs.zip"
+  },
+  "operation": "core_archive_extract",
+  "params": {
+    "max_bytes": 10000000,
+    "max_files": 10,
+    "path": "/tmp/opencode/docs.zip"
+  },
+  "result": {
+    "bytes_written": 19847,
+    "contradictions": [],
+    "files_written": 4,
+    "output_directory": "/tmp/craft-anything-extract-cb4f0fab3496457f",
+    "skipped": []
+  },
+  "summary": "Extracted 4 files (19847 bytes) from docs.zip into /tmp/craft-anything-extract-cb4f0fab3496457f.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [
+    {
+      "code": "nested_not_extracted",
+      "message": "Archives inside the archive are written as files, not unpacked; run core_archive_extract on them."
+    }
+  ],
+  "coverage": {
+    "status": "complete",
+    "examined": 4,
+    "total": 4
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/tmp/craft-anything-extract-cb4f0fab3496457f",
+      "label": "output folder"
+    }
+  ],
+  "links": []
+}

@@ -1,0 +1,27 @@
+{"caller":"ui","duration_ms":1184,"evidence_id":"ev_3968fcd53c84d3a80f885c06aa1ade64f70faca0161982436f95155d6433149d","kind":"tool_call","ok":true,"params":{"path":"/opt/BurpSuite/burpsuite.jar"},"time":"2026-11-10T13:29:56Z","tool":"core_target_triage","ts":1794317396}
+{"caller":"ui","duration_ms":0,"kind":"tool_call","ok":true,"params":{},"time":"2026-11-10T13:30:02Z","tool":"project_pins_list","ts":1794317402}
+{"caller":"ui","duration_ms":0,"kind":"tool_call","ok":true,"params":{},"time":"2026-11-10T13:32:13Z","tool":"project_pins_list","ts":1794317533}
+{"caller":"ui","duration_ms":0,"kind":"tool_call","ok":true,"params":{},"time":"2026-11-10T13:33:26Z","tool":"project_pins_list","ts":1794317606}
+{"caller":"ui","duration_ms":0,"kind":"tool_call","ok":true,"params":{},"time":"2026-11-10T13:37:14Z","tool":"project_pins_list","ts":1794317834}
+{"caller":"ui","duration_ms":0,"kind":"tool_call","ok":true,"params":{},"time":"2026-11-10T13:37:50Z","tool":"project_pins_list","ts":1794317870}
+{"caller":"ui","duration_ms":0,"kind":"tool_call","ok":true,"params":{},"time":"2026-11-10T13:40:05Z","tool":"project_pins_list","ts":1794318005}
+{"caller":"ui","duration_ms":0,"kind":"tool_call","ok":true,"params":{},"time":"2026-11-10T13:47:41Z","tool":"project_pins_list","ts":1794318461}
+{"caller":"ui","duration_ms":0,"kind":"tool_call","ok":true,"params":{},"time":"2026-11-10T13:50:47Z","tool":"project_pins_list","ts":1794318647}
+{"caller":"ui","duration_ms":0,"kind":"tool_call","ok":true,"params":{},"time":"2026-11-10T13:51:27Z","tool":"project_pins_list","ts":1794318687}
+{"caller":"ui","duration_ms":0,"kind":"tool_call","ok":true,"params":{},"time":"2026-11-10T13:51:34Z","tool":"project_pins_list","ts":1794318694}
+{"caller":"ui","duration_ms":0,"kind":"tool_call","ok":true,"params":{},"time":"2026-11-10T13:51:53Z","tool":"project_pins_list","ts":1794318713}
+{"caller":"ui","duration_ms":0,"kind":"tool_call","ok":true,"params":{},"time":"2026-11-10T13:53:22Z","tool":"project_pins_list","ts":1794318802}
+{"caller":"ui","duration_ms":0,"kind":"tool_call","ok":true,"params":{},"time":"2026-11-10T13:57:30Z","tool":"project_pins_list","ts":1794319050}
+{"caller":"ui","duration_ms":63,"kind":"tool_call","ok":true,"params":{},"time":"2026-11-10T14:16:33Z","tool":"project_pins_list","ts":1794320193}
+{"caller":"ui","duration_ms":0,"kind":"tool_call","ok":true,"params":{},"time":"2026-11-10T14:19:17Z","tool":"project_pins_list","ts":1794320357}
+{"caller":"ui","duration_ms":24,"kind":"tool_call","ok":true,"params":{"kind":"web","mode":"allow","project":"/root/Documents/Craft Anything/burpsuite"},"time":"2026-11-10T14:19:31Z","tool":"project_approvals_set","ts":1794320371}
+{"caller":"ui","duration_ms":4,"kind":"tool_call","ok":true,"params":{"kind":"commands","mode":"allow","project":"/root/Documents/Craft Anything/burpsuite"},"time":"2026-11-10T14:19:32Z","tool":"project_approvals_set","ts":1794320372}
+{"caller":"ui","duration_ms":4,"kind":"tool_call","ok":true,"params":{"kind":"outside_files","mode":"allow","project":"/root/Documents/Craft Anything/burpsuite"},"time":"2026-11-10T14:19:34Z","tool":"project_approvals_set","ts":1794320374}
+{"caller":"ui","duration_ms":3,"kind":"tool_call","ok":true,"params":{"kind":"publish","mode":"allow","project":"/root/Documents/Craft Anything/burpsuite"},"time":"2026-11-10T14:19:34Z","tool":"project_approvals_set","ts":1794320374}
+{"caller":"ui","duration_ms":4,"kind":"tool_call","ok":true,"params":{"kind":"delete_outside","mode":"allow","project":"/root/Documents/Craft Anything/burpsuite"},"time":"2026-11-10T14:19:35Z","tool":"project_approvals_set","ts":1794320375}
+{"caller":"ui","duration_ms":4,"kind":"tool_call","ok":true,"params":{"kind":"system","mode":"allow","project":"/root/Documents/Craft Anything/burpsuite"},"time":"2026-11-10T14:19:35Z","tool":"project_approvals_set","ts":1794320375}
+{"caller":"ui","duration_ms":3,"kind":"tool_call","ok":true,"params":{"kind":"other_tools","mode":"allow","project":"/root/Documents/Craft Anything/burpsuite"},"time":"2026-11-10T14:19:37Z","tool":"project_approvals_set","ts":1794320377}
+{"caller":"ui","duration_ms":51,"kind":"tool_call","ok":true,"params":{"path":"/root/Documents/Craft Anything/burpsuite"},"time":"2026-11-10T14:24:35Z","tool":"core_target_open","ts":1794320675}
+{"caller":"ui","duration_ms":64,"error":"A folder is not native machine code.","error_code":"not_supported","kind":"tool_call","ok":false,"params":{"limit":2000,"offset":0},"time":"2026-11-10T14:24:36Z","tool":"native_functions_list","ts":1794320676}
+{"caller":"ui","duration_ms":35,"kind":"tool_call","ok":true,"params":{},"time":"2026-11-10T14:24:36Z","tool":"project_pins_list","ts":1794320676}
+{"caller":"ui","duration_ms":3,"error":"Not a readable PE file: the file is malformed (no MZ signature)","error_code":"not_supported","kind":"tool_call","ok":false,"params":{},"time":"2026-11-10T14:24:53Z","tool":"native_pe_resources_list","ts":1794320693}

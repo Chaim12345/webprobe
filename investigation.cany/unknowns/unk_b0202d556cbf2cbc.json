@@ -1,0 +1,14 @@
+{
+  "id": "unk_b0202d556cbf2cbc",
+  "revision": 1,
+  "question": "The scanner has about 20 passive checks plus 'light active checks' (scan.rs) against Burp's much larger check set. Which checks are missing?",
+  "severity": "medium",
+  "domain": "feature-parity",
+  "status": "open",
+  "probes": [
+    "Enumerate the original's scanner issue types from the live app",
+    "Implement the high-value missing checks one at a time"
+  ],
+  "evidence_for": [],
+  "evidence_against": []
+}

@@ -1,0 +1,15 @@
+{
+  "id": "unk_3b6d852c8fcf765b",
+  "revision": 1,
+  "question": "Can the rebuild save and load a project file (.burp)? grep for '.burp' and project-save paths finds nothing, so work is lost when the app closes.",
+  "severity": "high",
+  "domain": "feature-parity",
+  "status": "open",
+  "probes": [
+    "Confirm the original's project format on disk (File > Save project)",
+    "Define a project schema covering proxy history, scope and sessions",
+    "Implement save/load in project.rs"
+  ],
+  "evidence_for": [],
+  "evidence_against": []
+}

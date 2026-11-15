@@ -1,0 +1,14 @@
+{
+  "id": "unk_b036181dea8a76a3",
+  "revision": 1,
+  "question": "Does session handling extract and replay auth tokens (login sequences, session rules)? The Sessions tab is 87 lines; token extraction was not found.",
+  "severity": "medium",
+  "domain": "feature-parity",
+  "status": "open",
+  "probes": [
+    "Run the original's recorded login sequence against a demo app",
+    "Implement session rules and token extraction"
+  ],
+  "evidence_for": [],
+  "evidence_against": []
+}

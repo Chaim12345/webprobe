@@ -1,0 +1,373 @@
+{
+  "id": "ev_d5b739fe93e5e07313a8061e15a9db808274c3b12281f6f83dc7caa827079565",
+  "subject": {
+    "kind": "jar",
+    "sha256": "510bf1c87c766f09c3c20d3ef75e7a6978e60dd38346965dd4836ce64417becf",
+    "name": "burpsuite.jar"
+  },
+  "operation": "java_class_show",
+  "params": {
+    "class_name": "burp.Zz68",
+    "decompile": true,
+    "path": null
+  },
+  "result": {
+    "access": [
+      "public"
+    ],
+    "annotations": [],
+    "entry": "burp/Zz68.class",
+    "fields": [
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zt92;",
+        "name": "Za",
+        "signature": null,
+        "type": "burp.Zt92"
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "I",
+        "name": "Zd",
+        "signature": null,
+        "type": "int"
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "I",
+        "name": "Zm",
+        "signature": null,
+        "type": "int"
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljava/lang/String;",
+        "name": "ZA",
+        "signature": null,
+        "type": "java.lang.String"
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljavax/swing/KeyStroke;",
+        "name": "Zn",
+        "signature": null,
+        "type": "javax.swing.KeyStroke"
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljava/lang/String;",
+        "name": "Z_",
+        "signature": null,
+        "type": "java.lang.String"
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Z",
+        "name": "Zq",
+        "signature": null,
+        "type": "boolean"
+      }
+    ],
+    "inner_classes": [],
+    "interfaces": [
+      "java.lang.Comparable"
+    ],
+    "internal": "burp/Zz68",
+    "java_version": "Java 21",
+    "methods": [
+      {
+        "access": [],
+        "code_bytes": 35,
+        "deprecated": false,
+        "descriptor": "(Lburp/Zt92;Ljavax/swing/KeyStroke;)V",
+        "max_locals": 3,
+        "max_stack": 2,
+        "name": "<init>",
+        "signature": "<init>(burp.Zt92, javax.swing.KeyStroke)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 40,
+        "deprecated": false,
+        "descriptor": "(IZIILburp/Zlo6;)V",
+        "max_locals": 6,
+        "max_stack": 3,
+        "name": "<init>",
+        "signature": "public <init>(int, boolean, int, int, burp.Zlo6)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 10,
+        "deprecated": false,
+        "descriptor": "()I",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "ZQ",
+        "signature": "public int ZQ()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 10,
+        "deprecated": false,
+        "descriptor": "()Lburp/Zlbw;",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "ZZ",
+        "signature": "public burp.Zlbw ZZ()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 5,
+        "deprecated": false,
+        "descriptor": "()I",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "ZN",
+        "signature": "public int ZN()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 5,
+        "deprecated": false,
+        "descriptor": "()I",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "ZH",
+        "signature": "public int ZH()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 68,
+        "deprecated": false,
+        "descriptor": "(Ljavax/swing/KeyStroke;)V",
+        "max_locals": 3,
+        "max_stack": 3,
+        "name": "ZT",
+        "signature": "public void ZT(javax.swing.KeyStroke)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 5,
+        "deprecated": false,
+        "descriptor": "()Ljavax/swing/KeyStroke;",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "ZI",
+        "signature": "public javax.swing.KeyStroke ZI()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 5,
+        "deprecated": false,
+        "descriptor": "()Z",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "ZV",
+        "signature": "public boolean ZV()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 12,
+        "deprecated": false,
+        "descriptor": "(Lburp/Zz68;)I",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "Zp",
+        "signature": "public int Zp(burp.Zz68)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 5,
+        "deprecated": false,
+        "descriptor": "()Ljava/lang/String;",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "Zi",
+        "signature": "public java.lang.String Zi()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 5,
+        "deprecated": false,
+        "descriptor": "()Ljava/lang/String;",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "ZJ",
+        "signature": "public java.lang.String ZJ()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [],
+        "code_bytes": 37,
+        "deprecated": false,
+        "descriptor": "()Lburp/Zzcf;",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "Zb",
+        "signature": "burp.Zzcf Zb()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public",
+          "bridge",
+          "synthetic"
+        ],
+        "code_bytes": 9,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/Object;)I",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "compareTo",
+        "signature": "public bridge synthetic int compareTo(java.lang.Object)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      }
+    ],
+    "name": "burp.Zz68",
+    "pseudo_java": "public class burp.Zz68 implements java.lang.Comparable {\n    private final burp.Zt92 Za;\n    private int Zd;\n    private int Zm;\n    private java.lang.String ZA;\n    private javax.swing.KeyStroke Zn;\n    private java.lang.String Z_;\n    private boolean Zq;\n\n    <init>(burp.Zt92, javax.swing.KeyStroke){\n        this.Za = v1;\n        if (v2 != null) {\n            this.Zm = v2.getKeyCode();\n            this.Zd = v2.getModifiers();\n        }\n        this.ZT(v2);\n        return;\n    }\n\n\n    public <init>(int, boolean, int, int, burp.Zlo6){\n        this.Zm = v3;\n        this.Zd = v4;\n        this.Za = v5.ZB(v1);\n        if (v2 != 0) {\n            this.ZT(Zko2.ZL(v4, v3));\n        }\n        return;\n    }\n\n\n    public int ZQ(){\n        return this.Za.Zf();\n    }\n\n\n    public burp.Zlbw ZZ(){\n        return this.Za.Ze();\n    }\n\n\n    public int ZN(){\n        return this.Zd;\n    }\n\n\n    public int ZH(){\n        return this.Zm;\n    }\n\n\n    public void ZT(javax.swing.KeyStroke){\n        v2 = Zko2.ZA();\n        this.Zn = v1;\n        if (v1 != null) {\n            this.Zm = v1.getKeyCode();\n            this.Zd = v1.getModifiers();\n            this.Z_ = Zhy.Zf(v1.getModifiers(), v1.getKeyCode());\n            if (v2 == 0) goto L40;\n        }\n        this.Z_ = \"\";\n        L40:\n        this.ZA = this.Za.Zj();\n        return;\n    }\n\n\n    public javax.swing.KeyStroke ZI(){\n        return this.Zn;\n    }\n\n\n    public boolean ZV(){\n        return this.Zq;\n    }\n\n\n    public int Zp(burp.Zz68){\n        return Integer.compare(this.ZQ(), v1.ZQ());\n    }\n\n\n    public java.lang.String Zi(){\n        return this.ZA;\n    }\n\n\n    public java.lang.String ZJ(){\n        return this.Z_;\n    }\n\n\n    burp.Zzcf Zb(){\n        if (this.Za.ZJ() == null) {\n        } else {\n        }\n        return this.Za.ZJ();\n    }\n\n\n}\n",
+    "signature": "Ljava/lang/Object;Ljava/lang/Comparable<Lburp/Zz68;>;",
+    "source_file": null,
+    "superclass": "java.lang.Object",
+    "version": {
+      "major": 65,
+      "minor": 0
+    }
+  },
+  "summary": "burp.Zz68 (Java 21) extends Object: 7 fields, 14 methods.",
+  "confidence": "inferred",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [
+    {
+      "code": "decompiler_inferred",
+      "message": "This pseudo-Java is reconstructed from bytecode by Craft Anything's built-in decompiler; it is a best guess, not the original source. The bytecode disassembly is the evidence."
+    },
+    {
+      "code": "generics_erased",
+      "message": "Generic type arguments are erased in bytecode and are not shown."
+    },
+    {
+      "code": "names_and_types_inferred",
+      "message": "Local variables are named v0, v1, … (no debug names); their declared types are not reconstructed."
+    },
+    {
+      "code": "desugaring_not_reversed",
+      "message": "Synthetic members, lambda/invokedynamic desugaring, enum scaffolding and string-switch hashing are not turned back into source."
+    },
+    {
+      "code": "control_flow_partly_structured",
+      "message": "Some methods contain control flow shown with labels and goto statements."
+    }
+  ],
+  "coverage": {
+    "status": "complete",
+    "examined": 1,
+    "total": 1
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/opt/BurpSuite/burpsuite.jar"
+    },
+    {
+      "kind": "class",
+      "value": "burp/Zz68"
+    }
+  ],
+  "links": []
+}

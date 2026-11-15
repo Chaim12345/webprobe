@@ -1,0 +1,14 @@
+{
+  "id": "unk_b03f3cfa7136f0a4",
+  "revision": 1,
+  "question": "The Extensions tab is 32 lines in ui.rs and loads nothing: it is a placeholder, not an extension host.",
+  "severity": "medium",
+  "domain": "feature-parity",
+  "status": "open",
+  "probes": [
+    "Count real extension features in the original's Extensions tab",
+    "Implement at least local extension loading, or mark as out of scope"
+  ],
+  "evidence_for": [],
+  "evidence_against": []
+}

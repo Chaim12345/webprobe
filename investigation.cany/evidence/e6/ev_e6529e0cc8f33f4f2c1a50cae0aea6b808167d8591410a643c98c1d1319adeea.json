@@ -1,0 +1,246 @@
+{
+  "id": "ev_e6529e0cc8f33f4f2c1a50cae0aea6b808167d8591410a643c98c1d1319adeea",
+  "subject": {
+    "kind": "jar",
+    "sha256": "510bf1c87c766f09c3c20d3ef75e7a6978e60dd38346965dd4836ce64417becf",
+    "name": "burpsuite.jar"
+  },
+  "operation": "java_class_show",
+  "params": {
+    "class_name": "burp.api.montoya.ui.hotkey.HotKeyContext",
+    "decompile": true,
+    "path": null
+  },
+  "result": {
+    "access": [
+      "public",
+      "final",
+      "enum"
+    ],
+    "annotations": [],
+    "entry": "burp/api/montoya/ui/hotkey/HotKeyContext.class",
+    "fields": [
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/api/montoya/ui/hotkey/HotKeyContext;",
+        "name": "HTTP_MESSAGE_EDITOR",
+        "signature": null,
+        "type": "burp.api.montoya.ui.hotkey.HotKeyContext"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/api/montoya/ui/hotkey/HotKeyContext;",
+        "name": "PROXY_HTTP_HISTORY",
+        "signature": null,
+        "type": "burp.api.montoya.ui.hotkey.HotKeyContext"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/api/montoya/ui/hotkey/HotKeyContext;",
+        "name": "INTRUDER_ATTACK_RESULTS",
+        "signature": null,
+        "type": "burp.api.montoya.ui.hotkey.HotKeyContext"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/api/montoya/ui/hotkey/HotKeyContext;",
+        "name": "ORGANIZER_ENTRIES",
+        "signature": null,
+        "type": "burp.api.montoya.ui.hotkey.HotKeyContext"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/api/montoya/ui/hotkey/HotKeyContext;",
+        "name": "SITE_MAP_CONTENTS_TABLE",
+        "signature": null,
+        "type": "burp.api.montoya.ui.hotkey.HotKeyContext"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final",
+          "synthetic"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "[Lburp/api/montoya/ui/hotkey/HotKeyContext;",
+        "name": "$VALUES",
+        "signature": null,
+        "type": "burp.api.montoya.ui.hotkey.HotKeyContext[]"
+      }
+    ],
+    "inner_classes": [],
+    "interfaces": [],
+    "internal": "burp/api/montoya/ui/hotkey/HotKeyContext",
+    "java_version": "Java 17",
+    "methods": [
+      {
+        "access": [
+          "public",
+          "static"
+        ],
+        "code_bytes": 10,
+        "deprecated": false,
+        "descriptor": "()[Lburp/api/montoya/ui/hotkey/HotKeyContext;",
+        "max_locals": 0,
+        "max_stack": 1,
+        "name": "values",
+        "signature": "public static burp.api.montoya.ui.hotkey.HotKeyContext[] values()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public",
+          "static"
+        ],
+        "code_bytes": 10,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;)Lburp/api/montoya/ui/hotkey/HotKeyContext;",
+        "max_locals": 1,
+        "max_stack": 2,
+        "name": "valueOf",
+        "signature": "public static burp.api.montoya.ui.hotkey.HotKeyContext valueOf(java.lang.String)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 7,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;I)V",
+        "max_locals": 3,
+        "max_stack": 3,
+        "name": "<init>",
+        "signature": "private <init>(java.lang.String, int)",
+        "signature_attr": "()V",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "synthetic"
+        ],
+        "code_bytes": 35,
+        "deprecated": false,
+        "descriptor": "()[Lburp/api/montoya/ui/hotkey/HotKeyContext;",
+        "max_locals": 0,
+        "max_stack": 4,
+        "name": "$values",
+        "signature": "private static synthetic burp.api.montoya.ui.hotkey.HotKeyContext[] $values()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "static"
+        ],
+        "code_bytes": 72,
+        "deprecated": false,
+        "descriptor": "()V",
+        "max_locals": 0,
+        "max_stack": 4,
+        "name": "<clinit>",
+        "signature": "static <clinit>()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      }
+    ],
+    "name": "burp.api.montoya.ui.hotkey.HotKeyContext",
+    "pseudo_java": "// decompiled from HotKeyContext.java\npublic final enum enum burp.api.montoya.ui.hotkey.HotKeyContext extends java.lang.Enum {\n    public static final enum burp.api.montoya.ui.hotkey.HotKeyContext HTTP_MESSAGE_EDITOR;\n    public static final enum burp.api.montoya.ui.hotkey.HotKeyContext PROXY_HTTP_HISTORY;\n    public static final enum burp.api.montoya.ui.hotkey.HotKeyContext INTRUDER_ATTACK_RESULTS;\n    public static final enum burp.api.montoya.ui.hotkey.HotKeyContext ORGANIZER_ENTRIES;\n    public static final enum burp.api.montoya.ui.hotkey.HotKeyContext SITE_MAP_CONTENTS_TABLE;\n    private static final synthetic burp.api.montoya.ui.hotkey.HotKeyContext[] $VALUES;\n\n    public static burp.api.montoya.ui.hotkey.HotKeyContext[] values(){\n        return (HotKeyContext[]) HotKeyContext.$VALUES.clone();\n    }\n\n\n    public static burp.api.montoya.ui.hotkey.HotKeyContext valueOf(java.lang.String){\n        return (HotKeyContext) Enum.valueOf(burp.api.montoya.ui.hotkey.HotKeyContext.class, v0);\n    }\n\n\n    private <init>(java.lang.String, int){\n        return;\n    }\n\n\n    static <clinit>(){\n        HotKeyContext.HTTP_MESSAGE_EDITOR = new HotKeyContext(\"HTTP_MESSAGE_EDITOR\", 0);\n        HotKeyContext.PROXY_HTTP_HISTORY = new HotKeyContext(\"PROXY_HTTP_HISTORY\", 1);\n        HotKeyContext.INTRUDER_ATTACK_RESULTS = new HotKeyContext(\"INTRUDER_ATTACK_RESULTS\", 2);\n        HotKeyContext.ORGANIZER_ENTRIES = new HotKeyContext(\"ORGANIZER_ENTRIES\", 3);\n        HotKeyContext.SITE_MAP_CONTENTS_TABLE = new HotKeyContext(\"SITE_MAP_CONTENTS_TABLE\", 4);\n        HotKeyContext.$VALUES = HotKeyContext.$values();\n        return;\n    }\n\n}\n",
+    "signature": "Ljava/lang/Enum<Lburp/api/montoya/ui/hotkey/HotKeyContext;>;",
+    "source_file": "HotKeyContext.java",
+    "superclass": "java.lang.Enum",
+    "version": {
+      "major": 61,
+      "minor": 0
+    }
+  },
+  "summary": "burp.api.montoya.ui.hotkey.HotKeyContext (Java 17) extends java.lang.Enum: 6 fields, 5 methods, from HotKeyContext.java.",
+  "confidence": "inferred",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [
+    {
+      "code": "decompiler_inferred",
+      "message": "This pseudo-Java is reconstructed from bytecode by Craft Anything's built-in decompiler; it is a best guess, not the original source. The bytecode disassembly is the evidence."
+    },
+    {
+      "code": "generics_erased",
+      "message": "Generic type arguments are erased in bytecode and are not shown."
+    },
+    {
+      "code": "names_and_types_inferred",
+      "message": "Local variables are named v0, v1, … (no debug names); their declared types are not reconstructed."
+    },
+    {
+      "code": "desugaring_not_reversed",
+      "message": "Synthetic members, lambda/invokedynamic desugaring, enum scaffolding and string-switch hashing are not turned back into source."
+    }
+  ],
+  "coverage": {
+    "status": "complete",
+    "examined": 1,
+    "total": 1
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/opt/BurpSuite/burpsuite.jar"
+    },
+    {
+      "kind": "class",
+      "value": "burp/api/montoya/ui/hotkey/HotKeyContext"
+    }
+  ],
+  "links": []
+}

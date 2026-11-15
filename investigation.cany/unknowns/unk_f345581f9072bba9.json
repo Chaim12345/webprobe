@@ -1,0 +1,14 @@
+{
+  "id": "unk_f345581f9072bba9",
+  "revision": 1,
+  "question": "Does the rebuild generate out-of-band (Collaborator) payloads for the scanner, or only use Collaborator as a passive view? collaborator.rs is large but the scanner does not reference it.",
+  "severity": "medium",
+  "domain": "feature-parity",
+  "status": "open",
+  "probes": [
+    "Run a Collaborator-based check in the original",
+    "Wire scanner checks to the existing Collaborator client"
+  ],
+  "evidence_for": [],
+  "evidence_against": []
+}

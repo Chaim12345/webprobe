@@ -1,0 +1,14 @@
+{
+  "id": "unk_a13f95ec8ae551f3",
+  "revision": 1,
+  "question": "Does the rebuild embed a browser with the proxy preconfigured (Burp's embedded Chromium)? No embedded-browser code exists.",
+  "severity": "medium",
+  "domain": "feature-parity",
+  "status": "open",
+  "probes": [
+    "Launch the original's embedded browser",
+    "Wire a Chromium with the proxy CA installed"
+  ],
+  "evidence_for": [],
+  "evidence_against": []
+}

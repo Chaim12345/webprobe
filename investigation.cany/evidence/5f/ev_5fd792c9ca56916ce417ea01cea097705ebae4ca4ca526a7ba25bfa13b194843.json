@@ -1,0 +1,587 @@
+{
+  "id": "ev_5fd792c9ca56916ce417ea01cea097705ebae4ca4ca526a7ba25bfa13b194843",
+  "subject": {
+    "kind": "jar",
+    "sha256": "510bf1c87c766f09c3c20d3ef75e7a6978e60dd38346965dd4836ce64417becf",
+    "name": "burpsuite.jar"
+  },
+  "operation": "java_class_show",
+  "params": {
+    "class_name": "burp.Zfhv",
+    "decompile": true,
+    "path": null
+  },
+  "result": {
+    "access": [
+      "public"
+    ],
+    "annotations": [
+      "burp.Zt9_ (runtime)"
+    ],
+    "entry": "burp/Zfhv.class",
+    "fields": [
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljava/util/Map;",
+        "name": "Z_",
+        "signature": "Ljava/util/Map<Ljava/lang/String;Lburp/Zt92;>;",
+        "type": "java.util.Map"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljava/util/Map;",
+        "name": "Zp",
+        "signature": "Ljava/util/Map<Ljava/lang/Integer;Ljavax/swing/KeyStroke;>;",
+        "type": "java.util.Map"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zlo6;",
+        "name": "Zz",
+        "signature": null,
+        "type": "burp.Zlo6"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zeqt;",
+        "name": "ZA",
+        "signature": null,
+        "type": "burp.Zeqt"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljava/util/List;",
+        "name": "Zm",
+        "signature": "Ljava/util/List<Lburp/Zz68;>;",
+        "type": "java.util.List"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "[Ljava/lang/String;",
+        "name": "a",
+        "signature": null,
+        "type": "java.lang.String[]"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "[Ljava/lang/String;",
+        "name": "b",
+        "signature": null,
+        "type": "java.lang.String[]"
+      }
+    ],
+    "inner_classes": [],
+    "interfaces": [
+      "burp.Zmbe"
+    ],
+    "internal": "burp/Zfhv",
+    "java_version": "Java 21",
+    "methods": [
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 20,
+        "deprecated": false,
+        "descriptor": "(Lburp/Zeqt;Lburp/Z_hh;Lburp/Zkzb;)V",
+        "max_locals": 4,
+        "max_stack": 4,
+        "name": "<init>",
+        "signature": "public <init>(burp.Zeqt, burp.Z_hh, burp.Zkzb)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 15,
+        "deprecated": false,
+        "descriptor": "(Lburp/Zeqt;Ljava/util/List;Lburp/Zkzb;)V",
+        "max_locals": 4,
+        "max_stack": 4,
+        "name": "<init>",
+        "signature": "public <init>(burp.Zeqt, java.util.List, burp.Zkzb)",
+        "signature_attr": "(Lburp/Zeqt;Ljava/util/List<Lburp/Zz68;>;Lburp/Zkzb;)V",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 101,
+        "deprecated": false,
+        "descriptor": "(Lburp/Zlo6;Lburp/Zeqt;Ljava/util/List;)V",
+        "max_locals": 7,
+        "max_stack": 4,
+        "name": "<init>",
+        "signature": "public <init>(burp.Zlo6, burp.Zeqt, java.util.List)",
+        "signature_attr": "(Lburp/Zlo6;Lburp/Zeqt;Ljava/util/List<Lburp/Zz68;>;)V",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 132,
+        "deprecated": false,
+        "descriptor": "(III)V",
+        "max_locals": 6,
+        "max_stack": 5,
+        "name": "ZT",
+        "signature": "private void ZT(int, int, int)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(I)Ljavax/swing/KeyStroke;",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "ZE",
+        "signature": "public javax.swing.KeyStroke ZE(int)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [],
+        "code_bytes": 14,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;)Lburp/Zt92;",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "Zy",
+        "signature": "burp.Zt92 Zy(java.lang.String)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 14,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;)Z",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "ZU",
+        "signature": "public boolean ZU(java.lang.String)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [],
+        "code_bytes": 24,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;)Ljava/lang/Integer;",
+        "max_locals": 3,
+        "max_stack": 2,
+        "name": "Zj",
+        "signature": "java.lang.Integer Zj(java.lang.String)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [],
+        "code_bytes": 114,
+        "deprecated": false,
+        "descriptor": "(Ljava/util/Map;)V",
+        "max_locals": 6,
+        "max_stack": 8,
+        "name": "Zl",
+        "signature": "void Zl(java.util.Map)",
+        "signature_attr": "(Ljava/util/Map<Ljava/lang/Integer;Ljavax/swing/KeyStroke;>;)V",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [],
+        "code_bytes": 84,
+        "deprecated": false,
+        "descriptor": "(Ljava/util/List;)V",
+        "max_locals": 5,
+        "max_stack": 4,
+        "name": "Z_",
+        "signature": "void Z_(java.util.List)",
+        "signature_attr": "(Ljava/util/List<Lburp/Zz68;>;)V",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 105,
+        "deprecated": false,
+        "descriptor": "()Ljava/util/List;",
+        "max_locals": 5,
+        "max_stack": 5,
+        "name": "Zx",
+        "signature": "public java.util.List Zx()",
+        "signature_attr": "()Ljava/util/List<Lburp/Zz68;>;",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 5,
+        "deprecated": false,
+        "descriptor": "()Lburp/Zlo6;",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "Zw",
+        "signature": "public burp.Zlo6 Zw()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 28,
+        "deprecated": false,
+        "descriptor": "()V",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "ZL",
+        "signature": "private void ZL()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 153,
+        "deprecated": false,
+        "descriptor": "(Lburp/Z_dk;)V",
+        "max_locals": 9,
+        "max_stack": 5,
+        "name": "Zh",
+        "signature": "public void Zh(burp.Z_dk)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Lburp/Zeyv;)V",
+        "max_locals": 2,
+        "max_stack": 4,
+        "name": "ZY",
+        "signature": "public void ZY(burp.Zeyv)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public",
+          "static"
+        ],
+        "code_bytes": 20,
+        "deprecated": false,
+        "descriptor": "(Lburp/Zeyv;Lburp/Zeqt;Ljava/util/List;Lburp/Zlo6;)V",
+        "max_locals": 5,
+        "max_stack": 3,
+        "name": "ZJ",
+        "signature": "public static void ZJ(burp.Zeyv, burp.Zeqt, java.util.List, burp.Zlo6)",
+        "signature_attr": "(Lburp/Zeyv;Lburp/Zeqt;Ljava/util/List<Lburp/Zz68;>;Lburp/Zlo6;)V",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private",
+          "static"
+        ],
+        "code_bytes": 173,
+        "deprecated": false,
+        "descriptor": "(Lburp/Zeyv;Ljava/util/List;Lburp/Zlo6;)V",
+        "max_locals": 11,
+        "max_stack": 4,
+        "name": "Zu",
+        "signature": "private static void Zu(burp.Zeyv, java.util.List, burp.Zlo6)",
+        "signature_attr": "(Lburp/Zeyv;Ljava/util/List<Lburp/Zz68;>;Lburp/Zlo6;)V",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private",
+          "static"
+        ],
+        "code_bytes": 75,
+        "deprecated": false,
+        "descriptor": "(Lburp/Zeqt;Lburp/Zlo6;)Ljava/util/List;",
+        "max_locals": 4,
+        "max_stack": 6,
+        "name": "Zw",
+        "signature": "private static java.util.List Zw(burp.Zeqt, burp.Zlo6)",
+        "signature_attr": "(Lburp/Zeqt;Lburp/Zlo6;)Ljava/util/List<Lburp/Zz68;>;",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private",
+          "static"
+        ],
+        "code_bytes": 151,
+        "deprecated": false,
+        "descriptor": "(Ljava/util/List;Ljava/util/List;)Ljava/util/List;",
+        "max_locals": 6,
+        "max_stack": 4,
+        "name": "ZH",
+        "signature": "private static java.util.List ZH(java.util.List, java.util.List)",
+        "signature_attr": "(Ljava/util/List<Lburp/Zz68;>;Ljava/util/List<Lburp/Zz68;>;)Ljava/util/List<Lburp/Zz68;>;",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private",
+          "static"
+        ],
+        "code_bytes": 103,
+        "deprecated": false,
+        "descriptor": "(Ljava/util/List;Ljava/util/List;Lburp/Zlo6;)Ljava/util/List;",
+        "max_locals": 5,
+        "max_stack": 3,
+        "name": "ZZ",
+        "signature": "private static java.util.List ZZ(java.util.List, java.util.List, burp.Zlo6)",
+        "signature_attr": "(Ljava/util/List<Lburp/Zz68;>;Ljava/util/List<Lburp/Zz68;>;Lburp/Zlo6;)Ljava/util/List<Lburp/Zz68;>;",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private",
+          "static"
+        ],
+        "code_bytes": 23,
+        "deprecated": false,
+        "descriptor": "(Ljava/util/List;Lburp/Zlo6;Ljava/lang/Integer;)V",
+        "max_locals": 3,
+        "max_stack": 8,
+        "name": "lambda$hotkeysWithRemovedDefaults$4",
+        "signature": "private static void lambda$hotkeysWithRemovedDefaults$4(java.util.List, burp.Zlo6, java.lang.Integer)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private",
+          "static"
+        ],
+        "code_bytes": 19,
+        "deprecated": false,
+        "descriptor": "(Ljava/util/Map;Lburp/Zz68;)Z",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "lambda$hotkeysWithAddedDefaults$3",
+        "signature": "private static boolean lambda$hotkeysWithAddedDefaults$3(java.util.Map, burp.Zz68)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private",
+          "static"
+        ],
+        "code_bytes": 22,
+        "deprecated": false,
+        "descriptor": "(Ljava/util/Set;Lburp/Zz68;)Z",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "lambda$hotkeysWithAddedDefaults$2",
+        "signature": "private static boolean lambda$hotkeysWithAddedDefaults$2(java.util.Set, burp.Zz68)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private",
+          "static"
+        ],
+        "code_bytes": 2,
+        "deprecated": false,
+        "descriptor": "(Lburp/Zz68;Lburp/Zz68;)Lburp/Zz68;",
+        "max_locals": 2,
+        "max_stack": 1,
+        "name": "lambda$hotkeysWithAddedDefaults$1",
+        "signature": "private static burp.Zz68 lambda$hotkeysWithAddedDefaults$1(burp.Zz68, burp.Zz68)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private",
+          "static"
+        ],
+        "code_bytes": 8,
+        "deprecated": false,
+        "descriptor": "(Lburp/Zz68;)Z",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "lambda$hotkeysWithAddedDefaults$0",
+        "signature": "private static boolean lambda$hotkeysWithAddedDefaults$0(burp.Zz68)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "static"
+        ],
+        "code_bytes": 301,
+        "deprecated": false,
+        "descriptor": "()V",
+        "max_locals": 7,
+        "max_stack": 10,
+        "name": "<clinit>",
+        "signature": "static <clinit>()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private",
+          "static"
+        ],
+        "code_bytes": 2620,
+        "deprecated": false,
+        "descriptor": "(II)Ljava/lang/String;",
+        "max_locals": 9,
+        "max_stack": 5,
+        "name": "a",
+        "signature": "private static java.lang.String a(int, int)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      }
+    ],
+    "name": "burp.Zfhv",
+    "pseudo_java": "@burp.Zt9_\npublic class burp.Zfhv implements burp.Zmbe {\n    private final java.util.Map Z_;\n    private final java.util.Map Zp;\n    private final burp.Zlo6 Zz;\n    private final burp.Zeqt ZA;\n    private final java.util.List Zm;\n    private static final java.lang.String[] a;\n    private static final java.lang.String[] b;\n\n    public <init>(burp.Zeqt, burp.Z_hh, burp.Zkzb){\n        return;\n    }\n\n\n    public <init>(burp.Zeqt, java.util.List, burp.Zkzb){\n        return;\n    }\n\n\n    public <init>(burp.Zlo6, burp.Zeqt, java.util.List){\n        this.Z_ = new HashMap();\n        this.Zp = new HashMap();\n        this.Zz = v1;\n        this.ZA = v2;\n        this.Zm = v3;\n        v5 = v3.iterator();\n        v4 = Zko2.Ze();\n        if (v5.hasNext() != 0) {\n            v6 = (Zz68) v5.next();\n            this.ZT(v6.ZN(), v6.ZH(), v6.ZQ());\n            if (v4 != 0) goto L3d;\n        }\n        return;\n    }\n\n\n    private void ZT(int, int, int){\n        v4 = Zhy.Zf((Zhy.ZW | v1), v2);\n        v5 = this.Zz.ZB(v3);\n        if (null == this.Z_.get(v4)) {\n        } else {\n        }\n        Zgj.ZN(0, Zyu.Zi, v4);\n        if (null == this.Zp.get(Integer.valueOf(v5.Zf()))) {\n        } else {\n        }\n        Zgj.Zm(0, Zyu.Zi, (long) v5.Zf(), v5.Zj());\n        this.Z_.put(v4, v5);\n        this.Zp.put(Integer.valueOf(v3), Zko2.ZL(v1, v2));\n        return;\n    }\n\n\n    public javax.swing.KeyStroke ZE(int){\n        return (KeyStroke) this.Zp.get(Integer.valueOf(v1));\n    }\n\n\n    burp.Zt92 Zy(java.lang.String){\n        return (Zt92) this.Z_.get(v1);\n    }\n\n\n    public boolean ZU(java.lang.String){\n        return this.Z_.containsKey(v1.trim());\n    }\n\n\n    java.lang.Integer Zj(java.lang.String){\n        v2 = this.Zy(v1);\n        if (v2 == null) {\n        } else {\n        }\n        return Integer.valueOf(v2.Zf());\n    }\n\n\n    void Zl(java.util.Map){\n        this.ZL();\n        v3 = v1.keySet().iterator();\n        v2 = Zko2.ZA();\n        if (v3.hasNext() != 0) {\n            v4 = (Integer) v3.next().intValue();\n            v5 = (KeyStroke) v1.get(Integer.valueOf(v4));\n            this.ZT(v5.getModifiers(), v5.getKeyCode(), v4);\n            this.Zm.add(new Zz68(v4, 1, v5.getKeyCode(), v5.getModifiers(), this.Zz));\n            if (v2 == 0) goto L1a;\n        }\n        return;\n    }\n\n\n    void Z_(java.util.List){\n        this.ZL();\n        v3 = v1.iterator();\n        v2 = Zko2.ZA();\n        if (v3.hasNext() != 0) {\n            v4 = (Zz68) v3.next();\n            if (v4 != null) {\n                if (v4.ZI() != null) {\n                    this.ZT(v4.ZN(), v4.ZH(), v4.ZQ());\n                    this.Zm.add(v4);\n                }\n            }\n            if (v2 == 0) goto L15;\n        }\n        return;\n    }\n\n\n    public java.util.List Zx(){\n        v2 = new ArrayList();\n        v3 = this.Zz.ZB().iterator();\n        v1 = Zko2.ZA();\n        if (v3.hasNext() != 0) {\n            v4 = (Zt92) v3.next();\n            if (this.Zp.containsKey(Integer.valueOf(v4.Zf())) == 0) {\n                v2.add(new Zz68(v4, null));\n            }\n            if (v1 == 0) goto L1f;\n        }\n        v2.addAll(this.Zm);\n        Collections.sort(v2);\n        return v2;\n    }\n\n\n    public burp.Zlo6 Zw(){\n        return this.Zz;\n    }\n\n\n    private void ZL(){\n        this.Z_.clear();\n        this.Zp.clear();\n        this.Zm.clear();\n        return;\n    }\n\n\n    public void Zh(burp.Z_dk){\n        v2 = Zko2.ZA();\n        v3 = v1.Zq(Zfhv.a(-6232, 14307), new Zas3(this.Zz));\n        if (v3 != null) {\n            v4 = Zfhv.ZH(v3, Zfhv.Zw(this.ZA, this.Zz));\n            v5 = new ArrayList();\n            v6 = new HashSet();\n            v7 = v4.iterator();\n            if (v7.hasNext() != 0) {\n                v8 = (Zz68) v7.next();\n                if (v6.contains(v8.ZI()) != 0) {\n                    goto L56;\n                }\n                v6.add(v8.ZI());\n                v5.add(v8);\n                if (v2 == 0) goto L56;\n            }\n            this.Z_(v5);\n        }\n        return;\n    }\n\n\n    public void ZY(burp.Zeyv){\n        Zfhv.ZJ(v1, this.ZA, this.Zm, this.Zz);\n        return;\n    }\n\n\n    public static void ZJ(burp.Zeyv, burp.Zeqt, java.util.List, burp.Zlo6){\n        v4 = Zfhv.ZZ(v2, Zfhv.Zw(v1, v3), v3);\n        Zfhv.Zu(v0, v4, v3);\n        return;\n    }\n\n\n    private static void Zu(burp.Zeyv, java.util.List, burp.Zlo6){\n        v4 = v0.Zx(Zfhv.a(-6231, 18389));\n        v5 = new ArrayList(v1);\n        Collections.sort(v5);\n        v3 = Zko2.Ze();\n        v6 = v5.iterator();\n        if (v6.hasNext() != 0) {\n            v7 = (Zz68) v6.next();\n            v8 = v2.ZQ(v7.ZQ());\n            if (v7.ZV() == 0) {\n                if (v8 != null) {\n                    if (v7.ZN() == -1) {\n                        if (v7.ZH() != -1) goto L7f;\n                    } else {\n                    }\n                    L7f:\n                    v9 = Zhy.Zf(v7.ZN(), v7.ZH());\n                    v10 = v4.ZF();\n                    v10.ZY(Zfhv.a(-6230, 7969), v8);\n                    v10.ZY(Zfhv.a(-6229, -10826), v9);\n                }\n            }\n            if (v3 != 0) goto L34;\n        }\n        return;\n    }\n\n\n    private static java.util.List Zw(burp.Zeqt, burp.Zlo6){\n        if (v0 == null) {\n            return Collections.emptyList();\n        }\n        new String[1][0] = Zfhv.a(-6231, 18389);\n        v2 = v0.Zc(new String[1]);\n        if (v2 == null) {\n        } else {\n        }\n        v3 = v2.Zq(Zfhv.a(-6231, 18389), new Zas3(v1));\n        if (v3 == null) {\n        } else {\n        }\n        return v3;\n    }\n\n\n    private static java.util.List ZH(java.util.List, java.util.List){\n        if (v1.isEmpty() != 0) {\n            return v0;\n        }\n        v2 = new ArrayList(v0);\n        v3 = (Set) v0.stream().map(apply() /* invokedynamic */).collect(Collectors.toSet());\n        v4 = (Map) v0.stream().filter(test() /* invokedynamic */).collect(Collectors.toMap(apply() /* invokedynamic */, Function.identity(), apply() /* invokedynamic */));\n        v5 = v1.stream().filter(test(v3) /* invokedynamic */).toList();\n        Objects.requireNonNull(v2);\n        v5.stream().filter(test(v4) /* invokedynamic */).forEach(accept(v2) /* invokedynamic */);\n        return v2;\n    }\n\n\n    private static java.util.List ZZ(java.util.List, java.util.List, burp.Zlo6){\n        if (v1.isEmpty() != 0) {\n            return v0;\n        }\n        v3 = new ArrayList(v0);\n        v4 = (Set) v1.stream().map(apply() /* invokedynamic */).collect(Collectors.toCollection(get() /* invokedynamic */));\n        Objects.requireNonNull(v4);\n        v0.stream().map(apply() /* invokedynamic */).forEach(accept(v4) /* invokedynamic */);\n        v4.forEach(accept(v2, v3) /* invokedynamic */);\n        return v3;\n    }\n\n\n    private static void lambda$hotkeysWithRemovedDefaults$4(java.util.List, burp.Zlo6, java.lang.Integer){\n        v0.add(new Zz68(v2.intValue(), 0, -1, -1, v1));\n        return;\n    }\n\n\n    private static boolean lambda$hotkeysWithAddedDefaults$3(java.util.Map, burp.Zz68){\n        if (v0.containsKey(v1.ZI()) == 0) {\n        } else {\n        }\n        return 0;\n    }\n\n\n    private static boolean lambda$hotkeysWithAddedDefaults$2(java.util.Set, burp.Zz68){\n        if (v0.contains(Integer.valueOf(v1.ZQ())) == 0) {\n        } else {\n        }\n        return 0;\n    }\n\n\n    private static burp.Zz68 lambda$hotkeysWithAddedDefaults$1(burp.Zz68, burp.Zz68){\n        return v0;\n    }\n\n\n    private static boolean lambda$hotkeysWithAddedDefaults$0(burp.Zz68){\n        return Objects.nonNull(v0.ZI());\n    }\n\n\n    static <clinit>(){\n        v5 = new String[4];\n        v3 = 0;\n        v2 = \"R.÷^ÿ\\u{95}\\u{6}XÄ\\u{9e}\\u{8c}Ø\\u{9a}\";\n        v4 = \"R.÷^ÿ\\u{95}\\u{6}XÄ\\u{9e}\\u{8c}Ø\\u{9a}\".length();\n        v1 = 6;\n        v0 = -1;\n        v0 += 1;\n        goto L8e;\n        v3 += 1;\n        v5[v3] = -1;\n        v0 = (v0 + v1);\n        if ((v0 + v1) < v4) {\n            v1 = v2.charAt(v0);\n            goto L18;\n        }\n        v2 = \"©+»CÁûè\\u{5}ñ\\u{5}]qæJÒ\\u{1}MZî\\u{f}Ø\\u{84}\\u{7f}ß\\u{1c}\\u{19}ó\\u{3}ðF¨[Å\\u{11}T\\u{87}é!p@\\0@\\u{17}r¥\\n±$RË¹\";\n        v4 = \"©+»CÁûè\\u{5}ñ\\u{5}]qæJÒ\\u{1}MZî\\u{f}Ø\\u{84}\\u{7f}ß\\u{1c}\\u{19}ó\\u{3}ðF¨[Å\\u{11}T\\u{87}é!p@\\0@\\u{17}r¥\\n±$RË¹\".length();\n        v1 = 25;\n        v0 = -1;\n        v0 += 1;\n        goto L8e;\n        v3 += 1;\n        v5[v3] = 0;\n        v0 = (v0 + v1);\n        if ((v0 + v1) < v4) {\n            v1 = v2.charAt(v0);\n            goto L53;\n        }\n        Zfhv.a = v5;\n        Zfhv.b = new String[4];\n        goto L12c;\n        L8e:\n        v2.substring(v0, (v0 + v1));\n        18.toCharArray().length;\n        v6 = 0;\n        v2.substring(v0, (v0 + v1));\n        if (77 <= 1) {\n            switch ((v6 % 7)) {\n                case 0:\n                    goto Lf6;\n                case 1:\n                    goto Lf6;\n                case 2:\n                    goto Lf6;\n                case 3:\n                    goto Lf6;\n                case 4:\n                    goto Lf6;\n                case 5:\n                    goto Lf6;\n                default:\n                    Lf6:\n                    3[117] = (char) (16 ^ (62 ^ 70));\n                    v6 += 1;\n                    if (99 == 0) {\n                        goto Lac;\n                    }\n            }\n        }\n        if (27 > v6) goto Lac;\n        switch (?) {\n            case 0: goto L66;\n            default: goto L2b;\n        }\n        L12c:\n        return;\n    }\n\n\n    private static java.lang.String a(int, int){\n        v2 = ((v0 ^ -6230) & 65535);\n        if (Zfhv.b[v2] == null) {\n            v3 = Zfhv.a[v2].toCharArray();\n            switch ((v3[0] & 255)) {\n                case 0: goto L42e;\n                case 1: goto L434;\n                case 2: goto L43a;\n                case 3: goto L43f;\n                case 4: goto L445;\n                case 5: goto L44a;\n                case 6: goto L44f;\n                case 7: goto L454;\n                case 8: goto L45a;\n                case 9: goto L45e;\n                case 10: goto L463;\n                case 11: goto L469;\n                case 12: goto L46e;\n                case 13: goto L474;\n                case 14: goto L479;\n                case 15: goto L47f;\n                case 16: goto L484;\n                case 17: goto L489;\n                case 18: goto L48e;\n                case 19: goto L494;\n                case 20: goto L499;\n                case 21: goto L49f;\n                case 22: goto L4a4;\n                case 23: goto L4aa;\n                case 24: goto L4af;\n                case 25: goto L4b5;\n                case 26: goto L4ba;\n                case 27: goto L4bf;\n                case 28: goto L4c5;\n                case 29: goto L4ca;\n                case 30: goto L4cf;\n                case 31: goto L4d5;\n                case 32: goto L4da;\n                case 33: goto L4e0;\n                case 34: goto L4e5;\n                case 35: goto L4ea;\n                case 36: goto L4ef;\n                case 37: goto L4f5;\n                case 38: goto L4f9;\n                case 39: goto L4ff;\n                case 40: goto L504;\n                case 41: goto L509;\n                case 42: goto L50e;\n                case 43: goto L514;\n                case 44: goto L51a;\n                case 45: goto L520;\n                case 46: goto L526;\n                case 47: goto L52b;\n                case 48: goto L531;\n                case 49: goto L537;\n                case 50: goto L53c;\n                case 51: goto L541;\n                case 52: goto L547;\n                case 53: goto L54d;\n                case 54: goto L552;\n                case 55: goto L558;\n                case 56: goto L55e;\n                case 57: goto L563;\n                case 58: goto L569;\n                case 59: goto L56f;\n                case 60: goto L575;\n                case 61: goto L57a;\n                case 62: goto L580;\n                case 63: goto L585;\n                case 64: goto L58a;\n                case 65: goto L590;\n                case 66: goto L595;\n                case 67: goto L59a;\n                case 68: goto L5a0;\n                case 69: goto L5a6;\n                case 70: goto L5ab;\n                case 71: goto L5b0;\n                case 72: goto L5b5;\n                case 73: goto L5bb;\n                case 74: goto L5c0;\n                case 75: goto L5c6;\n                case 76: goto L5cc;\n                case 77: goto L5d2;\n                case 78: goto L5d7;\n                case 79: goto L5dd;\n                case 80: goto L5e3;\n                case 81: goto L5e9;\n                case 82: goto L5ee;\n                case 83: goto L5f4;\n                case 84: goto L5fa;\n                case 85: goto L600;\n                case 86: goto L605;\n                case 87: goto L60a;\n                case 88: goto L60f;\n                case 89: goto L615;\n                case 90: goto L61b;\n                case 91: goto L620;\n                case 92: goto L626;\n                case 93: goto L62c;\n                case 94: goto L631;\n                case 95: goto L637;\n                case 96: goto L63c;\n                case 97: goto L642;\n                case 98: goto L647;\n                case 99: goto L64d;\n                case 100: goto L652;\n                case 101: goto L657;\n                case 102: goto L65c;\n                case 103: goto L662;\n                case 104: goto L667;\n                case 105: goto L66d;\n                case 106: goto L673;\n                case 107: goto L679;\n                case 108: goto L67f;\n                case 109: goto L685;\n                case 110: goto L689;\n                case 111: goto L68e;\n                case 112: goto L693;\n                case 113: goto L698;\n                case 114: goto L69e;\n                case 115: goto L6a3;\n                case 116: goto L6a9;\n                case 117: goto L6af;\n                case 118: goto L6b3;\n                case 119: goto L6b9;\n                case 120: goto L6be;\n                case 121: goto L6c4;\n                case 122: goto L6c9;\n                case 123: goto L6ce;\n                case 124: goto L6d4;\n                case 125: goto L6da;\n                case 126: goto L6e0;\n                case 127: goto L6e6;\n                case 128: goto L6ec;\n                case 129: goto L6f2;\n                case 130: goto L6f8;\n                case 131: goto L6fe;\n                case 132: goto L704;\n                case 133: goto L709;\n                case 134: goto L70f;\n                case 135: goto L715;\n                case 136: goto L71a;\n                case 137: goto L71f;\n                case 138: goto L724;\n                case 139: goto L72a;\n                case 140: goto L72f;\n                case 141: goto L734;\n                case 142: goto L73a;\n                case 143: goto L73f;\n                case 144: goto L744;\n                case 145: goto L749;\n                case 146: goto L74f;\n                case 147: goto L755;\n                case 148: goto L75a;\n                case 149: goto L75f;\n                case 150: goto L764;\n                case 151: goto L76a;\n                case 152: goto L76f;\n                case 153: goto L775;\n                case 154: goto L77b;\n                case 155: goto L781;\n                case 156: goto L787;\n                case 157: goto L78d;\n                case 158: goto L792;\n                case 159: goto L798;\n                case 160: goto L79d;\n                case 161: goto L7a2;\n                case 162: goto L7a8;\n                case 163: goto L7ae;\n                case 164: goto L7b4;\n                case 165: goto L7ba;\n                case 166: goto L7c0;\n                case 167: goto L7c5;\n                case 168: goto L7cb;\n                case 169: goto L7d0;\n                case 170: goto L7d5;\n                case 171: goto L7db;\n                case 172: goto L7e0;\n                case 173: goto L7e5;\n                case 174: goto L7ea;\n                case 175: goto L7f0;\n                case 176: goto L7f6;\n                case 177: goto L7fb;\n                case 178: goto L800;\n                case 179: goto L805;\n                case 180: goto L80b;\n                case 181: goto L811;\n                case 182: goto L817;\n                case 183: goto L81c;\n                case 184: goto L822;\n                case 185: goto L827;\n                case 186: goto L82d;\n                case 187: goto L832;\n                case 188: goto L837;\n                case 189: goto L83d;\n                case 190: goto L843;\n                case 191: goto L848;\n                case 192: goto L84d;\n                case 193: goto L853;\n                case 194: goto L858;\n                case 195: goto L85d;\n                case 196: goto L863;\n                case 197: goto L869;\n                case 198: goto L86e;\n                case 199: goto L874;\n                case 200: goto L879;\n                case 201: goto L87e;\n                case 202: goto L883;\n                case 203: goto L889;\n                case 204: goto L88e;\n                case 205: goto L894;\n                case 206: goto L89a;\n                case 207: goto L89f;\n                case 208: goto L8a4;\n                case 209: goto L8aa;\n                case 210: goto L8af;\n                case 211: goto L8b4;\n                case 212: goto L8b9;\n                case 213: goto L8be;\n                case 214: goto L8c4;\n                case 215: goto L8c8;\n                case 216: goto L8ce;\n                case 217: goto L8d4;\n                case 218: goto L8d9;\n                case 219: goto L8de;\n                case 220: goto L8e4;\n                case 221: goto L8ea;\n                case 222: goto L8ef;\n                case 223: goto L8f5;\n                case 224: goto L8fb;\n                case 225: goto L900;\n                case 226: goto L906;\n                case 227: goto L90c;\n                case 228: goto L911;\n                case 229: goto L916;\n                case 230: goto L91c;\n                case 231: goto L922;\n                case 232: goto L927;\n                case 233: goto L92d;\n                case 234: goto L932;\n                case 235: goto L937;\n                case 236: goto L93c;\n                case 237: goto L942;\n                case 238: goto L947;\n                case 239: goto L94d;\n                case 240: goto L952;\n                case 241: goto L958;\n                case 242: goto L95d;\n                case 243: goto L962;\n                case 244: goto L967;\n                case 245: goto L96d;\n                case 246: goto L973;\n                case 247: goto L979;\n                case 248: goto L97e;\n                case 249: goto L982;\n                case 250: goto L987;\n                case 251: goto L98d;\n                case 252: goto L992;\n                case 253: goto L997;\n                case 254: goto L99d;\n                default: goto L9a3;\n            }\n            L42e:\n            goto L9a3;\n            L434:\n            goto L9a3;\n            L43a:\n            goto L9a3;\n            L43f:\n            goto L9a3;\n            L445:\n            goto L9a3;\n            L44a:\n            goto L9a3;\n            L44f:\n            goto L9a3;\n            L454:\n            goto L9a3;\n            L45a:\n            goto L9a3;\n            L45e:\n            goto L9a3;\n            L463:\n            goto L9a3;\n            L469:\n            goto L9a3;\n            L46e:\n            goto L9a3;\n            L474:\n            goto L9a3;\n            L479:\n            goto L9a3;\n            L47f:\n            goto L9a3;\n            L484:\n            goto L9a3;\n            L489:\n            goto L9a3;\n            L48e:\n            goto L9a3;\n            L494:\n            goto L9a3;\n            L499:\n            goto L9a3;\n            L49f:\n            goto L9a3;\n            L4a4:\n            goto L9a3;\n            L4aa:\n            goto L9a3;\n            L4af:\n            goto L9a3;\n            L4b5:\n            goto L9a3;\n            L4ba:\n            goto L9a3;\n            L4bf:\n            goto L9a3;\n            L4c5:\n            goto L9a3;\n            L4ca:\n            goto L9a3;\n            L4cf:\n            goto L9a3;\n            L4d5:\n            goto L9a3;\n            L4da:\n            goto L9a3;\n            L4e0:\n            goto L9a3;\n            L4e5:\n            goto L9a3;\n            L4ea:\n            goto L9a3;\n            L4ef:\n            goto L9a3;\n            L4f5:\n            goto L9a3;\n            L4f9:\n            goto L9a3;\n            L4ff:\n            goto L9a3;\n            L504:\n            goto L9a3;\n            L509:\n            goto L9a3;\n            L50e:\n            goto L9a3;\n            L514:\n            goto L9a3;\n            L51a:\n            goto L9a3;\n            L520:\n            goto L9a3;\n            L526:\n            goto L9a3;\n            L52b:\n            goto L9a3;\n            L531:\n            goto L9a3;\n            L537:\n            goto L9a3;\n            L53c:\n            goto L9a3;\n            L541:\n            goto L9a3;\n            L547:\n            goto L9a3;\n            L54d:\n            goto L9a3;\n            L552:\n            goto L9a3;\n            L558:\n            goto L9a3;\n            L55e:\n            goto L9a3;\n            L563:\n            goto L9a3;\n            L569:\n            goto L9a3;\n            L56f:\n            goto L9a3;\n            L575:\n            goto L9a3;\n            L57a:\n            goto L9a3;\n            L580:\n            goto L9a3;\n            L585:\n            goto L9a3;\n            L58a:\n            goto L9a3;\n            L590:\n            goto L9a3;\n            L595:\n            goto L9a3;\n            L59a:\n            goto L9a3;\n            L5a0:\n            goto L9a3;\n            L5a6:\n            goto L9a3;\n            L5ab:\n            goto L9a3;\n            L5b0:\n            goto L9a3;\n            L5b5:\n            goto L9a3;\n            L5bb:\n            goto L9a3;\n            L5c0:\n            goto L9a3;\n            L5c6:\n            goto L9a3;\n            L5cc:\n            goto L9a3;\n            L5d2:\n            goto L9a3;\n            L5d7:\n            goto L9a3;\n            L5dd:\n            goto L9a3;\n            L5e3:\n            goto L9a3;\n            L5e9:\n            goto L9a3;\n            L5ee:\n            goto L9a3;\n            L5f4:\n            goto L9a3;\n            L5fa:\n            goto L9a3;\n            L600:\n            goto L9a3;\n            L605:\n            goto L9a3;\n            L60a:\n            goto L9a3;\n            L60f:\n            goto L9a3;\n            L615:\n            goto L9a3;\n            L61b:\n            goto L9a3;\n            L620:\n            goto L9a3;\n            L626:\n            goto L9a3;\n            L62c:\n            goto L9a3;\n            L631:\n            goto L9a3;\n            L637:\n            goto L9a3;\n            L63c:\n            goto L9a3;\n            L642:\n            goto L9a3;\n            L647:\n            goto L9a3;\n            L64d:\n            goto L9a3;\n            L652:\n            goto L9a3;\n            L657:\n            goto L9a3;\n            L65c:\n            goto L9a3;\n            L662:\n            goto L9a3;\n            L667:\n            goto L9a3;\n            L66d:\n            goto L9a3;\n            L673:\n            goto L9a3;\n            L679:\n            goto L9a3;\n            L67f:\n            goto L9a3;\n            L685:\n            goto L9a3;\n            L689:\n            goto L9a3;\n            L68e:\n            goto L9a3;\n            L693:\n            goto L9a3;\n            L698:\n            goto L9a3;\n            L69e:\n            goto L9a3;\n            L6a3:\n            goto L9a3;\n            L6a9:\n            goto L9a3;\n            L6af:\n            goto L9a3;\n            L6b3:\n            goto L9a3;\n            L6b9:\n            goto L9a3;\n            L6be:\n            goto L9a3;\n            L6c4:\n            goto L9a3;\n            L6c9:\n            goto L9a3;\n            L6ce:\n            goto L9a3;\n            L6d4:\n            goto L9a3;\n            L6da:\n            goto L9a3;\n            L6e0:\n            goto L9a3;\n            L6e6:\n            goto L9a3;\n            L6ec:\n            goto L9a3;\n            L6f2:\n            goto L9a3;\n            L6f8:\n            goto L9a3;\n            L6fe:\n            goto L9a3;\n            L704:\n            goto L9a3;\n            L709:\n            goto L9a3;\n            L70f:\n            goto L9a3;\n            L715:\n            goto L9a3;\n            L71a:\n            goto L9a3;\n            L71f:\n            goto L9a3;\n            L724:\n            goto L9a3;\n            L72a:\n            goto L9a3;\n            L72f:\n            goto L9a3;\n            L734:\n            goto L9a3;\n            L73a:\n            goto L9a3;\n            L73f:\n            goto L9a3;\n            L744:\n            goto L9a3;\n            L749:\n            goto L9a3;\n            L74f:\n            goto L9a3;\n            L755:\n            goto L9a3;\n            L75a:\n            goto L9a3;\n            L75f:\n            goto L9a3;\n            L764:\n            goto L9a3;\n            L76a:\n            goto L9a3;\n            L76f:\n            goto L9a3;\n            L775:\n            goto L9a3;\n            L77b:\n            goto L9a3;\n            L781:\n            goto L9a3;\n            L787:\n            goto L9a3;\n            L78d:\n            goto L9a3;\n            L792:\n            goto L9a3;\n            L798:\n            goto L9a3;\n            L79d:\n            goto L9a3;\n            L7a2:\n            goto L9a3;\n            L7a8:\n            goto L9a3;\n            L7ae:\n            goto L9a3;\n            L7b4:\n            goto L9a3;\n            L7ba:\n            goto L9a3;\n            L7c0:\n            goto L9a3;\n            L7c5:\n            goto L9a3;\n            L7cb:\n            goto L9a3;\n            L7d0:\n            goto L9a3;\n            L7d5:\n            goto L9a3;\n            L7db:\n            goto L9a3;\n            L7e0:\n            goto L9a3;\n            L7e5:\n            goto L9a3;\n            L7ea:\n            goto L9a3;\n            L7f0:\n            goto L9a3;\n            L7f6:\n            goto L9a3;\n            L7fb:\n            goto L9a3;\n            L800:\n            goto L9a3;\n            L805:\n            goto L9a3;\n            L80b:\n            goto L9a3;\n            L811:\n            goto L9a3;\n            L817:\n            goto L9a3;\n            L81c:\n            goto L9a3;\n            L822:\n            goto L9a3;\n            L827:\n            goto L9a3;\n            L82d:\n            goto L9a3;\n            L832:\n            goto L9a3;\n            L837:\n            goto L9a3;\n            L83d:\n            goto L9a3;\n            L843:\n            goto L9a3;\n            L848:\n            goto L9a3;\n            L84d:\n            goto L9a3;\n            L853:\n            goto L9a3;\n            L858:\n            goto L9a3;\n            L85d:\n            goto L9a3;\n            L863:\n            goto L9a3;\n            L869:\n            goto L9a3;\n            L86e:\n            goto L9a3;\n            L874:\n            goto L9a3;\n            L879:\n            goto L9a3;\n            L87e:\n            goto L9a3;\n            L883:\n            goto L9a3;\n            L889:\n            goto L9a3;\n            L88e:\n            goto L9a3;\n            L894:\n            goto L9a3;\n            L89a:\n            goto L9a3;\n            L89f:\n            goto L9a3;\n            L8a4:\n            goto L9a3;\n            L8aa:\n            goto L9a3;\n            L8af:\n            goto L9a3;\n            L8b4:\n            goto L9a3;\n            L8b9:\n            goto L9a3;\n            L8be:\n            goto L9a3;\n            L8c4:\n            goto L9a3;\n            L8c8:\n            goto L9a3;\n            L8ce:\n            goto L9a3;\n            L8d4:\n            goto L9a3;\n            L8d9:\n            goto L9a3;\n            L8de:\n            goto L9a3;\n            L8e4:\n            goto L9a3;\n            L8ea:\n            goto L9a3;\n            L8ef:\n            goto L9a3;\n            L8f5:\n            goto L9a3;\n            L8fb:\n            goto L9a3;\n            L900:\n            goto L9a3;\n            L906:\n            goto L9a3;\n            L90c:\n            goto L9a3;\n            L911:\n            goto L9a3;\n            L916:\n            goto L9a3;\n            L91c:\n            goto L9a3;\n            L922:\n            goto L9a3;\n            L927:\n            goto L9a3;\n            L92d:\n            goto L9a3;\n            L932:\n            goto L9a3;\n            L937:\n            goto L9a3;\n            L93c:\n            goto L9a3;\n            L942:\n            goto L9a3;\n            L947:\n            goto L9a3;\n            L94d:\n            goto L9a3;\n            L952:\n            goto L9a3;\n            L958:\n            goto L9a3;\n            L95d:\n            goto L9a3;\n            L962:\n            goto L9a3;\n            L967:\n            goto L9a3;\n            L96d:\n            goto L9a3;\n            L973:\n            goto L9a3;\n            L979:\n            goto L9a3;\n            L97e:\n            goto L9a3;\n            L982:\n            goto L9a3;\n            L987:\n            goto L9a3;\n            L98d:\n            goto L9a3;\n            L992:\n            goto L9a3;\n            L997:\n            goto L9a3;\n            L99d:\n            goto L9a3;\n            L9a3:\n            v4 = 174;\n            v5 = ((v1 & 255) - v4);\n            if (v5 < 0) {\n                v5 += 256;\n            }\n            v6 = (((v1 & 65535) >>> 8) - v4);\n            if (v6 < 0) {\n                v6 += 256;\n            }\n            v7 = 0;\n            goto La23;\n            v8 = (v7 % 2);\n            if (v8 == 0) {\n                89[216] = (char) (v3[v7] ^ v5);\n                v5 = ((((v5 >>> 3) | (v5 << 5)) ^ v3[v7]) & 255);\n            } else {\n                70[146] = (char) (68 ^ v6);\n                v6 = ((((v6 >>> 3) | (v6 << 5)) ^ v3[v7]) & 255);\n            }\n            v7 += 1;\n            La23:\n            if (v7 < v3.length) goto L9db;\n            Zfhv.b[v2] = new String(v3).intern();\n        }\n        return Zfhv.b[v2];\n    }\n\n}\n",
+    "signature": null,
+    "source_file": null,
+    "superclass": "java.lang.Object",
+    "version": {
+      "major": 65,
+      "minor": 0
+    }
+  },
+  "summary": "burp.Zfhv (Java 21) extends Object: 7 fields, 27 methods.",
+  "confidence": "inferred",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [
+    {
+      "code": "decompiler_inferred",
+      "message": "This pseudo-Java is reconstructed from bytecode by Craft Anything's built-in decompiler; it is a best guess, not the original source. The bytecode disassembly is the evidence."
+    },
+    {
+      "code": "generics_erased",
+      "message": "Generic type arguments are erased in bytecode and are not shown."
+    },
+    {
+      "code": "names_and_types_inferred",
+      "message": "Local variables are named v0, v1, … (no debug names); their declared types are not reconstructed."
+    },
+    {
+      "code": "desugaring_not_reversed",
+      "message": "Synthetic members, lambda/invokedynamic desugaring, enum scaffolding and string-switch hashing are not turned back into source."
+    },
+    {
+      "code": "stack_reconstruction_approximate",
+      "message": "4 method(s) contain stack operations that were approximated."
+    },
+    {
+      "code": "control_flow_partly_structured",
+      "message": "Some methods contain control flow shown with labels and goto statements."
+    }
+  ],
+  "coverage": {
+    "status": "complete",
+    "examined": 1,
+    "total": 1
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/opt/BurpSuite/burpsuite.jar"
+    },
+    {
+      "kind": "class",
+      "value": "burp/Zfhv"
+    }
+  ],
+  "links": []
+}

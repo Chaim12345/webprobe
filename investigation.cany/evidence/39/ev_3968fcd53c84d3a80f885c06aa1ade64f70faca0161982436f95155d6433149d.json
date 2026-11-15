@@ -1,0 +1,48 @@
+{
+  "id": "ev_3968fcd53c84d3a80f885c06aa1ade64f70faca0161982436f95155d6433149d",
+  "subject": {
+    "kind": "jar",
+    "sha256": "510bf1c87c766f09c3c20d3ef75e7a6978e60dd38346965dd4836ce64417becf",
+    "name": "burpsuite.jar"
+  },
+  "operation": "core_target_triage",
+  "params": {
+    "path": "/opt/BurpSuite/burpsuite.jar"
+  },
+  "result": {
+    "description": "A Java program",
+    "kind": "jar",
+    "next_steps": [
+      {
+        "tool": "core_archive_show",
+        "why": "list what's inside"
+      }
+    ],
+    "plain_english": "burpsuite.jar is a Java archive.",
+    "recommended_toolsets": [
+      "core",
+      "artifacts"
+    ],
+    "size": 164535672
+  },
+  "summary": "burpsuite.jar is a Java archive.",
+  "confidence": "inferred",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [
+    {
+      "code": "detected_by_content",
+      "message": "the kind is detected from the first bytes and, to break ties, the file name"
+    }
+  ],
+  "coverage": {
+    "status": "unknown"
+  },
+  "locations": [],
+  "links": []
+}

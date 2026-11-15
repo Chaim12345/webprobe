@@ -1,0 +1,7048 @@
+{
+  "id": "ev_b85e70b6c8cb66f62a815ac29394ccaa9a075e12b031824291afeaa3c2f509af",
+  "subject": {
+    "kind": "jar",
+    "sha256": "510bf1c87c766f09c3c20d3ef75e7a6978e60dd38346965dd4836ce64417becf",
+    "name": "burpsuite.jar"
+  },
+  "operation": "java_archive_show",
+  "params": {
+    "path": "/opt/BurpSuite/burpsuite.jar"
+  },
+  "result": {
+    "class_file_versions": {
+      "Java 11": 39,
+      "Java 15": 20,
+      "Java 16": 3,
+      "Java 17": 4,
+      "Java 21": 33,
+      "Java 23": 2,
+      "Java 25": 32,
+      "Java 9": 379
+    },
+    "class_path": [],
+    "classes_total": 54868,
+    "entries": 61682,
+    "kind": "JAR",
+    "main_class": "burp.StartBurp",
+    "manifest": {
+      "Add-Opens": "java.base/java.lang java.desktop/javax.swing java.desktop/java.awt java.desktop/java.awt.color java.base/javax.crypto jdk.crypto.cryptoki/sun.security.pkcs11",
+      "Burp-JAR-Type": "Installer",
+      "Implementation-Name": "burp",
+      "Implementation-Vendor": "PortSwigger",
+      "Implementation-Version": "52685",
+      "Main-Class": "burp.StartBurp",
+      "Manifest-Version": "1.0",
+      "Multi-Release": "true",
+      "Specification-Name": "burp",
+      "Specification-Vendor": "PortSwigger",
+      "SplashScreen-Image": "resources/Media/splash.png"
+    },
+    "native_libraries": [
+      {
+        "bytes": 34128,
+        "name": "com/formdev/flatlaf/natives/flatlaf-windows-arm64.dll"
+      },
+      {
+        "bytes": 30544,
+        "name": "com/formdev/flatlaf/natives/flatlaf-windows-x86.dll"
+      },
+      {
+        "bytes": 34128,
+        "name": "com/formdev/flatlaf/natives/flatlaf-windows-x86_64.dll"
+      },
+      {
+        "bytes": 75776,
+        "name": "com/formdev/flatlaf/natives/libflatlaf-linux-arm64.so"
+      },
+      {
+        "bytes": 29664,
+        "name": "com/formdev/flatlaf/natives/libflatlaf-linux-x86_64.so"
+      },
+      {
+        "bytes": 149552,
+        "name": "com/formdev/flatlaf/natives/libflatlaf-macos-arm64.dylib"
+      },
+      {
+        "bytes": 109744,
+        "name": "com/formdev/flatlaf/natives/libflatlaf-macos-x86_64.dylib"
+      },
+      {
+        "bytes": 159800,
+        "name": "com/sun/jna/darwin-aarch64/libjnidispatch.jnilib"
+      },
+      {
+        "bytes": 109824,
+        "name": "com/sun/jna/darwin-x86-64/libjnidispatch.jnilib"
+      },
+      {
+        "bytes": 116880,
+        "name": "com/sun/jna/dragonflybsd-x86-64/libjnidispatch.so"
+      },
+      {
+        "bytes": 116008,
+        "name": "com/sun/jna/freebsd-aarch64/libjnidispatch.so"
+      },
+      {
+        "bytes": 121040,
+        "name": "com/sun/jna/freebsd-x86-64/libjnidispatch.so"
+      },
+      {
+        "bytes": 105372,
+        "name": "com/sun/jna/freebsd-x86/libjnidispatch.so"
+      },
+      {
+        "bytes": 162288,
+        "name": "com/sun/jna/linux-aarch64/libjnidispatch.so"
+      },
+      {
+        "bytes": 130788,
+        "name": "com/sun/jna/linux-arm/libjnidispatch.so"
+      },
+      {
+        "bytes": 139472,
+        "name": "com/sun/jna/linux-armel/libjnidispatch.so"
+      },
+      {
+        "bytes": 341968,
+        "name": "com/sun/jna/linux-loongarch64/libjnidispatch.so"
+      },
+      {
+        "bytes": 144056,
+        "name": "com/sun/jna/linux-mips64el/libjnidispatch.so"
+      },
+      {
+        "bytes": 127724,
+        "name": "com/sun/jna/linux-ppc/libjnidispatch.so"
+      },
+      {
+        "bytes": 145072,
+        "name": "com/sun/jna/linux-ppc64le/libjnidispatch.so"
+      },
+      {
+        "bytes": 100064,
+        "name": "com/sun/jna/linux-riscv64/libjnidispatch.so"
+      },
+      {
+        "bytes": 136976,
+        "name": "com/sun/jna/linux-s390x/libjnidispatch.so"
+      },
+      {
+        "bytes": 134447,
+        "name": "com/sun/jna/linux-x86-64/libjnidispatch.so"
+      },
+      {
+        "bytes": 123384,
+        "name": "com/sun/jna/linux-x86/libjnidispatch.so"
+      },
+      {
+        "bytes": 122942,
+        "name": "com/sun/jna/openbsd-x86-64/libjnidispatch.so"
+      },
+      {
+        "bytes": 108073,
+        "name": "com/sun/jna/openbsd-x86/libjnidispatch.so"
+      },
+      {
+        "bytes": 231108,
+        "name": "com/sun/jna/sunos-sparc/libjnidispatch.so"
+      },
+      {
+        "bytes": 166976,
+        "name": "com/sun/jna/sunos-sparcv9/libjnidispatch.so"
+      },
+      {
+        "bytes": 169992,
+        "name": "com/sun/jna/sunos-x86-64/libjnidispatch.so"
+      },
+      {
+        "bytes": 153152,
+        "name": "com/sun/jna/sunos-x86/libjnidispatch.so"
+      },
+      {
+        "bytes": 274432,
+        "name": "com/sun/jna/win32-aarch64/jnidispatch.dll"
+      },
+      {
+        "bytes": 273408,
+        "name": "com/sun/jna/win32-x86-64/jnidispatch.dll"
+      },
+      {
+        "bytes": 226304,
+        "name": "com/sun/jna/win32-x86/jnidispatch.dll"
+      }
+    ],
+    "nested_jars": [
+      {
+        "bytes": 3285717,
+        "name": "META-INF/java-tooling/osgi/bundles/ecj-3.38.0.jar"
+      },
+      {
+        "bytes": 34511,
+        "name": "META-INF/java-tooling/osgi/bundles/java-tooling-plugin-2.0.1.jar"
+      },
+      {
+        "bytes": 402985,
+        "name": "META-INF/java-tooling/osgi/bundles/org.apache.felix.scr-2.2.6.jar"
+      },
+      {
+        "bytes": 70921,
+        "name": "META-INF/java-tooling/osgi/bundles/org.eclipse.compare.core-3.8.0.jar"
+      },
+      {
+        "bytes": 120672,
+        "name": "META-INF/java-tooling/osgi/bundles/org.eclipse.core.commands-3.12.100.jar"
+      },
+      {
+        "bytes": 105754,
+        "name": "META-INF/java-tooling/osgi/bundles/org.eclipse.core.contenttype-3.9.400.jar"
+      },
+      {
+        "bytes": 97692,
+        "name": "META-INF/java-tooling/osgi/bundles/org.eclipse.core.expressions-3.9.400.jar"
+      },
+      {
+        "bytes": 75272,
+        "name": "META-INF/java-tooling/osgi/bundles/org.eclipse.core.filesystem-1.10.400.jar"
+      },
+      {
+        "bytes": 28071,
+        "name": "META-INF/java-tooling/osgi/bundles/org.eclipse.core.filesystem.macosx-1.3.400.jar"
+      },
+      {
+        "bytes": 118672,
+        "name": "META-INF/java-tooling/osgi/bundles/org.eclipse.core.jobs-3.15.300.jar"
+      },
+      {
+        "bytes": 951782,
+        "name": "META-INF/java-tooling/osgi/bundles/org.eclipse.core.resources-3.20.200.jar"
+      },
+      {
+        "bytes": 83054,
+        "name": "META-INF/java-tooling/osgi/bundles/org.eclipse.core.runtime-3.31.100.jar"
+      },
+      {
+        "bytes": 38440,
+        "name": "META-INF/java-tooling/osgi/bundles/org.eclipse.core.variables-3.6.400.jar"
+      },
+      {
+        "bytes": 412413,
+        "name": "META-INF/java-tooling/osgi/bundles/org.eclipse.debug.core-3.21.400.jar"
+      },
+      {
+        "bytes": 94237,
+        "name": "META-INF/java-tooling/osgi/bundles/org.eclipse.equinox.app-1.7.100.jar"
+      },
+      {
+        "bytes": 163334,
+        "name": "META-INF/java-tooling/osgi/bundles/org.eclipse.equinox.common-3.19.100.jar"
+      },
+      {
+        "bytes": 128242,
+        "name": "META-INF/java-tooling/osgi/bundles/org.eclipse.equinox.preferences-3.11.100.jar"
+      },
+      {
+        "bytes": 206024,
+        "name": "META-INF/java-tooling/osgi/bundles/org.eclipse.equinox.registry-3.12.100.jar"
+      },
+      {
+        "bytes": 4304537,
+        "name": "META-INF/java-tooling/osgi/bundles/org.eclipse.jdt.core-3.38.0.jar"
+      },
+      {
+        "bytes": 952109,
+        "name": "META-INF/java-tooling/osgi/bundles/org.eclipse.jdt.debug-3.21.400.jar"
+      },
+      {
+        "bytes": 603086,
+        "name": "META-INF/java-tooling/osgi/bundles/org.eclipse.jdt.launching-3.22.0.jar"
+      },
+      {
+        "bytes": 21868,
+        "name": "META-INF/java-tooling/osgi/bundles/org.eclipse.jdt.launching.macosx-3.6.300.jar"
+      },
+      {
+        "bytes": 1554340,
+        "name": "META-INF/java-tooling/osgi/bundles/org.eclipse.osgi-3.20.0.jar"
+      },
+      {
+        "bytes": 412487,
+        "name": "META-INF/java-tooling/osgi/bundles/org.eclipse.team.core-3.10.0.jar"
+      },
+      {
+        "bytes": 360807,
+        "name": "META-INF/java-tooling/osgi/bundles/org.eclipse.text-3.14.100.jar"
+      },
+      {
+        "bytes": 66447,
+        "name": "META-INF/java-tooling/osgi/bundles/org.osgi.service.component-1.5.1.jar"
+      },
+      {
+        "bytes": 20165,
+        "name": "META-INF/java-tooling/osgi/bundles/org.osgi.service.prefs-1.1.2.jar"
+      },
+      {
+        "bytes": 12548,
+        "name": "META-INF/java-tooling/osgi/bundles/org.osgi.util.function-1.0.0.jar"
+      },
+      {
+        "bytes": 42975,
+        "name": "META-INF/java-tooling/osgi/bundles/org.osgi.util.promise-1.0.0.jar"
+      },
+      {
+        "bytes": 36875,
+        "name": "META-INF/java-tooling/osgi/bundles/osgi.annotation-8.0.1.jar"
+      },
+      {
+        "bytes": 1554340,
+        "name": "META-INF/java-tooling/osgi/framework/org.eclipse.osgi-3.20.0.jar"
+      },
+      {
+        "bytes": 224710,
+        "name": "resources/Infiltrator/burp_infiltrator_java.jar"
+      },
+      {
+        "bytes": 5343934,
+        "name": "resources/Tooling/libraries/montoya-api-javadoc.jar"
+      },
+      {
+        "bytes": 231244,
+        "name": "resources/Tooling/libraries/montoya-api-sources.jar"
+      },
+      {
+        "bytes": 181538,
+        "name": "resources/Tooling/libraries/montoya-api.jar"
+      }
+    ],
+    "packages": [
+      {
+        "classes": 3,
+        "package": "META-INF.versions.11.com.fasterxml.jackson.core.internal.shaded.fdp.v2_19_2"
+      },
+      {
+        "classes": 1,
+        "package": "META-INF.versions.11.io.opentelemetry.instrumentation.resources"
+      },
+      {
+        "classes": 34,
+        "package": "META-INF.versions.11.org.bouncycastle.jcajce.provider.asymmetric.edec"
+      },
+      {
+        "classes": 1,
+        "package": "META-INF.versions.11.reactor.core.publisher"
+      },
+      {
+        "classes": 20,
+        "package": "META-INF.versions.15.org.bouncycastle.jcajce.provider.asymmetric.edec"
+      },
+      {
+        "classes": 3,
+        "package": "META-INF.versions.16.com.squareup.moshi"
+      },
+      {
+        "classes": 2,
+        "package": "META-INF.versions.17.com.fasterxml.jackson.core.internal.shaded.fdp.v2_19_2"
+      },
+      {
+        "classes": 2,
+        "package": "META-INF.versions.17.tools.jackson.core.internal.shaded.fdp"
+      },
+      {
+        "classes": 2,
+        "package": "META-INF.versions.21.com.fasterxml.jackson.core.internal.shaded.fdp.v2_19_2"
+      },
+      {
+        "classes": 2,
+        "package": "META-INF.versions.21.org.bouncycastle.jcajce.provider.asymmetric"
+      },
+      {
+        "classes": 3,
+        "package": "META-INF.versions.21.org.bouncycastle.jcajce.provider.asymmetric.mlkem"
+      },
+      {
+        "classes": 6,
+        "package": "META-INF.versions.21.org.bouncycastle.pqc.jcajce.provider"
+      },
+      {
+        "classes": 3,
+        "package": "META-INF.versions.21.org.bouncycastle.pqc.jcajce.provider.hqc"
+      },
+      {
+        "classes": 3,
+        "package": "META-INF.versions.21.org.bouncycastle.pqc.jcajce.provider.ntru"
+      },
+      {
+        "classes": 3,
+        "package": "META-INF.versions.21.org.bouncycastle.pqc.jcajce.provider.ntruprime"
+      },
+      {
+        "classes": 9,
+        "package": "META-INF.versions.21.reactor.core.scheduler"
+      },
+      {
+        "classes": 2,
+        "package": "META-INF.versions.21.tools.jackson.core.internal.shaded.fdp"
+      },
+      {
+        "classes": 2,
+        "package": "META-INF.versions.23.tools.jackson.core.internal.shaded.fdp"
+      },
+      {
+        "classes": 6,
+        "package": "META-INF.versions.25.org.bouncycastle.jcajce.provider.kdf"
+      },
+      {
+        "classes": 4,
+        "package": "META-INF.versions.25.org.bouncycastle.jcajce.provider.kdf.hkdf"
+      },
+      {
+        "classes": 15,
+        "package": "META-INF.versions.25.org.bouncycastle.jcajce.provider.kdf.pbepbkdf2"
+      },
+      {
+        "classes": 2,
+        "package": "META-INF.versions.25.org.bouncycastle.jcajce.provider.kdf.scrypt"
+      },
+      {
+        "classes": 2,
+        "package": "META-INF.versions.25.org.bouncycastle.jcajce.spec"
+      },
+      {
+        "classes": 3,
+        "package": "META-INF.versions.25.org.bouncycastle.jsse.provider"
+      },
+      {
+        "classes": 1,
+        "package": "META-INF.versions.9"
+      },
+      {
+        "classes": 1,
+        "package": "META-INF.versions.9.com.formdev.flatlaf.ui"
+      },
+      {
+        "classes": 4,
+        "package": "META-INF.versions.9.com.formdev.flatlaf.util"
+      },
+      {
+        "classes": 1,
+        "package": "META-INF.versions.9.io.opentelemetry.instrumentation.resources"
+      },
+      {
+        "classes": 1,
+        "package": "META-INF.versions.9.kotlin.reflect.jvm.internal.impl.serialization.deserialization.builtins"
+      },
+      {
+        "classes": 136,
+        "package": "META-INF.versions.9.org.bouncycastle.asn1"
+      },
+      {
+        "classes": 3,
+        "package": "META-INF.versions.9.org.bouncycastle.asn1.anssi"
+      },
+      {
+        "classes": 1,
+        "package": "META-INF.versions.9.org.bouncycastle.asn1.bc"
+      },
+      {
+        "classes": 10,
+        "package": "META-INF.versions.9.org.bouncycastle.asn1.cryptopro"
+      },
+      {
+        "classes": 4,
+        "package": "META-INF.versions.9.org.bouncycastle.asn1.gm"
+      },
+      {
+        "classes": 2,
+        "package": "META-INF.versions.9.org.bouncycastle.asn1.nist"
+      },
+      {
+        "classes": 2,
+        "package": "META-INF.versions.9.org.bouncycastle.asn1.pkcs"
+      },
+      {
+        "classes": 35,
+        "package": "META-INF.versions.9.org.bouncycastle.asn1.sec"
+      },
+      {
+        "classes": 16,
+        "package": "META-INF.versions.9.org.bouncycastle.asn1.teletrust"
+      },
+      {
+        "classes": 2,
+        "package": "META-INF.versions.9.org.bouncycastle.asn1.x509"
+      },
+      {
+        "classes": 34,
+        "package": "META-INF.versions.9.org.bouncycastle.asn1.x9"
+      },
+      {
+        "classes": 34,
+        "package": "META-INF.versions.9.org.bouncycastle.crypto"
+      },
+      {
+        "classes": 1,
+        "package": "META-INF.versions.9.org.bouncycastle.crypto.constraints"
+      },
+      {
+        "classes": 13,
+        "package": "META-INF.versions.9.org.bouncycastle.crypto.digests"
+      },
+      {
+        "classes": 33,
+        "package": "META-INF.versions.9.org.bouncycastle.crypto.ec"
+      },
+      {
+        "classes": 2,
+        "package": "META-INF.versions.9.org.bouncycastle.crypto.engines"
+      },
+      {
+        "classes": 1,
+        "package": "META-INF.versions.9.org.bouncycastle.crypto.generators"
+      },
+      {
+        "classes": 1,
+        "package": "META-INF.versions.9.org.bouncycastle.crypto.macs"
+      },
+      {
+        "classes": 2,
+        "package": "META-INF.versions.9.org.bouncycastle.crypto.modes"
+      },
+      {
+        "classes": 13,
+        "package": "META-INF.versions.9.org.bouncycastle.crypto.params"
+      },
+      {
+        "classes": 1,
+        "package": "META-INF.versions.9.org.bouncycastle.internal.asn1.cryptlib"
+      },
+      {
+        "classes": 1,
+        "package": "META-INF.versions.9.org.bouncycastle.internal.asn1.isara"
+      },
+      {
+        "classes": 1,
+        "package": "META-INF.versions.9.org.bouncycastle.internal.asn1.oiw"
+      },
+      {
+        "classes": 1,
+        "package": "META-INF.versions.9.org.bouncycastle.internal.asn1.rosstandart"
+      },
+      {
+        "classes": 4,
+        "package": "META-INF.versions.9.org.bouncycastle.jcajce.interfaces"
+      },
+      {
+        "classes": 7,
+        "package": "META-INF.versions.9.org.bouncycastle.jcajce.provider.asymmetric.mlkem"
+      },
+      {
+        "classes": 3,
+        "package": "META-INF.versions.9.org.bouncycastle.jcajce.provider.asymmetric.util"
+      },
+      {
+        "classes": 3,
+        "package": "META-INF.versions.9.org.bouncycastle.jcajce.provider.config"
+      },
+      {
+        "classes": 2,
+        "package": "META-INF.versions.9.org.bouncycastle.jcajce.provider.symmetric.util"
+      },
+      {
+        "classes": 2,
+        "package": "META-INF.versions.9.org.bouncycastle.jcajce.provider.util"
+      },
+      {
+        "classes": 4,
+        "package": "META-INF.versions.9.org.bouncycastle.jcajce.spec"
+      },
+      {
+        "classes": 3,
+        "package": "META-INF.versions.9.org.bouncycastle.jcajce.util"
+      },
+      {
+        "classes": 1,
+        "package": "META-INF.versions.9.org.bouncycastle.jce"
+      },
+      {
+        "classes": 3,
+        "package": "META-INF.versions.9.org.bouncycastle.jce.interfaces"
+      },
+      {
+        "classes": 5,
+        "package": "META-INF.versions.9.org.bouncycastle.jce.provider"
+      },
+      {
+        "classes": 3,
+        "package": "META-INF.versions.9.org.bouncycastle.jce.spec"
+      },
+      {
+        "classes": 14,
+        "package": "META-INF.versions.9.org.bouncycastle.jsse"
+      },
+      {
+        "classes": 2,
+        "package": "META-INF.versions.9.org.bouncycastle.jsse.java.security"
+      },
+      {
+        "classes": 155,
+        "package": "META-INF.versions.9.org.bouncycastle.jsse.provider"
+      },
+      {
+        "classes": 4,
+        "package": "META-INF.versions.9.org.bouncycastle.math"
+      },
+      {
+        "classes": 48,
+        "package": "META-INF.versions.9.org.bouncycastle.math.ec"
+      },
+      {
+        "classes": 5,
+        "package": "META-INF.versions.9.org.bouncycastle.math.ec.custom.djb"
+      },
+      {
+        "classes": 5,
+        "package": "META-INF.versions.9.org.bouncycastle.math.ec.custom.gm"
+      },
+      {
+        "classes": 130,
+        "package": "META-INF.versions.9.org.bouncycastle.math.ec.custom.sec"
+      },
+      {
+        "classes": 8,
+        "package": "META-INF.versions.9.org.bouncycastle.math.ec.endo"
+      },
+      {
+        "classes": 8,
+        "package": "META-INF.versions.9.org.bouncycastle.math.field"
+      },
+      {
+        "classes": 14,
+        "package": "META-INF.versions.9.org.bouncycastle.math.raw"
+      },
+      {
+        "classes": 14,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.asn1"
+      },
+      {
+        "classes": 2,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.crypto"
+      },
+      {
+        "classes": 7,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.crypto.bike"
+      },
+      {
+        "classes": 12,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.crypto.cmce"
+      },
+      {
+        "classes": 16,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.crypto.crystals.dilithium"
+      },
+      {
+        "classes": 4,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.crypto.falcon"
+      },
+      {
+        "classes": 8,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.crypto.frodo"
+      },
+      {
+        "classes": 13,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.crypto.hqc"
+      },
+      {
+        "classes": 31,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.crypto.lms"
+      },
+      {
+        "classes": 4,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.crypto.mayo"
+      },
+      {
+        "classes": 15,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.crypto.mldsa"
+      },
+      {
+        "classes": 13,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.crypto.mlkem"
+      },
+      {
+        "classes": 2,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.crypto.newhope"
+      },
+      {
+        "classes": 4,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.crypto.ntru"
+      },
+      {
+        "classes": 8,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.crypto.ntruprime"
+      },
+      {
+        "classes": 23,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.crypto.picnic"
+      },
+      {
+        "classes": 10,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.crypto.rainbow"
+      },
+      {
+        "classes": 10,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.crypto.saber"
+      },
+      {
+        "classes": 14,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.crypto.slhdsa"
+      },
+      {
+        "classes": 10,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.crypto.snova"
+      },
+      {
+        "classes": 3,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.crypto.sphincs"
+      },
+      {
+        "classes": 20,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.crypto.sphincsplus"
+      },
+      {
+        "classes": 30,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.crypto.util"
+      },
+      {
+        "classes": 46,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.crypto.xmss"
+      },
+      {
+        "classes": 29,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.jcajce.interfaces"
+      },
+      {
+        "classes": 3,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.jcajce.provider"
+      },
+      {
+        "classes": 3,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.jcajce.provider.bike"
+      },
+      {
+        "classes": 3,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.jcajce.provider.cmce"
+      },
+      {
+        "classes": 9,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.jcajce.provider.dilithium"
+      },
+      {
+        "classes": 5,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.jcajce.provider.falcon"
+      },
+      {
+        "classes": 6,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.jcajce.provider.hqc"
+      },
+      {
+        "classes": 9,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.jcajce.provider.kyber"
+      },
+      {
+        "classes": 3,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.jcajce.provider.lms"
+      },
+      {
+        "classes": 7,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.jcajce.provider.mayo"
+      },
+      {
+        "classes": 3,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.jcajce.provider.newhope"
+      },
+      {
+        "classes": 3,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.jcajce.provider.ntru"
+      },
+      {
+        "classes": 3,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.jcajce.provider.picnic"
+      },
+      {
+        "classes": 47,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.jcajce.provider.snova"
+      },
+      {
+        "classes": 3,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.jcajce.provider.sphincs"
+      },
+      {
+        "classes": 3,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.jcajce.provider.sphincsplus"
+      },
+      {
+        "classes": 2,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.jcajce.provider.util"
+      },
+      {
+        "classes": 8,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.jcajce.provider.xmss"
+      },
+      {
+        "classes": 12,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.jcajce.spec"
+      },
+      {
+        "classes": 5,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.math.ntru"
+      },
+      {
+        "classes": 9,
+        "package": "META-INF.versions.9.org.bouncycastle.pqc.math.ntru.parameters"
+      },
+      {
+        "classes": 146,
+        "package": "META-INF.versions.9.org.bouncycastle.tls"
+      },
+      {
+        "classes": 41,
+        "package": "META-INF.versions.9.org.bouncycastle.tls.crypto"
+      },
+      {
+        "classes": 16,
+        "package": "META-INF.versions.9.org.bouncycastle.tls.crypto.impl"
+      },
+      {
+        "classes": 60,
+        "package": "META-INF.versions.9.org.bouncycastle.tls.crypto.impl.jcajce"
+      },
+      {
+        "classes": 4,
+        "package": "META-INF.versions.9.org.bouncycastle.tls.crypto.impl.jcajce.srp"
+      },
+      {
+        "classes": 23,
+        "package": "META-INF.versions.9.org.bouncycastle.util"
+      },
+      {
+        "classes": 6,
+        "package": "META-INF.versions.9.org.bouncycastle.util.encoders"
+      },
+      {
+        "classes": 2,
+        "package": "META-INF.versions.9.org.bouncycastle.util.io"
+      },
+      {
+        "classes": 2,
+        "package": "META-INF.versions.9.org.yaml"
+      },
+      {
+        "classes": 19361,
+        "package": "burp"
+      },
+      {
+        "classes": 671,
+        "package": "burp.agentic"
+      },
+      {
+        "classes": 4,
+        "package": "burp.agentic.registry"
+      },
+      {
+        "classes": 14,
+        "package": "burp.agentic.task"
+      },
+      {
+        "classes": 27,
+        "package": "burp.agentic.tool"
+      },
+      {
+        "classes": 103,
+        "package": "burp.agentic.toolargs"
+      },
+      {
+        "classes": 3,
+        "package": "burp.ai.sdk.burpai.spec"
+      },
+      {
+        "classes": 25,
+        "package": "burp.ai.sdk.burpai.spec.dto"
+      },
+      {
+        "classes": 2,
+        "package": "burp.ai.sdk.burpai.sse"
+      },
+      {
+        "classes": 1,
+        "package": "burp.ai.sdk.common.json"
+      },
+      {
+        "classes": 2,
+        "package": "burp.ai.sdk.common.transport"
+      },
+      {
+        "classes": 2,
+        "package": "burp.ai.sdk.common.util"
+      },
+      {
+        "classes": 5,
+        "package": "burp.ai.sdk.mcp.auth"
+      },
+      {
+        "classes": 3,
+        "package": "burp.ai.sdk.mcp.network"
+      },
+      {
+        "classes": 19,
+        "package": "burp.ai.sdk.mcp.transport"
+      },
+      {
+        "classes": 3,
+        "package": "burp.api.montoya"
+      },
+      {
+        "classes": 1,
+        "package": "burp.api.montoya.ai"
+      },
+      {
+        "classes": 5,
+        "package": "burp.api.montoya.ai.chat"
+      },
+      {
+        "classes": 3,
+        "package": "burp.api.montoya.bambda"
+      },
+      {
+        "classes": 4,
+        "package": "burp.api.montoya.burpsuite"
+      },
+      {
+        "classes": 16,
+        "package": "burp.api.montoya.collaborator"
+      },
+      {
+        "classes": 1,
+        "package": "burp.api.montoya.comparer"
+      },
+      {
+        "classes": 11,
+        "package": "burp.api.montoya.core"
+      },
+      {
+        "classes": 1,
+        "package": "burp.api.montoya.decoder"
+      },
+      {
+        "classes": 2,
+        "package": "burp.api.montoya.extension"
+      },
+      {
+        "classes": 7,
+        "package": "burp.api.montoya.http"
+      },
+      {
+        "classes": 14,
+        "package": "burp.api.montoya.http.execution"
+      },
+      {
+        "classes": 8,
+        "package": "burp.api.montoya.http.handler"
+      },
+      {
+        "classes": 7,
+        "package": "burp.api.montoya.http.message"
+      },
+      {
+        "classes": 3,
+        "package": "burp.api.montoya.http.message.params"
+      },
+      {
+        "classes": 3,
+        "package": "burp.api.montoya.http.message.requests"
+      },
+      {
+        "classes": 1,
+        "package": "burp.api.montoya.http.message.responses"
+      },
+      {
+        "classes": 5,
+        "package": "burp.api.montoya.http.message.responses.analysis"
+      },
+      {
+        "classes": 4,
+        "package": "burp.api.montoya.http.sessions"
+      },
+      {
+        "classes": 2,
+        "package": "burp.api.montoya.internal"
+      },
+      {
+        "classes": 12,
+        "package": "burp.api.montoya.intruder"
+      },
+      {
+        "classes": 2,
+        "package": "burp.api.montoya.logger"
+      },
+      {
+        "classes": 1,
+        "package": "burp.api.montoya.logging"
+      },
+      {
+        "classes": 4,
+        "package": "burp.api.montoya.organizer"
+      },
+      {
+        "classes": 4,
+        "package": "burp.api.montoya.persistence"
+      },
+      {
+        "classes": 1,
+        "package": "burp.api.montoya.project"
+      },
+      {
+        "classes": 7,
+        "package": "burp.api.montoya.proxy"
+      },
+      {
+        "classes": 9,
+        "package": "burp.api.montoya.proxy.http"
+      },
+      {
+        "classes": 10,
+        "package": "burp.api.montoya.proxy.websocket"
+      },
+      {
+        "classes": 3,
+        "package": "burp.api.montoya.repeater"
+      },
+      {
+        "classes": 12,
+        "package": "burp.api.montoya.scanner"
+      },
+      {
+        "classes": 2,
+        "package": "burp.api.montoya.scanner.audit"
+      },
+      {
+        "classes": 3,
+        "package": "burp.api.montoya.scanner.audit.insertionpoint"
+      },
+      {
+        "classes": 4,
+        "package": "burp.api.montoya.scanner.audit.issues"
+      },
+      {
+        "classes": 3,
+        "package": "burp.api.montoya.scanner.bchecks"
+      },
+      {
+        "classes": 3,
+        "package": "burp.api.montoya.scanner.scancheck"
+      },
+      {
+        "classes": 3,
+        "package": "burp.api.montoya.scope"
+      },
+      {
+        "classes": 3,
+        "package": "burp.api.montoya.sitemap"
+      },
+      {
+        "classes": 3,
+        "package": "burp.api.montoya.ui"
+      },
+      {
+        "classes": 11,
+        "package": "burp.api.montoya.ui.contextmenu"
+      },
+      {
+        "classes": 6,
+        "package": "burp.api.montoya.ui.editor"
+      },
+      {
+        "classes": 9,
+        "package": "burp.api.montoya.ui.editor.extension"
+      },
+      {
+        "classes": 4,
+        "package": "burp.api.montoya.ui.hotkey"
+      },
+      {
+        "classes": 4,
+        "package": "burp.api.montoya.ui.menu"
+      },
+      {
+        "classes": 6,
+        "package": "burp.api.montoya.ui.settings"
+      },
+      {
+        "classes": 1,
+        "package": "burp.api.montoya.ui.swing"
+      },
+      {
+        "classes": 17,
+        "package": "burp.api.montoya.utilities"
+      },
+      {
+        "classes": 10,
+        "package": "burp.api.montoya.utilities.json"
+      },
+      {
+        "classes": 3,
+        "package": "burp.api.montoya.utilities.rank"
+      },
+      {
+        "classes": 6,
+        "package": "burp.api.montoya.utilities.shell"
+      },
+      {
+        "classes": 11,
+        "package": "burp.api.montoya.websocket"
+      },
+      {
+        "classes": 4,
+        "package": "burp.api.montoya.websocket.extension"
+      },
+      {
+        "classes": 98,
+        "package": "burp.theme"
+      },
+      {
+        "classes": 2,
+        "package": "com.beust.ah"
+      },
+      {
+        "classes": 37,
+        "package": "com.beust.jcommander"
+      },
+      {
+        "classes": 20,
+        "package": "com.beust.jcommander.converters"
+      },
+      {
+        "classes": 2,
+        "package": "com.beust.jcommander.defaultprovider"
+      },
+      {
+        "classes": 8,
+        "package": "com.beust.jcommander.internal"
+      },
+      {
+        "classes": 1,
+        "package": "com.beust.jcommander.parser"
+      },
+      {
+        "classes": 3,
+        "package": "com.beust.jcommander.validators"
+      },
+      {
+        "classes": 42,
+        "package": "com.connectrpc"
+      },
+      {
+        "classes": 2,
+        "package": "com.connectrpc.compression"
+      },
+      {
+        "classes": 4,
+        "package": "com.connectrpc.extensions"
+      },
+      {
+        "classes": 5,
+        "package": "com.connectrpc.google.rpc"
+      },
+      {
+        "classes": 15,
+        "package": "com.connectrpc.http"
+      },
+      {
+        "classes": 7,
+        "package": "com.connectrpc.impl"
+      },
+      {
+        "classes": 27,
+        "package": "com.connectrpc.protocols"
+      },
+      {
+        "classes": 3,
+        "package": "com.ejt.internal"
+      },
+      {
+        "classes": 10,
+        "package": "com.ejt.internal.gui"
+      },
+      {
+        "classes": 10,
+        "package": "com.ejt.internal.i18n"
+      },
+      {
+        "classes": 5,
+        "package": "com.ejt.internal.io"
+      },
+      {
+        "classes": 32,
+        "package": "com.ejt.internal.util"
+      },
+      {
+        "classes": 14,
+        "package": "com.ethlo.time"
+      },
+      {
+        "classes": 3,
+        "package": "com.ethlo.time.internal"
+      },
+      {
+        "classes": 2,
+        "package": "com.ethlo.time.internal.fixed"
+      },
+      {
+        "classes": 5,
+        "package": "com.ethlo.time.internal.token"
+      },
+      {
+        "classes": 7,
+        "package": "com.ethlo.time.internal.util"
+      },
+      {
+        "classes": 2,
+        "package": "com.ethlo.time.token"
+      },
+      {
+        "classes": 6,
+        "package": "com.exe4j"
+      },
+      {
+        "classes": 8,
+        "package": "com.exe4j.runtime"
+      },
+      {
+        "classes": 8,
+        "package": "com.exe4j.runtime.gui"
+      },
+      {
+        "classes": 3,
+        "package": "com.exe4j.runtime.jpms"
+      },
+      {
+        "classes": 6,
+        "package": "com.exe4j.runtime.splash"
+      },
+      {
+        "classes": 12,
+        "package": "com.exe4j.runtime.util"
+      },
+      {
+        "classes": 74,
+        "package": "com.fasterxml.jackson.annotation"
+      },
+      {
+        "classes": 49,
+        "package": "com.fasterxml.jackson.core"
+      },
+      {
+        "classes": 3,
+        "package": "com.fasterxml.jackson.core.async"
+      },
+      {
+        "classes": 3,
+        "package": "com.fasterxml.jackson.core.base"
+      },
+      {
+        "classes": 4,
+        "package": "com.fasterxml.jackson.core.exc"
+      },
+      {
+        "classes": 6,
+        "package": "com.fasterxml.jackson.core.filter"
+      },
+      {
+        "classes": 5,
+        "package": "com.fasterxml.jackson.core.format"
+      },
+      {
+        "classes": 34,
+        "package": "com.fasterxml.jackson.core.internal.shaded.fdp.v2_19_2"
+      },
+      {
+        "classes": 19,
+        "package": "com.fasterxml.jackson.core.io"
+      },
+      {
+        "classes": 3,
+        "package": "com.fasterxml.jackson.core.io.schubfach"
+      },
+      {
+        "classes": 14,
+        "package": "com.fasterxml.jackson.core.json"
+      },
+      {
+        "classes": 4,
+        "package": "com.fasterxml.jackson.core.json.async"
+      },
+      {
+        "classes": 10,
+        "package": "com.fasterxml.jackson.core.sym"
+      },
+      {
+        "classes": 4,
+        "package": "com.fasterxml.jackson.core.type"
+      },
+      {
+        "classes": 42,
+        "package": "com.fasterxml.jackson.core.util"
+      },
+      {
+        "classes": 80,
+        "package": "com.fasterxml.jackson.databind"
+      },
+      {
+        "classes": 16,
+        "package": "com.fasterxml.jackson.databind.annotation"
+      },
+      {
+        "classes": 32,
+        "package": "com.fasterxml.jackson.databind.cfg"
+      },
+      {
+        "classes": 45,
+        "package": "com.fasterxml.jackson.databind.deser"
+      },
+      {
+        "classes": 52,
+        "package": "com.fasterxml.jackson.databind.deser.impl"
+      },
+      {
+        "classes": 89,
+        "package": "com.fasterxml.jackson.databind.deser.std"
+      },
+      {
+        "classes": 9,
+        "package": "com.fasterxml.jackson.databind.exc"
+      },
+      {
+        "classes": 17,
+        "package": "com.fasterxml.jackson.databind.ext"
+      },
+      {
+        "classes": 75,
+        "package": "com.fasterxml.jackson.databind.introspect"
+      },
+      {
+        "classes": 4,
+        "package": "com.fasterxml.jackson.databind.jdk14"
+      },
+      {
+        "classes": 2,
+        "package": "com.fasterxml.jackson.databind.json"
+      },
+      {
+        "classes": 26,
+        "package": "com.fasterxml.jackson.databind.jsonFormatVisitors"
+      },
+      {
+        "classes": 3,
+        "package": "com.fasterxml.jackson.databind.jsonschema"
+      },
+      {
+        "classes": 24,
+        "package": "com.fasterxml.jackson.databind.jsontype"
+      },
+      {
+        "classes": 23,
+        "package": "com.fasterxml.jackson.databind.jsontype.impl"
+      },
+      {
+        "classes": 6,
+        "package": "com.fasterxml.jackson.databind.module"
+      },
+      {
+        "classes": 33,
+        "package": "com.fasterxml.jackson.databind.node"
+      },
+      {
+        "classes": 24,
+        "package": "com.fasterxml.jackson.databind.ser"
+      },
+      {
+        "classes": 37,
+        "package": "com.fasterxml.jackson.databind.ser.impl"
+      },
+      {
+        "classes": 76,
+        "package": "com.fasterxml.jackson.databind.ser.std"
+      },
+      {
+        "classes": 22,
+        "package": "com.fasterxml.jackson.databind.type"
+      },
+      {
+        "classes": 67,
+        "package": "com.fasterxml.jackson.databind.util"
+      },
+      {
+        "classes": 25,
+        "package": "com.fasterxml.jackson.databind.util.internal"
+      },
+      {
+        "classes": 15,
+        "package": "com.fasterxml.jackson.dataformat.yaml"
+      },
+      {
+        "classes": 3,
+        "package": "com.fasterxml.jackson.dataformat.yaml.snakeyaml.error"
+      },
+      {
+        "classes": 2,
+        "package": "com.fasterxml.jackson.dataformat.yaml.util"
+      },
+      {
+        "classes": 8,
+        "package": "com.fasterxml.jackson.datatype.jsr310"
+      },
+      {
+        "classes": 18,
+        "package": "com.fasterxml.jackson.datatype.jsr310.deser"
+      },
+      {
+        "classes": 16,
+        "package": "com.fasterxml.jackson.datatype.jsr310.deser.key"
+      },
+      {
+        "classes": 18,
+        "package": "com.fasterxml.jackson.datatype.jsr310.ser"
+      },
+      {
+        "classes": 2,
+        "package": "com.fasterxml.jackson.datatype.jsr310.ser.key"
+      },
+      {
+        "classes": 2,
+        "package": "com.fasterxml.jackson.datatype.jsr310.util"
+      },
+      {
+        "classes": 32,
+        "package": "com.formdev.flatlaf"
+      },
+      {
+        "classes": 27,
+        "package": "com.formdev.flatlaf.extras"
+      },
+      {
+        "classes": 52,
+        "package": "com.formdev.flatlaf.extras.components"
+      },
+      {
+        "classes": 1,
+        "package": "com.formdev.flatlaf.extras.resources"
+      },
+      {
+        "classes": 47,
+        "package": "com.formdev.flatlaf.icons"
+      },
+      {
+        "classes": 6,
+        "package": "com.formdev.flatlaf.json"
+      },
+      {
+        "classes": 1,
+        "package": "com.formdev.flatlaf.resources"
+      },
+      {
+        "classes": 2,
+        "package": "com.formdev.flatlaf.themes"
+      },
+      {
+        "classes": 214,
+        "package": "com.formdev.flatlaf.ui"
+      },
+      {
+        "classes": 59,
+        "package": "com.formdev.flatlaf.util"
+      },
+      {
+        "classes": 3,
+        "package": "com.github.fge"
+      },
+      {
+        "classes": 8,
+        "package": "com.github.fge.jackson"
+      },
+      {
+        "classes": 7,
+        "package": "com.github.fge.jackson.jsonpointer"
+      },
+      {
+        "classes": 14,
+        "package": "com.github.fge.jsonpatch"
+      },
+      {
+        "classes": 1,
+        "package": "com.github.fge.jsonschema"
+      },
+      {
+        "classes": 2,
+        "package": "com.github.fge.jsonschema.cfg"
+      },
+      {
+        "classes": 4,
+        "package": "com.github.fge.jsonschema.core.exceptions"
+      },
+      {
+        "classes": 1,
+        "package": "com.github.fge.jsonschema.core.keyword.syntax"
+      },
+      {
+        "classes": 3,
+        "package": "com.github.fge.jsonschema.core.keyword.syntax.checkers"
+      },
+      {
+        "classes": 6,
+        "package": "com.github.fge.jsonschema.core.keyword.syntax.checkers.common"
+      },
+      {
+        "classes": 5,
+        "package": "com.github.fge.jsonschema.core.keyword.syntax.checkers.draftv3"
+      },
+      {
+        "classes": 7,
+        "package": "com.github.fge.jsonschema.core.keyword.syntax.checkers.draftv4"
+      },
+      {
+        "classes": 8,
+        "package": "com.github.fge.jsonschema.core.keyword.syntax.checkers.helpers"
+      },
+      {
+        "classes": 2,
+        "package": "com.github.fge.jsonschema.core.keyword.syntax.checkers.hyperschema"
+      },
+      {
+        "classes": 4,
+        "package": "com.github.fge.jsonschema.core.keyword.syntax.dictionaries"
+      },
+      {
+        "classes": 7,
+        "package": "com.github.fge.jsonschema.core.load"
+      },
+      {
+        "classes": 3,
+        "package": "com.github.fge.jsonschema.core.load.configuration"
+      },
+      {
+        "classes": 3,
+        "package": "com.github.fge.jsonschema.core.load.download"
+      },
+      {
+        "classes": 5,
+        "package": "com.github.fge.jsonschema.core.load.uri"
+      },
+      {
+        "classes": 2,
+        "package": "com.github.fge.jsonschema.core.messages"
+      },
+      {
+        "classes": 11,
+        "package": "com.github.fge.jsonschema.core.processing"
+      },
+      {
+        "classes": 4,
+        "package": "com.github.fge.jsonschema.core.ref"
+      },
+      {
+        "classes": 10,
+        "package": "com.github.fge.jsonschema.core.report"
+      },
+      {
+        "classes": 8,
+        "package": "com.github.fge.jsonschema.core.tree"
+      },
+      {
+        "classes": 2,
+        "package": "com.github.fge.jsonschema.core.tree.key"
+      },
+      {
+        "classes": 17,
+        "package": "com.github.fge.jsonschema.core.util"
+      },
+      {
+        "classes": 2,
+        "package": "com.github.fge.jsonschema.examples"
+      },
+      {
+        "classes": 1,
+        "package": "com.github.fge.jsonschema.exceptions"
+      },
+      {
+        "classes": 2,
+        "package": "com.github.fge.jsonschema.format"
+      },
+      {
+        "classes": 5,
+        "package": "com.github.fge.jsonschema.format.common"
+      },
+      {
+        "classes": 4,
+        "package": "com.github.fge.jsonschema.format.draftv3"
+      },
+      {
+        "classes": 8,
+        "package": "com.github.fge.jsonschema.format.extra"
+      },
+      {
+        "classes": 4,
+        "package": "com.github.fge.jsonschema.format.helpers"
+      },
+      {
+        "classes": 2,
+        "package": "com.github.fge.jsonschema.keyword.digest"
+      },
+      {
+        "classes": 4,
+        "package": "com.github.fge.jsonschema.keyword.digest.common"
+      },
+      {
+        "classes": 5,
+        "package": "com.github.fge.jsonschema.keyword.digest.draftv3"
+      },
+      {
+        "classes": 6,
+        "package": "com.github.fge.jsonschema.keyword.digest.draftv4"
+      },
+      {
+        "classes": 4,
+        "package": "com.github.fge.jsonschema.keyword.digest.helpers"
+      },
+      {
+        "classes": 5,
+        "package": "com.github.fge.jsonschema.keyword.validator"
+      },
+      {
+        "classes": 12,
+        "package": "com.github.fge.jsonschema.keyword.validator.common"
+      },
+      {
+        "classes": 5,
+        "package": "com.github.fge.jsonschema.keyword.validator.draftv3"
+      },
+      {
+        "classes": 9,
+        "package": "com.github.fge.jsonschema.keyword.validator.draftv4"
+      },
+      {
+        "classes": 5,
+        "package": "com.github.fge.jsonschema.keyword.validator.helpers"
+      },
+      {
+        "classes": 5,
+        "package": "com.github.fge.jsonschema.library"
+      },
+      {
+        "classes": 3,
+        "package": "com.github.fge.jsonschema.library.digest"
+      },
+      {
+        "classes": 4,
+        "package": "com.github.fge.jsonschema.library.format"
+      },
+      {
+        "classes": 3,
+        "package": "com.github.fge.jsonschema.library.validator"
+      },
+      {
+        "classes": 6,
+        "package": "com.github.fge.jsonschema.main"
+      },
+      {
+        "classes": 2,
+        "package": "com.github.fge.jsonschema.messages"
+      },
+      {
+        "classes": 1,
+        "package": "com.github.fge.jsonschema.processors.build"
+      },
+      {
+        "classes": 4,
+        "package": "com.github.fge.jsonschema.processors.data"
+      },
+      {
+        "classes": 1,
+        "package": "com.github.fge.jsonschema.processors.digest"
+      },
+      {
+        "classes": 2,
+        "package": "com.github.fge.jsonschema.processors.format"
+      },
+      {
+        "classes": 2,
+        "package": "com.github.fge.jsonschema.processors.syntax"
+      },
+      {
+        "classes": 13,
+        "package": "com.github.fge.jsonschema.processors.validation"
+      },
+      {
+        "classes": 1,
+        "package": "com.github.fge.msgsimple"
+      },
+      {
+        "classes": 4,
+        "package": "com.github.fge.msgsimple.bundle"
+      },
+      {
+        "classes": 2,
+        "package": "com.github.fge.msgsimple.load"
+      },
+      {
+        "classes": 1,
+        "package": "com.github.fge.msgsimple.locale"
+      },
+      {
+        "classes": 7,
+        "package": "com.github.fge.msgsimple.provider"
+      },
+      {
+        "classes": 2,
+        "package": "com.github.fge.msgsimple.source"
+      },
+      {
+        "classes": 4,
+        "package": "com.github.fge.uritemplate"
+      },
+      {
+        "classes": 4,
+        "package": "com.github.fge.uritemplate.expression"
+      },
+      {
+        "classes": 6,
+        "package": "com.github.fge.uritemplate.parse"
+      },
+      {
+        "classes": 5,
+        "package": "com.github.fge.uritemplate.vars.specs"
+      },
+      {
+        "classes": 15,
+        "package": "com.github.jaiimageio.impl.common"
+      },
+      {
+        "classes": 16,
+        "package": "com.github.jaiimageio.impl.plugins.bmp"
+      },
+      {
+        "classes": 6,
+        "package": "com.github.jaiimageio.impl.plugins.clib"
+      },
+      {
+        "classes": 12,
+        "package": "com.github.jaiimageio.impl.plugins.gif"
+      },
+      {
+        "classes": 4,
+        "package": "com.github.jaiimageio.impl.plugins.jpeg"
+      },
+      {
+        "classes": 6,
+        "package": "com.github.jaiimageio.impl.plugins.pcx"
+      },
+      {
+        "classes": 4,
+        "package": "com.github.jaiimageio.impl.plugins.png"
+      },
+      {
+        "classes": 8,
+        "package": "com.github.jaiimageio.impl.plugins.pnm"
+      },
+      {
+        "classes": 7,
+        "package": "com.github.jaiimageio.impl.plugins.raw"
+      },
+      {
+        "classes": 48,
+        "package": "com.github.jaiimageio.impl.plugins.tiff"
+      },
+      {
+        "classes": 7,
+        "package": "com.github.jaiimageio.impl.plugins.wbmp"
+      },
+      {
+        "classes": 2,
+        "package": "com.github.jaiimageio.impl.stream"
+      },
+      {
+        "classes": 2,
+        "package": "com.github.jaiimageio.plugins.bmp"
+      },
+      {
+        "classes": 1,
+        "package": "com.github.jaiimageio.plugins.pnm"
+      },
+      {
+        "classes": 192,
+        "package": "com.github.jaiimageio.plugins.tiff"
+      },
+      {
+        "classes": 9,
+        "package": "com.github.jaiimageio.stream"
+      },
+      {
+        "classes": 1,
+        "package": "com.github.weisj.jsvg"
+      },
+      {
+        "classes": 6,
+        "package": "com.github.weisj.jsvg.animation"
+      },
+      {
+        "classes": 6,
+        "package": "com.github.weisj.jsvg.animation.interpolation"
+      },
+      {
+        "classes": 3,
+        "package": "com.github.weisj.jsvg.animation.time"
+      },
+      {
+        "classes": 9,
+        "package": "com.github.weisj.jsvg.animation.value"
+      },
+      {
+        "classes": 31,
+        "package": "com.github.weisj.jsvg.attributes"
+      },
+      {
+        "classes": 17,
+        "package": "com.github.weisj.jsvg.attributes.filter"
+      },
+      {
+        "classes": 28,
+        "package": "com.github.weisj.jsvg.attributes.font"
+      },
+      {
+        "classes": 3,
+        "package": "com.github.weisj.jsvg.attributes.stroke"
+      },
+      {
+        "classes": 6,
+        "package": "com.github.weisj.jsvg.attributes.text"
+      },
+      {
+        "classes": 3,
+        "package": "com.github.weisj.jsvg.attributes.transform"
+      },
+      {
+        "classes": 13,
+        "package": "com.github.weisj.jsvg.attributes.value"
+      },
+      {
+        "classes": 8,
+        "package": "com.github.weisj.jsvg.geometry"
+      },
+      {
+        "classes": 7,
+        "package": "com.github.weisj.jsvg.geometry.mesh"
+      },
+      {
+        "classes": 2,
+        "package": "com.github.weisj.jsvg.geometry.noise"
+      },
+      {
+        "classes": 16,
+        "package": "com.github.weisj.jsvg.geometry.path"
+      },
+      {
+        "classes": 7,
+        "package": "com.github.weisj.jsvg.geometry.size"
+      },
+      {
+        "classes": 8,
+        "package": "com.github.weisj.jsvg.geometry.util"
+      },
+      {
+        "classes": 35,
+        "package": "com.github.weisj.jsvg.nodes"
+      },
+      {
+        "classes": 4,
+        "package": "com.github.weisj.jsvg.nodes.animation"
+      },
+      {
+        "classes": 6,
+        "package": "com.github.weisj.jsvg.nodes.container"
+      },
+      {
+        "classes": 63,
+        "package": "com.github.weisj.jsvg.nodes.filter"
+      },
+      {
+        "classes": 4,
+        "package": "com.github.weisj.jsvg.nodes.mesh"
+      },
+      {
+        "classes": 19,
+        "package": "com.github.weisj.jsvg.nodes.prototype"
+      },
+      {
+        "classes": 2,
+        "package": "com.github.weisj.jsvg.nodes.prototype.impl"
+      },
+      {
+        "classes": 4,
+        "package": "com.github.weisj.jsvg.nodes.prototype.spec"
+      },
+      {
+        "classes": 30,
+        "package": "com.github.weisj.jsvg.nodes.text"
+      },
+      {
+        "classes": 2,
+        "package": "com.github.weisj.jsvg.paint"
+      },
+      {
+        "classes": 11,
+        "package": "com.github.weisj.jsvg.paint.impl"
+      },
+      {
+        "classes": 4,
+        "package": "com.github.weisj.jsvg.paint.impl.jdk"
+      },
+      {
+        "classes": 10,
+        "package": "com.github.weisj.jsvg.parser"
+      },
+      {
+        "classes": 4,
+        "package": "com.github.weisj.jsvg.parser.css"
+      },
+      {
+        "classes": 8,
+        "package": "com.github.weisj.jsvg.parser.css.impl"
+      },
+      {
+        "classes": 29,
+        "package": "com.github.weisj.jsvg.parser.impl"
+      },
+      {
+        "classes": 4,
+        "package": "com.github.weisj.jsvg.parser.resources"
+      },
+      {
+        "classes": 6,
+        "package": "com.github.weisj.jsvg.parser.resources.impl"
+      },
+      {
+        "classes": 11,
+        "package": "com.github.weisj.jsvg.renderer"
+      },
+      {
+        "classes": 2,
+        "package": "com.github.weisj.jsvg.renderer.animation"
+      },
+      {
+        "classes": 1,
+        "package": "com.github.weisj.jsvg.renderer.awt"
+      },
+      {
+        "classes": 13,
+        "package": "com.github.weisj.jsvg.renderer.impl"
+      },
+      {
+        "classes": 6,
+        "package": "com.github.weisj.jsvg.renderer.impl.context"
+      },
+      {
+        "classes": 3,
+        "package": "com.github.weisj.jsvg.renderer.output"
+      },
+      {
+        "classes": 10,
+        "package": "com.github.weisj.jsvg.renderer.output.impl"
+      },
+      {
+        "classes": 2,
+        "package": "com.github.weisj.jsvg.ui"
+      },
+      {
+        "classes": 22,
+        "package": "com.github.weisj.jsvg.util"
+      },
+      {
+        "classes": 2,
+        "package": "com.github.weisj.jsvg.util.supplier"
+      },
+      {
+        "classes": 2,
+        "package": "com.github.weisj.jsvg.view"
+      },
+      {
+        "classes": 8,
+        "package": "com.google.common.annotations"
+      },
+      {
+        "classes": 247,
+        "package": "com.google.common.base"
+      },
+      {
+        "classes": 1,
+        "package": "com.google.common.base.internal"
+      },
+      {
+        "classes": 215,
+        "package": "com.google.common.cache"
+      },
+      {
+        "classes": 1287,
+        "package": "com.google.common.collect"
+      },
+      {
+        "classes": 18,
+        "package": "com.google.common.escape"
+      },
+      {
+        "classes": 26,
+        "package": "com.google.common.eventbus"
+      },
+      {
+        "classes": 125,
+        "package": "com.google.common.graph"
+      },
+      {
+        "classes": 89,
+        "package": "com.google.common.hash"
+      },
+      {
+        "classes": 3,
+        "package": "com.google.common.html"
+      },
+      {
+        "classes": 96,
+        "package": "com.google.common.io"
+      },
+      {
+        "classes": 39,
+        "package": "com.google.common.math"
+      },
+      {
+        "classes": 22,
+        "package": "com.google.common.net"
+      },
+      {
+        "classes": 70,
+        "package": "com.google.common.primitives"
+      },
+      {
+        "classes": 74,
+        "package": "com.google.common.reflect"
+      },
+      {
+        "classes": 346,
+        "package": "com.google.common.util.concurrent"
+      },
+      {
+        "classes": 4,
+        "package": "com.google.common.util.concurrent.internal"
+      },
+      {
+        "classes": 3,
+        "package": "com.google.common.xml"
+      },
+      {
+        "classes": 32,
+        "package": "com.google.errorprone.annotations"
+      },
+      {
+        "classes": 6,
+        "package": "com.google.errorprone.annotations.concurrent"
+      },
+      {
+        "classes": 23,
+        "package": "com.google.i18n.phonenumbers"
+      },
+      {
+        "classes": 5,
+        "package": "com.google.i18n.phonenumbers.internal"
+      },
+      {
+        "classes": 74,
+        "package": "com.google.inject"
+      },
+      {
+        "classes": 24,
+        "package": "com.google.inject.assistedinject"
+      },
+      {
+        "classes": 2,
+        "package": "com.google.inject.assistedinject.internal"
+      },
+      {
+        "classes": 12,
+        "package": "com.google.inject.binder"
+      },
+      {
+        "classes": 506,
+        "package": "com.google.inject.internal"
+      },
+      {
+        "classes": 50,
+        "package": "com.google.inject.internal.aop"
+      },
+      {
+        "classes": 68,
+        "package": "com.google.inject.internal.asm"
+      },
+      {
+        "classes": 24,
+        "package": "com.google.inject.internal.util"
+      },
+      {
+        "classes": 32,
+        "package": "com.google.inject.matcher"
+      },
+      {
+        "classes": 32,
+        "package": "com.google.inject.multibindings"
+      },
+      {
+        "classes": 6,
+        "package": "com.google.inject.name"
+      },
+      {
+        "classes": 142,
+        "package": "com.google.inject.spi"
+      },
+      {
+        "classes": 48,
+        "package": "com.google.inject.util"
+      },
+      {
+        "classes": 16,
+        "package": "com.google.j2objc.annotations"
+      },
+      {
+        "classes": 664,
+        "package": "com.google.protobuf"
+      },
+      {
+        "classes": 18,
+        "package": "com.google.protobuf.compiler"
+      },
+      {
+        "classes": 6,
+        "package": "com.google.thirdparty.publicsuffix"
+      },
+      {
+        "classes": 24,
+        "package": "com.google.zxing"
+      },
+      {
+        "classes": 3,
+        "package": "com.google.zxing.aztec"
+      },
+      {
+        "classes": 4,
+        "package": "com.google.zxing.aztec.decoder"
+      },
+      {
+        "classes": 3,
+        "package": "com.google.zxing.aztec.detector"
+      },
+      {
+        "classes": 8,
+        "package": "com.google.zxing.aztec.encoder"
+      },
+      {
+        "classes": 13,
+        "package": "com.google.zxing.client.j2se"
+      },
+      {
+        "classes": 37,
+        "package": "com.google.zxing.client.result"
+      },
+      {
+        "classes": 18,
+        "package": "com.google.zxing.common"
+      },
+      {
+        "classes": 3,
+        "package": "com.google.zxing.common.detector"
+      },
+      {
+        "classes": 5,
+        "package": "com.google.zxing.common.reedsolomon"
+      },
+      {
+        "classes": 2,
+        "package": "com.google.zxing.datamatrix"
+      },
+      {
+        "classes": 10,
+        "package": "com.google.zxing.datamatrix.decoder"
+      },
+      {
+        "classes": 1,
+        "package": "com.google.zxing.datamatrix.detector"
+      },
+      {
+        "classes": 20,
+        "package": "com.google.zxing.datamatrix.encoder"
+      },
+      {
+        "classes": 1,
+        "package": "com.google.zxing.maxicode"
+      },
+      {
+        "classes": 3,
+        "package": "com.google.zxing.maxicode.decoder"
+      },
+      {
+        "classes": 3,
+        "package": "com.google.zxing.multi"
+      },
+      {
+        "classes": 3,
+        "package": "com.google.zxing.multi.qrcode"
+      },
+      {
+        "classes": 4,
+        "package": "com.google.zxing.multi.qrcode.detector"
+      },
+      {
+        "classes": 33,
+        "package": "com.google.zxing.oned"
+      },
+      {
+        "classes": 6,
+        "package": "com.google.zxing.oned.rss"
+      },
+      {
+        "classes": 4,
+        "package": "com.google.zxing.oned.rss.expanded"
+      },
+      {
+        "classes": 21,
+        "package": "com.google.zxing.oned.rss.expanded.decoders"
+      },
+      {
+        "classes": 4,
+        "package": "com.google.zxing.pdf417"
+      },
+      {
+        "classes": 12,
+        "package": "com.google.zxing.pdf417.decoder"
+      },
+      {
+        "classes": 3,
+        "package": "com.google.zxing.pdf417.decoder.ec"
+      },
+      {
+        "classes": 2,
+        "package": "com.google.zxing.pdf417.detector"
+      },
+      {
+        "classes": 10,
+        "package": "com.google.zxing.pdf417.encoder"
+      },
+      {
+        "classes": 2,
+        "package": "com.google.zxing.qrcode"
+      },
+      {
+        "classes": 21,
+        "package": "com.google.zxing.qrcode.decoder"
+      },
+      {
+        "classes": 8,
+        "package": "com.google.zxing.qrcode.detector"
+      },
+      {
+        "classes": 13,
+        "package": "com.google.zxing.qrcode.encoder"
+      },
+      {
+        "classes": 13,
+        "package": "com.install4j.api"
+      },
+      {
+        "classes": 7,
+        "package": "com.install4j.api.actions"
+      },
+      {
+        "classes": 30,
+        "package": "com.install4j.api.beaninfo"
+      },
+      {
+        "classes": 15,
+        "package": "com.install4j.api.beans"
+      },
+      {
+        "classes": 20,
+        "package": "com.install4j.api.context"
+      },
+      {
+        "classes": 10,
+        "package": "com.install4j.api.events"
+      },
+      {
+        "classes": 7,
+        "package": "com.install4j.api.formcomponents"
+      },
+      {
+        "classes": 3,
+        "package": "com.install4j.api.laf"
+      },
+      {
+        "classes": 13,
+        "package": "com.install4j.api.launcher"
+      },
+      {
+        "classes": 5,
+        "package": "com.install4j.api.macos"
+      },
+      {
+        "classes": 9,
+        "package": "com.install4j.api.screens"
+      },
+      {
+        "classes": 9,
+        "package": "com.install4j.api.styles"
+      },
+      {
+        "classes": 2,
+        "package": "com.install4j.api.unix"
+      },
+      {
+        "classes": 7,
+        "package": "com.install4j.api.update"
+      },
+      {
+        "classes": 28,
+        "package": "com.install4j.api.windows"
+      },
+      {
+        "classes": 7,
+        "package": "com.install4j.api.windows.service"
+      },
+      {
+        "classes": 15,
+        "package": "com.install4j.runtime.alert"
+      },
+      {
+        "classes": 13,
+        "package": "com.install4j.runtime.beans"
+      },
+      {
+        "classes": 16,
+        "package": "com.install4j.runtime.beans.actions"
+      },
+      {
+        "classes": 16,
+        "package": "com.install4j.runtime.beans.actions.control"
+      },
+      {
+        "classes": 18,
+        "package": "com.install4j.runtime.beans.actions.desktop"
+      },
+      {
+        "classes": 43,
+        "package": "com.install4j.runtime.beans.actions.files"
+      },
+      {
+        "classes": 4,
+        "package": "com.install4j.runtime.beans.actions.finish"
+      },
+      {
+        "classes": 3,
+        "package": "com.install4j.runtime.beans.actions.firewall"
+      },
+      {
+        "classes": 10,
+        "package": "com.install4j.runtime.beans.actions.jdbc"
+      },
+      {
+        "classes": 24,
+        "package": "com.install4j.runtime.beans.actions.misc"
+      },
+      {
+        "classes": 14,
+        "package": "com.install4j.runtime.beans.actions.net"
+      },
+      {
+        "classes": 15,
+        "package": "com.install4j.runtime.beans.actions.properties"
+      },
+      {
+        "classes": 31,
+        "package": "com.install4j.runtime.beans.actions.registry"
+      },
+      {
+        "classes": 14,
+        "package": "com.install4j.runtime.beans.actions.services"
+      },
+      {
+        "classes": 7,
+        "package": "com.install4j.runtime.beans.actions.text"
+      },
+      {
+        "classes": 3,
+        "package": "com.install4j.runtime.beans.actions.update"
+      },
+      {
+        "classes": 12,
+        "package": "com.install4j.runtime.beans.actions.xml"
+      },
+      {
+        "classes": 8,
+        "package": "com.install4j.runtime.beans.applications"
+      },
+      {
+        "classes": 104,
+        "package": "com.install4j.runtime.beans.formcomponents"
+      },
+      {
+        "classes": 16,
+        "package": "com.install4j.runtime.beans.groups"
+      },
+      {
+        "classes": 39,
+        "package": "com.install4j.runtime.beans.screens"
+      },
+      {
+        "classes": 8,
+        "package": "com.install4j.runtime.beans.screens.components"
+      },
+      {
+        "classes": 14,
+        "package": "com.install4j.runtime.beans.screens.componentselection"
+      },
+      {
+        "classes": 3,
+        "package": "com.install4j.runtime.beans.screens.installationcomponents"
+      },
+      {
+        "classes": 6,
+        "package": "com.install4j.runtime.beans.screens.installationtype"
+      },
+      {
+        "classes": 16,
+        "package": "com.install4j.runtime.beans.styles"
+      },
+      {
+        "classes": 19,
+        "package": "com.install4j.runtime.beans.widgets"
+      },
+      {
+        "classes": 21,
+        "package": "com.install4j.runtime.filechooser"
+      },
+      {
+        "classes": 18,
+        "package": "com.install4j.runtime.filechooser.swingdirectory"
+      },
+      {
+        "classes": 7,
+        "package": "com.install4j.runtime.flatlaf"
+      },
+      {
+        "classes": 55,
+        "package": "com.install4j.runtime.installer"
+      },
+      {
+        "classes": 42,
+        "package": "com.install4j.runtime.installer.config"
+      },
+      {
+        "classes": 5,
+        "package": "com.install4j.runtime.installer.config.laf"
+      },
+      {
+        "classes": 2,
+        "package": "com.install4j.runtime.installer.config.update"
+      },
+      {
+        "classes": 26,
+        "package": "com.install4j.runtime.installer.controller"
+      },
+      {
+        "classes": 41,
+        "package": "com.install4j.runtime.installer.frontend"
+      },
+      {
+        "classes": 12,
+        "package": "com.install4j.runtime.installer.frontend.components"
+      },
+      {
+        "classes": 13,
+        "package": "com.install4j.runtime.installer.frontend.headless"
+      },
+      {
+        "classes": 39,
+        "package": "com.install4j.runtime.installer.helper"
+      },
+      {
+        "classes": 8,
+        "package": "com.install4j.runtime.installer.helper.apiimpl"
+      },
+      {
+        "classes": 13,
+        "package": "com.install4j.runtime.installer.helper.applaunch"
+      },
+      {
+        "classes": 14,
+        "package": "com.install4j.runtime.installer.helper.comm"
+      },
+      {
+        "classes": 7,
+        "package": "com.install4j.runtime.installer.helper.comm.actions"
+      },
+      {
+        "classes": 10,
+        "package": "com.install4j.runtime.installer.helper.comm.impl"
+      },
+      {
+        "classes": 7,
+        "package": "com.install4j.runtime.installer.helper.comm.responses"
+      },
+      {
+        "classes": 9,
+        "package": "com.install4j.runtime.installer.helper.console"
+      },
+      {
+        "classes": 37,
+        "package": "com.install4j.runtime.installer.helper.content"
+      },
+      {
+        "classes": 3,
+        "package": "com.install4j.runtime.installer.helper.content.apache.archivers"
+      },
+      {
+        "classes": 9,
+        "package": "com.install4j.runtime.installer.helper.content.apache.archivers.tar"
+      },
+      {
+        "classes": 4,
+        "package": "com.install4j.runtime.installer.helper.content.apache.archivers.zip"
+      },
+      {
+        "classes": 9,
+        "package": "com.install4j.runtime.installer.helper.content.apache.utils"
+      },
+      {
+        "classes": 6,
+        "package": "com.install4j.runtime.installer.helper.content.xz"
+      },
+      {
+        "classes": 1,
+        "package": "com.install4j.runtime.installer.helper.content.xz.lz"
+      },
+      {
+        "classes": 10,
+        "package": "com.install4j.runtime.installer.helper.content.xz.lzma"
+      },
+      {
+        "classes": 3,
+        "package": "com.install4j.runtime.installer.helper.content.xz.rangecoder"
+      },
+      {
+        "classes": 17,
+        "package": "com.install4j.runtime.installer.helper.fileinst"
+      },
+      {
+        "classes": 14,
+        "package": "com.install4j.runtime.installer.helper.launching"
+      },
+      {
+        "classes": 5,
+        "package": "com.install4j.runtime.installer.helper.registry"
+      },
+      {
+        "classes": 12,
+        "package": "com.install4j.runtime.installer.helper.versionspecific"
+      },
+      {
+        "classes": 4,
+        "package": "com.install4j.runtime.installer.platform"
+      },
+      {
+        "classes": 31,
+        "package": "com.install4j.runtime.installer.platform.macos"
+      },
+      {
+        "classes": 15,
+        "package": "com.install4j.runtime.installer.platform.unix"
+      },
+      {
+        "classes": 47,
+        "package": "com.install4j.runtime.installer.platform.win32"
+      },
+      {
+        "classes": 10,
+        "package": "com.install4j.runtime.installer.platform.win32.wininet"
+      },
+      {
+        "classes": 10,
+        "package": "com.install4j.runtime.launcher"
+      },
+      {
+        "classes": 14,
+        "package": "com.install4j.runtime.launcher.integration"
+      },
+      {
+        "classes": 3,
+        "package": "com.install4j.runtime.launcher.integration.gui"
+      },
+      {
+        "classes": 6,
+        "package": "com.install4j.runtime.launcher.service"
+      },
+      {
+        "classes": 8,
+        "package": "com.install4j.runtime.launcher.util"
+      },
+      {
+        "classes": 74,
+        "package": "com.install4j.runtime.util"
+      },
+      {
+        "classes": 7,
+        "package": "com.install4j.runtime.wizard"
+      },
+      {
+        "classes": 8,
+        "package": "com.networknt.org.apache.commons.validator.routines"
+      },
+      {
+        "classes": 51,
+        "package": "com.networknt.schema"
+      },
+      {
+        "classes": 6,
+        "package": "com.networknt.schema.annotation"
+      },
+      {
+        "classes": 24,
+        "package": "com.networknt.schema.dialect"
+      },
+      {
+        "classes": 21,
+        "package": "com.networknt.schema.format"
+      },
+      {
+        "classes": 6,
+        "package": "com.networknt.schema.i18n"
+      },
+      {
+        "classes": 79,
+        "package": "com.networknt.schema.keyword"
+      },
+      {
+        "classes": 6,
+        "package": "com.networknt.schema.output"
+      },
+      {
+        "classes": 4,
+        "package": "com.networknt.schema.path"
+      },
+      {
+        "classes": 18,
+        "package": "com.networknt.schema.regex"
+      },
+      {
+        "classes": 20,
+        "package": "com.networknt.schema.resource"
+      },
+      {
+        "classes": 2,
+        "package": "com.networknt.schema.result"
+      },
+      {
+        "classes": 10,
+        "package": "com.networknt.schema.serialization"
+      },
+      {
+        "classes": 18,
+        "package": "com.networknt.schema.serialization.node"
+      },
+      {
+        "classes": 15,
+        "package": "com.networknt.schema.utils"
+      },
+      {
+        "classes": 3,
+        "package": "com.networknt.schema.vocabulary"
+      },
+      {
+        "classes": 20,
+        "package": "com.networknt.schema.walk"
+      },
+      {
+        "classes": 59,
+        "package": "com.nimbusds.jose"
+      },
+      {
+        "classes": 26,
+        "package": "com.nimbusds.jose.crypto"
+      },
+      {
+        "classes": 2,
+        "package": "com.nimbusds.jose.crypto.bc"
+      },
+      {
+        "classes": 3,
+        "package": "com.nimbusds.jose.crypto.factories"
+      },
+      {
+        "classes": 41,
+        "package": "com.nimbusds.jose.crypto.impl"
+      },
+      {
+        "classes": 3,
+        "package": "com.nimbusds.jose.crypto.opts"
+      },
+      {
+        "classes": 2,
+        "package": "com.nimbusds.jose.crypto.utils"
+      },
+      {
+        "classes": 4,
+        "package": "com.nimbusds.jose.jca"
+      },
+      {
+        "classes": 32,
+        "package": "com.nimbusds.jose.jwk"
+      },
+      {
+        "classes": 5,
+        "package": "com.nimbusds.jose.jwk.gen"
+      },
+      {
+        "classes": 8,
+        "package": "com.nimbusds.jose.jwk.source"
+      },
+      {
+        "classes": 4,
+        "package": "com.nimbusds.jose.mint"
+      },
+      {
+        "classes": 23,
+        "package": "com.nimbusds.jose.proc"
+      },
+      {
+        "classes": 1,
+        "package": "com.nimbusds.jose.produce"
+      },
+      {
+        "classes": 11,
+        "package": "com.nimbusds.jose.shaded.asm"
+      },
+      {
+        "classes": 2,
+        "package": "com.nimbusds.jose.shaded.asm.ex"
+      },
+      {
+        "classes": 20,
+        "package": "com.nimbusds.jose.shaded.json"
+      },
+      {
+        "classes": 2,
+        "package": "com.nimbusds.jose.shaded.json.annotate"
+      },
+      {
+        "classes": 10,
+        "package": "com.nimbusds.jose.shaded.json.parser"
+      },
+      {
+        "classes": 25,
+        "package": "com.nimbusds.jose.shaded.json.reader"
+      },
+      {
+        "classes": 36,
+        "package": "com.nimbusds.jose.shaded.json.writer"
+      },
+      {
+        "classes": 34,
+        "package": "com.nimbusds.jose.shaded.ow2asm"
+      },
+      {
+        "classes": 3,
+        "package": "com.nimbusds.jose.shaded.ow2asm.signature"
+      },
+      {
+        "classes": 26,
+        "package": "com.nimbusds.jose.util"
+      },
+      {
+        "classes": 10,
+        "package": "com.nimbusds.jwt"
+      },
+      {
+        "classes": 9,
+        "package": "com.nimbusds.jwt.proc"
+      },
+      {
+        "classes": 1,
+        "package": "com.nimbusds.jwt.util"
+      },
+      {
+        "classes": 62,
+        "package": "com.squareup.moshi"
+      },
+      {
+        "classes": 6,
+        "package": "com.squareup.moshi.internal"
+      },
+      {
+        "classes": 3,
+        "package": "com.sun.javafx"
+      },
+      {
+        "classes": 1,
+        "package": "com.sun.javafx.beans"
+      },
+      {
+        "classes": 71,
+        "package": "com.sun.javafx.binding"
+      },
+      {
+        "classes": 72,
+        "package": "com.sun.javafx.collections"
+      },
+      {
+        "classes": 19,
+        "package": "com.sun.javafx.event"
+      },
+      {
+        "classes": 10,
+        "package": "com.sun.javafx.logging"
+      },
+      {
+        "classes": 6,
+        "package": "com.sun.javafx.logging.jfr"
+      },
+      {
+        "classes": 3,
+        "package": "com.sun.javafx.property"
+      },
+      {
+        "classes": 9,
+        "package": "com.sun.javafx.property.adapter"
+      },
+      {
+        "classes": 7,
+        "package": "com.sun.javafx.reflect"
+      },
+      {
+        "classes": 1,
+        "package": "com.sun.javafx.runtime"
+      },
+      {
+        "classes": 98,
+        "package": "com.sun.jna"
+      },
+      {
+        "classes": 5,
+        "package": "com.sun.jna.internal"
+      },
+      {
+        "classes": 49,
+        "package": "com.sun.jna.platform"
+      },
+      {
+        "classes": 2,
+        "package": "com.sun.jna.platform.bsd"
+      },
+      {
+        "classes": 7,
+        "package": "com.sun.jna.platform.dnd"
+      },
+      {
+        "classes": 16,
+        "package": "com.sun.jna.platform.linux"
+      },
+      {
+        "classes": 58,
+        "package": "com.sun.jna.platform.mac"
+      },
+      {
+        "classes": 92,
+        "package": "com.sun.jna.platform.unix"
+      },
+      {
+        "classes": 38,
+        "package": "com.sun.jna.platform.unix.aix"
+      },
+      {
+        "classes": 18,
+        "package": "com.sun.jna.platform.unix.solaris"
+      },
+      {
+        "classes": 850,
+        "package": "com.sun.jna.platform.win32"
+      },
+      {
+        "classes": 99,
+        "package": "com.sun.jna.platform.win32.COM"
+      },
+      {
+        "classes": 1,
+        "package": "com.sun.jna.platform.win32.COM.tlb"
+      },
+      {
+        "classes": 16,
+        "package": "com.sun.jna.platform.win32.COM.tlb.imp"
+      },
+      {
+        "classes": 31,
+        "package": "com.sun.jna.platform.win32.COM.util"
+      },
+      {
+        "classes": 5,
+        "package": "com.sun.jna.platform.win32.COM.util.annotation"
+      },
+      {
+        "classes": 1,
+        "package": "com.sun.jna.platform.wince"
+      },
+      {
+        "classes": 9,
+        "package": "com.sun.jna.ptr"
+      },
+      {
+        "classes": 12,
+        "package": "com.sun.jna.win32"
+      },
+      {
+        "classes": 17,
+        "package": "com.twitter.hpack"
+      },
+      {
+        "classes": 28,
+        "package": "io.modelcontextprotocol.client"
+      },
+      {
+        "classes": 17,
+        "package": "io.modelcontextprotocol.client.transport"
+      },
+      {
+        "classes": 8,
+        "package": "io.modelcontextprotocol.client.transport.customizer"
+      },
+      {
+        "classes": 2,
+        "package": "io.modelcontextprotocol.common"
+      },
+      {
+        "classes": 4,
+        "package": "io.modelcontextprotocol.json"
+      },
+      {
+        "classes": 2,
+        "package": "io.modelcontextprotocol.json.jackson3"
+      },
+      {
+        "classes": 3,
+        "package": "io.modelcontextprotocol.json.schema"
+      },
+      {
+        "classes": 3,
+        "package": "io.modelcontextprotocol.json.schema.jackson3"
+      },
+      {
+        "classes": 68,
+        "package": "io.modelcontextprotocol.server"
+      },
+      {
+        "classes": 17,
+        "package": "io.modelcontextprotocol.server.transport"
+      },
+      {
+        "classes": 143,
+        "package": "io.modelcontextprotocol.spec"
+      },
+      {
+        "classes": 11,
+        "package": "io.modelcontextprotocol.util"
+      },
+      {
+        "classes": 4,
+        "package": "io.opentelemetry.api"
+      },
+      {
+        "classes": 11,
+        "package": "io.opentelemetry.api.baggage"
+      },
+      {
+        "classes": 6,
+        "package": "io.opentelemetry.api.baggage.propagation"
+      },
+      {
+        "classes": 18,
+        "package": "io.opentelemetry.api.common"
+      },
+      {
+        "classes": 6,
+        "package": "io.opentelemetry.api.incubator.config"
+      },
+      {
+        "classes": 8,
+        "package": "io.opentelemetry.api.incubator.logs"
+      },
+      {
+        "classes": 47,
+        "package": "io.opentelemetry.api.incubator.metrics"
+      },
+      {
+        "classes": 4,
+        "package": "io.opentelemetry.api.incubator.propagation"
+      },
+      {
+        "classes": 8,
+        "package": "io.opentelemetry.api.incubator.trace"
+      },
+      {
+        "classes": 21,
+        "package": "io.opentelemetry.api.internal"
+      },
+      {
+        "classes": 11,
+        "package": "io.opentelemetry.api.logs"
+      },
+      {
+        "classes": 60,
+        "package": "io.opentelemetry.api.metrics"
+      },
+      {
+        "classes": 23,
+        "package": "io.opentelemetry.api.trace"
+      },
+      {
+        "classes": 1,
+        "package": "io.opentelemetry.api.trace.propagation"
+      },
+      {
+        "classes": 1,
+        "package": "io.opentelemetry.api.trace.propagation.internal"
+      },
+      {
+        "classes": 23,
+        "package": "io.opentelemetry.context"
+      },
+      {
+        "classes": 9,
+        "package": "io.opentelemetry.context.internal.shaded"
+      },
+      {
+        "classes": 7,
+        "package": "io.opentelemetry.context.propagation"
+      },
+      {
+        "classes": 1,
+        "package": "io.opentelemetry.context.propagation.internal"
+      },
+      {
+        "classes": 11,
+        "package": "io.opentelemetry.exporter.internal"
+      },
+      {
+        "classes": 4,
+        "package": "io.opentelemetry.exporter.internal.compression"
+      },
+      {
+        "classes": 12,
+        "package": "io.opentelemetry.exporter.internal.grpc"
+      },
+      {
+        "classes": 7,
+        "package": "io.opentelemetry.exporter.internal.http"
+      },
+      {
+        "classes": 33,
+        "package": "io.opentelemetry.exporter.internal.marshal"
+      },
+      {
+        "classes": 46,
+        "package": "io.opentelemetry.exporter.internal.otlp"
+      },
+      {
+        "classes": 10,
+        "package": "io.opentelemetry.exporter.internal.otlp.logs"
+      },
+      {
+        "classes": 44,
+        "package": "io.opentelemetry.exporter.internal.otlp.metrics"
+      },
+      {
+        "classes": 17,
+        "package": "io.opentelemetry.exporter.internal.otlp.traces"
+      },
+      {
+        "classes": 1,
+        "package": "io.opentelemetry.exporter.otlp.all.internal"
+      },
+      {
+        "classes": 2,
+        "package": "io.opentelemetry.exporter.otlp.http.logs"
+      },
+      {
+        "classes": 2,
+        "package": "io.opentelemetry.exporter.otlp.http.metrics"
+      },
+      {
+        "classes": 2,
+        "package": "io.opentelemetry.exporter.otlp.http.trace"
+      },
+      {
+        "classes": 12,
+        "package": "io.opentelemetry.exporter.otlp.internal"
+      },
+      {
+        "classes": 7,
+        "package": "io.opentelemetry.exporter.otlp.logs"
+      },
+      {
+        "classes": 7,
+        "package": "io.opentelemetry.exporter.otlp.metrics"
+      },
+      {
+        "classes": 7,
+        "package": "io.opentelemetry.exporter.otlp.trace"
+      },
+      {
+        "classes": 14,
+        "package": "io.opentelemetry.extension.trace.propagation"
+      },
+      {
+        "classes": 4,
+        "package": "io.opentelemetry.extension.trace.propagation.internal"
+      },
+      {
+        "classes": 2,
+        "package": "io.opentelemetry.instrumentation.api.incubator.builder.internal"
+      },
+      {
+        "classes": 3,
+        "package": "io.opentelemetry.instrumentation.api.incubator.config.internal"
+      },
+      {
+        "classes": 1,
+        "package": "io.opentelemetry.instrumentation.api.incubator.log"
+      },
+      {
+        "classes": 3,
+        "package": "io.opentelemetry.instrumentation.api.incubator.semconv.code"
+      },
+      {
+        "classes": 46,
+        "package": "io.opentelemetry.instrumentation.api.incubator.semconv.db"
+      },
+      {
+        "classes": 1,
+        "package": "io.opentelemetry.instrumentation.api.incubator.semconv.db.internal"
+      },
+      {
+        "classes": 7,
+        "package": "io.opentelemetry.instrumentation.api.incubator.semconv.genai"
+      },
+      {
+        "classes": 7,
+        "package": "io.opentelemetry.instrumentation.api.incubator.semconv.http"
+      },
+      {
+        "classes": 14,
+        "package": "io.opentelemetry.instrumentation.api.incubator.semconv.messaging"
+      },
+      {
+        "classes": 5,
+        "package": "io.opentelemetry.instrumentation.api.incubator.semconv.net"
+      },
+      {
+        "classes": 1,
+        "package": "io.opentelemetry.instrumentation.api.incubator.semconv.net.internal"
+      },
+      {
+        "classes": 12,
+        "package": "io.opentelemetry.instrumentation.api.incubator.semconv.rpc"
+      },
+      {
+        "classes": 4,
+        "package": "io.opentelemetry.instrumentation.api.incubator.semconv.util"
+      },
+      {
+        "classes": 35,
+        "package": "io.opentelemetry.instrumentation.api.instrumenter"
+      },
+      {
+        "classes": 36,
+        "package": "io.opentelemetry.instrumentation.api.internal"
+      },
+      {
+        "classes": 3,
+        "package": "io.opentelemetry.instrumentation.api.internal.cache"
+      },
+      {
+        "classes": 41,
+        "package": "io.opentelemetry.instrumentation.api.internal.cache.concurrentlinkedhashmap"
+      },
+      {
+        "classes": 10,
+        "package": "io.opentelemetry.instrumentation.api.internal.cache.weaklockfree"
+      },
+      {
+        "classes": 37,
+        "package": "io.opentelemetry.instrumentation.api.semconv.http"
+      },
+      {
+        "classes": 6,
+        "package": "io.opentelemetry.instrumentation.api.semconv.network"
+      },
+      {
+        "classes": 9,
+        "package": "io.opentelemetry.instrumentation.api.semconv.network.internal"
+      },
+      {
+        "classes": 2,
+        "package": "io.opentelemetry.instrumentation.api.semconv.url"
+      },
+      {
+        "classes": 1,
+        "package": "io.opentelemetry.instrumentation.api.semconv.url.internal"
+      },
+      {
+        "classes": 1,
+        "package": "io.opentelemetry.instrumentation.api.semconv.util"
+      },
+      {
+        "classes": 1,
+        "package": "io.opentelemetry.instrumentation.api.util"
+      },
+      {
+        "classes": 28,
+        "package": "io.opentelemetry.instrumentation.resources"
+      },
+      {
+        "classes": 7,
+        "package": "io.opentelemetry.instrumentation.resources.internal"
+      },
+      {
+        "classes": 21,
+        "package": "io.opentelemetry.internal.shaded.jctools.queues"
+      },
+      {
+        "classes": 4,
+        "package": "io.opentelemetry.internal.shaded.jctools.util"
+      },
+      {
+        "classes": 1,
+        "package": "io.opentelemetry.proto.collector.logs.v1.internal"
+      },
+      {
+        "classes": 1,
+        "package": "io.opentelemetry.proto.collector.metrics.v1.internal"
+      },
+      {
+        "classes": 1,
+        "package": "io.opentelemetry.proto.collector.profiles.v1development.internal"
+      },
+      {
+        "classes": 1,
+        "package": "io.opentelemetry.proto.collector.trace.v1.internal"
+      },
+      {
+        "classes": 5,
+        "package": "io.opentelemetry.proto.common.v1.internal"
+      },
+      {
+        "classes": 4,
+        "package": "io.opentelemetry.proto.logs.v1.internal"
+      },
+      {
+        "classes": 16,
+        "package": "io.opentelemetry.proto.metrics.v1.internal"
+      },
+      {
+        "classes": 12,
+        "package": "io.opentelemetry.proto.profiles.v1development.internal"
+      },
+      {
+        "classes": 1,
+        "package": "io.opentelemetry.proto.resource.v1.internal"
+      },
+      {
+        "classes": 8,
+        "package": "io.opentelemetry.proto.trace.v1.internal"
+      },
+      {
+        "classes": 5,
+        "package": "io.opentelemetry.sdk"
+      },
+      {
+        "classes": 7,
+        "package": "io.opentelemetry.sdk.autoconfigure.spi"
+      },
+      {
+        "classes": 5,
+        "package": "io.opentelemetry.sdk.autoconfigure.spi.internal"
+      },
+      {
+        "classes": 1,
+        "package": "io.opentelemetry.sdk.autoconfigure.spi.logs"
+      },
+      {
+        "classes": 1,
+        "package": "io.opentelemetry.sdk.autoconfigure.spi.metrics"
+      },
+      {
+        "classes": 3,
+        "package": "io.opentelemetry.sdk.autoconfigure.spi.traces"
+      },
+      {
+        "classes": 8,
+        "package": "io.opentelemetry.sdk.common"
+      },
+      {
+        "classes": 9,
+        "package": "io.opentelemetry.sdk.common.export"
+      },
+      {
+        "classes": 1,
+        "package": "io.opentelemetry.sdk.common.internal"
+      },
+      {
+        "classes": 23,
+        "package": "io.opentelemetry.sdk.internal"
+      },
+      {
+        "classes": 22,
+        "package": "io.opentelemetry.sdk.logs"
+      },
+      {
+        "classes": 6,
+        "package": "io.opentelemetry.sdk.logs.data"
+      },
+      {
+        "classes": 1,
+        "package": "io.opentelemetry.sdk.logs.data.internal"
+      },
+      {
+        "classes": 8,
+        "package": "io.opentelemetry.sdk.logs.export"
+      },
+      {
+        "classes": 4,
+        "package": "io.opentelemetry.sdk.logs.internal"
+      },
+      {
+        "classes": 63,
+        "package": "io.opentelemetry.sdk.metrics"
+      },
+      {
+        "classes": 21,
+        "package": "io.opentelemetry.sdk.metrics.data"
+      },
+      {
+        "classes": 13,
+        "package": "io.opentelemetry.sdk.metrics.export"
+      },
+      {
+        "classes": 3,
+        "package": "io.opentelemetry.sdk.metrics.internal"
+      },
+      {
+        "classes": 29,
+        "package": "io.opentelemetry.sdk.metrics.internal.aggregator"
+      },
+      {
+        "classes": 7,
+        "package": "io.opentelemetry.sdk.metrics.internal.concurrent"
+      },
+      {
+        "classes": 38,
+        "package": "io.opentelemetry.sdk.metrics.internal.data"
+      },
+      {
+        "classes": 4,
+        "package": "io.opentelemetry.sdk.metrics.internal.debug"
+      },
+      {
+        "classes": 9,
+        "package": "io.opentelemetry.sdk.metrics.internal.descriptor"
+      },
+      {
+        "classes": 17,
+        "package": "io.opentelemetry.sdk.metrics.internal.exemplar"
+      },
+      {
+        "classes": 1,
+        "package": "io.opentelemetry.sdk.metrics.internal.export"
+      },
+      {
+        "classes": 19,
+        "package": "io.opentelemetry.sdk.metrics.internal.state"
+      },
+      {
+        "classes": 28,
+        "package": "io.opentelemetry.sdk.metrics.internal.view"
+      },
+      {
+        "classes": 3,
+        "package": "io.opentelemetry.sdk.resources"
+      },
+      {
+        "classes": 25,
+        "package": "io.opentelemetry.sdk.trace"
+      },
+      {
+        "classes": 15,
+        "package": "io.opentelemetry.sdk.trace.data"
+      },
+      {
+        "classes": 9,
+        "package": "io.opentelemetry.sdk.trace.export"
+      },
+      {
+        "classes": 5,
+        "package": "io.opentelemetry.sdk.trace.internal"
+      },
+      {
+        "classes": 11,
+        "package": "io.opentelemetry.sdk.trace.samplers"
+      },
+      {
+        "classes": 22,
+        "package": "io.opentelemetry.semconv"
+      },
+      {
+        "classes": 31,
+        "package": "io.swagger.annotations"
+      },
+      {
+        "classes": 5,
+        "package": "io.swagger.config"
+      },
+      {
+        "classes": 4,
+        "package": "io.swagger.converter"
+      },
+      {
+        "classes": 3,
+        "package": "io.swagger.core.filter"
+      },
+      {
+        "classes": 4,
+        "package": "io.swagger.deserializer"
+      },
+      {
+        "classes": 5,
+        "package": "io.swagger.io"
+      },
+      {
+        "classes": 18,
+        "package": "io.swagger.jackson"
+      },
+      {
+        "classes": 4,
+        "package": "io.swagger.jackson.mixin"
+      },
+      {
+        "classes": 2,
+        "package": "io.swagger.model"
+      },
+      {
+        "classes": 32,
+        "package": "io.swagger.models"
+      },
+      {
+        "classes": 10,
+        "package": "io.swagger.models.apideclaration"
+      },
+      {
+        "classes": 9,
+        "package": "io.swagger.models.auth"
+      },
+      {
+        "classes": 11,
+        "package": "io.swagger.models.parameters"
+      },
+      {
+        "classes": 51,
+        "package": "io.swagger.models.properties"
+      },
+      {
+        "classes": 4,
+        "package": "io.swagger.models.reader"
+      },
+      {
+        "classes": 3,
+        "package": "io.swagger.models.refs"
+      },
+      {
+        "classes": 13,
+        "package": "io.swagger.models.resourcelisting"
+      },
+      {
+        "classes": 1,
+        "package": "io.swagger.models.utils"
+      },
+      {
+        "classes": 11,
+        "package": "io.swagger.parser"
+      },
+      {
+        "classes": 8,
+        "package": "io.swagger.parser.processors"
+      },
+      {
+        "classes": 1,
+        "package": "io.swagger.parser.urlresolver"
+      },
+      {
+        "classes": 1,
+        "package": "io.swagger.parser.urlresolver.exceptions"
+      },
+      {
+        "classes": 1,
+        "package": "io.swagger.parser.urlresolver.matchers"
+      },
+      {
+        "classes": 1,
+        "package": "io.swagger.parser.urlresolver.models"
+      },
+      {
+        "classes": 1,
+        "package": "io.swagger.parser.urlresolver.utils"
+      },
+      {
+        "classes": 25,
+        "package": "io.swagger.parser.util"
+      },
+      {
+        "classes": 5,
+        "package": "io.swagger.reader"
+      },
+      {
+        "classes": 3,
+        "package": "io.swagger.report"
+      },
+      {
+        "classes": 13,
+        "package": "io.swagger.transform.migrate"
+      },
+      {
+        "classes": 1,
+        "package": "io.swagger.transform.migrate.resourcelisting"
+      },
+      {
+        "classes": 8,
+        "package": "io.swagger.transform.util"
+      },
+      {
+        "classes": 46,
+        "package": "io.swagger.util"
+      },
+      {
+        "classes": 6,
+        "package": "io.swagger.v3.core.converter"
+      },
+      {
+        "classes": 4,
+        "package": "io.swagger.v3.core.filter"
+      },
+      {
+        "classes": 23,
+        "package": "io.swagger.v3.core.jackson"
+      },
+      {
+        "classes": 18,
+        "package": "io.swagger.v3.core.jackson.mixin"
+      },
+      {
+        "classes": 1,
+        "package": "io.swagger.v3.core.model"
+      },
+      {
+        "classes": 73,
+        "package": "io.swagger.v3.core.util"
+      },
+      {
+        "classes": 10,
+        "package": "io.swagger.v3.oas.annotations"
+      },
+      {
+        "classes": 2,
+        "package": "io.swagger.v3.oas.annotations.callbacks"
+      },
+      {
+        "classes": 5,
+        "package": "io.swagger.v3.oas.annotations.enums"
+      },
+      {
+        "classes": 3,
+        "package": "io.swagger.v3.oas.annotations.extensions"
+      },
+      {
+        "classes": 1,
+        "package": "io.swagger.v3.oas.annotations.headers"
+      },
+      {
+        "classes": 3,
+        "package": "io.swagger.v3.oas.annotations.info"
+      },
+      {
+        "classes": 2,
+        "package": "io.swagger.v3.oas.annotations.links"
+      },
+      {
+        "classes": 18,
+        "package": "io.swagger.v3.oas.annotations.media"
+      },
+      {
+        "classes": 2,
+        "package": "io.swagger.v3.oas.annotations.parameters"
+      },
+      {
+        "classes": 3,
+        "package": "io.swagger.v3.oas.annotations.responses"
+      },
+      {
+        "classes": 7,
+        "package": "io.swagger.v3.oas.annotations.security"
+      },
+      {
+        "classes": 3,
+        "package": "io.swagger.v3.oas.annotations.servers"
+      },
+      {
+        "classes": 2,
+        "package": "io.swagger.v3.oas.annotations.tags"
+      },
+      {
+        "classes": 9,
+        "package": "io.swagger.v3.oas.models"
+      },
+      {
+        "classes": 2,
+        "package": "io.swagger.v3.oas.models.annotations"
+      },
+      {
+        "classes": 1,
+        "package": "io.swagger.v3.oas.models.callbacks"
+      },
+      {
+        "classes": 1,
+        "package": "io.swagger.v3.oas.models.examples"
+      },
+      {
+        "classes": 2,
+        "package": "io.swagger.v3.oas.models.headers"
+      },
+      {
+        "classes": 3,
+        "package": "io.swagger.v3.oas.models.info"
+      },
+      {
+        "classes": 2,
+        "package": "io.swagger.v3.oas.models.links"
+      },
+      {
+        "classes": 29,
+        "package": "io.swagger.v3.oas.models.media"
+      },
+      {
+        "classes": 7,
+        "package": "io.swagger.v3.oas.models.parameters"
+      },
+      {
+        "classes": 2,
+        "package": "io.swagger.v3.oas.models.responses"
+      },
+      {
+        "classes": 7,
+        "package": "io.swagger.v3.oas.models.security"
+      },
+      {
+        "classes": 3,
+        "package": "io.swagger.v3.oas.models.servers"
+      },
+      {
+        "classes": 1,
+        "package": "io.swagger.v3.oas.models.tags"
+      },
+      {
+        "classes": 5,
+        "package": "io.swagger.v3.parser"
+      },
+      {
+        "classes": 2,
+        "package": "io.swagger.v3.parser.converter"
+      },
+      {
+        "classes": 1,
+        "package": "io.swagger.v3.parser.core.extensions"
+      },
+      {
+        "classes": 3,
+        "package": "io.swagger.v3.parser.core.models"
+      },
+      {
+        "classes": 2,
+        "package": "io.swagger.v3.parser.exception"
+      },
+      {
+        "classes": 1,
+        "package": "io.swagger.v3.parser.extensions"
+      },
+      {
+        "classes": 2,
+        "package": "io.swagger.v3.parser.models"
+      },
+      {
+        "classes": 13,
+        "package": "io.swagger.v3.parser.processors"
+      },
+      {
+        "classes": 12,
+        "package": "io.swagger.v3.parser.reference"
+      },
+      {
+        "classes": 1,
+        "package": "io.swagger.v3.parser.urlresolver"
+      },
+      {
+        "classes": 1,
+        "package": "io.swagger.v3.parser.urlresolver.exceptions"
+      },
+      {
+        "classes": 1,
+        "package": "io.swagger.v3.parser.urlresolver.matchers"
+      },
+      {
+        "classes": 1,
+        "package": "io.swagger.v3.parser.urlresolver.models"
+      },
+      {
+        "classes": 1,
+        "package": "io.swagger.v3.parser.urlresolver.utils"
+      },
+      {
+        "classes": 29,
+        "package": "io.swagger.v3.parser.util"
+      },
+      {
+        "classes": 6,
+        "package": "io.swagger.validate"
+      },
+      {
+        "classes": 6,
+        "package": "jakarta.inject"
+      },
+      {
+        "classes": 6,
+        "package": "javafx.beans"
+      },
+      {
+        "classes": 179,
+        "package": "javafx.beans.binding"
+      },
+      {
+        "classes": 121,
+        "package": "javafx.beans.property"
+      },
+      {
+        "classes": 31,
+        "package": "javafx.beans.property.adapter"
+      },
+      {
+        "classes": 27,
+        "package": "javafx.beans.value"
+      },
+      {
+        "classes": 51,
+        "package": "javafx.collections"
+      },
+      {
+        "classes": 7,
+        "package": "javafx.collections.transformation"
+      },
+      {
+        "classes": 9,
+        "package": "javafx.event"
+      },
+      {
+        "classes": 8,
+        "package": "javafx.util"
+      },
+      {
+        "classes": 22,
+        "package": "javafx.util.converter"
+      },
+      {
+        "classes": 24,
+        "package": "javax.annotation"
+      },
+      {
+        "classes": 4,
+        "package": "javax.annotation.concurrent"
+      },
+      {
+        "classes": 7,
+        "package": "javax.annotation.meta"
+      },
+      {
+        "classes": 114,
+        "package": "kotlin"
+      },
+      {
+        "classes": 6,
+        "package": "kotlin.annotation"
+      },
+      {
+        "classes": 120,
+        "package": "kotlin.collections"
+      },
+      {
+        "classes": 23,
+        "package": "kotlin.collections.builders"
+      },
+      {
+        "classes": 1,
+        "package": "kotlin.collections.jdk8"
+      },
+      {
+        "classes": 7,
+        "package": "kotlin.collections.unsigned"
+      },
+      {
+        "classes": 18,
+        "package": "kotlin.comparisons"
+      },
+      {
+        "classes": 6,
+        "package": "kotlin.concurrent"
+      },
+      {
+        "classes": 7,
+        "package": "kotlin.concurrent.atomics"
+      },
+      {
+        "classes": 1,
+        "package": "kotlin.concurrent.internal"
+      },
+      {
+        "classes": 11,
+        "package": "kotlin.contracts"
+      },
+      {
+        "classes": 21,
+        "package": "kotlin.coroutines"
+      },
+      {
+        "classes": 1,
+        "package": "kotlin.coroutines.cancellation"
+      },
+      {
+        "classes": 12,
+        "package": "kotlin.coroutines.intrinsics"
+      },
+      {
+        "classes": 17,
+        "package": "kotlin.coroutines.jvm.internal"
+      },
+      {
+        "classes": 6,
+        "package": "kotlin.enums"
+      },
+      {
+        "classes": 5,
+        "package": "kotlin.experimental"
+      },
+      {
+        "classes": 20,
+        "package": "kotlin.internal"
+      },
+      {
+        "classes": 2,
+        "package": "kotlin.internal.jdk7"
+      },
+      {
+        "classes": 4,
+        "package": "kotlin.internal.jdk8"
+      },
+      {
+        "classes": 35,
+        "package": "kotlin.io"
+      },
+      {
+        "classes": 10,
+        "package": "kotlin.io.encoding"
+      },
+      {
+        "classes": 28,
+        "package": "kotlin.io.path"
+      },
+      {
+        "classes": 2,
+        "package": "kotlin.jdk7"
+      },
+      {
+        "classes": 5,
+        "package": "kotlin.js"
+      },
+      {
+        "classes": 24,
+        "package": "kotlin.jvm"
+      },
+      {
+        "classes": 24,
+        "package": "kotlin.jvm.functions"
+      },
+      {
+        "classes": 91,
+        "package": "kotlin.jvm.internal"
+      },
+      {
+        "classes": 9,
+        "package": "kotlin.jvm.internal.markers"
+      },
+      {
+        "classes": 1,
+        "package": "kotlin.jvm.internal.unsafe"
+      },
+      {
+        "classes": 1,
+        "package": "kotlin.jvm.jdk8"
+      },
+      {
+        "classes": 1,
+        "package": "kotlin.jvm.optionals"
+      },
+      {
+        "classes": 5,
+        "package": "kotlin.math"
+      },
+      {
+        "classes": 8,
+        "package": "kotlin.properties"
+      },
+      {
+        "classes": 15,
+        "package": "kotlin.random"
+      },
+      {
+        "classes": 1,
+        "package": "kotlin.random.jdk8"
+      },
+      {
+        "classes": 42,
+        "package": "kotlin.ranges"
+      },
+      {
+        "classes": 51,
+        "package": "kotlin.reflect"
+      },
+      {
+        "classes": 20,
+        "package": "kotlin.reflect.full"
+      },
+      {
+        "classes": 8,
+        "package": "kotlin.reflect.jvm"
+      },
+      {
+        "classes": 158,
+        "package": "kotlin.reflect.jvm.internal"
+      },
+      {
+        "classes": 47,
+        "package": "kotlin.reflect.jvm.internal.calls"
+      },
+      {
+        "classes": 2,
+        "package": "kotlin.reflect.jvm.internal.impl"
+      },
+      {
+        "classes": 31,
+        "package": "kotlin.reflect.jvm.internal.impl.builtins"
+      },
+      {
+        "classes": 17,
+        "package": "kotlin.reflect.jvm.internal.impl.builtins.functions"
+      },
+      {
+        "classes": 37,
+        "package": "kotlin.reflect.jvm.internal.impl.builtins.jvm"
+      },
+      {
+        "classes": 112,
+        "package": "kotlin.reflect.jvm.internal.impl.descriptors"
+      },
+      {
+        "classes": 23,
+        "package": "kotlin.reflect.jvm.internal.impl.descriptors.annotations"
+      },
+      {
+        "classes": 7,
+        "package": "kotlin.reflect.jvm.internal.impl.descriptors.deserialization"
+      },
+      {
+        "classes": 76,
+        "package": "kotlin.reflect.jvm.internal.impl.descriptors.impl"
+      },
+      {
+        "classes": 4,
+        "package": "kotlin.reflect.jvm.internal.impl.descriptors.java"
+      },
+      {
+        "classes": 16,
+        "package": "kotlin.reflect.jvm.internal.impl.descriptors.runtime.components"
+      },
+      {
+        "classes": 44,
+        "package": "kotlin.reflect.jvm.internal.impl.descriptors.runtime.structure"
+      },
+      {
+        "classes": 1,
+        "package": "kotlin.reflect.jvm.internal.impl.incremental"
+      },
+      {
+        "classes": 8,
+        "package": "kotlin.reflect.jvm.internal.impl.incremental.components"
+      },
+      {
+        "classes": 65,
+        "package": "kotlin.reflect.jvm.internal.impl.load.java"
+      },
+      {
+        "classes": 21,
+        "package": "kotlin.reflect.jvm.internal.impl.load.java.components"
+      },
+      {
+        "classes": 11,
+        "package": "kotlin.reflect.jvm.internal.impl.load.java.descriptors"
+      },
+      {
+        "classes": 19,
+        "package": "kotlin.reflect.jvm.internal.impl.load.java.lazy"
+      },
+      {
+        "classes": 69,
+        "package": "kotlin.reflect.jvm.internal.impl.load.java.lazy.descriptors"
+      },
+      {
+        "classes": 13,
+        "package": "kotlin.reflect.jvm.internal.impl.load.java.lazy.types"
+      },
+      {
+        "classes": 2,
+        "package": "kotlin.reflect.jvm.internal.impl.load.java.sources"
+      },
+      {
+        "classes": 31,
+        "package": "kotlin.reflect.jvm.internal.impl.load.java.structure"
+      },
+      {
+        "classes": 78,
+        "package": "kotlin.reflect.jvm.internal.impl.load.java.typeEnhancement"
+      },
+      {
+        "classes": 70,
+        "package": "kotlin.reflect.jvm.internal.impl.load.kotlin"
+      },
+      {
+        "classes": 14,
+        "package": "kotlin.reflect.jvm.internal.impl.load.kotlin.header"
+      },
+      {
+        "classes": 128,
+        "package": "kotlin.reflect.jvm.internal.impl.metadata"
+      },
+      {
+        "classes": 4,
+        "package": "kotlin.reflect.jvm.internal.impl.metadata.builtins"
+      },
+      {
+        "classes": 18,
+        "package": "kotlin.reflect.jvm.internal.impl.metadata.deserialization"
+      },
+      {
+        "classes": 24,
+        "package": "kotlin.reflect.jvm.internal.impl.metadata.jvm"
+      },
+      {
+        "classes": 13,
+        "package": "kotlin.reflect.jvm.internal.impl.metadata.jvm.deserialization"
+      },
+      {
+        "classes": 16,
+        "package": "kotlin.reflect.jvm.internal.impl.name"
+      },
+      {
+        "classes": 4,
+        "package": "kotlin.reflect.jvm.internal.impl.platform"
+      },
+      {
+        "classes": 74,
+        "package": "kotlin.reflect.jvm.internal.impl.protobuf"
+      },
+      {
+        "classes": 48,
+        "package": "kotlin.reflect.jvm.internal.impl.renderer"
+      },
+      {
+        "classes": 41,
+        "package": "kotlin.reflect.jvm.internal.impl.resolve"
+      },
+      {
+        "classes": 6,
+        "package": "kotlin.reflect.jvm.internal.impl.resolve.calls.inference"
+      },
+      {
+        "classes": 41,
+        "package": "kotlin.reflect.jvm.internal.impl.resolve.constants"
+      },
+      {
+        "classes": 5,
+        "package": "kotlin.reflect.jvm.internal.impl.resolve.deprecation"
+      },
+      {
+        "classes": 7,
+        "package": "kotlin.reflect.jvm.internal.impl.resolve.descriptorUtil"
+      },
+      {
+        "classes": 7,
+        "package": "kotlin.reflect.jvm.internal.impl.resolve.jvm"
+      },
+      {
+        "classes": 2,
+        "package": "kotlin.reflect.jvm.internal.impl.resolve.sam"
+      },
+      {
+        "classes": 35,
+        "package": "kotlin.reflect.jvm.internal.impl.resolve.scopes"
+      },
+      {
+        "classes": 11,
+        "package": "kotlin.reflect.jvm.internal.impl.resolve.scopes.receivers"
+      },
+      {
+        "classes": 1,
+        "package": "kotlin.reflect.jvm.internal.impl.serialization"
+      },
+      {
+        "classes": 67,
+        "package": "kotlin.reflect.jvm.internal.impl.serialization.deserialization"
+      },
+      {
+        "classes": 6,
+        "package": "kotlin.reflect.jvm.internal.impl.serialization.deserialization.builtins"
+      },
+      {
+        "classes": 57,
+        "package": "kotlin.reflect.jvm.internal.impl.serialization.deserialization.descriptors"
+      },
+      {
+        "classes": 32,
+        "package": "kotlin.reflect.jvm.internal.impl.storage"
+      },
+      {
+        "classes": 131,
+        "package": "kotlin.reflect.jvm.internal.impl.types"
+      },
+      {
+        "classes": 45,
+        "package": "kotlin.reflect.jvm.internal.impl.types.checker"
+      },
+      {
+        "classes": 14,
+        "package": "kotlin.reflect.jvm.internal.impl.types.error"
+      },
+      {
+        "classes": 1,
+        "package": "kotlin.reflect.jvm.internal.impl.types.extensions"
+      },
+      {
+        "classes": 26,
+        "package": "kotlin.reflect.jvm.internal.impl.types.model"
+      },
+      {
+        "classes": 5,
+        "package": "kotlin.reflect.jvm.internal.impl.types.typeUtil"
+      },
+      {
+        "classes": 7,
+        "package": "kotlin.reflect.jvm.internal.impl.types.typesApproximation"
+      },
+      {
+        "classes": 49,
+        "package": "kotlin.reflect.jvm.internal.impl.util"
+      },
+      {
+        "classes": 1,
+        "package": "kotlin.reflect.jvm.internal.impl.util.capitalizeDecapitalize"
+      },
+      {
+        "classes": 1,
+        "package": "kotlin.reflect.jvm.internal.impl.util.collectionUtils"
+      },
+      {
+        "classes": 31,
+        "package": "kotlin.reflect.jvm.internal.impl.utils"
+      },
+      {
+        "classes": 1,
+        "package": "kotlin.reflect.jvm.internal.impl.utils.addToStdlib"
+      },
+      {
+        "classes": 65,
+        "package": "kotlin.sequences"
+      },
+      {
+        "classes": 5,
+        "package": "kotlin.streams.jdk8"
+      },
+      {
+        "classes": 2,
+        "package": "kotlin.system"
+      },
+      {
+        "classes": 68,
+        "package": "kotlin.text"
+      },
+      {
+        "classes": 1,
+        "package": "kotlin.text.jdk8"
+      },
+      {
+        "classes": 43,
+        "package": "kotlin.time"
+      },
+      {
+        "classes": 2,
+        "package": "kotlin.time.jdk8"
+      },
+      {
+        "classes": 9,
+        "package": "kotlin.uuid"
+      },
+      {
+        "classes": 175,
+        "package": "kotlinx.coroutines"
+      },
+      {
+        "classes": 120,
+        "package": "kotlinx.coroutines.channels"
+      },
+      {
+        "classes": 27,
+        "package": "kotlinx.coroutines.debug.internal"
+      },
+      {
+        "classes": 303,
+        "package": "kotlinx.coroutines.flow"
+      },
+      {
+        "classes": 60,
+        "package": "kotlinx.coroutines.flow.internal"
+      },
+      {
+        "classes": 6,
+        "package": "kotlinx.coroutines.future"
+      },
+      {
+        "classes": 67,
+        "package": "kotlinx.coroutines.internal"
+      },
+      {
+        "classes": 2,
+        "package": "kotlinx.coroutines.intrinsics"
+      },
+      {
+        "classes": 18,
+        "package": "kotlinx.coroutines.scheduling"
+      },
+      {
+        "classes": 30,
+        "package": "kotlinx.coroutines.selects"
+      },
+      {
+        "classes": 3,
+        "package": "kotlinx.coroutines.stream"
+      },
+      {
+        "classes": 17,
+        "package": "kotlinx.coroutines.sync"
+      },
+      {
+        "classes": 1,
+        "package": "kotlinx.coroutines.time"
+      },
+      {
+        "classes": 4,
+        "package": "net.jcip.annotations"
+      },
+      {
+        "classes": 1105,
+        "package": "net.portswigger"
+      },
+      {
+        "classes": 2,
+        "package": "net.portswigger.annotation"
+      },
+      {
+        "classes": 63,
+        "package": "net.portswigger.api"
+      },
+      {
+        "classes": 9,
+        "package": "net.portswigger.api.auth"
+      },
+      {
+        "classes": 24,
+        "package": "net.portswigger.api.plugin"
+      },
+      {
+        "classes": 64,
+        "package": "net.portswigger.api.reflection"
+      },
+      {
+        "classes": 2,
+        "package": "net.portswigger.apiparser.common.apitokens"
+      },
+      {
+        "classes": 1,
+        "package": "net.portswigger.apiparser.enterprise"
+      },
+      {
+        "classes": 31,
+        "package": "net.portswigger.apiparser.enterprise.data"
+      },
+      {
+        "classes": 9,
+        "package": "net.portswigger.apiparser.enterprise.openapi"
+      },
+      {
+        "classes": 2,
+        "package": "net.portswigger.apiparser.enterprise.soap"
+      },
+      {
+        "classes": 10,
+        "package": "net.portswigger.apiparser.openapi"
+      },
+      {
+        "classes": 2,
+        "package": "net.portswigger.apiparser.openapi.exception"
+      },
+      {
+        "classes": 23,
+        "package": "net.portswigger.apiparser.openapi.model"
+      },
+      {
+        "classes": 7,
+        "package": "net.portswigger.apiparser.openapi.request"
+      },
+      {
+        "classes": 44,
+        "package": "net.portswigger.apiparser.openapi.request.fragment"
+      },
+      {
+        "classes": 42,
+        "package": "net.portswigger.apiparser.openapi.request.generation"
+      },
+      {
+        "classes": 5,
+        "package": "net.portswigger.apiparser.telemetry"
+      },
+      {
+        "classes": 249,
+        "package": "net.portswigger.browser"
+      },
+      {
+        "classes": 1,
+        "package": "net.portswigger.browser.chromium"
+      },
+      {
+        "classes": 5,
+        "package": "net.portswigger.browser.chromium.installer"
+      },
+      {
+        "classes": 4,
+        "package": "net.portswigger.browser.service"
+      },
+      {
+        "classes": 11,
+        "package": "net.portswigger.crawlgraph.builder"
+      },
+      {
+        "classes": 5,
+        "package": "net.portswigger.crawlgraph.io"
+      },
+      {
+        "classes": 3,
+        "package": "net.portswigger.crawlgraph.model"
+      },
+      {
+        "classes": 3,
+        "package": "net.portswigger.crawlgraph.model.action"
+      },
+      {
+        "classes": 9,
+        "package": "net.portswigger.crawlgraph.model.action.definition"
+      },
+      {
+        "classes": 6,
+        "package": "net.portswigger.crawlgraph.model.action.outcome"
+      },
+      {
+        "classes": 4,
+        "package": "net.portswigger.crawlgraph.model.action.outcome.traffic"
+      },
+      {
+        "classes": 2,
+        "package": "net.portswigger.crawlgraph.model.page"
+      },
+      {
+        "classes": 3,
+        "package": "net.portswigger.crawlgraph.model.page.url"
+      },
+      {
+        "classes": 3,
+        "package": "net.portswigger.crawlgraph.validation"
+      },
+      {
+        "classes": 29,
+        "package": "net.portswigger.devtools.client"
+      },
+      {
+        "classes": 128,
+        "package": "net.portswigger.devtools.client.impl"
+      },
+      {
+        "classes": 19,
+        "package": "net.portswigger.devtools.client.impl.connection"
+      },
+      {
+        "classes": 3,
+        "package": "net.portswigger.devtools.client.impl.connection.local"
+      },
+      {
+        "classes": 9,
+        "package": "net.portswigger.devtools.client.impl.connection.local.process.chrome"
+      },
+      {
+        "classes": 12,
+        "package": "net.portswigger.devtools.client.impl.connection.local.process.chrome.binary"
+      },
+      {
+        "classes": 10,
+        "package": "net.portswigger.devtools.protocol"
+      },
+      {
+        "classes": 57,
+        "package": "net.portswigger.devtools.protocol.domains"
+      },
+      {
+        "classes": 2,
+        "package": "net.portswigger.devtools.protocol.events.accessibility"
+      },
+      {
+        "classes": 4,
+        "package": "net.portswigger.devtools.protocol.events.animation"
+      },
+      {
+        "classes": 1,
+        "package": "net.portswigger.devtools.protocol.events.audits"
+      },
+      {
+        "classes": 1,
+        "package": "net.portswigger.devtools.protocol.events.autofill"
+      },
+      {
+        "classes": 2,
+        "package": "net.portswigger.devtools.protocol.events.backgroundservice"
+      },
+      {
+        "classes": 3,
+        "package": "net.portswigger.devtools.protocol.events.bluetoothemulation"
+      },
+      {
+        "classes": 3,
+        "package": "net.portswigger.devtools.protocol.events.browser"
+      },
+      {
+        "classes": 2,
+        "package": "net.portswigger.devtools.protocol.events.cast"
+      },
+      {
+        "classes": 1,
+        "package": "net.portswigger.devtools.protocol.events.console"
+      },
+      {
+        "classes": 6,
+        "package": "net.portswigger.devtools.protocol.events.css"
+      },
+      {
+        "classes": 6,
+        "package": "net.portswigger.devtools.protocol.events.debugger"
+      },
+      {
+        "classes": 1,
+        "package": "net.portswigger.devtools.protocol.events.deviceaccess"
+      },
+      {
+        "classes": 19,
+        "package": "net.portswigger.devtools.protocol.events.dom"
+      },
+      {
+        "classes": 4,
+        "package": "net.portswigger.devtools.protocol.events.domstorage"
+      },
+      {
+        "classes": 2,
+        "package": "net.portswigger.devtools.protocol.events.emulation"
+      },
+      {
+        "classes": 2,
+        "package": "net.portswigger.devtools.protocol.events.fedcm"
+      },
+      {
+        "classes": 2,
+        "package": "net.portswigger.devtools.protocol.events.fetch"
+      },
+      {
+        "classes": 5,
+        "package": "net.portswigger.devtools.protocol.events.heapprofiler"
+      },
+      {
+        "classes": 1,
+        "package": "net.portswigger.devtools.protocol.events.input"
+      },
+      {
+        "classes": 4,
+        "package": "net.portswigger.devtools.protocol.events.inspector"
+      },
+      {
+        "classes": 2,
+        "package": "net.portswigger.devtools.protocol.events.layertree"
+      },
+      {
+        "classes": 1,
+        "package": "net.portswigger.devtools.protocol.events.log"
+      },
+      {
+        "classes": 5,
+        "package": "net.portswigger.devtools.protocol.events.media"
+      },
+      {
+        "classes": 45,
+        "package": "net.portswigger.devtools.protocol.events.network"
+      },
+      {
+        "classes": 6,
+        "package": "net.portswigger.devtools.protocol.events.overlay"
+      },
+      {
+        "classes": 33,
+        "package": "net.portswigger.devtools.protocol.events.page"
+      },
+      {
+        "classes": 1,
+        "package": "net.portswigger.devtools.protocol.events.performance"
+      },
+      {
+        "classes": 1,
+        "package": "net.portswigger.devtools.protocol.events.performancetimeline"
+      },
+      {
+        "classes": 6,
+        "package": "net.portswigger.devtools.protocol.events.preload"
+      },
+      {
+        "classes": 3,
+        "package": "net.portswigger.devtools.protocol.events.profiler"
+      },
+      {
+        "classes": 9,
+        "package": "net.portswigger.devtools.protocol.events.runtime"
+      },
+      {
+        "classes": 3,
+        "package": "net.portswigger.devtools.protocol.events.security"
+      },
+      {
+        "classes": 3,
+        "package": "net.portswigger.devtools.protocol.events.serviceworker"
+      },
+      {
+        "classes": 14,
+        "package": "net.portswigger.devtools.protocol.events.smartcardemulation"
+      },
+      {
+        "classes": 11,
+        "package": "net.portswigger.devtools.protocol.events.storage"
+      },
+      {
+        "classes": 7,
+        "package": "net.portswigger.devtools.protocol.events.target"
+      },
+      {
+        "classes": 1,
+        "package": "net.portswigger.devtools.protocol.events.tethering"
+      },
+      {
+        "classes": 3,
+        "package": "net.portswigger.devtools.protocol.events.tracing"
+      },
+      {
+        "classes": 13,
+        "package": "net.portswigger.devtools.protocol.events.webaudio"
+      },
+      {
+        "classes": 4,
+        "package": "net.portswigger.devtools.protocol.events.webauthn"
+      },
+      {
+        "classes": 4,
+        "package": "net.portswigger.devtools.protocol.events.webmcp"
+      },
+      {
+        "classes": 9,
+        "package": "net.portswigger.devtools.protocol.types.accessibility"
+      },
+      {
+        "classes": 1,
+        "package": "net.portswigger.devtools.protocol.types.ads"
+      },
+      {
+        "classes": 6,
+        "package": "net.portswigger.devtools.protocol.types.animation"
+      },
+      {
+        "classes": 69,
+        "package": "net.portswigger.devtools.protocol.types.audits"
+      },
+      {
+        "classes": 7,
+        "package": "net.portswigger.devtools.protocol.types.autofill"
+      },
+      {
+        "classes": 3,
+        "package": "net.portswigger.devtools.protocol.types.backgroundservice"
+      },
+      {
+        "classes": 9,
+        "package": "net.portswigger.devtools.protocol.types.bluetoothemulation"
+      },
+      {
+        "classes": 12,
+        "package": "net.portswigger.devtools.protocol.types.browser"
+      },
+      {
+        "classes": 6,
+        "package": "net.portswigger.devtools.protocol.types.cachestorage"
+      },
+      {
+        "classes": 1,
+        "package": "net.portswigger.devtools.protocol.types.cast"
+      },
+      {
+        "classes": 3,
+        "package": "net.portswigger.devtools.protocol.types.console"
+      },
+      {
+        "classes": 1,
+        "package": "net.portswigger.devtools.protocol.types.crashreportcontext"
+      },
+      {
+        "classes": 54,
+        "package": "net.portswigger.devtools.protocol.types.css"
+      },
+      {
+        "classes": 26,
+        "package": "net.portswigger.devtools.protocol.types.debugger"
+      },
+      {
+        "classes": 1,
+        "package": "net.portswigger.devtools.protocol.types.deviceaccess"
+      },
+      {
+        "classes": 19,
+        "package": "net.portswigger.devtools.protocol.types.dom"
+      },
+      {
+        "classes": 3,
+        "package": "net.portswigger.devtools.protocol.types.domdebugger"
+      },
+      {
+        "classes": 14,
+        "package": "net.portswigger.devtools.protocol.types.domsnapshot"
+      },
+      {
+        "classes": 1,
+        "package": "net.portswigger.devtools.protocol.types.domstorage"
+      },
+      {
+        "classes": 26,
+        "package": "net.portswigger.devtools.protocol.types.emulation"
+      },
+      {
+        "classes": 2,
+        "package": "net.portswigger.devtools.protocol.types.extensions"
+      },
+      {
+        "classes": 5,
+        "package": "net.portswigger.devtools.protocol.types.fedcm"
+      },
+      {
+        "classes": 8,
+        "package": "net.portswigger.devtools.protocol.types.fetch"
+      },
+      {
+        "classes": 3,
+        "package": "net.portswigger.devtools.protocol.types.filesystem"
+      },
+      {
+        "classes": 3,
+        "package": "net.portswigger.devtools.protocol.types.headlessexperimental"
+      },
+      {
+        "classes": 3,
+        "package": "net.portswigger.devtools.protocol.types.heapprofiler"
+      },
+      {
+        "classes": 11,
+        "package": "net.portswigger.devtools.protocol.types.indexeddb"
+      },
+      {
+        "classes": 11,
+        "package": "net.portswigger.devtools.protocol.types.input"
+      },
+      {
+        "classes": 1,
+        "package": "net.portswigger.devtools.protocol.types.io"
+      },
+      {
+        "classes": 6,
+        "package": "net.portswigger.devtools.protocol.types.layertree"
+      },
+      {
+        "classes": 6,
+        "package": "net.portswigger.devtools.protocol.types.log"
+      },
+      {
+        "classes": 7,
+        "package": "net.portswigger.devtools.protocol.types.media"
+      },
+      {
+        "classes": 6,
+        "package": "net.portswigger.devtools.protocol.types.memory"
+      },
+      {
+        "classes": 98,
+        "package": "net.portswigger.devtools.protocol.types.network"
+      },
+      {
+        "classes": 22,
+        "package": "net.portswigger.devtools.protocol.types.overlay"
+      },
+      {
+        "classes": 71,
+        "package": "net.portswigger.devtools.protocol.types.page"
+      },
+      {
+        "classes": 3,
+        "package": "net.portswigger.devtools.protocol.types.performance"
+      },
+      {
+        "classes": 4,
+        "package": "net.portswigger.devtools.protocol.types.performancetimeline"
+      },
+      {
+        "classes": 10,
+        "package": "net.portswigger.devtools.protocol.types.preload"
+      },
+      {
+        "classes": 7,
+        "package": "net.portswigger.devtools.protocol.types.profiler"
+      },
+      {
+        "classes": 4,
+        "package": "net.portswigger.devtools.protocol.types.pwa"
+      },
+      {
+        "classes": 31,
+        "package": "net.portswigger.devtools.protocol.types.runtime"
+      },
+      {
+        "classes": 1,
+        "package": "net.portswigger.devtools.protocol.types.schema"
+      },
+      {
+        "classes": 9,
+        "package": "net.portswigger.devtools.protocol.types.security"
+      },
+      {
+        "classes": 5,
+        "package": "net.portswigger.devtools.protocol.types.serviceworker"
+      },
+      {
+        "classes": 9,
+        "package": "net.portswigger.devtools.protocol.types.smartcardemulation"
+      },
+      {
+        "classes": 19,
+        "package": "net.portswigger.devtools.protocol.types.storage"
+      },
+      {
+        "classes": 9,
+        "package": "net.portswigger.devtools.protocol.types.systeminfo"
+      },
+      {
+        "classes": 5,
+        "package": "net.portswigger.devtools.protocol.types.target"
+      },
+      {
+        "classes": 8,
+        "package": "net.portswigger.devtools.protocol.types.tracing"
+      },
+      {
+        "classes": 10,
+        "package": "net.portswigger.devtools.protocol.types.webaudio"
+      },
+      {
+        "classes": 5,
+        "package": "net.portswigger.devtools.protocol.types.webauthn"
+      },
+      {
+        "classes": 4,
+        "package": "net.portswigger.devtools.protocol.types.webmcp"
+      },
+      {
+        "classes": 3,
+        "package": "net.portswigger.encoding.string"
+      },
+      {
+        "classes": 3,
+        "package": "net.portswigger.funnel.assertions"
+      },
+      {
+        "classes": 12,
+        "package": "net.portswigger.funnel.exceptions"
+      },
+      {
+        "classes": 17,
+        "package": "net.portswigger.javatooling.api"
+      },
+      {
+        "classes": 2,
+        "package": "net.portswigger.javatooling.framework"
+      },
+      {
+        "classes": 47,
+        "package": "net.portswigger.json"
+      },
+      {
+        "classes": 15,
+        "package": "net.portswigger.opentelemetry.utils"
+      },
+      {
+        "classes": 15,
+        "package": "net.portswigger.opentelemetry.utils.events"
+      },
+      {
+        "classes": 19,
+        "package": "net.portswigger.opentelemetry.utils.network"
+      },
+      {
+        "classes": 9,
+        "package": "net.portswigger.opentelemetry.utils.samplers"
+      },
+      {
+        "classes": 8,
+        "package": "net.portswigger.opentelemetry.utils.span"
+      },
+      {
+        "classes": 3,
+        "package": "org.aopalliance.aop"
+      },
+      {
+        "classes": 12,
+        "package": "org.aopalliance.intercept"
+      },
+      {
+        "classes": 7,
+        "package": "org.apache.commons.codec"
+      },
+      {
+        "classes": 5,
+        "package": "org.apache.commons.codec.binary"
+      },
+      {
+        "classes": 7,
+        "package": "org.apache.commons.io"
+      },
+      {
+        "classes": 5,
+        "package": "org.apache.commons.io.build"
+      },
+      {
+        "classes": 26,
+        "package": "org.apache.commons.io.file"
+      },
+      {
+        "classes": 10,
+        "package": "org.apache.commons.io.filefilter"
+      },
+      {
+        "classes": 5,
+        "package": "org.apache.commons.io.function"
+      },
+      {
+        "classes": 3,
+        "package": "org.apache.commons.io.input"
+      },
+      {
+        "classes": 5,
+        "package": "org.apache.commons.io.output"
+      },
+      {
+        "classes": 19,
+        "package": "org.apache.commons.lang3"
+      },
+      {
+        "classes": 14,
+        "package": "org.apache.commons.lang3.builder"
+      },
+      {
+        "classes": 1,
+        "package": "org.apache.commons.lang3.function"
+      },
+      {
+        "classes": 1,
+        "package": "org.apache.commons.lang3.math"
+      },
+      {
+        "classes": 2,
+        "package": "org.apache.commons.lang3.mutable"
+      },
+      {
+        "classes": 1,
+        "package": "org.apache.commons.lang3.stream"
+      },
+      {
+        "classes": 1,
+        "package": "org.apache.commons.lang3.text"
+      },
+      {
+        "classes": 13,
+        "package": "org.apache.commons.lang3.text.translate"
+      },
+      {
+        "classes": 2,
+        "package": "org.apache.commons.lang3.tuple"
+      },
+      {
+        "classes": 10,
+        "package": "org.apache.commons.logging"
+      },
+      {
+        "classes": 18,
+        "package": "org.apache.commons.logging.impl"
+      },
+      {
+        "classes": 35,
+        "package": "org.apache.http"
+      },
+      {
+        "classes": 3,
+        "package": "org.apache.http.annotation"
+      },
+      {
+        "classes": 18,
+        "package": "org.apache.http.auth"
+      },
+      {
+        "classes": 15,
+        "package": "org.apache.http.client"
+      },
+      {
+        "classes": 2,
+        "package": "org.apache.http.client.config"
+      },
+      {
+        "classes": 8,
+        "package": "org.apache.http.client.entity"
+      },
+      {
+        "classes": 16,
+        "package": "org.apache.http.client.methods"
+      },
+      {
+        "classes": 1,
+        "package": "org.apache.http.client.params"
+      },
+      {
+        "classes": 9,
+        "package": "org.apache.http.client.protocol"
+      },
+      {
+        "classes": 7,
+        "package": "org.apache.http.client.utils"
+      },
+      {
+        "classes": 2,
+        "package": "org.apache.http.concurrent"
+      },
+      {
+        "classes": 9,
+        "package": "org.apache.http.config"
+      },
+      {
+        "classes": 15,
+        "package": "org.apache.http.conn"
+      },
+      {
+        "classes": 8,
+        "package": "org.apache.http.conn.routing"
+      },
+      {
+        "classes": 3,
+        "package": "org.apache.http.conn.socket"
+      },
+      {
+        "classes": 11,
+        "package": "org.apache.http.conn.ssl"
+      },
+      {
+        "classes": 7,
+        "package": "org.apache.http.conn.util"
+      },
+      {
+        "classes": 14,
+        "package": "org.apache.http.cookie"
+      },
+      {
+        "classes": 7,
+        "package": "org.apache.http.entity"
+      },
+      {
+        "classes": 7,
+        "package": "org.apache.http.impl"
+      },
+      {
+        "classes": 30,
+        "package": "org.apache.http.impl.auth"
+      },
+      {
+        "classes": 25,
+        "package": "org.apache.http.impl.client"
+      },
+      {
+        "classes": 24,
+        "package": "org.apache.http.impl.conn"
+      },
+      {
+        "classes": 43,
+        "package": "org.apache.http.impl.cookie"
+      },
+      {
+        "classes": 2,
+        "package": "org.apache.http.impl.entity"
+      },
+      {
+        "classes": 13,
+        "package": "org.apache.http.impl.execchain"
+      },
+      {
+        "classes": 16,
+        "package": "org.apache.http.impl.io"
+      },
+      {
+        "classes": 8,
+        "package": "org.apache.http.io"
+      },
+      {
+        "classes": 24,
+        "package": "org.apache.http.message"
+      },
+      {
+        "classes": 6,
+        "package": "org.apache.http.params"
+      },
+      {
+        "classes": 12,
+        "package": "org.apache.http.pool"
+      },
+      {
+        "classes": 12,
+        "package": "org.apache.http.protocol"
+      },
+      {
+        "classes": 2,
+        "package": "org.apache.http.ssl"
+      },
+      {
+        "classes": 11,
+        "package": "org.apache.http.util"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle"
+      },
+      {
+        "classes": 146,
+        "package": "org.bouncycastle.asn1"
+      },
+      {
+        "classes": 3,
+        "package": "org.bouncycastle.asn1.anssi"
+      },
+      {
+        "classes": 14,
+        "package": "org.bouncycastle.asn1.bc"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.asn1.bsi"
+      },
+      {
+        "classes": 40,
+        "package": "org.bouncycastle.asn1.cmc"
+      },
+      {
+        "classes": 50,
+        "package": "org.bouncycastle.asn1.cmp"
+      },
+      {
+        "classes": 55,
+        "package": "org.bouncycastle.asn1.cms"
+      },
+      {
+        "classes": 2,
+        "package": "org.bouncycastle.asn1.cms.ecc"
+      },
+      {
+        "classes": 23,
+        "package": "org.bouncycastle.asn1.crmf"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.asn1.cryptlib"
+      },
+      {
+        "classes": 18,
+        "package": "org.bouncycastle.asn1.cryptopro"
+      },
+      {
+        "classes": 14,
+        "package": "org.bouncycastle.asn1.dvcs"
+      },
+      {
+        "classes": 17,
+        "package": "org.bouncycastle.asn1.eac"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.asn1.edec"
+      },
+      {
+        "classes": 25,
+        "package": "org.bouncycastle.asn1.esf"
+      },
+      {
+        "classes": 8,
+        "package": "org.bouncycastle.asn1.ess"
+      },
+      {
+        "classes": 3,
+        "package": "org.bouncycastle.asn1.est"
+      },
+      {
+        "classes": 4,
+        "package": "org.bouncycastle.asn1.gm"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.asn1.gnu"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.asn1.iana"
+      },
+      {
+        "classes": 5,
+        "package": "org.bouncycastle.asn1.icao"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.asn1.isara"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.asn1.isismtt"
+      },
+      {
+        "classes": 2,
+        "package": "org.bouncycastle.asn1.isismtt.ocsp"
+      },
+      {
+        "classes": 9,
+        "package": "org.bouncycastle.asn1.isismtt.x509"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.asn1.iso"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.asn1.kisa"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.asn1.microsoft"
+      },
+      {
+        "classes": 7,
+        "package": "org.bouncycastle.asn1.misc"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.asn1.mod"
+      },
+      {
+        "classes": 2,
+        "package": "org.bouncycastle.asn1.mozilla"
+      },
+      {
+        "classes": 4,
+        "package": "org.bouncycastle.asn1.nist"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.asn1.nsri"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.asn1.ntt"
+      },
+      {
+        "classes": 17,
+        "package": "org.bouncycastle.asn1.ocsp"
+      },
+      {
+        "classes": 2,
+        "package": "org.bouncycastle.asn1.oiw"
+      },
+      {
+        "classes": 31,
+        "package": "org.bouncycastle.asn1.pkcs"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.asn1.rosstandart"
+      },
+      {
+        "classes": 37,
+        "package": "org.bouncycastle.asn1.sec"
+      },
+      {
+        "classes": 6,
+        "package": "org.bouncycastle.asn1.smime"
+      },
+      {
+        "classes": 16,
+        "package": "org.bouncycastle.asn1.teletrust"
+      },
+      {
+        "classes": 12,
+        "package": "org.bouncycastle.asn1.tsp"
+      },
+      {
+        "classes": 7,
+        "package": "org.bouncycastle.asn1.ua"
+      },
+      {
+        "classes": 2,
+        "package": "org.bouncycastle.asn1.util"
+      },
+      {
+        "classes": 6,
+        "package": "org.bouncycastle.asn1.x500"
+      },
+      {
+        "classes": 6,
+        "package": "org.bouncycastle.asn1.x500.style"
+      },
+      {
+        "classes": 90,
+        "package": "org.bouncycastle.asn1.x509"
+      },
+      {
+        "classes": 8,
+        "package": "org.bouncycastle.asn1.x509.qualified"
+      },
+      {
+        "classes": 3,
+        "package": "org.bouncycastle.asn1.x509.sigi"
+      },
+      {
+        "classes": 41,
+        "package": "org.bouncycastle.asn1.x9"
+      },
+      {
+        "classes": 17,
+        "package": "org.bouncycastle.cert"
+      },
+      {
+        "classes": 5,
+        "package": "org.bouncycastle.cert.bc"
+      },
+      {
+        "classes": 19,
+        "package": "org.bouncycastle.cert.cmp"
+      },
+      {
+        "classes": 26,
+        "package": "org.bouncycastle.cert.crmf"
+      },
+      {
+        "classes": 5,
+        "package": "org.bouncycastle.cert.crmf.bc"
+      },
+      {
+        "classes": 13,
+        "package": "org.bouncycastle.cert.crmf.jcajce"
+      },
+      {
+        "classes": 11,
+        "package": "org.bouncycastle.cert.dane"
+      },
+      {
+        "classes": 2,
+        "package": "org.bouncycastle.cert.dane.fetcher"
+      },
+      {
+        "classes": 22,
+        "package": "org.bouncycastle.cert.jcajce"
+      },
+      {
+        "classes": 18,
+        "package": "org.bouncycastle.cert.ocsp"
+      },
+      {
+        "classes": 3,
+        "package": "org.bouncycastle.cert.ocsp.jcajce"
+      },
+      {
+        "classes": 7,
+        "package": "org.bouncycastle.cert.path"
+      },
+      {
+        "classes": 8,
+        "package": "org.bouncycastle.cert.path.validations"
+      },
+      {
+        "classes": 6,
+        "package": "org.bouncycastle.cert.selector"
+      },
+      {
+        "classes": 3,
+        "package": "org.bouncycastle.cert.selector.jcajce"
+      },
+      {
+        "classes": 2,
+        "package": "org.bouncycastle.cmc"
+      },
+      {
+        "classes": 121,
+        "package": "org.bouncycastle.cms"
+      },
+      {
+        "classes": 27,
+        "package": "org.bouncycastle.cms.bc"
+      },
+      {
+        "classes": 92,
+        "package": "org.bouncycastle.cms.jcajce"
+      },
+      {
+        "classes": 68,
+        "package": "org.bouncycastle.crypto"
+      },
+      {
+        "classes": 18,
+        "package": "org.bouncycastle.crypto.agreement"
+      },
+      {
+        "classes": 8,
+        "package": "org.bouncycastle.crypto.agreement.ecjpake"
+      },
+      {
+        "classes": 7,
+        "package": "org.bouncycastle.crypto.agreement.jpake"
+      },
+      {
+        "classes": 6,
+        "package": "org.bouncycastle.crypto.agreement.kdf"
+      },
+      {
+        "classes": 5,
+        "package": "org.bouncycastle.crypto.agreement.srp"
+      },
+      {
+        "classes": 2,
+        "package": "org.bouncycastle.crypto.commitments"
+      },
+      {
+        "classes": 8,
+        "package": "org.bouncycastle.crypto.constraints"
+      },
+      {
+        "classes": 89,
+        "package": "org.bouncycastle.crypto.digests"
+      },
+      {
+        "classes": 44,
+        "package": "org.bouncycastle.crypto.ec"
+      },
+      {
+        "classes": 3,
+        "package": "org.bouncycastle.crypto.encodings"
+      },
+      {
+        "classes": 145,
+        "package": "org.bouncycastle.crypto.engines"
+      },
+      {
+        "classes": 3,
+        "package": "org.bouncycastle.crypto.examples"
+      },
+      {
+        "classes": 4,
+        "package": "org.bouncycastle.crypto.fpe"
+      },
+      {
+        "classes": 49,
+        "package": "org.bouncycastle.crypto.generators"
+      },
+      {
+        "classes": 7,
+        "package": "org.bouncycastle.crypto.hpke"
+      },
+      {
+        "classes": 10,
+        "package": "org.bouncycastle.crypto.io"
+      },
+      {
+        "classes": 9,
+        "package": "org.bouncycastle.crypto.kems"
+      },
+      {
+        "classes": 26,
+        "package": "org.bouncycastle.crypto.macs"
+      },
+      {
+        "classes": 41,
+        "package": "org.bouncycastle.crypto.modes"
+      },
+      {
+        "classes": 9,
+        "package": "org.bouncycastle.crypto.modes.gcm"
+      },
+      {
+        "classes": 10,
+        "package": "org.bouncycastle.crypto.modes.kgcm"
+      },
+      {
+        "classes": 8,
+        "package": "org.bouncycastle.crypto.paddings"
+      },
+      {
+        "classes": 107,
+        "package": "org.bouncycastle.crypto.params"
+      },
+      {
+        "classes": 3,
+        "package": "org.bouncycastle.crypto.parsers"
+      },
+      {
+        "classes": 22,
+        "package": "org.bouncycastle.crypto.prng"
+      },
+      {
+        "classes": 7,
+        "package": "org.bouncycastle.crypto.prng.drbg"
+      },
+      {
+        "classes": 36,
+        "package": "org.bouncycastle.crypto.signers"
+      },
+      {
+        "classes": 13,
+        "package": "org.bouncycastle.crypto.threshold"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.crypto.tls"
+      },
+      {
+        "classes": 68,
+        "package": "org.bouncycastle.crypto.util"
+      },
+      {
+        "classes": 21,
+        "package": "org.bouncycastle.dvcs"
+      },
+      {
+        "classes": 5,
+        "package": "org.bouncycastle.eac"
+      },
+      {
+        "classes": 5,
+        "package": "org.bouncycastle.eac.jcajce"
+      },
+      {
+        "classes": 2,
+        "package": "org.bouncycastle.eac.operator"
+      },
+      {
+        "classes": 11,
+        "package": "org.bouncycastle.eac.operator.jcajce"
+      },
+      {
+        "classes": 33,
+        "package": "org.bouncycastle.est"
+      },
+      {
+        "classes": 17,
+        "package": "org.bouncycastle.est.jcajce"
+      },
+      {
+        "classes": 8,
+        "package": "org.bouncycastle.i18n"
+      },
+      {
+        "classes": 6,
+        "package": "org.bouncycastle.i18n.filter"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.iana"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.internal.asn1.bsi"
+      },
+      {
+        "classes": 3,
+        "package": "org.bouncycastle.internal.asn1.cms"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.internal.asn1.cryptlib"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.internal.asn1.eac"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.internal.asn1.edec"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.internal.asn1.gnu"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.internal.asn1.iana"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.internal.asn1.isara"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.internal.asn1.isismtt"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.internal.asn1.iso"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.internal.asn1.kisa"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.internal.asn1.microsoft"
+      },
+      {
+        "classes": 7,
+        "package": "org.bouncycastle.internal.asn1.misc"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.internal.asn1.nsri"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.internal.asn1.ntt"
+      },
+      {
+        "classes": 2,
+        "package": "org.bouncycastle.internal.asn1.oiw"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.internal.asn1.rosstandart"
+      },
+      {
+        "classes": 19,
+        "package": "org.bouncycastle.its"
+      },
+      {
+        "classes": 8,
+        "package": "org.bouncycastle.its.bc"
+      },
+      {
+        "classes": 22,
+        "package": "org.bouncycastle.its.jcajce"
+      },
+      {
+        "classes": 5,
+        "package": "org.bouncycastle.its.operator"
+      },
+      {
+        "classes": 45,
+        "package": "org.bouncycastle.jcajce"
+      },
+      {
+        "classes": 17,
+        "package": "org.bouncycastle.jcajce.interfaces"
+      },
+      {
+        "classes": 7,
+        "package": "org.bouncycastle.jcajce.io"
+      },
+      {
+        "classes": 55,
+        "package": "org.bouncycastle.jcajce.provider.asymmetric"
+      },
+      {
+        "classes": 63,
+        "package": "org.bouncycastle.jcajce.provider.asymmetric.compositesignatures"
+      },
+      {
+        "classes": 44,
+        "package": "org.bouncycastle.jcajce.provider.asymmetric.dh"
+      },
+      {
+        "classes": 29,
+        "package": "org.bouncycastle.jcajce.provider.asymmetric.dsa"
+      },
+      {
+        "classes": 6,
+        "package": "org.bouncycastle.jcajce.provider.asymmetric.dstu"
+      },
+      {
+        "classes": 146,
+        "package": "org.bouncycastle.jcajce.provider.asymmetric.ec"
+      },
+      {
+        "classes": 8,
+        "package": "org.bouncycastle.jcajce.provider.asymmetric.ecgost"
+      },
+      {
+        "classes": 10,
+        "package": "org.bouncycastle.jcajce.provider.asymmetric.ecgost12"
+      },
+      {
+        "classes": 57,
+        "package": "org.bouncycastle.jcajce.provider.asymmetric.edec"
+      },
+      {
+        "classes": 10,
+        "package": "org.bouncycastle.jcajce.provider.asymmetric.elgamal"
+      },
+      {
+        "classes": 8,
+        "package": "org.bouncycastle.jcajce.provider.asymmetric.gost"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.jcajce.provider.asymmetric.ies"
+      },
+      {
+        "classes": 33,
+        "package": "org.bouncycastle.jcajce.provider.asymmetric.mldsa"
+      },
+      {
+        "classes": 20,
+        "package": "org.bouncycastle.jcajce.provider.asymmetric.mlkem"
+      },
+      {
+        "classes": 98,
+        "package": "org.bouncycastle.jcajce.provider.asymmetric.rsa"
+      },
+      {
+        "classes": 60,
+        "package": "org.bouncycastle.jcajce.provider.asymmetric.slhdsa"
+      },
+      {
+        "classes": 20,
+        "package": "org.bouncycastle.jcajce.provider.asymmetric.util"
+      },
+      {
+        "classes": 25,
+        "package": "org.bouncycastle.jcajce.provider.asymmetric.x509"
+      },
+      {
+        "classes": 4,
+        "package": "org.bouncycastle.jcajce.provider.config"
+      },
+      {
+        "classes": 268,
+        "package": "org.bouncycastle.jcajce.provider.digest"
+      },
+      {
+        "classes": 26,
+        "package": "org.bouncycastle.jcajce.provider.drbg"
+      },
+      {
+        "classes": 6,
+        "package": "org.bouncycastle.jcajce.provider.keystore"
+      },
+      {
+        "classes": 6,
+        "package": "org.bouncycastle.jcajce.provider.keystore.bc"
+      },
+      {
+        "classes": 12,
+        "package": "org.bouncycastle.jcajce.provider.keystore.bcfks"
+      },
+      {
+        "classes": 13,
+        "package": "org.bouncycastle.jcajce.provider.keystore.pkcs12"
+      },
+      {
+        "classes": 5,
+        "package": "org.bouncycastle.jcajce.provider.keystore.util"
+      },
+      {
+        "classes": 559,
+        "package": "org.bouncycastle.jcajce.provider.symmetric"
+      },
+      {
+        "classes": 28,
+        "package": "org.bouncycastle.jcajce.provider.symmetric.util"
+      },
+      {
+        "classes": 6,
+        "package": "org.bouncycastle.jcajce.provider.util"
+      },
+      {
+        "classes": 50,
+        "package": "org.bouncycastle.jcajce.spec"
+      },
+      {
+        "classes": 15,
+        "package": "org.bouncycastle.jcajce.util"
+      },
+      {
+        "classes": 14,
+        "package": "org.bouncycastle.jce"
+      },
+      {
+        "classes": 5,
+        "package": "org.bouncycastle.jce.exception"
+      },
+      {
+        "classes": 16,
+        "package": "org.bouncycastle.jce.interfaces"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.jce.netscape"
+      },
+      {
+        "classes": 75,
+        "package": "org.bouncycastle.jce.provider"
+      },
+      {
+        "classes": 20,
+        "package": "org.bouncycastle.jce.spec"
+      },
+      {
+        "classes": 14,
+        "package": "org.bouncycastle.jsse"
+      },
+      {
+        "classes": 2,
+        "package": "org.bouncycastle.jsse.java.security"
+      },
+      {
+        "classes": 153,
+        "package": "org.bouncycastle.jsse.provider"
+      },
+      {
+        "classes": 5,
+        "package": "org.bouncycastle.jsse.util"
+      },
+      {
+        "classes": 4,
+        "package": "org.bouncycastle.math"
+      },
+      {
+        "classes": 52,
+        "package": "org.bouncycastle.math.ec"
+      },
+      {
+        "classes": 5,
+        "package": "org.bouncycastle.math.ec.custom.djb"
+      },
+      {
+        "classes": 5,
+        "package": "org.bouncycastle.math.ec.custom.gm"
+      },
+      {
+        "classes": 130,
+        "package": "org.bouncycastle.math.ec.custom.sec"
+      },
+      {
+        "classes": 10,
+        "package": "org.bouncycastle.math.ec.endo"
+      },
+      {
+        "classes": 8,
+        "package": "org.bouncycastle.math.ec.rfc7748"
+      },
+      {
+        "classes": 24,
+        "package": "org.bouncycastle.math.ec.rfc8032"
+      },
+      {
+        "classes": 3,
+        "package": "org.bouncycastle.math.ec.tools"
+      },
+      {
+        "classes": 8,
+        "package": "org.bouncycastle.math.field"
+      },
+      {
+        "classes": 15,
+        "package": "org.bouncycastle.math.raw"
+      },
+      {
+        "classes": 15,
+        "package": "org.bouncycastle.mime"
+      },
+      {
+        "classes": 3,
+        "package": "org.bouncycastle.mime.encoding"
+      },
+      {
+        "classes": 15,
+        "package": "org.bouncycastle.mime.smime"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.mozilla"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.mozilla.jcajce"
+      },
+      {
+        "classes": 29,
+        "package": "org.bouncycastle.oer"
+      },
+      {
+        "classes": 2,
+        "package": "org.bouncycastle.oer.its"
+      },
+      {
+        "classes": 70,
+        "package": "org.bouncycastle.oer.its.etsi102941"
+      },
+      {
+        "classes": 5,
+        "package": "org.bouncycastle.oer.its.etsi102941.basetypes"
+      },
+      {
+        "classes": 10,
+        "package": "org.bouncycastle.oer.its.etsi103097"
+      },
+      {
+        "classes": 9,
+        "package": "org.bouncycastle.oer.its.etsi103097.extension"
+      },
+      {
+        "classes": 58,
+        "package": "org.bouncycastle.oer.its.ieee1609dot2"
+      },
+      {
+        "classes": 106,
+        "package": "org.bouncycastle.oer.its.ieee1609dot2.basetypes"
+      },
+      {
+        "classes": 8,
+        "package": "org.bouncycastle.oer.its.ieee1609dot2dot1"
+      },
+      {
+        "classes": 7,
+        "package": "org.bouncycastle.oer.its.template.etsi102941"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.oer.its.template.etsi102941.basetypes"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.oer.its.template.etsi103097"
+      },
+      {
+        "classes": 2,
+        "package": "org.bouncycastle.oer.its.template.etsi103097.extension"
+      },
+      {
+        "classes": 4,
+        "package": "org.bouncycastle.oer.its.template.ieee1609dot2"
+      },
+      {
+        "classes": 1,
+        "package": "org.bouncycastle.oer.its.template.ieee1609dot2.basetypes"
+      },
+      {
+        "classes": 2,
+        "package": "org.bouncycastle.oer.its.template.ieee1609dot2dot1"
+      },
+      {
+        "classes": 32,
+        "package": "org.bouncycastle.openssl"
+      },
+      {
+        "classes": 3,
+        "package": "org.bouncycastle.openssl.bc"
+      },
+      {
+        "classes": 17,
+        "package": "org.bouncycastle.openssl.jcajce"
+      },
+      {
+        "classes": 47,
+        "package": "org.bouncycastle.operator"
+      },
+      {
+        "classes": 60,
+        "package": "org.bouncycastle.operator.bc"
+      },
+      {
+        "classes": 29,
+        "package": "org.bouncycastle.operator.jcajce"
+      },
+      {
+        "classes": 18,
+        "package": "org.bouncycastle.pkcs"
+      },
+      {
+        "classes": 16,
+        "package": "org.bouncycastle.pkcs.bc"
+      },
+      {
+        "classes": 19,
+        "package": "org.bouncycastle.pkcs.jcajce"
+      },
+      {
+        "classes": 10,
+        "package": "org.bouncycastle.pkix"
+      },
+      {
+        "classes": 21,
+        "package": "org.bouncycastle.pkix.jcajce"
+      },
+      {
+        "classes": 9,
+        "package": "org.bouncycastle.pkix.util"
+      },
+      {
+        "classes": 6,
+        "package": "org.bouncycastle.pkix.util.filter"
+      },
+      {
+        "classes": 17,
+        "package": "org.bouncycastle.pqc.asn1"
+      },
+      {
+        "classes": 13,
+        "package": "org.bouncycastle.pqc.crypto"
+      },
+      {
+        "classes": 11,
+        "package": "org.bouncycastle.pqc.crypto.bike"
+      },
+      {
+        "classes": 16,
+        "package": "org.bouncycastle.pqc.crypto.cmce"
+      },
+      {
+        "classes": 19,
+        "package": "org.bouncycastle.pqc.crypto.crystals.dilithium"
+      },
+      {
+        "classes": 20,
+        "package": "org.bouncycastle.pqc.crypto.falcon"
+      },
+      {
+        "classes": 12,
+        "package": "org.bouncycastle.pqc.crypto.frodo"
+      },
+      {
+        "classes": 17,
+        "package": "org.bouncycastle.pqc.crypto.hqc"
+      },
+      {
+        "classes": 36,
+        "package": "org.bouncycastle.pqc.crypto.lms"
+      },
+      {
+        "classes": 9,
+        "package": "org.bouncycastle.pqc.crypto.mayo"
+      },
+      {
+        "classes": 19,
+        "package": "org.bouncycastle.pqc.crypto.mldsa"
+      },
+      {
+        "classes": 17,
+        "package": "org.bouncycastle.pqc.crypto.mlkem"
+      },
+      {
+        "classes": 20,
+        "package": "org.bouncycastle.pqc.crypto.newhope"
+      },
+      {
+        "classes": 13,
+        "package": "org.bouncycastle.pqc.crypto.ntru"
+      },
+      {
+        "classes": 17,
+        "package": "org.bouncycastle.pqc.crypto.ntruprime"
+      },
+      {
+        "classes": 26,
+        "package": "org.bouncycastle.pqc.crypto.picnic"
+      },
+      {
+        "classes": 16,
+        "package": "org.bouncycastle.pqc.crypto.rainbow"
+      },
+      {
+        "classes": 14,
+        "package": "org.bouncycastle.pqc.crypto.saber"
+      },
+      {
+        "classes": 25,
+        "package": "org.bouncycastle.pqc.crypto.slhdsa"
+      },
+      {
+        "classes": 11,
+        "package": "org.bouncycastle.pqc.crypto.snova"
+      },
+      {
+        "classes": 14,
+        "package": "org.bouncycastle.pqc.crypto.sphincs"
+      },
+      {
+        "classes": 30,
+        "package": "org.bouncycastle.pqc.crypto.sphincsplus"
+      },
+      {
+        "classes": 34,
+        "package": "org.bouncycastle.pqc.crypto.util"
+      },
+      {
+        "classes": 63,
+        "package": "org.bouncycastle.pqc.crypto.xmss"
+      },
+      {
+        "classes": 7,
+        "package": "org.bouncycastle.pqc.crypto.xwing"
+      },
+      {
+        "classes": 34,
+        "package": "org.bouncycastle.pqc.jcajce.interfaces"
+      },
+      {
+        "classes": 39,
+        "package": "org.bouncycastle.pqc.jcajce.provider"
+      },
+      {
+        "classes": 10,
+        "package": "org.bouncycastle.pqc.jcajce.provider.bike"
+      },
+      {
+        "classes": 12,
+        "package": "org.bouncycastle.pqc.jcajce.provider.cmce"
+      },
+      {
+        "classes": 18,
+        "package": "org.bouncycastle.pqc.jcajce.provider.dilithium"
+      },
+      {
+        "classes": 12,
+        "package": "org.bouncycastle.pqc.jcajce.provider.falcon"
+      },
+      {
+        "classes": 7,
+        "package": "org.bouncycastle.pqc.jcajce.provider.frodo"
+      },
+      {
+        "classes": 19,
+        "package": "org.bouncycastle.pqc.jcajce.provider.hqc"
+      },
+      {
+        "classes": 22,
+        "package": "org.bouncycastle.pqc.jcajce.provider.kyber"
+      },
+      {
+        "classes": 7,
+        "package": "org.bouncycastle.pqc.jcajce.provider.lms"
+      },
+      {
+        "classes": 18,
+        "package": "org.bouncycastle.pqc.jcajce.provider.mayo"
+      },
+      {
+        "classes": 5,
+        "package": "org.bouncycastle.pqc.jcajce.provider.newhope"
+      },
+      {
+        "classes": 7,
+        "package": "org.bouncycastle.pqc.jcajce.provider.ntru"
+      },
+      {
+        "classes": 14,
+        "package": "org.bouncycastle.pqc.jcajce.provider.ntruprime"
+      },
+      {
+        "classes": 9,
+        "package": "org.bouncycastle.pqc.jcajce.provider.picnic"
+      },
+      {
+        "classes": 7,
+        "package": "org.bouncycastle.pqc.jcajce.provider.saber"
+      },
+      {
+        "classes": 138,
+        "package": "org.bouncycastle.pqc.jcajce.provider.snova"
+      },
+      {
+        "classes": 7,
+        "package": "org.bouncycastle.pqc.jcajce.provider.sphincs"
+      },
+      {
+        "classes": 18,
+        "package": "org.bouncycastle.pqc.jcajce.provider.sphincsplus"
+      },
+      {
+        "classes": 9,
+        "package": "org.bouncycastle.pqc.jcajce.provider.util"
+      },
+      {
+        "classes": 34,
+        "package": "org.bouncycastle.pqc.jcajce.provider.xmss"
+      },
+      {
+        "classes": 22,
+        "package": "org.bouncycastle.pqc.jcajce.spec"
+      },
+      {
+        "classes": 5,
+        "package": "org.bouncycastle.pqc.math.ntru"
+      },
+      {
+        "classes": 9,
+        "package": "org.bouncycastle.pqc.math.ntru.parameters"
+      },
+      {
+        "classes": 202,
+        "package": "org.bouncycastle.tls"
+      },
+      {
+        "classes": 42,
+        "package": "org.bouncycastle.tls.crypto"
+      },
+      {
+        "classes": 17,
+        "package": "org.bouncycastle.tls.crypto.impl"
+      },
+      {
+        "classes": 52,
+        "package": "org.bouncycastle.tls.crypto.impl.bc"
+      },
+      {
+        "classes": 63,
+        "package": "org.bouncycastle.tls.crypto.impl.jcajce"
+      },
+      {
+        "classes": 4,
+        "package": "org.bouncycastle.tls.crypto.impl.jcajce.srp"
+      },
+      {
+        "classes": 16,
+        "package": "org.bouncycastle.tsp"
+      },
+      {
+        "classes": 7,
+        "package": "org.bouncycastle.tsp.cms"
+      },
+      {
+        "classes": 29,
+        "package": "org.bouncycastle.tsp.ers"
+      },
+      {
+        "classes": 34,
+        "package": "org.bouncycastle.util"
+      },
+      {
+        "classes": 16,
+        "package": "org.bouncycastle.util.encoders"
+      },
+      {
+        "classes": 7,
+        "package": "org.bouncycastle.util.io"
+      },
+      {
+        "classes": 7,
+        "package": "org.bouncycastle.util.io.pem"
+      },
+      {
+        "classes": 18,
+        "package": "org.bouncycastle.util.test"
+      },
+      {
+        "classes": 2,
+        "package": "org.bouncycastle.voms"
+      },
+      {
+        "classes": 33,
+        "package": "org.bouncycastle.x509"
+      },
+      {
+        "classes": 2,
+        "package": "org.bouncycastle.x509.extension"
+      },
+      {
+        "classes": 3,
+        "package": "org.bouncycastle.x509.util"
+      },
+      {
+        "classes": 37,
+        "package": "org.brotli.dec"
+      },
+      {
+        "classes": 3,
+        "package": "org.checkerframework.checker.builder.qual"
+      },
+      {
+        "classes": 6,
+        "package": "org.checkerframework.checker.calledmethods.qual"
+      },
+      {
+        "classes": 3,
+        "package": "org.checkerframework.checker.compilermsgs.qual"
+      },
+      {
+        "classes": 18,
+        "package": "org.checkerframework.checker.fenum.qual"
+      },
+      {
+        "classes": 7,
+        "package": "org.checkerframework.checker.formatter.qual"
+      },
+      {
+        "classes": 10,
+        "package": "org.checkerframework.checker.guieffect.qual"
+      },
+      {
+        "classes": 5,
+        "package": "org.checkerframework.checker.i18n.qual"
+      },
+      {
+        "classes": 9,
+        "package": "org.checkerframework.checker.i18nformatter.qual"
+      },
+      {
+        "classes": 37,
+        "package": "org.checkerframework.checker.index.qual"
+      },
+      {
+        "classes": 5,
+        "package": "org.checkerframework.checker.initialization.qual"
+      },
+      {
+        "classes": 9,
+        "package": "org.checkerframework.checker.interning.qual"
+      },
+      {
+        "classes": 14,
+        "package": "org.checkerframework.checker.lock.qual"
+      },
+      {
+        "classes": 19,
+        "package": "org.checkerframework.checker.nullness.qual"
+      },
+      {
+        "classes": 4,
+        "package": "org.checkerframework.checker.optional.qual"
+      },
+      {
+        "classes": 3,
+        "package": "org.checkerframework.checker.propkey.qual"
+      },
+      {
+        "classes": 5,
+        "package": "org.checkerframework.checker.regex.qual"
+      },
+      {
+        "classes": 25,
+        "package": "org.checkerframework.checker.signature.qual"
+      },
+      {
+        "classes": 8,
+        "package": "org.checkerframework.checker.signedness.qual"
+      },
+      {
+        "classes": 3,
+        "package": "org.checkerframework.checker.tainting.qual"
+      },
+      {
+        "classes": 39,
+        "package": "org.checkerframework.checker.units.qual"
+      },
+      {
+        "classes": 5,
+        "package": "org.checkerframework.common.aliasing.qual"
+      },
+      {
+        "classes": 5,
+        "package": "org.checkerframework.common.initializedfields.qual"
+      },
+      {
+        "classes": 13,
+        "package": "org.checkerframework.common.reflection.qual"
+      },
+      {
+        "classes": 3,
+        "package": "org.checkerframework.common.returnsreceiver.qual"
+      },
+      {
+        "classes": 2,
+        "package": "org.checkerframework.common.subtyping.qual"
+      },
+      {
+        "classes": 8,
+        "package": "org.checkerframework.common.util.report.qual"
+      },
+      {
+        "classes": 20,
+        "package": "org.checkerframework.common.value.qual"
+      },
+      {
+        "classes": 5,
+        "package": "org.checkerframework.dataflow.qual"
+      },
+      {
+        "classes": 45,
+        "package": "org.checkerframework.framework.qual"
+      },
+      {
+        "classes": 28,
+        "package": "org.intellij.lang.annotations"
+      },
+      {
+        "classes": 38,
+        "package": "org.jetbrains.annotations"
+      },
+      {
+        "classes": 28,
+        "package": "org.joda.time"
+      },
+      {
+        "classes": 5,
+        "package": "org.joda.time.base"
+      },
+      {
+        "classes": 25,
+        "package": "org.joda.time.chrono"
+      },
+      {
+        "classes": 19,
+        "package": "org.joda.time.field"
+      },
+      {
+        "classes": 31,
+        "package": "org.joda.time.format"
+      },
+      {
+        "classes": 14,
+        "package": "org.joda.time.tz"
+      },
+      {
+        "classes": 4,
+        "package": "org.jspecify.annotations"
+      },
+      {
+        "classes": 10,
+        "package": "org.mozilla.classfile"
+      },
+      {
+        "classes": 170,
+        "package": "org.mozilla.javascript"
+      },
+      {
+        "classes": 5,
+        "package": "org.mozilla.javascript.annotations"
+      },
+      {
+        "classes": 68,
+        "package": "org.mozilla.javascript.ast"
+      },
+      {
+        "classes": 4,
+        "package": "org.mozilla.javascript.debug"
+      },
+      {
+        "classes": 2,
+        "package": "org.mozilla.javascript.json"
+      },
+      {
+        "classes": 12,
+        "package": "org.mozilla.javascript.optimizer"
+      },
+      {
+        "classes": 11,
+        "package": "org.mozilla.javascript.regexp"
+      },
+      {
+        "classes": 2,
+        "package": "org.mozilla.javascript.tools.shell"
+      },
+      {
+        "classes": 16,
+        "package": "org.mozilla.javascript.typedarrays"
+      },
+      {
+        "classes": 7,
+        "package": "org.mozilla.javascript.v8dtoa"
+      },
+      {
+        "classes": 4,
+        "package": "org.mozilla.javascript.xml"
+      },
+      {
+        "classes": 13,
+        "package": "org.reactivestreams"
+      },
+      {
+        "classes": 15,
+        "package": "org.slf4j"
+      },
+      {
+        "classes": 11,
+        "package": "org.slf4j.event"
+      },
+      {
+        "classes": 44,
+        "package": "org.slf4j.helpers"
+      },
+      {
+        "classes": 13,
+        "package": "org.slf4j.spi"
+      },
+      {
+        "classes": 5,
+        "package": "org.snakeyaml.engine.external.com.google.gdata.util.common.base"
+      },
+      {
+        "classes": 15,
+        "package": "org.snakeyaml.engine.v2.api"
+      },
+      {
+        "classes": 8,
+        "package": "org.snakeyaml.engine.v2.api.lowlevel"
+      },
+      {
+        "classes": 4,
+        "package": "org.snakeyaml.engine.v2.comments"
+      },
+      {
+        "classes": 8,
+        "package": "org.snakeyaml.engine.v2.common"
+      },
+      {
+        "classes": 2,
+        "package": "org.snakeyaml.engine.v2.composer"
+      },
+      {
+        "classes": 10,
+        "package": "org.snakeyaml.engine.v2.constructor"
+      },
+      {
+        "classes": 3,
+        "package": "org.snakeyaml.engine.v2.constructor.core"
+      },
+      {
+        "classes": 6,
+        "package": "org.snakeyaml.engine.v2.constructor.json"
+      },
+      {
+        "classes": 23,
+        "package": "org.snakeyaml.engine.v2.emitter"
+      },
+      {
+        "classes": 1,
+        "package": "org.snakeyaml.engine.v2.env"
+      },
+      {
+        "classes": 17,
+        "package": "org.snakeyaml.engine.v2.events"
+      },
+      {
+        "classes": 13,
+        "package": "org.snakeyaml.engine.v2.exceptions"
+      },
+      {
+        "classes": 9,
+        "package": "org.snakeyaml.engine.v2.nodes"
+      },
+      {
+        "classes": 30,
+        "package": "org.snakeyaml.engine.v2.parser"
+      },
+      {
+        "classes": 18,
+        "package": "org.snakeyaml.engine.v2.representer"
+      },
+      {
+        "classes": 6,
+        "package": "org.snakeyaml.engine.v2.resolver"
+      },
+      {
+        "classes": 7,
+        "package": "org.snakeyaml.engine.v2.scanner"
+      },
+      {
+        "classes": 4,
+        "package": "org.snakeyaml.engine.v2.schema"
+      },
+      {
+        "classes": 5,
+        "package": "org.snakeyaml.engine.v2.serializer"
+      },
+      {
+        "classes": 24,
+        "package": "org.snakeyaml.engine.v2.tokens"
+      },
+      {
+        "classes": 2,
+        "package": "org.snakeyaml.engine.v2.util"
+      },
+      {
+        "classes": 234,
+        "package": "org.yaml"
+      },
+      {
+        "classes": 3,
+        "package": "oshi"
+      },
+      {
+        "classes": 1,
+        "package": "oshi.annotation"
+      },
+      {
+        "classes": 4,
+        "package": "oshi.annotation.concurrent"
+      },
+      {
+        "classes": 6,
+        "package": "oshi.driver.linux"
+      },
+      {
+        "classes": 9,
+        "package": "oshi.driver.linux.proc"
+      },
+      {
+        "classes": 4,
+        "package": "oshi.driver.mac"
+      },
+      {
+        "classes": 1,
+        "package": "oshi.driver.mac.disk"
+      },
+      {
+        "classes": 2,
+        "package": "oshi.driver.mac.net"
+      },
+      {
+        "classes": 4,
+        "package": "oshi.driver.unix"
+      },
+      {
+        "classes": 7,
+        "package": "oshi.driver.unix.aix"
+      },
+      {
+        "classes": 7,
+        "package": "oshi.driver.unix.aix.perfstat"
+      },
+      {
+        "classes": 1,
+        "package": "oshi.driver.unix.freebsd"
+      },
+      {
+        "classes": 3,
+        "package": "oshi.driver.unix.freebsd.disk"
+      },
+      {
+        "classes": 1,
+        "package": "oshi.driver.unix.openbsd.disk"
+      },
+      {
+        "classes": 2,
+        "package": "oshi.driver.unix.solaris"
+      },
+      {
+        "classes": 3,
+        "package": "oshi.driver.unix.solaris.disk"
+      },
+      {
+        "classes": 1,
+        "package": "oshi.driver.unix.solaris.kstat"
+      },
+      {
+        "classes": 3,
+        "package": "oshi.driver.windows"
+      },
+      {
+        "classes": 25,
+        "package": "oshi.driver.windows.perfmon"
+      },
+      {
+        "classes": 10,
+        "package": "oshi.driver.windows.registry"
+      },
+      {
+        "classes": 47,
+        "package": "oshi.driver.windows.wmi"
+      },
+      {
+        "classes": 26,
+        "package": "oshi.hardware"
+      },
+      {
+        "classes": 17,
+        "package": "oshi.hardware.common"
+      },
+      {
+        "classes": 18,
+        "package": "oshi.hardware.platform.linux"
+      },
+      {
+        "classes": 17,
+        "package": "oshi.hardware.platform.mac"
+      },
+      {
+        "classes": 3,
+        "package": "oshi.hardware.platform.unix"
+      },
+      {
+        "classes": 16,
+        "package": "oshi.hardware.platform.unix.aix"
+      },
+      {
+        "classes": 12,
+        "package": "oshi.hardware.platform.unix.freebsd"
+      },
+      {
+        "classes": 12,
+        "package": "oshi.hardware.platform.unix.openbsd"
+      },
+      {
+        "classes": 16,
+        "package": "oshi.hardware.platform.unix.solaris"
+      },
+      {
+        "classes": 19,
+        "package": "oshi.hardware.platform.windows"
+      },
+      {
+        "classes": 29,
+        "package": "oshi.jna"
+      },
+      {
+        "classes": 4,
+        "package": "oshi.jna.platform.linux"
+      },
+      {
+        "classes": 21,
+        "package": "oshi.jna.platform.mac"
+      },
+      {
+        "classes": 28,
+        "package": "oshi.jna.platform.unix"
+      },
+      {
+        "classes": 19,
+        "package": "oshi.jna.platform.windows"
+      },
+      {
+        "classes": 7,
+        "package": "oshi.software.common"
+      },
+      {
+        "classes": 20,
+        "package": "oshi.software.os"
+      },
+      {
+        "classes": 9,
+        "package": "oshi.software.os.linux"
+      },
+      {
+        "classes": 7,
+        "package": "oshi.software.os.mac"
+      },
+      {
+        "classes": 7,
+        "package": "oshi.software.os.unix.aix"
+      },
+      {
+        "classes": 9,
+        "package": "oshi.software.os.unix.freebsd"
+      },
+      {
+        "classes": 9,
+        "package": "oshi.software.os.unix.openbsd"
+      },
+      {
+        "classes": 7,
+        "package": "oshi.software.os.unix.solaris"
+      },
+      {
+        "classes": 7,
+        "package": "oshi.software.os.windows"
+      },
+      {
+        "classes": 13,
+        "package": "oshi.util"
+      },
+      {
+        "classes": 3,
+        "package": "oshi.util.platform.linux"
+      },
+      {
+        "classes": 3,
+        "package": "oshi.util.platform.mac"
+      },
+      {
+        "classes": 2,
+        "package": "oshi.util.platform.unix.freebsd"
+      },
+      {
+        "classes": 2,
+        "package": "oshi.util.platform.unix.openbsd"
+      },
+      {
+        "classes": 3,
+        "package": "oshi.util.platform.unix.solaris"
+      },
+      {
+        "classes": 9,
+        "package": "oshi.util.platform.windows"
+      },
+      {
+        "classes": 4,
+        "package": "oshi.util.tuples"
+      },
+      {
+        "classes": 6,
+        "package": "reactor.adapter"
+      },
+      {
+        "classes": 34,
+        "package": "reactor.core"
+      },
+      {
+        "classes": 3,
+        "package": "reactor.core.observability"
+      },
+      {
+        "classes": 779,
+        "package": "reactor.core.publisher"
+      },
+      {
+        "classes": 47,
+        "package": "reactor.core.scheduler"
+      },
+      {
+        "classes": 13,
+        "package": "reactor.util"
+      },
+      {
+        "classes": 4,
+        "package": "reactor.util.annotation"
+      },
+      {
+        "classes": 14,
+        "package": "reactor.util.concurrent"
+      },
+      {
+        "classes": 11,
+        "package": "reactor.util.context"
+      },
+      {
+        "classes": 9,
+        "package": "reactor.util.function"
+      },
+      {
+        "classes": 3,
+        "package": "reactor.util.repeat"
+      },
+      {
+        "classes": 7,
+        "package": "reactor.util.retry"
+      },
+      {
+        "classes": 45,
+        "package": "tools.jackson.core"
+      },
+      {
+        "classes": 3,
+        "package": "tools.jackson.core.async"
+      },
+      {
+        "classes": 7,
+        "package": "tools.jackson.core.base"
+      },
+      {
+        "classes": 6,
+        "package": "tools.jackson.core.exc"
+      },
+      {
+        "classes": 6,
+        "package": "tools.jackson.core.filter"
+      },
+      {
+        "classes": 34,
+        "package": "tools.jackson.core.internal.shaded.fdp"
+      },
+      {
+        "classes": 18,
+        "package": "tools.jackson.core.io"
+      },
+      {
+        "classes": 3,
+        "package": "tools.jackson.core.io.schubfach"
+      },
+      {
+        "classes": 16,
+        "package": "tools.jackson.core.json"
+      },
+      {
+        "classes": 4,
+        "package": "tools.jackson.core.json.async"
+      },
+      {
+        "classes": 9,
+        "package": "tools.jackson.core.sym"
+      },
+      {
+        "classes": 2,
+        "package": "tools.jackson.core.tree"
+      },
+      {
+        "classes": 4,
+        "package": "tools.jackson.core.type"
+      },
+      {
+        "classes": 42,
+        "package": "tools.jackson.core.util"
+      },
+      {
+        "classes": 75,
+        "package": "tools.jackson.databind"
+      },
+      {
+        "classes": 14,
+        "package": "tools.jackson.databind.annotation"
+      },
+      {
+        "classes": 40,
+        "package": "tools.jackson.databind.cfg"
+      },
+      {
+        "classes": 37,
+        "package": "tools.jackson.databind.deser"
+      },
+      {
+        "classes": 21,
+        "package": "tools.jackson.databind.deser.bean"
+      },
+      {
+        "classes": 23,
+        "package": "tools.jackson.databind.deser.impl"
+      },
+      {
+        "classes": 7,
+        "package": "tools.jackson.databind.deser.jackson"
+      },
+      {
+        "classes": 92,
+        "package": "tools.jackson.databind.deser.jdk"
+      },
+      {
+        "classes": 13,
+        "package": "tools.jackson.databind.deser.std"
+      },
+      {
+        "classes": 14,
+        "package": "tools.jackson.databind.exc"
+      },
+      {
+        "classes": 9,
+        "package": "tools.jackson.databind.ext"
+      },
+      {
+        "classes": 2,
+        "package": "tools.jackson.databind.ext.beans"
+      },
+      {
+        "classes": 3,
+        "package": "tools.jackson.databind.ext.javatime"
+      },
+      {
+        "classes": 16,
+        "package": "tools.jackson.databind.ext.javatime.deser"
+      },
+      {
+        "classes": 15,
+        "package": "tools.jackson.databind.ext.javatime.deser.key"
+      },
+      {
+        "classes": 16,
+        "package": "tools.jackson.databind.ext.javatime.ser"
+      },
+      {
+        "classes": 1,
+        "package": "tools.jackson.databind.ext.javatime.ser.key"
+      },
+      {
+        "classes": 3,
+        "package": "tools.jackson.databind.ext.javatime.util"
+      },
+      {
+        "classes": 13,
+        "package": "tools.jackson.databind.ext.jdk8"
+      },
+      {
+        "classes": 6,
+        "package": "tools.jackson.databind.ext.sql"
+      },
+      {
+        "classes": 69,
+        "package": "tools.jackson.databind.introspect"
+      },
+      {
+        "classes": 4,
+        "package": "tools.jackson.databind.json"
+      },
+      {
+        "classes": 27,
+        "package": "tools.jackson.databind.jsonFormatVisitors"
+      },
+      {
+        "classes": 26,
+        "package": "tools.jackson.databind.jsontype"
+      },
+      {
+        "classes": 27,
+        "package": "tools.jackson.databind.jsontype.impl"
+      },
+      {
+        "classes": 6,
+        "package": "tools.jackson.databind.module"
+      },
+      {
+        "classes": 40,
+        "package": "tools.jackson.databind.node"
+      },
+      {
+        "classes": 23,
+        "package": "tools.jackson.databind.ser"
+      },
+      {
+        "classes": 7,
+        "package": "tools.jackson.databind.ser.bean"
+      },
+      {
+        "classes": 19,
+        "package": "tools.jackson.databind.ser.impl"
+      },
+      {
+        "classes": 5,
+        "package": "tools.jackson.databind.ser.jackson"
+      },
+      {
+        "classes": 70,
+        "package": "tools.jackson.databind.ser.jdk"
+      },
+      {
+        "classes": 21,
+        "package": "tools.jackson.databind.ser.std"
+      },
+      {
+        "classes": 22,
+        "package": "tools.jackson.databind.type"
+      },
+      {
+        "classes": 69,
+        "package": "tools.jackson.databind.util"
+      },
+      {
+        "classes": 25,
+        "package": "tools.jackson.databind.util.internal"
+      },
+      {
+        "classes": 21,
+        "package": "tools.jackson.dataformat.yaml"
+      },
+      {
+        "classes": 2,
+        "package": "tools.jackson.dataformat.yaml.util"
+      }
+    ],
+    "resources": 4453
+  },
+  "summary": "burpsuite.jar (JAR): 54868 classes in 1675 package(s), main class burp.StartBurp, 35 nested jar(s), 33 native lib(s), 4453 resource(s).",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [
+    {
+      "code": "dependencies_from_manifest",
+      "message": "Dependencies are taken from the manifest Class-Path and bundled jars/native libraries; dependencies resolved at run time (module path, classloaders, reflection) are not listed."
+    }
+  ],
+  "coverage": {
+    "status": "complete",
+    "examined": 61682,
+    "total": 61682
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/opt/BurpSuite/burpsuite.jar"
+    }
+  ],
+  "links": []
+}
