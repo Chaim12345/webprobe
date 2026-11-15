@@ -3,14 +3,14 @@
  "generated": "2026-11-15",
  "source": "TASKS.md",
  "summary": {
-  "total": 90,
+  "total": 92,
   "p0": 61,
-  "p1": 24,
+  "p1": 26,
   "p2": 5,
   "by_status": {
    "done": 18,
    "in_progress": 4,
-   "todo": 68
+   "todo": 70
   }
  },
  "tasks": [
@@ -610,7 +610,8 @@
    "title": "Embedded browser",
    "acceptance": "Launch a configured Chromium for proxy testing, or a documented \"use your browser\" flow",
    "effort": "L",
-   "status": "todo"
+   "status": "todo",
+   "evidence": "Evaluated 2026-11-15 (docs/EVAL-OBSCURA.md): Obscura is headless, so it cannot be Burp's interactive browser; split into P-15 (interactive launcher) and P-16 (headless engine). Still todo."
   },
   {
    "id": "M-01",
@@ -890,6 +891,31 @@
    "status": "done",
    "completed": "2026-11-15",
    "evidence": "Recovered from the dead-code warnings (about 40 down to 5 design tokens): history filter bar call restored, analysis_ui::show_comparer, tools::scope_editor, tools::project_controls, tools::appearance_options, net::listener_status/set_listeners with a new Dashboard Listeners panel and an add/remove editor in Proxy > Options (net::listener_specs), duplicate ScrollArea ids fixed (Match/replace, Intruder, Sequencer, Sessions, Search), Settings window centred, Target host chips wrap, dead editor::bytes_view removed. 117 tests pass. Commits 10bafe7, 6a969c1"
+  },
+  {
+   "id": "P-15",
+   "epic": "P — Live Burp parity gaps (found 2026-11-15)",
+   "priority": "P1",
+   "title": "Interactive Open browser launcher",
+   "acceptance": "'Open browser' (Intercept bar, empty states, Dashboard) launches the user's Chrome/Chromium or a downloaded Chrome for Testing with a throwaway profile, --proxy-server set to the active listener and the WebProbe CA trusted for that profile only; reports clearly when no browser is found",
+   "effort": "M",
+   "status": "todo",
+   "depends_on": [
+    "L-05",
+    "M-07"
+   ]
+  },
+  {
+   "id": "P-16",
+   "epic": "P — Live Burp parity gaps (found 2026-11-15)",
+   "priority": "P1",
+   "title": "Headless engine trait + Obscura sidecar spike",
+   "acceptance": "HeadlessBrowser trait with an Obscura implementation behind it; gate = the 5 acceptance checks in docs/EVAL-OBSCURA.md (JS crawl finds more links, all traffic incl. HTTPS in history via SSL_CERT_FILE, stored response to PNG <2 s and <150 MB, stealth/tracker blocking off, version pinned and digest verified); also compare Lightpanda in the same fixtures",
+   "effort": "M",
+   "status": "todo",
+   "depends_on": [
+    "D-01"
+   ]
   }
  ]
 }

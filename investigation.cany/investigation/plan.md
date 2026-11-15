@@ -1,10 +1,9 @@
 # Plan
 
-1. [done] Epic A proxy core (8/8), M foundations (7/7), B-01 history table — 18/90 tasks done; tests 117 green
-2. [done] P-13 WSL2 render fix + qa/qa.sh; P-14 UI wiring repair — commits 10bafe7, 6a969c1; root cause LIBGL_ALWAYS_INDIRECT=1 + no render node
-3. [done] Run real Burp Pro v2026.7.3 on Xvfb :98, capture every tab/menu/dialog, write gap report — qa/GAP-REPORT-2026-11-15.md; 12 new open tasks P-01..P-12
-4. [doing] Write the UI PRD (from Burp's shipped docs + live captures) and the backend PRD — docs/PRD-UI.md and docs/PRD-BACKEND.md; every requirement maps to a task id
-5. [todo] P-10 wire Intruder UI to intruder.rs (C-01/C-02 in progress), then C-03..C-07 — engine matrix exists with 10 tests; runner and UI are the gap
-6. [todo] UI parity batch: P-01 menu bar, P-02 tab bar, P-03 Settings dialog, P-04 Repeater layout, P-05 history columns — top five gaps by tester impact
-7. [todo] Backend-first epics with no UI dependency: F decoder ops, H sessions/cookie jar, J project v2, D crawl/audit engine — pure engine work with unit tests
-8. [todo] Close B-02/B-05 remainders; refresh re/mapping deobfuscation for build 52685 — history edit-in-place, layout persistence; ZKM renames per build
+1. [done] Epic A, M, B-01 done; P-13/P-14 (render fix, wiring repair); tasks.json now 90 tasks (18 done, 4 in progress) — commits 10bafe7, 6a969c1, ef70eb0
+2. [done] Live Burp gap analysis + UI PRD (docs/PRD-UI.md, 83 UI-* requirements) + backend PRD (docs/PRD-BACKEND.md, BE-* requirements) — built from live captures and the 364 doc pages in the jar; each requirement maps to a task id and a status
+3. [doing] P-10 wire Intruder UI to intruder.rs, then C-03 payload types, C-04 processing, C-05 grep/results, C-06 runner+pools — BE-IN-01/02 engine done; BE-IN-03..08 missing
+4. [todo] UI shell batch: P-01 menu bar, P-02 tab row, P-03 Settings dialog with Proxy page — UI-SH-01..07, UI-ST-01..10
+5. [todo] Message editor + history: P-05 columns, B-03 Pretty/Render, P-04 Repeater layout + Inspector — UI-ME-*, UI-PX-05, UI-RP-*
+6. [todo] Backend engines with no UI: F codec+pipeline, H cookie jar/macros, J project v2 + Burp config import, D insertion points/checks — BE-DC, BE-SS, BE-PJ/CF, BE-SC
+7. [todo] Deobfuscation refresh for build 52685 and extension host decision (K-02) — ZKM renames per build; Montoya host needs a JVM decision
