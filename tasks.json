@@ -8,9 +8,9 @@
   "p1": 26,
   "p2": 5,
   "by_status": {
-   "done": 19,
+   "done": 21,
    "in_progress": 7,
-   "todo": 66
+   "todo": 64
   }
  },
  "tasks": [
@@ -387,7 +387,9 @@
    "title": "Decoder operations",
    "acceptance": "Smart decode, MD5/SHA-1/SHA-256, ROT13, ASCII hex, URL/Base64/HTML/hex, construct",
    "effort": "M",
-   "status": "todo"
+   "status": "done",
+   "completed": "2026-11-15",
+   "evidence": "app/src/decoder_ops.rs: Op enum (URL, HTML, base64, ASCII hex, hex, ROT13, MD5, SHA-1, SHA-256, SHA-512, SmartDecode), apply(), pure codecs/digests; 9 tests with known vectors (base64, digests incl. padding boundaries, URL/HTML/hex round-trips, ROT13, smart decode, pipeline order). Engine done; UI controls remain P-07."
   },
   {
    "id": "F-02",
@@ -396,7 +398,9 @@
    "title": "Decoder pipeline",
    "acceptance": "Multi-stage encode/decode chain with editable stages and live output",
    "effort": "M",
-   "status": "todo"
+   "status": "done",
+   "completed": "2026-11-15",
+   "evidence": "decoder_ops::pipeline applies ops in order and names the failing step; tests pipeline_applies_ops_in_order, pipeline_names_the_failing_step. Engine done; the Decoder screen still needs the stage UI (P-07)."
   },
   {
    "id": "F-03",

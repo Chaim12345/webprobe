@@ -968,7 +968,7 @@ fn repeater(app: &mut App, ui: &mut Ui) {
     ui.add_space(4.0);
 
     let half = (ui.available_height() - 220.0).max(120.0) / 2.0;
-    egui::ScrollArea::vertical().max_height(half).show(ui, |ui| {
+    egui::ScrollArea::vertical().id_salt("repeater_request_scroll").max_height(half).show(ui, |ui| {
         ui.label(RichText::new("Request (edit then Send - keep the Host header, e.g. example.com:80)").size(12.0).color(c(theme::MONO6)));
         {
             let reps_len = app.shared.repeaters.lock().unwrap().len();
@@ -996,7 +996,7 @@ fn repeater(app: &mut App, ui: &mut Ui) {
         Some(r) => {
             let parts = util::parse_http(&r);
             ui.label(RichText::new(parts.first.clone()).monospace().size(12.5).color(c(theme::HEADER_BLUE)));
-            egui::ScrollArea::vertical().max_height(half).show(ui, |ui| match app.rep_view {
+            egui::ScrollArea::vertical().id_salt("repeater_response_scroll").max_height(half).show(ui, |ui| match app.rep_view {
                 1 => {
                     ui.monospace(RichText::new(util::hex_view(&r, 16384)).size(12.0).color(c(theme::EDITOR_TEXT)));
                 }

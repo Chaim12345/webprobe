@@ -7,6 +7,7 @@ mod codec;
 mod analysis_ui;
 mod collaborator;
 mod collaborator_ui;
+mod decoder_ops;
 mod editor;
 mod feedback;
 mod gl_env;
