@@ -1,31 +1,55 @@
 {
-  "revision": 13,
-  "brief": null,
+  "revision": 16,
+  "brief": {
+    "question": "Rebuild WebProbe, a clone of Burp Suite Pro (reference build 52685, v2026.7.3), to feature parity with the 76-task backlog in tasks.json, and produce a readable, evidence-backed name map for the obfuscated Burp jar.",
+    "purpose": "Interoperable reimplementation plus per-build deobfuscation; behaviour claims must come from the shipped jar or the running reference app, never guessed.",
+    "targets": [
+      "/opt/BurpSuite/burpsuite.jar",
+      "/root/Documents/Craft Anything/burpsuite/app"
+    ],
+    "constraints": [
+      "Test ports are 6566 (WebProbe proxy), 6567 (collaborator) and 6570 (reference Burp); 8080/8081 belong to a working tool and must never be bound or killed",
+      "Visual QA drives live windows on Xvfb (qa/qa.sh on :97, reference Burp on :98) with a multimodal subagent pinned to kilo/nvidia/nemotron-3.5-super-vl:free; no OCR",
+      "No rebuild or cargo test while a QA agent is mid-run, so the binary stays stable",
+      "Free models only for the builder; all work git-tracked; never touch ~/.zshrc or the user's real Burp config"
+    ],
+    "done_when": "All 76 tasks in tasks.json have status+evidence+date, mechanics.json claims updated, full test suite green, and re/mapping covers every class that has evidence in the current build."
+  },
   "plan": [
     {
-      "title": "Close the 16 recorded parity gaps in priority order",
-      "status": "doing",
-      "why": "Logger, project save/load, HTTP/2, Match&Replace and session auth are the blocking gaps; the build is NOT feature-complete"
-    },
-    {
-      "title": "Re-verify the 62 mechanics values against decompiled functions",
-      "status": "todo",
-      "why": "mechanics.json says 62 sourced / 0 estimated, but whole tools are missing, so some sources are suspect"
-    },
-    {
-      "title": "Keep the existing rebuild green (build, screenshot, mechanics)",
+      "title": "Epic A proxy core (8/8) and M-01..M-07 foundations (7/7)",
       "status": "done",
-      "why": "all 3 checks pass, 13/13 claims hold"
+      "why": "chunked/gzip/br, keep-alive, HTTP/2, TLS, listeners, design system, a11y, onboarding"
     },
     {
-      "title": "Implement Logger, then project save/load",
-      "status": "todo",
-      "why": "highest-severity missing features"
+      "title": "Fix WSL2 rendering at the source (gl_env.rs) + QA driver qa/qa.sh",
+      "status": "done",
+      "why": "LIBGL_ALWAYS_INDIRECT=1 from ~/.zshrc + no /dev/dri render node; 107 tests green, commit 10bafe7"
     },
     {
-      "title": "Add HTTP/2 to the proxy",
+      "title": "Live comparison against real Burp on Xvfb :98 (vision agent), then fix ranked gaps",
+      "status": "doing",
+      "why": "Tab bar, menus, Dashboard, Proxy sub-tabs, history table and filter are the first visible gaps; rebuild only after the agent finishes"
+    },
+    {
+      "title": "Close epic B bookkeeping: B-01 (done in code), B-02, B-05; then B-03, B-04, B-06..B-09",
       "status": "todo",
-      "why": "modern sites break without it"
+      "why": "tasks.json still says todo; needs status+evidence+date, TASKS.md, PROGRESS.md, mechanics.json claims"
+    },
+    {
+      "title": "Backend-first epics that need no UI: C Intruder engine (C-01..C-07), F decoder/comparer ops, H sessions, J project file, D crawl/audit engine",
+      "status": "todo",
+      "why": "Pure engine work with unit tests; UI hooks follow"
+    },
+    {
+      "title": "I Collaborator, E Repeater, G Sequencer, K extensions, L engagement tools, N quality",
+      "status": "todo",
+      "why": "Depend on engines above; K needs a JVM/Montoya host decision"
+    },
+    {
+      "title": "Deobfuscation: refresh re/mapping for build 52685 and re-open the remapped jar in craft",
+      "status": "todo",
+      "why": "301 Montoya-anchored names + 61 string-evidence classes so far; ZKM regenerates names per build"
     }
   ],
   "hypotheses": [],
@@ -79,6 +103,6 @@
       "confidence": "derived"
     }
   ],
-  "handoff": "M-07 done (91 tests). Onboarding is live-derived and serves http://webprobe + http://burpsuite from the proxy. Next task is the first of epic B (B-01..): check tasks.json for the exact acceptance text. Renaming map lives in re/mapping (classMap.tsv + methodMap.tsv, rebuild recipe in README.md); a runtime string index (RuntimeStringDump) can decode any ZKM-encrypted class by evaluating its decryptor.",
-  "updated": "2026-11-15T11:24:36Z"
+  "handoff": "STATE (2026-11-15): 15/76 tasks done (A 8/8, M 7/7). Commit 10bafe7 holds the WSL2 rendering fix and the UI wiring repair; 107 tests green.\nRENDERING: root cause was LIBGL_ALWAYS_INDIRECT=1 exported by ~/.zshrc:296 plus no /dev/dri render node (Mesa 26 falls to zink). The app fixes its own env in src/gl_env.rs; WEBPROBE_GL=native disables. Do not enable GALLIUM_DRIVER=d3d12 (documented host freezes, WSL#14033).\nQA: qa/qa.sh drives WebProbe on Xvfb :97 (proxy 6566, collaborator 6567). Real Burp Pro runs on :98 (launch: /opt/BurpSuite/BurpSuite --project-file=/root/burp-qa/qa.burp --config-file=/root/burp-qa/project.json --user-config-file=/root/burp-qa/user.json --disable-extensions; proxy 6570). Static tour shots: /root/webprobe-shots/burp-tour/. Vision agent must be started with model kilo/nvidia/nemotron-3.5-super-vl:free (the earlier general session was rejected by content safety).\nTRAPS: ports 8080/8081 belong to burpsy (user's working tool); never pkill with a pattern that appears in your own command line (killed my shell once); pgrep -f matches its own shell. zsh does not word-split unquoted vars: use bash for scripts. Do NOT rebuild or cargo test while the QA agent runs.\nNEXT: read the vision agent report, rank gaps, then rebuild once; close B-01/B-02/B-05 bookkeeping; then backend epics C, F, H, J, D with tests.",
+  "updated": "2026-11-15T12:45:01Z"
 }

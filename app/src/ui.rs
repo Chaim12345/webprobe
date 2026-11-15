@@ -769,11 +769,11 @@ fn intruder(app: &mut App, ui: &mut Ui) {
     ui.add_space(4.0);
 
     let half = (ui.available_height() - 220.0).max(100.0) / 2.0;
-    egui::ScrollArea::vertical().max_height(half).show(ui, |ui| {
+    egui::ScrollArea::vertical().id_salt("intruder_request_scroll").max_height(half).show(ui, |ui| {
         ui.label(RichText::new("Request with positions").size(12.0).color(c(theme::MONO6)));
         editor::message_editor(ui, "intruder_request", &mut app.intr_req, 8, &mut app.intr_editor);
     });
-    egui::ScrollArea::vertical().max_height(half).show(ui, |ui| {
+    egui::ScrollArea::vertical().id_salt("intruder_payload_scroll").max_height(half).show(ui, |ui| {
         ui.label(RichText::new("Payload list (one per line)").size(12.0).color(c(theme::MONO6)));
         egui::TextEdit::multiline(&mut app.intr_payloads)
             .font(egui::TextStyle::Monospace)

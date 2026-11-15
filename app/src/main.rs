@@ -12,6 +12,7 @@ mod feedback;
 mod gl_env;
 mod h2;
 mod history_filter;
+mod intruder;
 mod net;
 mod onboarding;
 mod project;

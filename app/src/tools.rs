@@ -205,7 +205,7 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
             app.seq_manual.clear();
         }
     });
-    egui::ScrollArea::vertical().max_height(90.0).show(ui, |ui| {
+    egui::ScrollArea::vertical().id_salt("seq_manual_scroll").max_height(90.0).show(ui, |ui| {
         crate::editor::message_editor(ui, "sequencer_manual", &mut app.seq_manual, 3, &mut app.seq_editor);
     });
     if !app.seq_status.is_empty() {
@@ -229,7 +229,7 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
         });
         ui.add_space(4.0);
         ui.label(RichText::new("Character distribution").size(12.0).color(c(theme::MONO6)));
-        egui::ScrollArea::vertical().max_height(140.0).show(ui, |ui| {
+        egui::ScrollArea::vertical().id_salt("seq_dist_scroll").max_height(140.0).show(ui, |ui| {
             egui::Grid::new("seq_dist").num_columns(4).show(ui, |ui| {
                 for row in stats.char_distribution.chunks(4) {
                     for (ch, count) in row {
@@ -324,7 +324,7 @@ pub fn sessions(app: &mut App, ui: &mut Ui) {
             }
         }
     });
-    egui::ScrollArea::vertical().max_height(180.0).show(ui, |ui| {
+    egui::ScrollArea::vertical().id_salt("macro_scroll").max_height(180.0).show(ui, |ui| {
         egui::TextEdit::multiline(&mut app.macro_request)
             .font(egui::TextStyle::Monospace)
             .code_editor()
@@ -341,7 +341,7 @@ pub fn websocket_history(app: &mut App, ui: &mut Ui) {
     ui.add_space(4.0);
     hint(ui, "Plain-HTTP upgrades are relayed and every frame is captured. TLS handshakes are recorded; encrypted frame relay is not supported yet.");
     let entries = app.shared.ws_history.lock().unwrap().clone();
-    egui::ScrollArea::vertical().show(ui, |ui| {
+    egui::ScrollArea::vertical().id_salt("ws_scroll").show(ui, |ui| {
         egui::Grid::new("ws_grid").striped(true).num_columns(5).show(ui, |ui| {
             for e in entries.iter().rev() {
                 ui.monospace(RichText::new(e.id.to_string()).size(12.0).color(c(theme::MONO6)));
@@ -412,7 +412,7 @@ pub fn search(app: &mut App, ui: &mut Ui) {
         }
     });
     ui.add_space(6.0);
-    egui::ScrollArea::vertical().show(ui, |ui| {
+    egui::ScrollArea::vertical().id_salt("search_results_scroll").show(ui, |ui| {
         for hit in &app.search_results {
             ui.horizontal(|ui| {
                 ui.label(RichText::new(hit.tool.clone()).size(12.0).color(c(theme::ORANGE)));

@@ -293,7 +293,6 @@ mod tests {
 #[test]
 fn sample_traffic_populates_history_through_the_listener() {
     use std::sync::atomic::Ordering;
-    use std::sync::Arc;
 
     let shared = net::Shared::new(); // already an Arc<Shared>
     let probe = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
