@@ -765,7 +765,7 @@ pub fn palette_ui(
                                     ui.label(
                                         RichText::new(hotkey)
                                             .monospace()
-                                            .size(11.5)
+                                            .size(12.0)
                                             .color(c(theme::MONO6)),
                                     );
                                 });
@@ -802,7 +802,7 @@ pub fn settings_panel(app: &mut crate::App, ui: &mut Ui) {
         let label = ACTIONS.get(idx).map(|d| d.label).unwrap_or("command");
         ui.label(
             RichText::new(format!("Press a new hotkey for \u{201c}{label}\u{201d} — Esc cancels."))
-                .size(11.5)
+                .size(12.0)
                 .color(c(theme::ORANGE)),
         );
     }
@@ -814,7 +814,7 @@ pub fn settings_panel(app: &mut crate::App, ui: &mut Ui) {
     }
     ui.label(
         RichText::new("Hotkeys are user settings: they apply to every project on this machine.")
-            .size(10.5)
+            .size(12.0)
             .color(c(theme::MONO4)),
     );
 }
@@ -833,11 +833,11 @@ pub fn settings_ui(ui: &mut Ui, shortcuts: &mut Shortcuts, notice: &mut Option<S
         RichText::new(
             "User settings, like Burp: every hotkey includes Ctrl. Click a hotkey, press the new combination, then Apply. Escape cancels.",
         )
-        .size(11.5)
+        .size(12.0)
         .color(c(theme::MONO6)),
     );
     if let Some(msg) = notice.clone() {
-        ui.label(RichText::new(msg).size(11.5).color(c(theme::BAD)));
+        ui.label(RichText::new(msg).size(12.0).color(c(theme::BAD)));
     }
 
     // 50 rows would push the rest of the dashboard off-screen, so the table
@@ -856,7 +856,7 @@ pub fn settings_ui(ui: &mut Ui, shortcuts: &mut Shortcuts, notice: &mut Option<S
                         if def.category != category {
                             category = def.category;
                             ui.add_space(theme::SPACE_XS);
-                            ui.label(RichText::new(category).size(11.5).strong().color(c(theme::MONO6)));
+                            ui.label(RichText::new(category).size(12.0).strong().color(c(theme::MONO6)));
                         }
                         ui.horizontal(|ui| {
                             let label = RichText::new(def.label).size(12.0).color(c(match def.support {
@@ -871,7 +871,7 @@ pub fn settings_ui(ui: &mut Ui, shortcuts: &mut Shortcuts, notice: &mut Option<S
                             if ui
                                 .add_sized(
                                     [120.0, 20.0],
-                                    egui::Button::new(RichText::new(shown).monospace().size(11.5)),
+                                    egui::Button::new(RichText::new(shown).monospace().size(12.0)),
                                 )
                                 .clicked()
                             {
@@ -896,7 +896,7 @@ pub fn settings_ui(ui: &mut Ui, shortcuts: &mut Shortcuts, notice: &mut Option<S
                                 }
                             }
                             if def.support == Support::Missing {
-                                ui.label(RichText::new(SUPPORT_HINT).size(10.5).color(c(theme::MONO4)));
+                                ui.label(RichText::new(SUPPORT_HINT).size(12.0).color(c(theme::MONO4)));
                             }
                         });
                     }

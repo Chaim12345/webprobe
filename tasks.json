@@ -9,8 +9,8 @@
   "p2": 5,
   "by_status": {
    "done": 21,
-   "in_progress": 7,
-   "todo": 64
+   "in_progress": 9,
+   "todo": 62
   }
  },
  "tasks": [
@@ -817,11 +817,12 @@
    "title": "Decoder layout and operations",
    "acceptance": "Text/Hex input toggle; 'Decode as', 'Encode as' and 'Hash' dropdowns; Smart decode; chained output panes",
    "effort": "M",
-   "status": "todo",
+   "status": "in_progress",
    "depends_on": [
     "F-01",
     "F-02"
-   ]
+   ],
+   "evidence": "Decoder screen rebuilt on decoder_ops (P-07): Input label with Text/Hex toggle, 'Decode as'/'Encode as'/'Hash' dropdowns, Smart decode, bordered Output pane with Copy and 'Use output as input', results history. Engine F-01/F-02 done (127 tests). REMAINING: chained multi-stage pipeline UI with editable stages."
   },
   {
    "id": "P-08",
@@ -869,7 +870,8 @@
    "title": "Light theme as the default option",
    "acceptance": "Light palette matches Burp's default look (flat white, orange underline accent) and is selectable in Settings; dark remains available",
    "effort": "S",
-   "status": "todo"
+   "status": "in_progress",
+   "evidence": "MiniMax M3.1 Flash review (qa/minimax-visual-review-2026-11-15.md) drove: secondary text 0x6A6A6C -> 0x9AA0A6 (>=4.5:1), type floor 10.5/11.0/11.5 -> 11.5/12.0, history table fills remaining height, Intruder empty state in a bordered card. REMAINING: single active-navigation accent, toolbar grouping on Proxy/Intruder, Repeater lower-area balance."
   },
   {
    "id": "P-12",

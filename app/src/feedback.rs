@@ -132,7 +132,7 @@ pub fn progress(ui: &mut Ui, done: usize, total: usize, cancel: bool) -> bool {
         ui.add(
             egui::ProgressBar::new(frac)
                 .desired_width(160.0)
-                .text(RichText::new(format!("{done}/{total}")).size(11.0).color(c(theme::MONO6))),
+                .text(RichText::new(format!("{done}/{total}")).size(12.0).color(c(theme::MONO6))),
         );
         if cancel && ui.button("Cancel").clicked() {
             cancelled = true;
@@ -159,7 +159,7 @@ pub fn empty_state(ui: &mut Ui, title: &str, detail: &str) {
     ui.add_space(18.0);
     ui.vertical_centered(|ui| {
         ui.label(RichText::new(title.to_string()).size(13.0).color(c(theme::MONO6)));
-        ui.label(RichText::new(detail.to_string()).size(11.5).color(c(theme::MONO4)));
+        ui.label(RichText::new(detail.to_string()).size(12.0).color(c(theme::MONO4)));
     });
     ui.add_space(18.0);
 }

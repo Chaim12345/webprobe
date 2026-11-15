@@ -99,7 +99,7 @@ pub fn panel(app: &mut App, ui: &mut Ui) -> bool {
         ui.add_space(6.0);
         ui.label(
             RichText::new(format!("{}/{} steps done", done, checks.len()))
-                .size(11.5)
+                .size(12.0)
                 .color(c(if done == checks.len() { theme::GOOD } else { theme::MONO6 })),
         );
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -114,14 +114,14 @@ pub fn panel(app: &mut App, ui: &mut Ui) -> bool {
     for check in &checks {
         ui.horizontal(|ui| {
             let (mark, colour) = if check.done { ("OK", theme::GOOD) } else { ("--", theme::MONO4) };
-            ui.add_sized([26.0, 18.0], egui::Label::new(RichText::new(mark).monospace().size(11.5).color(c(colour))));
+            ui.add_sized([26.0, 18.0], egui::Label::new(RichText::new(mark).monospace().size(12.0).color(c(colour))));
             ui.vertical(|ui| {
                 ui.label(
                     RichText::new(check.label.clone())
                         .size(12.0)
                         .color(c(if check.done { theme::EDITOR_TEXT } else { theme::MONO6 })),
                 );
-                ui.label(RichText::new(check.detail.clone()).size(11.0).color(c(theme::MONO4)));
+                ui.label(RichText::new(check.detail.clone()).size(12.0).color(c(theme::MONO4)));
             });
         });
     }
@@ -132,7 +132,7 @@ pub fn panel(app: &mut App, ui: &mut Ui) -> bool {
         RichText::new(format!(
             "Point your browser at 127.0.0.1:{port}, then open http://webprobe to download the CA certificate. Burp's own page is http://burpsuite; both are answered locally by the proxy."
         ))
-        .size(11.5)
+        .size(12.0)
         .color(c(theme::MONO6)),
     );
 

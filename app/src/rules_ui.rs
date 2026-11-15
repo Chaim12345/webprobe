@@ -111,7 +111,7 @@ pub fn rules_editor(ui: &mut egui::Ui, rules: &mut Vec<MrRule>, request_side: bo
                                 regex_ui
                                     .label(
                                         egui::RichText::new("invalid regex")
-                                            .size(11.0)
+                                            .size(12.0)
                                             .color(theme::c(theme::BAD)),
                                     );
                             }

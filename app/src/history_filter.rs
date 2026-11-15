@@ -133,14 +133,14 @@ impl HistoryFilter {
             }
             ui.label(
                 RichText::new(format!("{shown} of {total}"))
-                    .size(11.5)
+                    .size(12.0)
                     .color(c(if shown == total { theme::MONO6 } else { theme::ORANGE })),
             );
         });
         ui.horizontal(|ui| {
             // Indented to line the second row up with the filter input above it.
             ui.add_space(44.0);
-            ui.label(RichText::new("Method").size(11.0).color(c(theme::MONO4)));
+            ui.label(RichText::new("Method").size(12.0).color(c(theme::MONO4)));
             ui.add(
                 egui::TextEdit::singleline(&mut self.method)
                     .desired_width(58.0)
@@ -148,7 +148,7 @@ impl HistoryFilter {
                     .hint_text("any"),
             );
             ui.add_space(6.0);
-            ui.label(RichText::new("Status").size(11.0).color(c(theme::MONO4)));
+            ui.label(RichText::new("Status").size(12.0).color(c(theme::MONO4)));
             ui.add(
                 egui::TextEdit::singleline(&mut self.status)
                     .desired_width(52.0)
@@ -156,7 +156,7 @@ impl HistoryFilter {
                     .hint_text("any"),
             );
             ui.add_space(6.0);
-            ui.label(RichText::new("MIME").size(11.0).color(c(theme::MONO4)));
+            ui.label(RichText::new("MIME").size(12.0).color(c(theme::MONO4)));
             ui.add(
                 egui::TextEdit::singleline(&mut self.mime)
                     .desired_width(110.0)
@@ -170,7 +170,7 @@ impl HistoryFilter {
                     scope_rules,
                     if scope_rules == 1 { "" } else { "s" }
                 ))
-                .size(10.5)
+                .size(12.0)
                 .color(c(theme::MONO4)),
             );
         });

@@ -194,7 +194,7 @@ pub fn message_editor(
             let n = match_count(text, &state.search);
             ui.label(
                 RichText::new(format!("{n} match{}", if n == 1 { "" } else { "es" }))
-                    .size(11.5)
+                    .size(12.0)
                     .color(c(if n == 0 { theme::MONO6 } else { theme::ORANGE_5 })),
             );
         }
@@ -254,7 +254,7 @@ pub fn message_view_inner(
             let n = match_count(text, &state.search);
             ui.label(
                 RichText::new(format!("{n} match{}", if n == 1 { "" } else { "es" }))
-                    .size(11.5)
+                    .size(12.0)
                     .color(c(if n == 0 { theme::MONO6 } else { theme::ORANGE_5 })),
             );
         }

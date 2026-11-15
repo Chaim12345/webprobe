@@ -11,7 +11,7 @@ pub const ZEBRA: u32 = 0x3A3D3F; // alternating table row (a clear step above mo
 pub const MONO1X: u32 = 0x323334; // message editor background (mono[1])
 pub const MONO2: u32 = 0x424244; // mono[2]
 pub const MONO3: u32 = 0x525255;
-pub const MONO4: u32 = 0x6A6A6C;
+pub const MONO4: u32 = 0x9AA0A6; // secondary text: >= 4.5:1 on MONO1/MONO1X
 pub const MONO6: u32 = 0xC5C7C8; // disabled / unknown
 pub const MONO7: u32 = 0xFFFFFF;
 pub const EDITOR_TEXT: u32 = 0xCECECE;

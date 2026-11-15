@@ -206,7 +206,7 @@ pub fn show(state: &mut CollaboratorState, ui: &mut egui::Ui) {
                         ui.horizontal(|ui| {
                             ui.monospace(
                                 RichText::new(payload.http_url.clone())
-                                    .size(11.5)
+                                    .size(12.0)
                                     .color(c(theme::ORANGE_5)),
                             );
                             if ui.small_button("copy HTTP").clicked() {
@@ -225,7 +225,7 @@ pub fn show(state: &mut CollaboratorState, ui: &mut egui::Ui) {
                                 "token: {}",
                                 payload.token
                             ))
-                            .size(11.0)
+                            .size(12.0)
                             .color(c(theme::MONO6)),
                         );
                     }
@@ -324,7 +324,7 @@ pub fn show(state: &mut CollaboratorState, ui: &mut egui::Ui) {
                         interaction.source,
                         interaction.token.as_deref().unwrap_or("(none)")
                     ))
-                    .size(11.0)
+                    .size(12.0)
                     .color(c(theme::MONO6)),
                 );
                 match &interaction.detail {
@@ -353,13 +353,13 @@ fn http_details(ui: &mut Ui, http: &crate::collaborator::HttpInteraction) {
                 ui.label(
                     RichText::new(name.clone())
                         .monospace()
-                        .size(11.0)
+                        .size(12.0)
                         .color(c(theme::HEADER_BLUE)),
                 );
                 ui.label(
                     RichText::new(value.clone())
                         .monospace()
-                        .size(11.0)
+                        .size(12.0)
                         .color(c(theme::EDITOR_TEXT)),
                 );
                 ui.end_row();
@@ -369,12 +369,12 @@ fn http_details(ui: &mut Ui, http: &crate::collaborator::HttpInteraction) {
     if !http.body.is_empty() {
         ui.label(
             RichText::new(format!("body ({} bytes)", http.body.len()))
-                .size(11.0)
+                .size(12.0)
                 .color(c(theme::MONO6)),
         );
         ui.monospace(
             RichText::new(String::from_utf8_lossy(&http.body).into_owned())
-                .size(11.0)
+                .size(12.0)
                 .color(c(theme::EDITOR_TEXT)),
         );
     }
@@ -394,12 +394,12 @@ fn dns_details(ui: &mut Ui, dns: &crate::collaborator::DnsInteraction) {
             dns.qtype,
             dns.raw_query.len()
         ))
-        .size(11.0)
+        .size(12.0)
         .color(c(theme::MONO6)),
     );
     ui.label(
         RichText::new("reply: A 127.0.0.1")
-            .size(11.0)
+            .size(12.0)
             .color(c(theme::GOOD)),
     );
 }

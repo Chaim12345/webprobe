@@ -22,7 +22,7 @@ fn section_heading(ui: &mut Ui, text: &str) {
 }
 
 fn hint(ui: &mut Ui, text: impl Into<String>) {
-    ui.label(RichText::new(text).size(11.5).color(c(theme::MONO6)));
+    ui.label(RichText::new(text).size(12.0).color(c(theme::MONO6)));
 }
 
 /// Target-scope editor for include/exclude host and path regex rules.
@@ -111,10 +111,10 @@ fn scope_group(ui: &mut Ui, title: &str, rules: &mut Vec<ScopeRule>, exclude: bo
                 );
                 match rule.error() {
                     Some(problem) => {
-                        grid.label(RichText::new(problem).size(11.0).color(c(theme::BAD)));
+                        grid.label(RichText::new(problem).size(12.0).color(c(theme::BAD)));
                     }
                     None => {
-                        grid.label(RichText::new("valid").size(11.0).color(c(theme::GOOD)));
+                        grid.label(RichText::new("valid").size(12.0).color(c(theme::GOOD)));
                     }
                 }
                 if grid
@@ -223,12 +223,12 @@ pub fn show_upstream(ui: &mut Ui, state: &mut UpstreamState) {
     if state.enabled {
         match state.validation_error() {
             Some(error) => {
-                ui.label(RichText::new(error).size(11.5).color(c(theme::BAD)));
+                ui.label(RichText::new(error).size(12.0).color(c(theme::BAD)));
             }
             None => {
                 ui.label(
                     RichText::new("Proxy settings are complete.")
-                        .size(11.5)
+                        .size(12.0)
                         .color(c(theme::GOOD)),
                 );
             }

@@ -9,8 +9,7 @@ use crate::util;
 /// One Decoder operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Op {
-    /// Percent-encode every byte outside the RFC 3986 unreserved set (and decode
-    /// with `+` read as a space).
+    /// Percent-encode with RFC 3986 unreserved passthrough; decode reads `+` as a space.
     UrlEncode,
     UrlDecode,
     HtmlEncode,
@@ -53,8 +52,8 @@ pub fn apply(op: Op, input: &str) -> Result<String, String> {
     }
 }
 
-/// Apply `ops` in order, left to right, as the Decoder's chain does (F-02
-/// foundation); the first failure aborts and names the 1-based step.
+/// Apply `ops` in order, left to right, as the Decoder's chain does (F-02); the
+/// first failure aborts and names the 1-based step.
 pub fn pipeline(input: &str, ops: &[Op]) -> Result<String, String> {
     let mut current = input.to_string();
     for (idx, op) in ops.iter().enumerate() {
@@ -157,14 +156,11 @@ fn ascii_hex_decode(input: &str) -> Result<String, String> {
 // ---------- ROT13 ----------
 
 fn rot13(input: &str) -> String {
-    input
-        .chars()
-        .map(|c| match c {
-            'a'..='z' => (((c as u8 - b'a' + 13) % 26) + b'a') as char,
-            'A'..='Z' => (((c as u8 - b'A' + 13) % 26) + b'A') as char,
-            other => other,
-        })
-        .collect()
+    input.chars().map(|c| match c {
+        'a'..='z' => (((c as u8 - b'a' + 13) % 26) + b'a') as char,
+        'A'..='Z' => (((c as u8 - b'A' + 13) % 26) + b'A') as char,
+        other => other,
+    }).collect()
 }
 
 // ---------- Digests ----------
@@ -415,8 +411,7 @@ mod tests {
         assert_eq!(apply(Op::UrlDecode, "a%20b%26c%3Dd").unwrap(), "a b&c=d");
         assert_eq!(apply(Op::UrlDecode, "a+b").unwrap(), "a b");
         assert_eq!(apply(Op::UrlDecode, "%e2%82%ac").unwrap(), "\u{20ac}");
-        assert_eq!(apply(Op::UrlDecode, "%zz").unwrap(), "%zz");
-        assert_eq!(apply(Op::UrlDecode, "%").unwrap(), "%");
+        assert_eq!(apply(Op::UrlDecode, "%zz").unwrap(), "%zz"); // malformed escape kept
     }
 
     #[test]

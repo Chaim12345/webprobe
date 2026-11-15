@@ -144,7 +144,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                     let on = app.shared.intercept_on.load(Ordering::SeqCst);
                     ui.label(
                         RichText::new(format!("127.0.0.1:{}", app.shared.proxy_port.load(Ordering::SeqCst)))
-                            .size(11.5)
+                            .size(12.0)
                             .color(c(theme::MONO6)),
                     );
                     ui.add_space(10.0);
@@ -177,36 +177,36 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                 let port = app.shared.proxy_port.load(Ordering::SeqCst);
 
                 let dot = if on { c(theme::ORANGE) } else { c(theme::GOOD) };
-                ui.label(RichText::new("\u{25cf}").color(dot).size(11.0));
+                ui.label(RichText::new("\u{25cf}").color(dot).size(12.0));
                 ui.add_space(4.0);
                 ui.label(
                     RichText::new(format!("127.0.0.1:{port}"))
                         .monospace()
-                        .size(11.5)
+                        .size(12.0)
                         .color(c(theme::MONO6)),
                 );
                 ui.add_space(12.0);
                 ui.label(
                     RichText::new(if on { "intercept on" } else { "intercept off" })
-                        .size(11.5)
+                        .size(12.0)
                         .color(c(if on { theme::ORANGE } else { theme::MONO6 })),
                 );
                 ui.add_space(12.0);
                 ui.label(
                     RichText::new(format!("held: {waiting}"))
-                        .size(11.5)
+                        .size(12.0)
                         .color(c(if waiting > 0 { theme::WARN } else { theme::MONO4 })),
                 );
                 ui.add_space(12.0);
                 ui.label(
                     RichText::new(format!("history: {total}"))
-                        .size(11.5)
+                        .size(12.0)
                         .color(c(theme::MONO4)),
                 );
                 ui.add_space(12.0);
                 ui.label(
                     RichText::new(format!("messages: {messages}"))
-                        .size(11.5)
+                        .size(12.0)
                         .color(c(theme::MONO4)),
                 );
 
@@ -219,7 +219,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                     ui.add_space(12.0);
                     ui.label(
                         RichText::new(format!("scan {done}/{scan_total}"))
-                            .size(11.5)
+                            .size(12.0)
                             .color(c(if busy { theme::ORANGE } else { theme::MONO4 })),
                     );
                 }
@@ -238,7 +238,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                         ui.label(
                             RichText::new(format!("{method} {host}{path} \u{2192} {status}"))
                                 .monospace()
-                                .size(11.0)
+                                .size(12.0)
                                 .color(c(theme::MONO6)),
                         );
                         ui.add_space(10.0);
@@ -344,7 +344,7 @@ fn proxy_history(app: &mut App, ui: &mut Ui) {
     if regex_broken {
         ui.label(
             RichText::new("That is not a valid regular expression.")
-                .size(11.0)
+                .size(12.0)
                 .color(c(theme::BAD)),
         );
     }
@@ -393,7 +393,7 @@ fn proxy_history(app: &mut App, ui: &mut Ui) {
         if truncated {
             ui.label(
                 RichText::new("(most recent 1000 matching entries)")
-                    .size(11.0)
+                    .size(12.0)
                     .color(c(theme::MONO6)),
             );
         }
@@ -405,7 +405,8 @@ fn proxy_history(app: &mut App, ui: &mut Ui) {
     // Leave room for the message pane underneath, like Burp's split view; the
     // divider between the two is draggable (B-05).
     let pane_h = ui.available_height();
-    let table_h = (pane_h - app.split_detail).max(100.0);
+    // The split detail is the message pane; keep at least 40% of the space for it.
+    let table_h = (pane_h - app.split_detail.min(pane_h * 0.6)).max(160.0);
     // The column visibility is read inside the row closure, so it is snapshotted
     // here rather than borrowed from the table state the body mutably holds.
     let visible = app.hist_table.hidden.clone();
@@ -600,7 +601,7 @@ fn detail(app: &mut App, ui: &mut Ui) {
         }
         1 => {
             egui::ScrollArea::vertical().min_scrolled_height(70.0).show(ui, |ui| {
-                ui.monospace(RichText::new(util::hex_view(&bytes, 16384)).size(11.5).color(c(theme::EDITOR_TEXT)));
+                ui.monospace(RichText::new(util::hex_view(&bytes, 16384)).size(12.0).color(c(theme::EDITOR_TEXT)));
             });
         }
         2 => {
@@ -835,10 +836,10 @@ fn intruder(app: &mut App, ui: &mut Ui) {
                 Some(n) => format!("{} position(s), {} payload set(s), {} request(s)", t.positions(), lens.len(), n),
                 None => format!("{} position(s), {} payload set(s), count overflow", t.positions(), lens.len()),
             };
-            ui.label(RichText::new(line).size(11.5).color(c(theme::MONO6)));
+            ui.label(RichText::new(line).size(12.0).color(c(theme::MONO6)));
         }
         Err(e) => {
-            ui.label(RichText::new(e).size(11.5).color(c(theme::BAD)));
+            ui.label(RichText::new(e).size(12.0).color(c(theme::BAD)));
         }
     }
     ui.add_space(2.0);
@@ -861,7 +862,7 @@ fn intruder(app: &mut App, ui: &mut Ui) {
     for i in 0..needed.max(1) {
         ui.add_space(2.0);
         let label = if positions == 0 { format!("Payload set {}", i + 1) } else { format!("Position {} payloads (one per line)", i + 1) };
-        ui.label(RichText::new(label).size(11.0).color(c(theme::MONO4)));
+        ui.label(RichText::new(label).size(12.0).color(c(theme::MONO4)));
         let mut text = app.intr_sets.get(i).cloned().unwrap_or_default();
         egui::TextEdit::multiline(&mut text)
             .font(egui::TextStyle::Monospace)
@@ -874,10 +875,19 @@ fn intruder(app: &mut App, ui: &mut Ui) {
         }
     }
     ui.add_space(4.0);
+    ui.add_space(4.0);
     ui.label(RichText::new("Results").size(12.0).color(c(theme::MONO6)));
     let rows: Vec<(usize, net::AttackRow)> = attack.rows.lock().unwrap().clone().into_iter().enumerate().collect();
     if rows.is_empty() {
-        feedback::empty_state(ui, "No attack results yet", "Mark a position with § and press Start attack.");
+        // Bordered card so the empty state reads as a panel, not floating text.
+        egui::Frame::none()
+            .fill(c(theme::MONO1X))
+            .stroke(egui::Stroke::new(1.0, c(theme::MONO2)))
+            .inner_margin(egui::Margin::same(10.0))
+            .show(ui, |ui| {
+                ui.set_min_height(120.0);
+                feedback::empty_state(ui, "No attack results yet", "Mark a position with § and press Start attack.");
+            });
         return;
     }
     let rows = table::filter_rows(&rows, &app.intr_table, |(i, r)| {
@@ -989,7 +999,7 @@ fn repeater(app: &mut App, ui: &mut Ui) {
             app.rep_view = v;
         }
         if !result_line.is_empty() {
-            ui.label(RichText::new(result_line).size(11.5).color(c(theme::MONO6)));
+            ui.label(RichText::new(result_line).size(12.0).color(c(theme::MONO6)));
         }
     });
     match resp.clone() {
@@ -1023,31 +1033,31 @@ fn repeater(app: &mut App, ui: &mut Ui) {
         .default_open(false)
         .show(ui, |ui| {
             let rp = util::parse_http(req.as_bytes());
-            ui.label(RichText::new("Request line").size(11.0).color(c(theme::MONO4)));
-            ui.monospace(RichText::new(rp.first.clone()).size(11.5).color(c(theme::HEADER_BLUE)));
+            ui.label(RichText::new("Request line").size(12.0).color(c(theme::MONO4)));
+            ui.monospace(RichText::new(rp.first.clone()).size(12.0).color(c(theme::HEADER_BLUE)));
             let query = rp.path.split_once('?').map(|(_, q)| q).unwrap_or("");
             if !query.is_empty() {
-                ui.label(RichText::new("Query").size(11.0).color(c(theme::MONO4)));
+                ui.label(RichText::new("Query").size(12.0).color(c(theme::MONO4)));
                 for kv in query.split('&').filter(|s| !s.is_empty()) {
                     let (k, v) = kv.split_once('=').unwrap_or((kv, ""));
-                    ui.monospace(RichText::new(format!("{k} = {v}")).size(11.5).color(c(theme::EDITOR_TEXT)));
+                    ui.monospace(RichText::new(format!("{k} = {v}")).size(12.0).color(c(theme::EDITOR_TEXT)));
                 }
             }
-            ui.label(RichText::new("Request headers").size(11.0).color(c(theme::MONO4)));
+            ui.label(RichText::new("Request headers").size(12.0).color(c(theme::MONO4)));
             egui::Grid::new("rep_req_headers").striped(true).num_columns(2).show(ui, |ui| {
                 for (k, v) in &rp.headers {
-                    ui.monospace(RichText::new(k.clone()).size(11.5).color(c(theme::HEADER_BLUE)));
-                    ui.monospace(RichText::new(v.clone()).size(11.5).color(c(theme::EDITOR_TEXT)));
+                    ui.monospace(RichText::new(k.clone()).size(12.0).color(c(theme::HEADER_BLUE)));
+                    ui.monospace(RichText::new(v.clone()).size(12.0).color(c(theme::EDITOR_TEXT)));
                     ui.end_row();
                 }
             });
             if let Some(r) = &resp {
                 let sp = util::parse_http(r);
-                ui.label(RichText::new("Response headers").size(11.0).color(c(theme::MONO4)));
+                ui.label(RichText::new("Response headers").size(12.0).color(c(theme::MONO4)));
                 egui::Grid::new("rep_resp_headers").striped(true).num_columns(2).show(ui, |ui| {
                     for (k, v) in &sp.headers {
-                        ui.monospace(RichText::new(k.clone()).size(11.5).color(c(theme::HEADER_BLUE)));
-                        ui.monospace(RichText::new(v.clone()).size(11.5).color(c(theme::EDITOR_TEXT)));
+                        ui.monospace(RichText::new(k.clone()).size(12.0).color(c(theme::HEADER_BLUE)));
+                        ui.monospace(RichText::new(v.clone()).size(12.0).color(c(theme::EDITOR_TEXT)));
                         ui.end_row();
                     }
                 });
@@ -1120,38 +1130,94 @@ fn split_port(host: &str) -> Option<u16> {
 // ================= Decoder =================
 
 fn decoder(app: &mut App, ui: &mut Ui) {
+    use crate::decoder_ops::Op;
     ui.heading(RichText::new("Decoder").color(c(theme::MONO7)).size(15.0));
+    ui.add_space(2.0);
+    hint(ui, "Choose Decode as, Encode as or Hash, or Smart decode. The output can be fed back as input to chain stages.");
     ui.add_space(4.0);
-    egui::ScrollArea::vertical().max_height(150.0).show(ui, |ui| {
-        editor::message_editor(ui, "decoder_input", &mut app.dec_input, 5, &mut app.dec_editor);
+
+    ui.horizontal(|ui| {
+        ui.label(RichText::new("Input").size(12.0).color(c(theme::MONO6)));
+        if let Some(v) = sub_tabs(ui, &["Text", "Hex"], if app.dec_editor.hex { 1 } else { 0 }) {
+            if (v == 1) != app.dec_editor.hex {
+                if app.dec_editor.hex {
+                    if let Ok(bytes) = util::hex_decode(&app.dec_input) { app.dec_input = String::from_utf8_lossy(&bytes).into_owned(); }
+                } else {
+                    app.dec_input = util::hex_encode(app.dec_input.as_bytes());
+                }
+                app.dec_editor.hex = v == 1;
+            }
+        }
     });
+    editor::message_editor(ui, "decoder_input", &mut app.dec_input, 5, &mut app.dec_editor);
+
+    let mut run: Option<Op> = None;
     ui.add_space(4.0);
     ui.horizontal_wrapped(|ui| {
-        if ui.button("Encode as Base64").clicked() {
-            dec_add(app, "Base64", util::b64_encode(app.dec_input.as_bytes()));
-        }
-        if ui.button("URL encode (key)").clicked() {
-            dec_add(app, "URL", util::url_encode_key(&app.dec_input));
-        }
-        if ui.button("Hex").clicked() {
-            dec_add(app, "Hex", util::hex_encode(app.dec_input.as_bytes()));
-        }
-        if ui.button("HTML encode").clicked() {
-            dec_add(app, "HTML", util::html_encode(&app.dec_input));
-        }
-        if ui.button("Decode as Base64").clicked() {
-            dec_result(app, "Base64 <-", util::b64_decode(app.dec_input.trim()).map(|b| String::from_utf8_lossy(&b).into_owned()));
-        }
-        if ui.button("URL decode").clicked() {
-            dec_result(app, "URL <-", Ok(util::url_decode(&app.dec_input)));
-        }
-        if ui.button("Hex decode").clicked() {
-            dec_result(app, "Hex <-", util::hex_decode(app.dec_input.trim()).map(|b| String::from_utf8_lossy(&b).into_owned()));
-        }
-        if ui.button("HTML decode").clicked() {
-            dec_result(app, "HTML <-", Ok(util::html_decode(&app.dec_input)));
+        egui::ComboBox::from_label("Decode as")
+            .selected_text(app.dec_sel_decode.map(op_label).unwrap_or("choose"))
+            .show_ui(ui, |ui| {
+                for op in [Op::UrlDecode, Op::HtmlDecode, Op::Base64Decode, Op::AsciiHexDecode, Op::HexDecode] {
+                    if ui.selectable_label(app.dec_sel_decode == Some(op), op_label(op)).clicked() {
+                        app.dec_sel_decode = Some(op);
+                        run = Some(op);
+                    }
+                }
+            });
+        egui::ComboBox::from_label("Encode as")
+            .selected_text(app.dec_sel_encode.map(op_label).unwrap_or("choose"))
+            .show_ui(ui, |ui| {
+                for op in [Op::UrlEncode, Op::HtmlEncode, Op::Base64Encode, Op::AsciiHexEncode, Op::HexEncode] {
+                    if ui.selectable_label(app.dec_sel_encode == Some(op), op_label(op)).clicked() {
+                        app.dec_sel_encode = Some(op);
+                        run = Some(op);
+                    }
+                }
+            });
+        egui::ComboBox::from_label("Hash")
+            .selected_text(app.dec_sel_hash.map(op_label).unwrap_or("choose"))
+            .show_ui(ui, |ui| {
+                for op in [Op::Md5, Op::Sha1, Op::Sha256, Op::Sha512] {
+                    if ui.selectable_label(app.dec_sel_hash == Some(op), op_label(op)).clicked() {
+                        app.dec_sel_hash = Some(op);
+                        run = Some(op);
+                    }
+                }
+            });
+        if ui.button("Smart decode").clicked() {
+            run = Some(Op::SmartDecode);
         }
     });
+    if let Some(op) = run {
+        app.dec_output = crate::decoder_ops::apply(op, &app.dec_input).unwrap_or_else(|e| format!("<error: {e}>"));
+    }
+
+    ui.add_space(6.0);
+    ui.horizontal(|ui| {
+        ui.label(RichText::new("Output").size(12.0).color(c(theme::MONO6)));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui.small_button("Use output as input").clicked() && !app.dec_output.is_empty() {
+                app.dec_input = app.dec_output.clone();
+            }
+            if ui.small_button("Copy").clicked() && !app.dec_output.is_empty() {
+                ui.output_mut(|o| o.copied_text = app.dec_output.clone());
+            }
+        });
+    });
+    egui::Frame::none()
+        .fill(c(theme::MONO1X))
+        .stroke(egui::Stroke::new(1.0, c(theme::MONO2)))
+        .inner_margin(egui::Margin::same(6.0))
+        .show(ui, |ui| {
+            egui::ScrollArea::vertical().id_salt("decoder_output").max_height(120.0).show(ui, |ui| {
+                if app.dec_output.is_empty() {
+                    hint(ui, "output appears here");
+                } else {
+                    ui.monospace(RichText::new(app.dec_output.clone()).size(12.0).color(c(theme::EDITOR_TEXT)));
+                }
+            });
+        });
+
     ui.add_space(8.0);
     let results = app.dec_results.clone();
     for (i, (label, text)) in results.iter().enumerate() {
@@ -1166,6 +1232,28 @@ fn decoder(app: &mut App, ui: &mut Ui) {
         });
         ui.monospace(RichText::new(text.clone()).size(12.0).color(c(theme::EDITOR_TEXT)));
         ui.add_space(6.0);
+    }
+}
+
+fn op_label(op: crate::decoder_ops::Op) -> &'static str {
+    use crate::decoder_ops::Op::*;
+    match op {
+        UrlEncode => "URL encode",
+        UrlDecode => "URL decode",
+        HtmlEncode => "HTML encode",
+        HtmlDecode => "HTML decode",
+        Base64Encode => "Base64 encode",
+        Base64Decode => "Base64 decode",
+        AsciiHexEncode => "ASCII hex encode",
+        AsciiHexDecode => "ASCII hex decode",
+        HexEncode => "Hex encode",
+        HexDecode => "Hex decode",
+        Rot13 => "ROT13",
+        Md5 => "MD5",
+        Sha1 => "SHA-1",
+        Sha256 => "SHA-256",
+        Sha512 => "SHA-512",
+        SmartDecode => "Smart decode",
     }
 }
 
@@ -1280,7 +1368,7 @@ pub fn send_history_to_intruder(app: &mut App) {
 fn hint(ui: &mut Ui, text: &str) {
     ui.label(
         RichText::new(text)
-            .size(11.0)
+            .size(12.0)
             .color(c(theme::MONO4)),
     );
 }
@@ -1361,7 +1449,7 @@ fn proxy_intercept(app: &mut App, ui: &mut Ui) {
     ui.add_space(4.0);
     ui.label(
         RichText::new("Edit the message, then Forward; or Drop it. Nothing reaches the server until you forward.")
-            .size(11.0)
+            .size(12.0)
             .color(c(theme::MONO4)),
     );
     ui.add_space(6.0);
@@ -1394,10 +1482,10 @@ fn listeners_panel(app: &mut App, ui: &mut Ui, editable: bool) {
     for (i, (addr, running, error)) in net::listener_status(&app.shared).iter().enumerate() {
         ui.horizontal(|ui| {
             let (word, colour) = if *running { ("running", theme::GOOD) } else { ("stopped", theme::BAD) };
-            ui.label(RichText::new(word).size(11.5).color(c(colour)));
+            ui.label(RichText::new(word).size(12.0).color(c(colour)));
             ui.label(RichText::new(addr.as_str()).monospace().size(12.0).color(c(theme::EDITOR_TEXT)));
             if let Some(err) = error {
-                ui.label(RichText::new(err.as_str()).size(11.5).color(c(theme::BAD)));
+                ui.label(RichText::new(err.as_str()).size(12.0).color(c(theme::BAD)));
             }
             if editable && i > 0 && ui.small_button("Remove").clicked() {
                 remove = Some(i - 1);
@@ -1528,7 +1616,7 @@ fn dashboard(app: &mut App, ui: &mut Ui) {
                 .show(ui, |ui| {
                     ui.vertical(|ui| {
                         ui.label(RichText::new(value.to_string()).size(22.0).strong().color(c(colour)));
-                        ui.label(RichText::new(label).size(11.5).color(c(theme::MONO6)));
+                        ui.label(RichText::new(label).size(12.0).color(c(theme::MONO6)));
                     });
                 });
             ui.add_space(8.0);
@@ -1571,7 +1659,7 @@ fn dashboard(app: &mut App, ui: &mut Ui) {
     } else {
         egui::ScrollArea::vertical().max_height(220.0).show(ui, |ui| {
             for ev in &events {
-                ui.label(RichText::new(ev.clone()).monospace().size(11.5).color(c(theme::MONO6)));
+                ui.label(RichText::new(ev.clone()).monospace().size(12.0).color(c(theme::MONO6)));
             }
         });
     }
@@ -1585,7 +1673,7 @@ fn target(app: &mut App, ui: &mut Ui) {
         ui.add_space(10.0);
         ui.label(
             RichText::new(format!("{} hosts", app.target_hosts.len()))
-                .size(11.5)
+                .size(12.0)
                 .color(c(theme::MONO6)),
         );
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

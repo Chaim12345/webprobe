@@ -83,7 +83,7 @@ pub fn column_chooser(ui: &mut Ui, columns: &[Column], state: &mut TableState) {
         }
         if state.chooser_open {
             ui.add_space(6.0);
-            ui.label(RichText::new("show:").size(11.0).color(c(theme::MONO4)));
+            ui.label(RichText::new("show:").size(12.0).color(c(theme::MONO4)));
             for (i, col) in columns.iter().enumerate() {
                 let mut on = state.is_visible(i);
                 if ui.checkbox(&mut on, col.label).changed() {
@@ -141,7 +141,7 @@ pub fn data_table<R, F>(
         if !state.filter.is_empty() && ui.small_button("Clear").clicked() {
             state.filter.clear();
         }
-        ui.label(RichText::new(format!("{} rows", rows.len())).size(11.5).color(c(theme::MONO6)));
+        ui.label(RichText::new(format!("{} rows", rows.len())).size(12.0).color(c(theme::MONO6)));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             column_chooser(ui, columns, state);
         });
