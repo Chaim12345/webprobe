@@ -1,0 +1,14 @@
+{
+  "id": "unk_29b29eceaf0f9f50",
+  "revision": 1,
+  "question": "Which Burp tab/menu behaviours are only visible with a populated project (context menus, Target site map, Repeater history)?",
+  "severity": "low",
+  "domain": "ui-parity",
+  "status": "open",
+  "probes": [
+    "Capture each after sending sample traffic to Burp 6570",
+    "Use the shipped documentation screenshots as cross-check"
+  ],
+  "evidence_for": [],
+  "evidence_against": []
+}

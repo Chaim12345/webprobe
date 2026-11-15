@@ -1,0 +1,15 @@
+{
+  "id": "unk_7e4f15fa8dde1a2d",
+  "revision": 1,
+  "question": "Why did Burp's HTTP history stay empty while its proxy listener on 6570 answered curl requests through it?",
+  "severity": "medium",
+  "domain": "reference-app",
+  "status": "open",
+  "probes": [
+    "Send the same traffic from a Burp-launched browser",
+    "Check Proxy settings for 'Don't proxy loopback' or interception rules",
+    "Look at the Event log tab for listener messages"
+  ],
+  "evidence_for": [],
+  "evidence_against": []
+}

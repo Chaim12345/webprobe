@@ -1,5 +1,5 @@
 {
-  "revision": 16,
+  "revision": 18,
   "brief": {
     "question": "Rebuild WebProbe, a clone of Burp Suite Pro (reference build 52685, v2026.7.3), to feature parity with the 76-task backlog in tasks.json, and produce a readable, evidence-backed name map for the obfuscated Burp jar.",
     "purpose": "Interoperable reimplementation plus per-build deobfuscation; behaviour claims must come from the shipped jar or the running reference app, never guessed.",
@@ -17,39 +17,44 @@
   },
   "plan": [
     {
-      "title": "Epic A proxy core (8/8) and M-01..M-07 foundations (7/7)",
+      "title": "Epic A proxy core (8/8), M foundations (7/7), B-01 history table",
       "status": "done",
-      "why": "chunked/gzip/br, keep-alive, HTTP/2, TLS, listeners, design system, a11y, onboarding"
+      "why": "18/90 tasks done; tests 117 green"
     },
     {
-      "title": "Fix WSL2 rendering at the source (gl_env.rs) + QA driver qa/qa.sh",
+      "title": "P-13 WSL2 render fix + qa/qa.sh; P-14 UI wiring repair",
       "status": "done",
-      "why": "LIBGL_ALWAYS_INDIRECT=1 from ~/.zshrc + no /dev/dri render node; 107 tests green, commit 10bafe7"
+      "why": "commits 10bafe7, 6a969c1; root cause LIBGL_ALWAYS_INDIRECT=1 + no render node"
     },
     {
-      "title": "Live comparison against real Burp on Xvfb :98 (vision agent), then fix ranked gaps",
+      "title": "Run real Burp Pro v2026.7.3 on Xvfb :98, capture every tab/menu/dialog, write gap report",
+      "status": "done",
+      "why": "qa/GAP-REPORT-2026-11-15.md; 12 new open tasks P-01..P-12"
+    },
+    {
+      "title": "Write the UI PRD (from Burp's shipped docs + live captures) and the backend PRD",
       "status": "doing",
-      "why": "Tab bar, menus, Dashboard, Proxy sub-tabs, history table and filter are the first visible gaps; rebuild only after the agent finishes"
+      "why": "docs/PRD-UI.md and docs/PRD-BACKEND.md; every requirement maps to a task id"
     },
     {
-      "title": "Close epic B bookkeeping: B-01 (done in code), B-02, B-05; then B-03, B-04, B-06..B-09",
+      "title": "P-10 wire Intruder UI to intruder.rs (C-01/C-02 in progress), then C-03..C-07",
       "status": "todo",
-      "why": "tasks.json still says todo; needs status+evidence+date, TASKS.md, PROGRESS.md, mechanics.json claims"
+      "why": "engine matrix exists with 10 tests; runner and UI are the gap"
     },
     {
-      "title": "Backend-first epics that need no UI: C Intruder engine (C-01..C-07), F decoder/comparer ops, H sessions, J project file, D crawl/audit engine",
+      "title": "UI parity batch: P-01 menu bar, P-02 tab bar, P-03 Settings dialog, P-04 Repeater layout, P-05 history columns",
       "status": "todo",
-      "why": "Pure engine work with unit tests; UI hooks follow"
+      "why": "top five gaps by tester impact"
     },
     {
-      "title": "I Collaborator, E Repeater, G Sequencer, K extensions, L engagement tools, N quality",
+      "title": "Backend-first epics with no UI dependency: F decoder ops, H sessions/cookie jar, J project v2, D crawl/audit engine",
       "status": "todo",
-      "why": "Depend on engines above; K needs a JVM/Montoya host decision"
+      "why": "pure engine work with unit tests"
     },
     {
-      "title": "Deobfuscation: refresh re/mapping for build 52685 and re-open the remapped jar in craft",
+      "title": "Close B-02/B-05 remainders; refresh re/mapping deobfuscation for build 52685",
       "status": "todo",
-      "why": "301 Montoya-anchored names + 61 string-evidence classes so far; ZKM regenerates names per build"
+      "why": "history edit-in-place, layout persistence; ZKM renames per build"
     }
   ],
   "hypotheses": [],
@@ -103,6 +108,6 @@
       "confidence": "derived"
     }
   ],
-  "handoff": "STATE (2026-11-15): 15/76 tasks done (A 8/8, M 7/7). Commit 10bafe7 holds the WSL2 rendering fix and the UI wiring repair; 107 tests green.\nRENDERING: root cause was LIBGL_ALWAYS_INDIRECT=1 exported by ~/.zshrc:296 plus no /dev/dri render node (Mesa 26 falls to zink). The app fixes its own env in src/gl_env.rs; WEBPROBE_GL=native disables. Do not enable GALLIUM_DRIVER=d3d12 (documented host freezes, WSL#14033).\nQA: qa/qa.sh drives WebProbe on Xvfb :97 (proxy 6566, collaborator 6567). Real Burp Pro runs on :98 (launch: /opt/BurpSuite/BurpSuite --project-file=/root/burp-qa/qa.burp --config-file=/root/burp-qa/project.json --user-config-file=/root/burp-qa/user.json --disable-extensions; proxy 6570). Static tour shots: /root/webprobe-shots/burp-tour/. Vision agent must be started with model kilo/nvidia/nemotron-3.5-super-vl:free (the earlier general session was rejected by content safety).\nTRAPS: ports 8080/8081 belong to burpsy (user's working tool); never pkill with a pattern that appears in your own command line (killed my shell once); pgrep -f matches its own shell. zsh does not word-split unquoted vars: use bash for scripts. Do NOT rebuild or cargo test while the QA agent runs.\nNEXT: read the vision agent report, rank gaps, then rebuild once; close B-01/B-02/B-05 bookkeeping; then backend epics C, F, H, J, D with tests.",
-  "updated": "2026-11-15T12:45:01Z"
+  "handoff": "STATE 2026-11-15: 90 tasks (18 done, 4 in progress, 68 todo). Commits 10bafe7, 6a969c1, ef70eb0. 117 tests green.\nDONE THIS SESSION: WSL2 render fix (gl_env.rs, root cause LIBGL_ALWAYS_INDIRECT=1 + no /dev/dri), qa/qa.sh live driver, UI wiring repair, intruder.rs engine core (C-01/C-02 in progress), unique scroll ids, glyph fallback font, B-01 done.\nGAP ANALYSIS: real Burp Pro v2026.7.3 runs on Xvfb :98 (launch: /opt/BurpSuite/BurpSuite --project-file=/root/burp-qa/qa.burp --config-file=/root/burp-qa/project.json --user-config-file=/root/burp-qa/user.json --disable-extensions; proxy 6570). Shots in /root/webprobe-shots/burp-tour/. Report: qa/GAP-REPORT-2026-11-15.md. Tasks P-01..P-12 (epic P) in tasks.json/TASKS.md section 7.\nDOCS: docs/PRD-UI.md (what Burp's UI does, requirement ids UI-*) and docs/PRD-BACKEND.md (engine requirements BE-*), each mapped to task ids.\nTRAPS: vision agents on kilo/opencode/nvidia nemotron all failed (content safety, provider errors, free quota); compare screenshots directly. Ports 8080/8081 belong to burpsy: tests use 6566/6567, Burp 6570, origin 6580. Never pkill with a pattern present in your own command line. zsh does not word-split: use bash scripts. Burp history stayed empty despite listener traffic (unknown logged).\nNEXT: P-10 (Intruder UI on intruder.rs), then P-01..P-05 UI parity, then backend epics F/H/J/D.",
+  "updated": "2026-11-15T13:03:18Z"
 }

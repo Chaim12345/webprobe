@@ -1,0 +1,14 @@
+{
+  "id": "unk_2ab439b1006b4e2b",
+  "revision": 1,
+  "question": "What do Burp's Params, Edited, Extension and Title history columns compute exactly (Params: any request parameter?; Edited: request modified in intercept?)",
+  "severity": "medium",
+  "domain": "ui-parity",
+  "status": "open",
+  "probes": [
+    "Populate Burp history, read the column help and the shipped docs",
+    "Decompile the history table model with the remapped jar"
+  ],
+  "evidence_for": [],
+  "evidence_against": []
+}
