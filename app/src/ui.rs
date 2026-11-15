@@ -36,15 +36,15 @@ const TABS: [(&str, Tab); 13] = [
     ("Dashboard", Tab::Dashboard),
     ("Target", Tab::Target),
     ("Proxy", Tab::Proxy),
-    ("Scanner", Tab::Scanner),
     ("Intruder", Tab::Intruder),
     ("Repeater", Tab::Repeater),
-    ("Sequencer", Tab::Sequencer),
-    ("Comparer", Tab::Comparer),
-    ("Sessions", Tab::Sessions),
-    ("Decoder", Tab::Decoder),
-    ("Search", Tab::Search),
     ("Collaborator", Tab::Collaborator),
+    ("Sequencer", Tab::Sequencer),
+    ("Decoder", Tab::Decoder),
+    ("Comparer", Tab::Comparer),
+    ("Scanner", Tab::Scanner),
+    ("Sessions", Tab::Sessions),
+    ("Search", Tab::Search),
     ("Extensions", Tab::Extensions),
 ];
 
@@ -111,24 +111,24 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                 ui.add_space(6.0);
                 ui.label(RichText::new("WebProbe").strong().color(c(theme::ORANGE)).size(15.0));
                 ui.add_space(16.0);
-                for (name, tab) in &TABS[..6] {
+                // P-02: one tab row in Burp's order, no overflow menu; the active
+                // tab is an orange underline, not a filled pill.
+                for (name, tab) in &TABS {
                     let sel = app.tab == *tab;
-                    let text = RichText::new(*name).size(13.5).color(if sel { c(theme::ORANGE) } else { c(theme::MONO6) });
-                    if ui.selectable_label(sel, text).clicked() {
+                    let text = RichText::new(*name).size(12.5).color(if sel { c(theme::ORANGE) } else { c(theme::MONO6) });
+                    let resp = ui.add(egui::Label::new(text).sense(egui::Sense::click()));
+                    if resp.clicked() {
                         app.tab = *tab;
                     }
-                    ui.add_space(6.0);
-                }
-                let active_extra = TABS[6..].iter().find(|(_, tab)| app.tab == *tab).map(|(name, _)| *name);
-                let more_label = active_extra.unwrap_or("More tools");
-                ui.menu_button(RichText::new(format!("{more_label} ▾")).size(13.5).color(if active_extra.is_some() { c(theme::ORANGE) } else { c(theme::MONO6) }), |ui| {
-                    for (name, tab) in &TABS[6..] {
-                        if ui.selectable_label(app.tab == *tab, *name).clicked() {
-                            app.tab = *tab;
-                            ui.close_menu();
-                        }
+                    if sel {
+                        let y = resp.rect.bottom() - 1.0;
+                        ui.painter().line_segment(
+                            [egui::pos2(resp.rect.left(), y), egui::pos2(resp.rect.right(), y)],
+                            egui::Stroke::new(2.0, c(theme::ORANGE)),
+                        );
                     }
-                });
+                    ui.add_space(4.0);
+                }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     // Burp: Settings is its own window (Settings > User
                     // interface > Hotkeys), not a dashboard panel. Plain text:

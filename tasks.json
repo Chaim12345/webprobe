@@ -9,8 +9,8 @@
   "p2": 5,
   "by_status": {
    "done": 19,
-   "in_progress": 5,
-   "todo": 68
+   "in_progress": 6,
+   "todo": 67
   }
  },
  "tasks": [
@@ -753,7 +753,8 @@
    "title": "Tab bar and global controls parity",
    "acceptance": "Single tab row in Burp order (Dashboard, Target, Proxy, Intruder, Repeater, Collaborator, Sequencer, Decoder, Comparer, Logger, Organizer, Extensions, Discover) with no 'More tools' overflow at 1440 px; top-right global search, settings gear and browser launcher; active tab shown with an underline",
    "effort": "M",
-   "status": "todo"
+   "status": "in_progress",
+   "evidence": "Top bar now renders all 13 tabs in one row in Burp order (Dashboard, Target, Proxy, Intruder, Repeater, Collaborator, Sequencer, Decoder, Comparer, Scanner, Sessions, Search, Extensions), no 'More tools' overflow; active tab is an orange underline (not a pill). Live shot p02-tabs.png at 1440x900. REMAINING: top-right global search button, browser launcher (P-15), arrange/hide tabs and reset layout, title bar project name (J-04). 118 tests pass."
   },
   {
    "id": "P-03",
