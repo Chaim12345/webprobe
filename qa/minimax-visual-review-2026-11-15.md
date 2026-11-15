@@ -37,3 +37,8 @@ Stacked request editor, payload editor, results area; upper half cramped, most o
 - One accent for active navigation (orange nav vs blue sub-tabs) — needs a design-token decision.
 - Toolbar grouping/spacing on Proxy and Intruder (8–12 px gaps, labelled rows).
 - Repeater lower-area balance.
+
+## Re-review after fixes
+- **Intruder (r2-intruder.png):** text legible; empty state centred in a clearly visible full-width bordered card; "Results" label sits directly above it. Earlier problems fixed (smallest helper copy still slightly small).
+- **History (r2-history.png):** filter-row cramping fixed; text legible. Reviewer reported "unused vertical space"; verified by eye and by re-shoot at 40 rows — the table fills its area down to the splitter, and the blank region below is the message pane waiting for a selection, not unused table space. With 200 rows the body scrolls. No further change needed.
+- **Helper copy:** smallest tier (11.5) lifted to 12.0 across the UI after the re-review.

@@ -871,7 +871,7 @@
    "acceptance": "Light palette matches Burp's default look (flat white, orange underline accent) and is selectable in Settings; dark remains available",
    "effort": "S",
    "status": "in_progress",
-   "evidence": "MiniMax M3.1 Flash review (qa/minimax-visual-review-2026-11-15.md) drove: secondary text 0x6A6A6C -> 0x9AA0A6 (>=4.5:1), type floor 10.5/11.0/11.5 -> 11.5/12.0, history table fills remaining height, Intruder empty state in a bordered card. REMAINING: single active-navigation accent, toolbar grouping on Proxy/Intruder, Repeater lower-area balance."
+   "evidence": "MiniMax M3.1 Flash review (qa/minimax-visual-review-2026-11-15.md) drove: secondary text 0x6A6A6C -> 0x9AA0A6 (>=4.5:1), type floor 10.5/11.0/11.5 -> 11.5/12.0, history table fills remaining height, Intruder empty state in a bordered card. REMAINING: single active-navigation accent, toolbar grouping on Proxy/Intruder, Repeater lower-area balance. Re-review: Intruder card + legible text confirmed; history filter row fixed; 'unused vertical space' disproved (table fills to splitter, blank area is the message pane). Smallest helper copy 11.5 -> 12.0."
   },
   {
    "id": "P-12",
