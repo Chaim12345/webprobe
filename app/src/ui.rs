@@ -6,6 +6,7 @@ use std::sync::atomic::Ordering;
 use eframe::egui::{self, RichText, Ui};
 
 use crate::editor;
+use crate::intruder;
 use crate::feedback;
 use crate::net;
 use crate::scan;
@@ -736,14 +737,52 @@ fn intruder(app: &mut App, ui: &mut Ui) {
     let attack = app.shared.attack.lock().unwrap().clone();
     ui.heading(RichText::new("Intruder").color(c(theme::MONO7)).size(15.0));
     ui.add_space(2.0);
-    hint(ui, "Wrap the attack point in § markers (type them into the request text). Each run attacks one marked position with every payload; results appear below.");
+    hint(ui, "Wrap each attack point in § markers (Auto § finds them). Pick an attack type, give one payload set per position, then Start attack.");
+    ui.add_space(4.0);
+
+    let positions = intruder::Template::parse(&app.intr_req).map(|t| t.positions()).unwrap_or(0);
+    // One payload editor per position (C-03): grow the list when positions are added.
+    while app.intr_sets.len() < positions {
+        app.intr_sets.push(String::new());
+    }
+    let needed = app.intr_attack.sets_needed(positions);
+    let sets: Vec<Vec<String>> = app
+        .intr_sets
+        .iter()
+        .take(needed.max(1))
+        .map(|text| text.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect())
+        .collect();
+
+    ui.horizontal(|ui| {
+        ui.label(RichText::new("Attack type").size(12.0).color(c(theme::MONO6)));
+        for (kind, name) in [
+            (intruder::AttackType::Sniper, "Sniper"),
+            (intruder::AttackType::BatteringRam, "Battering ram"),
+            (intruder::AttackType::Pitchfork, "Pitchfork"),
+            (intruder::AttackType::ClusterBomb, "Cluster bomb"),
+        ] {
+            if ui.selectable_label(app.intr_attack == kind, name).clicked() {
+                app.intr_attack = kind;
+            }
+        }
+        ui.add_space(8.0);
+        if ui.button("Auto §").clicked() {
+            app.intr_req = intruder::auto_mark(&app.intr_req);
+        }
+        if ui.button("Clear §").clicked() {
+            app.intr_req = intruder::clear_markers(&app.intr_req);
+        }
+    });
     ui.add_space(4.0);
 
     let running = attack.running.load(Ordering::SeqCst);
     ui.horizontal(|ui| {
         let run_text = RichText::new(if running { "Attack running..." } else { "Start attack" }).color(c(theme::ORANGE)).size(13.0);
         if !running && ui.button(run_text).clicked() {
-            net::start_attack(app.shared.clone(), app.intr_req.clone(), app.intr_payloads.clone(), app.intr_https);
+            match net::start_attack(app.shared.clone(), app.intr_req.clone(), app.intr_attack, sets.clone(), app.intr_https) {
+                Ok(()) => {}
+                Err(e) => feedback::toast(feedback::Level::Error, e),
+            }
         }
         if running && ui.button("Stop").clicked() {
             attack.stop.store(true, Ordering::SeqCst);
@@ -766,23 +805,56 @@ fn intruder(app: &mut App, ui: &mut Ui) {
             attack.done.store(0, Ordering::SeqCst);
         }
     });
-    ui.add_space(4.0);
+    ui.add_space(2.0);
+    // Request count preview: the matrix is exact, so the user sees the size before sending.
+    match intruder::Template::parse(&app.intr_req) {
+        Ok(t) if t.positions() == 0 => {
+            hint(ui, "No payload positions yet: Auto § marks query, cookie, form and JSON values, or type § around a value.");
+        }
+        Ok(t) => {
+            let lens: Vec<usize> = sets.iter().map(Vec::len).collect();
+            let line = match intruder::count(app.intr_attack, t.positions(), &lens) {
+                Some(n) => format!("{} position(s), {} payload set(s), {} request(s)", t.positions(), lens.len(), n),
+                None => format!("{} position(s), {} payload set(s), count overflow", t.positions(), lens.len()),
+            };
+            ui.label(RichText::new(line).size(11.5).color(c(theme::MONO6)));
+        }
+        Err(e) => {
+            ui.label(RichText::new(e).size(11.5).color(c(theme::BAD)));
+        }
+    }
+    ui.add_space(2.0);
 
-    let half = (ui.available_height() - 220.0).max(100.0) / 2.0;
+    let half = (ui.available_height() - 260.0).max(80.0) / 2.0;
     egui::ScrollArea::vertical().id_salt("intruder_request_scroll").max_height(half).show(ui, |ui| {
         ui.label(RichText::new("Request with positions").size(12.0).color(c(theme::MONO6)));
         editor::message_editor(ui, "intruder_request", &mut app.intr_req, 8, &mut app.intr_editor);
     });
-    egui::ScrollArea::vertical().id_salt("intruder_payload_scroll").max_height(half).show(ui, |ui| {
-        ui.label(RichText::new("Payload list (one per line)").size(12.0).color(c(theme::MONO6)));
-        egui::TextEdit::multiline(&mut app.intr_payloads)
+    ui.add_space(4.0);
+    ui.label(
+        RichText::new(if positions == 0 {
+            "Payload sets (one per position once positions are marked)".to_string()
+        } else {
+            format!("Payload sets: {} needed for {}", needed, app.intr_attack.label())
+        })
+        .size(12.0)
+        .color(c(theme::MONO6)),
+    );
+    for i in 0..needed.max(1) {
+        ui.add_space(2.0);
+        let label = if positions == 0 { format!("Payload set {}", i + 1) } else { format!("Position {} payloads (one per line)", i + 1) };
+        ui.label(RichText::new(label).size(11.0).color(c(theme::MONO4)));
+        let mut text = app.intr_sets.get(i).cloned().unwrap_or_default();
+        egui::TextEdit::multiline(&mut text)
             .font(egui::TextStyle::Monospace)
             .code_editor()
-            .desired_rows(6)
-            .desired_width(400.0)
+            .desired_rows(4)
+            .desired_width(ui.available_width())
             .show(ui);
-    });
-
+        if let Some(slot) = app.intr_sets.get_mut(i) {
+            *slot = text;
+        }
+    }
     ui.add_space(4.0);
     ui.label(RichText::new("Results").size(12.0).color(c(theme::MONO6)));
     let rows: Vec<(usize, net::AttackRow)> = attack.rows.lock().unwrap().clone().into_iter().enumerate().collect();

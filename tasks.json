@@ -8,9 +8,9 @@
   "p1": 26,
   "p2": 5,
   "by_status": {
-   "done": 18,
+   "done": 19,
    "in_progress": 4,
-   "todo": 70
+   "todo": 69
   }
  },
  "tasks": [
@@ -194,8 +194,9 @@
    "title": "Four attack types",
    "acceptance": "Sniper, battering ram, pitchfork, cluster bomb produce the correct request matrix; tests assert counts and payload placement",
    "effort": "M",
-   "status": "in_progress",
-   "evidence": "app/src/intruder.rs: Template::parse + requests() for Sniper, Battering ram, Pitchfork, Cluster bomb (last position fastest, limit guard, empty-set and missing-set errors); 6 matrix tests assert counts and payload placement. REMAINING: net::start_attack is still sniper-only and the Intruder tab has no attack-type selector, so users cannot run the other three yet"
+   "status": "done",
+   "evidence": "intruder::requests/count (sniper, battering ram, pitchfork, cluster bomb, limit, empty/missing set errors) with 6 matrix tests + intruder_runner_sends_the_matrix; reachable from the Intruder tab attack-type selector (P-10).",
+   "completed": "2026-11-15"
   },
   {
    "id": "C-02",
@@ -205,7 +206,7 @@
    "acceptance": "Auto-mark, clear, add-from-selection, marker highlighting, multiple positions per request",
    "effort": "M",
    "status": "in_progress",
-   "evidence": "intruder.rs: add_marker (selection), clear_markers, auto_mark (query, cookie, form body, JSON scalars, existing markers replaced); tests add_and_clear_markers, auto_mark_covers_query_cookie_form_and_json. REMAINING: no UI buttons or marker highlighting yet"
+   "evidence": "intruder.rs add_marker/clear_markers/auto_mark (query, cookie, form, JSON) with 2 tests; UI has Auto § and Clear §; marker highlighting not drawn. REMAINING: Add § from a selection (needs an editable editor), marker highlight in the editor."
   },
   {
    "id": "C-03",
@@ -846,11 +847,12 @@
    "title": "Wire Intruder UI to intruder.rs",
    "acceptance": "Attack-type selector, Auto/Add/Clear position buttons with marker highlighting, one payload set per position, request count preview with the limit error shown, runner replaces net::start_attack; empty-state text 'To get started, send a request to Intruder from anywhere in Burp'",
    "effort": "M",
-   "status": "todo",
+   "status": "in_progress",
    "depends_on": [
     "C-01",
     "C-02"
-   ]
+   ],
+   "evidence": "Intruder screen rebuilt (src/ui.rs): attack-type selector (Sniper, Battering ram, Pitchfork, Cluster bomb), Auto § and Clear § buttons, live request-count preview with position and set counts, one payload editor per position (C-03 UI side). net::start_attack is now the generic matrix runner over intruder::requests (limit 100k, stop/progress/cancel kept, payload joined for the row); test intruder_runner_sends_the_matrix (cluster bomb 2x2 = 4 rows, all 200). Live check 2026-11-15: shot p10-intruder.png. REMAINING: Add § (needs an editable editor with selection), resource pool, payload types beyond simple lists (C-03), processing (C-04). 118 tests pass."
   },
   {
    "id": "P-11",

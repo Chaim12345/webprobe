@@ -1757,89 +1757,86 @@ pub fn split_h_p(authority: &str, fallback: u16) -> (String, u16) {
     split_host_port(authority.trim(), fallback)
 }
 
-/// Start a simple Sniper-style attack: for each marked position (§ ... §),
-/// run every payload, one request at a time.
-pub fn start_attack(shared: Arc<Shared>, template: String, payload_text: String, https: bool) {
-    let segments = parse_markers(&template);
-    let marker_count = segments.iter().filter(|s| s.is_marker).count();
-    let payloads: Vec<String> = payload_text
-        .lines()
-        .map(|l| l.trim().to_string())
-        .filter(|l| !l.is_empty())
-        .collect();
+/// Requests one Intruder attack will send before the cap kicks in (N-04 guard).
+pub const INTRUDER_REQUEST_LIMIT: usize = 100_000;
+
+/// Start an Intruder attack of any type (C-01): the request matrix comes from
+/// `intruder::requests`, so Sniper, Battering ram, Pitchfork and Cluster bomb all
+/// run through this one runner. `sets` is one payload list per position (Sniper
+/// and Battering ram use only the first). Payloads are one per line; the `§`
+/// markers never reach the wire (the template strips them).
+pub fn start_attack(
+    shared: Arc<Shared>,
+    template: String,
+    kind: crate::intruder::AttackType,
+    sets: Vec<Vec<String>>,
+    https: bool,
+) -> Result<(), String> {
+    let parsed = crate::intruder::Template::parse(&template)?;
+    let used = kind.sets_needed(parsed.positions());
+    let rows = crate::intruder::requests(&parsed, kind, &sets, INTRUDER_REQUEST_LIMIT)?;
 
     let cur = shared.attack.lock().unwrap().clone();
-    if marker_count == 0 || payloads.is_empty() {
-        shared.log("Intruder: need at least one position marked with § and at least one payload");
-        return;
-    }
     cur.rows.lock().unwrap().clear();
     cur.done.store(0, Ordering::SeqCst);
-    cur.total.store(payloads.len() * marker_count, Ordering::SeqCst);
+    cur.total.store(rows.len(), Ordering::SeqCst);
     cur.stop.store(false, Ordering::SeqCst);
     cur.running.store(true, Ordering::SeqCst);
-    shared.log(&format!("Intruder attack started: {marker_count} position(s) x {} payloads", payloads.len()));
+    shared.log(&format!(
+        "Intruder attack started: {} ({}) x {} request(s)",
+        kind.label(),
+        parsed.positions(),
+        rows.len()
+    ));
 
     std::thread::spawn(move || {
-        let mut idx = 0usize;
-        'outer: for pos in 0..marker_count {
-            for payload in &payloads {
-                if cur.stop.load(Ordering::SeqCst) {
-                    break 'outer;
-                }
-                let mut out = String::with_capacity(template.len() + payload.len());
-                let mut m = 0usize;
-                for seg in &segments {
-                    if seg.is_marker {
-                        if m == pos {
-                            out.push_str(payload);
-                        } else {
-                            out.push_str(&seg.text);
-                        }
-                        m += 1;
-                    } else {
-                        out.push_str(&seg.text);
-                    }
-                }
-                let _ = idx;
-                let parts = util::parse_http(out.as_bytes());
-                let host_header = util::get_header(&parts.headers, "Host").unwrap_or_default();
-                if host_header.is_empty() {
-                    cur.rows.lock().unwrap().push(AttackRow {
-                        payload: payload.clone(),
-                        status: String::new(),
-                        len: 0,
-                        ms: 0,
-                        ok: false,
-                    });
-                    idx += 1;
-                    continue;
-                }
-                let (host, port) = split_host_port(&host_header, if https { 443 } else { 80 });
-                let t0 = Instant::now();
-                let up = if https {
-                    send_tls_raw(&shared, &host, port, out.as_bytes())
-                } else {
-                    send_raw(&shared, &host, port, out.as_bytes())
-                };
-                let ms = t0.elapsed().as_millis();
-                cur.rows.lock().unwrap().push(match up.resp {
-                    Some(resp) => {
-                        let st = util::parse_http(&resp).first.split_whitespace().nth(1).unwrap_or("").to_string();
-                        AttackRow { payload: payload.clone(), status: st, len: resp.len(), ms, ok: true }
-                    }
-                    None => AttackRow { payload: payload.clone(), status: String::new(), len: 0, ms, ok: false },
+        for attack in rows {
+            if cur.stop.load(Ordering::SeqCst) {
+                break;
+            }
+            let payload = attack
+                .payloads
+                .iter()
+                .filter_map(|p| p.clone())
+                .collect::<Vec<_>>()
+                .join(", ");
+            let parts = util::parse_http(attack.request.as_bytes());
+            let host_header = util::get_header(&parts.headers, "Host").unwrap_or_default();
+            if host_header.is_empty() {
+                cur.rows.lock().unwrap().push(AttackRow {
+                    payload,
+                    status: String::new(),
+                    len: 0,
+                    ms: 0,
+                    ok: false,
                 });
                 cur.done.fetch_add(1, Ordering::SeqCst);
-                idx += 1;
-                // gentle pacing so one bad host does not hammer (500 ms default throttle from
-                // ProjectDefaults.json resource pool; applied only to intruder background work)
-                std::thread::sleep(Duration::from_millis(50));
+                continue;
             }
+            let (host, port) = split_host_port(&host_header, if https { 443 } else { 80 });
+            let t0 = Instant::now();
+            let up = if https {
+                send_tls_raw(&shared, &host, port, attack.request.as_bytes())
+            } else {
+                send_raw(&shared, &host, port, attack.request.as_bytes())
+            };
+            let ms = t0.elapsed().as_millis();
+            cur.rows.lock().unwrap().push(match up.resp {
+                Some(resp) => {
+                    let st = util::parse_http(&resp).first.split_whitespace().nth(1).unwrap_or("").to_string();
+                    AttackRow { payload, status: st, len: resp.len(), ms, ok: true }
+                }
+                None => AttackRow { payload, status: String::new(), len: 0, ms, ok: false },
+            });
+            cur.done.fetch_add(1, Ordering::SeqCst);
+            // Gentle pacing so one bad host does not hammer (500 ms default throttle
+            // from ProjectDefaults.json resource pool; C-06 turns this into a pool).
+            std::thread::sleep(Duration::from_millis(50));
         }
         cur.running.store(false, Ordering::SeqCst);
         shared.log("Intruder attack finished");
     });
+    Ok(())
 }
 
 pub struct MarkerSeg {
@@ -2417,6 +2414,38 @@ mod tests {
             listener_specs(&shared),
             vec![ListenerSpec { bind: "127.0.0.1".into(), port: 8081 }]
         );
+    }
+
+    /// P-10: the matrix runner sends one request per matrix row and records a row per request.
+    #[test]
+    fn intruder_runner_sends_the_matrix() {
+        use crate::intruder::AttackType;
+        let shared = Shared::new();
+        // Mock origin: answers one request per connection with a 200.
+        let origin = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = origin.local_addr().unwrap().port();
+        let ot = std::thread::spawn(move || {
+            for _ in 0..4 {
+                let (mut s, _) = origin.accept().unwrap();
+                s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+                let _ = read_request_head(&mut s);
+                s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok").unwrap();
+            }
+        });
+        // Cluster bomb over two positions: 2 x 2 = 4 requests.
+        let template = format!("GET /p?a=§1§&b=§2§ HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
+        let sets = vec![vec!["x".to_string(), "y".to_string()], vec!["1".to_string(), "2".to_string()]];
+        start_attack(shared.clone(), template, AttackType::ClusterBomb, sets, false).expect("attack starts");
+        let attack = shared.attack.lock().unwrap().clone();
+        for _ in 0..200 {
+            if attack.done.load(Ordering::SeqCst) >= 4 { break; }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        let rows = attack.rows.lock().unwrap().clone();
+        assert_eq!(rows.len(), 4, "one row per matrix request");
+        assert!(rows.iter().all(|r| r.ok && r.status == "200"));
+        assert_eq!(attack.total.load(Ordering::SeqCst), 4);
+        ot.join().unwrap();
     }
 
     /// A-07: replacing the listener set leaves history intact.

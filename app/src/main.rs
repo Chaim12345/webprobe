@@ -91,6 +91,10 @@ pub struct App {
     pub intr_req: String,
     pub intr_https: bool,
     pub intr_payloads: String,
+    /// Which of the four attack types (C-01).
+    pub intr_attack: intruder::AttackType,
+    /// Raw payload text per position, one payload per line (C-03 UI side).
+    pub intr_sets: Vec<String>,
     pub dec_input: String,
     pub dec_results: Vec<(String, String)>,
     pub scope_only: bool,
@@ -465,6 +469,8 @@ fn main() {
         intr_req: "GET /login HTTP/1.1\r\nHost: example.com\r\nUser-Agent: WebProbe/1.0\r\n\r\n".to_string(),
         intr_https: false,
         intr_payloads: "admin\n' OR 1=1--\ntest".to_string(),
+        intr_attack: intruder::AttackType::Sniper,
+        intr_sets: vec!["admin\n'test\nadmin2".to_string()],
         dec_input: String::new(),
         dec_results: Vec::new(),
         scope_only: false,
