@@ -844,21 +844,48 @@ fn intruder(app: &mut App, ui: &mut Ui) {
     }
     ui.add_space(2.0);
 
-    let half = (ui.available_height() - 260.0).max(80.0) / 2.0;
-    egui::ScrollArea::vertical().id_salt("intruder_request_scroll").max_height(half).show(ui, |ui| {
-        ui.label(RichText::new("Request with positions").size(12.0).color(c(theme::MONO6)));
-        editor::message_editor(ui, "intruder_request", &mut app.intr_req, 8, &mut app.intr_editor);
+    // Two columns: request on the left, payload sets on the right (P-10 layout).
+    let half = (ui.available_height() - 320.0).max(140.0);
+    ui.horizontal(|ui| {
+        let w = ((ui.available_width() - 10.0) * 0.55).max(320.0);
+        egui::Frame::none()
+            .stroke(egui::Stroke::new(1.0, c(theme::MONO2)))
+            .inner_margin(egui::Margin::same(6.0))
+            .show(ui, |ui| {
+                ui.set_min_width(w);
+                ui.set_max_width(w);
+                ui.set_min_height(half);
+                ui.label(RichText::new("Request with positions").size(12.0).strong().color(c(theme::MONO6)));
+                egui::ScrollArea::vertical().id_salt("intruder_request_scroll").max_height(half - 24.0).show(ui, |ui| {
+                    editor::message_editor(ui, "intruder_request", &mut app.intr_req, 10, &mut app.intr_editor);
+                });
+            });
+        ui.add_space(10.0);
+        egui::Frame::none()
+            .stroke(egui::Stroke::new(1.0, c(theme::MONO2)))
+            .inner_margin(egui::Margin::same(6.0))
+            .show(ui, |ui| {
+                ui.set_min_height(half);
+                if positions == 0 {
+                    // Burp's onboarding card: tell the user how to get started.
+                    ui.add_space(6.0);
+                    ui.label(RichText::new("To get started").size(13.0).strong().color(c(theme::MONO7)));
+                    ui.add_space(4.0);
+                    hint(ui, "Send a request to Intruder from Proxy or Repeater, or type § around a value in the request.");
+                    ui.add_space(6.0);
+                    hint(ui, "Then pick an attack type and one payload set per position.");
+                } else {
+                    let needed_now = app.intr_attack.sets_needed(positions);
+                    ui.label(
+                        RichText::new(format!("Payload sets: {} needed for {}", needed_now, app.intr_attack.label()))
+                            .size(12.0)
+                            .color(c(theme::MONO6)),
+                    );
+                }
+            });
     });
     ui.add_space(4.0);
-    ui.label(
-        RichText::new(if positions == 0 {
-            "Payload sets (one per position once positions are marked)".to_string()
-        } else {
-            format!("Payload sets: {} needed for {}", needed, app.intr_attack.label())
-        })
-        .size(12.0)
-        .color(c(theme::MONO6)),
-    );
+    egui::ScrollArea::vertical().id_salt("intruder_payload_scroll").max_height(half).show(ui, |ui| {
     for i in 0..needed.max(1) {
         ui.add_space(2.0);
         let label = if positions == 0 { format!("Payload set {}", i + 1) } else { format!("Position {} payloads (one per line)", i + 1) };
@@ -874,7 +901,7 @@ fn intruder(app: &mut App, ui: &mut Ui) {
             *slot = text;
         }
     }
-    ui.add_space(4.0);
+    });
     ui.add_space(4.0);
     ui.label(RichText::new("Results").size(12.0).color(c(theme::MONO6)));
     let rows: Vec<(usize, net::AttackRow)> = attack.rows.lock().unwrap().clone().into_iter().enumerate().collect();
@@ -917,24 +944,33 @@ fn intruder(app: &mut App, ui: &mut Ui) {
 // ================= Repeater =================
 
 fn repeater(app: &mut App, ui: &mut Ui) {
-    {
-        let reps = app.shared.repeaters.lock().unwrap().len();
-        for i in 0..reps {
-            let name = format!("{} ", {
-                let r = app.shared.repeaters.lock().unwrap();
-                r[i].name.clone()
-            });
+    // Tab strip: numbered tabs with close and add (P-04).
+    ui.horizontal(|ui| {
+        let names: Vec<String> = {
+            let reps = app.shared.repeaters.lock().unwrap();
+            reps.iter().map(|r| r.name.clone()).collect()
+        };
+        let reps_len = names.len();
+        let mut close: Option<usize> = None;
+        for (i, name) in names.iter().enumerate() {
             let sel = app.rep_sel == i;
-            if ui.selectable_label(sel, RichText::new(name).color(if sel { c(theme::MONO7) } else { c(theme::MONO6) })).clicked() {
+            let label = format!("{} {}", i + 1, name);
+            let resp = ui.selectable_label(
+                sel,
+                RichText::new(label).color(if sel { c(theme::ORANGE) } else { c(theme::MONO6) }),
+            );
+            if resp.clicked() {
                 app.rep_sel = i;
+            }
+            if reps_len > 1 && ui.small_button("\u{00d7}").clicked() {
+                close = Some(i);
             }
         }
         if ui.button("+").clicked() {
             let mut reps = app.shared.repeaters.lock().unwrap();
             let n = reps.len() + 1;
-            let name = format!("Rep {n}");
             reps.push(net::RepTab {
-                name: name.clone(),
+                name: format!("Rep {n}"),
                 host: String::new(),
                 port: 80,
                 https: false,
@@ -944,19 +980,45 @@ fn repeater(app: &mut App, ui: &mut Ui) {
             });
             app.rep_sel = n - 1;
         }
-    }
+        if let Some(i) = close {
+            let mut reps = app.shared.repeaters.lock().unwrap();
+            reps.remove(i);
+            app.rep_sel = app.rep_sel.saturating_sub(1).min(reps.len().saturating_sub(1));
+        }
+    });
     ui.add_space(4.0);
 
+    // Command row: Send, Cancel, target, HTTPS, status.
     let busy = app.shared.rep_busy.load(Ordering::SeqCst);
+    let (req_host, result_line) = {
+        let reps = app.shared.repeaters.lock().unwrap();
+        let i = app.rep_sel.min(reps.len().saturating_sub(1));
+        (format!("{}:{}", reps[i].host, reps[i].port), reps[i].result_line.clone())
+    };
     ui.horizontal(|ui| {
-        let btn = if busy {
-            RichText::new("sending...").color(c(theme::MONO6)).size(13.0)
-        } else {
-            RichText::new("Send (Ctrl+Space)").color(c(theme::ORANGE)).size(13.0)
-        };
-        if ui.button(btn).clicked() && !busy {
+        if ui
+            .add_enabled(!busy, egui::Button::new(RichText::new("Send (Ctrl+Space)").color(c(theme::ORANGE))))
+            .clicked()
+        {
             repeater_send(app);
         }
+        if ui.add_enabled(busy, egui::Button::new("Cancel")).clicked() {
+            app.shared.rep_cancel.store(true, Ordering::SeqCst);
+        }
+        ui.add_space(10.0);
+        ui.label(RichText::new("Target").size(12.0).color(c(theme::MONO4)));
+        let target = if req_host.ends_with(":0") || req_host.ends_with(':') {
+            "Not specified".to_string()
+        } else {
+            req_host
+        };
+        ui.label(
+            RichText::new(target.as_str())
+                .monospace()
+                .size(12.0)
+                .color(c(if target == "Not specified" { theme::MONO4 } else { theme::HEADER_BLUE })),
+        );
+        ui.add_space(10.0);
         let i = app.rep_sel.min(app.shared.repeaters.lock().unwrap().len().saturating_sub(1));
         let mut https = app.shared.repeaters.lock().unwrap()[i].https;
         if ui.add_enabled(!busy, egui::Checkbox::new(&mut https, "HTTPS")).changed() {
@@ -966,103 +1028,123 @@ fn repeater(app: &mut App, ui: &mut Ui) {
                 reps[i].port = if https { 443 } else { 80 };
             }
         }
-        let res = app.shared.rep_result.lock().unwrap().clone();
-        if let Some(err) = res.strip_prefix("error: ") {
-            if feedback::inline_error(ui, err, !busy) {
-                repeater_send(app);
-            }
-        } else if !res.is_empty() {
-            ui.label(RichText::new(res).size(12.0).color(c(theme::EDITOR_TEXT)));
-        }
-    });
-    ui.add_space(4.0);
-
-    let half = (ui.available_height() - 220.0).max(120.0) / 2.0;
-    egui::ScrollArea::vertical().id_salt("repeater_request_scroll").max_height(half).show(ui, |ui| {
-        ui.label(RichText::new("Request (edit then Send - keep the Host header, e.g. example.com:80)").size(12.0).color(c(theme::MONO6)));
-        {
-            let reps_len = app.shared.repeaters.lock().unwrap().len();
-            let i = app.rep_sel.min(reps_len.saturating_sub(1));
-            let mut reps = app.shared.repeaters.lock().unwrap();
-            editor::message_editor(ui, "repeater_request", &mut reps[i].request, 10, &mut app.rep_editor);
-        }
-    });
-    ui.add_space(4.0);
-    let (resp, result_line, req) = {
-        let reps = app.shared.repeaters.lock().unwrap();
-        let i = app.rep_sel.min(reps.len().saturating_sub(1));
-        (reps[i].response.clone(), reps[i].result_line.clone(), reps[i].request.clone())
-    };
-    ui.horizontal(|ui| {
-        ui.label(RichText::new("Response").size(12.0).color(c(theme::MONO6)));
-        if let Some(v) = sub_tabs(ui, &["Raw", "Hex", "Pretty"], app.rep_view) {
-            app.rep_view = v;
-        }
+        ui.add_space(10.0);
         if !result_line.is_empty() {
             ui.label(RichText::new(result_line).size(12.0).color(c(theme::MONO6)));
         }
     });
-    match resp.clone() {
-        Some(r) => {
-            let parts = util::parse_http(&r);
-            ui.label(RichText::new(parts.first.clone()).monospace().size(12.5).color(c(theme::HEADER_BLUE)));
-            egui::ScrollArea::vertical().id_salt("repeater_response_scroll").max_height(half).show(ui, |ui| match app.rep_view {
-                1 => {
-                    ui.monospace(RichText::new(util::hex_view(&r, 16384)).size(12.0).color(c(theme::EDITOR_TEXT)));
-                }
-                2 => {
-                    let body = r.get(parts.head_len..).unwrap_or(&[]);
-                    let pretty = serde_json::from_slice::<serde_json::Value>(body)
-                        .ok()
-                        .and_then(|v| serde_json::to_string_pretty(&v).ok());
-                    match pretty {
-                        Some(text) => ui.monospace(RichText::new(text).size(12.0).color(c(theme::EDITOR_TEXT))),
-                        None => ui.monospace(RichText::new(String::from_utf8_lossy(&r).into_owned()).size(12.0).color(c(theme::EDITOR_TEXT))),
-                    };
-                }
-                _ => {
-                    ui.monospace(RichText::new(String::from_utf8_lossy(&r).into_owned()).size(12.0).color(c(theme::EDITOR_TEXT)));
-                }
-            });
-        }
-        None => hint(ui, "no response yet"),
-    }
+    ui.add_space(4.0);
 
-    // P-04: Inspector - the parsed request and response without leaving the tab.
-    egui::CollapsingHeader::new(RichText::new("Inspector").size(12.5).color(c(theme::MONO6)))
-        .default_open(false)
-        .show(ui, |ui| {
-            let rp = util::parse_http(req.as_bytes());
-            ui.label(RichText::new("Request line").size(12.0).color(c(theme::MONO4)));
-            ui.monospace(RichText::new(rp.first.clone()).size(12.0).color(c(theme::HEADER_BLUE)));
-            let query = rp.path.split_once('?').map(|(_, q)| q).unwrap_or("");
-            if !query.is_empty() {
-                ui.label(RichText::new("Query").size(12.0).color(c(theme::MONO4)));
-                for kv in query.split('&').filter(|s| !s.is_empty()) {
-                    let (k, v) = kv.split_once('=').unwrap_or((kv, ""));
-                    ui.monospace(RichText::new(format!("{k} = {v}")).size(12.0).color(c(theme::EDITOR_TEXT)));
+    let (resp, req) = {
+        let reps = app.shared.repeaters.lock().unwrap();
+        let i = app.rep_sel.min(reps.len().saturating_sub(1));
+        (reps[i].response.clone(), reps[i].request.clone())
+    };
+
+    // Three panes: Request | Response | Inspector (P-04).
+    let avail = ui.available_height();
+    let inspector_w = 280.0;
+    let split = ((ui.available_width() - inspector_w) * 0.5).max(280.0);
+    ui.horizontal(|ui| {
+        // Request
+        egui::Frame::none()
+            .stroke(egui::Stroke::new(1.0, c(theme::MONO2)))
+            .inner_margin(egui::Margin::same(6.0))
+            .show(ui, |ui| {
+                ui.set_min_width(split);
+                ui.set_max_width(split);
+                ui.set_min_height(avail);
+                ui.label(RichText::new("Request").size(12.0).strong().color(c(theme::MONO6)));
+                if let Some(v) = sub_tabs(ui, &["Pretty", "Raw", "Hex"], app.rep_req_view) {
+                    app.rep_req_view = v;
                 }
-            }
-            ui.label(RichText::new("Request headers").size(12.0).color(c(theme::MONO4)));
-            egui::Grid::new("rep_req_headers").striped(true).num_columns(2).show(ui, |ui| {
-                for (k, v) in &rp.headers {
-                    ui.monospace(RichText::new(k.clone()).size(12.0).color(c(theme::HEADER_BLUE)));
-                    ui.monospace(RichText::new(v.clone()).size(12.0).color(c(theme::EDITOR_TEXT)));
-                    ui.end_row();
+                egui::ScrollArea::vertical().id_salt("repeater_request_scroll").show(ui, |ui| {
+                    let reps_len = app.shared.repeaters.lock().unwrap().len();
+                    let i = app.rep_sel.min(reps_len.saturating_sub(1));
+                    let mut reps = app.shared.repeaters.lock().unwrap();
+                    editor::message_editor(ui, "repeater_request", &mut reps[i].request, 12, &mut app.rep_editor);
+                });
+            });
+        ui.add_space(6.0);
+        // Response
+        egui::Frame::none()
+            .stroke(egui::Stroke::new(1.0, c(theme::MONO2)))
+            .inner_margin(egui::Margin::same(6.0))
+            .show(ui, |ui| {
+                ui.set_min_width(split);
+                ui.set_max_width(split);
+                ui.set_min_height(avail);
+                ui.label(RichText::new("Response").size(12.0).strong().color(c(theme::MONO6)));
+                if let Some(v) = sub_tabs(ui, &["Pretty", "Raw", "Hex"], app.rep_view) {
+                    app.rep_view = v;
+                }
+                match resp.clone() {
+                    Some(r) => {
+                        let parts = util::parse_http(&r);
+                        ui.label(RichText::new(parts.first.clone()).monospace().size(12.0).color(c(theme::HEADER_BLUE)));
+                        egui::ScrollArea::vertical().id_salt("repeater_response_scroll").show(ui, |ui| match app.rep_view {
+                            2 => {
+                                let body = r.get(parts.head_len..).unwrap_or(&[]);
+                                let pretty = serde_json::from_slice::<serde_json::Value>(body)
+                                    .ok()
+                                    .and_then(|v| serde_json::to_string_pretty(&v).ok());
+                                match pretty {
+                                    Some(text) => { ui.monospace(RichText::new(text).size(12.0).color(c(theme::EDITOR_TEXT))); }
+                                    None => { ui.monospace(RichText::new(String::from_utf8_lossy(&r).into_owned()).size(12.0).color(c(theme::EDITOR_TEXT))); }
+                                }
+                            }
+                            _ => { ui.monospace(RichText::new(String::from_utf8_lossy(&r).into_owned()).size(12.0).color(c(theme::EDITOR_TEXT))); }
+                        });
+                    }
+                    None => hint(ui, "no response yet"),
                 }
             });
-            if let Some(r) = &resp {
-                let sp = util::parse_http(r);
-                ui.label(RichText::new("Response headers").size(12.0).color(c(theme::MONO4)));
-                egui::Grid::new("rep_resp_headers").striped(true).num_columns(2).show(ui, |ui| {
-                    for (k, v) in &sp.headers {
-                        ui.monospace(RichText::new(k.clone()).size(12.0).color(c(theme::HEADER_BLUE)));
-                        ui.monospace(RichText::new(v.clone()).size(12.0).color(c(theme::EDITOR_TEXT)));
-                        ui.end_row();
+        ui.add_space(6.0);
+        // Inspector
+        egui::Frame::none()
+            .stroke(egui::Stroke::new(1.0, c(theme::MONO2)))
+            .inner_margin(egui::Margin::same(6.0))
+            .show(ui, |ui| {
+                ui.set_min_width(inspector_w);
+                ui.set_max_width(inspector_w);
+                ui.set_min_height(avail);
+                ui.label(RichText::new("Inspector").size(12.0).strong().color(c(theme::MONO6)));
+                ui.add_space(4.0);
+                egui::ScrollArea::vertical().id_salt("repeater_inspector").show(ui, |ui| {
+                    let rp = util::parse_http(req.as_bytes());
+                    ui.label(RichText::new("Request line").size(12.0).color(c(theme::MONO4)));
+                    ui.monospace(RichText::new(rp.first.clone()).size(12.0).color(c(theme::HEADER_BLUE)));
+                    let query = rp.path.split_once('?').map(|(_, q)| q).unwrap_or("");
+                    if !query.is_empty() {
+                        ui.add_space(4.0);
+                        ui.label(RichText::new("Query").size(12.0).color(c(theme::MONO4)));
+                        for kv in query.split('&').filter(|s| !s.is_empty()) {
+                            let (k, v) = kv.split_once('=').unwrap_or((kv, ""));
+                            ui.monospace(RichText::new(format!("{k} = {v}")).size(12.0).color(c(theme::EDITOR_TEXT)));
+                        }
+                    }
+                    ui.add_space(4.0);
+                    ui.label(RichText::new("Request headers").size(12.0).color(c(theme::MONO4)));
+                    for (k, v) in &rp.headers {
+                        ui.horizontal(|ui| {
+                            ui.monospace(RichText::new(k.clone()).size(12.0).color(c(theme::HEADER_BLUE)));
+                            ui.monospace(RichText::new(v.clone()).size(12.0).color(c(theme::EDITOR_TEXT)));
+                        });
+                    }
+                    if let Some(r) = &resp {
+                        let sp = util::parse_http(r);
+                        ui.add_space(6.0);
+                        ui.label(RichText::new("Response headers").size(12.0).color(c(theme::MONO4)));
+                        for (k, v) in &sp.headers {
+                            ui.horizontal(|ui| {
+                                ui.monospace(RichText::new(k.clone()).size(12.0).color(c(theme::HEADER_BLUE)));
+                                ui.monospace(RichText::new(v.clone()).size(12.0).color(c(theme::EDITOR_TEXT)));
+                            });
+                        }
                     }
                 });
-            }
-        });
+            });
+    });
 }
 
 fn repeater_send(app: &mut App) {
@@ -1595,9 +1677,19 @@ fn dashboard(app: &mut App, ui: &mut Ui) {
     }
 
     let total = app.shared.history.lock().map(|h| h.len()).unwrap_or(0);
-    let issues = app.shared.issues.lock().map(|i| i.len()).unwrap_or(0);
+    let all_issues = app.shared.issues.lock().unwrap().clone();
     let scope = app.shared.scope.lock().map(|s| s.len()).unwrap_or(0);
     let waiting = app.shared.count_waiting();
+    let mut sev = [0usize; 4]; // high, medium, low, info
+    for i in &all_issues {
+        let idx = match i.sev.as_str() {
+            "high" => 0,
+            "medium" => 1,
+            "low" => 2,
+            _ => 3,
+        };
+        sev[idx] += 1;
+    }
 
     ui.add_space(6.0);
     ui.label(RichText::new("Overview").size(15.0).strong().color(c(theme::MONO7)));
@@ -1605,7 +1697,7 @@ fn dashboard(app: &mut App, ui: &mut Ui) {
     ui.horizontal(|ui| {
         for (label, value, colour) in [
             ("history entries", total, theme::EDITOR_TEXT),
-            ("issues", issues, theme::ORANGE),
+            ("issues", all_issues.len(), theme::ORANGE),
             ("scope rules", scope, theme::METHOD_OTHER),
             ("held requests", waiting, theme::WARN),
         ] {
@@ -1623,13 +1715,108 @@ fn dashboard(app: &mut App, ui: &mut Ui) {
         }
     });
 
+    // Two columns: tasks and severity on the left, issue list on the right.
     ui.add_space(12.0);
-    listeners_panel(app, ui, false);
+    let left_w = 340.0;
+    let avail = ui.available_height();
+    let right_w = (ui.available_width() - left_w - 8.0).max(320.0);
+    ui.horizontal(|ui| {
+        egui::Frame::none()
+            .stroke(egui::Stroke::new(1.0, c(theme::MONO2)))
+            .inner_margin(egui::Margin::same(8.0))
+            .show(ui, |ui| {
+                ui.set_min_width(left_w);
+                ui.set_max_width(left_w);
+                ui.set_min_height(avail);
+                ui.vertical(|ui| {
+                    ui.label(RichText::new("Tasks").size(13.0).strong().color(c(theme::MONO7)));
+                    ui.add_space(4.0);
+                    let busy = app.shared.scan_busy.load(Ordering::SeqCst);
+                    let done = app.shared.scan_done.load(Ordering::SeqCst);
+                    let total_scan = app.shared.scan_total.load(Ordering::SeqCst);
+                    let on = app.shared.scan_enabled.load(Ordering::SeqCst);
+                    for (name, state, detail) in [
+                        ("Live audit from Proxy", if on { "running" } else { "paused" }, format!("{total} captured")),
+                        ("Passive scan", if busy { "running" } else { "paused" }, if total_scan > 0 { format!("{done} of {total_scan}") } else { "no scan yet".to_string() }),
+                    ] {
+                        egui::Frame::none()
+                            .fill(c(theme::MONO1X))
+                            .stroke(egui::Stroke::new(1.0, c(theme::MONO2)))
+                            .inner_margin(egui::Margin::same(8.0))
+                            .show(ui, |ui| {
+                                ui.horizontal(|ui| {
+                                    let (word, colour) = if state == "running" { ("running", theme::GOOD) } else { ("paused", theme::WARN) };
+                                    ui.label(RichText::new(word).size(12.0).color(c(colour)));
+                                });
+                                ui.label(RichText::new(name).size(12.0).strong().color(c(theme::EDITOR_TEXT)));
+                                ui.label(RichText::new(detail).size(12.0).color(c(theme::MONO6)));
+                            });
+                        ui.add_space(6.0);
+                    }
+                    if ui.button(if on { "Pause live audit" } else { "Resume live audit" }).clicked() {
+                        app.shared.scan_enabled.store(!on, Ordering::SeqCst);
+                    }
+
+                    ui.add_space(12.0);
+                    ui.label(RichText::new("Issues by severity").size(13.0).strong().color(c(theme::MONO7)));
+                    ui.add_space(4.0);
+                    for (label, count, colour) in [
+                        ("High", sev[0], theme::BAD),
+                        ("Medium", sev[1], theme::ORANGE),
+                        ("Low", sev[2], theme::WARN),
+                        ("Info", sev[3], theme::MONO6),
+                    ] {
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new(label).size(12.0).color(c(theme::MONO6)));
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                ui.label(RichText::new(count.to_string()).size(12.0).strong().color(c(colour)));
+                            });
+                        });
+                    }
+                });
+            });
+        ui.add_space(8.0);
+        // Issue list: takes the remaining width.
+        egui::Frame::none()
+            .stroke(egui::Stroke::new(1.0, c(theme::MONO2)))
+            .inner_margin(egui::Margin::same(8.0))
+            .show(ui, |ui| {
+                ui.set_min_height(avail);
+                ui.set_min_width(right_w);
+                ui.set_max_width(right_w);
+                ui.label(RichText::new("Issues").size(13.0).strong().color(c(theme::MONO7)));
+                ui.add_space(4.0);
+                if all_issues.is_empty() {
+                    hint(ui, "No issues yet. Passive checks run as traffic passes through the proxy.");
+                    return;
+                }
+                egui::ScrollArea::vertical().id_salt("dash_issues").show(ui, |ui| {
+                    ui.set_min_width(right_w - 20.0);
+                    for i in all_issues.iter().rev().take(200) {
+                        ui.allocate_ui_with_layout(
+                            egui::vec2(right_w - 20.0, 0.0),
+                            egui::Layout::left_to_right(egui::Align::Center),
+                            |ui| {
+                                let colour = match i.sev.as_str() {
+                                    "high" => theme::BAD,
+                                    "medium" => theme::ORANGE,
+                                    "low" => theme::WARN,
+                                    _ => theme::MONO6,
+                                };
+                                ui.add_sized([60.0, 0.0], egui::Label::new(RichText::new(i.sev.clone()).size(12.0).color(c(colour))));
+                                ui.add_sized([260.0, 0.0], egui::Label::new(RichText::new(i.name.clone()).size(12.0).color(c(theme::EDITOR_TEXT))));
+                                ui.add_sized([right_w - 360.0, 0.0], egui::Label::new(RichText::new(format!("{}{}", i.host, i.path)).size(12.0).color(c(theme::MONO6))));
+                            },
+                        );
+                    }
+                });
+            });
+    });
 
     ui.add_space(12.0);
     ui.label(RichText::new("Jump to").size(13.0).strong().color(c(theme::MONO7)));
     ui.add_space(4.0);
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         for (name, tab) in TABS.iter() {
             if *tab == Tab::Dashboard {
                 continue;
@@ -1639,11 +1826,6 @@ fn dashboard(app: &mut App, ui: &mut Ui) {
             }
         }
     });
-
-    ui.add_space(12.0);
-    ui.label(RichText::new("Project").size(13.0).strong().color(c(theme::MONO7)));
-    ui.add_space(4.0);
-    crate::tools::project_controls(app, ui);
 
     ui.add_space(12.0);
     ui.label(RichText::new("Recent activity").size(13.0).strong().color(c(theme::MONO7)));
@@ -1657,7 +1839,7 @@ fn dashboard(app: &mut App, ui: &mut Ui) {
     if events.is_empty() {
         hint(ui, "nothing recorded yet");
     } else {
-        egui::ScrollArea::vertical().max_height(220.0).show(ui, |ui| {
+        egui::ScrollArea::vertical().max_height(160.0).show(ui, |ui| {
             for ev in &events {
                 ui.label(RichText::new(ev.clone()).monospace().size(12.0).color(c(theme::MONO6)));
             }

@@ -101,10 +101,14 @@ cmd_info() {
 }
 
 cmd_shot() {
-  local name="${1:?usage: qa.sh shot NAME}" w
+  local name="${1:?usage: qa.sh shot NAME}" w out
   w=$(wid) || exit 1
-  mkdir -p "$SHOTS"
-  import -window "$w" "$SHOTS/$name.png" && echo "$SHOTS/$name.png"
+  case "$name" in
+    /*) out="$name" ;;                 # absolute path wins
+    *) mkdir -p "$SHOTS"; out="$SHOTS/$name.png" ;;
+  esac
+  mkdir -p "$(dirname "$out")"
+  import -window "$w" "$out" && echo "$out"
 }
 
 cmd_move() { xdotool mousemove --window "$(wid)" "${1:?x}" "${2:?y}"; }

@@ -318,6 +318,8 @@ pub struct Shared {
     pub listener_running: AtomicBool,
     pub listener_restart: AtomicBool,
     pub rep_busy: AtomicBool,
+    /// Set by the Repeater Cancel button; the worker drops a late response.
+    pub rep_cancel: AtomicBool,
     pub rep_result: Mutex<String>,
     /// `http.http1.enable_keep_alive` (ProjectDefaults.json): off by default,
     /// matching the original's outgoing suite requests.
@@ -391,6 +393,7 @@ impl Shared {
             listener_running: AtomicBool::new(false),
             listener_restart: AtomicBool::new(false),
             rep_busy: AtomicBool::new(false),
+            rep_cancel: AtomicBool::new(false),
             rep_result: Mutex::new(String::new()),
             keep_alive: AtomicBool::new(false),
             tls_bypass: Mutex::new(Vec::new()),

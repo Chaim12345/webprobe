@@ -9,8 +9,8 @@
   "p2": 5,
   "by_status": {
    "done": 21,
-   "in_progress": 9,
-   "todo": 62
+   "in_progress": 10,
+   "todo": 61
   }
  },
  "tasks": [
@@ -785,7 +785,7 @@
     "E-01",
     "E-04"
    ],
-   "evidence": "Repeater now has numbered tab + '+', primary Send (Ctrl+Space), Raw/Hex/Pretty response sub-tabs, a status line (e.g. '200 | 85 bytes | 1 ms'), and an Inspector collapsible with request line, query params, request headers and response headers. Live test 2026-11-15: seeded request to local origin, Ctrl+Space sent it, response 200 with JSON body; shot p04-repeater-raw.png. REMAINING: tab close/rename/reorder/groups, Cancel, back/forward history, Target field with edit, layout toggles, follow redirects. 118 tests pass."
+   "evidence": "Repeater now has numbered tab + '+', primary Send (Ctrl+Space), Raw/Hex/Pretty response sub-tabs, a status line (e.g. '200 | 85 bytes | 1 ms'), and an Inspector collapsible with request line, query params, request headers and response headers. Live test 2026-11-15: seeded request to local origin, Ctrl+Space sent it, response 200 with JSON body; shot p04-repeater-raw.png. REMAINING: tab close/rename/reorder/groups, Cancel, back/forward history, Target field with edit, layout toggles, follow redirects. 118 tests pass. Rewritten as a three-pane layout: Request | Response | Inspector, numbered tabs with close and +, a command row with Send/Cancel/Target/HTTPS/status, Pretty/Raw/Hex per pane. Shot tour/08-repeater.png. REMAINING: back/forward history, follow redirects, tab groups."
   },
   {
    "id": "P-05",
@@ -843,11 +843,12 @@
    "title": "Dashboard task model",
    "acceptance": "Task cards (live audit, live crawl, scans) with pause/resume, issue counters and Summary / Audit items / Issues / Event log / Logger / Audit log tabs; 'Task execution is paused' banner",
    "effort": "L",
-   "status": "todo",
+   "status": "in_progress",
    "depends_on": [
     "D-05",
     "D-06"
-   ]
+   ],
+   "evidence": "Dashboard rebuilt (P-09): two-column layout with a Tasks panel (live audit running/paused, passive scan progress, pause/resume), an Issues-by-severity breakdown (high/medium/low/info), and an issue table with severity, name and host+path columns; stat cards and recent activity retained. Live shot tour/01-dashboard.png. REMAINING: task cards with per-task issue counters and rename, Summary/Audit items/Event log/Logger/Audit log tabs, banner when paused."
   },
   {
    "id": "P-10",
