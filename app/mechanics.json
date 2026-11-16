@@ -12,34 +12,34 @@
    "group": "connections",
    "value": 120000,
    "unit": "ms",
-   "source": "resources/Preferences/ProjectDefaults.json"
+   "source": "resources/Preferences/ProjectDefaults.json project_options.connections.timeouts (connect_timeout=120000, normal_timeout=120000, open_ended_response_timeout=10000, domain_name_resolution_timeout=300000)"
   },
   {
    "name": "read timeout",
    "group": "connections",
    "value": 120000,
    "unit": "ms",
-   "source": "resources/Preferences/ProjectDefaults.json"
+   "source": "resources/Preferences/ProjectDefaults.json project_options.connections.timeouts (connect_timeout=120000, normal_timeout=120000, open_ended_response_timeout=10000, domain_name_resolution_timeout=300000)"
   },
   {
    "name": "open-ended response timeout",
    "group": "connections",
    "value": 10000,
    "unit": "ms",
-   "source": "resources/Preferences/ProjectDefaults.json"
+   "source": "resources/Preferences/ProjectDefaults.json project_options.connections.timeouts (connect_timeout=120000, normal_timeout=120000, open_ended_response_timeout=10000, domain_name_resolution_timeout=300000)"
   },
   {
    "name": "dns resolution timeout",
    "group": "connections",
    "value": 300000,
    "unit": "ms",
-   "source": "resources/Preferences/ProjectDefaults.json"
+   "source": "resources/Preferences/ProjectDefaults.json project_options.connections.timeouts (connect_timeout=120000, normal_timeout=120000, open_ended_response_timeout=10000, domain_name_resolution_timeout=300000)"
   },
   {
    "name": "concurrent request limit",
    "group": "requests",
    "value": 10,
-   "source": "resources/Preferences/ProjectDefaults.json"
+   "source": "resources/Preferences/ProjectDefaults.json project_options.resource_pools.default_resource_pool.concurrent_request_limit (enabled=true)"
   },
   {
    "name": "throttle interval",
@@ -52,13 +52,13 @@
    "name": "back off after 429",
    "group": "requests",
    "value": true,
-   "source": "resources/Preferences/ProjectDefaults.json"
+   "source": "resources/Preferences/ProjectDefaults.json project_options.resource_pools.default_resource_pool.auto_backoff_after_429_status_returned"
   },
   {
    "name": "interception on at startup",
    "group": "proxy",
    "value": false,
-   "source": "resources/Preferences/UserDefaults.json misc.enable_proxy_interception_at_startup=never"
+   "source": "resources/Preferences/UserDefaults.json user_options.misc.enable_proxy_interception_at_startup=never"
   },
   {
    "name": "message editor font size",
@@ -222,7 +222,8 @@
    "name": "ca validity",
    "group": "https",
    "value": "notBefore year=min(current year,2014); notAfter=generation +10 calendar years",
-   "source": "live 52685 burp.Zg88.Z_ offsets 0050-0084 (ev_7b303a5634e4ae2ac5e2de10d4fa53e96eb4d7ee60df593a259ba7e5bad2d487)"
+   "source": "NOT VERIFIABLE in re-check (wave 24): the cited source \"burp.Zg88.Z_ offsets 0050-0084 (ev_7b303a56...)\" could not be reproduced - Zg88.java in clean/pristine is an empty interface (coverage.tsv maps it to ScannerComponent0732) and the evidence record is not in investigation.cany. Marked estimated; WebProbe CA validity lives in tls.rs (rcgen) and stands on its own implementation.",
+   "estimated": true
   },
   {
    "name": "host certificate validity",
@@ -263,8 +264,8 @@
   {
    "name": "intruder position markers",
    "group": "intruder",
-   "value": "payload markers as ranges in the request template; WebProbe UI marks spans with § and replaces one position per payload",
-   "source": "burp/api/montoya/core/Marker.java + burp/api/montoya/intruder/HttpRequestTemplate.java verify ranges; § editor representation is WebProbe-specific"
+   "value": "payload markers as ranges in the request template; WebProbe UI marks spans with \u00a7 and replaces one position per payload",
+   "source": "burp/api/montoya/core/Marker.java + burp/api/montoya/intruder/HttpRequestTemplate.java verify ranges; \u00a7 editor representation is WebProbe-specific"
   },
   {
    "name": "scan types enabled",
@@ -348,7 +349,7 @@
    "name": "default request interception rule",
    "group": "proxy",
    "value": "enabled AND file extension does_not_match (gif|jpg|png|css|js|ico|svg|eot|woff|woff2|ttf); response interception=false; startup master switch=false",
-   "source": "resources/Preferences/ProjectDefaults.json proxy.intercept_client_requests.rules[0], intercept_server_responses.do_intercept; UserDefaults.json misc.enable_proxy_interception_at_startup=never; implemented in net::default_intercept_allows_path"
+   "source": "resources/Preferences/ProjectDefaults.json proxy.intercept_client_requests.rules[0], intercept_server_responses.do_intercept; UserDefaults.json user_options.misc.enable_proxy_interception_at_startup=never; implemented in net::default_intercept_allows_path"
   },
   {
    "name": "websocket history cap",
@@ -390,7 +391,7 @@
    "name": "http1 keep-alive for outgoing suite requests",
    "group": "proxy",
    "value": "disabled (enable_keep_alive=false)",
-   "source": "resources/Preferences/ProjectDefaults.json http.http1.enable_keep_alive"
+   "source": "resources/Preferences/ProjectDefaults.json project_options.http.http1.enable_keep_alive (throttle/resource pool under project_options.resource_pools; throttle_interval_enabled=false so the 500 ms interval is a default value, not an active limit)"
   },
   {
    "name": "http2 upstream",

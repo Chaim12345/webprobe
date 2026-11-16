@@ -719,13 +719,13 @@ pub fn palette_ui(
         }
     });
 
-    egui::Area::new(egui::Id::new("command_palette"))
+    egui::Area::new(egui::Id::unique("command_palette"))
         .anchor(egui::Align2::CENTER_TOP, egui::vec2(0.0, 84.0))
         .order(egui::Order::Foreground)
         .show(ctx, |ui| {
             egui::Frame::popup(ui.style())
-                .fill(c(theme::MONO1))
-                .stroke(egui::Stroke::new(1.0, c(theme::MONO3)))
+                .fill(theme::chrome())
+                .stroke(egui::Stroke::new(1.0, theme::line_strong()))
                 .show(ui, |ui| {
                     ui.set_width(520.0);
                     let edit = ui.add(
@@ -743,7 +743,7 @@ pub fn palette_ui(
                             ui.label(
                                 RichText::new("no matching commands")
                                     .size(12.0)
-                                    .color(c(theme::MONO6)),
+                                    .color(theme::ink_faint()),
                             );
                         }
                         for (row_i, &a) in rows.iter().enumerate() {
@@ -759,14 +759,14 @@ pub fn palette_ui(
                                     selected,
                                     RichText::new(text)
                                         .size(12.5)
-                                        .color(c(if selected { theme::MONO7 } else { theme::EDITOR_TEXT })),
+                                        .color(if selected { theme::ink() } else { theme::ink_dim() }),
                                 );
                                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                     ui.label(
                                         RichText::new(hotkey)
                                             .monospace()
                                             .size(12.0)
-                                            .color(c(theme::MONO6)),
+                                            .color(theme::ink_faint()),
                                     );
                                 });
                                 r
@@ -815,7 +815,7 @@ pub fn settings_panel(app: &mut crate::App, ui: &mut Ui) {
     ui.label(
         RichText::new("Hotkeys are user settings: they apply to every project on this machine.")
             .size(12.0)
-            .color(c(theme::MONO4)),
+            .color(theme::ink_hint()),
     );
 }
 
@@ -827,14 +827,14 @@ pub fn settings_ui(ui: &mut Ui, shortcuts: &mut Shortcuts, notice: &mut Option<S
         RichText::new("Hotkeys")
             .size(13.0)
             .strong()
-            .color(c(theme::MONO7)),
+            .color(theme::ink()),
     );
     ui.label(
         RichText::new(
             "User settings, like Burp: every hotkey includes Ctrl. Click a hotkey, press the new combination, then Apply. Escape cancels.",
         )
         .size(12.0)
-        .color(c(theme::MONO6)),
+        .color(theme::ink_faint()),
     );
     if let Some(msg) = notice.clone() {
         ui.label(RichText::new(msg).size(12.0).color(c(theme::BAD)));
@@ -844,8 +844,8 @@ pub fn settings_ui(ui: &mut Ui, shortcuts: &mut Shortcuts, notice: &mut Option<S
     // scrolls inside its own frame (Burp's hotkey table lives in Settings and
     // scrolls too).
     egui::Frame::default()
-        .fill(c(theme::MONO1))
-        .inner_margin(egui::Margin::same(8.0))
+        .fill(theme::chrome())
+        .inner_margin(egui::Margin::same(8))
         .show(ui, |ui| {
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
@@ -856,13 +856,13 @@ pub fn settings_ui(ui: &mut Ui, shortcuts: &mut Shortcuts, notice: &mut Option<S
                         if def.category != category {
                             category = def.category;
                             ui.add_space(theme::SPACE_XS);
-                            ui.label(RichText::new(category).size(12.0).strong().color(c(theme::MONO6)));
+                            ui.label(RichText::new(category).size(12.0).strong().color(theme::ink_faint()));
                         }
                         ui.horizontal(|ui| {
-                            let label = RichText::new(def.label).size(12.0).color(c(match def.support {
-                                Support::Missing => theme::MONO4,
-                                _ => theme::EDITOR_TEXT,
-                            }));
+                            let label = RichText::new(def.label).size(12.0).color(match def.support {
+                                Support::Missing => theme::ink_hint(),
+                                _ => theme::ink_dim(),
+                            });
                             ui.add_sized([300.0, 20.0], egui::Label::new(label).truncate());
                             let shown = shortcuts
                                 .chord_for(idx)
@@ -896,7 +896,7 @@ pub fn settings_ui(ui: &mut Ui, shortcuts: &mut Shortcuts, notice: &mut Option<S
                                 }
                             }
                             if def.support == Support::Missing {
-                                ui.label(RichText::new(SUPPORT_HINT).size(12.0).color(c(theme::MONO4)));
+                                ui.label(RichText::new(SUPPORT_HINT).size(12.0).color(theme::ink_hint()));
                             }
                         });
                     }

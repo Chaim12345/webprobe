@@ -1,5 +1,8 @@
-// In-memory certificate authority and per-host TLS server configurations for CONNECT.
-// No operating-system trust settings or on-disk private keys are changed.
+// The proxy's certificate authority and per-host TLS server configurations for
+// CONNECT. Like Burp's CA (kept in its user settings), the CA persists across
+// restarts so a browser or OS that trusts it keeps trusting it: the key and
+// certificate parameters live in ~/.config/webprobe/ca.json (mode 0600; set
+// WEBPROBE_CA_DIR to move it). No operating-system trust store is touched.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicI32, Ordering};
@@ -41,6 +44,43 @@ fn ca_not_before_year(current_year: i32) -> i32 {
     current_year.min(CA_NOT_BEFORE_YEAR)
 }
 
+struct CaSeed {
+    serial: u64,
+    not_before: i64,
+    not_after: i64,
+}
+
+/// Where the CA is kept: $WEBPROBE_CA_DIR, else $XDG_CONFIG_HOME/webprobe or
+/// ~/.config/webprobe.
+pub fn default_ca_dir() -> Option<std::path::PathBuf> {
+    if let Some(d) = std::env::var_os("WEBPROBE_CA_DIR") {
+        return Some(d.into());
+    }
+    let base = std::env::var_os("XDG_CONFIG_HOME")
+        .map(std::path::PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".config")))?;
+    Some(base.join("webprobe"))
+}
+
+/// Write a file only its owner can read (the CA private key is inside).
+fn write_private(dir: &std::path::Path, file: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+    std::fs::create_dir_all(dir)?;
+    let tmp = file.with_extension("tmp");
+    {
+        use std::io::Write;
+        let mut o = std::fs::OpenOptions::new();
+        o.write(true).create(true).truncate(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            o.mode(0o600);
+        }
+        let mut f = o.open(&tmp)?;
+        f.write_all(bytes)?;
+    }
+    std::fs::rename(tmp, file)
+}
+
 pub struct MitmAuthority {
     ca_cert: Certificate,
     ca_key: KeyPair,
@@ -51,9 +91,67 @@ pub struct MitmAuthority {
 }
 
 impl MitmAuthority {
+    /// The persistent CA (created on first run), or an in-memory one in tests.
     pub fn new() -> Result<Self, String> {
+        if cfg!(test) {
+            return Self::load_or_create(None);
+        }
+        Self::load_or_create(default_ca_dir())
+    }
+
+    /// Load the CA saved in `dir`, or create one and save it there.
+    pub fn load_or_create(dir: Option<std::path::PathBuf>) -> Result<Self, String> {
+        let file = dir.as_ref().map(|d| d.join("ca.json"));
+        if let Some(f) = &file {
+            if let Ok(text) = std::fs::read_to_string(f) {
+                match Self::from_saved(&text) {
+                    Ok(ca) => return Ok(ca),
+                    Err(e) => eprintln!("webprobe: ignoring unreadable CA file {}: {e}", f.display()),
+                }
+            }
+        }
         let now = OffsetDateTime::now_utc();
         let mut rng = rand::rngs::OsRng;
+        let mut serial_bytes = [0u8; CA_SERIAL_BITS / 8];
+        rng.fill_bytes(&mut serial_bytes);
+        let seed = CaSeed {
+            serial: u64::from(u32::from_be_bytes(serial_bytes)),
+            not_before: add_calendar_years(now, ca_not_before_year(now.year()) - now.year())?.unix_timestamp(),
+            not_after: add_calendar_years(now, CA_VALIDITY_YEARS)?.unix_timestamp(),
+        };
+        let ca_key = generate_rsa_key()?;
+        if let (Some(d), Some(f)) = (&dir, &file) {
+            let saved = serde_json::json!({
+                "serial": seed.serial,
+                "not_before": seed.not_before,
+                "not_after": seed.not_after,
+                "key_pkcs8": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, ca_key.serialize_der()),
+            });
+            if let Err(e) = write_private(d, f, saved.to_string().as_bytes()) {
+                eprintln!("webprobe: could not save the CA to {}: {e}; it will change on the next start", f.display());
+            }
+        }
+        Self::from_seed(&seed, ca_key)
+    }
+
+    fn from_saved(text: &str) -> Result<Self, String> {
+        let v: serde_json::Value = serde_json::from_str(text).map_err(|e| e.to_string())?;
+        let seed = CaSeed {
+            serial: v["serial"].as_u64().ok_or("no serial")?,
+            not_before: v["not_before"].as_i64().ok_or("no not_before")?,
+            not_after: v["not_after"].as_i64().ok_or("no not_after")?,
+        };
+        let der = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, v["key_pkcs8"].as_str().ok_or("no key")?)
+            .map_err(|e| e.to_string())?;
+        let key = KeyPair::from_pkcs8_der_and_sign_algo(&PrivatePkcs8KeyDer::from(der), &PKCS_RSA_SHA256)
+            .map_err(|e| format!("CA key: {e}"))?;
+        Self::from_seed(&seed, key)
+    }
+
+    /// The CA certificate is rebuilt from its saved parameters and key; RSA
+    /// PKCS#1 v1.5 signatures are deterministic, so it is byte-identical to
+    /// the one a browser or OS was told to trust.
+    fn from_seed(seed: &CaSeed, ca_key: KeyPair) -> Result<Self, String> {
         let mut params = CertificateParams::default();
         params.distinguished_name.push(DnType::CommonName, "WebProbe Local CA");
         params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
@@ -62,22 +160,20 @@ impl MitmAuthority {
             KeyUsagePurpose::KeyCertSign,
             KeyUsagePurpose::CrlSign,
         ];
-        let mut serial_bytes = [0u8; CA_SERIAL_BITS / 8];
-        rng.fill_bytes(&mut serial_bytes);
-        params.serial_number = Some(SerialNumber::from(u64::from(u32::from_be_bytes(serial_bytes))));
-        params.not_before = add_calendar_years(now, ca_not_before_year(now.year()) - now.year())?;
-        params.not_after = add_calendar_years(now, CA_VALIDITY_YEARS)?;
-        let ca_key = generate_rsa_key()?;
+        params.serial_number = Some(SerialNumber::from(seed.serial));
+        params.not_before = OffsetDateTime::from_unix_timestamp(seed.not_before).map_err(|e| e.to_string())?;
+        params.not_after = OffsetDateTime::from_unix_timestamp(seed.not_after).map_err(|e| e.to_string())?;
         let ca_cert = params.self_signed(&ca_key).map_err(|e| format!("generate CA: {e}"))?;
         let ca_der = ca_cert.der().clone();
         let ca_pem = ca_cert.pem();
-        let seed = (now.unix_timestamp_nanos() / 1_000_000) as i32;
+        let now = OffsetDateTime::now_utc();
+        let leaf_seed = (now.unix_timestamp_nanos() / 1_000_000) as i32;
         Ok(Self {
             ca_cert,
             ca_key,
             ca_der,
             ca_pem,
-            next_serial: AtomicI32::new(seed),
+            next_serial: AtomicI32::new(leaf_seed),
             hosts: Mutex::new(HashMap::new()),
         })
     }
@@ -186,12 +282,69 @@ impl MitmAuthority {
     }
 }
 
+/// TLS to the targets the proxy and tools talk to. Like Burp (which does not
+/// validate upstream server certificates by default), any certificate is
+/// accepted: self-signed, private-CA, expired or wrong-name servers are
+/// exactly what gets tested. The handshake signatures are still checked, so
+/// the peer must hold the key of the certificate it presents.
 pub fn upstream_config() -> Arc<ClientConfig> {
-    let roots = RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    let provider = Arc::new(rustls::crypto::ring::default_provider());
+    let mut config = ClientConfig::builder_with_provider(provider.clone())
+        .with_safe_default_protocol_versions()
+        .expect("TLS versions")
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(AcceptAnyServerCert(provider)))
+        .with_no_client_auth();
     // Offer HTTP/2 via ALPN; servers without it fall back to HTTP/1.1.
+    config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+    Arc::new(config)
+}
+
+/// TLS to WebProbe's own external services (the public OAST server), which
+/// must be the real thing: verified against the WebPKI roots.
+pub fn verified_client_config() -> Arc<ClientConfig> {
+    let roots = RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
     let mut config = ClientConfig::builder().with_root_certificates(roots).with_no_client_auth();
     config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
     Arc::new(config)
+}
+
+#[derive(Debug)]
+struct AcceptAnyServerCert(Arc<rustls::crypto::CryptoProvider>);
+
+impl rustls::client::danger::ServerCertVerifier for AcceptAnyServerCert {
+    fn verify_server_cert(
+        &self,
+        _end_entity: &CertificateDer<'_>,
+        _intermediates: &[CertificateDer<'_>],
+        _server_name: &rustls::pki_types::ServerName<'_>,
+        _ocsp: &[u8],
+        _now: rustls::pki_types::UnixTime,
+    ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
+        Ok(rustls::client::danger::ServerCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        rustls::crypto::verify_tls12_signature(message, cert, dss, &self.0.signature_verification_algorithms)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        rustls::crypto::verify_tls13_signature(message, cert, dss, &self.0.signature_verification_algorithms)
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+        self.0.signature_verification_algorithms.supported_schemes()
+    }
 }
 
 /// A client config that presents a client certificate (mTLS) to upstream
@@ -272,6 +425,27 @@ pub fn client_auth_config(cert_pem: &str, key_pem: &str, roots: RootCertStore) -
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn ca_persists_byte_identical_across_restarts() {
+        let d = std::env::temp_dir().join(format!("wp-ca-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        let a = super::MitmAuthority::load_or_create(Some(d.clone())).unwrap();
+        let b = super::MitmAuthority::load_or_create(Some(d.clone())).unwrap();
+        assert_eq!(a.ca_der(), b.ca_der(), "same CA after a restart");
+        assert_eq!(a.ca_pem(), b.ca_pem());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(d.join("ca.json")).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600, "private key file is owner-only");
+        }
+        // A leaf issued after the restart chains to the saved CA.
+        assert!(b.server_config("example.test").is_ok());
+        let _ = std::fs::remove_dir_all(&d);
+        let c = super::MitmAuthority::load_or_create(None).unwrap();
+        assert_ne!(c.ca_der(), a.ca_der(), "no directory: a fresh in-memory CA");
+    }
+
     use super::{ca_not_before_year, CA_NOT_BEFORE_YEAR};
 
     #[test]

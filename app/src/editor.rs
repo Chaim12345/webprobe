@@ -132,7 +132,7 @@ pub fn line_colour(line: &str, first: bool) -> eframe::egui::Color32 {
             return c(theme::ORANGE_5);
         }
     }
-    c(theme::EDITOR_TEXT)
+    theme::editor_ink()
 }
 
 /// Body colouring for the common structured types.
@@ -144,7 +144,45 @@ pub fn body_colour(body: &str) -> eframe::egui::Color32 {
     if t.starts_with('<') {
         return c(theme::HEADER_BLUE);
     }
-    c(theme::EDITOR_TEXT)
+    theme::editor_ink()
+}
+
+/// The request/status line split into coloured spans: everything before the
+/// query string and the trailing protocol token keep the first-line colour,
+/// query keys and values get Burp's url_key/url_value tokens (its Params view
+/// colours, applied to the raw line).
+pub fn first_line_spans(line: &str) -> Vec<(String, eframe::egui::Color32)> {
+    let accent = c(theme::HEADER_BLUE);
+    let mut out: Vec<(String, eframe::egui::Color32)> = Vec::new();
+    let (pre, q) = match line.split_once('?') {
+        Some((pre, q)) => (pre, Some(q)),
+        None => (line, None),
+    };
+    out.push((pre.to_owned(), accent));
+    let Some(q) = q else { return out };
+    let (pairs, tail) = match q.rsplit_once(' ') {
+        Some((pairs, tail)) => (pairs, Some(tail)),
+        None => (q, None),
+    };
+    for (i, pair) in pairs.split('&').enumerate() {
+        if i > 0 {
+            out.push(("&".to_owned(), accent));
+        }
+        if pair.is_empty() {
+            continue;
+        }
+        match pair.split_once('=') {
+            Some((k, v)) => {
+                out.push((k.to_owned(), theme::url_key()));
+                out.push((format!("={v}"), theme::url_value()));
+            }
+            None => out.push((pair.to_owned(), theme::url_key())),
+        }
+    }
+    if let Some(tail) = tail {
+        out.push((format!(" {tail}"), accent));
+    }
+    out
 }
 
 /// egui has no per-widget font size, so the monospace text style of this `Ui`
@@ -164,6 +202,22 @@ pub fn apply_font_size(ui: &mut Ui, size: f32) {
 ///
 /// When `state.hex` is on, the buffer is shown as hex and edits are decoded back
 /// into the message as they are made, so the two views never disagree.
+/// The "N matches" counter, drawn as a chip on the subtle tint (design token
+/// consumer for theme::subtle_bg / RADIUS_S).
+fn match_count_chip(ui: &mut Ui, n: usize) {
+    egui::Frame::NONE
+        .fill(theme::subtle_bg())
+        .corner_radius(theme::RADIUS_S)
+        .inner_margin(egui::Margin::symmetric(6, 1))
+        .show(ui, |ui| {
+            ui.label(
+                RichText::new(format!("{n} match{}", if n == 1 { "" } else { "es" }))
+                    .size(12.0)
+                    .color(c(if n == 0 { theme::MONO6 } else { theme::ORANGE_5 })),
+            );
+        });
+}
+
 pub fn message_editor(
     ui: &mut Ui,
     id: &str,
@@ -192,11 +246,7 @@ pub fn message_editor(
         );
         if !state.search.is_empty() {
             let n = match_count(text, &state.search);
-            ui.label(
-                RichText::new(format!("{n} match{}", if n == 1 { "" } else { "es" }))
-                    .size(12.0)
-                    .color(c(if n == 0 { theme::MONO6 } else { theme::ORANGE_5 })),
-            );
+            match_count_chip(ui, n);
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let mut size = state.font_size;
@@ -215,14 +265,17 @@ pub fn message_editor(
         });
     });
 
+    // Never ask for an unbounded width: inside a scroll area egui then hands the
+    // text a near-zero wrap width and every character lands on its own line.
+    let text_w = ui.available_width().max(120.0);
     let mut edit = egui::TextEdit::multiline(text)
         .font(egui::TextStyle::Monospace)
         .code_editor()
         .desired_rows(rows)
-        .desired_width(f32::INFINITY)
+        .desired_width(text_w)
         .id_salt(id);
     if !state.wrap {
-        edit = edit.desired_width(f32::INFINITY);
+        edit = edit.desired_width(text_w);
     }
     apply_font_size(ui, state.font_size);
     ui.add(edit)
@@ -252,11 +305,7 @@ pub fn message_view_inner(
         );
         if !state.search.is_empty() {
             let n = match_count(text, &state.search);
-            ui.label(
-                RichText::new(format!("{n} match{}", if n == 1 { "" } else { "es" }))
-                    .size(12.0)
-                    .color(c(if n == 0 { theme::MONO6 } else { theme::ORANGE_5 })),
-            );
+            match_count_chip(ui, n);
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let mut size = state.font_size;
@@ -300,16 +349,24 @@ pub fn message_view_inner(
                             ),
                         );
                     }
-                    ui.label(
-                        RichText::new(line)
-                            .monospace()
-                            .size(size)
-                            .color(line_colour(line, i == 0)),
-                    );
+                    if i == 0 {
+                        for (seg, colour) in first_line_spans(line) {
+                            ui.label(RichText::new(seg).monospace().size(size).color(colour));
+                        }
+                    } else {
+                        ui.label(
+                            RichText::new(line)
+                                .monospace()
+                                .size(size)
+                                .color(line_colour(line, false)),
+                        );
+                    }
                 });
             }
             if !body.is_empty() {
-                ui.add_space(4.0);
+                // One blank line at the message font (~16 px) separates the
+                // headers from the body, as the raw CRLFCRLF does.
+                ui.add_space(theme::SPACE_L);
                 ui.horizontal(|ui| {
                     if gutter > 0.0 {
                         ui.add_sized(
@@ -390,9 +447,22 @@ mod tests {
     fn line_colours_follow_the_message_shape() {
         assert_eq!(line_colour("GET / HTTP/1.1", true), c(theme::HEADER_BLUE));
         assert_eq!(line_colour("Host: a", false), c(theme::ORANGE_5));
-        assert_eq!(line_colour("  folded", false), c(theme::EDITOR_TEXT));
+        assert_eq!(line_colour("  folded", false), theme::editor_ink());
         assert_eq!(body_colour("{\"a\":1}"), c(theme::GOOD));
         assert_eq!(body_colour("<html>"), c(theme::HEADER_BLUE));
-        assert_eq!(body_colour("plain"), c(theme::EDITOR_TEXT));
+        assert_eq!(body_colour("plain"), theme::editor_ink());
+    }
+
+    #[test]
+    fn first_line_spans_colour_the_query() {
+        let spans = first_line_spans("GET /p?a=1&b HTTP/1.1");
+        assert_eq!(spans[0], ("GET /".to_owned(), c(theme::HEADER_BLUE)));
+        assert_eq!(spans[1], ("a".to_owned(), theme::url_key()));
+        assert_eq!(spans[2], ("=1".to_owned(), theme::url_value()));
+        assert_eq!(spans[3], ("&".to_owned(), c(theme::HEADER_BLUE)));
+        assert_eq!(spans[4], ("b".to_owned(), theme::url_key()));
+        assert_eq!(spans[5], (" HTTP/1.1".to_owned(), c(theme::HEADER_BLUE)));
+        // A status line without a query stays one span.
+        assert_eq!(first_line_spans("HTTP/1.1 200 OK").len(), 1);
     }
 }

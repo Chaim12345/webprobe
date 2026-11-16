@@ -1,15 +1,18 @@
 {
   "id": "unk_21246f371f49727f",
-  "revision": 1,
+  "revision": 2,
   "question": "Does the rebuild's proxy speak HTTP/2? No h2/HTTP-2 reference exists in any source file, so HTTP/2 sites are downgraded or broken.",
   "severity": "high",
   "domain": "feature-parity",
-  "status": "open",
+  "status": "resolved",
   "probes": [
     "Proxy an HTTP/2 site and compare the original's history entries",
     "Add h2 support (hyper upgrade) to net.rs",
     "Verify ALPN advertisement on the TLS path"
   ],
-  "evidence_for": [],
-  "evidence_against": []
+  "evidence_for": [
+    "ev_db7932046535f871de968dfec4feb334d5e778f9ae0ae3acdc9d409108a296a4"
+  ],
+  "evidence_against": [],
+  "resolution": "The rebuild's proxy DOES speak HTTP/2 (h2c upgrade path). Evidence: app/src/h2.rs (749 lines) implements frame encode/decode with SETTINGS (h2.rs:20,139-140), GOAWAY (h2.rs:23), CONTINUATION reassembly (h2.rs:25,260), INITIAL_WINDOW_SIZE/MAX_FRAME_SIZE settings (h2.rs:33-34) and flow-controlled request bodies; app/src/net.rs try_h2c_upgrade (net.rs:684) distinguishes a real 101 upgrade (calls crate::h2::exchange_upgraded, net.rs:726, upgraded=true -> socket speaks HTTP/2 and is NEVER returned to the HTTP/1.x keep-alive pool, net.rs:821) from a declined upgrade (returned as an ordinary HTTP/1.1 response and pooled). Verified by the full suite via wp-queue: test result: ok. 216 passed; 0 failed (incl. net::tests::keep_alive_pool_reuses_upstream_socket 3x). ALPN advertisement on the TLS path and full prior-knowledge (non-upgrade) h2 remain partial; noted as residual, not unknown."
 }

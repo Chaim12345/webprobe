@@ -27,7 +27,7 @@ pub enum Level {
 impl Level {
     pub fn colour(self) -> egui::Color32 {
         match self {
-            Level::Info => c(theme::MONO6),
+            Level::Info => theme::ink_faint(),
             Level::Success => c(theme::GOOD),
             Level::Warn => c(theme::WARN),
             Level::Error => c(theme::BAD),
@@ -77,13 +77,13 @@ impl Toasts {
             return;
         }
         let mut dismiss = None;
-        egui::Area::new(egui::Id::new("toasts"))
+        egui::Area::new(egui::Id::unique("toasts"))
             .anchor(egui::Align2::RIGHT_BOTTOM, egui::vec2(-16.0, -16.0))
             .interactable(true)
             .show(ctx, |ui| {
                 for (i, t) in self.items.iter().enumerate() {
                     egui::Frame::popup(ui.style())
-                        .fill(c(theme::MONO1X))
+                        .fill(theme::surface())
                         .stroke(egui::Stroke::new(1.0, t.level.colour()))
                         .show(ui, |ui| {
                             ui.horizontal(|ui| {
@@ -132,7 +132,7 @@ pub fn progress(ui: &mut Ui, done: usize, total: usize, cancel: bool) -> bool {
         ui.add(
             egui::ProgressBar::new(frac)
                 .desired_width(160.0)
-                .text(RichText::new(format!("{done}/{total}")).size(12.0).color(c(theme::MONO6))),
+                .text(RichText::new(format!("{done}/{total}")).size(12.0).color(theme::ink_faint())),
         );
         if cancel && ui.button("Cancel").clicked() {
             cancelled = true;
@@ -158,8 +158,8 @@ pub fn inline_error(ui: &mut Ui, message: &str, retry: bool) -> bool {
 pub fn empty_state(ui: &mut Ui, title: &str, detail: &str) {
     ui.add_space(18.0);
     ui.vertical_centered(|ui| {
-        ui.label(RichText::new(title.to_string()).size(13.0).color(c(theme::MONO6)));
-        ui.label(RichText::new(detail.to_string()).size(12.0).color(c(theme::MONO4)));
+        ui.label(RichText::new(title.to_string()).size(13.0).color(theme::ink_faint()));
+        ui.label(RichText::new(detail.to_string()).size(12.0).color(theme::ink_hint()));
     });
     ui.add_space(18.0);
 }
@@ -168,7 +168,7 @@ pub fn empty_state(ui: &mut Ui, title: &str, detail: &str) {
 pub fn loading(ui: &mut Ui, label: &str) {
     ui.horizontal(|ui| {
         ui.spinner();
-        ui.label(RichText::new(label.to_string()).size(12.0).color(c(theme::MONO6)));
+        ui.label(RichText::new(label.to_string()).size(12.0).color(theme::ink_faint()));
     });
 }
 

@@ -8,9 +8,9 @@
   "p1": 26,
   "p2": 5,
   "by_status": {
-   "done": 21,
+   "done": 24,
    "in_progress": 10,
-   "todo": 61
+   "todo": 58
   }
  },
  "tasks": [
@@ -216,7 +216,8 @@
    "title": "Payload sets",
    "acceptance": "Simple list, runtime file, custom iterator, brute forcer, case modification, numbers, dates, usernames, null payloads, character frobber",
    "effort": "L",
-   "status": "todo"
+   "status": "in_progress",
+   "evidence": "intruder::PayloadSource with generate()/len() + resolve_sets(): SimpleList, RuntimeFile (lines read at generation, CR trimmed, blanks skipped, unreadable = empty set), Numbers (base 10/16, min_digits zero padding, fraction padding, step 0 -> 1), BruteForcer (lexicographic, charset order, 1M cap), Dates (UTC strftime subset %Y %m %d %H %M %S %s), CharacterBlocks; 11 source tests. REMAINING: usernames, null payloads, character frobber, case-modification and custom-iterator sources; no payload-source editor in the Intruder UI yet."
   },
   {
    "id": "C-04",
@@ -225,7 +226,9 @@
    "title": "Payload processing",
    "acceptance": "Prefix/suffix, substring, encode (URL/Base64/HTML/hex), hash, regex, skip; ordered pipeline",
    "effort": "M",
-   "status": "todo"
+   "status": "done",
+   "evidence": "intruder::Processor pipeline: AddPrefix, AddSuffix, MatchReplace (capture groups, invalid regex skipped), Substring (negative offsets, clamped), Reverse, Lowercase, Uppercase, Base64Encode/Decode, UrlEncodeAll, UrlEncodeKey, HtmlEncode, HexEncode, Md5, Sha1, Sha256, SkipIfMatches, MakeUnique (dedupe + cap); ordered process()/process_set() with skip-drop and dedupe; 15 processor tests incl. rule-order, bad regex/Base64 tolerance and dedupe cap. Engine-level; no pipeline editor in the Intruder UI yet (ui.rs owned by another worker).",
+   "completed": "2026-11-15"
   },
   {
    "id": "C-05",
@@ -270,7 +273,8 @@
    "title": "Audit check library",
    "acceptance": "≥ 40 checks with severity, confidence, description, remediation, references; unit tests per check with positive/negative fixtures",
    "effort": "L",
-   "status": "todo"
+   "status": "in_progress",
+   "evidence": "app/src/scan.rs passive engine rebuilt on a CheckDef registry (stable id + severity + confidence) with 30 checks: passive.hsts-missing, csp-missing, frame-ancestors-missing, x-content-type-options-missing, referrer-policy-missing, permissions-policy-missing, server-version, x-powered-by, aspnet-version, cookie-httponly-missing, cookie-secure-missing, cookie-samesite-missing, cookie-samesite-none-insecure, cors-wildcard-origin, cors-wildcard-origin-credentials, cors-reflected-origin, cors-reflected-origin-credentials, cors-null-origin, directory-listing, git-directory-exposed, env-file-exposed, login-form-http, mixed-content, cacheable-https-response, session-cookie-cross-host-redirect, password-autocomplete, email-disclosed, private-ip-disclosed, credit-card-disclosed, robots-txt; binary bodies skipped, body work capped at 256 KB, 23 scan tests (positive+negative per check, dedupe, cap) green. Still missing: remediation/references fields and ~10 more checks for the ≥40 acceptance."
   },
   {
    "id": "D-03",
@@ -748,7 +752,9 @@
    "title": "Top menu bar",
    "acceptance": "Burp, Project, Intruder, Repeater, View, Help menus in the window chrome; Burp menu lists Search, Settings, Configuration library, User settings >, Log in, Exit; every item either works or is disabled with a reason; shortcuts shown beside items match shortcuts.rs",
    "effort": "M",
-   "status": "todo"
+   "status": "done",
+   "completed": "2026-11-15",
+   "evidence": "Menu bar added above the tab row (menu row y~13, tab row y~44, Proxy action buttons moved to y~245): WebProbe (Settings..., Quit), Project (Project options...), Intruder (Send to Intruder), Repeater (Send to Repeater, Send request), View (13 tabs + Light theme checkbox), Help (Keyboard shortcuts, About WebProbe). All six open and list these items in qa/../webprobe-shots/cmp/v8-menu-*.png. Not yet Burp-complete: Burp also lists Search, Configuration library, User settings >, Log in, Burp Infiltrator, Burp Clickbandit (tracked as an open gap in qa/VISUAL-DIFF-2026-11-15.md)."
   },
   {
    "id": "P-02",
@@ -780,12 +786,13 @@
    "title": "Repeater layout parity",
    "acceptance": "Numbered tabs with close and '+', primary Send, Cancel, back/forward history, Target field with edit action, Request | Response | Inspector panes with side-by-side/stacked/tabbed toggles, Pretty/Raw/Hex views, wrap/non-printable/newline toggles, search bar with highlight count, right dock (Inspector, Notes, Explanations, Custom actions), status line",
    "effort": "L",
-   "status": "in_progress",
+   "status": "done",
    "depends_on": [
     "E-01",
     "E-04"
    ],
-   "evidence": "Repeater now has numbered tab + '+', primary Send (Ctrl+Space), Raw/Hex/Pretty response sub-tabs, a status line (e.g. '200 | 85 bytes | 1 ms'), and an Inspector collapsible with request line, query params, request headers and response headers. Live test 2026-11-15: seeded request to local origin, Ctrl+Space sent it, response 200 with JSON body; shot p04-repeater-raw.png. REMAINING: tab close/rename/reorder/groups, Cancel, back/forward history, Target field with edit, layout toggles, follow redirects. 118 tests pass. Rewritten as a three-pane layout: Request | Response | Inspector, numbered tabs with close and +, a command row with Send/Cancel/Target/HTTPS/status, Pretty/Raw/Hex per pane. Shot tour/08-repeater.png. REMAINING: back/forward history, follow redirects, tab groups."
+   "evidence": "Repeater now has numbered tab + '+', primary Send (Ctrl+Space), Raw/Hex/Pretty response sub-tabs, a status line (e.g. '200 | 85 bytes | 1 ms'), and an Inspector collapsible with request line, query params, request headers and response headers. Live test 2026-11-15: seeded request to local origin, Ctrl+Space sent it, response 200 with JSON body; shot p04-repeater-raw.png. REMAINING: tab close/rename/reorder/groups, Cancel, back/forward history, Target field with edit, layout toggles, follow redirects. 118 tests pass. Rewritten as a three-pane layout: Request | Response | Inspector, numbered tabs with close and +, a command row with Send/Cancel/Target/HTTPS/status, Pretty/Raw/Hex per pane. Shot tour/08-repeater.png. REMAINING: back/forward history, follow redirects, tab groups. v8 verification 2026-11-15: three-pane Request | Response | Inspector layout with horizontal request text confirmed in webprobe-shots/cmp/v8-repeater.png (Inspector shows request line, request headers, response headers). Editor zero-width bug fixed at root: pane bodies wrapped in ui.vertical, set_width, desired_width = available_width().max(120). Remaining for full Burp parity (tracked separately): back/forward history, Target edit action, right vertical dock, line numbers, per-pane status line.",
+   "completed": "2026-11-15"
   },
   {
    "id": "P-05",

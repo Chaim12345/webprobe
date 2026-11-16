@@ -9,7 +9,7 @@
 use eframe::egui::{self, RichText, Ui};
 
 use crate::collaborator::{
-    CollaboratorState, InteractionDetail, InteractionKind, Interaction, MAX_INTERACTIONS,
+    CollaboratorState, InteractionDetail, InteractionKind, Interaction,
     MAX_PAYLOADS,
 };
 use crate::theme::{self, c};
@@ -63,16 +63,180 @@ fn listener_notes(ui: &mut Ui, protocol: &str) {
     }
 }
 
+/// Burp's Collaborator tab (live 52685): onboarding until "Get started",
+/// then the client: Copy to clipboard / Poll now / "Include Collaborator
+/// server location", the interactions table and Description / Request to
+/// Collaborator / Response from Collaborator. Server and listener settings
+/// sit behind the gear.
 pub fn show(state: &mut CollaboratorState, ui: &mut egui::Ui) {
-    ui.heading(
-        RichText::new("Collaborator (local)")
-            .size(15.0)
-            .color(c(theme::MONO7)),
-    );
+    if !state.ui_started {
+        ui.add_space(ui.available_height() * 0.25);
+        ui.vertical_centered(|ui| {
+            ui.label(RichText::new(theme::icon::BROADCAST).size(56.0).color(c(0x26649D)));
+            ui.add_space(8.0);
+            ui.label(RichText::new("WebProbe Collaborator").strong().size(16.0).color(theme::ink()));
+            ui.add_space(8.0);
+            ui.label(RichText::new("Collaborator enables you to test whether you can induce an application to interact with an external service via DNS, HTTP, or SMTP. This type of testing makes it easier to discover blind or asynchronous vulnerabilities.").size(12.5).color(theme::ink_dim()));
+            ui.add_space(12.0);
+            ui.horizontal(|ui| {
+                ui.add_space(ui.available_width() / 2.0 - 100.0);
+                if ui.button("Learn more").on_hover_text("Payloads come from a public interactsh server or the loopback listeners").clicked() {
+                    state.ui_settings = true;
+                    state.ui_started = true;
+                }
+                let gs = egui::Button::new(RichText::new("Get started").strong().color(egui::Color32::WHITE)).fill(c(theme::ORANGE_1));
+                if ui.add(gs).clicked() {
+                    state.ui_started = true;
+                }
+            });
+        });
+        return;
+    }
+    let interactions: Vec<Interaction> = state.interactions();
+    ui.horizontal(|ui| {
+        let copy = egui::Button::new(RichText::new("Copy to clipboard").strong().color(egui::Color32::WHITE)).fill(c(theme::ORANGE_1)).min_size(egui::vec2(140.0, 24.0));
+        if ui.add(copy).on_hover_text("Generate a new payload and copy it").clicked() {
+            let p = state.generate_payload();
+            let text = if state.include_server { p.dns_name.clone() } else { p.dns_name.split('.').next().unwrap_or("").to_string() };
+            ui.ctx().copy_text(text.clone());
+            crate::feedback::toast(crate::feedback::Level::Success, format!("Copied {text}"));
+        }
+        ui.checkbox(&mut state.include_server, "Include Collaborator server location");
+        if ui.button("Poll now").clicked() {
+            state.poll_now();
+        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.add_space(8.0);
+            if ui.add(egui::Button::new(RichText::new(theme::icon::GEAR).size(16.0)).frame(false)).on_hover_text("Collaborator server and listeners").clicked() {
+                state.ui_settings = !state.ui_settings;
+            }
+            let server = state.remote_server().map(|d| format!("*.{d}")).unwrap_or_else(|| {
+                if state.http.is_running() || state.dns.is_running() { "loopback listeners (127.0.0.1)".to_string() } else { "not configured".to_string() }
+            });
+            ui.label(RichText::new(format!("Collaborator server: {server}")).size(12.5).color(theme::ink_dim()));
+        });
+    });
+    ui.add_space(6.0);
+    if state.ui_settings {
+        egui::Frame::NONE.fill(theme::chrome()).stroke(egui::Stroke::new(1.0, theme::line())).inner_margin(egui::Margin::same(8)).show(ui, |ui| {
+            settings_panel(state, ui);
+        });
+        ui.add_space(6.0);
+    }
+    let cols = [
+        crate::table::Column::new("#", 50.0),
+        crate::table::Column::new("Time", 150.0),
+        crate::table::Column::new("Type", 70.0),
+        crate::table::Column::new("Payload", 220.0),
+        crate::table::Column::new("Source IP address", 140.0),
+        crate::table::Column::new("Comment", 300.0),
+    ];
+    let mut selected = state.selected;
+    let full = ui.available_height();
+    let mut tbl = state.table.clone();
+    egui_extras::StripBuilder::new(ui)
+        .size(egui_extras::Size::relative(0.45))
+        .size(egui_extras::Size::remainder())
+        .vertical(|mut col| {
+            col.cell(|ui| {
+                let rows: Vec<Interaction> = interactions.iter().rev().cloned().collect();
+                let h = ui.available_height();
+                crate::table::table_body(ui, "collab_rows", &cols, &rows, &mut tbl, 19.0, h, &mut |i, ui| {
+                    let rr = egui::Rect::from_min_size(ui.cursor().min, egui::vec2(ui.available_width(), 19.0));
+                    if selected == Some(i.id) {
+                        ui.painter().rect_filled(rr, 0.0, theme::selection_bg());
+                    }
+                    let row = ui.horizontal(|ui| {
+                        crate::table::cells(ui, &cols, &crate::table::TableState::default(), 19.0, &[
+                            (0, i.id.to_string(), None),
+                            (1, format_clock(i.at), None),
+                            (2, i.kind().label().to_string(), None),
+                            (3, i.token.clone().unwrap_or_default(), None),
+                            (4, i.source.clone(), None),
+                            (5, i.headline(), None),
+                        ]);
+                    }).response.interact(egui::Sense::click());
+                    if row.clicked() {
+                        selected = Some(i.id);
+                    }
+                });
+            });
+            col.cell(|ui| {
+                let Some(i) = selected.and_then(|id| interactions.iter().find(|x| x.id == id)) else {
+                    if interactions.is_empty() {
+                        ui.add_space(10.0);
+                        ui.label(RichText::new(if state.remote_server().is_some() { "No interactions yet. Payloads are polled every 3 seconds; click Poll now to check immediately." } else { "No interactions yet. Copy a payload, use it in a request, then poll. Configure a server with the gear." }).size(12.5).color(theme::ink_dim()));
+                    }
+                    return;
+                };
+                ui.horizontal(|ui| {
+                    if let Some(v) = crate::msgpane::underline_tabs(ui, &["Description", "Request to Collaborator", "Response from Collaborator"], state.detail_tab, 13.0) {
+                        state.detail_tab = v;
+                    }
+                });
+                let _ = full;
+                egui::ScrollArea::vertical().id_salt("collab_detail").auto_shrink([false, false]).show(ui, |ui| match state.detail_tab {
+                    0 => {
+                        let what = match i.kind() {
+                            InteractionKind::Http => "an HTTP request",
+                            InteractionKind::Dns => "a DNS lookup",
+                            InteractionKind::Smtp => "an SMTP connection",
+                        };
+                        ui.label(RichText::new(format!(
+                            "The Collaborator server received {what} for the payload {}. The request was received from IP address {} at {}.",
+                            i.token.clone().unwrap_or_default(), i.source, format_clock(i.at)
+                        )).size(12.5).color(theme::ink_dim()));
+                    }
+                    1 => match &i.detail {
+                        InteractionDetail::Http(http) => http_details(ui, http),
+                        InteractionDetail::Dns(dns) => dns_details(ui, dns),
+                        InteractionDetail::Smtp(smtp) => smtp_details(ui, smtp),
+                    },
+                    _ => {
+                        ui.label(RichText::new("The server's reply is a fixed acknowledgement (HTTP 200 with an empty body, or an A record of 127.0.0.1 for DNS).").size(12.5).color(theme::ink_dim()));
+                    }
+                });
+            });
+        });
+    state.table = tbl;
+    state.selected = selected;
+}
+
+/// Server and listener configuration (the gear in Burp's client).
+fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
     hint(
         ui,
-        "Loopback-only local Collaborator replacement. It records HTTP and DNS interactions that reach these local listeners; it does not use or contact any public DNS/cloud service.",
+        "Use a public interactsh server so targets on the internet can reach the payloads (DNS, HTTP and SMTP, polled every 3 s); the loopback listeners only see traffic from this machine.",
     );
+    ui.add_space(6.0);
+
+    // ------------------------- Public server (interactsh) -------------
+    ui.group(|ui| {
+        ui.label(RichText::new("Public server (interactsh)").size(13.0).strong().color(c(theme::ORANGE)));
+        let active = state.remote_server();
+        ui.horizontal(|ui| {
+            egui::ComboBox::from_id_salt("collab_remote_server")
+                .selected_text(state.remote_choice.clone())
+                .show_ui(ui, |ui| {
+                    for srv in crate::interactsh::DEFAULT_SERVERS {
+                        ui.selectable_value(&mut state.remote_choice, srv.to_string(), srv);
+                    }
+                });
+            if active.is_some() {
+                if ui.button("Stop").clicked() {
+                    state.stop_remote();
+                }
+            } else if ui.button("Use public server").clicked() {
+                let choice = state.remote_choice.clone();
+                match state.start_remote(&choice) {
+                    Ok(d) => crate::feedback::toast(crate::feedback::Level::Info, &format!("Collaborator registered on {d}")),
+                    Err(e) => crate::feedback::toast(crate::feedback::Level::Error, &e),
+                }
+            }
+        });
+        status_label(ui, active.is_some(), "public payloads", active.map(|d| format!("*.{d}")));
+        error_label(ui, state.remote_error());
+    });
     ui.add_space(6.0);
 
     // ------------------------- HTTP listener -------------------------
@@ -231,109 +395,14 @@ pub fn show(state: &mut CollaboratorState, ui: &mut egui::Ui) {
                     }
                 });
         }
-        hint(ui, "Payload URLs are local-only. They are meaningful only when the corresponding listeners are running on 127.0.0.1.");
+        match state.remote_server() {
+            Some(d) => hint(ui, &format!("Payloads resolve publicly under *.{d}: any DNS lookup, HTTP request or mail to user@<payload> is reported here.")),
+            None => hint(ui, "Payload URLs are local-only. They are meaningful only when the corresponding listeners are running on 127.0.0.1."),
+        }
     });
 
     ui.add_space(6.0);
 
-    // -------------------- Observed interactions ----------------------
-    ui.group(|ui| {
-        let interactions: Vec<Interaction> = state.interactions();
-        ui.horizontal(|ui| {
-            ui.label(
-                RichText::new(format!(
-                    "Interactions ({}/{MAX_INTERACTIONS})",
-                    interactions.len()
-                ))
-                .size(13.0)
-                .strong()
-                .color(c(theme::MONO7)),
-            );
-            if !interactions.is_empty() && ui.small_button("Clear all").clicked() {
-                state.clear_interactions();
-            }
-        });
-        if interactions.is_empty() {
-            hint(ui, "No HTTP or DNS interactions captured on these local listeners yet.");
-        } else {
-            let columns = [
-                crate::table::Column::new("Time", 92.0),
-                crate::table::Column::new("Type", 60.0),
-                crate::table::Column::new("Target", 340.0),
-            ];
-            let mut rows: Vec<(String, String, String, Interaction)> = interactions
-                .iter()
-                .map(|i| {
-                    (
-                        format_clock(i.at),
-                        i.kind().label().to_string(),
-                        i.headline(),
-                        i.clone(),
-                    )
-                })
-                .collect();
-            crate::table::sort_rows(&mut rows, &state.table, |row, col| match col {
-                0 => row.0.clone(),
-                1 => row.1.clone(),
-                _ => row.2.clone(),
-            });
-            let mut selected = state.selected;
-            egui::ScrollArea::vertical()
-                .id_salt("collab_interactions")
-                .max_height(280.0)
-                .show(ui, |ui| {
-                    crate::table::data_table(
-                        ui,
-                        "collab_interactions_table",
-                        &columns,
-                        &rows,
-                        &mut state.table,
-                        theme::appearance().1.row_height(),
-                        |(clock, kind, headline, interaction), ui| {
-                            let color = match interaction.kind() {
-                                InteractionKind::Http => c(theme::METHOD_OTHER),
-                                InteractionKind::Dns => c(theme::ORANGE_5),
-                            };
-                            let row_h = theme::appearance().1.row_height();
-                            let row = ui
-                                .horizontal(|ui| {
-                                    crate::table::cell(ui, &columns[0], clock.clone(), Some(c(theme::MONO6)), row_h);
-                                    crate::table::cell(ui, &columns[1], kind.clone(), Some(color), row_h);
-                                    crate::table::cell(ui, &columns[2], headline.clone(), Some(color), row_h);
-                                })
-                                .response
-                                .interact(egui::Sense::click());
-                            if row.clicked() {
-                                selected = Some(interaction.id);
-                            }
-                        },
-                    );
-                });
-            state.selected = selected;
-            // Detail for the selected interaction (falls back to the newest).
-            let detail = state
-                .selected
-                .and_then(|id| interactions.iter().find(|i| i.id == id))
-                .or_else(|| interactions.last());
-            if let Some(interaction) = detail {
-                ui.add_space(4.0);
-                ui.label(
-                    RichText::new(format!(
-                        "id {}  source {}  token {}",
-                        interaction.id,
-                        interaction.source,
-                        interaction.token.as_deref().unwrap_or("(none)")
-                    ))
-                    .size(12.0)
-                    .color(c(theme::MONO6)),
-                );
-                match &interaction.detail {
-                    InteractionDetail::Http(http) => http_details(ui, http),
-                    InteractionDetail::Dns(dns) => dns_details(ui, dns),
-                }
-            }
-        }
-    });
 }
 
 fn http_details(ui: &mut Ui, http: &crate::collaborator::HttpInteraction) {
@@ -378,6 +447,11 @@ fn http_details(ui: &mut Ui, http: &crate::collaborator::HttpInteraction) {
                 .color(c(theme::EDITOR_TEXT)),
         );
     }
+}
+
+fn smtp_details(ui: &mut Ui, smtp: &crate::collaborator::SmtpInteraction) {
+    ui.label(RichText::new(format!("MAIL FROM: {}", smtp.from)).monospace().size(12.0).color(c(theme::EDITOR_TEXT)));
+    ui.label(RichText::new(&smtp.conversation).monospace().size(12.0).color(c(theme::MONO6)));
 }
 
 fn dns_details(ui: &mut Ui, dns: &crate::collaborator::DnsInteraction) {

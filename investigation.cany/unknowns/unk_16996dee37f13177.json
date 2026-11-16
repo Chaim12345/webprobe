@@ -1,14 +1,15 @@
 {
   "id": "unk_16996dee37f13177",
-  "revision": 1,
+  "revision": 4,
   "question": "Does the proxy intercept handle WebSocket frames and non-HTTP traffic, or only HTTP messages? Proxy is 30 lines.",
   "severity": "medium",
   "domain": "feature-parity",
-  "status": "open",
+  "status": "resolved",
   "probes": [
     "Intercept a WebSocket frame in the original",
     "Compare with the rebuild's intercept view"
   ],
   "evidence_for": [],
-  "evidence_against": []
+  "evidence_against": [],
+  "resolution": "RESOLVED (wave 29, 2026-11-15): parity of behavior classes established. WebProbe: HTTP intercepted+recorded; WebSocket frames intercepted both directions (waves 21-22); non-HTTP CONNECT tunnels byte-relayed untouched (relay_tunnel, TLS pass-through + bypassed hosts) and logged. Burp behaves the same: intercepts HTTP/WS, relays unrecognized tunneled traffic without interception (SSL pass-through). Neither intercepts arbitrary non-HTTP protocols - no divergence. All parts of the original question (WS frames, non-HTTP traffic) are answered; the unknown is closed."
 }

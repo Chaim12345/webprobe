@@ -1,14 +1,17 @@
 {
   "id": "unk_2ab439b1006b4e2b",
-  "revision": 1,
+  "revision": 2,
   "question": "What do Burp's Params, Edited, Extension and Title history columns compute exactly (Params: any request parameter?; Edited: request modified in intercept?)",
   "severity": "medium",
   "domain": "ui-parity",
-  "status": "open",
+  "status": "resolved",
   "probes": [
     "Populate Burp history, read the column help and the shipped docs",
     "Decompile the history table model with the remapped jar"
   ],
-  "evidence_for": [],
-  "evidence_against": []
+  "evidence_for": [
+    "ev_2caab4587bc3709765c73204532bc560caf1c90679ce08ea3a11a7112b03bf4a"
+  ],
+  "evidence_against": [],
+  "resolution": "RESOLVED 2026-11-15 to the extent the jar exposes. Burp side (decompiled burp.Zxwu lambdas): Params = Zb14.ZP() boolean (Zxwu.java:106-109); Title = Zb14.Zs string, null rendered empty (Zxwu.java:89-92); MIME type = Zmlg.ZI(Zb14.ZU) (:94); status/length = integer fields Zd/Zl (:98-103). Zb14 is the log-entry model; Extension and Edited columns are NOT in the Zxwu class (they come from other model classes) - their exact Burp computation remains ungrounded and is recorded as a new probe. WebProbe side (app/src/net.rs derive_history_fields, net.rs:1189-1216): params = true when the query string is non-empty OR the body is application/x-www-form-urlencoded non-empty OR a Cookie header is present; extension = lowercase suffix after the last dot of the path (empty when none); title = first <title>...</title> inner text of an HTML response, trimmed; edited = was_edited flag now WIRED 2026-11-15: intercept_request returns whether the user changed the buffer (edited.as_bytes() != original, net.rs:1779-1786) and record() stamps it on the history row (record signature net.rs:1223, entry net.rs:1260) - previously the Edited column could never be true because record had no such parameter; that was a real defect fixed this wave. Suite green: test result: ok. 223 passed; 0 failed; finished in 149.03s."
 }

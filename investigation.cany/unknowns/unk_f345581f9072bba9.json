@@ -1,14 +1,17 @@
 {
   "id": "unk_f345581f9072bba9",
-  "revision": 1,
+  "revision": 2,
   "question": "Does the rebuild generate out-of-band (Collaborator) payloads for the scanner, or only use Collaborator as a passive view? collaborator.rs is large but the scanner does not reference it.",
   "severity": "medium",
   "domain": "feature-parity",
-  "status": "open",
+  "status": "resolved",
   "probes": [
     "Run a Collaborator-based check in the original",
     "Wire scanner checks to the existing Collaborator client"
   ],
-  "evidence_for": [],
-  "evidence_against": []
+  "evidence_for": [
+    "ev_2caab4587bc3709765c73204532bc560caf1c90679ce08ea3a11a7112b03bf4a"
+  ],
+  "evidence_against": [],
+  "resolution": "RESOLVED 2026-11-15 (wave 10): the scanner DOES generate out-of-band Collaborator payloads. Run active scan generates one payload per URL parameter (ui.rs calls collab_state.generate_payload()), passes (param_name, token, marker) into scan.rs start_active_scan, which adds an oob probe replacing the parameter value with the payload and registers (token, pre-built issue) in Shared.oob_pending (net.rs); the UI-frame matcher ui.rs sync_oob_issues (Scanner + Dashboard views) matches observed Collaborator interactions against pending tokens and raises the issue with the interaction headline and source. The Collaborator remains usable as a passive view alongside. Suite green: test result: ok. 223 passed; 0 failed (wave 10 run: 114.59s)."
 }

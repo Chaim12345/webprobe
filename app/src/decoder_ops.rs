@@ -65,16 +65,8 @@ pub fn pipeline(input: &str, ops: &[Op]) -> Result<String, String> {
 // ---------- URL ----------
 
 fn url_encode(input: &str) -> String {
-    let mut out = String::with_capacity(input.len() + 8);
-    for b in input.bytes() {
-        // RFC 3986 unreserved: the only bytes left as-is.
-        if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'~') {
-            out.push(b as char);
-        } else {
-            out.push_str(&format!("%{b:02X}"));
-        }
-    }
-    out
+    // RFC 3986 unreserved passthrough, shared with the request builders.
+    util::url_encode_key(input)
 }
 
 /// Decode `%XX` escapes, `+` as a space; a malformed escape is kept verbatim, as

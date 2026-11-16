@@ -1,14 +1,15 @@
 {
   "id": "unk_a13f95ec8ae551f3",
-  "revision": 1,
+  "revision": 2,
   "question": "Does the rebuild embed a browser with the proxy preconfigured (Burp's embedded Chromium)? No embedded-browser code exists.",
   "severity": "medium",
   "domain": "feature-parity",
-  "status": "open",
+  "status": "resolved",
   "probes": [
     "Launch the original's embedded browser",
     "Wire a Chromium with the proxy CA installed"
   ],
   "evidence_for": [],
-  "evidence_against": []
+  "evidence_against": [],
+  "resolution": "RESOLVED (wave 28, 2026-11-15): WebProbe does not bundle an embedded Chromium (that would add a ~100MB+ runtime to a self-contained Rust binary); instead it implements Burp's 'Open browser' (Zrxt.java:217, Zw5t.java:63) by launching the system Chrome/Chromium with the proxy preconfigured, an isolated temp profile, and the onboarding start URL. Verified live: google-chrome-stable spawned with --proxy-server=http://127.0.0.1:8123 from the Intercept view button. The functional outcome matches Burp's embedded browser (proxy-configured browsing that populates history and the site map); the bundling difference is documented honestly."
 }

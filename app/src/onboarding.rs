@@ -210,11 +210,11 @@ pub fn setup_page(port: u16) -> String {
 h1{{margin:0 0 .25em}}code,pre{{font-family:ui-monospace,monospace;background:#f2f4f6;padding:.1em .35em;border-radius:3px}}\
 pre{{padding:.8em;overflow:auto}}a{{color:#0b5cad}}li{{margin:.35em 0}}</style></head><body>\
 <h1>WebProbe proxy</h1>\
-<p>Your browser reached WebProbe through the proxy on <code>127.0.0.1:{port}</code>. \
+<p>Your browser reached WebProbe through its proxy (main listener <code>127.0.0.1:{port}</code>; WebProbe's own browser uses a private listener). \
 If you are reading this, the listener is running and your browser is configured correctly.</p>\
 <h2>1. Install the CA certificate</h2>\
-<p>WebProbe signs the per-host HTTPS certificates with a local CA whose private key never leaves this process. \
-Trust it to browse HTTPS without warnings:</p>\
+<p>WebProbe signs the per-host HTTPS certificates with its own CA, kept on this machine (owner-only file) and reused across restarts. \
+WebProbe's built-in browser already trusts it. For any other browser or device, trust it once to browse HTTPS without warnings:</p>\
 <ul><li><a href=\"/webprobe-ca.pem\">Download the CA certificate (PEM)</a> &mdash; for Firefox, macOS Keychain, Android</li>\
 <li><a href=\"/webprobe-ca.der\">Download the CA certificate (DER)</a> &mdash; for Windows, iOS, Java</li></ul>\
 <h2>2. Check the listener</h2>\
