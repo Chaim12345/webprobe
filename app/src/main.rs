@@ -11,7 +11,6 @@ mod collaborator;
 mod crawl;
 mod collaborator_ui;
 mod decoder_ops;
-mod editor;
 mod ext_host;
 mod feedback;
 mod gl_env;
@@ -109,12 +108,8 @@ pub struct App {
     /// First-run setup panel dismissed for this session (M-07).
     pub onboarding_hidden: bool,
     /// Shared editor state for each message editor/view (M-03).
-    pub detail_editor: editor::EditorState,
-    pub intercept_editor: editor::EditorState,
-    pub intr_editor: editor::EditorState,
-    pub rep_editor: editor::EditorState,
-    pub seq_editor: editor::EditorState,
-    pub dec_editor: editor::EditorState,
+    /// Decoder input shown as hex.
+    pub dec_hex: bool,
     pub intercept_edit: String,
     pub detail_sub: usize,
     /// Burp message panes and Inspector under the Proxy history.
@@ -228,6 +223,10 @@ pub struct App {
     pub intr_attack: intruder::AttackType,
     /// Raw payload text per position, one payload per line (C-03 UI side).
     pub intr_sets: Vec<String>,
+    /// Payload-type configuration, one per payload position.
+    pub intr_sources: Vec<intruder::PayloadSource>,
+    /// Ordered payload-processing pipeline applied to every resolved set.
+    pub intr_rules: Vec<intruder::Processor>,
     pub dec_input: String,
     pub dec_results: Vec<(String, String)>,
     /// Latest Decoder output (P-07).
@@ -248,6 +247,7 @@ pub struct App {
     pub search_query: String,
     pub search_case: bool,
     pub search_results: Vec<analysis::SearchHit>,
+    pub project_open: bool,
     pub project_path: String,
     pub project_status: String,
     pub collab_state: collaborator::CollaboratorState,
@@ -798,12 +798,7 @@ fn main() {
         settings_open,
         settings_help,
         onboarding_hidden: false,
-        detail_editor: editor::EditorState::default(),
-        intercept_editor: editor::EditorState::default(),
-        intr_editor: editor::EditorState::default(),
-        rep_editor: editor::EditorState::default(),
-        seq_editor: editor::EditorState::default(),
-        dec_editor: editor::EditorState::default(),
+        dec_hex: false,
         intercept_edit: String::new(),
         detail_sub: 0,
         req_pane: msgpane::PaneState::default(),
@@ -895,6 +890,8 @@ fn main() {
         intr_payloads: "admin\n' OR 1=1--\ntest".to_string(),
         intr_attack: intruder::AttackType::Sniper,
         intr_sets: vec![String::new()],
+        intr_sources: vec![intruder::PayloadSource::SimpleList { items: Vec::new() }],
+        intr_rules: Vec::new(),
         dec_input: String::new(),
         dec_results: Vec::new(),
         dec_output: String::new(),
@@ -914,6 +911,7 @@ fn main() {
         search_query: String::new(),
         search_case: false,
         search_results: Vec::new(),
+        project_open: false,
         project_path,
         project_status: String::new(),
         collab_state,

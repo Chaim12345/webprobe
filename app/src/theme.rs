@@ -179,18 +179,6 @@ pub fn ink_hint() -> Color32 {
 pub fn header_ink() -> Color32 {
     Tokens::current().header_ink
 }
-/// Text inside a message editor.
-pub fn editor_ink() -> Color32 {
-    Tokens::current().editor_ink
-}
-/// Query-parameter name in the Params view.
-pub fn url_key() -> Color32 {
-    Tokens::current().url_key
-}
-/// Query-parameter value in the Params view.
-pub fn url_value() -> Color32 {
-    Tokens::current().url_value
-}
 
 fn is_light() -> bool {
     appearance().0 == Palette::Light
@@ -324,7 +312,6 @@ pub const SPACE_L: f32 = 16.0;
 pub const SPACE_XL: f32 = 24.0;
 
 /// Corner radii.
-pub const RADIUS_S: f32 = 2.0;
 pub const RADIUS_M: f32 = 4.0;
 
 /// Typography scale.
@@ -608,7 +595,6 @@ mod tests {
         '\u{25BE}', // small down triangle
         '\u{2195}', // up-down arrow (table sort hint)
         '\u{25BC}', // down triangle (table sort arrow)
-        '\u{2699}', // gear (Proxy settings tab, search options)
         '\u{25BD}', // filter funnel stand-in
         '\u{25B4}', // small up triangle (Inspector collapse)
         '\u{203A}', // single right angle quote (Inspector row)
@@ -617,9 +603,10 @@ mod tests {
 
     fn missing(ctx: &egui::Context) -> Vec<char> {
         // Fonts are (re)built at the start of a pass.
-        let _ = ctx.run(egui::RawInput::default(), |_| {});
+        let mut out = ctx.run_ui(egui::RawInput::default(), |_| {});
+        out.textures_delta.clear();
         let font = egui::FontId::proportional(13.0);
-        ctx.fonts(|f| UI_GLYPHS.iter().copied().filter(|&c| !f.has_glyph(&font, c)).collect())
+        ctx.fonts_mut(|f| UI_GLYPHS.iter().copied().filter(|&c| !f.has_glyph(&font, c)).collect())
     }
 
     #[test]

@@ -1282,7 +1282,7 @@ pub fn start_active_scan(shared: Arc<Shared>, entry: HistEntry, oob: &[(String, 
                             "Certain",
                             &entry,
                             name,
-                            format!("Payload {:?} broke out of reflection context {} and executed.", hit.payload, hit.context),
+                            format!("Payload {:?} broke out of reflection context {} and executed. Signature {:?} survived unencoded.", hit.payload, hit.context, hit.signature),
                         )],
                     );
                 }

@@ -398,7 +398,7 @@ fn search_row(ui: &mut Ui, id: &str, st: &mut PaneState, highlights: usize) {
                 "Type to highlight matches in this message. Use the arrows to step through them; the gear sets search options.",
             );
             ui.add_space(2.0);
-            ui.menu_button(RichText::new("\u{2699}").size(13.0), |ui| {
+            ui.menu_button(RichText::new(crate::theme::icon::GEAR).size(13.0), |ui| {
                 ui.checkbox(&mut st.case_sensitive, "Case sensitive");
             });
             ui.add_space(2.0);

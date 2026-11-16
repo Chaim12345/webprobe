@@ -293,7 +293,6 @@ pub fn cors_detail(f: &CorsFinding) -> String {
     if !f.request.is_empty() {
         let esc = |t: &str| t.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
         let req = String::from_utf8_lossy(&f.request);
-        let resp = String::from_utf8_lossy(&f.response);
         let p = crate::util::parse_http(&f.response);
         s.push_str("<br><br><b>Proof request</b> (attacker-controlled origin):");
         s.push_str(&format!("<pre>{}</pre>", esc(&req.lines().take(10).collect::<Vec<_>>().join("\n"))));

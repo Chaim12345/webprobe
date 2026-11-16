@@ -98,6 +98,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
         run_shortcut(app, idx);
     }
     settings_window(app, &ctx);
+    project_window(app, &ctx);
     app.toasts.show(&ctx);
 
     // P-01: Burp's menu row sits above the tab row. Only items that do
@@ -132,7 +133,25 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                     ui.spacing_mut().item_spacing.y = 0.0;
                     ui.spacing_mut().button_padding.y = 4.0;
                     if ui.button("Project options\u{2026}").clicked() {
-                        app.settings_open = true;
+                        app.project_open = true;
+                        ui.close();
+                    }
+                    if ui.button("Save project").clicked() {
+                        let data = crate::project::snapshot(app);
+                        match crate::project::save(std::path::Path::new(&app.project_path), &data) {
+                            Ok(()) => crate::feedback::toast(crate::feedback::Level::Success, format!("Project saved to {}", app.project_path)),
+                            Err(e) => crate::feedback::toast(crate::feedback::Level::Error, format!("Save failed: {e}")),
+                        }
+                        ui.close();
+                    }
+                    if ui.button("Restore project").clicked() {
+                        match crate::project::load(std::path::Path::new(&app.project_path)) {
+                            Ok(data) => {
+                                crate::project::restore(&data, app);
+                                crate::feedback::toast(crate::feedback::Level::Success, format!("Project restored from {}", app.project_path));
+                            }
+                            Err(e) => crate::feedback::toast(crate::feedback::Level::Error, format!("Restore failed: {e}")),
+                        }
                         ui.close();
                     }
                 });
@@ -1320,6 +1339,13 @@ fn scanner(app: &mut App, ui: &mut Ui) {
 pub(crate) fn add_marker(text: &str, sel: (usize, usize)) -> String {
     let chars: Vec<char> = text.chars().collect();
     let (a, b) = (sel.0.min(chars.len()), sel.1.min(chars.len()));
+    let byte_at = |n: usize| chars.iter().take(n).map(|c| c.len_utf8()).sum::<usize>();
+    // Delegate to the Intruder engine's marker insertion (byte offsets; it
+    // rejects selections that overlap an existing marker) and fall back to
+    // the permissive local behaviour on that error.
+    if let Ok(out) = intruder::add_marker(text, byte_at(a), byte_at(b)) {
+        return out;
+    }
     let mut out: String = chars[..a].iter().collect();
     out.push('\u{00A7}');
     out.extend(chars[a..b].iter());
@@ -1338,6 +1364,193 @@ fn with_target_host(req: &str, target: &str) -> String {
         .or_else(|| auth.strip_suffix(":443").filter(|_| target.starts_with("https://")))
         .unwrap_or(auth);
     String::from_utf8_lossy(&net::replace_or_add_header(req.as_bytes(), "Host", auth)).into_owned()
+}
+
+/// Default configuration for each Burp payload type (dropdown order).
+fn payload_type_default(kind: usize) -> intruder::PayloadSource {
+    use intruder::{NumberBase, PayloadSource as S};
+    match kind {
+        1 => S::RuntimeFile { path: String::new() },
+        2 => S::Numbers { from: 1, to: 100, step: 1, base: NumberBase::Decimal, min_digits: 1, fraction_digits: 0 },
+        3 => S::BruteForcer { charset: "abcdefghijklmnopqrstuvwxyz0123456789".into(), min_len: 1, max_len: 3 },
+        4 => S::Dates { from: 1_700_000_000, to: 1_700_086_400, step_secs: 86_400, format: "%Y-%m-%d".into() },
+        5 => S::CharacterBlocks { base: "A".into(), min_len: 1, max_len: 3 },
+        _ => S::SimpleList { items: Vec::new() },
+    }
+}
+
+fn payload_type_hint(src: &intruder::PayloadSource) -> String {
+    use intruder::PayloadSource as S;
+    match src {
+        S::SimpleList { .. } => "This payload type lets you configure a simple list of strings that are used as payloads.".into(),
+        S::RuntimeFile { .. } => "Reads payloads from a file, one per line, each time the attack is prepared.".into(),
+        S::Numbers { .. } => "Generates a sequence of numbers, in decimal, hexadecimal, octal or binary.".into(),
+        S::BruteForcer { .. } => "Generates every combination of the given character set within the length range.".into(),
+        S::Dates { .. } => "Generates UTC timestamps between the two dates, formatted with the given pattern.".into(),
+        S::CharacterBlocks { .. } => "Repeats the base string and truncates it to each length in the range.".into(),
+    }
+}
+
+/// Per-type configuration editors (SimpleList is edited as text by the caller).
+fn payload_type_editor(app: &mut App, ui: &mut egui::Ui, set_n: usize) {
+    use intruder::{NumberBase, PayloadSource as S};
+    let src = &mut app.intr_sources[set_n];
+    match src {
+        S::SimpleList { .. } => {}
+        S::RuntimeFile { path } => {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("Payload file:").size(12.5).color(theme::ink()));
+                ui.add(egui::TextEdit::singleline(path).hint_text("One payload per line").desired_width(ui.available_width() - 8.0));
+            });
+        }
+        S::Numbers { from, to, step, base, min_digits, fraction_digits } => {
+            egui::Grid::new("intr_numbers").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
+                ui.label(RichText::new("From:").size(12.5).color(theme::ink()));
+                ui.add(egui::DragValue::new(from));
+                ui.end_row();
+                ui.label(RichText::new("To:").size(12.5).color(theme::ink()));
+                ui.add(egui::DragValue::new(to));
+                ui.end_row();
+                ui.label(RichText::new("Step:").size(12.5).color(theme::ink()));
+                ui.add(egui::DragValue::new(step).range(1..=1_000_000));
+                ui.end_row();
+                ui.label(RichText::new("Base:").size(12.5).color(theme::ink()));
+                egui::ComboBox::from_id_salt("intr_base").width(140.0).selected_text(base.label()).show_ui(ui, |ui| {
+                    for b in [NumberBase::Decimal, NumberBase::Hex, NumberBase::Octal, NumberBase::Binary] {
+                        ui.selectable_value(base, b, b.label());
+                    }
+                });
+                ui.end_row();
+                ui.label(RichText::new("Min integer digits:").size(12.5).color(theme::ink()));
+                ui.add(egui::DragValue::new(min_digits).range(0..=18));
+                ui.end_row();
+                ui.label(RichText::new("Min fraction digits:").size(12.5).color(theme::ink()));
+                ui.add(egui::DragValue::new(fraction_digits).range(0..=6));
+                ui.end_row();
+            });
+        }
+        S::BruteForcer { charset, min_len, max_len } => {
+            egui::Grid::new("intr_brute").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
+                ui.label(RichText::new("Character set:").size(12.5).color(theme::ink()));
+                ui.add(egui::TextEdit::singleline(charset).desired_width(220.0));
+                ui.end_row();
+                ui.label(RichText::new("Min length:").size(12.5).color(theme::ink()));
+                ui.add(egui::DragValue::new(min_len).range(1..=12));
+                ui.end_row();
+                ui.label(RichText::new("Max length:").size(12.5).color(theme::ink()));
+                ui.add(egui::DragValue::new(max_len).range(1..=12));
+                ui.end_row();
+            });
+        }
+        S::Dates { from, to, step_secs, format } => {
+            egui::Grid::new("intr_dates").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
+                ui.label(RichText::new("From (unix):").size(12.5).color(theme::ink()));
+                ui.add(egui::DragValue::new(from).speed(3600.0));
+                ui.end_row();
+                ui.label(RichText::new("To (unix):").size(12.5).color(theme::ink()));
+                ui.add(egui::DragValue::new(to).speed(3600.0));
+                ui.end_row();
+                ui.label(RichText::new("Step (secs):").size(12.5).color(theme::ink()));
+                ui.add(egui::DragValue::new(step_secs).range(1..=31_536_000));
+                ui.end_row();
+                ui.label(RichText::new("Format:").size(12.5).color(theme::ink()));
+                ui.add(egui::TextEdit::singleline(format).hint_text("%Y-%m-%d").desired_width(160.0));
+                ui.end_row();
+            });
+        }
+        S::CharacterBlocks { base, min_len, max_len } => {
+            egui::Grid::new("intr_blocks").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
+                ui.label(RichText::new("Base string:").size(12.5).color(theme::ink()));
+                ui.add(egui::TextEdit::singleline(base).desired_width(220.0));
+                ui.end_row();
+                ui.label(RichText::new("Min length:").size(12.5).color(theme::ink()));
+                ui.add(egui::DragValue::new(min_len).range(1..=1_000_000));
+                ui.end_row();
+                ui.label(RichText::new("Max length:").size(12.5).color(theme::ink()));
+                ui.add(egui::DragValue::new(max_len).range(1..=1_000_000));
+                ui.end_row();
+            });
+        }
+    }
+}
+
+/// Every Processor variant with a sensible default, for the "Add rule" menu.
+fn processor_defaults() -> Vec<intruder::Processor> {
+    use intruder::Processor as R;
+    vec![
+        R::AddPrefix(String::new()),
+        R::AddSuffix(String::new()),
+        R::MatchReplace { regex: String::new(), replacement: String::new() },
+        R::Substring { start: 0, end: -1 },
+        R::Reverse,
+        R::Lowercase,
+        R::Uppercase,
+        R::Base64Encode,
+        R::Base64Decode,
+        R::UrlEncodeAll,
+        R::UrlEncodeKey,
+        R::HtmlEncode,
+        R::HexEncode,
+        R::Md5,
+        R::Sha1,
+        R::Sha256,
+        R::SkipIfMatches { regex: String::new() },
+        R::MakeUnique { max: 0 },
+    ]
+}
+
+/// Burp-style payload-processing rules list: per-rule parameter editors plus
+/// an "Add rule" menu over every Processor variant.
+fn payload_rules_ui(app: &mut App, ui: &mut egui::Ui) {
+    use intruder::Processor as R;
+    ui.label(RichText::new("Payload processing").strong().size(13.0).color(theme::ink()));
+    if app.intr_rules.is_empty() {
+        ui.label(RichText::new("No rules. Payloads are used exactly as generated.").size(12.0).color(theme::ink_dim()));
+    }
+    let mut remove: Option<usize> = None;
+    for (i, rule) in app.intr_rules.iter_mut().enumerate() {
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(rule.label()).size(12.0).color(theme::ink()));
+            match rule {
+                R::AddPrefix(s) | R::AddSuffix(s) => {
+                    ui.add(egui::TextEdit::singleline(s).desired_width(160.0));
+                }
+                R::MatchReplace { regex, replacement } => {
+                    ui.add(egui::TextEdit::singleline(regex).hint_text("regex").desired_width(140.0));
+                    ui.label(RichText::new("\u{2192}").size(12.0).color(theme::ink_dim()));
+                    ui.add(egui::TextEdit::singleline(replacement).hint_text("replace").desired_width(100.0));
+                }
+                R::Substring { start, end } => {
+                    ui.label(RichText::new("from").size(12.0).color(theme::ink_dim()));
+                    ui.add(egui::DragValue::new(start));
+                    ui.label(RichText::new("to").size(12.0).color(theme::ink_dim()));
+                    ui.add(egui::DragValue::new(end));
+                }
+                R::SkipIfMatches { regex } => {
+                    ui.add(egui::TextEdit::singleline(regex).hint_text("regex").desired_width(160.0));
+                }
+                R::MakeUnique { max } => {
+                    ui.label(RichText::new("max").size(12.0).color(theme::ink_dim()));
+                    ui.add(egui::DragValue::new(max).range(0..=1_000_000));
+                }
+                _ => {}
+            }
+            if ui.small_button(theme::icon::X).on_hover_text("Remove rule").clicked() {
+                remove = Some(i);
+            }
+        });
+    }
+    if let Some(i) = remove {
+        app.intr_rules.remove(i);
+    }
+    egui::ComboBox::from_id_salt("intr_rule_add").width(180.0).selected_text("Add rule ...").show_ui(ui, |ui| {
+        for rule in processor_defaults() {
+            let name = rule.label();
+            if ui.selectable_label(false, name).clicked() {
+                app.intr_rules.push(rule);
+            }
+        }
+    });
 }
 
 fn intruder(app: &mut App, ui: &mut Ui) {
@@ -1383,13 +1596,19 @@ fn intruder(app: &mut App, ui: &mut Ui) {
     let positions = intruder::Template::parse(&app.intr_req).map(|t| t.positions()).unwrap_or(0);
     while app.intr_sets.len() < positions.max(1) {
         app.intr_sets.push(String::new());
+        app.intr_sources.push(intruder::PayloadSource::SimpleList { items: Vec::new() });
     }
     let needed = app.intr_attack.sets_needed(positions).max(1);
-    let sets: Vec<Vec<String>> = app
-        .intr_sets
+    // SimpleList is edited as text in `intr_sets`; sync it into the source
+    // config, then resolve every set and run the processing pipeline.
+    for (n, src) in app.intr_sources.iter_mut().enumerate().take(needed) {
+        if let intruder::PayloadSource::SimpleList { items } = src {
+            *items = intruder::read_payload_lines(app.intr_sets.get(n).map(String::as_str).unwrap_or(""));
+        }
+    }
+    let sets: Vec<Vec<String>> = intruder::resolve_sets(&app.intr_sources[..needed.min(app.intr_sources.len())])
         .iter()
-        .take(needed)
-        .map(|text| text.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect())
+        .map(|set| intruder::process_set(set, &app.intr_rules))
         .collect();
 
     let side_w = if app.intr_dock < 3 { 400.0 } else { 0.0 };
@@ -1530,13 +1749,20 @@ fn intruder(app: &mut App, ui: &mut Ui) {
                                 });
                                 ui.end_row();
                                 ui.label(RichText::new("Payload type:").size(12.5).color(theme::ink()));
-                                ui.label(RichText::new("Simple list").size(12.5).color(theme::ink_dim()));
+                                egui::ComboBox::from_id_salt("intr_ptype").width(200.0).selected_text(app.intr_sources[set_n].label()).show_ui(ui, |ui| {
+                                    for (kind, name) in [(0, "Simple list"), (1, "Runtime file"), (2, "Numbers"), (3, "Brute forcer"), (4, "Dates"), (5, "Character blocks")] {
+                                        if ui.selectable_label(std::mem::discriminant(&app.intr_sources[set_n]) == std::mem::discriminant(&payload_type_default(kind)), name).clicked() {
+                                            app.intr_sources[set_n] = payload_type_default(kind);
+                                        }
+                                    }
+                                });
                                 ui.end_row();
                                 let count = sets.get(set_n).map(Vec::len).unwrap_or(0);
                                 let lens: Vec<usize> = sets.iter().map(Vec::len).collect();
                                 let reqs = intruder::count(app.intr_attack, positions, &lens).map(|n| n.to_string()).unwrap_or_else(|| "too many".into());
                                 ui.label(RichText::new("Payload count:").size(12.5).color(theme::ink()));
-                                ui.label(RichText::new(count.to_string()).size(12.5).color(theme::ink_dim()));
+                                let cap = if count >= intruder::MAX_PAYLOADS { format!("{count} (capped at {})", intruder::MAX_PAYLOADS) } else { count.to_string() };
+                                ui.label(RichText::new(cap).size(12.5).color(theme::ink_dim()));
                                 ui.end_row();
                                 ui.label(RichText::new("Request count:").size(12.5).color(theme::ink()));
                                 ui.label(RichText::new(reqs).size(12.5).color(theme::ink_dim()));
@@ -1544,8 +1770,10 @@ fn intruder(app: &mut App, ui: &mut Ui) {
                             });
                             ui.add_space(10.0);
                             ui.label(RichText::new("Payload configuration").strong().size(13.0).color(theme::ink()));
-                            ui.label(RichText::new("This payload type lets you configure a simple list of strings that are used as payloads.").size(12.0).color(theme::ink_dim()));
+                            ui.label(RichText::new(payload_type_hint(&app.intr_sources[set_n])).size(12.0).color(theme::ink_dim()));
                             ui.add_space(6.0);
+                            let simple = matches!(app.intr_sources[set_n], intruder::PayloadSource::SimpleList { .. });
+                            if simple {
                             ui.horizontal_top(|ui| {
                                 ui.vertical(|ui| {
                                     ui.set_width(96.0);
@@ -1555,8 +1783,9 @@ fn intruder(app: &mut App, ui: &mut Ui) {
                                     }
                                     if ui.add_sized([90.0, 22.0], egui::Button::new("Load ...")).on_hover_text("Load a newline-separated file (path below)").clicked() {
                                         if let Ok(t) = std::fs::read_to_string(app.intr_load_path.trim()) {
-                                            if !set.is_empty() && !set.ends_with('\n') { set.push('\n'); }
-                                            set.push_str(&t);
+                                            let mut lines: Vec<String> = set.lines().map(str::to_string).collect();
+                                            lines.extend(intruder::read_payload_lines(&t));
+                                            *set = lines.join("\n");
                                         } else {
                                             feedback::toast(feedback::Level::Error, "Could not read the payload file");
                                         }
@@ -1594,6 +1823,11 @@ fn intruder(app: &mut App, ui: &mut Ui) {
                                 ui.add_space(100.0);
                                 ui.add(egui::TextEdit::singleline(&mut app.intr_load_path).hint_text("File to load (Load ...)").desired_width(ui.available_width() - 8.0));
                             });
+                            } else {
+                                payload_type_editor(app, ui, set_n);
+                            }
+                            ui.add_space(10.0);
+                            payload_rules_ui(app, ui);
                         });
                         if app.intr_paste_pending {
                             app.intr_paste_pending = false;
@@ -2043,7 +2277,7 @@ fn decoder(app: &mut App, ui: &mut Ui) {
         for k in 0..stages {
             ui.horizontal_top(|ui| {
                 let w = (ui.available_width() - 230.0).max(200.0);
-                let hex = if k == 0 { app.dec_editor.hex } else { app.dec_chain[k - 1].1 };
+                let hex = if k == 0 { app.dec_hex } else { app.dec_chain[k - 1].1 };
                 egui::Frame::NONE.stroke(egui::Stroke::new(1.0, theme::line())).fill(theme::surface()).show(ui, |ui| {
                     ui.set_width(w);
                     let text: &mut String = if k == 0 { &mut app.dec_input } else { &mut app.dec_chain[k - 1].0 };
@@ -2061,7 +2295,7 @@ fn decoder(app: &mut App, ui: &mut Ui) {
                         let mut h = hex;
                         if ui.radio(!h, "Text").clicked() { h = false; }
                         if ui.radio(h, "Hex").clicked() { h = true; }
-                        if k == 0 { app.dec_editor.hex = h; } else { app.dec_chain[k - 1].1 = h; }
+                        if k == 0 { app.dec_hex = h; } else { app.dec_chain[k - 1].1 = h; }
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             let _ = ui.add(egui::Button::new(RichText::new(theme::icon::QUESTION).size(15.0)).frame(false)).on_hover_text("Transform the data with the menus below; each result opens a new panel underneath.");
                         });
@@ -2608,6 +2842,24 @@ pub enum SettingsPane {
     Hotkeys,
     Proxy,
     Sessions,
+}
+
+/// Project options: save/restore the binary project, export/import JSON
+/// (tools::project_controls owns the widgets + status line).
+fn project_window(app: &mut App, ctx: &egui::Context) {
+    if !app.project_open {
+        return;
+    }
+    let mut open = true;
+    egui::Window::new("Project options")
+        .open(&mut open)
+        .default_pos(ctx.viewport_rect().center() - egui::vec2(300.0, 140.0))
+        .resizable(true)
+        .default_width(600.0)
+        .show(ctx, |ui| {
+            crate::tools::project_controls(app, ui);
+        });
+    app.project_open = open;
 }
 
 fn settings_window(app: &mut App, ctx: &egui::Context) {

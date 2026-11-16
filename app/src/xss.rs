@@ -277,6 +277,8 @@ pub fn xss_templates(context: u8) -> Vec<XssTemplate> {
 pub struct XssHit {
     pub payload: String,
     pub context: u8,
+    /// The template's unencoded-survival signature (breakout evidence).
+    pub signature: &'static str,
 }
 
 /// burp.Zcyd chain: a payload is tried raw, then %xx (Zw9s mode 1), then
@@ -320,13 +322,10 @@ pub fn run_xss_check<F: FnMut(&str) -> Option<Vec<u8>>>(value: &str, mut send: F
             for variant in xss_variants(&expanded) {
                 let v = if append { format!("{value}{variant}") } else { variant.clone() };
                 let Some(r) = send(&v) else { continue };
-                let out = body_of(&r);
-                // Full expanded payload surviving is the primary proof; if the
-                // markers were mangled in transit, the template's signature
-                // substring plus the PoC surviving unencoded is Burp's
-                // breakout confirmation (burp.Zi_x HTML re-parse approximation).
-                if out.contains(&expanded) || (out.contains(t.signature) && out.contains(XSS_POCS[0])) {
-                    return Some(XssHit { payload: v, context });
+                // Burp's breakout proof: the expanded payload survives the
+                // response unencoded (approximates its HTML re-parse, Zi_x).
+                if body_of(&r).contains(&expanded) {
+                    return Some(XssHit { payload: v, context, signature: t.signature });
                 }
             }
         }
