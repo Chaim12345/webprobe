@@ -1,0 +1,75 @@
+{
+  "id": "ev_3b12e9e090f1af398b477041a37409629d3cbc9a1df275dda4bef389d53984b2",
+  "subject": {
+    "kind": "jar",
+    "sha256": "510bf1c87c766f09c3c20d3ef75e7a6978e60dd38346965dd4836ce64417becf",
+    "name": "burpsuite.jar"
+  },
+  "operation": "java_classes_find",
+  "params": {
+    "include_methods": true,
+    "limit": 200,
+    "offset": 0,
+    "path": null,
+    "query": "websocket.Message"
+  },
+  "result": {
+    "classes": [
+      {
+        "access": [
+          "public",
+          "final",
+          "enum"
+        ],
+        "entry": "burp/api/montoya/websocket/MessageAction.class",
+        "fields": 3,
+        "interfaces": [],
+        "internal": "burp/api/montoya/websocket/MessageAction",
+        "matched_methods": [],
+        "methods": 5,
+        "name": "burp.api.montoya.websocket.MessageAction",
+        "superclass": "java.lang.Enum"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/websocket/MessageHandler.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/websocket/MessageHandler",
+        "matched_methods": [],
+        "methods": 3,
+        "name": "burp.api.montoya.websocket.MessageHandler",
+        "superclass": "java.lang.Object"
+      }
+    ],
+    "classes_total": 54868,
+    "matches": 2,
+    "query": "websocket.Message"
+  },
+  "summary": "2 of 54868 classes match \"websocket.Message\" ; showing 2.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 2,
+    "total": 2
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/opt/BurpSuite/burpsuite.jar"
+    }
+  ],
+  "links": []
+}

@@ -1,0 +1,713 @@
+{
+  "id": "ev_b13bcff8de46c84f68a31710bad03acb2fbd160c60b1c3806aca5e79c865e8f7",
+  "subject": {
+    "kind": "jar",
+    "sha256": "510bf1c87c766f09c3c20d3ef75e7a6978e60dd38346965dd4836ce64417becf",
+    "name": "burpsuite.jar"
+  },
+  "operation": "java_classes_find",
+  "params": {
+    "include_methods": false,
+    "limit": 200,
+    "offset": 0,
+    "path": null,
+    "query": "WebSocket"
+  },
+  "result": {
+    "classes": [
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/proxy/ProxyWebSocketHistoryFilter.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/proxy/ProxyWebSocketHistoryFilter",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "burp.api.montoya.proxy.ProxyWebSocketHistoryFilter",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/proxy/ProxyWebSocketMessage.class",
+        "fields": 0,
+        "interfaces": [
+          "burp.api.montoya.ui.contextmenu.WebSocketMessage"
+        ],
+        "internal": "burp/api/montoya/proxy/ProxyWebSocketMessage",
+        "matched_methods": [],
+        "methods": 11,
+        "name": "burp.api.montoya.proxy.ProxyWebSocketMessage",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/proxy/websocket/BinaryMessageReceivedAction.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/proxy/websocket/BinaryMessageReceivedAction",
+        "matched_methods": [],
+        "methods": 9,
+        "name": "burp.api.montoya.proxy.websocket.BinaryMessageReceivedAction",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/proxy/websocket/BinaryMessageToBeSentAction.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/proxy/websocket/BinaryMessageToBeSentAction",
+        "matched_methods": [],
+        "methods": 5,
+        "name": "burp.api.montoya.proxy.websocket.BinaryMessageToBeSentAction",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/proxy/websocket/InterceptedBinaryMessage.class",
+        "fields": 0,
+        "interfaces": [
+          "burp.api.montoya.websocket.BinaryMessage"
+        ],
+        "internal": "burp/api/montoya/proxy/websocket/InterceptedBinaryMessage",
+        "matched_methods": [],
+        "methods": 3,
+        "name": "burp.api.montoya.proxy.websocket.InterceptedBinaryMessage",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/proxy/websocket/InterceptedTextMessage.class",
+        "fields": 0,
+        "interfaces": [
+          "burp.api.montoya.websocket.TextMessage"
+        ],
+        "internal": "burp/api/montoya/proxy/websocket/InterceptedTextMessage",
+        "matched_methods": [],
+        "methods": 3,
+        "name": "burp.api.montoya.proxy.websocket.InterceptedTextMessage",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/proxy/websocket/ProxyMessageHandler.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/proxy/websocket/ProxyMessageHandler",
+        "matched_methods": [],
+        "methods": 5,
+        "name": "burp.api.montoya.proxy.websocket.ProxyMessageHandler",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/proxy/websocket/ProxyWebSocket.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/proxy/websocket/ProxyWebSocket",
+        "matched_methods": [],
+        "methods": 4,
+        "name": "burp.api.montoya.proxy.websocket.ProxyWebSocket",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/proxy/websocket/ProxyWebSocketCreation.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/proxy/websocket/ProxyWebSocketCreation",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.api.montoya.proxy.websocket.ProxyWebSocketCreation",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/proxy/websocket/ProxyWebSocketCreationHandler.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/proxy/websocket/ProxyWebSocketCreationHandler",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "burp.api.montoya.proxy.websocket.ProxyWebSocketCreationHandler",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/proxy/websocket/TextMessageReceivedAction.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/proxy/websocket/TextMessageReceivedAction",
+        "matched_methods": [],
+        "methods": 9,
+        "name": "burp.api.montoya.proxy.websocket.TextMessageReceivedAction",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/proxy/websocket/TextMessageToBeSentAction.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/proxy/websocket/TextMessageToBeSentAction",
+        "matched_methods": [],
+        "methods": 5,
+        "name": "burp.api.montoya.proxy.websocket.TextMessageToBeSentAction",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/ui/contextmenu/WebSocketContextMenuEvent.class",
+        "fields": 0,
+        "interfaces": [
+          "burp.api.montoya.ui.contextmenu.ComponentEvent",
+          "burp.api.montoya.core.ToolSource"
+        ],
+        "internal": "burp/api/montoya/ui/contextmenu/WebSocketContextMenuEvent",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.api.montoya.ui.contextmenu.WebSocketContextMenuEvent",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/ui/contextmenu/WebSocketEditorEvent.class",
+        "fields": 0,
+        "interfaces": [
+          "burp.api.montoya.ui.contextmenu.ComponentEvent",
+          "burp.api.montoya.core.ToolSource"
+        ],
+        "internal": "burp/api/montoya/ui/contextmenu/WebSocketEditorEvent",
+        "matched_methods": [],
+        "methods": 6,
+        "name": "burp.api.montoya.ui.contextmenu.WebSocketEditorEvent",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/ui/contextmenu/WebSocketMessage.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/ui/contextmenu/WebSocketMessage",
+        "matched_methods": [],
+        "methods": 4,
+        "name": "burp.api.montoya.ui.contextmenu.WebSocketMessage",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/ui/editor/WebSocketMessageEditor.class",
+        "fields": 0,
+        "interfaces": [
+          "burp.api.montoya.ui.editor.Editor"
+        ],
+        "internal": "burp/api/montoya/ui/editor/WebSocketMessageEditor",
+        "matched_methods": [],
+        "methods": 7,
+        "name": "burp.api.montoya.ui.editor.WebSocketMessageEditor",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/ui/editor/extension/ExtensionProvidedWebSocketMessageEditor.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/ui/editor/extension/ExtensionProvidedWebSocketMessageEditor",
+        "matched_methods": [],
+        "methods": 7,
+        "name": "burp.api.montoya.ui.editor.extension.ExtensionProvidedWebSocketMessageEditor",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/ui/editor/extension/WebSocketMessageEditorProvider.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/ui/editor/extension/WebSocketMessageEditorProvider",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "burp.api.montoya.ui.editor.extension.WebSocketMessageEditorProvider",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/websocket/BinaryMessage.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/websocket/BinaryMessage",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.api.montoya.websocket.BinaryMessage",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/websocket/BinaryMessageAction.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/websocket/BinaryMessageAction",
+        "matched_methods": [],
+        "methods": 6,
+        "name": "burp.api.montoya.websocket.BinaryMessageAction",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "final",
+          "enum"
+        ],
+        "entry": "burp/api/montoya/websocket/Direction.class",
+        "fields": 3,
+        "interfaces": [],
+        "internal": "burp/api/montoya/websocket/Direction",
+        "matched_methods": [],
+        "methods": 5,
+        "name": "burp.api.montoya.websocket.Direction",
+        "superclass": "java.lang.Enum"
+      },
+      {
+        "access": [
+          "public",
+          "final",
+          "enum"
+        ],
+        "entry": "burp/api/montoya/websocket/MessageAction.class",
+        "fields": 3,
+        "interfaces": [],
+        "internal": "burp/api/montoya/websocket/MessageAction",
+        "matched_methods": [],
+        "methods": 5,
+        "name": "burp.api.montoya.websocket.MessageAction",
+        "superclass": "java.lang.Enum"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/websocket/MessageHandler.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/websocket/MessageHandler",
+        "matched_methods": [],
+        "methods": 3,
+        "name": "burp.api.montoya.websocket.MessageHandler",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/websocket/TextMessage.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/websocket/TextMessage",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.api.montoya.websocket.TextMessage",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/websocket/TextMessageAction.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/websocket/TextMessageAction",
+        "matched_methods": [],
+        "methods": 6,
+        "name": "burp.api.montoya.websocket.TextMessageAction",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/websocket/WebSocket.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/websocket/WebSocket",
+        "matched_methods": [],
+        "methods": 4,
+        "name": "burp.api.montoya.websocket.WebSocket",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/websocket/WebSocketCreated.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/websocket/WebSocketCreated",
+        "matched_methods": [],
+        "methods": 3,
+        "name": "burp.api.montoya.websocket.WebSocketCreated",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/websocket/WebSocketCreatedHandler.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/websocket/WebSocketCreatedHandler",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "burp.api.montoya.websocket.WebSocketCreatedHandler",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/websocket/WebSockets.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/websocket/WebSockets",
+        "matched_methods": [],
+        "methods": 3,
+        "name": "burp.api.montoya.websocket.WebSockets",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/websocket/extension/ExtensionWebSocket.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/websocket/extension/ExtensionWebSocket",
+        "matched_methods": [],
+        "methods": 4,
+        "name": "burp.api.montoya.websocket.extension.ExtensionWebSocket",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/websocket/extension/ExtensionWebSocketCreation.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/websocket/extension/ExtensionWebSocketCreation",
+        "matched_methods": [],
+        "methods": 3,
+        "name": "burp.api.montoya.websocket.extension.ExtensionWebSocketCreation",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "final",
+          "enum"
+        ],
+        "entry": "burp/api/montoya/websocket/extension/ExtensionWebSocketCreationStatus.class",
+        "fields": 9,
+        "interfaces": [],
+        "internal": "burp/api/montoya/websocket/extension/ExtensionWebSocketCreationStatus",
+        "matched_methods": [],
+        "methods": 5,
+        "name": "burp.api.montoya.websocket.extension.ExtensionWebSocketCreationStatus",
+        "superclass": "java.lang.Enum"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/websocket/extension/ExtensionWebSocketMessageHandler.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/websocket/extension/ExtensionWebSocketMessageHandler",
+        "matched_methods": [],
+        "methods": 3,
+        "name": "burp.api.montoya.websocket.extension.ExtensionWebSocketMessageHandler",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "net/portswigger/api/Api$AcceptsWebSockets.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "net/portswigger/api/Api$AcceptsWebSockets",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "net.portswigger.api.Api$AcceptsWebSockets",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "net/portswigger/devtools/protocol/events/network/WebSocketClosed.class",
+        "fields": 2,
+        "interfaces": [
+          "net.portswigger.devtools.protocol.Zq"
+        ],
+        "internal": "net/portswigger/devtools/protocol/events/network/WebSocketClosed",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "net.portswigger.devtools.protocol.events.network.WebSocketClosed",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "net/portswigger/devtools/protocol/events/network/WebSocketCreated.class",
+        "fields": 3,
+        "interfaces": [
+          "net.portswigger.devtools.protocol.Zq"
+        ],
+        "internal": "net/portswigger/devtools/protocol/events/network/WebSocketCreated",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "net.portswigger.devtools.protocol.events.network.WebSocketCreated",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "net/portswigger/devtools/protocol/events/network/WebSocketFrameError.class",
+        "fields": 3,
+        "interfaces": [
+          "net.portswigger.devtools.protocol.Zq"
+        ],
+        "internal": "net/portswigger/devtools/protocol/events/network/WebSocketFrameError",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "net.portswigger.devtools.protocol.events.network.WebSocketFrameError",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "net/portswigger/devtools/protocol/events/network/WebSocketFrameReceived.class",
+        "fields": 3,
+        "interfaces": [
+          "net.portswigger.devtools.protocol.Zq"
+        ],
+        "internal": "net/portswigger/devtools/protocol/events/network/WebSocketFrameReceived",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "net.portswigger.devtools.protocol.events.network.WebSocketFrameReceived",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "net/portswigger/devtools/protocol/events/network/WebSocketFrameSent.class",
+        "fields": 3,
+        "interfaces": [
+          "net.portswigger.devtools.protocol.Zq"
+        ],
+        "internal": "net/portswigger/devtools/protocol/events/network/WebSocketFrameSent",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "net.portswigger.devtools.protocol.events.network.WebSocketFrameSent",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "net/portswigger/devtools/protocol/events/network/WebSocketHandshakeResponseReceived.class",
+        "fields": 3,
+        "interfaces": [
+          "net.portswigger.devtools.protocol.Zq"
+        ],
+        "internal": "net/portswigger/devtools/protocol/events/network/WebSocketHandshakeResponseReceived",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "net.portswigger.devtools.protocol.events.network.WebSocketHandshakeResponseReceived",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "net/portswigger/devtools/protocol/events/network/WebSocketWillSendHandshakeRequest.class",
+        "fields": 4,
+        "interfaces": [
+          "net.portswigger.devtools.protocol.Zq"
+        ],
+        "internal": "net/portswigger/devtools/protocol/events/network/WebSocketWillSendHandshakeRequest",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "net.portswigger.devtools.protocol.events.network.WebSocketWillSendHandshakeRequest",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "net/portswigger/devtools/protocol/types/network/WebSocketFrame.class",
+        "fields": 3,
+        "interfaces": [],
+        "internal": "net/portswigger/devtools/protocol/types/network/WebSocketFrame",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "net.portswigger.devtools.protocol.types.network.WebSocketFrame",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "net/portswigger/devtools/protocol/types/network/WebSocketRequest.class",
+        "fields": 1,
+        "interfaces": [],
+        "internal": "net/portswigger/devtools/protocol/types/network/WebSocketRequest",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "net.portswigger.devtools.protocol.types.network.WebSocketRequest",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "net/portswigger/devtools/protocol/types/network/WebSocketResponse.class",
+        "fields": 6,
+        "interfaces": [],
+        "internal": "net/portswigger/devtools/protocol/types/network/WebSocketResponse",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "net.portswigger.devtools.protocol.types.network.WebSocketResponse",
+        "superclass": "java.lang.Object"
+      }
+    ],
+    "classes_total": 54868,
+    "matches": 44,
+    "query": "WebSocket"
+  },
+  "summary": "44 of 54868 classes match \"WebSocket\" ; showing 44.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 44,
+    "total": 44
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/opt/BurpSuite/burpsuite.jar"
+    }
+  ],
+  "links": []
+}

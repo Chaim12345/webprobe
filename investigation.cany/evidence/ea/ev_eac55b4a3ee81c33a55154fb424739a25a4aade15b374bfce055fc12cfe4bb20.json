@@ -1,0 +1,237 @@
+{
+  "id": "ev_eac55b4a3ee81c33a55154fb424739a25a4aade15b374bfce055fc12cfe4bb20",
+  "subject": {
+    "kind": "jar",
+    "sha256": "510bf1c87c766f09c3c20d3ef75e7a6978e60dd38346965dd4836ce64417becf",
+    "name": "burpsuite.jar"
+  },
+  "operation": "java_class_show",
+  "params": {
+    "class_name": "burp.Zlrr",
+    "decompile": true,
+    "path": "/opt/BurpSuite/burpsuite.jar"
+  },
+  "result": {
+    "access": [
+      "public"
+    ],
+    "annotations": [],
+    "entry": "burp/Zlrr.class",
+    "fields": [
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "[Ljava/lang/String;",
+        "name": "a",
+        "signature": null,
+        "type": "java.lang.String[]"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "[Ljava/lang/String;",
+        "name": "b",
+        "signature": null,
+        "type": "java.lang.String[]"
+      }
+    ],
+    "inner_classes": [],
+    "interfaces": [],
+    "internal": "burp/Zlrr",
+    "java_version": "Java 21",
+    "methods": [
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 15,
+        "deprecated": false,
+        "descriptor": "()V",
+        "max_locals": 1,
+        "max_stack": 2,
+        "name": "<init>",
+        "signature": "public <init>()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 45,
+        "deprecated": false,
+        "descriptor": "()Ljava/lang/String;",
+        "max_locals": 1,
+        "max_stack": 2,
+        "name": "getUIClassID",
+        "signature": "public java.lang.String getUIClassID()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 2
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 100,
+        "deprecated": false,
+        "descriptor": "(I)V",
+        "max_locals": 4,
+        "max_stack": 4,
+        "name": "setTabPlacement",
+        "signature": "public void setTabPlacement(int)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 6
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 86,
+        "deprecated": false,
+        "descriptor": "(I)V",
+        "max_locals": 4,
+        "max_stack": 4,
+        "name": "setTabLayoutPolicy",
+        "signature": "public void setTabLayoutPolicy(int)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 5
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 29,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;Ljavax/swing/Icon;Ljava/awt/Component;Ljava/lang/String;I)V",
+        "max_locals": 6,
+        "max_stack": 7,
+        "name": "insertTab",
+        "signature": "public void insertTab(java.lang.String, javax.swing.Icon, java.awt.Component, java.lang.String, int)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private",
+          "static"
+        ],
+        "code_bytes": 2,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/IllegalArgumentException;)Ljava/lang/IllegalArgumentException;",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "a",
+        "signature": "private static java.lang.IllegalArgumentException a(java.lang.IllegalArgumentException)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "static"
+        ],
+        "code_bytes": 301,
+        "deprecated": false,
+        "descriptor": "()V",
+        "max_locals": 7,
+        "max_stack": 10,
+        "name": "<clinit>",
+        "signature": "static <clinit>()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private",
+          "static"
+        ],
+        "code_bytes": 2620,
+        "deprecated": false,
+        "descriptor": "(II)Ljava/lang/String;",
+        "max_locals": 9,
+        "max_stack": 5,
+        "name": "a",
+        "signature": "private static java.lang.String a(int, int)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      }
+    ],
+    "name": "burp.Zlrr",
+    "pseudo_java": "public class burp.Zlrr extends javax.swing.JTabbedPane {\n    private static final java.lang.String[] a;\n    private static final java.lang.String[] b;\n\n    public <init>(){\n        this.setTabPlacement(4);\n        this.setTabLayoutPolicy(1);\n        return;\n    }\n\n\n    public java.lang.String getUIClassID(){\n        // 2 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (Zesb.ZA() == 0) {\n            if (Beans.isDesignTime() == 0) goto L2c;\n            goto L1c;\n            throw Zlrr.a(?);\n        }\n        L1c:\n        goto L2c;\n        throw Zlrr.a(Zlrr.a(23098, -13664));\n        L2c:\n        return Zlrr.a(23097, -30284);\n    }\n\n\n    public void setTabPlacement(int){\n        // 6 exception handler(s) in the table; try/catch structure not reconstructed here.\n        v2 = Zzr.Zn();\n        if (this.getTabPlacement() == 1) {\n            if (v1 == 1) {\n                goto L19;\n                throw Zlrr.a(?);\n                L19:\n                goto L21;\n                throw Zlrr.a(1);\n            }\n        }\n        L21:\n        v3 = 0;\n        if (v3 == 0) {\n            if (v1 != 2) {\n                goto L34;\n                throw Zlrr.a(?);\n                L34:\n                if (v1 != 4) goto L5e;\n                goto L40;\n                throw Zlrr.a(?);\n            }\n        }\n        L40:\n        super.setTabPlacement(v1);\n        if (v2 == 0) {\n            goto L5e;\n            throw Zlrr.a(?);\n            L5e:\n            throw new IllegalArgumentException(Zlrr.a(23099, 25934));\n            throw Zlrr.a(?);\n        }\n        return;\n    }\n\n\n    public void setTabLayoutPolicy(int){\n        // 5 exception handler(s) in the table; try/catch structure not reconstructed here.\n        v2 = Zzr.Zo();\n        if (this.getTabLayoutPolicy() == 0) {\n            if (v1 == 0) {\n                goto L17;\n                throw Zlrr.a(?);\n                L17:\n                goto L1f;\n                throw Zlrr.a(1);\n            }\n        }\n        L1f:\n        v3 = 0;\n        if (v3 == 0) {\n            if (v1 != 1) goto L50;\n            goto L32;\n            throw Zlrr.a(?);\n        }\n        L32:\n        super.setTabLayoutPolicy(v1);\n        if (v2 != 0) {\n            goto L50;\n            throw Zlrr.a(?);\n            L50:\n            throw new IllegalArgumentException(Zlrr.a(23096, 12670));\n            throw Zlrr.a(?);\n        }\n        return;\n    }\n\n\n    public void insertTab(java.lang.String, javax.swing.Icon, java.awt.Component, java.lang.String, int){\n        super.insertTab(v1, v2, v3, v4, v5);\n        this.setTabComponentAt(v5, new Zcs3(v1, v2, v4));\n        return;\n    }\n\n\n    private static java.lang.IllegalArgumentException a(java.lang.IllegalArgumentException){\n        return v0;\n    }\n\n\n    static <clinit>(){\n        v5 = new String[4];\n        v3 = 0;\n        v2 = \"éü+\\u{b}F\\u{88}Íî\\u{14}*\\u{98}oø\\u{86}á\\u{7}\\u{19}\\u{95}óÉ¡S:\\u{84}4\\u{97}4´=Yý'\\u{90}\\u{89}9\\u{96}\\u{3}bÎ\\u{96}\\u{3}\\u{9f}©AM\\u{88}ù\\u{2}ÓB\\u{6}Ì;\\u{8a},\\u{90}\\u{87}ÃC\\u{9d}°,\\u{13}Þ\\u{7f}Ã\\u{9e}«Þ\\u{87}Òÿ]\\u{88}ÏÎe\";\n        v4 = \"éü+\\u{b}F\\u{88}Íî\\u{14}*\\u{98}oø\\u{86}á\\u{7}\\u{19}\\u{95}óÉ¡S:\\u{84}4\\u{97}4´=Yý'\\u{90}\\u{89}9\\u{96}\\u{3}bÎ\\u{96}\\u{3}\\u{9f}©AM\\u{88}ù\\u{2}ÓB\\u{6}Ì;\\u{8a},\\u{90}\\u{87}ÃC\\u{9d}°,\\u{13}Þ\\u{7f}Ã\\u{9e}«Þ\\u{87}Òÿ]\\u{88}ÏÎe\".length();\n        v1 = 24;\n        v0 = -1;\n        v0 += 1;\n        goto L8e;\n        v3 += 1;\n        v5[v3] = -1;\n        v0 = (v0 + v1);\n        if ((v0 + v1) < v4) {\n            v1 = v2.charAt(v0);\n            goto L18;\n        }\n        v2 = \"\\u{14}\\u{11}¢ÿýÃÕ1±k÷/4 ½\\u{18}\\u{97}8q=\\u{1e}\\u{1a}\\u{87}[ø÷$N8\\u{16}\\u{1}\\u{1e}nÔù\\u{1c}_Mä$fd·:\\u{5}\\u{c}dö8¨cËxÔ¥º\\u{1b}ø\";\n        v4 = \"\\u{14}\\u{11}¢ÿýÃÕ1±k÷/4 ½\\u{18}\\u{97}8q=\\u{1e}\\u{1a}\\u{87}[ø÷$N8\\u{16}\\u{1}\\u{1e}nÔù\\u{1c}_Mä$fd·:\\u{5}\\u{c}dö8¨cËxÔ¥º\\u{1b}ø\".length();\n        v1 = 45;\n        v0 = -1;\n        v0 += 1;\n        goto L8e;\n        v3 += 1;\n        v5[v3] = 0;\n        v0 = (v0 + v1);\n        if ((v0 + v1) < v4) {\n            v1 = v2.charAt(v0);\n            goto L53;\n        }\n        Zlrr.a = v5;\n        Zlrr.b = new String[4];\n        goto L12c;\n        L8e:\n        v2.substring(v0, (v0 + v1));\n        53.toCharArray().length;\n        v6 = 0;\n        v2.substring(v0, (v0 + v1));\n        if (23 <= 1) {\n            switch ((v6 % 7)) {\n                case 0:\n                    goto Lf7;\n                case 1:\n                    goto Lf7;\n                case 2:\n                    goto Lf7;\n                case 3:\n                    goto Lf7;\n                case 4:\n                    goto Lf7;\n                case 5:\n                    goto Lf7;\n                default:\n                    Lf7:\n                    116[10] = (char) (50 ^ (70 ^ 88));\n                    v6 += 1;\n                    if (6 == 0) {\n                        goto Lac;\n                    }\n            }\n        }\n        if (127 > v6) goto Lac;\n        switch (?) {\n            case 0: goto L66;\n            default: goto L2b;\n        }\n        L12c:\n        return;\n    }\n\n\n    private static java.lang.String a(int, int){\n        v2 = ((v0 ^ 23097) & 65535);\n        if (Zlrr.b[v2] == null) {\n            v3 = Zlrr.a[v2].toCharArray();\n            switch ((v3[0] & 255)) {\n                case 0: goto L42e;\n                case 1: goto L433;\n                case 2: goto L439;\n                case 3: goto L43e;\n                case 4: goto L443;\n                case 5: goto L447;\n                case 6: goto L44d;\n                case 7: goto L453;\n                case 8: goto L458;\n                case 9: goto L45e;\n                case 10: goto L463;\n                case 11: goto L468;\n                case 12: goto L46d;\n                case 13: goto L471;\n                case 14: goto L476;\n                case 15: goto L47c;\n                case 16: goto L481;\n                case 17: goto L486;\n                case 18: goto L48b;\n                case 19: goto L491;\n                case 20: goto L496;\n                case 21: goto L49c;\n                case 22: goto L4a2;\n                case 23: goto L4a8;\n                case 24: goto L4ad;\n                case 25: goto L4b2;\n                case 26: goto L4b8;\n                case 27: goto L4be;\n                case 28: goto L4c3;\n                case 29: goto L4c8;\n                case 30: goto L4ce;\n                case 31: goto L4d3;\n                case 32: goto L4d8;\n                case 33: goto L4dd;\n                case 34: goto L4e2;\n                case 35: goto L4e8;\n                case 36: goto L4ee;\n                case 37: goto L4f4;\n                case 38: goto L4fa;\n                case 39: goto L500;\n                case 40: goto L506;\n                case 41: goto L50b;\n                case 42: goto L510;\n                case 43: goto L515;\n                case 44: goto L51a;\n                case 45: goto L520;\n                case 46: goto L525;\n                case 47: goto L52b;\n                case 48: goto L531;\n                case 49: goto L537;\n                case 50: goto L53d;\n                case 51: goto L542;\n                case 52: goto L548;\n                case 53: goto L54d;\n                case 54: goto L553;\n                case 55: goto L557;\n                case 56: goto L55d;\n                case 57: goto L563;\n                case 58: goto L569;\n                case 59: goto L56f;\n                case 60: goto L575;\n                case 61: goto L57a;\n                case 62: goto L580;\n                case 63: goto L586;\n                case 64: goto L58b;\n                case 65: goto L590;\n                case 66: goto L595;\n                case 67: goto L59a;\n                case 68: goto L59f;\n                case 69: goto L5a5;\n                case 70: goto L5ab;\n                case 71: goto L5b1;\n                case 72: goto L5b7;\n                case 73: goto L5bc;\n                case 74: goto L5c1;\n                case 75: goto L5c7;\n                case 76: goto L5cc;\n                case 77: goto L5d2;\n                case 78: goto L5d7;\n                case 79: goto L5dc;\n                case 80: goto L5e2;\n                case 81: goto L5e8;\n                case 82: goto L5ed;\n                case 83: goto L5f2;\n                case 84: goto L5f7;\n                case 85: goto L5fc;\n                case 86: goto L601;\n                case 87: goto L606;\n                case 88: goto L60b;\n                case 89: goto L611;\n                case 90: goto L617;\n                case 91: goto L61d;\n                case 92: goto L623;\n                case 93: goto L628;\n                case 94: goto L62d;\n                case 95: goto L633;\n                case 96: goto L639;\n                case 97: goto L63e;\n                case 98: goto L644;\n                case 99: goto L649;\n                case 100: goto L64f;\n                case 101: goto L655;\n                case 102: goto L65b;\n                case 103: goto L661;\n                case 104: goto L667;\n                case 105: goto L66c;\n                case 106: goto L671;\n                case 107: goto L677;\n                case 108: goto L67c;\n                case 109: goto L682;\n                case 110: goto L688;\n                case 111: goto L68d;\n                case 112: goto L693;\n                case 113: goto L698;\n                case 114: goto L69e;\n                case 115: goto L6a3;\n                case 116: goto L6a8;\n                case 117: goto L6ad;\n                case 118: goto L6b3;\n                case 119: goto L6b9;\n                case 120: goto L6be;\n                case 121: goto L6c4;\n                case 122: goto L6ca;\n                case 123: goto L6d0;\n                case 124: goto L6d5;\n                case 125: goto L6db;\n                case 126: goto L6e1;\n                case 127: goto L6e7;\n                case 128: goto L6ed;\n                case 129: goto L6f3;\n                case 130: goto L6f8;\n                case 131: goto L6fd;\n                case 132: goto L703;\n                case 133: goto L709;\n                case 134: goto L70e;\n                case 135: goto L713;\n                case 136: goto L719;\n                case 137: goto L71e;\n                case 138: goto L724;\n                case 139: goto L72a;\n                case 140: goto L72f;\n                case 141: goto L734;\n                case 142: goto L73a;\n                case 143: goto L740;\n                case 144: goto L746;\n                case 145: goto L74c;\n                case 146: goto L750;\n                case 147: goto L756;\n                case 148: goto L75b;\n                case 149: goto L75f;\n                case 150: goto L765;\n                case 151: goto L76a;\n                case 152: goto L770;\n                case 153: goto L775;\n                case 154: goto L77a;\n                case 155: goto L780;\n                case 156: goto L785;\n                case 157: goto L78a;\n                case 158: goto L78f;\n                case 159: goto L795;\n                case 160: goto L79a;\n                case 161: goto L79f;\n                case 162: goto L7a5;\n                case 163: goto L7aa;\n                case 164: goto L7af;\n                case 165: goto L7b5;\n                case 166: goto L7bb;\n                case 167: goto L7c0;\n                case 168: goto L7c6;\n                case 169: goto L7cc;\n                case 170: goto L7d2;\n                case 171: goto L7d7;\n                case 172: goto L7dd;\n                case 173: goto L7e3;\n                case 174: goto L7e8;\n                case 175: goto L7ee;\n                case 176: goto L7f3;\n                case 177: goto L7f8;\n                case 178: goto L7fd;\n                case 179: goto L802;\n                case 180: goto L808;\n                case 181: goto L80d;\n                case 182: goto L812;\n                case 183: goto L817;\n                case 184: goto L81c;\n                case 185: goto L822;\n                case 186: goto L828;\n                case 187: goto L82d;\n                case 188: goto L833;\n                case 189: goto L839;\n                case 190: goto L83e;\n                case 191: goto L843;\n                case 192: goto L848;\n                case 193: goto L84e;\n                case 194: goto L853;\n                case 195: goto L859;\n                case 196: goto L85f;\n                case 197: goto L865;\n                case 198: goto L86a;\n                case 199: goto L870;\n                case 200: goto L874;\n                case 201: goto L879;\n                case 202: goto L87f;\n                case 203: goto L884;\n                case 204: goto L88a;\n                case 205: goto L890;\n                case 206: goto L895;\n                case 207: goto L89b;\n                case 208: goto L8a1;\n                case 209: goto L8a7;\n                case 210: goto L8ac;\n                case 211: goto L8b2;\n                case 212: goto L8b8;\n                case 213: goto L8be;\n                case 214: goto L8c4;\n                case 215: goto L8ca;\n                case 216: goto L8cf;\n                case 217: goto L8d5;\n                case 218: goto L8db;\n                case 219: goto L8e0;\n                case 220: goto L8e5;\n                case 221: goto L8ea;\n                case 222: goto L8ef;\n                case 223: goto L8f5;\n                case 224: goto L8fb;\n                case 225: goto L901;\n                case 226: goto L907;\n                case 227: goto L90d;\n                case 228: goto L912;\n                case 229: goto L918;\n                case 230: goto L91e;\n                case 231: goto L923;\n                case 232: goto L928;\n                case 233: goto L92d;\n                case 234: goto L933;\n                case 235: goto L938;\n                case 236: goto L93d;\n                case 237: goto L942;\n                case 238: goto L948;\n                case 239: goto L94e;\n                case 240: goto L954;\n                case 241: goto L959;\n                case 242: goto L95e;\n                case 243: goto L963;\n                case 244: goto L968;\n                case 245: goto L96d;\n                case 246: goto L972;\n                case 247: goto L977;\n                case 248: goto L97c;\n                case 249: goto L981;\n                case 250: goto L987;\n                case 251: goto L98c;\n                case 252: goto L992;\n                case 253: goto L997;\n                case 254: goto L99d;\n                default: goto L9a3;\n            }\n            L42e:\n            goto L9a3;\n            L433:\n            goto L9a3;\n            L439:\n            goto L9a3;\n            L43e:\n            goto L9a3;\n            L443:\n            goto L9a3;\n            L447:\n            goto L9a3;\n            L44d:\n            goto L9a3;\n            L453:\n            goto L9a3;\n            L458:\n            goto L9a3;\n            L45e:\n            goto L9a3;\n            L463:\n            goto L9a3;\n            L468:\n            goto L9a3;\n            L46d:\n            goto L9a3;\n            L471:\n            goto L9a3;\n            L476:\n            goto L9a3;\n            L47c:\n            goto L9a3;\n            L481:\n            goto L9a3;\n            L486:\n            goto L9a3;\n            L48b:\n            goto L9a3;\n            L491:\n            goto L9a3;\n            L496:\n            goto L9a3;\n            L49c:\n            goto L9a3;\n            L4a2:\n            goto L9a3;\n            L4a8:\n            goto L9a3;\n            L4ad:\n            goto L9a3;\n            L4b2:\n            goto L9a3;\n            L4b8:\n            goto L9a3;\n            L4be:\n            goto L9a3;\n            L4c3:\n            goto L9a3;\n            L4c8:\n            goto L9a3;\n            L4ce:\n            goto L9a3;\n            L4d3:\n            goto L9a3;\n            L4d8:\n            goto L9a3;\n            L4dd:\n            goto L9a3;\n            L4e2:\n            goto L9a3;\n            L4e8:\n            goto L9a3;\n            L4ee:\n            goto L9a3;\n            L4f4:\n            goto L9a3;\n            L4fa:\n            goto L9a3;\n            L500:\n            goto L9a3;\n            L506:\n            goto L9a3;\n            L50b:\n            goto L9a3;\n            L510:\n            goto L9a3;\n            L515:\n            goto L9a3;\n            L51a:\n            goto L9a3;\n            L520:\n            goto L9a3;\n            L525:\n            goto L9a3;\n            L52b:\n            goto L9a3;\n            L531:\n            goto L9a3;\n            L537:\n            goto L9a3;\n            L53d:\n            goto L9a3;\n            L542:\n            goto L9a3;\n            L548:\n            goto L9a3;\n            L54d:\n            goto L9a3;\n            L553:\n            goto L9a3;\n            L557:\n            goto L9a3;\n            L55d:\n            goto L9a3;\n            L563:\n            goto L9a3;\n            L569:\n            goto L9a3;\n            L56f:\n            goto L9a3;\n            L575:\n            goto L9a3;\n            L57a:\n            goto L9a3;\n            L580:\n            goto L9a3;\n            L586:\n            goto L9a3;\n            L58b:\n            goto L9a3;\n            L590:\n            goto L9a3;\n            L595:\n            goto L9a3;\n            L59a:\n            goto L9a3;\n            L59f:\n            goto L9a3;\n            L5a5:\n            goto L9a3;\n            L5ab:\n            goto L9a3;\n            L5b1:\n            goto L9a3;\n            L5b7:\n            goto L9a3;\n            L5bc:\n            goto L9a3;\n            L5c1:\n            goto L9a3;\n            L5c7:\n            goto L9a3;\n            L5cc:\n            goto L9a3;\n            L5d2:\n            goto L9a3;\n            L5d7:\n            goto L9a3;\n            L5dc:\n            goto L9a3;\n            L5e2:\n            goto L9a3;\n            L5e8:\n            goto L9a3;\n            L5ed:\n            goto L9a3;\n            L5f2:\n            goto L9a3;\n            L5f7:\n            goto L9a3;\n            L5fc:\n            goto L9a3;\n            L601:\n            goto L9a3;\n            L606:\n            goto L9a3;\n            L60b:\n            goto L9a3;\n            L611:\n            goto L9a3;\n            L617:\n            goto L9a3;\n            L61d:\n            goto L9a3;\n            L623:\n            goto L9a3;\n            L628:\n            goto L9a3;\n            L62d:\n            goto L9a3;\n            L633:\n            goto L9a3;\n            L639:\n            goto L9a3;\n            L63e:\n            goto L9a3;\n            L644:\n            goto L9a3;\n            L649:\n            goto L9a3;\n            L64f:\n            goto L9a3;\n            L655:\n            goto L9a3;\n            L65b:\n            goto L9a3;\n            L661:\n            goto L9a3;\n            L667:\n            goto L9a3;\n            L66c:\n            goto L9a3;\n            L671:\n            goto L9a3;\n            L677:\n            goto L9a3;\n            L67c:\n            goto L9a3;\n            L682:\n            goto L9a3;\n            L688:\n            goto L9a3;\n            L68d:\n            goto L9a3;\n            L693:\n            goto L9a3;\n            L698:\n            goto L9a3;\n            L69e:\n            goto L9a3;\n            L6a3:\n            goto L9a3;\n            L6a8:\n            goto L9a3;\n            L6ad:\n            goto L9a3;\n            L6b3:\n            goto L9a3;\n            L6b9:\n            goto L9a3;\n            L6be:\n            goto L9a3;\n            L6c4:\n            goto L9a3;\n            L6ca:\n            goto L9a3;\n            L6d0:\n            goto L9a3;\n            L6d5:\n            goto L9a3;\n            L6db:\n            goto L9a3;\n            L6e1:\n            goto L9a3;\n            L6e7:\n            goto L9a3;\n            L6ed:\n            goto L9a3;\n            L6f3:\n            goto L9a3;\n            L6f8:\n            goto L9a3;\n            L6fd:\n            goto L9a3;\n            L703:\n            goto L9a3;\n            L709:\n            goto L9a3;\n            L70e:\n            goto L9a3;\n            L713:\n            goto L9a3;\n            L719:\n            goto L9a3;\n            L71e:\n            goto L9a3;\n            L724:\n            goto L9a3;\n            L72a:\n            goto L9a3;\n            L72f:\n            goto L9a3;\n            L734:\n            goto L9a3;\n            L73a:\n            goto L9a3;\n            L740:\n            goto L9a3;\n            L746:\n            goto L9a3;\n            L74c:\n            goto L9a3;\n            L750:\n            goto L9a3;\n            L756:\n            goto L9a3;\n            L75b:\n            goto L9a3;\n            L75f:\n            goto L9a3;\n            L765:\n            goto L9a3;\n            L76a:\n            goto L9a3;\n            L770:\n            goto L9a3;\n            L775:\n            goto L9a3;\n            L77a:\n            goto L9a3;\n            L780:\n            goto L9a3;\n            L785:\n            goto L9a3;\n            L78a:\n            goto L9a3;\n            L78f:\n            goto L9a3;\n            L795:\n            goto L9a3;\n            L79a:\n            goto L9a3;\n            L79f:\n            goto L9a3;\n            L7a5:\n            goto L9a3;\n            L7aa:\n            goto L9a3;\n            L7af:\n            goto L9a3;\n            L7b5:\n            goto L9a3;\n            L7bb:\n            goto L9a3;\n            L7c0:\n            goto L9a3;\n            L7c6:\n            goto L9a3;\n            L7cc:\n            goto L9a3;\n            L7d2:\n            goto L9a3;\n            L7d7:\n            goto L9a3;\n            L7dd:\n            goto L9a3;\n            L7e3:\n            goto L9a3;\n            L7e8:\n            goto L9a3;\n            L7ee:\n            goto L9a3;\n            L7f3:\n            goto L9a3;\n            L7f8:\n            goto L9a3;\n            L7fd:\n            goto L9a3;\n            L802:\n            goto L9a3;\n            L808:\n            goto L9a3;\n            L80d:\n            goto L9a3;\n            L812:\n            goto L9a3;\n            L817:\n            goto L9a3;\n            L81c:\n            goto L9a3;\n            L822:\n            goto L9a3;\n            L828:\n            goto L9a3;\n            L82d:\n            goto L9a3;\n            L833:\n            goto L9a3;\n            L839:\n            goto L9a3;\n            L83e:\n            goto L9a3;\n            L843:\n            goto L9a3;\n            L848:\n            goto L9a3;\n            L84e:\n            goto L9a3;\n            L853:\n            goto L9a3;\n            L859:\n            goto L9a3;\n            L85f:\n            goto L9a3;\n            L865:\n            goto L9a3;\n            L86a:\n            goto L9a3;\n            L870:\n            goto L9a3;\n            L874:\n            goto L9a3;\n            L879:\n            goto L9a3;\n            L87f:\n            goto L9a3;\n            L884:\n            goto L9a3;\n            L88a:\n            goto L9a3;\n            L890:\n            goto L9a3;\n            L895:\n            goto L9a3;\n            L89b:\n            goto L9a3;\n            L8a1:\n            goto L9a3;\n            L8a7:\n            goto L9a3;\n            L8ac:\n            goto L9a3;\n            L8b2:\n            goto L9a3;\n            L8b8:\n            goto L9a3;\n            L8be:\n            goto L9a3;\n            L8c4:\n            goto L9a3;\n            L8ca:\n            goto L9a3;\n            L8cf:\n            goto L9a3;\n            L8d5:\n            goto L9a3;\n            L8db:\n            goto L9a3;\n            L8e0:\n            goto L9a3;\n            L8e5:\n            goto L9a3;\n            L8ea:\n            goto L9a3;\n            L8ef:\n            goto L9a3;\n            L8f5:\n            goto L9a3;\n            L8fb:\n            goto L9a3;\n            L901:\n            goto L9a3;\n            L907:\n            goto L9a3;\n            L90d:\n            goto L9a3;\n            L912:\n            goto L9a3;\n            L918:\n            goto L9a3;\n            L91e:\n            goto L9a3;\n            L923:\n            goto L9a3;\n            L928:\n            goto L9a3;\n            L92d:\n            goto L9a3;\n            L933:\n            goto L9a3;\n            L938:\n            goto L9a3;\n            L93d:\n            goto L9a3;\n            L942:\n            goto L9a3;\n            L948:\n            goto L9a3;\n            L94e:\n            goto L9a3;\n            L954:\n            goto L9a3;\n            L959:\n            goto L9a3;\n            L95e:\n            goto L9a3;\n            L963:\n            goto L9a3;\n            L968:\n            goto L9a3;\n            L96d:\n            goto L9a3;\n            L972:\n            goto L9a3;\n            L977:\n            goto L9a3;\n            L97c:\n            goto L9a3;\n            L981:\n            goto L9a3;\n            L987:\n            goto L9a3;\n            L98c:\n            goto L9a3;\n            L992:\n            goto L9a3;\n            L997:\n            goto L9a3;\n            L99d:\n            goto L9a3;\n            L9a3:\n            v4 = 232;\n            v5 = ((v1 & 255) - v4);\n            if (v5 < 0) {\n                v5 += 256;\n            }\n            v6 = (((v1 & 65535) >>> 8) - v4);\n            if (v6 < 0) {\n                v6 += 256;\n            }\n            v7 = 0;\n            goto La23;\n            v8 = (v7 % 2);\n            if (v8 == 0) {\n                9[166] = (char) (v3[v7] ^ v5);\n                v5 = ((((v5 >>> 3) | (v5 << 5)) ^ v3[v7]) & 255);\n            } else {\n                199[50] = (char) (144 ^ v6);\n                v6 = ((((v6 >>> 3) | (v6 << 5)) ^ v3[v7]) & 255);\n            }\n            v7 += 1;\n            La23:\n            if (v7 < v3.length) goto L9db;\n            Zlrr.b[v2] = new String(v3).intern();\n        }\n        return Zlrr.b[v2];\n    }\n\n}\n",
+    "signature": null,
+    "source_file": null,
+    "superclass": "javax.swing.JTabbedPane",
+    "version": {
+      "major": 65,
+      "minor": 0
+    }
+  },
+  "summary": "burp.Zlrr (Java 21) extends javax.swing.JTabbedPane: 2 fields, 8 methods.",
+  "confidence": "inferred",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [
+    {
+      "code": "decompiler_inferred",
+      "message": "This pseudo-Java is reconstructed from bytecode by Craft Anything's built-in decompiler; it is a best guess, not the original source. The bytecode disassembly is the evidence."
+    },
+    {
+      "code": "generics_erased",
+      "message": "Generic type arguments are erased in bytecode and are not shown."
+    },
+    {
+      "code": "names_and_types_inferred",
+      "message": "Local variables are named v0, v1, … (no debug names); their declared types are not reconstructed."
+    },
+    {
+      "code": "desugaring_not_reversed",
+      "message": "Synthetic members, lambda/invokedynamic desugaring, enum scaffolding and string-switch hashing are not turned back into source."
+    },
+    {
+      "code": "stack_reconstruction_approximate",
+      "message": "5 method(s) contain stack operations that were approximated."
+    },
+    {
+      "code": "control_flow_partly_structured",
+      "message": "Some methods contain control flow shown with labels and goto statements."
+    }
+  ],
+  "coverage": {
+    "status": "complete",
+    "examined": 1,
+    "total": 1
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/opt/BurpSuite/burpsuite.jar"
+    },
+    {
+      "kind": "class",
+      "value": "burp/Zlrr"
+    }
+  ],
+  "links": []
+}

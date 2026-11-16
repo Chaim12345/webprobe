@@ -1,0 +1,44 @@
+{
+  "id": "ev_d220f9cfcda66b30b38555a87ba2b2eb474a6f06e7c76f4681e33b448449c8b0",
+  "subject": {
+    "kind": "jar",
+    "sha256": "510bf1c87c766f09c3c20d3ef75e7a6978e60dd38346965dd4836ce64417becf",
+    "name": "burpsuite.jar"
+  },
+  "operation": "java_classes_find",
+  "params": {
+    "include_methods": false,
+    "limit": 5,
+    "offset": 0,
+    "path": "/opt/BurpSuite/burpsuite.jar",
+    "query": "Zxw2"
+  },
+  "result": {
+    "classes": [],
+    "classes_total": 54868,
+    "matches": 0,
+    "query": "Zxw2"
+  },
+  "summary": "0 of 54868 classes match \"Zxw2\" ; showing 0.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 0,
+    "total": 0
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/opt/BurpSuite/burpsuite.jar"
+    }
+  ],
+  "links": []
+}

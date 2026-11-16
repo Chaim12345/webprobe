@@ -1,15 +1,16 @@
 {
   "id": "unk_7e4f15fa8dde1a2d",
-  "revision": 1,
+  "revision": 2,
   "question": "Why did Burp's HTTP history stay empty while its proxy listener on 6570 answered curl requests through it?",
   "severity": "medium",
   "domain": "reference-app",
-  "status": "open",
+  "status": "resolved",
   "probes": [
     "Send the same traffic from a Burp-launched browser",
     "Check Proxy settings for 'Don't proxy loopback' or interception rules",
     "Look at the Event log tab for listener messages"
   ],
   "evidence_for": [],
-  "evidence_against": []
+  "evidence_against": [],
+  "resolution": "RESOLVED (wave 25, 2026-11-15): premise disproved with live probes. The reference Burp (pid 127214, listener 6570, project /root/burp-qa/qa.burp, default proxy config - no loopback exclusion in user.json) answered curl with 200 AND recorded the exchange: the exact curl request line, Host/User-Agent headers and full response body are present in the project save file at strings level (twice, for two curl runs), with the file mtime advancing on the request. The earlier empty-history observation was stale or from an unrefreshed view. burp.log contains no listener errors. This matches WebProbe's record() behavior - no change needed."
 }

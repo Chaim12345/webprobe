@@ -1,0 +1,149 @@
+{
+  "id": "ev_9bd8a497b34f15ecd22aa20f8945e63d8e64543828c28f91e8b2838be8bdcef5",
+  "subject": {
+    "kind": "source-tree",
+    "sha256": "172b576ed735e3299c161f8b66502b851ffc39dea2dec043fefb0f9b918aa107",
+    "name": "parity-evidence-w38"
+  },
+  "operation": "app_source_import",
+  "params": {
+    "include_hidden": false,
+    "path": "/tmp/parity-evidence-w38",
+    "respect_gitignore": true
+  },
+  "result": {
+    "files": [
+      {
+        "bytes": 46442,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "json",
+        "parse_mode": null,
+        "path": "burp-scan3.json",
+        "sha256": "99acf82bbdf4ae8d05648a68464c907ebfc061d36b4e3e2f4fc2179fe6a1a8b6",
+        "strings": []
+      },
+      {
+        "bytes": 3915,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "python",
+        "parse_mode": null,
+        "path": "lab.py",
+        "sha256": "6c3f0915300e58c11bfd250fac1f8b0dc19d41118f0bb8c1c00ef3e5ba72077b",
+        "strings": []
+      },
+      {
+        "bytes": 132,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "json",
+        "parse_mode": null,
+        "path": "project.json",
+        "sha256": "c8f6169eb1d9f0088dd968d9b244fa5e07fabcb6a9f38b450e74ebe4fc913f1d",
+        "strings": []
+      },
+      {
+        "bytes": 405,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "json",
+        "parse_mode": null,
+        "path": "scan.json",
+        "sha256": "10cad348f0d73f8da483ad801757f9dd239bb9517bd300a8a1bc762fca38ed5c",
+        "strings": []
+      },
+      {
+        "bytes": 124,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "json",
+        "parse_mode": null,
+        "path": "user.json",
+        "sha256": "b56747226cd8be38f4a051a3421b7dd6a4645d3d0b226af633b028f9711ea7e2",
+        "strings": []
+      },
+      {
+        "bytes": 345,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "other",
+        "parse_mode": null,
+        "path": "webprobe-issues-after-w39.txt",
+        "sha256": "db013da4019ebd26de5e5e633f15c1e46329da3aea37a6dba02de3f5ad5f177f",
+        "strings": []
+      },
+      {
+        "bytes": 490,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "other",
+        "parse_mode": null,
+        "path": "webprobe-issues-w40.txt",
+        "sha256": "de538d12a0ae28513adc5eb1a48573c380ee9caa2592c79b2c6018da59c31d75",
+        "strings": []
+      },
+      {
+        "bytes": 447,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "other",
+        "parse_mode": null,
+        "path": "webprobe-issues.txt",
+        "sha256": "00d219d46d855b835bf310676bd7bb7920b2a1d87839edd94fb989922c0e023b",
+        "strings": []
+      }
+    ],
+    "ignored": 0,
+    "label": "parity-evidence-w38",
+    "languages": {
+      "json": 4,
+      "other": 3,
+      "python": 1
+    },
+    "source_graph_id": "sg_172b576ed735e3299c161f8b66502b851ffc39dea2dec043fefb0f9b918aa107",
+    "truncated": false
+  },
+  "summary": "parity-evidence-w38: 8 file(s), 0 script(s) analysed, 0 ignored.",
+  "confidence": "observed",
+  "authority": "reasoning",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [
+    {
+      "code": "reference_claim",
+      "message": "A source tree is someone's claim about what was built; js_source_bundle_compare checks it against the shipped code."
+    }
+  ],
+  "coverage": {
+    "status": "complete",
+    "examined": 8
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/tmp/parity-evidence-w38"
+    }
+  ],
+  "links": []
+}

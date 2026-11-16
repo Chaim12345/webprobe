@@ -1,0 +1,280 @@
+{
+  "id": "ev_e853dfa6340b1e0112f8ee7dda2b75f1fa7b485cec216b57bb7b065423118b35",
+  "subject": {
+    "kind": "source-tree",
+    "sha256": "83dc96d7d23d3343dbe42bba9011a6725ce80d926f0744b530bbcf2de1660db1",
+    "name": "wave31-evidence"
+  },
+  "operation": "app_source_import",
+  "params": {
+    "include_hidden": false,
+    "path": "/tmp/wave31-evidence",
+    "respect_gitignore": true
+  },
+  "result": {
+    "files": [
+      {
+        "bytes": 488,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "jvm",
+        "parse_mode": null,
+        "path": "Arr.java",
+        "sha256": "aa8992f57db481f27427bf6005f170f42991fb6783fb4a4637f30eff9a511df8",
+        "strings": []
+      },
+      {
+        "bytes": 1494,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "jvm",
+        "parse_mode": null,
+        "path": "Dump.java",
+        "sha256": "6ad7cd508bde06409ab7b8a1cac6b3502edcce775ed05e56503e6fea9232619b",
+        "strings": []
+      },
+      {
+        "bytes": 1824,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "jvm",
+        "parse_mode": null,
+        "path": "Statics.java",
+        "sha256": "bb68b2c05aa1b82c61ff0a8fe01dabe9e550d1fbdf05ebacdda4d0cf1265bdb3",
+        "strings": []
+      },
+      {
+        "bytes": 1670,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "jvm",
+        "parse_mode": null,
+        "path": "Verify.java",
+        "sha256": "14f1d6f8c271cc67b32a6389af45e20cd8c569a50aa061906ec8c4ef7e5a6e07",
+        "strings": []
+      },
+      {
+        "bytes": 3256,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "jvm",
+        "parse_mode": null,
+        "path": "Walk.java",
+        "sha256": "60a7a67fafdacb367a4fbba9c1783c3e3089907a21231392cad84735b51da3c9",
+        "strings": []
+      },
+      {
+        "bytes": 454,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "jvm",
+        "parse_mode": null,
+        "path": "Zkm.java",
+        "sha256": "b24ad19f2f20c92ec7e1747965ac2290ae13f35423b8213a28a423731050257a",
+        "strings": []
+      },
+      {
+        "bytes": 1500,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "other",
+        "parse_mode": null,
+        "path": "decoded-Ze2s-sql-errors.txt",
+        "sha256": "2f618a1c1d46ab957dde5e4418078d4ff2f6f0ab328d904a82d871f36255dbef",
+        "strings": []
+      },
+      {
+        "bytes": 54,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "other",
+        "parse_mode": null,
+        "path": "decoded-Zp3a-ZJ.txt",
+        "sha256": "1d0bdde35234133f50c92180ca9541fbbc2eb6821745d7d48a3129ef9ff05765",
+        "strings": []
+      },
+      {
+        "bytes": 162,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "other",
+        "parse_mode": null,
+        "path": "decoded-Zppj-error-quotes.txt",
+        "sha256": "40202602406a9049219ca8e3e19b33d34fb32f2bdc5bcdbae341dcd77754d2fe",
+        "strings": []
+      },
+      {
+        "bytes": 3395,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "other",
+        "parse_mode": null,
+        "path": "decoded-Zw_c-Zscp-tables.txt",
+        "sha256": "b39e7b1333211ed43eb9e4c16600f000e8a74d10bc3be3951f32e20b011c5e85",
+        "strings": []
+      },
+      {
+        "bytes": 4174,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "other",
+        "parse_mode": null,
+        "path": "live-smtp-e2e.log",
+        "sha256": "f4624b1f5e54c4bc4e8b1929532d07db38a7f96bdc29fff5de872ca0bc61aa1a",
+        "strings": []
+      },
+      {
+        "bytes": 20629,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "other",
+        "parse_mode": null,
+        "path": "live-smtp-recipient-forms.log",
+        "sha256": "8de81ba14416693037bbb38937d1aea72092e9887f4aa1c39b27f875ff8acc8a",
+        "strings": []
+      },
+      {
+        "bytes": 1511,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "other",
+        "parse_mode": null,
+        "path": "nextest-before.txt",
+        "sha256": "99b0982cf3280a03a9c9fc13f8af8ce34dc3b6c5ac0b3dd45d5f11705180ba15",
+        "strings": []
+      },
+      {
+        "bytes": 421,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "other",
+        "parse_mode": null,
+        "path": "timings.txt",
+        "sha256": "09d81d139cb93b85770b854cfea97118bb3c07e2e81d03d0e42698fa39aa2842",
+        "strings": []
+      },
+      {
+        "bytes": 632,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "other",
+        "parse_mode": null,
+        "path": "trie-completeness.txt",
+        "sha256": "432e58f8ce646ad5663852267634bb72e403a461bedf146f10c1ebe9eb7070d3",
+        "strings": []
+      },
+      {
+        "bytes": 153184,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "other",
+        "parse_mode": null,
+        "path": "w35-collab-hit.png",
+        "sha256": "dd1f8773c0d74986f21bc8f9e60a1c59cf1f3d9123b519887f317fa96c22d90b",
+        "strings": []
+      },
+      {
+        "bytes": 119890,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "other",
+        "parse_mode": null,
+        "path": "w35-collab-remote.png",
+        "sha256": "460e13af9e80dcb381a39e70b7c6cc17e4727b440703ed1eab86b95f52f58b9e",
+        "strings": []
+      },
+      {
+        "bytes": 105113,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "other",
+        "parse_mode": null,
+        "path": "w35-collab.png",
+        "sha256": "84bc4d3e675eadb04c1c89b2342ec27480cdfea87324bd06935f7f70408997f3",
+        "strings": []
+      },
+      {
+        "bytes": 63757,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "other",
+        "parse_mode": null,
+        "path": "w35-scanner.png",
+        "sha256": "a286d2d76d575a64278ac85c39afed1b6a5333dbdf2fc1f0fcad156c4391ac15",
+        "strings": []
+      }
+    ],
+    "ignored": 0,
+    "label": "wave31-evidence",
+    "languages": {
+      "jvm": 6,
+      "other": 13
+    },
+    "source_graph_id": "sg_83dc96d7d23d3343dbe42bba9011a6725ce80d926f0744b530bbcf2de1660db1",
+    "truncated": false
+  },
+  "summary": "wave31-evidence: 19 file(s), 0 script(s) analysed, 0 ignored.",
+  "confidence": "observed",
+  "authority": "reasoning",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [
+    {
+      "code": "reference_claim",
+      "message": "A source tree is someone's claim about what was built; js_source_bundle_compare checks it against the shipped code."
+    }
+  ],
+  "coverage": {
+    "status": "complete",
+    "examined": 19
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/tmp/wave31-evidence"
+    }
+  ],
+  "links": []
+}

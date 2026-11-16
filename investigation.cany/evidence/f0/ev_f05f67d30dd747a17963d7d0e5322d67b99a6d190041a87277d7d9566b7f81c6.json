@@ -1,0 +1,62 @@
+{
+  "id": "ev_f05f67d30dd747a17963d7d0e5322d67b99a6d190041a87277d7d9566b7f81c6",
+  "subject": {
+    "kind": "jar",
+    "sha256": "510bf1c87c766f09c3c20d3ef75e7a6978e60dd38346965dd4836ce64417becf",
+    "name": "burpsuite.jar"
+  },
+  "operation": "java_classes_find",
+  "params": {
+    "include_methods": true,
+    "limit": 200,
+    "offset": 0,
+    "path": null,
+    "query": "ProxyWebSocketMessage"
+  },
+  "result": {
+    "classes": [
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/proxy/ProxyWebSocketMessage.class",
+        "fields": 0,
+        "interfaces": [
+          "burp.api.montoya.ui.contextmenu.WebSocketMessage"
+        ],
+        "internal": "burp/api/montoya/proxy/ProxyWebSocketMessage",
+        "matched_methods": [],
+        "methods": 11,
+        "name": "burp.api.montoya.proxy.ProxyWebSocketMessage",
+        "superclass": "java.lang.Object"
+      }
+    ],
+    "classes_total": 54868,
+    "matches": 1,
+    "query": "ProxyWebSocketMessage"
+  },
+  "summary": "1 of 54868 classes match \"ProxyWebSocketMessage\" ; showing 1.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 1,
+    "total": 1
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/opt/BurpSuite/burpsuite.jar"
+    }
+  ],
+  "links": []
+}

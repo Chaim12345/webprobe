@@ -1,0 +1,157 @@
+{
+  "id": "ev_058fb42d6c1c2e5d437ffd9c213afa0a9446c4ab95c3c1f25c72181ed33d272d",
+  "subject": {
+    "kind": "jar",
+    "sha256": "510bf1c87c766f09c3c20d3ef75e7a6978e60dd38346965dd4836ce64417becf",
+    "name": "burpsuite.jar"
+  },
+  "operation": "java_class_show",
+  "params": {
+    "class_name": "burp.Zn",
+    "decompile": true,
+    "path": "/opt/BurpSuite/burpsuite.jar"
+  },
+  "result": {
+    "access": [],
+    "annotations": [],
+    "entry": "burp/Zn.class",
+    "fields": [
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Z_;",
+        "name": "ZP",
+        "signature": null,
+        "type": "burp.Z_"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljava/lang/String;",
+        "name": "a",
+        "signature": null,
+        "type": "java.lang.String"
+      }
+    ],
+    "inner_classes": [],
+    "interfaces": [],
+    "internal": "burp/Zn",
+    "java_version": "Java 21",
+    "methods": [
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 10,
+        "deprecated": false,
+        "descriptor": "(Lburp/Z_;)V",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "<init>",
+        "signature": "public <init>(burp.Z_)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 31,
+        "deprecated": false,
+        "descriptor": "(Lburp/Zmg4;)Ljava/lang/String;",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "Zx",
+        "signature": "public java.lang.String Zx(burp.Zmg4)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "static"
+        ],
+        "code_bytes": 155,
+        "deprecated": false,
+        "descriptor": "()V",
+        "max_locals": 1,
+        "max_stack": 10,
+        "name": "<clinit>",
+        "signature": "static <clinit>()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      }
+    ],
+    "name": "burp.Zn",
+    "pseudo_java": "class burp.Zn extends burp.Z_ {\n    private final burp.Z_ ZP;\n    private static final java.lang.String a;\n\n    public <init>(burp.Z_){\n        this.ZP = v1;\n        return;\n    }\n\n\n    public java.lang.String Zx(burp.Zmg4){\n        return new Zd95(Zn.a).ZA(this.ZP.Zx(v1)).Zh(v1).toString();\n    }\n\n\n    static <clinit>(){\n        goto L16;\n        Zn.a = -1;\n        goto L9a;\n        L16:\n        68.toCharArray().length;\n        v0 = 0;\n        if (? <= 1) {\n            switch ((v0 % 7)) {\n                case 0:\n                    goto L73;\n                case 1:\n                    goto L73;\n                case 2:\n                    goto L73;\n                case 3:\n                    goto L73;\n                case 4:\n                    goto L73;\n                case 5:\n                    goto L73;\n                default:\n                    L73:\n                    64[83] = (char) (80 ^ (46 ^ 108));\n                    v0 += 1;\n                    if (97 == 0) {\n                        goto L2a;\n                    }\n            }\n        }\n        if (37 > v0) goto L2a;\n        goto L8;\n        L9a:\n        return;\n    }\n\n}\n",
+    "signature": null,
+    "source_file": null,
+    "superclass": "burp.Z_",
+    "version": {
+      "major": 65,
+      "minor": 0
+    }
+  },
+  "summary": "burp.Zn (Java 21) extends burp.Z_: 2 fields, 3 methods.",
+  "confidence": "inferred",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [
+    {
+      "code": "decompiler_inferred",
+      "message": "This pseudo-Java is reconstructed from bytecode by Craft Anything's built-in decompiler; it is a best guess, not the original source. The bytecode disassembly is the evidence."
+    },
+    {
+      "code": "generics_erased",
+      "message": "Generic type arguments are erased in bytecode and are not shown."
+    },
+    {
+      "code": "names_and_types_inferred",
+      "message": "Local variables are named v0, v1, … (no debug names); their declared types are not reconstructed."
+    },
+    {
+      "code": "desugaring_not_reversed",
+      "message": "Synthetic members, lambda/invokedynamic desugaring, enum scaffolding and string-switch hashing are not turned back into source."
+    },
+    {
+      "code": "stack_reconstruction_approximate",
+      "message": "1 method(s) contain stack operations that were approximated."
+    },
+    {
+      "code": "control_flow_partly_structured",
+      "message": "Some methods contain control flow shown with labels and goto statements."
+    }
+  ],
+  "coverage": {
+    "status": "complete",
+    "examined": 1,
+    "total": 1
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/opt/BurpSuite/burpsuite.jar"
+    },
+    {
+      "kind": "class",
+      "value": "burp/Zn"
+    }
+  ],
+  "links": []
+}

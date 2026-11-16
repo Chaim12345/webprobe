@@ -1,0 +1,60 @@
+{
+  "id": "ev_633448ab78939c2dc86e516ff4a8fb7563ed9bf52f0b99cb2fc6d3970a78aa42",
+  "subject": {
+    "kind": "jar",
+    "sha256": "510bf1c87c766f09c3c20d3ef75e7a6978e60dd38346965dd4836ce64417becf",
+    "name": "burpsuite.jar"
+  },
+  "operation": "java_classes_find",
+  "params": {
+    "include_methods": true,
+    "limit": 200,
+    "offset": 0,
+    "path": null,
+    "query": "ProxyWebSocketHistory"
+  },
+  "result": {
+    "classes": [
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/proxy/ProxyWebSocketHistoryFilter.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/proxy/ProxyWebSocketHistoryFilter",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "burp.api.montoya.proxy.ProxyWebSocketHistoryFilter",
+        "superclass": "java.lang.Object"
+      }
+    ],
+    "classes_total": 54868,
+    "matches": 1,
+    "query": "ProxyWebSocketHistory"
+  },
+  "summary": "1 of 54868 classes match \"ProxyWebSocketHistory\" ; showing 1.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 1,
+    "total": 1
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/opt/BurpSuite/burpsuite.jar"
+    }
+  ],
+  "links": []
+}

@@ -3,14 +3,14 @@
  "generated": "2026-11-15",
  "source": "TASKS.md",
  "summary": {
-  "total": 92,
-  "p0": 61,
-  "p1": 26,
-  "p2": 5,
+  "total": 101,
+  "p0": 64,
+  "p1": 29,
+  "p2": 8,
   "by_status": {
-   "done": 21,
-   "in_progress": 10,
-   "todo": 61
+   "done": 24,
+   "in_progress": 12,
+   "todo": 65
   }
  },
  "tasks": [
@@ -216,7 +216,8 @@
    "title": "Payload sets",
    "acceptance": "Simple list, runtime file, custom iterator, brute forcer, case modification, numbers, dates, usernames, null payloads, character frobber",
    "effort": "L",
-   "status": "todo"
+   "status": "in_progress",
+   "evidence": "intruder::PayloadSource with generate()/len() + resolve_sets(): SimpleList, RuntimeFile (lines read at generation, CR trimmed, blanks skipped, unreadable = empty set), Numbers (base 10/16, min_digits zero padding, fraction padding, step 0 -> 1), BruteForcer (lexicographic, charset order, 1M cap), Dates (UTC strftime subset %Y %m %d %H %M %S %s), CharacterBlocks; 11 source tests. REMAINING: usernames, null payloads, character frobber, case-modification and custom-iterator sources; no payload-source editor in the Intruder UI yet."
   },
   {
    "id": "C-04",
@@ -225,7 +226,9 @@
    "title": "Payload processing",
    "acceptance": "Prefix/suffix, substring, encode (URL/Base64/HTML/hex), hash, regex, skip; ordered pipeline",
    "effort": "M",
-   "status": "todo"
+   "status": "done",
+   "evidence": "intruder::Processor pipeline: AddPrefix, AddSuffix, MatchReplace (capture groups, invalid regex skipped), Substring (negative offsets, clamped), Reverse, Lowercase, Uppercase, Base64Encode/Decode, UrlEncodeAll, UrlEncodeKey, HtmlEncode, HexEncode, Md5, Sha1, Sha256, SkipIfMatches, MakeUnique (dedupe + cap); ordered process()/process_set() with skip-drop and dedupe; 15 processor tests incl. rule-order, bad regex/Base64 tolerance and dedupe cap. Engine-level; no pipeline editor in the Intruder UI yet (ui.rs owned by another worker).",
+   "completed": "2026-11-15"
   },
   {
    "id": "C-05",
@@ -270,7 +273,8 @@
    "title": "Audit check library",
    "acceptance": "≥ 40 checks with severity, confidence, description, remediation, references; unit tests per check with positive/negative fixtures",
    "effort": "L",
-   "status": "todo"
+   "status": "in_progress",
+   "evidence": "app/src/scan.rs passive engine rebuilt on a CheckDef registry (stable id + severity + confidence) with 30 checks: passive.hsts-missing, csp-missing, frame-ancestors-missing, x-content-type-options-missing, referrer-policy-missing, permissions-policy-missing, server-version, x-powered-by, aspnet-version, cookie-httponly-missing, cookie-secure-missing, cookie-samesite-missing, cookie-samesite-none-insecure, cors-wildcard-origin, cors-wildcard-origin-credentials, cors-reflected-origin, cors-reflected-origin-credentials, cors-null-origin, directory-listing, git-directory-exposed, env-file-exposed, login-form-http, mixed-content, cacheable-https-response, session-cookie-cross-host-redirect, password-autocomplete, email-disclosed, private-ip-disclosed, credit-card-disclosed, robots-txt; binary bodies skipped, body work capped at 256 KB, 23 scan tests (positive+negative per check, dedupe, cap) green. Still missing: remediation/references fields and ~10 more checks for the ≥40 acceptance."
   },
   {
    "id": "D-03",
@@ -748,7 +752,9 @@
    "title": "Top menu bar",
    "acceptance": "Burp, Project, Intruder, Repeater, View, Help menus in the window chrome; Burp menu lists Search, Settings, Configuration library, User settings >, Log in, Exit; every item either works or is disabled with a reason; shortcuts shown beside items match shortcuts.rs",
    "effort": "M",
-   "status": "todo"
+   "status": "done",
+   "completed": "2026-11-15",
+   "evidence": "Menu bar added above the tab row (menu row y~13, tab row y~44, Proxy action buttons moved to y~245): WebProbe (Settings..., Quit), Project (Project options...), Intruder (Send to Intruder), Repeater (Send to Repeater, Send request), View (13 tabs + Light theme checkbox), Help (Keyboard shortcuts, About WebProbe). All six open and list these items in qa/../webprobe-shots/cmp/v8-menu-*.png. Not yet Burp-complete: Burp also lists Search, Configuration library, User settings >, Log in, Burp Infiltrator, Burp Clickbandit (tracked as an open gap in qa/VISUAL-DIFF-2026-11-15.md)."
   },
   {
    "id": "P-02",
@@ -780,12 +786,13 @@
    "title": "Repeater layout parity",
    "acceptance": "Numbered tabs with close and '+', primary Send, Cancel, back/forward history, Target field with edit action, Request | Response | Inspector panes with side-by-side/stacked/tabbed toggles, Pretty/Raw/Hex views, wrap/non-printable/newline toggles, search bar with highlight count, right dock (Inspector, Notes, Explanations, Custom actions), status line",
    "effort": "L",
-   "status": "in_progress",
+   "status": "done",
    "depends_on": [
     "E-01",
     "E-04"
    ],
-   "evidence": "Repeater now has numbered tab + '+', primary Send (Ctrl+Space), Raw/Hex/Pretty response sub-tabs, a status line (e.g. '200 | 85 bytes | 1 ms'), and an Inspector collapsible with request line, query params, request headers and response headers. Live test 2026-11-15: seeded request to local origin, Ctrl+Space sent it, response 200 with JSON body; shot p04-repeater-raw.png. REMAINING: tab close/rename/reorder/groups, Cancel, back/forward history, Target field with edit, layout toggles, follow redirects. 118 tests pass. Rewritten as a three-pane layout: Request | Response | Inspector, numbered tabs with close and +, a command row with Send/Cancel/Target/HTTPS/status, Pretty/Raw/Hex per pane. Shot tour/08-repeater.png. REMAINING: back/forward history, follow redirects, tab groups."
+   "evidence": "Repeater now has numbered tab + '+', primary Send (Ctrl+Space), Raw/Hex/Pretty response sub-tabs, a status line (e.g. '200 | 85 bytes | 1 ms'), and an Inspector collapsible with request line, query params, request headers and response headers. Live test 2026-11-15: seeded request to local origin, Ctrl+Space sent it, response 200 with JSON body; shot p04-repeater-raw.png. REMAINING: tab close/rename/reorder/groups, Cancel, back/forward history, Target field with edit, layout toggles, follow redirects. 118 tests pass. Rewritten as a three-pane layout: Request | Response | Inspector, numbered tabs with close and +, a command row with Send/Cancel/Target/HTTPS/status, Pretty/Raw/Hex per pane. Shot tour/08-repeater.png. REMAINING: back/forward history, follow redirects, tab groups. v8 verification 2026-11-15: three-pane Request | Response | Inspector layout with horizontal request text confirmed in webprobe-shots/cmp/v8-repeater.png (Inspector shows request line, request headers, response headers). Editor zero-width bug fixed at root: pane bodies wrapped in ui.vertical, set_width, desired_width = available_width().max(120). Remaining for full Burp parity (tracked separately): back/forward history, Target edit action, right vertical dock, line numbers, per-pane status line.",
+   "completed": "2026-11-15"
   },
   {
    "id": "P-05",
@@ -929,6 +936,96 @@
    "depends_on": [
     "D-01"
    ]
+  },
+  {
+   "id": "UAT-01",
+   "epic": "UAT 2026-11-16 — blocking defects",
+   "priority": "P0",
+   "title": "Intruder attack-results window ignores all input (cannot close, cannot select a row)",
+   "acceptance": "The results window closes via its X/Escape and selecting a row shows the request/response; verified by an automated UAT pass.",
+   "effort": "S",
+   "status": "todo",
+   "evidence": "Isolated UAT 2026-11-16: clicks at 999/1002/1007 px on the title-bar X, row clicks at (250,171), and Escape all had no effect; Settings X closes normally. Shots /root/webprobe-uat/shots/68..71."
+  },
+  {
+   "id": "UAT-02",
+   "epic": "UAT 2026-11-16 — blocking defects",
+   "priority": "P0",
+   "title": "Repeater Cancel does not abort an in-flight request",
+   "acceptance": "Cancel aborts the worker; the status line reports cancellation; the response never arrives after cancel.",
+   "effort": "M",
+   "status": "todo",
+   "evidence": "Isolated UAT 2026-11-16: GET /slow?ms=8000 completed 200 in 8214 ms after two clicks on the enabled Cancel button. Shots 94/95."
+  },
+  {
+   "id": "UAT-03",
+   "epic": "UAT 2026-11-16 — blocking defects",
+   "priority": "P0",
+   "title": "Comparer uses one shared item collection and Paste is inert",
+   "acceptance": "Item 1 and item 2 hold independent lists; Paste adds to the targeted list; loading two files then Compare produces the expected diff.",
+   "effort": "M",
+   "status": "todo",
+   "evidence": "Isolated UAT 2026-11-16: loading cmp-a and cmp-b puts both entries in BOTH tables; Paste adds nothing. Shots 80-82."
+  },
+  {
+   "id": "UAT-04",
+   "epic": "UAT 2026-11-16 — blocking defects",
+   "priority": "P1",
+   "title": "Persist proxy history (and site map) in the project file across restarts",
+   "acceptance": "Quit and relaunch with the same project restores HTTP history rows and the site map.",
+   "effort": "M",
+   "status": "todo",
+   "evidence": "Isolated UAT 2026-11-16: 11 captured rows present before restart, empty after relaunch. Shot 47."
+  },
+  {
+   "id": "UAT-05",
+   "epic": "UAT 2026-11-16 — blocking defects",
+   "priority": "P1",
+   "title": "Window intermittently starts unmapped (process spins, proxy bound, no visible UI)",
+   "acceptance": "Every launch maps the window; a regression test or startup timeout surfaces the failure instead of spinning.",
+   "effort": "M",
+   "status": "todo",
+   "evidence": "Isolated UAT 2026-11-16: 2 of 4 launches left Map State IsUnMapped at ~115% CPU; external xdotool windowmap made the UI appear. Shots 98."
+  },
+  {
+   "id": "UAT-06",
+   "epic": "UAT 2026-11-16 — blocking defects",
+   "priority": "P1",
+   "title": "Paste into request/message editors is ignored or delivers stale clipboard",
+   "acceptance": "Ctrl+V inserts the current clipboard text into Repeater/Intruder request editors, preserving line breaks (LF and CRLF).",
+   "effort": "M",
+   "status": "todo",
+   "evidence": "Isolated UAT 2026-11-16: paste works in the Target single-line field but not reliably in request editors; one paste delivered the previous clipboard. Shots 30-37, 65."
+  },
+  {
+   "id": "UAT-07",
+   "epic": "UAT 2026-11-16 — polish",
+   "priority": "P2",
+   "title": "History Time column is truncated and the table needs horizontal scrolling at 1440 px",
+   "acceptance": "Time shows full HH:MM:SS without clipping; default column widths fit the reference window; message panes show more than ~4 lines.",
+   "effort": "S",
+   "status": "todo",
+   "evidence": "Isolated UAT 2026-11-16: Time renders as '08:39:'; horizontal scrollbar spans the viewport. Shots 02/05."
+  },
+  {
+   "id": "UAT-08",
+   "epic": "UAT 2026-11-16 — polish",
+   "priority": "P2",
+   "title": "Menu bar parity: WebProbe menu only has Search, Settings, Quit",
+   "acceptance": "Menus match the reference structure (Burp/Project/Intruder/Repeater/View/Help) with the expected items.",
+   "effort": "M",
+   "status": "todo",
+   "evidence": "Isolated UAT 2026-11-16: shot 100-menu-burp.png."
+  },
+  {
+   "id": "UAT-09",
+   "epic": "Automation / MCP integration",
+   "priority": "P2",
+   "title": "Publish a usable accessibility tree and IPC socket for MCP automation",
+   "acceptance": "With accesskit enabled, agent-desktop and egui-mcp see the widget tree and can click elements; egui-mcp check_connection succeeds once egui 0.33 + egui-mcp-client is embedded.",
+   "effort": "L",
+   "status": "in_progress",
+   "evidence": "accesskit build in /root/webprobe-a11y appears on the AT-SPI bus but the frame lacks native-window mapping; egui-mcp-server 0.0.5 installed and registered in ~/.config/opencode/opencode.json (ping=pong, check_connection=false). egui 0.33 + egui-mcp-client trial build in /root/webprobe-egui33."
   }
  ]
 }

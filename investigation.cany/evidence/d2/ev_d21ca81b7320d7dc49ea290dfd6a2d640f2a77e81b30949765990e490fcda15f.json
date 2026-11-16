@@ -1,0 +1,517 @@
+{
+  "id": "ev_d21ca81b7320d7dc49ea290dfd6a2d640f2a77e81b30949765990e490fcda15f",
+  "subject": {
+    "kind": "jar",
+    "sha256": "510bf1c87c766f09c3c20d3ef75e7a6978e60dd38346965dd4836ce64417becf",
+    "name": "burpsuite.jar"
+  },
+  "operation": "java_classes_find",
+  "params": {
+    "include_methods": true,
+    "limit": 200,
+    "offset": 0,
+    "path": null,
+    "query": "WebSocketMessage"
+  },
+  "result": {
+    "classes": [
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zce8.class",
+        "fields": 22,
+        "interfaces": [
+          "burp.Ztyn",
+          "burp.Zk8k",
+          "burp.Zzl2",
+          "burp.Zj4t"
+        ],
+        "internal": "burp/Zce8",
+        "matched_methods": [
+          {
+            "name": "lambda$setWebSocketMessage$3",
+            "signature": "private void lambda$setWebSocketMessage$3(byte[])"
+          }
+        ],
+        "methods": 116,
+        "name": "burp.Zce8",
+        "superclass": "burp.Zcit"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zcur.class",
+        "fields": 60,
+        "interfaces": [
+          "burp.Zuzu",
+          "burp.Zmbe",
+          "burp.Zguy",
+          "burp.Zk9h",
+          "burp.Zd9c"
+        ],
+        "internal": "burp/Zcur",
+        "matched_methods": [
+          {
+            "name": "lambda$refreshWebSocketMessageEditorProviders$20",
+            "signature": "private static void lambda$refreshWebSocketMessageEditorProviders$20(java.util.List, burp.Ze81)"
+          }
+        ],
+        "methods": 103,
+        "name": "burp.Zcur",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [],
+        "entry": "burp/Zem1.class",
+        "fields": 8,
+        "interfaces": [
+          "burp.Zaws"
+        ],
+        "internal": "burp/Zem1",
+        "matched_methods": [
+          {
+            "name": "lambda$webSocketMessageSyntaxStyleSelector$0",
+            "signature": "private static boolean lambda$webSocketMessageSyntaxStyleSelector$0(burp.Zgfc)"
+          }
+        ],
+        "methods": 7,
+        "name": "burp.Zem1",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zfwa.class",
+        "fields": 13,
+        "interfaces": [
+          "burp.api.montoya.ui.UserInterface"
+        ],
+        "internal": "burp/Zfwa",
+        "matched_methods": [
+          {
+            "name": "registerWebSocketMessageEditorProvider",
+            "signature": "public burp.api.montoya.core.Registration registerWebSocketMessageEditorProvider(burp.api.montoya.ui.editor.extension.WebSocketMessageEditorProvider)"
+          },
+          {
+            "name": "createWebSocketMessageEditor",
+            "signature": "public varargs burp.api.montoya.ui.editor.WebSocketMessageEditor createWebSocketMessageEditor(burp.api.montoya.ui.editor.EditorOptions[])"
+          }
+        ],
+        "methods": 25,
+        "name": "burp.Zfwa",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zgd7.class",
+        "fields": 3,
+        "interfaces": [
+          "burp.api.montoya.ui.UserInterface"
+        ],
+        "internal": "burp/Zgd7",
+        "matched_methods": [
+          {
+            "name": "registerWebSocketMessageEditorProvider",
+            "signature": "public burp.api.montoya.core.Registration registerWebSocketMessageEditorProvider(burp.api.montoya.ui.editor.extension.WebSocketMessageEditorProvider)"
+          },
+          {
+            "name": "createWebSocketMessageEditor",
+            "signature": "public varargs burp.api.montoya.ui.editor.WebSocketMessageEditor createWebSocketMessageEditor(burp.api.montoya.ui.editor.EditorOptions[])"
+          }
+        ],
+        "methods": 23,
+        "name": "burp.Zgd7",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zj30.class",
+        "fields": 2,
+        "interfaces": [
+          "burp.api.montoya.ui.UserInterface"
+        ],
+        "internal": "burp/Zj30",
+        "matched_methods": [
+          {
+            "name": "registerWebSocketMessageEditorProvider",
+            "signature": "public burp.api.montoya.core.Registration registerWebSocketMessageEditorProvider(burp.api.montoya.ui.editor.extension.WebSocketMessageEditorProvider)"
+          },
+          {
+            "name": "createWebSocketMessageEditor",
+            "signature": "public varargs burp.api.montoya.ui.editor.WebSocketMessageEditor createWebSocketMessageEditor(burp.api.montoya.ui.editor.EditorOptions[])"
+          }
+        ],
+        "methods": 23,
+        "name": "burp.Zj30",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zju1.class",
+        "fields": 1,
+        "interfaces": [
+          "burp.Zu_r"
+        ],
+        "internal": "burp/Zju1",
+        "matched_methods": [
+          {
+            "name": "lambda$webSocketMessageSelectionChanged$2",
+            "signature": "private static void lambda$webSocketMessageSelectionChanged$2(int, int, java.lang.String, burp.Zu_r)"
+          }
+        ],
+        "methods": 10,
+        "name": "burp.Zju1",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zlaz.class",
+        "fields": 1,
+        "interfaces": [
+          "burp.api.montoya.ui.UserInterface"
+        ],
+        "internal": "burp/Zlaz",
+        "matched_methods": [
+          {
+            "name": "registerWebSocketMessageEditorProvider",
+            "signature": "public burp.api.montoya.core.Registration registerWebSocketMessageEditorProvider(burp.api.montoya.ui.editor.extension.WebSocketMessageEditorProvider)"
+          },
+          {
+            "name": "createWebSocketMessageEditor",
+            "signature": "public varargs burp.api.montoya.ui.editor.WebSocketMessageEditor createWebSocketMessageEditor(burp.api.montoya.ui.editor.EditorOptions[])"
+          }
+        ],
+        "methods": 24,
+        "name": "burp.Zlaz",
+        "superclass": "burp.Zla0"
+      },
+      {
+        "access": [
+          "public",
+          "abstract"
+        ],
+        "entry": "burp/Zmbj.class",
+        "fields": 14,
+        "interfaces": [
+          "burp.Zzem"
+        ],
+        "internal": "burp/Zmbj",
+        "matched_methods": [
+          {
+            "name": "lambda$getWebSocketMessageEditorProviders$4",
+            "signature": "private burp.Zkqn lambda$getWebSocketMessageEditorProviders$4(burp.api.montoya.ui.editor.extension.WebSocketMessageEditorProvider)"
+          }
+        ],
+        "methods": 71,
+        "name": "burp.Zmbj",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [],
+        "entry": "burp/Ztae.class",
+        "fields": 12,
+        "interfaces": [
+          "burp.Zz0_"
+        ],
+        "internal": "burp/Ztae",
+        "matched_methods": [
+          {
+            "name": "lambda$webSocketMessageModified$10",
+            "signature": "private void lambda$webSocketMessageModified$10()"
+          },
+          {
+            "name": "lambda$setWebSocketMessageSource$7",
+            "signature": "private void lambda$setWebSocketMessageSource$7(burp.Zjta)"
+          },
+          {
+            "name": "lambda$setWebSocketMessageSourceAndClearOthers$4",
+            "signature": "private void lambda$setWebSocketMessageSourceAndClearOthers$4(burp.Zjta)"
+          }
+        ],
+        "methods": 51,
+        "name": "burp.Ztae",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [],
+        "entry": "burp/Zth8.class",
+        "fields": 11,
+        "interfaces": [
+          "burp.Za3b"
+        ],
+        "internal": "burp/Zth8",
+        "matched_methods": [
+          {
+            "name": "lambda$webSocketMessageProviderConfigChanged$2",
+            "signature": "private static boolean lambda$webSocketMessageProviderConfigChanged$2(burp.Zf70, burp.Zug8)"
+          }
+        ],
+        "methods": 15,
+        "name": "burp.Zth8",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zu45.class",
+        "fields": 2,
+        "interfaces": [
+          "burp.api.montoya.ui.contextmenu.WebSocketContextMenuEvent"
+        ],
+        "internal": "burp/Zu45",
+        "matched_methods": [
+          {
+            "name": "selectedWebSocketMessages",
+            "signature": "public java.util.List selectedWebSocketMessages()"
+          },
+          {
+            "name": "lambda$selectedWebSocketMessages$0",
+            "signature": "private burp.Zmpq lambda$selectedWebSocketMessages$0(burp.Ztov)"
+          }
+        ],
+        "methods": 9,
+        "name": "burp.Zu45",
+        "superclass": "burp.Zu4d"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zu4u.class",
+        "fields": 3,
+        "interfaces": [
+          "burp.api.montoya.ui.contextmenu.WebSocketEditorEvent"
+        ],
+        "internal": "burp/Zu4u",
+        "matched_methods": [
+          {
+            "name": "webSocketMessage",
+            "signature": "public burp.api.montoya.ui.contextmenu.WebSocketMessage webSocketMessage()"
+          }
+        ],
+        "methods": 12,
+        "name": "burp.Zu4u",
+        "superclass": "burp.Zu4d"
+      },
+      {
+        "access": [],
+        "entry": "burp/Zz3s.class",
+        "fields": 9,
+        "interfaces": [
+          "burp.Zegc"
+        ],
+        "internal": "burp/Zz3s",
+        "matched_methods": [
+          {
+            "name": "lambda$setMessageFromWebSocketMessage$2",
+            "signature": "private void lambda$setMessageFromWebSocketMessage$2(burp.Zuxx, burp.Zuxx)"
+          }
+        ],
+        "methods": 44,
+        "name": "burp.Zz3s",
+        "superclass": "burp.Zz32"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/proxy/ProxyWebSocketMessage.class",
+        "fields": 0,
+        "interfaces": [
+          "burp.api.montoya.ui.contextmenu.WebSocketMessage"
+        ],
+        "internal": "burp/api/montoya/proxy/ProxyWebSocketMessage",
+        "matched_methods": [],
+        "methods": 11,
+        "name": "burp.api.montoya.proxy.ProxyWebSocketMessage",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/ui/UserInterface.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/ui/UserInterface",
+        "matched_methods": [
+          {
+            "name": "registerWebSocketMessageEditorProvider",
+            "signature": "public abstract burp.api.montoya.core.Registration registerWebSocketMessageEditorProvider(burp.api.montoya.ui.editor.extension.WebSocketMessageEditorProvider)"
+          },
+          {
+            "name": "createWebSocketMessageEditor",
+            "signature": "public varargs abstract burp.api.montoya.ui.editor.WebSocketMessageEditor createWebSocketMessageEditor(burp.api.montoya.ui.editor.EditorOptions[])"
+          }
+        ],
+        "methods": 20,
+        "name": "burp.api.montoya.ui.UserInterface",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/ui/contextmenu/WebSocketContextMenuEvent.class",
+        "fields": 0,
+        "interfaces": [
+          "burp.api.montoya.ui.contextmenu.ComponentEvent",
+          "burp.api.montoya.core.ToolSource"
+        ],
+        "internal": "burp/api/montoya/ui/contextmenu/WebSocketContextMenuEvent",
+        "matched_methods": [
+          {
+            "name": "selectedWebSocketMessages",
+            "signature": "public abstract java.util.List selectedWebSocketMessages()"
+          }
+        ],
+        "methods": 2,
+        "name": "burp.api.montoya.ui.contextmenu.WebSocketContextMenuEvent",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/ui/contextmenu/WebSocketEditorEvent.class",
+        "fields": 0,
+        "interfaces": [
+          "burp.api.montoya.ui.contextmenu.ComponentEvent",
+          "burp.api.montoya.core.ToolSource"
+        ],
+        "internal": "burp/api/montoya/ui/contextmenu/WebSocketEditorEvent",
+        "matched_methods": [
+          {
+            "name": "webSocketMessage",
+            "signature": "public abstract burp.api.montoya.ui.contextmenu.WebSocketMessage webSocketMessage()"
+          }
+        ],
+        "methods": 6,
+        "name": "burp.api.montoya.ui.contextmenu.WebSocketEditorEvent",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/ui/contextmenu/WebSocketMessage.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/ui/contextmenu/WebSocketMessage",
+        "matched_methods": [],
+        "methods": 4,
+        "name": "burp.api.montoya.ui.contextmenu.WebSocketMessage",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/ui/editor/WebSocketMessageEditor.class",
+        "fields": 0,
+        "interfaces": [
+          "burp.api.montoya.ui.editor.Editor"
+        ],
+        "internal": "burp/api/montoya/ui/editor/WebSocketMessageEditor",
+        "matched_methods": [],
+        "methods": 7,
+        "name": "burp.api.montoya.ui.editor.WebSocketMessageEditor",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/ui/editor/extension/ExtensionProvidedWebSocketMessageEditor.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/ui/editor/extension/ExtensionProvidedWebSocketMessageEditor",
+        "matched_methods": [],
+        "methods": 7,
+        "name": "burp.api.montoya.ui.editor.extension.ExtensionProvidedWebSocketMessageEditor",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/ui/editor/extension/WebSocketMessageEditorProvider.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/ui/editor/extension/WebSocketMessageEditorProvider",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "burp.api.montoya.ui.editor.extension.WebSocketMessageEditorProvider",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/api/montoya/websocket/extension/ExtensionWebSocketMessageHandler.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/api/montoya/websocket/extension/ExtensionWebSocketMessageHandler",
+        "matched_methods": [],
+        "methods": 3,
+        "name": "burp.api.montoya.websocket.extension.ExtensionWebSocketMessageHandler",
+        "superclass": "java.lang.Object"
+      }
+    ],
+    "classes_total": 54868,
+    "matches": 23,
+    "query": "WebSocketMessage"
+  },
+  "summary": "23 of 54868 classes match \"WebSocketMessage\" ; showing 23.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 23,
+    "total": 23
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/opt/BurpSuite/burpsuite.jar"
+    }
+  ],
+  "links": []
+}

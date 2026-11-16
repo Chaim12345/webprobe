@@ -1,0 +1,87 @@
+{
+  "id": "ev_1f11bbcae7093c78d66f9a757cb46baf2c4b39b268506c7f5473e8b275ad91d0",
+  "subject": {
+    "kind": "source-tree",
+    "sha256": "30144922d81022e6ba9f51fa0d228687a3f44722e7e639cdaeed5456374b7f37",
+    "name": "wave30-evidence"
+  },
+  "operation": "app_source_import",
+  "params": {
+    "include_hidden": false,
+    "path": "/tmp/wave30-evidence",
+    "respect_gitignore": true
+  },
+  "result": {
+    "files": [
+      {
+        "bytes": 2896,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "other",
+        "parse_mode": null,
+        "path": "DemoExtension.java.txt",
+        "sha256": "5ab44fd1c88af4b4309a982459e2034237c8852869716c93433455347bad0e89",
+        "strings": []
+      },
+      {
+        "bytes": 18986,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "other",
+        "parse_mode": null,
+        "path": "MontoyaBridge.java.txt",
+        "sha256": "a942a8ac21e07b88f038c60d9f8e8648b2b7317e28a8a46803b76ebe80b272f7",
+        "strings": []
+      },
+      {
+        "bytes": 155218,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "other",
+        "parse_mode": null,
+        "path": "extensions-tab-sidecar-loaded.png",
+        "sha256": "92321e08c81d21053991ca1b19c73085a801dfb5691aa187ce5d089978dd02c0",
+        "strings": []
+      }
+    ],
+    "ignored": 0,
+    "label": "wave30-evidence",
+    "languages": {
+      "other": 3
+    },
+    "source_graph_id": "sg_30144922d81022e6ba9f51fa0d228687a3f44722e7e639cdaeed5456374b7f37",
+    "truncated": false
+  },
+  "summary": "wave30-evidence: 3 file(s), 0 script(s) analysed, 0 ignored.",
+  "confidence": "observed",
+  "authority": "reasoning",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [
+    {
+      "code": "reference_claim",
+      "message": "A source tree is someone's claim about what was built; js_source_bundle_compare checks it against the shipped code."
+    }
+  ],
+  "coverage": {
+    "status": "complete",
+    "examined": 3
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/tmp/wave30-evidence"
+    }
+  ],
+  "links": []
+}

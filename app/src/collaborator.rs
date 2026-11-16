@@ -63,6 +63,7 @@ fn unix_secs() -> u64 {
 pub enum InteractionKind {
     Http,
     Dns,
+    Smtp,
 }
 
 impl InteractionKind {
@@ -70,6 +71,7 @@ impl InteractionKind {
         match self {
             Self::Http => "HTTP",
             Self::Dns => "DNS",
+            Self::Smtp => "SMTP",
         }
     }
 }
@@ -107,12 +109,20 @@ impl DnsInteraction {
     }
 }
 
+/// One SMTP conversation reported by the public interactsh server.
+#[derive(Clone, Debug, Default)]
+pub struct SmtpInteraction {
+    pub from: String,
+    pub conversation: String,
+}
+
 /// Captured payload, shaped after the local observable parts of the Montoya
 /// `Interaction` API. The raw query/request is retained for inspection.
 #[derive(Clone, Debug)]
 pub enum InteractionDetail {
     Http(HttpInteraction),
     Dns(DnsInteraction),
+    Smtp(SmtpInteraction),
 }
 
 /// One observed interaction. IDs are assigned locally and monotonically.
@@ -130,20 +140,21 @@ impl Interaction {
         match self.detail {
             InteractionDetail::Http(_) => InteractionKind::Http,
             InteractionDetail::Dns(_) => InteractionKind::Dns,
+            InteractionDetail::Smtp(_) => InteractionKind::Smtp,
         }
     }
 
     pub fn http(&self) -> Option<&HttpInteraction> {
         match &self.detail {
             InteractionDetail::Http(details) => Some(details),
-            InteractionDetail::Dns(_) => None,
+            _ => None,
         }
     }
 
     pub fn dns(&self) -> Option<&DnsInteraction> {
         match &self.detail {
             InteractionDetail::Dns(details) => Some(details),
-            InteractionDetail::Http(_) => None,
+            _ => None,
         }
     }
 
@@ -160,6 +171,11 @@ impl Interaction {
                 preview_text(&dns.qname, 120),
                 dns.qtype_label(),
                 dns.qtype
+            ),
+            InteractionDetail::Smtp(smtp) => format!(
+                "MAIL FROM {} ({} bytes)",
+                preview_text(&smtp.from, 80),
+                smtp.conversation.len()
             ),
         }
     }
@@ -474,6 +490,83 @@ pub struct CollaboratorState {
     pub table: crate::table::TableState,
     /// Selected interaction id, shown in the detail pane.
     pub selected: Option<u64>,
+    /// Public interactsh session (Collaborator on a public OAST host), when
+    /// enabled. Payloads then resolve on the internet like Burp's.
+    remote: Option<RemoteCollaborator>,
+    /// Server chosen in the UI for the next `start_remote`.
+    pub remote_choice: String,
+    /// Burp's tab starts on an onboarding screen until "Get started".
+    pub ui_started: bool,
+    /// Settings panel (server and listeners) shown under the client.
+    pub ui_settings: bool,
+    /// "Include Collaborator server location" in copied payloads.
+    pub include_server: bool,
+    /// Detail tab: 0 Description, 1 Request to Collaborator, 2 Response.
+    pub detail_tab: usize,
+}
+
+/// A registered interactsh session plus its poll thread, which records every
+/// reported interaction into the shared log.
+struct RemoteCollaborator {
+    session: Arc<crate::interactsh::Session>,
+    stop: Arc<AtomicBool>,
+    error: Arc<Mutex<Option<String>>>,
+    handle: Option<JoinHandle<()>>,
+}
+
+impl Drop for RemoteCollaborator {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::SeqCst);
+        if let Some(h) = self.handle.take() {
+            let _ = h.join();
+        }
+        self.session.deregister();
+    }
+}
+
+/// Map one interactsh report onto the local interaction model.
+pub(crate) fn remote_detail(it: &crate::interactsh::RemoteInteraction) -> Option<InteractionDetail> {
+    match it.protocol.as_str() {
+        "http" | "https" => {
+            let raw = it.raw_request.as_bytes();
+            let detail = match parse_http_request(raw) {
+                Ok(req) => HttpInteraction {
+                    method: req.method,
+                    target: req.target,
+                    version: req.version,
+                    headers: req.headers,
+                    body: req.body,
+                },
+                Err(_) => HttpInteraction { body: raw.to_vec(), ..Default::default() },
+            };
+            Some(InteractionDetail::Http(detail))
+        }
+        "dns" => Some(InteractionDetail::Dns(DnsInteraction {
+            qname: it.full_id.clone(),
+            qtype: dns_qtype_from_label(&it.q_type),
+            raw_query: it.raw_request.as_bytes().to_vec(),
+        })),
+        "smtp" => Some(InteractionDetail::Smtp(SmtpInteraction {
+            from: it.smtp_from.clone(),
+            conversation: it.raw_request.clone(),
+        })),
+        _ => None,
+    }
+}
+
+fn dns_qtype_from_label(label: &str) -> u16 {
+    match label.to_ascii_uppercase().as_str() {
+        "A" => 1,
+        "NS" => 2,
+        "CNAME" => 5,
+        "SOA" => 6,
+        "PTR" => 12,
+        "MX" => 15,
+        "TXT" => 16,
+        "AAAA" => 28,
+        "SRV" => 33,
+        _ => 0,
+    }
 }
 
 impl CollaboratorState {
@@ -492,6 +585,12 @@ impl CollaboratorState {
             payloads: Vec::new(),
             table: crate::table::TableState::new(),
             selected: None,
+            remote: None,
+            remote_choice: crate::interactsh::DEFAULT_SERVERS[0].to_string(),
+            ui_started: false,
+            ui_settings: false,
+            include_server: true,
+            detail_tab: 0,
         }
     }
 
@@ -530,6 +629,73 @@ impl CollaboratorState {
     pub fn stop_all(&mut self) {
         self.stop_http();
         self.stop_dns();
+        self.stop_remote();
+    }
+
+    /// Register with a public interactsh server and start polling it every
+    /// few seconds. New payloads then use that server's domain.
+    pub fn start_remote(&mut self, server: &str) -> Result<String, String> {
+        self.stop_remote();
+        let session = Arc::new(crate::interactsh::Session::register(server)?);
+        let stop = Arc::new(AtomicBool::new(false));
+        let error = Arc::new(Mutex::new(None));
+        let (s2, stop2, err2, log) = (Arc::clone(&session), Arc::clone(&stop), Arc::clone(&error), Arc::clone(&self.log));
+        let handle = std::thread::spawn(move || {
+            while !stop2.load(Ordering::SeqCst) {
+                match s2.poll() {
+                    Ok(items) => {
+                        *lock(&err2) = None;
+                        for it in items {
+                            if let Some(detail) = remote_detail(&it) {
+                                let token = (!it.unique_id.is_empty()).then(|| it.unique_id.clone());
+                                log.record(unix_secs(), it.remote_address.clone(), token, detail);
+                            }
+                        }
+                    }
+                    Err(e) => *lock(&err2) = Some(e),
+                }
+                for _ in 0..30 {
+                    if stop2.load(Ordering::SeqCst) {
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                }
+            }
+        });
+        let domain = session.server.clone();
+        self.remote = Some(RemoteCollaborator { session, stop, error, handle: Some(handle) });
+        Ok(domain)
+    }
+
+    pub fn stop_remote(&mut self) {
+        self.remote = None;
+    }
+
+    /// The public server domain while an interactsh session is active.
+    /// Burp's "Poll now": fetch new interactions from the public server
+    /// immediately instead of waiting for the next 3 s poll.
+    pub fn poll_now(&self) {
+        if let Some(r) = &self.remote {
+            let (s2, log) = (Arc::clone(&r.session), Arc::clone(&self.log));
+            std::thread::spawn(move || {
+                if let Ok(items) = s2.poll() {
+                    for it in items {
+                        if let Some(detail) = remote_detail(&it) {
+                            let token = (!it.unique_id.is_empty()).then(|| it.unique_id.clone());
+                            log.record(unix_secs(), it.remote_address.clone(), token, detail);
+                        }
+                    }
+                }
+            });
+        }
+    }
+
+    pub fn remote_server(&self) -> Option<String> {
+        self.remote.as_ref().map(|r| r.session.server.clone())
+    }
+
+    pub fn remote_error(&self) -> Option<String> {
+        self.remote.as_ref().and_then(|r| lock(&r.error).clone())
     }
 
     pub fn interactions(&self) -> Vec<Interaction> {
@@ -548,6 +714,20 @@ impl CollaboratorState {
     /// This is local correlation only; the URLs do not resolve via a public
     /// service and are useful only against these loopback listeners.
     pub fn generate_payload(&mut self) -> Payload {
+        if let Some(remote) = &self.remote {
+            let (token, host) = remote.session.new_payload();
+            let payload = Payload {
+                http_url: format!("http://{host}/"),
+                dns_name: host,
+                token,
+                created_at: unix_secs(),
+            };
+            self.payloads.push(payload.clone());
+            while self.payloads.len() > MAX_PAYLOADS {
+                self.payloads.remove(0);
+            }
+            return payload;
+        }
         let mut token = make_token();
         while self.payloads.iter().any(|payload| payload.token == token) {
             token = make_token();
@@ -576,7 +756,7 @@ impl CollaboratorState {
     /// Keep stored URLs aligned with the currently configured HTTP port.
     pub fn refresh_payload_urls(&mut self) {
         let port = self.http.port;
-        for payload in &mut self.payloads {
+        for payload in self.payloads.iter_mut().filter(|p| p.http_url.starts_with("http://127.0.0.1:")) {
             payload.http_url = format!("http://127.0.0.1:{port}/{}", payload.token);
         }
     }

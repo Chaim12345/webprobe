@@ -18,6 +18,36 @@ serde_json = "1"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 time = "0.3"
 webpki-roots = "0.26"
+# interactsh client (Collaborator on a public OAST host): RSA-OAEP-SHA256
+# key unwrap + AES-CTR message decryption (verified live against oast.pro:
+# CFB decrypts only the first block, CTR all of it).
+sha2 = "0.10"
+aes = "0.8"
+ctr = "0.9"
+base64 = "0.22"
+# Burp-clone UI helpers: Render tab text, status-bar memory gauge.
+egui-phosphor = "0.7"
+egui_extras = { version = "0.29", default-features = false }
+# Browser-driven crawl: Chrome DevTools Protocol over WebSocket.
+tungstenite = { version = "0.24", default-features = false, features = ["handshake"] }
+html2text = "0.12"
+sysinfo = { version = "0.32", default-features = false, features = ["system"] }
 
 [profile.release]
 opt-level = 2
+
+# Test/dev build speed (measured 2026-11-15 with cargo-nextest): nearly every
+# test builds a net::Shared, which generates a 2048-bit RSA CA key (tls.rs).
+# Unoptimized `rsa`/bigint code made that cost seconds per test, and under
+# parallel contention six tests took 64-118s each. Optimizing dependencies
+# (not our own crate, which stays fast to compile) removes that cost.
+[profile.dev.package."*"]
+opt-level = 2
+
+# Keep panic line numbers but write far less DWARF (faster link, smaller
+# target/). Mirrors ~/.cargo/config.toml so the crate is fast on any box.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.test]
+debug = "line-tables-only"

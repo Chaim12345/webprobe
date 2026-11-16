@@ -1,0 +1,124 @@
+{
+  "id": "ev_1fe229926233009d2fe760d35c96a35352d1f6775c37d336723ca4e8daeea70d",
+  "subject": {
+    "kind": "source-tree",
+    "sha256": "dba7178203b28d0806198802a1225e208dc9bb955bcb00bdd236bb94791dcdc7",
+    "name": "wave31-evidence"
+  },
+  "operation": "app_source_import",
+  "params": {
+    "include_hidden": false,
+    "path": "/tmp/wave31-evidence",
+    "respect_gitignore": true
+  },
+  "result": {
+    "files": [
+      {
+        "bytes": 1494,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "jvm",
+        "parse_mode": null,
+        "path": "Dump.java",
+        "sha256": "6ad7cd508bde06409ab7b8a1cac6b3502edcce775ed05e56503e6fea9232619b",
+        "strings": []
+      },
+      {
+        "bytes": 3256,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "jvm",
+        "parse_mode": null,
+        "path": "Walk.java",
+        "sha256": "60a7a67fafdacb367a4fbba9c1783c3e3089907a21231392cad84735b51da3c9",
+        "strings": []
+      },
+      {
+        "bytes": 54,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "other",
+        "parse_mode": null,
+        "path": "decoded-Zp3a-ZJ.txt",
+        "sha256": "1d0bdde35234133f50c92180ca9541fbbc2eb6821745d7d48a3129ef9ff05765",
+        "strings": []
+      },
+      {
+        "bytes": 3395,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "other",
+        "parse_mode": null,
+        "path": "decoded-Zw_c-Zscp-tables.txt",
+        "sha256": "b39e7b1333211ed43eb9e4c16600f000e8a74d10bc3be3951f32e20b011c5e85",
+        "strings": []
+      },
+      {
+        "bytes": 1511,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "other",
+        "parse_mode": null,
+        "path": "nextest-before.txt",
+        "sha256": "99b0982cf3280a03a9c9fc13f8af8ce34dc3b6c5ac0b3dd45d5f11705180ba15",
+        "strings": []
+      },
+      {
+        "bytes": 421,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "other",
+        "parse_mode": null,
+        "path": "timings.txt",
+        "sha256": "09d81d139cb93b85770b854cfea97118bb3c07e2e81d03d0e42698fa39aa2842",
+        "strings": []
+      }
+    ],
+    "ignored": 0,
+    "label": "wave31-evidence",
+    "languages": {
+      "jvm": 2,
+      "other": 4
+    },
+    "source_graph_id": "sg_dba7178203b28d0806198802a1225e208dc9bb955bcb00bdd236bb94791dcdc7",
+    "truncated": false
+  },
+  "summary": "wave31-evidence: 6 file(s), 0 script(s) analysed, 0 ignored.",
+  "confidence": "observed",
+  "authority": "reasoning",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [
+    {
+      "code": "reference_claim",
+      "message": "A source tree is someone's claim about what was built; js_source_bundle_compare checks it against the shipped code."
+    }
+  ],
+  "coverage": {
+    "status": "complete",
+    "examined": 6
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/tmp/wave31-evidence"
+    }
+  ],
+  "links": []
+}

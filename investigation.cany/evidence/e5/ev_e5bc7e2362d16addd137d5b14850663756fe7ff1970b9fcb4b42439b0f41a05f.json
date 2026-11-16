@@ -1,0 +1,275 @@
+{
+  "id": "ev_e5bc7e2362d16addd137d5b14850663756fe7ff1970b9fcb4b42439b0f41a05f",
+  "subject": {
+    "kind": "jar",
+    "sha256": "510bf1c87c766f09c3c20d3ef75e7a6978e60dd38346965dd4836ce64417becf",
+    "name": "burpsuite.jar"
+  },
+  "operation": "java_classes_find",
+  "params": {
+    "include_methods": false,
+    "limit": 15,
+    "offset": 0,
+    "path": "/opt/BurpSuite/burpsuite.jar",
+    "query": ""
+  },
+  "result": {
+    "classes": [
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/IBurpCollaboratorClientContext.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/IBurpCollaboratorClientContext",
+        "matched_methods": [],
+        "methods": 6,
+        "name": "burp.IBurpCollaboratorClientContext",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/IBurpCollaboratorInteraction.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/IBurpCollaboratorInteraction",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.IBurpCollaboratorInteraction",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/IBurpExtender.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/IBurpExtender",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "burp.IBurpExtender",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/IBurpExtenderCallbacks.class",
+        "fields": 11,
+        "interfaces": [],
+        "internal": "burp/IBurpExtenderCallbacks",
+        "matched_methods": [],
+        "methods": 97,
+        "name": "burp.IBurpExtenderCallbacks",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/IContextMenuFactory.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/IContextMenuFactory",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "burp.IContextMenuFactory",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/IContextMenuInvocation.class",
+        "fields": 11,
+        "interfaces": [],
+        "internal": "burp/IContextMenuInvocation",
+        "matched_methods": [],
+        "methods": 6,
+        "name": "burp.IContextMenuInvocation",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/ICookie.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/ICookie",
+        "matched_methods": [],
+        "methods": 5,
+        "name": "burp.ICookie",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/IExtensionHelpers.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/IExtensionHelpers",
+        "matched_methods": [],
+        "methods": 29,
+        "name": "burp.IExtensionHelpers",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/IExtensionStateListener.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/IExtensionStateListener",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "burp.IExtensionStateListener",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/IHttpHeader.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/IHttpHeader",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.IHttpHeader",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/IHttpListener.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/IHttpListener",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "burp.IHttpListener",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/IHttpRequestResponse.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/IHttpRequestResponse",
+        "matched_methods": [],
+        "methods": 18,
+        "name": "burp.IHttpRequestResponse",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/IHttpRequestResponsePersisted.class",
+        "fields": 0,
+        "interfaces": [
+          "burp.IHttpRequestResponse"
+        ],
+        "internal": "burp/IHttpRequestResponsePersisted",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "burp.IHttpRequestResponsePersisted",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/IHttpRequestResponseWithMarkers.class",
+        "fields": 0,
+        "interfaces": [
+          "burp.IHttpRequestResponse"
+        ],
+        "internal": "burp/IHttpRequestResponseWithMarkers",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.IHttpRequestResponseWithMarkers",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/IHttpService.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/IHttpService",
+        "matched_methods": [],
+        "methods": 3,
+        "name": "burp.IHttpService",
+        "superclass": "java.lang.Object"
+      }
+    ],
+    "classes_total": 54868,
+    "matches": 54868,
+    "query": ""
+  },
+  "summary": "54868 of 54868 classes ; showing 15.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "partial",
+    "examined": 15,
+    "total": 54868,
+    "next_offset": 15
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/opt/BurpSuite/burpsuite.jar"
+    }
+  ],
+  "links": []
+}

@@ -1,0 +1,788 @@
+{
+  "id": "ev_afa0fced26eb03048d1fea53c25f9ac023971985081c11fcff0ec54afed770bf",
+  "subject": {
+    "kind": "jar",
+    "sha256": "510bf1c87c766f09c3c20d3ef75e7a6978e60dd38346965dd4836ce64417becf",
+    "name": "burpsuite.jar"
+  },
+  "operation": "java_classes_find",
+  "params": {
+    "include_methods": false,
+    "limit": 60,
+    "offset": 0,
+    "path": "/opt/BurpSuite/burpsuite.jar",
+    "query": "Zn"
+  },
+  "result": {
+    "classes": [
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Z_zn.class",
+        "fields": 1,
+        "interfaces": [
+          "burp.Z_w0"
+        ],
+        "internal": "burp/Z_zn",
+        "matched_methods": [],
+        "methods": 10,
+        "name": "burp.Z_zn",
+        "superclass": "burp.Z_ky"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zazn.class",
+        "fields": 9,
+        "interfaces": [],
+        "internal": "burp/Zazn",
+        "matched_methods": [],
+        "methods": 27,
+        "name": "burp.Zazn",
+        "superclass": "burp.Zakk"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zczn.class",
+        "fields": 4,
+        "interfaces": [],
+        "internal": "burp/Zczn",
+        "matched_methods": [],
+        "methods": 5,
+        "name": "burp.Zczn",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [],
+        "entry": "burp/Zdzn.class",
+        "fields": 2,
+        "interfaces": [],
+        "internal": "burp/Zdzn",
+        "matched_methods": [],
+        "methods": 6,
+        "name": "burp.Zdzn",
+        "superclass": "burp.Zdzq"
+      },
+      {
+        "access": [],
+        "entry": "burp/Zezn.class",
+        "fields": 4,
+        "interfaces": [],
+        "internal": "burp/Zezn",
+        "matched_methods": [],
+        "methods": 7,
+        "name": "burp.Zezn",
+        "superclass": "java.lang.ClassLoader"
+      },
+      {
+        "access": [],
+        "entry": "burp/Zfzn.class",
+        "fields": 1,
+        "interfaces": [],
+        "internal": "burp/Zfzn",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.Zfzn",
+        "superclass": "javax.swing.AbstractAction"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zjzn.class",
+        "fields": 3,
+        "interfaces": [
+          "burp.Zje7"
+        ],
+        "internal": "burp/Zjzn",
+        "matched_methods": [],
+        "methods": 11,
+        "name": "burp.Zjzn",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [],
+        "entry": "burp/Zkzn.class",
+        "fields": 3,
+        "interfaces": [],
+        "internal": "burp/Zkzn",
+        "matched_methods": [],
+        "methods": 4,
+        "name": "burp.Zkzn",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [],
+        "entry": "burp/Zlzn.class",
+        "fields": 1,
+        "interfaces": [
+          "java.awt.event.ActionListener"
+        ],
+        "internal": "burp/Zlzn",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.Zlzn",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "interface",
+          "abstract"
+        ],
+        "entry": "burp/Zmzn.class",
+        "fields": 1,
+        "interfaces": [
+          "burp.Zfg0"
+        ],
+        "internal": "burp/Zmzn",
+        "matched_methods": [],
+        "methods": 5,
+        "name": "burp.Zmzn",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [],
+        "entry": "burp/Zn.class",
+        "fields": 2,
+        "interfaces": [],
+        "internal": "burp/Zn",
+        "matched_methods": [],
+        "methods": 3,
+        "name": "burp.Zn",
+        "superclass": "burp.Z_"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zn0.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/Zn0",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.Zn0",
+        "superclass": "burp.Zny"
+      },
+      {
+        "access": [],
+        "entry": "burp/Zn1.class",
+        "fields": 4,
+        "interfaces": [],
+        "internal": "burp/Zn1",
+        "matched_methods": [],
+        "methods": 4,
+        "name": "burp.Zn1",
+        "superclass": "burp.Zgx"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zn2.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/Zn2",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.Zn2",
+        "superclass": "burp.Zgx"
+      },
+      {
+        "access": [],
+        "entry": "burp/Zn3.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/Zn3",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.Zn3",
+        "superclass": "burp.Zgx"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zn4.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/Zn4",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "burp.Zn4",
+        "superclass": "burp.Zgx"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zn5.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/Zn5",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.Zn5",
+        "superclass": "burp.Zgx"
+      },
+      {
+        "access": [],
+        "entry": "burp/Zn6.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/Zn6",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.Zn6",
+        "superclass": "burp.Zgx"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zn7.class",
+        "fields": 2,
+        "interfaces": [],
+        "internal": "burp/Zn7",
+        "matched_methods": [],
+        "methods": 4,
+        "name": "burp.Zn7",
+        "superclass": "burp.Zn5"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zn8.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/Zn8",
+        "matched_methods": [],
+        "methods": 3,
+        "name": "burp.Zn8",
+        "superclass": "burp.Zn5"
+      },
+      {
+        "access": [],
+        "entry": "burp/Zn9.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/Zn9",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.Zn9",
+        "superclass": "burp.Zgs"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zn_.class",
+        "fields": 1,
+        "interfaces": [],
+        "internal": "burp/Zn_",
+        "matched_methods": [],
+        "methods": 5,
+        "name": "burp.Zn_",
+        "superclass": "burp.Zgx"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zna.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/Zna",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.Zna",
+        "superclass": "burp.Zn4"
+      },
+      {
+        "access": [],
+        "entry": "burp/Znb.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/Znb",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.Znb",
+        "superclass": "burp.Zgx"
+      },
+      {
+        "access": [],
+        "entry": "burp/Znc.class",
+        "fields": 1,
+        "interfaces": [],
+        "internal": "burp/Znc",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.Znc",
+        "superclass": "burp.Zgx"
+      },
+      {
+        "access": [],
+        "entry": "burp/Znd.class",
+        "fields": 3,
+        "interfaces": [],
+        "internal": "burp/Znd",
+        "matched_methods": [],
+        "methods": 3,
+        "name": "burp.Znd",
+        "superclass": "burp.Zgx"
+      },
+      {
+        "access": [],
+        "entry": "burp/Zne.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/Zne",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.Zne",
+        "superclass": "burp.Zgx"
+      },
+      {
+        "access": [],
+        "entry": "burp/Znf.class",
+        "fields": 3,
+        "interfaces": [],
+        "internal": "burp/Znf",
+        "matched_methods": [],
+        "methods": 3,
+        "name": "burp.Znf",
+        "superclass": "burp.Zgx"
+      },
+      {
+        "access": [],
+        "entry": "burp/Zng.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/Zng",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.Zng",
+        "superclass": "burp.Zgx"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Znh.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/Znh",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.Znh",
+        "superclass": "burp.Zn4"
+      },
+      {
+        "access": [],
+        "entry": "burp/Zni.class",
+        "fields": 1,
+        "interfaces": [],
+        "internal": "burp/Zni",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.Zni",
+        "superclass": "burp.Zny"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Znj.class",
+        "fields": 1,
+        "interfaces": [],
+        "internal": "burp/Znj",
+        "matched_methods": [],
+        "methods": 3,
+        "name": "burp.Znj",
+        "superclass": "burp.Zgx"
+      },
+      {
+        "access": [],
+        "entry": "burp/Znk.class",
+        "fields": 1,
+        "interfaces": [],
+        "internal": "burp/Znk",
+        "matched_methods": [],
+        "methods": 3,
+        "name": "burp.Znk",
+        "superclass": "burp.Zgx"
+      },
+      {
+        "access": [],
+        "entry": "burp/Znl.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/Znl",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.Znl",
+        "superclass": "burp.Zn5"
+      },
+      {
+        "access": [],
+        "entry": "burp/Znm.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/Znm",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.Znm",
+        "superclass": "burp.Zgx"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Znn.class",
+        "fields": 1,
+        "interfaces": [],
+        "internal": "burp/Znn",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.Znn",
+        "superclass": "burp.Zny"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zno.class",
+        "fields": 1,
+        "interfaces": [],
+        "internal": "burp/Zno",
+        "matched_methods": [],
+        "methods": 4,
+        "name": "burp.Zno",
+        "superclass": "burp.Zgx"
+      },
+      {
+        "access": [],
+        "entry": "burp/Znp.class",
+        "fields": 1,
+        "interfaces": [],
+        "internal": "burp/Znp",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.Znp",
+        "superclass": "burp.Zgx"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Znq.class",
+        "fields": 1,
+        "interfaces": [],
+        "internal": "burp/Znq",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.Znq",
+        "superclass": "burp.Zn4"
+      },
+      {
+        "access": [],
+        "entry": "burp/Znr.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/Znr",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.Znr",
+        "superclass": "burp.Zgx"
+      },
+      {
+        "access": [],
+        "entry": "burp/Zns.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/Zns",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.Zns",
+        "superclass": "burp.Zgx"
+      },
+      {
+        "access": [],
+        "entry": "burp/Znt.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/Znt",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.Znt",
+        "superclass": "burp.Zgx"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Znu.class",
+        "fields": 2,
+        "interfaces": [],
+        "internal": "burp/Znu",
+        "matched_methods": [],
+        "methods": 3,
+        "name": "burp.Znu",
+        "superclass": "burp.Zgx"
+      },
+      {
+        "access": [],
+        "entry": "burp/Znv.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/Znv",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.Znv",
+        "superclass": "burp.Zgx"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Znw.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/Znw",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.Znw",
+        "superclass": "burp.Zgx"
+      },
+      {
+        "access": [],
+        "entry": "burp/Znx.class",
+        "fields": 1,
+        "interfaces": [],
+        "internal": "burp/Znx",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.Znx",
+        "superclass": "burp.Zny"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zny.class",
+        "fields": 1,
+        "interfaces": [],
+        "internal": "burp/Zny",
+        "matched_methods": [],
+        "methods": 3,
+        "name": "burp.Zny",
+        "superclass": "burp.Zn4"
+      },
+      {
+        "access": [],
+        "entry": "burp/Znz.class",
+        "fields": 1,
+        "interfaces": [],
+        "internal": "burp/Znz",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.Znz",
+        "superclass": "burp.Zgx"
+      },
+      {
+        "access": [],
+        "entry": "burp/Ztzn.class",
+        "fields": 1,
+        "interfaces": [],
+        "internal": "burp/Ztzn",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.Ztzn",
+        "superclass": "java.awt.event.MouseAdapter"
+      },
+      {
+        "access": [],
+        "entry": "burp/Zuzn.class",
+        "fields": 2,
+        "interfaces": [
+          "burp.Ztjc"
+        ],
+        "internal": "burp/Zuzn",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.Zuzn",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "final",
+          "enum"
+        ],
+        "entry": "burp/Zzn.class",
+        "fields": 6,
+        "interfaces": [],
+        "internal": "burp/Zzn",
+        "matched_methods": [],
+        "methods": 5,
+        "name": "burp.Zzn",
+        "superclass": "java.lang.Enum"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zzn0.class",
+        "fields": 6,
+        "interfaces": [
+          "burp.Zlzi"
+        ],
+        "internal": "burp/Zzn0",
+        "matched_methods": [],
+        "methods": 7,
+        "name": "burp.Zzn0",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public",
+          "final",
+          "enum"
+        ],
+        "entry": "burp/Zzn1.class",
+        "fields": 5,
+        "interfaces": [],
+        "internal": "burp/Zzn1",
+        "matched_methods": [],
+        "methods": 7,
+        "name": "burp.Zzn1",
+        "superclass": "java.lang.Enum"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zzn2.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/Zzn2",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "burp.Zzn2",
+        "superclass": "burp.Zznh"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zzn3.class",
+        "fields": 0,
+        "interfaces": [],
+        "internal": "burp/Zzn3",
+        "matched_methods": [],
+        "methods": 1,
+        "name": "burp.Zzn3",
+        "superclass": "burp.Zznh"
+      },
+      {
+        "access": [
+          "public",
+          "final",
+          "enum"
+        ],
+        "entry": "burp/Zzn4.class",
+        "fields": 20,
+        "interfaces": [],
+        "internal": "burp/Zzn4",
+        "matched_methods": [],
+        "methods": 15,
+        "name": "burp.Zzn4",
+        "superclass": "java.lang.Enum"
+      },
+      {
+        "access": [],
+        "entry": "burp/Zzn5.class",
+        "fields": 1,
+        "interfaces": [],
+        "internal": "burp/Zzn5",
+        "matched_methods": [],
+        "methods": 4,
+        "name": "burp.Zzn5",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Zzn6.class",
+        "fields": 4,
+        "interfaces": [
+          "burp.Z_08"
+        ],
+        "internal": "burp/Zzn6",
+        "matched_methods": [],
+        "methods": 5,
+        "name": "burp.Zzn6",
+        "superclass": "java.lang.Object"
+      },
+      {
+        "access": [
+          "final",
+          "enum"
+        ],
+        "entry": "burp/Zzn7.class",
+        "fields": 9,
+        "interfaces": [],
+        "internal": "burp/Zzn7",
+        "matched_methods": [],
+        "methods": 16,
+        "name": "burp.Zzn7",
+        "superclass": "java.lang.Enum"
+      },
+      {
+        "access": [],
+        "entry": "burp/Zzn8.class",
+        "fields": 1,
+        "interfaces": [
+          "java.awt.event.ActionListener"
+        ],
+        "internal": "burp/Zzn8",
+        "matched_methods": [],
+        "methods": 2,
+        "name": "burp.Zzn8",
+        "superclass": "java.lang.Object"
+      }
+    ],
+    "classes_total": 54868,
+    "matches": 282,
+    "query": "Zn"
+  },
+  "summary": "282 of 54868 classes match \"Zn\" ; showing 60.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "partial",
+    "examined": 60,
+    "total": 282,
+    "next_offset": 60
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/opt/BurpSuite/burpsuite.jar"
+    }
+  ],
+  "links": []
+}

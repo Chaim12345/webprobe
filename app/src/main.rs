@@ -2,20 +2,28 @@
 // Normal start: opens the desktop app. `--screenshot <file.png>`: draws ~120
 // frames without taking focus, saves the window picture as PNG and exits.
 
+mod ai;
 mod analysis;
+mod burp_checks;
 mod codec;
 mod analysis_ui;
 mod collaborator;
+mod crawl;
 mod collaborator_ui;
 mod decoder_ops;
 mod editor;
+mod ext_host;
 mod feedback;
 mod gl_env;
 mod h2;
+mod interactsh;
 mod history_filter;
 mod intruder;
+mod logger;
+mod msgpane;
 mod net;
 mod onboarding;
+mod organizer;
 mod project;
 mod rules;
 mod rules_ui;
@@ -28,6 +36,8 @@ mod tools;
 mod ui;
 mod upstream;
 mod util;
+mod variations;
+mod xss;
 
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
@@ -35,8 +45,26 @@ use std::sync::{Arc, Mutex};
 
 use eframe::egui::{self, ViewportCommand};
 
+use crate::ext_host::ProxyHooks as _;
+
 pub struct App {
     pub shared: Arc<net::Shared>,
+    /// Cross-tool HTTP Logger, mirrored from proxy history every frame.
+    pub logger: logger::Logger,
+    /// Saved request/response collection (Organizer tab).
+    pub organizer: organizer::Organizer,
+    /// Filter driving the Logger view.
+    pub log_filter: logger::LogQuery,
+    /// Highest proxy history id already mirrored into `logger`.
+    pub log_seen: u64,
+    /// Selected Logger row.
+    pub log_sel: Option<u64>,
+    /// Selected Organizer item.
+    pub org_sel: Option<u64>,
+    /// Intruder sub-tab (0 = Positions, 1 = Payloads).
+    pub intr_sub: usize,
+    /// Selected WebSocket history row.
+    pub ws_sel: Option<u64>,
     pub tab: ui::Tab,
     pub proxy_sub: usize,
     pub history_sel: Option<u64>,
@@ -87,6 +115,108 @@ pub struct App {
     pub dec_editor: editor::EditorState,
     pub intercept_edit: String,
     pub detail_sub: usize,
+    /// Burp message panes and Inspector under the Proxy history.
+    pub req_pane: msgpane::PaneState,
+    pub resp_pane: msgpane::PaneState,
+    pub insp_state: msgpane::InspectorState,
+    /// Right dock: 0 Inspector, 1 Notes, 2 collapsed.
+    pub dock_sel: usize,
+    /// WebProbe AI (Burp AI slot).
+    pub ai: ai::AiChat,
+    /// History context-menu dialogs: browser URL, CSRF PoC, extra history window.
+    pub browser_url: Option<(String, String)>,
+    pub csrf_poc: Option<String>,
+    pub hist_window_open: bool,
+    pub hist_window_filter: String,
+    pub hist_window_table: table::TableState,
+    /// Extensions (Burp layout).
+    pub ext_sub: usize,
+    pub ext_sel: Option<usize>,
+    pub ext_table: table::TableState,
+    pub ext_detail: usize,
+    pub ext_add_open: bool,
+    pub ext_add_path: String,
+    /// Sequencer (Burp layout): sub-tab, requests sent here, token location
+    /// (0 cookie, 1 form field, 2 custom regex), live capture state.
+    pub seq_sub: usize,
+    pub seq_requests: Vec<net::HistEntry>,
+    pub seq_req_sel: Option<usize>,
+    pub seq_table: table::TableState,
+    pub seq_loc: usize,
+    pub seq_field: String,
+    pub seq_custom: String,
+    pub seq_load_path: String,
+    pub seq_live_buf: Option<Arc<Mutex<Vec<Vec<u8>>>>>,
+    pub seq_live_stop: Option<Arc<std::sync::atomic::AtomicBool>>,
+    /// Intercept: the held item being edited and its text.
+    pub intercept_cur: Option<u64>,
+    pub intercept_text: String,
+    pub intercept_pane: msgpane::PaneState,
+    /// Decoder stages after the input: (text, hex view).
+    pub dec_chain: Vec<(String, bool)>,
+    /// Comparer items (shown in both tables), selections, comparison window.
+    pub cmp_items: Vec<String>,
+    pub cmp_sel1: Option<usize>,
+    pub cmp_sel2: Option<usize>,
+    pub cmp_table1: table::TableState,
+    pub cmp_table2: table::TableState,
+    pub cmp_paste_pending: bool,
+    pub cmp_load_path: String,
+    pub cmp_window: Option<(usize, usize, bool)>,
+    /// Logger / Organizer (Burp layouts).
+    pub log_on: bool,
+    pub log_table: table::TableState,
+    pub log_req_pane: msgpane::PaneState,
+    pub log_resp_pane: msgpane::PaneState,
+    pub org_search: String,
+    pub org_table: table::TableState,
+    pub org_req_pane: msgpane::PaneState,
+    pub org_resp_pane: msgpane::PaneState,
+    /// Intruder (Burp 2026 layout): target, Host update, editor pane, right
+    /// dock (0 Payloads, 1 Resource pool, 2 Settings, 3 closed), selected
+    /// payload set, add/load fields, results window.
+    pub intr_target: String,
+    pub intr_update_host: bool,
+    pub intr_pane: msgpane::PaneState,
+    pub intr_dock: usize,
+    pub intr_set_sel: usize,
+    pub intr_add: String,
+    pub intr_load_path: String,
+    pub intr_paste_pending: bool,
+    pub intr_results_open: bool,
+    pub intr_attack_no: usize,
+    pub intr_row_sel: Option<usize>,
+    pub intr_res_req_pane: msgpane::PaneState,
+    pub intr_res_resp_pane: msgpane::PaneState,
+    /// Target: sub-tab, URL/Crawl paths view, selected tree node and entry, panes.
+    pub target_sub: usize,
+    pub target_view: usize,
+    pub target_node: Option<(String, String)>,
+    pub target_entry: Option<u64>,
+    pub site_req_pane: msgpane::PaneState,
+    pub site_resp_pane: msgpane::PaneState,
+    /// Dashboard: selected task (0 crawl, 1 live audit, 2 active scan), task
+    /// sub-tab, task search, New scan dialog, crawl capture switch.
+    pub dash_task: usize,
+    pub dash_sub: usize,
+    pub dash_search: String,
+    pub dash_items_table: table::TableState,
+    pub new_scan_open: bool,
+    pub new_scan_urls: String,
+    /// New scan type: 0 Crawl and audit (Burp's default), 1 Audit selected items.
+    pub new_scan_type: usize,
+    /// Repeater: message panes and the Configure-target dialog.
+    pub rep_req_pane: msgpane::PaneState,
+    pub rep_resp_pane: msgpane::PaneState,
+    pub rep_target_edit: bool,
+    pub rep_update_cl: bool,
+    /// Burp's Search window and Event log window.
+    pub search_open: bool,
+    pub event_log_open: bool,
+    pub event_log_table: table::TableState,
+    /// Status-bar memory gauge cache (process MB, machine MB).
+    pub mem: (f64, f64),
+    pub mem_at: Option<std::time::Instant>,
     pub detail_view: usize,
     pub scan_sel: Option<u64>,
     pub intr_req: String,
@@ -135,15 +265,126 @@ pub struct App {
     pub screenshot: Option<PathBuf>,
 }
 
+/// One proxy history row flattened for mirroring: `(id, ts, method, host,
+/// port, path, status, req_len, resp_len, mime)`.
+///
+/// `ts` and `mime` are carried alongside the fields the Logger stores so the
+/// mirroring step stays pure: it never touches `Shared` and can be tested
+/// without a window or a `net::Shared`.
+type HistRow = (u64, u64, String, String, u16, String, String, usize, usize, String);
+
+impl App {
+    /// Mirror proxy history into the Logger, once per history id.
+    ///
+    /// Rows are copied out under the history lock, the lock is dropped, and
+    /// only then is the Logger touched: nothing here may re-enter the history
+    /// mutex (the proxy thread holds it while appending).
+    fn sync_logger(&mut self) {
+        // Logger's "Logging on" switch: while off, new traffic is not mirrored.
+        if !self.log_on {
+            if let Ok(h) = self.shared.history.lock() {
+                self.log_seen = h.iter().map(|e| e.id).max().unwrap_or(self.log_seen);
+            }
+            return;
+        }
+        let seen = self.log_seen;
+        let mut newest = 0u64;
+        let mut rows: Vec<HistRow> = Vec::new();
+        {
+            let Ok(hist) = self.shared.history.lock() else { return };
+            for e in hist.iter() {
+                newest = newest.max(e.id);
+            }
+            // Loading a project replaces history with ids that can be lower
+            // than what was already mirrored; resync rather than go dark.
+            let resync = newest < seen;
+            for e in hist.iter().filter(|e| resync || e.id > seen) {
+                rows.push((
+                    e.id,
+                    e.ts,
+                    e.method.clone(),
+                    e.host.clone(),
+                    e.port,
+                    e.path.clone(),
+                    e.status.clone(),
+                    e.req_raw.len(),
+                    e.resp_raw.as_ref().map(|r| r.len()).unwrap_or(e.resp_len),
+                    response_mime(e),
+                ));
+            }
+        }
+        if newest < seen {
+            self.log_seen = 0;
+        }
+        mirror_history(&mut self.logger, &mut self.log_seen, &rows);
+    }
+}
+
+/// Append `rows` to `logger` in order, skipping any id at or below `*seen`,
+/// and advance `*seen` to the highest id mirrored. Pure: no locks, no I/O.
+fn mirror_history(logger: &mut logger::Logger, seen: &mut u64, rows: &[HistRow]) {
+    for (id, ts, method, host, port, path, status, req_len, resp_len, mime) in rows {
+        if *id <= *seen {
+            continue;
+        }
+        logger.push(logger::LogEntry {
+            ts: *ts,
+            tool: "Proxy".to_string(),
+            method: method.clone(),
+            host: host.clone(),
+            port: *port,
+            path: path.clone(),
+            status: status.clone(),
+            req_len: *req_len,
+            resp_len: *resp_len,
+            mime: mime.clone(),
+            source: "proxy".to_string(),
+            ..Default::default() // `push` assigns the logger id
+        });
+        *seen = (*seen).max(*id);
+    }
+}
+
+/// `type/subtype` of the recorded response's Content-Type, else the entry's
+/// URL extension, else empty. Reads only the response head.
+fn response_mime(entry: &net::HistEntry) -> String {
+    if let Some(resp) = &entry.resp_raw {
+        let head_end = util::find_head_end(resp).unwrap_or(resp.len());
+        let head = String::from_utf8_lossy(&resp[..head_end]);
+        for line in head.split("\r\n").flat_map(|l| l.split('\n')) {
+            if let Some((name, value)) = line.split_once(':') {
+                if name.trim().eq_ignore_ascii_case("content-type") {
+                    let essence = value.split(';').next().unwrap_or("").trim().to_lowercase();
+                    if !essence.is_empty() {
+                        return essence;
+                    }
+                }
+            }
+        }
+    }
+    entry.extension.clone()
+}
+
 impl eframe::App for App {
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        tools::close_launched_browsers(&self.shared);
+    }
+
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         theme::apply_current(ctx);
         feedback::drain(&mut self.toasts);
         self.toasts.tick(std::time::Instant::now());
+        // Mirror new proxy traffic before drawing, so the Logger view and the
+        // history table show the same frame's entries.
+        self.sync_logger();
         ui::show(self, ctx);
         self.toasts.show(ctx);
 
-        ctx.request_repaint(); // keep drawing even when the window is not focused
+        // Poll background state (proxy traffic, scans, Repeater) five times a
+        // second instead of redrawing flat out: continuous repaint under the
+        // software renderer pinned ~6 cores and starved the network threads
+        // (a 60 ms Repeater send took 22 s). Input still repaints at once.
+        ctx.request_repaint_after(std::time::Duration::from_millis(200));
 
         // Optional self test: route one request through our own proxy so the
         // passive-audit pipeline can be exercised in screenshot runs.
@@ -181,7 +422,7 @@ impl eframe::App for App {
                             std::thread::sleep(std::time::Duration::from_millis(800));
                             let e = sh.history.lock().unwrap().last().cloned();
                             if let Some(e) = e {
-                                crate::scan::start_active_scan(sh.clone(), e);
+                                crate::scan::start_active_scan(sh.clone(), e, &[], &[]);
                             }
                         }
                     }
@@ -354,12 +595,16 @@ fn main() {
                 resp_raw: Some(resp.into_bytes()),
                 https: i % 3 == 0,
                 note: None,
+                highlight: None,
+                audited: false,
                 params: i % 2 == 0,
                 edited: false,
                 extension: "json".to_string(),
                 title: String::new(),
                 cookies: String::new(),
                 listener_port: 6566,
+                ip: String::new(),
+                diffs: 0,
             });
         }
         shared.next_id.store(base + n as u64, Ordering::SeqCst);
@@ -380,6 +625,32 @@ fn main() {
                 is_regex: false,
                 scope: rules::MrScope::RequestHeader,
             });
+        }
+    }
+    // Test hook: register the built-in example extension, e.g. WEBPROBE_EXT_TEST=1
+    if std::env::var("WEBPROBE_EXT_TEST").is_ok() {
+        shared.ext_host.lock().unwrap().extensions.push(ext_host::LoadedExtension {
+            enabled: true,
+            hooks: Box::new(ext_host::ExampleHeaderExtension),
+        });
+        shared.log("Registered example extension: Example header add (ProxyRequestHandler)");
+    }
+    // Path B: load a real Montoya .jar extension through the sidecar JVM,
+    // e.g. WEBPROBE_EXT_JAR=app/sidecar/demo-ext/demo-ext.jar
+    if let Ok(ext_jar) = std::env::var("WEBPROBE_EXT_JAR") {
+        match ext_host::JavaSidecar::spawn(&ext_jar) {
+            Ok(sidecar) => {
+                shared.log(&format!(
+                    "Sidecar JVM loaded Montoya extension: {} ({})",
+                    sidecar.extension_name(),
+                    sidecar.hooks_registered()
+                ));
+                shared.ext_host.lock().unwrap().extensions.push(ext_host::LoadedExtension {
+                    enabled: true,
+                    hooks: Box::new(sidecar),
+                });
+            }
+            Err(e) => shared.log(&format!("Sidecar JVM failed to load {ext_jar}: {e}")),
         }
     }
     net::start_proxy(shared.clone());
@@ -418,6 +689,9 @@ fn main() {
         "search" => ui::Tab::Search,
         "collaborator" => ui::Tab::Collaborator,
         "extensions" => ui::Tab::Extensions,
+        "logger" => ui::Tab::Logger,
+        "organizer" => ui::Tab::Organizer,
+        "discover" => ui::Tab::Discover,
         _ => ui::Tab::Dashboard,
     };
     let project_path = std::env::current_dir()
@@ -433,6 +707,13 @@ fn main() {
     // Debug hook: WEBPROBE_PALETTE=<query> opens the command palette with that
     // text already typed (used by the screenshot checks).
     let palette_query = std::env::var("WEBPROBE_PALETTE").unwrap_or_default();
+    // QA hook: WEBPROBE_DENSITY=compact|comfortable and WEBPROBE_THEME=light|dark.
+    if std::env::var("WEBPROBE_DENSITY").is_ok() || std::env::var("WEBPROBE_THEME").is_ok() {
+        let (p, d, f) = theme::appearance();
+        let p = std::env::var("WEBPROBE_THEME").map(|v| theme::Palette::parse(&v)).unwrap_or(p);
+        let d = std::env::var("WEBPROBE_DENSITY").map(|v| theme::Density::parse(&v)).unwrap_or(d);
+        theme::set_appearance(p, d, f);
+    }
     let palette = shortcuts::Palette {
         open: !palette_query.is_empty(),
         query: palette_query,
@@ -440,11 +721,19 @@ fn main() {
     };
     let app = App {
         shared,
+        logger: logger::Logger::new(5000),
+        organizer: organizer::Organizer::new(),
+        log_filter: logger::LogQuery::default(),
+        log_seen: 0,
+        log_sel: None,
+        org_sel: None,
+        intr_sub: 0,
+        ws_sel: None,
         tab,
         proxy_sub: std::env::var("WEBPROBE_PROXY_SUB")
             .ok()
             .and_then(|v| v.trim().parse::<usize>().ok())
-            .map(|v| v.min(3))
+            .map(|v| v.min(4))
             .unwrap_or(1),
         // QA hook: WEBPROBE_SELECT_ID=<id> preselects a row so the selected-row
         // highlight can be inspected without a pointer.
@@ -480,13 +769,95 @@ fn main() {
         dec_editor: editor::EditorState::default(),
         intercept_edit: String::new(),
         detail_sub: 0,
+        req_pane: msgpane::PaneState::default(),
+        resp_pane: msgpane::PaneState::default(),
+        insp_state: msgpane::InspectorState::default(),
+        dock_sel: 0,
+        ai: ai::AiChat::default(),
+        browser_url: None,
+        csrf_poc: None,
+        hist_window_open: false,
+        hist_window_filter: String::new(),
+        hist_window_table: table::TableState::default(),
+        ext_sub: 0,
+        ext_sel: None,
+        ext_table: table::TableState::default(),
+        ext_detail: 0,
+        ext_add_open: false,
+        ext_add_path: String::new(),
+        seq_sub: 0,
+        seq_requests: Vec::new(),
+        seq_req_sel: None,
+        seq_table: table::TableState::default(),
+        seq_loc: 0,
+        seq_field: String::new(),
+        seq_custom: String::new(),
+        seq_load_path: String::new(),
+        seq_live_buf: None,
+        seq_live_stop: None,
+        intercept_cur: None,
+        intercept_text: String::new(),
+        intercept_pane: msgpane::PaneState { view: 1, ..Default::default() },
+        dec_chain: Vec::new(),
+        cmp_items: Vec::new(),
+        cmp_sel1: None,
+        cmp_sel2: None,
+        cmp_table1: table::TableState::default(),
+        cmp_table2: table::TableState::default(),
+        cmp_paste_pending: false,
+        cmp_load_path: String::new(),
+        cmp_window: None,
+        log_on: true,
+        log_table: table::TableState::default(),
+        log_req_pane: msgpane::PaneState::default(),
+        log_resp_pane: msgpane::PaneState::default(),
+        org_search: String::new(),
+        org_table: table::TableState::default(),
+        org_req_pane: msgpane::PaneState::default(),
+        org_resp_pane: msgpane::PaneState::default(),
+        intr_target: String::new(),
+        intr_update_host: true,
+        intr_pane: msgpane::PaneState { view: 1, ..Default::default() },
+        intr_dock: 0,
+        intr_set_sel: 0,
+        intr_add: String::new(),
+        intr_load_path: String::new(),
+        intr_paste_pending: false,
+        intr_results_open: false,
+        intr_attack_no: 0,
+        intr_row_sel: None,
+        intr_res_req_pane: msgpane::PaneState::default(),
+        intr_res_resp_pane: msgpane::PaneState::default(),
+        target_sub: 0,
+        target_view: 0,
+        target_node: None,
+        target_entry: None,
+        site_req_pane: msgpane::PaneState::default(),
+        site_resp_pane: msgpane::PaneState::default(),
+        dash_task: 1,
+        dash_sub: 0,
+        dash_search: String::new(),
+        dash_items_table: table::TableState::default(),
+        new_scan_open: false,
+        new_scan_urls: String::new(),
+        new_scan_type: 0,
+        rep_req_pane: msgpane::PaneState { view: 1, ..Default::default() },
+        rep_resp_pane: msgpane::PaneState::default(),
+        rep_target_edit: false,
+        rep_update_cl: true,
+        search_open: false,
+        event_log_open: false,
+        event_log_table: table::TableState::default(),
+        mem: (0.0, 0.0),
+        mem_at: None,
         detail_view: 0,
         scan_sel: None,
-        intr_req: "GET /login HTTP/1.1\r\nHost: example.com\r\nUser-Agent: WebProbe/1.0\r\n\r\n".to_string(),
+        // Burp starts with no Intruder request (its "To get started" state).
+        intr_req: String::new(),
         intr_https: false,
         intr_payloads: "admin\n' OR 1=1--\ntest".to_string(),
         intr_attack: intruder::AttackType::Sniper,
-        intr_sets: vec!["admin\n'test\nadmin2".to_string()],
+        intr_sets: vec![String::new()],
         dec_input: String::new(),
         dec_results: Vec::new(),
         dec_output: String::new(),
@@ -532,4 +903,124 @@ fn main() {
         }),
     )
     .expect("failed to start app");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn row(id: u64, path: &str) -> HistRow {
+        (
+            id,
+            id * 10,
+            "GET".to_string(),
+            "example.com".to_string(),
+            80,
+            path.to_string(),
+            "200".to_string(),
+            42,
+            128,
+            "text/html".to_string(),
+        )
+    }
+
+    #[test]
+    fn mirror_appends_new_rows_in_history_order() {
+        let mut log = logger::Logger::new(10);
+        let mut seen = 0;
+        mirror_history(&mut log, &mut seen, &[row(1, "/a"), row(2, "/b"), row(3, "/c")]);
+        let paths: Vec<&str> = log.entries.iter().map(|e| e.path.as_str()).collect();
+        assert_eq!(paths, vec!["/a", "/b", "/c"]);
+        assert_eq!(seen, 3);
+    }
+
+    #[test]
+    fn mirror_assigns_monotonic_ids_and_copies_fields() {
+        let mut log = logger::Logger::new(10);
+        let mut seen = 0;
+        mirror_history(&mut log, &mut seen, &[row(7, "/a"), row(8, "/b")]);
+        let ids: Vec<u64> = log.entries.iter().map(|e| e.id).collect();
+        assert_eq!(ids, vec![1, 2], "logger ids are its own, monotonic counter");
+        let e = &log.entries[0];
+        assert_eq!(e.ts, 70);
+        assert_eq!(e.tool, "Proxy");
+        assert_eq!(e.source, "proxy");
+        assert_eq!(e.method, "GET");
+        assert_eq!(e.host, "example.com");
+        assert_eq!(e.port, 80);
+        assert_eq!(e.status, "200");
+        assert_eq!(e.req_len, 42);
+        assert_eq!(e.resp_len, 128);
+        assert_eq!(e.mime, "text/html");
+    }
+
+    #[test]
+    fn second_call_with_same_rows_adds_nothing() {
+        let mut log = logger::Logger::new(10);
+        let mut seen = 0;
+        let rows = [row(1, "/a"), row(2, "/b")];
+        mirror_history(&mut log, &mut seen, &rows);
+        mirror_history(&mut log, &mut seen, &rows);
+        assert_eq!(log.len(), 2, "no duplicates on re-mirror");
+        assert_eq!(seen, 2);
+
+        // A later call only appends the ids that are new.
+        mirror_history(&mut log, &mut seen, &[row(1, "/a"), row(2, "/b"), row(3, "/c")]);
+        assert_eq!(log.len(), 3);
+        assert_eq!(log.entries[2].path, "/c");
+        assert_eq!(seen, 3);
+    }
+
+    #[test]
+    fn mirror_skips_ids_below_seen_and_advances_past_gaps() {
+        let mut log = logger::Logger::new(10);
+        let mut seen = 5;
+        mirror_history(&mut log, &mut seen, &[row(3, "/old"), row(6, "/new"), row(9, "/gap")]);
+        let paths: Vec<&str> = log.entries.iter().map(|e| e.path.as_str()).collect();
+        assert_eq!(paths, vec!["/new", "/gap"]);
+        assert_eq!(seen, 9);
+    }
+
+    #[test]
+    fn mirror_respects_the_logger_cap() {
+        let mut log = logger::Logger::new(2);
+        let mut seen = 0;
+        mirror_history(&mut log, &mut seen, &[row(1, "/a"), row(2, "/b"), row(3, "/c")]);
+        let paths: Vec<&str> = log.entries.iter().map(|e| e.path.as_str()).collect();
+        assert_eq!(paths, vec!["/b", "/c"], "oldest evicted, seen still advanced");
+        assert_eq!(seen, 3);
+    }
+
+    #[test]
+    fn response_mime_prefers_content_type_then_extension() {
+        let mut entry = net::HistEntry {
+            id: 1,
+            ts: 0,
+            method: "GET".into(),
+            host: "example.com".into(),
+            port: 80,
+            https: false,
+            path: "/a".into(),
+            status: "200".into(),
+            resp_len: 0,
+            req_raw: b"GET /a HTTP/1.1\r\nHost: example.com\r\n\r\n".to_vec(),
+            resp_raw: Some(
+                b"HTTP/1.1 200 OK\r\nContent-Type: Application/JSON; charset=utf-8\r\n\r\n{}".to_vec(),
+            ),
+            note: None,
+            highlight: None,
+            audited: false,
+            params: false,
+            edited: false,
+            extension: "bin".into(),
+            title: String::new(),
+            cookies: String::new(),
+            listener_port: 8080,
+            ip: String::new(),
+            diffs: 0,
+        };
+        assert_eq!(response_mime(&entry), "application/json");
+        entry.resp_raw = None;
+        assert_eq!(response_mime(&entry), "bin", "falls back to the URL extension");
+    }
 }

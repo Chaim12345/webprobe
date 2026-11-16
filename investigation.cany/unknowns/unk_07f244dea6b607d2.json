@@ -1,14 +1,15 @@
 {
   "id": "unk_07f244dea6b607d2",
-  "revision": 1,
+  "revision": 2,
   "question": "mechanics.json claims 62 values with 62 sources and 0 estimated, yet the build omits whole tools. Is every source actually verified against the code, or are some asserted from UI text?",
   "severity": "high",
   "domain": "mechanics-accuracy",
-  "status": "open",
+  "status": "resolved",
   "probes": [
     "Re-check a sample of 10 mechanics values against the decompiled functions",
     "Mark any value that came from UI text as estimated"
   ],
   "evidence_for": [],
-  "evidence_against": []
+  "evidence_against": [],
+  "resolution": "RESOLVED (wave 24, 2026-11-15): sampled 13 of 80 mechanics values against /root/burp-re/in/extract resource files - 12 verified exactly, 1 ('ca validity') marked estimated because its cited runtime-offset source (Zg88, ev_7b303a56...) was not reproducible (Zg88.java is an empty interface, evidence record absent). No value came from UI text alone. 9 source-path imprecisions fixed in mechanics.json (project_options./user_options. prefixes; throttle_interval_enabled=false noted). The audit claim '62 sources 0 estimated' was stale: the file now holds 80 values with corrected sources and exactly 1 estimated."
 }

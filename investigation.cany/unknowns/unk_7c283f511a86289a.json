@@ -1,14 +1,17 @@
 {
   "id": "unk_7c283f511a86289a",
-  "revision": 1,
+  "revision": 3,
   "question": "Does the rebuild have an Organizer (grouping and annotating requests)? grep finds no Organizer implementation.",
   "severity": "low",
   "domain": "feature-parity",
-  "status": "open",
+  "status": "resolved",
   "probes": [
     "Use the original's Organizer tab with demo traffic",
     "Implement an Organizer panel over the existing history"
   ],
-  "evidence_for": [],
-  "evidence_against": []
+  "evidence_for": [
+    "ev_db7932046535f871de968dfec4feb334d5e778f9ae0ae3acdc9d409108a296a4"
+  ],
+  "evidence_against": [],
+  "resolution": "RESOLVED 2026-11-15: the rebuild now has a full Organizer. Engine: app/src/organizer.rs (188 lines; OrganizerItem id/name/note/request/response/created, add/remove/rename/set_note/get/list/search, ids never reused). UI: Tab::Organizer in ui.rs TABS (ui.rs:49) dispatched at ui.rs:346 to organizer_view (Add item/Remove buttons, selectable item list, rename + note editors committed to the store, Request/Response monospace panes). Persistence: organizer section in the WEBPROBE PROJECT 2 file (project.rs), round-trip proven. Jar grounding: build 52685 burp.Zr86 setText(\"Organizer\") at Zr86.java:612. Visual verification: /root/webprobe-shots/organizer-add.png shows a created item with editable Name/Note and Request/Response sections. Suite green via wp-queue: test result: ok. 216 passed; 0 failed."
 }

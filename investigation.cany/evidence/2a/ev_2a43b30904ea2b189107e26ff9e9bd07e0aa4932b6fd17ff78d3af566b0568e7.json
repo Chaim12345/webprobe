@@ -1,0 +1,435 @@
+{
+  "id": "ev_2a43b30904ea2b189107e26ff9e9bd07e0aa4932b6fd17ff78d3af566b0568e7",
+  "subject": {
+    "kind": "source-tree",
+    "sha256": "fbc9989358a832560cb3ce75c9ec6900b8c4dfb32c5a606dbd944ebc0ca05bb1",
+    "name": "src"
+  },
+  "operation": "app_source_import",
+  "params": {
+    "include_hidden": false,
+    "path": "/root/Documents/Craft Anything/burpsuite/app/src",
+    "respect_gitignore": true
+  },
+  "result": {
+    "files": [
+      {
+        "bytes": 26868,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "rust",
+        "parse_mode": null,
+        "path": "analysis.rs",
+        "sha256": "54d7ecfb22f06c554a2bf0da396a7075fc0bb3a74b466530c28f7bd3f8565ffa",
+        "strings": []
+      },
+      {
+        "bytes": 7762,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "rust",
+        "parse_mode": null,
+        "path": "analysis_ui.rs",
+        "sha256": "db84ef695039adfde6c311eaf1743c8243c676864c2fbb9931a3c4d69a5abfdc",
+        "strings": []
+      },
+      {
+        "bytes": 17022,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "rust",
+        "parse_mode": null,
+        "path": "codec.rs",
+        "sha256": "18757aeeb55fc7b7d7fd75bb23baa448d166fbfb6a5f901888e1dcbe38aa6139",
+        "strings": []
+      },
+      {
+        "bytes": 46509,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "rust",
+        "parse_mode": null,
+        "path": "collaborator.rs",
+        "sha256": "7654192beea75fbd4e9ce545a1225a427349ad7cb72ef428ec970e83c68f6a7e",
+        "strings": []
+      },
+      {
+        "bytes": 14515,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "rust",
+        "parse_mode": null,
+        "path": "collaborator_ui.rs",
+        "sha256": "889caa288ef61d3d28cfbe2043d981bb8d12893c944d231cd8984f2c19739835",
+        "strings": []
+      },
+      {
+        "bytes": 23351,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "rust",
+        "parse_mode": null,
+        "path": "decoder_ops.rs",
+        "sha256": "1835767cb898f3ef2e8fd9fa0723c819c6a7c85c5a5e7e5fb03ddd2c3587c8d4",
+        "strings": []
+      },
+      {
+        "bytes": 14076,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "rust",
+        "parse_mode": null,
+        "path": "editor.rs",
+        "sha256": "866e78accd4cfa6c9fe5298bf878c86e2a798fd2e2b8b9c6ef7d09ac64a0c05c",
+        "strings": []
+      },
+      {
+        "bytes": 6072,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "rust",
+        "parse_mode": null,
+        "path": "ext_host.rs",
+        "sha256": "433088c020049d50fc497c82f9f3352416783c0fa424f8a725eae414992ea024",
+        "strings": []
+      },
+      {
+        "bytes": 6255,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "rust",
+        "parse_mode": null,
+        "path": "feedback.rs",
+        "sha256": "4e87db655c3c7ee8a97916fe92043cf2b2d13f1c844edbe382eac9dae96cc159",
+        "strings": []
+      },
+      {
+        "bytes": 5512,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "rust",
+        "parse_mode": null,
+        "path": "gl_env.rs",
+        "sha256": "3eb3250445772f81c0ef1ad7bc18783a0e9038ecb1bcf29e095bad184ac876db",
+        "strings": []
+      },
+      {
+        "bytes": 30552,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "rust",
+        "parse_mode": null,
+        "path": "h2.rs",
+        "sha256": "520ac03feb6864a00e6a548fabd5798b33d8f2efac97a82462245a8139e20633",
+        "strings": []
+      },
+      {
+        "bytes": 11417,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "rust",
+        "parse_mode": null,
+        "path": "history_filter.rs",
+        "sha256": "ff7ecfd05cd85299feb99f894a6ed6aad2ae16e56210d3e8d728ea4117fa0ecf",
+        "strings": []
+      },
+      {
+        "bytes": 41819,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "rust",
+        "parse_mode": null,
+        "path": "intruder.rs",
+        "sha256": "724dfc7336583a5a6fe1904fe55889af7b3c3d60c06e4c42359d6b77da7db7dd",
+        "strings": []
+      },
+      {
+        "bytes": 9114,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "rust",
+        "parse_mode": null,
+        "path": "logger.rs",
+        "sha256": "61fee352b16e4b651b5d54fd978a3aa4a5e956cf88a1889ff2ca9f556ffbfc16",
+        "strings": []
+      },
+      {
+        "bytes": 30416,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "rust",
+        "parse_mode": null,
+        "path": "main.rs",
+        "sha256": "8117ff15df4f1a85e42e93d8902eaa42166d5c874df2c40702b502801d268f2e",
+        "strings": []
+      },
+      {
+        "bytes": 131187,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "rust",
+        "parse_mode": null,
+        "path": "net.rs",
+        "sha256": "8ca3f8ee3714d931177e62a25a072528377b491aba4a3c3c9c70a563ee771fff",
+        "strings": []
+      },
+      {
+        "bytes": 14258,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "rust",
+        "parse_mode": null,
+        "path": "onboarding.rs",
+        "sha256": "1be7696ea1aab078ab5d9c0721175401162b52240f90f7dd9019077ef87306b2",
+        "strings": []
+      },
+      {
+        "bytes": 5872,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "rust",
+        "parse_mode": null,
+        "path": "organizer.rs",
+        "sha256": "dce921a63d811cd533738d9dc629c04e44bd8ed5520aa72abdba78bfce6c1cc4",
+        "strings": []
+      },
+      {
+        "bytes": 33702,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "rust",
+        "parse_mode": null,
+        "path": "project.rs",
+        "sha256": "98ba3d061db1e21a0f80fd149ade1175bce35a83441a6f21f3fa857be021b754",
+        "strings": []
+      },
+      {
+        "bytes": 17926,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "rust",
+        "parse_mode": null,
+        "path": "rules.rs",
+        "sha256": "c88ed292c86c2891de51db16d757dffa01ccf4b117e837025679f29d8f4156f4",
+        "strings": []
+      },
+      {
+        "bytes": 6963,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "rust",
+        "parse_mode": null,
+        "path": "rules_ui.rs",
+        "sha256": "ed7c62ac42e96ab0638e3d8d1ba02e355eef9a41a7a5fa62fa90fddfd93445f4",
+        "strings": []
+      },
+      {
+        "bytes": 92442,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "rust",
+        "parse_mode": null,
+        "path": "scan.rs",
+        "sha256": "c20973bc3e01d65a708fe08b320e4195147a6eec995296aa396751b6d072f00f",
+        "strings": []
+      },
+      {
+        "bytes": 12415,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "rust",
+        "parse_mode": null,
+        "path": "settings.rs",
+        "sha256": "aeb8e6796c1c5db7812dd00f96435096042f708ba2f6651e1f231770750f5dbe",
+        "strings": []
+      },
+      {
+        "bytes": 8009,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "rust",
+        "parse_mode": null,
+        "path": "settings_ui.rs",
+        "sha256": "90fbf6647de2a081b27edc1c95dfe562f4102cfcc14ff6b433b4f9b2e4cd3381",
+        "strings": []
+      },
+      {
+        "bytes": 38428,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "rust",
+        "parse_mode": null,
+        "path": "shortcuts.rs",
+        "sha256": "9580121beb1b49be6347c05394fe6cd38113acd3a42fb52d801803997a4cd1a7",
+        "strings": []
+      },
+      {
+        "bytes": 14166,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "rust",
+        "parse_mode": null,
+        "path": "table.rs",
+        "sha256": "e0f46e33d50e5fa530baa85c2854a727357ce9748eb9c52e2c2c22705b68358a",
+        "strings": []
+      },
+      {
+        "bytes": 21066,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "rust",
+        "parse_mode": null,
+        "path": "theme.rs",
+        "sha256": "6dd8cf3d3a5ff36645d95bd18aebe984f130739d2decef65cad38f1e17483906",
+        "strings": []
+      },
+      {
+        "bytes": 12714,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "rust",
+        "parse_mode": null,
+        "path": "tls.rs",
+        "sha256": "3c851412e20fd2e54443dc15b3004b4732a3d0a4d1b0dffadbe890c767237e25",
+        "strings": []
+      },
+      {
+        "bytes": 38532,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "rust",
+        "parse_mode": null,
+        "path": "tools.rs",
+        "sha256": "082c461fd83e774cc93ca0f0409e91588798516de71451d5f23aca7bab24ab72",
+        "strings": []
+      },
+      {
+        "bytes": 115215,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "rust",
+        "parse_mode": null,
+        "path": "ui.rs",
+        "sha256": "bd0b008e7b8bbba67007d6afcf1984e4639a7ccb9ede4270ff123728e7f31cf2",
+        "strings": []
+      },
+      {
+        "bytes": 17854,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "rust",
+        "parse_mode": null,
+        "path": "upstream.rs",
+        "sha256": "626e497cc8f478b9484f8ddc4ea29a46d60015795fec25b02ff21c4afc351ede",
+        "strings": []
+      },
+      {
+        "bytes": 15656,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "rust",
+        "parse_mode": null,
+        "path": "util.rs",
+        "sha256": "6af4dbb655639ba7b718d301c7c0383dfe3595e511a4974ce5d72b3b0417d395",
+        "strings": []
+      }
+    ],
+    "ignored": 0,
+    "label": "src",
+    "languages": {
+      "rust": 32
+    },
+    "source_graph_id": "sg_fbc9989358a832560cb3ce75c9ec6900b8c4dfb32c5a606dbd944ebc0ca05bb1",
+    "truncated": false
+  },
+  "summary": "src: 32 file(s), 0 script(s) analysed, 0 ignored.",
+  "confidence": "observed",
+  "authority": "reasoning",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [
+    {
+      "code": "reference_claim",
+      "message": "A source tree is someone's claim about what was built; js_source_bundle_compare checks it against the shipped code."
+    }
+  ],
+  "coverage": {
+    "status": "complete",
+    "examined": 32
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/root/Documents/Craft Anything/burpsuite/app/src"
+    }
+  ],
+  "links": []
+}

@@ -1,0 +1,58 @@
+{
+  "id": "ev_daa615302414e060dfba916dcdb5cdb5d033818fc8c30b78f5d9def63efa4591",
+  "subject": {
+    "kind": "jar",
+    "sha256": "510bf1c87c766f09c3c20d3ef75e7a6978e60dd38346965dd4836ce64417becf",
+    "name": "burpsuite.jar"
+  },
+  "operation": "java_classes_find",
+  "params": {
+    "include_methods": false,
+    "limit": 10,
+    "offset": 0,
+    "path": "/opt/BurpSuite/burpsuite.jar",
+    "query": "Z_00"
+  },
+  "result": {
+    "classes": [
+      {
+        "access": [
+          "public"
+        ],
+        "entry": "burp/Z_00.class",
+        "fields": 7,
+        "interfaces": [],
+        "internal": "burp/Z_00",
+        "matched_methods": [],
+        "methods": 38,
+        "name": "burp.Z_00",
+        "superclass": "burp.Z_0y"
+      }
+    ],
+    "classes_total": 54868,
+    "matches": 1,
+    "query": "Z_00"
+  },
+  "summary": "1 of 54868 classes match \"Z_00\" ; showing 1.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 1,
+    "total": 1
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/opt/BurpSuite/burpsuite.jar"
+    }
+  ],
+  "links": []
+}

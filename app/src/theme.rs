@@ -25,22 +25,196 @@ pub const WARN: u32 = 0xE1B156; // yellow[3]
 pub const BAD: u32 = 0xDF4C63; // red[3]
 pub const HEADER_BLUE: u32 = 0xD1E8F9;
 
+/// Icon glyphs (Phosphor regular).
+pub use egui_phosphor::regular as icon;
+
 pub const fn c(v: u32) -> Color32 {
     Color32::from_rgb(((v >> 16) & 0xFF) as u8, ((v >> 8) & 0xFF) as u8, (v & 0xFF) as u8)
 }
 
+// ---------- palette-aware chrome tokens ----------
+//
+// The constants above describe Burp's dark theme. Widgets that used to paint
+// `c(MONO1)` or colour labels `c(MONO6)` now ask for the semantic token below,
+// which resolves against the live palette. The dark column is the legacy
+// constant verbatim, so switching to Light is the only thing that changes
+// pixels; Dark stays identical.
+
+/// Resolved chrome colours for one palette.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Tokens {
+    pub chrome: Color32,
+    pub chrome_alt: Color32,
+    pub surface: Color32,
+    pub header_bg: Color32,
+    pub line: Color32,
+    pub line_strong: Color32,
+    pub zebra: Color32,
+    pub selection_bg: Color32,
+    pub subtle_bg: Color32,
+    pub ink: Color32,
+    pub ink_dim: Color32,
+    pub ink_faint: Color32,
+    pub ink_hint: Color32,
+    pub header_ink: Color32,
+    pub editor_ink: Color32,
+    pub url_key: Color32,
+    pub url_value: Color32,
+}
+
+impl Tokens {
+    /// The mapping for an explicit palette (pure, so tests need no global state).
+    pub fn for_palette(p: Palette) -> Self {
+        match p {
+            // Burp's light UI: near-white panels, white content, cool grey rules,
+            // near-black body text and a dark blue for header/request lines.
+            Palette::Light => Self {
+                // burp/theme/LightTheme.json: mono = white swatch, 1-based
+                // (mono[1] #FFFFFF, [2] #FBFBFB, [3] #EEEEEE, [4] #DFDFDF,
+                // [5] #C9C9C9, [7] #4B4B4B, [8] #2B2B2B). Sampled against the
+                // live 52685 window: menu/sub-tab/status rows #FBFBFB, tab row
+                // and content #FFFFFF, table header #EEEEEE, odd rows #FAFAFA,
+                // selected row background.5 = secondary[7] #EBF1F6.
+                chrome: c(0xFBFBFB),
+                chrome_alt: c(0xFBFBFB),
+                surface: c(0xFFFFFF),
+                header_bg: c(0xEEEEEE),
+                line: c(0xDFDFDF),
+                line_strong: c(0xC9C9C9),
+                zebra: c(0xFAFAFA),
+                selection_bg: c(0xEBF1F6),
+                subtle_bg: c(0xEEEEEE),
+                ink: c(0x000000),
+                ink_dim: c(0x2B2B2B),
+                ink_faint: c(0x4B4B4B),
+                ink_hint: c(0x787878),
+                // editor.message.httpFirstLine / headerName / text
+                header_ink: c(0x000075),
+                editor_ink: c(0x141414),
+                url_key: c(0x0000C0),
+                url_value: c(0xA01010),
+            },
+            // Dark (and high contrast, which still renders on the dark base)
+            // keep the legacy constants.
+            _ => Self {
+                chrome: c(MONO1),
+                chrome_alt: c(MONO1X),
+                surface: c(MONO1X),
+                header_bg: c(MONO1X),
+                line: c(MONO2),
+                line_strong: c(MONO3),
+                zebra: c(ZEBRA),
+                selection_bg: c(SEL_BG),
+                subtle_bg: c(SELECTION_SUBTLE),
+                ink: c(MONO7),
+                ink_dim: c(EDITOR_TEXT),
+                ink_faint: c(MONO6),
+                ink_hint: c(MONO4),
+                header_ink: c(HEADER_BLUE),
+                editor_ink: c(EDITOR_TEXT),
+                url_key: c(URL_KEY),
+                url_value: c(URL_VALUE),
+            },
+        }
+    }
+
+    pub fn current() -> Self {
+        Self::for_palette(appearance().0)
+    }
+}
+
+/// Window chrome behind the menu/tool/status bars.
+pub fn chrome() -> Color32 {
+    Tokens::current().chrome
+}
+/// The menu bar strip, one step off `chrome`.
+pub fn chrome_alt() -> Color32 {
+    Tokens::current().chrome_alt
+}
+/// Content surface: central panel, cards, editors, toasts.
+pub fn surface() -> Color32 {
+    Tokens::current().surface
+}
+/// Table header strip.
+pub fn header_bg() -> Color32 {
+    Tokens::current().header_bg
+}
+/// Ordinary border / divider.
+pub fn line() -> Color32 {
+    Tokens::current().line
+}
+/// Border that has to stay visible against a busy surface.
+pub fn line_strong() -> Color32 {
+    Tokens::current().line_strong
+}
+/// Alternating table row.
+pub fn zebra() -> Color32 {
+    Tokens::current().zebra
+}
+/// Selected table row / list item.
+pub fn selection_bg() -> Color32 {
+    Tokens::current().selection_bg
+}
+/// Faint tint behind the logo mark.
+pub fn subtle_bg() -> Color32 {
+    Tokens::current().subtle_bg
+}
+/// Primary text: headings and strong labels.
+pub fn ink() -> Color32 {
+    Tokens::current().ink
+}
+/// Body text and monospace values.
+pub fn ink_dim() -> Color32 {
+    Tokens::current().ink_dim
+}
+/// Secondary labels, table headers, muted states.
+pub fn ink_faint() -> Color32 {
+    Tokens::current().ink_faint
+}
+/// Hints and captions, the dimmest readable step.
+pub fn ink_hint() -> Color32 {
+    Tokens::current().ink_hint
+}
+/// Request/status lines and other accent-blue text.
+pub fn header_ink() -> Color32 {
+    Tokens::current().header_ink
+}
+/// Text inside a message editor.
+pub fn editor_ink() -> Color32 {
+    Tokens::current().editor_ink
+}
+/// Query-parameter name in the Params view.
+pub fn url_key() -> Color32 {
+    Tokens::current().url_key
+}
+/// Query-parameter value in the Params view.
+pub fn url_value() -> Color32 {
+    Tokens::current().url_value
+}
+
+fn is_light() -> bool {
+    appearance().0 == Palette::Light
+}
+
+/// ui.target.method.* (Dark: shade 3, Light: shade 2 of the same swatch).
 pub fn method_color(m: &str) -> Color32 {
     let m = m.to_ascii_uppercase();
+    let light = is_light();
     match m.as_str() {
-        "GET" | "OPTIONS" => c(METHOD_GET),
-        "POST" => c(METHOD_POST),
-        "" => c(MONO6),
-        _ => c(METHOD_OTHER),
+        "GET" | "OPTIONS" => c(if light { 0x87486F } else { METHOD_GET }),
+        "POST" => c(if light { 0x4B44AE } else { METHOD_POST }),
+        "" => if light { c(0x4B4B4B) } else { c(MONO6) },
+        _ => c(if light { 0x2A828E } else { METHOD_OTHER }),
     }
 }
 
 #[allow(dead_code)]
 pub fn status_color(s: &str) -> Color32 {
+    // Burp's history table prints status codes in body ink in the light theme
+    // (live 52685 window); the dark palette keeps its tinted codes.
+    if is_light() {
+        return c(0x2B2B2B);
+    }
     if s.is_empty() {
         return c(MONO6);
     }
@@ -55,9 +229,72 @@ pub fn status_color(s: &str) -> Color32 {
     }
 }
 
+/// Message-editor syntax colours (ui.editor.message.* in Light/DarkTheme.json).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EditorColours {
+    pub first_line: Color32,
+    pub header_name: Color32,
+    pub header_value: Color32,
+    pub text: Color32,
+    pub line_numbers: Color32,
+    pub current_line: Color32,
+    pub gutter_border: Color32,
+    pub param_name: Color32,
+    pub param_value: Color32,
+    pub tag_name: Color32,
+    pub literal_string: Color32,
+    pub search_highlight: Color32,
+}
+
+pub fn editor_colours() -> EditorColours {
+    if is_light() {
+        EditorColours {
+            first_line: c(0x141414),
+            header_name: c(0x000075),
+            header_value: c(0x202020),
+            text: c(0x141414),
+            line_numbers: c(0x787878),
+            current_line: c(0xF0F0F0),
+            gutter_border: c(0xDDDDDD),
+            param_name: c(0x0000C0),
+            param_value: c(0xA01010),
+            tag_name: c(0xB000C0),
+            literal_string: c(0x008000),
+            search_highlight: c(0xFFFF00),
+        }
+    } else {
+        EditorColours {
+            first_line: c(0xD1E8F9),
+            header_name: c(0xD1E8F9),
+            header_value: c(0xBABABA),
+            text: c(EDITOR_TEXT),
+            line_numbers: c(0xA0A0A0),
+            current_line: c(EDITOR_CUR_LINE),
+            gutter_border: c(MONO2),
+            param_name: c(0xBBCDFF),
+            param_value: c(0xA5C35B),
+            tag_name: c(0xE9C063),
+            literal_string: c(0x93C763),
+            search_highlight: c(0x7A6A00),
+        }
+    }
+}
+
+/// ui.issue.* severity colours.
+pub fn issue_colour(sev: &str) -> Color32 {
+    let light = is_light();
+    match sev.to_ascii_lowercase().as_str() {
+        "high" => c(if light { 0xD6213F } else { BAD }),
+        "medium" => c(ORANGE),
+        "low" => c(if light { 0x26649D } else { METHOD_OTHER }),
+        _ => if light { c(0xB0AFAF) } else { c(MONO6) },
+    }
+}
+
 pub fn apply(ctx: &egui::Context) {
     install_fonts(ctx);
-    apply_as(ctx, Palette::Dark, Density::Comfortable, 1.0);
+    let (p, d, f) = appearance();
+    apply_as(ctx, p, d, f);
 }
 
 /// egui's proportional faces lack some arrows and symbols the UI prints, and a
@@ -66,6 +303,9 @@ pub fn apply(ctx: &egui::Context) {
 /// start-up: replacing the fonts rebuilds the glyph atlas.
 pub fn install_fonts(ctx: &egui::Context) {
     let mut fonts = egui::FontDefinitions::default();
+    // Phosphor icon font (egui-phosphor): Burp's toolbar glyphs (globe,
+    // terminal, search, gear, funnel, check) without drawing them by hand.
+    egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
     if let Some(family) = fonts.families.get_mut(&egui::FontFamily::Proportional) {
         if !family.iter().any(|name| name == "Hack") {
             family.push("Hack".to_owned());
@@ -162,7 +402,7 @@ impl Palette {
     fn panel_fill(self) -> Color32 {
         match self {
             Palette::Dark => c(MONO1),
-            Palette::Light => Color32::from_rgb(0xF6, 0xF7, 0xF8),
+            Palette::Light => Color32::from_rgb(0xFB, 0xFB, 0xFB),
             Palette::HighContrast => Color32::from_rgb(0x00, 0x00, 0x00),
         }
     }
@@ -176,28 +416,28 @@ impl Palette {
     fn text(self) -> Color32 {
         match self {
             Palette::Dark => c(EDITOR_TEXT),
-            Palette::Light => Color32::from_rgb(0x1A, 0x1C, 0x1F),
+            Palette::Light => Color32::from_rgb(0x2B, 0x2B, 0x2B),
             Palette::HighContrast => Color32::from_rgb(0xFF, 0xFF, 0xFF),
         }
     }
     fn faint_bg(self) -> Color32 {
         match self {
             Palette::Dark => c(EDITOR_CUR_LINE),
-            Palette::Light => Color32::from_rgb(0xEC, 0xEE, 0xF1),
+            Palette::Light => Color32::from_rgb(0xF0, 0xF0, 0xF0),
             Palette::HighContrast => Color32::from_rgb(0x1A, 0x1A, 0x1A),
         }
     }
     fn widget_bg(self) -> Color32 {
         match self {
             Palette::Dark => c(MONO3),
-            Palette::Light => Color32::from_rgb(0xE4, 0xE7, 0xEB),
+            Palette::Light => Color32::from_rgb(0xFF, 0xFF, 0xFF),
             Palette::HighContrast => Color32::from_rgb(0x3A, 0x3A, 0x3A),
         }
     }
     fn border(self) -> Color32 {
         match self {
             Palette::Dark => c(MONO2),
-            Palette::Light => Color32::from_rgb(0xC9, 0xCE, 0xD4),
+            Palette::Light => Color32::from_rgb(0xC9, 0xC9, 0xC9),
             Palette::HighContrast => Color32::from_rgb(0xFF, 0xFF, 0xFF),
         }
     }
@@ -266,6 +506,24 @@ pub fn apply_as(ctx: &egui::Context, palette: Palette, density: Density, font_sc
         v.widgets.active.bg_fill = c(ORANGE_1);
         v.widgets.active.fg_stroke = egui::Stroke::new(1.0, c(MONO7));
         v.hyperlink_color = c(ORANGE_5);
+        if palette == Palette::Light {
+            // egui's stock light selection is a saturated blue that fights the
+            // orange accent; use Burp's pale selection tint with dark ink.
+            let t = Tokens::for_palette(palette);
+            v.selection.bg_fill = t.selection_bg;
+            v.selection.stroke = egui::Stroke::new(1.0, t.ink);
+            // Strong text (egui's widgets.active text colour) is ui.text.header
+            // black in Burp's light theme, not white.
+            v.widgets.active.fg_stroke = egui::Stroke::new(1.0, t.ink);
+            // ui.text.link = primary[1] (LightTheme.json).
+            v.hyperlink_color = c(0xAD5B28);
+            // Burp's light scroll bars are thin grey thumbs, not ink-black.
+            sty.spacing.scroll.bar_width = 8.0;
+            sty.spacing.scroll.dormant_handle_opacity = 0.3;
+            sty.spacing.scroll.active_handle_opacity = 0.45;
+            sty.spacing.scroll.interact_handle_opacity = 0.6;
+            sty.spacing.scroll.dormant_background_opacity = 0.0;
+        }
         sty.text_styles = base_text_styles(font_scale);
     }
     // Density applies in every palette.
@@ -289,8 +547,10 @@ fn base_text_styles(font_scale: f32) -> std::collections::BTreeMap<egui::TextSty
 
 use std::sync::atomic::{AtomicU32, AtomicU8};
 
-static PALETTE: AtomicU8 = AtomicU8::new(0); // 0 dark, 1 light, 2 high contrast
-static DENSITY: AtomicU8 = AtomicU8::new(1); // 0 compact, 1 comfortable
+// Burp default: user_options.display.user_interface.look_and_feel = Light (UserDefaults.json).
+static PALETTE: AtomicU8 = AtomicU8::new(1); // 0 dark, 1 light, 2 high contrast
+// Burp's Swing UI is compact: ~20 px rows and menu items.
+static DENSITY: AtomicU8 = AtomicU8::new(0); // 0 compact, 1 comfortable
 static FONT_SCALE_BITS: AtomicU32 = AtomicU32::new(1.0f32.to_bits());
 
 pub fn appearance() -> (Palette, Density, f32) {
@@ -348,6 +608,11 @@ mod tests {
         '\u{25BE}', // small down triangle
         '\u{2195}', // up-down arrow (table sort hint)
         '\u{25BC}', // down triangle (table sort arrow)
+        '\u{2699}', // gear (Proxy settings tab, search options)
+        '\u{25BD}', // filter funnel stand-in
+        '\u{25B4}', // small up triangle (Inspector collapse)
+        '\u{203A}', // single right angle quote (Inspector row)
+        '\u{2190}', // left arrow
     ];
 
     fn missing(ctx: &egui::Context) -> Vec<char> {
@@ -365,5 +630,68 @@ mod tests {
         install_fonts(&ctx);
         let missing = missing(&ctx);
         assert!(missing.is_empty(), "these would draw as boxes: {missing:?}");
+    }
+
+    /// Dark must stay pixel-identical to the constants the UI was built on.
+    #[test]
+    fn dark_tokens_equal_the_legacy_constants() {
+        let t = Tokens::for_palette(Palette::Dark);
+        assert_eq!(t.chrome, c(MONO1));
+        assert_eq!(t.chrome_alt, c(MONO1X));
+        assert_eq!(t.surface, c(MONO1X));
+        assert_eq!(t.header_bg, c(MONO1X));
+        assert_eq!(t.line, c(MONO2));
+        assert_eq!(t.line_strong, c(MONO3));
+        assert_eq!(t.zebra, c(ZEBRA));
+        assert_eq!(t.selection_bg, c(SEL_BG));
+        assert_eq!(t.ink, c(MONO7));
+        assert_eq!(t.ink_dim, c(EDITOR_TEXT));
+        assert_eq!(t.ink_faint, c(MONO6));
+        assert_eq!(t.ink_hint, c(MONO4));
+        assert_eq!(t.header_ink, c(HEADER_BLUE));
+        assert_eq!(t.editor_ink, c(EDITOR_TEXT));
+    }
+
+    #[test]
+    fn light_tokens_differ_from_dark_where_the_ui_flips() {
+        let dark = Tokens::for_palette(Palette::Dark);
+        let light = Tokens::for_palette(Palette::Light);
+        for (name, d, l) in [
+            ("chrome", dark.chrome, light.chrome),
+            ("surface", dark.surface, light.surface),
+            ("ink", dark.ink, light.ink),
+            ("ink_dim", dark.ink_dim, light.ink_dim),
+            ("ink_faint", dark.ink_faint, light.ink_faint),
+            ("line", dark.line, light.line),
+            ("header_ink", dark.header_ink, light.header_ink),
+        ] {
+            assert_ne!(d, l, "{name} must flip between palettes");
+        }
+    }
+
+    /// Light text has to be dark ink on light surfaces, or the palette is a
+    /// half-migration again.
+    #[test]
+    fn light_text_is_dark_on_light_surfaces() {
+        let t = Tokens::for_palette(Palette::Light);
+        let luma = |c: Color32| 0.2126 * c.r() as f32 + 0.7152 * c.g() as f32 + 0.0722 * c.b() as f32;
+        for (name, bg) in [
+            ("chrome", t.chrome),
+            ("surface", t.surface),
+            ("header_bg", t.header_bg),
+            ("zebra", t.zebra),
+            ("selection_bg", t.selection_bg),
+        ] {
+            assert!(luma(bg) > 200.0, "{name} should be a light surface, got {bg:?}");
+        }
+        for (name, fg) in [
+            ("ink", t.ink),
+            ("ink_dim", t.ink_dim),
+            ("ink_faint", t.ink_faint),
+            ("editor_ink", t.editor_ink),
+            ("header_ink", t.header_ink),
+        ] {
+            assert!(luma(fg) < 120.0, "{name} should be dark ink, got {fg:?}");
+        }
     }
 }

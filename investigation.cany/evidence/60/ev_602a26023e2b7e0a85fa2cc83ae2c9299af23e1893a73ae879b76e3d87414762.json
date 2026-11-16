@@ -1,0 +1,88 @@
+{
+  "id": "ev_602a26023e2b7e0a85fa2cc83ae2c9299af23e1893a73ae879b76e3d87414762",
+  "subject": {
+    "kind": "source-tree",
+    "sha256": "4e7205ad3b7e4126548714a4f6270e47de1b9ddd3a7a05ca4698ca34910bfa5b",
+    "name": "qa-ref-evidence"
+  },
+  "operation": "app_source_import",
+  "params": {
+    "include_hidden": false,
+    "path": "/tmp/qa-ref-evidence",
+    "respect_gitignore": false
+  },
+  "result": {
+    "files": [
+      {
+        "bytes": 1186,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "other",
+        "parse_mode": null,
+        "path": "burp.log",
+        "sha256": "42d5c16e46383d791653425057839eabab73983dbe221ee9b4bbcbb3dd9c0778",
+        "strings": []
+      },
+      {
+        "bytes": 524288,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "other",
+        "parse_mode": null,
+        "path": "qa.burp",
+        "sha256": "c30fddd4cd6e20b1f90637a44ec743024073b57bbc78d7f92ba838e65065f8e8",
+        "strings": []
+      },
+      {
+        "bytes": 51,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "json",
+        "parse_mode": null,
+        "path": "user.json",
+        "sha256": "cd5a38cbe6fe496743f747dd7f0cc1d823741528297e5da32066ea3575fb1d51",
+        "strings": []
+      }
+    ],
+    "ignored": 0,
+    "label": "qa-ref-evidence",
+    "languages": {
+      "json": 1,
+      "other": 2
+    },
+    "source_graph_id": "sg_4e7205ad3b7e4126548714a4f6270e47de1b9ddd3a7a05ca4698ca34910bfa5b",
+    "truncated": false
+  },
+  "summary": "qa-ref-evidence: 3 file(s), 0 script(s) analysed, 0 ignored.",
+  "confidence": "observed",
+  "authority": "reasoning",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [
+    {
+      "code": "reference_claim",
+      "message": "A source tree is someone's claim about what was built; js_source_bundle_compare checks it against the shipped code."
+    }
+  ],
+  "coverage": {
+    "status": "complete",
+    "examined": 3
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/tmp/qa-ref-evidence"
+    }
+  ],
+  "links": []
+}

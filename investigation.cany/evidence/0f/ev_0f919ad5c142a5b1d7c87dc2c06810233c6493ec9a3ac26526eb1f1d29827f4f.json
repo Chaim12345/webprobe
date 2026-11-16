@@ -1,0 +1,274 @@
+{
+  "id": "ev_0f919ad5c142a5b1d7c87dc2c06810233c6493ec9a3ac26526eb1f1d29827f4f",
+  "subject": {
+    "kind": "jar",
+    "sha256": "510bf1c87c766f09c3c20d3ef75e7a6978e60dd38346965dd4836ce64417becf",
+    "name": "burpsuite.jar"
+  },
+  "operation": "java_class_show",
+  "params": {
+    "class_name": "burp.Zu66",
+    "decompile": true,
+    "path": "/opt/BurpSuite/burpsuite.jar"
+  },
+  "result": {
+    "access": [
+      "public",
+      "final",
+      "enum"
+    ],
+    "annotations": [],
+    "entry": "burp/Zu66.class",
+    "fields": [
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zu66;",
+        "name": "ENABLE_ALL",
+        "signature": null,
+        "type": "burp.Zu66"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zu66;",
+        "name": "DISABLE_VIEW",
+        "signature": null,
+        "type": "burp.Zu66"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zu66;",
+        "name": "DISABLE_VIEW_AND_DELETE",
+        "signature": null,
+        "type": "burp.Zu66"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zu66;",
+        "name": "DISABLE_ALL",
+        "signature": null,
+        "type": "burp.Zu66"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Z",
+        "name": "allowContextMenuAndHotkeyActions",
+        "signature": null,
+        "type": "boolean"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Z",
+        "name": "allowDashboardViewActions",
+        "signature": null,
+        "type": "boolean"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Z",
+        "name": "allowDelete",
+        "signature": null,
+        "type": "boolean"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "[Lburp/Zu66;",
+        "name": "Zl",
+        "signature": null,
+        "type": "burp.Zu66[]"
+      }
+    ],
+    "inner_classes": [],
+    "interfaces": [],
+    "internal": "burp/Zu66",
+    "java_version": "Java 21",
+    "methods": [
+      {
+        "access": [
+          "public",
+          "static"
+        ],
+        "code_bytes": 10,
+        "deprecated": false,
+        "descriptor": "()[Lburp/Zu66;",
+        "max_locals": 0,
+        "max_stack": 1,
+        "name": "values",
+        "signature": "public static burp.Zu66[] values()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public",
+          "static"
+        ],
+        "code_bytes": 10,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;)Lburp/Zu66;",
+        "max_locals": 1,
+        "max_stack": 2,
+        "name": "valueOf",
+        "signature": "public static burp.Zu66 valueOf(java.lang.String)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 24,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;IZZZ)V",
+        "max_locals": 6,
+        "max_stack": 3,
+        "name": "<init>",
+        "signature": "private <init>(java.lang.String, int, boolean, boolean, boolean)",
+        "signature_attr": "(ZZZ)V",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private",
+          "static"
+        ],
+        "code_bytes": 29,
+        "deprecated": false,
+        "descriptor": "()[Lburp/Zu66;",
+        "max_locals": 0,
+        "max_stack": 4,
+        "name": "Z_",
+        "signature": "private static burp.Zu66[] Z_()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "static"
+        ],
+        "code_bytes": 363,
+        "deprecated": false,
+        "descriptor": "()V",
+        "max_locals": 7,
+        "max_stack": 10,
+        "name": "<clinit>",
+        "signature": "static <clinit>()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      }
+    ],
+    "name": "burp.Zu66",
+    "pseudo_java": "public final enum enum burp.Zu66 extends java.lang.Enum {\n    public static final enum burp.Zu66 ENABLE_ALL;\n    public static final enum burp.Zu66 DISABLE_VIEW;\n    public static final enum burp.Zu66 DISABLE_VIEW_AND_DELETE;\n    public static final enum burp.Zu66 DISABLE_ALL;\n    public final boolean allowContextMenuAndHotkeyActions;\n    public final boolean allowDashboardViewActions;\n    public final boolean allowDelete;\n    private static final burp.Zu66[] Zl;\n\n    public static burp.Zu66[] values(){\n        return (Zu66[]) Zu66.Zl.clone();\n    }\n\n\n    public static burp.Zu66 valueOf(java.lang.String){\n        return (Zu66) Enum.valueOf(burp.Zu66.class, v0);\n    }\n\n\n    private <init>(java.lang.String, int, boolean, boolean, boolean){\n        this.allowContextMenuAndHotkeyActions = v3;\n        this.allowDashboardViewActions = v4;\n        this.allowDelete = v5;\n        return;\n    }\n\n\n    private static burp.Zu66[] Z_(){\n        new Zu66[4][0] = Zu66.ENABLE_ALL;\n        new Zu66[4][1] = Zu66.DISABLE_VIEW;\n        new Zu66[4][2] = Zu66.DISABLE_VIEW_AND_DELETE;\n        new Zu66[4][3] = Zu66.DISABLE_ALL;\n        return new Zu66[4];\n    }\n\n\n    static <clinit>(){\n        v0 = new String[4];\n        v4 = 0;\n        v3 = \"bzs!;\\u{1c}\\u{7}yrl,\\u{c}bzs!;\\u{1c}\\u{7}yei%.\";\n        v5 = \"bzs!;\\u{1c}\\u{7}yrl,\\u{c}bzs!;\\u{1c}\\u{7}yei%.\".length();\n        v2 = 11;\n        v1 = -1;\n        v1 += 1;\n        goto L82;\n        v4 += 1;\n        v0[v4] = -1;\n        v1 = (v1 + v2);\n        if ((v1 + v2) < v5) {\n            v2 = v3.charAt(v1);\n            goto L18;\n        }\n        v3 = \"\\u{f}\\u{17}\\u{1e}LVqj\\u{14}\\u{8}\\u{4}HCbn\\u{5}\\u{1a}\\u{12}IQqj\\u{1f}\\u{1b}\\n\\u{e}\\u{10}\\u{c}OXxp\\n\\u{12}\\u{1}\";\n        v5 = \"\\u{f}\\u{17}\\u{1e}LVqj\\u{14}\\u{8}\\u{4}HCbn\\u{5}\\u{1a}\\u{12}IQqj\\u{1f}\\u{1b}\\n\\u{e}\\u{10}\\u{c}OXxp\\n\\u{12}\\u{1}\".length();\n        v2 = 23;\n        v1 = -1;\n        v1 += 1;\n        goto L82;\n        v4 += 1;\n        v0[v4] = 0;\n        v1 = (v1 + v2);\n        if ((v1 + v2) < v5) {\n            v2 = v3.charAt(v1);\n            goto L53;\n        }\n        goto L12e;\n        L82:\n        v3.substring(v1, (v1 + v2));\n        76.toCharArray().length;\n        v6 = 0;\n        v3.substring(v1, (v1 + v2));\n        if (33 <= 1) {\n            switch ((v6 % 7)) {\n                case 0:\n                    goto Lea;\n                case 1:\n                    goto Lea;\n                case 2:\n                    goto Lea;\n                case 3:\n                    goto Lea;\n                case 4:\n                    goto Lea;\n                case 5:\n                    goto Lea;\n                default:\n                    Lea:\n                    1[65] = (char) (88 ^ (113 ^ 99));\n                    v6 += 1;\n                    if (18 == 0) {\n                        goto La0;\n                    }\n            }\n        }\n        if (7 > v6) goto La0;\n        switch (?) {\n            case 0: goto L66;\n            default: goto L2b;\n        }\n        L12e:\n        Zu66.ENABLE_ALL = new Zu66(v0[3], 0, 1, 1, 1);\n        Zu66.DISABLE_VIEW = new Zu66(v0[1], 1, 1, 0, 1);\n        Zu66.DISABLE_VIEW_AND_DELETE = new Zu66(v0[2], 2, 1, 0, 0);\n        Zu66.DISABLE_ALL = new Zu66(v0[0], 3, 0, 0, 0);\n        Zu66.Zl = Zu66.Z_();\n        return;\n    }\n\n}\n",
+    "signature": "Ljava/lang/Enum<Lburp/Zu66;>;",
+    "source_file": null,
+    "superclass": "java.lang.Enum",
+    "version": {
+      "major": 65,
+      "minor": 0
+    }
+  },
+  "summary": "burp.Zu66 (Java 21) extends java.lang.Enum: 8 fields, 5 methods.",
+  "confidence": "inferred",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [
+    {
+      "code": "decompiler_inferred",
+      "message": "This pseudo-Java is reconstructed from bytecode by Craft Anything's built-in decompiler; it is a best guess, not the original source. The bytecode disassembly is the evidence."
+    },
+    {
+      "code": "generics_erased",
+      "message": "Generic type arguments are erased in bytecode and are not shown."
+    },
+    {
+      "code": "names_and_types_inferred",
+      "message": "Local variables are named v0, v1, … (no debug names); their declared types are not reconstructed."
+    },
+    {
+      "code": "desugaring_not_reversed",
+      "message": "Synthetic members, lambda/invokedynamic desugaring, enum scaffolding and string-switch hashing are not turned back into source."
+    },
+    {
+      "code": "stack_reconstruction_approximate",
+      "message": "1 method(s) contain stack operations that were approximated."
+    },
+    {
+      "code": "control_flow_partly_structured",
+      "message": "Some methods contain control flow shown with labels and goto statements."
+    }
+  ],
+  "coverage": {
+    "status": "complete",
+    "examined": 1,
+    "total": 1
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/opt/BurpSuite/burpsuite.jar"
+    },
+    {
+      "kind": "class",
+      "value": "burp/Zu66"
+    }
+  ],
+  "links": []
+}

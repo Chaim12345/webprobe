@@ -1,0 +1,161 @@
+{
+  "id": "ev_535bfb285f89c090ad1c2d143c63b44d21bd473a447e465e7e74e3e4730b5b37",
+  "subject": {
+    "kind": "source-tree",
+    "sha256": "430211396b453570b2a7e8ed3abd902df41c96b61af5032e3f6b5e9465337e15",
+    "name": "parity-evidence-w39"
+  },
+  "operation": "app_source_import",
+  "params": {
+    "include_hidden": false,
+    "path": "/tmp/parity-evidence-w39",
+    "respect_gitignore": true
+  },
+  "result": {
+    "files": [
+      {
+        "bytes": 83314,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "other",
+        "parse_mode": null,
+        "path": "burp-insp.png",
+        "sha256": "b90887810f00de682db1e01ac816c6e056f227a5445289aaee28906b5bce06c5",
+        "strings": []
+      },
+      {
+        "bytes": 264201,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "json",
+        "parse_mode": null,
+        "path": "burp-scan7.json",
+        "sha256": "ce4a09001e6c1a1ea4248edcbbfbf70f817bb1b928ca0f22889ec899d94c1e0f",
+        "strings": []
+      },
+      {
+        "bytes": 95870,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "json",
+        "parse_mode": null,
+        "path": "burp-scan8.json",
+        "sha256": "de2a5d6523de5351d5d95f17695d2ffc762befb183ece063f57868449596d541",
+        "strings": []
+      },
+      {
+        "bytes": 32357,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "rust",
+        "parse_mode": null,
+        "path": "burp_checks.rs",
+        "sha256": "713abd2d313e5b1bbabc78baf0c1442edc6900df1470f3279db71972259a3f39",
+        "strings": []
+      },
+      {
+        "bytes": 1031,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "other",
+        "parse_mode": null,
+        "path": "diff-final.txt",
+        "sha256": "6ead2caaadd47d6642a662f4983677c4158cfa2cbfed0620dddac77fbd3a71a4",
+        "strings": []
+      },
+      {
+        "bytes": 688,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "other",
+        "parse_mode": null,
+        "path": "paths.txt",
+        "sha256": "e30bde10579e11a2c3dcc4861fd54b53715e12db4b1f5fc91d4e962b7dce7782",
+        "strings": []
+      },
+      {
+        "bytes": 7863,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "other",
+        "parse_mode": null,
+        "path": "webprobe-issues.txt",
+        "sha256": "fd776b7b0f53e50c00503376d3e3b5c1e3070b947f17d5503f1e791b8a8c3247",
+        "strings": []
+      },
+      {
+        "bytes": 125103,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "other",
+        "parse_mode": null,
+        "path": "wp-proxy5.png",
+        "sha256": "6bf268116002e1e652ede2be04573b50f0aaed059d38324611bad9552edc8744",
+        "strings": []
+      },
+      {
+        "bytes": 172331,
+        "exports": [],
+        "fingerprint": null,
+        "functions": [],
+        "imports": [],
+        "language": "other",
+        "parse_mode": null,
+        "path": "wp-repeater5.png",
+        "sha256": "6c7cd65cba5d9b3dc27609facee7beec5f4a14f6b64717c00aeda92ad404dc84",
+        "strings": []
+      }
+    ],
+    "ignored": 0,
+    "label": "parity-evidence-w39",
+    "languages": {
+      "json": 2,
+      "other": 6,
+      "rust": 1
+    },
+    "source_graph_id": "sg_430211396b453570b2a7e8ed3abd902df41c96b61af5032e3f6b5e9465337e15",
+    "truncated": false
+  },
+  "summary": "parity-evidence-w39: 9 file(s), 0 script(s) analysed, 0 ignored.",
+  "confidence": "observed",
+  "authority": "reasoning",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [
+    {
+      "code": "reference_claim",
+      "message": "A source tree is someone's claim about what was built; js_source_bundle_compare checks it against the shipped code."
+    }
+  ],
+  "coverage": {
+    "status": "complete",
+    "examined": 9
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/tmp/parity-evidence-w39"
+    }
+  ],
+  "links": []
+}

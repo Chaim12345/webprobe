@@ -1,14 +1,19 @@
 {
   "id": "unk_b5d66c6c635b412b",
-  "revision": 1,
+  "revision": 4,
   "question": "Does the rebuild implement the Montoya extension API so Java extensions can be loaded? No extension runtime exists.",
   "severity": "medium",
   "domain": "feature-parity",
-  "status": "open",
+  "status": "resolved",
   "probes": [
-    "Install a sample Montoya extension in the original",
-    "Define which extension API surface (if any) to support"
+    "Decision recorded: Rust cannot host Java Montoya extensions without an embedded JVM (jffi/JNI bridge or sidecar JVM process speaking IPC)",
+    "Path A: Rust-native extension host with a Montoya-shaped hook interface (HttpRequestResponse handlers, proxy handler registry) - extensions would be Rust/WASM, not Java",
+    "Path B: sidecar JVM process (java -jar bridge) exposing Burp's real Montoya API, WebProbe drives it over IPC",
+    "Neither path started; both need a design pass"
   ],
-  "evidence_for": [],
-  "evidence_against": []
+  "evidence_for": [
+    "ev_6ded8ff7aa1e635964ad11c91ec2c3bbda5378aec7475fe9b5682ba2e3fa8fb0"
+  ],
+  "evidence_against": [],
+  "resolution": "RESOLVED (waves 20+30, 2026-11-15): Two-part answer. Path A (wave 20): WebProbe's own hook surface is Rust-native Montoya-shaped traits (ext_host.rs ProxyHooks) running in-process. Path B (wave 30): real Burp Montoya .jar extensions NOW LOAD through a sidecar JVM bridge - app/sidecar/MontoyaBridge.java launched in single-file source mode (java -cp burpsuite.jar MontoyaBridge.java <ext.jar>) against Burp's own Montoya API classes from /opt/BurpSuite/burpsuite.jar (1001 burp.api.montoya entries incl. sources). ServiceLoader finds BurpExtension; reflect-Proxy stubs back MontoyaApi (proxy().registerRequestHandler/ResponseHandler really register; logging() -> stderr; other accessors throw); ObjectFactoryLocator.FACTORY stub makes drop()/continueWith() factories work; InterceptedRequest/InterceptedResponse stubs expose the message fields. Rust JavaSidecar implements ProxyHooks over JSON-lines IPC, degrades to pass-through if the JVM dies; WEBPROBE_EXT_JAR registers at startup. Verified: standalone bridge smoke (drop on /admin-drop, continue on /normal, response hook, exit 0); suite test java_sidecar_runs_a_real_montoya_extension (242/242 green incl. real JVM); live proxy QA (:8123 - /normal -> 404 passthrough, /admin-drop/panel -> empty reply/dropped; Extensions tab lists 'Montoya bridge (demo-ext.jar) ProxyRequestHandler + ProxyResponseHandler (sidecar JVM)'). Honest v1 scope documented in-tab: Received halves only, no message editing, UI-coupled APIs throw. Evidence ev_1f11bbcae7093c78d66f9a757cb46baf2c4b39b268506c7f5473e8b275ad91d0, finding fnd_41."
 }

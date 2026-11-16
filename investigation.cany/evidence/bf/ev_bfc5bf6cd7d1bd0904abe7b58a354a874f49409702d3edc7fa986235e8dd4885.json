@@ -1,0 +1,2875 @@
+{
+  "id": "ev_bfc5bf6cd7d1bd0904abe7b58a354a874f49409702d3edc7fa986235e8dd4885",
+  "subject": {
+    "kind": "jar",
+    "sha256": "510bf1c87c766f09c3c20d3ef75e7a6978e60dd38346965dd4836ce64417becf",
+    "name": "burpsuite.jar"
+  },
+  "operation": "java_class_show",
+  "params": {
+    "class_name": "burp.Z_f2",
+    "decompile": true,
+    "path": "/opt/BurpSuite/burpsuite.jar"
+  },
+  "result": {
+    "access": [
+      "public"
+    ],
+    "annotations": [],
+    "entry": "burp/Z_f2.class",
+    "fields": [
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zjhi;",
+        "name": "ZQ",
+        "signature": null,
+        "type": "burp.Zjhi"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zloj;",
+        "name": "Zb",
+        "signature": null,
+        "type": "burp.Zloj"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zt0f;",
+        "name": "Zt",
+        "signature": null,
+        "type": "burp.Zt0f"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zmbj;",
+        "name": "Zz",
+        "signature": null,
+        "type": "burp.Zmbj"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/IExtensionHelpers;",
+        "name": "Z_",
+        "signature": null,
+        "type": "burp.IExtensionHelpers"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zcos;",
+        "name": "ZB",
+        "signature": null,
+        "type": "burp.Zcos"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zm6a;",
+        "name": "ZG",
+        "signature": null,
+        "type": "burp.Zm6a"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zunv;",
+        "name": "ZV",
+        "signature": null,
+        "type": "burp.Zunv"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/api/montoya/MontoyaApi;",
+        "name": "Zn",
+        "signature": null,
+        "type": "burp.api.montoya.MontoyaApi"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Ztwo;",
+        "name": "ZM",
+        "signature": null,
+        "type": "burp.Ztwo"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljava/util/Map;",
+        "name": "Zk",
+        "signature": "Ljava/util/Map<Lburp/IScopeChangeListener;Lburp/api/montoya/core/Registration;>;",
+        "type": "java.util.Map"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljava/util/Map;",
+        "name": "Za",
+        "signature": "Ljava/util/Map<Lburp/IExtensionStateListener;Lburp/api/montoya/core/Registration;>;",
+        "type": "java.util.Map"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljava/util/Map;",
+        "name": "ZX",
+        "signature": "Ljava/util/Map<Lburp/IProxyListener;Lburp/api/montoya/core/Registration;>;",
+        "type": "java.util.Map"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljava/util/Map;",
+        "name": "Zd",
+        "signature": "Ljava/util/Map<Lburp/IProxyListener;Lburp/api/montoya/core/Registration;>;",
+        "type": "java.util.Map"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljava/util/Map;",
+        "name": "Zh",
+        "signature": "Ljava/util/Map<Lburp/IHttpListener;Lburp/api/montoya/core/Registration;>;",
+        "type": "java.util.Map"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljava/util/Map;",
+        "name": "ZZ",
+        "signature": "Ljava/util/Map<Lburp/IScannerListener;Lburp/api/montoya/core/Registration;>;",
+        "type": "java.util.Map"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljava/util/Map;",
+        "name": "Zj",
+        "signature": "Ljava/util/Map<Lburp/ISessionHandlingAction;Lburp/api/montoya/core/Registration;>;",
+        "type": "java.util.Map"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljava/util/Map;",
+        "name": "ZY",
+        "signature": "Ljava/util/Map<Lburp/IIntruderPayloadProcessor;Lburp/api/montoya/core/Registration;>;",
+        "type": "java.util.Map"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljava/util/Map;",
+        "name": "Zm",
+        "signature": "Ljava/util/Map<Lburp/IIntruderPayloadGeneratorFactory;Lburp/api/montoya/core/Registration;>;",
+        "type": "java.util.Map"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljava/util/Map;",
+        "name": "ZJ",
+        "signature": "Ljava/util/Map<Lburp/IScannerInsertionPointProvider;Lburp/api/montoya/core/Registration;>;",
+        "type": "java.util.Map"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljava/util/Map;",
+        "name": "ZK",
+        "signature": "Ljava/util/Map<Lburp/IScannerCheck;Lburp/api/montoya/core/Registration;>;",
+        "type": "java.util.Map"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljava/util/Map;",
+        "name": "ZH",
+        "signature": "Ljava/util/Map<Lburp/ITab;Lburp/api/montoya/core/Registration;>;",
+        "type": "java.util.Map"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljava/util/Map;",
+        "name": "Zs",
+        "signature": "Ljava/util/Map<Lburp/IContextMenuFactory;Lburp/api/montoya/core/Registration;>;",
+        "type": "java.util.Map"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljava/util/Map;",
+        "name": "ZF",
+        "signature": "Ljava/util/Map<Lburp/IMessageEditorTabFactory;Lnet/portswigger/Za<Lburp/api/montoya/core/Registration;Lburp/api/montoya/core/Registration;>;>;",
+        "type": "java.util.Map"
+      },
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zkzb;",
+        "name": "Zr",
+        "signature": null,
+        "type": "burp.Zkzb"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "[Ljava/lang/String;",
+        "name": "a",
+        "signature": null,
+        "type": "java.lang.String[]"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "[Ljava/lang/String;",
+        "name": "b",
+        "signature": null,
+        "type": "java.lang.String[]"
+      }
+    ],
+    "inner_classes": [],
+    "interfaces": [
+      "burp.IBurpExtenderCallbacks"
+    ],
+    "internal": "burp/Z_f2",
+    "java_version": "Java 21",
+    "methods": [
+      {
+        "access": [
+          "public",
+          "static"
+        ],
+        "code_bytes": 49,
+        "deprecated": false,
+        "descriptor": "(Lburp/Zt0f;Lburp/Zmbj;Lburp/Zcos;Lburp/Zunv;Lburp/Zm6a;Lburp/Ztlk;Lburp/api/montoya/MontoyaApi;Lburp/Zjhi;Lburp/Ztwo;Lburp/Zu8l;Lburp/Zloj;Lburp/Zkzb;)Lburp/IBurpExtenderCallbacks;",
+        "max_locals": 13,
+        "max_stack": 12,
+        "name": "ZE",
+        "signature": "public static burp.IBurpExtenderCallbacks ZE(burp.Zt0f, burp.Zmbj, burp.Zcos, burp.Zunv, burp.Zm6a, burp.Ztlk, burp.api.montoya.MontoyaApi, burp.Zjhi, burp.Ztwo, burp.Zu8l, burp.Zloj, burp.Zkzb)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 232,
+        "deprecated": false,
+        "descriptor": "(Lburp/Zt0f;Lburp/Zmbj;Lburp/Zcos;Lburp/Zunv;Lburp/Zm6a;Lburp/api/montoya/MontoyaApi;Lburp/Zjhi;Lburp/Ztwo;Lburp/Zloj;Lburp/Zkzb;)V",
+        "max_locals": 11,
+        "max_stack": 6,
+        "name": "<init>",
+        "signature": "private <init>(burp.Zt0f, burp.Zmbj, burp.Zcos, burp.Zunv, burp.Zm6a, burp.api.montoya.MontoyaApi, burp.Zjhi, burp.Ztwo, burp.Zloj, burp.Zkzb)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "issueAlert",
+        "signature": "public void issueAlert(java.lang.String)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 23,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;IZ[BLjava/lang/String;)V",
+        "max_locals": 6,
+        "max_stack": 7,
+        "name": "sendToRepeater",
+        "signature": "public void sendToRepeater(java.lang.String, int, boolean, byte[], java.lang.String)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 11,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;IZ[B)[B",
+        "max_locals": 5,
+        "max_stack": 6,
+        "name": "makeHttpRequest",
+        "signature": "public byte[] makeHttpRequest(java.lang.String, int, boolean, byte[])",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 164,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;IZ[BZ)[B",
+        "max_locals": 10,
+        "max_stack": 5,
+        "name": "makeHttpRequest",
+        "signature": "public byte[] makeHttpRequest(java.lang.String, int, boolean, byte[], boolean)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 5
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 10,
+        "deprecated": false,
+        "descriptor": "(Lburp/IHttpService;Ljava/util/List;[B)[B",
+        "max_locals": 4,
+        "max_stack": 6,
+        "name": "makeHttp2Request",
+        "signature": "public byte[] makeHttp2Request(burp.IHttpService, java.util.List, byte[])",
+        "signature_attr": "(Lburp/IHttpService;Ljava/util/List<Lburp/IHttpHeader;>;[B)[B",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 11,
+        "deprecated": false,
+        "descriptor": "(Lburp/IHttpService;Ljava/util/List;[BZ)[B",
+        "max_locals": 5,
+        "max_stack": 6,
+        "name": "makeHttp2Request",
+        "signature": "public byte[] makeHttp2Request(burp.IHttpService, java.util.List, byte[], boolean)",
+        "signature_attr": "(Lburp/IHttpService;Ljava/util/List<Lburp/IHttpHeader;>;[BZ)[B",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 123,
+        "deprecated": false,
+        "descriptor": "(Lburp/IHttpService;Ljava/util/List;[BZLjava/lang/String;)[B",
+        "max_locals": 10,
+        "max_stack": 4,
+        "name": "makeHttp2Request",
+        "signature": "public byte[] makeHttp2Request(burp.IHttpService, java.util.List, byte[], boolean, java.lang.String)",
+        "signature_attr": "(Lburp/IHttpService;Ljava/util/List<Lburp/IHttpHeader;>;[BZLjava/lang/String;)[B",
+        "throws": [],
+        "try_blocks": 2
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 11,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;IZ[B)V",
+        "max_locals": 5,
+        "max_stack": 6,
+        "name": "sendToIntruder",
+        "signature": "public void sendToIntruder(java.lang.String, int, boolean, byte[])",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 23,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;IZ[BLjava/util/List;)V",
+        "max_locals": 6,
+        "max_stack": 7,
+        "name": "sendToIntruder",
+        "signature": "public void sendToIntruder(java.lang.String, int, boolean, byte[], java.util.List)",
+        "signature_attr": "(Ljava/lang/String;IZ[BLjava/util/List<[I>;)V",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Ljava/net/URL;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "sendToSpider",
+        "signature": "public void sendToSpider(java.net.URL)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 32,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;IZ[B)Lburp/IScanQueueItem;",
+        "max_locals": 5,
+        "max_stack": 6,
+        "name": "doActiveScan",
+        "signature": "public burp.IScanQueueItem doActiveScan(java.lang.String, int, boolean, byte[])",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 205,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;IZ[BLjava/util/List;)Lburp/IScanQueueItem;",
+        "max_locals": 9,
+        "max_stack": 5,
+        "name": "doActiveScan",
+        "signature": "public burp.IScanQueueItem doActiveScan(java.lang.String, int, boolean, byte[], java.util.List)",
+        "signature_attr": "(Ljava/lang/String;IZ[BLjava/util/List<[I>;)Lburp/IScanQueueItem;",
+        "throws": [],
+        "try_blocks": 5
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 43,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;IZ[B[B)V",
+        "max_locals": 6,
+        "max_stack": 7,
+        "name": "doPassiveScan",
+        "signature": "public void doPassiveScan(java.lang.String, int, boolean, byte[], byte[])",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 38,
+        "deprecated": false,
+        "descriptor": "(Ljava/net/URL;)Z",
+        "max_locals": 3,
+        "max_stack": 2,
+        "name": "isInScope",
+        "signature": "public boolean isInScope(java.net.URL)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Ljava/net/URL;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "includeInScope",
+        "signature": "public void includeInScope(java.net.URL)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Ljava/net/URL;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "excludeFromScope",
+        "signature": "public void excludeFromScope(java.net.URL)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 73,
+        "deprecated": false,
+        "descriptor": "()[Lburp/IHttpRequestResponse;",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "getProxyHistory",
+        "signature": "public burp.IHttpRequestResponse[] getProxyHistory()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 85,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;)[Lburp/IHttpRequestResponse;",
+        "max_locals": 3,
+        "max_stack": 3,
+        "name": "getSiteMap",
+        "signature": "public burp.IHttpRequestResponse[] getSiteMap(java.lang.String)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 42,
+        "deprecated": false,
+        "descriptor": "(Lburp/IHttpRequestResponse;)V",
+        "max_locals": 2,
+        "max_stack": 4,
+        "name": "addToSiteMap",
+        "signature": "public void addToSiteMap(burp.IHttpRequestResponse)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 8,
+        "deprecated": false,
+        "descriptor": "(Ljava/io/File;)V",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "restoreState",
+        "signature": "public void restoreState(java.io.File)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Ljava/io/File;)V",
+        "max_locals": 2,
+        "max_stack": 4,
+        "name": "saveState",
+        "signature": "public void saveState(java.io.File)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 8,
+        "deprecated": false,
+        "descriptor": "([B)[[Ljava/lang/String;",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "getParameters",
+        "signature": "public java.lang.String[][] getParameters(byte[])",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 8,
+        "deprecated": false,
+        "descriptor": "([B)[Ljava/lang/String;",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "getHeaders",
+        "signature": "public java.lang.String[] getHeaders(byte[])",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 97,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;)[Lburp/IScanIssue;",
+        "max_locals": 4,
+        "max_stack": 2,
+        "name": "getScanIssues",
+        "signature": "public burp.IScanIssue[] getScanIssues(java.lang.String)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 2
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 39,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;[Lburp/IScanIssue;Ljava/io/File;)V",
+        "max_locals": 4,
+        "max_stack": 5,
+        "name": "generateScanReport",
+        "signature": "public void generateScanReport(java.lang.String, burp.IScanIssue[], java.io.File)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 8,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;Lburp/IMenuItemHandler;)V",
+        "max_locals": 3,
+        "max_stack": 2,
+        "name": "registerMenuItem",
+        "signature": "public void registerMenuItem(java.lang.String, burp.IMenuItemHandler)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "()Ljava/util/Map;",
+        "max_locals": 1,
+        "max_stack": 4,
+        "name": "saveConfig",
+        "signature": "public java.util.Map saveConfig()",
+        "signature_attr": "()Ljava/util/Map<Ljava/lang/String;Ljava/lang/String;>;",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Ljava/util/Map;)V",
+        "max_locals": 2,
+        "max_stack": 4,
+        "name": "loadConfig",
+        "signature": "public void loadConfig(java.util.Map)",
+        "signature_attr": "(Ljava/util/Map<Ljava/lang/String;Ljava/lang/String;>;)V",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public",
+          "varargs"
+        ],
+        "code_bytes": 35,
+        "deprecated": false,
+        "descriptor": "([Ljava/lang/String;)Ljava/lang/String;",
+        "max_locals": 3,
+        "max_stack": 2,
+        "name": "saveConfigAsJson",
+        "signature": "public varargs java.lang.String saveConfigAsJson(java.lang.String[])",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "loadConfigFromJson",
+        "signature": "public void loadConfigFromJson(java.lang.String)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Z)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "setProxyInterceptionEnabled",
+        "signature": "public void setProxyInterceptionEnabled(boolean)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 66,
+        "deprecated": false,
+        "descriptor": "()[Ljava/lang/String;",
+        "max_locals": 2,
+        "max_stack": 4,
+        "name": "getBurpVersion",
+        "signature": "public java.lang.String[] getBurpVersion()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 34,
+        "deprecated": false,
+        "descriptor": "()Ljava/lang/String;",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "getExtensionFilename",
+        "signature": "public java.lang.String getExtensionFilename()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 34,
+        "deprecated": false,
+        "descriptor": "()Z",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "isExtensionBapp",
+        "signature": "public boolean isExtensionBapp()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Z)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "exitSuite",
+        "signature": "public void exitSuite(boolean)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Lburp/IExtensionStateListener;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "registerExtensionStateListener",
+        "signature": "public void registerExtensionStateListener(burp.IExtensionStateListener)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 32,
+        "deprecated": false,
+        "descriptor": "()Ljava/util/List;",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "getExtensionStateListeners",
+        "signature": "public java.util.List getExtensionStateListeners()",
+        "signature_attr": "()Ljava/util/List<Lburp/IExtensionStateListener;>;",
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Lburp/IExtensionStateListener;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "removeExtensionStateListener",
+        "signature": "public void removeExtensionStateListener(burp.IExtensionStateListener)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 37,
+        "deprecated": false,
+        "descriptor": "(Lburp/IScannerListener;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "registerScannerListener",
+        "signature": "public void registerScannerListener(burp.IScannerListener)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 53,
+        "deprecated": false,
+        "descriptor": "()Ljava/util/List;",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "getScannerListeners",
+        "signature": "public java.util.List getScannerListeners()",
+        "signature_attr": "()Ljava/util/List<Lburp/IScannerListener;>;",
+        "throws": [],
+        "try_blocks": 2
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 37,
+        "deprecated": false,
+        "descriptor": "(Lburp/IScannerListener;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "removeScannerListener",
+        "signature": "public void removeScannerListener(burp.IScannerListener)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Lburp/IProxyListener;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "registerProxyListener",
+        "signature": "public void registerProxyListener(burp.IProxyListener)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 32,
+        "deprecated": false,
+        "descriptor": "()Ljava/util/List;",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "getProxyListeners",
+        "signature": "public java.util.List getProxyListeners()",
+        "signature_attr": "()Ljava/util/List<Lburp/IProxyListener;>;",
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Lburp/IProxyListener;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "removeProxyListener",
+        "signature": "public void removeProxyListener(burp.IProxyListener)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Lburp/IHttpListener;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "registerHttpListener",
+        "signature": "public void registerHttpListener(burp.IHttpListener)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 32,
+        "deprecated": false,
+        "descriptor": "()Ljava/util/List;",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "getHttpListeners",
+        "signature": "public java.util.List getHttpListeners()",
+        "signature_attr": "()Ljava/util/List<Lburp/IHttpListener;>;",
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Lburp/IHttpListener;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "removeHttpListener",
+        "signature": "public void removeHttpListener(burp.IHttpListener)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Lburp/IMessageEditorTabFactory;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "registerMessageEditorTabFactory",
+        "signature": "public void registerMessageEditorTabFactory(burp.IMessageEditorTabFactory)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 32,
+        "deprecated": false,
+        "descriptor": "()Ljava/util/List;",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "getMessageEditorTabFactories",
+        "signature": "public java.util.List getMessageEditorTabFactories()",
+        "signature_attr": "()Ljava/util/List<Lburp/IMessageEditorTabFactory;>;",
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Lburp/IMessageEditorTabFactory;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "removeMessageEditorTabFactory",
+        "signature": "public void removeMessageEditorTabFactory(burp.IMessageEditorTabFactory)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Lburp/IContextMenuFactory;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "registerContextMenuFactory",
+        "signature": "public void registerContextMenuFactory(burp.IContextMenuFactory)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 32,
+        "deprecated": false,
+        "descriptor": "()Ljava/util/List;",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "getContextMenuFactories",
+        "signature": "public java.util.List getContextMenuFactories()",
+        "signature_attr": "()Ljava/util/List<Lburp/IContextMenuFactory;>;",
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Lburp/IContextMenuFactory;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "removeContextMenuFactory",
+        "signature": "public void removeContextMenuFactory(burp.IContextMenuFactory)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "setExtensionName",
+        "signature": "public void setExtensionName(java.lang.String)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 34,
+        "deprecated": false,
+        "descriptor": "()Ljava/io/OutputStream;",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "getStdout",
+        "signature": "public java.io.OutputStream getStdout()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 34,
+        "deprecated": false,
+        "descriptor": "()Ljava/io/OutputStream;",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "getStderr",
+        "signature": "public java.io.OutputStream getStderr()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "printOutput",
+        "signature": "public void printOutput(java.lang.String)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "printError",
+        "signature": "public void printError(java.lang.String)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Lburp/ITab;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "addSuiteTab",
+        "signature": "public void addSuiteTab(burp.ITab)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Lburp/ITab;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "removeSuiteTab",
+        "signature": "public void removeSuiteTab(burp.ITab)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 41,
+        "deprecated": false,
+        "descriptor": "(Lburp/IMessageEditorController;Z)Lburp/IMessageEditor;",
+        "max_locals": 4,
+        "max_stack": 6,
+        "name": "createMessageEditor",
+        "signature": "public burp.IMessageEditor createMessageEditor(burp.IMessageEditorController, boolean)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 58,
+        "deprecated": false,
+        "descriptor": "()Lburp/ITextEditor;",
+        "max_locals": 2,
+        "max_stack": 6,
+        "name": "createTextEditor",
+        "signature": "public burp.ITextEditor createTextEditor()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 62,
+        "deprecated": false,
+        "descriptor": "([B)Lburp/ITempFile;",
+        "max_locals": 3,
+        "max_stack": 4,
+        "name": "saveToTempFile",
+        "signature": "public burp.ITempFile saveToTempFile(byte[])",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 2
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 62,
+        "deprecated": false,
+        "descriptor": "(Lburp/IHttpRequestResponse;)Lburp/IHttpRequestResponsePersisted;",
+        "max_locals": 3,
+        "max_stack": 4,
+        "name": "saveBuffersToTempFiles",
+        "signature": "public burp.IHttpRequestResponsePersisted saveBuffersToTempFiles(burp.IHttpRequestResponse)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 2
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 181,
+        "deprecated": false,
+        "descriptor": "(I)Ljava/lang/String;",
+        "max_locals": 3,
+        "max_stack": 2,
+        "name": "getToolName",
+        "signature": "public java.lang.String getToolName(int)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 2
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Ljava/awt/Component;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "customizeUiComponent",
+        "signature": "public void customizeUiComponent(java.awt.Component)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 37,
+        "deprecated": false,
+        "descriptor": "(Lburp/IScannerInsertionPointProvider;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "registerScannerInsertionPointProvider",
+        "signature": "public void registerScannerInsertionPointProvider(burp.IScannerInsertionPointProvider)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 53,
+        "deprecated": false,
+        "descriptor": "()Ljava/util/List;",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "getScannerInsertionPointProviders",
+        "signature": "public java.util.List getScannerInsertionPointProviders()",
+        "signature_attr": "()Ljava/util/List<Lburp/IScannerInsertionPointProvider;>;",
+        "throws": [],
+        "try_blocks": 2
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 37,
+        "deprecated": false,
+        "descriptor": "(Lburp/IScannerInsertionPointProvider;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "removeScannerInsertionPointProvider",
+        "signature": "public void removeScannerInsertionPointProvider(burp.IScannerInsertionPointProvider)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 37,
+        "deprecated": false,
+        "descriptor": "(Lburp/IScanIssue;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "addScanIssue",
+        "signature": "public void addScanIssue(burp.IScanIssue)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 181,
+        "deprecated": false,
+        "descriptor": "(Lburp/IHttpRequestResponse;Ljava/util/List;Ljava/util/List;)Lburp/IHttpRequestResponseWithMarkers;",
+        "max_locals": 7,
+        "max_stack": 6,
+        "name": "applyMarkers",
+        "signature": "public burp.IHttpRequestResponseWithMarkers applyMarkers(burp.IHttpRequestResponse, java.util.List, java.util.List)",
+        "signature_attr": "(Lburp/IHttpRequestResponse;Ljava/util/List<[I>;Ljava/util/List<[I>;)Lburp/IHttpRequestResponseWithMarkers;",
+        "throws": [],
+        "try_blocks": 4
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 37,
+        "deprecated": false,
+        "descriptor": "(Lburp/IScannerCheck;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "registerScannerCheck",
+        "signature": "public void registerScannerCheck(burp.IScannerCheck)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 53,
+        "deprecated": false,
+        "descriptor": "()Ljava/util/List;",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "getScannerChecks",
+        "signature": "public java.util.List getScannerChecks()",
+        "signature_attr": "()Ljava/util/List<Lburp/IScannerCheck;>;",
+        "throws": [],
+        "try_blocks": 2
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 37,
+        "deprecated": false,
+        "descriptor": "(Lburp/IScannerCheck;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "removeScannerCheck",
+        "signature": "public void removeScannerCheck(burp.IScannerCheck)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Lburp/ISessionHandlingAction;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "registerSessionHandlingAction",
+        "signature": "public void registerSessionHandlingAction(burp.ISessionHandlingAction)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 32,
+        "deprecated": false,
+        "descriptor": "()Ljava/util/List;",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "getSessionHandlingActions",
+        "signature": "public java.util.List getSessionHandlingActions()",
+        "signature_attr": "()Ljava/util/List<Lburp/ISessionHandlingAction;>;",
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Lburp/ISessionHandlingAction;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "removeSessionHandlingAction",
+        "signature": "public void removeSessionHandlingAction(burp.ISessionHandlingAction)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Lburp/IIntruderPayloadGeneratorFactory;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "registerIntruderPayloadGeneratorFactory",
+        "signature": "public void registerIntruderPayloadGeneratorFactory(burp.IIntruderPayloadGeneratorFactory)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 32,
+        "deprecated": false,
+        "descriptor": "()Ljava/util/List;",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "getIntruderPayloadGeneratorFactories",
+        "signature": "public java.util.List getIntruderPayloadGeneratorFactories()",
+        "signature_attr": "()Ljava/util/List<Lburp/IIntruderPayloadGeneratorFactory;>;",
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Lburp/IIntruderPayloadGeneratorFactory;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "removeIntruderPayloadGeneratorFactory",
+        "signature": "public void removeIntruderPayloadGeneratorFactory(burp.IIntruderPayloadGeneratorFactory)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Lburp/IIntruderPayloadProcessor;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "registerIntruderPayloadProcessor",
+        "signature": "public void registerIntruderPayloadProcessor(burp.IIntruderPayloadProcessor)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 32,
+        "deprecated": false,
+        "descriptor": "()Ljava/util/List;",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "getIntruderPayloadProcessors",
+        "signature": "public java.util.List getIntruderPayloadProcessors()",
+        "signature_attr": "()Ljava/util/List<Lburp/IIntruderPayloadProcessor;>;",
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 58,
+        "deprecated": false,
+        "descriptor": "()Lburp/IBurpCollaboratorClientContext;",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "createBurpCollaboratorClientContext",
+        "signature": "public burp.IBurpCollaboratorClientContext createBurpCollaboratorClientContext()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 2
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Lburp/IIntruderPayloadProcessor;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "removeIntruderPayloadProcessor",
+        "signature": "public void removeIntruderPayloadProcessor(burp.IIntruderPayloadProcessor)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 5,
+        "deprecated": false,
+        "descriptor": "()Lburp/IExtensionHelpers;",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "getHelpers",
+        "signature": "public burp.IExtensionHelpers getHelpers()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 8,
+        "deprecated": false,
+        "descriptor": "(Lburp/IHttpService;[B)Lburp/IHttpRequestResponse;",
+        "max_locals": 3,
+        "max_stack": 4,
+        "name": "makeHttpRequest",
+        "signature": "public burp.IHttpRequestResponse makeHttpRequest(burp.IHttpService, byte[])",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 142,
+        "deprecated": false,
+        "descriptor": "(Lburp/IHttpService;[BZ)Lburp/IHttpRequestResponse;",
+        "max_locals": 7,
+        "max_stack": 5,
+        "name": "makeHttpRequest",
+        "signature": "public burp.IHttpRequestResponse makeHttpRequest(burp.IHttpService, byte[], boolean)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 4
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 18,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;Ljava/lang/String;)V",
+        "max_locals": 3,
+        "max_stack": 4,
+        "name": "saveExtensionSetting",
+        "signature": "public void saveExtensionSetting(java.lang.String, java.lang.String)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 40,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;)Ljava/lang/String;",
+        "max_locals": 3,
+        "max_stack": 2,
+        "name": "loadExtensionSetting",
+        "signature": "public java.lang.String loadExtensionSetting(java.lang.String)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Lburp/IScopeChangeListener;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "registerScopeChangeListener",
+        "signature": "public void registerScopeChangeListener(burp.IScopeChangeListener)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 32,
+        "deprecated": false,
+        "descriptor": "()Ljava/util/List;",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "getScopeChangeListeners",
+        "signature": "public java.util.List getScopeChangeListeners()",
+        "signature_attr": "()Ljava/util/List<Lburp/IScopeChangeListener;>;",
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Lburp/IScopeChangeListener;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "removeScopeChangeListener",
+        "signature": "public void removeScopeChangeListener(burp.IScopeChangeListener)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 69,
+        "deprecated": false,
+        "descriptor": "()Ljava/util/List;",
+        "max_locals": 3,
+        "max_stack": 2,
+        "name": "getCookieJarContents",
+        "signature": "public java.util.List getCookieJarContents()",
+        "signature_attr": "()Ljava/util/List<Lburp/ICookie;>;",
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "(Lburp/ICookie;)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "updateCookieJar",
+        "signature": "public void updateCookieJar(burp.ICookie)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 16,
+        "deprecated": false,
+        "descriptor": "()V",
+        "max_locals": 1,
+        "max_stack": 2,
+        "name": "unloadExtension",
+        "signature": "public void unloadExtension()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 48,
+        "deprecated": false,
+        "descriptor": "()[Ljava/lang/String;",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "getCommandLineArguments",
+        "signature": "public java.lang.String[] getCommandLineArguments()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 17,
+        "deprecated": false,
+        "descriptor": "([B)V",
+        "max_locals": 2,
+        "max_stack": 3,
+        "name": "sendToComparer",
+        "signature": "public void sendToComparer(byte[])",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 57,
+        "deprecated": false,
+        "descriptor": "([B)V",
+        "max_locals": 2,
+        "max_stack": 6,
+        "name": "lambda$sendToComparer$56",
+        "signature": "private void lambda$sendToComparer$56(byte[])",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 15,
+        "deprecated": false,
+        "descriptor": "()V",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "lambda$unloadExtension$55",
+        "signature": "private void lambda$unloadExtension$55()",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 87,
+        "deprecated": false,
+        "descriptor": "(Lburp/ICookie;)V",
+        "max_locals": 4,
+        "max_stack": 6,
+        "name": "lambda$updateCookieJar$54",
+        "signature": "private void lambda$updateCookieJar$54(burp.ICookie)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 57,
+        "deprecated": false,
+        "descriptor": "(Lburp/IScopeChangeListener;)V",
+        "max_locals": 3,
+        "max_stack": 4,
+        "name": "lambda$removeScopeChangeListener$53",
+        "signature": "private void lambda$removeScopeChangeListener$53(burp.IScopeChangeListener)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 2
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 59,
+        "deprecated": false,
+        "descriptor": "(Lburp/IScopeChangeListener;)V",
+        "max_locals": 3,
+        "max_stack": 4,
+        "name": "lambda$registerScopeChangeListener$52",
+        "signature": "private void lambda$registerScopeChangeListener$52(burp.IScopeChangeListener)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "private",
+          "static"
+        ],
+        "code_bytes": 7,
+        "deprecated": false,
+        "descriptor": "(Lburp/IScopeChangeListener;Lburp/api/montoya/scope/ScopeChange;)V",
+        "max_locals": 2,
+        "max_stack": 1,
+        "name": "lambda$registerScopeChangeListener$51",
+        "signature": "private static void lambda$registerScopeChangeListener$51(burp.IScopeChangeListener, burp.api.montoya.scope.ScopeChange)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 60,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;Ljava/lang/String;)V",
+        "max_locals": 5,
+        "max_stack": 3,
+        "name": "lambda$saveExtensionSetting$50",
+        "signature": "private void lambda$saveExtensionSetting$50(java.lang.String, java.lang.String)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 2
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 57,
+        "deprecated": false,
+        "descriptor": "(Lburp/IIntruderPayloadProcessor;)V",
+        "max_locals": 3,
+        "max_stack": 4,
+        "name": "lambda$removeIntruderPayloadProcessor$49",
+        "signature": "private void lambda$removeIntruderPayloadProcessor$49(burp.IIntruderPayloadProcessor)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 2
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 65,
+        "deprecated": false,
+        "descriptor": "(Lburp/IIntruderPayloadProcessor;)V",
+        "max_locals": 3,
+        "max_stack": 6,
+        "name": "lambda$registerIntruderPayloadProcessor$48",
+        "signature": "private void lambda$registerIntruderPayloadProcessor$48(burp.IIntruderPayloadProcessor)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 57,
+        "deprecated": false,
+        "descriptor": "(Lburp/IIntruderPayloadGeneratorFactory;)V",
+        "max_locals": 3,
+        "max_stack": 4,
+        "name": "lambda$removeIntruderPayloadGeneratorFactory$47",
+        "signature": "private void lambda$removeIntruderPayloadGeneratorFactory$47(burp.IIntruderPayloadGeneratorFactory)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 2
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 67,
+        "deprecated": false,
+        "descriptor": "(Lburp/IIntruderPayloadGeneratorFactory;)V",
+        "max_locals": 4,
+        "max_stack": 5,
+        "name": "lambda$registerIntruderPayloadGeneratorFactory$46",
+        "signature": "private void lambda$registerIntruderPayloadGeneratorFactory$46(burp.IIntruderPayloadGeneratorFactory)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 57,
+        "deprecated": false,
+        "descriptor": "(Lburp/ISessionHandlingAction;)V",
+        "max_locals": 3,
+        "max_stack": 4,
+        "name": "lambda$removeSessionHandlingAction$45",
+        "signature": "private void lambda$removeSessionHandlingAction$45(burp.ISessionHandlingAction)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 2
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 68,
+        "deprecated": false,
+        "descriptor": "(Lburp/ISessionHandlingAction;)V",
+        "max_locals": 4,
+        "max_stack": 6,
+        "name": "lambda$registerSessionHandlingAction$44",
+        "signature": "private void lambda$registerSessionHandlingAction$44(burp.ISessionHandlingAction)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 57,
+        "deprecated": false,
+        "descriptor": "(Lburp/IScannerCheck;)V",
+        "max_locals": 3,
+        "max_stack": 4,
+        "name": "lambda$removeScannerCheck$43",
+        "signature": "private void lambda$removeScannerCheck$43(burp.IScannerCheck)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 2
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 60,
+        "deprecated": false,
+        "descriptor": "(Lburp/IScannerCheck;)V",
+        "max_locals": 4,
+        "max_stack": 4,
+        "name": "lambda$registerScannerCheck$42",
+        "signature": "private void lambda$registerScannerCheck$42(burp.IScannerCheck)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 16,
+        "deprecated": false,
+        "descriptor": "([I)Lburp/api/montoya/core/Range;",
+        "max_locals": 2,
+        "max_stack": 4,
+        "name": "lambda$applyMarkers$40",
+        "signature": "private burp.api.montoya.core.Range lambda$applyMarkers$40(int[])",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 52,
+        "deprecated": false,
+        "descriptor": "(Lburp/IScanIssue;)V",
+        "max_locals": 2,
+        "max_stack": 5,
+        "name": "lambda$addScanIssue$39",
+        "signature": "private void lambda$addScanIssue$39(burp.IScanIssue)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 57,
+        "deprecated": false,
+        "descriptor": "(Lburp/IScannerInsertionPointProvider;)V",
+        "max_locals": 3,
+        "max_stack": 4,
+        "name": "lambda$removeScannerInsertionPointProvider$38",
+        "signature": "private void lambda$removeScannerInsertionPointProvider$38(burp.IScannerInsertionPointProvider)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 2
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 67,
+        "deprecated": false,
+        "descriptor": "(Lburp/IScannerInsertionPointProvider;)V",
+        "max_locals": 4,
+        "max_stack": 4,
+        "name": "lambda$registerScannerInsertionPointProvider$37",
+        "signature": "private void lambda$registerScannerInsertionPointProvider$37(burp.IScannerInsertionPointProvider)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 16,
+        "deprecated": false,
+        "descriptor": "(Ljava/awt/Component;)V",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "lambda$customizeUiComponent$36",
+        "signature": "private void lambda$customizeUiComponent$36(java.awt.Component)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 89,
+        "deprecated": false,
+        "descriptor": "(Lburp/ITab;)V",
+        "max_locals": 4,
+        "max_stack": 4,
+        "name": "lambda$removeSuiteTab$35",
+        "signature": "private void lambda$removeSuiteTab$35(burp.ITab)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 3
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 40,
+        "deprecated": false,
+        "descriptor": "(Lburp/ITab;)V",
+        "max_locals": 3,
+        "max_stack": 3,
+        "name": "lambda$addSuiteTab$34",
+        "signature": "private void lambda$addSuiteTab$34(burp.ITab)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 16,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;)V",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "lambda$printError$33",
+        "signature": "private void lambda$printError$33(java.lang.String)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 16,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;)V",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "lambda$printOutput$32",
+        "signature": "private void lambda$printOutput$32(java.lang.String)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 16,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;)V",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "lambda$setExtensionName$31",
+        "signature": "private void lambda$setExtensionName$31(java.lang.String)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 57,
+        "deprecated": false,
+        "descriptor": "(Lburp/IContextMenuFactory;)V",
+        "max_locals": 3,
+        "max_stack": 4,
+        "name": "lambda$removeContextMenuFactory$30",
+        "signature": "private void lambda$removeContextMenuFactory$30(burp.IContextMenuFactory)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 2
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 69,
+        "deprecated": false,
+        "descriptor": "(Lburp/IContextMenuFactory;)V",
+        "max_locals": 3,
+        "max_stack": 6,
+        "name": "lambda$registerContextMenuFactory$29",
+        "signature": "private void lambda$registerContextMenuFactory$29(burp.IContextMenuFactory)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 75,
+        "deprecated": false,
+        "descriptor": "(Lburp/IMessageEditorTabFactory;)V",
+        "max_locals": 3,
+        "max_stack": 4,
+        "name": "lambda$removeMessageEditorTabFactory$28",
+        "signature": "private void lambda$removeMessageEditorTabFactory$28(burp.IMessageEditorTabFactory)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 2
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 85,
+        "deprecated": false,
+        "descriptor": "(Lburp/IMessageEditorTabFactory;)V",
+        "max_locals": 6,
+        "max_stack": 4,
+        "name": "lambda$registerMessageEditorTabFactory$27",
+        "signature": "private void lambda$registerMessageEditorTabFactory$27(burp.IMessageEditorTabFactory)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 57,
+        "deprecated": false,
+        "descriptor": "(Lburp/IHttpListener;)V",
+        "max_locals": 3,
+        "max_stack": 4,
+        "name": "lambda$removeHttpListener$26",
+        "signature": "private void lambda$removeHttpListener$26(burp.IHttpListener)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 2
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 67,
+        "deprecated": false,
+        "descriptor": "(Lburp/IHttpListener;)V",
+        "max_locals": 4,
+        "max_stack": 4,
+        "name": "lambda$registerHttpListener$25",
+        "signature": "private void lambda$registerHttpListener$25(burp.IHttpListener)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 88,
+        "deprecated": false,
+        "descriptor": "(Lburp/IProxyListener;)V",
+        "max_locals": 4,
+        "max_stack": 4,
+        "name": "lambda$removeProxyListener$24",
+        "signature": "private void lambda$removeProxyListener$24(burp.IProxyListener)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 3
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 101,
+        "deprecated": false,
+        "descriptor": "(Lburp/IProxyListener;)V",
+        "max_locals": 5,
+        "max_stack": 5,
+        "name": "lambda$registerProxyListener$23",
+        "signature": "private void lambda$registerProxyListener$23(burp.IProxyListener)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 57,
+        "deprecated": false,
+        "descriptor": "(Lburp/IScannerListener;)V",
+        "max_locals": 3,
+        "max_stack": 4,
+        "name": "lambda$removeScannerListener$22",
+        "signature": "private void lambda$removeScannerListener$22(burp.IScannerListener)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 2
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 63,
+        "deprecated": false,
+        "descriptor": "(Lburp/IScannerListener;)V",
+        "max_locals": 4,
+        "max_stack": 4,
+        "name": "lambda$registerScannerListener$21",
+        "signature": "private void lambda$registerScannerListener$21(burp.IScannerListener)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 57,
+        "deprecated": false,
+        "descriptor": "(Lburp/IExtensionStateListener;)V",
+        "max_locals": 3,
+        "max_stack": 4,
+        "name": "lambda$removeExtensionStateListener$20",
+        "signature": "private void lambda$removeExtensionStateListener$20(burp.IExtensionStateListener)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 2
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 66,
+        "deprecated": false,
+        "descriptor": "(Lburp/IExtensionStateListener;)V",
+        "max_locals": 4,
+        "max_stack": 4,
+        "name": "lambda$registerExtensionStateListener$19",
+        "signature": "private void lambda$registerExtensionStateListener$19(burp.IExtensionStateListener)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 69,
+        "deprecated": false,
+        "descriptor": "(Z)V",
+        "max_locals": 3,
+        "max_stack": 5,
+        "name": "lambda$exitSuite$18",
+        "signature": "private void lambda$exitSuite$18(boolean)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 2
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 55,
+        "deprecated": false,
+        "descriptor": "(Z)V",
+        "max_locals": 3,
+        "max_stack": 1,
+        "name": "lambda$setProxyInterceptionEnabled$17",
+        "signature": "private void lambda$setProxyInterceptionEnabled$17(boolean)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 2
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 16,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;)V",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "lambda$loadConfigFromJson$16",
+        "signature": "private void lambda$loadConfigFromJson$16(java.lang.String)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 57,
+        "deprecated": false,
+        "descriptor": "([Lburp/IScanIssue;Ljava/lang/String;Ljava/io/File;)V",
+        "max_locals": 6,
+        "max_stack": 4,
+        "name": "lambda$generateScanReport$15",
+        "signature": "private void lambda$generateScanReport$15(burp.IScanIssue[], java.lang.String, java.io.File)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 13,
+        "deprecated": false,
+        "descriptor": "(Lburp/IScanIssue;)Lburp/Zzke;",
+        "max_locals": 2,
+        "max_stack": 4,
+        "name": "lambda$generateScanReport$14",
+        "signature": "private burp.Zzke lambda$generateScanReport$14(burp.IScanIssue)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private",
+          "static"
+        ],
+        "code_bytes": 5,
+        "deprecated": false,
+        "descriptor": "(I)[Lburp/IScanIssue;",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "lambda$getScanIssues$13",
+        "signature": "private static burp.IScanIssue[] lambda$getScanIssues$13(int)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 27,
+        "deprecated": false,
+        "descriptor": "(Lburp/IHttpRequestResponse;)V",
+        "max_locals": 3,
+        "max_stack": 2,
+        "name": "lambda$addToSiteMap$12",
+        "signature": "private void lambda$addToSiteMap$12(burp.IHttpRequestResponse)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 13,
+        "deprecated": false,
+        "descriptor": "(Lburp/Zcuv;)Lburp/Z_9c;",
+        "max_locals": 2,
+        "max_stack": 4,
+        "name": "lambda$getSiteMap$10",
+        "signature": "private burp.Z_9c lambda$getSiteMap$10(burp.Zcuv)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private",
+          "static"
+        ],
+        "code_bytes": 5,
+        "deprecated": false,
+        "descriptor": "(I)[Lburp/IHttpRequestResponse;",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "lambda$getProxyHistory$9",
+        "signature": "private static burp.IHttpRequestResponse[] lambda$getProxyHistory$9(int)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 13,
+        "deprecated": false,
+        "descriptor": "(Lburp/Z_xl;)Lburp/Z_9c;",
+        "max_locals": 2,
+        "max_stack": 4,
+        "name": "lambda$getProxyHistory$8",
+        "signature": "private burp.Z_9c lambda$getProxyHistory$8(burp.Z_xl)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 19,
+        "deprecated": false,
+        "descriptor": "(Ljava/net/URL;)V",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "lambda$excludeFromScope$7",
+        "signature": "private void lambda$excludeFromScope$7(java.net.URL)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 19,
+        "deprecated": false,
+        "descriptor": "(Ljava/net/URL;)V",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "lambda$includeInScope$6",
+        "signature": "private void lambda$includeInScope$6(java.net.URL)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 127,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;[B[BIZ)V",
+        "max_locals": 7,
+        "max_stack": 7,
+        "name": "lambda$doPassiveScan$5",
+        "signature": "private void lambda$doPassiveScan$5(java.lang.String, byte[], byte[], int, boolean)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 3
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 43,
+        "deprecated": false,
+        "descriptor": "(Ljava/net/URL;)V",
+        "max_locals": 2,
+        "max_stack": 4,
+        "name": "lambda$sendToSpider$4",
+        "signature": "private void lambda$sendToSpider$4(java.net.URL)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 1
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 35,
+        "deprecated": false,
+        "descriptor": "(Ljava/net/URL;)Lburp/api/montoya/scanner/Crawl;",
+        "max_locals": 2,
+        "max_stack": 6,
+        "name": "lambda$sendToSpider$3",
+        "signature": "private burp.api.montoya.scanner.Crawl lambda$sendToSpider$3(java.net.URL)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Exception"
+        ],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 98,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;[BIZLjava/util/List;)V",
+        "max_locals": 8,
+        "max_stack": 4,
+        "name": "lambda$sendToIntruder$2",
+        "signature": "private void lambda$sendToIntruder$2(java.lang.String, byte[], int, boolean, java.util.List)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 2
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 85,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;[BIZLjava/lang/String;)V",
+        "max_locals": 7,
+        "max_stack": 5,
+        "name": "lambda$sendToRepeater$1",
+        "signature": "private void lambda$sendToRepeater$1(java.lang.String, byte[], int, boolean, java.lang.String)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 2
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 16,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;)V",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "lambda$issueAlert$0",
+        "signature": "private void lambda$issueAlert$0(java.lang.String)",
+        "signature_attr": null,
+        "throws": [
+          "java/lang/Throwable"
+        ],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private",
+          "static"
+        ],
+        "code_bytes": 2,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/Throwable;)Ljava/lang/Throwable;",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "a",
+        "signature": "private static java.lang.Throwable a(java.lang.Throwable)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "static"
+        ],
+        "code_bytes": 301,
+        "deprecated": false,
+        "descriptor": "()V",
+        "max_locals": 7,
+        "max_stack": 10,
+        "name": "<clinit>",
+        "signature": "static <clinit>()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private",
+          "static"
+        ],
+        "code_bytes": 2620,
+        "deprecated": false,
+        "descriptor": "(II)Ljava/lang/String;",
+        "max_locals": 9,
+        "max_stack": 5,
+        "name": "a",
+        "signature": "private static java.lang.String a(int, int)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      }
+    ],
+    "name": "burp.Z_f2",
+    "pseudo_java": "public class burp.Z_f2 implements burp.IBurpExtenderCallbacks {\n    private final burp.Zjhi ZQ;\n    private final burp.Zloj Zb;\n    private final burp.Zt0f Zt;\n    private final burp.Zmbj Zz;\n    private final burp.IExtensionHelpers Z_;\n    private final burp.Zcos ZB;\n    private final burp.Zm6a ZG;\n    private final burp.Zunv ZV;\n    private final burp.api.montoya.MontoyaApi Zn;\n    private final burp.Ztwo ZM;\n    private final java.util.Map Zk;\n    private final java.util.Map Za;\n    private final java.util.Map ZX;\n    private final java.util.Map Zd;\n    private final java.util.Map Zh;\n    private final java.util.Map ZZ;\n    private final java.util.Map Zj;\n    private final java.util.Map ZY;\n    private final java.util.Map Zm;\n    private final java.util.Map ZJ;\n    private final java.util.Map ZK;\n    private final java.util.Map ZH;\n    private final java.util.Map Zs;\n    private final java.util.Map ZF;\n    private final burp.Zkzb Zr;\n    private static final java.lang.String[] a;\n    private static final java.lang.String[] b;\n\n    public static burp.IBurpExtenderCallbacks ZE(burp.Zt0f, burp.Zmbj, burp.Zcos, burp.Zunv, burp.Zm6a, burp.Ztlk, burp.api.montoya.MontoyaApi, burp.Zjhi, burp.Ztwo, burp.Zu8l, burp.Zloj, burp.Zkzb){\n        v12 = new Z_f2(v0, v1, v2, v3, v4, v6, v7, v8, v10, v11);\n        return new Zedj(new Z_gh(v12), v5, v0, v7, v9);\n    }\n\n\n    private <init>(burp.Zt0f, burp.Zmbj, burp.Zcos, burp.Zunv, burp.Zm6a, burp.api.montoya.MontoyaApi, burp.Zjhi, burp.Ztwo, burp.Zloj, burp.Zkzb){\n        this.Zn = v6;\n        this.ZM = v8;\n        this.Zt = v1;\n        this.Zz = v2;\n        this.ZB = v3;\n        this.ZV = v4;\n        this.ZG = v5;\n        this.ZQ = v7;\n        this.Zb = v9;\n        this.Zk = new LinkedHashMap();\n        this.Za = new LinkedHashMap();\n        this.ZX = new LinkedHashMap();\n        this.Zd = new LinkedHashMap();\n        this.Zh = new LinkedHashMap();\n        this.ZZ = new LinkedHashMap();\n        this.Zj = new LinkedHashMap();\n        this.ZY = new LinkedHashMap();\n        this.Zm = new LinkedHashMap();\n        this.ZJ = new LinkedHashMap();\n        this.ZK = new LinkedHashMap();\n        this.ZH = new LinkedHashMap();\n        this.Zs = new LinkedHashMap();\n        this.ZF = new LinkedHashMap();\n        this.Zr = v10;\n        this.Z_ = Zlal.Zi(v1, v6, v7, v8, v10);\n        return;\n    }\n\n\n    public void issueAlert(java.lang.String){\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public void sendToRepeater(java.lang.String, int, boolean, byte[], java.lang.String){\n        this.ZQ.ZJ(Zq(v5, v3, v2, v4, v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public byte[] makeHttpRequest(java.lang.String, int, boolean, byte[]){\n        return this.makeHttpRequest(v1, v2, v3, v4, 0);\n    }\n\n\n    public byte[] makeHttpRequest(java.lang.String, int, boolean, byte[], boolean){\n        // 5 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new NullPointerException(Z_f2.a(12107, 10434));\n            throw Z_f2.a(?);\n        }\n        if (v4 == null) {\n            throw new NullPointerException(Z_f2.a(12097, 21372));\n            throw Z_f2.a(?);\n        }\n        v6 = this.ZM.Zz(v1, v2, v3, v4);\n        if (v5 != 0) {\n            goto L55;\n            throw Z_f2.a(HttpMode.HTTP_1);\n        }\n        L55:\n        v7 = HttpMode.AUTO;\n        v8 = this.Zn.http().sendRequest(v6, v7);\n        v9 = v8.response();\n        if (v9 == null) {\n            goto L8d;\n            throw Z_f2.a(null);\n        }\n        L8d:\n        return v9.toByteArray().getBytes();\n        v6 = ?;\n        Zgp.ZG(v6, Zdd.IGNORED);\n        throw this.ZQ.ZG(v6);\n    }\n\n\n    public byte[] makeHttp2Request(burp.IHttpService, java.util.List, byte[]){\n        return this.makeHttp2Request(v1, v2, v3, 0, null);\n    }\n\n\n    public byte[] makeHttp2Request(burp.IHttpService, java.util.List, byte[], boolean){\n        return this.makeHttp2Request(v1, v2, v3, v4, null);\n    }\n\n\n    public byte[] makeHttp2Request(burp.IHttpService, java.util.List, byte[], boolean, java.lang.String){\n        // 2 exception handler(s) in the table; try/catch structure not reconstructed here.\n        Objects.requireNonNull(v1, Z_f2.a(12104, 11955));\n        if (v4 != 0) {\n        } else {\n        }\n        v6 = HttpMode.HTTP_2;\n        v7 = this.ZM.ZZ(v1, v2, v3);\n        v8 = this.Zn.http().sendRequest(v7, v6, v5);\n        v9 = v8.response();\n        if (v9 == null) {\n            goto L64;\n            throw Z_f2.a(null);\n        }\n        L64:\n        return v9.toByteArray().getBytes();\n        v6 = HttpMode.HTTP_2_IGNORE_ALPN;\n        Zgp.ZG(v6, Zdd.IGNORED);\n        throw this.ZQ.ZG(v6);\n    }\n\n\n    public void sendToIntruder(java.lang.String, int, boolean, byte[]){\n        this.sendToIntruder(v1, v2, v3, v4, null);\n        return;\n    }\n\n\n    public void sendToIntruder(java.lang.String, int, boolean, byte[], java.util.List){\n        this.ZQ.ZJ(Zq(v5, v3, v2, v4, v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public void sendToSpider(java.net.URL){\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public burp.IScanQueueItem doActiveScan(java.lang.String, int, boolean, byte[]){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (this.Zr.ZG(Za4r.Zx) != 0) {\n            return this.doActiveScan(v1, v2, v3, v4, null);\n            throw Z_f2.a(?);\n        }\n        return null;\n    }\n\n\n    public burp.IScanQueueItem doActiveScan(java.lang.String, int, boolean, byte[], java.util.List){\n        // 5 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (this.Zr.ZG(Za4r.Zx) == 0) {\n            return null;\n            throw Z_f2.a(?);\n        }\n        if (v1 == null) {\n            throw new IllegalArgumentException(Z_f2.a(12121, -23149));\n            throw Z_f2.a(?);\n        }\n        if (v4 == null) {\n            throw new IllegalArgumentException(Z_f2.a(12149, -28723));\n            throw Z_f2.a(?);\n        }\n        v6 = this.ZM.Zz(v1, v2, v3, v4);\n        if (v5 == null) {\n            goto L84;\n            throw Z_f2.a(null);\n        }\n        Objects.requireNonNull(this.ZM);\n        L84:\n        v7 = v5.stream().map(apply(this.ZM) /* invokedynamic */).toList();\n        v8 = this.Zn.scanner().startAudit(this.ZM.Zw(BuiltInAuditConfiguration.LEGACY_ACTIVE_AUDIT_CHECKS));\n        v8.addRequest(v6, v7);\n        return new Zk_g(v8);\n        v6 = ?;\n        Zgp.ZG(v6, Zdd.IGNORED);\n        throw this.ZQ.ZG(v6);\n    }\n\n\n    public void doPassiveScan(java.lang.String, int, boolean, byte[], byte[]){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (this.Zr.ZG(Za4r.Zx) == 0) {\n            return;\n            throw Z_f2.a(?);\n        }\n        this.ZQ.ZJ(Zq(v3, v2, v5, v4, v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public boolean isInScope(java.net.URL){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        return this.Zn.scope().isInScope(v1.toString());\n        v2 = ?;\n        Zgp.ZG(v2, Zdd.IGNORED);\n        throw this.ZQ.ZG(v2);\n    }\n\n\n    public void includeInScope(java.net.URL){\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public void excludeFromScope(java.net.URL){\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public burp.IHttpRequestResponse[] getProxyHistory(){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        return (IHttpRequestResponse[]) this.Zn.proxy().history().stream().map(apply() /* invokedynamic */).map(apply(this) /* invokedynamic */).toArray(apply() /* invokedynamic */);\n        v1 = ?;\n        Zgp.ZG(v1, Zdd.IGNORED);\n        throw this.ZQ.ZG(v1);\n    }\n\n\n    public burp.IHttpRequestResponse[] getSiteMap(java.lang.String){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        v2 = this.Zn.siteMap().requestResponses(this.ZM.ZV(v1));\n        return (IHttpRequestResponse[]) v2.stream().map(apply() /* invokedynamic */).map(apply(this) /* invokedynamic */).toArray(apply() /* invokedynamic */);\n        v2 = ?;\n        Zgp.ZG(v2, Zdd.IGNORED);\n        throw this.ZQ.ZG(v2);\n    }\n\n\n    public void addToSiteMap(burp.IHttpRequestResponse){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new IllegalArgumentException(Z_f2.a(12148, -1577));\n            throw Z_f2.a(?);\n        }\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public void restoreState(java.io.File){\n        throw new UnsupportedOperationException();\n    }\n\n\n    public void saveState(java.io.File){\n        throw new UnsupportedOperationException(Z_f2.a(12118, 3926));\n    }\n\n\n    public java.lang.String[][] getParameters(byte[]){\n        throw new UnsupportedOperationException();\n    }\n\n\n    public java.lang.String[] getHeaders(byte[]){\n        throw new UnsupportedOperationException();\n    }\n\n\n    public burp.IScanIssue[] getScanIssues(java.lang.String){\n        // 2 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (this.Zr.ZG(Za4r.Zx) == 0) {\n            return null;\n            throw Z_f2.a(?);\n        }\n        v2 = this.ZM.ZV(v1);\n        v3 = this.Zn.siteMap().issues(v2);\n        return (IScanIssue[]) v3.stream().map(apply() /* invokedynamic */).toArray(apply() /* invokedynamic */);\n        v2 = ?;\n        Zgp.ZG(v2, Zdd.IGNORED);\n        throw this.ZQ.ZG(v2);\n    }\n\n\n    public void generateScanReport(java.lang.String, burp.IScanIssue[], java.io.File){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (this.Zr.ZG(Za4r.Zx) == 0) {\n            return;\n            throw Z_f2.a(?);\n        }\n        this.ZQ.ZJ(Zq(v3, v1, v2, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public void registerMenuItem(java.lang.String, burp.IMenuItemHandler){\n        throw new UnsupportedOperationException();\n    }\n\n\n    public java.util.Map saveConfig(){\n        throw new UnsupportedOperationException(Z_f2.a(12124, -18376));\n    }\n\n\n    public void loadConfig(java.util.Map){\n        throw new UnsupportedOperationException(Z_f2.a(12106, 23252));\n    }\n\n\n    public varargs java.lang.String saveConfigAsJson(java.lang.String[]){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        return this.Zn.burpSuite().exportProjectOptionsAsJson(v1);\n        v2 = ?;\n        Zgp.ZG(v2, Zdd.IGNORED);\n        throw this.ZQ.ZG(v2);\n    }\n\n\n    public void loadConfigFromJson(java.lang.String){\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public void setProxyInterceptionEnabled(boolean){\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public java.lang.String[] getBurpVersion(){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        v1 = this.Zn.burpSuite().version();\n        new String[3][0] = v1.name();\n        new String[3][1] = v1.major();\n        new String[3][2] = v1.minor();\n        return new String[3];\n        v1 = ?;\n        Zgp.ZG(v1, Zdd.IGNORED);\n        throw this.ZQ.ZG(v1);\n    }\n\n\n    public java.lang.String getExtensionFilename(){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        return this.Zn.extension().filename();\n        v1 = ?;\n        Zgp.ZG(v1, Zdd.IGNORED);\n        throw this.ZQ.ZG(v1);\n    }\n\n\n    public boolean isExtensionBapp(){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        return this.Zn.extension().isBapp();\n        v1 = ?;\n        Zgp.ZG(v1, Zdd.IGNORED);\n        throw this.ZQ.ZG(v1);\n    }\n\n\n    public void exitSuite(boolean){\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public void registerExtensionStateListener(burp.IExtensionStateListener){\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public java.util.List getExtensionStateListeners(){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        return List.copyOf(this.Za.keySet());\n        v1 = ?;\n        Zgp.ZG(v1, Zdd.IGNORED);\n        throw this.ZQ.ZG(v1);\n    }\n\n\n    public void removeExtensionStateListener(burp.IExtensionStateListener){\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public void registerScannerListener(burp.IScannerListener){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (this.Zr.ZG(Za4r.Zx) == 0) {\n            return;\n            throw Z_f2.a(?);\n        }\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public java.util.List getScannerListeners(){\n        // 2 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (this.Zr.ZG(Za4r.Zx) == 0) {\n            return null;\n            throw Z_f2.a(?);\n        }\n        return List.copyOf(this.ZZ.keySet());\n        v1 = ?;\n        Zgp.ZG(v1, Zdd.IGNORED);\n        throw this.ZQ.ZG(v1);\n    }\n\n\n    public void removeScannerListener(burp.IScannerListener){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (this.Zr.ZG(Za4r.Zx) == 0) {\n            return;\n            throw Z_f2.a(?);\n        }\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public void registerProxyListener(burp.IProxyListener){\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public java.util.List getProxyListeners(){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        return List.copyOf(this.ZX.keySet());\n        v1 = ?;\n        Zgp.ZG(v1, Zdd.IGNORED);\n        throw this.ZQ.ZG(v1);\n    }\n\n\n    public void removeProxyListener(burp.IProxyListener){\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public void registerHttpListener(burp.IHttpListener){\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public java.util.List getHttpListeners(){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        return List.copyOf(this.Zh.keySet());\n        v1 = ?;\n        Zgp.ZG(v1, Zdd.IGNORED);\n        throw this.ZQ.ZG(v1);\n    }\n\n\n    public void removeHttpListener(burp.IHttpListener){\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public void registerMessageEditorTabFactory(burp.IMessageEditorTabFactory){\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public java.util.List getMessageEditorTabFactories(){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        return List.copyOf(this.ZF.keySet());\n        v1 = ?;\n        Zgp.ZG(v1, Zdd.IGNORED);\n        throw this.ZQ.ZG(v1);\n    }\n\n\n    public void removeMessageEditorTabFactory(burp.IMessageEditorTabFactory){\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public void registerContextMenuFactory(burp.IContextMenuFactory){\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public java.util.List getContextMenuFactories(){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        return List.copyOf(this.Zs.keySet());\n        v1 = ?;\n        Zgp.ZG(v1, Zdd.IGNORED);\n        throw this.ZQ.ZG(v1);\n    }\n\n\n    public void removeContextMenuFactory(burp.IContextMenuFactory){\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public void setExtensionName(java.lang.String){\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public java.io.OutputStream getStdout(){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        return this.Zn.logging().output();\n        v1 = ?;\n        Zgp.ZG(v1, Zdd.IGNORED);\n        throw this.ZQ.ZG(v1);\n    }\n\n\n    public java.io.OutputStream getStderr(){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        return this.Zn.logging().error();\n        v1 = ?;\n        Zgp.ZG(v1, Zdd.IGNORED);\n        throw this.ZQ.ZG(v1);\n    }\n\n\n    public void printOutput(java.lang.String){\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public void printError(java.lang.String){\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public void addSuiteTab(burp.ITab){\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public void removeSuiteTab(burp.ITab){\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public burp.IMessageEditor createMessageEditor(burp.IMessageEditorController, boolean){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        return Zj9h.Zd(this.Zt, v1, v2, this.ZB, this.ZV, this.ZQ);\n        v3 = ?;\n        Zgp.ZG(v3, Zdd.IGNORED);\n        throw this.ZQ.ZG(v3);\n    }\n\n\n    public burp.ITextEditor createTextEditor(){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        v1 = this.Zn.userInterface().createRawEditor(new EditorOptions[0]);\n        return new Zdee(new Zkrq(v1, this.ZM));\n        v1 = ?;\n        Zgp.ZG(v1, Zdd.IGNORED);\n        throw this.ZQ.ZG(v1);\n    }\n\n\n    public burp.ITempFile saveToTempFile(byte[]){\n        // 2 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new NullPointerException(Z_f2.a(12100, -10512));\n            throw Z_f2.a(?);\n        }\n        return new Zkol(this.ZM.Zf(v1));\n        v2 = ?;\n        Zgp.ZG(v2, Zdd.IGNORED);\n        throw this.ZQ.ZG(v2);\n    }\n\n\n    public burp.IHttpRequestResponsePersisted saveBuffersToTempFiles(burp.IHttpRequestResponse){\n        // 2 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new NullPointerException(Z_f2.a(12123, 23007));\n            throw Z_f2.a(?);\n        }\n        return new Zlzs(this.ZM.Zz(v1));\n        v2 = ?;\n        Zgp.ZG(v2, Zdd.IGNORED);\n        throw this.ZQ.ZG(v2);\n    }\n\n\n    public java.lang.String getToolName(int){\n        // 2 exception handler(s) in the table; try/catch structure not reconstructed here.\n        switch (v1) {\n            case 1: goto L5a;\n            case 2: goto L67;\n            case 4: goto L70;\n            case 8: goto L79;\n            case 16: goto L79;\n            case 32: goto L82;\n            case 64: goto L8b;\n            case 128: goto L94;\n            case 1024: goto L9d;\n            default: goto La1;\n        }\n        L5a:\n        goto La1;\n        throw Z_f2.a(ToolType.SUITE.toolName());\n        L67:\n        goto La1;\n        L70:\n        goto La1;\n        L79:\n        goto La1;\n        L82:\n        goto La1;\n        L8b:\n        goto La1;\n        L94:\n        goto La1;\n        L9d:\n        goto La1;\n        La1:\n        return null;\n        v2 = ToolType.EXTENSIONS.toolName();\n        Zgp.ZG(v2, Zdd.IGNORED);\n        throw this.ZQ.ZG(v2);\n    }\n\n\n    public void customizeUiComponent(java.awt.Component){\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public void registerScannerInsertionPointProvider(burp.IScannerInsertionPointProvider){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (this.Zr.ZG(Za4r.Zx) == 0) {\n            return;\n            throw Z_f2.a(?);\n        }\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public java.util.List getScannerInsertionPointProviders(){\n        // 2 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (this.Zr.ZG(Za4r.Zx) == 0) {\n            return null;\n            throw Z_f2.a(?);\n        }\n        return List.copyOf(this.ZJ.keySet());\n        v1 = ?;\n        Zgp.ZG(v1, Zdd.IGNORED);\n        throw this.ZQ.ZG(v1);\n    }\n\n\n    public void removeScannerInsertionPointProvider(burp.IScannerInsertionPointProvider){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (this.Zr.ZG(Za4r.Zx) == 0) {\n            return;\n            throw Z_f2.a(?);\n        }\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public void addScanIssue(burp.IScanIssue){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (this.Zr.ZG(Za4r.Zx) == 0) {\n            return;\n            throw Z_f2.a(?);\n        }\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public burp.IHttpRequestResponseWithMarkers applyMarkers(burp.IHttpRequestResponse, java.util.List, java.util.List){\n        // 4 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new NullPointerException(Z_f2.a(12120, 18944));\n            throw Z_f2.a(?);\n        }\n        v4 = this.ZM.ZJ(v1);\n        if (v2 == null) {\n            goto L57;\n            throw Z_f2.a(null);\n        }\n        L57:\n        v5 = (List) v2.stream().filter(test() /* invokedynamic */).map(apply(this) /* invokedynamic */).collect(Collectors.toList());\n        if (v3 == null) {\n            goto L8b;\n            throw Z_f2.a(null);\n        }\n        L8b:\n        v6 = (List) v3.stream().filter(test() /* invokedynamic */).map(apply(this) /* invokedynamic */).collect(Collectors.toList());\n        return new Zdfd(v4, this.ZM, v5, v6);\n        v4 = ?;\n        Zgp.ZG(v4, Zdd.IGNORED);\n        throw this.ZQ.ZG(v4);\n    }\n\n\n    public void registerScannerCheck(burp.IScannerCheck){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (this.Zr.ZG(Za4r.Zx) == 0) {\n            return;\n            throw Z_f2.a(?);\n        }\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public java.util.List getScannerChecks(){\n        // 2 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (this.Zr.ZG(Za4r.Zx) == 0) {\n            return null;\n            throw Z_f2.a(?);\n        }\n        return List.copyOf(this.ZK.keySet());\n        v1 = ?;\n        Zgp.ZG(v1, Zdd.IGNORED);\n        throw this.ZQ.ZG(v1);\n    }\n\n\n    public void removeScannerCheck(burp.IScannerCheck){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (this.Zr.ZG(Za4r.Zx) == 0) {\n            return;\n            throw Z_f2.a(?);\n        }\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public void registerSessionHandlingAction(burp.ISessionHandlingAction){\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public java.util.List getSessionHandlingActions(){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        return List.copyOf(this.Zj.keySet());\n        v1 = ?;\n        Zgp.ZG(v1, Zdd.IGNORED);\n        throw this.ZQ.ZG(v1);\n    }\n\n\n    public void removeSessionHandlingAction(burp.ISessionHandlingAction){\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public void registerIntruderPayloadGeneratorFactory(burp.IIntruderPayloadGeneratorFactory){\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public java.util.List getIntruderPayloadGeneratorFactories(){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        return List.copyOf(this.Zm.keySet());\n        v1 = ?;\n        Zgp.ZG(v1, Zdd.IGNORED);\n        throw this.ZQ.ZG(v1);\n    }\n\n\n    public void removeIntruderPayloadGeneratorFactory(burp.IIntruderPayloadGeneratorFactory){\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public void registerIntruderPayloadProcessor(burp.IIntruderPayloadProcessor){\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public java.util.List getIntruderPayloadProcessors(){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        return List.copyOf(this.ZY.keySet());\n        v1 = ?;\n        Zgp.ZG(v1, Zdd.IGNORED);\n        throw this.ZQ.ZG(v1);\n    }\n\n\n    public burp.IBurpCollaboratorClientContext createBurpCollaboratorClientContext(){\n        // 2 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (this.Zr.ZG(Za4r.ZY) == 0) {\n            return null;\n            throw Z_f2.a(?);\n        }\n        return Zfpg.Zb(this.ZG.ZC(), this.ZG.ZN());\n        v1 = ?;\n        Zgp.ZG(v1, Zdd.IGNORED);\n        throw this.ZQ.ZG(v1);\n    }\n\n\n    public void removeIntruderPayloadProcessor(burp.IIntruderPayloadProcessor){\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public burp.IExtensionHelpers getHelpers(){\n        return this.Z_;\n    }\n\n\n    public burp.IHttpRequestResponse makeHttpRequest(burp.IHttpService, byte[]){\n        return this.makeHttpRequest(v1, v2, 0);\n    }\n\n\n    public burp.IHttpRequestResponse makeHttpRequest(burp.IHttpService, byte[], boolean){\n        // 4 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new NullPointerException(Z_f2.a(12103, 32409));\n            throw Z_f2.a(?);\n        }\n        if (v2 == null) {\n            throw new NullPointerException(Z_f2.a(12125, -10156));\n            throw Z_f2.a(?);\n        }\n        if (v3 != 0) {\n            goto L43;\n            throw Z_f2.a(HttpMode.HTTP_1);\n        }\n        L43:\n        v4 = HttpMode.AUTO;\n        v5 = this.ZM.Ze(v1, v2);\n        v6 = this.Zn.http().sendRequest(v5, v4);\n        return new Zdft(v6, this.Zt, this.ZM);\n        v4 = ?;\n        Zgp.ZG(v4, Zdd.IGNORED);\n        throw this.ZQ.ZG(v4);\n    }\n\n\n    public void saveExtensionSetting(java.lang.String, java.lang.String){\n        this.ZQ.ZJ(Zq(v1, v2, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public java.lang.String loadExtensionSetting(java.lang.String){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        return this.Zn.persistence().preferences().getString(v1);\n        v2 = ?;\n        Zgp.ZG(v2, Zdd.IGNORED);\n        throw this.ZQ.ZG(v2);\n    }\n\n\n    public void registerScopeChangeListener(burp.IScopeChangeListener){\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public java.util.List getScopeChangeListeners(){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        return List.copyOf(this.Zk.keySet());\n        v1 = ?;\n        Zgp.ZG(v1, Zdd.IGNORED);\n        throw this.ZQ.ZG(v1);\n    }\n\n\n    public void removeScopeChangeListener(burp.IScopeChangeListener){\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public java.util.List getCookieJarContents(){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        v1 = this.Zn.http().cookieJar();\n        v2 = v1.cookies();\n        return (List) v2.stream().map(apply() /* invokedynamic */).collect(Collectors.toList());\n        v1 = ?;\n        Zgp.ZG(v1, Zdd.IGNORED);\n        throw this.ZQ.ZG(v1);\n    }\n\n\n    public void updateCookieJar(burp.ICookie){\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    public void unloadExtension(){\n        this.ZQ.ZJ(Zq(this) /* invokedynamic */);\n        return;\n    }\n\n\n    public java.lang.String[] getCommandLineArguments(){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        v1 = this.Zn.burpSuite().commandLineArguments();\n        return (String[]) v1.toArray(new String[0]);\n        v1 = ?;\n        Zgp.ZG(v1, Zdd.IGNORED);\n        throw this.ZQ.ZG(v1);\n    }\n\n\n    public void sendToComparer(byte[]){\n        this.ZQ.ZJ(Zq(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    private void lambda$sendToComparer$56(byte[]){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new NullPointerException(Z_f2.a(12145, 32261));\n            throw Z_f2.a(?);\n        }\n        new ByteArray[1][0] = this.ZM.Zl(v1);\n        this.Zn.comparer().sendToComparer(new ByteArray[1]);\n        return;\n    }\n\n\n    private void lambda$unloadExtension$55(){\n        this.Zn.extension().unload();\n        return;\n    }\n\n\n    private void lambda$updateCookieJar$54(burp.ICookie){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1.getDomain() == null) {\n            throw new NullPointerException(Z_f2.a(12127, 11806));\n            throw Z_f2.a(?);\n        }\n        v2 = this.Zn.http().cookieJar();\n        v3 = Zzsm.ZU(v1.getExpiration());\n        v2.setCookie(v1.getName(), v1.getValue(), v1.getPath(), v1.getDomain(), v3);\n        return;\n    }\n\n\n    private void lambda$removeScopeChangeListener$53(burp.IScopeChangeListener){\n        // 2 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new IllegalArgumentException(Z_f2.a(12116, 28715));\n            throw Z_f2.a(?);\n        }\n        v2 = (Registration) this.Zk.remove(v1);\n        if (v2 != null) {\n            v2.deregister();\n            goto L38;\n            throw Z_f2.a(?);\n        }\n        L38:\n        return;\n    }\n\n\n    private void lambda$registerScopeChangeListener$52(burp.IScopeChangeListener){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new IllegalArgumentException(Z_f2.a(12126, 7937));\n            throw Z_f2.a(?);\n        }\n        v2 = this.Zn.scope().registerScopeChangeHandler(scopeChanged(v1) /* invokedynamic */);\n        this.Zk.put(v1, v2);\n        return;\n    }\n\n\n    private static void lambda$registerScopeChangeListener$51(burp.IScopeChangeListener, burp.api.montoya.scope.ScopeChange){\n        v0.scopeChanged();\n        return;\n    }\n\n\n    private void lambda$saveExtensionSetting$50(java.lang.String, java.lang.String){\n        // 2 exception handler(s) in the table; try/catch structure not reconstructed here.\n        v3 = Zaaf.Zn();\n        v4 = this.Zn.persistence().preferences();\n        if (v1 == null) {\n            v4.deleteString(v2);\n            if (v3 != 0) goto L3b;\n            goto L2f;\n            throw Z_f2.a(?);\n        }\n        L2f:\n        v4.setString(v2, v1);\n        goto L3b;\n        throw Z_f2.a(?);\n        L3b:\n        return;\n    }\n\n\n    private void lambda$removeIntruderPayloadProcessor$49(burp.IIntruderPayloadProcessor){\n        // 2 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new NullPointerException(Z_f2.a(12144, 21347));\n            throw Z_f2.a(?);\n        }\n        v2 = (Registration) this.ZY.remove(v1);\n        if (v2 != null) {\n            v2.deregister();\n            goto L38;\n            throw Z_f2.a(?);\n        }\n        L38:\n        return;\n    }\n\n\n    private void lambda$registerIntruderPayloadProcessor$48(burp.IIntruderPayloadProcessor){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new NullPointerException(Z_f2.a(12151, 9028));\n            throw Z_f2.a(?);\n        }\n        v2 = this.Zz.Zb(new Zeth(this.Zz.ZU, v1, this.ZM));\n        this.ZY.put(v1, v2);\n        return;\n    }\n\n\n    private void lambda$removeIntruderPayloadGeneratorFactory$47(burp.IIntruderPayloadGeneratorFactory){\n        // 2 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new NullPointerException(Z_f2.a(12112, -26656));\n            throw Z_f2.a(?);\n        }\n        v2 = (Registration) this.Zm.remove(v1);\n        if (v2 != null) {\n            v2.deregister();\n            goto L38;\n            throw Z_f2.a(?);\n        }\n        L38:\n        return;\n    }\n\n\n    private void lambda$registerIntruderPayloadGeneratorFactory$46(burp.IIntruderPayloadGeneratorFactory){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new NullPointerException(Z_f2.a(12112, -26656));\n            throw Z_f2.a(?);\n        }\n        v2 = new Za6v(this.Zz.ZU, v1, this.ZM);\n        v3 = this.Zz.ZT(v2);\n        this.Zm.put(v1, v3);\n        return;\n    }\n\n\n    private void lambda$removeSessionHandlingAction$45(burp.ISessionHandlingAction){\n        // 2 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new IllegalArgumentException(Z_f2.a(12122, 3149));\n            throw Z_f2.a(?);\n        }\n        v2 = (Registration) this.Zj.remove(v1);\n        if (v2 != null) {\n            v2.deregister();\n            goto L38;\n            throw Z_f2.a(?);\n        }\n        L38:\n        return;\n    }\n\n\n    private void lambda$registerSessionHandlingAction$44(burp.ISessionHandlingAction){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new IllegalArgumentException(Z_f2.a(12111, 14226));\n            throw Z_f2.a(?);\n        }\n        v2 = new Zamv(v1, this.Zt, this.ZQ, this.ZM);\n        v3 = this.Zz.Zd(v2);\n        this.Zj.put(v1, v3);\n        return;\n    }\n\n\n    private void lambda$removeScannerCheck$43(burp.IScannerCheck){\n        // 2 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new NullPointerException(Z_f2.a(12109, 28507));\n            throw Z_f2.a(?);\n        }\n        v2 = (Registration) this.ZK.remove(v1);\n        if (v2 != null) {\n            v2.deregister();\n            goto L38;\n            throw Z_f2.a(?);\n        }\n        L38:\n        return;\n    }\n\n\n    private void lambda$registerScannerCheck$42(burp.IScannerCheck){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new NullPointerException(Z_f2.a(12114, -10347));\n            throw Z_f2.a(?);\n        }\n        v2 = new Zmve(v1, this.ZM);\n        v3 = this.Zz.ZY(v2);\n        this.ZK.put(v1, v3);\n        return;\n    }\n\n\n    private burp.api.montoya.core.Range lambda$applyMarkers$40(int[]){\n        return this.ZM.ZZ(v1[0], v1[1]);\n    }\n\n\n    private void lambda$addScanIssue$39(burp.IScanIssue){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new IllegalArgumentException(Z_f2.a(12102, 9207));\n            throw Z_f2.a(?);\n        }\n        this.Zn.siteMap().add(new Zzke(v1, this.ZM));\n        return;\n    }\n\n\n    private void lambda$removeScannerInsertionPointProvider$38(burp.IScannerInsertionPointProvider){\n        // 2 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new NullPointerException(Z_f2.a(12119, 30023));\n            throw Z_f2.a(?);\n        }\n        v2 = (Registration) this.ZJ.remove(v1);\n        if (v2 != null) {\n            v2.deregister();\n            goto L38;\n            throw Z_f2.a(?);\n        }\n        L38:\n        return;\n    }\n\n\n    private void lambda$registerScannerInsertionPointProvider$37(burp.IScannerInsertionPointProvider){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new NullPointerException(Z_f2.a(12099, -27869));\n            throw Z_f2.a(?);\n        }\n        v2 = new Zzri(v1, this.ZM);\n        v3 = this.Zn.scanner().registerInsertionPointProvider(v2);\n        this.ZJ.put(v1, v3);\n        return;\n    }\n\n\n    private void lambda$customizeUiComponent$36(java.awt.Component){\n        this.Zn.userInterface().applyThemeToComponent(v1);\n        return;\n    }\n\n\n    private void lambda$removeSuiteTab$35(burp.ITab){\n        // 3 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new NullPointerException(Z_f2.a(12147, 17268));\n            throw Z_f2.a(?);\n        }\n        v2 = v1.getUiComponent();\n        if (v2 == null) {\n            throw new NullPointerException(Z_f2.a(12110, 13202));\n            throw Z_f2.a(?);\n        }\n        v3 = (Registration) this.ZH.remove(v1);\n        if (v3 != null) {\n            v3.deregister();\n            goto L58;\n            throw Z_f2.a(?);\n        }\n        L58:\n        return;\n    }\n\n\n    private void lambda$addSuiteTab$34(burp.ITab){\n        v2 = this.Zn.userInterface().registerSuiteTab(v1.getTabCaption(), v1.getUiComponent());\n        this.ZH.put(v1, v2);\n        return;\n    }\n\n\n    private void lambda$printError$33(java.lang.String){\n        this.Zn.logging().logToError(v1);\n        return;\n    }\n\n\n    private void lambda$printOutput$32(java.lang.String){\n        this.Zn.logging().logToOutput(v1);\n        return;\n    }\n\n\n    private void lambda$setExtensionName$31(java.lang.String){\n        this.Zn.extension().setName(v1);\n        return;\n    }\n\n\n    private void lambda$removeContextMenuFactory$30(burp.IContextMenuFactory){\n        // 2 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new NullPointerException(Z_f2.a(12112, -26656));\n            throw Z_f2.a(?);\n        }\n        v2 = (Registration) this.Zs.remove(v1);\n        if (v2 != null) {\n            v2.deregister();\n            goto L38;\n            throw Z_f2.a(?);\n        }\n        L38:\n        return;\n    }\n\n\n    private void lambda$registerContextMenuFactory$29(burp.IContextMenuFactory){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new NullPointerException(Z_f2.a(12112, -26656));\n            throw Z_f2.a(?);\n        }\n        v2 = this.Zn.userInterface().registerContextMenuItemsProvider(new Zahu(v1, this.Zt, this.ZM));\n        this.Zs.put(v1, v2);\n        return;\n    }\n\n\n    private void lambda$removeMessageEditorTabFactory$28(burp.IMessageEditorTabFactory){\n        // 2 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new NullPointerException(Z_f2.a(12112, -26656));\n            throw Z_f2.a(?);\n        }\n        v2 = (Za) this.ZF.remove(v1);\n        if (v2 != null) {\n            (Registration) v2.Zh.deregister();\n            (Registration) v2.Za.deregister();\n            goto L4a;\n            throw Z_f2.a(?);\n        }\n        L4a:\n        return;\n    }\n\n\n    private void lambda$registerMessageEditorTabFactory$27(burp.IMessageEditorTabFactory){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new NullPointerException(Z_f2.a(12113, 31208));\n            throw Z_f2.a(?);\n        }\n        v2 = new Z_0_(v1, this.ZM);\n        v3 = this.Zn.userInterface();\n        v4 = v3.registerHttpRequestEditorProvider(v2);\n        v5 = v3.registerHttpResponseEditorProvider(v2);\n        this.ZF.put(v1, Za.Zu(v4, v5));\n        return;\n    }\n\n\n    private void lambda$removeHttpListener$26(burp.IHttpListener){\n        // 2 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new IllegalArgumentException(Z_f2.a(12116, 28715));\n            throw Z_f2.a(?);\n        }\n        v2 = (Registration) this.Zh.remove(v1);\n        if (v2 != null) {\n            v2.deregister();\n            goto L38;\n            throw Z_f2.a(?);\n        }\n        L38:\n        return;\n    }\n\n\n    private void lambda$registerHttpListener$25(burp.IHttpListener){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new IllegalArgumentException(Z_f2.a(12101, -10054));\n            throw Z_f2.a(?);\n        }\n        v2 = new Zfor(v1, this.ZM);\n        v3 = this.Zn.http().registerHttpHandler(v2);\n        this.Zh.put(v1, v3);\n        return;\n    }\n\n\n    private void lambda$removeProxyListener$24(burp.IProxyListener){\n        // 3 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new IllegalArgumentException(Z_f2.a(12116, 28715));\n            throw Z_f2.a(?);\n        }\n        v2 = (Registration) this.ZX.remove(v1);\n        if (v2 != null) {\n            v2.deregister();\n            goto L45;\n            throw Z_f2.a(?);\n        }\n        L45:\n        v3 = (Registration) this.Zd.remove(v1);\n        if (v3 != null) {\n            v3.deregister();\n            goto L57;\n            throw Z_f2.a(?);\n        }\n        L57:\n        return;\n    }\n\n\n    private void lambda$registerProxyListener$23(burp.IProxyListener){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new IllegalArgumentException(Z_f2.a(12116, 28715));\n            throw Z_f2.a(?);\n        }\n        v2 = new Zpp(v1, this.ZQ, this.ZM);\n        v3 = this.Zn.proxy().registerRequestHandler(v2);\n        v4 = this.Zn.proxy().registerResponseHandler(v2);\n        this.ZX.put(v1, v3);\n        this.Zd.put(v1, v4);\n        return;\n    }\n\n\n    private void lambda$removeScannerListener$22(burp.IScannerListener){\n        // 2 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new IllegalArgumentException(Z_f2.a(12116, 28715));\n            throw Z_f2.a(?);\n        }\n        v2 = (Registration) this.ZZ.remove(v1);\n        if (v2 != null) {\n            v2.deregister();\n            goto L38;\n            throw Z_f2.a(?);\n        }\n        L38:\n        return;\n    }\n\n\n    private void lambda$registerScannerListener$21(burp.IScannerListener){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new IllegalArgumentException(Z_f2.a(12117, -15400));\n            throw Z_f2.a(?);\n        }\n        v2 = new Zc4r(v1);\n        v3 = this.Zn.scanner().registerAuditIssueHandler(v2);\n        this.ZZ.put(v1, v3);\n        return;\n    }\n\n\n    private void lambda$removeExtensionStateListener$20(burp.IExtensionStateListener){\n        // 2 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new NullPointerException(Z_f2.a(12098, -20732));\n            throw Z_f2.a(?);\n        }\n        v2 = (Registration) this.Za.remove(v1);\n        if (v2 != null) {\n            v2.deregister();\n            goto L38;\n            throw Z_f2.a(?);\n        }\n        L38:\n        return;\n    }\n\n\n    private void lambda$registerExtensionStateListener$19(burp.IExtensionStateListener){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new NullPointerException(Z_f2.a(12116, 28715));\n            throw Z_f2.a(?);\n        }\n        Objects.requireNonNull(v1);\n        v2 = extensionUnloaded(v1) /* invokedynamic */;\n        v3 = this.Zn.extension().registerUnloadingHandler(v2);\n        this.Za.put(v1, v3);\n        return;\n    }\n\n\n    private void lambda$exitSuite$18(boolean){\n        // 2 exception handler(s) in the table; try/catch structure not reconstructed here.\n        v2 = Zaaf.ZZ();\n        if (v1 != 0) {\n            new ShutdownOptions[1][0] = ShutdownOptions.PROMPT_USER;\n            this.Zn.burpSuite().shutdown(new ShutdownOptions[1]);\n            if (v2 == 0) goto L44;\n            goto L38;\n            throw Z_f2.a(?);\n        }\n        L38:\n        this.Zn.burpSuite().shutdown(new ShutdownOptions[0]);\n        goto L44;\n        throw Z_f2.a(?);\n        L44:\n        return;\n    }\n\n\n    private void lambda$setProxyInterceptionEnabled$17(boolean){\n        // 2 exception handler(s) in the table; try/catch structure not reconstructed here.\n        v2 = Zaaf.ZZ();\n        if (v1 != 0) {\n            this.Zn.proxy().enableIntercept();\n            if (v2 == 0) goto L36;\n            goto L2a;\n            throw Z_f2.a(?);\n        }\n        L2a:\n        this.Zn.proxy().disableIntercept();\n        goto L36;\n        throw Z_f2.a(?);\n        L36:\n        return;\n    }\n\n\n    private void lambda$loadConfigFromJson$16(java.lang.String){\n        this.Zn.burpSuite().importProjectOptionsFromJson(v1);\n        return;\n    }\n\n\n    private void lambda$generateScanReport$15(burp.IScanIssue[], java.lang.String, java.io.File){\n        v4 = (List) Arrays.stream(v1).map(apply(this) /* invokedynamic */).collect(Collectors.toList());\n        v5 = Zzxh.Za(v2);\n        this.Zn.scanner().generateReport(v4, v5, v3.toPath());\n        return;\n    }\n\n\n    private burp.Zzke lambda$generateScanReport$14(burp.IScanIssue){\n        return new Zzke(v1, this.ZM);\n    }\n\n\n    private static burp.IScanIssue[] lambda$getScanIssues$13(int){\n        return new IScanIssue[v0];\n    }\n\n\n    private void lambda$addToSiteMap$12(burp.IHttpRequestResponse){\n        v2 = this.ZM.ZJ(v1);\n        this.Zn.siteMap().add(v2);\n        return;\n    }\n\n\n    private burp.Z_9c lambda$getSiteMap$10(burp.Zcuv){\n        return new Z_9c(v1, this.ZQ);\n    }\n\n\n    private static burp.IHttpRequestResponse[] lambda$getProxyHistory$9(int){\n        return new IHttpRequestResponse[v0];\n    }\n\n\n    private burp.Z_9c lambda$getProxyHistory$8(burp.Z_xl){\n        return new Z_9c(v1, this.ZQ);\n    }\n\n\n    private void lambda$excludeFromScope$7(java.net.URL){\n        this.Zn.scope().excludeFromScope(v1.toString());\n        return;\n    }\n\n\n    private void lambda$includeInScope$6(java.net.URL){\n        this.Zn.scope().includeInScope(v1.toString());\n        return;\n    }\n\n\n    private void lambda$doPassiveScan$5(java.lang.String, byte[], byte[], int, boolean){\n        // 3 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new IllegalArgumentException(Z_f2.a(12096, -30798));\n            throw Z_f2.a(?);\n        }\n        if (v2 == null) {\n            throw new IllegalArgumentException(Z_f2.a(12115, -21722));\n            throw Z_f2.a(?);\n        }\n        if (v3 == null) {\n            throw new IllegalArgumentException(Z_f2.a(12146, -23985));\n            throw Z_f2.a(?);\n        }\n        v6 = this.Zn.scanner().startAudit(this.ZM.Zw(BuiltInAuditConfiguration.LEGACY_PASSIVE_AUDIT_CHECKS));\n        v6.addRequestResponse(this.ZM.Zc(v1, v4, v5, v2, v3));\n        return;\n    }\n\n\n    private void lambda$sendToSpider$4(java.net.URL){\n        // 1 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new NullPointerException(Z_f2.a(12108, -9101));\n            throw Z_f2.a(?);\n        }\n        this.Zb.Zj(call(v1, this) /* invokedynamic */);\n        return;\n    }\n\n\n    private burp.api.montoya.scanner.Crawl lambda$sendToSpider$3(java.net.URL){\n        new String[1][0] = v1.toExternalForm();\n        return this.Zn.scanner().startCrawl(this.ZM.ZQ(new String[1]));\n    }\n\n\n    private void lambda$sendToIntruder$2(java.lang.String, byte[], int, boolean, java.util.List){\n        // 2 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new NullPointerException(Z_f2.a(12107, 10434));\n            throw Z_f2.a(?);\n        }\n        if (v2 == null) {\n            throw new NullPointerException(Z_f2.a(12097, 21372));\n            throw Z_f2.a(?);\n        }\n        v6 = this.ZM.ZG(v1, v3, v4);\n        v7 = this.ZM.ZJ(v2, v5);\n        this.Zn.intruder().sendToIntruder(v6, v7);\n        return;\n    }\n\n\n    private void lambda$sendToRepeater$1(java.lang.String, byte[], int, boolean, java.lang.String){\n        // 2 exception handler(s) in the table; try/catch structure not reconstructed here.\n        if (v1 == null) {\n            throw new NullPointerException(Z_f2.a(12105, 19599));\n            throw Z_f2.a(?);\n        }\n        if (v2 == null) {\n            throw new NullPointerException(Z_f2.a(12097, 21372));\n            throw Z_f2.a(?);\n        }\n        v6 = this.ZM.Zz(v1, v3, v4, v2);\n        this.Zn.repeater().sendToRepeater(v6, v5);\n        return;\n    }\n\n\n    private void lambda$issueAlert$0(java.lang.String){\n        this.Zn.logging().raiseInfoEvent(v1);\n        return;\n    }\n\n\n    private static java.lang.Throwable a(java.lang.Throwable){\n        return v0;\n    }\n\n\n    static <clinit>(){\n        v5 = new String[39];\n        v3 = 0;\n        v2 = \"ã\\u{1e}Ú¤-odé\\n3~Sp\\u{87}´Û\\u{9c}+\\\"G±G\\u{16}\\u{5}^\\u{6}¬¶n\\u{17}Éd7³ÓÉ\\u{97}\\u{83}ÙzkþO*F\\u{18}7¦Ä6´\\u{1d}\\u{11}\\u{86}\\u{6}Ê-àë².2,\\u{80}ÒmÇä\\u{84}`\\u{14}=ÿ¢§à¨CHºaÅíi\\u{1f}t^bÄ\\u{95}\\\\\\u{18}\\u{8e}í,Óë\\u{9d}ëz'[ÿ\\u{1c}¯u:¿\\u{94}è\\u{8a}É:îCY\\u{17}ý¶B¸&ðR×\\u{10}î\\u{19}ªs£¡eç³ä¢÷\\u{83}ú\\u{17}Ru4º{øt\\u{9d}Ô§\\u{81}\\u{83}`\\u{86}ÃÁ«'m0ÆÑÜ)\\u{8f}Ñõ@~Xvë-Juw\\u{7}{µ\\u{1a}Ü\\u{8f}döá¢üTBrpûó\\nÌöÀüO,KÂÁ\\u{17}Õ\\u{15}\\0:yï\\u{4}\\u{19}ë\\u{88}agæ±x®\\u{8f}'´\\u{1d}Ñ\\u{1f}·\\\"I\\u{10}WÖT²Ùò²½µîZ\\u{8c}êP\\u{6}¥\\u{10}ú\\u{92}\\u{2}\\u{80}(\\u{82}Ä\\u{81}:iúÁPáÎ#üPÀa\\u{84}÷±\\u{8f}9\\u{80}Ñ»\\u{6}Ò³POD\\u{e}=Æ\\u{15}.\\u{88}¸Ë³áöÎ\\u{9b} 4¸\\u{b}\\u{15}î \\u{8b}<òÞÆ\\u{3}.J¸\\u{93}³êö¯\\u{9b}\\u{c}4=\\u{b}\\u{16}éq\\u{1f}ÌÏB~må£\\u{83}AÏÅC\\u{93}b\\\"ýfJc\\u{1d}\\u{8a}\\u{1d}%}\\u{8}ô\\u{6}:$²çúÊ\\u{e}i\\u{89}À*êüª\\u{82}\\u{1e}8ó}~?]\\u{18}®^?vX\\u{9e}U\\u{5}HXø øuÐ¿Éè!ÉOîíY\\u{18}¡MÉÇW\\u{1f}|*ÕQ¡]d]Cº»HoÝ\\u{86}lÔ\\t\\u{16}\\u{86}Ãò\\u{9a}r\\u{88}É4\\u{13}\\u{88}]$\\u{14}i8\\u{6}\\r\\u{90}\\u{10}0÷©\\u{15}\\u{1f}N\\u{9a}axÈd²\\u{90} ØY¿³w\\u{84}«i2\\u{91}Ë\\u{17}{â\\u{11}Hß¦àVFÞÓ¬*c\\u{8a}}\\u{82}°HÂb\\u{8f}H\\u{17}s\\u{86}\\u{93}¾\\u{1c}0\\u{15}Ïøí\\u{4}ÊÐ¯Õäi\\u{83}5¤ÍC½\\u{1a}÷\\u{97}\\u{3}\\u{9c}\\u{e}tWG°ò\\u{19}ûÿxs÷ò\\u{2}Ðr.ñ'º\\r\\u{8e}\\u{15}Ã5_E2\\u{3}\\u{95}'DÎõ\\u{3}\\u{1a}øÃí=Dà4\\u{91}\\u{1b}Õ\\u{1f}ä3t<õð²\\0Ó7&v\\u{99}\\u{1c}[\\u{11}ªó÷'C\\u{8}gØ(\\u{14}\\u{7}Â¸nyE¿õ%Ö6\\u{1b}\\u{17}Á»\\u{85}\\u{9b}¿ª3\\u{13}`¯u]\\u{85}AÏQi\\u{ad}¤\\u{1}\\u{7f}[ù\\u{7f}%~\\u{5}\\u{1b}(\\u{82}[\\u{80}\\u{83}J\\u{b}>mÙ(\\u{c}Y\\u{11}vð¦\\u{8c}\\u{15}@\\0Q½Æ¸\\u{1}Ó\\u{13}\\u{91}gKDBb75v!G\\u{90}\\u{3}iv9Ô¶;\\u{1f}ñlJSå1»\\u{82}\\u{93}¥\\u{11}\\u{7}\\u{1a}Z½ö{Å\\u{9d}\\u{1}D:ÂíWc*:.^\\u{4}\\u{14}¥Y±s\\u{82}2\\u{f}\\u{1b}3\\u{b}ô\\u{a0}O¶°kúb\\u{86}\\u{88}\\u{12}Ð\\u{95}âÔì¬Æ®§I\\u{8}§3ÀÙú¿¶\\u{15}w\\u{91}¸\\n\\u{94}\\u{18}\\nÛ·Q\\u{8b}ðÕ\\u{86}:\\\"\\u{2}½\\u{7}\\u{b}m\\u{18}\\u{9e}8Þ«b\\u{16}\\u{91}\\u{17}<*@\\u{16}\\u{1a}Û\\u{97}\\u{1f}\\u{1b}%4Ù\\u{1b}r\\u{1f}²\\u{13}>»4\\u{5}Jý6ÆV_C_\\u{83}\\u{90}f\\u{6}ÖQ{\\u{18}\\u{9d}\\u{84}Í\\u{91}H=\\u{89}ÍíP¼Y\\u{85}2d\\\"e\\u{82}û-âì a\\u{12}Ð?íÔæ¬\\u{87}®\\u{8f}I\\r§\\u{93}ÀÍú=¶\\u{19}\\u{17}ôÂy<LLW\\u{7}\\u{5}ï\\u{5}!§¨\\u{c}\\u{89}}¿\\u{9d}Ã\\u{c}\\u{9a}\\u{5}º\\u{18}$z¦\\u{ad}øn\\u{98}è7\\u{7}\\u{b}Y/\\u{85}¶Ô?\\\\°ö\\u{8b}\\u{97}\\r\\u{e}\";\n        v4 = \"ã\\u{1e}Ú¤-odé\\n3~Sp\\u{87}´Û\\u{9c}+\\\"G±G\\u{16}\\u{5}^\\u{6}¬¶n\\u{17}Éd7³ÓÉ\\u{97}\\u{83}ÙzkþO*F\\u{18}7¦Ä6´\\u{1d}\\u{11}\\u{86}\\u{6}Ê-àë².2,\\u{80}ÒmÇä\\u{84}`\\u{14}=ÿ¢§à¨CHºaÅíi\\u{1f}t^bÄ\\u{95}\\\\\\u{18}\\u{8e}í,Óë\\u{9d}ëz'[ÿ\\u{1c}¯u:¿\\u{94}è\\u{8a}É:îCY\\u{17}ý¶B¸&ðR×\\u{10}î\\u{19}ªs£¡eç³ä¢÷\\u{83}ú\\u{17}Ru4º{øt\\u{9d}Ô§\\u{81}\\u{83}`\\u{86}ÃÁ«'m0ÆÑÜ)\\u{8f}Ñõ@~Xvë-Juw\\u{7}{µ\\u{1a}Ü\\u{8f}döá¢üTBrpûó\\nÌöÀüO,KÂÁ\\u{17}Õ\\u{15}\\0:yï\\u{4}\\u{19}ë\\u{88}agæ±x®\\u{8f}'´\\u{1d}Ñ\\u{1f}·\\\"I\\u{10}WÖT²Ùò²½µîZ\\u{8c}êP\\u{6}¥\\u{10}ú\\u{92}\\u{2}\\u{80}(\\u{82}Ä\\u{81}:iúÁPáÎ#üPÀa\\u{84}÷±\\u{8f}9\\u{80}Ñ»\\u{6}Ò³POD\\u{e}=Æ\\u{15}.\\u{88}¸Ë³áöÎ\\u{9b} 4¸\\u{b}\\u{15}î \\u{8b}<òÞÆ\\u{3}.J¸\\u{93}³êö¯\\u{9b}\\u{c}4=\\u{b}\\u{16}éq\\u{1f}ÌÏB~må£\\u{83}AÏÅC\\u{93}b\\\"ýfJc\\u{1d}\\u{8a}\\u{1d}%}\\u{8}ô\\u{6}:$²çúÊ\\u{e}i\\u{89}À*êüª\\u{82}\\u{1e}8ó}~?]\\u{18}®^?vX\\u{9e}U\\u{5}HXø øuÐ¿Éè!ÉOîíY\\u{18}¡MÉÇW\\u{1f}|*ÕQ¡]d]Cº»HoÝ\\u{86}lÔ\\t\\u{16}\\u{86}Ãò\\u{9a}r\\u{88}É4\\u{13}\\u{88}]$\\u{14}i8\\u{6}\\r\\u{90}\\u{10}0÷©\\u{15}\\u{1f}N\\u{9a}axÈd²\\u{90} ØY¿³w\\u{84}«i2\\u{91}Ë\\u{17}{â\\u{11}Hß¦àVFÞÓ¬*c\\u{8a}}\\u{82}°HÂb\\u{8f}H\\u{17}s\\u{86}\\u{93}¾\\u{1c}0\\u{15}Ïøí\\u{4}ÊÐ¯Õäi\\u{83}5¤ÍC½\\u{1a}÷\\u{97}\\u{3}\\u{9c}\\u{e}tWG°ò\\u{19}ûÿxs÷ò\\u{2}Ðr.ñ'º\\r\\u{8e}\\u{15}Ã5_E2\\u{3}\\u{95}'DÎõ\\u{3}\\u{1a}øÃí=Dà4\\u{91}\\u{1b}Õ\\u{1f}ä3t<õð²\\0Ó7&v\\u{99}\\u{1c}[\\u{11}ªó÷'C\\u{8}gØ(\\u{14}\\u{7}Â¸nyE¿õ%Ö6\\u{1b}\\u{17}Á»\\u{85}\\u{9b}¿ª3\\u{13}`¯u]\\u{85}AÏQi\\u{ad}¤\\u{1}\\u{7f}[ù\\u{7f}%~\\u{5}\\u{1b}(\\u{82}[\\u{80}\\u{83}J\\u{b}>mÙ(\\u{c}Y\\u{11}vð¦\\u{8c}\\u{15}@\\0Q½Æ¸\\u{1}Ó\\u{13}\\u{91}gKDBb75v!G\\u{90}\\u{3}iv9Ô¶;\\u{1f}ñlJSå1»\\u{82}\\u{93}¥\\u{11}\\u{7}\\u{1a}Z½ö{Å\\u{9d}\\u{1}D:ÂíWc*:.^\\u{4}\\u{14}¥Y±s\\u{82}2\\u{f}\\u{1b}3\\u{b}ô\\u{a0}O¶°kúb\\u{86}\\u{88}\\u{12}Ð\\u{95}âÔì¬Æ®§I\\u{8}§3ÀÙú¿¶\\u{15}w\\u{91}¸\\n\\u{94}\\u{18}\\nÛ·Q\\u{8b}ðÕ\\u{86}:\\\"\\u{2}½\\u{7}\\u{b}m\\u{18}\\u{9e}8Þ«b\\u{16}\\u{91}\\u{17}<*@\\u{16}\\u{1a}Û\\u{97}\\u{1f}\\u{1b}%4Ù\\u{1b}r\\u{1f}²\\u{13}>»4\\u{5}Jý6ÆV_C_\\u{83}\\u{90}f\\u{6}ÖQ{\\u{18}\\u{9d}\\u{84}Í\\u{91}H=\\u{89}ÍíP¼Y\\u{85}2d\\\"e\\u{82}û-âì a\\u{12}Ð?íÔæ¬\\u{87}®\\u{8f}I\\r§\\u{93}ÀÍú=¶\\u{19}\\u{17}ôÂy<LLW\\u{7}\\u{5}ï\\u{5}!§¨\\u{c}\\u{89}}¿\\u{9d}Ã\\u{c}\\u{9a}\\u{5}º\\u{18}$z¦\\u{ad}øn\\u{98}è7\\u{7}\\u{b}Y/\\u{85}¶Ô?\\\\°ö\\u{8b}\\u{97}\\r\\u{e}\".length();\n        v1 = 22;\n        v0 = -1;\n        v0 += 1;\n        goto L90;\n        v3 += 1;\n        v5[v3] = -1;\n        v0 = (v0 + v1);\n        if ((v0 + v1) < v4) {\n            v1 = v2.charAt(v0);\n            goto L19;\n        }\n        v2 = \"\\r9\\u{8c}\\u{8d}\\r\\u{2}½ZD¯b\\\"Ä\\\\íüÄmZ\\u{18}{Sr\\u{8}Ümx¤°\\u{1e}tóÿ\\u{4}H\\u{87}\\u{83}UD´v¼Ñ\\u{8}\";\n        v4 = \"\\r9\\u{8c}\\u{8d}\\r\\u{2}½ZD¯b\\\"Ä\\\\íüÄmZ\\u{18}{Sr\\u{8}Ümx¤°\\u{1e}tóÿ\\u{4}H\\u{87}\\u{83}UD´v¼Ñ\\u{8}\".length();\n        v1 = 19;\n        v0 = -1;\n        v0 += 1;\n        goto L90;\n        v3 += 1;\n        v5[v3] = 0;\n        v0 = (v0 + v1);\n        if ((v0 + v1) < v4) {\n            v1 = v2.charAt(v0);\n            goto L54;\n        }\n        Z_f2.a = v5;\n        Z_f2.b = new String[39];\n        goto L12c;\n        L90:\n        v2.substring(v0, (v0 + v1));\n        23.toCharArray().length;\n        v6 = 0;\n        v2.substring(v0, (v0 + v1));\n        if (20 <= 1) {\n            switch ((v6 % 7)) {\n                case 0:\n                    goto Lf7;\n                case 1:\n                    goto Lf7;\n                case 2:\n                    goto Lf7;\n                case 3:\n                    goto Lf7;\n                case 4:\n                    goto Lf7;\n                case 5:\n                    goto Lf7;\n                default:\n                    Lf7:\n                    61[77] = (char) (39 ^ (76 ^ 72));\n                    v6 += 1;\n                    if (44 == 0) {\n                        goto Lae;\n                    }\n            }\n        }\n        if (7 > v6) goto Lae;\n        switch (?) {\n            case 0: goto L67;\n            default: goto L2c;\n        }\n        L12c:\n        return;\n    }\n\n\n    private static java.lang.String a(int, int){\n        v2 = ((v0 ^ 12113) & 65535);\n        if (Z_f2.b[v2] == null) {\n            v3 = Z_f2.a[v2].toCharArray();\n            switch ((v3[0] & 255)) {\n                case 0: goto L42e;\n                case 1: goto L434;\n                case 2: goto L43a;\n                case 3: goto L440;\n                case 4: goto L446;\n                case 5: goto L44a;\n                case 6: goto L44f;\n                case 7: goto L455;\n                case 8: goto L45a;\n                case 9: goto L45f;\n                case 10: goto L464;\n                case 11: goto L469;\n                case 12: goto L46e;\n                case 13: goto L474;\n                case 14: goto L47a;\n                case 15: goto L47f;\n                case 16: goto L484;\n                case 17: goto L489;\n                case 18: goto L48e;\n                case 19: goto L493;\n                case 20: goto L499;\n                case 21: goto L49e;\n                case 22: goto L4a4;\n                case 23: goto L4a9;\n                case 24: goto L4ae;\n                case 25: goto L4b3;\n                case 26: goto L4b8;\n                case 27: goto L4be;\n                case 28: goto L4c3;\n                case 29: goto L4c9;\n                case 30: goto L4ce;\n                case 31: goto L4d3;\n                case 32: goto L4d8;\n                case 33: goto L4dd;\n                case 34: goto L4e2;\n                case 35: goto L4e7;\n                case 36: goto L4ed;\n                case 37: goto L4f2;\n                case 38: goto L4f8;\n                case 39: goto L4fd;\n                case 40: goto L503;\n                case 41: goto L509;\n                case 42: goto L50e;\n                case 43: goto L514;\n                case 44: goto L51a;\n                case 45: goto L520;\n                case 46: goto L525;\n                case 47: goto L52b;\n                case 48: goto L530;\n                case 49: goto L535;\n                case 50: goto L53b;\n                case 51: goto L541;\n                case 52: goto L547;\n                case 53: goto L54c;\n                case 54: goto L551;\n                case 55: goto L556;\n                case 56: goto L55c;\n                case 57: goto L562;\n                case 58: goto L567;\n                case 59: goto L56c;\n                case 60: goto L572;\n                case 61: goto L577;\n                case 62: goto L57c;\n                case 63: goto L581;\n                case 64: goto L587;\n                case 65: goto L58c;\n                case 66: goto L591;\n                case 67: goto L597;\n                case 68: goto L59b;\n                case 69: goto L5a1;\n                case 70: goto L5a7;\n                case 71: goto L5ac;\n                case 72: goto L5b1;\n                case 73: goto L5b6;\n                case 74: goto L5ba;\n                case 75: goto L5bf;\n                case 76: goto L5c4;\n                case 77: goto L5c9;\n                case 78: goto L5cf;\n                case 79: goto L5d5;\n                case 80: goto L5d9;\n                case 81: goto L5df;\n                case 82: goto L5e5;\n                case 83: goto L5eb;\n                case 84: goto L5f0;\n                case 85: goto L5f6;\n                case 86: goto L5fc;\n                case 87: goto L601;\n                case 88: goto L606;\n                case 89: goto L60b;\n                case 90: goto L611;\n                case 91: goto L617;\n                case 92: goto L61c;\n                case 93: goto L622;\n                case 94: goto L627;\n                case 95: goto L62c;\n                case 96: goto L632;\n                case 97: goto L638;\n                case 98: goto L63e;\n                case 99: goto L643;\n                case 100: goto L648;\n                case 101: goto L64d;\n                case 102: goto L652;\n                case 103: goto L658;\n                case 104: goto L65e;\n                case 105: goto L663;\n                case 106: goto L669;\n                case 107: goto L66e;\n                case 108: goto L674;\n                case 109: goto L67a;\n                case 110: goto L680;\n                case 111: goto L685;\n                case 112: goto L68a;\n                case 113: goto L690;\n                case 114: goto L696;\n                case 115: goto L69b;\n                case 116: goto L6a1;\n                case 117: goto L6a7;\n                case 118: goto L6ac;\n                case 119: goto L6b1;\n                case 120: goto L6b6;\n                case 121: goto L6bb;\n                case 122: goto L6c1;\n                case 123: goto L6c7;\n                case 124: goto L6cd;\n                case 125: goto L6d1;\n                case 126: goto L6d7;\n                case 127: goto L6dc;\n                case 128: goto L6e2;\n                case 129: goto L6e8;\n                case 130: goto L6ee;\n                case 131: goto L6f4;\n                case 132: goto L6f9;\n                case 133: goto L6fe;\n                case 134: goto L703;\n                case 135: goto L708;\n                case 136: goto L70d;\n                case 137: goto L713;\n                case 138: goto L718;\n                case 139: goto L71e;\n                case 140: goto L724;\n                case 141: goto L72a;\n                case 142: goto L730;\n                case 143: goto L735;\n                case 144: goto L73b;\n                case 145: goto L740;\n                case 146: goto L746;\n                case 147: goto L74c;\n                case 148: goto L751;\n                case 149: goto L757;\n                case 150: goto L75c;\n                case 151: goto L761;\n                case 152: goto L766;\n                case 153: goto L76b;\n                case 154: goto L771;\n                case 155: goto L776;\n                case 156: goto L77c;\n                case 157: goto L781;\n                case 158: goto L787;\n                case 159: goto L78d;\n                case 160: goto L793;\n                case 161: goto L798;\n                case 162: goto L79d;\n                case 163: goto L7a2;\n                case 164: goto L7a8;\n                case 165: goto L7ae;\n                case 166: goto L7b3;\n                case 167: goto L7b8;\n                case 168: goto L7be;\n                case 169: goto L7c4;\n                case 170: goto L7ca;\n                case 171: goto L7cf;\n                case 172: goto L7d4;\n                case 173: goto L7da;\n                case 174: goto L7df;\n                case 175: goto L7e4;\n                case 176: goto L7ea;\n                case 177: goto L7f0;\n                case 178: goto L7f4;\n                case 179: goto L7f9;\n                case 180: goto L7fe;\n                case 181: goto L804;\n                case 182: goto L809;\n                case 183: goto L80f;\n                case 184: goto L815;\n                case 185: goto L81b;\n                case 186: goto L820;\n                case 187: goto L825;\n                case 188: goto L82b;\n                case 189: goto L830;\n                case 190: goto L836;\n                case 191: goto L83c;\n                case 192: goto L841;\n                case 193: goto L847;\n                case 194: goto L84d;\n                case 195: goto L853;\n                case 196: goto L858;\n                case 197: goto L85e;\n                case 198: goto L863;\n                case 199: goto L868;\n                case 200: goto L86e;\n                case 201: goto L874;\n                case 202: goto L87a;\n                case 203: goto L87f;\n                case 204: goto L885;\n                case 205: goto L88b;\n                case 206: goto L891;\n                case 207: goto L896;\n                case 208: goto L89b;\n                case 209: goto L8a0;\n                case 210: goto L8a6;\n                case 211: goto L8ab;\n                case 212: goto L8b1;\n                case 213: goto L8b7;\n                case 214: goto L8bd;\n                case 215: goto L8c3;\n                case 216: goto L8c9;\n                case 217: goto L8cf;\n                case 218: goto L8d5;\n                case 219: goto L8da;\n                case 220: goto L8df;\n                case 221: goto L8e5;\n                case 222: goto L8eb;\n                case 223: goto L8f1;\n                case 224: goto L8f6;\n                case 225: goto L8fb;\n                case 226: goto L900;\n                case 227: goto L906;\n                case 228: goto L90b;\n                case 229: goto L911;\n                case 230: goto L917;\n                case 231: goto L91d;\n                case 232: goto L923;\n                case 233: goto L928;\n                case 234: goto L92e;\n                case 235: goto L934;\n                case 236: goto L939;\n                case 237: goto L93f;\n                case 238: goto L945;\n                case 239: goto L94a;\n                case 240: goto L94f;\n                case 241: goto L954;\n                case 242: goto L95a;\n                case 243: goto L960;\n                case 244: goto L966;\n                case 245: goto L96c;\n                case 246: goto L971;\n                case 247: goto L977;\n                case 248: goto L97c;\n                case 249: goto L982;\n                case 250: goto L988;\n                case 251: goto L98d;\n                case 252: goto L992;\n                case 253: goto L998;\n                case 254: goto L99d;\n                default: goto L9a3;\n            }\n            L42e:\n            goto L9a3;\n            L434:\n            goto L9a3;\n            L43a:\n            goto L9a3;\n            L440:\n            goto L9a3;\n            L446:\n            goto L9a3;\n            L44a:\n            goto L9a3;\n            L44f:\n            goto L9a3;\n            L455:\n            goto L9a3;\n            L45a:\n            goto L9a3;\n            L45f:\n            goto L9a3;\n            L464:\n            goto L9a3;\n            L469:\n            goto L9a3;\n            L46e:\n            goto L9a3;\n            L474:\n            goto L9a3;\n            L47a:\n            goto L9a3;\n            L47f:\n            goto L9a3;\n            L484:\n            goto L9a3;\n            L489:\n            goto L9a3;\n            L48e:\n            goto L9a3;\n            L493:\n            goto L9a3;\n            L499:\n            goto L9a3;\n            L49e:\n            goto L9a3;\n            L4a4:\n            goto L9a3;\n            L4a9:\n            goto L9a3;\n            L4ae:\n            goto L9a3;\n            L4b3:\n            goto L9a3;\n            L4b8:\n            goto L9a3;\n            L4be:\n            goto L9a3;\n            L4c3:\n            goto L9a3;\n            L4c9:\n            goto L9a3;\n            L4ce:\n            goto L9a3;\n            L4d3:\n            goto L9a3;\n            L4d8:\n            goto L9a3;\n            L4dd:\n            goto L9a3;\n            L4e2:\n            goto L9a3;\n            L4e7:\n            goto L9a3;\n            L4ed:\n            goto L9a3;\n            L4f2:\n            goto L9a3;\n            L4f8:\n            goto L9a3;\n            L4fd:\n            goto L9a3;\n            L503:\n            goto L9a3;\n            L509:\n            goto L9a3;\n            L50e:\n            goto L9a3;\n            L514:\n            goto L9a3;\n            L51a:\n            goto L9a3;\n            L520:\n            goto L9a3;\n            L525:\n            goto L9a3;\n            L52b:\n            goto L9a3;\n            L530:\n            goto L9a3;\n            L535:\n            goto L9a3;\n            L53b:\n            goto L9a3;\n            L541:\n            goto L9a3;\n            L547:\n            goto L9a3;\n            L54c:\n            goto L9a3;\n            L551:\n            goto L9a3;\n            L556:\n            goto L9a3;\n            L55c:\n            goto L9a3;\n            L562:\n            goto L9a3;\n            L567:\n            goto L9a3;\n            L56c:\n            goto L9a3;\n            L572:\n            goto L9a3;\n            L577:\n            goto L9a3;\n            L57c:\n            goto L9a3;\n            L581:\n            goto L9a3;\n            L587:\n            goto L9a3;\n            L58c:\n            goto L9a3;\n            L591:\n            goto L9a3;\n            L597:\n            goto L9a3;\n            L59b:\n            goto L9a3;\n            L5a1:\n            goto L9a3;\n            L5a7:\n            goto L9a3;\n            L5ac:\n            goto L9a3;\n            L5b1:\n            goto L9a3;\n            L5b6:\n            goto L9a3;\n            L5ba:\n            goto L9a3;\n            L5bf:\n            goto L9a3;\n            L5c4:\n            goto L9a3;\n            L5c9:\n            goto L9a3;\n            L5cf:\n            goto L9a3;\n            L5d5:\n            goto L9a3;\n            L5d9:\n            goto L9a3;\n            L5df:\n            goto L9a3;\n            L5e5:\n            goto L9a3;\n            L5eb:\n            goto L9a3;\n            L5f0:\n            goto L9a3;\n            L5f6:\n            goto L9a3;\n            L5fc:\n            goto L9a3;\n            L601:\n            goto L9a3;\n            L606:\n            goto L9a3;\n            L60b:\n            goto L9a3;\n            L611:\n            goto L9a3;\n            L617:\n            goto L9a3;\n            L61c:\n            goto L9a3;\n            L622:\n            goto L9a3;\n            L627:\n            goto L9a3;\n            L62c:\n            goto L9a3;\n            L632:\n            goto L9a3;\n            L638:\n            goto L9a3;\n            L63e:\n            goto L9a3;\n            L643:\n            goto L9a3;\n            L648:\n            goto L9a3;\n            L64d:\n            goto L9a3;\n            L652:\n            goto L9a3;\n            L658:\n            goto L9a3;\n            L65e:\n            goto L9a3;\n            L663:\n            goto L9a3;\n            L669:\n            goto L9a3;\n            L66e:\n            goto L9a3;\n            L674:\n            goto L9a3;\n            L67a:\n            goto L9a3;\n            L680:\n            goto L9a3;\n            L685:\n            goto L9a3;\n            L68a:\n            goto L9a3;\n            L690:\n            goto L9a3;\n            L696:\n            goto L9a3;\n            L69b:\n            goto L9a3;\n            L6a1:\n            goto L9a3;\n            L6a7:\n            goto L9a3;\n            L6ac:\n            goto L9a3;\n            L6b1:\n            goto L9a3;\n            L6b6:\n            goto L9a3;\n            L6bb:\n            goto L9a3;\n            L6c1:\n            goto L9a3;\n            L6c7:\n            goto L9a3;\n            L6cd:\n            goto L9a3;\n            L6d1:\n            goto L9a3;\n            L6d7:\n            goto L9a3;\n            L6dc:\n            goto L9a3;\n            L6e2:\n            goto L9a3;\n            L6e8:\n            goto L9a3;\n            L6ee:\n            goto L9a3;\n            L6f4:\n            goto L9a3;\n            L6f9:\n            goto L9a3;\n            L6fe:\n            goto L9a3;\n            L703:\n            goto L9a3;\n            L708:\n            goto L9a3;\n            L70d:\n            goto L9a3;\n            L713:\n            goto L9a3;\n            L718:\n            goto L9a3;\n            L71e:\n            goto L9a3;\n            L724:\n            goto L9a3;\n            L72a:\n            goto L9a3;\n            L730:\n            goto L9a3;\n            L735:\n            goto L9a3;\n            L73b:\n            goto L9a3;\n            L740:\n            goto L9a3;\n            L746:\n            goto L9a3;\n            L74c:\n            goto L9a3;\n            L751:\n            goto L9a3;\n            L757:\n            goto L9a3;\n            L75c:\n            goto L9a3;\n            L761:\n            goto L9a3;\n            L766:\n            goto L9a3;\n            L76b:\n            goto L9a3;\n            L771:\n            goto L9a3;\n            L776:\n            goto L9a3;\n            L77c:\n            goto L9a3;\n            L781:\n            goto L9a3;\n            L787:\n            goto L9a3;\n            L78d:\n            goto L9a3;\n            L793:\n            goto L9a3;\n            L798:\n            goto L9a3;\n            L79d:\n            goto L9a3;\n            L7a2:\n            goto L9a3;\n            L7a8:\n            goto L9a3;\n            L7ae:\n            goto L9a3;\n            L7b3:\n            goto L9a3;\n            L7b8:\n            goto L9a3;\n            L7be:\n            goto L9a3;\n            L7c4:\n            goto L9a3;\n            L7ca:\n            goto L9a3;\n            L7cf:\n            goto L9a3;\n            L7d4:\n            goto L9a3;\n            L7da:\n            goto L9a3;\n            L7df:\n            goto L9a3;\n            L7e4:\n            goto L9a3;\n            L7ea:\n            goto L9a3;\n            L7f0:\n            goto L9a3;\n            L7f4:\n            goto L9a3;\n            L7f9:\n            goto L9a3;\n            L7fe:\n            goto L9a3;\n            L804:\n            goto L9a3;\n            L809:\n            goto L9a3;\n            L80f:\n            goto L9a3;\n            L815:\n            goto L9a3;\n            L81b:\n            goto L9a3;\n            L820:\n            goto L9a3;\n            L825:\n            goto L9a3;\n            L82b:\n            goto L9a3;\n            L830:\n            goto L9a3;\n            L836:\n            goto L9a3;\n            L83c:\n            goto L9a3;\n            L841:\n            goto L9a3;\n            L847:\n            goto L9a3;\n            L84d:\n            goto L9a3;\n            L853:\n            goto L9a3;\n            L858:\n            goto L9a3;\n            L85e:\n            goto L9a3;\n            L863:\n            goto L9a3;\n            L868:\n            goto L9a3;\n            L86e:\n            goto L9a3;\n            L874:\n            goto L9a3;\n            L87a:\n            goto L9a3;\n            L87f:\n            goto L9a3;\n            L885:\n            goto L9a3;\n            L88b:\n            goto L9a3;\n            L891:\n            goto L9a3;\n            L896:\n            goto L9a3;\n            L89b:\n            goto L9a3;\n            L8a0:\n            goto L9a3;\n            L8a6:\n            goto L9a3;\n            L8ab:\n            goto L9a3;\n            L8b1:\n            goto L9a3;\n            L8b7:\n            goto L9a3;\n            L8bd:\n            goto L9a3;\n            L8c3:\n            goto L9a3;\n            L8c9:\n            goto L9a3;\n            L8cf:\n            goto L9a3;\n            L8d5:\n            goto L9a3;\n            L8da:\n            goto L9a3;\n            L8df:\n            goto L9a3;\n            L8e5:\n            goto L9a3;\n            L8eb:\n            goto L9a3;\n            L8f1:\n            goto L9a3;\n            L8f6:\n            goto L9a3;\n            L8fb:\n            goto L9a3;\n            L900:\n            goto L9a3;\n            L906:\n            goto L9a3;\n            L90b:\n            goto L9a3;\n            L911:\n            goto L9a3;\n            L917:\n            goto L9a3;\n            L91d:\n            goto L9a3;\n            L923:\n            goto L9a3;\n            L928:\n            goto L9a3;\n            L92e:\n            goto L9a3;\n            L934:\n            goto L9a3;\n            L939:\n            goto L9a3;\n            L93f:\n            goto L9a3;\n            L945:\n            goto L9a3;\n            L94a:\n            goto L9a3;\n            L94f:\n            goto L9a3;\n            L954:\n            goto L9a3;\n            L95a:\n            goto L9a3;\n            L960:\n            goto L9a3;\n            L966:\n            goto L9a3;\n            L96c:\n            goto L9a3;\n            L971:\n            goto L9a3;\n            L977:\n            goto L9a3;\n            L97c:\n            goto L9a3;\n            L982:\n            goto L9a3;\n            L988:\n            goto L9a3;\n            L98d:\n            goto L9a3;\n            L992:\n            goto L9a3;\n            L998:\n            goto L9a3;\n            L99d:\n            goto L9a3;\n            L9a3:\n            v4 = 149;\n            v5 = ((v1 & 255) - v4);\n            if (v5 < 0) {\n                v5 += 256;\n            }\n            v6 = (((v1 & 65535) >>> 8) - v4);\n            if (v6 < 0) {\n                v6 += 256;\n            }\n            v7 = 0;\n            goto La23;\n            v8 = (v7 % 2);\n            if (v8 == 0) {\n                145[127] = (char) (v3[v7] ^ v5);\n                v5 = ((((v5 >>> 3) | (v5 << 5)) ^ v3[v7]) & 255);\n            } else {\n                172[107] = (char) (88 ^ v6);\n                v6 = ((((v6 >>> 3) | (v6 << 5)) ^ v3[v7]) & 255);\n            }\n            v7 += 1;\n            La23:\n            if (v7 < v3.length) goto L9db;\n            Z_f2.b[v2] = new String(v3).intern();\n        }\n        return Z_f2.b[v2];\n    }\n\n}\n",
+    "signature": null,
+    "source_file": null,
+    "superclass": "java.lang.Object",
+    "version": {
+      "major": 65,
+      "minor": 0
+    }
+  },
+  "summary": "burp.Z_f2 (Java 21) extends Object: 27 fields, 157 methods.",
+  "confidence": "inferred",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [
+    {
+      "code": "decompiler_inferred",
+      "message": "This pseudo-Java is reconstructed from bytecode by Craft Anything's built-in decompiler; it is a best guess, not the original source. The bytecode disassembly is the evidence."
+    },
+    {
+      "code": "generics_erased",
+      "message": "Generic type arguments are erased in bytecode and are not shown."
+    },
+    {
+      "code": "names_and_types_inferred",
+      "message": "Local variables are named v0, v1, … (no debug names); their declared types are not reconstructed."
+    },
+    {
+      "code": "desugaring_not_reversed",
+      "message": "Synthetic members, lambda/invokedynamic desugaring, enum scaffolding and string-switch hashing are not turned back into source."
+    },
+    {
+      "code": "stack_reconstruction_approximate",
+      "message": "120 method(s) contain stack operations that were approximated."
+    },
+    {
+      "code": "control_flow_partly_structured",
+      "message": "Some methods contain control flow shown with labels and goto statements."
+    }
+  ],
+  "coverage": {
+    "status": "complete",
+    "examined": 1,
+    "total": 1
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/opt/BurpSuite/burpsuite.jar"
+    },
+    {
+      "kind": "class",
+      "value": "burp/Z_f2"
+    }
+  ],
+  "links": []
+}

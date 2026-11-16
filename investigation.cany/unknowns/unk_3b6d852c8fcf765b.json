@@ -1,15 +1,20 @@
 {
   "id": "unk_3b6d852c8fcf765b",
-  "revision": 1,
+  "revision": 2,
   "question": "Can the rebuild save and load a project file (.burp)? grep for '.burp' and project-save paths finds nothing, so work is lost when the app closes.",
   "severity": "high",
   "domain": "feature-parity",
-  "status": "open",
+  "status": "resolved",
   "probes": [
     "Confirm the original's project format on disk (File > Save project)",
     "Define a project schema covering proxy history, scope and sessions",
     "Implement save/load in project.rs"
   ],
-  "evidence_for": [],
-  "evidence_against": []
+  "evidence_for": [
+    "ev_03b73f88265675c4a1fc06cc0ed5fc1148b938a82904d9029a8aee35d539e15d (source-tree/src import)",
+    "fnd_11: app/src/project.rs save L401-447 (temp sibling, write_all+sync_all, rename, parent fsync), load/decode L450-535 (legacy bare JSON L472-476, version checks L501-514), header L25/29/33/383-386, export/import L456-467, sections L335-345",
+    "test round_trip_preserves_every_field L749-763 (save then load, all fields equal); 15 project.rs tests L575-1005"
+  ],
+  "evidence_against": [],
+  "resolution": "RESOLVED on the WebProbe side: app/src/project.rs implements .burp project save/load with a proven save->load round-trip across every ProjectData section (logger/organizer/intruder/decoder/target/collaborator), the 'WEBPROBE PROJECT 2\\n' header, atomic temp+sync_all+rename+parent-fsync save, and legacy bare-JSON load. 15 unit tests. CAVEAT: Burp's own on-disk .burp format was NOT checked against the jar - byte-format parity is explicitly UNVERIFIED; this closes only the 'can WebProbe save/load a project' question."
 }
