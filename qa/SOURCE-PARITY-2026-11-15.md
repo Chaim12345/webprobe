@@ -805,3 +805,4 @@ Suite: core 390 (380 pass, 10 ignored), desktop 134, 0 fail.
 - **Clean shutdown on SIGTERM/SIGINT** (signal-hook): the app closes through `on_exit` (project saved, session marker removed), so a terminated instance no longer triggers the crash-recovery prompt. Verified: stopped in under 1 s, next start had no prompt.
 - **Accessibility.** Repeater tabs are now exposed as Tab elements.
 - **GUI-verified:** E-04 duplicate, rename and drag-reorder of Repeater tabs, persisted in order by autosave; E-02 redirect handling; UAT-06 clipboard paste.
+- Find references resolves relative links like the crawler (fix; L-02). GUI-verified L-02 Find references and L-03 Discover content (no false finds on a catch-all host; real files and directories found and recursed on a static lab server).

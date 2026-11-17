@@ -2064,7 +2064,7 @@ fn link_targets(resp: &[u8]) -> Vec<String> {
 
 /// Live passive crawl: same-origin link paths found in a response, resolved
 /// against the request path (query kept, fragment dropped).
-pub(crate) fn crawl_links(origin: &str, req_path: &str, resp: &[u8]) -> Vec<String> {
+pub fn crawl_links(origin: &str, req_path: &str, resp: &[u8]) -> Vec<String> {
     let base = req_path.split('?').next().unwrap_or("/");
     let base = match base.split_once("://") {
         Some((_, r)) => r.find('/').map(|i| r[i..].to_string()).unwrap_or_else(|| "/".into()),

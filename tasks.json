@@ -664,8 +664,10 @@
       "title": "Engagement tools",
       "acceptance": "Find comments, find scripts, find references, copy URLs, copy as curl",
       "effort": "M",
-      "status": "in_progress",
-      "notes": "2026-11-16 wave 42: Find comments/scripts/references and Copy URLs implemented with tests (engagement.rs); site-map menu seen. Results window not yet checked."
+      "status": "done",
+      "notes": "2026-11-16 wave 42: Find comments/scripts/references and Copy URLs implemented with tests (engagement.rs); site-map menu seen. Results window not yet checked.",
+      "completed": "2026-11-17",
+      "evidence": "engagement.rs: Find comments, Find scripts, Find references, Copy URLs in this host/branch, Copy as curl (tests). Find references now resolves relative links like the crawler (scan::crawl_links), so href=\"admin/\" counts (test references_resolve_relative_links). GUI-verified 2026-11-17 on a local lab host: References to http://127.0.0.1:18782/ listed /admin and /images (redirect targets)."
     },
     {
       "id": "L-03",
@@ -674,8 +676,10 @@
       "title": "Content discovery",
       "acceptance": "Wordlist-based path discovery with extension set, recursion, scope, result table",
       "effort": "M",
-      "status": "in_progress",
-      "notes": "2026-11-16 wave 42: wordlist discovery with soft-404 detection, recursion, request cap (discovery.rs, 8 loopback tests). Window not checked; extension list and thread count are guesses; traffic not in Logger."
+      "status": "done",
+      "notes": "2026-11-16 wave 42: wordlist discovery with soft-404 detection, recursion, request cap (discovery.rs, 8 loopback tests). Window not checked; extension list and thread count are guesses; traffic not in Logger.",
+      "completed": "2026-11-17",
+      "evidence": "discovery.rs: Burp's Discover content (Burp PayloadStrings short filename/directory lists, extensions, recursion with max depth, files/directories mode, not-found fingerprinting, results table, finds added to the site map). GUI-verified 2026-11-17: against a host that answers 200 to everything, 2674 requests and 0 false finds; against a local static server, found /admin, /admin/, /images, /images/, /index.html, /login.php and recursed into /admin/."
     },
     {
       "id": "L-04",

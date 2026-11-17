@@ -255,8 +255,18 @@ pub fn find_references(entries: &[HistEntry], origin: &str, path: &str) -> Vec<(
             continue;
         }
         let (_, body) = response_text(resp);
+        // Same-origin pages: their links resolved the way the crawler
+        // resolves them, so relative links (href="admin/") count, and any
+        // link under the selected path is a reference to it.
+        let resolved = if origin_of(e) == origin {
+            crate::scan::crawl_links(origin, &e.path, resp).into_iter().find(|l| l.split('?').next().unwrap_or(l).starts_with(bare))
+        } else {
+            None
+        };
         let hit = if body.contains(&target_abs) {
             Some(target_abs.clone())
+        } else if let Some(l) = resolved {
+            Some(l)
         } else if origin_of(e) == origin && bare.len() > 1 {
             ['"', '\'']
                 .iter()
@@ -587,6 +597,15 @@ mod tests {
         let html = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<!-- c1 --><p>x</p>";
         let e = vec![entry(1, "/p", html), entry(2, "/p", html), entry(3, "/q", "HTTP/1.1 200 OK\r\n\r\nnone")];
         assert_eq!(find_in_branch(&e, "http://app.local", "/", false), vec![("http://app.local/p".to_string(), "<!-- c1 -->".to_string())]);
+    }
+
+    #[test]
+    fn references_resolve_relative_links() {
+        let listing = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<a href=\"admin/\">admin/</a><a href=\"login.php\">l</a>";
+        let e = vec![entry(1, "/", listing), entry(2, "/x", "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<a href=\"../other\">o</a>")];
+        let r = find_references(&e, "http://app.local", "/admin/");
+        assert_eq!(r, vec![("http://app.local/".to_string(), "/admin/".to_string())]);
+        assert_eq!(find_references(&e, "http://app.local", "/").len(), 2, "the whole host: both pages link inside it");
     }
 
     #[test]
