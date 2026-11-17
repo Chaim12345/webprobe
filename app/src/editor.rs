@@ -215,14 +215,17 @@ pub fn message_editor(
         });
     });
 
+    // Never ask for an unbounded width: inside a scroll area egui then hands the
+    // text a near-zero wrap width and every character lands on its own line.
+    let text_w = ui.available_width().max(120.0);
     let mut edit = egui::TextEdit::multiline(text)
         .font(egui::TextStyle::Monospace)
         .code_editor()
         .desired_rows(rows)
-        .desired_width(f32::INFINITY)
+        .desired_width(text_w)
         .id_salt(id);
     if !state.wrap {
-        edit = edit.desired_width(f32::INFINITY);
+        edit = edit.desired_width(text_w);
     }
     apply_font_size(ui, state.font_size);
     ui.add(edit)

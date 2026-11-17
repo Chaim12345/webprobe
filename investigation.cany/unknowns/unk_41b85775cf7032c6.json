@@ -1,14 +1,19 @@
 {
   "id": "unk_41b85775cf7032c6",
-  "revision": 1,
+  "revision": 2,
   "question": "Does the rebuild implement Match & Replace rules (request/response rewriting)? grep for match_replace finds nothing.",
   "severity": "medium",
   "domain": "feature-parity",
-  "status": "open",
+  "status": "resolved",
   "probes": [
     "Open the original's Proxy > Options > Match and replace",
     "Implement a rule list applied in net.rs on both directions"
   ],
-  "evidence_for": [],
-  "evidence_against": []
+  "evidence_for": [
+    "ev_03b73f88265675c4a1fc06cc0ed5fc1148b938a82904d9029a8aee35d539e15d (source-tree/src import)",
+    "fnd_10: app/src/match_replace.rs Rule/RuleKind/MatchKind L16-48, apply_rules L101-121, split_message L71-81, literal replace-all L89, regex $1 groups L90-91, invalid regex skipped L92-93, CRLF/separator preserved L120; 10 tests L123-250",
+    "App::apply_match_replace delegates to match_replace::apply_rules at app/src/main.rs:203-205"
+  ],
+  "evidence_against": [],
+  "resolution": "RESOLVED for the ENGINE: WebProbe has a complete, unit-tested Match-and-Replace implementation (10 tests: literal/regex/$1 groups/invalid-regex-skip/CRLF-preserved/in-order). CAVEATS: net.rs still applies the separate legacy rules.rs::apply_rules (net.rs:1412,1512,1806,1814) rather than this engine, and there is no Proxy > Options > Match and replace UI tab; proxy-path + UI wiring remains for a separate worker. Burp-side rule semantics NOT verified against the jar this pass - WebProbe side only."
 }

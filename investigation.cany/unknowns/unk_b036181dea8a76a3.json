@@ -1,14 +1,17 @@
 {
   "id": "unk_b036181dea8a76a3",
-  "revision": 1,
+  "revision": 2,
   "question": "Does session handling extract and replay auth tokens (login sequences, session rules)? The Sessions tab is 87 lines; token extraction was not found.",
   "severity": "medium",
   "domain": "feature-parity",
-  "status": "open",
+  "status": "resolved",
   "probes": [
     "Run the original's recorded login sequence against a demo app",
     "Implement session rules and token extraction"
   ],
-  "evidence_for": [],
-  "evidence_against": []
+  "evidence_for": [
+    "ev_4994c2318a1ad7378602d235c9e172270534f7d3f90982bbe73aea04d1c04548"
+  ],
+  "evidence_against": [],
+  "resolution": "RESOLVED 2026-11-15: session handling IS implemented and wired into the proxy path. net.rs apply_session_rules (net.rs:172-225) applies enabled, host-matched rules before each request is sent upstream, at all three proxy sites (net.rs:1418 plain HTTP, net.rs:1518 TLS, net.rs:1812 upstream/h2c). All three actions work, matching the runtime-decoded Burp session actions (string-evidence.tsv burp.Z_0a 'Set the header: %s: %s' with name/value/add_if_not_present; Z_00/Z_0h macros): 'set header' (replace_or_add_header), 'use cookie' (latest_cookie extracts the most recent Set-Cookie value for the named cookie from proxy history, then append_cookie replays it - i.e. auth token extraction and replay), 'run macro' (executes a stored macro request before the current one). UI: Sessions tab editor (tools.rs:252-283). Persistence: project round-trip via ProjectSessionRule (tools.rs:566 save, tools.rs:666 load). Validation: suite green test result: ok. 219 passed; 0 failed (with wave-8 scanner probes). Not implemented vs Burp: multi-step macro chains with parameter extraction (Z_00 match_params/update_with_params scope granularity); noted as residual, tracked separately."
 }

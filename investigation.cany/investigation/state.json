@@ -1,5 +1,5 @@
 {
-  "revision": 26,
+  "revision": 130,
   "brief": {
     "question": "Rebuild WebProbe, a clone of Burp Suite Pro (reference build 52685, v2026.7.3), to feature parity with the 76-task backlog in tasks.json, and produce a readable, evidence-backed name map for the obfuscated Burp jar.",
     "purpose": "Interoperable reimplementation plus per-build deobfuscation; behaviour claims must come from the shipped jar or the running reference app, never guessed.",
@@ -17,44 +17,39 @@
   },
   "plan": [
     {
-      "title": "Epic A, M, B-01; P-13/P-14 render fix + wiring repair; P-10 Intruder attack-type UI + generic matrix runner; C-01 done",
+      "title": "Visual bridge pass: horizontal Repeater/Intruder panes, menu bar, Proxy sub-tab names",
       "status": "done",
-      "why": "commits 10bafe7, 6a969c1, ef70eb0, 0ab9711, b0978f8"
+      "why": "Editor zero-width bug came from inherited horizontal layout; fixed at root and verified in v8-repeater.png / v8-intruder.png."
     },
     {
-      "title": "Live Burp gap analysis + UI PRD + backend PRD + Obscura evaluation (P-15/P-16)",
+      "title": "Light-palette token pass + remaining chrome",
+      "status": "todo",
+      "why": "Panel fills are hardcoded MONO1/MONO1X, so View > Light theme is mixed; menu items and right-side globals still differ from Burp."
+    },
+    {
+      "title": "Structural tool gaps: Logger/Organizer/Discover, Proxy Match and replace, Dashboard and Intruder sub-tabs",
+      "status": "todo",
+      "why": "Largest remaining parity gap after chrome; WebProbe currently substitutes Scanner/Sessions/Search."
+    },
+    {
+      "title": "Engine done + verified: Logger (app/src/logger.rs)",
       "status": "done",
-      "why": "docs/PRD-UI.md, docs/PRD-BACKEND.md, docs/EVAL-OBSCURA.md"
+      "why": "fnd_8; logger.rs L12/16-29/114-158 + 8 tests L167-293; engine only, no Logger UI tab."
     },
     {
-      "title": "P-05 HTTP history columns and derived fields (in build/test now: Params, Edited, Extension, Title, Cookies, Listener port)",
-      "status": "doing",
-      "why": "BE-HS-01/02; build green, test run in flight"
+      "title": "Engine done + verified: Organizer (app/src/organizer.rs)",
+      "status": "done",
+      "why": "fnd_9; organizer.rs L8-15/24-99 + 6 tests L110-188; engine only, no Organizer UI panel."
     },
     {
-      "title": "UI shell batch P-01 menu bar, P-02 tab row, P-03 Settings dialog",
-      "status": "todo",
-      "why": "UI-SH-*, UI-ST-*"
+      "title": "Engine done + verified: Match and Replace (app/src/match_replace.rs)",
+      "status": "done",
+      "why": "fnd_10; match_replace.rs L16-48/71-121 + 10 tests L123-250; net.rs still uses legacy rules.rs::apply_rules."
     },
     {
-      "title": "Repeater P-04 layout + Inspector, B-03 Pretty/Render views, B-02 editable history pane",
-      "status": "todo",
-      "why": "UI-ME-*, UI-RP-*"
-    },
-    {
-      "title": "Intruder depth C-03 payload types, C-04 processing, C-05 grep/results, C-06 runner pools, Add § editor",
-      "status": "todo",
-      "why": "P-10 remainder"
-    },
-    {
-      "title": "Backend engines F codec+pipeline, H cookie jar/macros, J project v2 + Burp config import, D insertion points/checks",
-      "status": "todo",
-      "why": "BE-DC, BE-SS, BE-PJ/CF, BE-SC"
-    },
-    {
-      "title": "Deobfuscation refresh + extension host decision",
-      "status": "todo",
-      "why": "re/mapping; K-02"
+      "title": "Engine done + verified: Project .burp save/load (app/src/project.rs)",
+      "status": "done",
+      "why": "fnd_11; project.rs L25/29/33/383-386/401-447/450-535 + 15 tests; round_trip_preserves_every_field L749-763; Burp byte-format parity unverified."
     }
   ],
   "hypotheses": [],
@@ -114,8 +109,622 @@
         "ev_2b28cf4a66e192c1e0206147b9976d337c3bd73541cf87af0f767b8597876fcf"
       ],
       "confidence": "observed"
+    },
+    {
+      "id": "fnd_8",
+      "statement": "app/src/logger.rs implements the Logger engine exactly as described: LogEntry 12 fields id/ts/tool/method/host/port/path/status/req_len/resp_len/mime/source (L16-29); DEFAULT_CAP=5000 (L12); Logger::new(cap) maps cap 0 to DEFAULT_CAP (L114-122); push->u64 assigns monotonic ids and evicts oldest-first from the VecDeque (L126-135); clear empties but ids keep counting (L137-140); filter(&LogQuery) AND-matches case-insensitive text/tool/status_class/mime (L50-104, L143-145); snapshot() is newest-first while storage stays oldest-first (L155-158). 8 tests (L167-293): push_assigns_monotonic_ids, cap_evicts_oldest, zero_cap_uses_default, filter_by_text_is_case_insensitive_over_host_path_method_status, filter_by_tool_status_class_and_mime, empty_query_matches_everything, clear_empties_but_ids_continue, snapshot_is_newest_first. Verified by reading only (no cargo). Wired as App.logger and via mirror_history in app/src/main.rs:44,210,561. NOTE: engine only (file L1 'UI wiring lands in the next wave'); no Logger UI tab. Burp-side Logger behaviour NOT verified against the jar this pass - WebProbe side only.",
+      "evidence_ids": [
+        "ev_03b73f88265675c4a1fc06cc0ed5fc1148b938a82904d9029a8aee35d539e15d"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_9",
+      "statement": "app/src/organizer.rs implements the Organizer engine: OrganizerItem{id,name,note,request,response,created} (L8-15); Organizer::new/add/remove/rename/set_note/get/list/search (L24-99), ids monotonic and never reused via saturating_add (L31-43), list/search sorted by id (L76-99). 6 tests (L110-188): add_and_get, remove_reports_success, rename_and_set_note, search_matches_name_and_note_case_insensitively, ids_stay_stable_after_removal, list_is_sorted_by_id. DISCREPANCY: description said 5 tests, actual source has 6. Verified by reading only. Wired as App.organizer (app/src/main.rs:46,562). Engine only (file L1); no Organizer UI panel - UI wiring remains for a separate worker. Burp-side Organizer parity NOT verified this pass.",
+      "evidence_ids": [
+        "ev_03b73f88265675c4a1fc06cc0ed5fc1148b938a82904d9029a8aee35d539e15d"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_10",
+      "statement": "app/src/match_replace.rs implements the Match-and-Replace engine: Rule, RuleKind{RequestHeader,RequestBody,ResponseHeader,ResponseBody} (L18-23), MatchKind{Literal,Regex} (L33-36), Rule::new (L50-69); apply_rules(rules,kind,message)->String (L101-121) splits head/body at the first blank line via split_message (L71-81, CRLFCRLF preferred over LFLF), literal replace-all (L89), regex replace_all with $1/${name} groups (L90-91), invalid regex skipped not panicking (L92-93), original line-ending separator preserved (L120), unchanged message returned byte-for-byte when nothing matches (L116-119). 10 tests (L123-250): literal_header_replace, literal_replaces_all_occurrences, regex_body_replace_with_capture_groups, response_header_and_body_are_separate_regions, disabled_rule_is_skipped, invalid_regex_is_skipped_without_panicking, crlf_is_preserved, no_match_returns_identical_message, rules_apply_in_order, message_without_body_only_touches_head. DISCREPANCY: description said 9 tests, actual has 10. App::apply_match_replace delegates here (app/src/main.rs:203-205), but net.rs still applies the separate legacy rules.rs::apply_rules (net.rs:1412,1512,1806,1814) - proxy-path integration remains. Engine only; Burp-side rule semantics NOT verified against the jar this pass.",
+      "evidence_ids": [
+        "ev_03b73f88265675c4a1fc06cc0ed5fc1148b938a82904d9029a8aee35d539e15d"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_11",
+      "statement": "app/src/project.rs implements .burp project save/load end-to-end: PROJECT_MAGIC='WEBPROBE PROJECT' (L25), PROJECT_VERSION=2 (L29), MIN_PROJECT_VERSION=1 (L33), header_line() writes 'WEBPROBE PROJECT 2\\n' (L383-386); save() serializes then writes a unique same-dir temp sibling, write_all+sync_all, rename into place, then best-effort parent fsync (L401-447, temporary_path L537-560, sync_parent L562-571); load()->decode() accepts legacy bare JSON (split_document L472-476) and older header versions, rejects wrong magic/too-new/too-old versions (L501-535); export_json/import_json (L456-467); ProjectData sections logger/organizer/intruder/decoder/target/collaborator all present (L335-345). 15 tests (L575-1005) incl. round_trip_preserves_every_field (save then load, all fields equal), save_writes_magic_header_before_json, load_accepts_legacy_bare_json, load_accepts_older_header_version, save_leaves_no_temporary_file, save_reports_rename_failure_and_keeps_existing_file, export_and_import_json_round_trip, large_history_round_trips; temp files use .burp extension (L729-740). Verified by reading only. Burp's own on-disk .burp format was NOT checked against the jar this pass - byte-format parity explicitly unverified; only WebProbe round-trip is proven.",
+      "evidence_ids": [
+        "ev_03b73f88265675c4a1fc06cc0ed5fc1148b938a82904d9029a8aee35d539e15d"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_12",
+      "statement": "Proxy sub-tab parity fix grounded in decompiled Burp build 52685: burp.Zx5h.Za (Zx5h.java:51) names Burp's fourth Proxy sub-tab \"Match and replace\" (persistence key subtab.match_and_replace.shown); the label \"Proxy settings\" appears nowhere in the jar. WebProbe ui.rs sub_tabs now uses [\"Intercept\",\"HTTP history\",\"WebSockets history\",\"Match and replace\"] and proxy_options leads with the M&R rules tables, moving listener/CA/upstream options under a \"Connection and listeners\" heading. Also resolved the duplicate-engine defect: match_replace.rs (String-based, 4 regions, lossy conversion unsafe for binary bodies, no param/first-line scopes) was an unwired duplicate; rules.rs is the single live engine (byte-exact, 7 Burp-verified scopes, defaults verified in live build 52685 burp.Zmo7.<init> 0007-0016). match_replace.rs deleted; App.mr_rules and App::apply_match_replace dead code removed from main.rs. Intruder attack-type display strings grounded at runtime: burp.Zgu5 enum constants \"Sniper attack\"/\"Battering ram attack\"/\"Pitchfork attack\"/\"Cluster bomb attack\" (runtime_enums.tsv evidence runtime.enumConstant:Zgu5, internal INTRUDER_POSITIONS_ATTACK_TYPE_* in burp.Zpbb). Full suite green after changes pending re-run; baseline: test result: ok. 226 passed; 0 failed (wpq-after-fix.out).",
+      "evidence_ids": [
+        "ev_3d1de31855b4363247b49fb37a9016d4a30ad9c51b1b60111088f909d7d8affe"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_13",
+      "statement": "Second parity wave, all jar-grounded and suite-validated. Added Tab::Logger + logger_view and Tab::Organizer + organizer_view (tab names grounded: burp.Zi96 addTab(Logger) Zi96.java:16; burp.Zr86 setText(Organizer) Zr86.java:612); engines logger.rs/organizer.rs were already wired in main.rs state. Severity display now uses Burp exact names via new scan_sev_label (burp.Ze1r lines 12-22: High/Medium/Low/Information): Issues table previously showed raw internal values (info/low), dashboard chip said Info instead of Information. Deleted dead duplicate match_replace.rs engine (String-based, 4 regions, lossy-unsafe for binary bodies) in favor of the live rules.rs engine (byte-exact, 7 Burp-verified scopes, defaults from live build 52685 burp.Zmo7.<init>). Proxy sub-tab 4 renamed Proxy settings -> Match and replace (burp.Zx5h.Za Zx5h.java:51, subtab.match_and_replace.shown; Proxy settings appears nowhere in jar). Validation: cargo check exit 0; full suite green after each wave via wp-queue: test result: ok. 216 passed; 0 failed (226 minus the 10 tests that lived in deleted match_replace.rs). Parity matrix doc: qa/SOURCE-PARITY-2026-11-15.md updated with fixed/open status per item.",
+      "evidence_ids": [
+        "ev_db7932046535f871de968dfec4feb334d5e778f9ae0ae3acdc9d409108a296a4"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_14",
+      "statement": "Third parity wave, jar-grounded and suite-validated. Added Burp Intruder sub-tabs Positions/Payloads (grounded: burp.Zr7k Positions Zr7k.java:90; burp.Zija Payloads Zija.java:39) via App.intr_sub; Positions tab holds Auto section/Clear section markers plus the full-width request editor; Payloads tab holds the attack-type selector and payload-set editors; Start/Stop/progress/results remain visible on both. Attack-type display strings updated to runtime-grounded burp.Zgu5 enum decodes: Sniper attack / Battering ram attack / Pitchfork attack / Cluster bomb attack (AttackType::label). Validation: cargo check clean; wp-queue full suite green: test result: ok. 216 passed; 0 failed; 0 ignored; finished in 78.89s. Remaining open parity items per qa/SOURCE-PARITY-2026-11-15.md: False positive severity state, Burp AI tab, Repeater Send/Pretty/Hex/Raw strings, Logger/Organizer column headers, tab-order alignment, Discover placeholder removal.",
+      "evidence_ids": [
+        "ev_5af228ef92700bc901fc042012db3fbf181359a78d455dd5dee4e0de423a4516"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_15",
+      "statement": "Fourth parity wave, jar-grounded and suite-validated. History table column headers aligned to Burp exact strings from column-definition class burp.Zxwu (ZD calls): Status -> Status code (Zxwu.java:32), MIME -> MIME type (Zxwu.java:40); Method/Host/URL/Params/Length/Title already matched. Repeater strings verified as matching jar: Send to Repeater (Zcur.java:43), Pretty/Raw/Hex view toggles (Zwsv.java:21/25/30), Send to Intruder. Discover placeholder confirmed absent from WebProbe source (no Burp counterpart in build 52685). New grounded columns identified as missing candidates: Notes, Time requested, Diff count (Zxwu.java:48/52/56). Validation: cargo check clean, wp-queue full suite green: test result: ok. 216 passed; 0 failed; finished in 91.86s. Visual re-check: history-columns.png shows Status code / MIME type headers. qa/SOURCE-PARITY-2026-11-15.md updated with the new History table column headers section.",
+      "evidence_ids": [
+        "ev_615d0bddbb544e2dc33b406777409a2046194743c4b36c28e6d5243e64d53dcb"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_16",
+      "statement": "Fifth parity wave, jar-grounded and suite-validated. (1) Burp False positive issue classification added (burp.Ze1r line 12): ScanIssue.false_positive field, Mark as false positive / Unmark toggle button in Scanner detail, Issues table and detail render False positive label, dashboard gets a 5th severity bucket False positive (fp issues excluded from their severity bucket), project save/load round-trip via ProjectIssue with serde default for legacy files. (2) History table columns Notes (Zxwu.java:48) and Time requested (Zxwu.java:52, UTC time-of-day) added with sort keys; Diff count (Zxwu.java:56) still open pending a request-diff data source. (3) Burp AI tab added at end of tab bar (Zg4s.ZF case 7, Zg4s.java:26) with honest not-implemented placeholder. Validation: cargo check clean; wp-queue full suite green: test result: ok. 216 passed; 0 failed; finished in 103.03s. Visual: wave5-wide.png shows ordered headers Title/Notes/Time requested/TLS/Cookies/Port/Params aligned; wave5-burp-ai2.png shows Burp AI tab active.",
+      "evidence_ids": [
+        "ev_25d436fd5a927bcc1585bfbabf586ccabe6a8010a4dc021799cf95d8d8c55386"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_17",
+      "statement": "Fifth parity wave, jar-grounded and suite-validated. 1) False positive severity state added (burp.Ze1r line 12 grounds the label): ScanIssue.false_positive field, Mark as false positive / Unmark toggle button in Scanner issue detail, Issues table and detail render False positive in faint ink, dashboard gains a fifth False positive severity bucket, project save/load round-trips the flag (ProjectIssue serde default false for legacy files). 2) History table columns added per burp.Zxwu ZD calls: Notes (Zxwu.java:48, data from entry notes) and Time requested (Zxwu.java:52, UTC time-of-day from entry ts); sort keys and cells renumbered (TLS/Cookies/Port/Params/Edited shifted to 11-15). Diff count (Zxwu.java:56) remains open - needs request-diff tracking data source. 3) Burp AI tab added at end of tab bar (Zg4s.ZF case 7, Zg4s.java:26) with honest placeholder pane. Validation: cargo check clean; wp-queue full suite green: test result: ok. 216 passed; 0 failed; finished in 103.03s. Visual: wave5-wide.png shows correct column order (Title, Notes, Time requested, TLS, Cookies, Port, Params) and Burp AI tab in bar; wave5-burp-ai2.png shows the active Burp AI pane.",
+      "evidence_ids": [
+        "ev_25d436fd5a927bcc1585bfbabf586ccabe6a8010a4dc021799cf95d8d8c55386"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_18",
+      "statement": "Sixth parity wave: WebSockets history view upgraded from a bare 5-column list to a Burp-style inspectable table. 7 columns (#, Time, Host, Direction, Opcode, Length, Payload - Payload string grounded in Zbvn.java:9 et al.), clickable rows via new App.ws_sel, and a frame inspector below showing id/direction/host/opcode/size with an editable monospace payload pane for replay prep. Time column reuses the UTC time-of-day formatter from the Time requested history column. Validation: cargo check clean; wp-queue full suite green: test result: ok. 216 passed; 0 failed; finished in 127.38s; visual /root/webprobe-shots/ws-history.png (empty state clean, full tab bar with Logger/Organizer/Burp AI and Match and replace sub-tab all visible). Craft unknowns resolved this session now total 5: unk_21246f371f49727f (HTTP/2 h2c upgrade path), unk_71c873a1e064539e + unk_57a5828c4d7f28b3 (Logger), unk_7c283f511a86289a (Organizer), unk_4efba175ea5170f8 (WebSockets history view).",
+      "evidence_ids": [
+        "ev_4994c2318a1ad7378602d235c9e172270534f7d3f90982bbe73aea04d1c04548"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_19",
+      "statement": "Seventh parity wave: scanner active-check depth advanced against the runtime-grounded Burp family list. Burp's 20 active-check families extracted from /root/burp-re/out/runtime_names/runtime_enums.tsv (burp.Zbjf SCANNER_ACTIVE_CHECKS_* enum constants). WebProbe's light active scan (scan.rs start_active_scan) now implements 4 of 20 families: SQL_INJECTION (error signatures, pre-existing), REFLECTED_INPUT (unencoded marker, pre-existing), OPEN_REDIRECTION (new: parameter pointed at external marker host, is_open_redirect checks 3xx + Location contains marker, 5-case unit test), HEADER_INJECTION (new: %0d%0a CRLF in parameter value, detection via X-WebProbe-Inject response header). Insertion-point probe count doubled (2->4 per parameter). Validation: cargo check clean; wp-queue suite green: test result: ok. 217 passed; 0 failed; finished in 108.99s. Scanner-depth unknown unk_b0202d556cbf2cbc updated with the grounded family matrix and remaining 16 families as explicit probes; still open by design (parity target documented).",
+      "evidence_ids": [
+        "ev_4994c2318a1ad7378602d235c9e172270534f7d3f90982bbe73aea04d1c04548"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_20",
+      "statement": "Eighth parity wave. 1) Scanner active-check families advanced from 4/20 to 6/20 of the runtime-grounded burp.Zbjf SCANNER_ACTIVE_CHECKS_* list: FILE_PATH_TRAVERSAL (probe appends /../../../../etc/passwd; is_path_traversal_hit detects root:x:/root:!/bin:x: passwd content markers, 3-case test) and SERVER_SIDE_TEMPLATE_INJECTION (probe appends {{7*7}}; is_ssti_hit requires the value followed by evaluated 49 in the body so literal echoes do not fire, 3-case test). Suite green: test result: ok. 219 passed; 0 failed; finished in 91.50s. 2) Session-handling unknown unk_b036181dea8a76a3 RESOLVED with evidence: apply_session_rules (net.rs:172) implements all three Burp-grounded actions (set header per Z_0a runtime-decoded strings, use cookie with latest_cookie auth-token extraction+replay from proxy history, run macro) at all three proxy sites (net.rs:1418/1518/1812), host-matched, project-persisted; multi-step macro parameter chains noted as residual. 6 craft unknowns now resolved this session.",
+      "evidence_ids": [
+        "ev_4994c2318a1ad7378602d235c9e172270534f7d3f90982bbe73aea04d1c04548"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_21",
+      "statement": "Ninth parity wave: scanner active-check families advanced from 6/20 to 8/20 of the runtime-grounded burp.Zbjf SCANNER_ACTIVE_CHECKS_* list. New: OS_COMMAND_INJECTION (time-based blind detection - per-scan baseline request measured, probe appends ';sleep 3', is_blind_cmd_hit requires fast baseline (<2000ms) and delayed response (>= baseline+2500ms), 5-case unit test) and LDAP_INJECTION (error-based: appended filter wildcard, is_ldap_hit matches javax.naming / LDAP Result Code / ldap_search signatures, 5-case test). Passive side: new CSRF check (passive variant of SCANNER_ACTIVE_CHECKS_CSRF): POST request whose body carries a password field without any csrf/token/nonce/authenticity field name raises 'CSRF token missing on form with password field' (medium). Insertion points now get 8 probes + 1 baseline request. Validation: cargo check clean; wp-queue suite green: test result: ok. 221 passed; 0 failed; finished in 111.46s. Craft unknown unk_b0202d556cbf2cbc updated with the 8/20 state and remaining 12 families as explicit probes.",
+      "evidence_ids": [
+        "ev_4994c2318a1ad7378602d235c9e172270534f7d3f90982bbe73aea04d1c04548"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_22",
+      "statement": "Tenth parity wave: EXTERNAL_INTERACTION family implemented via the local Collaborator (9/20 of the runtime-grounded burp.Zbjf SCANNER_ACTIVE_CHECKS_* list). Architecture: Run active scan generates one Collaborator payload per URL parameter (collab_state.generate_payload); the new oob probe in scan.rs start_active_scan replaces the parameter value with the payload and registers (token, pre-built issue) in the new Shared.oob_pending; the UI-frame matcher ui.rs sync_oob_issues (called each frame from the Scanner and Dashboard views) matches observed Collaborator interactions against pending tokens and raises the issue with the interaction headline and source. Loopback-only by design - the Collaborator listens on 127.0.0.1 and this is stated in the UI hint. Validation: cargo check clean; wp-queue suite green: test result: ok. 221 passed; 0 failed; finished in 114.59s. Craft unknown unk_b0202d556cbf2cbc updated to 9/20 with the remaining 11 families as probes.",
+      "evidence_ids": [
+        "ev_4994c2318a1ad7378602d235c9e172270534f7d3f90982bbe73aea04d1c04548"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_23",
+      "statement": "Eleventh parity wave. 1) Scanner active-check families advanced from 9/20 to 11/20 of the runtime-grounded burp.Zbjf SCANNER_ACTIVE_CHECKS_* list: HEADER_MANIPULATION (scan-level probe - net::replace_or_add_header made pub, sets X-Forwarded-For to marker wb-fip-marker; is_header_manipulation_hit checks body and response headers for reflection, 3-case test) and XML_INJECTION (when the request is XML by Content-Type or declaration, inject_xxe inserts an external-entity DOCTYPE after the XML declaration pointing at file:///etc/passwd; passwd-marker detection in the response, 4-case test). Suite green: test result: ok. 223 passed; 0 failed; finished in 138.54s. 2) Montoya extension host architecture decision grounded in craft (unk_b5d66c6c635b412b updated, still open): Path A = Rust-native Montoya-shaped hook host (Rust/WASM extensions, loses Java ecosystem) vs Path B = sidecar JVM process with the real Montoya API driven over IPC (keeps ecosystem, adds JVM dependency); neither implementable as a small wave, recorded as the explicit fork for a design session. Evidence ev_6ded8ff7.",
+      "evidence_ids": [
+        "ev_6ded8ff7aa1e635964ad11c91ec2c3bbda5378aec7475fe9b5682ba2e3fa8fb0"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_24",
+      "statement": "Twelfth parity wave. 1) Edited column defect fixed: the history Edited flag could never be true because record() had no edited parameter and the intercept path never compared the user's buffer to the original request. intercept_request now returns (Option<Vec<u8>>, was_edited) comparing edited.as_bytes() != original (net.rs:1779-1786), upstream_and_deliver threads the flag, record() stamps it on the row. 2) Two reference unknowns resolved by measurement: unk_a2b1ba606b7cba5b (hotkeys) - shortcuts.rs implements Burp's full 50-entry default hotkey map (16 Wired / 20 EditorNative / 19 Missing, each enumerated), chord parser enforces Burp's hotkeys.html rules (Ctrl-required, shift-letter rejection, duplicate rejection), persisted to ~/.config/webprobe/hotkeys.json with settings editor + command palette wired. unk_2ab439b1006b4e2b (history column computations) - Burp side grounded via Zxwu lambdas (Params=Zb14.ZP() boolean, Title=Zb14.Zs null-to-empty; Extension/Edited live in other model classes and remain a new probe), WebProbe side documented in net.rs derive_history_fields (params: query/form-body/cookie; extension: last dot suffix; title: first <title> of HTML response; edited: intercept-compare flag). Validation: cargo check clean; wp-queue suite green: test result: ok. 223 passed; 0 failed; finished in 149.03s. 8 craft unknowns now resolved this session.",
+      "evidence_ids": [
+        "ev_2caab4587bc3709765c73204532bc560caf1c90679ce08ea3a11a7112b03bf4a"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_25",
+      "statement": "Thirteenth parity wave. 1) Scanner active-check families advanced from 11/20 to 13/20 of the runtime-grounded burp.Zbjf SCANNER_ACTIVE_CHECKS_* list: REFLECTED_XSS (script-context probe <script>wbNNNxss</script>; hit requires the full tag echoed unencoded, distinguishing it from the existing REFLECTED_INPUT probe) and SERVER_SIDE_CODE_INJECTION (EL/JSP-EL probe value+${7*7}; is_code_injection_hit requires value immediately followed by evaluated 49, 3-case test covering evaluated, literal, and coincidental-49 cases). Suite green: test result: ok. 224 passed; 0 failed; finished in 103.29s. 2) unk_f345581f9072bba9 RESOLVED: the scanner generates out-of-band Collaborator payloads (wave 10 evidence) - Run active scan generates one payload per URL parameter, the oob probe embeds it, and sync_oob_issues raises the issue when an interaction is observed; Collaborator remains usable as a passive view. 9 craft unknowns resolved this session.",
+      "evidence_ids": [
+        "ev_2caab4587bc3709765c73204532bc560caf1c90679ce08ea3a11a7112b03bf4a"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_26",
+      "statement": "Fourteenth parity wave: SQL_INJECTION deepened with the boolean-based differential variant (burp.Zbjf SCANNER_ACTIVE_CHECKS_SQL_INJECTION). Two new probes per insertion point: value AND 1=1 and value AND 1=2. is_boolean_sql_hit requires the 1=1 response length to mirror the per-scan baseline (abs_diff <= 32 B, baseline response captured at scan start) while the 1=2 response diverges from both by more than 64 B; 5-case unit test covers the hit, jitter tolerance, non-matching true response, identical false response, and missing-response no-signal cases. Insertion points now get 12 probes + one baseline request + one oob probe per Collaborator payload + two scan-level probes (header manipulation, XXE). Validation: cargo check clean; wp-queue suite green: test result: ok. 225 passed; 0 failed; finished in 91.03s. Scanner: 13/20 families with SQL now deep (error-signature + boolean differential); remaining 6: REFLECTED_DOM, STORED_DOM, STORED_XSS, SERVER_LEVEL_ISSUES, SMTP_INJECTION, CSRF-active (passive variant exists).",
+      "evidence_ids": [
+        "ev_2caab4587bc3709765c73204532bc560caf1c90679ce08ea3a11a7112b03bf4a"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_27",
+      "statement": "Fifteenth parity wave: the Proxy history 'Diff count' column (burp.Zxwu.java:56, the last MISSING entry in the Zxwu column matrix) is implemented. net.rs gains DiffTracker: for each request location (method + host:port + path without query) it remembers the previous exchange's response attributes and counts changed, added and removed attributes (status, length, cookies and every response header); the first sighting of a location diffs 0. HistEntry gains a diffs field stamped in record() after derive_history_fields; Shared gains diff_tracker state; all 7 HistEntry constructor sites updated. UI: 'Diff count' column appended at index 16 (right-aligned, sortable, chosen with the column chooser). Two unit tests: DiffTracker per-location semantics (first sighting 0, identical repeat 0, 2 changed, independent locations, 2 removed + 1 added = 3) and record() stamping (200 then 304 response = 3 diffs: status, length and the recomputed Content-Length that normalize_response stamps). Validation: wp-queue suite green - test result: ok. 227 passed; 0 failed; 0 ignored; finished in 113.47s. Every Zxwu-grounded history column is now present.",
+      "evidence_ids": [
+        "ev_ed3f385a1849275137fbf864734d08333befa8c86269558a497eb0f97d0cf821"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_28",
+      "statement": "Sixteenth parity wave: REFLECTED_DOM active-check family implemented (burp.Zbjf SCANNER_ACTIVE_CHECKS_REFLECTED_DOM), scanner families 13/20 -> 14/20. New probe per insertion point: a plain canary (wb{idx}dom) appended to the parameter value; is_reflected_dom_hit reports a hit when the canary is reflected unencoded into script data (between <script> and </script>, case-insensitive tag matching) or into a quoted attribute value inside a tag (single or double quotes). A bare text-node reflection does not count and entity-escaped values never match, so the check stays distinct from REFLECTED_INPUT/REFLECTED_XSS. Issue raised as 'DOM-based cross-site scripting (reflected)' at high severity, gated on an HTML Content-Type. 10-case unit test covers script data, double/single-quoted attributes, text-node exclusion, quoted-attribute-before-canary exclusion, entity-encoded exclusion, missing canary, unclosed script tag, and case-insensitive tags; a boundary bug (canary ending exactly at the closing quote) was caught by the test and fixed. Insertion points now get 13 probes + baseline + oob + two scan-level probes. Validation: wp-queue suite green - test result: ok. 228 passed; 0 failed; 0 ignored; finished in 112.87s. Remaining 5 families: STORED_DOM, STORED_XSS, STORED_INPUT, SERVER_LEVEL_ISSUES, SMTP_INJECTION (CSRF active variant judged redundant with the passive check + crawl).",
+      "evidence_ids": [
+        "ev_fa651c4d7141104b1264748851c417f08a8b160bab28b060bf0884aae4ccc7a8"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_29",
+      "statement": "Seventeenth parity wave: the three STORED_* active-check families implemented via a stored-echo pass (burp.Zbjf SCANNER_ACTIVE_CHECKS_STORED_INPUT / STORED_XSS / STORED_DOM), scanner families 14/20 -> 17/20. Burp detects stored variants by revisiting pages after injection; the light-weight equivalent: the per-parameter probes now record their markers (script-tag xss marker and plain dom canary per parameter), and after the probe loop the scan re-fetches the original URL once. Any surviving marker is classified by stored_echo_hit: a persisted '<script>marker</script>' = stored XSS (high), a canary now sitting in script data or a quoted attribute value (reuses is_reflected_dom_hit) = stored DOM (high), any other unencoded echo = stored input (medium). A marker in a later response to the original URL proves persistence server-side where the attacker does not control the echoed page. 5-case unit test: stored XSS classification, stored DOM via title attribute, plain stored input, no-signal on an unrelated page, and escaped script-tag echo downgraded to stored input. Validation: wp-queue suite green - test result: ok. 229 passed; 0 failed; 0 ignored; finished in 116.31s. Remaining 2 families: SERVER_LEVEL_ISSUES, SMTP_INJECTION (both need deeper probe design).",
+      "evidence_ids": [
+        "ev_6bcaf63c505f783f69b010def3ea88a142d45d836a6de44149fc620ddb156609"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_30",
+      "statement": "Eighteenth and nineteenth parity waves: SERVER_LEVEL_ISSUES and SMTP_INJECTION implemented (burp.Zbjf SCANNER_ACTIVE_CHECKS_SERVER_LEVEL_ISSUES / SMTP_INJECTION), scanner families 17/20 -> 19/20. SERVER_LEVEL_ISSUES: two host-level probes per scanned entry - (1) TRACE probe (TRACE path with Max-Forwards: 0); is_trace_hit requires a 2xx response that echoes the request line back and contains a Host header, raised as 'TRACE method enabled (cross-site tracing)' medium; (2) OPTIONS probe; risky_methods_allowed parses the Allow header case-insensitively on 2xx and reports PUT/DELETE/TRACE/CONNECT as 'permissive HTTP methods advertised via OPTIONS' low. SMTP_INJECTION: per-parameter probe value+%0d%0aBcc:%20wb-smtp-probe@probe.invalid; is_smtp_injection_hit requires a mail-pipeline error signature (SMTP error / sendmail / Failed to send / mail() has been disabled / Invalid mailbox) in the probe response that the baseline response (now retained instead of dropped) does not already contain, so pre-existing error pages cannot fire the check. 9-case unit tests across both. With this wave every SCANNER_ACTIVE_CHECKS_* family from runtime_enums.tsv is implemented or explicitly documented: 19/20 active families + CSRF covered by the passive check (password POST without token field) + crawl-driven form handling; the active CSRF form-probing variant is a documented omission as redundant. Insertion points: 14 probes + baseline + oob; scan-level: header manipulation, XXE, TRACE, OPTIONS, stored-echo pass. Validation: wp-queue suite green twice quoted: test result: ok. 230 passed; 0 failed (141.04s) and test result: ok. 231 passed; 0 failed (113.30s). qa/SOURCE-PARITY-2026-11-15.md updated to 19/20.",
+      "evidence_ids": [
+        "ev_e7b9598fc11be00ca87e7a4a5289b624ed473d68e492bbe329702a5757684a47"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_31",
+      "statement": "Twentieth parity wave: Montoya architecture fork resolved to Path A and implemented - a Rust-native, Montoya-shaped extension host (ext_host.rs). Rationale: WebProbe is a self-contained Rust binary; embedding a sidecar JVM (Path B) would add an external runtime dependency and per-message IPC latency, while the Montoya proxy hook surface (ProxyRequestHandler / ProxyResponseHandler) is expressible as Rust traits (ProxyHooks with handle_request_received / handle_response_received returning Continue/Drop, mirroring Montoya's ProxyRequestReceived action). ExtensionHost runs enabled extensions in registration order on every proxied message, after session rules and match/replace, at all three proxy sites (HTTP, plain-WS handshake, TLS-WS handshake); a Drop verdict stops the chain and closes the connection. Shared.ext_host state + ext_handle_request/response helpers; the Extensions tab now lists the real registry with enable/disable toggles (previously a 5-line placeholder). Burp's Java .jar extensions do not load - the honest limitation is stated in the tab, not pretended away. QA hook WEBPROBE_EXT_TEST=1 registers the built-in example (ExampleHeaderExtension adds X-WebProbe-Extension). 4 unit tests: empty host passes, Drop stops the chain so later extensions never run, disabled extensions are skipped, example adds its header. Validation: wp-queue suite green - test result: ok. 235 passed; 0 failed; 0 ignored; finished in 107.88s.",
+      "evidence_ids": [
+        "ev_83a2ec68ef44c9d1f28da293ff6e46e5b30bba77455f7538baef97b6486e8a2f"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_32",
+      "statement": "Twenty-first parity wave: WebSocket message interception implemented (Burp Proxy settings > WebSockets: 'Intercept client-to-server messages' / 'Intercept server-to-client messages', default off). WebProbe gains both flags (Shared.ws_intercept_client / ws_intercept_server, checkboxes under Proxy options > WebSockets) and intercept_ws_stream in net.rs: text and binary frames of a plain-HTTP WebSocket upgrade are parsed from the relay stream and queued in the regular Intercept tab (shared InterceptItem queue) when the direction's flag is on; Forward rewrites the payload, Drop skips the frame; control frames (ping/close/pong) relay untouched. Frames are rebuilt with build_ws_frame - client frames stay masked (server requirement), server frames unmasked, and 7-bit/16-bit/64-bit length encodings are re-chosen by payload size. The rewrite path only activates when the flag is on, so the default relay is unchanged raw passthrough. Test-driven bug: the first header encoding put the length in a third header byte (RFC 6455 puts the 7-bit length in byte 1 with the mask bit); the 3-case unit tests caught it via roundtrip failure at len 5. Unit tests: roundtrip across all three length encodings masked/unmasked, off-passthrough + control-frame passthrough, queue edit + drop. Limitation unchanged: TLS WebSocket frames are recorded but not intercepted (one-shot TLS relay). Validation: wp-queue suite green - test result: ok. 238 passed; 0 failed; 0 ignored; finished in 123.44s.",
+      "evidence_ids": [
+        "ev_8ccd0d254edca45f7aecd5877dcb0e1d500ea1eee315c2e28d9ec26b6b490821"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_33",
+      "statement": "Twenty-second parity wave: WebSocket frame interception extended to TLS WebSocket upgrades. relay_ws_tls now shares its frame buffer with the recorder (record_ws_chunk drains complete frames, the leftover joins the next chunk) and routes bytes through intercept_ws_stream when ws_intercept_client / ws_intercept_server is on - so TLS WebSocket text and binary frames are queued in the regular Intercept tab in both directions, Forward rewrites the payload, Drop skips the frame, control frames relay untouched, and the masked/unmasked flag of each parsed frame is preserved on rebuild. The interception path only activates when the flags are on, so default TLS relay behavior is unchanged. The previous 'one-shot TLS relay, frames not intercepted' limitation is closed for WebSocket upgrades; the unit tests from wave 21 cover intercept_ws_stream directly (the TLS site is compile-verified wiring of the same pure function). Validation: wp-queue suite green - test result: ok. 238 passed; 0 failed; 0 ignored; finished in 106.32s.",
+      "evidence_ids": [
+        "ev_a45d163466a5b0d1e930c9b20d50fb36415c972eb1a620ce2c7168b855785e38"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_34",
+      "statement": "Twenty-third parity wave: BApp Store surface implemented and grounded. The unknown's premise ('grep for bapp finds nothing') was disproved against the decompiled jar: build 52685 ships the BApp Store - the 'BApp Store' sub-tab at burp.Zg26.java:47 (telemetry key subtab.bapp_store.shown) and the welcome-card copy at burp.Zmx_.java:28 ('Customize Burp with extensions' / 'Explore extensions in the BApp Store to customize Burp's behavior and add extra capabilities.'). WebProbe's Extensions tab now has a BApp Store section with those exact grounded strings plus a static offline catalog of 8 well-known BApps (Active Scan++, Autorize, Collaborator Everywhere, JWT*, Logger++, Param Miner, Turbo Intruder, Upload Scanner), each with a one-line description. Honest scope: the live store is not fetched and ratings are not shown - the parity surface is the tab and its copy, not network content; installing Java BApps is unsupported under the Rust-native extension host and that is stated in the tab. Validation: wp-queue suite green - test result: ok. 238 passed; 0 failed; 117.64s (UI-only change, compile-verified).",
+      "evidence_ids": [
+        "ev_130cc7a3c65dfb4178f4f841ec7332c9ea052865b1ea84e353d510315dd27978"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_35",
+      "statement": "Twenty-fourth parity wave: the mechanics.json audit (unk_07f244dea6b607d2 probe: re-check a sample against the decompiled functions / extracted resources, mark UI-text-derived values estimated) executed on a 13-value sample spanning proxy/connections/requests/hotkeys/colors/https/scanner groups. VERIFIED 12/13 against /root/burp-re/in/extract/ resource files: proxy listener (proxy.request_listeners[0] loopback_only/8080/per_host/running), connect_timeout=120000, normal_timeout=120000, open_ended_response_timeout=10000, domain_name_resolution_timeout=300000 (project_options.connections.timeouts), concurrent_request_limit=10 (enabled), throttle_interval_millis=500 (NOTING throttle_interval_enabled=false - the 500 ms is a default value, not an active limit), auto_backoff_after_429_status_returned=true, project_options.http.http1.enable_keep_alive=false, proxy.intercept_client_requests.rules[0] file_extension does_not_match (^gif$|^jpg$|^png$|^css$|^js$|^ico$|^svg$|^eot$|^woff$|^woff2$|^ttf$) with intercept_server_responses.do_intercept=false and user_options.misc.enable_proxy_interception_at_startup='never', hotkey count exactly 50 (user_options.misc.hotkeys), DarkTheme.json contains #323334 and #FFB090, AuditDefaults scan_type_passive=true, CrawlDefaults maximum_unique_locations=1500. MARKED ESTIMATED 1: 'ca validity' - its cited source (burp.Zg88.Z_ offsets, ev_7b303a56...) was NOT reproducible: Zg88.java is an empty interface (coverage.tsv: ScannerComponent0732) and the evidence record is absent; source rewritten to say so. RESULT: no sampled value is fabricated from UI text; 9 source-path imprecisions corrected in mechanics.json (missing project_options./user_options. prefixes, throttle-enabled note). mechanics.json now claims 80 values with corrected sources and 1 estimated. Validation: UI/config-only change; suite remains 238 passed / 0 failed (last quoted 117.64s at wave 23).",
+      "evidence_ids": [
+        "ev_289b2cf70f7251c8b6c7c329ddb435ed3a5110105940b625a31e1b320afcd77b"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_36",
+      "statement": "Twenty-fifth parity wave: reference-behavior unknown resolved by executing its probes against the live reference Burp (java pid 127214, listener 127.0.0.1:6570, project /root/burp-qa/qa.burp, user config proxy section empty = pure defaults, no loopback exclusion configured; artifacts imported: qa.burp, burp.log, user.json). Probe result: a fresh curl through 6570 to http://example.com/ returned 200 with the Example Domain body, and immediately afterwards the project save file contains the exact exchange at strings level - 'GET / HTTP/1.1' + 'Host: example.com' + 'User-Agent: curl/8.22.0' and the full response body, present twice from two curl runs; the file mtime advanced (21:58 -> 22:03) on the request. CONCLUSION: the premise is disproved - the reference Burp proxy on 6570 DOES record proxied exchanges into HTTP history; the earlier 'history stays empty' observation was stale (likely an unrefreshed view or a different project state). Event log shows only JVM/SLF4J warnings, no listener errors. Burp behavior matches WebProbe's record() implementation: a non-intercepting listener records every proxied exchange into history. No code change required.",
+      "evidence_ids": [
+        "ev_602a26023e2b7e0a85fa2cc83ae2c9299af23e1893a73ae879b76e3d87414762"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_37",
+      "statement": "Twenty-sixth parity wave: the history context menu implemented item-for-item from the live reference capture, and the populated-project UI probes executed. Reference observations (traffic through 6570 + screenshots in /root/webprobe-shots/burp-populated/): HTTP history populates with rows (example.com GET / 200 917B HTML 'Example Domain' IP 104.20.23.154) and the right-click menu was captured exactly; the Target site map stays empty while crawl tasks are paused ('Task execution is paused - Site map will not be populated' + Resume banner) - proxy traffic alone does not populate the site map on the reference either; Repeater shows a per-tab history pager plus Inspector sidebar. NEW GROUNDING: the reference history table has an 'IP' column that WebProbe lacks - recorded as the next parity gap. IMPLEMENTATION: ui.rs proxy_history rows gained row.context_menu with the exact captured item set and order; wired: Add to scope (ScopeRule::include of scheme://host), Scan + Active scan selected message (run_active_scan_on, shared helper with the scanner button, one Collaborator payload per URL param), Send to Intruder/Repeater (existing send_history_* with selection set), Send to Organizer (organizer.add), Send to Comparer (request/response) (comparer_state left/right + recompute + tab switch), Delete item (history retain), Clear history, Copy URL (history_url), Copy as curl command (bash) (curl_command_of: method, headers minus Connection/Content-Length, --data-raw, quoted URL), Copy links in response (links_in_response: href/src/action absolute URLs). Items without a WebProbe backend (Passive scan selected message, Send to Sequencer, Open response in browser, Request in browser, Send to Burp AT, Engagement tools, Show new history window, Add notes, Highlight, Save item, Proxy history documentation) are shown DISABLED, not pretended away. Borrow constraint solved by queueing commands as pending_menu applied after table_body (the row closure cannot capture app while app.hist_table is mutably borrowed). VERIFIED END-TO-END in the QA rig (Xvfb :99, screenshots burp-waves/04-10): the menu opens with the grounded order and greyed-out items, and clicking 'Send to Repeater' switched to a new Repeater tab containing the request. Validation: wp-queue suite green - test result: ok. 238 passed; 0 failed; 103.57s.",
+      "evidence_ids": [
+        "ev_87e02fe1bfa7499766dce5b8e4b0b4cac953aa232e1538cb336491ef1f8b1457"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_38",
+      "statement": "Twenty-seventh parity wave: the history 'IP' column implemented - grounded from the live reference screenshot (104.20.23.154 for example.com) that showed the reference history table carries a resolved-IP column WebProbe lacked. HistEntry gains ip, stamped in record() via resolve_ip: a host -> IP cache (Shared.ip_cache, cleared past 4096 hosts) backed by a one-time blocking getaddrinfo per host on the proxy worker thread; empty/unresolvable hosts yield an empty cell. UI: 'IP' column inserted after TLS (index 12) matching the reference order (Notes, Time requested, TLS, IP, Cookies, Time, Listener on the reference); sort arm and cell added and downstream indices renumbered (Cookies 13, Port 14, Params 15, Edited 16, Diff count 17). Unit test: empty host -> empty, cache hit answers without DNS. Verified live in the QA rig: real traffic through the listener (example.com GET / 200 577 text/html 'Example Domain') recorded into history (burp-waves/15-ip.png); the IP cell sits beyond the visible table width in the synthetic pass, so the value is covered by the unit test rather than a screenshot. Suite: wp-queue green - test result: ok. 239 passed; 0 failed; 117.60s.",
+      "evidence_ids": [
+        "ev_2a43b30904ea2b189107e26ff9e9bd07e0aa4932b6fd17ff78d3af566b0568e7"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_39",
+      "statement": "Twenty-eighth parity wave: the embedded-browser parity item implemented as 'Open browser' - grounded at Zrxt.java:217 (Intercept view button) and Zw5t.java:63, with the reference driving chrome/chromium itself (Zrg5.java:38, Zrgu.java:28 mention 'chrome', 'chromium', 'without sandbox'). tools.rs gains launch_preconfigured_browser: finds a system Chrome/Chromium (google-chrome-stable, google-chrome, chromium-browser, chromium, probed via --version), spawns it with --proxy-server=http://127.0.0.1:<port>, --user-data-dir=/tmp/webprobe-browser-profile (isolated profile), --no-first-run, --no-default-browser-check, starting on the onboarding page http://webprobe/ (served through the proxy, like Burp's burpsuite host). Buttons placed where Burp has them: Intercept view 'Nothing held.' state and Target view header. Honest scope: Burp bundles its own Chromium; WebProbe launches the system browser - no embedded runtime is bundled, and the difference is stated in the qa doc and error toast when no browser is found. VERIFIED LIVE: clicking Open browser in the QA rig launched google-chrome-stable with --proxy-server=http://127.0.0.1:8123 (process-args check via pgrep + success toast, screenshots burp-waves/22-24). Unit test: candidate preference order + argument builder (proxy flag, isolated profile, onboarding start URL). Validation: wp-queue suite green - test result: ok. 240 passed; 0 failed; 110.78s.",
+      "evidence_ids": [
+        "ev_871469fb82bd4bb923a1ccd173aca1d45622b3b3705cb4a6f13d3502244d57fa"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_40",
+      "statement": "Twenty-ninth wave: the non-HTTP traffic residual of unk_16996dee37f13177 closed by parity-of-behavior analysis. WebProbe's proxy pipeline classifies traffic exactly like the reference: HTTP requests/responses are intercepted (intercept_request queue) and recorded; WebSocket frames are intercepted and recorded in both directions (waves 21-22); anything else arriving through CONNECT tunnels is byte-relayed untouched by relay_tunnel (net.rs:1874) for TLS pass-through hosts (handle_connect:1901) and bypassed hosts, with the tunnel logged. Burp behaves identically: it intercepts HTTP and WebSocket messages and relays unrecognized tunneled traffic without interception (its SSL pass-through setting). Neither tool intercepts arbitrary non-HTTP protocols, so there is no divergence to close. Behavior classes are identical: HTTP = intercept+record, WS = intercept+record, tunneled = relay+log. No code change required. Validation: no functional change; suite remains 240 passed / 0 failed (quoted 110.78s at wave 28).",
+      "evidence_ids": [
+        "ev_871469fb82bd4bb923a1ccd173aca1d45622b3b3705cb4a6f13d3502244d57fa"
+      ],
+      "confidence": "derived"
+    },
+    {
+      "id": "fnd_41",
+      "statement": "Java .jar extensions now load via sidecar-JVM Montoya bridge (wave 30). Wave 30 closes the wave-20 gap \"Java .jar extensions do not load\". app/sidecar/MontoyaBridge.java runs a real Montoya extension against Burp's own API classes from /opt/BurpSuite/burpsuite.jar (single-file source mode: java -cp burpsuite.jar MontoyaBridge.java <ext.jar>). ServiceLoader loads BurpExtension; MontoyaApi/proxy()/logging() are reflect-Proxy stubs (proxy().registerRequestHandler really registers); ObjectFactoryLocator.FACTORY is stubbed so ProxyRequestReceivedAction.drop()/continueWith() work; InterceptedRequest/InterceptedResponse stubs expose method/path/headers/headerValue/bodyToString/httpService/statusCode(short)/reasonPhrase/messageId. Rust ext_host::JavaSidecar implements ProxyHooks over JSON-lines stdin/stdout IPC; a dead sidecar degrades to pass-through; WEBPROBE_EXT_JAR registers it at startup (WEBPROBE_BURP_JAR overrides the Burp jar); demo-ext/DemoExtension.java (ServiceLoader jar via build-demo-ext.sh) drops /admin-drop paths. Verified 3 ways: standalone bridge smoke test (ping -> drop on /admin-drop -> continue on /normal -> response hook -> exit 0); suite test java_sidecar_runs_a_real_montoya_extension (real JVM; suite 242 passed / 0 failed); live proxy QA on 127.0.0.1:8123 (curl /normal -> 404 passthrough from target, /admin-drop/panel -> curl rc=52 empty reply = dropped; Extensions tab screenshot shows \"Montoya bridge (demo-ext.jar) ProxyRequestHandler + ProxyResponseHandler (sidecar JVM)\"). Honest v1 scope documented in the Extensions tab: Received halves only (matching WebProbe's ProxyHooks), no message editing, UI-coupled APIs throw, request bodies travel as JSON strings (lossy for binary).",
+      "evidence_ids": [
+        "ev_1f11bbcae7093c78d66f9a757cb46baf2c4b39b268506c7f5473e8b275ad91d0"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_42",
+      "statement": "Wave 31a: active CSRF check ported in Burp's shape (burp.Zg8u = APR_CrossSiteRequestForgery, SCANNER_ACTIVE_CHECKS_CSRF): skip when baseline is 4xx/5xx (Zg8u.ZN); require POST with url-encoded/multipart/no content type and no X-* header except X-Requested-With (Zm9o.ZP); drop token parameters chosen by burp.Zg8w.Zi and resend; report when the stripped request still succeeds. Verified the inherited guard against the jar: Zg8w.Zi checks var1.ZO.length() >= 6 and burp.Zwwc.toString prints name=Za, value=ZO, so the 6-char guard is on the token VALUE (code and test are correct; an earlier note saying 'name length' was wrong). scan.rs csrf_applicable/strip_csrf_params + tests.",
+      "evidence_ids": [
+        "ev_1fe229926233009d2fe760d35c96a35352d1f6775c37d336723ca4e8daeea70d",
+        "ev_0d275abc3f36ff485d85d79ef2b555da988f240c90f3f82694302dd187e47085"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_43",
+      "statement": "Wave 31b: 'Open browser' launch aligned with Burp's embedded-browser launch (burp.Zi9a.java:57): Burp's own bundled Chromium (/opt/BurpSuite/burpbrowser/150.0.7871.186/chrome) is preferred when present, and the launch now passes Burp's flags --class=burp-browser and --ignore-certificate-errors (HTTPS through the proxy's MITM CA works without installing the CA) in addition to --proxy-server and an isolated profile. tools.rs browser_args + test browser_launch_configuration_is_grounded. Not covered: Burp's --load-extension (its browser extension) and sandbox mode selection (Zlg).",
+      "evidence_ids": [
+        "ev_1fe229926233009d2fe760d35c96a35352d1f6775c37d336723ca4e8daeea70d",
+        "ev_0d275abc3f36ff485d85d79ef2b555da988f240c90f3f82694302dd187e47085"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_44",
+      "statement": "Wave 31c: test-suite slowness root-caused and fixed. cargo-nextest 0.9.152 per-test timings showed 241/247 tests fast and 6 taking 64-118s (e.g. history_filter::in_scope 114.6s, 6.5s alone). Cause: nearly every test builds net::Shared, whose MitmAuthority generates a 2048-bit RSA key (tls.rs:27) with unoptimized rsa/bigint code; parallel contention multiplied it. Fix in app/Cargo.toml: [profile.dev.package.\"*\"] opt-level = 2 (deps only) plus explicit [profile.dev]/[profile.test] debug = \"line-tables-only\". Result: cargo test 251 passed in 5.64s (was 92-176s); nextest 9.9s, so wp-queue keeps cargo test and nextest stays installed (/usr/local/bin/cargo-nextest) for slow-test diagnosis. Already in place: lld linker (mold not installed, same class). Not applicable: doctests and tests/ consolidation (binary crate, no tests/ dir), rust-analyzer target dir (not running), sccache (disabled in app/.cargo/config.toml because the rustup rustc proxy is broken).",
+      "evidence_ids": [
+        "ev_1fe229926233009d2fe760d35c96a35352d1f6775c37d336723ca4e8daeea70d",
+        "ev_0d275abc3f36ff485d85d79ef2b555da988f240c90f3f82694302dd187e47085"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_45",
+      "statement": "Wave 31d: FILE_PATH_TRAVERSAL and XXE file-read ported from Burp's own check code, not just the family name. Control flow from the decompiled tree: burp.Zp3a (FilePathTraversalCheck) tries Windows then Unix candidates, a hit needs file markers AND a clean negative control (filename+X, Zp3a.ZV/Zd), a Unix passwd hit escalates to shadow (Zp3a.Zg); burp.Zscp.Za builds placements (replace value / value+payload / payload+NUL+value); burp.Zw_c disables markers already present in the baseline; burp.Zge7 is XXE with 4 DOCTYPE variants (win.ini, passwd, and X controls) and the &xxe?????; reference after an element value. The literal tables are encrypted in the jar and were decoded by running Burp's own decrypted classes (/root/burp-re/in/extract/burp) and walking the objects (Walk.java in evidence): Zco6 = win.ini/passwd/shadow; Zscp.ZL = 27 payloads by os/placement/speed tier; Zw_c.ZE = Aho-Corasick tries decoded to '; FOR 16-BIT APP SUPPORT','[FONTS]','[EXTENSIONS]','[MCI EXTENSIONS]','[FILES]' and 'ROOT:','BIN:','NOBODY:' (case-insensitive); Zp3a.ZJ path-like regex escalates to THOROUGH. Two real defects in the previous WebProbe XXE probe were fixed: the declared entity was never referenced (could never fire) and Content-Length was not updated after the body grew. Tests: 5 unit tests + active_scan_reports_traversal_against_a_vulnerable_server (real scan over the wire). Suite 251/251. Not ported: Zw4k.ZI viewstate-region exclusion; WebProbe has no audit-speed setting so scans run at NORMAL.",
+      "evidence_ids": [
+        "ev_1fe229926233009d2fe760d35c96a35352d1f6775c37d336723ca4e8daeea70d",
+        "ev_0d275abc3f36ff485d85d79ef2b555da988f240c90f3f82694302dd187e47085"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_46",
+      "statement": "Wave 32a: XXE insertion now follows Burp exactly after an external advisor review: burp.Zmku.ZY (skip leading whitespace, step over the prolog only when the body starts with <?xml), burp.Zmku.Zs (up to 10 element-value points; Zge7.ZA skips XML_ATTR), burp.Zmku.ZW (no point: insert <data></data> at the document position and use its empty value), per point win.ini then passwd with X controls. burp.Zsif.ZT0() returns the value (Zsif(type,name,value,...)), so Burp writes value+'&ent;'. The earlier test that claimed '<root/> gets no probe' was wrong and has been replaced. Trie decode independently verified (trie-completeness.txt): each Zw_c matcher has exactly one terminal node, Burp's own matcher accepts each decoded marker lowercased and rejects truncations.",
+      "evidence_ids": [
+        "ev_ef8f0f8c390a4b877be564457f83fd6a91f2798a77148f5c440da9252133dbeb",
+        "ev_45217f88ac786d0cf87b322ef8704135cbf675c4f78a3bb2c3aadf814f1ad114"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_47",
+      "statement": "Wave 32b: Collaborator on a public interactsh server (user request 'use interactsh public host for collaborator'). New app/src/interactsh.rs implements the projectdiscovery protocol: RSA-2048 key, PKIX public key in an 'RSA PUBLIC KEY' PEM, register/poll/deregister over HTTPS (rustls). Poll messages are iv||AES-CTR: a live run showed CFB decrypts only the first block (CFB and CTR share E(IV)), so CTR is used. The key is unwrapped with RSA-OAEP-SHA256. Payload ids are cid(20)+nonce(13), and hosts are id.server. CollaboratorState.start_remote spawns a 3-second poll thread that records DNS, HTTP and new SMTP interactions in the same log, so the scan's token matcher works unchanged. The Collaborator tab has a server picker (oast.pro/live/site/online/fun/me). Live tests: an HTTP+DNS round trip passes, and an SMTP recipient-form test shows interactsh attributes only user@<id>.<domain> (Burp's burp.Zbzl.Zm minimise-false-negatives form), not <id>@<domain>.",
+      "evidence_ids": [
+        "ev_ef8f0f8c390a4b877be564457f83fd6a91f2798a77148f5c440da9252133dbeb",
+        "ev_45217f88ac786d0cf87b322ef8704135cbf675c4f78a3bb2c3aadf814f1ad114"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_48",
+      "statement": "Wave 32c: SMTP header injection ported from Burp's check (burp.Zgcg + burp.Zrok) in place of WebProbe's invented error-signature probe. Burp runs it only with Collaborator enabled (Zgcg.Zw: Za.Ze()), sends two payloads per insertion point appended to the value (Ziqd mode 1) using the decoded format '%s\\r\\nBCC:%s\\r\\n%s: %s' (prefix '' or '>', address, rand3, rand1), each with its own Collaborator id, and never inspects the response. The issue is raised only when an SMTP interaction for the id arrives (oob_pending now carries a required interaction kind). A live end-to-end test (live_smtp_injection_end_to_end) ran a real scan against a local mailer that relays injected BCCs; interactsh reported an SMTP interaction for the payload id. Suite: 253 passed, 0 failed, 3 ignored (opt-in live network tests).",
+      "evidence_ids": [
+        "ev_ef8f0f8c390a4b877be564457f83fd6a91f2798a77148f5c440da9252133dbeb",
+        "ev_45217f88ac786d0cf87b322ef8704135cbf675c4f78a3bb2c3aadf814f1ad114"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_49",
+      "statement": "Wave 33: Burp's response-variation engine ported (app/src/variations.rs) and the LDAP injection check ported onto it (burp.Zwkf). Engine: burp.Zx33 fingerprint, with 34 burp.Zb6a attributes computed by the per-attribute calculators (Zhat CONTENT_LENGTH, Zhhh COOKIE_NAMES, Zb8s HEADERS_NAMES, Ziz2 header values, Zwcj/Zwbj/Zb20 body/limited/initial content, Zsgu LINE_COUNT, Zeim WORD_COUNT using Java's signed-byte <=32 rule, Zxqy COLON_COUNT, and HTML calculators Zcux/Zczn/Zhl7/Zwhf/Zbuf/Zfhr/Zijw/Zpov/Zbih/Zwh3/Zes_/Zesn using token codes 0 start/1 end/2 comment/3 text/4 self-closing, header tags h1-h6 decoded from Zpio.ZR). String attributes use CRC32 over each char's low byte, like Java's CRC32.update(char). An unset attribute reads 0 (Zeua.Za). burp.Zr2x per-side retain rules, burp.Zsnr comparator (CC/SSN/email/JSON-node counts excluded), and burp.Zmaq driver: rounds 4/6/10 read from Burp's own Zmaq.ZA at runtime, NORMAL = 6 = the AuditDefaults scan_accuracy default; the baseline seeds the positive side; true/false sides alternate. Approximated: the six navigation-model attributes (Zxpm over Burp's browser model). LDAP (burp.Zwkf/Zsna/Zc5a): not applied to true/false values or when chars after the first fall outside letters, digits, space and '\"@.-*. Payloads are '<prefix>)(' + objectClass=* under k%6 negations (even = always true, odd = never true). The random 10-char prefix is tried first at NORMAL speed, then '*'. Payloads replace the value. This replaces WebProbe's invented error-signature LDAP probe. Tests: engine 4, LDAP 2 (filter sink detected, insensitive page not). Suite 258 passed / 0 failed / 3 ignored.",
+      "evidence_ids": [
+        "ev_2069fa2c6c156953f94a4a167e5b1cd296e8e93278b3444c9a3af91e8bee26f3"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_50",
+      "statement": "Wave 34: boolean SQL injection ported from Burp's SQL engine burp.Zppj (behind SqlAndXPathInjectionCheck burp.Zg_c -> Zw7s). Payload generators burp.Zguq: Zguz '<r>{q} or {q}{n}{q}={q}{v}', Zgut '<r>{q} or {n}={v}-- ', Zgua '{q} and {q}{n}{q}={q}{v}', Zgu3 '{q} and {n}={v}-- '. The ' or '/' and ' literals were decoded at runtime. r is in [10^7,10^8). Positive: n in [1000,10000) vs itself; when unquoted, every 4th (starting with the first) vs '0n'. Negative: m in [1009,9990) vs m+k, k in [1,10); every 4th (2nd, 6th, ...) vs m+quote or m+'0'. Order follows Zppj.Zi/ZL: unquoted (gated on Zgx0.ZO/Zs, which is not decompilable; WebProbe uses 'numeric value' for it, inferred), then quote ', each OR, OR-comment, and at NORMAL also AND and AND-comment. Then the numeric pairs Zppj.Zh replace the value, cycled by Zht3: ['(select abs(1))','(select 1)','1','000001'] vs ['(select sba(1))','(seletc 1)','0','100000']. String pairs are appended to the value (Zx4k mode 1). Every attempt runs through the ported Zmaq differential engine with the base response. This replaces WebProbe's invented AND 1=1/AND 1=2 length-threshold probe. Test sink models the original query's closing quote; Burp's every-4th quoted negative becomes a syntax error, as in a real database. Suite 259 passed / 0 failed / 3 ignored. Still open in Zppj: error-based (ZE, signatures encrypted), time-based (ZT), and the backslash-powered differences step.",
+      "evidence_ids": [
+        "ev_91c6efce3a1d9aab8e7cd5a0faa92cdcf0a5d5031ff859a1083914b787728331"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_51",
+      "statement": "Wave 35: error-based SQL injection ported from burp.Zppj.ZE. The per-database signatures come from burp.Ze2s.Zn, decoded at runtime from Burp's own class: Generic SQLException, MSSQL (9), Oracle (9), MySQL (8), PostgreSQL (5), Access (2), DB2 (4), 'Dynamic Page Generation Error'. Burp's XPath error lists (Ze2s.Zy) and speed-tiered prefix tables (Ze2s.ZM/Zv/Zd/Zf/ZX/ZG/Zu/ZO/ZD/ZQ/ZA/Zj) were decoded too (decoded-Ze2s-sql-errors.txt). The probe strings were decrypted by calling Burp's own ZKM decoder burp.Zppj.a(int,int) with the constants from the bytecode listing (Zkm.java). They are ' '' ''' '''' and, at THOROUGH with MYSQL_SPECIFIC, \\' \\\\' \\\\\\' \\\\\\\\'. Flow: probe 1 must raise a signature the baseline lacks. A DB-specific error reports, confirmed when the balanced second probe is clean; generic SQLException needs error/clean/error/clean (issue flags 16/8 -> specific/generic is inferred). This replaces WebProbe's 3-signature quote probe. Also added Burp's scan configuration 'scan speed' (Zsv7 FAST/NORMAL/THOROUGH) and 'scan accuracy' (Zgnf, rounds 4/6/10), default normal/normal per AuditDefaults.json, in the Scanner tab; every ported check reads them. Suite 260 passed / 0 failed / 3 ignored.",
+      "evidence_ids": [
+        "ev_860304c0a2a4fe4161cf110fd9219b06237f89911dfdffffee249c8c6cd9b42a",
+        "ev_e853dfa6340b1e0112f8ee7dda2b75f1fa7b485cec216b57bb7b065423118b35"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_52",
+      "statement": "Wave 36: live UI verification of the interactsh Collaborator (w35-collab-*.png). 'Use public server' registered on oast.pro and Generate payload produced http://<33-char id>.oast.pro/. An outside curl to it was reported within one 3-second poll as 3 DNS (A/AAAA) and 1 HTTP interaction carrying the payload token and the true public source address. Scanner tab shows the new Scan speed / Scan accuracy settings (w35-scanner.png). The stale 'payload URLs are local-only' hints now switch to public wording when the public server is active.",
+      "evidence_ids": [
+        "ev_860304c0a2a4fe4161cf110fd9219b06237f89911dfdffffee249c8c6cd9b42a",
+        "ev_e853dfa6340b1e0112f8ee7dda2b75f1fa7b485cec216b57bb7b065423118b35"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_53",
+      "statement": "Wave 37: open redirection ported from burp.Zuag (OpenRedirectionCheck). It applies only when the value is reflected into a redirect sink: the appended form first, then replaced (Zuag.Zx via Zw7s). Sinks, with literals decoded through Burp's own ZKM decoder: burp.Zxzj = 3xx Location, or a Refresh header's url=; burp.Zgi5 = <meta http-equiv=refresh content=...url=...>; burp.Zsyu = script sink, where the letters in the 30 chars before the reflection end with documentlocation/documenturl/windowopen/windownavigate/locationhref. Order: ZG domain-suffix attack ('.a<r>', or bare <r> after 'http://', plus '/' when more follows) when the value sits right after a host with no '/' or '?'; ZE 'http://a<r>/a?<v>', 'https://a<r>/a?<v>', and at THOROUGH 'Http://a<r>/a?'; ZR same scheme+host+'.a<r>'+file for absolute-URL values; ZV prefixes decoded from Zuag.Zl ['//a','/\\a','\\\\a'], each raw and burp.Zw9s.Zi-encoded (letters/digits kept, others %xx). A hit means the redirect target starts with the expected prefix (case-insensitive, Zuag.Zq). r is 10 random chars, and payloads replace the value. This replaces WebProbe's single '//marker' Location probe. Not ported: the POST-to-GET re-check (Zuag.Zc/ZZ, flags 4/8). Suite 260/0/3.",
+      "evidence_ids": [
+        "ev_f95daf4c871b8e7c1016afaf9b2871333e6d9046fa43eb83100768bc3e74c932"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_54",
+      "statement": "Wave 38: first live parity run of WebProbe against the real Burp scanner on the same target. A second, separate Burp 52685 instance runs with only its REST API on loopback:1337 (proxy 6580, Xvfb :99); the reference instance was left untouched. Lab: /tmp/parity-lab/lab.py, simulated sinks only. Burp REST scan #3 ('Audit checks - all except time-based detection methods', 2036 audit requests) reported: SQL injection /item high certain; SQL injection /user high tentative; LDAP injection /dir high firm; File path traversal /file high firm; Open redirection (reflected) /redirect LOW certain; HTTP response header injection /redirect high certain; Input returned in response (reflected) /file info; Link manipulation (reflected) /redirect info; Unencrypted communications / low. WebProbe live_lab_scan on the same URLs found SQLi /item, SQLi /user, LDAP /dir, traversal /file, open redirect /redirect, plus XXE on POST /xml (the REST API takes URLs only), with no false positives. Gaps exposed: (1) header injection missed. WebProbe's name-only probe sends an unencoded space ('%0d%0aX-WebProbe-Inject: 1') that breaks the request line; port burp.Zwi. (2) Reflected input missed; port burp.Zr02. (3) Link manipulation check absent (burp.Zb_5). (4) Issue names, severities and confidences differ from Burp's (e.g. open redirection is low in Burp, medium in WebProbe); use Burp's KnowledgeBase issue definitions.",
+      "evidence_ids": [
+        "ev_d20fdf69662761518521350d26898453f8f1c9b4fc80fd20da28156affec8f51"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_55",
+      "statement": "Wave 39: two gaps from the live Burp comparison closed. (1) HTTP response header injection ported from burp.Zwi. It applies when the value is reflected into a response header, replaced then appended. Separators decoded from Zwi.Zy: CRLF, CR and LF, each raw, Zw9s.Zi %xx and NUL-prefixed. The payload is r[0..5]+sep+r[5..] with r 10 random chars; a hit is a raw response header line starting with r[5..] (burp.Zfpy). This replaces the broken name-only probe, whose unencoded space split the request line. (2) Ported findings now use Burp's exact KnowledgeBase issue names (resources/KnowledgeBase/Issues, 183 types; only names are used, no advisory text). A new confidence field (Certain/Firm/Tentative) is persisted in the project file with a legacy default of Firm and shown as an Issues-table column. Severity and confidence come from the live Burp result. Re-run of the live lab: WebProbe now reports HTTP response header injection high Certain, Open redirection (reflected) low Certain, File path traversal high Firm, SQL injection /item high Certain, SQL injection /user high Tentative, LDAP injection high Firm. These are identical to Burp REST scan #3 for every active finding, plus XML external entity injection on POST /xml. Remaining Burp-only items: Input returned in response (reflected) info (burp.Zr02), Link manipulation (reflected) info (burp.Zb_5), Unencrypted communications low (passive, host-level). Suite 261/0/4.",
+      "evidence_ids": [
+        "ev_46ce042c22576daf359fb9ee4b5b206df90c98f3a0202c3579f18cebebba3463",
+        "ev_1ae7b80877c71f659c64b5f554dd8f6ef6bf3ebf868ca0ef589f1934be4e895c"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_56",
+      "statement": "Wave 40: 'Input returned in response (reflected)' ported from burp.Zr02. The plain-reflection probe (Zwe8.PLAIN_REFLECTION_TYPES) sends a random 10-char marker, replacing the value and then appended to it, and reports info/Certain when the marker returns in the response body. The live lab comparison fixed one divergence: the first port also counted header-only reflections (/redirect, value echoed in Location), which Burp does not report. After restricting to the body, WebProbe's lab issue list for /file, /item, /user, /dir and /redirect equals Burp REST scan #3 for every active and reflected finding. WebProbe's old 'value reflected unencoded' issue, which has no Burp counterpart, was removed. Remaining Burp-only lab items: Link manipulation (reflected) (Zb_5) and Unencrypted communications (passive). Suite 262/0/4.",
+      "evidence_ids": [
+        "ev_81a74a24db26594ab70248ee38fcaf37c6f32ed2a022a3b5caee4b09f6c9e338",
+        "ev_9bd8a497b34f15ecd22aa20f8945e63d8e64543828c28f91e8b2838be8bdcef5"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_57",
+      "statement": "Wave 41: Burp's XSS reflection-context classifier ported (app/src/xss.rs) from burp.Zueq, the foundation of XssAndTemplateInjectionCheck (Zi6p -> Zgkd -> Zguu -> Zglf). Contexts follow burp.Zgd7.ZP: tag name 2, attribute name 3; attribute value by quote \", ', `, unquoted -> 4/5/6/7. Shifted to 8-11 for Zueq.ZZ script-URL attributes: src/data on iframe/object/embed/frame, href on a/math, formaction on button/input, action on form. Shifted to 12-15 for the 151 event-handler names of Zueq.ZK, decoded at runtime into src/xss_event_handlers.txt. Comment 23. Text uses the open raw element (Zueq.ZH): xmp 20, noscript 21, title 22, else 19; script uses the JS scanner Zueq.Zu: \" string 16, ' string 17, // 24, /* */ 25, code 18, with backslash escapes. 23-case test passes. Next: the per-context breakout handlers from Zglf.Zt.",
+      "evidence_ids": [
+        "ev_81a74a24db26594ab70248ee38fcaf37c6f32ed2a022a3b5caee4b09f6c9e338",
+        "ev_9bd8a497b34f15ecd22aa20f8945e63d8e64543828c28f91e8b2838be8bdcef5"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_58",
+      "statement": "Wave 42: reflected XSS ported (app/src/xss.rs run_xss_check) on top of the wave-41 context classifier, from Burp's handler trees (burp.Zi6p -> Zglf). Per-context breakout templates match Burp's burp.Zuw7 leaves: HTML text (burp.Zw2t) <script>/<ScRiPt>/<img onerror>; quoted attribute (burp.Zuce) quote+'><script>'/'><img'/' a=b'; unquoted attr; URL attribute 'javascript:'+poc; event-handler contexts; JS string close-and-run; JS comment end-and-run; xmp/noscript/title/comment element close. PoCs are Burp's decoded Zglf.ZX list (alert(1) etc.). Each payload is tried raw, then Zw9s %xx-encoded, then NUL-prefixed (the burp.Zcyd chain Zbno(Zb43,Zepw,Zmap,Zplz)), appended then replaced (Zguu). Success = the whole expanded breakout survives unencoded in the response body, a documented approximation of Burp's HTML re-parse (burp.Zi_x/Zw8c). The old name-only '<script>marker</script>' probe was removed. Confidence Certain, matching Burp. Live parity: a Burp REST scan (#4) and WebProbe scanned the same lab incl. /search (reflects q into HTML text) and /safe (HTML-encoded). Both report Cross-site scripting (reflected) high certain on /search and nothing on /safe, plus Input returned in response (reflected) info certain on both. Suite 264/0/4.",
+      "evidence_ids": [
+        "ev_7f4bb3eec520ae9870f2e41f3d22498dc35911f506150e2b060716f792f949d7",
+        "ev_c8f8beb3c5ad94caf825e6bf9ccd8cf316294fa6a2042c49dddb57efee8f8374"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_59",
+      "statement": "Wave 42 parity status: on the local lab, WebProbe's full issue list now equals the live Burp scanner's for every endpoint tested, name/severity/confidence: File path traversal (Firm), SQL injection error (Certain) and boolean (Tentative), LDAP injection (Firm), Open redirection reflected (low Certain), HTTP response header injection (Certain), XML external entity injection, Cross-site scripting reflected (Certain), Input returned in response reflected (info Certain). Remaining Burp-only lab item is Unencrypted communications (passive, host-level, HTTP). Verified via a second headless Burp 52685 with REST API on 127.0.0.1:1337 (reference instance untouched); harness at /tmp/burp-api + /tmp/parity-lab.",
+      "evidence_ids": [
+        "ev_7f4bb3eec520ae9870f2e41f3d22498dc35911f506150e2b060716f792f949d7",
+        "ev_c8f8beb3c5ad94caf825e6bf9ccd8cf316294fa6a2042c49dddb57efee8f8374"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_60",
+      "statement": "Wave 43: server-side template / code injection ported from Burp's echo-based detectors (burp.Zi6p -> Znq tree: Zsl3 ${a*b}, Zhuy {{a*b}}, Zieh #{a*b}, Zgok %{a*b}, Zpk0 [[a*b]], Zbrp Smarty {a*b}{*commentedout*}{c*d}, Ziyq/Zxpo Twig {{a*'b'}}{#commentedout#}{{c*d}}, plus EL identity probes ${''.class}=class java.lang.String, ${os.arch}=amd64/x86_64, ${file.separator}=/ or \\). Each is burp.Ziog(payload, expected): a random prefix+suffix wraps the expression, and the response must contain prefix+<rendered>+suffix; the comment-split/arithmetic forms mean a literal echo can never collide (scan.rs run_ssti_check rejects a response that contains the raw payload). This replaces WebProbe's {{7*7}}/${7*7} name-only probes and merges the old separate SSTI and code-injection checks into one. Live parity: a Burp REST scan (#5) and WebProbe scanned a /tmpl endpoint that evaluates {{a*b}}/${a*b}. Both report Server-side template injection high on /tmpl (confidence aligned to Burp's tentative), plus Cross-site scripting (reflected) high certain and Input returned in response (reflected) info certain on the same endpoint - identical finding sets. Suite 263/0/4.",
+      "evidence_ids": [
+        "ev_1e20820f5e89d0a54ca04bb49fd3b4dab01f0ec9d01e2cc270fda42886a4c1bb",
+        "ev_68127530cd9ae0a53b30a72756b22c5504ea63bd57c65dc80460fb1c997d65fd"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_61",
+      "statement": "Wave 44: SSI injection ported from burp.Zexx (echo-based), a family WebProbe lacked. Payload from burp.Zxvd.Zu: for a random token t, id1/value1 = Caesar-shift(t,14/13), id2/value2 = Caesar-shift(t,16/15) over the 36-char alphabet (burp.Zcub.Zy/Zs decoded at runtime), payload '<!--#set var=\"id1\" value=\"value1\"--><!--#set var=\"id2\" value=\"value2\"--><!--#echo var=\"id1\"--><!--#echo var=\"id2\"-->'. A server that processes SSI emits value1value2 contiguously (burp.Zcml.Zc); the reflected payload never shows them contiguous, so a literal echo is rejected. Issue name 'SSI injection' (Burp KB), high. Live parity: a Burp REST scan (#7) and WebProbe scanned an /ssi endpoint that processes #set/#echo. Both report SSI injection high firm on /ssi, plus Cross-site scripting (reflected) high certain and Input returned in response (reflected) info certain - identical. Suite 264/0/4. The collaborator-based SSI exec variant (nslookup, burp.Zxvd line 54) is not ported.",
+      "evidence_ids": [
+        "ev_db573476fcb304f29396af5260847a765c4dd9e72ca22861b844d4fc5e4c2ea3",
+        "ev_f18f0d351fea688571da6e4ac7a0e4b841515c8caf558d2e19fc88a06b87d3e1"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_62",
+      "statement": "Wave 45: File path manipulation ported from burp.Zsl1, the second sub-check of the traversal check. For a path-like value it builds same-file variants (burp.Zulm.ZV: './file','././file','./././file') and bogus variants (Zulm.Zb: '...<sep>file','<rand><sep>file','file<rand>'), templates decoded at runtime, and runs the ported differential engine (burp.Zmaq): if the same-file paths respond consistently differently from the bogus ones, the parameter selects a file. Issue name 'File path manipulation' high (Burp KB). Gated on a path-like value. scan.rs run_file_path_manip_check, 2 unit tests (variant templates match Zulm; a file-selector endpoint is detected, a fixed page is not). Suite 266/0/4. Not ported: Zsl1's parent-directory and sibling-file heuristics (Zp/Zs) that first locate the servable directory.",
+      "evidence_ids": [
+        "ev_f90fc7f0b2b07fadd5c9abc0146fd76952f8525c900cf83cc03a03e666322f2e"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_63",
+      "statement": "Wave 46: Link manipulation (reflected) ported from burp.Zb_5 (Zpyp), the last family that showed as Burp-only on the lab. It injects an absolute URL marker as the value (replaced then appended) and reports when the marker becomes a link or redirect target the page points at: href/src/action/formaction attribute values, or a Location/Refresh/meta-refresh/JS redirect target (reusing the open-redirect redirect_targets). Issue 'Link manipulation (reflected)' info/Firm (Burp KB). scan.rs run_link_manip_check, 4 unit tests. Suite 267/0/4. Not ported: Zb_5's stored variant and the CLIENT_SIDE_HTTP_PARAMETER_POLLUTION/FORM_ACTION_HIJACKING/CSS_INJECTION families it also dispatches.",
+      "evidence_ids": [
+        "ev_2a5cfbf853c77af80cecccb9249db1492e3c61a0979002e04dae1a3792c62ba2"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_64",
+      "statement": "Wave 47 (capstone): a fresh-project Burp REST scan of all nine lab endpoints was diffed against WebProbe's scan of the same lab. 17 of 18 findings matched exactly (path, issue name, severity, confidence). The one Burp-only item was the passive host-level 'Unencrypted communications' (low), now added as a passive check CH_CLEARTEXT (reported on any plain-HTTP response, Burp KB name/severity). The one WebProbe-only item was XML external entity injection on /xml, which Burp's REST API never tested because /xml is POST-only and the API takes GET URLs; WebProbe exercises it with its own POST and both tools detect XXE when given that request (confirmed earlier). After this, WebProbe's active+passive issue list equals the live Burp 52685 scanner's across the whole lab. Evidence: /tmp/parity-lab/burp-capstone.json vs webprobe-capstone.txt. Suite 268/0/4.",
+      "evidence_ids": [
+        "ev_ee9d5de5f5ec4186e624ea7e2abaf19c8a4089ac27b1c8f40adb26c07951a834",
+        "ev_2df53986d99171372a66e6ea07902fe19cbf3016d4b9cc4a08a80b7ffcff00dd"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_65",
+      "statement": "Wave 39 UI clone: WebProbe now defaults to Burp's Light look-and-feel (UserDefaults.json user_options.display.user_interface.look_and_feel=Light) with colours from burp/theme/LightTheme.json (mono=white swatch; editor headerName #000075, headerValue #202020, httpFirstLine #141414, lineNumbers #787878) and pixel-sampled chrome (#FBFBFB rows, #FFFFFF content, #EEEEEE table header, #EBF1F6 selection).",
+      "evidence_ids": [
+        "ev_3d2c77595959ab85e05e0416ea852a93d7b07a2c322b451e621231cad1f02d54",
+        "ev_1ff3e9457654c63b952c89bdc42f979fd4cc31eacae340e0f98d2939e6334f2f"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_66",
+      "statement": "Wave 39 UI clone: top tab row now has Burp's 13 tools in Burp's order (Dashboard..Extensions, Discover); Scanner/Sessions/Search/AI moved to Burp's locations (All issues link, Settings > Project > Sessions, search icon window, AI pill). Proxy history now uses Burp column order (# Host Method URL Params Edited Status code Length MIME type Extension Title Notes TLS IP Cookies Time Listener port), Burp MIME families, scheme://host, Burp's default display filter (ProjectDefaults.json proxy.http_history_display_filter: hide CSS+images, hide js,gif,jpg,png,ico,css,woff,woff2,ttf,svg) with the one-line 'Filter settings:' summary, and Request/Response panes with Pretty/Raw/Hex(/Render), per-pane search with N highlights, Inspector (Request attributes = Method+Path, HTTP/1|HTTP/2 toggle) and the Inspector/Notes dock.",
+      "evidence_ids": [
+        "ev_3d2c77595959ab85e05e0416ea852a93d7b07a2c322b451e621231cad1f02d54",
+        "ev_1ff3e9457654c63b952c89bdc42f979fd4cc31eacae340e0f98d2939e6334f2f"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_67",
+      "statement": "Proxy bug found via Juice Shop: WebProbe attempted an h2c upgrade on every cleartext upstream connection; Node http servers drop the socket on 'Upgrade: h2c', so every Juice Shop request failed with 'h2c upgrade read: failed to fill whole buffer'. Burp never sends h2c upgrades. Fixed: opt-in Shared.h2c_upgrade (WEBPROBE_H2C=1) plus plain retry. Also fixed Extension column derived from absolute-form URLs ('1:3001/...').",
+      "evidence_ids": [
+        "ev_3d2c77595959ab85e05e0416ea852a93d7b07a2c322b451e621231cad1f02d54",
+        "ev_1ff3e9457654c63b952c89bdc42f979fd4cc31eacae340e0f98d2939e6334f2f"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_68",
+      "statement": "Burp REST oracle scan of local Juice Shop (scan 7, crawl limit 10 min + audit all except time-based) produced 58 issue events of 7 types: CORS arbitrary origin trusted (25, info, certain, flags 65569, origin http://<12 letters>.com), CORS generic (25), Input returned in response (reflected) (4), Unencrypted communications, Robots.txt file, OpenAPI definition found (active scan check) at /api-docs/swagger-ui-init.js, Path-relative style sheet import (tentative). Saved /tmp/parity-juice/burp-scan7.json.",
+      "evidence_ids": [
+        "ev_3d2c77595959ab85e05e0416ea852a93d7b07a2c322b451e621231cad1f02d54",
+        "ev_1ff3e9457654c63b952c89bdc42f979fd4cc31eacae340e0f98d2939e6334f2f"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_69",
+      "statement": "Ported from decompiled source into app/src/burp_checks.rs: CORS state machine (Zx8s/Zidt/Zmsy/Zmsq/Zmsd/Zmsc/Zmsg/Zmsz over Zu8t origin variants, Zpqe evaluation, Zmpk collection, Zrbl flags, Zwfk detail text; Zwo8.Zw strings decoded via ZKM: null, http://null, https://null), OpenAPI active check (Zh0b path lists Zk/ZB/ZF runtime-dumped, Zbhe markers 'var options =' / 'url = options.swaggerUrl'), Path-relative style sheet import (Zwza: rel=stylesheet relative href, no <base href>, flags 2/4/8). Active scan now runs per-request/per-host checks even without parameters (Burp behaviour).",
+      "evidence_ids": [
+        "ev_3d2c77595959ab85e05e0416ea852a93d7b07a2c322b451e621231cad1f02d54",
+        "ev_1ff3e9457654c63b952c89bdc42f979fd4cc31eacae340e0f98d2939e6334f2f"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_70",
+      "statement": "Juice Shop real-app parity (local 127.0.0.1:3001, Burp 52685 REST oracle scans 7+8): WebProbe now reproduces Burp's issue set exactly, 75/75 on (issue type, path, severity, confidence), no Burp-only and no WebProbe-only issues. Types: CORS generic (30), CORS arbitrary origin trusted (30), Input returned in response (reflected) (9), OpenAPI definition found active (1) and passive (1), Path-relative style sheet import, Robots.txt file, SQL injection (high/tentative on /rest/products/search q), Unencrypted communications.",
+      "evidence_ids": [
+        "ev_535bfb285f89c090ad1c2d143c63b44d21bd473a447e465e7e74e3e4730b5b37"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_71",
+      "statement": "Ported for Juice parity: (1) SQLi general-error path burp.Zxp6/Zbpt with Ze27.Za words runtime-dumped (error, exception, illegal, invalid, fail, stack) plus new-5xx rule, confirmed by the '/''/'''/'''' alternation and Zh6 flag-64 text; (2) Burp URL path insertion points ('URL path filename', 'URL path folder N') for Input returned in response; (3) email parser burp.Zflt with Burp's 251-entry TLD list (Zflt.Zh) and request exclusion (Zpwx); (4) credit-card scanner burp.Zu0p (13-16 digits, <=3 separators, alnum boundaries, issuer prefixes, Luhn); (5) passive OpenAPI burp.Zge_ suffix lists ZZ/ZL/Zv; (6) issue path = URL path without query (Burp keying); (7) non-Burp passive checks gated behind 'WebProbe extra checks' (default off) using KB names list.",
+      "evidence_ids": [
+        "ev_535bfb285f89c090ad1c2d143c63b44d21bd473a447e465e7e74e3e4730b5b37"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_72",
+      "statement": "Structural scanner bug fixed: server-level/XXE/CSRF/request-level checks sat inside the per-parameter loop, so they never ran for parameterless requests (e.g. XML POST without query string). Moved after the loop; active scan now runs on parameterless requests like Burp's per-request/per-host checks.",
+      "evidence_ids": [
+        "ev_535bfb285f89c090ad1c2d143c63b44d21bd473a447e465e7e74e3e4730b5b37"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_73",
+      "statement": "UX bug fixed: the egui app called request_repaint every frame (continuous redraw), pinning ~6 cores under the software renderer and starving network threads (Repeater send 22.8 s vs 21 ms). Now request_repaint_after(200ms); idle CPU 0%. Repeater rebuilt to Burp layout (tab strip, orange Send, Target: + edit dialog, Request/Response/Inspector/dock, 'Done ... 1,976 bytes | 21 millis' status line).",
+      "evidence_ids": [
+        "ev_535bfb285f89c090ad1c2d143c63b44d21bd473a447e465e7e74e3e4730b5b37"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_74",
+      "statement": "Precondition on the Juice Shop 75/75 result (corrects fnd_70): parity is check parity given the same audited URLs. paths.txt came from Burp's own crawl and targeted scan; WebProbe has no crawler, and Burp URLs that produced zero issues were not all replayed, so WebProbe false positives on those would be invisible. Crawl/coverage parity remains open (a live passive crawl now adds same-origin links to the site map, but there is no active crawler).",
+      "evidence_ids": [
+        "ev_ebb264a2e7080aa3055504b18f06297aadb5dc9b04d15986d95937f8b96b8f5f"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_75",
+      "statement": "Lab capstone regression check after the wave-39 scanner changes: WebProbe's lab issue set is identical to wave 38 (18 = 18, no added or removed issues); the general-error SQLi path raised no new findings on /dir, /tmpl or /file. The one apparent XXE loss was a harness bug (Content-Length 39 for a 38-byte body, previously masked by pipelining), now fixed.",
+      "evidence_ids": [
+        "ev_ebb264a2e7080aa3055504b18f06297aadb5dc9b04d15986d95937f8b96b8f5f"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_76",
+      "statement": "UI dynamic-behaviour fixes this wave: Intercept view popped the held item each frame and dropped it when no button was pressed (every intercepted request was silently discarded); now peeks, keeps per-item edits, Forward/Drop release it (verified live: held 4 s, Forward -> 200). Repeater per-tab history (< >), search-match navigation in message panes, Highlight/Add notes/Send to Sequencer menu items, Dashboard task pause/menu, live passive crawl toggle feeding the Target tree, Logger 'Logging on', Comparer Words/Bytes window, Decoder stage chain all functional.",
+      "evidence_ids": [
+        "ev_ebb264a2e7080aa3055504b18f06297aadb5dc9b04d15986d95937f8b96b8f5f"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_77",
+      "statement": "Burp reference captures used this wave (display :98, build 2026.7.3 / 52685): Proxy history with Inspector expanded, Intruder populated (Sniper attack, Target + Update Host header, Add/Clear/Auto §, Payloads panel + Resource pool/Settings dock), Intercept off empty state, Dashboard, Comparer, Logger, Organizer, Extensions, Discover.",
+      "evidence_ids": [
+        "ev_ebb264a2e7080aa3055504b18f06297aadb5dc9b04d15986d95937f8b96b8f5f"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_78",
+      "statement": "Wave 39 close-out: remaining tabs rebuilt to Burp layouts (Sequencer with real background live capture, capped at 20 consecutive misses and using regex capture group 1; Collaborator onboarding + client with Poll now / include-server-location; Extensions Installed/BApp Store/APIs/... with runtime .jar Add/Remove/Up/Down). Table layout bug fixed (tables inside horizontal layouts placed the body beside the header). Paseo advisor (codebuddy hy3) review applied: generic SQLi path skips empty baselines, OpenAPI per-host check keyed by speed and reset per New scan, inert help buttons get tooltips; its single-probe DB-error and CORS ranking concerns were checked against Zppj.ZE / Zws.ZR and kept as literal Burp behaviour. Re-verified after fixes: Juice Shop 75/75, lab 18=18 unchanged, suite 293 passed / 0 failed / 6 ignored.",
+      "evidence_ids": [
+        "ev_ebb264a2e7080aa3055504b18f06297aadb5dc9b04d15986d95937f8b96b8f5f"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_79",
+      "statement": "Coverage parity on Juice Shop: WebProbe's new crawler (CrawlDefaults: depth 4, 1500 locations, robots.txt, sitemap.xml, same-origin HTML links and redirects) crawling from '/' alone reaches all 25 locations Burp scan 7 audited and reproduces all 58 of its issues (58/58). Extras: 4 CORS issues on /ftp/legal.md and /ftp/announcement_encrypted.md, which Burp's browser crawler deterministically skips (repeat scan 10 visited the same 25 locations; targeted scan 9 of the two URLs recorded 0 crawl locations and 0 audit items).",
+      "evidence_ids": [
+        "ev_a789390cf660f8b704d393591f46d5b15ceb1c3dc9cab7297d75f14268695da7"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_80",
+      "statement": "All Proxy history context-menu items are now functional (none disabled): Passive scan selected message, Open response in browser and Request in browser via proxy-served http://webprobe/show/N and /repeat/N, Send to WebProbe AI, Engagement tools > Find references / Generate CSRF PoC, Show new history window, Save item, documentation. The AI tab is a working chat against a configured OpenAI-compatible endpoint (unit-tested against a fake server; no live model was reachable on this host). Suite 299 passed / 0 failed / 7 ignored.",
+      "evidence_ids": [
+        "ev_a789390cf660f8b704d393591f46d5b15ceb1c3dc9cab7297d75f14268695da7"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_81",
+      "statement": "Crawl-pruning experiment (controlled site, Burp REST scans 11 and 12): Burp's headless crawler visited only / and /robots.txt (2 locations, 4 crawl requests) and followed no links, neither a plain <a href='files/'> nor a robots.txt Disallow path, while on Juice Shop it walked /ftp and its listing. Burp's browser-driven crawl selection is therefore not reproducible from a static link graph or from readable source; the 2 Juice URLs it skips (legal.md, announcement_encrypted.md) stay a documented crawler difference, not a check difference.",
+      "evidence_ids": [
+        "ev_22ac8017b038172f9879f838cb7ea9b52db927eff053122e2f141dd2a0fd0d9c"
+      ],
+      "confidence": "observed"
     }
   ],
-  "handoff": "STATE 2026-11-15: 92 tasks (19 done, 6 in progress, 67 todo). Commits 10bafe7, 6a969c1, ef70eb0, 0ab9711, b0978f8, f12e87d, 05082ca.\nDONE THIS SESSION: render fix (gl_env.rs), QA driver, wiring repair, B-01, P-10 (Intruder attack-type UI + generic matrix runner), C-01, P-05 (history derived fields + 14 columns), P-02 (single 13-tab row, active underline), P-13/P-14, gap report, UI+backend PRDs, Obscura eval.\nPARALLEL SUBAGENTS RUNNING (disjoint files): researcher -> docs/burp-intruder.md (Burp Intruder docs extract); implementer -> new src/decoder_ops.rs (F-01 codecs/hashes/pipeline, no other files, no build); multimodal-looker -> qa/visual-review-2026-11-15.md (screenshot comparison). Do not edit those three files until they report.\nCRAFT: fnd_7 records the Intruder extension surface (IIntruderAttack, IIntruderPayloadGenerator/Factory/Processor, Montoya HttpRequestTemplate/GeneratedPayload/AttackConfiguration; evidence ev_2b28...). Attack-type labels are not literal in bytecode (only an adblock false positive); docs are the source. Z_so is a synthetic switch map, not the enum.\nREAD: docs/PRD-UI.md, docs/PRD-BACKEND.md, qa/GAP-REPORT-2026-11-15.md, docs/EVAL-OBSCURA.md.\nREFERENCE: Burp Pro v2026.7.3 on :98 (proxy 6570); shots /root/webprobe-shots/burp-tour/. QA: qa/qa.sh (:97, proxy 6566).\nTRAPS: 8080/8081 belong to burpsy; never pkill with a pattern in your own command line; zsh does not word-split; /root is 700; do not edit ~/.zshrc; do not rebuild while a QA agent drives the binary; keep subagents on disjoint files.\nNEXT: collect the three subagent reports, wire decoder_ops.rs (F-01/F-02), use docs/burp-intruder.md for C-03/C-04, fix the top visual gaps; then P-01 menu bar, P-04 Repeater, B-03 Pretty/Render.",
-  "updated": "2026-11-15T13:42:03Z"
+  "handoff": "Wave 39 complete (2026-11-16). Scanner: Juice Shop 75/75 exact vs Burp oracle given Burp's audited URLs; lab 18=18. UI: all 13 tools plus chrome rebuilt to Burp's light layouts with working dynamic behaviour (intercept hold/forward, Repeater history, Intruder attacks + results window, Sequencer live capture, Comparer windows, Decoder chain, site map + live passive crawl, Logger toggle, Collaborator loopback/public). Open: active crawler (coverage parity), live passive audit diff through both proxies, Burp AI tab is a placeholder, some context-menu items visibly disabled (browser open, save item, engagement tools). Time-based injection family intentionally not pursued (safety stop). Evidence /tmp/parity-evidence-w39; doc qa/SOURCE-PARITY-2026-11-15.md wave 39.",
+  "updated": "2026-11-16T03:54:06Z"
 }

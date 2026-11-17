@@ -203,8 +203,8 @@ Every task must end with an automated check and a `mechanics.json` claim where i
 |---|---|---|---|
 | C-01 🚧 | Four attack types | Sniper, battering ram, pitchfork, cluster bomb produce the correct request matrix; tests assert counts and payload placement | M |
 | C-02 🚧 | Payload positions | Auto-mark, clear, add-from-selection, marker highlighting, multiple positions per request | M |
-| C-03 | Payload sets | Simple list, runtime file, custom iterator, brute forcer, case modification, numbers, dates, usernames, null payloads, character frobber | L |
-| C-04 | Payload processing | Prefix/suffix, substring, encode (URL/Base64/HTML/hex), hash, regex, skip; ordered pipeline | M |
+| C-03 🚧 | Payload sets | Simple list, runtime file, custom iterator, brute forcer, case modification, numbers, dates, usernames, null payloads, character frobber | L |
+| C-04 ✅ | Payload processing | Prefix/suffix, substring, encode (URL/Base64/HTML/hex), hash, regex, skip; ordered pipeline | M |
 | C-05 | Result analysis | Grep match, grep extract, grep capture, grep payloads; configurable result columns; per-row detail | L |
 | C-06 | Attack control | Pause/resume/stop, concurrency, throttle, resource pool, retry/backoff, progress | M |
 | C-07 | Results I/O | Save/export results (CSV/XML), send row to Repeater/Comparer, copy as curl | M |
@@ -214,7 +214,7 @@ Every task must end with an automated check and a `mechanics.json` claim where i
 | ID | Task | Acceptance criteria | Effort |
 |---|---|---|---|
 | D-01 | Crawl engine | Follow links, forms, scripts, redirects; depth/location caps; scope rules; produce a site map; tests on a local multi-page fixture | L |
-| D-02 | Audit check library | ≥ 40 checks with severity, confidence, description, remediation, references; unit tests per check with positive/negative fixtures | L |
+| D-02 🚧 | Audit check library | ≥ 40 checks with severity, confidence, description, remediation, references; unit tests per check with positive/negative fixtures | L |
 | D-03 | Insertion points | Query, body, headers, cookies, path segments, multipart; max 30 per base request; tests per point type | L |
 | D-04 | Scan configuration | Crawl/audit/optimization/insertion-point/speed settings; persisted; check selection | M |
 | D-05 | Task queue | New scan, pause/resume/cancel, per-task progress, live audit/crawl, queue persistence | L |
@@ -354,10 +354,10 @@ Method: the reference jar was launched from `/opt/BurpSuite` on its own display,
 
 | ID | Task | Acceptance criteria | Effort |
 |---|---|---|---|
-| P-01 | Top menu bar (P0) | Burp, Project, Intruder, Repeater, View, Help menus in the window chrome; Burp menu lists Search, Settings, Configuration library, User settings >, Log in, Exit; every item either works or is disabled with a reason; shortcuts shown beside items match shortcuts.rs | M |
+| P-01 ✅ | Top menu bar (P0) | Burp, Project, Intruder, Repeater, View, Help menus in the window chrome; Burp menu lists Search, Settings, Configuration library, User settings >, Log in, Exit; every item either works or is disabled with a reason; shortcuts shown beside items match shortcuts.rs | M |
 | P-02 | Tab bar and global controls parity (P1) | Single tab row in Burp order (Dashboard, Target, Proxy, Intruder, Repeater, Collaborator, Sequencer, Decoder, Comparer, Logger, Organizer, Extensions, Discover) with no 'More tools' overflow at 1440 px; top-right global search, settings gear and browser launcher; active tab shown with an underline | M |
 | P-03 | Settings dialog parity (P0) | Searchable dialog with All/User/Project filter pills and a category tree (Tools: Proxy, Intruder, Repeater, Sequencer, Comparer; Project; Sessions; Network; User interface; Suite; Extensions; Configuration library); Proxy page has a listeners table (Running, Interface, Invisible, Redirect, Certificate, TLS protocols) with Add/Edit/Remove, CA import/export/regenerate, request-interception rules table with Up/Down | L |
-| P-04 | Repeater layout parity (P0) | Numbered tabs with close and '+', primary Send, Cancel, back/forward history, Target field with edit action, Request | Response | Inspector panes with side-by-side/stacked/tabbed toggles, Pretty/Raw/Hex views, wrap/non-printable/newline toggles, search bar with highlight count, right dock (Inspector, Notes, Explanations, Custom actions), status line | L |
+| P-04 ✅ | Repeater layout parity (P0) | Numbered tabs with close and '+', primary Send, Cancel, back/forward history, Target field with edit action, Request | Response | Inspector panes with side-by-side/stacked/tabbed toggles, Pretty/Raw/Hex views, wrap/non-printable/newline toggles, search bar with highlight count, right dock (Inspector, Notes, Explanations, Custom actions), status line | L |
 | P-05 | HTTP history columns and views (P0) | Add Params, Edited, Extension and Title columns; Pretty and Renderer views in the message pane; column chooser exposes all of them | M |
 | P-06 | Intercept bar parity (P1) | Intercept on/off toggle, Forward and Drop as split buttons with dropdown actions (forward all, drop all), Open browser, help and overflow menu; empty state text explaining intercept | S |
 | P-07 | Decoder layout and operations (P1) | Text/Hex input toggle; 'Decode as', 'Encode as' and 'Hash' dropdowns; Smart decode; chained output panes | M |

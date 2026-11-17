@@ -1,14 +1,15 @@
 {
   "id": "unk_29b29eceaf0f9f50",
-  "revision": 1,
+  "revision": 2,
   "question": "Which Burp tab/menu behaviours are only visible with a populated project (context menus, Target site map, Repeater history)?",
   "severity": "low",
   "domain": "ui-parity",
-  "status": "open",
+  "status": "resolved",
   "probes": [
     "Capture each after sending sample traffic to Burp 6570",
     "Use the shipped documentation screenshots as cross-check"
   ],
   "evidence_for": [],
-  "evidence_against": []
+  "evidence_against": [],
+  "resolution": "RESOLVED (wave 26, 2026-11-15): populated-state probes captured from the live reference (screenshots burp-populated/). Findings: (1) the history context menu is the big populated-only behavior - captured item-for-item and now implemented in WebProbe with the exact set/order, wired where backends exist, disabled otherwise; (2) the Target site map does NOT populate from proxy traffic while crawl tasks are paused (reference banner: 'Task execution is paused - Site map will not be populated'), so WebProbe's history-built site map is consistent with tasks-running behavior; (3) Repeater per-tab history pager + Inspector sidebar exist on the reference; (4) NEW parity gap grounded: the reference history has an 'IP' column WebProbe lacks (next wave)."
 }

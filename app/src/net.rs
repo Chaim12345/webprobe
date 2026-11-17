@@ -3,7 +3,7 @@
 
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, AtomicUsize, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -17,7 +17,7 @@ pub const READ_TIMEOUT_MS: u64 = 120000;
 pub const OPEN_ENDED_RESPONSE_TIMEOUT_MS: u64 = 10000;
 pub const DNS_TIMEOUT_MS: u64 = 300000;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct HistEntry {
     pub id: u64,
     pub ts: u64,
@@ -31,6 +31,10 @@ pub struct HistEntry {
     pub req_raw: Vec<u8>,
     pub resp_raw: Option<Vec<u8>>,
     pub note: Option<String>,
+    /// Burp's row highlight (ui.highlight.0..8 in LightTheme.json).
+    pub highlight: Option<u8>,
+    /// The live passive audit looked at this item (Dashboard > Audit items).
+    pub audited: bool,
     /// Derived once at insert (P-05), so a table frame never recomputes them.
     /// Whether the request carries a query string, body parameters or cookies.
     pub params: bool,
@@ -44,6 +48,37 @@ pub struct HistEntry {
     pub cookies: String,
     /// Listener port the request arrived on.
     pub listener_port: u16,
+    /// Upstream IP the host resolved to (history "IP" column, live 52685:
+    /// e.g. 104.20.23.154 for example.com); empty when unresolvable.
+    pub ip: String,
+    /// How many response attributes changed vs. the previous exchange of the
+    /// same request location ("Diff count" column, burp.Zxwu.java:56).
+    pub diffs: usize,
+}
+
+/// Host -> resolved-IP cache backing the history "IP" column, so repeated
+/// requests to the same host do not re-resolve.
+fn resolve_ip(shared: &Shared, host: &str) -> String {
+    if host.is_empty() {
+        return String::new();
+    }
+    if let Ok(cache) = shared.ip_cache.lock() {
+        if let Some(ip) = cache.get(host) {
+            return ip.clone();
+        }
+    }
+    let ip = std::net::ToSocketAddrs::to_socket_addrs(&(host, 80u16))
+        .ok()
+        .and_then(|mut addrs| addrs.next())
+        .map(|a| a.ip().to_string())
+        .unwrap_or_default();
+    if let Ok(mut cache) = shared.ip_cache.lock() {
+        if cache.len() > 4096 {
+            cache.clear();
+        }
+        cache.insert(host.to_string(), ip.clone());
+    }
+    ip
 }
 
 pub struct InterceptItem {
@@ -54,6 +89,53 @@ pub struct InterceptItem {
     pub tx: mpsc::Sender<Option<String>>,
 }
 
+/// Remembers the previous exchange's response attributes per request location
+/// so each new history entry can report a diff count (Proxy history
+/// "Diff count" column, build 52685 burp.Zxwu.java:56). The location is
+/// method + host:port + path without query; the first sighting diffs 0.
+#[derive(Default)]
+pub struct DiffTracker {
+    prev: std::collections::HashMap<String, Vec<(String, String)>>,
+}
+
+impl DiffTracker {
+    /// Compare ordered name/value attributes against the stored set for
+    /// `key`: changed, added and removed attributes all count. The new set
+    /// is stored either way.
+    pub fn diff(&mut self, key: &str, attrs: Vec<(String, String)>) -> usize {
+        let count = match self.prev.get(key) {
+            None => 0,
+            Some(prev) => {
+                let changed = attrs
+                    .iter()
+                    .filter(|(n, v)| prev.iter().any(|(pn, pv)| pn == n && pv != v))
+                    .count();
+                let added = attrs.iter().filter(|(n, _)| !prev.iter().any(|(pn, _)| pn == n)).count();
+                let removed = prev.iter().filter(|(pn, _)| !attrs.iter().any(|(n, _)| n == pn)).count();
+                changed + added + removed
+            }
+        };
+        self.prev.insert(key.to_string(), attrs);
+        count
+    }
+}
+
+/// The attribute set a history diff covers: status, length, cookies and every
+/// response header, matching what Logger's diff columns surface.
+fn diff_attrs(e: &HistEntry) -> Vec<(String, String)> {
+    let mut attrs = vec![
+        ("status".to_string(), e.status.clone()),
+        ("length".to_string(), e.resp_len.to_string()),
+        ("cookies".to_string(), e.cookies.clone()),
+    ];
+    if let Some(resp) = &e.resp_raw {
+        for (k, v) in &util::parse_http(resp).headers {
+            attrs.push((format!("h:{k}"), v.clone()));
+        }
+    }
+    attrs
+}
+
 #[derive(Clone)]
 pub struct AttackRow {
     pub payload: String,
@@ -61,6 +143,9 @@ pub struct AttackRow {
     pub len: usize,
     pub ms: u128,
     pub ok: bool,
+    /// The request sent and the response received (attack results window).
+    pub req: Vec<u8>,
+    pub resp: Option<Vec<u8>>,
 }
 
 pub struct Attack {
@@ -79,6 +164,11 @@ pub struct RepTab {
     pub request: String,
     pub response: Option<Vec<u8>>,
     pub result_line: String,
+    /// Burp's per-tab history: every sent (request, response, status line),
+    /// stepped through with the < > buttons.
+    pub history: Vec<(String, Option<Vec<u8>>, String)>,
+    /// Position in `history` being shown (len = the live, editable item).
+    pub hist_pos: usize,
 }
 
 /// Literal or regex scope/session pattern match. Invalid regexes never match.
@@ -105,7 +195,9 @@ pub fn in_scope(shared: &Shared, url: &str) -> bool {
     includes.is_empty() || includes.iter().any(|r| pattern_matches(&r.pattern, r.is_regex, url))
 }
 
-fn replace_or_add_header(raw: &[u8], name: &str, value: &str) -> Vec<u8> {
+/// Insert or replace a header in a raw HTTP message, keeping head order and
+/// the body intact. Public: the scanner's header-manipulation probe reuses it.
+pub fn replace_or_add_header(raw: &[u8], name: &str, value: &str) -> Vec<u8> {
     let p = util::parse_http(raw);
     let body = &raw[p.head_len.min(raw.len())..];
     let mut out = String::with_capacity(raw.len() + name.len() + value.len() + 4);
@@ -289,13 +381,36 @@ pub struct Shared {
     pub queue: Mutex<Vec<InterceptItem>>,
     pub history: Mutex<Vec<HistEntry>>,
     pub events: Mutex<Vec<String>>,
+    /// Attempt an h2c upgrade on direct cleartext connections. Off by default:
+    /// Burp never does it and Node servers drop the socket (WEBPROBE_H2C=1).
+    pub h2c_upgrade: AtomicBool,
+    /// Dashboard task 1, "Live passive crawl from Proxy": while on, links in
+    /// proxied responses are added to the site map as unrequested items.
+    pub crawl_capture: AtomicBool,
+    /// Unrequested site-map items found by the live passive crawl:
+    /// (origin "scheme://host[:port]", path).
+    pub site_links: Mutex<std::collections::BTreeSet<(String, String)>>,
+    /// Items requested by the crawler (site map contents that are not proxy
+    /// history, as in Burp).
+    pub crawl_items: Mutex<Vec<HistEntry>>,
+    /// Report WebProbe-only passive checks (names Burp's KB does not have).
+    pub extra_checks: AtomicBool,
     pub attack: Mutex<Arc<Attack>>,
     pub repeaters: Mutex<Vec<RepTab>>,
     pub next_id: AtomicU64,
     pub proxy_port: std::sync::atomic::AtomicU16,
+    /// The private listener of the embedded browser (0 until first opened).
+    pub browser_port: std::sync::atomic::AtomicU16,
+    /// Browsers opened from WebProbe (main pid, profile dir), closed on exit.
+    pub browsers: Mutex<Vec<(u32, String)>>,
     pub issues: Mutex<Vec<crate::scan::ScanIssue>>,
     pub scan_enabled: AtomicBool,
     pub scan_busy: AtomicBool,
+    /// Burp scan configuration "Audit speed" (burp.Zsv7): 0 fast, 1 normal, 2 thorough.
+    pub scan_speed: AtomicU8,
+    /// Burp scan configuration "Audit accuracy" (burp.Zgnf): 0 minimise false
+    /// negatives, 1 normal, 2 minimise false positives.
+    pub scan_accuracy: AtomicU8,
     pub scan_stop: AtomicBool,
     pub scan_done: AtomicUsize,
     pub scan_total: AtomicUsize,
@@ -309,8 +424,22 @@ pub struct Shared {
     /// Session handling rules and their reusable request macros.
     pub session_rules: Mutex<Vec<SessionRule>>,
     pub macros: Mutex<Vec<Macro>>,
+    /// Out-of-band probe tokens the active scan embedded, awaiting a
+    /// Collaborator interaction: (token, pre-built issue raised on match).
+    /// Collaborator ids the active scan embedded: (id, required interaction
+    /// kind label such as "SMTP" or None for any, issue to raise).
+    pub oob_pending: Mutex<Vec<(String, Option<&'static str>, crate::scan::ScanIssue)>>,
     /// Captured WebSocket handshakes and frames.
     pub ws_history: Mutex<Vec<WsEntry>>,
+    /// Diff-count state for the history table ("Diff count", burp.Zxwu.java:56).
+    pub diff_tracker: Mutex<DiffTracker>,
+    /// Extension host (Montoya-shaped, Path A): hooks run in the proxy pipeline.
+    pub ext_host: Mutex<crate::ext_host::ExtensionHost>,
+    /// WebSocket message interception (Burp default: off in both directions).
+    pub ws_intercept_client: AtomicBool,
+    pub ws_intercept_server: AtomicBool,
+    /// Host -> IP cache for the history "IP" column.
+    pub ip_cache: Mutex<std::collections::HashMap<String, String>>,
     /// Monotonic counter of proxied messages, for the status bar's activity read.
     pub messages: std::sync::atomic::AtomicUsize,
     /// Upstream direct/HTTP/SOCKS routing configuration.
@@ -352,6 +481,11 @@ impl Shared {
             queue: Mutex::new(Vec::new()),
             history: Mutex::new(Vec::new()),
             events: Mutex::new(Vec::new()),
+            extra_checks: AtomicBool::new(false),
+            crawl_capture: AtomicBool::new(true),
+            site_links: Mutex::new(std::collections::BTreeSet::new()),
+            crawl_items: Mutex::new(Vec::new()),
+            h2c_upgrade: AtomicBool::new(std::env::var("WEBPROBE_H2C").map(|v| v == "1").unwrap_or(false)),
             attack: Mutex::new(Arc::new(Attack {
                 running: AtomicBool::new(false),
                 stop: AtomicBool::new(false),
@@ -372,13 +506,20 @@ impl Shared {
                     .unwrap_or_default(),
                 response: None,
                 result_line: String::new(),
+            history: Vec::new(),
+            hist_pos: 0,
             }]),
             messages: std::sync::atomic::AtomicUsize::new(0),
             next_id: AtomicU64::new(1),
             proxy_port: std::sync::atomic::AtomicU16::new(8080),
+            browser_port: std::sync::atomic::AtomicU16::new(0),
+            browsers: Mutex::new(Vec::new()),
             issues: Mutex::new(Vec::new()),
             scan_enabled: AtomicBool::new(true),
             scan_busy: AtomicBool::new(false),
+            // AuditDefaults.json: scan_speed / scan_accuracy "normal"
+            scan_speed: AtomicU8::new(1),
+            scan_accuracy: AtomicU8::new(1),
             scan_stop: AtomicBool::new(false),
             scan_done: AtomicUsize::new(0),
             scan_total: AtomicUsize::new(0),
@@ -388,7 +529,13 @@ impl Shared {
             scope: Mutex::new(Vec::new()),
             session_rules: Mutex::new(Vec::new()),
             macros: Mutex::new(Vec::new()),
+            oob_pending: Mutex::new(Vec::new()),
             ws_history: Mutex::new(Vec::new()),
+            diff_tracker: Mutex::new(DiffTracker::default()),
+            ext_host: Mutex::new(crate::ext_host::ExtensionHost::default()),
+            ws_intercept_client: AtomicBool::new(false),
+            ws_intercept_server: AtomicBool::new(false),
+            ip_cache: Mutex::new(std::collections::HashMap::new()),
             upstream: Mutex::new(crate::upstream::UpstreamConfig::default()),
             listener_running: AtomicBool::new(false),
             listener_restart: AtomicBool::new(false),
@@ -425,6 +572,17 @@ impl Shared {
 
     pub fn count_waiting(&self) -> usize {
         self.queue.lock().map(|q| q.len()).unwrap_or(0)
+    }
+
+    /// Extension request hooks (Montoya-shaped, Path A): run every enabled
+    /// extension in registration order; false means one dropped the message.
+    pub fn ext_handle_request(&self, method: &str, path: &str, req: &mut Vec<u8>) -> bool {
+        self.ext_host.lock().unwrap().run_request_hooks(method, path, req)
+    }
+
+    /// Extension response hooks: false means one dropped the message.
+    pub fn ext_handle_response(&self, method: &str, path: &str, resp: &mut Vec<u8>) -> bool {
+        self.ext_host.lock().unwrap().run_response_hooks(method, path, resp)
     }
 }
 
@@ -580,7 +738,14 @@ pub fn send_raw(shared: &Shared, host: &str, port: u16, request: &[u8]) -> Upstr
 }
 
 fn send_from(shared: &Shared, host: &str, port: u16, req: &[u8]) -> Upstream {
-    match send_inner(shared, host, port, req) {
+    let t0 = std::time::Instant::now();
+    let r = send_inner(shared, host, port, req);
+    // Debug aid: WB_TRACE=1 prints every upstream exchange slower than 2 s.
+    if std::env::var_os("WB_TRACE").is_some() && t0.elapsed().as_millis() > 2000 {
+        let first = req.split(|b| *b == b'\n').next().map(|l| String::from_utf8_lossy(l).into_owned()).unwrap_or_default();
+        eprintln!("TRACE slow {} ms {first} -> {:?}", t0.elapsed().as_millis(), r.as_ref().err());
+    }
+    match r {
         Ok(resp) => Upstream { resp: Some(resp), error: None },
         Err(e) => Upstream { resp: None, error: Some(e) },
     }
@@ -676,10 +841,12 @@ fn set_connection(req: &[u8], value: &str) -> Vec<u8> {
 }
 
 /// Attempt an HTTP/1.1 → h2c upgrade (RFC 7540 §3.2) on a direct plain
-/// connection. `Ok(None)` means the request should not be upgraded (nothing was
-/// written); `Ok(Some(resp))` is the full response — either the HTTP/2 session
-/// result or, when the server declined, the ordinary HTTP/1.1 reply.
-fn try_h2c_upgrade<S: Read + Write + ResponseRead>(stream: &mut S, routed: &[u8]) -> Result<Option<Vec<u8>>, String> {
+/// connection. `Ok(None)` means nothing was written and the caller should send
+/// the request normally. `Ok(Some((resp, upgraded)))` is the full response:
+/// `upgraded = true` means the socket now speaks HTTP/2 (never pool it);
+/// `upgraded = false` means the server declined and `resp` is an ordinary
+/// HTTP/1.1 reply whose connection may still be pooled for keep-alive.
+fn try_h2c_upgrade<S: Read + Write + ResponseRead>(stream: &mut S, routed: &[u8]) -> Result<Option<(Vec<u8>, bool)>, String> {
     let parts = util::parse_http(routed);
     if parts.head_len == 0 || parts.head_len > routed.len() {
         return Ok(None);
@@ -719,10 +886,10 @@ fn try_h2c_upgrade<S: Read + Write + ResponseRead>(stream: &mut S, routed: &[u8]
     }
     let status = util::parse_http(&head).status;
     if status == "101" {
-        let h2req = crate::h2::request_from_raw(routed, "http")
-            .ok_or("h2c: request without Host header")?;
-        let resp = crate::h2::exchange(stream, &h2req)?;
-        return Ok(Some(resp));
+        // Stream 1 is the HTTP/1.1 request that was just sent; only the
+        // preface and SETTINGS follow (RFC 7540 §3.2).
+        let resp = crate::h2::exchange_upgraded(stream)?;
+        return Ok(Some((resp, true)));
     }
     // The server declined (or ignored) the upgrade: read the rest of the
     // HTTP/1.1 message per its framing and return it unchanged.
@@ -767,7 +934,7 @@ fn try_h2c_upgrade<S: Read + Write + ResponseRead>(stream: &mut S, routed: &[u8]
             }
         }
     }
-    Ok(Some(msg))
+    Ok(Some((msg, false)))
 }
 
 fn response_allows_reuse(resp: &[u8]) -> bool {
@@ -812,18 +979,32 @@ fn send_inner(shared: &Shared, host: &str, port: u16, req: &[u8]) -> Result<Vec<
             UpstreamConn::Plain(tcp)
         }
     };
-    // h2c upgrade (RFC 7540 §3.2) on direct plain connections. Any answer other
-    // than 101 is handed back as the ordinary HTTP/1.1 response.
-    if !reused && config.kind == crate::upstream::UpstreamKind::None {
+    // h2c upgrade (RFC 7540 §3.2) on direct plain connections. Burp never
+    // sends one (cleartext traffic stays HTTP/1.1), and servers such as Node's
+    // http module drop the socket on an unhandled `Upgrade: h2c`, so it is
+    // opt-in (WEBPROBE_H2C=1). Any answer other than 101 is handed back as the
+    // ordinary HTTP/1.1 response.
+    let h2c = shared.h2c_upgrade.load(Ordering::SeqCst);
+    if h2c && !reused && config.kind == crate::upstream::UpstreamKind::None {
         match try_h2c_upgrade(&mut stream, &routed) {
-            Ok(Some(resp)) => {
-                if keep_alive && response_allows_reuse(&resp) {
+            Ok(Some((resp, upgraded))) => {
+                // A real upgrade leaves the socket speaking HTTP/2, so it must
+                // never enter the HTTP/1.x pool. A declined upgrade is just an
+                // ordinary HTTP/1.1 reply: keep the connection reusable so a
+                // later keep-alive request can actually reuse it.
+                if !upgraded && keep_alive && response_allows_reuse(&resp) {
                     shared.pool.lock().unwrap().insert(key, stream);
                 }
                 return Ok(resp);
             }
             Ok(None) => {}
-            Err(e) => return Err(e),
+            Err(_) => {
+                // The server hung up on the upgrade: retry plainly on a new socket.
+                let tcp = crate::upstream::connect_target(&config, host, port)?;
+                tcp.set_read_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS))).ok();
+                shared.conns_opened.fetch_add(1, Ordering::SeqCst);
+                stream = UpstreamConn::Plain(tcp);
+            }
         }
     }
     let result = match exchange(&mut stream, &routed) {
@@ -899,11 +1080,32 @@ fn send_tls_inner(shared: &Shared, host: &str, port: u16, req: &[u8]) -> Result<
     if use_h2 {
         let h2req = crate::h2::request_from_raw(&req, "https")
             .ok_or("h2: request without Host header")?;
-        let resp = match &mut stream {
-            UpstreamConn::Tls(tls) => crate::h2::exchange(tls, &h2req)?,
+        let first = match &mut stream {
+            UpstreamConn::Tls(tls) => crate::h2::exchange(tls, &h2req),
             _ => return Err("h2: not a TLS connection".into()),
         };
-        return Ok(resp);
+        match first {
+            Ok(resp) => return Ok(resp),
+            Err(e) if crate::h2::retryable(&e) => {
+                // The server never processed stream 1 (GOAWAY/REFUSED_STREAM),
+                // so one retry on a fresh connection is safe.
+                shared.conns_opened.fetch_add(1, Ordering::SeqCst);
+                let mut fresh = new_tls_conn(shared, &config, host, port)?;
+                let retried = match &mut fresh {
+                    UpstreamConn::Tls(tls) => {
+                        let _ = tls.conn.complete_io(&mut tls.sock);
+                        if tls.conn.alpn_protocol() == Some(b"h2".as_slice()) {
+                            crate::h2::exchange(tls, &h2req)
+                        } else {
+                            Err(e.clone())
+                        }
+                    }
+                    _ => Err(e.clone()),
+                };
+                return retried.map_err(|e2| format!("{e}; retry: {e2}"));
+            }
+            Err(e) => return Err(e),
+        }
     }
     let result = match exchange(&mut stream, &req) {
         Ok(r) => Ok((r, stream)),
@@ -959,6 +1161,33 @@ fn exchange<S: Read + Write + ResponseRead>(stream: &mut S, req: &[u8]) -> Resul
 }
 
 // ---------- the proxy loop ----------
+
+/// The embedded browser's own listener. Burp's browser does not use the
+/// user's proxy listener: it gets a private one on a random loopback port
+/// (its process runs with --proxy-server=localhost:<random>), so it works
+/// even when the configured port (8080) is taken by another tool and could
+/// otherwise reach that tool instead. Traffic takes the same path as the main
+/// listener (history, interception, scanner).
+pub fn browser_listener(shared: &Arc<Shared>) -> Result<u16, String> {
+    let p = shared.browser_port.load(Ordering::SeqCst);
+    if p != 0 {
+        return Ok(p);
+    }
+    let l = TcpListener::bind("127.0.0.1:0").map_err(|e| format!("browser listener: {e}"))?;
+    let port = l.local_addr().map_err(|e| e.to_string())?.port();
+    if let Err(existing) = shared.browser_port.compare_exchange(0, port, Ordering::SeqCst, Ordering::SeqCst) {
+        return Ok(existing);
+    }
+    let sh = shared.clone();
+    std::thread::spawn(move || {
+        for stream in l.incoming().flatten() {
+            let sh = sh.clone();
+            std::thread::spawn(move || handle_conn(sh, stream));
+        }
+    });
+    shared.log(&format!("Browser listener started on 127.0.0.1:{port}"));
+    Ok(port)
+}
 
 pub fn start_proxy(shared: Arc<Shared>) {
     start_extra_listeners(shared.clone());
@@ -1162,7 +1391,14 @@ pub fn derive_history_fields(e: &HistEntry) -> (bool, String, String, String) {
     let params = !query.is_empty() || body_params || util::get_header(&parts.headers, "Cookie").is_some();
 
     let path = parts.path.split('?').next().unwrap_or("");
-    let extension = path.rsplit('.').next().filter(|_| path.contains('.')).map(|x| x.to_ascii_lowercase()).unwrap_or_default();
+    // Proxied requests arrive in absolute form (http://host:port/path): the
+    // extension comes from the last segment of the path only.
+    let path = match path.split_once("://") {
+        Some((_, rest)) => rest.find('/').map(|i| &rest[i..]).unwrap_or("/"),
+        None => path,
+    };
+    let last = path.rsplit('/').next().unwrap_or("");
+    let extension = last.rsplit_once('.').map(|(_, x)| x.to_ascii_lowercase()).unwrap_or_default();
 
     let mut title = String::new();
     let mut cookies = String::new();
@@ -1187,7 +1423,7 @@ pub fn derive_history_fields(e: &HistEntry) -> (bool, String, String, String) {
     (params, extension, title, cookies)
 }
 
-fn record(shared: &Shared, req: &[u8], resp: Option<Vec<u8>>, note: Option<String>, default_port: u16, https: bool, listener_port: u16) {
+fn record(shared: &Shared, req: &[u8], resp: Option<Vec<u8>>, note: Option<String>, default_port: u16, https: bool, listener_port: u16, edited: bool) {
     // History shows the decoded message: chunked bodies reassembled and
     // content coding removed (MECHANICS.md A-01/A-02). The bytes forwarded to
     // the server or client are untouched.
@@ -1221,12 +1457,16 @@ fn record(shared: &Shared, req: &[u8], resp: Option<Vec<u8>>, note: Option<Strin
         req_raw: req.to_vec(),
         resp_raw: resp,
         note,
+        highlight: None,
+        audited: false,
         params: false,
-        edited: false,
+        edited,
         extension: String::new(),
         title: String::new(),
         cookies: String::new(),
         listener_port,
+        ip: String::new(),
+        diffs: 0,
     };
     let mut e = e;
     let derived = derive_history_fields(&e);
@@ -1234,7 +1474,31 @@ fn record(shared: &Shared, req: &[u8], resp: Option<Vec<u8>>, note: Option<Strin
     e.extension = derived.1;
     e.title = derived.2;
     e.cookies = derived.3;
+    e.ip = resolve_ip(shared, &e.host);
+    // Diff count vs the previous exchange of the same request location
+    // ("Diff count" column, burp.Zxwu.java:56); the location drops the query,
+    // the same way Logger groups repeated requests.
+    let loc = format!(
+        "{}|{}:{}{}",
+        e.method,
+        e.host,
+        e.port,
+        e.path.split('?').next().unwrap_or("")
+    );
+    e.diffs = shared.diff_tracker.lock().unwrap().diff(&loc, diff_attrs(&e));
+    e.audited = shared.scan_enabled.load(Ordering::SeqCst) && e.path != "/favicon.ico";
     shared.push_history(e.clone());
+    // Live passive crawl (Dashboard task 1): "Add links. Add item itself, same
+    // domain and URLs in suite scope."
+    if shared.crawl_capture.load(Ordering::SeqCst) {
+        if let Some(resp) = &e.resp_raw {
+            let origin = crate::ui::history_host(&e);
+            let mut links = shared.site_links.lock().unwrap();
+            for path in crate::scan::crawl_links(&origin, &e.path, resp) {
+                links.insert((origin.clone(), path));
+            }
+        }
+    }
     // live passive audit (AuditDefaults.json: scan_type_passive enabled),
     // bounded by the crawler's unique-location cap (CrawlDefaults.json: 1500)
     if shared.scan_enabled.load(Ordering::SeqCst) && e.path != "/favicon.ico" {
@@ -1254,6 +1518,44 @@ fn record(shared: &Shared, req: &[u8], resp: Option<Vec<u8>>, note: Option<Strin
             crate::scan::add_passive_issues(shared, issues);
         }
     }
+}
+
+/// `/show/<id>`: the stored response verbatim. `/repeat/<id>`: make the
+/// browser issue the stored request (a redirect for GET, an auto-submitting
+/// form otherwise).
+pub fn browser_item_response(shared: &Shared, path: &str) -> Option<Vec<u8>> {
+    let p = path.split('?').next().unwrap_or(path);
+    let (kind, id) = if let Some(n) = p.strip_prefix("/show/") {
+        ("show", n)
+    } else if let Some(n) = p.strip_prefix("/repeat/") {
+        ("repeat", n)
+    } else {
+        return None;
+    };
+    let id: u64 = id.trim_end_matches('/').parse().ok()?;
+    let e = shared.history.lock().unwrap().iter().find(|e| e.id == id).cloned()?;
+    if kind == "show" {
+        let resp = e.resp_raw.clone()?;
+        return Some(String::from_utf8_lossy(&set_connection(&resp, "close")).into_owned().into_bytes());
+    }
+    let scheme = if e.https { "https" } else { "http" };
+    let default = if e.https { 443 } else { 80 };
+    let origin = if e.port == default { format!("{scheme}://{}", e.host) } else { format!("{scheme}://{}:{}", e.host, e.port) };
+    let req_path = String::from_utf8_lossy(&util::origin_form(&e.req_raw)).split_whitespace().nth(1).unwrap_or("/").to_string();
+    let url = format!("{origin}{req_path}");
+    if e.method.eq_ignore_ascii_case("GET") {
+        return Some(format!("HTTP/1.1 302 Found\r\nLocation: {url}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").into_bytes());
+    }
+    let parts = util::parse_http(&e.req_raw);
+    let body = String::from_utf8_lossy(&e.req_raw[parts.head_len.min(e.req_raw.len())..]).into_owned();
+    let esc = |v: &str| v.replace('&', "&amp;").replace('"', "&quot;").replace('<', "&lt;");
+    let mut inputs = String::new();
+    for kv in body.split('&').filter(|x| !x.is_empty()) {
+        let (k, v) = kv.split_once('=').unwrap_or((kv, ""));
+        inputs.push_str(&format!("<input type=\"hidden\" name=\"{}\" value=\"{}\">", esc(&util::url_decode(k)), esc(&util::url_decode(v))));
+    }
+    let html = format!("<html><body><form method=\"{}\" action=\"{}\">{inputs}</form><script>document.forms[0].submit()</script></body></html>", esc(&e.method), esc(&url));
+    Some(format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{html}", html.len()).into_bytes())
 }
 
 fn read_response_head<R: Read>(stream: &mut R) -> std::io::Result<Vec<u8>> {
@@ -1288,11 +1590,13 @@ fn ws_opcode_name(opcode: u8) -> &'static str {
     }
 }
 
-fn parse_ws_frame(buf: &[u8]) -> Option<(String, Vec<u8>, usize)> {
+/// Parse one complete frame: (opcode, masked, payload, bytes consumed).
+/// Text/binary payloads are unmasked; None when more bytes are needed.
+fn parse_ws_frame(buf: &[u8]) -> Option<(u8, bool, Vec<u8>, usize)> {
     if buf.len() < 2 {
         return None;
     }
-    let opcode = ws_opcode_name(buf[0]);
+    let opcode = buf[0] & 0x0f;
     let masked = buf[1] & 0x80 != 0;
     let mut len = (buf[1] & 0x7f) as usize;
     let mut offset = 2;
@@ -1312,7 +1616,7 @@ fn parse_ws_frame(buf: &[u8]) -> Option<(String, Vec<u8>, usize)> {
         offset += 8;
     }
     if len > 16 * 1024 * 1024 {
-        return Some(("oversized".into(), Vec::new(), buf.len()));
+        return Some((opcode, masked, Vec::new(), buf.len()));
     }
     let mask_len = if masked { 4 } else { 0 };
     if buf.len() < offset + mask_len + len {
@@ -1330,13 +1634,86 @@ fn parse_ws_frame(buf: &[u8]) -> Option<(String, Vec<u8>, usize)> {
             *b ^= mask[i & 3];
         }
     }
-    Some((opcode.to_string(), payload, payload_start + len))
+    Some((opcode, masked, payload, payload_start + len))
+}
+
+/// Rebuild a WebSocket frame around a (possibly edited) payload. Client
+/// frames must stay masked (the server requires it); server frames are
+/// unmasked.
+fn build_ws_frame(opcode: u8, payload: &[u8], masked: bool) -> Vec<u8> {
+    let mask_bit = if masked { 0x80u8 } else { 0 };
+    let len = payload.len();
+    let mut out = vec![opcode];
+    if len > 65_535 {
+        out.push(127 | mask_bit);
+        out.extend_from_slice(&(len as u64).to_be_bytes());
+    } else if len > 125 {
+        out.push(126 | mask_bit);
+        out.extend_from_slice(&(len as u16).to_be_bytes());
+    } else {
+        out.push((len as u8) | mask_bit);
+    }
+    if masked {
+        let mask: [u8; 4] = [0x11, 0x22, 0x33, 0x44];
+        out.extend_from_slice(&mask);
+        out.extend(payload.iter().enumerate().map(|(i, b)| b ^ mask[i & 3]));
+    } else {
+        out.extend_from_slice(payload);
+    }
+    out
+}
+
+/// Intercept plain WebSocket frames before they are forwarded (Burp's
+/// "Intercept client-to-server messages" / "...server-to-client messages",
+/// Proxy settings > WebSockets): text/binary frames are queued for the user;
+/// Forward rewrites the payload, Drop skips the frame. Control frames and
+/// partial frames relay untouched. Returns the bytes to forward; unparsed
+/// leftovers stay buffered for the next chunk.
+fn intercept_ws_stream(
+    shared: &Shared,
+    host: &str,
+    chunk: &[u8],
+    buffered: &mut Vec<u8>,
+    client_to_server: bool,
+) -> Vec<u8> {
+    buffered.extend_from_slice(chunk);
+    let intercept_on = if client_to_server {
+        shared.ws_intercept_client.load(Ordering::SeqCst)
+    } else {
+        shared.ws_intercept_server.load(Ordering::SeqCst)
+    };
+    let mut out = Vec::with_capacity(buffered.len());
+    while let Some((opcode, masked, payload, consumed)) = parse_ws_frame(buffered) {
+        let forwarded = if (opcode == 0x1 || opcode == 0x2) && intercept_on {
+            let id = shared.next_id.fetch_add(1, Ordering::SeqCst);
+            let (tx, rx) = mpsc::channel::<Option<String>>();
+            shared.queue.lock().unwrap().push(InterceptItem {
+                id,
+                host: host.to_string(),
+                port: 0,
+                edited: String::from_utf8_lossy(&payload).into_owned(),
+                tx,
+            });
+            shared.log(&format!("Intercepted WebSocket frame queued (id {id})"));
+            match rx.recv() {
+                Ok(Some(edited)) => Some(edited.into_bytes()),
+                _ => None,
+            }
+        } else {
+            Some(payload)
+        };
+        if let Some(p) = forwarded {
+            out.extend_from_slice(&build_ws_frame(opcode, &p, masked));
+        }
+        buffered.drain(..consumed);
+    }
+    out
 }
 
 fn record_ws_chunk(shared: &Shared, host: &str, direction: &str, chunk: &[u8], buffered: &mut Vec<u8>) {
     buffered.extend_from_slice(chunk);
-    while let Some((opcode, payload, consumed)) = parse_ws_frame(buffered) {
-        push_ws(shared, host, direction, &opcode, &payload);
+    while let Some((opcode, _, payload, consumed)) = parse_ws_frame(buffered) {
+        push_ws(shared, host, direction, ws_opcode_name(opcode), &payload);
         buffered.drain(..consumed);
     }
 }
@@ -1356,7 +1733,12 @@ fn relay_ws(shared: Arc<Shared>, client: TcpStream, upstream: TcpStream, host: S
                 Ok(0) | Err(_) => break,
                 Ok(n) => {
                     record_ws_chunk(&client_shared, &client_host, "client -> server", &chunk[..n], &mut buffered);
-                    if upstream_write.write_all(&chunk[..n]).is_err() {
+                    let out = if client_shared.ws_intercept_client.load(Ordering::SeqCst) {
+                        intercept_ws_stream(&client_shared, &client_host, &chunk[..n], &mut buffered, true)
+                    } else {
+                        chunk[..n].to_vec()
+                    };
+                    if !out.is_empty() && upstream_write.write_all(&out).is_err() {
                         break;
                     }
                 }
@@ -1374,7 +1756,12 @@ fn relay_ws(shared: Arc<Shared>, client: TcpStream, upstream: TcpStream, host: S
             Ok(0) | Err(_) => break,
             Ok(n) => {
                 record_ws_chunk(&upstream_shared, &upstream_host, "server -> client", &chunk[..n], &mut buffered);
-                if client_write.write_all(&chunk[..n]).is_err() {
+                let out = if upstream_shared.ws_intercept_server.load(Ordering::SeqCst) {
+                    intercept_ws_stream(&upstream_shared, &upstream_host, &chunk[..n], &mut buffered, false)
+                } else {
+                    chunk[..n].to_vec()
+                };
+                if !out.is_empty() && client_write.write_all(&out).is_err() {
                     break;
                 }
             }
@@ -1389,7 +1776,11 @@ fn handle_websocket(shared: Arc<Shared>, mut client: TcpStream, req: Vec<u8>) {
     let parts = util::parse_http(&req);
     let (host, port) = host_of(&parts, 80);
     let req_session = apply_session_rules(&shared, &req, 80);
-    let req_out = crate::rules::apply_rules(&req_session, &shared.mr_request.lock().unwrap());
+    let mut req_out = crate::rules::apply_rules(&req_session, &shared.mr_request.lock().unwrap());
+    if !shared.ext_handle_request(&parts.method, &path_of(&parts), &mut req_out) {
+        shared.log("WebSocket handshake dropped by an extension hook");
+        return;
+    }
     let config = shared.upstream.lock().unwrap().clone();
     let mut upstream = match crate::upstream::connect_target(&config, &host, port) {
         Ok(s) => s,
@@ -1416,7 +1807,7 @@ fn handle_websocket(shared: Arc<Shared>, mut client: TcpStream, req: Vec<u8>) {
     }
     push_ws(&shared, &host, "handshake", "request", &req_out);
     push_ws(&shared, &host, "handshake", "response", &response);
-    record(&shared, &req_out, Some(response.clone()), None, 80, false, shared.proxy_port.load(Ordering::SeqCst));
+    record(&shared, &req_out, Some(response.clone()), None, 80, false, shared.proxy_port.load(Ordering::SeqCst), false);
     if util::parse_http(&response).status != "101" {
         shared.log(&format!("WebSocket upgrade for {host}:{port} was not accepted"));
         return;
@@ -1453,7 +1844,14 @@ fn relay_ws_tls<C: ProxyIo, U: ProxyIo>(shared: &Shared, client: &mut C, upstrea
                 Ok(n) => {
                     progressed = true;
                     record_ws_chunk(shared, &host, "client -> server", &chunk[..n], &mut client_pending);
-                    if write_nonblocking(upstream, &chunk[..n]).is_err() {
+                    // Interception shares the frame buffer: record_ws_chunk
+                    // drained complete frames, the leftover joins this chunk.
+                    let out = if shared.ws_intercept_client.load(Ordering::SeqCst) {
+                        intercept_ws_stream(shared, &host, &chunk[..n], &mut client_pending, true)
+                    } else {
+                        chunk[..n].to_vec()
+                    };
+                    if !out.is_empty() && write_nonblocking(upstream, &out).is_err() {
                         break;
                     }
                 }
@@ -1467,7 +1865,12 @@ fn relay_ws_tls<C: ProxyIo, U: ProxyIo>(shared: &Shared, client: &mut C, upstrea
                 Ok(n) => {
                     progressed = true;
                     record_ws_chunk(shared, &host, "server -> client", &chunk[..n], &mut upstream_pending);
-                    if write_nonblocking(client, &chunk[..n]).is_err() {
+                    let out = if shared.ws_intercept_server.load(Ordering::SeqCst) {
+                        intercept_ws_stream(shared, &host, &chunk[..n], &mut upstream_pending, false)
+                    } else {
+                        chunk[..n].to_vec()
+                    };
+                    if !out.is_empty() && write_nonblocking(client, &out).is_err() {
                         break;
                     }
                 }
@@ -1488,8 +1891,13 @@ fn handle_tls_websocket(
     host: String,
     port: u16,
 ) {
+    let parts = util::parse_http(&req);
     let req_session = apply_session_rules(&shared, &req, 443);
-    let req_out = crate::rules::apply_rules(&req_session, &shared.mr_request.lock().unwrap());
+    let mut req_out = crate::rules::apply_rules(&req_session, &shared.mr_request.lock().unwrap());
+    if !shared.ext_handle_request(&parts.method, &path_of(&parts), &mut req_out) {
+        shared.log("TLS WebSocket handshake dropped by an extension hook");
+        return;
+    }
     let config = shared.upstream.lock().unwrap().clone();
     let upstream_tcp = match crate::upstream::connect_tls_target(&config, &host, port) {
         Ok(stream) => stream,
@@ -1530,7 +1938,7 @@ fn handle_tls_websocket(
     }
     push_ws(&shared, &host, "handshake", "request", &req_out);
     push_ws(&shared, &host, "handshake", "response", &response);
-    record(&shared, &req_out, Some(response.clone()), None, 443, true, shared.proxy_port.load(Ordering::SeqCst));
+    record(&shared, &req_out, Some(response.clone()), None, 443, true, shared.proxy_port.load(Ordering::SeqCst), false);
     if util::parse_http(&response).status != "101" {
         return;
     }
@@ -1602,7 +2010,8 @@ fn handle_conn(shared: Arc<Shared>, mut stream: TcpStream) {
         return;
     }
 
-    let Some(req) = intercept_request(&shared, req, 80) else { return };
+    let (req, was_edited) = intercept_request(&shared, req, 80);
+    let Some(req) = req else { return };
     let is_ws = util::get_header(&parts.headers, "Upgrade")
         .map(|v| v.eq_ignore_ascii_case("websocket"))
         .unwrap_or(false);
@@ -1610,7 +2019,7 @@ fn handle_conn(shared: Arc<Shared>, mut stream: TcpStream) {
         handle_websocket(shared, stream, req);
         return;
     }
-    upstream_and_deliver(&shared, &mut stream, req, 80, false);
+    upstream_and_deliver(&shared, &mut stream, req, 80, false, was_edited);
 }
 
 /// Copy bytes both ways until either direction closes (SSL pass-through tunnel).
@@ -1693,7 +2102,8 @@ fn handle_connect(shared: Arc<Shared>, mut stream: TcpStream, host: String, port
             return;
         }
     };
-    let Some(req) = intercept_request(&shared, req, 443) else { return };
+    let (req, was_edited) = intercept_request(&shared, req, 443);
+    let Some(req) = req else { return };
     let ws_parts = util::parse_http(&req);
     let is_ws = util::get_header(&ws_parts.headers, "Upgrade")
         .map(|v| v.eq_ignore_ascii_case("websocket"))
@@ -1702,7 +2112,7 @@ fn handle_connect(shared: Arc<Shared>, mut stream: TcpStream, host: String, port
         handle_tls_websocket(shared, tls, req, host, port);
         return;
     }
-    upstream_and_deliver(&shared, &mut tls, req, 443, true);
+    upstream_and_deliver(&shared, &mut tls, req, 443, true, was_edited);
     tls.conn.send_close_notify();
     let _ = tls.flush();
 }
@@ -1725,13 +2135,13 @@ fn default_intercept_allows_path(path: &str) -> bool {
         .any(|excluded| extension.eq_ignore_ascii_case(excluded))
 }
 
-fn intercept_request(shared: &Shared, req: Vec<u8>, default_port: u16) -> Option<Vec<u8>> {
+fn intercept_request(shared: &Shared, req: Vec<u8>, default_port: u16) -> (Option<Vec<u8>>, bool) {
     if !shared.intercept_on.load(Ordering::SeqCst) {
-        return Some(req);
+        return (Some(req), false);
     }
     let parts = util::parse_http(&req);
     if !default_intercept_allows_path(&parts.path) {
-        return Some(req);
+        return (Some(req), false);
     }
     let (host, port) = host_of(&parts, default_port);
     let (tx, rx) = mpsc::channel::<Option<String>>();
@@ -1744,12 +2154,15 @@ fn intercept_request(shared: &Shared, req: Vec<u8>, default_port: u16) -> Option
         tx,
     });
     match rx.recv() {
-        Ok(Some(edited)) => Some(edited.into_bytes()),
+        Ok(Some(edited)) => {
+            let changed = edited.as_bytes() != req.as_slice();
+            (Some(edited.into_bytes()), changed)
+        }
         Ok(None) => {
             shared.log("Intercepted request dropped");
-            None
+            (None, false)
         }
-        Err(_) => None,
+        Err(_) => (None, false),
     }
 }
 
@@ -1759,15 +2172,27 @@ fn upstream_and_deliver<S: ProxyIo>(
     req: Vec<u8>,
     default_port: u16,
     use_tls: bool,
+    was_edited: bool,
 ) {
     let parts = util::parse_http(&req);
     let (host, port) = host_of(&parts, default_port);
 
+    // Burp's "Show response in browser" / "Request in browser" URLs
+    // (http://burpsuite/show/N, /repeat/N): WebProbe serves the same under
+    // http://webprobe.
+    if host.eq_ignore_ascii_case("webprobe") {
+        if let Some(resp) = browser_item_response(shared, &path_of(&parts)) {
+            let _ = stream.write_all(&resp);
+            let _ = stream.flush();
+            shared.log(&format!("Served {} for the browser", path_of(&parts)));
+            return;
+        }
+    }
     // Burp answers `http://burpsuite` itself: the browser must already be
     // proxying through the listener, and the page it returns is where the CA
     // certificate is downloaded. WebProbe does the same at http://webprobe.
     if let Some(resp) =
-        crate::onboarding::local_response(&host, &path_of(&parts), port, shared.mitm.ca_pem(), &shared.mitm.ca_der())
+        crate::onboarding::local_response(&host, &path_of(&parts), shared.proxy_port.load(Ordering::SeqCst), shared.mitm.ca_pem(), &shared.mitm.ca_der())
     {
         let _ = stream.write_all(&resp);
         let _ = stream.flush();
@@ -1777,13 +2202,20 @@ fn upstream_and_deliver<S: ProxyIo>(
             .unwrap_or("")
             .trim()
             .to_string();
-        record(shared, &req, Some(resp), None, default_port, use_tls, shared.proxy_port.load(Ordering::SeqCst));
+        // Not recorded: Burp keeps http://burpsuite out of Proxy history and
+        // the scanner (live 52685: history stays empty, live audit 0 issues).
         shared.log(&format!("Served the local setup page for {host} -> {status}"));
         return;
     }
     // Session rules run before match-and-replace, matching Burp's handling chain.
     let req_session = apply_session_rules(shared, &req, default_port);
-    let req_out = crate::rules::apply_rules(&req_session, &shared.mr_request.lock().unwrap());
+    let mut req_out = crate::rules::apply_rules(&req_session, &shared.mr_request.lock().unwrap());
+    // Extension hooks run after the built-in chain (session rules, M&R);
+    // a Drop verdict closes the client connection without a response.
+    if !shared.ext_handle_request(&parts.method, &path_of(&parts), &mut req_out) {
+        shared.log("Request dropped by an extension hook");
+        return;
+    }
     let up = if use_tls {
         send_tls_raw(shared, &host, port, &req_out)
     } else {
@@ -1791,11 +2223,15 @@ fn upstream_and_deliver<S: ProxyIo>(
     };
     match up.resp {
         Some(resp) => {
-            let resp = crate::rules::apply_rules(&resp, &shared.mr_response.lock().unwrap());
+            let mut resp = crate::rules::apply_rules(&resp, &shared.mr_response.lock().unwrap());
+            if !shared.ext_handle_response(&parts.method, &path_of(&parts), &mut resp) {
+                shared.log("Response dropped by an extension hook");
+                return;
+            }
             let status = util::parse_http(&resp).first.split_whitespace().nth(1).unwrap_or("").to_string();
             let _ = stream.write_all(&resp);
             let _ = stream.flush();
-            record(shared, &req_out, Some(resp), None, default_port, use_tls, shared.proxy_port.load(Ordering::SeqCst));
+            record(shared, &req_out, Some(resp), None, default_port, use_tls, shared.proxy_port.load(Ordering::SeqCst), was_edited);
             shared.log(&format!(
                 "Proxied {} {host}:{port}{} -> {}{}",
                 parts.method,
@@ -1809,7 +2245,7 @@ fn upstream_and_deliver<S: ProxyIo>(
             let msg = format!("HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nWebProbe: upstream failed: {err}");
             let _ = stream.write_all(msg.as_bytes());
             let note = up.error.clone().unwrap_or_else(|| "failed".into());
-            record(shared, &req_out, None, Some(note), default_port, use_tls, shared.proxy_port.load(Ordering::SeqCst));
+            record(shared, &req_out, None, Some(note), default_port, use_tls, shared.proxy_port.load(Ordering::SeqCst), was_edited);
             shared.log(&format!("Proxy error for {host}:{port}: {err}"));
         }
     }
@@ -1872,6 +2308,8 @@ pub fn start_attack(
                     len: 0,
                     ms: 0,
                     ok: false,
+                    req: attack.request.clone().into_bytes(),
+                    resp: None,
                 });
                 cur.done.fetch_add(1, Ordering::SeqCst);
                 continue;
@@ -1884,12 +2322,13 @@ pub fn start_attack(
                 send_raw(&shared, &host, port, attack.request.as_bytes())
             };
             let ms = t0.elapsed().as_millis();
+            let req_bytes = attack.request.clone().into_bytes();
             cur.rows.lock().unwrap().push(match up.resp {
                 Some(resp) => {
                     let st = util::parse_http(&resp).first.split_whitespace().nth(1).unwrap_or("").to_string();
-                    AttackRow { payload, status: st, len: resp.len(), ms, ok: true }
+                    AttackRow { payload, status: st, len: resp.len(), ms, ok: true, req: req_bytes, resp: Some(resp) }
                 }
-                None => AttackRow { payload, status: String::new(), len: 0, ms, ok: false },
+                None => AttackRow { payload, status: String::new(), len: 0, ms, ok: false, req: req_bytes, resp: None },
             });
             cur.done.fetch_add(1, Ordering::SeqCst);
             // Gentle pacing so one bad host does not hammer (500 ms default throttle
@@ -2020,6 +2459,35 @@ mod tests {
         assert!(history[0].https);
         assert_eq!(history[0].path, "/private");
         assert_eq!(history[0].status, "200");
+    }
+
+    #[test]
+    fn browser_item_routes_show_and_repeat() {
+        let shared = Shared::new();
+        let mut e = HistEntry::default();
+        e.id = 7;
+        e.method = "GET".into();
+        e.host = "h".into();
+        e.port = 80;
+        e.req_raw = b"GET http://h/a?b=1 HTTP/1.1\r\nHost: h\r\n\r\n".to_vec();
+        e.resp_raw = Some(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok".to_vec());
+        shared.history.lock().unwrap().push(e);
+        let show = String::from_utf8(browser_item_response(&shared, "/show/7").unwrap()).unwrap();
+        assert!(show.ends_with("ok") && show.contains("200 OK"));
+        let rep = String::from_utf8(browser_item_response(&shared, "/repeat/7").unwrap()).unwrap();
+        assert!(rep.contains("Location: http://h/a?b=1"), "{rep}");
+        assert!(browser_item_response(&shared, "/other").is_none());
+    }
+
+    #[test]
+    fn extension_comes_from_the_last_path_segment_of_absolute_form() {
+        let mut e = HistEntry::default();
+        e.req_raw = b"GET http://127.0.0.1:3001/rest/user/login HTTP/1.1\r\nHost: 127.0.0.1:3001\r\n\r\n".to_vec();
+        assert_eq!(derive_history_fields(&e).1, "");
+        e.req_raw = b"GET http://127.0.0.1:3001/main.js?v=1 HTTP/1.1\r\nHost: x\r\n\r\n".to_vec();
+        assert_eq!(derive_history_fields(&e).1, "js");
+        e.req_raw = b"GET /a.b/c HTTP/1.1\r\nHost: x\r\n\r\n".to_vec();
+        assert_eq!(derive_history_fields(&e).1, "");
     }
 
     #[test]
@@ -2176,8 +2644,8 @@ mod tests {
     }
 
     /// Speak the server side of one h2 request/response exchange on `s`.
-    /// `upgrade` writes the 101 first (h2c); the connection then carries the
-    /// HTTP/2 preface and frames.
+    /// `upgrade` writes the 101 first (h2c); stream 1 is then the HTTP/1.1
+    /// request already sent, so no HEADERS may follow.
     fn serve_h2<S: Read + Write>(s: &mut S, upgrade: bool, expected_path: &str) {
         if upgrade {
             // consume the HTTP/1.1 upgrade request head
@@ -2188,7 +2656,7 @@ mod tests {
                 head.push(b[0]);
             }
             let text = String::from_utf8_lossy(&head);
-            assert!(text.starts_with("GET /"), "upgrade request: {text}");
+            assert!(text.starts_with(&format!("GET {expected_path} ")), "upgrade request: {text}");
             assert!(text.to_ascii_lowercase().contains("upgrade: h2c"));
             s.write_all(b"HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: h2c\r\n\r\n").unwrap();
         }
@@ -2207,42 +2675,62 @@ mod tests {
         f.push(0);
         f.extend_from_slice(&[0, 0, 0, 0]);
         s.write_all(&f).unwrap();
-        // read frames until the request HEADERS on stream 1 are complete
-        let mut block = Vec::new();
-        loop {
-            let (ty, flags, stream, payload) = read_frame(s);
-            match ty {
-                0x1 if stream == 1 => {
-                    block.extend_from_slice(&payload);
-                    if flags & 0x4 != 0 {
-                        break;
+        if upgrade {
+            // Stream 1 is the upgrade request: the client may only ACK our
+            // SETTINGS, never resend HEADERS/DATA for it.
+            loop {
+                let (ty, flags, stream, _) = read_frame(s);
+                assert!(ty == 0x4, "unexpected frame type {ty} on upgraded stream 1");
+                assert_eq!(stream, 0);
+                if flags & 0x1 != 0 {
+                    break;
+                }
+            }
+        } else {
+            // read frames until the request HEADERS on stream 1 are complete
+            let mut block = Vec::new();
+            loop {
+                let (ty, flags, stream, payload) = read_frame(s);
+                match ty {
+                    0x1 if stream == 1 => {
+                        block.extend_from_slice(&payload);
+                        if flags & 0x4 != 0 {
+                            break;
+                        }
                     }
+                    0x4 if flags & 0x1 == 0 => {
+                        // ack the client's settings
+                        s.write_all(&[0, 0, 0, 0x4, 0x1, 0, 0, 0, 0]).unwrap();
+                    }
+                    _ => {}
                 }
-                0x4 if flags & 0x1 == 0 => {
-                    // ack the client's settings
-                    s.write_all(&[0, 0, 0, 0x4, 0x1, 0, 0, 0, 0]).unwrap();
+            }
+            let mut dec = hpack::Decoder::new();
+            let headers = dec.decode(&block).unwrap();
+            let mut method = String::new();
+            let mut path = String::new();
+            for (k, v) in headers {
+                let k = String::from_utf8_lossy(&k).into_owned();
+                let v = String::from_utf8_lossy(&v).into_owned();
+                // RFC 9113 §8.2: field names must be lowercase on the wire.
+                assert_eq!(k, k.to_ascii_lowercase(), "uppercase h2 field name {k}");
+                if k == ":method" {
+                    method = v;
+                } else if k == ":path" {
+                    path = v;
                 }
-                _ => {}
             }
+            assert_eq!(method, "GET");
+            assert_eq!(path, expected_path);
         }
-        let mut dec = hpack::Decoder::new();
-        let headers = dec.decode(&block).unwrap();
-        let mut method = String::new();
-        let mut path = String::new();
-        for (k, v) in headers {
-            let k = String::from_utf8_lossy(&k).into_owned();
-            let v = String::from_utf8_lossy(&v).into_owned();
-            if k == ":method" {
-                method = v;
-            } else if k == ":path" {
-                path = v;
-            }
-        }
-        assert_eq!(method, "GET");
-        assert_eq!(path, expected_path);
-        // response: HEADERS(:status 200) + DATA, both END_STREAM on DATA
+        // response: HEADERS(:status 200) + DATA, both END_STREAM on DATA.
+        // The content-length field lets the client deduplicate framing headers.
         let mut enc = hpack::Encoder::new();
-        let hb = enc.encode(vec![(b":status".as_ref(), b"200".as_ref()), (b"content-type".as_ref(), b"text/plain".as_ref())]);
+        let hb = enc.encode(vec![
+            (b":status".as_ref(), b"200".as_ref()),
+            (b"content-type".as_ref(), b"text/plain".as_ref()),
+            (b"content-length".as_ref(), b"8".as_ref()),
+        ]);
         let mut out = Vec::new();
         out.extend_from_slice(&[(hb.len() >> 16) as u8, (hb.len() >> 8) as u8, hb.len() as u8]);
         out.extend_from_slice(&[0x1, 0x4, 0, 0, 0, 1]); // END_HEADERS, stream 1
@@ -2252,6 +2740,15 @@ mod tests {
         out.extend_from_slice(body);
         s.write_all(&out).unwrap();
         s.flush().unwrap();
+    }
+
+    /// Exactly one framing header and a normal HTTP/1.1 status line.
+    fn assert_normalised_h2_view(resp: &[u8]) {
+        let text = String::from_utf8_lossy(resp);
+        assert!(text.starts_with("HTTP/1.1 200"), "{text}");
+        assert_eq!(text.matches("Content-Length:").count(), 1, "{text}");
+        assert_eq!(text.to_ascii_lowercase().matches("content-length:").count(), 1, "{text}");
+        assert!(resp.ends_with(b"hello h2"), "{text}");
     }
 
     /// A-05: a plain HTTP request upgrades to h2c when the server offers it.
@@ -2264,13 +2761,11 @@ mod tests {
             serve_h2(&mut s, true, "/h2c");
         });
         let shared = Shared::new();
+        shared.h2c_upgrade.store(true, Ordering::SeqCst);
         let resp = send_raw(&shared, "127.0.0.1", port, b"GET /h2c HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n");
         t.join().unwrap();
         let resp = resp.resp.expect("h2c response");
-        let text = String::from_utf8_lossy(&resp);
-        assert!(text.starts_with("HTTP/1.1 200"), "{text}");
-        assert!(text.contains("Content-Length: 8"), "{text}");
-        assert!(resp.ends_with(b"hello h2"));
+        assert_normalised_h2_view(&resp);
     }
 
     /// A-05: when the server ignores the upgrade, the HTTP/1.1 reply is used.
@@ -2285,6 +2780,7 @@ mod tests {
             s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nplain").unwrap();
         });
         let shared = Shared::new();
+        shared.h2c_upgrade.store(true, Ordering::SeqCst);
         let resp = send_raw(&shared, "127.0.0.1", port, b"GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n");
         t.join().unwrap();
         let resp = resp.resp.expect("http/1.1 fallback response");
@@ -2311,10 +2807,106 @@ mod tests {
         let resp = send_tls_raw(&shared, "localhost", port, b"GET /secure HTTP/1.1\r\nHost: localhost\r\n\r\n");
         t.join().unwrap();
         let resp = resp.resp.unwrap_or_else(|| panic!("h2 over TLS failed: {:?}", resp.error));
-        let text = String::from_utf8_lossy(&resp);
-        assert!(text.starts_with("HTTP/1.1 200"), "{text}");
-        assert!(text.contains("Content-Length: 8"), "{text}");
-        assert!(resp.ends_with(b"hello h2"));
+        assert_normalised_h2_view(&resp);
+    }
+
+    /// A-05 end to end: a browser-style CONNECT + MITM request through the
+    /// proxy listener reaches an upstream that negotiated h2 via ALPN, and the
+    /// client still receives a normal HTTP/1.1 response.
+    #[test]
+    fn tls_alpn_h2_end_to_end_through_proxy_listener() {
+        let mut shared = Shared::new();
+        let ca = shared.mitm.ca_der();
+        Arc::get_mut(&mut shared).unwrap().tls_upstream = client_config(ca);
+
+        let upstream = TcpListener::bind("127.0.0.1:0").unwrap();
+        let upstream_port = upstream.local_addr().unwrap().port();
+        let upstream_config = shared.mitm.server_config_with_alpn("localhost", vec![b"h2".to_vec()]).unwrap();
+        let upstream_thread = std::thread::spawn(move || {
+            let (stream, _) = upstream.accept().unwrap();
+            stream.set_read_timeout(Some(Duration::from_secs(60))).unwrap();
+            let conn = ServerConnection::new(upstream_config).unwrap();
+            let mut tls = StreamOwned::new(conn, stream);
+            tls.conn.complete_io(&mut tls.sock).unwrap();
+            // Proof that the upstream side really spoke HTTP/2.
+            assert_eq!(tls.conn.alpn_protocol(), Some(b"h2".as_slice()));
+            serve_h2(&mut tls, false, "/e2e");
+        });
+
+        let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+        let proxy_port = proxy.local_addr().unwrap().port();
+        let proxy_shared = shared.clone();
+        let proxy_thread = std::thread::spawn(move || {
+            let (stream, _) = proxy.accept().unwrap();
+            handle_conn(proxy_shared, stream);
+        });
+
+        let mut client = TcpStream::connect(("127.0.0.1", proxy_port)).unwrap();
+        // Certificates are RSA-2048 generated per host; debug builds can take a
+        // while under a parallel test run.
+        client.set_read_timeout(Some(Duration::from_secs(60))).unwrap();
+        write!(client, "CONNECT localhost:{upstream_port} HTTP/1.1\r\nHost: localhost:{upstream_port}\r\n\r\n").unwrap();
+        let mut connect_response = Vec::new();
+        while !connect_response.ends_with(b"\r\n\r\n") {
+            let mut byte = [0u8; 1];
+            client.read_exact(&mut byte).unwrap();
+            connect_response.push(byte[0]);
+        }
+        assert!(connect_response.starts_with(b"HTTP/1.1 200"));
+
+        let conn = ClientConnection::new(client_config(shared.mitm.ca_der()), ServerName::try_from("localhost").unwrap()).unwrap();
+        let mut tls = StreamOwned::new(conn, client);
+        write!(tls, "GET /e2e HTTP/1.1\r\nHost: localhost:{upstream_port}\r\nConnection: close\r\n\r\n").unwrap();
+        let mut response = Vec::new();
+        tls.read_to_end(&mut response).unwrap();
+
+        assert_normalised_h2_view(&response);
+        upstream_thread.join().unwrap();
+        proxy_thread.join().unwrap();
+        let history = shared.history.lock().unwrap();
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].path, "/e2e");
+        assert_eq!(history[0].status, "200");
+        assert!(history[0].https);
+    }
+
+    /// A-05 end to end: a plain request through the proxy listener upgrades to
+    /// h2c and the client sees the normalized HTTP/1.1 response. The upgraded
+    /// socket must not be pooled as if it were HTTP/1.x.
+    #[test]
+    fn http2c_end_to_end_through_proxy_listener() {
+        let upstream = TcpListener::bind("127.0.0.1:0").unwrap();
+        let upstream_port = upstream.local_addr().unwrap().port();
+        let upstream_thread = std::thread::spawn(move || {
+            let (mut s, _) = upstream.accept().unwrap();
+            s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+            serve_h2(&mut s, true, "/h2c-e2e");
+        });
+
+        let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+        let proxy_port = proxy.local_addr().unwrap().port();
+        let shared = Shared::new();
+        shared.h2c_upgrade.store(true, Ordering::SeqCst);
+        let proxy_shared = shared.clone();
+        let proxy_thread = std::thread::spawn(move || {
+            let (stream, _) = proxy.accept().unwrap();
+            handle_conn(proxy_shared, stream);
+        });
+
+        let mut client = TcpStream::connect(("127.0.0.1", proxy_port)).unwrap();
+        client.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+        write!(
+            client,
+            "GET http://127.0.0.1:{upstream_port}/h2c-e2e HTTP/1.1\r\nHost: 127.0.0.1:{upstream_port}\r\nConnection: close\r\n\r\n"
+        )
+        .unwrap();
+        let mut response = Vec::new();
+        client.read_to_end(&mut response).unwrap();
+
+        assert_normalised_h2_view(&response);
+        upstream_thread.join().unwrap();
+        proxy_thread.join().unwrap();
+        assert!(shared.pool.lock().unwrap().is_empty(), "h2c connection must not enter the HTTP/1.x pool");
     }
 
     /// A-06: a bypassed host gets a raw byte tunnel, not a MITM connection.
@@ -2511,6 +3103,120 @@ mod tests {
         ot.join().unwrap();
     }
 
+    /// "Diff count" (burp.Zxwu.java:56): changed, added and removed response
+    /// attributes count against the previous exchange of the same location.
+    #[test]
+    fn diff_counts_changed_attributes_per_location() {
+        let mut t = DiffTracker::default();
+        let a = vec![
+            ("status".to_string(), "200".to_string()),
+            ("h:Server".to_string(), "nginx".to_string()),
+        ];
+        assert_eq!(t.diff("GET|example.com:80/a", a.clone()), 0, "first sighting diffs nothing");
+        assert_eq!(t.diff("GET|example.com:80/a", a.clone()), 0, "identical repeat diffs nothing");
+        let b = vec![
+            ("status".to_string(), "500".to_string()),
+            ("h:Server".to_string(), "lighttpd".to_string()),
+        ];
+        assert_eq!(t.diff("GET|example.com:80/a", b), 2, "each changed attribute counts");
+        assert_eq!(t.diff("GET|example.com:80/b", a), 0, "another location is independent");
+        let c = vec![("h:WWW-Authenticate".to_string(), "Basic".to_string())];
+        assert_eq!(t.diff("GET|example.com:80/a", c), 3, "2 removed + 1 added");
+    }
+
+    /// resolve_ip: empty hosts never resolve; the cache answers without DNS.
+    #[test]
+    fn resolve_ip_uses_cache_and_handles_empty_host() {
+        let shared = Shared::new();
+        assert_eq!(resolve_ip(&shared, ""), "", "empty host resolves to nothing");
+        shared.ip_cache.lock().unwrap().insert("cached.example".into(), "203.0.113.7".into());
+        assert_eq!(resolve_ip(&shared, "cached.example"), "203.0.113.7", "cache hit avoids DNS");
+    }
+
+    /// record() stamps the diff count into each history entry.
+    #[test]
+    fn record_stamps_diff_count_against_previous_exchange() {
+        let shared = Shared::new();
+        let req = b"GET /diff HTTP/1.1\r\nHost: example.com\r\n\r\n".to_vec();
+        let r1 = b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nok".to_vec();
+        record(&shared, &req, Some(r1), None, 80, false, 8080, false);
+        let r2 = b"HTTP/1.1 304 Not Modified\r\nContent-Type: text/plain\r\n\r\n".to_vec();
+        record(&shared, &req, Some(r2), None, 80, false, 8080, false);
+        let h = shared.history.lock().unwrap();
+        assert_eq!(h[0].diffs, 0);
+        // The 304 changes the status, the length and the recomputed
+        // Content-Length header normalize_response stamps in.
+        assert_eq!(h[1].diffs, 3, "status, length and Content-Length all changed");
+    }
+
+    /// WS frame rebuild roundtrips: masked and unmasked, short, 16-bit and
+    /// 64-bit length encodings all survive a parse after a rebuild.
+    #[test]
+    fn build_ws_frame_roundtrips_through_parse() {
+        for (len, masked) in [(5usize, true), (200, false), (300, true), (70_000, false)] {
+            let payload: Vec<u8> = (0..len).map(|i| (i % 251) as u8).collect();
+            let frame = build_ws_frame(0x1, &payload, masked);
+            let (op, m, parsed, consumed) = parse_ws_frame(&frame).expect("complete frame");
+            assert_eq!(op, 0x1);
+            assert_eq!(m, masked);
+            assert_eq!(parsed, payload, "payload survives the roundtrip at len {len}");
+            assert_eq!(consumed, frame.len());
+        }
+    }
+
+    /// With interception off, frames pass through byte-identical; control
+    /// frames relay untouched even when intercepting.
+    #[test]
+    fn ws_intercept_off_relays_raw_bytes_and_control_frames_pass() {
+        let shared = Shared::new();
+        let mut buffered = Vec::new();
+        let frame = build_ws_frame(0x1, b"plain", true);
+        let out = intercept_ws_stream(&shared, "example.com", &frame, &mut buffered, true);
+        assert_eq!(out, frame, "with interception off, bytes pass through unchanged");
+        // Ping frames are control frames: relayed even when intercepting.
+        shared.ws_intercept_client.store(true, Ordering::SeqCst);
+        let ping = build_ws_frame(0x9, b"keepalive", true);
+        let out = intercept_ws_stream(&shared, "example.com", &ping, &mut buffered, true);
+        assert_eq!(out, ping, "control frames are never queued");
+        assert!(buffered.is_empty());
+    }
+
+    /// Intercept on: text frames are queued, Forward rewrites the payload,
+    /// Drop skips the frame.
+    #[test]
+    fn ws_intercept_queues_edits_and_drops() {
+        let shared = Shared::new();
+        shared.ws_intercept_client.store(true, Ordering::SeqCst);
+        let q_shared = shared.clone();
+        let answerer = std::thread::spawn(move || {
+            for verdict in ["HELLO", ""] {
+                loop {
+                    let item = {
+                        let mut queue = q_shared.queue.lock().unwrap();
+                        if queue.is_empty() { None } else { Some(queue.remove(0)) }
+                    };
+                    if let Some(item) = item {
+                        let edited = if verdict.is_empty() { None } else { Some(verdict.to_string()) };
+                        item.tx.send(edited).unwrap();
+                        break;
+                    }
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+            }
+        });
+        let mut buffered = Vec::new();
+        let mut chunk = build_ws_frame(0x1, b"hello", true);
+        chunk.extend_from_slice(&build_ws_frame(0x1, b"dropme", true));
+        let out = intercept_ws_stream(&shared, "example.com", &chunk, &mut buffered, true);
+        assert_eq!(
+            out,
+            build_ws_frame(0x1, b"HELLO", true),
+            "first frame forwarded with the edited payload, second dropped"
+        );
+        assert!(buffered.is_empty());
+        answerer.join().unwrap();
+    }
+
     /// A-07: replacing the listener set leaves history intact.
     #[test]
     fn listener_restart_keeps_history() {
@@ -2528,12 +3234,16 @@ mod tests {
             req_raw: Vec::new(),
             resp_raw: None,
             note: None,
+            highlight: None,
+            audited: false,
             params: false,
             edited: false,
             extension: String::new(),
             title: String::new(),
             cookies: String::new(),
             listener_port: 0,
+            ip: String::new(),
+            diffs: 0,
         });
         assert!(set_listeners(&shared, vec![ListenerSpec { bind: "127.0.0.1".into(), port: free_port() }]).is_ok());
         std::thread::sleep(Duration::from_millis(600));
@@ -2645,8 +3355,9 @@ mod tests {
         assert!(text.contains("application/x-pem-file"), "{text}");
         assert!(text.contains("BEGIN CERTIFICATE"), "{text}");
 
-        // And the history recorded the exchange.
-        assert_eq!(shared.history.lock().unwrap().len(), 2);
+        // Like http://burpsuite, the internal page stays out of history (and
+        // so out of the scanner).
+        assert_eq!(shared.history.lock().unwrap().len(), 0);
         t.join().unwrap();
     }
 

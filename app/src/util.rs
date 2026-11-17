@@ -457,3 +457,110 @@ mod tests {
         assert_eq!(origin_form(direct).as_slice(), &direct[..]);
     }
 }
+
+
+/// Start a child in its own process group, so it and everything it forks
+/// (a browser's zygotes, renderers, GPU and crash handlers) can be ended
+/// together. Killing only the main browser process leaves the rest orphaned
+/// and running: dozens of processes and gigabytes per browser.
+pub fn own_process_group(cmd: &mut std::process::Command) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+}
+
+/// End a process group started with `own_process_group` (SIGTERM, then
+/// SIGKILL after `grace`), plus any stragglers that still carry `marker` in
+/// their command line (a browser's unique --user-data-dir), which catches
+/// helpers that moved to another group.
+pub fn kill_process_tree(pid: u32, marker: Option<&str>, grace: std::time::Duration) {
+    #[cfg(unix)]
+    {
+        let group = format!("-{pid}");
+        let _ = std::process::Command::new("kill").args(["-TERM", "--", &group]).output();
+        let t0 = std::time::Instant::now();
+        while t0.elapsed() < grace {
+            let alive = std::process::Command::new("kill").args(["-0", "--", &group]).output().map(|o| o.status.success()).unwrap_or(false);
+            if !alive {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        let _ = std::process::Command::new("kill").args(["-KILL", "--", &group]).output();
+        if let Some(m) = marker {
+            if let Ok(entries) = std::fs::read_dir("/proc") {
+                for e in entries.flatten() {
+                    let Ok(p) = e.file_name().to_string_lossy().parse::<u32>() else { continue };
+                    if p == std::process::id() {
+                        continue;
+                    }
+                    let cmdline = std::fs::read(format!("/proc/{p}/cmdline")).unwrap_or_default();
+                    if String::from_utf8_lossy(&cmdline).contains(m) {
+                        let _ = std::process::Command::new("kill").args(["-KILL", &p.to_string()]).output();
+                    }
+                }
+            }
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (pid, marker, grace);
+    }
+}
+
+
+#[cfg(all(test, unix))]
+mod process_tree_tests {
+    fn alive_with(marker: &str) -> usize {
+        std::fs::read_dir("/proc")
+            .unwrap()
+            .flatten()
+            .filter_map(|e| e.file_name().to_string_lossy().parse::<u32>().ok())
+            .filter(|p| *p != std::process::id())
+            .filter(|p| {
+                let c = std::fs::read(format!("/proc/{p}/cmdline")).unwrap_or_default();
+                let st = std::fs::read_to_string(format!("/proc/{p}/stat")).unwrap_or_default();
+                String::from_utf8_lossy(&c).contains(marker) && !st.contains(") Z ")
+            })
+            .count()
+    }
+
+    #[test]
+    fn a_forking_child_is_ended_with_all_its_descendants() {
+        let marker = format!("wp-tree-test-{}", std::process::id());
+        let mut cmd = std::process::Command::new("sh");
+        cmd.args(["-c", &format!("sleep 300 & sleep 300 & exec -a {marker} sleep 300")]);
+        super::own_process_group(&mut cmd);
+        let mut child = cmd.spawn().unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        super::kill_process_tree(child.id(), Some(&marker), std::time::Duration::from_secs(2));
+        let _ = child.wait();
+        let pgid_left = std::process::Command::new("kill").args(["-0", "--", &format!("-{}", child.id())]).output().unwrap().status.success();
+        assert!(!pgid_left, "the background sleeps must be gone too");
+        assert_eq!(alive_with(&marker), 0);
+    }
+
+    /// The real leak: a killed browser left its zygotes and renderers
+    /// running (about 70 processes each). Every one must be gone.
+    #[test]
+    fn a_headless_browser_leaves_no_processes_behind() {
+        let Some(bin) = crate::crawl::chromium_binary() else { return };
+        let profile = std::env::temp_dir().join(format!("wp-tree-browser-{}", std::process::id()));
+        let mut cmd = std::process::Command::new(bin);
+        cmd.args(["--headless=new", "--no-sandbox", "--disable-gpu", &format!("--user-data-dir={}", profile.display()), "about:blank"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+        super::own_process_group(&mut cmd);
+        let mut child = cmd.spawn().unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(3));
+        let marker = profile.display().to_string();
+        assert!(alive_with(&marker) > 1, "browser should have spawned helpers");
+        super::kill_process_tree(child.id(), Some(&marker), std::time::Duration::from_secs(2));
+        let _ = child.wait();
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        assert_eq!(alive_with(&marker), 0, "no browser process may survive");
+        let _ = std::fs::remove_dir_all(&profile);
+    }
+}

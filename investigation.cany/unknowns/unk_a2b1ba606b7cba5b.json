@@ -1,14 +1,17 @@
 {
   "id": "unk_a2b1ba606b7cba5b",
-  "revision": 1,
+  "revision": 2,
   "question": "Hotkeys: mechanics lists 6 hotkey values. Does the rebuild cover the full keyboard map (Ctrl+R, Ctrl+T, Ctrl+I, etc.)?",
   "severity": "low",
   "domain": "feature-parity",
-  "status": "open",
+  "status": "resolved",
   "probes": [
     "List the original's shortcuts from its preferences",
     "Compare with handle_hotkeys in ui.rs"
   ],
-  "evidence_for": [],
-  "evidence_against": []
+  "evidence_for": [
+    "ev_2caab4587bc3709765c73204532bc560caf1c90679ce08ea3a11a7112b03bf4a"
+  ],
+  "evidence_against": [],
+  "resolution": "RESOLVED 2026-11-15: the rebuild covers Burp's full keyboard map. app/src/shortcuts.rs defines exactly 50 default hotkeys in the order Burp's reference file lists them (ACTIONS const, shortcuts.rs:51-52), with a per-action Support state: 16 Wired (WebProbe dispatches: send_to_repeater Ctrl+R, send_to_intruder Ctrl+I, intercept forward/drop, etc.), 20 EditorNative (delegated to the focused egui text editor so both never consume the same chord), 19 Missing (Burp commands with no WebProbe equivalent yet, e.g. explain_this for Burp AI, send_to_organizer). The chord parser enforces Burp's shipped rules (hotkeys.html): every hotkey must use Ctrl/Cmd, Shift-modified letters are rejected, duplicates rejected (isKeystrokeDuplicate equivalent, shortcuts.rs:235-258). Hotkeys persist in ~/.config/webprobe/hotkeys.json; a settings editor and command palette are wired (ui.rs:61-98, shortcuts.rs handle/palette_ui). Burp-side grounding: HOTKEYS_HOTKEYS/HOTKEYS_MODIFIED/HOTKEYS_PATH runtime enums (runtime_enums.tsv) and UserDefaults.json user_options.misc.hotkeys. The 19 Missing entries are the residual, each already enumerated in the map with its Burp chord."
 }

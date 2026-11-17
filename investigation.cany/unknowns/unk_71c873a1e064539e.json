@@ -1,14 +1,17 @@
 {
   "id": "unk_71c873a1e064539e",
-  "revision": 1,
+  "revision": 3,
   "question": "Does the rebuilt app log every request/response like Burp Logger? No Logger tab exists in app/src (logger: 0 files).",
   "severity": "high",
   "domain": "feature-parity",
-  "status": "open",
+  "status": "resolved",
   "probes": [
     "Confirm the original Logger behaviour from the live app",
     "Implement a Logger tab fed by net.rs"
   ],
-  "evidence_for": [],
-  "evidence_against": []
+  "evidence_for": [
+    "ev_db7932046535f871de968dfec4feb334d5e778f9ae0ae3acdc9d409108a296a4"
+  ],
+  "evidence_against": [],
+  "resolution": "RESOLVED 2026-11-15: the rebuild now has a full Logger. Engine: app/src/logger.rs (293 lines; LogEntry with id/ts/tool/method/host/port/path/status/req_len/resp_len/mime/source, LogQuery filter, bounded Logger with monotonic push/filter/snapshot newest-first, cap 5000). Feed: main.rs App.logger + mirror_history/sync_logger mirrors proxy history rows under the history lock. UI: Tab::Logger in ui.rs TABS (ui.rs:48) dispatched at ui.rs:345 to logger_view (Filter box bound to App.log_filter, Clear log, per-row select via App.log_sel, newest-first table with #/Tool/Method/Host/Path/Status/Req/Resp/MIME/Source). Jar grounding: build 52685 burp.Zi96 addTab(\"Logger\", ...) at Zi96.java:16. Visual verification: /root/webprobe-shots/logger-tab2.png shows 60 mirrored entries. Suite green via wp-queue: test result: ok. 216 passed; 0 failed."
 }

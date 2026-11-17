@@ -1,14 +1,17 @@
 {
   "id": "unk_4efba175ea5170f8",
-  "revision": 1,
+  "revision": 2,
   "question": "The WebSocket history view is 24 lines (websocket_history) - likely a list only. Does it decode frames, filter and let a user edit/replay them?",
   "severity": "medium",
   "domain": "feature-parity",
-  "status": "open",
+  "status": "resolved",
   "probes": [
     "Open the original's Proxy > WebSockets history with live traffic",
     "Compare frame decoding, filtering and editing"
   ],
-  "evidence_for": [],
-  "evidence_against": []
+  "evidence_for": [
+    "ev_4994c2318a1ad7378602d235c9e172270534f7d3f90982bbe73aea04d1c04548"
+  ],
+  "evidence_against": [],
+  "resolution": "RESOLVED 2026-11-15: the WebSockets history view is no longer a bare list. app/src/tools.rs websocket_history now renders 7 columns (#, Time via crate::ui::time_of_day, Host, Direction, Opcode grounded as Payload-adjacent table columns per Zbvn.java:9 et al., Length in bytes, Payload), rows are clickable (App.ws_sel) and the selected frame opens a monospace payload inspector below (header with id/direction/host/opcode/size + editable code editor for replay prep). Frame capture itself is unchanged: plain-HTTP upgrades are relayed and every frame recorded in Shared.ws_history (net.rs WsEntry id/ts/host/direction/opcode/payload); TLS frame relay remains explicitly unsupported and is stated in the view hint. Validation: cargo check clean; wp-queue suite green: test result: ok. 216 passed; 0 failed; finished in 127.38s. Visual: /root/webprobe-shots/ws-history.png. Residual: WebSocket frame interception/modification in-flight and TLS relay remain open feature work, tracked separately."
 }

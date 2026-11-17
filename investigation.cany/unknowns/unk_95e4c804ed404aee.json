@@ -1,14 +1,15 @@
 {
   "id": "unk_95e4c804ed404aee",
-  "revision": 1,
+  "revision": 2,
   "question": "Does the rebuild ship Burp's BApp Store? grep for 'bapp' finds nothing.",
   "severity": "low",
   "domain": "feature-parity",
-  "status": "open",
+  "status": "resolved",
   "probes": [
     "List the original's BApp Store entries",
     "Decide whether to reimplement or document as out of scope"
   ],
   "evidence_for": [],
-  "evidence_against": []
+  "evidence_against": [],
+  "resolution": "RESOLVED (wave 23, 2026-11-15): the premise was wrong - build 52685 DOES ship the BApp Store (sub-tab at burp.Zg26.java:47, welcome card at burp.Zmx_.java:28; 'bapp' appears in ~10 jar classes). WebProbe now has the BApp Store surface in its Extensions tab: grounded sub-tab/copy strings and a static offline catalog of 8 well-known BApps. The live store is not fetched and Java BApp installation is unsupported (Rust-native extension host) - both stated honestly in the tab and in qa/SOURCE-PARITY-2026-11-15.md (BApp Store section)."
 }
