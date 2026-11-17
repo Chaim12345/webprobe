@@ -391,13 +391,7 @@ impl App {
     /// whatever view is open (it used to run only while the Scanner or
     /// Dashboard was visible). The matching itself lives in the engine.
     fn match_oob(&mut self) {
-        if self.shared.oob_pending.lock().unwrap().is_empty() {
-            return;
-        }
-        let interactions = self.collab_state.interactions();
-        if !interactions.is_empty() {
-            scan::match_oob_interactions(&self.shared, &interactions);
-        }
+        scan::match_new_interactions(&self.shared, &self.collab_state);
     }
 
     /// Mirror proxy history into the Logger, once per history id.

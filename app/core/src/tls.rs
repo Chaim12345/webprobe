@@ -139,6 +139,9 @@ fn write_private(dir: &std::path::Path, file: &std::path::Path, bytes: &[u8]) ->
     std::fs::rename(tmp, file)
 }
 
+/// Per-host TLS configurations kept in memory at most.
+const MAX_CACHED_HOSTS: usize = 4096;
+
 pub struct MitmAuthority {
     ca_cert: Certificate,
     ca_key: KeyPair,
@@ -146,6 +149,10 @@ pub struct MitmAuthority {
     ca_pem: String,
     next_serial: AtomicI32,
     hosts: Mutex<HashMap<String, Arc<ServerConfig>>>,
+    /// One key pair for every per-host certificate, made on first use: a
+    /// fresh 2048-bit RSA key per host cost a key generation on every new
+    /// site (Burp's generated certificates share one key too).
+    leaf_key: std::sync::OnceLock<KeyPair>,
 }
 
 impl MitmAuthority {
@@ -236,7 +243,7 @@ impl MitmAuthority {
             ca_der,
             ca_pem,
             next_serial: AtomicI32::new(leaf_seed),
-            hosts: Mutex::new(HashMap::new()),
+            hosts: Mutex::new(HashMap::new()), leaf_key: std::sync::OnceLock::new(),
         })
     }
 
@@ -250,7 +257,7 @@ impl MitmAuthority {
         let ca_der = CertificateDer::from(cert_der.to_vec());
         let ca_pem = crate::tls::pem_armor(cert_der, "CERTIFICATE");
         let leaf_seed = (OffsetDateTime::now_utc().unix_timestamp_nanos() / 1_000_000) as i32;
-        Ok(Self { ca_cert: issuer, ca_key: key, ca_der, ca_pem, next_serial: AtomicI32::new(leaf_seed), hosts: Mutex::new(HashMap::new()) })
+        Ok(Self { ca_cert: issuer, ca_key: key, ca_der, ca_pem, next_serial: AtomicI32::new(leaf_seed), hosts: Mutex::new(HashMap::new()), leaf_key: std::sync::OnceLock::new() })
     }
 
     pub fn ca_pem(&self) -> &str {
@@ -269,11 +276,18 @@ impl MitmAuthority {
     }
 
     pub fn server_config(&self, host: &str) -> Result<Arc<ServerConfig>, String> {
-        if let Some(config) = self.hosts.lock().unwrap().get(host) {
+        // Built under the cache lock: with the shared leaf key a build is one
+        // signature, and two connections to a new host no longer both build.
+        let mut hosts = self.hosts.lock().unwrap();
+        if let Some(config) = hosts.get(host) {
             return Ok(config.clone());
         }
         let config = self.build_config(host, Vec::new())?;
-        self.hosts.lock().unwrap().insert(host.to_string(), config.clone());
+        // Bounded: a crawl over many hosts must not grow this forever.
+        if hosts.len() >= MAX_CACHED_HOSTS {
+            hosts.clear();
+        }
+        hosts.insert(host.to_string(), config.clone());
         Ok(config)
     }
 
@@ -349,9 +363,16 @@ impl MitmAuthority {
         // unsigned_abs deliberately maps Java's negative MIN_VALUE overflow to +2147483648.
         let serial = self.next_serial.fetch_add(1, Ordering::Relaxed).unsigned_abs();
         params.serial_number = Some(SerialNumber::from(u64::from(serial)));
-        let leaf_key = generate_rsa_key()?;
+        let leaf_key = match self.leaf_key.get() {
+            Some(k) => k,
+            None => {
+                let k = generate_rsa_key()?;
+                let _ = self.leaf_key.set(k);
+                self.leaf_key.get().ok_or("leaf key unavailable")?
+            }
+        };
         let leaf = params
-            .signed_by(&leaf_key, &self.ca_cert, &self.ca_key)
+            .signed_by(leaf_key, &self.ca_cert, &self.ca_key)
             .map_err(|e| format!("sign host certificate: {e}"))?;
         let chain = vec![leaf.der().clone(), self.ca_der.clone()];
         let key = PrivatePkcs8KeyDer::from(leaf_key.serialize_der());

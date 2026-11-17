@@ -2176,6 +2176,7 @@ mod tests {
             request: req.into(),
             response: Some("HTTP/1.1 200 OK\r\n\r\n".into()),
             result_line: "Done".into(),
+            response_b64: None,
         };
         let mut d = crate::project::ProjectData::default();
         d.repeaters = vec![tab("login", "GET /a HTTP/1.1\r\n\r\n"), tab("3", "POST /b HTTP/1.1\r\n\r\nx")];

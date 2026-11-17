@@ -232,6 +232,14 @@ impl InteractionLog {
         id
     }
 
+    /// Interactions with an id above `after`, oldest first (ids rise
+    /// monotonically, so this walks only the new tail).
+    fn since(&self, after: u64) -> Vec<Interaction> {
+        let entries = lock(&self.entries);
+        let fresh = entries.iter().rev().take_while(|i| i.id > after).count();
+        entries.iter().skip(entries.len() - fresh).cloned().collect()
+    }
+
     fn snapshot(&self) -> Vec<Interaction> {
         let mut entries = lock(&self.entries);
         self.expire(&mut entries, unix_secs());
@@ -780,6 +788,11 @@ impl CollaboratorState {
 
     pub fn interactions(&self) -> Vec<Interaction> {
         self.log.snapshot()
+    }
+
+    /// Interactions recorded after the one with id `after`.
+    pub fn interactions_since(&self, after: u64) -> Vec<Interaction> {
+        self.log.since(after)
     }
 
     pub fn interaction_count(&self) -> usize {
@@ -1526,6 +1539,18 @@ fn preview_text(text: &str, limit: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Review finding 14: only interactions newer than the last matched one
+    /// are handed out, oldest first.
+    #[test]
+    fn interactions_since_returns_only_the_new_tail() {
+        let log = InteractionLog::new();
+        let smtp = || InteractionDetail::Smtp(SmtpInteraction::default());
+        let ids: Vec<u64> = (0..5).map(|i| log.record(unix_secs(), format!("s{i}"), None, smtp())).collect();
+        assert_eq!(log.since(0).iter().map(|i| i.id).collect::<Vec<_>>(), ids);
+        assert_eq!(log.since(ids[2]).iter().map(|i| i.id).collect::<Vec<_>>(), ids[3..].to_vec());
+        assert!(log.since(ids[4]).is_empty());
+    }
     use std::collections::HashSet;
 
     #[test]

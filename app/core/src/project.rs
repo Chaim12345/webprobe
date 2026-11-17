@@ -173,8 +173,10 @@ impl<'de> Deserialize<'de> for ProjectHistory {
             https: h.https,
             path: h.path,
             status: h.status,
-            request: decode_message(&h.request, h.request_b64.as_deref()).into(),
-            response: h.response.as_deref().map(|r| decode_message(r, h.response_b64.as_deref()).into()),
+            // Into the body store as each item is parsed (a no-op for small
+            // bodies), so loading a large project does not hold every body.
+            request: crate::body::spill(&decode_message(&h.request, h.request_b64.as_deref()).into()),
+            response: h.response.as_deref().map(|r| crate::body::spill(&decode_message(r, h.response_b64.as_deref()).into())),
             note: h.note,
             highlight: h.highlight,
             edited: h.edited,
@@ -264,6 +266,26 @@ pub struct ProjectRepeater {
     pub request: String,
     pub response: Option<String>,
     pub result_line: String,
+    /// The exact response bytes (base64) when they are not UTF-8, so a
+    /// binary Repeater response survives a save; `response` is then a lossy
+    /// text view.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response_b64: Option<String>,
+}
+
+impl ProjectRepeater {
+    /// `response` and `response_b64` for raw response bytes.
+    pub fn encode_response(bytes: Option<&[u8]>) -> (Option<String>, Option<String>) {
+        match bytes.map(encode_message) {
+            Some((text, b64)) => (Some(text), b64),
+            None => (None, None),
+        }
+    }
+
+    /// The saved response bytes, exact when base64 was stored.
+    pub fn response_bytes(&self) -> Option<Vec<u8>> {
+        self.response.as_deref().map(|r| decode_message(r, self.response_b64.as_deref()))
+    }
 }
 
 /// One scanner issue.
@@ -1310,9 +1332,18 @@ pub fn wait_for_saves() {
 
 /// Read and validate a project file.
 pub fn load(path: &Path) -> Result<ProjectData, String> {
-    let bytes = std::fs::read(path)
-        .map_err(|err| format!("cannot read project {}: {err}", path.display()))?;
-    decode(&bytes, &path.display().to_string())
+    let file = std::fs::File::open(path).map_err(|err| format!("cannot read project {}: {err}", path.display()))?;
+    let len = file.metadata().map(|m| m.len()).unwrap_or(0);
+    if len == 0 {
+        return decode(b"", &path.display().to_string());
+    }
+    // Mapped, not read: the file's pages are page cache the kernel can drop,
+    // and history bodies go straight to the body store while parsing
+    // (ProjectHistory's Deserialize), so a large project is not held twice.
+    // SAFETY: saves replace the file by rename, so this inode is not
+    // modified while it is mapped.
+    let map = unsafe { memmap2::Mmap::map(&file) }.map_err(|err| format!("cannot read project {}: {err}", path.display()))?;
+    decode(&map, &path.display().to_string())
 }
 
 /// Render a project document as a string (header plus JSON), for tests and
@@ -1530,6 +1561,7 @@ mod tests {
                 request: "GET / HTTP/1.1\r\n\r\n".into(),
                 response: Some("HTTP/1.1 200 OK\r\n\r\n".into()),
                 result_line: "200 OK".into(),
+                response_b64: None,
             }],
             issues: vec![ProjectIssue {
                 id: 11,
@@ -1956,6 +1988,16 @@ mod tests {
         assert_eq!(reset.listener_port, 9191);
         assert_eq!(reset.cookie_jar.as_ref().unwrap().cookies.len(), 2);
         assert_eq!(reset.cookie_jar.as_ref().unwrap().update_from, ["Proxy"]);
+    }
+
+    /// Review finding 16: a binary Repeater response survives save and load.
+    #[test]
+    fn binary_repeater_response_round_trips() {
+        let bytes = vec![b'H', 0xff, 0x00, 0xfe];
+        let (response, response_b64) = ProjectRepeater::encode_response(Some(&bytes));
+        let tab = ProjectRepeater { name: "1".into(), host: "h".into(), port: 80, https: false, request: String::new(), response, result_line: String::new(), response_b64 };
+        let back: ProjectRepeater = serde_json::from_str(&serde_json::to_string(&tab).unwrap()).unwrap();
+        assert_eq!(back.response_bytes(), Some(bytes));
     }
 
     /// Review finding 12: saving keeps the project file's permissions.

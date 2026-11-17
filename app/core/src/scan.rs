@@ -257,6 +257,25 @@ fn mk_burp(kb_name: &str, sev: &str, confidence: &str, e: &HistEntry, param: &st
     i
 }
 
+/// Pending Collaborator ids kept at most; the oldest are dropped beyond it
+/// (an id that never sees its interaction must not be kept forever).
+const MAX_OOB_PENDING: usize = 100_000;
+
+/// Match the interactions `collab` recorded since the last call: cheap to
+/// run every frame, as only new interactions are looked at.
+pub fn match_new_interactions(shared: &Shared, collab: &crate::collaborator::CollaboratorState) -> usize {
+    let seen = shared.oob_seen.load(Ordering::SeqCst);
+    let fresh = collab.interactions_since(seen);
+    let Some(last) = fresh.last().map(|i| i.id) else { return 0 };
+    shared.oob_seen.store(last, Ordering::SeqCst);
+    {
+        let mut pending = shared.oob_pending.lock().unwrap();
+        let excess = pending.len().saturating_sub(MAX_OOB_PENDING);
+        pending.drain(..excess);
+    }
+    match_oob_interactions(shared, &fresh)
+}
+
 /// Match Collaborator interactions against the ids the active scans
 /// embedded (`Shared::oob_pending`) and raise the issues they prove.
 /// Burp family SCANNER_ACTIVE_CHECKS_EXTERNAL_INTERACTION.

@@ -1826,7 +1826,8 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
         port: r.port,
         https: r.https,
         request: r.request.clone(),
-        response: r.response.as_ref().map(|v| String::from_utf8_lossy(v).into_owned()),
+        response: project::ProjectRepeater::encode_response(r.response.as_deref()).0,
+        response_b64: project::ProjectRepeater::encode_response(r.response.as_deref()).1,
         result_line: r.result_line.clone(),
     }).collect();
     let locked_issues = app.shared.issues.lock().unwrap().iter().map(project::ProjectIssue::from_issue).collect();
@@ -2040,7 +2041,7 @@ pub fn apply_project(app: &mut App, data: &project::ProjectData, content: bool) 
             port: r.port,
             https: r.https,
             request: r.request.clone(),
-            response: r.response.as_ref().map(|v| v.as_bytes().to_vec()),
+            response: r.response_bytes(),
             result_line: r.result_line.clone(),
         history: Vec::new(),
         hist_pos: 0,

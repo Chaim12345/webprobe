@@ -845,6 +845,9 @@ pub struct Shared {
     /// "token|kind" pairs already raised as External service interaction
     /// issues (one per interaction type, see `scan::match_oob_interactions`).
     pub oob_reported: Mutex<std::collections::HashSet<String>>,
+    /// Highest Collaborator interaction id already matched
+    /// (`scan::match_new_interactions` looks only at newer ones).
+    pub oob_seen: AtomicU64,
     /// Captured WebSocket handshakes and frames.
     pub ws_history: Mutex<Vec<WsEntry>>,
     /// Diff-count state for the history table ("Diff count", burp.Zxwu.java:56).
@@ -993,6 +996,7 @@ impl Shared {
             macros: Mutex::new(Vec::new()),
             oob_pending: Mutex::new(Vec::new()),
             oob_reported: Mutex::new(std::collections::HashSet::new()),
+            oob_seen: AtomicU64::new(0),
             ws_history: Mutex::new(Vec::new()),
             diff_tracker: Mutex::new(DiffTracker::default()),
             ext_host: Mutex::new(crate::ext_host::ExtensionHost::default()),
@@ -2590,7 +2594,7 @@ fn handle_websocket(shared: Arc<Shared>, mut client: TcpStream, req: Vec<u8>) {
     }
     push_ws(&shared, &host, "handshake", "request", &req_out);
     push_ws(&shared, &host, "handshake", "response", &response);
-    record(&shared, &req_out, Some(response.clone()), None, 80, false, shared.proxy_port.load(Ordering::SeqCst), false);
+    record(&shared, &req_out, Some(response.clone()), None, 80, false, listener_port(&shared), false);
     if util::parse_http(&response).status != "101" {
         shared.log(&format!("WebSocket upgrade for {host}:{port} was not accepted"));
         return;
@@ -2709,7 +2713,7 @@ fn handle_tls_websocket(
     }
     push_ws(&shared, &host, "handshake", "request", &req_out);
     push_ws(&shared, &host, "handshake", "response", &response);
-    record(&shared, &req_out, Some(response.clone()), None, 443, true, shared.proxy_port.load(Ordering::SeqCst), false);
+    record(&shared, &req_out, Some(response.clone()), None, 443, true, listener_port(&shared), false);
     if util::parse_http(&response).status != "101" {
         return;
     }
@@ -2818,6 +2822,12 @@ thread_local! {
 
 /// The upstream target for a request on this connection: the listener's
 /// redirect when one is set, otherwise the host the request names.
+/// The listener port of this thread's connection (history "Listener port"),
+/// the main listener when the thread is not serving one.
+fn listener_port(shared: &Shared) -> u16 {
+    LISTENER_PORT.with(|p| p.get()).unwrap_or_else(|| shared.proxy_port.load(Ordering::SeqCst))
+}
+
 fn upstream_target(shared: &Shared, host: &str, port: u16) -> (String, u16) {
     LISTENER_PORT
         .with(|p| p.get())
@@ -3114,7 +3124,7 @@ fn upstream_and_deliver<S: ProxyIo>(
             let status = util::parse_http(&resp).first.split_whitespace().nth(1).unwrap_or("").to_string();
             let _ = stream.write_all(&resp);
             let _ = stream.flush();
-            record(shared, &req_out, Some(resp), None, default_port, use_tls, shared.proxy_port.load(Ordering::SeqCst), was_edited);
+            record(shared, &req_out, Some(resp), None, default_port, use_tls, listener_port(shared), was_edited);
             shared.log(&format!(
                 "Proxied {} {host}:{port}{} -> {}{}",
                 parts.method,
@@ -3128,7 +3138,7 @@ fn upstream_and_deliver<S: ProxyIo>(
             let msg = format!("HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nWebProbe: upstream failed: {err}");
             let _ = stream.write_all(msg.as_bytes());
             let note = up.error.clone().unwrap_or_else(|| "failed".into());
-            record(shared, &req_out, None, Some(note), default_port, use_tls, shared.proxy_port.load(Ordering::SeqCst), was_edited);
+            record(shared, &req_out, None, Some(note), default_port, use_tls, listener_port(shared), was_edited);
             shared.log(&format!("Proxy error for {host}:{port}: {err}"));
         }
     }

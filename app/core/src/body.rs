@@ -134,9 +134,13 @@ impl From<&Body> for Body {
     }
 }
 
-/// One mapped segment file (already unlinked).
+/// One mapped segment file (already unlinked). Bytes are written with
+/// `pwrite` through `file`, so a full disk is an error; writing through the
+/// mapping into a sparse file would raise SIGBUS instead. Reads use the map.
 struct Segment {
     map: memmap2::MmapRaw,
+    #[cfg(unix)]
+    file: std::fs::File,
 }
 
 /// Bodies smaller than this stay inline: a handle costs about as much.
@@ -148,12 +152,14 @@ struct Store {
     dir: Option<PathBuf>,
     current: Option<(Arc<Segment>, usize, usize)>,
     next: u64,
-    failed: bool,
+    /// After a failure, bodies stay inline until this time; then the store
+    /// is tried again (a full disk may have been cleared).
+    retry_at: Option<std::time::Instant>,
 }
 
 fn store() -> &'static Mutex<Store> {
     static S: OnceLock<Mutex<Store>> = OnceLock::new();
-    S.get_or_init(|| Mutex::new(Store { dir: store_dir(), current: None, next: 0, failed: false }))
+    S.get_or_init(|| Mutex::new(Store { dir: store_dir(), current: None, next: 0, retry_at: None }))
 }
 
 /// `WEBPROBE_BODY_DIR`, else `$XDG_CACHE_HOME/webprobe`, else
@@ -180,12 +186,21 @@ impl Store {
         let cap = need.max(SEGMENT);
         let path = dir.join(format!("bodies-{}-{}", std::process::id(), self.next));
         self.next += 1;
-        let file = std::fs::OpenOptions::new().read(true).write(true).create_new(true).open(&path)?;
-        let mapped = file.set_len(cap as u64).and_then(|()| memmap2::MmapOptions::new().len(cap).map_raw(&file));
-        // Unlinked at once: the mapping keeps the data for this process and
-        // nothing outlives it.
+        let mut opts = std::fs::OpenOptions::new();
+        opts.read(true).write(true).create_new(true);
+        // Private to this user from the first moment: traffic is sensitive.
+        #[cfg(unix)]
+        std::os::unix::fs::OpenOptionsExt::mode(&mut opts, 0o600);
+        let file = opts.open(&path)?;
+        let mapped = file.set_len(cap as u64).and_then(|()| memmap2::MmapOptions::new().len(cap).map_raw_read_only(&file));
+        // Unlinked at once: the mapping and the handle keep the data for this
+        // process and nothing outlives it.
         let _ = std::fs::remove_file(&path);
-        let seg = Arc::new(Segment { map: mapped? });
+        let seg = Arc::new(Segment {
+            map: mapped?,
+            #[cfg(unix)]
+            file,
+        });
         self.current = Some((seg.clone(), 0, cap));
         Ok((seg, 0))
     }
@@ -198,27 +213,41 @@ pub fn spill(body: &Body) -> Body {
     if body.is_stored() || body.len() < MIN_SPILL {
         return body.clone();
     }
-    let mut st = store().lock().unwrap();
-    if st.failed {
+    let mut st = store().lock().unwrap_or_else(|p| p.into_inner());
+    if st.retry_at.is_some_and(|t| std::time::Instant::now() < t) {
         return body.clone();
     }
-    match st.segment(body.len()) {
+    match st.segment(body.len()).and_then(|(seg, off)| write_at(&seg, off, body).map(|()| (seg, off))) {
         Ok((seg, off)) => {
-            // SAFETY: [off, off + len) is past every range handed out so far
-            // and inside the mapping; no reader can see it until this Body
-            // is returned.
-            unsafe { std::ptr::copy_nonoverlapping(body.as_ptr(), seg.map.as_mut_ptr().add(off), body.len()) };
+            st.retry_at = None;
             if let Some((_, used, _)) = &mut st.current {
                 *used = off + body.len();
             }
             Body(Repr::Stored { seg, off, len: body.len() })
         }
         Err(e) => {
-            st.failed = true;
-            eprintln!("webprobe: history bodies stay in memory, the body store is unavailable: {e}");
+            if st.retry_at.is_none() {
+                eprintln!("webprobe: history bodies stay in memory for now, the body store failed: {e}");
+            }
+            // Start a fresh segment next time and back off for a minute.
+            st.current = None;
+            st.retry_at = Some(std::time::Instant::now() + std::time::Duration::from_secs(60));
             body.clone()
         }
     }
+}
+
+/// Write `body` at `off` of the segment with `pwrite`: [off, off + len) is
+/// past every range handed out and inside the file; no reader can see it
+/// until the Body is returned.
+#[cfg(unix)]
+fn write_at(seg: &Segment, off: usize, body: &[u8]) -> std::io::Result<()> {
+    std::os::unix::fs::FileExt::write_all_at(&seg.file, body, off as u64)
+}
+
+#[cfg(not(unix))]
+fn write_at(_seg: &Segment, _off: usize, _body: &[u8]) -> std::io::Result<()> {
+    Err(std::io::Error::other("no body store on this platform"))
 }
 
 #[cfg(test)]

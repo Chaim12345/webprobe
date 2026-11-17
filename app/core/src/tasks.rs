@@ -208,15 +208,19 @@ fn run(shared: &Arc<Shared>, id: u64, kind: TaskKind) {
                 break;
             }
             let (oob, smtp) = prepared.unwrap_or_else(|| (crate::scan::pooled_oob(shared, &e.req_raw), Vec::new()));
+            // start_active_scan marks the scanner busy before it returns,
+            // so waiting for idle cannot miss the scan it just started.
             crate::scan::start_active_scan(shared.clone(), e, &oob, &smtp);
-            std::thread::sleep(Duration::from_millis(50));
             wait_idle(shared);
+            // Read the issue count first: `tasks` is never held while
+            // `issues` is locked (one lock order everywhere).
+            let found = shared.issues.lock().unwrap().len().saturating_sub(issues_before);
             if let Some(t) = shared.tasks.lock().unwrap().iter_mut().find(|t| t.id == id) {
                 // An item cut short by Cancel was not audited.
                 if t.state != TaskState::Cancelled {
                     t.done += 1;
                 }
-                t.issues_found = shared.issues.lock().unwrap().len().saturating_sub(issues_before);
+                t.issues_found = found;
             }
             shared.wake();
         }
