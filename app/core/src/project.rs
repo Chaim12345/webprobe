@@ -712,6 +712,11 @@ pub struct ProjectData {
     pub layout: ProjectLayout,
     #[serde(default)]
     pub editors: ProjectEditors,
+    /// The CA that intercepted this project's HTTPS traffic (its SHA-256
+    /// fingerprint). The CA itself is per user, as in Burp; the project only
+    /// records which one it was, so opening it under another CA is noticed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ca_fingerprint: Option<String>,
 }
 
 fn default_listener_port() -> u16 {
@@ -750,6 +755,7 @@ impl Default for ProjectData {
             tasks: ProjectTasks::default(),
             layout: ProjectLayout::default(),
             editors: ProjectEditors::default(),
+            ca_fingerprint: None,
         }
     }
 }
@@ -1379,6 +1385,7 @@ mod tests {
                 macro_request: "GET /login HTTP/1.1\r\n\r\n".into(),
                 sequencer_manual: "tok1\ntok2".into(),
             },
+            ca_fingerprint: Some("AB:CD".into()),
         }
     }
 

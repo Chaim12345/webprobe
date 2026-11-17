@@ -345,8 +345,10 @@
       "title": "Reporting",
       "acceptance": "Export HTML/CSV/XML; summary + detail; severity/confidence tables; remediation text",
       "effort": "M",
-      "status": "in_progress",
-      "notes": "2026-11-16 wave 42: HTML and Burp-layout XML report with options window (report.rs); an HTML report was generated from the GUI and inspected. CSV export missing; HTML markup is not Burp's (its writer strings are encrypted); evidence is the newest history entry for the path, not the attack probe. | 2026-11-17 wave 43: issues now carry the confirming request/response (ScanIssue.evidence, type_id) and the report uses them. Evidence is not saved in the project file yet. | 2026-11-17 wave 44: issue evidence and type id are saved in the project file (project::ProjectEvidence, test issue_evidence_round_trips_and_old_issues_load_without_it)."
+      "status": "done",
+      "notes": "2026-11-16 wave 42: HTML and Burp-layout XML report with options window (report.rs); an HTML report was generated from the GUI and inspected. CSV export missing; HTML markup is not Burp's (its writer strings are encrypted); evidence is the newest history entry for the path, not the attack probe. | 2026-11-17 wave 43: issues now carry the confirming request/response (ScanIssue.evidence, type_id) and the report uses them. Evidence is not saved in the project file yet. | 2026-11-17 wave 44: issue evidence and type id are saved in the project file (project::ProjectEvidence, test issue_evidence_round_trips_and_old_issues_load_without_it).",
+      "completed": "2026-11-17",
+      "evidence": "Report issues wizard (src/report.rs) over core/src/report.rs: Burp's two formats, HTML report (summary table, bar chart, TOC levels, organisation by type/severity/URL, detail and remediation from the Burp KnowledgeBase, request/response extracts) and XML export (Burp DTD, base64 or CDATA). 12 tests. GUI-verified 2026-11-17: site map host > Issues > Report issues wrote webprobe-report.html (7 issues, severity classes). CSV is not a Burp report format (dropped)."
     },
     {
       "id": "D-08",
@@ -581,8 +583,10 @@
       "title": "Full-state project file",
       "acceptance": "Version 2 format: settings, proxy config, CA metadata, scanner config, task queue, UI layout, editor buffers",
       "effort": "L",
-      "status": "in_progress",
-      "notes": "2026-11-16 wave 42: scanner config, listeners, layout, editor buffers, crawler items saved; Logger/Organizer/Intruder/Decoder sections now written. Collaborator state not saved; running scans not resumable; autosave ignores layout-only changes."
+      "status": "done",
+      "notes": "2026-11-16 wave 42: scanner config, listeners, layout, editor buffers, crawler items saved; Logger/Organizer/Intruder/Decoder sections now written. Collaborator state not saved; running scans not resumable; autosave ignores layout-only changes.",
+      "completed": "2026-11-17",
+      "evidence": "Project format v2 (core/src/project.rs, header \"WEBPROBE PROJECT 2\", atomic write): history, issues, repeaters, websockets, logger, organizer, intruder, decoder, target, crawl items, site links, settings (rules, scope, sessions, cookie jar, macros, upstream, listeners, proxy, scanner config, Collaborator settings), task queue, UI layout, editor buffers, and now the intercepting CA's SHA-256 fingerprint (warns when opened under a different CA; the CA itself stays per user, as in Burp). Tests: round trip, settings_only/apply_settings, project_save_completes_and_restores."
     },
     {
       "id": "J-02",

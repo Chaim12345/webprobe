@@ -198,6 +198,13 @@ impl MitmAuthority {
         &self.ca_pem
     }
 
+    /// SHA-256 of the CA certificate, as colon-separated hex (what browsers
+    /// show as the certificate fingerprint).
+    pub fn ca_fingerprint(&self) -> String {
+        use sha2::Digest;
+        sha2::Sha256::digest(self.ca_der.as_ref()).iter().map(|b| format!("{b:02X}")).collect::<Vec<_>>().join(":")
+    }
+
     pub fn ca_der(&self) -> CertificateDer<'static> {
         self.ca_der.clone()
     }

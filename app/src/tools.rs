@@ -1836,6 +1836,7 @@ pub fn save_project(app: &mut App, quiet: bool) {
             retention_secs: Some(app.collab_state.retention_secs()),
             ..Default::default()
         },
+        ca_fingerprint: Some(app.shared.mitm.ca_fingerprint()),
         ..project::ProjectData::default()
     };
     match project::save(std::path::Path::new(&target), &data) {
@@ -1913,6 +1914,14 @@ pub fn restore_project(app: &mut App, quiet: bool) {
                 data.appearance.font_scale,
             );
             restore_j01_sections(app, &data);
+            // The traffic in this project was intercepted under another CA:
+            // browsers trusting only the current CA will reject the old one's
+            // certificates, and evidence refers to a different CA.
+            if let Some(fp) = data.ca_fingerprint.as_ref().filter(|fp| **fp != app.shared.mitm.ca_fingerprint()) {
+                let msg = format!("This project was recorded with a different CA certificate ({}…); the current CA is {}…", &fp[..fp.len().min(23)], &app.shared.mitm.ca_fingerprint()[..23]);
+                app.shared.log(&msg);
+                crate::feedback::toast(crate::feedback::Level::Info, msg);
+            }
             // Ids handed out after the restore must not collide with restored ones.
             {
                 let max_id = app.shared.history.lock().unwrap().iter().map(|e| e.id)
@@ -2157,6 +2166,9 @@ mod save_restore_tests {
             app.shared.scan_config.lock().unwrap().disabled_insertion.insert("cookie".into());
             app.collab_state.set_poll_secs(9);
             save_project(&mut app, true);
+            let saved = project::load(std::path::Path::new(&app.project_path)).unwrap();
+            assert_eq!(saved.ca_fingerprint.as_deref(), Some(app.shared.mitm.ca_fingerprint().as_str()), "CA recorded");
+            assert_eq!(app.shared.mitm.ca_fingerprint().len(), 95, "SHA-256 as AA:BB:...");
             let mut fresh = crate::App::new(net::Shared::new());
             fresh.project_path = app.project_path.clone();
             restore_project(&mut fresh, true);
