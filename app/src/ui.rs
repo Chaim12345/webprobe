@@ -488,12 +488,30 @@ fn history_menu_windows(app: &mut App, ctx: &egui::Context) {
         egui::Window::new("HTTP history").default_pos(crate::theme::window_pos(&ctx)).open(&mut open).default_size(egui::vec2(900.0, 420.0)).show(ctx, |ui| {
             ui.add(egui::TextEdit::singleline(&mut app.hist_window_filter).hint_text("Search").desired_width(260.0));
             let q = app.hist_window_filter.to_ascii_lowercase();
-            let rows: Vec<net::HistEntry> = app.shared.history.lock().unwrap().iter().rev().filter(|e| q.is_empty() || history_url(e).to_ascii_lowercase().contains(&q)).cloned().collect();
+            // Rebuilt only when the history or the filter changes: filtering
+            // and copying every entry under the history lock on every frame
+            // held up the proxy threads that record traffic.
+            thread_local! {
+                static ROWS: std::cell::RefCell<((usize, u64, String), std::rc::Rc<Vec<net::HistEntry>>)> = std::cell::RefCell::new(((usize::MAX, 0, String::new()), Default::default()));
+            }
+            let stamp = {
+                let h = app.shared.history.lock().unwrap();
+                (h.len(), h.last().map(|e| e.id).unwrap_or(0), q.clone())
+            };
+            let rows = ROWS.with(|c| {
+                let mut c = c.borrow_mut();
+                if c.0 != stamp {
+                    let snapshot: Vec<net::HistEntry> = app.shared.history.lock().unwrap().iter().rev().cloned().collect();
+                    let rows: Vec<net::HistEntry> = snapshot.into_iter().filter(|e| q.is_empty() || history_url(e).to_ascii_lowercase().contains(&q)).collect();
+                    *c = (stamp, std::rc::Rc::new(rows));
+                }
+                c.1.clone()
+            });
             let cols = [table::Column::new("#", 50.0), table::Column::new("Host", 180.0), table::Column::new("Method", 60.0), table::Column::new("URL", 300.0), table::Column::new("Status code", 80.0), table::Column::new("Length", 70.0)];
             let mut st = app.hist_window_table.clone();
             let mut pick = None;
             let h = ui.available_height();
-            table::table_body(ui, "hist_window", &cols, &rows, &mut st, 19.0, h, &mut |e, ui| {
+            table::table_body(ui, "hist_window", &cols, &rows[..], &mut st, 19.0, h, &mut |e, ui| {
                 let row = ui.horizontal(|ui| {
                     table::cells(ui, &cols, &table::TableState::default(), 19.0, &[
                         (0, e.id.to_string(), None),

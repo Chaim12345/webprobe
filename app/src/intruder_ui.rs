@@ -30,6 +30,12 @@ pub struct IntruderExtra {
     /// Cached sort: (rows, column, ascending) -> row order.
     order_key: (usize, usize, bool),
     order: Vec<usize>,
+    /// When the order was last computed: while an attack adds rows, a sorted
+    /// table is re-sorted at most twice a second (new rows go at the end in
+    /// between) instead of every frame.
+    order_at: Option<std::time::Instant>,
+    /// Rows were appended unsorted and still need a sort.
+    order_dirty: bool,
 }
 
 impl Default for IntruderExtra {
@@ -43,6 +49,8 @@ impl Default for IntruderExtra {
             csv_path: std::env::temp_dir().join("intruder-results.csv").to_string_lossy().into_owned(),
             order_key: (usize::MAX, usize::MAX, false),
             order: Vec::new(),
+            order_at: None,
+            order_dirty: false,
         }
     }
 }
@@ -335,13 +343,30 @@ pub fn request_count_text(app: &App) -> String {
         let lens: Vec<usize> = used.iter().map(PayloadSource::len).collect();
         return intruder::count(kind, template.positions(), &lens).map(|n| n.to_string()).unwrap_or_else(|| "too many".into());
     }
-    match intruder::resolve_specs(&template, kind, &sources) {
+    // Slow path: resolving regenerates every set (a brute forcer can be
+    // millions of payloads), so the answer is kept until the inputs change.
+    thread_local! {
+        static LAST: std::cell::RefCell<Option<(u64, String)>> = const { std::cell::RefCell::new(None) };
+    }
+    let key = {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        app.intr_req.hash(&mut h);
+        format!("{kind:?}{sources:?}").hash(&mut h);
+        h.finish()
+    };
+    if let Some(hit) = LAST.with(|l| l.borrow().as_ref().filter(|(k, _)| *k == key).map(|(_, v)| v.clone())) {
+        return hit;
+    }
+    let text: String = match intruder::resolve_specs(&template, kind, &sources) {
         Ok(specs) if specs.iter().any(|s| matches!(s, intruder::SetSpec::Recursive { .. })) => "unknown".into(),
         Ok(specs) => intruder::count_specs(app.intr_attack, template.positions(), &specs)
             .map(|n| n.to_string())
             .unwrap_or_else(|| "too many".into()),
         Err(_) => "-".into(),
-    }
+    };
+    LAST.with(|l| *l.borrow_mut() = Some((key, text.clone())));
+    text
 }
 
 pub fn is_running(app: &App) -> bool {
@@ -689,14 +714,26 @@ pub fn results_window(app: &mut App, ctx: &egui::Context) {
                 .collect();
             let mut st = app.intr_table.clone();
             let key = (rows.len(), st.sort_col, st.sort_asc);
-            if key != app.intr_x.order_key {
-                app.intr_x.order = if st.sort_col == usize::MAX {
-                    let mut o: Vec<usize> = (0..rows.len()).collect();
-                    o.sort_by_key(|&i| rows[i].number);
-                    o
+            let recent = app.intr_x.order_at.is_some_and(|t| t.elapsed() < std::time::Duration::from_millis(500));
+            if key != app.intr_x.order_key || (app.intr_x.order_dirty && !recent) {
+                let (old_len, old_col, old_asc) = app.intr_x.order_key;
+                let only_grew = old_col == st.sort_col && old_asc == st.sort_asc && rows.len() > old_len && old_len != usize::MAX;
+                if st.sort_col != usize::MAX && only_grew && recent {
+                    // Sorted view while rows arrive: append now, sort soon.
+                    app.intr_x.order.extend(old_len..rows.len());
+                    app.intr_x.order_dirty = true;
+                    ui.ctx().request_repaint_after(std::time::Duration::from_millis(500));
                 } else {
-                    run::sort_order(&rows, state.sets, &state.settings, st.sort_col, st.sort_asc)
-                };
+                    app.intr_x.order_dirty = false;
+                    app.intr_x.order = if st.sort_col == usize::MAX {
+                        let mut o: Vec<usize> = (0..rows.len()).collect();
+                        o.sort_by_key(|&i| rows[i].number);
+                        o
+                    } else {
+                        run::sort_order(&rows, state.sets, &state.settings, st.sort_col, st.sort_asc)
+                    };
+                    app.intr_x.order_at = Some(std::time::Instant::now());
+                }
                 app.intr_x.order_key = key;
             }
             let order = app.intr_x.order.clone();

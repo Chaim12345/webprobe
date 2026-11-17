@@ -41,11 +41,14 @@ pub struct PaneState {
     /// Pasted line breaks follow the HTTP message's CRLF (UAT-06); off for
     /// non-HTTP payloads such as WebSocket messages.
     pub crlf_paste: bool,
+    /// The lines last shown, keyed by message fingerprint and view: a large
+    /// JSON/XML body used to be pretty-printed again on every frame.
+    pub(crate) lines_cache: Option<(u64, bool, std::sync::Arc<Vec<(LineKind, String)>>)>,
 }
 
 impl Default for PaneState {
     fn default() -> Self {
-        Self { view: 0, search: String::new(), wrap: true, show_np: false, cur: 0, jump: false, case_sensitive: false, sel: None, live_url_encode: false, crlf_paste: true }
+        Self { view: 0, search: String::new(), wrap: true, show_np: false, cur: 0, jump: false, case_sensitive: false, sel: None, live_url_encode: false, crlf_paste: true, lines_cache: None }
     }
 }
 
@@ -239,6 +242,29 @@ pub fn pretty_xml(text: &str) -> Option<String> {
     }
     out.truncate(out.trim_end().len());
     Some(out)
+}
+
+/// A fingerprint of a message's full content. Hashing is linear and cheap
+/// next to pretty-printing; sampling parts of the body would show stale
+/// lines for two same-length responses that differ in the middle.
+fn fingerprint(bytes: &[u8]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    bytes.hash(&mut h);
+    h.finish()
+}
+
+/// `message_lines`, cached in the pane state until the message or view changes.
+fn cached_lines(st: &mut PaneState, bytes: &[u8], pretty: bool) -> std::sync::Arc<Vec<(LineKind, String)>> {
+    let key = fingerprint(bytes);
+    if let Some((k, p, lines)) = &st.lines_cache {
+        if *k == key && *p == pretty {
+            return lines.clone();
+        }
+    }
+    let lines = std::sync::Arc::new(message_lines(bytes, pretty));
+    st.lines_cache = Some((key, pretty, lines.clone()));
+    lines
 }
 
 /// Lines of a message for the text views, each tagged with its syntax role.
@@ -532,7 +558,7 @@ pub fn message_pane(
                 }
                 v => {
                     ui.spacing_mut().item_spacing.y = 0.0;
-                    let lines = message_lines(bytes, v == 0);
+                    let lines = cached_lines(st, bytes, v == 0);
                     let ec = theme::editor_colours();
                     let gutter = 12.0 + 8.0 * (lines.len().max(1).to_string().len() as f32);
                     let text_w = (ui.available_width() - gutter - 8.0).max(80.0);
@@ -1094,6 +1120,19 @@ pub fn side_dock(ui: &mut Ui, active: usize) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Second review, finding 9: lines are built once per message and view,
+    /// and a different message of the same length is not served stale.
+    #[test]
+    fn pane_lines_are_cached_per_message_and_view() {
+        let mut st = PaneState::default();
+        let a = b"HTTP/1.1 200 OK\r\n\r\n{\"a\":1}";
+        let b = b"HTTP/1.1 200 OK\r\n\r\n{\"b\":1}";
+        let first = cached_lines(&mut st, a, true);
+        assert!(std::sync::Arc::ptr_eq(&first, &cached_lines(&mut st, a, true)), "same message: cached");
+        assert!(!std::sync::Arc::ptr_eq(&first, &cached_lines(&mut st, a, false)), "other view: rebuilt");
+        assert!(cached_lines(&mut st, b, true).iter().any(|(_, l)| l.contains("\"b\"")), "same length, other content");
+    }
 
     #[test]
     fn lines_are_tagged_first_header_body() {
