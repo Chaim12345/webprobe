@@ -212,6 +212,15 @@ pub fn cors_flags(resp: &[u8], acao: &str, credentials: bool) -> u32 {
         .iter()
         .filter(|(k, _)| k.eq_ignore_ascii_case("vary"))
         .any(|(_, v)| v.split(',').any(|x| x.trim().eq_ignore_ascii_case("origin")));
+    // Zrbl.Zh: the MIME types that may carry in-session data are none,
+    // HTML, text, script, JSON and XML (Zmlg ids 0, 256, 257, 259, 260,
+    // 262); any other type sets 64 ("not likely to contain sensitive
+    // in-session data").
+    let ct = util::get_header(&parts.headers, "Content-Type").unwrap_or_default();
+    let body = &resp[parts.head_len.min(resp.len())..];
+    if !matches!(crate::mime::burp_mime(&ct, body), "" | "HTML" | "text" | "script" | "JSON" | "XML") {
+        f |= 64;
+    }
     if !vary_origin {
         f |= 32;
     }
@@ -693,6 +702,18 @@ fn attr(tag: &str, name: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Second review, finding 18: Zrbl.Zh sets 64 for non-sensitive types.
+    #[test]
+    fn cors_flag_64_marks_non_sensitive_content_types() {
+        let resp = |ct: &str| format!("HTTP/1.1 200 OK\r\nContent-Type: {ct}\r\nVary: Origin\r\n\r\nx").into_bytes();
+        for ct in ["image/png", "text/css", "application/octet-stream"] {
+            assert_ne!(cors_flags(&resp(ct), "https://evil", true) & 64, 0, "{ct}");
+        }
+        for ct in ["text/html", "application/json", "text/plain", "application/javascript", "application/xml"] {
+            assert_eq!(cors_flags(&resp(ct), "https://evil", true) & 64, 0, "{ct}");
+        }
+    }
 
     struct Fixed(u8);
     impl Rand for Fixed {
