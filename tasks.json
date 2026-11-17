@@ -517,8 +517,10 @@
       "title": "Session rule actions",
       "acceptance": "Set header, set cookie, run macro, validate session, browser recovery, post-request match/replace",
       "effort": "M",
-      "status": "in_progress",
-      "notes": "2026-11-17 wave 50: session rules now have a tool scope (Burp's default: all but Proxy) and run for tool requests as well as proxy traffic; actions: set header, set cookie, use cookie, use cookie jar, run macro (its cookies feed the jar, then the request), check session (validation request, expression, valid/invalid sense, login macro), post-request macro. Loopback tests net::session_rule_tests (3), including a login performed once and reused. Rule editor row seen in the GUI (qa-egui37-merged/37c.png); the check-session fields were not exercised on screen. Not done: in-browser session recovery, post-request match/replace, a multi-request macro."
+      "status": "done",
+      "notes": "2026-11-17 wave 50: session rules now have a tool scope (Burp's default: all but Proxy) and run for tool requests as well as proxy traffic; actions: set header, set cookie, use cookie, use cookie jar, run macro (its cookies feed the jar, then the request), check session (validation request, expression, valid/invalid sense, login macro), post-request macro. Loopback tests net::session_rule_tests (3), including a login performed once and reused. Rule editor row seen in the GUI (qa-egui37-merged/37c.png); the check-session fields were not exercised on screen. Not done: in-browser session recovery, post-request match/replace, a multi-request macro.",
+      "evidence": "Session rule actions in net::apply_session_rules_for: set header, set cookie, use cookie, use cookie jar, run macro, check session (macro or in-browser recovery), post-request macro. In-browser recovery: net::BrowserRecovery prompt, test browser_recovery_waits_for_the_login_and_uses_the_new_cookie. GUI-verified 2026-11-17 against a local lab origin: Repeater request found \"Please login\", Session recovery prompt shown, login proxied through 6566 fed the jar, Done -> response \"Welcome back, account page\".",
+      "completed": "2026-11-17"
     },
     {
       "id": "I-01",
@@ -581,9 +583,10 @@
       "title": "Autosave and recovery",
       "acceptance": "Periodic autosave, crash recovery prompt, temp project support",
       "effort": "M",
-      "status": "in_progress",
-      "evidence": "Done: periodic autosave (60 s when changed) and save on exit, autoload at startup. Missing: crash-recovery prompt and temporary-project mode.",
-      "notes": "2026-11-16 wave 42: running-marker crash detection, restore/temporary/start-clean prompt, WEBPROBE_TEMP_PROJECT (recovery.rs, 7 tests). Prompt not yet seen in the GUI."
+      "status": "done",
+      "evidence": "Periodic autosave (60 s when changed), save on exit, autoload; crash recovery prompt (recovery.rs) with Restore / Temporary / Start clean, writing to a temporary project until chosen. GUI-verified 2026-11-17: killed instance -> \"WebProbe did not shut down cleanly last time\" prompt -> Restore the autosaved project restored the Repeater tab and session rule. Save deadlock fixed (project_save_completes_and_restores).",
+      "notes": "2026-11-16 wave 42: running-marker crash detection, restore/temporary/start-clean prompt, WEBPROBE_TEMP_PROJECT (recovery.rs, 7 tests). Prompt not yet seen in the GUI.",
+      "completed": "2026-11-17"
     },
     {
       "id": "J-03",
@@ -1083,9 +1086,10 @@
       "title": "Paste into request/message editors is ignored or delivers stale clipboard",
       "acceptance": "Ctrl+V inserts the current clipboard text into Repeater/Intruder request editors, preserving line breaks (LF and CRLF).",
       "effort": "M",
-      "status": "in_progress",
-      "evidence": "Isolated UAT 2026-11-16: paste works in the Target single-line field but not reliably in request editors; one paste delivered the previous clipboard. Shots 30-37, 65.",
-      "notes": "2026-11-16 wave 42: CRLF-preserving paste handled in the editor (msgpane.rs, headless tests). 'Paste ignored / stale clipboard' root cause not found (clipboard path not reproducible headless)."
+      "status": "done",
+      "evidence": "GUI-verified 2026-11-17 on Xvfb with a real X clipboard (xclip) and real Ctrl+V (xdotool) into the Repeater request editor: CRLF text pasted verbatim replacing the selection; then a different LF clipboard pasted fresh content (no stale clipboard) with LF normalised to CRLF (msgpane take_paste, crlf_paste on). Read back through the egui MCP get_text on the \"Request\" editor.",
+      "notes": "2026-11-16 wave 42: CRLF-preserving paste handled in the editor (msgpane.rs, headless tests). 'Paste ignored / stale clipboard' root cause not found (clipboard path not reproducible headless).",
+      "completed": "2026-11-17"
     },
     {
       "id": "UAT-07",

@@ -799,3 +799,5 @@ Suite: core 390 (380 pass, 10 ignored), desktop 134, 0 fail.
   - J-04: corrupt file rejected; New project written and added to the recent list.
   - Site map comparison run.
 - **N-05.** Release startup to a mapped window takes 871 ms cold and about 410 ms warm. An incremental release rebuild takes 65 s (the desktop crate is 58 s of it). The cache misses after a target-dir change: sccache keys include the target directory.
+- **Proxy listener restart (fix).** The listener only re-read its port after the next client connected (blocking accept). A restored project with port 8080 would therefore have moved the proxy onto 8080 at the next request. It now polls a non-blocking accept and moves at once (test `primary_listener_moves_on_restart_without_a_connection`). An explicit `WEBPROBE_PORT` now wins over a project's saved port.
+- **GUI-verified:** H-04 in-browser session recovery end to end, and J-02 crash recovery prompt then restore.

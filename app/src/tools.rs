@@ -1900,8 +1900,12 @@ pub fn restore_project(app: &mut App, quiet: bool) {
                 payload: w.payload.clone(),
             }).collect();
             *app.shared.upstream.lock().unwrap() = data.upstream.clone();
-            app.shared.proxy_port.store(data.listener_port, Ordering::SeqCst);
-            app.shared.listener_restart.store(true, Ordering::SeqCst);
+            // An explicit WEBPROBE_PORT (QA runs, a second instance) wins
+            // over the port saved in the project.
+            if std::env::var_os("WEBPROBE_PORT").is_none() && data.listener_port != app.shared.proxy_port.load(Ordering::SeqCst) {
+                app.shared.proxy_port.store(data.listener_port, Ordering::SeqCst);
+                app.shared.listener_restart.store(true, Ordering::SeqCst);
+            }
             // M-05: apply the persisted appearance.
             crate::theme::set_appearance(
                 crate::theme::Palette::parse(&data.appearance.palette),

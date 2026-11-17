@@ -1781,15 +1781,21 @@ pub fn start_proxy(shared: Arc<Shared>) {
                 shared.log(&format!("Proxy listener started on {addr}, intercept is {}", {
                     if shared.intercept_on.load(Ordering::SeqCst) { "on" } else { "off" }
                 }));
+                // Non-blocking accept, so a restart (port change, restored
+                // project) takes effect at once; a blocking accept only saw
+                // the flag after the next client connected.
+                let _ = l.set_nonblocking(true);
                 loop {
                     if shared.listener_restart.load(Ordering::SeqCst) {
                         break;
                     }
                     match l.accept() {
                         Ok((stream, _)) => {
+                            let _ = stream.set_nonblocking(false);
                             let sh = shared.clone();
                             spawn_connection(sh, stream);
                         }
+                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => std::thread::sleep(Duration::from_millis(50)),
                         Err(_) => continue,
                     }
                 }
@@ -4352,6 +4358,30 @@ mod tests {
         assert!(set_listeners(&shared, vec![ListenerSpec { bind: "127.0.0.1".into(), port: free_port() }]).is_ok());
         std::thread::sleep(Duration::from_millis(600));
         assert_eq!(shared.history.lock().unwrap().len(), 1, "history survives listener changes");
+    }
+
+    /// A port change moves the primary listener without waiting for a client
+    /// to connect (a blocking accept used to hold the old port until then).
+    #[test]
+    fn primary_listener_moves_on_restart_without_a_connection() {
+        let shared = Shared::new();
+        let (a, b) = (free_port(), free_port());
+        shared.proxy_port.store(a, Ordering::SeqCst);
+        start_proxy(shared.clone());
+        let bound = |p: u16| std::net::TcpStream::connect(("127.0.0.1", p)).is_ok();
+        let wait = |cond: &dyn Fn() -> bool| {
+            let t0 = std::time::Instant::now();
+            while !cond() && t0.elapsed() < Duration::from_secs(5) {
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            cond()
+        };
+        assert!(wait(&|| shared.listener_running.load(Ordering::SeqCst)), "listener up");
+        shared.proxy_port.store(b, Ordering::SeqCst);
+        shared.listener_restart.store(true, Ordering::SeqCst);
+        // No connection to the old port in between: the new one must come up.
+        assert!(wait(&|| std::net::TcpListener::bind(("127.0.0.1", a)).is_ok()), "old port released");
+        assert!(wait(&|| bound(b)), "new port listening");
     }
 
     // ---------- A-08: invisible proxying ----------
