@@ -845,7 +845,9 @@
       "title": "Builder reliability",
       "acceptance": "Fix the `omp` model-routing 404s (glm-5.3 / kimi-k3.1) so rounds complete; add a working fallback",
       "effort": "S",
-      "status": "todo"
+      "status": "rejected",
+      "completed": "2026-11-17",
+      "evidence": "Out of scope (user decision 2026-11-17): concerns the omp builder harness's model routing, not WebProbe."
     },
     {
       "id": "N-05",
@@ -1060,11 +1062,12 @@
       "title": "Headless engine trait + Obscura sidecar spike",
       "acceptance": "HeadlessBrowser trait with an Obscura implementation behind it; gate = the 5 acceptance checks in docs/EVAL-OBSCURA.md (JS crawl finds more links, all traffic incl. HTTPS in history via SSL_CERT_FILE, stored response to PNG <2 s and <150 MB, stealth/tracker blocking off, version pinned and digest verified); also compare Lightpanda in the same fixtures",
       "effort": "M",
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [
         "D-01"
       ],
-      "evidence": "2026-11-17: core/src/headless.rs HeadlessBrowser trait (render through the WebProbe proxy, DOM after scripts) with Chromium, Lightpanda and Obscura engines; js_crawl within the scan crawl limits; Crawl and audit can use Lightpanda/Obscura (Settings > scan configuration > JavaScript crawl engine, saved with the project). Test js_crawl_follows_script_written_links_through_the_proxy (Lightpanda installed here). OPEN: the Obscura binary is not installed on this box, so the 5 EVAL-OBSCURA.md acceptance checks are not run yet."
+      "evidence": "core/src/headless.rs: HeadlessBrowser trait (render through the WebProbe proxy; DOM, screenshot, version) with Obscura, Lightpanda and Chromium; js_crawl within the scan crawl limits; selectable JS crawl engine (Settings, saved with the project). Comparison test headless_engine_comparison (WEBPROBE_BENCH=1), results in docs/EVAL-OBSCURA.md. Obscura 0.2.7 passes all 5 gates: JS-only link found, HTTPS via proxy in history (SSL_CERT_FILE), stored response to PNG 0.23 s / 50 MB, no stealth or tracker blocking, version + binary digest pinned. Lightpanda: same speed and memory (0.18 s / 22 MB a page) but no screenshots. Obscura is therefore the default headless engine; Chromium CDP stays the default for Crawl and audit (it also sees XHR).",
+      "completed": "2026-11-17"
     },
     {
       "id": "UAT-01",

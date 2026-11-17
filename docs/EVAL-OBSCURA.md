@@ -71,3 +71,19 @@ per task, kill on cancel, capture stderr into the event log.
 | Embedded WebView (wry/tauri) | 🚧 | no reliable per-profile proxy/CA control on Linux |
 | CEF | ✅ but heavy | large build, licence and packaging cost |
 | Lightpanda (Zig headless) | ❌ headless | alternative headless engine to compare in the same spike |
+
+## Engine comparison (2026-11-17, task P-16)
+
+Run: `WEBPROBE_BENCH=1 wp-queue test headless_engine_comparison` (core/src/headless.rs). Local fixtures, through the WebProbe proxy.
+
+| Check | Lightpanda | Obscura |
+|---|---|---|
+| version (binary sha256 prefix) | lightpanda 1.0.0-nightly.6703+b0426bab (8226fd60f04b800d…) | obscura 0.2.7 (547f9d8a60048983…) |
+| 1. JS-only link found (static crawl: no) | yes (3 pages, 0.31 s) | yes (3 pages, 0.52 s) |
+| 4. tracker-like script requested (not blocked) | yes | yes |
+| render one page: time / peak RSS | 0.18 s / 22 MB | 0.17 s / 25 MB |
+| 2. HTTPS via proxy, in history | yes (page rendered) | yes (page rendered) |
+| 3. stored response to PNG (<2 s, <150 MB) | not supported (Lightpanda cannot take screenshots) | 11708 bytes, 0.23 s, 50 MB |
+| 4. stealth / tracker blocking | off (never passed) | off (never passed) |
+
+**Choice: Obscura** is the default headless engine (`headless::engines()` order): it passes all five acceptance checks. Lightpanda is as fast and small, but it cannot render a stored response to PNG. Chromium remains the fallback and the default for the CDP-driven "Crawl and audit", which also sees the XHR calls pages make. The checks are: JS crawl finds more links; HTTPS lands in history via `SSL_CERT_FILE`; PNG in under 2 s and 150 MB; stealth and tracker blocking off; version pinned (0.2.7, binary sha256 `547f9d8a…`, the same as the evaluated download).

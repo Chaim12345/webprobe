@@ -173,6 +173,11 @@ impl HeadlessBrowser for Lightpanda {
     fn binary(&self) -> Option<String> {
         on_path(&["lightpanda"])
     }
+    fn version(&self) -> Option<String> {
+        let out = Command::new(self.binary()?).arg("version").output().ok()?;
+        let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        (!text.is_empty()).then(|| format!("lightpanda {text}"))
+    }
     fn render_dom(&self, url: &str, proxy_port: u16, _ca: Option<&std::path::Path>) -> Result<String, String> {
         let bin = self.binary().ok_or("lightpanda is not installed")?;
         let mut cmd = Command::new(bin);
@@ -218,9 +223,12 @@ impl HeadlessBrowser for Obscura {
     }
 }
 
-/// Every engine, installed or not.
+/// Every engine, installed or not, best first: Obscura passed every
+/// EVAL-OBSCURA acceptance check (JS crawl, HTTPS via the proxy, PNG of a
+/// stored response, no stealth); Lightpanda cannot take screenshots;
+/// Chromium is the heavy fallback. Measured 2026-11-17, docs/EVAL-OBSCURA.md.
 pub fn engines() -> Vec<Box<dyn HeadlessBrowser>> {
-    vec![Box::new(Chromium), Box::new(Lightpanda), Box::new(Obscura)]
+    vec![Box::new(Obscura), Box::new(Lightpanda), Box::new(Chromium)]
 }
 
 /// The engine named `name` (case-insensitive), else the first installed one.
@@ -308,7 +316,7 @@ mod tests {
 
     #[test]
     fn js_crawl_follows_script_written_links_through_the_proxy() {
-        let Some(engine) = pick(Some("lightpanda")).or_else(|| pick(Some("chromium"))) else {
+        let Some(engine) = pick(None) else {
             eprintln!("no headless engine installed; skipping");
             return;
         };
@@ -332,10 +340,128 @@ mod tests {
     #[test]
     fn engines_are_listed_and_picked_by_name() {
         let names: Vec<&str> = engines().iter().map(|e| e.name()).collect();
-        assert_eq!(names, ["Chromium", "Lightpanda", "Obscura"]);
+        assert_eq!(names, ["Obscura", "Lightpanda", "Chromium"]);
         if let Some(e) = pick(Some("LIGHTPANDA")) {
             assert_eq!(e.name(), "Lightpanda");
         }
         assert!(pick(Some("netscape")).is_none());
+    }
+
+    /// Engine comparison over the EVAL-OBSCURA acceptance checks (run with
+    /// WEBPROBE_BENCH=1; writes /tmp/headless-bench.md). Local fixtures only.
+    #[test]
+    fn headless_engine_comparison() {
+        if std::env::var_os("WEBPROBE_BENCH").is_none() {
+            return;
+        }
+        use std::fmt::Write as _;
+        // Plain HTTP fixture: JS-only link plus a tracker-looking script.
+        let http = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let hport = http.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for mut s in http.incoming().flatten() {
+                let mut buf = [0u8; 4096];
+                let n = s.read(&mut buf).unwrap_or(0);
+                let path = String::from_utf8_lossy(&buf[..n]).split_whitespace().nth(1).unwrap_or("/").to_string();
+                let (ct, body) = if path.contains("analytics") {
+                    ("application/javascript", "window.ga=1;".to_string())
+                } else if path.ends_with("/js-only") {
+                    ("text/html", "<html><body>reached</body></html>".to_string())
+                } else if path.ends_with("/stored") {
+                    ("text/html", "<html><body style=\"background:#fff\"><h1>Stored response</h1><p>rendered to PNG</p></body></html>".to_string())
+                } else {
+                    ("text/html", "<html><head><script src=\"/google-analytics/analytics.js\"></script></head><body><script>var a=document.createElement('a');a.setAttribute('hr'+'ef',String.fromCharCode(47)+'js-'+'only');a.textContent='x';document.body.appendChild(a);</script></body></html>".to_string())
+                };
+                let _ = s.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: {ct}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes());
+            }
+        });
+        // HTTPS fixture: any certificate (WebProbe accepts any upstream cert).
+        let tls_ca = crate::tls::MitmAuthority::load_or_create(None).unwrap();
+        let tls_cfg = tls_ca.server_config("localhost").unwrap();
+        let https = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let sport = https.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for tcp in https.incoming().flatten() {
+                let cfg = tls_cfg.clone();
+                std::thread::spawn(move || {
+                    let Ok(conn) = rustls::ServerConnection::new(cfg) else { return };
+                    let mut s = rustls::StreamOwned::new(conn, tcp);
+                    let mut buf = [0u8; 4096];
+                    let _ = s.read(&mut buf);
+                    let body = "<html><body>secure page</body></html>";
+                    let _ = s.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes());
+                    s.conn.send_close_notify();
+                    let _ = s.flush();
+                });
+            }
+        });
+        let shared = Shared::new();
+        let pport = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        shared.proxy_port.store(pport, Ordering::SeqCst);
+        crate::net::start_proxy(shared.clone());
+        while !shared.listener_running.load(Ordering::SeqCst) {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let ca_file = std::env::temp_dir().join("webprobe-bench-ca.pem");
+        std::fs::write(&ca_file, shared.mitm.ca_pem()).unwrap();
+        let mut report = String::from("| Check | Lightpanda | Obscura |\n|---|---|---|\n");
+        let mut rows: Vec<(String, Vec<String>)> = Vec::new();
+        let mut row = |name: &str, v: String, col: usize| {
+            if let Some(r) = rows.iter_mut().find(|r| r.0 == name) {
+                r.1[col] = v;
+            } else {
+                let mut cells = vec![String::new(), String::new()];
+                cells[col] = v;
+                rows.push((name.to_string(), cells));
+            }
+        };
+        for (col, engine) in [Box::new(Lightpanda) as Box<dyn HeadlessBrowser>, Box::new(Obscura)].into_iter().enumerate() {
+            let Some(bin) = engine.binary() else {
+                row("installed", "no".into(), col);
+                continue;
+            };
+            let digest = {
+                use sha2::Digest;
+                let b = std::fs::read(&bin).unwrap_or_default();
+                sha2::Sha256::digest(&b).iter().take(8).map(|x| format!("{x:02x}")).collect::<String>()
+            };
+            row("version (binary sha256 prefix)", format!("{} ({digest}…)", engine.version().unwrap_or_default().replace('\n', " ")), col);
+            // 1. JS-aware crawl through the proxy.
+            shared.history.lock().unwrap().clear();
+            let t0 = std::time::Instant::now();
+            let urls = js_crawl(engine.as_ref(), &shared, &format!("http://127.0.0.1:{hport}/")).unwrap_or_default();
+            let found = urls.iter().any(|u| u.ends_with("/js-only"));
+            row("1. JS-only link found (static crawl: no)", format!("{} ({} pages, {:.2} s)", if found { "yes" } else { "no" }, urls.len(), t0.elapsed().as_secs_f32()), col);
+            let hist: Vec<String> = shared.history.lock().unwrap().iter().map(|e| e.path.clone()).collect();
+            row("4. tracker-like script requested (not blocked)", if hist.iter().any(|p| p.contains("analytics")) { "yes".into() } else { "no".into() }, col);
+            // Render cost of one page.
+            let _ = engine.render_dom(&format!("http://127.0.0.1:{hport}/"), pport, Some(&ca_file));
+            let st = last_run();
+            row("render one page: time / peak RSS", format!("{:.2} s / {} MB", st.elapsed.as_secs_f32(), st.peak_rss_kb / 1024), col);
+            // 2. HTTPS through the intercepting proxy.
+            shared.history.lock().unwrap().clear();
+            let dom = engine.render_dom(&format!("https://localhost:{sport}/"), pport, Some(&ca_file)).unwrap_or_else(|e| format!("ERR {e}"));
+            let in_hist = shared.history.lock().unwrap().iter().any(|e| e.https && e.status.starts_with('2'));
+            row("2. HTTPS via proxy, in history", format!("{} (page {})", if in_hist { "yes" } else { "no" }, if dom.contains("secure page") { "rendered" } else { "not rendered" }), col);
+            // 3. Stored response to PNG.
+            let png = std::env::temp_dir().join(format!("webprobe-bench-{col}.png"));
+            let _ = std::fs::remove_file(&png);
+            let shot = engine.screenshot(&format!("http://127.0.0.1:{hport}/stored"), pport, Some(&ca_file), &png);
+            let st = last_run();
+            row(
+                "3. stored response to PNG (<2 s, <150 MB)",
+                match shot {
+                    Ok(()) => format!("{} bytes, {:.2} s, {} MB", std::fs::metadata(&png).map(|m| m.len()).unwrap_or(0), st.elapsed.as_secs_f32(), st.peak_rss_kb / 1024),
+                    Err(e) => format!("not supported ({e})"),
+                },
+                col,
+            );
+            row("4. stealth / tracker blocking", "off (never passed)".into(), col);
+        }
+        for (name, cells) in &rows {
+            let _ = writeln!(report, "| {name} | {} | {} |", cells[0], cells[1]);
+        }
+        println!("{report}");
+        std::fs::write("/tmp/headless-bench.md", &report).unwrap();
     }
 }

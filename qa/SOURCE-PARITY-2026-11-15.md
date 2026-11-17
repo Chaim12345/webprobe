@@ -826,11 +826,17 @@ Suite: core 390 (380 pass, 10 ignored), desktop 134, 0 fail.
   - Response interception, as Burp's "Response interception rules": master switch off by default; Content-Type matches `text`, Or request was modified, Or request was intercepted, And status not `^304$`, And URL in scope. A matching response is held in the Intercept queue (shown as "← Response"), editable, and forwarded or dropped (tests `response_rules_follow_burps_defaults`, `matching_responses_are_held_and_forwarded_edited`).
   - TLS pass-through gets a settings UI and is saved with the project.
   - Per-destination upstream proxy rules ("Upstream proxy servers"; first enabled match, else the global route; test `upstream_rules_pick_the_first_match`) are used by every upstream connection and saved with the project.
-- **Headless engines (P-16, partial).** New `core/src/headless.rs`:
+- **Headless engines (P-16).** New `core/src/headless.rs`:
   - a `HeadlessBrowser` trait that renders a page through the WebProbe proxy (its traffic lands in history) and returns the post-script DOM;
   - Chromium (`--dump-dom`), Lightpanda (`fetch --dump html`) and Obscura (`fetch --dump html`, CA via `SSL_CERT_FILE`) implementations;
   - `js_crawl` follows links in the rendered DOM within the scan's crawl limits.
   - "Crawl and audit" can use Lightpanda or Obscura instead of the Chromium CDP crawler (Settings > scan configuration > JavaScript crawl engine; saved with the project).
   - Test: a link written only by JavaScript is found, and its request is in Proxy history.
-  - Still open: the Obscura binary is not installed here, so the five acceptance checks in docs/EVAL-OBSCURA.md have not been run.
+  - Engine comparison (`WEBPROBE_BENCH=1` test `headless_engine_comparison`, results in docs/EVAL-OBSCURA.md). Obscura 0.2.7 passes all five acceptance checks:
+    - it finds the JS-only link;
+    - HTTPS traffic through the proxy lands in history;
+    - a stored response renders to PNG in 0.23 s at 50 MB;
+    - stealth and tracker blocking are off;
+    - the version and binary digest are pinned.
+  - Lightpanda matches its speed and memory (0.18 s and 22 MB a page) but cannot take screenshots. Obscura is therefore listed first and is the default headless engine. The Chromium CDP crawler stays the default for "Crawl and audit", because it also observes XHR calls.
 - **Message panes.** The wrap and non-printable toggles hide in narrow panes; they used to cover the Render tab.

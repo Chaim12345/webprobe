@@ -256,7 +256,7 @@ fn scan_configuration(app: &mut App, ui: &mut Ui) {
         let shown = if config.crawl.engine.is_empty() { "Chromium (default)".to_string() } else { config.crawl.engine.clone() };
         egui::ComboBox::from_id_salt("crawl_engine").selected_text(shown).show_ui(ui, |ui| {
             ui.selectable_value(&mut config.crawl.engine, String::new(), "Chromium (default)");
-            for e in webprobe_core::headless::engines().iter().skip(1) {
+            for e in webprobe_core::headless::engines().iter().filter(|e| e.name() != "Chromium") {
                 let label = if e.binary().is_some() { e.name().to_string() } else { format!("{} (not installed)", e.name()) };
                 ui.selectable_value(&mut config.crawl.engine, e.name().to_string(), label);
             }
