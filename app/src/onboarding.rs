@@ -57,7 +57,7 @@ pub fn real_https_count(history: &[net::HistEntry]) -> usize {
 pub fn checks(app: &App) -> Vec<Check> {
     let port = app.shared.proxy_port.load(std::sync::atomic::Ordering::SeqCst);
     let listening = app.shared.listener_running.load(std::sync::atomic::Ordering::SeqCst);
-    let history: Vec<net::HistEntry> = app.shared.history.lock().map(|h| h.clone()).unwrap_or_default();
+    let history: Vec<net::HistEntry> = app.shared.history.snapshot();
     let https = real_https_count(&history);
     let waiting = app.shared.count_waiting();
 
@@ -303,12 +303,12 @@ fn sample_traffic_populates_history_through_the_listener() {
     });
     sample_traffic_to(&shared, &format!("127.0.0.1:{up_port}"));
     for _ in 0..100 {
-        if !shared.history.lock().unwrap().is_empty() {
+        if !shared.history.is_empty() {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
-    let history = shared.history.lock().unwrap();
+    let history = shared.history.snapshot();
     assert!(!history.is_empty(), "sample traffic never reached the proxy");
     assert_eq!(history[0].host, "127.0.0.1");
     assert_eq!(history[0].status, "200");

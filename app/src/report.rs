@@ -192,7 +192,7 @@ pub fn report_window(app: &mut crate::App, ctx: &egui::Context) {
         let all = app.shared.issues.lock().unwrap().clone();
         let chosen: Vec<ScanIssue> = ids.iter().filter_map(|id| all.iter().find(|i| i.id == *id).cloned()).collect();
         let selected = select_issues(&chosen, &app.eng.report.options);
-        let history = app.shared.history.lock().unwrap().clone();
+        let history = app.shared.history.snapshot();
         if app.eng.kb.is_none() {
             app.eng.kb = Some(KnowledgeBase::discover());
         }

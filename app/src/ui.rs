@@ -495,13 +495,13 @@ fn history_menu_windows(app: &mut App, ctx: &egui::Context) {
                 static ROWS: std::cell::RefCell<((usize, u64, String), std::rc::Rc<Vec<net::HistEntry>>)> = std::cell::RefCell::new(((usize::MAX, 0, String::new()), Default::default()));
             }
             let stamp = {
-                let h = app.shared.history.lock().unwrap();
-                (h.len(), h.last().map(|e| e.id).unwrap_or(0), q.clone())
+                let (len, last) = app.shared.history.stamp();
+                (len, last, q.clone())
             };
             let rows = ROWS.with(|c| {
                 let mut c = c.borrow_mut();
                 if c.0 != stamp {
-                    let snapshot: Vec<net::HistEntry> = app.shared.history.lock().unwrap().iter().rev().cloned().collect();
+                    let snapshot: Vec<net::HistEntry> = app.shared.history.snapshot().iter().rev().cloned().collect();
                     let rows: Vec<net::HistEntry> = snapshot.into_iter().filter(|e| q.is_empty() || history_url(e).to_ascii_lowercase().contains(&q)).collect();
                     *c = (stamp, std::rc::Rc::new(rows));
                 }
@@ -653,7 +653,7 @@ fn bulk_history_command(app: &mut App, entries: &[net::HistEntry], cmd: &str) {
             app.tab = Tab::Comparer;
         }
         "delete" => {
-            app.shared.history.lock().unwrap().retain(|h| !ids.contains(&h.id));
+            app.shared.history.retain(|h| !ids.contains(&h.id));
             app.hist_cache_key.clear();
             feedback::toast(feedback::Level::Success, format!("Deleted {n} item(s)"));
         }
@@ -675,9 +675,7 @@ fn bulk_history_command(app: &mut App, entries: &[net::HistEntry], cmd: &str) {
         }
         hl if hl.starts_with("hl_") => {
             let k = HIGHLIGHT_CMDS.iter().position(|c| *c == hl).map(|k| k as u8);
-            for h in app.shared.history.lock().unwrap().iter_mut().filter(|h| ids.contains(&h.id)) {
-                h.highlight = k;
-            }
+            app.shared.history.update_where(|h| ids.contains(&h.id), |h| h.highlight = k);
             app.hist_cache_key.clear();
         }
         _ => {}
@@ -689,7 +687,7 @@ fn bulk_history_command(app: &mut App, entries: &[net::HistEntry], cmd: &str) {
 /// The filter bar is text/regex plus method, status code, MIME type and "in scope
 /// only"; every column is sortable and resizable, and the view is virtualized.
 fn proxy_history(app: &mut App, ui: &mut Ui) {
-    let total = app.shared.history.lock().map(|h| h.len()).unwrap_or(0);
+    let total = app.shared.history.len();
 
     // N-02: the filtered view is rebuilt only when a filter or sort input
     // changed. New traffic in the default newest-first order is put on top
@@ -699,8 +697,7 @@ fn proxy_history(app: &mut App, ui: &mut Ui) {
     let newest_first = (app.hist_table.sort_col == 0 && !app.hist_table.sort_asc) || app.hist_table.sort_col == usize::MAX;
     if key != app.hist_cache_key || total < app.hist_cache_len || (total > app.hist_cache_len && !newest_first) {
         let (rows, truncated) = {
-            let history = app.shared.history.lock().unwrap();
-            history_view(&history, |e| app.hist_filter.matches(e, &app.shared), &app.hist_table)
+            app.shared.history.with_rows(|history| history_view(history, |e| app.hist_filter.matches(e, &app.shared), &app.hist_table))
         };
         app.hist_cache = std::sync::Arc::new(rows);
         app.hist_cache_truncated = truncated;
@@ -708,8 +705,7 @@ fn proxy_history(app: &mut App, ui: &mut Ui) {
         app.hist_cache_len = total;
     } else if total > app.hist_cache_len {
         let fresh = {
-            let history = app.shared.history.lock().unwrap();
-            history_new_rows(&history, app.hist_cache_len, |e| app.hist_filter.matches(e, &app.shared))
+            app.shared.history.with_rows(|history| history_new_rows(history, app.hist_cache_len, |e| app.hist_filter.matches(e, &app.shared)))
         };
         let old = std::mem::take(std::sync::Arc::make_mut(&mut app.hist_cache));
         let mut rows = fresh;
@@ -1075,18 +1071,16 @@ fn proxy_history(app: &mut App, ui: &mut Ui) {
             }
             cmd if cmd.starts_with("hl_") => {
                 let k = HIGHLIGHT_CMDS.iter().position(|c| *c == cmd).map(|k| k as u8);
-                if let Some(h) = app.shared.history.lock().unwrap().iter_mut().find(|h| h.id == e.id) {
-                    h.highlight = k;
-                }
+                app.shared.history.update(e.id, |h| h.highlight = k);
                 app.hist_cache_key.clear();
             }
             "delete" => {
-                app.shared.history.lock().unwrap().retain(|h| h.id != e.id);
+                app.shared.history.retain(|h| h.id != e.id);
                 selected = None;
                 app.shared.log(&format!("Deleted history item {}", e.id));
             }
             "clear" => {
-                app.shared.history.lock().unwrap().clear();
+                app.shared.history.clear();
                 selected = None;
             }
             _ => {}
@@ -1243,7 +1237,7 @@ fn facts(ui: &mut Ui, rows: &[(&str, &str)]) {
 fn detail(app: &mut App, ui: &mut Ui) {
     let entry = app
         .history_sel
-        .and_then(|id| app.shared.history.lock().unwrap().iter().find(|e| e.id == id).cloned());
+        .and_then(|id| app.shared.history.get(id));
     // Burp shows the request in origin form even when the browser sent it to
     // the proxy in absolute form.
     let req = entry.as_ref().map(|e| util::origin_form(&e.req_raw));
@@ -1291,9 +1285,7 @@ fn detail(app: &mut App, ui: &mut Ui) {
                         let mut note = e.note.clone().unwrap_or_default();
                         let w = ui.available_width() - 16.0;
                         if ui.add(egui::TextEdit::multiline(&mut note).desired_width(w).desired_rows(12)).changed() {
-                            if let Some(h) = app.shared.history.lock().unwrap().iter_mut().find(|h| h.id == e.id) {
-                                h.note = if note.is_empty() { None } else { Some(note) };
-                            }
+                            app.shared.history.update(e.id, |h| h.note = if note.is_empty() { None } else { Some(note) });
                             // The filtered rows are cached copies: refresh the Notes column now.
                             app.hist_cache_key.clear();
                         }
@@ -1389,7 +1381,7 @@ fn scanner(app: &mut App, ui: &mut Ui) {
             .size(13.0);
         if !busy && ui.button(btn).clicked() {
             if let Some(id) = app.history_sel {
-                let e = app.shared.history.lock().unwrap().iter().find(|e| e.id == id).cloned();
+                let e = app.shared.history.get(id);
                 if let Some(e) = e {
                     run_active_scan_on(app, &e);
                 }
@@ -2524,7 +2516,7 @@ pub(crate) fn request_for_tools(raw: &[u8]) -> String {
 
 pub fn send_history_to_repeater(app: &mut App) {
     let Some(id) = app.history_sel else { return };
-    let entry = app.shared.history.lock().unwrap().iter().find(|e| e.id == id).cloned();
+    let entry = app.shared.history.get(id);
     if let Some(e) = entry {
         let mut reps = app.shared.repeaters.lock().unwrap();
         let id = app.shared.next_rep_id.fetch_add(1, Ordering::SeqCst);
@@ -2585,7 +2577,7 @@ fn repeater_tab_to_new_tab(app: &mut App) {
 
 pub fn send_history_to_intruder(app: &mut App) {
     let Some(id) = app.history_sel else { return };
-    let entry = app.shared.history.lock().unwrap().iter().find(|e| e.id == id).cloned();
+    let entry = app.shared.history.get(id);
     if let Some(e) = entry {
         app.intr_req = request_for_tools(&e.req_raw);
         app.intr_https = e.https;
@@ -3331,7 +3323,7 @@ fn dashboard(app: &mut App, ui: &mut Ui) {
                 match app.dash_sub {
                     0 => dashboard_summary(app, ui, &all_issues),
                     1 => {
-                        let rows: Vec<net::HistEntry> = app.shared.history.lock().unwrap().iter().rev().take(2000).cloned().collect();
+                        let rows: Vec<net::HistEntry> = app.shared.history.with_rows(|h| h.iter().rev().take(2000).cloned().collect());
                         let cols = [
                             table::Column::new("#", 50.0),
                             table::Column::new("Host", 200.0),
@@ -3490,7 +3482,7 @@ fn dashboard_summary(app: &mut App, ui: &mut Ui, issues: &[crate::scan::ScanIssu
                         ui.end_row();
                     });
                 });
-                let total = app.shared.history.lock().map(|h| h.len()).unwrap_or(0);
+                let total = app.shared.history.len();
                 let (done, all, busy) = (
                     app.shared.scan_done.load(Ordering::SeqCst),
                     app.shared.scan_total.load(Ordering::SeqCst),
@@ -3498,8 +3490,7 @@ fn dashboard_summary(app: &mut App, ui: &mut Ui, issues: &[crate::scan::ScanIssu
                 );
                 let msgs = app.shared.messages.load(Ordering::SeqCst);
                 let (audited, net_errors) = {
-                    let h = app.shared.history.lock().unwrap();
-                    (h.iter().filter(|e| e.audited).count(), h.iter().filter(|e| e.resp_raw.is_none()).count())
+                    app.shared.history.with_rows(|h| (h.iter().filter(|e| e.audited).count(), h.iter().filter(|e| e.resp_raw.is_none()).count()))
                 };
                 card(ui, "Task progress", theme::icon::CLOCK, &mut |ui| {
                     egui::Grid::new("dash_prog").num_columns(4).spacing([30.0, 8.0]).show(ui, |ui| {
@@ -3620,14 +3611,14 @@ fn target(app: &mut App, ui: &mut Ui) {
 
     // The site contents are rebuilt only when the history, the crawl, the
     // scope or the filter changed, not on every frame.
-    let (hist_len, crawl_len) = (app.shared.history.lock().unwrap().len(), app.shared.crawl_items.lock().unwrap().len());
+    let (hist_len, crawl_len) = (app.shared.history.len(), app.shared.crawl_items.len());
     let scope_key = app.shared.scope.lock().unwrap().iter().map(|r| format!("{}{}{}{}", r.enabled, r.include, r.is_regex, r.pattern)).collect::<Vec<_>>().join("|");
     let key = format!("{hist_len}|{crawl_len}|{}|{}|{}|{scope_key}", app.site_filter.text, app.site_filter.in_scope_only, app.site_filter.hide_unrequested);
     if key != app.site_cache_key {
-        let mut all: Vec<net::HistEntry> = app.shared.history.lock().unwrap().clone();
+        let mut all: Vec<net::HistEntry> = app.shared.history.snapshot();
         // Crawler requests are site-map contents too (Burp keeps them out of
         // Proxy history but in the site map).
-        all.extend(app.shared.crawl_items.lock().unwrap().iter().cloned());
+        all.extend(app.shared.crawl_items.snapshot().iter().cloned());
         let shared = app.shared.clone();
         let filter = app.site_filter.clone();
         let kept: Vec<net::HistEntry> = all.into_iter().filter(|e| filter.keeps(&history_host(e), &e.path, || net::in_scope(&shared, &history_url(e)))).collect();
@@ -4304,7 +4295,7 @@ fn logger_view(app: &mut App, ui: &mut Ui) {
                 let row = app.log_sel.and_then(|id| app.logger.get(id).cloned());
                 let (req, resp) = match &row {
                     Some(r) if r.hist_id.is_some() => {
-                        let e = app.shared.history.lock().unwrap().iter().find(|h| Some(h.id) == r.hist_id).cloned();
+                        let e = r.hist_id.and_then(|id| app.shared.history.get(id));
                         (e.as_ref().map(|e| util::origin_form(&e.req_raw)), e.and_then(|e| e.resp_raw).map(|b| b.to_vec()))
                     }
                     Some(r) => (r.request.as_ref().map(|b| b.to_vec()), r.response.as_ref().map(|b| b.to_vec())),

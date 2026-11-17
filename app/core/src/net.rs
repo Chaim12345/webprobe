@@ -357,7 +357,7 @@ fn append_cookie(raw: &[u8], name: &str, value: &str) -> Vec<u8> {
 }
 
 fn latest_cookie(shared: &Shared, name: &str) -> Option<String> {
-    let history = shared.history.lock().unwrap().clone();
+    let history = shared.history.snapshot();
     for entry in history.iter().rev() {
         let Some(resp) = &entry.resp_raw else { continue };
         let p = util::parse_http(resp);
@@ -762,7 +762,7 @@ pub struct Shared {
     /// Response interception rules (Proxy settings).
     pub response_rules: Mutex<ResponseInterceptRules>,
     pub queue: Mutex<Vec<InterceptItem>>,
-    pub history: Mutex<Vec<HistEntry>>,
+    pub history: crate::history::ProxyHistory,
     pub events: Mutex<Vec<String>>,
     /// Attempt an h2c upgrade on direct cleartext connections. Off by default:
     /// Burp never does it and Node servers drop the socket (WEBPROBE_H2C=1).
@@ -775,7 +775,7 @@ pub struct Shared {
     pub site_links: Mutex<std::collections::BTreeSet<(String, String)>>,
     /// Items requested by the crawler (site map contents that are not proxy
     /// history, as in Burp).
-    pub crawl_items: Mutex<Vec<HistEntry>>,
+    pub crawl_items: crate::history::ProxyHistory,
     /// Report WebProbe-only passive checks (names Burp's KB does not have).
     pub extra_checks: AtomicBool,
     pub attack: Mutex<Arc<Attack>>,
@@ -930,12 +930,12 @@ impl Shared {
             intercept_on: AtomicBool::new(false), // Burp default: never intercept at startup
             response_rules: Mutex::new(ResponseInterceptRules::default()),
             queue: Mutex::new(Vec::new()),
-            history: Mutex::new(Vec::new()),
+            history: Default::default(),
             events: Mutex::new(Vec::new()),
             extra_checks: AtomicBool::new(false),
             crawl_capture: AtomicBool::new(true),
             site_links: Mutex::new(std::collections::BTreeSet::new()),
-            crawl_items: Mutex::new(Vec::new()),
+            crawl_items: Default::default(),
             h2c_upgrade: AtomicBool::new(std::env::var("WEBPROBE_H2C").map(|v| v == "1").unwrap_or(false)),
             attack: Mutex::new(Arc::new(Attack {
                 running: AtomicBool::new(false),
@@ -1046,13 +1046,11 @@ impl Shared {
     /// Add crawl-only site map items (Target), bodies in the on-disk store
     /// like Proxy history.
     pub fn add_crawl_items(&self, items: impl IntoIterator<Item = HistEntry>) {
-        let items: Vec<HistEntry> = items.into_iter().map(HistEntry::spilled).collect();
-        self.crawl_items.lock().unwrap().extend(items);
+        self.crawl_items.extend(items);
     }
 
     pub fn push_history(&self, e: HistEntry) {
-        let e = e.spilled();
-        self.history.lock().unwrap().push(e);
+        self.history.push(e);
         self.messages.fetch_add(1, Ordering::SeqCst);
         self.wake();
     }
@@ -2276,7 +2274,7 @@ pub fn browser_item_response(shared: &Shared, path: &str) -> Option<Vec<u8>> {
         return None;
     };
     let id: u64 = id.trim_end_matches('/').parse().ok()?;
-    let e = shared.history.lock().unwrap().iter().find(|e| e.id == id).cloned()?;
+    let e = shared.history.get(id)?;
     if kind == "show" {
         let resp = e.resp_raw.clone()?;
         return Some(String::from_utf8_lossy(&set_connection(&resp, "close")).into_owned().into_bytes());
@@ -3491,7 +3489,7 @@ mod tests {
 
         upstream_thread.join().unwrap();
         proxy_thread.join().unwrap();
-        let history = shared.history.lock().unwrap();
+        let history = shared.history.snapshot();
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].host, "localhost");
         assert_eq!(history[0].port, upstream_port);
@@ -3510,7 +3508,7 @@ mod tests {
         e.port = 80;
         e.req_raw = b"GET http://h/a?b=1 HTTP/1.1\r\nHost: h\r\n\r\n".to_vec().into();
         e.resp_raw = Some(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok".to_vec().into());
-        shared.history.lock().unwrap().push(e);
+        shared.history.push(e);
         let show = String::from_utf8(browser_item_response(&shared, "/show/7").unwrap()).unwrap();
         assert!(show.ends_with("ok") && show.contains("200 OK"));
         let rep = String::from_utf8(browser_item_response(&shared, "/repeat/7").unwrap()).unwrap();
@@ -3591,7 +3589,7 @@ mod tests {
         pt.join().unwrap();
 
         assert_eq!(wire, expected_wire, "the client must receive the original bytes");
-        let hist = shared.history.lock().unwrap();
+        let hist = shared.history.snapshot();
         assert_eq!(hist.len(), 1);
         let e = &hist[0];
         let raw = e.resp_raw.as_ref().expect("a stored response");
@@ -3894,7 +3892,7 @@ mod tests {
         assert_normalised_h2_view(&response);
         upstream_thread.join().unwrap();
         proxy_thread.join().unwrap();
-        let history = shared.history.lock().unwrap();
+        let history = shared.history.snapshot();
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].path, "/e2e");
         assert_eq!(history[0].status, "200");
@@ -4163,7 +4161,7 @@ mod tests {
         shared.listener_generation.fetch_add(1, Ordering::SeqCst);
         worker.join().unwrap();
         assert!(!state.running.load(Ordering::SeqCst));
-        assert_eq!(shared.history.lock().unwrap().len(), 1);
+        assert_eq!(shared.history.len(), 1);
     }
 
     /// A-07: set_listeners validates its input.
@@ -4262,7 +4260,7 @@ mod tests {
         record(&shared, &req, Some(r1), None, 80, false, 8080, false);
         let r2 = b"HTTP/1.1 304 Not Modified\r\nContent-Type: text/plain\r\n\r\n".to_vec();
         record(&shared, &req, Some(r2), None, 80, false, 8080, false);
-        let h = shared.history.lock().unwrap();
+        let h = shared.history.snapshot();
         assert_eq!(h[0].diffs, 0);
         // The 304 changes the status, the length and the recomputed
         // Content-Length header normalize_response stamps in.
@@ -4580,7 +4578,7 @@ mod tests {
     #[test]
     fn listener_restart_keeps_history() {
         let shared = Shared::new();
-        shared.history.lock().unwrap().push(HistEntry {
+        shared.history.push(HistEntry {
             id: 1,
             ts: 0,
             method: "GET".into(),
@@ -4608,7 +4606,7 @@ mod tests {
         std::thread::sleep(Duration::from_millis(600));
         assert!(set_listeners(&shared, vec![ListenerSpec { bind: "127.0.0.1".into(), port: free_port() }]).is_ok());
         std::thread::sleep(Duration::from_millis(600));
-        assert_eq!(shared.history.lock().unwrap().len(), 1, "history survives listener changes");
+        assert_eq!(shared.history.len(), 1, "history survives listener changes");
     }
 
     /// A port change moves the primary listener without waiting for a client
@@ -4740,7 +4738,7 @@ mod tests {
 
         // Like http://burpsuite, the internal page stays out of history (and
         // so out of the scanner).
-        assert_eq!(shared.history.lock().unwrap().len(), 0);
+        assert_eq!(shared.history.len(), 0);
         t.join().unwrap();
     }
 

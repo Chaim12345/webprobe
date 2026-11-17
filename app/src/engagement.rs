@@ -61,7 +61,7 @@ pub fn url_of(e: &HistEntry) -> String {
 /// Items in the branch `prefix` of `origin` (an empty prefix or "/" = the
 /// whole host).
 pub fn in_branch<'a>(entries: &'a [HistEntry], origin: &str, prefix: &str) -> Vec<&'a HistEntry> {
-    entries.iter().filter(|e| origin_of(e) == origin && e.path.starts_with(prefix)).collect()
+    entries.iter().filter(|e| is_in_branch(e, origin, prefix)).collect()
 }
 
 /// "Copy URLs in this host / branch": every requested item plus every
@@ -285,8 +285,8 @@ pub fn find_references(entries: &[HistEntry], origin: &str, path: &str) -> Vec<(
 
 /// Everything the site map shows: proxy history plus crawler items.
 pub fn site_entries(app: &crate::App) -> Vec<HistEntry> {
-    let mut v = app.shared.history.lock().unwrap().clone();
-    v.extend(app.shared.crawl_items.lock().unwrap().iter().cloned());
+    let mut v = app.shared.history.snapshot();
+    v.extend(app.shared.crawl_items.snapshot().iter().cloned());
     v
 }
 
@@ -308,11 +308,9 @@ pub fn issues_in_branch(issues: &[crate::scan::ScanIssue], origin: &str, prefix:
     issues.iter().filter(|i| i.host == host && i.path.starts_with(prefix)).map(|i| i.id).collect()
 }
 
-/// Remove a branch's items from a history list. Returns how many went.
-pub fn remove_branch(entries: &mut Vec<HistEntry>, origin: &str, prefix: &str) -> usize {
-    let before = entries.len();
-    entries.retain(|e| !(origin_of(e) == origin && e.path.starts_with(prefix)));
-    before - entries.len()
+/// Whether `e` lies in the branch `prefix` of `origin`.
+pub fn is_in_branch(e: &HistEntry, origin: &str, prefix: &str) -> bool {
+    origin_of(e) == origin && e.path.starts_with(prefix)
 }
 
 /// Site map node menu. Item names follow Burp: scan items from burp.Zeem
@@ -383,7 +381,7 @@ pub fn site_map_menu(ui: &mut egui::Ui, app: &mut crate::App, origin: &str, bran
         }
     });
     if ui.button(if whole_host { "Delete host" } else { "Delete branch" }).clicked() {
-        let removed = remove_branch(&mut app.shared.history.lock().unwrap(), origin, branch) + remove_branch(&mut app.shared.crawl_items.lock().unwrap(), origin, branch);
+        let removed = app.shared.history.retain(|e| !is_in_branch(e, origin, branch)) + app.shared.crawl_items.retain(|e| !is_in_branch(e, origin, branch));
         app.shared.site_links.lock().unwrap().retain(|(o, p)| !(o == origin && p.starts_with(branch)));
         app.hist_cache_key.clear();
         crate::feedback::toast(crate::feedback::Level::Success, format!("Deleted {removed} item(s)"));
@@ -538,11 +536,12 @@ mod tests {
         assert_eq!(issues_in_branch(&issues, "http://app.local:80", "/"), vec![1, 2, 4]);
         assert!(issues_in_branch(&issues, "http://none.local", "/").is_empty());
 
-        let mut items = vec![entry(1, "/admin/a", ""), entry(2, "/public", ""), entry(3, "/admin", "")];
-        assert_eq!(remove_branch(&mut items, "http://app.local", "/admin"), 2);
-        assert_eq!(items.iter().map(|e| e.id).collect::<Vec<_>>(), vec![2]);
+        let items = webprobe_core::history::ProxyHistory::default();
+        items.extend([entry(1, "/admin/a", ""), entry(2, "/public", ""), entry(3, "/admin", "")]);
+        assert_eq!(items.retain(|e| !is_in_branch(e, "http://app.local", "/admin")), 2);
+        assert_eq!(items.with_rows(|r| r.iter().map(|e| e.id).collect::<Vec<_>>()), vec![2]);
         // Another origin's items are left alone.
-        assert_eq!(remove_branch(&mut items, "http://other.local", "/"), 0);
+        assert_eq!(items.retain(|e| !is_in_branch(e, "http://other.local", "/")), 0);
         assert_eq!(items.len(), 1);
     }
 

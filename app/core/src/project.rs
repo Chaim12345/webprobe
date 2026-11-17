@@ -2073,7 +2073,7 @@ mod tests {
         let shared = crate::net::Shared::new();
         let body: Vec<u8> = (0..5000u32).map(|i| (i % 256) as u8).collect();
         shared.push_history(crate::net::HistEntry { id: 1, req_raw: b"GET / HTTP/1.1\r\n\r\n".into(), resp_raw: Some(body.clone().into()), ..Default::default() });
-        let e = shared.history.lock().unwrap()[0].clone();
+        let e = shared.history.snapshot()[0].clone();
         if cfg!(unix) {
             assert!(e.resp_raw.as_ref().unwrap().is_stored());
         }
@@ -2130,7 +2130,7 @@ mod tests {
         let path = dir.join("p.json");
         let t0 = std::time::Instant::now();
         let mut data = ProjectData::default();
-        data.history = shared.history.lock().unwrap().iter().map(ProjectHistory::from_entry).collect();
+        data.history = shared.history.snapshot().iter().map(ProjectHistory::from_entry).collect();
         save(&path, &data).unwrap();
         let save_ms = t0.elapsed().as_millis();
         let peak = rss();

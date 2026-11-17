@@ -1185,7 +1185,7 @@
       "epic": "N — Quality, performance and build",
       "priority": "P2",
       "title": "Split Shared and App by subsystem",
-      "acceptance": "net::Shared (76 public fields) and App are split into per-subsystem state (proxy, scanner, collaborator, intruder, extensions, project), each with its own lock, so one subsystem's lock never blocks another; the layering test stays green and no behaviour changes.",
+      "acceptance": "Engine state that carries invariants is owned by subsystem types with private fields whose methods enforce them: Proxy history / crawl items (every write spills bodies; scoped reads), the scan run (claimed and released only through a guard; idle waits without polling), Collaborator ids (registered, pooled and matched through one API, shortfalls reported), Repeater tabs. Each step keeps the full suite and layering test green. Not split: App (single-threaded UI state) and the remaining config-like Shared fields, which are already one Mutex each.",
       "effort": "L",
       "status": "todo",
       "evidence": "Open-items ledger 2026-11-17; listed as open in Wave 44 architecture notes."

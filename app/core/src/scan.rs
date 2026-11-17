@@ -3375,7 +3375,7 @@ fn stored_retrieval_requests(shared: &Shared, entry: &HistEntry, req: &str, base
     let base = parts.path.split('?').next().unwrap_or("").to_string();
     let mut seen: Vec<String> = vec![base];
     {
-        let items = shared.crawl_items.lock().unwrap();
+        let items = shared.crawl_items.snapshot();
         for it in items.iter() {
             if out.len() >= 4 {
                 break;
@@ -3768,7 +3768,7 @@ mod tests {
             out.push_str(&format!("{}\t{}\t{}\t{}\n", i.path, i.sev, i.confidence, i.name));
         }
         std::fs::write(format!("{dir}/webprobe-crawl-issues.txt"), &out).unwrap();
-        let items: String = shared.crawl_items.lock().unwrap().iter().map(|e| format!("{} {} {} {}\n", e.status, e.method, e.path, crate::crawl::auditable(e))).collect();
+        let items: String = shared.crawl_items.snapshot().iter().map(|e| format!("{} {} {} {}\n", e.status, e.method, e.path, crate::crawl::auditable(e))).collect();
         for ev in shared.events.lock().unwrap().iter().filter(|e| e.contains("crawl") || e.contains("Crawl")) {
             eprintln!("EVENT {ev}");
         }

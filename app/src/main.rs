@@ -395,17 +395,15 @@ impl App {
     fn sync_logger(&mut self) {
         // Logger's "Logging on" switch: while off, new traffic is not mirrored.
         if !self.log_on {
-            {
-                let h = self.shared.history.lock().unwrap();
-                self.log_seen = h.iter().map(|e| e.id).max().unwrap_or(self.log_seen);
-            }
+            self.log_seen = self.shared.history.with_rows(|h| h.iter().map(|e| e.id).max()).unwrap_or(self.log_seen);
             return;
         }
         let seen = self.log_seen;
         let mut newest = 0u64;
         let mut rows: Vec<HistRow> = Vec::new();
-        {
-            let hist = self.shared.history.lock().unwrap();
+        // Rows are copied out under the lock and the Logger is touched after
+        // it is released.
+        self.shared.history.with_rows(|hist| {
             for e in hist.iter() {
                 newest = newest.max(e.id);
             }
@@ -426,7 +424,7 @@ impl App {
                     response_mime(e),
                 ));
             }
-        }
+        });
         if newest < seen {
             self.log_seen = 0;
         }
@@ -512,7 +510,7 @@ fn autosave_enabled() -> bool {
 
 fn autosave_signature(app: &App) -> (usize, usize, usize) {
     (
-        app.shared.history.lock().unwrap().len(),
+        app.shared.history.len(),
         app.shared.issues.lock().unwrap().len(),
         app.shared.repeaters.lock().unwrap().iter().map(|r| r.history.len() + r.request.len()).sum(),
     )
@@ -603,13 +601,7 @@ impl eframe::App for App {
                         // verify a request rule was applied if one was preloaded
                         if !sh.mr_request.lock().unwrap().is_empty() {
                             std::thread::sleep(std::time::Duration::from_millis(500));
-                            let hit = sh
-                                .history
-                                .lock()
-                                .unwrap()
-                                .last()
-                                .map(|e| e.req_raw.windows(11).any(|w| w == b"WebProbe-MR"))
-                                .unwrap_or(false);
+                            let hit = sh.history.last().map(|e| e.req_raw.windows(11).any(|w| w == b"WebProbe-MR")).unwrap_or(false);
                             sh.log(&format!(
                                 "Selftest match-and-replace: rule {}",
                                 if hit { "applied (request carries rewritten value)" } else { "not applied" }
@@ -618,7 +610,7 @@ impl eframe::App for App {
                         // optionally exercise the light active scan on the just-stored request
                         if std::env::var("WEBPROBE_SELFTEST_SCAN").as_deref() == Ok("1") {
                             std::thread::sleep(std::time::Duration::from_millis(800));
-                            let e = sh.history.lock().unwrap().last().cloned();
+                            let e = sh.history.last();
                             if let Some(e) = e {
                                 crate::tasks::enqueue(&sh, "Selftest active scan", crate::tasks::TaskKind::Audit(vec![e]));
                             }
@@ -993,7 +985,7 @@ fn main() {
     // populated table without network access.
     if let Some(n) = std::env::var("WEBPROBE_SEED_HISTORY").ok().and_then(|v| v.trim().parse::<usize>().ok()) {
         let base = shared.next_id.load(Ordering::SeqCst);
-        let mut hist = shared.history.lock().unwrap();
+        let mut hist = Vec::with_capacity(n);
         for i in 0..n {
             let id = base + i as u64 + 1;
             let status = ["200", "301", "404", "500"][i % 4];
@@ -1029,8 +1021,9 @@ fn main() {
                 listener_port: 6566,
                 ip: String::new(),
                 diffs: 0,
-            }.spilled());
+            });
         }
+        shared.history.extend(hist);
         // Seeded ids are base+1..=base+n; the next real exchange must not reuse
         // the last one (two rows with one id select and send as the first).
         shared.next_id.store(base + n as u64 + 1, Ordering::SeqCst);

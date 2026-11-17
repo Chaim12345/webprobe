@@ -64,7 +64,7 @@ fn issue_json(i: &scan::ScanIssue) -> String {
 
 fn save_project(shared: &net::Shared, path: &str) -> Result<(), String> {
     let data = project::ProjectData {
-        history: shared.history.lock().unwrap().iter().map(project::ProjectHistory::from_entry).collect(),
+        history: shared.history.snapshot().iter().map(project::ProjectHistory::from_entry).collect(),
         issues: shared.issues.lock().unwrap().iter().map(project::ProjectIssue::from_issue).collect(),
         ..Default::default()
     };
@@ -108,7 +108,7 @@ fn proxy(mut args: Vec<String>) {
         // Copy the new rows out first: printing to a slow pipe must not hold
         // the history lock every proxy thread needs to record.
         let fresh: Vec<String> = {
-            let history = shared.history.lock().unwrap();
+            let history = shared.history.snapshot();
             let rows = history.iter().skip(printed).map(|e| format!("{}\t{}\t{}\t{}\t{}", e.id, e.method, net::history_host(e), e.path, e.status)).collect();
             printed = history.len();
             rows
@@ -165,8 +165,8 @@ fn scan_urls(mut args: Vec<String>) {
     if let Some(path) = report_file {
         let format = if path.to_ascii_lowercase().ends_with(".xml") { report::ReportFormat::Xml } else { report::ReportFormat::Html };
         let options = report::ReportOptions { format, ..Default::default() };
-        let mut known: Vec<net::HistEntry> = shared.crawl_items.lock().unwrap().clone();
-        known.extend(shared.history.lock().unwrap().iter().cloned());
+        let mut known: Vec<net::HistEntry> = shared.crawl_items.snapshot();
+        known.extend(shared.history.snapshot().iter().cloned());
         let chosen = report::select_issues(&issues, &options);
         let items = report::build_report_issues(&chosen, &known, &report::KnowledgeBase::discover());
         let text = report::render(&items, &options, webprobe_core::util::now_secs());

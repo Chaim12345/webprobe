@@ -754,7 +754,7 @@ pub fn sessions(app: &mut App, ui: &mut Ui) {
     // step. Testing: run the editor's steps and show what each one did.
     let test_id = egui::Id::unique("macro_test_results");
     ui.horizontal(|ui| {
-        let selected = app.history_sel.and_then(|id| app.shared.history.lock().unwrap().iter().find(|e| e.id == id).cloned());
+        let selected = app.history_sel.and_then(|id| app.shared.history.get(id));
         let label = match &selected {
             Some(e) => format!("Add step: {} {}", e.method, e.path.chars().take(40).collect::<String>()),
             None => "Add step from selected history item".to_string(),
@@ -812,7 +812,7 @@ pub fn search(app: &mut App, ui: &mut Ui) {
         ui.checkbox(&mut app.search_case, "case sensitive");
         if ui.button("Search all tools").clicked() && !app.search_query.trim().is_empty() {
             let mut records = Vec::new();
-            for e in app.shared.history.lock().unwrap().iter() {
+            for e in app.shared.history.snapshot().iter() {
                 records.push(analysis::SearchRecord {
                     id: e.id.to_string(),
                     tool: "Proxy".into(),
@@ -1748,8 +1748,8 @@ pub fn drain_save_results(app: &mut App) {
 /// this is cheap): what a save writes and what Settings works on.
 pub fn project_snapshot(app: &mut App) -> project::ProjectData {
     let to_project_history = project::ProjectHistory::from_entry;
-    let crawl_items: Vec<project::ProjectHistory> = app.shared.crawl_items.lock().unwrap().iter().map(to_project_history).collect();
-    let history = app.shared.history.lock().unwrap().iter().map(to_project_history).collect();
+    let crawl_items: Vec<project::ProjectHistory> = app.shared.crawl_items.snapshot().iter().map(to_project_history).collect();
+    let history = app.shared.history.snapshot().iter().map(to_project_history).collect();
     // Each shared lock is taken and released in its own statement: in one
     // struct literal every guard would live to the end of the statement, so
     // a second lock of the same mutex deadlocked (scan_config, every save
@@ -1966,7 +1966,7 @@ fn save_project_with(app: &mut App, quiet: bool, background: bool) {
 /// are, so traffic that arrived meanwhile is never rolled back.
 pub fn apply_project(app: &mut App, data: &project::ProjectData, content: bool) {
     if content {
-        *app.shared.history.lock().unwrap() = data.history.iter().map(|h| h.to_entry().spilled()).collect();
+        app.shared.history.replace_all(data.history.iter().map(|h| h.to_entry()));
     }
     *app.shared.mr_request.lock().unwrap() = data.match_request.iter().filter(|r| r.kind == "request").map(net_rule).collect();
     *app.shared.mr_response.lock().unwrap() = data.match_response.iter().filter(|r| r.kind == "response").map(net_rule).collect();
@@ -2040,8 +2040,8 @@ pub fn apply_project(app: &mut App, data: &project::ProjectData, content: bool) 
     }
     // Ids handed out after the restore must not collide with restored ones.
     {
-        let max_id = app.shared.history.lock().unwrap().iter().map(|e| e.id)
-            .chain(app.shared.crawl_items.lock().unwrap().iter().map(|e| e.id))
+        let max_id = app.shared.history.with_rows(|h| h.iter().map(|e| e.id).max()).into_iter()
+            .chain(app.shared.crawl_items.with_rows(|h| h.iter().map(|e| e.id).max()))
             .chain(app.shared.issues.lock().unwrap().iter().map(|i| i.id))
             .chain(app.shared.ws_history.lock().unwrap().iter().map(|w| w.id))
             .max()
@@ -2070,7 +2070,7 @@ pub fn restore_project(app: &mut App, quiet: bool) {
 /// settings are applied: recorded traffic, tasks, editors and layout stay.
 fn restore_j01_sections(app: &mut App, data: &project::ProjectData, content: bool) {
     if content {
-        *app.shared.crawl_items.lock().unwrap() = data.crawl_items.iter().map(|h| h.to_entry().spilled()).collect();
+        app.shared.crawl_items.replace_all(data.crawl_items.iter().map(|h| h.to_entry()));
         *app.shared.site_links.lock().unwrap() = data.site_links.iter().cloned().collect();
     }
     let cs = &data.collaborator;
@@ -2193,7 +2193,7 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData, content: boo
             ..Default::default()
         }).collect();
         app.logger.next_id = app.logger.entries.iter().map(|e| e.id).max().unwrap_or(0) + 1;
-        app.log_seen = app.shared.history.lock().unwrap().iter().map(|e| e.id).max().unwrap_or(0);
+        app.log_seen = app.shared.history.with_rows(|h| h.iter().map(|e| e.id).max()).unwrap_or(0);
         app.log_sel = None;
     }
 }
@@ -2305,7 +2305,7 @@ mod save_restore_tests {
         app.shared.push_history(net::HistEntry { id: 77, host: "late.test".into(), ..Default::default() });
         app.shared.issues.lock().unwrap().push(crate::scan::ScanIssue { id: 78, name: "late".into(), ..Default::default() });
         crate::settings_dialog::install(&mut app, &project::with_section_defaults(&snap, project::SettingsSection::Tasks)).unwrap();
-        assert!(app.shared.history.lock().unwrap().iter().any(|e| e.id == 77), "history kept");
+        assert!(app.shared.history.snapshot().iter().any(|e| e.id == 77), "history kept");
         assert!(app.shared.issues.lock().unwrap().iter().any(|i| i.id == 78), "issues kept");
         assert!(!std::path::Path::new("/nonexistent/should-not-be-written.json").exists());
     }

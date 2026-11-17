@@ -338,7 +338,7 @@ mod tests {
         assert!(crate::scan::crawl_links("http://x", "/", raw).is_empty());
         let urls = js_crawl(engine.as_ref(), &shared, &format!("http://127.0.0.1:{site}/")).unwrap();
         assert!(urls.iter().any(|u| u.ends_with("/js-only")), "{} found {urls:?}", engine.name());
-        let hist: Vec<String> = shared.history.lock().unwrap().iter().map(|e| e.path.clone()).collect();
+        let hist: Vec<String> = shared.history.snapshot().iter().map(|e| e.path.clone()).collect();
         assert!(hist.iter().any(|p| p.ends_with("/js-only")), "traffic in history: {hist:?}");
     }
 
@@ -432,21 +432,21 @@ mod tests {
             };
             row("version (binary sha256 prefix)", format!("{} ({digest}…)", engine.version().unwrap_or_default().replace('\n', " ")), col);
             // 1. JS-aware crawl through the proxy.
-            shared.history.lock().unwrap().clear();
+            shared.history.clear();
             let t0 = std::time::Instant::now();
             let urls = js_crawl(engine.as_ref(), &shared, &format!("http://127.0.0.1:{hport}/")).unwrap_or_default();
             let found = urls.iter().any(|u| u.ends_with("/js-only"));
             row("1. JS-only link found (static crawl: no)", format!("{} ({} pages, {:.2} s)", if found { "yes" } else { "no" }, urls.len(), t0.elapsed().as_secs_f32()), col);
-            let hist: Vec<String> = shared.history.lock().unwrap().iter().map(|e| e.path.clone()).collect();
+            let hist: Vec<String> = shared.history.snapshot().iter().map(|e| e.path.clone()).collect();
             row("4. tracker-like script requested (not blocked)", if hist.iter().any(|p| p.contains("analytics")) { "yes".into() } else { "no".into() }, col);
             // Render cost of one page.
             let _ = engine.render_dom(&format!("http://127.0.0.1:{hport}/"), pport, Some(&ca_file));
             let st = last_run();
             row("render one page: time / peak RSS", format!("{:.2} s / {} MB", st.elapsed.as_secs_f32(), st.peak_rss_kb / 1024), col);
             // 2. HTTPS through the intercepting proxy.
-            shared.history.lock().unwrap().clear();
+            shared.history.clear();
             let dom = engine.render_dom(&format!("https://localhost:{sport}/"), pport, Some(&ca_file)).unwrap_or_else(|e| format!("ERR {e}"));
-            let in_hist = shared.history.lock().unwrap().iter().any(|e| e.https && e.status.starts_with('2'));
+            let in_hist = shared.history.snapshot().iter().any(|e| e.https && e.status.starts_with('2'));
             row("2. HTTPS via proxy, in history", format!("{} (page {})", if in_hist { "yes" } else { "no" }, if dom.contains("secure page") { "rendered" } else { "not rendered" }), col);
             // 3. Stored response to PNG.
             let png = std::env::temp_dir().join(format!("webprobe-bench-{col}.png"));
