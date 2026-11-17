@@ -185,8 +185,9 @@ pub fn requests(
             for _ in 0..total {
                 let values: Vec<Option<&str>> = (0..n).map(|j| Some(sets[j][index[j]].as_str())).collect();
                 out.push(attack(template, &values));
-                // Odometer: the last position varies fastest.
-                for j in (0..n).rev() {
+                // Odometer: position 1 varies fastest, as Burp iterates all of
+                // set 1 for each payload of set 2 (and so on).
+                for j in 0..n {
                     index[j] += 1;
                     if index[j] < lens[j] {
                         break;
@@ -1397,7 +1398,8 @@ pub fn requests_specs(template: &Template, kind: AttackType, specs: &[SetSpec], 
                     .collect();
                 apply_copies(&mut values, specs);
                 out.push(attack(template, &values));
-                for j in (0..n).rev() {
+                // Position 1 fastest (Burp's cluster bomb order).
+                for j in 0..n {
                     index[j] += 1;
                     if index[j] < lens[j] {
                         break;
@@ -1789,10 +1791,10 @@ mod tests {
     }
 
     #[test]
-    fn cluster_bomb_tries_every_combination_last_position_fastest() {
+    fn cluster_bomb_tries_every_combination_first_position_fastest() {
         let t = Template::parse("a§1§b§2§c").unwrap();
         let out = requests(&t, AttackType::ClusterBomb, &[set(&["A", "B"]), set(&["1", "2"])], 100).unwrap();
-        assert_eq!(reqs(&out), ["aAb1c", "aAb2c", "aBb1c", "aBb2c"]);
+        assert_eq!(reqs(&out), ["aAb1c", "aBb1c", "aAb2c", "aBb2c"]);
 
         let t3 = Template::parse("§a§§b§§c§").unwrap();
         let sets = [set(&["1", "2"]), set(&["3", "4"]), set(&["5", "6"])];
@@ -2303,7 +2305,7 @@ mod tests {
         let specs = resolve_specs(&template, AttackType::ClusterBomb, &sources).unwrap();
         assert_eq!(count_specs(AttackType::ClusterBomb, 3, &specs), Some(4));
         let r = requests_specs(&template, AttackType::ClusterBomb, &specs, 100).unwrap();
-        assert_eq!(reqs(&r), ["xx1", "xx2", "yy1", "yy2"]);
+        assert_eq!(reqs(&r), ["xx1", "yy1", "xx2", "yy2"], "position 1 fastest, the copy follows it");
         assert_eq!(r[0].payloads, vec![Some("x".to_string()), Some("x".to_string()), Some("1".to_string())]);
 
         let one = Template::parse("§a§").unwrap();
