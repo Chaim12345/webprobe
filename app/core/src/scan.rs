@@ -3523,10 +3523,23 @@ fn json_set(v: &mut serde_json::Value, path: &[String], new: serde_json::Value) 
     }
 }
 
-/// The request with `encoded` (a URL-encoded value, as the URL-parameter
-/// probes build it) placed at the insertion point: verbatim in the URL or
-/// form body, decoded into a JSON string for JSON values.
-pub(crate) fn inject(req: &str, ip: &InsertionPoint, encoded: &str) -> String {
+/// The request with `payload` placed at the insertion point, encoded for
+/// that kind of point: URL-encoded in the query, form body, cookie and
+/// header values; as written inside a JSON string, a multipart part and a
+/// path segment, which escape it their own way. A payload that is itself
+/// percent-encoded (a `%2f` traversal variant) therefore reaches a JSON
+/// value as written; it used to be URL-decoded into `/`.
+pub(crate) fn inject_payload(req: &str, ip: &InsertionPoint, payload: &str) -> String {
+    match &ip.kind {
+        IpKind::Json(_) | IpKind::Multipart { .. } | IpKind::PathFolder(_) | IpKind::PathFilename(_) => inject(req, ip, payload),
+        _ => inject(req, ip, &encode_query_payload(payload)),
+    }
+}
+
+/// The request with `value` placed verbatim at the insertion point (already
+/// encoded for it; see [`inject_payload`]).
+pub(crate) fn inject(req: &str, ip: &InsertionPoint, value: &str) -> String {
+    let encoded = value;
     let parts = util::parse_http(req.as_bytes());
     match &ip.kind {
         IpKind::Query => rebuild_with_path(req, &replace_param(&parts.path, &ip.name, encoded)),
@@ -3544,17 +3557,16 @@ pub(crate) fn inject(req: &str, ip: &InsertionPoint, encoded: &str) -> String {
         IpKind::Json(path) => {
             let body = req.find("\r\n\r\n").map(|i| &req[i + 4..]).unwrap_or("");
             let Ok(mut v) = serde_json::from_str::<serde_json::Value>(body) else { return req.to_string() };
-            json_set(&mut v, path, serde_json::Value::String(util::url_decode(encoded)));
+            json_set(&mut v, path, serde_json::Value::String(encoded.to_string()));
             with_body(req, &v.to_string())
         }
-        // Multipart content is sent raw (decoded), like a browser would.
-        IpKind::Multipart { index, .. } => with_multipart_part(req, *index, &util::url_decode(encoded), None, None),
+        // Multipart content is sent raw, like a browser would.
+        IpKind::Multipart { index, .. } => with_multipart_part(req, *index, encoded, None, None),
         IpKind::Cookie => with_cookie(req, &ip.name, &cookie_value(encoded)),
         IpKind::Header => String::from_utf8_lossy(&net::replace_or_add_header(req.as_bytes(), &ip.name, &header_value(encoded))).into_owned(),
         IpKind::PathFolder(idx) | IpKind::PathFilename(idx) => {
-            // with_path_segment encodes '/' and '?' on top of the
-            // already-encoded payload so it stays inside its segment.
-            rebuild_with_path(req, &with_path_segment(&parts.path, *idx, &util::url_decode(encoded)))
+            // with_path_segment escapes what would leave the segment.
+            rebuild_with_path(req, &with_path_segment(&parts.path, *idx, encoded))
         }
     }
 }
@@ -4970,10 +4982,15 @@ mod tests {
         let json = "POST /rest/user/login HTTP/1.1\r\nHost: h\r\nContent-Type: application/json\r\nContent-Length: 30\r\n\r\n{\"email\":\"a@b.c\",\"n\":{\"k\":5}}";
         let pts: Vec<InsertionPoint> = insertion_points(json).into_iter().filter(|p| matches!(p.kind, IpKind::Json(_))).collect();
         assert_eq!(pts.len(), 2);
-        let r = inject(json, &pts[0], "a@b.c%27");
+        let r = inject_payload(json, &pts[0], "a@b.c'");
         let body = r.split("\r\n\r\n").nth(1).unwrap();
         let v: serde_json::Value = serde_json::from_str(body).unwrap();
         assert_eq!(v["email"], "a@b.c'");
+        // A deliberately percent-encoded payload reaches the JSON value as
+        // written (second review, finding 17).
+        let r = inject_payload(json, &pts[0], "..%2f..%2fetc");
+        let v: serde_json::Value = serde_json::from_str(r.split("\r\n\r\n").nth(1).unwrap()).unwrap();
+        assert_eq!(v["email"], "..%2f..%2fetc");
         assert_eq!(v["n"]["k"], 5);
         // URL parameter of a POST keeps the body intact.
         let q = inject(form, &insertion_points(form)[0], "2");
@@ -5481,7 +5498,7 @@ mod tests {
         let req = "GET /s?q=shoes&page=2 HTTP/1.1\r\nHost: h\r\n\r\n";
         let ip = &insertion_points(req)[0];
         assert_eq!((ip.kind.clone(), ip.name.as_str(), ip.value.as_str()), (IpKind::Query, "q", "shoes"));
-        let r = inject(req, ip, &encode_query_payload("a b&c"));
+        let r = inject_payload(req, ip, &"a b&c");
         assert!(r.starts_with("GET /s?q=a%20b%26c&page=2 HTTP/1.1\r\n"), "{r}");
     }
 
@@ -5495,8 +5512,8 @@ mod tests {
         assert_eq!(pts[0].kind, IpKind::Multipart { index: 0, filename: None });
         assert_eq!(pts[1].kind, IpKind::Multipart { index: 1, filename: Some("cv.pdf".into()) });
         assert_eq!(pts[1].value, "%PDF-1");
-        // A probe replaces the part content (decoded, raw) and restamps the length.
-        let r = inject(&req, &pts[0], "a%27%22");
+        // A probe replaces the part content (raw) and restamps the length.
+        let r = inject_payload(&req, &pts[0], "a'\"");
         let new_body = r.split_once("\r\n\r\n").unwrap().1;
         assert!(new_body.contains("name=\"title\"\r\n\r\na'\"\r\n--XyZ"), "{new_body}");
         assert!(r.contains(&format!("Content-Length: {}\r\n", new_body.len())));
@@ -5512,7 +5529,7 @@ mod tests {
         let req = "GET / HTTP/1.1\r\nHost: h\r\nCookie: _gat=1; sid=abc; theme=dark\r\n\r\n";
         let pts: Vec<InsertionPoint> = insertion_points(req).into_iter().filter(|p| p.kind == IpKind::Cookie).collect();
         assert_eq!(pts.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), vec!["sid", "theme"], "_gat is skip-listed");
-        let r = inject(req, &pts[0], &encode_query_payload("x';y"));
+        let r = inject_payload(req, &pts[0], &"x';y");
         assert!(r.contains("\r\nCookie: _gat=1; sid=x'%3By; theme=dark\r\n"), "{r}");
     }
 
@@ -5529,7 +5546,7 @@ mod tests {
         ]);
         let ua = InsertionPoint { kind: IpKind::Header, name: "User-Agent".into(), value: "UA".into() };
         // Decoded for the header, but a CR/LF stays encoded: no new header line.
-        let r = inject(req, &ua, &encode_query_payload("a b\r\nX-Evil: 1"));
+        let r = inject_payload(req, &ua, &"a b\r\nX-Evil: 1");
         assert!(r.contains("\r\nUser-Agent: a b%0D%0AX-Evil: 1\r\n") && !r.contains("\r\nX-Evil:"), "{r}");
         // Without a Referer, Burp synthesises one (Zuq.ZE) and the probe adds it.
         let bare = "GET /p HTTP/1.1\r\nHost: h\r\n\r\n";
@@ -5547,7 +5564,7 @@ mod tests {
         assert_eq!(pts.len(), 3);
         assert_eq!((pts[1].kind.clone(), pts[1].value.as_str()), (IpKind::PathFolder(1), "v1"));
         assert_eq!((pts[2].kind.clone(), pts[2].value.as_str()), (IpKind::PathFilename(2), "users.json"));
-        let r = inject(req, &pts[1], &encode_query_payload("../x"));
+        let r = inject_payload(req, &pts[1], &"../x");
         assert!(r.starts_with("GET /api/..%2Fx/users.json?x=1 HTTP/1.1\r\n"), "{r}");
         let r = inject(req, &pts[2], "users.jsonzz");
         assert!(r.starts_with("GET /api/v1/users.jsonzz?x=1 HTTP/1.1\r\n"), "{r}");
