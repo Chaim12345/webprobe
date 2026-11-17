@@ -905,7 +905,7 @@ A second independent review covered the areas the first pass left out and report
 | # | Finding | Fix |
 |---|---|---|
 | 1 | The browser crawl kept links by a prefix test on the origin: `example.com.evil.tld` and `127.0.0.1:8080` passed and were then actively scanned | `crawl::same_origin` exact scheme/host/port check at all sites, plus a filter before replay (49bc1e1) |
-| 2 | Java sidecar: a hung handler blocked the proxy; extension stdout desynced replies, applying one message's edits to another | Reader/writer threads, id-matched replies, 15 s / 60 s deadlines, `System.out` redirected to stderr (740ba69) |
+| 2 | Java sidecar: a hung handler blocked the proxy; extension stdout desynced replies, applying one message's edits to another | Reader/writer threads, id-matched replies, 15 s per message, 180 s for the first load, `System.out` redirected to stderr (740ba69) |
 | 3 | "Copy links in response" looped forever, or panicked inside a multi-byte character | Offsets kept within the remaining text (49bc1e1) |
 | 4 | Intruder: no URL-encoding of payloads, Content-Length never updated | Burp's default encode set (`Zg3x`/`Zr71`), `util::update_content_length` |
 | 5 | Process extension: a write to its stdin could block forever | Writer thread, bounded reader channel, capped line length |

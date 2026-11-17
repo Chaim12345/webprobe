@@ -409,7 +409,10 @@ impl JavaSidecar {
     }
 
     fn ping(&self) -> Result<(), String> {
-        let reply = self.exchange(r#"{"type":"ping"}"#, None, std::time::Duration::from_secs(60))?;
+        // The first ping waits for the JVM to compile the bridge against
+        // Burp's jar and run the extension's initialize(): about 20 s on an
+        // idle machine, over 60 s under a build. Generous, but bounded.
+        let reply = self.exchange(r#"{"type":"ping"}"#, None, std::time::Duration::from_secs(180))?;
         match reply.get("type").and_then(|v| v.as_str()) {
             Some("pong") => Ok(()),
             other => Err(format!("unexpected ping reply: {other:?}")),
