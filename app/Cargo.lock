@@ -4861,6 +4861,7 @@ dependencies = [
  "ctr",
  "flate2",
  "hpack",
+ "memmap2",
  "rand 0.8.8",
  "rcgen",
  "regex",
