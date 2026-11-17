@@ -199,7 +199,7 @@ fn run(shared: &Arc<Shared>, id: u64, kind: TaskKind) {
         }
     };
     if !items.is_empty() {
-        shared.oob_wanted.store(true, Ordering::SeqCst);
+        shared.oob.want(true);
         for (e, prepared) in items {
             wait_while_paused(shared);
             if state_of(shared, id) == Some(TaskState::Cancelled) {
@@ -222,7 +222,7 @@ fn run(shared: &Arc<Shared>, id: u64, kind: TaskKind) {
             }
             shared.wake();
         }
-        shared.oob_wanted.store(false, Ordering::SeqCst);
+        shared.oob.want(false);
     }
     shared.scan.running_task.store(0, Ordering::SeqCst);
     shared.scan.paused.store(false, Ordering::SeqCst);

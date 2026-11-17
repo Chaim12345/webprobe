@@ -386,7 +386,7 @@ impl PointCheck for ExternalInteraction {
             format!("Collaborator token {token} replaced the value; confirmed when an interaction is observed."),
         )
         .with_evidence(vec![ScanEvidence::new(new_req.as_bytes(), resp.as_deref())]);
-        cx.shared.oob_pending.lock().unwrap().push((token.clone(), None, issue));
+        cx.shared.oob.register(token.clone(), None, issue);
         cx.progress();
         cx.pace(50);
     }
@@ -478,7 +478,7 @@ impl PointCheck for OsCommandInjection {
                 ),
             )
             .with_evidence(vec![ScanEvidence::new(new_req.as_bytes(), resp.as_deref())]);
-            cx.shared.oob_pending.lock().unwrap().push((token, Some("CNAME"), issue));
+            cx.shared.oob.register(token, Some("CNAME"), issue);
             cx.progress();
             cx.pace(50);
         }
@@ -1148,7 +1148,7 @@ impl PointCheck for XmlInjectionOob {
                     format!("The payload {payload} replaced the value; an XML parser that resolves it contacts the Collaborator id {token}."),
                 )
                 .with_evidence(evidence([rec.last(&payload)]));
-                cx.shared.oob_pending.lock().unwrap().push((token, Some("DNS"), issue));
+                cx.shared.oob.register(token, Some("DNS"), issue);
             }
             cx.progress();
         }
@@ -1283,7 +1283,7 @@ impl PointCheck for SmtpHeaderInjection {
                 format!("Payload appended a BCC header to user@{collab_host}; awaiting an SMTP interaction for id {token}."),
             )
             .with_evidence(vec![ScanEvidence::new(new_req.as_bytes(), resp.as_deref())]);
-            cx.shared.oob_pending.lock().unwrap().push((token.clone(), Some("SMTP"), issue));
+            cx.shared.oob.register(token.clone(), Some("SMTP"), issue);
         }
     }
 }

@@ -790,14 +790,8 @@ pub struct Shared {
     pub scan_enabled: AtomicBool,
     /// The active scanner's run state (claim, stop, pause, progress).
     pub scan: crate::scan_run::ScanRun,
-    /// Collaborator payloads (token, DNS name) minted ahead of time for scans
-    /// that run off the UI thread (Crawl & Audit): the Collaborator state
-    /// lives on the UI thread, which tops this pool up while `oob_wanted`.
-    pub oob_pool: Mutex<Vec<(String, String)>>,
-    pub oob_wanted: AtomicBool,
-    /// Set by a front end that keeps `oob_pool` filled. Without one (a
-    /// headless run) scans do not wait for payloads that will never come.
-    pub oob_supplier: AtomicBool,
+    /// Collaborator ids: the payload pool, registered ids and matching.
+    pub oob: crate::oob::OobState,
     /// Client connections being handled right now (see `MAX_CONNECTIONS`).
     pub active_connections: AtomicUsize,
     /// The scan task queue (`tasks.rs`).
@@ -827,17 +821,6 @@ pub struct Shared {
     /// In-browser session recovery prompt ("check session" rules).
     pub browser_recovery: BrowserRecovery,
     pub macros: Mutex<Vec<Macro>>,
-    /// Out-of-band probe tokens the active scan embedded, awaiting a
-    /// Collaborator interaction: (token, pre-built issue raised on match).
-    /// Collaborator ids the active scan embedded: (id, required interaction
-    /// kind label such as "SMTP" or None for any, issue to raise).
-    pub oob_pending: Mutex<Vec<(String, Option<&'static str>, crate::scan::ScanIssue)>>,
-    /// "token|kind" pairs already raised as External service interaction
-    /// issues (one per interaction type, see `scan::match_oob_interactions`).
-    pub oob_reported: Mutex<std::collections::HashSet<String>>,
-    /// Highest Collaborator interaction id already matched
-    /// (`scan::match_new_interactions` looks only at newer ones).
-    pub oob_seen: AtomicU64,
     /// Captured WebSocket handshakes and frames.
     pub ws_history: Mutex<Vec<WsEntry>>,
     /// Diff-count state for the history table ("Diff count", burp.Zxwu.java:56).
@@ -958,10 +941,8 @@ impl Shared {
             browsers: Mutex::new(Vec::new()),
             issues: Mutex::new(Vec::new()),
             scan: Default::default(),
+            oob: Default::default(),
             scan_enabled: AtomicBool::new(true),
-            oob_pool: Mutex::new(Vec::new()),
-            oob_wanted: AtomicBool::new(false),
-            oob_supplier: AtomicBool::new(false),
             active_connections: AtomicUsize::new(0),
             tasks: Mutex::new(Vec::new()),
             next_task_id: AtomicU64::new(1),
@@ -978,9 +959,6 @@ impl Shared {
             session_rules: Mutex::new(Vec::new()),
             browser_recovery: BrowserRecovery::default(),
             macros: Mutex::new(Vec::new()),
-            oob_pending: Mutex::new(Vec::new()),
-            oob_reported: Mutex::new(std::collections::HashSet::new()),
-            oob_seen: AtomicU64::new(0),
             ws_history: Mutex::new(Vec::new()),
             diff_tracker: Mutex::new(DiffTracker::default()),
             ext_host: Mutex::new(crate::ext_host::ExtensionHost::default()),

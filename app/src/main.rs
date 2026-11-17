@@ -363,21 +363,17 @@ pub struct App {
 type HistRow = (u64, u64, String, String, u16, String, String, usize, usize, String);
 
 impl App {
-    /// While a scan off the UI thread asks for them (`Shared::oob_wanted`),
-    /// keep a stock of Collaborator payloads in `Shared::oob_pool`.
+    /// While a scan off the UI thread asks for them, keep a stock of
+    /// Collaborator payloads in the engine's pool.
     fn refill_oob_pool(&mut self) {
-        const LOW: usize = 200;
-        const BATCH: usize = 300;
-        if !self.shared.oob_wanted.load(Ordering::SeqCst) {
+        if !self.shared.oob.is_wanted() {
             return;
         }
-        let mut pool = self.shared.oob_pool.lock().unwrap();
-        if pool.len() < LOW {
-            for _ in 0..BATCH {
-                let p = self.collab_state.generate_payload();
-                pool.push((p.token, p.dns_name));
-            }
-        }
+        let collab = &mut self.collab_state;
+        self.shared.oob.refill(200, 500, || {
+            let p = collab.generate_payload();
+            (p.token, p.dns_name)
+        });
     }
 
     /// Raise the issues proved by Collaborator interactions, every frame
@@ -1072,7 +1068,7 @@ fn main() {
         webprobe_core::ext_store::load_all(&shared);
     }
     // This front end refills the Collaborator payload pool (refill_oob_pool).
-    shared.oob_supplier.store(true, Ordering::SeqCst);
+    shared.oob.set_supplier(true);
     net::start_proxy(shared.clone());
 
     let options = eframe::NativeOptions {

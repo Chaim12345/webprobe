@@ -257,97 +257,21 @@ fn mk_burp(kb_name: &str, sev: &str, confidence: &str, e: &HistEntry, param: &st
     i
 }
 
-/// Pending Collaborator ids kept at most; the oldest are dropped beyond it
-/// (an id that never sees its interaction must not be kept forever).
-const MAX_OOB_PENDING: usize = 100_000;
-
-/// Match the interactions `collab` recorded since the last call: cheap to
-/// run every frame, as only new interactions are looked at.
+/// Match the interactions `collab` recorded since the last call and add the
+/// issues they prove (see `oob::OobState::match_new`). Called every frame by
+/// whoever owns the Collaborator, whatever view is open.
 pub fn match_new_interactions(shared: &Shared, collab: &crate::collaborator::CollaboratorState) -> usize {
-    let seen = shared.oob_seen.load(Ordering::SeqCst);
-    let fresh = collab.interactions_since(seen);
-    let Some(last) = fresh.last().map(|i| i.id) else { return 0 };
-    shared.oob_seen.store(last, Ordering::SeqCst);
-    {
-        let mut pending = shared.oob_pending.lock().unwrap();
-        let excess = pending.len().saturating_sub(MAX_OOB_PENDING);
-        pending.drain(..excess);
+    let issues = shared.oob.match_new(collab);
+    let n = issues.len();
+    if n > 0 {
+        add_issues(shared, issues);
     }
-    match_oob_interactions(shared, &fresh)
+    n
 }
 
-/// Match Collaborator interactions against the ids the active scans
-/// embedded (`Shared::oob_pending`) and raise the issues they prove.
-/// Burp family SCANNER_ACTIVE_CHECKS_EXTERNAL_INTERACTION.
-///
-/// A check that names its own issue (SMTP header injection, XML injection)
-/// waits for one interaction of its kind. The plain external-interaction
-/// probe raises one issue per interaction type, as Burp does ("External
-/// service interaction (DNS)" and "(HTTP)", high, certain), so its id stays
-/// pending until both have been seen. Returns the number of issues raised.
-/// Called by whoever owns the Collaborator, every frame or poll; it is
-/// independent of which view is open.
+/// Match `interactions` against the pending ids and add the issues proved.
 pub fn match_oob_interactions(shared: &Shared, interactions: &[crate::collaborator::Interaction]) -> usize {
-    let mut issues = Vec::new();
-    {
-        let mut pending = shared.oob_pending.lock().unwrap();
-        if pending.is_empty() {
-            return 0;
-        }
-        let mut reported = shared.oob_reported.lock().unwrap();
-        for it in interactions {
-            let Some(token) = &it.token else { continue };
-            let kind = it.kind().label();
-            // "CNAME": a DNS lookup of type CNAME, which only the injected
-            // `nslookup -q=cname` makes (burp.Zing.ZR: DNS and type 5).
-            let cname = it.dns().is_some_and(|d| d.qtype == 5);
-            let fits = |k: &str| k == kind || (k == "CNAME" && cname);
-            let Some(pos) = pending.iter().position(|(t, k, _)| t == token && k.is_none_or(fits)) else {
-                // An OS-command id that saw some other interaction (an A
-                // lookup, an HTTP fetch): Burp reports External service
-                // interaction for it (burp.Zfw7.Zr: not Zing.ZR -> Zuet.ZJ)
-                // and keeps waiting for the CNAME.
-                if let Some(p) = pending.iter().find(|(t, k, _)| t == token && *k == Some("CNAME")) {
-                    if (kind == "DNS" || kind == "HTTP") && reported.insert(format!("{token}|{kind}")) {
-                        let mut issue = p.2.clone();
-                        issue.name = format!("External service interaction ({kind})");
-                        issue.sev = "high".into();
-                        issue.confidence = "Certain".into();
-                        issue.type_id = 0;
-                        issue.detail = format!(
-                            "The nslookup payload's Collaborator id {token} received a {kind} interaction: {} (source {}).",
-                            it.headline(),
-                            it.source
-                        );
-                        issues.push(issue);
-                    }
-                }
-                continue;
-            };
-            if pending[pos].1.is_some() {
-                let (_, _, mut issue) = pending.remove(pos);
-                issue.detail = format!("Collaborator interaction observed: {} (source {})", it.headline(), it.source);
-                issues.push(issue);
-                continue;
-            }
-            if !reported.insert(format!("{token}|{kind}")) {
-                continue;
-            }
-            let mut issue = pending[pos].2.clone();
-            issue.name = format!("External service interaction ({kind})");
-            issue.sev = "high".into();
-            issue.confidence = "Certain".into();
-            issue.detail = format!(
-                "It is possible to induce the application to perform server-side {kind} interactions with an arbitrary domain. The payload {token} was submitted and a {kind} interaction was received: {} (source {}).",
-                it.headline(),
-                it.source
-            );
-            issues.push(issue);
-            if reported.contains(&format!("{token}|DNS")) && reported.contains(&format!("{token}|HTTP")) {
-                pending.remove(pos);
-            }
-        }
-    }
+    let issues = shared.oob.match_interactions(interactions);
     let n = issues.len();
     if n > 0 {
         add_issues(shared, issues);
@@ -1230,21 +1154,19 @@ pub fn audit_entries(shared: Arc<Shared>, entries: Vec<HistEntry>) {
 }
 
 /// One pre-minted Collaborator payload per out-of-band slot of this request,
-/// taken from `Shared::oob_pool`. Slots beyond what the pool holds get none
-/// (their out-of-band checks are skipped); with no UI to fill the pool, as in
-/// a headless run, this is empty.
+/// taken from the pool (a front end with a Collaborator stocks it; a headless
+/// run has none). When the pool runs short the remaining slots get none and
+/// the scan log says so: those out-of-band checks are skipped, not silently.
 pub fn pooled_oob(shared: &Shared, req_raw: &[u8]) -> Vec<(String, String, String)> {
     let slots = oob_slots(shared, req_raw);
     if slots.is_empty() {
         return Vec::new();
     }
-    // Give a UI that was just asked a moment to mint the first batch.
-    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(600);
-    while shared.oob_supplier.load(Ordering::SeqCst) && shared.oob_wanted.load(Ordering::SeqCst) && shared.oob_pool.lock().unwrap().is_empty() && std::time::Instant::now() < deadline {
-        std::thread::sleep(std::time::Duration::from_millis(50));
+    let ids = shared.oob.take(slots.len(), std::time::Duration::from_millis(1500));
+    if ids.len() < slots.len() && !ids.is_empty() {
+        shared.log(&format!("Scanner: only {} of {} Collaborator ids available; {} out-of-band probe(s) skipped", ids.len(), slots.len(), slots.len() - ids.len()));
     }
-    let mut pool = shared.oob_pool.lock().unwrap();
-    slots.into_iter().map_while(|slot| pool.pop().map(|(token, dns)| (slot, token, dns))).collect()
+    slots.into_iter().zip(ids).map(|(slot, (token, dns))| (slot, token, dns)).collect()
 }
 
 pub fn crawl_and_audit(shared: &Arc<Shared>, start_urls: &[String], audit_only: bool) {
@@ -1254,10 +1176,10 @@ pub fn crawl_and_audit(shared: &Arc<Shared>, start_urls: &[String], audit_only: 
     struct Wanted<'a>(&'a Shared);
     impl Drop for Wanted<'_> {
         fn drop(&mut self) {
-            self.0.oob_wanted.store(false, Ordering::SeqCst);
+            self.0.oob.want(false);
         }
     }
-    shared.oob_wanted.store(true, Ordering::SeqCst);
+    shared.oob.want(true);
     let _wanted = Wanted(shared);
     reset_openapi_hosts();
     for url in start_urls {
@@ -3631,7 +3553,8 @@ mod tests {
         let shared = net::Shared::new();
         let base = ScanIssue { host: "127.0.0.1:1".into(), path: "/".into(), ..Default::default() };
         let smtp = ScanIssue { name: "SMTP header injection".into(), sev: "medium".into(), ..base.clone() };
-        shared.oob_pending.lock().unwrap().extend([("tokplain".to_string(), None, base), ("toksmtp".to_string(), Some("SMTP"), smtp)]);
+        shared.oob.register("tokplain".to_string(), None, base);
+        shared.oob.register("toksmtp".to_string(), Some("SMTP"), smtp);
         let it = |id, token: &str, detail| Interaction { id, at: 0, source: "127.0.0.1".into(), token: Some(token.into()), detail };
         let dns = || InteractionDetail::Dns(DnsInteraction { qname: "tokplain.oob.invalid".into(), qtype: 1, raw_query: Vec::new() });
         let http = || InteractionDetail::Http(HttpInteraction { method: "GET".into(), target: "/".into(), ..Default::default() });
@@ -3639,10 +3562,10 @@ mod tests {
         assert_eq!(match_oob_interactions(&shared, &[it(1, "tokplain", dns())]), 0, "a repeat raises nothing");
         assert_eq!(match_oob_interactions(&shared, &[it(3, "toksmtp", http())]), 0, "SMTP id ignores HTTP");
         assert_eq!(match_oob_interactions(&shared, &[it(4, "tokplain", http()), it(5, "toksmtp", InteractionDetail::Smtp(SmtpInteraction::default()))]), 2);
-        assert!(shared.oob_pending.lock().unwrap().is_empty(), "both ids retired");
+        assert!(shared.oob.is_pending_empty(), "both ids retired");
         // OS command injection waits for a CNAME lookup (burp.Zing.ZR).
         let cmd = ScanIssue { name: "OS command injection".into(), ..ScanIssue::default() };
-        shared.oob_pending.lock().unwrap().push(("tokcmd".to_string(), Some("CNAME"), cmd));
+        shared.oob.register("tokcmd".to_string(), Some("CNAME"), cmd);
         let q = |qtype| InteractionDetail::Dns(DnsInteraction { qname: "tokcmd.oob.invalid".into(), qtype, raw_query: Vec::new() });
         // An A lookup is not command execution: Burp reports it as External
         // service interaction (burp.Zfw7) and keeps waiting for the CNAME.
@@ -3652,7 +3575,7 @@ mod tests {
         // The same verdict from a public Collaborator (interactsh) report,
         // whose DNS query type arrives as a label.
         let cmd = ScanIssue { name: "OS command injection".into(), ..ScanIssue::default() };
-        shared.oob_pending.lock().unwrap().push(("tokpub".to_string(), Some("CNAME"), cmd));
+        shared.oob.register("tokpub".to_string(), Some("CNAME"), cmd);
         let report = |qt: &str| {
             let r = crate::interactsh::parse_interaction(&format!(r#"{{"protocol":"dns","unique-id":"tokpub","full-id":"tokpub","q-type":"{qt}","raw-request":"","remote-address":"192.0.2.1"}}"#)).unwrap();
             Interaction { id: 9, at: 0, source: r.remote_address.clone(), token: Some(r.unique_id.clone()), detail: crate::collaborator::remote_detail(&r).unwrap() }
@@ -4405,7 +4328,7 @@ mod tests {
         while shared.scan.is_busy() && t0.elapsed() < std::time::Duration::from_secs(120) {
             std::thread::sleep(std::time::Duration::from_millis(200));
         }
-        let pending: Vec<_> = shared.oob_pending.lock().unwrap().iter().map(|(t, k, _)| (t.clone(), *k)).collect();
+        let pending: Vec<_> = shared.oob.pending().iter().map(|(t, k, _)| (t.clone(), *k)).collect();
         assert!(pending.contains(&(a.token.clone(), Some("SMTP"))), "pending: {pending:?}");
         let mut hit = false;
         for _ in 0..15 {
@@ -5424,7 +5347,7 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
         assert!(!shared.scan.is_busy(), "scan did not finish");
-        let pending = shared.oob_pending.lock().unwrap();
+        let pending = shared.oob.pending();
         let get = |token: &str| pending.iter().find(|(t, _, _)| t == token).unwrap_or_else(|| panic!("{token} not pending"));
         for (token, kind, needle) in [("tok0", None, "tok0.oob.invalid"), ("tok1", Some("DNS"), "tok1.oob.invalid"), ("tok2", Some("DNS"), "tok2.oob.invalid"), ("smtpa", Some("SMTP"), "smtpa.oob.invalid"), ("smtpb", Some("SMTP"), "smtpb.oob.invalid"), ("tok3", Some("CNAME"), "tok3.oob.invalid"), ("tok6", Some("CNAME"), "tok6.oob.invalid")] {
             let (_, k, issue) = get(token);
@@ -5572,14 +5495,14 @@ mod tests {
         // No pool (headless): nothing, and no waiting because nobody was asked.
         assert!(pooled_oob(&shared, req).is_empty());
         // Fewer payloads than slots: the first slots get them, the pool empties.
-        *shared.oob_pool.lock().unwrap() = vec![("t1".into(), "t1.oast.test".into()), ("t2".into(), "t2.oast.test".into())];
+        shared.oob.stock([("t1".into(), "t1.oast.test".into()), ("t2".into(), "t2.oast.test".into())]);
         let got = pooled_oob(&shared, req);
         assert_eq!(got.len(), 2);
         assert_eq!(got.iter().map(|(s, _, _)| s.clone()).collect::<Vec<_>>(), slots[..2].to_vec());
         assert!(got.iter().all(|(_, t, d)| d.starts_with(t.as_str())));
-        assert!(shared.oob_pool.lock().unwrap().is_empty());
+        assert_eq!(shared.oob.pool_len(), 0);
         // A request without insertion points takes nothing.
-        *shared.oob_pool.lock().unwrap() = vec![("t3".into(), "t3.oast.test".into())];
+        shared.oob.stock([("t3".into(), "t3.oast.test".into())]);
         assert!(pooled_oob(&shared, b"GET / HTTP/1.1\r\nHost: h\r\n\r\n").len() <= 1);
     }
 
