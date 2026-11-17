@@ -49,6 +49,13 @@ pub struct ProjectHistory {
     pub request: crate::body::Body,
     pub response: Option<crate::body::Body>,
     pub note: Option<String>,
+    /// Row highlight, "Edited", resolved IP and listener port: kept so a
+    /// reopened project shows the same table (added after version 2; older
+    /// files load with the defaults).
+    pub highlight: Option<u8>,
+    pub edited: bool,
+    pub ip: String,
+    pub listener_port: u16,
 }
 
 /// The file form of [`ProjectHistory`] (unchanged since version 2):
@@ -67,6 +74,14 @@ struct HistoryOut<'a> {
     request: std::borrow::Cow<'a, str>,
     response: Option<std::borrow::Cow<'a, str>>,
     note: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    highlight: Option<u8>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    edited: bool,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    ip: &'a str,
+    #[serde(skip_serializing_if = "is_zero_port")]
+    listener_port: u16,
     #[serde(skip_serializing_if = "Option::is_none")]
     request_b64: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -88,9 +103,21 @@ struct HistoryIn {
     response: Option<String>,
     note: Option<String>,
     #[serde(default)]
+    highlight: Option<u8>,
+    #[serde(default)]
+    edited: bool,
+    #[serde(default)]
+    ip: String,
+    #[serde(default)]
+    listener_port: u16,
+    #[serde(default)]
     request_b64: Option<String>,
     #[serde(default)]
     response_b64: Option<String>,
+}
+
+fn is_zero_port(p: &u16) -> bool {
+    *p == 0
 }
 
 /// Text view and, when the bytes are not UTF-8, their base64.
@@ -123,6 +150,10 @@ impl Serialize for ProjectHistory {
             request,
             response,
             note: self.note.as_deref(),
+            highlight: self.highlight,
+            edited: self.edited,
+            ip: &self.ip,
+            listener_port: self.listener_port,
             request_b64,
             response_b64,
         }
@@ -145,6 +176,10 @@ impl<'de> Deserialize<'de> for ProjectHistory {
             request: decode_message(&h.request, h.request_b64.as_deref()).into(),
             response: h.response.as_deref().map(|r| decode_message(r, h.response_b64.as_deref()).into()),
             note: h.note,
+            highlight: h.highlight,
+            edited: h.edited,
+            ip: h.ip,
+            listener_port: h.listener_port,
         })
     }
 }
@@ -914,6 +949,10 @@ impl ProjectHistory {
             request: e.req_raw.clone(),
             response: e.resp_raw.clone(),
             note: e.note.clone(),
+            highlight: e.highlight,
+            edited: e.edited,
+            ip: e.ip.clone(),
+            listener_port: e.listener_port,
         }
     }
 
@@ -932,6 +971,10 @@ impl ProjectHistory {
             req_raw: self.request.clone(),
             resp_raw: self.response.clone(),
             note: self.note.clone(),
+            highlight: self.highlight,
+            edited: self.edited,
+            ip: self.ip.clone(),
+            listener_port: self.listener_port,
             ..Default::default()
         };
         let (params, extension, title, cookies) = crate::net::derive_history_fields(&e);
@@ -1382,6 +1425,10 @@ mod tests {
                 request: "GET /index.html HTTP/1.1\r\nHost: example.com\r\n\r\n".into(),
                 response: Some("HTTP/1.1 200 OK\r\n\r\nok".into()),
                 note: Some("checked".into()),
+                highlight: None,
+                edited: false,
+                ip: String::new(),
+                listener_port: 0,
             }],
             match_request: vec![ProjectRule {
                 enabled: true,
@@ -1548,6 +1595,10 @@ mod tests {
                 request: "GET /admin/ HTTP/1.1\r\n\r\n".into(),
                 response: Some("HTTP/1.1 200 OK\r\n\r\n".into()),
                 note: None,
+                highlight: None,
+                edited: false,
+                ip: String::new(),
+                listener_port: 0,
             }],
             site_links: vec![("https://example.com".into(), "/unvisited".into())],
             scanner: ProjectScanner { speed: 2, accuracy: 0, extra_checks: true, disabled_checks: vec!["active.csrf".into()], disabled_insertion_points: vec!["header".into()], crawl_max_depth: Some(2), crawl_max_locations: Some(100), crawl_robots: Some(false), crawl_sitemap: Some(true), crawl_engine: Some("Lightpanda".into()) },
@@ -1984,7 +2035,11 @@ mod tests {
             note: Some("n".into()),
             ..Default::default()
         };
-        let back = ProjectHistory::from_entry(&e).to_entry();
+        let e = crate::net::HistEntry { highlight: Some(3), edited: true, ip: "192.0.2.7".into(), listener_port: 8443, ..e };
+        let json = serde_json::to_string(&ProjectHistory::from_entry(&e)).unwrap();
+        let back: ProjectHistory = serde_json::from_str(&json).unwrap();
+        let back = back.to_entry();
+        assert_eq!((back.highlight, back.edited, back.ip.as_str(), back.listener_port), (Some(3), true, "192.0.2.7", 8443), "table state survives a reopen");
         assert_eq!((back.id, back.ts, back.method.as_str(), back.port, back.https), (4, 1_800_000_000, "POST", 8443, true));
         assert_eq!((back.req_raw.clone(), back.resp_raw.clone()), (e.req_raw.clone(), e.resp_raw.clone()));
         assert_eq!(back.resp_len, 4);
@@ -2083,6 +2138,10 @@ mod tests {
                 request: format!("GET /item/{i} HTTP/1.1\r\nHost: h\r\n\r\n").into(),
                 response: Some(format!("HTTP/1.1 200 OK\r\n\r\n{i}").into()),
                 note: None,
+                highlight: None,
+                edited: false,
+                ip: String::new(),
+                listener_port: 0,
             })
             .collect();
 

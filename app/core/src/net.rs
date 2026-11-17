@@ -2153,13 +2153,9 @@ fn record(shared: &Shared, req: &[u8], resp: Option<Vec<u8>>, note: Option<Strin
         .as_ref()
         .map(|r| util::parse_http(r).status.clone())
         .unwrap_or_default();
-    let resp_len = resp
-        .as_ref()
-        .map(|r| {
-            let p = util::parse_http(r);
-            r.len().saturating_sub(p.head_len)
-        })
-        .unwrap_or(0);
+    // Burp's history "Length" is the whole response, headers included
+    // (live 2026.7.3: example.com shows 917 for a 513-byte body).
+    let resp_len = resp.as_ref().map(|r| r.len()).unwrap_or(0);
     let e = HistEntry {
         id,
         ts: util::now_secs(),
@@ -3560,7 +3556,7 @@ mod tests {
         assert!(!text.to_ascii_lowercase().contains("transfer-encoding"));
         assert!(!text.to_ascii_lowercase().contains("content-encoding"));
         assert!(raw.ends_with(plain), "decoded body stored");
-        assert_eq!(e.resp_len, plain.len());
+        assert_eq!(e.resp_len, raw.len(), "Length is the whole response, as in Burp");
     }
 
     /// A-03: with keep-alive on, two requests reuse one upstream connection.
