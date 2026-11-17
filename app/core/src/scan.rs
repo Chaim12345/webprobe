@@ -1309,7 +1309,10 @@ pub fn crawl_and_audit(shared: &Arc<Shared>, start_urls: &[String], audit_only: 
                     seen.sort_by_key(|r| r.resp_head.is_none() || r.resp_body.is_none());
                     let mut keys: std::collections::BTreeSet<String> =
                         items.iter().map(|e| format!("{} {}", e.method, crate::crawl::location_key(&e.path))).collect();
-                    for r in seen {
+                    // Only the start origin is crawled and audited, whatever
+                    // the browser was led to request.
+                    let start = crate::crawl::origin_of(url).unwrap_or_default();
+                    for r in seen.into_iter().filter(|r| crate::crawl::same_origin(&r.url, &start)) {
                         let path = r.url.split_once("://").and_then(|(_, x)| x.find('/').map(|i| x[i..].to_string())).unwrap_or_else(|| "/".into());
                         let path = path.split('#').next().unwrap_or("/").to_string();
                         if keys.insert(format!("{} {}", r.method, crate::crawl::location_key(&path))) {

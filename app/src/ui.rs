@@ -2490,20 +2490,20 @@ fn links_in_response(e: &net::HistEntry) -> String {
     let body = String::from_utf8_lossy(&resp[rp.head_len.min(resp.len())..]);
     let mut links = Vec::new();
     for attr in ["href", "src", "action"] {
+        // Every index is into `rest` and `rest` only moves forward: the old
+        // loop indexed the whole body with an offset found in `rest`, which
+        // looped forever (or panicked inside a multi-byte character) from
+        // the second link on.
+        let needle = format!("{attr}=\"");
         let mut rest = body.as_ref();
-        while let Some(at) = rest.find(&format!("{attr}=\"")) {
-            let start = at + attr.len() + 2;
-            if let Some(end) = body[start..].find('"') {
-                let link = &body[start..start + end];
-                if link.starts_with("http://") || link.starts_with("https://") {
-                    if !links.contains(&link) {
-                        links.push(link);
-                    }
-                }
-                rest = &body[start + end + 1..];
-            } else {
-                break;
+        while let Some(at) = rest.find(&needle) {
+            rest = &rest[at + needle.len()..];
+            let Some(end) = rest.find('"') else { break };
+            let link = &rest[..end];
+            if (link.starts_with("http://") || link.starts_with("https://")) && !links.contains(&link) {
+                links.push(link);
             }
+            rest = &rest[end + 1..];
         }
     }
     links.join("\n")
@@ -4463,6 +4463,15 @@ fn organizer_view(app: &mut App, ui: &mut Ui) {
 #[cfg(test)]
 mod repeater_fix_tests {
     use super::*;
+
+    /// Second review, finding 3: several links (and non-ASCII text) neither
+    /// hang nor panic.
+    #[test]
+    fn links_in_response_walks_every_link() {
+        let body = "<a href=\"http://a\"> x <a href=\"http://b\"> é <img src=\"https://c/ü\"> <a href=\"/rel\">";
+        let e = net::HistEntry { resp_raw: Some(format!("HTTP/1.1 200 OK\r\n\r\n{body}").into()), ..Default::default() };
+        assert_eq!(links_in_response(&e), "http://a\nhttp://b\nhttps://c/ü");
+    }
 
     /// Issue #2 item 2: Cancel frees the tab at once and a late response
     /// is dropped (its generation is stale).

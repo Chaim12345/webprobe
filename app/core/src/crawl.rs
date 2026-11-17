@@ -218,6 +218,20 @@ pub fn crawl(shared: &Arc<Shared>, start_url: &str) -> Vec<HistEntry> {
 mod tests {
     use super::*;
 
+    /// Second review, finding 1: the crawler stays on its start origin.
+    #[test]
+    fn same_origin_is_exact() {
+        let o = "http://example.com";
+        for ok in ["http://example.com", "http://example.com/", "http://example.com/a?b#c", "HTTP://EXAMPLE.COM/x", "http://example.com?x"] {
+            assert!(same_origin(ok, o), "{ok}");
+        }
+        for bad in ["http://example.com.evil.tld/x", "http://example.com:8080/", "https://example.com/", "http://example.community/", "//example.com/", "example.com/"] {
+            assert!(!same_origin(bad, o), "{bad}");
+        }
+        assert!(!same_origin("http://127.0.0.1:8080/", "http://127.0.0.1"));
+        assert!(same_origin("http://127.0.0.1:18782/a", "http://127.0.0.1:18782"));
+    }
+
     /// The crawl follows the configured limits: depth 1 stops after the
     /// start page's links, and robots.txt is not requested when switched off.
     #[test]
@@ -374,7 +388,7 @@ impl Cdp {
         let ids: Vec<String> = self
             .seen
             .iter()
-            .filter(|r| r.finished && r.resp_body.is_none() && r.resp_head.is_some() && r.url.starts_with(origin))
+            .filter(|r| r.finished && r.resp_body.is_none() && r.resp_head.is_some() && same_origin(&r.url, origin))
             .filter(|r| self.seen.iter().filter(|o| o.id == r.id).count() == 1)
             .map(|r| r.id.clone())
             .collect();
@@ -725,7 +739,7 @@ pub fn browser_crawl(shared: &Arc<Shared>, start_url: &str) -> Result<Vec<SeenRe
                 .unwrap_or_default();
             for l in links {
                 let l = l.trim_end_matches('#').to_string();
-                if l.starts_with(&origin) && seen.len() < limits.max_locations && seen.insert(l.clone()) {
+                if same_origin(&l, &origin) && seen.len() < limits.max_locations && seen.insert(l.clone()) {
                     queue.push_back((l, depth + 1));
                 }
             }
@@ -739,7 +753,7 @@ pub fn browser_crawl(shared: &Arc<Shared>, start_url: &str) -> Result<Vec<SeenRe
                 .unwrap_or_default();
             for f in specs {
                 let key = format!("{} {} {}", f.method, f.action, f.fields.iter().map(|x| x.name.as_str()).collect::<Vec<_>>().join(","));
-                if !f.action.starts_with(&origin) || !form_keys.insert(key) {
+                if !same_origin(&f.action, &origin) || !form_keys.insert(key) {
                     continue;
                 }
                 // Burp's crawler fills and submits in the browser, twice
@@ -789,13 +803,13 @@ pub fn browser_crawl(shared: &Arc<Shared>, start_url: &str) -> Result<Vec<SeenRe
                 let revealed: Vec<String> = eval_json(&mut cdp, LINKS_JS).unwrap_or_default();
                 for l in here.into_iter().chain(revealed) {
                     let l = l.trim_end_matches('#').to_string();
-                    if l.starts_with(&origin) && seen.len() < limits.max_locations && seen.insert(l.clone()) {
+                    if same_origin(&l, &origin) && seen.len() < limits.max_locations && seen.insert(l.clone()) {
                         queue.push_back((l, depth + 1));
                     }
                 }
             }
         }
-        let out: Vec<SeenRequest> = cdp.seen.iter().filter(|r| r.url.starts_with(&origin)).cloned().collect();
+        let out: Vec<SeenRequest> = cdp.seen.iter().filter(|r| same_origin(&r.url, &origin)).cloned().collect();
         Ok(out)
     })();
     // The whole browser tree, not just its main process (see kill_process_tree).
@@ -803,6 +817,22 @@ pub fn browser_crawl(shared: &Arc<Shared>, start_url: &str) -> Result<Vec<SeenRe
     let _ = child.wait();
     let _ = std::fs::remove_dir_all(&profile);
     result
+}
+
+/// The origin (`scheme://host[:port]`) of a URL, as written.
+pub fn origin_of(url: &str) -> Option<String> {
+    let (scheme, rest) = url.split_once("://")?;
+    let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    (end > 0).then(|| format!("{}://{}", scheme.to_ascii_lowercase(), rest[..end].to_ascii_lowercase()))
+}
+
+/// True when `url` is on exactly `origin` (`scheme://host[:port]`). A plain
+/// prefix test let `http://example.com.evil.tld/` pass for
+/// `http://example.com`, and `http://127.0.0.1:8080/` for
+/// `http://127.0.0.1`: the crawler then requested, and the scanner actively
+/// audited, hosts outside the start origin.
+pub fn same_origin(url: &str, origin: &str) -> bool {
+    origin_of(url).is_some_and(|o| o.eq_ignore_ascii_case(origin.trim_end_matches('/')))
 }
 
 /// Re-issue a browser-observed request through WebProbe and record it as a
