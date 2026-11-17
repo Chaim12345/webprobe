@@ -3,13 +3,14 @@
   "generated": "2026-11-15",
   "source": "TASKS.md",
   "summary": {
-    "total": 103,
+    "total": 106,
     "p0": 64,
-    "p1": 30,
-    "p2": 9,
+    "p1": 32,
+    "p2": 10,
     "by_status": {
       "done": 101,
-      "rejected": 2
+      "rejected": 2,
+      "todo": 3
     }
   },
   "tasks": [
@@ -1189,6 +1190,36 @@
       "status": "done",
       "evidence": "Subsystem types with private state, one commit each, full suite green at the end of the wave: core/src/history.rs ProxyHistory (6b7871f: every write spills bodies; scoped reads; 69 lock sites moved; fixed seed hook), core/src/scan_run.rs ScanRun + ScanGuard (8fe804e: claim/release only via guard, Condvar idle waits replace sleep-polling, claim before progress reset), core/src/oob.rs OobState (d52cc73: register / take / refill / match in one place; pool shortfalls logged instead of silently skipped), core/src/repeater_run.rs RepeaterRun (begin / finish / cancel under one lock: a cancelled send can no longer overwrite a newer one; tab ids). Tests: writes_spill_and_reads_are_scoped, one_claim_at_a_time_and_idle_waits_wake, take_hands_out_what_there_is_and_waits_only_when_asked, a_cancelled_send_cannot_finish. App and config-like Shared fields stay as they are (single-threaded UI state / one Mutex each).",
       "completed": "2026-11-18"
+    },
+    {
+      "id": "D-08",
+      "epic": "D — Scanner parity",
+      "priority": "P1",
+      "title": "Remaining Burp insertion points",
+      "acceptance": "Ported from the decompiled source with tests: entire body (burp.Zuq.ZT), nested data inside a parameter such as base64 or JSON (Zuq.Zq), XML standalone tags (Zuq.Za), parameter names (Zuq.Zp); Burp's skip_server_side_injection_for_parameters tagging (PHPSESSID, jsessionid, ...). Order and the cap of 30 stay as burp.Zuq.Zs / Zwez.",
+      "effort": "M",
+      "status": "todo",
+      "evidence": "Craft unknown unk_e8d35ba47ccfba29 probes; not present in scan.rs IpKind (2026-11-18)."
+    },
+    {
+      "id": "D-09",
+      "epic": "D — Scanner parity",
+      "priority": "P1",
+      "title": "Remaining Collaborator check variants",
+      "acceptance": "Ported with tests: Collaborator payloads across the checks that have them (burp.Zc7h), PHP code injection Collaborator half (Zxvv.ZQ fsockopen/gethostbyname), and the in-band 'Out-of-band resource load (HTTP)' path of Zsrh.",
+      "effort": "M",
+      "status": "todo",
+      "evidence": "Craft unknown unk_e8d35ba47ccfba29 probes; OS command injection Collaborator (Zc99) done 2026-11-17."
+    },
+    {
+      "id": "D-10",
+      "epic": "D — Scanner parity",
+      "priority": "P2",
+      "title": "Stored XSS retrieval pairing as Burp",
+      "acceptance": "Stored input is paired with any later request whose response showed it (as Burp does), not only safe GETs (base GET, same-origin redirect target, up to 3 crawled GETs); test with a local multi-page fixture.",
+      "effort": "M",
+      "status": "todo",
+      "evidence": "Craft unknown unk_e8d35ba47ccfba29 probes."
     }
   ]
 }
