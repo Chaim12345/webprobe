@@ -896,4 +896,33 @@ An independent reviewer read the branch (master..HEAD) and reported 16 findings:
 
 Live check after the fixes (QA rig, local lab servers): a POST with `Expect: 100-continue` and a chunked upload both reached the server whole; GET and HEAD were correct; history showed the final 200 statuses and full-response lengths.
 
-The first pass did not cover: extensions, Intruder, crawl/headless, upstream, other scanner ports, the UI modules and the vendored MCP code. A second review of those areas is running.
+The first pass did not cover: extensions, Intruder, crawl/headless, upstream, other scanner ports, the UI modules and the vendored MCP code. A second review covered them (next section).
+
+## Code review, second pass (2026-11-17/18)
+
+A second independent review covered the areas the first pass left out and reported 19 findings: 12 confirmed and 7 plausible. All 19 are resolved; only #17 needed no change for non-ASCII characters (see its row).
+
+| # | Finding | Fix |
+|---|---|---|
+| 1 | The browser crawl kept links by a prefix test on the origin: `example.com.evil.tld` and `127.0.0.1:8080` passed and were then actively scanned | `crawl::same_origin` exact scheme/host/port check at all sites, plus a filter before replay (49bc1e1) |
+| 2 | Java sidecar: a hung handler blocked the proxy; extension stdout desynced replies, applying one message's edits to another | Reader/writer threads, id-matched replies, 15 s / 60 s deadlines, `System.out` redirected to stderr (740ba69) |
+| 3 | "Copy links in response" looped forever, or panicked inside a multi-byte character | Offsets kept within the remaining text (49bc1e1) |
+| 4 | Intruder: no URL-encoding of payloads, Content-Length never updated | Burp's default encode set (`Zg3x`/`Zr71`), `util::update_content_length` |
+| 5 | Process extension: a write to its stdin could block forever | Writer thread, bounded reader channel, capped line length |
+| 6 | One exception in the bridge ended it for every later message | Per-message catch; the message passes unchanged |
+| 7 | Extensions that failed to load were deleted from extensions.json on the next save | `ExtensionHost::not_loaded`, shown with Retry / Forget |
+| 8 | Cluster bomb order | Position 1 now varies fastest (Burp's documented order; the bytecode was not decompilable) |
+| 9 | Message panes pretty-printed the body on every frame | Lines cached per message (full-content hash) and per view |
+| 10 | Intruder results re-sorted, and the request count was regenerated, on every frame | Re-sorts throttled to every 500 ms; count cached |
+| 11 | Sidecar edits broke framing (Transfer-Encoding kept, Content-Length missing) | A changed body is reframed |
+| 12 | Sidecar told every message `http`, port 80, and responses had no host | `HttpService` (host, port, TLS) passed into every hook |
+| 13 | Extension issues could be attributed to another connection, or to an empty host | Issue buffer kept per calling thread; request host passed |
+| 14 | Headless engine helpers outlived the run, and the stdout join could hang | Process group stopped after exit; output read with a 2 s bound |
+| 15 | `webprobe-headless proxy` did not save on Ctrl+C, and printed while holding the history lock | SIGINT/SIGTERM end the run and save (checked live); rows copied out before printing |
+| 16 | Upstream: only the first DNS address was tried; IPv6 hosts were not bracketed | Every address tried; `[::1]` bracketed |
+| 17 | Payload encoding per insertion point: JSON, multipart and path points decoded `%2f` back to `/` | `scan::inject_payload` encodes for the point. Non-ASCII is unchanged, as Burp sends one ISO-8859-1 byte per character |
+| 18 | CORS flag 64 was never set | `Zrbl.Zh` sensitive-MIME set ported |
+| 19 | SQL issue text, process-extension memory growth, per-frame lock in the HTTP history window, MCP replaying input, MCP screenshots over 1 MiB | All fixed (b962020 and the commits above) |
+
+Dead code: `editor.rs` (superseded by `msgpane.rs`) and 24 unused helpers were removed, and the workspace builds with no warnings.
+
