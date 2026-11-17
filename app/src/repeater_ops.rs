@@ -562,6 +562,34 @@ pub fn toggle_request_method(req: &str) -> String {
     }
 }
 
+/// Burp's "Change body encoding": a urlencoded body becomes
+/// multipart/form-data (one part per parameter, values decoded) and a
+/// multipart body becomes urlencoded (values encoded). Content-Type and
+/// Content-Length follow. Requests without such a body are left alone.
+pub fn toggle_body_encoding(req: &str, boundary: &str) -> String {
+    let (mut lines, body) = head_lines_and_body(req);
+    let ct = lines.iter().skip(1).find(|l| header_name(l) == "content-type").map(|l| l.splitn(2, ':').nth(1).unwrap_or("").trim().to_string()).unwrap_or_default();
+    let lct = ct.to_ascii_lowercase();
+    let decode = |t: &str| crate::util::url_decode(&t.replace('+', " "));
+    let new_body = if lct.contains("application/x-www-form-urlencoded") {
+        let mut out = String::new();
+        for (k, v) in split_params(&body) {
+            out.push_str(&format!("--{boundary}\r\nContent-Disposition: form-data; name=\"{}\"\r\n\r\n{}\r\n", decode(&k), decode(&v)));
+        }
+        out.push_str(&format!("--{boundary}--\r\n"));
+        set_header(&mut lines, "Content-Type", &format!("multipart/form-data; boundary={boundary}"));
+        out
+    } else if lct.starts_with("multipart/") {
+        let out = multipart_params(&body, &ct).into_iter().map(|(k, v)| format!("{}={}", url_encode_all_special(&k), url_encode_all_special(&v))).collect::<Vec<_>>().join("&");
+        set_header(&mut lines, "Content-Type", "application/x-www-form-urlencoded");
+        out
+    } else {
+        return req.to_string();
+    };
+    set_header(&mut lines, "Content-Length", &new_body.len().to_string());
+    join_message(&lines, &new_body)
+}
+
 /// Characters "URL-encode as you type" replaces. Burp's documentation names
 /// "& and ="; the set is Burp's own key-character list (the Intruder
 /// payload-encoding default, Zg3x/Zr71).
@@ -1041,6 +1069,7 @@ pub enum RepAction {
     ToDecoder,
     ToOrganizer,
     ChangeMethod,
+    ChangeBodyEncoding,
     PasteUrl,
     CopyUrl,
     CopyCurl,
@@ -1101,6 +1130,9 @@ pub fn request_menu(ui: &mut Ui, st: &mut State, has_selection: bool, sel_text: 
     ui.separator();
     if item(ui, "Change request method") {
         out = Some(RepAction::ChangeMethod);
+    }
+    if item(ui, "Change body encoding") {
+        out = Some(RepAction::ChangeBodyEncoding);
     }
     ui.separator();
     if item(ui, "Copy URL") {
@@ -1421,6 +1453,21 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
             let mut reps = app.shared.repeaters.lock().unwrap();
             let i = app.rep_sel.min(reps.len().saturating_sub(1));
             let changed = toggle_request_method(&reps[i].request);
+            reps[i].request = changed;
+        }
+        RepAction::ChangeBodyEncoding => {
+            // Burp-style boundary: WebKit prefix and 16 random characters.
+            let boundary = {
+                use rand::{distributions::Alphanumeric, Rng};
+                let tail: String = rand::thread_rng().sample_iter(&Alphanumeric).take(16).map(char::from).collect();
+                format!("----WebKitFormBoundary{tail}")
+            };
+            let mut reps = app.shared.repeaters.lock().unwrap();
+            let i = app.rep_sel.min(reps.len().saturating_sub(1));
+            let changed = toggle_body_encoding(&reps[i].request, &boundary);
+            if changed == reps[i].request {
+                toast(Level::Info, "The request has no urlencoded or multipart body to convert");
+            }
             reps[i].request = changed;
         }
         RepAction::PasteUrl => {
@@ -1990,6 +2037,21 @@ mod tests {
         // A JSON body has no parameters: it is dropped with its headers.
         let j = toggle_request_method("PUT /j HTTP/1.1\r\nHost: h\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}");
         assert_eq!(j, "GET /j HTTP/1.1\r\nHost: h\r\n\r\n");
+    }
+
+    #[test]
+    fn body_encoding_toggles_between_urlencoded_and_multipart() {
+        let req = "POST /f HTTP/1.1\r\nHost: h\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 15\r\n\r\na=1&b=x+y%26z";
+        let mp = toggle_body_encoding(req, "B0");
+        assert!(mp.contains("Content-Type: multipart/form-data; boundary=B0\r\n"), "{mp}");
+        assert!(mp.contains("--B0\r\nContent-Disposition: form-data; name=\"b\"\r\n\r\nx y&z\r\n--B0--\r\n"), "{mp}");
+        let body = mp.split("\r\n\r\n").skip(1).collect::<Vec<_>>().join("\r\n\r\n");
+        assert!(mp.contains(&format!("Content-Length: {}\r\n", body.len())), "{mp}");
+        let back = toggle_body_encoding(&mp, "unused");
+        assert!(back.contains("Content-Type: application/x-www-form-urlencoded\r\n"));
+        assert!(back.ends_with("\r\n\r\na=1&b=x%20y%26z"), "{back}");
+        let get = "GET /?a=1 HTTP/1.1\r\nHost: h\r\n\r\n";
+        assert_eq!(toggle_body_encoding(get, "B"), get);
     }
 
     #[test]

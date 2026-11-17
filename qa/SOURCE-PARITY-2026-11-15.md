@@ -809,3 +809,4 @@ Suite: core 390 (380 pass, 10 ignored), desktop 134, 0 fail.
 - **MCP idle CPU.** The MCP hook's 100 ms polling repaint is gone. The vendored client wakes the UI when an IPC request arrives (`McpClient::set_waker`). Idle CPU on Xvfb software GL dropped from ~110% of a core to ~11%.
 - **Intruder.** XML export writes `<column name=...>` elements; tags derived from column titles collided ("Request" with the message, "Error" with the "error" grep column). New test `attack_pauses_resumes_and_stops`. GUI-verified C-05 grep columns and C-07 XML/CSV save.
 - **Project files** record the intercepting CA's SHA-256 fingerprint; opening a project under a different CA logs and toasts it (J-01). GUI-verified D-07: HTML report written from the wizard.
+- **Repeater:** new "Change body encoding" (urlencoded <-> multipart), GUI-verified (E-06).

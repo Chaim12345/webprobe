@@ -423,8 +423,10 @@
       "title": "Editing helpers",
       "acceptance": "Paste URL, change method, URL-encode as you type, content-type-aware body editing",
       "effort": "M",
-      "status": "in_progress",
-      "notes": "2026-11-16 wave 42: Paste URL as request, Change request method, URL-encode as you type implemented with tests. Missing: Change body encoding."
+      "status": "done",
+      "notes": "2026-11-16 wave 42: Paste URL as request, Change request method, URL-encode as you type implemented with tests. Missing: Change body encoding.",
+      "completed": "2026-11-17",
+      "evidence": "repeater_ops: Paste URL as request, Change request method (GET<->POST with parameters moved), URL-encode as you type, and new Change body encoding (urlencoded <-> multipart/form-data, WebKit-style boundary, Content-Type/Length updated; test body_encoding_toggles_between_urlencoded_and_multipart). GUI-verified 2026-11-17: request editor menu > Change body encoding turned user=a+b&x=1 into two form-data parts with Content-Length 227."
     },
     {
       "id": "F-01",
