@@ -870,3 +870,30 @@ Also verified on 2026-11-17:
 - **Response interception, GUI check over MCP on :97.** The switch is off by default. With it on, the request was held and forwarded, and the response was held ("← Response"). The body was edited in the editor, and after Forward the client received the edited body.
 - **Renderer fallback.** A kernel exposing `/dev/dri/renderD128` made the app keep hardware GL on Xvfb and panic at start. It now restarts once on software GL (`gl_env::software_retry`, test `unusable_render_node_gets_one_software_retry`).
 
+
+## Code review (2026-11-17)
+
+An independent reviewer read the branch (master..HEAD) and reported 16 findings: 15 confirmed and 1 plausible. All 16 are fixed, each with a regression test (commits 862e3b3, f514c04, c1de75d, 0856caf).
+
+| # | Finding | Fix |
+|---|---|---|
+| 1 | A chunk size of `ffffffffffffffff` panicked (debug) or sliced out of bounds (release) on network data | Incremental, overflow-checked `codec::scan_chunked` |
+| 2 | A panicking check or save left `scan_busy` or the saver busy forever | Drop guards, `catch_unwind`, `compare_exchange` claim |
+| 3 | HTTP/2: an hpack panic on a truncated block, unbounded CONTINUATION, 16 MiB frames | `catch_unwind` decode, 256 KiB header block cap, 16 KiB frame limit |
+| 4 | Proxied request bodies: no size cap, chunked uploads cut to the first read | 64 MiB cap, chunked bodies read to the last chunk |
+| 5 | `100 Continue` returned as the final response | Interim 1xx responses skipped (101 stays final) |
+| 6 | HEAD framed as GET; leftover or EOF-framed connections pooled | Method passed to the reader; reuse only after clean framing; pooled sockets with pending bytes discarded |
+| 7 | Quadratic chunked reading and header search | Cursor-based scan, header search only over new bytes |
+| 8 | Intercept Forward rewrote binary messages through lossy UTF-8 | Original bytes forwarded when unchanged |
+| 9 | Body store: SIGBUS on a full disk, 0644 files, failure latched forever | `pwrite` with a read-only map, mode 0600, one-minute back-off |
+| 10 | Live passive audit never ran once a scope rule existed | Scope checked against the full URL |
+| 11 | Issues silently capped at 500 | Cap removed |
+| 12 | Saves to different files merged; settings round-tripped through /tmp and rolled back traffic; file mode lost | Per-path queue, in-memory settings snapshot that applies settings only, mode kept |
+| 13 | OS command check ignored pause, dropped non-CNAME interactions, and wasted ids at Fast speed | Scan sender; External service interaction raised as `burp.Zfw7` does; speed-aware slots |
+| 14 | Collaborator matching rescanned every interaction every frame; pending ids grew forever | `InteractionLog::since` tracks the newest id already handled; pending ids capped at 100k |
+| 15 | Lock order: `tasks` held while `issues` was locked | Count read first |
+| 16 | Wrong listener port; lossy Repeater responses; RSA key per host and unbounded cert cache; project load held two copies | Fixed |
+
+Live check after the fixes (QA rig, local lab servers): a POST with `Expect: 100-continue` and a chunked upload both reached the server whole; GET and HEAD were correct; history showed the final 200 statuses and full-response lengths.
+
+The first pass did not cover: extensions, Intruder, crawl/headless, upstream, other scanner ports, the UI modules and the vendored MCP code. A second review of those areas is running.
