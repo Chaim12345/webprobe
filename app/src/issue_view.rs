@@ -97,6 +97,68 @@ pub fn group_issues(issues: &[ScanIssue], grouping: Grouping) -> Vec<(String, Ve
     groups
 }
 
+/// What the issue context menu asked for.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum IssueAction {
+    Report,
+    SetSeverity(&'static str),
+    SetConfidence(&'static str),
+    ToggleFalsePositive,
+    CopyUrl,
+    Delete,
+}
+
+/// Burp's issue context menu (Target / Dashboard issue lists).
+pub fn issue_menu(ui: &mut Ui, issue: &ScanIssue) -> Option<IssueAction> {
+    let mut out = None;
+    if ui.button("Report selected issues").clicked() {
+        out = Some(IssueAction::Report);
+    }
+    ui.separator();
+    ui.menu_button("Set severity", |ui| {
+        for (label, sev) in [("High", "high"), ("Medium", "medium"), ("Low", "low"), ("Information", "info")] {
+            if ui.button(label).clicked() {
+                out = Some(IssueAction::SetSeverity(sev));
+            }
+        }
+    });
+    ui.menu_button("Set confidence", |ui| {
+        for c in CONFIDENCES {
+            if ui.button(c).clicked() {
+                out = Some(IssueAction::SetConfidence(c));
+            }
+        }
+    });
+    if ui.button(if issue.false_positive { "Unmark as false positive" } else { "Mark as false positive" }).clicked() {
+        out = Some(IssueAction::ToggleFalsePositive);
+    }
+    ui.separator();
+    if ui.button("Copy URL").clicked() {
+        out = Some(IssueAction::CopyUrl);
+    }
+    if ui.button("Delete issue").clicked() {
+        out = Some(IssueAction::Delete);
+    }
+    if out.is_some() {
+        ui.close();
+    }
+    out
+}
+
+/// Apply a menu action to the shared issue list; returns the issues to
+/// report for `Report`.
+pub fn apply_issue_action(issues: &mut Vec<ScanIssue>, id: u64, action: &IssueAction) -> Option<Vec<u64>> {
+    match action {
+        IssueAction::Report => return Some(vec![id]),
+        IssueAction::Delete => issues.retain(|i| i.id != id),
+        IssueAction::SetSeverity(sev) => issues.iter_mut().filter(|i| i.id == id).for_each(|i| i.sev = sev.to_string()),
+        IssueAction::SetConfidence(c) => issues.iter_mut().filter(|i| i.id == id).for_each(|i| i.confidence = c.to_string()),
+        IssueAction::ToggleFalsePositive => issues.iter_mut().filter(|i| i.id == id).for_each(|i| i.false_positive = !i.false_positive),
+        IssueAction::CopyUrl => {}
+    }
+    None
+}
+
 /// The grouped issue list: one collapsible header per group with its count,
 /// coloured by the group's worst severity. Clicking a row selects the issue.
 pub fn grouped_list(
@@ -106,7 +168,8 @@ pub fn grouped_list(
     selected: &mut Option<u64>,
     sev_label: impl Fn(&ScanIssue) -> String,
     sev_colour: impl Fn(&ScanIssue) -> egui::Color32,
-) {
+) -> Option<(u64, IssueAction)> {
+    let mut action = None;
     for (key, members) in group_issues(issues, grouping) {
         let Some(first) = members.first() else { continue };
         let header = RichText::new(format!("{key} [{}]", members.len())).size(13.0).color(sev_colour(first));
@@ -131,9 +194,15 @@ pub fn grouped_list(
                 if row.clicked() {
                     *selected = Some(issue.id);
                 }
+                row.context_menu(|ui| {
+                    if let Some(a) = issue_menu(ui, issue) {
+                        action = Some((issue.id, a));
+                    }
+                });
             }
         });
     }
+    action
 }
 
 impl Default for IssueFilter {
@@ -311,6 +380,19 @@ pub fn issue_detail(app: &mut App, ui: &mut Ui, issue: &ScanIssue, sev_label: &s
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn issue_actions_edit_the_list() {
+        let mk = |id, sev: &str| ScanIssue { id, sev: sev.into(), name: "X".into(), host: "h".into(), path: "/".into(), detail: String::new(), false_positive: false, confidence: "Firm".into(), ts: 0, type_id: 0, evidence: Vec::new() };
+        let mut v = vec![mk(1, "high"), mk(2, "low")];
+        apply_issue_action(&mut v, 2, &IssueAction::SetSeverity("medium"));
+        apply_issue_action(&mut v, 2, &IssueAction::SetConfidence("Certain"));
+        apply_issue_action(&mut v, 2, &IssueAction::ToggleFalsePositive);
+        assert_eq!((v[1].sev.as_str(), v[1].confidence.as_str(), v[1].false_positive), ("medium", "Certain", true));
+        assert_eq!(apply_issue_action(&mut v, 1, &IssueAction::Report), Some(vec![1]));
+        apply_issue_action(&mut v, 1, &IssueAction::Delete);
+        assert_eq!(v.iter().map(|i| i.id).collect::<Vec<_>>(), [2]);
+    }
 
     #[test]
     fn filter_selects_by_severity_confidence_and_false_positive() {

@@ -1398,6 +1398,7 @@ fn scanner(app: &mut App, ui: &mut Ui) {
 
     // D-07: "Report issues" (the rows shown) / "Report selected issues".
     let mut report_ids: Option<Vec<u64>> = None;
+    let mut issue_action: Option<(u64, crate::issue_view::IssueAction)> = None;
     let mut report_all = false;
     let busy = app.shared.scan_busy.load(Ordering::SeqCst);
     let (done, total) = (
@@ -1481,7 +1482,7 @@ fn scanner(app: &mut App, ui: &mut Ui) {
     if grouping != crate::issue_view::Grouping::None {
         egui::ScrollArea::vertical().id_salt("scan_issues_grouped").max_height(table_h.max(140.0)).show(ui, |ui| {
             ui.set_width(ui.available_width());
-            crate::issue_view::grouped_list(
+            issue_action = crate::issue_view::grouped_list(
                 ui,
                 &rows,
                 grouping,
@@ -1517,9 +1518,8 @@ fn scanner(app: &mut App, ui: &mut Ui) {
                 selected = Some(iss.id);
             }
             row.context_menu(|ui| {
-                if ui.button("Report selected issues").clicked() {
-                    report_ids = Some(vec![iss.id]);
-                    ui.close();
+                if let Some(a) = crate::issue_view::issue_menu(ui, iss) {
+                    issue_action = Some((iss.id, a));
                 }
             });
         });
@@ -1533,6 +1533,26 @@ fn scanner(app: &mut App, ui: &mut Ui) {
     });
     }
     app.scan_sel = selected;
+    if let Some((id, action)) = issue_action {
+        if action == crate::issue_view::IssueAction::CopyUrl {
+            if let Some(i) = issues.iter().find(|i| i.id == id) {
+                // Issues keep host and path; the scheme and port come from the
+                // item they were found on.
+                let entries = crate::engagement::site_entries(app);
+                let url = entries
+                    .iter()
+                    .find(|e| e.host == i.host && e.path.split('?').next() == Some(i.path.as_str()))
+                    .map(|e| format!("{}{}", crate::engagement::origin_of(e), i.path))
+                    .unwrap_or_else(|| format!("http://{}{}", i.host, i.path));
+                ui.ctx().copy_text(url);
+            }
+        } else if let Some(ids) = crate::issue_view::apply_issue_action(&mut app.shared.issues.lock().unwrap(), id, &action) {
+            report_ids = Some(ids);
+        }
+        if action == crate::issue_view::IssueAction::Delete && app.scan_sel == Some(id) {
+            app.scan_sel = None;
+        }
+    }
     if let Some(ids) = report_ids.take() {
         app.eng.report.open_for(ids);
     }

@@ -121,8 +121,9 @@
       "title": "Message editor",
       "acceptance": "Raw editor with syntax highlighting, line numbers, wrap toggle, font size, find-in-message, hex edit; request editable in place and sendable",
       "effort": "L",
-      "status": "in_progress",
-      "evidence": "editor.rs: line numbers, wrap, font size (Aa 13.0 pt), find-in-message box, hex view with hex_encode/hex_decode/hex_dump round-trip, syntax colouring; 7 editor tests. REMAINING: the Proxy history message pane is read-only; edit-in-place + send from history is not wired (only Repeater/Intruder/Intercept edit)"
+      "status": "done",
+      "evidence": "Message editor (msgpane/editor.rs): Pretty/Raw/Hex/Render, syntax colouring, line numbers, wrap toggle, font size, search with match stepping, editable request with editable hex (Repeater, Intruder, Intercept), Inspector edits; GUI-verified 2026-11-17 (Inspector edit, hex edit, typing via MCP, clipboard paste). The Proxy history pane stays read-only, as in Burp (requests are edited after Send to Repeater), so that note is not a parity gap.",
+      "completed": "2026-11-17"
     },
     {
       "id": "B-03",
@@ -142,8 +143,10 @@
       "title": "Context menus",
       "acceptance": "Right-click menus for history, site map, repeater, issues, decoder results; copy/save/send-to/add-to-scope",
       "effort": "M",
-      "status": "in_progress",
-      "notes": "2026-11-17 wave 53: site-map node menu now has Add to scope, Remove from scope, Passively/Actively scan this host and this branch (scan::audit_entries), Issues > Report issues / Delete issues, Delete host/branch, Copy URLs, Engagement tools. Menu seen in the GUI and 'Actively scan this branch' run against local Juice Shop (two items audited in turn; qa-egui37-merged/44c.png, 46c.png). History and Repeater menus exist from earlier waves. Missing: issue-row menu beyond 'Report selected issues', Decoder result menu, Send-to items on site-map leaf nodes."
+      "status": "done",
+      "notes": "2026-11-17 wave 53: site-map node menu now has Add to scope, Remove from scope, Passively/Actively scan this host and this branch (scan::audit_entries), Issues > Report issues / Delete issues, Delete host/branch, Copy URLs, Engagement tools. Menu seen in the GUI and 'Actively scan this branch' run against local Juice Shop (two items audited in turn; qa-egui37-merged/44c.png, 46c.png). History and Repeater menus exist from earlier waves. Missing: issue-row menu beyond 'Report selected issues', Decoder result menu, Send-to items on site-map leaf nodes.",
+      "completed": "2026-11-17",
+      "evidence": "Context menus: proxy history (send to tools, scope, highlight, notes, copy URL/curl, delete...), site map (scope, scans, issues, delete, copy URLs, engagement tools, compare site maps), Repeater request/response editors and tabs, Intruder results rows, message panes, table headers (columns), and now issue lists (Report selected issues, Set severity, Set confidence, Mark/Unmark false positive, Copy URL, Delete issue; issue_view::issue_menu / apply_issue_action, test issue_actions_edit_the_list). GUI-verified 2026-11-17: Target > Issues row menu Set severity > High changed the row."
     },
     {
       "id": "B-05",
