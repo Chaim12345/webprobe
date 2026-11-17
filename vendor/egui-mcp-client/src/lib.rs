@@ -86,7 +86,13 @@ pub fn socket_path_from_env() -> std::path::PathBuf {
 #[derive(Clone)]
 pub struct McpClient {
     state: Arc<RwLock<ClientState>>,
+    /// Called when a request arrives, so an idle app redraws (and handles
+    /// it) at once instead of polling with timed repaints.
+    waker: Arc<std::sync::Mutex<Option<Waker>>>,
 }
+
+/// Wakes the app's UI loop (e.g. `egui::Context::request_repaint`).
+pub type Waker = Arc<dyn Fn() + Send + Sync>;
 
 struct ClientState {
     socket_path: PathBuf,
@@ -138,6 +144,19 @@ impl McpClient {
                 perf_recording: None,
                 last_frame_instant: None,
             })),
+            waker: Arc::new(std::sync::Mutex::new(None)),
+        }
+    }
+
+    /// Install the function that wakes the UI when a request arrives.
+    pub fn set_waker(&self, waker: Waker) {
+        *self.waker.lock().unwrap_or_else(|e| e.into_inner()) = Some(waker);
+    }
+
+    /// Wake the UI (no-op until a waker is installed).
+    pub fn wake(&self) {
+        if let Some(w) = self.waker.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+            w();
         }
     }
 

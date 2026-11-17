@@ -15,6 +15,7 @@ pub struct Mcp {
     /// a real pointer: a widget must be hovered before it can be pressed, and
     /// table rows ignore a move+press+release that arrives in one frame.
     staged: std::cell::RefCell<std::collections::VecDeque<Vec<egui::Event>>>,
+    waker_set: std::cell::Cell<bool>,
 }
 
 #[cfg(not(feature = "mcp"))]
@@ -32,7 +33,7 @@ impl Mcp {
                 eprintln!("webprobe: egui MCP unavailable on {}: {e}", path.display());
             }
         });
-        Mcp { client, rt, staged: Default::default() }
+        Mcp { client, rt, staged: Default::default(), waker_set: Default::default() }
     }
 
     /// Inputs sent by the agent, merged into the frames' input in the order
@@ -54,6 +55,14 @@ impl Mcp {
 
     /// Per frame: answer screenshot requests, draw requested highlights.
     pub fn frame(&self, ctx: &egui::Context) {
+        // Event-driven: the IPC server wakes the UI when a request arrives
+        // (polling with a 100 ms repaint kept a software-rendered window at
+        // ~110% CPU while idle).
+        if !self.waker_set.get() {
+            let c = ctx.clone();
+            self.client.set_waker(std::sync::Arc::new(move || c.request_repaint()));
+            self.waker_set.set(true);
+        }
         if self.rt.block_on(self.client.take_screenshot_request()) {
             let client = self.client.clone();
             let rt = self.rt.clone();
@@ -67,8 +76,6 @@ impl Mcp {
         }
         let highlights = self.rt.block_on(self.client.get_highlights());
         egui_mcp_client::draw_highlights(ctx, &highlights);
-        // Keep polling for agent commands while one is connected.
-        ctx.request_repaint_after(std::time::Duration::from_millis(100));
     }
 }
 

@@ -74,8 +74,11 @@ impl IpcServer {
         loop {
             let request = read_request(&mut reader).await?;
             tracing::debug!("Received request: {:?}", request);
+            // Let an idle app pick the request up on its next frame.
+            client.wake();
 
             let response = Self::handle_request(&request, &client).await;
+            client.wake();
             tracing::debug!("Sending response: {:?}", response);
 
             write_response(&mut writer, &response).await?;
