@@ -266,6 +266,12 @@ pub struct App {
     pub site_filter: site_map::SiteFilter,
     pub site_cache: Arc<(Vec<net::HistEntry>, Vec<(String, String)>)>,
     pub site_cache_key: String,
+    /// The site map tree built from `site_cache`, and the key it was built for.
+    pub site_tree: Arc<std::collections::BTreeMap<String, ui::MapNode>>,
+    pub site_tree_key: String,
+    /// Indices into `site_cache` for the selected site map node.
+    pub site_rows: Arc<Vec<usize>>,
+    pub site_rows_key: String,
     pub target_entry: Option<u64>,
     pub site_req_pane: msgpane::PaneState,
     pub site_resp_pane: msgpane::PaneState,
@@ -527,6 +533,7 @@ impl eframe::App for App {
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = &ui.ctx().clone();
+        self.mcp.begin_frame();
         // SIGTERM / SIGINT: close through the normal path, so on_exit saves
         // the project and the next start shows no crash-recovery prompt.
         if TERMINATE.load(Ordering::SeqCst) {
@@ -546,11 +553,13 @@ impl eframe::App for App {
         self.toasts.tick(std::time::Instant::now());
         // Mirror new proxy traffic before drawing, so the Logger view and the
         // history table show the same frame's entries.
-        self.mcp.frame(ctx);
         self.sync_logger();
         self.refill_oob_pool();
         ui::show(self, ui);
         self.toasts.show(ctx);
+        // After the UI: frame-time stats cover the whole build, highlights
+        // draw on top.
+        self.mcp.frame(ctx);
 
         // Poll background state (proxy traffic, scans, Repeater) five times a
         // second instead of redrawing flat out: continuous repaint under the
@@ -861,6 +870,10 @@ impl App {
             site_filter: site_map::SiteFilter::default(),
             site_cache: Arc::new((Vec::new(), Vec::new())),
             site_cache_key: String::new(),
+            site_tree: Default::default(),
+            site_tree_key: String::new(),
+            site_rows: Default::default(),
+            site_rows_key: String::new(),
             target_entry: None,
             site_req_pane: msgpane::PaneState::default(),
             site_resp_pane: msgpane::PaneState::default(),

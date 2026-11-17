@@ -20,6 +20,27 @@ pub struct ScanConfig {
     pub disabled_checks: BTreeSet<String>,
     /// Insertion point type keys (see [`INSERTION_TYPES`]) not attacked.
     pub disabled_insertion: BTreeSet<String>,
+    /// Crawl limits for "Crawl and audit" scans.
+    pub crawl: CrawlLimits,
+}
+
+/// Burp's crawl settings (CrawlDefaults.json): link depth, unique locations,
+/// and whether robots.txt and sitemap.xml are requested.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CrawlLimits {
+    pub max_depth: usize,
+    pub max_locations: usize,
+    pub robots: bool,
+    pub sitemap: bool,
+}
+
+impl Default for CrawlLimits {
+    fn default() -> Self {
+        // crawl_optimization.maximum_link_depth = 4,
+        // crawl_limits.maximum_unique_locations = 1500,
+        // customization.request_robots_txt / request_sitemap = true.
+        Self { max_depth: 4, max_locations: 1500, robots: true, sitemap: true }
+    }
 }
 
 impl ScanConfig {

@@ -215,3 +215,76 @@ fn patch_header_handles_empty_and_headerless_messages() {
         b"GET / HTTP/1.1\r\nHost: h\r\nContent-Length: 4\r\n\r\nbody".to_vec()
     );
 }
+
+/// The live proxy against hostile clients: random bytes, truncated and
+/// oversized requests, CONNECT followed by garbage TLS records, and a
+/// WebSocket upgrade followed by garbage frames. No handler may hang (every
+/// connection slot comes back once the clients close) and the proxy still
+/// serves a normal request afterwards.
+#[test]
+fn proxy_survives_malformed_connections() {
+    use std::io::{Read, Write};
+    use std::sync::atomic::Ordering;
+    let origin = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let oport = origin.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for mut s in origin.incoming().flatten() {
+            let mut buf = [0u8; 4096];
+            let _ = s.read(&mut buf);
+            let _ = s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok");
+        }
+    });
+    let shared = crate::net::Shared::new();
+    let port = {
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        l.local_addr().unwrap().port()
+    };
+    shared.proxy_port.store(port, Ordering::SeqCst);
+    crate::net::start_proxy(shared.clone());
+    let t0 = std::time::Instant::now();
+    while !shared.listener_running.load(Ordering::SeqCst) {
+        assert!(t0.elapsed() < Duration::from_secs(5), "proxy did not start");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let mut rng = Rng(0x5eed_f00d);
+    for round in 0..60 {
+        let Ok(mut s) = std::net::TcpStream::connect(("127.0.0.1", port)) else { continue };
+        let _ = s.set_write_timeout(Some(Duration::from_millis(500)));
+        let payload: Vec<u8> = match round % 6 {
+            0 => rng.bytes(2048),
+            1 => b"GET http://127.0.0.1/ HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Long: ".iter().copied().chain(std::iter::repeat(b'a').take(70_000)).collect(),
+            2 => {
+                let mut v = b"CONNECT example.test:443 HTTP/1.1\r\nHost: example.test:443\r\n\r\n".to_vec();
+                // A TLS record header claiming a huge handshake, then noise.
+                v.extend_from_slice(&[0x16, 0x03, 0x01, 0xff, 0xff, 0x01, 0x00, 0xff, 0xfb]);
+                v.extend(rng.bytes(512));
+                v
+            }
+            3 => format!("GET http://127.0.0.1:{oport}/ HTTP/1.1\r\nHost: 127.0.0.1:{oport}\r\nContent-Length: 999999\r\n\r\nshort").into_bytes(),
+            4 => {
+                let mut v = format!("GET http://127.0.0.1:{oport}/ws HTTP/1.1\r\nHost: 127.0.0.1:{oport}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: x\r\nSec-WebSocket-Version: 13\r\n\r\n").into_bytes();
+                v.extend(rng.bytes(300));
+                v
+            }
+            _ => mutate(&mut rng, &seeds()[round % seeds().len()]),
+        };
+        let _ = s.write_all(&payload);
+        let _ = s.shutdown(std::net::Shutdown::Write);
+        let _ = s.set_read_timeout(Some(Duration::from_millis(200)));
+        let mut sink = [0u8; 1024];
+        let _ = s.read(&mut sink);
+    }
+    // Every handler finishes once its client is gone.
+    let t0 = std::time::Instant::now();
+    while shared.active_connections.load(Ordering::SeqCst) > 0 {
+        assert!(t0.elapsed() < Duration::from_secs(30), "{} connection(s) still held", shared.active_connections.load(Ordering::SeqCst));
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    // And the proxy still works.
+    let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+    s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+    s.write_all(format!("GET http://127.0.0.1:{oport}/after HTTP/1.1\r\nHost: 127.0.0.1:{oport}\r\nConnection: close\r\n\r\n").as_bytes()).unwrap();
+    let mut resp = Vec::new();
+    let _ = s.read_to_end(&mut resp);
+    assert!(resp.starts_with(b"HTTP/1.1 200"), "{}", String::from_utf8_lossy(&resp));
+}

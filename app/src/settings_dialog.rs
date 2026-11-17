@@ -238,6 +238,20 @@ fn manage_menu(app: &mut App, ui: &mut Ui) {
 fn scan_configuration(app: &mut App, ui: &mut Ui) {
     let mut config = app.shared.scan_config.lock().unwrap().clone();
     let before = config.clone();
+    // Burp's crawl settings (CrawlDefaults.json) for "Crawl and audit".
+    ui.label(RichText::new("Crawl limits").strong().size(13.5).color(theme::ink()));
+    ui.horizontal(|ui| {
+        ui.label("Maximum link depth");
+        ui.add(egui::DragValue::new(&mut config.crawl.max_depth).range(1..=50));
+        ui.add_space(16.0);
+        ui.label("Maximum unique locations");
+        ui.add(egui::DragValue::new(&mut config.crawl.max_locations).range(1..=100_000));
+    });
+    ui.horizontal(|ui| {
+        ui.checkbox(&mut config.crawl.robots, "Request robots.txt");
+        ui.checkbox(&mut config.crawl.sitemap, "Request sitemap.xml");
+    });
+    ui.add_space(8.0);
     ui.label(RichText::new("Insertion point types").strong().size(13.5).color(theme::ink()));
     ui.horizontal_wrapped(|ui| {
         for (key, label) in crate::scan_config::INSERTION_TYPES {

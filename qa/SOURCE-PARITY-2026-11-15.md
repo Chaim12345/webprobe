@@ -815,3 +815,9 @@ Suite: core 390 (380 pass, 10 ignored), desktop 134, 0 fail.
 - **Extension catalogue (K-03).** The BApp Store tab installs from `extensions/catalogue.json` (marker reflection, security headers review, Montoya demo), showing runtime dependencies (found/missing); Installed details show the Runtime. Fixed: a `{dir}` containing a space split the command. **CI (N-01).** `scripts/ci.sh` passes all 4 steps.
 - **Issue lists** get Burp's context menu: Report, Set severity, Set confidence, false positive, Copy URL (scheme and port from the matching site map item), Delete. GUI-verified (B-04).
 - **Split panes (B-05).** Repeater request|response and site map tree|contents dividers are draggable and saved in the project layout; GUI-verified.
+- **Performance (N-02).**
+  - The site map rebuilt its tree and cloned every matching entry, raw bytes included, on every frame: 125 ms per frame at 10k items in the debug build. The tree and the row indices are now cached by contents key.
+  - Release build with 10k items: site map 10.5 ms per frame (95 fps), history 4.3 ms (231 fps).
+  - The MCP hook now reports per-frame UI build time to `get_frame_stats`.
+- **Fuzzing (N-03).** New live-proxy fuzz test: hostile connections (garbage, oversized headers, garbage TLS after CONNECT, truncated bodies, WebSocket noise). No hung handlers, and the proxy still serves.
+- **Scan configuration (D-04).** Crawl limits (link depth, unique locations, robots.txt, sitemap.xml) are configurable, used by both crawlers and saved with the project (test).

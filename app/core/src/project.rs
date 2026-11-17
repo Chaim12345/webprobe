@@ -421,6 +421,15 @@ pub struct ProjectScanner {
     /// Insertion point types switched off.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub disabled_insertion_points: Vec<String>,
+    /// Crawl limits (absent: Burp's defaults).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crawl_max_depth: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crawl_max_locations: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crawl_robots: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crawl_sitemap: Option<bool>,
 }
 
 fn one_u8() -> u8 {
@@ -433,7 +442,7 @@ fn yes() -> bool {
 
 impl Default for ProjectScanner {
     fn default() -> Self {
-        Self { speed: 1, accuracy: 1, extra_checks: false, disabled_checks: Vec::new(), disabled_insertion_points: Vec::new() }
+        Self { speed: 1, accuracy: 1, extra_checks: false, disabled_checks: Vec::new(), disabled_insertion_points: Vec::new(), crawl_max_depth: None, crawl_max_locations: None, crawl_robots: None, crawl_sitemap: None }
     }
 }
 
@@ -1364,7 +1373,7 @@ mod tests {
                 response_b64: None,
             }],
             site_links: vec![("https://example.com".into(), "/unvisited".into())],
-            scanner: ProjectScanner { speed: 2, accuracy: 0, extra_checks: true, disabled_checks: vec!["active.csrf".into()], disabled_insertion_points: vec!["header".into()] },
+            scanner: ProjectScanner { speed: 2, accuracy: 0, extra_checks: true, disabled_checks: vec!["active.csrf".into()], disabled_insertion_points: vec!["header".into()], crawl_max_depth: Some(2), crawl_max_locations: Some(100), crawl_robots: Some(false), crawl_sitemap: Some(true) },
             proxy: ProjectProxy {
                 listeners: vec![ProjectListener { bind: "127.0.0.1".into(), port: 18_090 }],
                 ws_intercept_client: false,

@@ -1766,6 +1766,10 @@ pub fn save_project(app: &mut App, quiet: bool) {
         extra_checks: app.shared.extra_checks.load(Ordering::SeqCst),
         disabled_checks: scan_cfg.disabled_checks.iter().cloned().collect(),
         disabled_insertion_points: scan_cfg.disabled_insertion.iter().cloned().collect(),
+        crawl_max_depth: Some(scan_cfg.crawl.max_depth),
+        crawl_max_locations: Some(scan_cfg.crawl.max_locations),
+        crawl_robots: Some(scan_cfg.crawl.robots),
+        crawl_sitemap: Some(scan_cfg.crawl.sitemap),
     };
     let locked_proxy = project::ProjectProxy {
         listeners: net::listener_specs(&app.shared).into_iter().map(|l| project::ProjectListener { bind: l.bind, port: l.port }).collect(),
@@ -2006,6 +2010,15 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData) {
     *app.shared.scan_config.lock().unwrap() = crate::scan_config::ScanConfig {
         disabled_checks: s.disabled_checks.iter().cloned().collect(),
         disabled_insertion: s.disabled_insertion_points.iter().cloned().collect(),
+        crawl: {
+            let d = crate::scan_config::CrawlLimits::default();
+            crate::scan_config::CrawlLimits {
+                max_depth: s.crawl_max_depth.unwrap_or(d.max_depth).clamp(1, 50),
+                max_locations: s.crawl_max_locations.unwrap_or(d.max_locations).clamp(1, 100_000),
+                robots: s.crawl_robots.unwrap_or(d.robots),
+                sitemap: s.crawl_sitemap.unwrap_or(d.sitemap),
+            }
+        },
     };
     app.shared.scan_speed.store(s.speed.min(2), Ordering::SeqCst);
     app.shared.scan_accuracy.store(s.accuracy.min(2), Ordering::SeqCst);

@@ -3594,7 +3594,7 @@ fn start_url_scan(app: &mut App, urls: Vec<String>) {
 
 /// One node of the site map tree.
 #[derive(Default)]
-struct MapNode {
+pub(crate) struct MapNode {
     children: std::collections::BTreeMap<String, MapNode>,
     requested: bool,
 }
@@ -3734,21 +3734,30 @@ fn target(app: &mut App, ui: &mut Ui) {
     }
 
     // Build the tree: requested items from the history, unrequested ones from
-    // the live passive crawl (shown grey, as in Burp).
-    let mut roots: std::collections::BTreeMap<String, MapNode> = std::collections::BTreeMap::new();
-    for e in entries.iter() {
-        let segs = path_segments(&e.path);
-        let refs: Vec<&str> = segs.iter().map(String::as_str).collect();
-        let root = roots.entry(history_host(e)).or_default();
-        if refs.is_empty() { root.requested = true; } else { root.insert(&refs, true); }
-    }
-    if app.target_view == 0 {
-        for (origin, path) in links.iter() {
-            let segs = path_segments(path);
+    // the live passive crawl (shown grey, as in Burp). Rebuilt only when the
+    // contents or the view change: rebuilding it every frame cost ~100 ms a
+    // frame with 10k items.
+    let tree_key = format!("{}|{}", app.site_cache_key, app.target_view);
+    if tree_key != app.site_tree_key {
+        let mut roots: std::collections::BTreeMap<String, MapNode> = std::collections::BTreeMap::new();
+        for e in entries.iter() {
+            let segs = path_segments(&e.path);
             let refs: Vec<&str> = segs.iter().map(String::as_str).collect();
-            roots.entry(origin.clone()).or_default().insert(&refs, false);
+            let root = roots.entry(history_host(e)).or_default();
+            if refs.is_empty() { root.requested = true; } else { root.insert(&refs, true); }
         }
+        if app.target_view == 0 {
+            for (origin, path) in links.iter() {
+                let segs = path_segments(path);
+                let refs: Vec<&str> = segs.iter().map(String::as_str).collect();
+                roots.entry(origin.clone()).or_default().insert(&refs, false);
+            }
+        }
+        app.site_tree = std::sync::Arc::new(roots);
+        app.site_tree_key = tree_key;
     }
+    let roots_arc = app.site_tree.clone();
+    let roots = &*roots_arc;
 
     // Tree | contents divider: draggable, kept in the project layout.
     let map_w = ui.available_width().max(500.0);
@@ -3831,18 +3840,30 @@ fn target(app: &mut App, ui: &mut Ui) {
                         }
                     }
                     let marks = Marks { issues: &issue_marks, scope_set };
-                    for (origin, node) in &roots {
+                    for (origin, node) in roots {
                         draw(ui, app, &marks, origin, "/", "", node, 0);
                     }
                 });
             });
             strip.cell(|ui| {
+                // The selected node's items, as indices into the cached
+                // contents, recomputed only when the contents or the node
+                // change (cloning every entry each frame cost ~40 ms at 10k).
                 let (origin, prefix) = app.target_node.clone().unwrap_or_default();
-                let rows: Vec<net::HistEntry> = entries
-                    .iter()
-                    .filter(|e| origin.is_empty() || (history_host(e) == origin && e.path.starts_with(&prefix)))
-                    .cloned()
-                    .collect();
+                let rows_key = format!("{}|{origin}|{prefix}", app.site_tree_key);
+                if rows_key != app.site_rows_key {
+                    app.site_rows = std::sync::Arc::new(
+                        entries
+                            .iter()
+                            .enumerate()
+                            .filter(|(_, e)| origin.is_empty() || (e.path.starts_with(&prefix) && history_host(e) == origin))
+                            .map(|(i, _)| i)
+                            .collect(),
+                    );
+                    app.site_rows_key = rows_key;
+                }
+                let row_idx = app.site_rows.clone();
+                let rows: Vec<&net::HistEntry> = row_idx.iter().filter_map(|&i| entries.get(i)).collect();
                 let full_h = ui.available_height();
                 egui_extras::StripBuilder::new(ui)
                     .size(egui_extras::Size::relative(0.45))

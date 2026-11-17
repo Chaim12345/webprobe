@@ -16,6 +16,8 @@ pub struct Mcp {
     /// table rows ignore a move+press+release that arrives in one frame.
     staged: std::cell::RefCell<std::collections::VecDeque<Vec<egui::Event>>>,
     waker_set: std::cell::Cell<bool>,
+    /// When this frame's UI started (get_frame_stats reports build time).
+    frame_start: std::cell::Cell<Option<std::time::Instant>>,
 }
 
 #[cfg(not(feature = "mcp"))]
@@ -33,7 +35,7 @@ impl Mcp {
                 eprintln!("webprobe: egui MCP unavailable on {}: {e}", path.display());
             }
         });
-        Mcp { client, rt, staged: Default::default(), waker_set: Default::default() }
+        Mcp { client, rt, staged: Default::default(), waker_set: Default::default(), frame_start: Default::default() }
     }
 
     /// Inputs sent by the agent, merged into the frames' input in the order
@@ -53,8 +55,16 @@ impl Mcp {
         }
     }
 
+    /// Mark the start of the frame's UI pass.
+    pub fn begin_frame(&self) {
+        self.frame_start.set(Some(std::time::Instant::now()));
+    }
+
     /// Per frame: answer screenshot requests, draw requested highlights.
     pub fn frame(&self, ctx: &egui::Context) {
+        if let Some(t0) = self.frame_start.take() {
+            self.rt.block_on(self.client.record_frame(t0.elapsed()));
+        }
         // Event-driven: the IPC server wakes the UI when a request arrives
         // (polling with a 100 ms repaint kept a software-rendered window at
         // ~110% CPU while idle).
@@ -340,5 +350,6 @@ impl Mcp {
         Mcp
     }
     pub fn inject(&self, _ctx: &egui::Context, _raw: &mut egui::RawInput) {}
+    pub fn begin_frame(&self) {}
     pub fn frame(&self, _ctx: &egui::Context) {}
 }

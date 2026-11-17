@@ -319,8 +319,10 @@
       "title": "Scan configuration",
       "acceptance": "Crawl/audit/optimization/insertion-point/speed settings; persisted; check selection",
       "effort": "M",
-      "status": "in_progress",
-      "notes": "2026-11-17 wave 62: scan configuration with Burp's insertion point types (URL, body, cookie, header, path folder, path filename) and a per-check on/off list for all 29 registered checks (scan_config.rs, scan::check_catalogue), applied by the scan driver and saved in the project; audit speed and accuracy on the same page. Test scan_configuration_switches_checks_and_insertion_types_off runs real scans against a local server. Page seen in the GUI (qa-egui37-merged/65c.png). Missing: crawl settings (depth, strategy), named saved configurations (configuration library)."
+      "status": "done",
+      "notes": "2026-11-17 wave 62: scan configuration with Burp's insertion point types (URL, body, cookie, header, path folder, path filename) and a per-check on/off list for all 29 registered checks (scan_config.rs, scan::check_catalogue), applied by the scan driver and saved in the project; audit speed and accuracy on the same page. Test scan_configuration_switches_checks_and_insertion_types_off runs real scans against a local server. Page seen in the GUI (qa-egui37-merged/65c.png). Missing: crawl settings (depth, strategy), named saved configurations (configuration library).",
+      "completed": "2026-11-17",
+      "evidence": "Scan configuration (core/src/scan_config.rs): audit check selection (check catalogue, select all/none), insertion point types, speed and accuracy (optimization), and crawl limits (max link depth, max unique locations, request robots.txt / sitemap.xml; Burp CrawlDefaults values) used by both the static and browser crawlers; all saved with the project (ProjectScanner) and edited in Settings > Tasks > Scan configuration. Test crawl_honours_configured_limits (depth 1 stops before /b, robots/sitemap not requested)."
     },
     {
       "id": "D-05",
@@ -816,8 +818,10 @@
       "title": "Performance",
       "acceptance": "10k history entries and 1k site-map nodes render at 60 fps; no per-frame full-list scans",
       "effort": "M",
-      "status": "in_progress",
-      "notes": "2026-11-17 wave 64: measured on the QA display (software GL): 10,000 history rows cost the same CPU as an empty history (virtualised table). Redraws are now event-driven (Shared::set_waker / notice::set_waker; 1 s idle, 200 ms while a tool works): idle CPU with 10k rows fell from 142 to 28-30 ticks per 5 s. The 1,000-row display cap is gone (Burp shows everything): the view is cached behind an Arc (no per-frame copy) and new traffic is put on top incrementally (ui::history_new_rows, test history_view_keeps_every_match_and_new_rows_go_on_top). '#' column widened for 5-digit ids. Not measured: frame time in ms (no frame counter), 1k-node site map."
+      "status": "done",
+      "notes": "2026-11-17 wave 64: measured on the QA display (software GL): 10,000 history rows cost the same CPU as an empty history (virtualised table). Redraws are now event-driven (Shared::set_waker / notice::set_waker; 1 s idle, 200 ms while a tool works): idle CPU with 10k rows fell from 142 to 28-30 ticks per 5 s. The 1,000-row display cap is gone (Burp shows everything): the view is cached behind an Arc (no per-frame copy) and new traffic is put on top incrementally (ui::history_new_rows, test history_view_keeps_every_match_and_new_rows_go_on_top). '#' column widened for 5-digit ids. Not measured: frame time in ms (no frame counter), 1k-node site map.",
+      "completed": "2026-11-17",
+      "evidence": "10,000 seeded history entries over 25 hosts (10k site map leaves), measured over the egui MCP get_frame_stats (UI build time per frame), Xvfb software GL. Release: history 4.3 ms (231 fps), site map 10.5 ms (95 fps). Debug: 12 ms / 19.6 ms. Fixed on the way: the site map rebuilt its whole tree (MapNode::insert over every item) and cloned every matching entry with its raw bytes on every frame (125 ms/frame); both are now cached by contents key (site_tree, site_rows). History view virtualized with an incrementally grown filtered view (wave 64)."
     },
     {
       "id": "N-03",
@@ -826,8 +830,10 @@
       "title": "Fuzzing",
       "acceptance": "Malformed HTTP/TLS/WebSocket inputs never panic or hang; fuzz targets in CI",
       "effort": "M",
-      "status": "in_progress",
-      "notes": "2026-11-17 wave 63: deterministic fuzz test core/src/fuzz_tests.rs: 3000 random and mutated inputs through HTTP parsing, chunked/gzip/deflate/brotli decoding, WebSocket frames, HTTP/2 against a hostile server, insertion points, passive checks, Intruder templates, macros, cookie jar, project JSON. Found and fixed three panics: util::url_decode (multi-byte after %), cookie_jar::parse_http_date (multi-byte month token), util::patch_header (empty message), and a header-placement bug in patch_header that broke upstream proxy Proxy-Authorization. Runs in the normal suite. Missing: coverage-guided fuzzing (cargo-fuzz) and CI."
+      "status": "done",
+      "notes": "2026-11-17 wave 63: deterministic fuzz test core/src/fuzz_tests.rs: 3000 random and mutated inputs through HTTP parsing, chunked/gzip/deflate/brotli decoding, WebSocket frames, HTTP/2 against a hostile server, insertion points, passive checks, Intruder templates, macros, cookie jar, project JSON. Found and fixed three panics: util::url_decode (multi-byte after %), cookie_jar::parse_http_date (multi-byte month token), util::patch_header (empty message), and a header-placement bug in patch_header that broke upstream proxy Proxy-Authorization. Runs in the normal suite. Missing: coverage-guided fuzzing (cargo-fuzz) and CI.",
+      "completed": "2026-11-17",
+      "evidence": "fuzz_tests: 3000 seeded random/mutated inputs per run through the HTTP/chunked/codec/URL/MIME/WebSocket-frame/HTTP-2/project parsers (three panics and one wrong-output bug found and fixed earlier), and proxy_survives_malformed_connections: random bytes, oversized headers, CONNECT followed by garbage TLS records, truncated bodies and WebSocket upgrades with garbage frames against the live proxy; every connection slot returns and the proxy still serves a request. Both run in scripts/ci.sh."
     },
     {
       "id": "N-04",

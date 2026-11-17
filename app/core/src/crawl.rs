@@ -14,8 +14,6 @@ use std::sync::Arc;
 use crate::net::{self, HistEntry, Shared};
 use crate::util;
 
-pub const MAX_LINK_DEPTH: usize = 4;
-pub const MAX_UNIQUE_LOCATIONS: usize = 1500;
 
 /// Paths named by robots.txt Allow/Disallow lines (wildcards dropped).
 pub fn robots_paths(body: &str) -> Vec<String> {
@@ -163,17 +161,19 @@ pub fn crawl(shared: &Arc<Shared>, start_url: &str) -> Vec<HistEntry> {
     let default_port = if https { 443 } else { 80 };
     let origin = if port == default_port { format!("{scheme}://{host}") } else { format!("{scheme}://{host}:{port}") };
 
+    let limits = shared.scan_config.lock().unwrap().crawl.clone();
     let mut seen: BTreeSet<String> = BTreeSet::new();
     let mut queue: VecDeque<(String, usize)> = VecDeque::new();
     let push = |p: String, d: usize, seen: &mut BTreeSet<String>, queue: &mut VecDeque<(String, usize)>| {
-        if seen.len() < MAX_UNIQUE_LOCATIONS && seen.insert(location_key(&p)) {
+        if seen.len() < limits.max_locations && seen.insert(location_key(&p)) {
             queue.push_back((p, d));
         }
     };
     push(start_path.to_string(), 0, &mut seen, &mut queue);
     let mut out = Vec::new();
     // request_robots_txt / request_sitemap
-    for extra in ["/robots.txt", "/sitemap.xml"] {
+    let extras: Vec<&str> = [("/robots.txt", limits.robots), ("/sitemap.xml", limits.sitemap)].into_iter().filter(|(_, on)| *on).map(|(p, _)| p).collect();
+    for extra in extras {
         let e = fetch(shared, https, &host, port, authority, extra, shared.next_id.fetch_add(1, Ordering::SeqCst));
         let ok = e.status.starts_with('2');
         let body = e.resp_raw.as_ref().map(|r| {
@@ -201,7 +201,7 @@ pub fn crawl(shared: &Arc<Shared>, start_url: &str) -> Vec<HistEntry> {
             break;
         }
         let e = fetch(shared, https, &host, port, authority, &path, shared.next_id.fetch_add(1, Ordering::SeqCst));
-        if depth < MAX_LINK_DEPTH {
+        if depth < limits.max_depth {
             if let Some(resp) = &e.resp_raw {
                 for link in crate::scan::crawl_links(&origin, &path, resp) {
                     push(link, depth + 1, &mut seen, &mut queue);
@@ -217,6 +217,42 @@ pub fn crawl(shared: &Arc<Shared>, start_url: &str) -> Vec<HistEntry> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The crawl follows the configured limits: depth 1 stops after the
+    /// start page's links, and robots.txt is not requested when switched off.
+    #[test]
+    fn crawl_honours_configured_limits() {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let s2 = seen.clone();
+        std::thread::spawn(move || {
+            for mut s in listener.incoming().flatten() {
+                let mut buf = [0u8; 2048];
+                let n = s.read(&mut buf).unwrap_or(0);
+                let line = String::from_utf8_lossy(&buf[..n]).lines().next().unwrap_or("").to_string();
+                let path = line.split_whitespace().nth(1).unwrap_or("/").to_string();
+                s2.lock().unwrap().push(path.clone());
+                let body = match path.as_str() {
+                    "/" => "<a href=\"/a\">a</a>",
+                    "/a" => "<a href=\"/b\">b</a>",
+                    _ => "end",
+                };
+                let _ = s.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes());
+            }
+        });
+        let shared = Shared::new();
+        {
+            let mut c = shared.scan_config.lock().unwrap();
+            c.crawl = crate::scan_config::CrawlLimits { max_depth: 1, max_locations: 100, robots: false, sitemap: false };
+        }
+        let _ = crawl(&shared, &format!("http://127.0.0.1:{port}/"));
+        let paths = seen.lock().unwrap().clone();
+        assert!(paths.contains(&"/".to_string()) && paths.contains(&"/a".to_string()), "{paths:?}");
+        assert!(!paths.contains(&"/b".to_string()), "depth 1 stops at /a's links: {paths:?}");
+        assert!(!paths.iter().any(|p| p == "/robots.txt" || p == "/sitemap.xml"), "{paths:?}");
+    }
 
     #[test]
     fn robots_and_sitemap_parsing() {
@@ -611,6 +647,7 @@ fn eval_json<T: serde::de::DeserializeOwned>(cdp: &mut Cdp, js: &str) -> Option<
 /// leaves for other hosts.
 pub fn browser_crawl(shared: &Arc<Shared>, start_url: &str) -> Result<Vec<SeenRequest>, String> {
     let bin = chromium_binary().ok_or("no Chromium/Chrome binary found")?;
+    let limits = shared.scan_config.lock().unwrap().crawl.clone();
     let (scheme, rest) = start_url.split_once("://").unwrap_or(("http", start_url));
     let authority = rest.split('/').next().unwrap_or("").to_string();
     let origin = format!("{scheme}://{authority}");
@@ -668,7 +705,7 @@ pub fn browser_crawl(shared: &Arc<Shared>, start_url: &str) -> Result<Vec<SeenRe
         let mut form_keys: BTreeSet<String> = BTreeSet::new();
         let mut clicked: BTreeSet<String> = BTreeSet::new();
         while let Some((url, depth)) = queue.pop_front() {
-            if shared.scan_stop.load(Ordering::SeqCst) || pages >= MAX_UNIQUE_LOCATIONS {
+            if shared.scan_stop.load(Ordering::SeqCst) || pages >= limits.max_locations {
                 break;
             }
             if cdp.call("Page.navigate", serde_json::json!({"url": url})).is_err() {
@@ -677,7 +714,7 @@ pub fn browser_crawl(shared: &Arc<Shared>, start_url: &str) -> Result<Vec<SeenRe
             cdp.pump(2500);
             cdp.collect_bodies(&origin);
             pages += 1;
-            if depth >= MAX_LINK_DEPTH {
+            if depth >= limits.max_depth {
                 continue;
             }
             let r = cdp.call("Runtime.evaluate", serde_json::json!({"expression": LINKS_JS, "returnByValue": true}));
@@ -688,7 +725,7 @@ pub fn browser_crawl(shared: &Arc<Shared>, start_url: &str) -> Result<Vec<SeenRe
                 .unwrap_or_default();
             for l in links {
                 let l = l.trim_end_matches('#').to_string();
-                if l.starts_with(&origin) && seen.len() < MAX_UNIQUE_LOCATIONS && seen.insert(l.clone()) {
+                if l.starts_with(&origin) && seen.len() < limits.max_locations && seen.insert(l.clone()) {
                     queue.push_back((l, depth + 1));
                 }
             }
@@ -752,7 +789,7 @@ pub fn browser_crawl(shared: &Arc<Shared>, start_url: &str) -> Result<Vec<SeenRe
                 let revealed: Vec<String> = eval_json(&mut cdp, LINKS_JS).unwrap_or_default();
                 for l in here.into_iter().chain(revealed) {
                     let l = l.trim_end_matches('#').to_string();
-                    if l.starts_with(&origin) && seen.len() < MAX_UNIQUE_LOCATIONS && seen.insert(l.clone()) {
+                    if l.starts_with(&origin) && seen.len() < limits.max_locations && seen.insert(l.clone()) {
                         queue.push_back((l, depth + 1));
                     }
                 }
