@@ -1,0 +1,5378 @@
+{
+  "id": "ev_84e58d24461883c8daa2a5c6a48934b7e9c8f8324464910db4d80cf7b2f1582b",
+  "subject": {
+    "kind": "java-class",
+    "sha256": "fa6e6593f52a8b7a0dde4d7942014fc8e427f60cfc6c34e3e99b1ca1ce26adb0",
+    "name": "Zccv.class"
+  },
+  "operation": "java_method_show",
+  "params": {
+    "class_name": null,
+    "decompile": true,
+    "descriptor": null,
+    "limit": 2000,
+    "method_name": "ZM",
+    "offset": 0,
+    "path": "/root/burp-re/in/extract/burp/Zccv.class"
+  },
+  "result": {
+    "access": [
+      "private",
+      "static"
+    ],
+    "class": "burp.Zccv",
+    "descriptor": "(Lburp/Zr5_;)[[B",
+    "entry": "Zccv.class",
+    "exception_table": [
+      {
+        "catch_type": "java.io.IOException",
+        "end_pc": 970,
+        "handler_pc": 973,
+        "start_pc": 958
+      },
+      {
+        "catch_type": "java.io.IOException",
+        "end_pc": 934,
+        "handler_pc": 934,
+        "start_pc": 920
+      },
+      {
+        "catch_type": "java.io.IOException",
+        "end_pc": 924,
+        "handler_pc": 927,
+        "start_pc": 914
+      },
+      {
+        "catch_type": "java.io.IOException",
+        "end_pc": 884,
+        "handler_pc": 887,
+        "start_pc": 855
+      },
+      {
+        "catch_type": "java.io.IOException",
+        "end_pc": 625,
+        "handler_pc": 628,
+        "start_pc": 599
+      },
+      {
+        "catch_type": "java.io.IOException",
+        "end_pc": 551,
+        "handler_pc": 554,
+        "start_pc": 497
+      },
+      {
+        "catch_type": "java.io.IOException",
+        "end_pc": 522,
+        "handler_pc": 525,
+        "start_pc": 468
+      },
+      {
+        "catch_type": "java.io.IOException",
+        "end_pc": 490,
+        "handler_pc": 493,
+        "start_pc": 437
+      },
+      {
+        "catch_type": "java.io.IOException",
+        "end_pc": 392,
+        "handler_pc": 395,
+        "start_pc": 376
+      },
+      {
+        "catch_type": "java.io.IOException",
+        "end_pc": 327,
+        "handler_pc": 330,
+        "start_pc": 272
+      },
+      {
+        "catch_type": "java.io.IOException",
+        "end_pc": 265,
+        "handler_pc": 268,
+        "start_pc": 216
+      },
+      {
+        "catch_type": "java.io.IOException",
+        "end_pc": 209,
+        "handler_pc": 212,
+        "start_pc": 165
+      },
+      {
+        "catch_type": "java.io.IOException",
+        "end_pc": 158,
+        "handler_pc": 161,
+        "start_pc": 119
+      },
+      {
+        "catch_type": "java.io.IOException",
+        "end_pc": 112,
+        "handler_pc": 115,
+        "start_pc": 78
+      },
+      {
+        "catch_type": "java.io.IOException",
+        "end_pc": 997,
+        "handler_pc": 1000,
+        "start_pc": 977
+      },
+      {
+        "catch_type": "java.io.IOException",
+        "end_pc": 1326,
+        "handler_pc": 1329,
+        "start_pc": 1282
+      },
+      {
+        "catch_type": "java.io.IOException",
+        "end_pc": 1300,
+        "handler_pc": 1303,
+        "start_pc": 1275
+      },
+      {
+        "catch_type": "java.io.IOException",
+        "end_pc": 1268,
+        "handler_pc": 1271,
+        "start_pc": 1256
+      },
+      {
+        "catch_type": "java.io.IOException",
+        "end_pc": 1232,
+        "handler_pc": 1232,
+        "start_pc": 1218
+      },
+      {
+        "catch_type": "java.io.IOException",
+        "end_pc": 1222,
+        "handler_pc": 1225,
+        "start_pc": 1212
+      },
+      {
+        "catch_type": "java.io.IOException",
+        "end_pc": 1190,
+        "handler_pc": 1193,
+        "start_pc": 1179
+      },
+      {
+        "catch_type": "java.io.IOException",
+        "end_pc": 1139,
+        "handler_pc": 1142,
+        "start_pc": 1104
+      },
+      {
+        "catch_type": "java.io.IOException",
+        "end_pc": 1073,
+        "handler_pc": 1076,
+        "start_pc": 1048
+      },
+      {
+        "catch_type": "java.io.IOException",
+        "end_pc": 1034,
+        "handler_pc": 1037,
+        "start_pc": 1024
+      },
+      {
+        "catch_type": "java.io.IOException",
+        "end_pc": 1333,
+        "handler_pc": 1336,
+        "start_pc": 1275
+      },
+      {
+        "catch_type": "java.io.IOException",
+        "end_pc": 1540,
+        "handler_pc": 1543,
+        "start_pc": 1528
+      },
+      {
+        "catch_type": "java.io.IOException",
+        "end_pc": 1489,
+        "handler_pc": 1489,
+        "start_pc": 1475
+      },
+      {
+        "catch_type": "java.io.IOException",
+        "end_pc": 1479,
+        "handler_pc": 1482,
+        "start_pc": 1469
+      },
+      {
+        "catch_type": "java.io.IOException",
+        "end_pc": 1409,
+        "handler_pc": 1412,
+        "start_pc": 1384
+      },
+      {
+        "catch_type": "java.io.IOException",
+        "end_pc": 1370,
+        "handler_pc": 1373,
+        "start_pc": 1360
+      },
+      {
+        "catch_type": "java.io.IOException",
+        "end_pc": 1563,
+        "handler_pc": 1566,
+        "start_pc": 1547
+      },
+      {
+        "catch_type": "java.io.IOException",
+        "end_pc": 1600,
+        "handler_pc": 1603,
+        "start_pc": 1590
+      },
+      {
+        "catch_type": "java.io.IOException",
+        "end_pc": 1639,
+        "handler_pc": 1642,
+        "start_pc": 1614
+      }
+    ],
+    "instructions": [
+      {
+        "len": 1,
+        "offset": "0000",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 5,
+        "offset": "0001",
+        "opcode": "0xb9",
+        "text": "invokeinterface burp.Zr5_.Zr6()I"
+      },
+      {
+        "len": 1,
+        "offset": "0006",
+        "opcode": "0x3d",
+        "text": "istore_2"
+      },
+      {
+        "len": 1,
+        "offset": "0007",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 5,
+        "offset": "0008",
+        "opcode": "0xb9",
+        "text": "invokeinterface burp.Zr5_.Zrz()B"
+      },
+      {
+        "len": 1,
+        "offset": "000d",
+        "opcode": "0x3e",
+        "text": "istore_3"
+      },
+      {
+        "len": 1,
+        "offset": "000e",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 5,
+        "offset": "000f",
+        "opcode": "0xb9",
+        "text": "invokeinterface burp.Zr5_.Zru()B"
+      },
+      {
+        "len": 2,
+        "offset": "0014",
+        "opcode": "0x36",
+        "text": "istore 4"
+      },
+      {
+        "len": 1,
+        "offset": "0016",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 5,
+        "offset": "0017",
+        "opcode": "0xb9",
+        "text": "invokeinterface burp.Zr5_.Zrx()Z"
+      },
+      {
+        "len": 2,
+        "offset": "001c",
+        "opcode": "0x36",
+        "text": "istore 5"
+      },
+      {
+        "len": 3,
+        "offset": "001e",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zevi.ZK()[Ljava/lang/String;"
+      },
+      {
+        "len": 1,
+        "offset": "0021",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 5,
+        "offset": "0022",
+        "opcode": "0xb9",
+        "text": "invokeinterface burp.Zr5_.ZrF()Z"
+      },
+      {
+        "len": 2,
+        "offset": "0027",
+        "opcode": "0x36",
+        "text": "istore 6"
+      },
+      {
+        "len": 3,
+        "offset": "0029",
+        "opcode": "0xbb",
+        "text": "new java.util.ArrayList"
+      },
+      {
+        "len": 1,
+        "offset": "002c",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 3,
+        "offset": "002d",
+        "opcode": "0xb7",
+        "text": "invokespecial java.util.ArrayList.<init>()V"
+      },
+      {
+        "len": 2,
+        "offset": "0030",
+        "opcode": "0x3a",
+        "text": "astore 7"
+      },
+      {
+        "len": 3,
+        "offset": "0032",
+        "opcode": "0xbb",
+        "text": "new java.util.ArrayList"
+      },
+      {
+        "len": 1,
+        "offset": "0035",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 3,
+        "offset": "0036",
+        "opcode": "0xb7",
+        "text": "invokespecial java.util.ArrayList.<init>()V"
+      },
+      {
+        "len": 2,
+        "offset": "0039",
+        "opcode": "0x3a",
+        "text": "astore 8"
+      },
+      {
+        "len": 1,
+        "offset": "003b",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 2,
+        "offset": "003c",
+        "opcode": "0x36",
+        "text": "istore 9"
+      },
+      {
+        "len": 2,
+        "offset": "003e",
+        "opcode": "0x19",
+        "text": "aload 7"
+      },
+      {
+        "len": 1,
+        "offset": "0040",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 2,
+        "offset": "0041",
+        "opcode": "0xbc",
+        "text": "newarray byte"
+      },
+      {
+        "len": 1,
+        "offset": "0043",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "0044",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 1,
+        "offset": "0045",
+        "opcode": "0x1d",
+        "text": "iload_3"
+      },
+      {
+        "len": 1,
+        "offset": "0046",
+        "opcode": "0x54",
+        "text": "bastore"
+      },
+      {
+        "len": 5,
+        "offset": "0047",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.List.add(Ljava/lang/Object;)Z"
+      },
+      {
+        "len": 1,
+        "offset": "004c",
+        "opcode": "0x57",
+        "text": "pop"
+      },
+      {
+        "len": 1,
+        "offset": "004d",
+        "opcode": "0x4c",
+        "text": "astore_1"
+      },
+      {
+        "len": 2,
+        "offset": "004e",
+        "opcode": "0x15",
+        "text": "iload 4"
+      },
+      {
+        "len": 1,
+        "offset": "0050",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 3,
+        "offset": "0051",
+        "opcode": "0xa4",
+        "text": "if_icmple 119"
+      },
+      {
+        "len": 2,
+        "offset": "0054",
+        "opcode": "0x19",
+        "text": "aload 7"
+      },
+      {
+        "len": 1,
+        "offset": "0056",
+        "opcode": "0x05",
+        "text": "iconst_2"
+      },
+      {
+        "len": 2,
+        "offset": "0057",
+        "opcode": "0xbc",
+        "text": "newarray byte"
+      },
+      {
+        "len": 1,
+        "offset": "0059",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "005a",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 2,
+        "offset": "005b",
+        "opcode": "0x10",
+        "text": "bipush -64"
+      },
+      {
+        "len": 1,
+        "offset": "005d",
+        "opcode": "0x54",
+        "text": "bastore"
+      },
+      {
+        "len": 1,
+        "offset": "005e",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "005f",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 3,
+        "offset": "0060",
+        "opcode": "0x11",
+        "text": "sipush 128"
+      },
+      {
+        "len": 1,
+        "offset": "0063",
+        "opcode": "0x1d",
+        "text": "iload_3"
+      },
+      {
+        "len": 2,
+        "offset": "0064",
+        "opcode": "0x10",
+        "text": "bipush 63"
+      },
+      {
+        "len": 1,
+        "offset": "0066",
+        "opcode": "0x7e",
+        "text": "iand"
+      },
+      {
+        "len": 1,
+        "offset": "0067",
+        "opcode": "0x82",
+        "text": "ixor"
+      },
+      {
+        "len": 1,
+        "offset": "0068",
+        "opcode": "0x91",
+        "text": "i2b"
+      },
+      {
+        "len": 1,
+        "offset": "0069",
+        "opcode": "0x54",
+        "text": "bastore"
+      },
+      {
+        "len": 5,
+        "offset": "006a",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.List.add(Ljava/lang/Object;)Z"
+      },
+      {
+        "len": 1,
+        "offset": "006f",
+        "opcode": "0x57",
+        "text": "pop"
+      },
+      {
+        "len": 3,
+        "offset": "0070",
+        "opcode": "0xa7",
+        "text": "goto 119"
+      },
+      {
+        "len": 3,
+        "offset": "0073",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;"
+      },
+      {
+        "len": 1,
+        "offset": "0076",
+        "opcode": "0xbf",
+        "text": "athrow"
+      },
+      {
+        "len": 2,
+        "offset": "0077",
+        "opcode": "0x15",
+        "text": "iload 4"
+      },
+      {
+        "len": 1,
+        "offset": "0079",
+        "opcode": "0x05",
+        "text": "iconst_2"
+      },
+      {
+        "len": 3,
+        "offset": "007a",
+        "opcode": "0xa4",
+        "text": "if_icmple 165"
+      },
+      {
+        "len": 2,
+        "offset": "007d",
+        "opcode": "0x19",
+        "text": "aload 7"
+      },
+      {
+        "len": 1,
+        "offset": "007f",
+        "opcode": "0x06",
+        "text": "iconst_3"
+      },
+      {
+        "len": 2,
+        "offset": "0080",
+        "opcode": "0xbc",
+        "text": "newarray byte"
+      },
+      {
+        "len": 1,
+        "offset": "0082",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "0083",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 2,
+        "offset": "0084",
+        "opcode": "0x10",
+        "text": "bipush -32"
+      },
+      {
+        "len": 1,
+        "offset": "0086",
+        "opcode": "0x54",
+        "text": "bastore"
+      },
+      {
+        "len": 1,
+        "offset": "0087",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "0088",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 2,
+        "offset": "0089",
+        "opcode": "0x10",
+        "text": "bipush -128"
+      },
+      {
+        "len": 1,
+        "offset": "008b",
+        "opcode": "0x54",
+        "text": "bastore"
+      },
+      {
+        "len": 1,
+        "offset": "008c",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "008d",
+        "opcode": "0x05",
+        "text": "iconst_2"
+      },
+      {
+        "len": 3,
+        "offset": "008e",
+        "opcode": "0x11",
+        "text": "sipush 128"
+      },
+      {
+        "len": 1,
+        "offset": "0091",
+        "opcode": "0x1d",
+        "text": "iload_3"
+      },
+      {
+        "len": 2,
+        "offset": "0092",
+        "opcode": "0x10",
+        "text": "bipush 63"
+      },
+      {
+        "len": 1,
+        "offset": "0094",
+        "opcode": "0x7e",
+        "text": "iand"
+      },
+      {
+        "len": 1,
+        "offset": "0095",
+        "opcode": "0x82",
+        "text": "ixor"
+      },
+      {
+        "len": 1,
+        "offset": "0096",
+        "opcode": "0x91",
+        "text": "i2b"
+      },
+      {
+        "len": 1,
+        "offset": "0097",
+        "opcode": "0x54",
+        "text": "bastore"
+      },
+      {
+        "len": 5,
+        "offset": "0098",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.List.add(Ljava/lang/Object;)Z"
+      },
+      {
+        "len": 1,
+        "offset": "009d",
+        "opcode": "0x57",
+        "text": "pop"
+      },
+      {
+        "len": 3,
+        "offset": "009e",
+        "opcode": "0xa7",
+        "text": "goto 165"
+      },
+      {
+        "len": 3,
+        "offset": "00a1",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;"
+      },
+      {
+        "len": 1,
+        "offset": "00a4",
+        "opcode": "0xbf",
+        "text": "athrow"
+      },
+      {
+        "len": 2,
+        "offset": "00a5",
+        "opcode": "0x15",
+        "text": "iload 4"
+      },
+      {
+        "len": 1,
+        "offset": "00a7",
+        "opcode": "0x06",
+        "text": "iconst_3"
+      },
+      {
+        "len": 3,
+        "offset": "00a8",
+        "opcode": "0xa4",
+        "text": "if_icmple 216"
+      },
+      {
+        "len": 2,
+        "offset": "00ab",
+        "opcode": "0x19",
+        "text": "aload 7"
+      },
+      {
+        "len": 1,
+        "offset": "00ad",
+        "opcode": "0x07",
+        "text": "iconst_4"
+      },
+      {
+        "len": 2,
+        "offset": "00ae",
+        "opcode": "0xbc",
+        "text": "newarray byte"
+      },
+      {
+        "len": 1,
+        "offset": "00b0",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "00b1",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 2,
+        "offset": "00b2",
+        "opcode": "0x10",
+        "text": "bipush -16"
+      },
+      {
+        "len": 1,
+        "offset": "00b4",
+        "opcode": "0x54",
+        "text": "bastore"
+      },
+      {
+        "len": 1,
+        "offset": "00b5",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "00b6",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 2,
+        "offset": "00b7",
+        "opcode": "0x10",
+        "text": "bipush -128"
+      },
+      {
+        "len": 1,
+        "offset": "00b9",
+        "opcode": "0x54",
+        "text": "bastore"
+      },
+      {
+        "len": 1,
+        "offset": "00ba",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "00bb",
+        "opcode": "0x05",
+        "text": "iconst_2"
+      },
+      {
+        "len": 2,
+        "offset": "00bc",
+        "opcode": "0x10",
+        "text": "bipush -128"
+      },
+      {
+        "len": 1,
+        "offset": "00be",
+        "opcode": "0x54",
+        "text": "bastore"
+      },
+      {
+        "len": 1,
+        "offset": "00bf",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "00c0",
+        "opcode": "0x06",
+        "text": "iconst_3"
+      },
+      {
+        "len": 3,
+        "offset": "00c1",
+        "opcode": "0x11",
+        "text": "sipush 128"
+      },
+      {
+        "len": 1,
+        "offset": "00c4",
+        "opcode": "0x1d",
+        "text": "iload_3"
+      },
+      {
+        "len": 2,
+        "offset": "00c5",
+        "opcode": "0x10",
+        "text": "bipush 63"
+      },
+      {
+        "len": 1,
+        "offset": "00c7",
+        "opcode": "0x7e",
+        "text": "iand"
+      },
+      {
+        "len": 1,
+        "offset": "00c8",
+        "opcode": "0x82",
+        "text": "ixor"
+      },
+      {
+        "len": 1,
+        "offset": "00c9",
+        "opcode": "0x91",
+        "text": "i2b"
+      },
+      {
+        "len": 1,
+        "offset": "00ca",
+        "opcode": "0x54",
+        "text": "bastore"
+      },
+      {
+        "len": 5,
+        "offset": "00cb",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.List.add(Ljava/lang/Object;)Z"
+      },
+      {
+        "len": 1,
+        "offset": "00d0",
+        "opcode": "0x57",
+        "text": "pop"
+      },
+      {
+        "len": 3,
+        "offset": "00d1",
+        "opcode": "0xa7",
+        "text": "goto 216"
+      },
+      {
+        "len": 3,
+        "offset": "00d4",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;"
+      },
+      {
+        "len": 1,
+        "offset": "00d7",
+        "opcode": "0xbf",
+        "text": "athrow"
+      },
+      {
+        "len": 2,
+        "offset": "00d8",
+        "opcode": "0x15",
+        "text": "iload 4"
+      },
+      {
+        "len": 1,
+        "offset": "00da",
+        "opcode": "0x07",
+        "text": "iconst_4"
+      },
+      {
+        "len": 3,
+        "offset": "00db",
+        "opcode": "0xa4",
+        "text": "if_icmple 272"
+      },
+      {
+        "len": 2,
+        "offset": "00de",
+        "opcode": "0x19",
+        "text": "aload 7"
+      },
+      {
+        "len": 1,
+        "offset": "00e0",
+        "opcode": "0x08",
+        "text": "iconst_5"
+      },
+      {
+        "len": 2,
+        "offset": "00e1",
+        "opcode": "0xbc",
+        "text": "newarray byte"
+      },
+      {
+        "len": 1,
+        "offset": "00e3",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "00e4",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 2,
+        "offset": "00e5",
+        "opcode": "0x10",
+        "text": "bipush -8"
+      },
+      {
+        "len": 1,
+        "offset": "00e7",
+        "opcode": "0x54",
+        "text": "bastore"
+      },
+      {
+        "len": 1,
+        "offset": "00e8",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "00e9",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 2,
+        "offset": "00ea",
+        "opcode": "0x10",
+        "text": "bipush -128"
+      },
+      {
+        "len": 1,
+        "offset": "00ec",
+        "opcode": "0x54",
+        "text": "bastore"
+      },
+      {
+        "len": 1,
+        "offset": "00ed",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "00ee",
+        "opcode": "0x05",
+        "text": "iconst_2"
+      },
+      {
+        "len": 2,
+        "offset": "00ef",
+        "opcode": "0x10",
+        "text": "bipush -128"
+      },
+      {
+        "len": 1,
+        "offset": "00f1",
+        "opcode": "0x54",
+        "text": "bastore"
+      },
+      {
+        "len": 1,
+        "offset": "00f2",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "00f3",
+        "opcode": "0x06",
+        "text": "iconst_3"
+      },
+      {
+        "len": 2,
+        "offset": "00f4",
+        "opcode": "0x10",
+        "text": "bipush -128"
+      },
+      {
+        "len": 1,
+        "offset": "00f6",
+        "opcode": "0x54",
+        "text": "bastore"
+      },
+      {
+        "len": 1,
+        "offset": "00f7",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "00f8",
+        "opcode": "0x07",
+        "text": "iconst_4"
+      },
+      {
+        "len": 3,
+        "offset": "00f9",
+        "opcode": "0x11",
+        "text": "sipush 128"
+      },
+      {
+        "len": 1,
+        "offset": "00fc",
+        "opcode": "0x1d",
+        "text": "iload_3"
+      },
+      {
+        "len": 2,
+        "offset": "00fd",
+        "opcode": "0x10",
+        "text": "bipush 63"
+      },
+      {
+        "len": 1,
+        "offset": "00ff",
+        "opcode": "0x7e",
+        "text": "iand"
+      },
+      {
+        "len": 1,
+        "offset": "0100",
+        "opcode": "0x82",
+        "text": "ixor"
+      },
+      {
+        "len": 1,
+        "offset": "0101",
+        "opcode": "0x91",
+        "text": "i2b"
+      },
+      {
+        "len": 1,
+        "offset": "0102",
+        "opcode": "0x54",
+        "text": "bastore"
+      },
+      {
+        "len": 5,
+        "offset": "0103",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.List.add(Ljava/lang/Object;)Z"
+      },
+      {
+        "len": 1,
+        "offset": "0108",
+        "opcode": "0x57",
+        "text": "pop"
+      },
+      {
+        "len": 3,
+        "offset": "0109",
+        "opcode": "0xa7",
+        "text": "goto 272"
+      },
+      {
+        "len": 3,
+        "offset": "010c",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;"
+      },
+      {
+        "len": 1,
+        "offset": "010f",
+        "opcode": "0xbf",
+        "text": "athrow"
+      },
+      {
+        "len": 2,
+        "offset": "0110",
+        "opcode": "0x15",
+        "text": "iload 4"
+      },
+      {
+        "len": 1,
+        "offset": "0112",
+        "opcode": "0x08",
+        "text": "iconst_5"
+      },
+      {
+        "len": 3,
+        "offset": "0113",
+        "opcode": "0xa4",
+        "text": "if_icmple 334"
+      },
+      {
+        "len": 2,
+        "offset": "0116",
+        "opcode": "0x19",
+        "text": "aload 7"
+      },
+      {
+        "len": 2,
+        "offset": "0118",
+        "opcode": "0x10",
+        "text": "bipush 6"
+      },
+      {
+        "len": 2,
+        "offset": "011a",
+        "opcode": "0xbc",
+        "text": "newarray byte"
+      },
+      {
+        "len": 1,
+        "offset": "011c",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "011d",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 2,
+        "offset": "011e",
+        "opcode": "0x10",
+        "text": "bipush -4"
+      },
+      {
+        "len": 1,
+        "offset": "0120",
+        "opcode": "0x54",
+        "text": "bastore"
+      },
+      {
+        "len": 1,
+        "offset": "0121",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "0122",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 2,
+        "offset": "0123",
+        "opcode": "0x10",
+        "text": "bipush -128"
+      },
+      {
+        "len": 1,
+        "offset": "0125",
+        "opcode": "0x54",
+        "text": "bastore"
+      },
+      {
+        "len": 1,
+        "offset": "0126",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "0127",
+        "opcode": "0x05",
+        "text": "iconst_2"
+      },
+      {
+        "len": 2,
+        "offset": "0128",
+        "opcode": "0x10",
+        "text": "bipush -128"
+      },
+      {
+        "len": 1,
+        "offset": "012a",
+        "opcode": "0x54",
+        "text": "bastore"
+      },
+      {
+        "len": 1,
+        "offset": "012b",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "012c",
+        "opcode": "0x06",
+        "text": "iconst_3"
+      },
+      {
+        "len": 2,
+        "offset": "012d",
+        "opcode": "0x10",
+        "text": "bipush -128"
+      },
+      {
+        "len": 1,
+        "offset": "012f",
+        "opcode": "0x54",
+        "text": "bastore"
+      },
+      {
+        "len": 1,
+        "offset": "0130",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "0131",
+        "opcode": "0x07",
+        "text": "iconst_4"
+      },
+      {
+        "len": 2,
+        "offset": "0132",
+        "opcode": "0x10",
+        "text": "bipush -128"
+      },
+      {
+        "len": 1,
+        "offset": "0134",
+        "opcode": "0x54",
+        "text": "bastore"
+      },
+      {
+        "len": 1,
+        "offset": "0135",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "0136",
+        "opcode": "0x08",
+        "text": "iconst_5"
+      },
+      {
+        "len": 3,
+        "offset": "0137",
+        "opcode": "0x11",
+        "text": "sipush 128"
+      },
+      {
+        "len": 1,
+        "offset": "013a",
+        "opcode": "0x1d",
+        "text": "iload_3"
+      },
+      {
+        "len": 2,
+        "offset": "013b",
+        "opcode": "0x10",
+        "text": "bipush 63"
+      },
+      {
+        "len": 1,
+        "offset": "013d",
+        "opcode": "0x7e",
+        "text": "iand"
+      },
+      {
+        "len": 1,
+        "offset": "013e",
+        "opcode": "0x82",
+        "text": "ixor"
+      },
+      {
+        "len": 1,
+        "offset": "013f",
+        "opcode": "0x91",
+        "text": "i2b"
+      },
+      {
+        "len": 1,
+        "offset": "0140",
+        "opcode": "0x54",
+        "text": "bastore"
+      },
+      {
+        "len": 5,
+        "offset": "0141",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.List.add(Ljava/lang/Object;)Z"
+      },
+      {
+        "len": 1,
+        "offset": "0146",
+        "opcode": "0x57",
+        "text": "pop"
+      },
+      {
+        "len": 3,
+        "offset": "0147",
+        "opcode": "0xa7",
+        "text": "goto 334"
+      },
+      {
+        "len": 3,
+        "offset": "014a",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;"
+      },
+      {
+        "len": 1,
+        "offset": "014d",
+        "opcode": "0xbf",
+        "text": "athrow"
+      },
+      {
+        "len": 1,
+        "offset": "014e",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 5,
+        "offset": "014f",
+        "opcode": "0xb9",
+        "text": "invokeinterface burp.Zr5_.ZrA()Z"
+      },
+      {
+        "len": 3,
+        "offset": "0154",
+        "opcode": "0x99",
+        "text": "ifeq 781"
+      },
+      {
+        "len": 2,
+        "offset": "0157",
+        "opcode": "0x19",
+        "text": "aload 7"
+      },
+      {
+        "len": 5,
+        "offset": "0159",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.List.size()I"
+      },
+      {
+        "len": 2,
+        "offset": "015e",
+        "opcode": "0x36",
+        "text": "istore 10"
+      },
+      {
+        "len": 1,
+        "offset": "0160",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 2,
+        "offset": "0161",
+        "opcode": "0x36",
+        "text": "istore 11"
+      },
+      {
+        "len": 2,
+        "offset": "0163",
+        "opcode": "0x15",
+        "text": "iload 11"
+      },
+      {
+        "len": 2,
+        "offset": "0165",
+        "opcode": "0x15",
+        "text": "iload 10"
+      },
+      {
+        "len": 3,
+        "offset": "0167",
+        "opcode": "0xa2",
+        "text": "if_icmpge 781"
+      },
+      {
+        "len": 2,
+        "offset": "016a",
+        "opcode": "0x19",
+        "text": "aload 7"
+      },
+      {
+        "len": 2,
+        "offset": "016c",
+        "opcode": "0x15",
+        "text": "iload 11"
+      },
+      {
+        "len": 5,
+        "offset": "016e",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.List.get(I)Ljava/lang/Object;"
+      },
+      {
+        "len": 3,
+        "offset": "0173",
+        "opcode": "0xc0",
+        "text": "checkcast byte[]"
+      },
+      {
+        "len": 2,
+        "offset": "0176",
+        "opcode": "0x3a",
+        "text": "astore 12"
+      },
+      {
+        "len": 2,
+        "offset": "0178",
+        "opcode": "0x19",
+        "text": "aload 12"
+      },
+      {
+        "len": 1,
+        "offset": "017a",
+        "opcode": "0xbe",
+        "text": "arraylength"
+      },
+      {
+        "len": 1,
+        "offset": "017b",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 3,
+        "offset": "017c",
+        "opcode": "0xa4",
+        "text": "if_icmple 774"
+      },
+      {
+        "len": 1,
+        "offset": "017f",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 5,
+        "offset": "0180",
+        "opcode": "0xb9",
+        "text": "invokeinterface burp.Zr5_.Zri()Z"
+      },
+      {
+        "len": 3,
+        "offset": "0185",
+        "opcode": "0x99",
+        "text": "ifeq 647"
+      },
+      {
+        "len": 3,
+        "offset": "0188",
+        "opcode": "0xa7",
+        "text": "goto 399"
+      },
+      {
+        "len": 3,
+        "offset": "018b",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;"
+      },
+      {
+        "len": 1,
+        "offset": "018e",
+        "opcode": "0xbf",
+        "text": "athrow"
+      },
+      {
+        "len": 2,
+        "offset": "018f",
+        "opcode": "0x19",
+        "text": "aload 12"
+      },
+      {
+        "len": 1,
+        "offset": "0191",
+        "opcode": "0xbe",
+        "text": "arraylength"
+      },
+      {
+        "len": 1,
+        "offset": "0192",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 1,
+        "offset": "0193",
+        "opcode": "0x64",
+        "text": "isub"
+      },
+      {
+        "len": 2,
+        "offset": "0194",
+        "opcode": "0xbc",
+        "text": "newarray int"
+      },
+      {
+        "len": 2,
+        "offset": "0196",
+        "opcode": "0x3a",
+        "text": "astore 13"
+      },
+      {
+        "len": 2,
+        "offset": "0198",
+        "opcode": "0x19",
+        "text": "aload 13"
+      },
+      {
+        "len": 1,
+        "offset": "019a",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 1,
+        "offset": "019b",
+        "opcode": "0x2e",
+        "text": "iaload"
+      },
+      {
+        "len": 1,
+        "offset": "019c",
+        "opcode": "0x07",
+        "text": "iconst_4"
+      },
+      {
+        "len": 3,
+        "offset": "019d",
+        "opcode": "0xa2",
+        "text": "if_icmpge 643"
+      },
+      {
+        "len": 2,
+        "offset": "01a0",
+        "opcode": "0x19",
+        "text": "aload 12"
+      },
+      {
+        "len": 3,
+        "offset": "01a2",
+        "opcode": "0xb6",
+        "text": "invokevirtual byte[].clone()Ljava/lang/Object;"
+      },
+      {
+        "len": 3,
+        "offset": "01a5",
+        "opcode": "0xc0",
+        "text": "checkcast byte[]"
+      },
+      {
+        "len": 2,
+        "offset": "01a8",
+        "opcode": "0x3a",
+        "text": "astore 14"
+      },
+      {
+        "len": 1,
+        "offset": "01aa",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 2,
+        "offset": "01ab",
+        "opcode": "0x36",
+        "text": "istore 15"
+      },
+      {
+        "len": 2,
+        "offset": "01ad",
+        "opcode": "0x15",
+        "text": "iload 15"
+      },
+      {
+        "len": 2,
+        "offset": "01af",
+        "opcode": "0x19",
+        "text": "aload 13"
+      },
+      {
+        "len": 1,
+        "offset": "01b1",
+        "opcode": "0xbe",
+        "text": "arraylength"
+      },
+      {
+        "len": 3,
+        "offset": "01b2",
+        "opcode": "0xa2",
+        "text": "if_icmpge 565"
+      },
+      {
+        "len": 2,
+        "offset": "01b5",
+        "opcode": "0x19",
+        "text": "aload 13"
+      },
+      {
+        "len": 2,
+        "offset": "01b7",
+        "opcode": "0x15",
+        "text": "iload 15"
+      },
+      {
+        "len": 1,
+        "offset": "01b9",
+        "opcode": "0x2e",
+        "text": "iaload"
+      },
+      {
+        "len": 26,
+        "offset": "01ba",
+        "opcode": "0xaa",
+        "text": "tableswitch  # default -> 558; 1 -> 468, 2 -> 497, 3 -> 529"
+      },
+      {
+        "len": 2,
+        "offset": "01d4",
+        "opcode": "0x19",
+        "text": "aload 14"
+      },
+      {
+        "len": 2,
+        "offset": "01d6",
+        "opcode": "0x15",
+        "text": "iload 15"
+      },
+      {
+        "len": 1,
+        "offset": "01d8",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 1,
+        "offset": "01d9",
+        "opcode": "0x60",
+        "text": "iadd"
+      },
+      {
+        "len": 2,
+        "offset": "01da",
+        "opcode": "0x19",
+        "text": "aload 14"
+      },
+      {
+        "len": 2,
+        "offset": "01dc",
+        "opcode": "0x15",
+        "text": "iload 15"
+      },
+      {
+        "len": 1,
+        "offset": "01de",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 1,
+        "offset": "01df",
+        "opcode": "0x60",
+        "text": "iadd"
+      },
+      {
+        "len": 1,
+        "offset": "01e0",
+        "opcode": "0x33",
+        "text": "baload"
+      },
+      {
+        "len": 2,
+        "offset": "01e1",
+        "opcode": "0x10",
+        "text": "bipush 63"
+      },
+      {
+        "len": 1,
+        "offset": "01e3",
+        "opcode": "0x7e",
+        "text": "iand"
+      },
+      {
+        "len": 1,
+        "offset": "01e4",
+        "opcode": "0x91",
+        "text": "i2b"
+      },
+      {
+        "len": 1,
+        "offset": "01e5",
+        "opcode": "0x54",
+        "text": "bastore"
+      },
+      {
+        "len": 1,
+        "offset": "01e6",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "01e7",
+        "opcode": "0xc7",
+        "text": "ifnonnull 558"
+      },
+      {
+        "len": 3,
+        "offset": "01ea",
+        "opcode": "0xa7",
+        "text": "goto 497"
+      },
+      {
+        "len": 3,
+        "offset": "01ed",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;"
+      },
+      {
+        "len": 1,
+        "offset": "01f0",
+        "opcode": "0xbf",
+        "text": "athrow"
+      },
+      {
+        "len": 2,
+        "offset": "01f1",
+        "opcode": "0x19",
+        "text": "aload 14"
+      },
+      {
+        "len": 2,
+        "offset": "01f3",
+        "opcode": "0x15",
+        "text": "iload 15"
+      },
+      {
+        "len": 1,
+        "offset": "01f5",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 1,
+        "offset": "01f6",
+        "opcode": "0x60",
+        "text": "iadd"
+      },
+      {
+        "len": 2,
+        "offset": "01f7",
+        "opcode": "0x19",
+        "text": "aload 14"
+      },
+      {
+        "len": 2,
+        "offset": "01f9",
+        "opcode": "0x15",
+        "text": "iload 15"
+      },
+      {
+        "len": 1,
+        "offset": "01fb",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 1,
+        "offset": "01fc",
+        "opcode": "0x60",
+        "text": "iadd"
+      },
+      {
+        "len": 1,
+        "offset": "01fd",
+        "opcode": "0x33",
+        "text": "baload"
+      },
+      {
+        "len": 2,
+        "offset": "01fe",
+        "opcode": "0x10",
+        "text": "bipush 63"
+      },
+      {
+        "len": 1,
+        "offset": "0200",
+        "opcode": "0x7e",
+        "text": "iand"
+      },
+      {
+        "len": 2,
+        "offset": "0201",
+        "opcode": "0x10",
+        "text": "bipush 64"
+      },
+      {
+        "len": 1,
+        "offset": "0203",
+        "opcode": "0x82",
+        "text": "ixor"
+      },
+      {
+        "len": 1,
+        "offset": "0204",
+        "opcode": "0x91",
+        "text": "i2b"
+      },
+      {
+        "len": 1,
+        "offset": "0205",
+        "opcode": "0x54",
+        "text": "bastore"
+      },
+      {
+        "len": 1,
+        "offset": "0206",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "0207",
+        "opcode": "0xc7",
+        "text": "ifnonnull 558"
+      },
+      {
+        "len": 3,
+        "offset": "020a",
+        "opcode": "0xa7",
+        "text": "goto 529"
+      },
+      {
+        "len": 3,
+        "offset": "020d",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;"
+      },
+      {
+        "len": 1,
+        "offset": "0210",
+        "opcode": "0xbf",
+        "text": "athrow"
+      },
+      {
+        "len": 2,
+        "offset": "0211",
+        "opcode": "0x19",
+        "text": "aload 14"
+      },
+      {
+        "len": 2,
+        "offset": "0213",
+        "opcode": "0x15",
+        "text": "iload 15"
+      },
+      {
+        "len": 1,
+        "offset": "0215",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 1,
+        "offset": "0216",
+        "opcode": "0x60",
+        "text": "iadd"
+      },
+      {
+        "len": 2,
+        "offset": "0217",
+        "opcode": "0x19",
+        "text": "aload 14"
+      },
+      {
+        "len": 2,
+        "offset": "0219",
+        "opcode": "0x15",
+        "text": "iload 15"
+      },
+      {
+        "len": 1,
+        "offset": "021b",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 1,
+        "offset": "021c",
+        "opcode": "0x60",
+        "text": "iadd"
+      },
+      {
+        "len": 1,
+        "offset": "021d",
+        "opcode": "0x33",
+        "text": "baload"
+      },
+      {
+        "len": 2,
+        "offset": "021e",
+        "opcode": "0x10",
+        "text": "bipush 63"
+      },
+      {
+        "len": 1,
+        "offset": "0220",
+        "opcode": "0x7e",
+        "text": "iand"
+      },
+      {
+        "len": 3,
+        "offset": "0221",
+        "opcode": "0x11",
+        "text": "sipush 192"
+      },
+      {
+        "len": 1,
+        "offset": "0224",
+        "opcode": "0x82",
+        "text": "ixor"
+      },
+      {
+        "len": 1,
+        "offset": "0225",
+        "opcode": "0x91",
+        "text": "i2b"
+      },
+      {
+        "len": 1,
+        "offset": "0226",
+        "opcode": "0x54",
+        "text": "bastore"
+      },
+      {
+        "len": 3,
+        "offset": "0227",
+        "opcode": "0xa7",
+        "text": "goto 558"
+      },
+      {
+        "len": 3,
+        "offset": "022a",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;"
+      },
+      {
+        "len": 1,
+        "offset": "022d",
+        "opcode": "0xbf",
+        "text": "athrow"
+      },
+      {
+        "len": 3,
+        "offset": "022e",
+        "opcode": "0x84",
+        "text": "iinc 15, 1"
+      },
+      {
+        "len": 1,
+        "offset": "0231",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "0232",
+        "opcode": "0xc7",
+        "text": "ifnonnull 429"
+      },
+      {
+        "len": 2,
+        "offset": "0235",
+        "opcode": "0x19",
+        "text": "aload 7"
+      },
+      {
+        "len": 2,
+        "offset": "0237",
+        "opcode": "0x19",
+        "text": "aload 14"
+      },
+      {
+        "len": 5,
+        "offset": "0239",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.List.add(Ljava/lang/Object;)Z"
+      },
+      {
+        "len": 1,
+        "offset": "023e",
+        "opcode": "0x57",
+        "text": "pop"
+      },
+      {
+        "len": 2,
+        "offset": "023f",
+        "opcode": "0x19",
+        "text": "aload 13"
+      },
+      {
+        "len": 2,
+        "offset": "0241",
+        "opcode": "0x19",
+        "text": "aload 13"
+      },
+      {
+        "len": 1,
+        "offset": "0243",
+        "opcode": "0xbe",
+        "text": "arraylength"
+      },
+      {
+        "len": 1,
+        "offset": "0244",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 1,
+        "offset": "0245",
+        "opcode": "0x64",
+        "text": "isub"
+      },
+      {
+        "len": 1,
+        "offset": "0246",
+        "opcode": "0x5c",
+        "text": "dup2"
+      },
+      {
+        "len": 1,
+        "offset": "0247",
+        "opcode": "0x2e",
+        "text": "iaload"
+      },
+      {
+        "len": 1,
+        "offset": "0248",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 1,
+        "offset": "0249",
+        "opcode": "0x60",
+        "text": "iadd"
+      },
+      {
+        "len": 1,
+        "offset": "024a",
+        "opcode": "0x4f",
+        "text": "iastore"
+      },
+      {
+        "len": 2,
+        "offset": "024b",
+        "opcode": "0x19",
+        "text": "aload 13"
+      },
+      {
+        "len": 1,
+        "offset": "024d",
+        "opcode": "0xbe",
+        "text": "arraylength"
+      },
+      {
+        "len": 1,
+        "offset": "024e",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 1,
+        "offset": "024f",
+        "opcode": "0x64",
+        "text": "isub"
+      },
+      {
+        "len": 2,
+        "offset": "0250",
+        "opcode": "0x36",
+        "text": "istore 15"
+      },
+      {
+        "len": 2,
+        "offset": "0252",
+        "opcode": "0x15",
+        "text": "iload 15"
+      },
+      {
+        "len": 3,
+        "offset": "0254",
+        "opcode": "0x9e",
+        "text": "ifle 639"
+      },
+      {
+        "len": 2,
+        "offset": "0257",
+        "opcode": "0x19",
+        "text": "aload 13"
+      },
+      {
+        "len": 2,
+        "offset": "0259",
+        "opcode": "0x15",
+        "text": "iload 15"
+      },
+      {
+        "len": 1,
+        "offset": "025b",
+        "opcode": "0x2e",
+        "text": "iaload"
+      },
+      {
+        "len": 1,
+        "offset": "025c",
+        "opcode": "0x06",
+        "text": "iconst_3"
+      },
+      {
+        "len": 3,
+        "offset": "025d",
+        "opcode": "0xa4",
+        "text": "if_icmple 632"
+      },
+      {
+        "len": 2,
+        "offset": "0260",
+        "opcode": "0x19",
+        "text": "aload 13"
+      },
+      {
+        "len": 2,
+        "offset": "0262",
+        "opcode": "0x15",
+        "text": "iload 15"
+      },
+      {
+        "len": 1,
+        "offset": "0264",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 1,
+        "offset": "0265",
+        "opcode": "0x4f",
+        "text": "iastore"
+      },
+      {
+        "len": 2,
+        "offset": "0266",
+        "opcode": "0x19",
+        "text": "aload 13"
+      },
+      {
+        "len": 2,
+        "offset": "0268",
+        "opcode": "0x15",
+        "text": "iload 15"
+      },
+      {
+        "len": 1,
+        "offset": "026a",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 1,
+        "offset": "026b",
+        "opcode": "0x64",
+        "text": "isub"
+      },
+      {
+        "len": 1,
+        "offset": "026c",
+        "opcode": "0x5c",
+        "text": "dup2"
+      },
+      {
+        "len": 1,
+        "offset": "026d",
+        "opcode": "0x2e",
+        "text": "iaload"
+      },
+      {
+        "len": 1,
+        "offset": "026e",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 1,
+        "offset": "026f",
+        "opcode": "0x60",
+        "text": "iadd"
+      },
+      {
+        "len": 1,
+        "offset": "0270",
+        "opcode": "0x4f",
+        "text": "iastore"
+      },
+      {
+        "len": 3,
+        "offset": "0271",
+        "opcode": "0xa7",
+        "text": "goto 632"
+      },
+      {
+        "len": 3,
+        "offset": "0274",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;"
+      },
+      {
+        "len": 1,
+        "offset": "0277",
+        "opcode": "0xbf",
+        "text": "athrow"
+      },
+      {
+        "len": 3,
+        "offset": "0278",
+        "opcode": "0x84",
+        "text": "iinc 15, -1"
+      },
+      {
+        "len": 1,
+        "offset": "027b",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "027c",
+        "opcode": "0xc7",
+        "text": "ifnonnull 594"
+      },
+      {
+        "len": 1,
+        "offset": "027f",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "0280",
+        "opcode": "0xc7",
+        "text": "ifnonnull 408"
+      },
+      {
+        "len": 1,
+        "offset": "0283",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "0284",
+        "opcode": "0xc7",
+        "text": "ifnonnull 774"
+      },
+      {
+        "len": 1,
+        "offset": "0287",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 2,
+        "offset": "0288",
+        "opcode": "0x36",
+        "text": "istore 13"
+      },
+      {
+        "len": 2,
+        "offset": "028a",
+        "opcode": "0x15",
+        "text": "iload 13"
+      },
+      {
+        "len": 2,
+        "offset": "028c",
+        "opcode": "0x19",
+        "text": "aload 12"
+      },
+      {
+        "len": 1,
+        "offset": "028e",
+        "opcode": "0xbe",
+        "text": "arraylength"
+      },
+      {
+        "len": 3,
+        "offset": "028f",
+        "opcode": "0xa2",
+        "text": "if_icmpge 774"
+      },
+      {
+        "len": 2,
+        "offset": "0292",
+        "opcode": "0x19",
+        "text": "aload 12"
+      },
+      {
+        "len": 3,
+        "offset": "0294",
+        "opcode": "0xb6",
+        "text": "invokevirtual byte[].clone()Ljava/lang/Object;"
+      },
+      {
+        "len": 3,
+        "offset": "0297",
+        "opcode": "0xc0",
+        "text": "checkcast byte[]"
+      },
+      {
+        "len": 2,
+        "offset": "029a",
+        "opcode": "0x3a",
+        "text": "astore 14"
+      },
+      {
+        "len": 2,
+        "offset": "029c",
+        "opcode": "0x19",
+        "text": "aload 14"
+      },
+      {
+        "len": 2,
+        "offset": "029e",
+        "opcode": "0x15",
+        "text": "iload 13"
+      },
+      {
+        "len": 2,
+        "offset": "02a0",
+        "opcode": "0x19",
+        "text": "aload 14"
+      },
+      {
+        "len": 2,
+        "offset": "02a2",
+        "opcode": "0x15",
+        "text": "iload 13"
+      },
+      {
+        "len": 1,
+        "offset": "02a4",
+        "opcode": "0x33",
+        "text": "baload"
+      },
+      {
+        "len": 2,
+        "offset": "02a5",
+        "opcode": "0x10",
+        "text": "bipush 63"
+      },
+      {
+        "len": 1,
+        "offset": "02a7",
+        "opcode": "0x7e",
+        "text": "iand"
+      },
+      {
+        "len": 1,
+        "offset": "02a8",
+        "opcode": "0x91",
+        "text": "i2b"
+      },
+      {
+        "len": 1,
+        "offset": "02a9",
+        "opcode": "0x54",
+        "text": "bastore"
+      },
+      {
+        "len": 2,
+        "offset": "02aa",
+        "opcode": "0x19",
+        "text": "aload 7"
+      },
+      {
+        "len": 2,
+        "offset": "02ac",
+        "opcode": "0x19",
+        "text": "aload 14"
+      },
+      {
+        "len": 5,
+        "offset": "02ae",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.List.add(Ljava/lang/Object;)Z"
+      },
+      {
+        "len": 1,
+        "offset": "02b3",
+        "opcode": "0x57",
+        "text": "pop"
+      },
+      {
+        "len": 2,
+        "offset": "02b4",
+        "opcode": "0x19",
+        "text": "aload 12"
+      },
+      {
+        "len": 3,
+        "offset": "02b6",
+        "opcode": "0xb6",
+        "text": "invokevirtual byte[].clone()Ljava/lang/Object;"
+      },
+      {
+        "len": 3,
+        "offset": "02b9",
+        "opcode": "0xc0",
+        "text": "checkcast byte[]"
+      },
+      {
+        "len": 2,
+        "offset": "02bc",
+        "opcode": "0x3a",
+        "text": "astore 14"
+      },
+      {
+        "len": 2,
+        "offset": "02be",
+        "opcode": "0x19",
+        "text": "aload 14"
+      },
+      {
+        "len": 2,
+        "offset": "02c0",
+        "opcode": "0x15",
+        "text": "iload 13"
+      },
+      {
+        "len": 2,
+        "offset": "02c2",
+        "opcode": "0x19",
+        "text": "aload 14"
+      },
+      {
+        "len": 2,
+        "offset": "02c4",
+        "opcode": "0x15",
+        "text": "iload 13"
+      },
+      {
+        "len": 1,
+        "offset": "02c6",
+        "opcode": "0x33",
+        "text": "baload"
+      },
+      {
+        "len": 2,
+        "offset": "02c7",
+        "opcode": "0x10",
+        "text": "bipush 63"
+      },
+      {
+        "len": 1,
+        "offset": "02c9",
+        "opcode": "0x7e",
+        "text": "iand"
+      },
+      {
+        "len": 2,
+        "offset": "02ca",
+        "opcode": "0x10",
+        "text": "bipush 64"
+      },
+      {
+        "len": 1,
+        "offset": "02cc",
+        "opcode": "0x82",
+        "text": "ixor"
+      },
+      {
+        "len": 1,
+        "offset": "02cd",
+        "opcode": "0x91",
+        "text": "i2b"
+      },
+      {
+        "len": 1,
+        "offset": "02ce",
+        "opcode": "0x54",
+        "text": "bastore"
+      },
+      {
+        "len": 2,
+        "offset": "02cf",
+        "opcode": "0x19",
+        "text": "aload 7"
+      },
+      {
+        "len": 2,
+        "offset": "02d1",
+        "opcode": "0x19",
+        "text": "aload 14"
+      },
+      {
+        "len": 5,
+        "offset": "02d3",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.List.add(Ljava/lang/Object;)Z"
+      },
+      {
+        "len": 1,
+        "offset": "02d8",
+        "opcode": "0x57",
+        "text": "pop"
+      },
+      {
+        "len": 2,
+        "offset": "02d9",
+        "opcode": "0x19",
+        "text": "aload 12"
+      },
+      {
+        "len": 3,
+        "offset": "02db",
+        "opcode": "0xb6",
+        "text": "invokevirtual byte[].clone()Ljava/lang/Object;"
+      },
+      {
+        "len": 3,
+        "offset": "02de",
+        "opcode": "0xc0",
+        "text": "checkcast byte[]"
+      },
+      {
+        "len": 2,
+        "offset": "02e1",
+        "opcode": "0x3a",
+        "text": "astore 14"
+      },
+      {
+        "len": 2,
+        "offset": "02e3",
+        "opcode": "0x19",
+        "text": "aload 14"
+      },
+      {
+        "len": 2,
+        "offset": "02e5",
+        "opcode": "0x15",
+        "text": "iload 13"
+      },
+      {
+        "len": 2,
+        "offset": "02e7",
+        "opcode": "0x19",
+        "text": "aload 14"
+      },
+      {
+        "len": 2,
+        "offset": "02e9",
+        "opcode": "0x15",
+        "text": "iload 13"
+      },
+      {
+        "len": 1,
+        "offset": "02eb",
+        "opcode": "0x33",
+        "text": "baload"
+      },
+      {
+        "len": 2,
+        "offset": "02ec",
+        "opcode": "0x10",
+        "text": "bipush 63"
+      },
+      {
+        "len": 1,
+        "offset": "02ee",
+        "opcode": "0x7e",
+        "text": "iand"
+      },
+      {
+        "len": 3,
+        "offset": "02ef",
+        "opcode": "0x11",
+        "text": "sipush 192"
+      },
+      {
+        "len": 1,
+        "offset": "02f2",
+        "opcode": "0x82",
+        "text": "ixor"
+      },
+      {
+        "len": 1,
+        "offset": "02f3",
+        "opcode": "0x91",
+        "text": "i2b"
+      },
+      {
+        "len": 1,
+        "offset": "02f4",
+        "opcode": "0x54",
+        "text": "bastore"
+      },
+      {
+        "len": 2,
+        "offset": "02f5",
+        "opcode": "0x19",
+        "text": "aload 7"
+      },
+      {
+        "len": 2,
+        "offset": "02f7",
+        "opcode": "0x19",
+        "text": "aload 14"
+      },
+      {
+        "len": 5,
+        "offset": "02f9",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.List.add(Ljava/lang/Object;)Z"
+      },
+      {
+        "len": 1,
+        "offset": "02fe",
+        "opcode": "0x57",
+        "text": "pop"
+      },
+      {
+        "len": 3,
+        "offset": "02ff",
+        "opcode": "0x84",
+        "text": "iinc 13, 1"
+      },
+      {
+        "len": 1,
+        "offset": "0302",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "0303",
+        "opcode": "0xc7",
+        "text": "ifnonnull 650"
+      },
+      {
+        "len": 3,
+        "offset": "0306",
+        "opcode": "0x84",
+        "text": "iinc 11, 1"
+      },
+      {
+        "len": 1,
+        "offset": "0309",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "030a",
+        "opcode": "0xc7",
+        "text": "ifnonnull 355"
+      },
+      {
+        "len": 1,
+        "offset": "030d",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 5,
+        "offset": "030e",
+        "opcode": "0xb9",
+        "text": "invokeinterface burp.Zr5_.Zrb()Z"
+      },
+      {
+        "len": 3,
+        "offset": "0313",
+        "opcode": "0x99",
+        "text": "ifeq 1438"
+      },
+      {
+        "len": 2,
+        "offset": "0316",
+        "opcode": "0x19",
+        "text": "aload 7"
+      },
+      {
+        "len": 5,
+        "offset": "0318",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.List.iterator()Ljava/util/Iterator;"
+      },
+      {
+        "len": 2,
+        "offset": "031d",
+        "opcode": "0x3a",
+        "text": "astore 10"
+      },
+      {
+        "len": 2,
+        "offset": "031f",
+        "opcode": "0x19",
+        "text": "aload 10"
+      },
+      {
+        "len": 5,
+        "offset": "0321",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.Iterator.hasNext()Z"
+      },
+      {
+        "len": 3,
+        "offset": "0326",
+        "opcode": "0x99",
+        "text": "ifeq 1434"
+      },
+      {
+        "len": 2,
+        "offset": "0329",
+        "opcode": "0x19",
+        "text": "aload 10"
+      },
+      {
+        "len": 5,
+        "offset": "032b",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.Iterator.next()Ljava/lang/Object;"
+      },
+      {
+        "len": 3,
+        "offset": "0330",
+        "opcode": "0xc0",
+        "text": "checkcast byte[]"
+      },
+      {
+        "len": 2,
+        "offset": "0333",
+        "opcode": "0x3a",
+        "text": "astore 11"
+      },
+      {
+        "len": 1,
+        "offset": "0335",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 5,
+        "offset": "0336",
+        "opcode": "0xb9",
+        "text": "invokeinterface burp.Zr5_.ZrC()Z"
+      },
+      {
+        "len": 3,
+        "offset": "033b",
+        "opcode": "0x99",
+        "text": "ifeq 1161"
+      },
+      {
+        "len": 2,
+        "offset": "033e",
+        "opcode": "0x19",
+        "text": "aload 11"
+      },
+      {
+        "len": 1,
+        "offset": "0340",
+        "opcode": "0xbe",
+        "text": "arraylength"
+      },
+      {
+        "len": 2,
+        "offset": "0341",
+        "opcode": "0xbc",
+        "text": "newarray int"
+      },
+      {
+        "len": 2,
+        "offset": "0343",
+        "opcode": "0x3a",
+        "text": "astore 12"
+      },
+      {
+        "len": 2,
+        "offset": "0345",
+        "opcode": "0x19",
+        "text": "aload 11"
+      },
+      {
+        "len": 1,
+        "offset": "0347",
+        "opcode": "0xbe",
+        "text": "arraylength"
+      },
+      {
+        "len": 2,
+        "offset": "0348",
+        "opcode": "0xbc",
+        "text": "newarray int"
+      },
+      {
+        "len": 2,
+        "offset": "034a",
+        "opcode": "0x3a",
+        "text": "astore 13"
+      },
+      {
+        "len": 1,
+        "offset": "034c",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 2,
+        "offset": "034d",
+        "opcode": "0x36",
+        "text": "istore 14"
+      },
+      {
+        "len": 2,
+        "offset": "034f",
+        "opcode": "0x15",
+        "text": "iload 14"
+      },
+      {
+        "len": 2,
+        "offset": "0351",
+        "opcode": "0x19",
+        "text": "aload 13"
+      },
+      {
+        "len": 1,
+        "offset": "0353",
+        "opcode": "0xbe",
+        "text": "arraylength"
+      },
+      {
+        "len": 3,
+        "offset": "0354",
+        "opcode": "0xa2",
+        "text": "if_icmpge 898"
+      },
+      {
+        "len": 2,
+        "offset": "0357",
+        "opcode": "0x19",
+        "text": "aload 13"
+      },
+      {
+        "len": 2,
+        "offset": "0359",
+        "opcode": "0x15",
+        "text": "iload 14"
+      },
+      {
+        "len": 2,
+        "offset": "035b",
+        "opcode": "0x19",
+        "text": "aload 11"
+      },
+      {
+        "len": 2,
+        "offset": "035d",
+        "opcode": "0x15",
+        "text": "iload 14"
+      },
+      {
+        "len": 1,
+        "offset": "035f",
+        "opcode": "0x33",
+        "text": "baload"
+      },
+      {
+        "len": 1,
+        "offset": "0360",
+        "opcode": "0x4f",
+        "text": "iastore"
+      },
+      {
+        "len": 2,
+        "offset": "0361",
+        "opcode": "0x19",
+        "text": "aload 13"
+      },
+      {
+        "len": 2,
+        "offset": "0363",
+        "opcode": "0x15",
+        "text": "iload 14"
+      },
+      {
+        "len": 1,
+        "offset": "0365",
+        "opcode": "0x2e",
+        "text": "iaload"
+      },
+      {
+        "len": 3,
+        "offset": "0366",
+        "opcode": "0x9c",
+        "text": "ifge 891"
+      },
+      {
+        "len": 2,
+        "offset": "0369",
+        "opcode": "0x19",
+        "text": "aload 13"
+      },
+      {
+        "len": 2,
+        "offset": "036b",
+        "opcode": "0x15",
+        "text": "iload 14"
+      },
+      {
+        "len": 1,
+        "offset": "036d",
+        "opcode": "0x5c",
+        "text": "dup2"
+      },
+      {
+        "len": 1,
+        "offset": "036e",
+        "opcode": "0x2e",
+        "text": "iaload"
+      },
+      {
+        "len": 3,
+        "offset": "036f",
+        "opcode": "0x11",
+        "text": "sipush 256"
+      },
+      {
+        "len": 1,
+        "offset": "0372",
+        "opcode": "0x60",
+        "text": "iadd"
+      },
+      {
+        "len": 1,
+        "offset": "0373",
+        "opcode": "0x4f",
+        "text": "iastore"
+      },
+      {
+        "len": 3,
+        "offset": "0374",
+        "opcode": "0xa7",
+        "text": "goto 891"
+      },
+      {
+        "len": 3,
+        "offset": "0377",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;"
+      },
+      {
+        "len": 1,
+        "offset": "037a",
+        "opcode": "0xbf",
+        "text": "athrow"
+      },
+      {
+        "len": 3,
+        "offset": "037b",
+        "opcode": "0x84",
+        "text": "iinc 14, 1"
+      },
+      {
+        "len": 1,
+        "offset": "037e",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "037f",
+        "opcode": "0xc7",
+        "text": "ifnonnull 847"
+      },
+      {
+        "len": 2,
+        "offset": "0382",
+        "opcode": "0x19",
+        "text": "aload 12"
+      },
+      {
+        "len": 1,
+        "offset": "0384",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 1,
+        "offset": "0385",
+        "opcode": "0x2e",
+        "text": "iaload"
+      },
+      {
+        "len": 3,
+        "offset": "0386",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zccv.Zk:byte[][][]"
+      },
+      {
+        "len": 2,
+        "offset": "0389",
+        "opcode": "0x19",
+        "text": "aload 13"
+      },
+      {
+        "len": 1,
+        "offset": "038b",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 1,
+        "offset": "038c",
+        "opcode": "0x2e",
+        "text": "iaload"
+      },
+      {
+        "len": 1,
+        "offset": "038d",
+        "opcode": "0x32",
+        "text": "aaload"
+      },
+      {
+        "len": 1,
+        "offset": "038e",
+        "opcode": "0xbe",
+        "text": "arraylength"
+      },
+      {
+        "len": 3,
+        "offset": "038f",
+        "opcode": "0xa2",
+        "text": "if_icmpge 1157"
+      },
+      {
+        "len": 2,
+        "offset": "0392",
+        "opcode": "0x15",
+        "text": "iload 9"
+      },
+      {
+        "len": 1,
+        "offset": "0394",
+        "opcode": "0x1c",
+        "text": "iload_2"
+      },
+      {
+        "len": 3,
+        "offset": "0395",
+        "opcode": "0xa1",
+        "text": "if_icmplt 938"
+      },
+      {
+        "len": 1,
+        "offset": "0398",
+        "opcode": "0x1c",
+        "text": "iload_2"
+      },
+      {
+        "len": 3,
+        "offset": "0399",
+        "opcode": "0x99",
+        "text": "ifeq 938"
+      },
+      {
+        "len": 3,
+        "offset": "039c",
+        "opcode": "0xa7",
+        "text": "goto 931"
+      },
+      {
+        "len": 3,
+        "offset": "039f",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;"
+      },
+      {
+        "len": 1,
+        "offset": "03a2",
+        "opcode": "0xbf",
+        "text": "athrow"
+      },
+      {
+        "len": 3,
+        "offset": "03a3",
+        "opcode": "0xa7",
+        "text": "goto 1157"
+      },
+      {
+        "len": 3,
+        "offset": "03a6",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;"
+      },
+      {
+        "len": 1,
+        "offset": "03a9",
+        "opcode": "0xbf",
+        "text": "athrow"
+      },
+      {
+        "len": 3,
+        "offset": "03aa",
+        "opcode": "0xbb",
+        "text": "new java.io.ByteArrayOutputStream"
+      },
+      {
+        "len": 1,
+        "offset": "03ad",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 3,
+        "offset": "03ae",
+        "opcode": "0xb7",
+        "text": "invokespecial java.io.ByteArrayOutputStream.<init>()V"
+      },
+      {
+        "len": 2,
+        "offset": "03b1",
+        "opcode": "0x3a",
+        "text": "astore 14"
+      },
+      {
+        "len": 1,
+        "offset": "03b3",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 2,
+        "offset": "03b4",
+        "opcode": "0x36",
+        "text": "istore 15"
+      },
+      {
+        "len": 2,
+        "offset": "03b6",
+        "opcode": "0x15",
+        "text": "iload 15"
+      },
+      {
+        "len": 2,
+        "offset": "03b8",
+        "opcode": "0x19",
+        "text": "aload 11"
+      },
+      {
+        "len": 1,
+        "offset": "03ba",
+        "opcode": "0xbe",
+        "text": "arraylength"
+      },
+      {
+        "len": 3,
+        "offset": "03bb",
+        "opcode": "0xa2",
+        "text": "if_icmpge 1017"
+      },
+      {
+        "len": 2,
+        "offset": "03be",
+        "opcode": "0x15",
+        "text": "iload 5"
+      },
+      {
+        "len": 3,
+        "offset": "03c0",
+        "opcode": "0x99",
+        "text": "ifeq 977"
+      },
+      {
+        "len": 2,
+        "offset": "03c3",
+        "opcode": "0x19",
+        "text": "aload 14"
+      },
+      {
+        "len": 2,
+        "offset": "03c5",
+        "opcode": "0x10",
+        "text": "bipush 37"
+      },
+      {
+        "len": 3,
+        "offset": "03c7",
+        "opcode": "0xb6",
+        "text": "invokevirtual java.io.ByteArrayOutputStream.write(I)V"
+      },
+      {
+        "len": 3,
+        "offset": "03ca",
+        "opcode": "0xa7",
+        "text": "goto 977"
+      },
+      {
+        "len": 3,
+        "offset": "03cd",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;"
+      },
+      {
+        "len": 1,
+        "offset": "03d0",
+        "opcode": "0xbf",
+        "text": "athrow"
+      },
+      {
+        "len": 2,
+        "offset": "03d1",
+        "opcode": "0x19",
+        "text": "aload 14"
+      },
+      {
+        "len": 3,
+        "offset": "03d3",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zccv.Zk:byte[][][]"
+      },
+      {
+        "len": 2,
+        "offset": "03d6",
+        "opcode": "0x19",
+        "text": "aload 13"
+      },
+      {
+        "len": 2,
+        "offset": "03d8",
+        "opcode": "0x15",
+        "text": "iload 15"
+      },
+      {
+        "len": 1,
+        "offset": "03da",
+        "opcode": "0x2e",
+        "text": "iaload"
+      },
+      {
+        "len": 1,
+        "offset": "03db",
+        "opcode": "0x32",
+        "text": "aaload"
+      },
+      {
+        "len": 2,
+        "offset": "03dc",
+        "opcode": "0x19",
+        "text": "aload 12"
+      },
+      {
+        "len": 2,
+        "offset": "03de",
+        "opcode": "0x15",
+        "text": "iload 15"
+      },
+      {
+        "len": 1,
+        "offset": "03e0",
+        "opcode": "0x2e",
+        "text": "iaload"
+      },
+      {
+        "len": 1,
+        "offset": "03e1",
+        "opcode": "0x32",
+        "text": "aaload"
+      },
+      {
+        "len": 3,
+        "offset": "03e2",
+        "opcode": "0xb6",
+        "text": "invokevirtual java.io.ByteArrayOutputStream.write([B)V"
+      },
+      {
+        "len": 3,
+        "offset": "03e5",
+        "opcode": "0xa7",
+        "text": "goto 1010"
+      },
+      {
+        "len": 2,
+        "offset": "03e8",
+        "opcode": "0x3a",
+        "text": "astore 16"
+      },
+      {
+        "len": 2,
+        "offset": "03ea",
+        "opcode": "0x19",
+        "text": "aload 16"
+      },
+      {
+        "len": 3,
+        "offset": "03ec",
+        "opcode": "0xb2",
+        "text": "getstatic net.portswigger.Zar.IMPOSSIBLE:net.portswigger.Zar"
+      },
+      {
+        "len": 3,
+        "offset": "03ef",
+        "opcode": "0xb8",
+        "text": "invokestatic net.portswigger.Zo6.Zm(Ljava/lang/Throwable;Lnet/portswigger/Zar;)V"
+      },
+      {
+        "len": 3,
+        "offset": "03f2",
+        "opcode": "0x84",
+        "text": "iinc 15, 1"
+      },
+      {
+        "len": 1,
+        "offset": "03f5",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "03f6",
+        "opcode": "0xc7",
+        "text": "ifnonnull 950"
+      },
+      {
+        "len": 2,
+        "offset": "03f9",
+        "opcode": "0x19",
+        "text": "aload 14"
+      },
+      {
+        "len": 3,
+        "offset": "03fb",
+        "opcode": "0xb6",
+        "text": "invokevirtual java.io.ByteArrayOutputStream.toByteArray()[B"
+      },
+      {
+        "len": 2,
+        "offset": "03fe",
+        "opcode": "0x3a",
+        "text": "astore 15"
+      },
+      {
+        "len": 2,
+        "offset": "0400",
+        "opcode": "0x15",
+        "text": "iload 6"
+      },
+      {
+        "len": 3,
+        "offset": "0402",
+        "opcode": "0x9a",
+        "text": "ifne 1041"
+      },
+      {
+        "len": 2,
+        "offset": "0405",
+        "opcode": "0x19",
+        "text": "aload 15"
+      },
+      {
+        "len": 3,
+        "offset": "0407",
+        "opcode": "0xb8",
+        "text": "invokestatic net.portswigger.Zru.Zz([B)V"
+      },
+      {
+        "len": 3,
+        "offset": "040a",
+        "opcode": "0xa7",
+        "text": "goto 1041"
+      },
+      {
+        "len": 3,
+        "offset": "040d",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;"
+      },
+      {
+        "len": 1,
+        "offset": "0410",
+        "opcode": "0xbf",
+        "text": "athrow"
+      },
+      {
+        "len": 2,
+        "offset": "0411",
+        "opcode": "0x19",
+        "text": "aload 15"
+      },
+      {
+        "len": 3,
+        "offset": "0413",
+        "opcode": "0xb8",
+        "text": "invokestatic net.portswigger.Zhs.ZA([B)Ljava/lang/String;"
+      },
+      {
+        "len": 2,
+        "offset": "0416",
+        "opcode": "0x3a",
+        "text": "astore 16"
+      },
+      {
+        "len": 2,
+        "offset": "0418",
+        "opcode": "0x19",
+        "text": "aload 8"
+      },
+      {
+        "len": 2,
+        "offset": "041a",
+        "opcode": "0x19",
+        "text": "aload 16"
+      },
+      {
+        "len": 5,
+        "offset": "041c",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.List.contains(Ljava/lang/Object;)Z"
+      },
+      {
+        "len": 3,
+        "offset": "0421",
+        "opcode": "0x9a",
+        "text": "ifne 1080"
+      },
+      {
+        "len": 2,
+        "offset": "0424",
+        "opcode": "0x19",
+        "text": "aload 8"
+      },
+      {
+        "len": 2,
+        "offset": "0426",
+        "opcode": "0x19",
+        "text": "aload 16"
+      },
+      {
+        "len": 5,
+        "offset": "0428",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.List.add(Ljava/lang/Object;)Z"
+      },
+      {
+        "len": 1,
+        "offset": "042d",
+        "opcode": "0x57",
+        "text": "pop"
+      },
+      {
+        "len": 3,
+        "offset": "042e",
+        "opcode": "0x84",
+        "text": "iinc 9, 1"
+      },
+      {
+        "len": 3,
+        "offset": "0431",
+        "opcode": "0xa7",
+        "text": "goto 1080"
+      },
+      {
+        "len": 3,
+        "offset": "0434",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;"
+      },
+      {
+        "len": 1,
+        "offset": "0437",
+        "opcode": "0xbf",
+        "text": "athrow"
+      },
+      {
+        "len": 2,
+        "offset": "0438",
+        "opcode": "0x19",
+        "text": "aload 12"
+      },
+      {
+        "len": 2,
+        "offset": "043a",
+        "opcode": "0x19",
+        "text": "aload 12"
+      },
+      {
+        "len": 1,
+        "offset": "043c",
+        "opcode": "0xbe",
+        "text": "arraylength"
+      },
+      {
+        "len": 1,
+        "offset": "043d",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 1,
+        "offset": "043e",
+        "opcode": "0x64",
+        "text": "isub"
+      },
+      {
+        "len": 1,
+        "offset": "043f",
+        "opcode": "0x5c",
+        "text": "dup2"
+      },
+      {
+        "len": 1,
+        "offset": "0440",
+        "opcode": "0x2e",
+        "text": "iaload"
+      },
+      {
+        "len": 1,
+        "offset": "0441",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 1,
+        "offset": "0442",
+        "opcode": "0x60",
+        "text": "iadd"
+      },
+      {
+        "len": 1,
+        "offset": "0443",
+        "opcode": "0x4f",
+        "text": "iastore"
+      },
+      {
+        "len": 2,
+        "offset": "0444",
+        "opcode": "0x19",
+        "text": "aload 12"
+      },
+      {
+        "len": 1,
+        "offset": "0446",
+        "opcode": "0xbe",
+        "text": "arraylength"
+      },
+      {
+        "len": 1,
+        "offset": "0447",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 1,
+        "offset": "0448",
+        "opcode": "0x64",
+        "text": "isub"
+      },
+      {
+        "len": 2,
+        "offset": "0449",
+        "opcode": "0x36",
+        "text": "istore 17"
+      },
+      {
+        "len": 2,
+        "offset": "044b",
+        "opcode": "0x15",
+        "text": "iload 17"
+      },
+      {
+        "len": 3,
+        "offset": "044d",
+        "opcode": "0x9e",
+        "text": "ifle 1153"
+      },
+      {
+        "len": 2,
+        "offset": "0450",
+        "opcode": "0x19",
+        "text": "aload 12"
+      },
+      {
+        "len": 2,
+        "offset": "0452",
+        "opcode": "0x15",
+        "text": "iload 17"
+      },
+      {
+        "len": 1,
+        "offset": "0454",
+        "opcode": "0x2e",
+        "text": "iaload"
+      },
+      {
+        "len": 3,
+        "offset": "0455",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zccv.Zk:byte[][][]"
+      },
+      {
+        "len": 2,
+        "offset": "0458",
+        "opcode": "0x19",
+        "text": "aload 13"
+      },
+      {
+        "len": 2,
+        "offset": "045a",
+        "opcode": "0x15",
+        "text": "iload 17"
+      },
+      {
+        "len": 1,
+        "offset": "045c",
+        "opcode": "0x2e",
+        "text": "iaload"
+      },
+      {
+        "len": 1,
+        "offset": "045d",
+        "opcode": "0x32",
+        "text": "aaload"
+      },
+      {
+        "len": 1,
+        "offset": "045e",
+        "opcode": "0xbe",
+        "text": "arraylength"
+      },
+      {
+        "len": 3,
+        "offset": "045f",
+        "opcode": "0xa1",
+        "text": "if_icmplt 1146"
+      },
+      {
+        "len": 2,
+        "offset": "0462",
+        "opcode": "0x19",
+        "text": "aload 12"
+      },
+      {
+        "len": 2,
+        "offset": "0464",
+        "opcode": "0x15",
+        "text": "iload 17"
+      },
+      {
+        "len": 1,
+        "offset": "0466",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 1,
+        "offset": "0467",
+        "opcode": "0x4f",
+        "text": "iastore"
+      },
+      {
+        "len": 2,
+        "offset": "0468",
+        "opcode": "0x19",
+        "text": "aload 12"
+      },
+      {
+        "len": 2,
+        "offset": "046a",
+        "opcode": "0x15",
+        "text": "iload 17"
+      },
+      {
+        "len": 1,
+        "offset": "046c",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 1,
+        "offset": "046d",
+        "opcode": "0x64",
+        "text": "isub"
+      },
+      {
+        "len": 1,
+        "offset": "046e",
+        "opcode": "0x5c",
+        "text": "dup2"
+      },
+      {
+        "len": 1,
+        "offset": "046f",
+        "opcode": "0x2e",
+        "text": "iaload"
+      },
+      {
+        "len": 1,
+        "offset": "0470",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 1,
+        "offset": "0471",
+        "opcode": "0x60",
+        "text": "iadd"
+      },
+      {
+        "len": 1,
+        "offset": "0472",
+        "opcode": "0x4f",
+        "text": "iastore"
+      },
+      {
+        "len": 3,
+        "offset": "0473",
+        "opcode": "0xa7",
+        "text": "goto 1146"
+      },
+      {
+        "len": 3,
+        "offset": "0476",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;"
+      },
+      {
+        "len": 1,
+        "offset": "0479",
+        "opcode": "0xbf",
+        "text": "athrow"
+      },
+      {
+        "len": 3,
+        "offset": "047a",
+        "opcode": "0x84",
+        "text": "iinc 17, -1"
+      },
+      {
+        "len": 1,
+        "offset": "047d",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "047e",
+        "opcode": "0xc7",
+        "text": "ifnonnull 1099"
+      },
+      {
+        "len": 1,
+        "offset": "0481",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "0482",
+        "opcode": "0xc7",
+        "text": "ifnonnull 898"
+      },
+      {
+        "len": 1,
+        "offset": "0485",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "0486",
+        "opcode": "0xc7",
+        "text": "ifnonnull 1430"
+      },
+      {
+        "len": 1,
+        "offset": "0489",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 2,
+        "offset": "048a",
+        "opcode": "0x36",
+        "text": "istore 12"
+      },
+      {
+        "len": 2,
+        "offset": "048c",
+        "opcode": "0x15",
+        "text": "iload 12"
+      },
+      {
+        "len": 2,
+        "offset": "048e",
+        "opcode": "0x19",
+        "text": "aload 11"
+      },
+      {
+        "len": 1,
+        "offset": "0490",
+        "opcode": "0xbe",
+        "text": "arraylength"
+      },
+      {
+        "len": 3,
+        "offset": "0491",
+        "opcode": "0xa2",
+        "text": "if_icmpge 1430"
+      },
+      {
+        "len": 2,
+        "offset": "0494",
+        "opcode": "0x19",
+        "text": "aload 11"
+      },
+      {
+        "len": 2,
+        "offset": "0496",
+        "opcode": "0x15",
+        "text": "iload 12"
+      },
+      {
+        "len": 1,
+        "offset": "0498",
+        "opcode": "0x33",
+        "text": "baload"
+      },
+      {
+        "len": 2,
+        "offset": "0499",
+        "opcode": "0x36",
+        "text": "istore 13"
+      },
+      {
+        "len": 2,
+        "offset": "049b",
+        "opcode": "0x15",
+        "text": "iload 13"
+      },
+      {
+        "len": 3,
+        "offset": "049d",
+        "opcode": "0x9c",
+        "text": "ifge 1197"
+      },
+      {
+        "len": 6,
+        "offset": "04a0",
+        "opcode": "0x84",
+        "text": "iinc 13, 256"
+      },
+      {
+        "len": 3,
+        "offset": "04a6",
+        "opcode": "0xa7",
+        "text": "goto 1197"
+      },
+      {
+        "len": 3,
+        "offset": "04a9",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;"
+      },
+      {
+        "len": 1,
+        "offset": "04ac",
+        "opcode": "0xbf",
+        "text": "athrow"
+      },
+      {
+        "len": 1,
+        "offset": "04ad",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 2,
+        "offset": "04ae",
+        "opcode": "0x36",
+        "text": "istore 14"
+      },
+      {
+        "len": 2,
+        "offset": "04b0",
+        "opcode": "0x15",
+        "text": "iload 14"
+      },
+      {
+        "len": 3,
+        "offset": "04b2",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zccv.Zk:byte[][][]"
+      },
+      {
+        "len": 2,
+        "offset": "04b5",
+        "opcode": "0x15",
+        "text": "iload 13"
+      },
+      {
+        "len": 1,
+        "offset": "04b7",
+        "opcode": "0x32",
+        "text": "aaload"
+      },
+      {
+        "len": 1,
+        "offset": "04b8",
+        "opcode": "0xbe",
+        "text": "arraylength"
+      },
+      {
+        "len": 3,
+        "offset": "04b9",
+        "opcode": "0xa2",
+        "text": "if_icmpge 1423"
+      },
+      {
+        "len": 2,
+        "offset": "04bc",
+        "opcode": "0x15",
+        "text": "iload 9"
+      },
+      {
+        "len": 1,
+        "offset": "04be",
+        "opcode": "0x1c",
+        "text": "iload_2"
+      },
+      {
+        "len": 3,
+        "offset": "04bf",
+        "opcode": "0xa1",
+        "text": "if_icmplt 1236"
+      },
+      {
+        "len": 1,
+        "offset": "04c2",
+        "opcode": "0x1c",
+        "text": "iload_2"
+      },
+      {
+        "len": 3,
+        "offset": "04c3",
+        "opcode": "0x99",
+        "text": "ifeq 1236"
+      },
+      {
+        "len": 3,
+        "offset": "04c6",
+        "opcode": "0xa7",
+        "text": "goto 1229"
+      },
+      {
+        "len": 3,
+        "offset": "04c9",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;"
+      },
+      {
+        "len": 1,
+        "offset": "04cc",
+        "opcode": "0xbf",
+        "text": "athrow"
+      },
+      {
+        "len": 3,
+        "offset": "04cd",
+        "opcode": "0xa7",
+        "text": "goto 1423"
+      },
+      {
+        "len": 3,
+        "offset": "04d0",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;"
+      },
+      {
+        "len": 1,
+        "offset": "04d3",
+        "opcode": "0xbf",
+        "text": "athrow"
+      },
+      {
+        "len": 3,
+        "offset": "04d4",
+        "opcode": "0xbb",
+        "text": "new java.io.ByteArrayOutputStream"
+      },
+      {
+        "len": 1,
+        "offset": "04d7",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 3,
+        "offset": "04d8",
+        "opcode": "0xb7",
+        "text": "invokespecial java.io.ByteArrayOutputStream.<init>()V"
+      },
+      {
+        "len": 2,
+        "offset": "04db",
+        "opcode": "0x3a",
+        "text": "astore 15"
+      },
+      {
+        "len": 1,
+        "offset": "04dd",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 2,
+        "offset": "04de",
+        "opcode": "0x36",
+        "text": "istore 16"
+      },
+      {
+        "len": 2,
+        "offset": "04e0",
+        "opcode": "0x15",
+        "text": "iload 16"
+      },
+      {
+        "len": 2,
+        "offset": "04e2",
+        "opcode": "0x19",
+        "text": "aload 11"
+      },
+      {
+        "len": 1,
+        "offset": "04e4",
+        "opcode": "0xbe",
+        "text": "arraylength"
+      },
+      {
+        "len": 3,
+        "offset": "04e5",
+        "opcode": "0xa2",
+        "text": "if_icmpge 1353"
+      },
+      {
+        "len": 2,
+        "offset": "04e8",
+        "opcode": "0x15",
+        "text": "iload 5"
+      },
+      {
+        "len": 3,
+        "offset": "04ea",
+        "opcode": "0x99",
+        "text": "ifeq 1275"
+      },
+      {
+        "len": 2,
+        "offset": "04ed",
+        "opcode": "0x19",
+        "text": "aload 15"
+      },
+      {
+        "len": 2,
+        "offset": "04ef",
+        "opcode": "0x10",
+        "text": "bipush 37"
+      },
+      {
+        "len": 3,
+        "offset": "04f1",
+        "opcode": "0xb6",
+        "text": "invokevirtual java.io.ByteArrayOutputStream.write(I)V"
+      },
+      {
+        "len": 3,
+        "offset": "04f4",
+        "opcode": "0xa7",
+        "text": "goto 1275"
+      },
+      {
+        "len": 3,
+        "offset": "04f7",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;"
+      },
+      {
+        "len": 1,
+        "offset": "04fa",
+        "opcode": "0xbf",
+        "text": "athrow"
+      },
+      {
+        "len": 2,
+        "offset": "04fb",
+        "opcode": "0x15",
+        "text": "iload 16"
+      },
+      {
+        "len": 2,
+        "offset": "04fd",
+        "opcode": "0x15",
+        "text": "iload 12"
+      },
+      {
+        "len": 3,
+        "offset": "04ff",
+        "opcode": "0xa0",
+        "text": "if_icmpne 1307"
+      },
+      {
+        "len": 2,
+        "offset": "0502",
+        "opcode": "0x19",
+        "text": "aload 15"
+      },
+      {
+        "len": 3,
+        "offset": "0504",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zccv.Zk:byte[][][]"
+      },
+      {
+        "len": 2,
+        "offset": "0507",
+        "opcode": "0x15",
+        "text": "iload 13"
+      },
+      {
+        "len": 1,
+        "offset": "0509",
+        "opcode": "0x32",
+        "text": "aaload"
+      },
+      {
+        "len": 2,
+        "offset": "050a",
+        "opcode": "0x15",
+        "text": "iload 14"
+      },
+      {
+        "len": 1,
+        "offset": "050c",
+        "opcode": "0x32",
+        "text": "aaload"
+      },
+      {
+        "len": 3,
+        "offset": "050d",
+        "opcode": "0xb6",
+        "text": "invokevirtual java.io.ByteArrayOutputStream.write([B)V"
+      },
+      {
+        "len": 1,
+        "offset": "0510",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "0511",
+        "opcode": "0xc7",
+        "text": "ifnonnull 1333"
+      },
+      {
+        "len": 3,
+        "offset": "0514",
+        "opcode": "0xa7",
+        "text": "goto 1307"
+      },
+      {
+        "len": 3,
+        "offset": "0517",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;"
+      },
+      {
+        "len": 1,
+        "offset": "051a",
+        "opcode": "0xbf",
+        "text": "athrow"
+      },
+      {
+        "len": 2,
+        "offset": "051b",
+        "opcode": "0x19",
+        "text": "aload 15"
+      },
+      {
+        "len": 1,
+        "offset": "051d",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 2,
+        "offset": "051e",
+        "opcode": "0xbc",
+        "text": "newarray byte"
+      },
+      {
+        "len": 1,
+        "offset": "0520",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "0521",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 2,
+        "offset": "0522",
+        "opcode": "0x19",
+        "text": "aload 11"
+      },
+      {
+        "len": 2,
+        "offset": "0524",
+        "opcode": "0x15",
+        "text": "iload 16"
+      },
+      {
+        "len": 1,
+        "offset": "0526",
+        "opcode": "0x33",
+        "text": "baload"
+      },
+      {
+        "len": 1,
+        "offset": "0527",
+        "opcode": "0x54",
+        "text": "bastore"
+      },
+      {
+        "len": 3,
+        "offset": "0528",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zpwf.Zv([B)[B"
+      },
+      {
+        "len": 3,
+        "offset": "052b",
+        "opcode": "0xb6",
+        "text": "invokevirtual java.io.ByteArrayOutputStream.write([B)V"
+      },
+      {
+        "len": 3,
+        "offset": "052e",
+        "opcode": "0xa7",
+        "text": "goto 1333"
+      },
+      {
+        "len": 3,
+        "offset": "0531",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;"
+      },
+      {
+        "len": 1,
+        "offset": "0534",
+        "opcode": "0xbf",
+        "text": "athrow"
+      },
+      {
+        "len": 3,
+        "offset": "0535",
+        "opcode": "0xa7",
+        "text": "goto 1346"
+      },
+      {
+        "len": 2,
+        "offset": "0538",
+        "opcode": "0x3a",
+        "text": "astore 17"
+      },
+      {
+        "len": 2,
+        "offset": "053a",
+        "opcode": "0x19",
+        "text": "aload 17"
+      },
+      {
+        "len": 3,
+        "offset": "053c",
+        "opcode": "0xb2",
+        "text": "getstatic net.portswigger.Zar.IMPOSSIBLE:net.portswigger.Zar"
+      },
+      {
+        "len": 3,
+        "offset": "053f",
+        "opcode": "0xb8",
+        "text": "invokestatic net.portswigger.Zo6.Zm(Ljava/lang/Throwable;Lnet/portswigger/Zar;)V"
+      },
+      {
+        "len": 3,
+        "offset": "0542",
+        "opcode": "0x84",
+        "text": "iinc 16, 1"
+      },
+      {
+        "len": 1,
+        "offset": "0545",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "0546",
+        "opcode": "0xc7",
+        "text": "ifnonnull 1248"
+      },
+      {
+        "len": 2,
+        "offset": "0549",
+        "opcode": "0x19",
+        "text": "aload 15"
+      },
+      {
+        "len": 3,
+        "offset": "054b",
+        "opcode": "0xb6",
+        "text": "invokevirtual java.io.ByteArrayOutputStream.toByteArray()[B"
+      },
+      {
+        "len": 2,
+        "offset": "054e",
+        "opcode": "0x3a",
+        "text": "astore 16"
+      },
+      {
+        "len": 2,
+        "offset": "0550",
+        "opcode": "0x15",
+        "text": "iload 6"
+      },
+      {
+        "len": 3,
+        "offset": "0552",
+        "opcode": "0x9a",
+        "text": "ifne 1377"
+      },
+      {
+        "len": 2,
+        "offset": "0555",
+        "opcode": "0x19",
+        "text": "aload 16"
+      },
+      {
+        "len": 3,
+        "offset": "0557",
+        "opcode": "0xb8",
+        "text": "invokestatic net.portswigger.Zru.Zz([B)V"
+      },
+      {
+        "len": 3,
+        "offset": "055a",
+        "opcode": "0xa7",
+        "text": "goto 1377"
+      },
+      {
+        "len": 3,
+        "offset": "055d",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;"
+      },
+      {
+        "len": 1,
+        "offset": "0560",
+        "opcode": "0xbf",
+        "text": "athrow"
+      },
+      {
+        "len": 2,
+        "offset": "0561",
+        "opcode": "0x19",
+        "text": "aload 16"
+      },
+      {
+        "len": 3,
+        "offset": "0563",
+        "opcode": "0xb8",
+        "text": "invokestatic net.portswigger.Zhs.ZA([B)Ljava/lang/String;"
+      },
+      {
+        "len": 2,
+        "offset": "0566",
+        "opcode": "0x3a",
+        "text": "astore 17"
+      },
+      {
+        "len": 2,
+        "offset": "0568",
+        "opcode": "0x19",
+        "text": "aload 8"
+      },
+      {
+        "len": 2,
+        "offset": "056a",
+        "opcode": "0x19",
+        "text": "aload 17"
+      },
+      {
+        "len": 5,
+        "offset": "056c",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.List.contains(Ljava/lang/Object;)Z"
+      },
+      {
+        "len": 3,
+        "offset": "0571",
+        "opcode": "0x9a",
+        "text": "ifne 1416"
+      },
+      {
+        "len": 2,
+        "offset": "0574",
+        "opcode": "0x19",
+        "text": "aload 8"
+      },
+      {
+        "len": 2,
+        "offset": "0576",
+        "opcode": "0x19",
+        "text": "aload 17"
+      },
+      {
+        "len": 5,
+        "offset": "0578",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.List.add(Ljava/lang/Object;)Z"
+      },
+      {
+        "len": 1,
+        "offset": "057d",
+        "opcode": "0x57",
+        "text": "pop"
+      },
+      {
+        "len": 3,
+        "offset": "057e",
+        "opcode": "0x84",
+        "text": "iinc 9, 1"
+      },
+      {
+        "len": 3,
+        "offset": "0581",
+        "opcode": "0xa7",
+        "text": "goto 1416"
+      },
+      {
+        "len": 3,
+        "offset": "0584",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;"
+      },
+      {
+        "len": 1,
+        "offset": "0587",
+        "opcode": "0xbf",
+        "text": "athrow"
+      },
+      {
+        "len": 3,
+        "offset": "0588",
+        "opcode": "0x84",
+        "text": "iinc 14, 1"
+      },
+      {
+        "len": 1,
+        "offset": "058b",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "058c",
+        "opcode": "0xc7",
+        "text": "ifnonnull 1200"
+      },
+      {
+        "len": 3,
+        "offset": "058f",
+        "opcode": "0x84",
+        "text": "iinc 12, 1"
+      },
+      {
+        "len": 1,
+        "offset": "0592",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "0593",
+        "opcode": "0xc7",
+        "text": "ifnonnull 1164"
+      },
+      {
+        "len": 1,
+        "offset": "0596",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "0597",
+        "opcode": "0xc7",
+        "text": "ifnonnull 799"
+      },
+      {
+        "len": 1,
+        "offset": "059a",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "059b",
+        "opcode": "0xc7",
+        "text": "ifnonnull 1650"
+      },
+      {
+        "len": 2,
+        "offset": "059e",
+        "opcode": "0x19",
+        "text": "aload 7"
+      },
+      {
+        "len": 5,
+        "offset": "05a0",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.List.iterator()Ljava/util/Iterator;"
+      },
+      {
+        "len": 2,
+        "offset": "05a5",
+        "opcode": "0x3a",
+        "text": "astore 10"
+      },
+      {
+        "len": 2,
+        "offset": "05a7",
+        "opcode": "0x19",
+        "text": "aload 10"
+      },
+      {
+        "len": 5,
+        "offset": "05a9",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.Iterator.hasNext()Z"
+      },
+      {
+        "len": 3,
+        "offset": "05ae",
+        "opcode": "0x99",
+        "text": "ifeq 1650"
+      },
+      {
+        "len": 2,
+        "offset": "05b1",
+        "opcode": "0x19",
+        "text": "aload 10"
+      },
+      {
+        "len": 5,
+        "offset": "05b3",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.Iterator.next()Ljava/lang/Object;"
+      },
+      {
+        "len": 3,
+        "offset": "05b8",
+        "opcode": "0xc0",
+        "text": "checkcast byte[]"
+      },
+      {
+        "len": 2,
+        "offset": "05bb",
+        "opcode": "0x3a",
+        "text": "astore 11"
+      },
+      {
+        "len": 2,
+        "offset": "05bd",
+        "opcode": "0x15",
+        "text": "iload 9"
+      },
+      {
+        "len": 1,
+        "offset": "05bf",
+        "opcode": "0x1c",
+        "text": "iload_2"
+      },
+      {
+        "len": 3,
+        "offset": "05c0",
+        "opcode": "0xa1",
+        "text": "if_icmplt 1493"
+      },
+      {
+        "len": 1,
+        "offset": "05c3",
+        "opcode": "0x1c",
+        "text": "iload_2"
+      },
+      {
+        "len": 3,
+        "offset": "05c4",
+        "opcode": "0x99",
+        "text": "ifeq 1493"
+      },
+      {
+        "len": 3,
+        "offset": "05c7",
+        "opcode": "0xa7",
+        "text": "goto 1486"
+      },
+      {
+        "len": 3,
+        "offset": "05ca",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;"
+      },
+      {
+        "len": 1,
+        "offset": "05cd",
+        "opcode": "0xbf",
+        "text": "athrow"
+      },
+      {
+        "len": 3,
+        "offset": "05ce",
+        "opcode": "0xa7",
+        "text": "goto 1650"
+      },
+      {
+        "len": 3,
+        "offset": "05d1",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;"
+      },
+      {
+        "len": 1,
+        "offset": "05d4",
+        "opcode": "0xbf",
+        "text": "athrow"
+      },
+      {
+        "len": 3,
+        "offset": "05d5",
+        "opcode": "0xbb",
+        "text": "new java.io.ByteArrayOutputStream"
+      },
+      {
+        "len": 1,
+        "offset": "05d8",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 3,
+        "offset": "05d9",
+        "opcode": "0xb7",
+        "text": "invokespecial java.io.ByteArrayOutputStream.<init>()V"
+      },
+      {
+        "len": 2,
+        "offset": "05dc",
+        "opcode": "0x3a",
+        "text": "astore 12"
+      },
+      {
+        "len": 2,
+        "offset": "05de",
+        "opcode": "0x19",
+        "text": "aload 11"
+      },
+      {
+        "len": 2,
+        "offset": "05e0",
+        "opcode": "0x3a",
+        "text": "astore 13"
+      },
+      {
+        "len": 2,
+        "offset": "05e2",
+        "opcode": "0x19",
+        "text": "aload 13"
+      },
+      {
+        "len": 1,
+        "offset": "05e4",
+        "opcode": "0xbe",
+        "text": "arraylength"
+      },
+      {
+        "len": 2,
+        "offset": "05e5",
+        "opcode": "0x36",
+        "text": "istore 14"
+      },
+      {
+        "len": 1,
+        "offset": "05e7",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 2,
+        "offset": "05e8",
+        "opcode": "0x36",
+        "text": "istore 15"
+      },
+      {
+        "len": 2,
+        "offset": "05ea",
+        "opcode": "0x15",
+        "text": "iload 15"
+      },
+      {
+        "len": 2,
+        "offset": "05ec",
+        "opcode": "0x15",
+        "text": "iload 14"
+      },
+      {
+        "len": 3,
+        "offset": "05ee",
+        "opcode": "0xa2",
+        "text": "if_icmpge 1583"
+      },
+      {
+        "len": 2,
+        "offset": "05f1",
+        "opcode": "0x19",
+        "text": "aload 13"
+      },
+      {
+        "len": 2,
+        "offset": "05f3",
+        "opcode": "0x15",
+        "text": "iload 15"
+      },
+      {
+        "len": 1,
+        "offset": "05f5",
+        "opcode": "0x33",
+        "text": "baload"
+      },
+      {
+        "len": 2,
+        "offset": "05f6",
+        "opcode": "0x36",
+        "text": "istore 16"
+      },
+      {
+        "len": 2,
+        "offset": "05f8",
+        "opcode": "0x15",
+        "text": "iload 5"
+      },
+      {
+        "len": 3,
+        "offset": "05fa",
+        "opcode": "0x99",
+        "text": "ifeq 1547"
+      },
+      {
+        "len": 2,
+        "offset": "05fd",
+        "opcode": "0x19",
+        "text": "aload 12"
+      },
+      {
+        "len": 2,
+        "offset": "05ff",
+        "opcode": "0x10",
+        "text": "bipush 37"
+      },
+      {
+        "len": 3,
+        "offset": "0601",
+        "opcode": "0xb6",
+        "text": "invokevirtual java.io.ByteArrayOutputStream.write(I)V"
+      },
+      {
+        "len": 3,
+        "offset": "0604",
+        "opcode": "0xa7",
+        "text": "goto 1547"
+      },
+      {
+        "len": 3,
+        "offset": "0607",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;"
+      },
+      {
+        "len": 1,
+        "offset": "060a",
+        "opcode": "0xbf",
+        "text": "athrow"
+      },
+      {
+        "len": 2,
+        "offset": "060b",
+        "opcode": "0x19",
+        "text": "aload 12"
+      },
+      {
+        "len": 1,
+        "offset": "060d",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 2,
+        "offset": "060e",
+        "opcode": "0xbc",
+        "text": "newarray byte"
+      },
+      {
+        "len": 1,
+        "offset": "0610",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "0611",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 2,
+        "offset": "0612",
+        "opcode": "0x15",
+        "text": "iload 16"
+      },
+      {
+        "len": 1,
+        "offset": "0614",
+        "opcode": "0x54",
+        "text": "bastore"
+      },
+      {
+        "len": 3,
+        "offset": "0615",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zpwf.Zv([B)[B"
+      },
+      {
+        "len": 3,
+        "offset": "0618",
+        "opcode": "0xb6",
+        "text": "invokevirtual java.io.ByteArrayOutputStream.write([B)V"
+      },
+      {
+        "len": 3,
+        "offset": "061b",
+        "opcode": "0xa7",
+        "text": "goto 1576"
+      },
+      {
+        "len": 2,
+        "offset": "061e",
+        "opcode": "0x3a",
+        "text": "astore 17"
+      },
+      {
+        "len": 2,
+        "offset": "0620",
+        "opcode": "0x19",
+        "text": "aload 17"
+      },
+      {
+        "len": 3,
+        "offset": "0622",
+        "opcode": "0xb2",
+        "text": "getstatic net.portswigger.Zar.IMPOSSIBLE:net.portswigger.Zar"
+      },
+      {
+        "len": 3,
+        "offset": "0625",
+        "opcode": "0xb8",
+        "text": "invokestatic net.portswigger.Zo6.Zm(Ljava/lang/Throwable;Lnet/portswigger/Zar;)V"
+      },
+      {
+        "len": 3,
+        "offset": "0628",
+        "opcode": "0x84",
+        "text": "iinc 15, 1"
+      },
+      {
+        "len": 1,
+        "offset": "062b",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "062c",
+        "opcode": "0xc7",
+        "text": "ifnonnull 1514"
+      },
+      {
+        "len": 2,
+        "offset": "062f",
+        "opcode": "0x19",
+        "text": "aload 12"
+      },
+      {
+        "len": 3,
+        "offset": "0631",
+        "opcode": "0xb6",
+        "text": "invokevirtual java.io.ByteArrayOutputStream.toByteArray()[B"
+      },
+      {
+        "len": 2,
+        "offset": "0634",
+        "opcode": "0x3a",
+        "text": "astore 13"
+      },
+      {
+        "len": 2,
+        "offset": "0636",
+        "opcode": "0x15",
+        "text": "iload 6"
+      },
+      {
+        "len": 3,
+        "offset": "0638",
+        "opcode": "0x9a",
+        "text": "ifne 1607"
+      },
+      {
+        "len": 2,
+        "offset": "063b",
+        "opcode": "0x19",
+        "text": "aload 13"
+      },
+      {
+        "len": 3,
+        "offset": "063d",
+        "opcode": "0xb8",
+        "text": "invokestatic net.portswigger.Zru.Zz([B)V"
+      },
+      {
+        "len": 3,
+        "offset": "0640",
+        "opcode": "0xa7",
+        "text": "goto 1607"
+      },
+      {
+        "len": 3,
+        "offset": "0643",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;"
+      },
+      {
+        "len": 1,
+        "offset": "0646",
+        "opcode": "0xbf",
+        "text": "athrow"
+      },
+      {
+        "len": 2,
+        "offset": "0647",
+        "opcode": "0x19",
+        "text": "aload 13"
+      },
+      {
+        "len": 3,
+        "offset": "0649",
+        "opcode": "0xb8",
+        "text": "invokestatic net.portswigger.Zhs.ZA([B)Ljava/lang/String;"
+      },
+      {
+        "len": 2,
+        "offset": "064c",
+        "opcode": "0x3a",
+        "text": "astore 14"
+      },
+      {
+        "len": 2,
+        "offset": "064e",
+        "opcode": "0x19",
+        "text": "aload 8"
+      },
+      {
+        "len": 2,
+        "offset": "0650",
+        "opcode": "0x19",
+        "text": "aload 14"
+      },
+      {
+        "len": 5,
+        "offset": "0652",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.List.contains(Ljava/lang/Object;)Z"
+      },
+      {
+        "len": 3,
+        "offset": "0657",
+        "opcode": "0x9a",
+        "text": "ifne 1646"
+      },
+      {
+        "len": 2,
+        "offset": "065a",
+        "opcode": "0x19",
+        "text": "aload 8"
+      },
+      {
+        "len": 2,
+        "offset": "065c",
+        "opcode": "0x19",
+        "text": "aload 14"
+      },
+      {
+        "len": 5,
+        "offset": "065e",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.List.add(Ljava/lang/Object;)Z"
+      },
+      {
+        "len": 1,
+        "offset": "0663",
+        "opcode": "0x57",
+        "text": "pop"
+      },
+      {
+        "len": 3,
+        "offset": "0664",
+        "opcode": "0x84",
+        "text": "iinc 9, 1"
+      },
+      {
+        "len": 3,
+        "offset": "0667",
+        "opcode": "0xa7",
+        "text": "goto 1646"
+      },
+      {
+        "len": 3,
+        "offset": "066a",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;"
+      },
+      {
+        "len": 1,
+        "offset": "066d",
+        "opcode": "0xbf",
+        "text": "athrow"
+      },
+      {
+        "len": 1,
+        "offset": "066e",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "066f",
+        "opcode": "0xc7",
+        "text": "ifnonnull 1447"
+      },
+      {
+        "len": 2,
+        "offset": "0672",
+        "opcode": "0x19",
+        "text": "aload 8"
+      },
+      {
+        "len": 5,
+        "offset": "0674",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.List.size()I"
+      },
+      {
+        "len": 3,
+        "offset": "0679",
+        "opcode": "0xbd",
+        "text": "anewarray byte[]"
+      },
+      {
+        "len": 2,
+        "offset": "067c",
+        "opcode": "0x3a",
+        "text": "astore 10"
+      },
+      {
+        "len": 1,
+        "offset": "067e",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 2,
+        "offset": "067f",
+        "opcode": "0x36",
+        "text": "istore 11"
+      },
+      {
+        "len": 2,
+        "offset": "0681",
+        "opcode": "0x15",
+        "text": "iload 11"
+      },
+      {
+        "len": 2,
+        "offset": "0683",
+        "opcode": "0x19",
+        "text": "aload 8"
+      },
+      {
+        "len": 5,
+        "offset": "0685",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.List.size()I"
+      },
+      {
+        "len": 3,
+        "offset": "068a",
+        "opcode": "0xa2",
+        "text": "if_icmpge 1704"
+      },
+      {
+        "len": 2,
+        "offset": "068d",
+        "opcode": "0x19",
+        "text": "aload 10"
+      },
+      {
+        "len": 2,
+        "offset": "068f",
+        "opcode": "0x15",
+        "text": "iload 11"
+      },
+      {
+        "len": 2,
+        "offset": "0691",
+        "opcode": "0x19",
+        "text": "aload 8"
+      },
+      {
+        "len": 2,
+        "offset": "0693",
+        "opcode": "0x15",
+        "text": "iload 11"
+      },
+      {
+        "len": 5,
+        "offset": "0695",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.List.get(I)Ljava/lang/Object;"
+      },
+      {
+        "len": 3,
+        "offset": "069a",
+        "opcode": "0xc0",
+        "text": "checkcast java.lang.String"
+      },
+      {
+        "len": 3,
+        "offset": "069d",
+        "opcode": "0xb8",
+        "text": "invokestatic net.portswigger.Zhs.Zq(Ljava/lang/String;)[B"
+      },
+      {
+        "len": 1,
+        "offset": "06a0",
+        "opcode": "0x53",
+        "text": "aastore"
+      },
+      {
+        "len": 3,
+        "offset": "06a1",
+        "opcode": "0x84",
+        "text": "iinc 11, 1"
+      },
+      {
+        "len": 1,
+        "offset": "06a4",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "06a5",
+        "opcode": "0xc7",
+        "text": "ifnonnull 1665"
+      },
+      {
+        "len": 2,
+        "offset": "06a8",
+        "opcode": "0x19",
+        "text": "aload 10"
+      },
+      {
+        "len": 1,
+        "offset": "06aa",
+        "opcode": "0xb0",
+        "text": "areturn"
+      }
+    ],
+    "instructions_total": 847,
+    "listing": "0000: aload_0\n0001: invokeinterface burp.Zr5_.Zr6()I\n0006: istore_2\n0007: aload_0\n0008: invokeinterface burp.Zr5_.Zrz()B\n000d: istore_3\n000e: aload_0\n000f: invokeinterface burp.Zr5_.Zru()B\n0014: istore 4\n0016: aload_0\n0017: invokeinterface burp.Zr5_.Zrx()Z\n001c: istore 5\n001e: invokestatic burp.Zevi.ZK()[Ljava/lang/String;\n0021: aload_0\n0022: invokeinterface burp.Zr5_.ZrF()Z\n0027: istore 6\n0029: new java.util.ArrayList\n002c: dup\n002d: invokespecial java.util.ArrayList.<init>()V\n0030: astore 7\n0032: new java.util.ArrayList\n0035: dup\n0036: invokespecial java.util.ArrayList.<init>()V\n0039: astore 8\n003b: iconst_0\n003c: istore 9\n003e: aload 7\n0040: iconst_1\n0041: newarray byte\n0043: dup\n0044: iconst_0\n0045: iload_3\n0046: bastore\n0047: invokeinterface java.util.List.add(Ljava/lang/Object;)Z\n004c: pop\n004d: astore_1\n004e: iload 4\n0050: iconst_1\n0051: if_icmple 119\n0054: aload 7\n0056: iconst_2\n0057: newarray byte\n0059: dup\n005a: iconst_0\n005b: bipush -64\n005d: bastore\n005e: dup\n005f: iconst_1\n0060: sipush 128\n0063: iload_3\n0064: bipush 63\n0066: iand\n0067: ixor\n0068: i2b\n0069: bastore\n006a: invokeinterface java.util.List.add(Ljava/lang/Object;)Z\n006f: pop\n0070: goto 119\n0073: invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;\n0076: athrow\n0077: iload 4\n0079: iconst_2\n007a: if_icmple 165\n007d: aload 7\n007f: iconst_3\n0080: newarray byte\n0082: dup\n0083: iconst_0\n0084: bipush -32\n0086: bastore\n0087: dup\n0088: iconst_1\n0089: bipush -128\n008b: bastore\n008c: dup\n008d: iconst_2\n008e: sipush 128\n0091: iload_3\n0092: bipush 63\n0094: iand\n0095: ixor\n0096: i2b\n0097: bastore\n0098: invokeinterface java.util.List.add(Ljava/lang/Object;)Z\n009d: pop\n009e: goto 165\n00a1: invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;\n00a4: athrow\n00a5: iload 4\n00a7: iconst_3\n00a8: if_icmple 216\n00ab: aload 7\n00ad: iconst_4\n00ae: newarray byte\n00b0: dup\n00b1: iconst_0\n00b2: bipush -16\n00b4: bastore\n00b5: dup\n00b6: iconst_1\n00b7: bipush -128\n00b9: bastore\n00ba: dup\n00bb: iconst_2\n00bc: bipush -128\n00be: bastore\n00bf: dup\n00c0: iconst_3\n00c1: sipush 128\n00c4: iload_3\n00c5: bipush 63\n00c7: iand\n00c8: ixor\n00c9: i2b\n00ca: bastore\n00cb: invokeinterface java.util.List.add(Ljava/lang/Object;)Z\n00d0: pop\n00d1: goto 216\n00d4: invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;\n00d7: athrow\n00d8: iload 4\n00da: iconst_4\n00db: if_icmple 272\n00de: aload 7\n00e0: iconst_5\n00e1: newarray byte\n00e3: dup\n00e4: iconst_0\n00e5: bipush -8\n00e7: bastore\n00e8: dup\n00e9: iconst_1\n00ea: bipush -128\n00ec: bastore\n00ed: dup\n00ee: iconst_2\n00ef: bipush -128\n00f1: bastore\n00f2: dup\n00f3: iconst_3\n00f4: bipush -128\n00f6: bastore\n00f7: dup\n00f8: iconst_4\n00f9: sipush 128\n00fc: iload_3\n00fd: bipush 63\n00ff: iand\n0100: ixor\n0101: i2b\n0102: bastore\n0103: invokeinterface java.util.List.add(Ljava/lang/Object;)Z\n0108: pop\n0109: goto 272\n010c: invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;\n010f: athrow\n0110: iload 4\n0112: iconst_5\n0113: if_icmple 334\n0116: aload 7\n0118: bipush 6\n011a: newarray byte\n011c: dup\n011d: iconst_0\n011e: bipush -4\n0120: bastore\n0121: dup\n0122: iconst_1\n0123: bipush -128\n0125: bastore\n0126: dup\n0127: iconst_2\n0128: bipush -128\n012a: bastore\n012b: dup\n012c: iconst_3\n012d: bipush -128\n012f: bastore\n0130: dup\n0131: iconst_4\n0132: bipush -128\n0134: bastore\n0135: dup\n0136: iconst_5\n0137: sipush 128\n013a: iload_3\n013b: bipush 63\n013d: iand\n013e: ixor\n013f: i2b\n0140: bastore\n0141: invokeinterface java.util.List.add(Ljava/lang/Object;)Z\n0146: pop\n0147: goto 334\n014a: invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;\n014d: athrow\n014e: aload_0\n014f: invokeinterface burp.Zr5_.ZrA()Z\n0154: ifeq 781\n0157: aload 7\n0159: invokeinterface java.util.List.size()I\n015e: istore 10\n0160: iconst_0\n0161: istore 11\n0163: iload 11\n0165: iload 10\n0167: if_icmpge 781\n016a: aload 7\n016c: iload 11\n016e: invokeinterface java.util.List.get(I)Ljava/lang/Object;\n0173: checkcast byte[]\n0176: astore 12\n0178: aload 12\n017a: arraylength\n017b: iconst_1\n017c: if_icmple 774\n017f: aload_0\n0180: invokeinterface burp.Zr5_.Zri()Z\n0185: ifeq 647\n0188: goto 399\n018b: invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;\n018e: athrow\n018f: aload 12\n0191: arraylength\n0192: iconst_1\n0193: isub\n0194: newarray int\n0196: astore 13\n0198: aload 13\n019a: iconst_0\n019b: iaload\n019c: iconst_4\n019d: if_icmpge 643\n01a0: aload 12\n01a2: invokevirtual byte[].clone()Ljava/lang/Object;\n01a5: checkcast byte[]\n01a8: astore 14\n01aa: iconst_0\n01ab: istore 15\n01ad: iload 15\n01af: aload 13\n01b1: arraylength\n01b2: if_icmpge 565\n01b5: aload 13\n01b7: iload 15\n01b9: iaload\n01ba: tableswitch  # default -> 558; 1 -> 468, 2 -> 497, 3 -> 529\n01d4: aload 14\n01d6: iload 15\n01d8: iconst_1\n01d9: iadd\n01da: aload 14\n01dc: iload 15\n01de: iconst_1\n01df: iadd\n01e0: baload\n01e1: bipush 63\n01e3: iand\n01e4: i2b\n01e5: bastore\n01e6: aload_1\n01e7: ifnonnull 558\n01ea: goto 497\n01ed: invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;\n01f0: athrow\n01f1: aload 14\n01f3: iload 15\n01f5: iconst_1\n01f6: iadd\n01f7: aload 14\n01f9: iload 15\n01fb: iconst_1\n01fc: iadd\n01fd: baload\n01fe: bipush 63\n0200: iand\n0201: bipush 64\n0203: ixor\n0204: i2b\n0205: bastore\n0206: aload_1\n0207: ifnonnull 558\n020a: goto 529\n020d: invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;\n0210: athrow\n0211: aload 14\n0213: iload 15\n0215: iconst_1\n0216: iadd\n0217: aload 14\n0219: iload 15\n021b: iconst_1\n021c: iadd\n021d: baload\n021e: bipush 63\n0220: iand\n0221: sipush 192\n0224: ixor\n0225: i2b\n0226: bastore\n0227: goto 558\n022a: invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;\n022d: athrow\n022e: iinc 15, 1\n0231: aload_1\n0232: ifnonnull 429\n0235: aload 7\n0237: aload 14\n0239: invokeinterface java.util.List.add(Ljava/lang/Object;)Z\n023e: pop\n023f: aload 13\n0241: aload 13\n0243: arraylength\n0244: iconst_1\n0245: isub\n0246: dup2\n0247: iaload\n0248: iconst_1\n0249: iadd\n024a: iastore\n024b: aload 13\n024d: arraylength\n024e: iconst_1\n024f: isub\n0250: istore 15\n0252: iload 15\n0254: ifle 639\n0257: aload 13\n0259: iload 15\n025b: iaload\n025c: iconst_3\n025d: if_icmple 632\n0260: aload 13\n0262: iload 15\n0264: iconst_0\n0265: iastore\n0266: aload 13\n0268: iload 15\n026a: iconst_1\n026b: isub\n026c: dup2\n026d: iaload\n026e: iconst_1\n026f: iadd\n0270: iastore\n0271: goto 632\n0274: invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;\n0277: athrow\n0278: iinc 15, -1\n027b: aload_1\n027c: ifnonnull 594\n027f: aload_1\n0280: ifnonnull 408\n0283: aload_1\n0284: ifnonnull 774\n0287: iconst_1\n0288: istore 13\n028a: iload 13\n028c: aload 12\n028e: arraylength\n028f: if_icmpge 774\n0292: aload 12\n0294: invokevirtual byte[].clone()Ljava/lang/Object;\n0297: checkcast byte[]\n029a: astore 14\n029c: aload 14\n029e: iload 13\n02a0: aload 14\n02a2: iload 13\n02a4: baload\n02a5: bipush 63\n02a7: iand\n02a8: i2b\n02a9: bastore\n02aa: aload 7\n02ac: aload 14\n02ae: invokeinterface java.util.List.add(Ljava/lang/Object;)Z\n02b3: pop\n02b4: aload 12\n02b6: invokevirtual byte[].clone()Ljava/lang/Object;\n02b9: checkcast byte[]\n02bc: astore 14\n02be: aload 14\n02c0: iload 13\n02c2: aload 14\n02c4: iload 13\n02c6: baload\n02c7: bipush 63\n02c9: iand\n02ca: bipush 64\n02cc: ixor\n02cd: i2b\n02ce: bastore\n02cf: aload 7\n02d1: aload 14\n02d3: invokeinterface java.util.List.add(Ljava/lang/Object;)Z\n02d8: pop\n02d9: aload 12\n02db: invokevirtual byte[].clone()Ljava/lang/Object;\n02de: checkcast byte[]\n02e1: astore 14\n02e3: aload 14\n02e5: iload 13\n02e7: aload 14\n02e9: iload 13\n02eb: baload\n02ec: bipush 63\n02ee: iand\n02ef: sipush 192\n02f2: ixor\n02f3: i2b\n02f4: bastore\n02f5: aload 7\n02f7: aload 14\n02f9: invokeinterface java.util.List.add(Ljava/lang/Object;)Z\n02fe: pop\n02ff: iinc 13, 1\n0302: aload_1\n0303: ifnonnull 650\n0306: iinc 11, 1\n0309: aload_1\n030a: ifnonnull 355\n030d: aload_0\n030e: invokeinterface burp.Zr5_.Zrb()Z\n0313: ifeq 1438\n0316: aload 7\n0318: invokeinterface java.util.List.iterator()Ljava/util/Iterator;\n031d: astore 10\n031f: aload 10\n0321: invokeinterface java.util.Iterator.hasNext()Z\n0326: ifeq 1434\n0329: aload 10\n032b: invokeinterface java.util.Iterator.next()Ljava/lang/Object;\n0330: checkcast byte[]\n0333: astore 11\n0335: aload_0\n0336: invokeinterface burp.Zr5_.ZrC()Z\n033b: ifeq 1161\n033e: aload 11\n0340: arraylength\n0341: newarray int\n0343: astore 12\n0345: aload 11\n0347: arraylength\n0348: newarray int\n034a: astore 13\n034c: iconst_0\n034d: istore 14\n034f: iload 14\n0351: aload 13\n0353: arraylength\n0354: if_icmpge 898\n0357: aload 13\n0359: iload 14\n035b: aload 11\n035d: iload 14\n035f: baload\n0360: iastore\n0361: aload 13\n0363: iload 14\n0365: iaload\n0366: ifge 891\n0369: aload 13\n036b: iload 14\n036d: dup2\n036e: iaload\n036f: sipush 256\n0372: iadd\n0373: iastore\n0374: goto 891\n0377: invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;\n037a: athrow\n037b: iinc 14, 1\n037e: aload_1\n037f: ifnonnull 847\n0382: aload 12\n0384: iconst_0\n0385: iaload\n0386: getstatic burp.Zccv.Zk:byte[][][]\n0389: aload 13\n038b: iconst_0\n038c: iaload\n038d: aaload\n038e: arraylength\n038f: if_icmpge 1157\n0392: iload 9\n0394: iload_2\n0395: if_icmplt 938\n0398: iload_2\n0399: ifeq 938\n039c: goto 931\n039f: invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;\n03a2: athrow\n03a3: goto 1157\n03a6: invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;\n03a9: athrow\n03aa: new java.io.ByteArrayOutputStream\n03ad: dup\n03ae: invokespecial java.io.ByteArrayOutputStream.<init>()V\n03b1: astore 14\n03b3: iconst_0\n03b4: istore 15\n03b6: iload 15\n03b8: aload 11\n03ba: arraylength\n03bb: if_icmpge 1017\n03be: iload 5\n03c0: ifeq 977\n03c3: aload 14\n03c5: bipush 37\n03c7: invokevirtual java.io.ByteArrayOutputStream.write(I)V\n03ca: goto 977\n03cd: invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;\n03d0: athrow\n03d1: aload 14\n03d3: getstatic burp.Zccv.Zk:byte[][][]\n03d6: aload 13\n03d8: iload 15\n03da: iaload\n03db: aaload\n03dc: aload 12\n03de: iload 15\n03e0: iaload\n03e1: aaload\n03e2: invokevirtual java.io.ByteArrayOutputStream.write([B)V\n03e5: goto 1010\n03e8: astore 16\n03ea: aload 16\n03ec: getstatic net.portswigger.Zar.IMPOSSIBLE:net.portswigger.Zar\n03ef: invokestatic net.portswigger.Zo6.Zm(Ljava/lang/Throwable;Lnet/portswigger/Zar;)V\n03f2: iinc 15, 1\n03f5: aload_1\n03f6: ifnonnull 950\n03f9: aload 14\n03fb: invokevirtual java.io.ByteArrayOutputStream.toByteArray()[B\n03fe: astore 15\n0400: iload 6\n0402: ifne 1041\n0405: aload 15\n0407: invokestatic net.portswigger.Zru.Zz([B)V\n040a: goto 1041\n040d: invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;\n0410: athrow\n0411: aload 15\n0413: invokestatic net.portswigger.Zhs.ZA([B)Ljava/lang/String;\n0416: astore 16\n0418: aload 8\n041a: aload 16\n041c: invokeinterface java.util.List.contains(Ljava/lang/Object;)Z\n0421: ifne 1080\n0424: aload 8\n0426: aload 16\n0428: invokeinterface java.util.List.add(Ljava/lang/Object;)Z\n042d: pop\n042e: iinc 9, 1\n0431: goto 1080\n0434: invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;\n0437: athrow\n0438: aload 12\n043a: aload 12\n043c: arraylength\n043d: iconst_1\n043e: isub\n043f: dup2\n0440: iaload\n0441: iconst_1\n0442: iadd\n0443: iastore\n0444: aload 12\n0446: arraylength\n0447: iconst_1\n0448: isub\n0449: istore 17\n044b: iload 17\n044d: ifle 1153\n0450: aload 12\n0452: iload 17\n0454: iaload\n0455: getstatic burp.Zccv.Zk:byte[][][]\n0458: aload 13\n045a: iload 17\n045c: iaload\n045d: aaload\n045e: arraylength\n045f: if_icmplt 1146\n0462: aload 12\n0464: iload 17\n0466: iconst_0\n0467: iastore\n0468: aload 12\n046a: iload 17\n046c: iconst_1\n046d: isub\n046e: dup2\n046f: iaload\n0470: iconst_1\n0471: iadd\n0472: iastore\n0473: goto 1146\n0476: invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;\n0479: athrow\n047a: iinc 17, -1\n047d: aload_1\n047e: ifnonnull 1099\n0481: aload_1\n0482: ifnonnull 898\n0485: aload_1\n0486: ifnonnull 1430\n0489: iconst_0\n048a: istore 12\n048c: iload 12\n048e: aload 11\n0490: arraylength\n0491: if_icmpge 1430\n0494: aload 11\n0496: iload 12\n0498: baload\n0499: istore 13\n049b: iload 13\n049d: ifge 1197\n04a0: iinc 13, 256\n04a6: goto 1197\n04a9: invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;\n04ac: athrow\n04ad: iconst_0\n04ae: istore 14\n04b0: iload 14\n04b2: getstatic burp.Zccv.Zk:byte[][][]\n04b5: iload 13\n04b7: aaload\n04b8: arraylength\n04b9: if_icmpge 1423\n04bc: iload 9\n04be: iload_2\n04bf: if_icmplt 1236\n04c2: iload_2\n04c3: ifeq 1236\n04c6: goto 1229\n04c9: invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;\n04cc: athrow\n04cd: goto 1423\n04d0: invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;\n04d3: athrow\n04d4: new java.io.ByteArrayOutputStream\n04d7: dup\n04d8: invokespecial java.io.ByteArrayOutputStream.<init>()V\n04db: astore 15\n04dd: iconst_0\n04de: istore 16\n04e0: iload 16\n04e2: aload 11\n04e4: arraylength\n04e5: if_icmpge 1353\n04e8: iload 5\n04ea: ifeq 1275\n04ed: aload 15\n04ef: bipush 37\n04f1: invokevirtual java.io.ByteArrayOutputStream.write(I)V\n04f4: goto 1275\n04f7: invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;\n04fa: athrow\n04fb: iload 16\n04fd: iload 12\n04ff: if_icmpne 1307\n0502: aload 15\n0504: getstatic burp.Zccv.Zk:byte[][][]\n0507: iload 13\n0509: aaload\n050a: iload 14\n050c: aaload\n050d: invokevirtual java.io.ByteArrayOutputStream.write([B)V\n0510: aload_1\n0511: ifnonnull 1333\n0514: goto 1307\n0517: invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;\n051a: athrow\n051b: aload 15\n051d: iconst_1\n051e: newarray byte\n0520: dup\n0521: iconst_0\n0522: aload 11\n0524: iload 16\n0526: baload\n0527: bastore\n0528: invokestatic burp.Zpwf.Zv([B)[B\n052b: invokevirtual java.io.ByteArrayOutputStream.write([B)V\n052e: goto 1333\n0531: invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;\n0534: athrow\n0535: goto 1346\n0538: astore 17\n053a: aload 17\n053c: getstatic net.portswigger.Zar.IMPOSSIBLE:net.portswigger.Zar\n053f: invokestatic net.portswigger.Zo6.Zm(Ljava/lang/Throwable;Lnet/portswigger/Zar;)V\n0542: iinc 16, 1\n0545: aload_1\n0546: ifnonnull 1248\n0549: aload 15\n054b: invokevirtual java.io.ByteArrayOutputStream.toByteArray()[B\n054e: astore 16\n0550: iload 6\n0552: ifne 1377\n0555: aload 16\n0557: invokestatic net.portswigger.Zru.Zz([B)V\n055a: goto 1377\n055d: invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;\n0560: athrow\n0561: aload 16\n0563: invokestatic net.portswigger.Zhs.ZA([B)Ljava/lang/String;\n0566: astore 17\n0568: aload 8\n056a: aload 17\n056c: invokeinterface java.util.List.contains(Ljava/lang/Object;)Z\n0571: ifne 1416\n0574: aload 8\n0576: aload 17\n0578: invokeinterface java.util.List.add(Ljava/lang/Object;)Z\n057d: pop\n057e: iinc 9, 1\n0581: goto 1416\n0584: invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;\n0587: athrow\n0588: iinc 14, 1\n058b: aload_1\n058c: ifnonnull 1200\n058f: iinc 12, 1\n0592: aload_1\n0593: ifnonnull 1164\n0596: aload_1\n0597: ifnonnull 799\n059a: aload_1\n059b: ifnonnull 1650\n059e: aload 7\n05a0: invokeinterface java.util.List.iterator()Ljava/util/Iterator;\n05a5: astore 10\n05a7: aload 10\n05a9: invokeinterface java.util.Iterator.hasNext()Z\n05ae: ifeq 1650\n05b1: aload 10\n05b3: invokeinterface java.util.Iterator.next()Ljava/lang/Object;\n05b8: checkcast byte[]\n05bb: astore 11\n05bd: iload 9\n05bf: iload_2\n05c0: if_icmplt 1493\n05c3: iload_2\n05c4: ifeq 1493\n05c7: goto 1486\n05ca: invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;\n05cd: athrow\n05ce: goto 1650\n05d1: invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;\n05d4: athrow\n05d5: new java.io.ByteArrayOutputStream\n05d8: dup\n05d9: invokespecial java.io.ByteArrayOutputStream.<init>()V\n05dc: astore 12\n05de: aload 11\n05e0: astore 13\n05e2: aload 13\n05e4: arraylength\n05e5: istore 14\n05e7: iconst_0\n05e8: istore 15\n05ea: iload 15\n05ec: iload 14\n05ee: if_icmpge 1583\n05f1: aload 13\n05f3: iload 15\n05f5: baload\n05f6: istore 16\n05f8: iload 5\n05fa: ifeq 1547\n05fd: aload 12\n05ff: bipush 37\n0601: invokevirtual java.io.ByteArrayOutputStream.write(I)V\n0604: goto 1547\n0607: invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;\n060a: athrow\n060b: aload 12\n060d: iconst_1\n060e: newarray byte\n0610: dup\n0611: iconst_0\n0612: iload 16\n0614: bastore\n0615: invokestatic burp.Zpwf.Zv([B)[B\n0618: invokevirtual java.io.ByteArrayOutputStream.write([B)V\n061b: goto 1576\n061e: astore 17\n0620: aload 17\n0622: getstatic net.portswigger.Zar.IMPOSSIBLE:net.portswigger.Zar\n0625: invokestatic net.portswigger.Zo6.Zm(Ljava/lang/Throwable;Lnet/portswigger/Zar;)V\n0628: iinc 15, 1\n062b: aload_1\n062c: ifnonnull 1514\n062f: aload 12\n0631: invokevirtual java.io.ByteArrayOutputStream.toByteArray()[B\n0634: astore 13\n0636: iload 6\n0638: ifne 1607\n063b: aload 13\n063d: invokestatic net.portswigger.Zru.Zz([B)V\n0640: goto 1607\n0643: invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;\n0646: athrow\n0647: aload 13\n0649: invokestatic net.portswigger.Zhs.ZA([B)Ljava/lang/String;\n064c: astore 14\n064e: aload 8\n0650: aload 14\n0652: invokeinterface java.util.List.contains(Ljava/lang/Object;)Z\n0657: ifne 1646\n065a: aload 8\n065c: aload 14\n065e: invokeinterface java.util.List.add(Ljava/lang/Object;)Z\n0663: pop\n0664: iinc 9, 1\n0667: goto 1646\n066a: invokestatic burp.Zccv.a(Ljava/io/IOException;)Ljava/io/IOException;\n066d: athrow\n066e: aload_1\n066f: ifnonnull 1447\n0672: aload 8\n0674: invokeinterface java.util.List.size()I\n0679: anewarray byte[]\n067c: astore 10\n067e: iconst_0\n067f: istore 11\n0681: iload 11\n0683: aload 8\n0685: invokeinterface java.util.List.size()I\n068a: if_icmpge 1704\n068d: aload 10\n068f: iload 11\n0691: aload 8\n0693: iload 11\n0695: invokeinterface java.util.List.get(I)Ljava/lang/Object;\n069a: checkcast java.lang.String\n069d: invokestatic net.portswigger.Zhs.Zq(Ljava/lang/String;)[B\n06a0: aastore\n06a1: iinc 11, 1\n06a4: aload_1\n06a5: ifnonnull 1665\n06a8: aload 10\n06aa: areturn",
+    "max_locals": 18,
+    "max_stack": 7,
+    "method": "burp.Zccv.ZM(Lburp/Zr5_;)[[B",
+    "overloads": [
+      "(Lburp/Zr5_;)[[B"
+    ],
+    "pseudo_java": {
+      "code": "private static byte[][] ZM(burp.Zr5_) {\n    // 33 exception handler(s) in the table; try/catch structure not reconstructed here.\n    v2 = v0.Zr6();\n    v3 = v0.Zrz();\n    v4 = v0.Zru();\n    v5 = v0.Zrx();\n    v6 = v0.ZrF();\n    v7 = new ArrayList();\n    v8 = new ArrayList();\n    v9 = 0;\n    new byte[1][0] = v3;\n    v7.add(new byte[1]);\n    v1 = Zevi.ZK();\n    if (v4 > 1) {\n        new byte[2][0] = -64;\n        new byte[2][1] = (byte) (128 ^ (v3 & 63));\n        v7.add(new byte[2]);\n        goto L7a;\n        throw Zccv.a(?);\n    }\n    L7a:\n    if (v4 > 2) {\n        new byte[3][0] = -32;\n        new byte[3][1] = -128;\n        new byte[3][2] = (byte) (128 ^ (v3 & 63));\n        v7.add(new byte[3]);\n        goto La8;\n        throw Zccv.a(?);\n    }\n    La8:\n    if (v4 > 3) {\n        new byte[4][0] = -16;\n        new byte[4][1] = -128;\n        new byte[4][2] = -128;\n        new byte[4][3] = (byte) (128 ^ (v3 & 63));\n        v7.add(new byte[4]);\n        goto Ldb;\n        throw Zccv.a(?);\n    }\n    Ldb:\n    if (v4 > 4) {\n        new byte[5][0] = -8;\n        new byte[5][1] = -128;\n        new byte[5][2] = -128;\n        new byte[5][3] = -128;\n        new byte[5][4] = (byte) (128 ^ (v3 & 63));\n        v7.add(new byte[5]);\n        goto L113;\n        throw Zccv.a(?);\n    }\n    L113:\n    if (v4 > 5) {\n        new byte[6][0] = -4;\n        new byte[6][1] = -128;\n        new byte[6][2] = -128;\n        new byte[6][3] = -128;\n        new byte[6][4] = -128;\n        new byte[6][5] = (byte) (128 ^ (v3 & 63));\n        v7.add(new byte[6]);\n        goto L154;\n        throw Zccv.a(?);\n    }\n    L154:\n    if (v0.ZrA() != 0) {\n        v10 = v7.size();\n        v11 = 0;\n        if (v11 < v10) {\n            v12 = (byte[]) v7.get(v11);\n            if (v12.length > 1) {\n                if (v0.Zri() != 0) {\n                    goto L196;\n                    throw Zccv.a(?);\n                    L196:\n                    v13 = new int[(v12.length - 1)];\n                    if (v13[0] < 4) {\n                        v14 = (byte[]) v12.clone();\n                        v15 = 0;\n                        if (v15 < v13.length) {\n                            switch (v13[v15]) {\n                                case 1: goto L1e5;\n                                case 2: goto L205;\n                                case 3: goto L226;\n                                default: goto L22e;\n                            }\n                            L1e5:\n                            v14[(v15 + 1)] = (byte) (v14[(v15 + 1)] & 63);\n                            if (v1 == null) {\n                                goto L205;\n                                throw Zccv.a(?);\n                                L205:\n                                v14[(v15 + 1)] = (byte) ((v14[(v15 + 1)] & 63) ^ 64);\n                                if (v1 == null) {\n                                    goto L226;\n                                    throw Zccv.a(?);\n                                    L226:\n                                    v14[(v15 + 1)] = (byte) ((v14[(v15 + 1)] & 63) ^ 192);\n                                    goto L22e;\n                                    throw Zccv.a(?);\n                                }\n                            }\n                            L22e:\n                            v15 += 1;\n                            if (v1 != null) goto L1b2;\n                        }\n                        v7.add(v14);\n                        ?[?] = (v13[(v13.length - 1)] + 1);\n                        v15 = (v13.length - 1);\n                        if (v15 > 0) {\n                            if (v13[v15] > 3) {\n                                v13[v15] = 0;\n                                ?[?] = (v13[(v15 - 1)] + 1);\n                                goto L278;\n                                throw Zccv.a(?);\n                            }\n                            L278:\n                            v15 -= 1;\n                            if (v1 != null) goto L254;\n                        }\n                        if (v1 != null) goto L19d;\n                    }\n                    if (v1 != null) goto L306;\n                }\n                v13 = 1;\n                if (v13 < v12.length) {\n                    v14 = (byte[]) v12.clone();\n                    v14[v13] = (byte) (v14[v13] & 63);\n                    v7.add(v14);\n                    v14 = (byte[]) v12.clone();\n                    v14[v13] = (byte) ((v14[v13] & 63) ^ 64);\n                    v7.add(v14);\n                    v14 = (byte[]) v12.clone();\n                    v14[v13] = (byte) ((v14[v13] & 63) ^ 192);\n                    v7.add(v14);\n                    v13 += 1;\n                    if (v1 != null) goto L28f;\n                }\n            }\n            L306:\n            v11 += 1;\n            if (v1 != null) goto L167;\n        }\n    }\n    if (v0.Zrb() != 0) {\n        v10 = v7.iterator();\n        if (v10.hasNext() != 0) {\n            v11 = (byte[]) v10.next();\n            if (v0.ZrC() != 0) {\n                v12 = new int[v11.length];\n                v13 = new int[v11.length];\n                v14 = 0;\n                if (v14 < v13.length) {\n                    v13[v14] = v11[v14];\n                    if (v13[v14] < 0) {\n                        ?[?] = (v13[v14] + 256);\n                        goto L37b;\n                        throw Zccv.a(?);\n                    }\n                    L37b:\n                    v14 += 1;\n                    if (v1 != null) goto L354;\n                }\n                if (v12[0] < Zccv.Zk[v13[0]].length) {\n                    if (v9 >= v2) {\n                        if (v2 != 0) {\n                            goto L3a3;\n                            throw Zccv.a(?);\n                            L3a3:\n                            goto L486;\n                            throw Zccv.a(?);\n                        }\n                    }\n                    v14 = new ByteArrayOutputStream();\n                    v15 = 0;\n                    if (v15 < v11.length) {\n                        if (v5 != 0) {\n                            v14.write(37);\n                            goto L3e2;\n                            throw Zccv.a(?);\n                        }\n                        L3e2:\n                        v14.write(Zccv.Zk[v13[v15]][v12[v15]]);\n                        goto L3f2;\n                        v16 = ?;\n                        Zo6.Zm(v16, Zar.IMPOSSIBLE);\n                        L3f2:\n                        v15 += 1;\n                        if (v1 != null) goto L3bb;\n                    }\n                    v15 = v14.toByteArray();\n                    if (v6 == 0) {\n                        Zru.Zz(v15);\n                        goto L416;\n                        throw Zccv.a(?);\n                    }\n                    L416:\n                    v16 = Zhs.ZA(v15);\n                    if (v8.contains(v16) == 0) {\n                        v8.add(v16);\n                        v9 += 1;\n                        goto L443;\n                        throw Zccv.a(?);\n                    }\n                    L443:\n                    ?[?] = (v12[(v12.length - 1)] + 1);\n                    v17 = (v12.length - 1);\n                    if (v17 > 0) {\n                        if (v12[v17] >= Zccv.Zk[v13[v17]].length) {\n                            v12[v17] = 0;\n                            ?[?] = (v12[(v17 - 1)] + 1);\n                            goto L47a;\n                            throw Zccv.a(?);\n                        }\n                        L47a:\n                        v17 -= 1;\n                        if (v1 != null) goto L44d;\n                    }\n                    if (v1 != null) goto L38f;\n                }\n                L486:\n                if (v1 != null) goto L597;\n            }\n            v12 = 0;\n            if (v12 < v11.length) {\n                v13 = v11[v12];\n                if (v13 < 0) {\n                    v13 += 256;\n                    goto L4ae;\n                    throw Zccv.a(?);\n                }\n                L4ae:\n                v14 = 0;\n                if (v14 < Zccv.Zk[v13].length) {\n                    if (v9 >= v2) {\n                        if (v2 != 0) {\n                            goto L4cd;\n                            throw Zccv.a(?);\n                            L4cd:\n                            goto L58f;\n                            throw Zccv.a(?);\n                        }\n                    }\n                    v15 = new ByteArrayOutputStream();\n                    v16 = 0;\n                    if (v16 < v11.length) {\n                        if (v5 != 0) {\n                            v15.write(37);\n                            goto L4ff;\n                            throw Zccv.a(?);\n                        }\n                        L4ff:\n                        if (v16 == v12) {\n                            v15.write(Zccv.Zk[v13][v14]);\n                            if (v1 != null) goto L535;\n                            goto L527;\n                            throw Zccv.a(?);\n                        }\n                        L527:\n                        new byte[1][0] = v11[v16];\n                        v15.write(Zpwf.Zv(new byte[1]));\n                        goto L535;\n                        throw Zccv.a(?);\n                        L535:\n                        goto L542;\n                        v17 = ?;\n                        Zo6.Zm(v17, Zar.IMPOSSIBLE);\n                        L542:\n                        v16 += 1;\n                        if (v1 != null) goto L4e5;\n                    }\n                    v16 = v15.toByteArray();\n                    if (v6 == 0) {\n                        Zru.Zz(v16);\n                        goto L566;\n                        throw Zccv.a(?);\n                    }\n                    L566:\n                    v17 = Zhs.ZA(v16);\n                    if (v8.contains(v17) == 0) {\n                        v8.add(v17);\n                        v9 += 1;\n                        goto L588;\n                        throw Zccv.a(?);\n                    }\n                    L588:\n                    v14 += 1;\n                    if (v1 != null) goto L4b9;\n                }\n                L58f:\n                v12 += 1;\n                if (v1 != null) goto L491;\n            }\n            L597:\n            if (v1 != null) goto L326;\n        }\n        if (v1 != null) goto L67c;\n    }\n    v10 = v7.iterator();\n    if (v10.hasNext() != 0) {\n        v11 = (byte[]) v10.next();\n        if (v9 >= v2) {\n            if (v2 != 0) {\n                goto L5ce;\n                throw Zccv.a(?);\n                L5ce:\n                goto L67c;\n                throw Zccv.a(?);\n            }\n        }\n        v12 = new ByteArrayOutputStream();\n        v13 = v11;\n        v14 = v13.length;\n        v15 = 0;\n        if (v15 < v14) {\n            v16 = v13[v15];\n            if (v5 != 0) {\n                v12.write(37);\n                goto L614;\n                throw Zccv.a(?);\n            }\n            L614:\n            new byte[1][0] = v16;\n            v12.write(Zpwf.Zv(new byte[1]));\n            goto L628;\n            v17 = ?;\n            Zo6.Zm(v17, Zar.IMPOSSIBLE);\n            L628:\n            v15 += 1;\n            if (v1 != null) goto L5ee;\n        }\n        v13 = v12.toByteArray();\n        if (v6 == 0) {\n            Zru.Zz(v13);\n            goto L64c;\n            throw Zccv.a(?);\n        }\n        L64c:\n        v14 = Zhs.ZA(v13);\n        if (v8.contains(v14) == 0) {\n            v8.add(v14);\n            v9 += 1;\n            goto L66f;\n            throw Zccv.a(?);\n        }\n        L66f:\n        if (v1 != null) goto L5ae;\n    }\n    L67c:\n    v10 = new byte[][v8.size()];\n    v11 = 0;\n    if (v11 < v8.size()) {\n        v10[v11] = Zhs.Zq((String) v8.get(v11));\n        v11 += 1;\n        if (v1 != null) goto L68a;\n    }\n    return v10;\n}",
+      "confidence": "inferred",
+      "fully_structured": false,
+      "signature": "private static byte[][] ZM(burp.Zr5_)"
+    },
+    "signature": "private static byte[][] ZM(burp.Zr5_)",
+    "throws": []
+  },
+  "summary": "burp.Zccv.ZM(Lburp/Zr5_;)[[B (Zccv.class): 847 instructions, 33 try block(s).",
+  "confidence": "inferred",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [
+    {
+      "code": "decompiler_inferred",
+      "message": "This pseudo-Java is reconstructed from bytecode by Craft Anything's built-in decompiler; it is a best guess, not the original source. The bytecode disassembly is the evidence."
+    },
+    {
+      "code": "generics_erased",
+      "message": "Generic type arguments are erased in bytecode and are not shown."
+    },
+    {
+      "code": "names_and_types_inferred",
+      "message": "Local variables are named v0, v1, … (no debug names); their declared types are not reconstructed."
+    },
+    {
+      "code": "desugaring_not_reversed",
+      "message": "Synthetic members, lambda/invokedynamic desugaring, enum scaffolding and string-switch hashing are not turned back into source."
+    },
+    {
+      "code": "control_flow_partly_structured",
+      "message": "Some control flow could not be recovered and is shown with labels and goto statements."
+    },
+    {
+      "code": "stack_reconstruction_approximate",
+      "message": "Some stack operations (complex dup/swap, invokedynamic/lambda, jsr/ret) are approximated; read the bytecode listing for the exact behaviour."
+    }
+  ],
+  "coverage": {
+    "status": "complete",
+    "examined": 847,
+    "total": 847
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/root/burp-re/in/extract/burp/Zccv.class"
+    },
+    {
+      "kind": "method",
+      "value": "burp.Zccv.ZM(Lburp/Zr5_;)[[B"
+    }
+  ],
+  "links": []
+}

@@ -1,0 +1,457 @@
+{
+  "id": "ev_526265719fe16620c42491ded4723dd7142d9f6f4dc9c12eeedf6e78d57b1436",
+  "subject": {
+    "kind": "java-class",
+    "sha256": "b2760356746d3f0a22db50c5bab57e3c25bc9e6dd9c49a8475473350c5aaaed2",
+    "name": "Zxmw.class"
+  },
+  "operation": "java_method_show",
+  "params": {
+    "class_name": null,
+    "decompile": false,
+    "descriptor": null,
+    "limit": 400,
+    "method_name": "<clinit>",
+    "offset": 0,
+    "path": "/root/burp-re/in/extract/burp/Zxmw.class"
+  },
+  "result": {
+    "access": [
+      "static"
+    ],
+    "class": "burp.Zxmw",
+    "descriptor": "()V",
+    "entry": "Zxmw.class",
+    "exception_table": [
+      {
+        "catch_type": "java.lang.NoSuchFieldError",
+        "end_pc": 20,
+        "handler_pc": 23,
+        "start_pc": 9
+      },
+      {
+        "catch_type": "java.lang.NoSuchFieldError",
+        "end_pc": 35,
+        "handler_pc": 38,
+        "start_pc": 24
+      },
+      {
+        "catch_type": "java.lang.NoSuchFieldError",
+        "end_pc": 50,
+        "handler_pc": 53,
+        "start_pc": 39
+      },
+      {
+        "catch_type": "java.lang.NoSuchFieldError",
+        "end_pc": 74,
+        "handler_pc": 77,
+        "start_pc": 63
+      },
+      {
+        "catch_type": "java.lang.NoSuchFieldError",
+        "end_pc": 89,
+        "handler_pc": 92,
+        "start_pc": 78
+      },
+      {
+        "catch_type": "java.lang.NoSuchFieldError",
+        "end_pc": 104,
+        "handler_pc": 107,
+        "start_pc": 93
+      },
+      {
+        "catch_type": "java.lang.NoSuchFieldError",
+        "end_pc": 119,
+        "handler_pc": 122,
+        "start_pc": 108
+      }
+    ],
+    "instructions": [
+      {
+        "len": 3,
+        "offset": "0000",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zgnf.values()[Lburp/Zgnf;"
+      },
+      {
+        "len": 1,
+        "offset": "0003",
+        "opcode": "0xbe",
+        "text": "arraylength"
+      },
+      {
+        "len": 2,
+        "offset": "0004",
+        "opcode": "0xbc",
+        "text": "newarray int"
+      },
+      {
+        "len": 3,
+        "offset": "0006",
+        "opcode": "0xb3",
+        "text": "putstatic burp.Zxmw.ZI:int[]"
+      },
+      {
+        "len": 3,
+        "offset": "0009",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zxmw.ZI:int[]"
+      },
+      {
+        "len": 3,
+        "offset": "000c",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zgnf.MINIMIZE_FALSE_NEGATIVES:burp.Zgnf"
+      },
+      {
+        "len": 3,
+        "offset": "000f",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zgnf.ordinal()I"
+      },
+      {
+        "len": 1,
+        "offset": "0012",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 1,
+        "offset": "0013",
+        "opcode": "0x4f",
+        "text": "iastore"
+      },
+      {
+        "len": 3,
+        "offset": "0014",
+        "opcode": "0xa7",
+        "text": "goto 24"
+      },
+      {
+        "len": 1,
+        "offset": "0017",
+        "opcode": "0x4b",
+        "text": "astore_0"
+      },
+      {
+        "len": 3,
+        "offset": "0018",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zxmw.ZI:int[]"
+      },
+      {
+        "len": 3,
+        "offset": "001b",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zgnf.NORMAL:burp.Zgnf"
+      },
+      {
+        "len": 3,
+        "offset": "001e",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zgnf.ordinal()I"
+      },
+      {
+        "len": 1,
+        "offset": "0021",
+        "opcode": "0x05",
+        "text": "iconst_2"
+      },
+      {
+        "len": 1,
+        "offset": "0022",
+        "opcode": "0x4f",
+        "text": "iastore"
+      },
+      {
+        "len": 3,
+        "offset": "0023",
+        "opcode": "0xa7",
+        "text": "goto 39"
+      },
+      {
+        "len": 1,
+        "offset": "0026",
+        "opcode": "0x4b",
+        "text": "astore_0"
+      },
+      {
+        "len": 3,
+        "offset": "0027",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zxmw.ZI:int[]"
+      },
+      {
+        "len": 3,
+        "offset": "002a",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zgnf.MINIMIZE_FALSE_POSITIVES:burp.Zgnf"
+      },
+      {
+        "len": 3,
+        "offset": "002d",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zgnf.ordinal()I"
+      },
+      {
+        "len": 1,
+        "offset": "0030",
+        "opcode": "0x06",
+        "text": "iconst_3"
+      },
+      {
+        "len": 1,
+        "offset": "0031",
+        "opcode": "0x4f",
+        "text": "iastore"
+      },
+      {
+        "len": 3,
+        "offset": "0032",
+        "opcode": "0xa7",
+        "text": "goto 54"
+      },
+      {
+        "len": 1,
+        "offset": "0035",
+        "opcode": "0x4b",
+        "text": "astore_0"
+      },
+      {
+        "len": 3,
+        "offset": "0036",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zbg8.values()[Lburp/Zbg8;"
+      },
+      {
+        "len": 1,
+        "offset": "0039",
+        "opcode": "0xbe",
+        "text": "arraylength"
+      },
+      {
+        "len": 2,
+        "offset": "003a",
+        "opcode": "0xbc",
+        "text": "newarray int"
+      },
+      {
+        "len": 3,
+        "offset": "003c",
+        "opcode": "0xb3",
+        "text": "putstatic burp.Zxmw.Zl:int[]"
+      },
+      {
+        "len": 3,
+        "offset": "003f",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zxmw.Zl:int[]"
+      },
+      {
+        "len": 3,
+        "offset": "0042",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zbg8.HEADER:burp.Zbg8"
+      },
+      {
+        "len": 3,
+        "offset": "0045",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zbg8.ordinal()I"
+      },
+      {
+        "len": 1,
+        "offset": "0048",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 1,
+        "offset": "0049",
+        "opcode": "0x4f",
+        "text": "iastore"
+      },
+      {
+        "len": 3,
+        "offset": "004a",
+        "opcode": "0xa7",
+        "text": "goto 78"
+      },
+      {
+        "len": 1,
+        "offset": "004d",
+        "opcode": "0x4b",
+        "text": "astore_0"
+      },
+      {
+        "len": 3,
+        "offset": "004e",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zxmw.Zl:int[]"
+      },
+      {
+        "len": 3,
+        "offset": "0051",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zbg8.PARAM_NAME_URL:burp.Zbg8"
+      },
+      {
+        "len": 3,
+        "offset": "0054",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zbg8.ordinal()I"
+      },
+      {
+        "len": 1,
+        "offset": "0057",
+        "opcode": "0x05",
+        "text": "iconst_2"
+      },
+      {
+        "len": 1,
+        "offset": "0058",
+        "opcode": "0x4f",
+        "text": "iastore"
+      },
+      {
+        "len": 3,
+        "offset": "0059",
+        "opcode": "0xa7",
+        "text": "goto 93"
+      },
+      {
+        "len": 1,
+        "offset": "005c",
+        "opcode": "0x4b",
+        "text": "astore_0"
+      },
+      {
+        "len": 3,
+        "offset": "005d",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zxmw.Zl:int[]"
+      },
+      {
+        "len": 3,
+        "offset": "0060",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zbg8.PARAM_NAME_BODY_URL_ENCODED:burp.Zbg8"
+      },
+      {
+        "len": 3,
+        "offset": "0063",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zbg8.ordinal()I"
+      },
+      {
+        "len": 1,
+        "offset": "0066",
+        "opcode": "0x06",
+        "text": "iconst_3"
+      },
+      {
+        "len": 1,
+        "offset": "0067",
+        "opcode": "0x4f",
+        "text": "iastore"
+      },
+      {
+        "len": 3,
+        "offset": "0068",
+        "opcode": "0xa7",
+        "text": "goto 108"
+      },
+      {
+        "len": 1,
+        "offset": "006b",
+        "opcode": "0x4b",
+        "text": "astore_0"
+      },
+      {
+        "len": 3,
+        "offset": "006c",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zxmw.Zl:int[]"
+      },
+      {
+        "len": 3,
+        "offset": "006f",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zbg8.PARAM_NAME_BODY_MULTIPART:burp.Zbg8"
+      },
+      {
+        "len": 3,
+        "offset": "0072",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zbg8.ordinal()I"
+      },
+      {
+        "len": 1,
+        "offset": "0075",
+        "opcode": "0x07",
+        "text": "iconst_4"
+      },
+      {
+        "len": 1,
+        "offset": "0076",
+        "opcode": "0x4f",
+        "text": "iastore"
+      },
+      {
+        "len": 3,
+        "offset": "0077",
+        "opcode": "0xa7",
+        "text": "goto 123"
+      },
+      {
+        "len": 1,
+        "offset": "007a",
+        "opcode": "0x4b",
+        "text": "astore_0"
+      },
+      {
+        "len": 1,
+        "offset": "007b",
+        "opcode": "0xb1",
+        "text": "return"
+      }
+    ],
+    "instructions_total": 58,
+    "listing": "0000: invokestatic burp.Zgnf.values()[Lburp/Zgnf;\n0003: arraylength\n0004: newarray int\n0006: putstatic burp.Zxmw.ZI:int[]\n0009: getstatic burp.Zxmw.ZI:int[]\n000c: getstatic burp.Zgnf.MINIMIZE_FALSE_NEGATIVES:burp.Zgnf\n000f: invokevirtual burp.Zgnf.ordinal()I\n0012: iconst_1\n0013: iastore\n0014: goto 24\n0017: astore_0\n0018: getstatic burp.Zxmw.ZI:int[]\n001b: getstatic burp.Zgnf.NORMAL:burp.Zgnf\n001e: invokevirtual burp.Zgnf.ordinal()I\n0021: iconst_2\n0022: iastore\n0023: goto 39\n0026: astore_0\n0027: getstatic burp.Zxmw.ZI:int[]\n002a: getstatic burp.Zgnf.MINIMIZE_FALSE_POSITIVES:burp.Zgnf\n002d: invokevirtual burp.Zgnf.ordinal()I\n0030: iconst_3\n0031: iastore\n0032: goto 54\n0035: astore_0\n0036: invokestatic burp.Zbg8.values()[Lburp/Zbg8;\n0039: arraylength\n003a: newarray int\n003c: putstatic burp.Zxmw.Zl:int[]\n003f: getstatic burp.Zxmw.Zl:int[]\n0042: getstatic burp.Zbg8.HEADER:burp.Zbg8\n0045: invokevirtual burp.Zbg8.ordinal()I\n0048: iconst_1\n0049: iastore\n004a: goto 78\n004d: astore_0\n004e: getstatic burp.Zxmw.Zl:int[]\n0051: getstatic burp.Zbg8.PARAM_NAME_URL:burp.Zbg8\n0054: invokevirtual burp.Zbg8.ordinal()I\n0057: iconst_2\n0058: iastore\n0059: goto 93\n005c: astore_0\n005d: getstatic burp.Zxmw.Zl:int[]\n0060: getstatic burp.Zbg8.PARAM_NAME_BODY_URL_ENCODED:burp.Zbg8\n0063: invokevirtual burp.Zbg8.ordinal()I\n0066: iconst_3\n0067: iastore\n0068: goto 108\n006b: astore_0\n006c: getstatic burp.Zxmw.Zl:int[]\n006f: getstatic burp.Zbg8.PARAM_NAME_BODY_MULTIPART:burp.Zbg8\n0072: invokevirtual burp.Zbg8.ordinal()I\n0075: iconst_4\n0076: iastore\n0077: goto 123\n007a: astore_0\n007b: return",
+    "max_locals": 1,
+    "max_stack": 3,
+    "method": "burp.Zxmw.<clinit>()V",
+    "overloads": [
+      "()V"
+    ],
+    "pseudo_java": null,
+    "signature": "static <clinit>()",
+    "throws": []
+  },
+  "summary": "burp.Zxmw.<clinit>()V (Zxmw.class): 58 instructions, 7 try block(s).",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 58,
+    "total": 58
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/root/burp-re/in/extract/burp/Zxmw.class"
+    },
+    {
+      "kind": "method",
+      "value": "burp.Zxmw.<clinit>()V"
+    }
+  ],
+  "links": []
+}

@@ -1,0 +1,549 @@
+{
+  "id": "ev_deca062d2b53dd8157077270342a9d64038e42a7ab128e276e062f3e14d15084",
+  "subject": {
+    "kind": "java-class",
+    "sha256": "11f0b339aeb3e8b42d66f1e5da827f6dee8285e178d98cbea840dee891f06c45",
+    "name": "Zmqs.class"
+  },
+  "operation": "java_class_show",
+  "params": {
+    "class_name": null,
+    "decompile": false,
+    "path": "/root/burp-re/in/extract/burp/Zmqs.class"
+  },
+  "result": {
+    "access": [
+      "public",
+      "final",
+      "enum"
+    ],
+    "annotations": [],
+    "entry": "Zmqs.class",
+    "fields": [
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zmqs;",
+        "name": "FASTEST",
+        "signature": null,
+        "type": "burp.Zmqs"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zmqs;",
+        "name": "FASTER",
+        "signature": null,
+        "type": "burp.Zmqs"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zmqs;",
+        "name": "NORMAL",
+        "signature": null,
+        "type": "burp.Zmqs"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zmqs;",
+        "name": "MORE_COMPLETE",
+        "signature": null,
+        "type": "burp.Zmqs"
+      },
+      {
+        "access": [
+          "public",
+          "static",
+          "final",
+          "enum"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zmqs;",
+        "name": "MOST_COMPLETE",
+        "signature": null,
+        "type": "burp.Zmqs"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "I",
+        "name": "id",
+        "signature": null,
+        "type": "int"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljava/lang/String;",
+        "name": "name",
+        "signature": null,
+        "type": "java.lang.String"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljava/lang/String;",
+        "name": "description",
+        "signature": null,
+        "type": "java.lang.String"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Z",
+        "name": "incyWincy",
+        "signature": null,
+        "type": "boolean"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Z",
+        "name": "useAccessibleTextForVisibleText",
+        "signature": null,
+        "type": "boolean"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "I",
+        "name": "incomingUrlActionDescriptorMaskingThreshold",
+        "signature": null,
+        "type": "int"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "I",
+        "name": "incomingPageActionDescriptorMaskingThreshold",
+        "signature": null,
+        "type": "int"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "I",
+        "name": "loopbackActionDescriptorMaskingThreshold",
+        "signature": null,
+        "type": "int"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "I",
+        "name": "minimumFormInputStrategyChainLengthBeforeDiscontinuationStrategyApplied",
+        "signature": null,
+        "type": "int"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "I",
+        "name": "totalUnmatchedActionDescriptorTolerance",
+        "signature": null,
+        "type": "int"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "I",
+        "name": "unmatchedAnchorTolerance",
+        "signature": null,
+        "type": "int"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "I",
+        "name": "unmatchedIFrameTolerance",
+        "signature": null,
+        "type": "int"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "I",
+        "name": "unmatchedFrameTolerance",
+        "signature": null,
+        "type": "int"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "I",
+        "name": "unmatchedFormTolerance",
+        "signature": null,
+        "type": "int"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "I",
+        "name": "unmatchedRedirectTolerance",
+        "signature": null,
+        "type": "int"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "I",
+        "name": "unmatchedImageAreaMapTolerance",
+        "signature": null,
+        "type": "int"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljava/time/Duration;",
+        "name": "networkIdleThreshold",
+        "signature": null,
+        "type": "java.time.Duration"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljava/time/Duration;",
+        "name": "domIdleThreshold",
+        "signature": null,
+        "type": "java.time.Duration"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljava/time/Duration;",
+        "name": "awaitNavigationTimeout",
+        "signature": null,
+        "type": "java.time.Duration"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "I",
+        "name": "maximumNumberOfFormInputStrategiesGeneratedPerActionDescriptor",
+        "signature": null,
+        "type": "int"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "I",
+        "name": "pageDiscoveryFormInputStrategyChainDiscontinuationThreshold",
+        "signature": null,
+        "type": "int"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "I",
+        "name": "maximumNumberOfFormInputStrategiesGeneratedPerNavigationalControl",
+        "signature": null,
+        "type": "int"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Z",
+        "name": "alwaysSubmitGuessFormInputStrategies",
+        "signature": null,
+        "type": "boolean"
+      },
+      {
+        "access": [
+          "public",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "I",
+        "name": "maxLocationsPerUrl",
+        "signature": null,
+        "type": "int"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final",
+          "synthetic"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "[Lburp/Zmqs;",
+        "name": "ZQ",
+        "signature": null,
+        "type": "burp.Zmqs[]"
+      }
+    ],
+    "inner_classes": [],
+    "interfaces": [],
+    "internal": "burp/Zmqs",
+    "java_version": "Java 21",
+    "methods": [
+      {
+        "access": [
+          "public",
+          "static"
+        ],
+        "code_bytes": 10,
+        "deprecated": false,
+        "descriptor": "()[Lburp/Zmqs;",
+        "max_locals": 0,
+        "max_stack": 1,
+        "name": "values",
+        "signature": "public static burp.Zmqs[] values()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public",
+          "static"
+        ],
+        "code_bytes": 10,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;)Lburp/Zmqs;",
+        "max_locals": 1,
+        "max_stack": 2,
+        "name": "valueOf",
+        "signature": "public static burp.Zmqs valueOf(java.lang.String)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "code_bytes": 150,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;IILjava/lang/String;Ljava/lang/String;ZZIIIIIIIIIIILjava/time/Duration;Ljava/time/Duration;Ljava/time/Duration;IIIZI)V",
+        "max_locals": 27,
+        "max_stack": 3,
+        "name": "<init>",
+        "signature": "private <init>(java.lang.String, int, int, java.lang.String, java.lang.String, boolean, boolean, int, int, int, int, int, int, int, int, int, int, int, java.time.Duration, java.time.Duration, java.time.Duration, int, int, int, boolean, int)",
+        "signature_attr": "(ILjava/lang/String;Ljava/lang/String;ZZIIIIIIIIIIILjava/time/Duration;Ljava/time/Duration;Ljava/time/Duration;IIIZI)V",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public",
+          "static"
+        ],
+        "code_bytes": 47,
+        "deprecated": false,
+        "descriptor": "(I)Lburp/Zmqs;",
+        "max_locals": 6,
+        "max_stack": 2,
+        "name": "Zu",
+        "signature": "public static burp.Zmqs Zu(int)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public",
+          "static"
+        ],
+        "code_bytes": 50,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;)Lburp/Zmqs;",
+        "max_locals": 6,
+        "max_stack": 2,
+        "name": "Zz",
+        "signature": "public static burp.Zmqs Zz(java.lang.String)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "synthetic"
+        ],
+        "code_bytes": 35,
+        "deprecated": false,
+        "descriptor": "()[Lburp/Zmqs;",
+        "max_locals": 0,
+        "max_stack": 4,
+        "name": "ZO",
+        "signature": "private static synthetic burp.Zmqs[] ZO()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "static"
+        ],
+        "code_bytes": 599,
+        "deprecated": false,
+        "descriptor": "()V",
+        "max_locals": 7,
+        "max_stack": 28,
+        "name": "<clinit>",
+        "signature": "static <clinit>()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      }
+    ],
+    "name": "burp.Zmqs",
+    "pseudo_java": null,
+    "signature": "Ljava/lang/Enum<Lburp/Zmqs;>;",
+    "source_file": null,
+    "superclass": "java.lang.Enum",
+    "version": {
+      "major": 65,
+      "minor": 0
+    }
+  },
+  "summary": "burp.Zmqs (Java 21) extends java.lang.Enum: 30 fields, 7 methods.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 1,
+    "total": 1
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/root/burp-re/in/extract/burp/Zmqs.class"
+    },
+    {
+      "kind": "class",
+      "value": "burp/Zmqs"
+    }
+  ],
+  "links": []
+}

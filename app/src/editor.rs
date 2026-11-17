@@ -289,7 +289,18 @@ pub fn message_view_inner(
                 ui.monospace(RichText::new(hex_dump(text.as_bytes())).size(size).color(c(theme::EDITOR_TEXT)));
                 return;
             }
-            for (i, line) in head.split('\n').enumerate() {
+            // A hostile response can carry an enormous header block; one widget
+            // row per line would stall every frame, so show the first lines only.
+            const MAX_HEAD_LINES: usize = 2000;
+            let head_lines = head.split('\n').count();
+            if head_lines > MAX_HEAD_LINES {
+                ui.label(
+                    RichText::new(format!("{} header lines; showing the first {MAX_HEAD_LINES} (use Hex or Raw search for the rest)", head_lines))
+                        .size(size - 1.0)
+                        .color(c(theme::MONO4)),
+                );
+            }
+            for (i, line) in head.split('\n').take(MAX_HEAD_LINES).enumerate() {
                 let line = line.trim_end_matches('\r');
                 ui.horizontal(|ui| {
                     if gutter > 0.0 {

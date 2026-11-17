@@ -2,3 +2,4 @@ app/target/
 *.log
 inbox/
 capture/
+**/target/

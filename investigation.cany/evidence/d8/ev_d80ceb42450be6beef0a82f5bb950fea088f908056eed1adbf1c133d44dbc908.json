@@ -1,0 +1,139 @@
+{
+  "id": "ev_d80ceb42450be6beef0a82f5bb950fea088f908056eed1adbf1c133d44dbc908",
+  "subject": {
+    "kind": "java-class",
+    "sha256": "43848f1c6c7f03e60768e72a1644d8eda9d5f7f22aa143268f46b32e67782250",
+    "name": "Zcgg.class"
+  },
+  "operation": "java_method_show",
+  "params": {
+    "class_name": null,
+    "decompile": false,
+    "descriptor": null,
+    "limit": 60,
+    "method_name": "ZI",
+    "offset": 0,
+    "path": "/root/burp-re/in/extract/burp/Zcgg.class"
+  },
+  "result": {
+    "access": [
+      "public",
+      "static"
+    ],
+    "class": "burp.Zcgg",
+    "descriptor": "(Lburp/Zcrn;Lburp/Zp8u;)Lburp/Zict;",
+    "entry": "Zcgg.class",
+    "exception_table": [],
+    "instructions": [
+      {
+        "len": 1,
+        "offset": "0000",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 1,
+        "offset": "0001",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "0002",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zcgg.Zd(Lburp/Zcrn;Lburp/Zp8u;)Lburp/Zict;"
+      },
+      {
+        "len": 1,
+        "offset": "0005",
+        "opcode": "0x4d",
+        "text": "astore_2"
+      },
+      {
+        "len": 1,
+        "offset": "0006",
+        "opcode": "0x2c",
+        "text": "aload_2"
+      },
+      {
+        "len": 3,
+        "offset": "0007",
+        "opcode": "0xc7",
+        "text": "ifnonnull 18"
+      },
+      {
+        "len": 1,
+        "offset": "000a",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 1,
+        "offset": "000b",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "000c",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zcgg.ZF(Lburp/Zcrn;Lburp/Zp8u;)Lburp/Zict;"
+      },
+      {
+        "len": 3,
+        "offset": "000f",
+        "opcode": "0xa7",
+        "text": "goto 19"
+      },
+      {
+        "len": 1,
+        "offset": "0012",
+        "opcode": "0x2c",
+        "text": "aload_2"
+      },
+      {
+        "len": 1,
+        "offset": "0013",
+        "opcode": "0xb0",
+        "text": "areturn"
+      }
+    ],
+    "instructions_total": 12,
+    "listing": "0000: aload_0\n0001: aload_1\n0002: invokestatic burp.Zcgg.Zd(Lburp/Zcrn;Lburp/Zp8u;)Lburp/Zict;\n0005: astore_2\n0006: aload_2\n0007: ifnonnull 18\n000a: aload_0\n000b: aload_1\n000c: invokestatic burp.Zcgg.ZF(Lburp/Zcrn;Lburp/Zp8u;)Lburp/Zict;\n000f: goto 19\n0012: aload_2\n0013: areturn",
+    "max_locals": 3,
+    "max_stack": 2,
+    "method": "burp.Zcgg.ZI(Lburp/Zcrn;Lburp/Zp8u;)Lburp/Zict;",
+    "overloads": [
+      "(Lburp/Zcrn;Lburp/Zp8u;)Lburp/Zict;"
+    ],
+    "pseudo_java": null,
+    "signature": "public static burp.Zict ZI(burp.Zcrn, burp.Zp8u)",
+    "throws": []
+  },
+  "summary": "burp.Zcgg.ZI(Lburp/Zcrn;Lburp/Zp8u;)Lburp/Zict; (Zcgg.class): 12 instructions.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 12,
+    "total": 12
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/root/burp-re/in/extract/burp/Zcgg.class"
+    },
+    {
+      "kind": "method",
+      "value": "burp.Zcgg.ZI(Lburp/Zcrn;Lburp/Zp8u;)Lburp/Zict;"
+    }
+  ],
+  "links": []
+}

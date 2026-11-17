@@ -1,0 +1,241 @@
+{
+  "id": "ev_3da3535e75a3116219ad5e8e03dc09a1333d5b65d3cda06faa402a5351fea526",
+  "subject": {
+    "kind": "java-class",
+    "sha256": "ccdf1b44b6db6b00c79a83d6afefda8474211fb506f5cbdd89466aba72d0ff72",
+    "name": "Zu2y.class"
+  },
+  "operation": "java_method_show",
+  "params": {
+    "class_name": null,
+    "decompile": false,
+    "descriptor": null,
+    "limit": 200,
+    "method_name": "<clinit>",
+    "offset": 0,
+    "path": "/root/burp-re/in/extract/burp/Zu2y.class"
+  },
+  "result": {
+    "access": [
+      "static"
+    ],
+    "class": "burp.Zu2y",
+    "descriptor": "()V",
+    "entry": "Zu2y.class",
+    "exception_table": [
+      {
+        "catch_type": "java.lang.NoSuchFieldError",
+        "end_pc": 20,
+        "handler_pc": 23,
+        "start_pc": 9
+      },
+      {
+        "catch_type": "java.lang.NoSuchFieldError",
+        "end_pc": 35,
+        "handler_pc": 38,
+        "start_pc": 24
+      },
+      {
+        "catch_type": "java.lang.NoSuchFieldError",
+        "end_pc": 50,
+        "handler_pc": 53,
+        "start_pc": 39
+      }
+    ],
+    "instructions": [
+      {
+        "len": 3,
+        "offset": "0000",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zs_g.values()[Lburp/Zs_g;"
+      },
+      {
+        "len": 1,
+        "offset": "0003",
+        "opcode": "0xbe",
+        "text": "arraylength"
+      },
+      {
+        "len": 2,
+        "offset": "0004",
+        "opcode": "0xbc",
+        "text": "newarray int"
+      },
+      {
+        "len": 3,
+        "offset": "0006",
+        "opcode": "0xb3",
+        "text": "putstatic burp.Zu2y.ZG:int[]"
+      },
+      {
+        "len": 3,
+        "offset": "0009",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zu2y.ZG:int[]"
+      },
+      {
+        "len": 3,
+        "offset": "000c",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zs_g.EXTERNAL_SERVICE_INTERACTION:burp.Zs_g"
+      },
+      {
+        "len": 3,
+        "offset": "000f",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zs_g.ordinal()I"
+      },
+      {
+        "len": 1,
+        "offset": "0012",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 1,
+        "offset": "0013",
+        "opcode": "0x4f",
+        "text": "iastore"
+      },
+      {
+        "len": 3,
+        "offset": "0014",
+        "opcode": "0xa7",
+        "text": "goto 24"
+      },
+      {
+        "len": 1,
+        "offset": "0017",
+        "opcode": "0x4b",
+        "text": "astore_0"
+      },
+      {
+        "len": 3,
+        "offset": "0018",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zu2y.ZG:int[]"
+      },
+      {
+        "len": 3,
+        "offset": "001b",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zs_g.OUT_BAND_RESOURCE_LOAD:burp.Zs_g"
+      },
+      {
+        "len": 3,
+        "offset": "001e",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zs_g.ordinal()I"
+      },
+      {
+        "len": 1,
+        "offset": "0021",
+        "opcode": "0x05",
+        "text": "iconst_2"
+      },
+      {
+        "len": 1,
+        "offset": "0022",
+        "opcode": "0x4f",
+        "text": "iastore"
+      },
+      {
+        "len": 3,
+        "offset": "0023",
+        "opcode": "0xa7",
+        "text": "goto 39"
+      },
+      {
+        "len": 1,
+        "offset": "0026",
+        "opcode": "0x4b",
+        "text": "astore_0"
+      },
+      {
+        "len": 3,
+        "offset": "0027",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zu2y.ZG:int[]"
+      },
+      {
+        "len": 3,
+        "offset": "002a",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zs_g.XML_INJECTION:burp.Zs_g"
+      },
+      {
+        "len": 3,
+        "offset": "002d",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zs_g.ordinal()I"
+      },
+      {
+        "len": 1,
+        "offset": "0030",
+        "opcode": "0x06",
+        "text": "iconst_3"
+      },
+      {
+        "len": 1,
+        "offset": "0031",
+        "opcode": "0x4f",
+        "text": "iastore"
+      },
+      {
+        "len": 3,
+        "offset": "0032",
+        "opcode": "0xa7",
+        "text": "goto 54"
+      },
+      {
+        "len": 1,
+        "offset": "0035",
+        "opcode": "0x4b",
+        "text": "astore_0"
+      },
+      {
+        "len": 1,
+        "offset": "0036",
+        "opcode": "0xb1",
+        "text": "return"
+      }
+    ],
+    "instructions_total": 26,
+    "listing": "0000: invokestatic burp.Zs_g.values()[Lburp/Zs_g;\n0003: arraylength\n0004: newarray int\n0006: putstatic burp.Zu2y.ZG:int[]\n0009: getstatic burp.Zu2y.ZG:int[]\n000c: getstatic burp.Zs_g.EXTERNAL_SERVICE_INTERACTION:burp.Zs_g\n000f: invokevirtual burp.Zs_g.ordinal()I\n0012: iconst_1\n0013: iastore\n0014: goto 24\n0017: astore_0\n0018: getstatic burp.Zu2y.ZG:int[]\n001b: getstatic burp.Zs_g.OUT_BAND_RESOURCE_LOAD:burp.Zs_g\n001e: invokevirtual burp.Zs_g.ordinal()I\n0021: iconst_2\n0022: iastore\n0023: goto 39\n0026: astore_0\n0027: getstatic burp.Zu2y.ZG:int[]\n002a: getstatic burp.Zs_g.XML_INJECTION:burp.Zs_g\n002d: invokevirtual burp.Zs_g.ordinal()I\n0030: iconst_3\n0031: iastore\n0032: goto 54\n0035: astore_0\n0036: return",
+    "max_locals": 1,
+    "max_stack": 3,
+    "method": "burp.Zu2y.<clinit>()V",
+    "overloads": [
+      "()V"
+    ],
+    "pseudo_java": null,
+    "signature": "static <clinit>()",
+    "throws": []
+  },
+  "summary": "burp.Zu2y.<clinit>()V (Zu2y.class): 26 instructions, 3 try block(s).",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 26,
+    "total": 26
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/root/burp-re/in/extract/burp/Zu2y.class"
+    },
+    {
+      "kind": "method",
+      "value": "burp.Zu2y.<clinit>()V"
+    }
+  ],
+  "links": []
+}

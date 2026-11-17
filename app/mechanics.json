@@ -222,8 +222,8 @@
    "name": "ca validity",
    "group": "https",
    "value": "notBefore year=min(current year,2014); notAfter=generation +10 calendar years",
-   "source": "NOT VERIFIABLE in re-check (wave 24): the cited source \"burp.Zg88.Z_ offsets 0050-0084 (ev_7b303a56...)\" could not be reproduced - Zg88.java in clean/pristine is an empty interface (coverage.tsv maps it to ScannerComponent0732) and the evidence record is not in investigation.cany. Marked estimated; WebProbe CA validity lives in tls.rs (rcgen) and stands on its own implementation.",
-   "estimated": true
+   "source": "VERIFIED (wave 31): burp.Zpdi -> BurpClass7973.java ZS() (/root/burp-re/out/clean/renamed_final, build 52685): Calendar YEAR set to 2014 when current year > 2014 (notBefore year=min(current year,2014)) and var6.add(Calendar.YEAR, 10) (notAfter = generation + 10 calendar years); subject CN/O/U 'PortSwigger CA'/'PortSwigger'. Wave-24's 'not verifiable' verdict was a lookup failure: Zg88 was the wrong class; the strings map points at Zpdi.",
+   "verified": true
   },
   {
    "name": "host certificate validity",

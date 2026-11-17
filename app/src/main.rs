@@ -2,46 +2,71 @@
 // Normal start: opens the desktop app. `--screenshot <file.png>`: draws ~120
 // frames without taking focus, saves the window picture as PNG and exits.
 
-mod ai;
-mod analysis;
-mod burp_checks;
-mod codec;
+use webprobe_core::ai;
+use webprobe_core::analysis;
+use webprobe_core::codec;
 mod analysis_ui;
-mod collaborator;
-mod crawl;
+use webprobe_core::collaborator;
+use webprobe_core::compare;
+use webprobe_core::cookie_jar;
+use webprobe_core::crawl;
 mod collaborator_ui;
-mod decoder_ops;
+use webprobe_core::decoder_ops;
+mod discovery;
 mod editor;
-mod ext_host;
+mod engagement;
+use webprobe_core::ext_host;
 mod feedback;
 mod gl_env;
-mod h2;
-mod interactsh;
+use webprobe_core::interactsh;
+use webprobe_core::intercept_rules;
 mod history_filter;
-mod intruder;
-mod logger;
+use webprobe_core::intruder;
+mod issue_view;
+use webprobe_core::intruder_run;
+mod intruder_ui;
+use webprobe_core::logger;
+mod mcp_hook;
+mod menus;
+use webprobe_core::macros;
 mod msgpane;
-mod net;
+use webprobe_core::mime;
+use webprobe_core::net;
+use webprobe_core::notice;
 mod onboarding;
-mod organizer;
-mod project;
-mod rules;
+use webprobe_core::organizer;
+use webprobe_core::project;
+use webprobe_core::project_files;
+mod project_start;
+mod proxy_settings;
+mod recovery;
+mod repeater_ops;
+mod report;
+use webprobe_core::rules;
 mod rules_ui;
-mod scan;
+use webprobe_core::scan;
+use webprobe_core::scan_config;
+use webprobe_core::seq_bits;
+mod settings_dialog;
+use webprobe_core::setup_page;
 mod shortcuts;
+mod site_map;
+mod sitemap_compare_ui;
+use webprobe_core::sync;
+use webprobe_core::tasks;
 mod table;
 mod theme;
-mod tls;
+use webprobe_core::tls;
 mod tools;
 mod ui;
-mod upstream;
-mod util;
-mod variations;
-mod xss;
+use webprobe_core::upstream;
+use webprobe_core::util;
 
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+
+use crate::sync::Mutex;
 
 use eframe::egui::{self, ViewportCommand};
 
@@ -63,24 +88,38 @@ pub struct App {
     pub org_sel: Option<u64>,
     /// Intruder sub-tab (0 = Positions, 1 = Payloads).
     pub intr_sub: usize,
+    /// Intercept split buttons (burp.Zub8 / Zubj): true = "Forward all" /
+    /// "Drop all" mode, chosen from the button's dropdown.
+    pub intercept_fwd_all: bool,
+    pub intercept_drop_all: bool,
     /// Selected WebSocket history row.
     pub ws_sel: Option<u64>,
     pub tab: ui::Tab,
     pub proxy_sub: usize,
     pub history_sel: Option<u64>,
+    /// Rows selected with Ctrl/Shift in Proxy > HTTP history.
+    pub history_multi: table::MultiSelect,
+    /// Whether the engine's wake-up calls point at this window yet.
+    pub waker_installed: bool,
+    /// UI automation hook (no-op unless built with `--features mcp`).
+    pub mcp: mcp_hook::Mcp,
     /// Height of the Proxy message pane, dragged by the splitter (B-05).
     pub split_detail: f32,
     pub target_host_sel: Option<String>,
     pub target_hosts: Vec<String>,
     pub target_items: Vec<(String, String, String, u64)>, // host, method, path, hist id
     pub map_cache_len: usize,
+    /// Project autosave: when it last ran and the (history, issues,
+    /// repeaters) counts it saw, so it only writes after a change.
+    pub autosave_at: std::time::Instant,
+    pub autosave_sig: (usize, usize, usize),
     /// Shared table state for proxy history (sort, filter, columns).
     pub hist_table: table::TableState,
     /// Proxy HTTP history filter bar (B-01).
     pub hist_filter: history_filter::HistoryFilter,
     /// Cached filtered/sorted view of the history (N-02): recomputing it every
     /// frame is a full scan of every entry, so it is keyed on the inputs.
-    pub hist_cache: Vec<net::HistEntry>,
+    pub hist_cache: Arc<Vec<net::HistEntry>>,
     pub hist_cache_len: usize,
     pub hist_cache_key: String,
     pub hist_cache_truncated: bool,
@@ -118,6 +157,11 @@ pub struct App {
     /// Burp message panes and Inspector under the Proxy history.
     pub req_pane: msgpane::PaneState,
     pub resp_pane: msgpane::PaneState,
+    /// Selected tab of the issue detail view (Advisory, Request, Response, ...)
+    /// and the state of its message pane.
+    pub issue_tab: usize,
+    pub issue_pane: msgpane::PaneState,
+    pub issue_filter: issue_view::IssueFilter,
     pub insp_state: msgpane::InspectorState,
     /// Right dock: 0 Inspector, 1 Notes, 2 collapsed.
     pub dock_sel: usize,
@@ -136,6 +180,15 @@ pub struct App {
     pub ext_detail: usize,
     pub ext_add_open: bool,
     pub ext_add_path: String,
+    /// Add dialog: Java (.jar) or WebProbe process extension.
+    pub ext_add_kind: webprobe_core::ext_store::Kind,
+    /// An extension is being loaded in the background.
+    pub ext_loading: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// Set when a load from the Add dialog succeeded (closes the dialog).
+    pub ext_add_done: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// A tab refresh is in flight / when the last one started (UI time).
+    pub ext_tab_busy: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    pub ext_tab_at: f64,
     /// Sequencer (Burp layout): sub-tab, requests sent here, token location
     /// (0 cookie, 1 form field, 2 custom regex), live capture state.
     pub seq_sub: usize,
@@ -163,6 +216,16 @@ pub struct App {
     pub cmp_paste_pending: bool,
     pub cmp_load_path: String,
     pub cmp_window: Option<(usize, usize, bool)>,
+    /// The token-level comparison shown in the compare window, and the file
+    /// its Export button writes.
+    pub cmp_result: Option<compare::Comparison>,
+    /// Comparer result window: Hex view, Sync views, shared scroll offset.
+    pub cmp_hex: bool,
+    pub cmp_sync: bool,
+    pub cmp_scroll: egui::Vec2,
+    pub cmp_export_path: String,
+    /// Which Compare button opened the window (Words, Bytes, Characters).
+    pub cmp_unit_label: &'static str,
     /// Logger / Organizer (Burp layouts).
     pub log_on: bool,
     pub log_table: table::TableState,
@@ -188,10 +251,17 @@ pub struct App {
     pub intr_row_sel: Option<usize>,
     pub intr_res_req_pane: msgpane::PaneState,
     pub intr_res_resp_pane: msgpane::PaneState,
+    /// Intruder attack settings, running attack and results-window state (C-05..C-07).
+    pub intr_x: intruder_ui::IntruderExtra,
     /// Target: sub-tab, URL/Crawl paths view, selected tree node and entry, panes.
     pub target_sub: usize,
     pub target_view: usize,
     pub target_node: Option<(String, String)>,
+    /// Site map filter, and the filtered contents with the inputs they were
+    /// built from.
+    pub site_filter: site_map::SiteFilter,
+    pub site_cache: Arc<(Vec<net::HistEntry>, Vec<(String, String)>)>,
+    pub site_cache_key: String,
     pub target_entry: Option<u64>,
     pub site_req_pane: msgpane::PaneState,
     pub site_resp_pane: msgpane::PaneState,
@@ -226,6 +296,9 @@ pub struct App {
     pub intr_attack: intruder::AttackType,
     /// Raw payload text per position, one payload per line (C-03 UI side).
     pub intr_sets: Vec<String>,
+    /// Payload type per set (Burp's "Payload type" dropdown). For "Simple
+    /// list" the text in `intr_sets` is the list; the others generate.
+    pub intr_sources: Vec<intruder::PayloadSource>,
     pub dec_input: String,
     pub dec_results: Vec<(String, String)>,
     /// Latest Decoder output (P-07).
@@ -236,11 +309,18 @@ pub struct App {
     pub scope_only: bool,
     pub seq_mode: usize,
     pub seq_ignore_abnormal: bool,
+    /// Live capture: stop after this many tokens; re-analyse as they arrive.
+    pub seq_capture_limit: usize,
+    pub seq_auto_analyze: bool,
     pub seq_selector: String,
     pub seq_manual: String,
     pub seq_samples: Vec<Vec<u8>>,
     pub seq_stats: Option<analysis::TokenStats>,
     pub seq_report: Option<analysis::SequencerReport>,
+    /// Bit-level analysis of `seq_samples` (None below 100 tokens) and the
+    /// file its export buttons write to.
+    pub seq_bits: Option<seq_bits::BitReport>,
+    pub seq_export_path: String,
     pub seq_status: String,
     pub comparer_state: analysis::ComparerState,
     pub search_query: String,
@@ -248,10 +328,14 @@ pub struct App {
     pub search_results: Vec<analysis::SearchHit>,
     pub project_path: String,
     pub project_status: String,
+    /// The start window / Project menu chooser.
+    pub chooser: project_start::Chooser,
     pub collab_state: collaborator::CollaboratorState,
     pub macro_name: String,
     pub macro_request: String,
     pub rep_sel: usize,
+    /// Repeater/intercept/WebSockets state (E-02..E-06, P-06, B-09).
+    pub rops: repeater_ops::State,
     /// Repeater response view: 0 Raw, 1 Hex, 2 Pretty (P-04).
     pub rep_view: usize,
     /// Repeater request view: 0 Pretty, 1 Raw, 2 Hex (P-04).
@@ -263,6 +347,8 @@ pub struct App {
     pub selftest_done: bool,
     pub grab_done: Option<Arc<Mutex<bool>>>,
     pub screenshot: Option<PathBuf>,
+    /// Reporting, engagement tools, content discovery, crash recovery.
+    pub eng: engagement::State,
 }
 
 /// One proxy history row flattened for mirroring: `(id, ts, method, host,
@@ -274,6 +360,23 @@ pub struct App {
 type HistRow = (u64, u64, String, String, u16, String, String, usize, usize, String);
 
 impl App {
+    /// While a scan off the UI thread asks for them (`Shared::oob_wanted`),
+    /// keep a stock of Collaborator payloads in `Shared::oob_pool`.
+    fn refill_oob_pool(&mut self) {
+        const LOW: usize = 200;
+        const BATCH: usize = 300;
+        if !self.shared.oob_wanted.load(Ordering::SeqCst) {
+            return;
+        }
+        let mut pool = self.shared.oob_pool.lock().unwrap();
+        if pool.len() < LOW {
+            for _ in 0..BATCH {
+                let p = self.collab_state.generate_payload();
+                pool.push((p.token, p.dns_name));
+            }
+        }
+    }
+
     /// Mirror proxy history into the Logger, once per history id.
     ///
     /// Rows are copied out under the history lock, the lock is dropped, and
@@ -282,7 +385,8 @@ impl App {
     fn sync_logger(&mut self) {
         // Logger's "Logging on" switch: while off, new traffic is not mirrored.
         if !self.log_on {
-            if let Ok(h) = self.shared.history.lock() {
+            {
+                let h = self.shared.history.lock().unwrap();
                 self.log_seen = h.iter().map(|e| e.id).max().unwrap_or(self.log_seen);
             }
             return;
@@ -291,7 +395,7 @@ impl App {
         let mut newest = 0u64;
         let mut rows: Vec<HistRow> = Vec::new();
         {
-            let Ok(hist) = self.shared.history.lock() else { return };
+            let hist = self.shared.history.lock().unwrap();
             for e in hist.iter() {
                 newest = newest.max(e.id);
             }
@@ -317,6 +421,30 @@ impl App {
             self.log_seen = 0;
         }
         mirror_history(&mut self.logger, &mut self.log_seen, &rows);
+        let sent = std::mem::take(&mut *self.shared.tool_log.lock().unwrap());
+        mirror_tool_log(&mut self.logger, sent);
+    }
+}
+
+/// Append what the tools sent (Repeater, Intruder, Scanner, ...) to `logger`.
+fn mirror_tool_log(logger: &mut logger::Logger, sent: Vec<net::ToolExchange>) {
+    for t in sent {
+        logger.push(logger::LogEntry {
+            ts: t.ts,
+            tool: t.tool.to_string(),
+            method: t.method,
+            host: t.host,
+            port: t.port,
+            path: t.path,
+            status: t.status,
+            req_len: t.req_len,
+            resp_len: t.resp_len,
+            mime: t.mime,
+            source: t.tool.to_ascii_lowercase(),
+            request: Some(t.request),
+            response: t.response,
+            ..Default::default()
+        });
     }
 }
 
@@ -339,6 +467,7 @@ fn mirror_history(logger: &mut logger::Logger, seen: &mut u64, rows: &[HistRow])
             resp_len: *resp_len,
             mime: mime.clone(),
             source: "proxy".to_string(),
+            hist_id: Some(*id),
             ..Default::default() // `push` assigns the logger id
         });
         *seen = (*seen).max(*id);
@@ -365,26 +494,75 @@ fn response_mime(entry: &net::HistEntry) -> String {
     entry.extension.clone()
 }
 
+/// Project autosave/autoload is on unless WEBPROBE_NO_AUTOSAVE is set (QA
+/// rigs and throwaway sessions).
+fn autosave_enabled() -> bool {
+    std::env::var_os("WEBPROBE_NO_AUTOSAVE").is_none()
+}
+
+fn autosave_signature(app: &App) -> (usize, usize, usize) {
+    (
+        app.shared.history.lock().unwrap().len(),
+        app.shared.issues.lock().unwrap().len(),
+        app.shared.repeaters.lock().unwrap().iter().map(|r| r.history.len() + r.request.len()).sum(),
+    )
+}
+
 impl eframe::App for App {
-    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-        tools::close_launched_browsers(&self.shared);
+    fn raw_input_hook(&mut self, ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+        self.mcp.inject(ctx, raw_input);
     }
 
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        tools::close_launched_browsers(&self.shared);
+        if autosave_enabled() && autosave_signature(self) != (0, 0, 0) {
+            tools::save_project(self, true);
+        }
+        recovery::shutdown(self);
+    }
+
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = &ui.ctx().clone();
         theme::apply_current(ctx);
+        // Autosave once a minute when the project changed.
+        if autosave_enabled() && self.autosave_at.elapsed() >= std::time::Duration::from_secs(60) {
+            self.autosave_at = std::time::Instant::now();
+            let sig = autosave_signature(self);
+            if sig != self.autosave_sig {
+                self.autosave_sig = sig;
+                tools::save_project(self, true);
+            }
+        }
         feedback::drain(&mut self.toasts);
         self.toasts.tick(std::time::Instant::now());
         // Mirror new proxy traffic before drawing, so the Logger view and the
         // history table show the same frame's entries.
+        self.mcp.frame(ctx);
         self.sync_logger();
-        ui::show(self, ctx);
+        self.refill_oob_pool();
+        ui::show(self, ui);
         self.toasts.show(ctx);
 
         // Poll background state (proxy traffic, scans, Repeater) five times a
         // second instead of redrawing flat out: continuous repaint under the
         // software renderer pinned ~6 cores and starved the network threads
         // (a 60 ms Repeater send took 22 s). Input still repaints at once.
-        ctx.request_repaint_after(std::time::Duration::from_millis(200));
+        // The engine wakes the UI when traffic, a held message, a log line or
+        // a notice arrives (Shared::set_waker), so idle redraws are rare: once
+        // a second for the clock and memory gauge, or five times a second
+        // while a tool is working and its progress should move.
+        if !self.waker_installed {
+            let c = ctx.clone();
+            self.shared.set_waker(Arc::new(move || c.request_repaint()));
+            let c = ctx.clone();
+            notice::set_waker(Arc::new(move || c.request_repaint()));
+            self.waker_installed = true;
+        }
+        let busy = self.shared.scan_busy.load(Ordering::SeqCst)
+            || self.shared.rep_busy.load(Ordering::SeqCst)
+            || crate::intruder_ui::is_running(self)
+            || self.seq_live_stop.as_ref().is_some_and(|s| !s.load(Ordering::SeqCst));
+        ctx.request_repaint_after(std::time::Duration::from_millis(if busy { 200 } else { 1000 }));
 
         // Optional self test: route one request through our own proxy so the
         // passive-audit pipeline can be exercised in screenshot runs.
@@ -422,7 +600,7 @@ impl eframe::App for App {
                             std::thread::sleep(std::time::Duration::from_millis(800));
                             let e = sh.history.lock().unwrap().last().cloned();
                             if let Some(e) = e {
-                                crate::scan::start_active_scan(sh.clone(), e, &[], &[]);
+                                crate::tasks::enqueue(&sh, "Selftest active scan", crate::tasks::TaskKind::Audit(vec![e]));
                             }
                         }
                     }
@@ -434,7 +612,7 @@ impl eframe::App for App {
             self.frames += 1;
             if self.frames == 100 && !self.shot_added {
                 // paint callback runs while the frame's own framebuffer still holds the image
-                let rect = ctx.screen_rect();
+                let rect = ctx.viewport_rect();
                 let done = Arc::new(Mutex::new(false));
                 self.grab_done = Some(done.clone());
                 schedule_grab(ctx, &path, rect, done);
@@ -483,7 +661,7 @@ pub fn send_internal_probe(port: u16, request: &[u8]) -> Vec<u8> {
 fn schedule_grab(ctx: &egui::Context, path: &PathBuf, rect: egui::Rect, done: Arc<Mutex<bool>>) {
     let painter = egui::Painter::new(
         ctx.clone(),
-        egui::LayerId::new(egui::Order::Tooltip, egui::Id::new("shot_grab")),
+        egui::LayerId::new(egui::Order::Tooltip, egui::Id::unique("shot_grab")),
         rect,
     );
     let path = path.clone();
@@ -503,7 +681,7 @@ fn schedule_grab(ctx: &egui::Context, path: &PathBuf, rect: egui::Rect, done: Ar
                 h,
                 eframe::glow::RGBA,
                 eframe::glow::UNSIGNED_BYTE,
-                eframe::glow::PixelPackData::Slice(&mut pixels),
+                eframe::glow::PixelPackData::Slice(Some(&mut pixels)),
             );
             // flip rows (GL reads bottom-up) and force opaque alpha if the surface has none
             let stride = w as usize * 4;
@@ -527,6 +705,225 @@ fn schedule_grab(ctx: &egui::Context, path: &PathBuf, rect: egui::Rect, done: Ar
         *done.lock().unwrap() = ok;
     });
     painter.add(egui::PaintCallback { rect, callback: Arc::new(cb) });
+}
+
+
+impl App {
+    /// The app state with its defaults, over an engine that is already set
+    /// up. `main` applies the command-line / environment choices (start tab,
+    /// project path, Collaborator ports, QA hooks) afterwards; tests build
+    /// an `App` the same way.
+    pub fn new(shared: Arc<net::Shared>) -> Self {
+        let port_txt = shared.proxy_port.load(Ordering::SeqCst).to_string();
+        App {
+            shared,
+            logger: logger::Logger::new(5000),
+            organizer: organizer::Organizer::new(),
+            log_filter: logger::LogQuery::default(),
+            log_seen: 0,
+            log_sel: None,
+            org_sel: None,
+            intr_sub: 0,
+            intercept_fwd_all: false,
+            intercept_drop_all: false,
+            ws_sel: None,
+            tab: ui::Tab::Dashboard,
+            proxy_sub: std::env::var("WEBPROBE_PROXY_SUB")
+                .ok()
+                .and_then(|v| v.trim().parse::<usize>().ok())
+                .map(|v| v.min(4))
+                .unwrap_or(1),
+            // QA hook: WEBPROBE_SELECT_ID=<id> preselects a row so the selected-row
+            // highlight can be inspected without a pointer.
+            history_sel: std::env::var("WEBPROBE_SELECT_ID").ok().and_then(|v| v.trim().parse().ok()),
+            history_multi: table::MultiSelect::default(),
+            waker_installed: false,
+            mcp: mcp_hook::Mcp::start(),
+            split_detail: 260.0,
+            target_host_sel: None,
+            target_hosts: Vec::new(),
+            target_items: Vec::new(),
+            map_cache_len: usize::MAX,
+            // Proxy history opens newest-first, like Burp's HTTP history.
+            hist_table: table::TableState { sort_col: 0, sort_asc: false, ..Default::default() },
+            hist_filter: history_filter::HistoryFilter::default(),
+            hist_cache: Arc::new(Vec::new()),
+            hist_cache_len: 0,
+            hist_cache_key: String::new(),
+            hist_cache_truncated: false,
+            scan_table: table::TableState::new(),
+            intr_table: table::TableState::new(),
+            target_table: table::TableState::new(),
+            toasts: feedback::Toasts::new(),
+            shortcuts: shortcuts::Shortcuts::load(),
+            palette: shortcuts::Palette { open: false, query: String::new(), sel: 0 },
+            hotkey_capture: None,
+            hotkey_notice: None,
+            settings_open: false,
+            settings_help: ui::SettingsPane::Appearance,
+            onboarding_hidden: false,
+            detail_editor: editor::EditorState::default(),
+            intercept_editor: editor::EditorState::default(),
+            intr_editor: editor::EditorState::default(),
+            rep_editor: editor::EditorState::default(),
+            seq_editor: editor::EditorState::default(),
+            dec_editor: editor::EditorState::default(),
+            intercept_edit: String::new(),
+            detail_sub: 0,
+            req_pane: msgpane::PaneState::default(),
+            resp_pane: msgpane::PaneState::default(),
+            issue_tab: 0,
+            issue_pane: msgpane::PaneState::default(),
+            issue_filter: issue_view::IssueFilter::default(),
+            insp_state: msgpane::InspectorState::default(),
+            dock_sel: 0,
+            ai: ai::AiChat::default(),
+            browser_url: None,
+            csrf_poc: None,
+            hist_window_open: false,
+            hist_window_filter: String::new(),
+            hist_window_table: table::TableState::default(),
+            ext_sub: 0,
+            ext_sel: None,
+            ext_table: table::TableState::default(),
+            ext_detail: 0,
+            ext_add_open: false,
+            ext_add_path: String::new(),
+            ext_add_kind: webprobe_core::ext_store::Kind::Process,
+            ext_loading: Default::default(),
+            ext_add_done: Default::default(),
+            ext_tab_busy: Default::default(),
+            ext_tab_at: 0.0,
+            seq_sub: 0,
+            seq_requests: Vec::new(),
+            seq_req_sel: None,
+            seq_table: table::TableState::default(),
+            seq_loc: 0,
+            seq_field: String::new(),
+            seq_custom: String::new(),
+            seq_load_path: String::new(),
+            seq_live_buf: None,
+            seq_live_stop: None,
+            intercept_cur: None,
+            intercept_text: String::new(),
+            intercept_pane: msgpane::PaneState { view: 1, ..Default::default() },
+            dec_chain: Vec::new(),
+            cmp_items: Vec::new(),
+            cmp_sel1: None,
+            cmp_sel2: None,
+            cmp_table1: table::TableState::default(),
+            cmp_table2: table::TableState::default(),
+            cmp_paste_pending: false,
+            cmp_load_path: String::new(),
+            cmp_window: None,
+            cmp_result: None,
+            cmp_hex: false,
+            cmp_sync: false,
+            cmp_scroll: egui::Vec2::ZERO,
+            cmp_export_path: "/tmp/comparer.html".to_string(),
+            cmp_unit_label: "Words",
+            log_on: true,
+            log_table: table::TableState::default(),
+            log_req_pane: msgpane::PaneState::default(),
+            log_resp_pane: msgpane::PaneState::default(),
+            org_search: String::new(),
+            org_table: table::TableState::default(),
+            org_req_pane: msgpane::PaneState::default(),
+            org_resp_pane: msgpane::PaneState::default(),
+            intr_target: String::new(),
+            intr_update_host: true,
+            intr_pane: msgpane::PaneState { view: 1, ..Default::default() },
+            intr_dock: 0,
+            intr_set_sel: 0,
+            intr_add: String::new(),
+            intr_load_path: String::new(),
+            intr_paste_pending: false,
+            intr_results_open: false,
+            intr_attack_no: 0,
+            intr_row_sel: None,
+            intr_res_req_pane: msgpane::PaneState::default(),
+            intr_res_resp_pane: msgpane::PaneState::default(),
+            intr_x: intruder_ui::IntruderExtra::default(),
+            target_sub: 0,
+            target_view: 0,
+            target_node: None,
+            site_filter: site_map::SiteFilter::default(),
+            site_cache: Arc::new((Vec::new(), Vec::new())),
+            site_cache_key: String::new(),
+            target_entry: None,
+            site_req_pane: msgpane::PaneState::default(),
+            site_resp_pane: msgpane::PaneState::default(),
+            dash_task: 1,
+            dash_sub: 0,
+            dash_search: String::new(),
+            dash_items_table: table::TableState::default(),
+            new_scan_open: false,
+            new_scan_urls: String::new(),
+            new_scan_type: 0,
+            rep_req_pane: msgpane::PaneState { view: 1, ..Default::default() },
+            rep_resp_pane: msgpane::PaneState::default(),
+            rep_target_edit: false,
+            rep_update_cl: true,
+            search_open: false,
+            event_log_open: false,
+            event_log_table: table::TableState::default(),
+            mem: (0.0, 0.0),
+            mem_at: None,
+            detail_view: 0,
+            scan_sel: None,
+            // Burp starts with no Intruder request (its "To get started" state).
+            intr_req: String::new(),
+            intr_https: false,
+            intr_payloads: "admin\n' OR 1=1--\ntest".to_string(),
+            intr_attack: intruder::AttackType::Sniper,
+            intr_sets: vec![String::new()],
+            intr_sources: Vec::new(),
+            dec_input: String::new(),
+            dec_results: Vec::new(),
+            dec_output: String::new(),
+            dec_sel_decode: None,
+            dec_sel_encode: None,
+            dec_sel_hash: None,
+            scope_only: false,
+            seq_mode: 0,
+            seq_ignore_abnormal: true,
+            seq_capture_limit: 20_000,
+            seq_auto_analyze: true,
+            seq_selector: "session".to_string(),
+            seq_manual: String::new(),
+            seq_samples: Vec::new(),
+            seq_stats: None,
+            seq_report: None,
+            seq_bits: None,
+            seq_export_path: "/tmp/sequencer-analysis.csv".to_string(),
+            seq_status: String::new(),
+            comparer_state: analysis::ComparerState::default(),
+            search_query: String::new(),
+            search_case: false,
+            search_results: Vec::new(),
+            project_path: "webprobe-project.json".to_string(),
+            project_status: String::new(),
+            chooser: project_start::Chooser::default(),
+            autosave_at: std::time::Instant::now(),
+            autosave_sig: (0, 0, 0),
+            collab_state: collaborator::CollaboratorState::new(),
+            macro_name: "Macro 1".to_string(),
+            // Empty: a prefilled example host would get real traffic from Test macro.
+            macro_request: String::new(),
+            rep_sel: 0,
+            rops: repeater_ops::State::default(),
+            rep_view: 0,
+            rep_req_view: 1,
+            port_txt,
+            frames: 0,
+            saved: false,
+            shot_added: false,
+            selftest_done: false,
+            grab_done: None,
+            screenshot: None,
+            eng: engagement::State::default(),
+        }
+    }
 }
 
 fn main() {
@@ -607,7 +1004,9 @@ fn main() {
                 diffs: 0,
             });
         }
-        shared.next_id.store(base + n as u64, Ordering::SeqCst);
+        // Seeded ids are base+1..=base+n; the next real exchange must not reuse
+        // the last one (two rows with one id select and send as the first).
+        shared.next_id.store(base + n as u64 + 1, Ordering::SeqCst);
         shared.log(&format!("Seeded {n} history entries"));
     }
 
@@ -629,10 +1028,7 @@ fn main() {
     }
     // Test hook: register the built-in example extension, e.g. WEBPROBE_EXT_TEST=1
     if std::env::var("WEBPROBE_EXT_TEST").is_ok() {
-        shared.ext_host.lock().unwrap().extensions.push(ext_host::LoadedExtension {
-            enabled: true,
-            hooks: Box::new(ext_host::ExampleHeaderExtension),
-        });
+        shared.ext_host.lock().unwrap().extensions.push(ext_host::LoadedExtension::new(ext_host::ExampleHeaderExtension));
         shared.log("Registered example extension: Example header add (ProxyRequestHandler)");
     }
     // Path B: load a real Montoya .jar extension through the sidecar JVM,
@@ -645,14 +1041,18 @@ fn main() {
                     sidecar.extension_name(),
                     sidecar.hooks_registered()
                 ));
-                shared.ext_host.lock().unwrap().extensions.push(ext_host::LoadedExtension {
-                    enabled: true,
-                    hooks: Box::new(sidecar),
-                });
+                shared.ext_host.lock().unwrap().extensions.push(ext_host::LoadedExtension::new(sidecar));
             }
             Err(e) => shared.log(&format!("Sidecar JVM failed to load {ext_jar}: {e}")),
         }
     }
+    // Extensions the user installed earlier (Extensions > Installed), loaded
+    // in the background. WEBPROBE_NO_EXTENSIONS=1 skips them (QA runs).
+    if std::env::var_os("WEBPROBE_NO_EXTENSIONS").is_none() {
+        webprobe_core::ext_store::load_all(&shared);
+    }
+    // This front end refills the Collaborator payload pool (refill_oob_pool).
+    shared.oob_supplier.store(true, Ordering::SeqCst);
     net::start_proxy(shared.clone());
 
     let options = eframe::NativeOptions {
@@ -719,180 +1119,36 @@ fn main() {
         query: palette_query,
         sel: 0,
     };
-    let app = App {
-        shared,
-        logger: logger::Logger::new(5000),
-        organizer: organizer::Organizer::new(),
-        log_filter: logger::LogQuery::default(),
-        log_seen: 0,
-        log_sel: None,
-        org_sel: None,
-        intr_sub: 0,
-        ws_sel: None,
-        tab,
-        proxy_sub: std::env::var("WEBPROBE_PROXY_SUB")
-            .ok()
-            .and_then(|v| v.trim().parse::<usize>().ok())
-            .map(|v| v.min(4))
-            .unwrap_or(1),
-        // QA hook: WEBPROBE_SELECT_ID=<id> preselects a row so the selected-row
-        // highlight can be inspected without a pointer.
-        history_sel: std::env::var("WEBPROBE_SELECT_ID").ok().and_then(|v| v.trim().parse().ok()),
-        split_detail: 260.0,
-        target_host_sel: None,
-        target_hosts: Vec::new(),
-        target_items: Vec::new(),
-        map_cache_len: usize::MAX,
-        // Proxy history opens newest-first, like Burp's HTTP history.
-        hist_table: table::TableState { sort_col: 0, sort_asc: false, ..Default::default() },
-        hist_filter: history_filter::HistoryFilter::default(),
-        hist_cache: Vec::new(),
-        hist_cache_len: 0,
-        hist_cache_key: String::new(),
-        hist_cache_truncated: false,
-        scan_table: table::TableState::new(),
-        intr_table: table::TableState::new(),
-        target_table: table::TableState::new(),
-        toasts: feedback::Toasts::new(),
-        shortcuts: shortcuts::Shortcuts::load(),
-        palette,
-        hotkey_capture: None,
-        hotkey_notice: None,
-        settings_open,
-        settings_help,
-        onboarding_hidden: false,
-        detail_editor: editor::EditorState::default(),
-        intercept_editor: editor::EditorState::default(),
-        intr_editor: editor::EditorState::default(),
-        rep_editor: editor::EditorState::default(),
-        seq_editor: editor::EditorState::default(),
-        dec_editor: editor::EditorState::default(),
-        intercept_edit: String::new(),
-        detail_sub: 0,
-        req_pane: msgpane::PaneState::default(),
-        resp_pane: msgpane::PaneState::default(),
-        insp_state: msgpane::InspectorState::default(),
-        dock_sel: 0,
-        ai: ai::AiChat::default(),
-        browser_url: None,
-        csrf_poc: None,
-        hist_window_open: false,
-        hist_window_filter: String::new(),
-        hist_window_table: table::TableState::default(),
-        ext_sub: 0,
-        ext_sel: None,
-        ext_table: table::TableState::default(),
-        ext_detail: 0,
-        ext_add_open: false,
-        ext_add_path: String::new(),
-        seq_sub: 0,
-        seq_requests: Vec::new(),
-        seq_req_sel: None,
-        seq_table: table::TableState::default(),
-        seq_loc: 0,
-        seq_field: String::new(),
-        seq_custom: String::new(),
-        seq_load_path: String::new(),
-        seq_live_buf: None,
-        seq_live_stop: None,
-        intercept_cur: None,
-        intercept_text: String::new(),
-        intercept_pane: msgpane::PaneState { view: 1, ..Default::default() },
-        dec_chain: Vec::new(),
-        cmp_items: Vec::new(),
-        cmp_sel1: None,
-        cmp_sel2: None,
-        cmp_table1: table::TableState::default(),
-        cmp_table2: table::TableState::default(),
-        cmp_paste_pending: false,
-        cmp_load_path: String::new(),
-        cmp_window: None,
-        log_on: true,
-        log_table: table::TableState::default(),
-        log_req_pane: msgpane::PaneState::default(),
-        log_resp_pane: msgpane::PaneState::default(),
-        org_search: String::new(),
-        org_table: table::TableState::default(),
-        org_req_pane: msgpane::PaneState::default(),
-        org_resp_pane: msgpane::PaneState::default(),
-        intr_target: String::new(),
-        intr_update_host: true,
-        intr_pane: msgpane::PaneState { view: 1, ..Default::default() },
-        intr_dock: 0,
-        intr_set_sel: 0,
-        intr_add: String::new(),
-        intr_load_path: String::new(),
-        intr_paste_pending: false,
-        intr_results_open: false,
-        intr_attack_no: 0,
-        intr_row_sel: None,
-        intr_res_req_pane: msgpane::PaneState::default(),
-        intr_res_resp_pane: msgpane::PaneState::default(),
-        target_sub: 0,
-        target_view: 0,
-        target_node: None,
-        target_entry: None,
-        site_req_pane: msgpane::PaneState::default(),
-        site_resp_pane: msgpane::PaneState::default(),
-        dash_task: 1,
-        dash_sub: 0,
-        dash_search: String::new(),
-        dash_items_table: table::TableState::default(),
-        new_scan_open: false,
-        new_scan_urls: String::new(),
-        new_scan_type: 0,
-        rep_req_pane: msgpane::PaneState { view: 1, ..Default::default() },
-        rep_resp_pane: msgpane::PaneState::default(),
-        rep_target_edit: false,
-        rep_update_cl: true,
-        search_open: false,
-        event_log_open: false,
-        event_log_table: table::TableState::default(),
-        mem: (0.0, 0.0),
-        mem_at: None,
-        detail_view: 0,
-        scan_sel: None,
-        // Burp starts with no Intruder request (its "To get started" state).
-        intr_req: String::new(),
-        intr_https: false,
-        intr_payloads: "admin\n' OR 1=1--\ntest".to_string(),
-        intr_attack: intruder::AttackType::Sniper,
-        intr_sets: vec![String::new()],
-        dec_input: String::new(),
-        dec_results: Vec::new(),
-        dec_output: String::new(),
-        dec_sel_decode: None,
-        dec_sel_encode: None,
-        dec_sel_hash: None,
-        scope_only: false,
-        seq_mode: 0,
-        seq_ignore_abnormal: true,
-        seq_selector: "session".to_string(),
-        seq_manual: String::new(),
-        seq_samples: Vec::new(),
-        seq_stats: None,
-        seq_report: None,
-        seq_status: String::new(),
-        comparer_state: analysis::ComparerState::default(),
-        search_query: String::new(),
-        search_case: false,
-        search_results: Vec::new(),
-        project_path,
-        project_status: String::new(),
-        collab_state,
-        macro_name: "Macro 1".to_string(),
-        macro_request: "GET /login HTTP/1.1\r\nHost: example.com\r\n\r\n".to_string(),
-        rep_sel: 0,
-        rep_view: 0,
-        rep_req_view: 1,
-        port_txt,
-        frames: 0,
-        saved: false,
-        shot_added: false,
-        selftest_done: false,
-        grab_done: None,
-        screenshot,
-    };
+    let mut app = App::new(shared);
+    app.tab = tab;
+    app.palette = palette;
+    app.settings_open = settings_open;
+    app.settings_help = settings_help;
+    app.project_path = project_path;
+    app.collab_state = collab_state;
+    app.port_txt = port_txt;
+    app.screenshot = screenshot;
+
+    // Reopen the project as Burp reopens its project file: history, issues,
+    // Repeater tabs and rules come back after a restart.
+    // J-02: an unclean previous exit asks first (recovery::startup).
+    if autosave_enabled() && recovery::startup(&mut app) {
+        tools::restore_project(&mut app, true);
+        app.autosave_sig = autosave_signature(&app);
+    }
+    // Burp opens on its project chooser. Not when a recovery prompt is
+    // already up, nor in scripted runs (no autosave, a fixed tab, or
+    // WEBPROBE_NO_START_SCREEN).
+    if autosave_enabled()
+        && app.eng.recovery.is_none()
+        && std::env::var_os("WEBPROBE_TAB").is_none()
+        && std::env::var_os("WEBPROBE_NO_START_SCREEN").is_none()
+        && std::env::var_os("WEBPROBE_TEMP_PROJECT").is_none()
+    {
+        app.chooser.open = true;
+        app.chooser.at_start = true;
+        project_files::note_used(&app.project_path.clone());
+    }
 
     eframe::run_native(
         "WebProbe",
@@ -1022,5 +1278,23 @@ mod tests {
         assert_eq!(response_mime(&entry), "application/json");
         entry.resp_raw = None;
         assert_eq!(response_mime(&entry), "bin", "falls back to the URL extension");
+    }
+}
+
+#[cfg(test)]
+mod layering_tests {
+    /// The engine is its own crate (core/), so it cannot name a UI module.
+    /// What remains to guard is its manifest: it must not gain a GUI
+    /// dependency, or a headless build would pull one in.
+    #[test]
+    fn engine_crate_has_no_gui_dependency() {
+        let manifest = std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("core/Cargo.toml")).unwrap();
+        for gui in ["eframe", "egui", "winit", "glow", "image"] {
+            let found = manifest.lines().any(|l| {
+                let l = l.trim_start();
+                !l.starts_with('#') && [" ", "=", "-", "_"].iter().any(|sep| l.starts_with(&format!("{gui}{sep}")))
+            });
+            assert!(!found, "core/Cargo.toml must not depend on {gui}");
+        }
     }
 }

@@ -1,0 +1,155 @@
+{
+  "id": "ev_f0be66ab9bdea7124a5aabbd8585857141c4a9f521f40249e3a64921e3f034c6",
+  "subject": {
+    "kind": "java-class",
+    "sha256": "a878e0514337fdeefa2a0bedc76728c7d4ae15070684d855dcd900b0c5319737",
+    "name": "Zp9s.class"
+  },
+  "operation": "java_class_show",
+  "params": {
+    "class_name": null,
+    "decompile": false,
+    "path": "/root/burp-re/in/extract/burp/Zp9s.class"
+  },
+  "result": {
+    "access": [
+      "public"
+    ],
+    "annotations": [],
+    "entry": "Zp9s.class",
+    "fields": [
+      {
+        "access": [
+          "private",
+          "static"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "[I",
+        "name": "ZH",
+        "signature": null,
+        "type": "int[]"
+      }
+    ],
+    "inner_classes": [],
+    "interfaces": [],
+    "internal": "burp/Zp9s",
+    "java_version": "Java 21",
+    "methods": [
+      {
+        "access": [
+          "public",
+          "static"
+        ],
+        "code_bytes": 72,
+        "deprecated": false,
+        "descriptor": "(Lburp/Zcrn;Lburp/Zgx0;[BLburp/Zxtk;Ljava/util/List;)Lburp/Zeke;",
+        "max_locals": 6,
+        "max_stack": 12,
+        "name": "Zi",
+        "signature": "public static burp.Zeke Zi(burp.Zcrn, burp.Zgx0, byte[], burp.Zxtk, java.util.List)",
+        "signature_attr": "(Lburp/Zcrn;Lburp/Zgx0;[BLburp/Zxtk;Ljava/util/List<Lburp/Zxtk;>;)Lburp/Zeke<Lburp/Zco9;>;",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public",
+          "static"
+        ],
+        "code_bytes": 47,
+        "deprecated": false,
+        "descriptor": "(Lburp/Zp42;Ljava/lang/String;Lburp/Zi2s;Lburp/Zgx0;Ljava/util/List;[B)Lburp/Zeke;",
+        "max_locals": 6,
+        "max_stack": 12,
+        "name": "ZC",
+        "signature": "public static burp.Zeke ZC(burp.Zp42, java.lang.String, burp.Zi2s, burp.Zgx0, java.util.List, byte[])",
+        "signature_attr": "(Lburp/Zp42;Ljava/lang/String;Lburp/Zi2s;Lburp/Zgx0;Ljava/util/List<Lburp/Zw6p<*>;>;[B)Lburp/Zeke<Lburp/Zco9;>;",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public",
+          "static"
+        ],
+        "code_bytes": 5,
+        "deprecated": false,
+        "descriptor": "([I)V",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "Zq",
+        "signature": "public static void Zq(int[])",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public",
+          "static"
+        ],
+        "code_bytes": 4,
+        "deprecated": false,
+        "descriptor": "()[I",
+        "max_locals": 0,
+        "max_stack": 1,
+        "name": "ZR",
+        "signature": "public static int[] ZR()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "static"
+        ],
+        "code_bytes": 13,
+        "deprecated": false,
+        "descriptor": "()V",
+        "max_locals": 0,
+        "max_stack": 1,
+        "name": "<clinit>",
+        "signature": "static <clinit>()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      }
+    ],
+    "name": "burp.Zp9s",
+    "pseudo_java": null,
+    "signature": null,
+    "source_file": null,
+    "superclass": "java.lang.Object",
+    "version": {
+      "major": 65,
+      "minor": 0
+    }
+  },
+  "summary": "burp.Zp9s (Java 21) extends Object: 1 fields, 5 methods.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 1,
+    "total": 1
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/root/burp-re/in/extract/burp/Zp9s.class"
+    },
+    {
+      "kind": "class",
+      "value": "burp/Zp9s"
+    }
+  ],
+  "links": []
+}

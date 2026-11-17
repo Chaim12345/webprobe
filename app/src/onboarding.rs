@@ -26,8 +26,8 @@ use crate::net;
 use crate::theme::{self, c};
 use crate::App;
 
-/// Hosts answered locally instead of being proxied upstream.
-pub const SETUP_HOSTS: [&str; 2] = ["webprobe", "burpsuite"];
+#[cfg(test)]
+use crate::setup_page::{local_response, setup_page};
 
 /// A checklist line, derived from live state rather than from a stored flag, so
 /// it cannot claim a step is done when it is not.
@@ -37,11 +37,28 @@ pub struct Check {
     pub done: bool,
 }
 
+/// An exchange the proxy really carried. Seeded test rows (the
+/// WEBPROBE_SEED_HISTORY hook) carry a tiny counter as their timestamp and
+/// must not tick the onboarding steps.
+fn is_real(e: &net::HistEntry) -> bool {
+    e.ts >= 1_000_000_000
+}
+
+/// Real exchanges in history.
+pub fn real_count(history: &[net::HistEntry]) -> usize {
+    history.iter().filter(|e| is_real(e)).count()
+}
+
+/// Real exchanges that were intercepted over TLS.
+pub fn real_https_count(history: &[net::HistEntry]) -> usize {
+    history.iter().filter(|e| is_real(e) && e.https).count()
+}
+
 pub fn checks(app: &App) -> Vec<Check> {
     let port = app.shared.proxy_port.load(std::sync::atomic::Ordering::SeqCst);
     let listening = app.shared.listener_running.load(std::sync::atomic::Ordering::SeqCst);
     let history: Vec<net::HistEntry> = app.shared.history.lock().map(|h| h.clone()).unwrap_or_default();
-    let https = history.iter().filter(|e| e.https).count();
+    let https = real_https_count(&history);
     let waiting = app.shared.count_waiting();
 
     vec![
@@ -55,9 +72,11 @@ pub fn checks(app: &App) -> Vec<Check> {
             done: listening,
         },
         Check {
-            label: "CA certificate trusted by your browser".into(),
+            label: "HTTPS interception working".into(),
+            // The proxy cannot see whether a browser warned before the user
+            // clicked through, so this only claims what it observed.
             detail: if https > 0 {
-                format!("{https} HTTPS exchange(s) decrypted without a browser warning")
+                format!("{https} HTTPS exchange(s) intercepted and decrypted")
             } else {
                 "visit http://webprobe through the proxy, then trust the CA".into()
             },
@@ -65,12 +84,12 @@ pub fn checks(app: &App) -> Vec<Check> {
         },
         Check {
             label: "Traffic is flowing".into(),
-            detail: if history.is_empty() {
+            detail: if real_count(&history) == 0 {
                 "no requests seen yet".into()
             } else {
-                format!("{} request(s) in history", history.len())
+                format!("{} request(s) in history", real_count(&history))
             },
-            done: !history.is_empty(),
+            done: real_count(&history) > 0,
         },
         Check {
             label: "Intercept holds messages".into(),
@@ -89,7 +108,7 @@ pub fn panel(app: &mut App, ui: &mut Ui) -> bool {
     let checks = checks(app);
     let done = checks.iter().filter(|c| c.done).count();
 
-    ui.horizontal(|ui| {
+    let hide = ui.horizontal(|ui| {
         ui.label(
             RichText::new("Set up WebProbe")
                 .size(14.0)
@@ -109,7 +128,8 @@ pub fn panel(app: &mut App, ui: &mut Ui) -> bool {
             false
         })
         .inner
-    });
+    })
+    .inner;
 
     for check in &checks {
         ui.horizontal(|ui| {
@@ -155,7 +175,7 @@ pub fn panel(app: &mut App, ui: &mut Ui) -> bool {
         ui.hyperlink_to("Proxy listener (docs)", "https://portswigger.net/burp/documentation/desktop/external-browser-config");
     });
 
-    false
+    hide
 }
 
 fn export_ca(app: &App) {
@@ -174,8 +194,14 @@ fn export_ca(app: &App) {
 /// a status line and (with an HTTPS URL) a decrypted exchange. Runs off-thread:
 /// the listener answers from its own accept loop.
 pub fn sample_traffic(shared: &std::sync::Arc<net::Shared>) {
+    sample_traffic_to(shared, "example.com");
+}
+
+/// The sample request, sent through the listener to `host` (tests use a local
+/// upstream so they never depend on, or send traffic to, the internet).
+pub fn sample_traffic_to(shared: &std::sync::Arc<net::Shared>, host: &str) {
     let port = shared.proxy_port.load(std::sync::atomic::Ordering::SeqCst);
-    let request = "GET / HTTP/1.1\r\nHost: example.com\r\nUser-Agent: WebProbe/1.0\r\nAccept: */*\r\nConnection: close\r\n\r\n";
+    let request = format!("GET http://{host}/ HTTP/1.1\r\nHost: {host}\r\nUser-Agent: WebProbe/1.0\r\nAccept: */*\r\nConnection: close\r\n\r\n");
     let shared = shared.clone();
     std::thread::spawn(move || {
         let out = crate::send_internal_probe(port, request.as_bytes());
@@ -198,63 +224,19 @@ pub fn sample_traffic(shared: &std::sync::Arc<net::Shared>) {
     });
 }
 
-/// The page served for `http://webprobe` and `http://burpsuite`.
-///
-/// Burp's page tells you to download the certificate and explains that the
-/// browser must already be proxying through the listener; this keeps that shape
-/// (and the same two download formats) without copying its assets.
-pub fn setup_page(port: u16) -> String {
-    format!(
-        "<!doctype html><html><head><meta charset=\"utf-8\"><title>WebProbe</title>\
-<style>body{{font:14px/1.5 system-ui,sans-serif;max-width:44em;margin:3em auto;padding:0 1em;color:#1b1f24}}\
-h1{{margin:0 0 .25em}}code,pre{{font-family:ui-monospace,monospace;background:#f2f4f6;padding:.1em .35em;border-radius:3px}}\
-pre{{padding:.8em;overflow:auto}}a{{color:#0b5cad}}li{{margin:.35em 0}}</style></head><body>\
-<h1>WebProbe proxy</h1>\
-<p>Your browser reached WebProbe through its proxy (main listener <code>127.0.0.1:{port}</code>; WebProbe's own browser uses a private listener). \
-If you are reading this, the listener is running and your browser is configured correctly.</p>\
-<h2>1. Install the CA certificate</h2>\
-<p>WebProbe signs the per-host HTTPS certificates with its own CA, kept on this machine (owner-only file) and reused across restarts. \
-WebProbe's built-in browser already trusts it. For any other browser or device, trust it once to browse HTTPS without warnings:</p>\
-<ul><li><a href=\"/webprobe-ca.pem\">Download the CA certificate (PEM)</a> &mdash; for Firefox, macOS Keychain, Android</li>\
-<li><a href=\"/webprobe-ca.der\">Download the CA certificate (DER)</a> &mdash; for Windows, iOS, Java</li></ul>\
-<h2>2. Check the listener</h2>\
-<p>The listener is on <code>127.0.0.1:{port}</code>. WebProbe's Dashboard shows it as the first checklist step.</p>\
-<h2>3. Verify</h2>\
-<p>Visit any HTTPS URL. The browser should load it with no security warning, and the request appears in Proxy &gt; HTTP history with the padlock marked.</p>\
-<h2>4. Interception</h2>\
-<p>Press <code>Ctrl+T</code> to hold messages, <code>Ctrl+F</code> to forward a held request, and <code>Ctrl+K</code> for the command palette.</p>\
-<hr><p style=\"color:#666\">Reference documentation for the original tool: \
-<a href=\"https://portswigger.net/burp/documentation/desktop/external-browser-config/certificate\">installing a CA certificate</a>, \
-<a href=\"https://portswigger.net/burp/documentation/desktop/settings/ui/hotkeys.html\">hotkeys</a>.</p>\
-</body></html>"
-    )
-}
-
-/// True when this request is for the local setup page (or the CA download) and
-/// should be answered by the proxy instead of being sent upstream.
-pub fn local_response(host: &str, path: &str, port: u16, ca_pem: &str, ca_der: &[u8]) -> Option<Vec<u8>> {
-    let host = host.split(':').next().unwrap_or(host);
-    if !SETUP_HOSTS.iter().any(|h| h.eq_ignore_ascii_case(host)) {
-        return None;
-    }
-    let path = path.split(['?', '#']).next().unwrap_or("/");
-    let (body, content_type): (Vec<u8>, &str) = match path {
-        "/webprobe-ca.pem" => (ca_pem.as_bytes().to_vec(), "application/x-pem-file"),
-        "/webprobe-ca.der" | "/cert" | "/burp/cert" => (ca_der.to_vec(), "application/pkix-cert"),
-        _ => (setup_page(port).into_bytes(), "text/html; charset=utf-8"),
-    };
-    let head = format!(
-        "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\nCache-Control: no-store\r\n\r\n",
-        body.len()
-    );
-    let mut out = head.into_bytes();
-    out.extend_from_slice(&body);
-    Some(out)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn seeded_rows_do_not_count_as_traffic() {
+        let row = |ts: u64, https: bool| net::HistEntry { ts, https, ..Default::default() };
+        // The seed hook stamps rows 0, 1, 2, ...; real rows carry unix time.
+        let history = vec![row(0, true), row(7, true), row(29, false), row(1_794_000_000, false), row(1_794_000_001, true)];
+        assert_eq!(super::real_count(&history), 2);
+        assert_eq!(super::real_https_count(&history), 1);
+        assert_eq!(super::real_https_count(&history[..3]), 0);
+    }
 
     #[test]
     fn setup_hosts_are_answered_locally() {
@@ -308,18 +290,28 @@ fn sample_traffic_populates_history_through_the_listener() {
     }
     assert!(shared.listener_running.load(Ordering::SeqCst), "listener never started");
 
-    sample_traffic(&shared);
+    // A local upstream: the test must not depend on the internet.
+    let upstream = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let up_port = upstream.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        use std::io::{Read, Write};
+        if let Ok((mut s, _)) = upstream.accept() {
+            let mut buf = [0u8; 4096];
+            let _ = s.read(&mut buf);
+            let _ = s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok");
+        }
+    });
+    sample_traffic_to(&shared, &format!("127.0.0.1:{up_port}"));
     for _ in 0..100 {
         if !shared.history.lock().unwrap().is_empty() {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
-    // example.com may be unreachable in the sandbox; either way the exchange is
-    // recorded (a 502 with the upstream error, or the real response).
     let history = shared.history.lock().unwrap();
     assert!(!history.is_empty(), "sample traffic never reached the proxy");
-    assert_eq!(history[0].host, "example.com");
+    assert_eq!(history[0].host, "127.0.0.1");
+    assert_eq!(history[0].status, "200");
 }
 
 }

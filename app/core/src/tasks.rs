@@ -1,0 +1,340 @@
+//! The scan task queue (Burp's Dashboard tasks): scans are queued and run one
+//! at a time by a single runner thread, and each task can be paused,
+//! resumed or cancelled. Unfinished tasks are saved with the project and
+//! queued again when it is opened.
+
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
+use std::time::Duration;
+
+use crate::net::{HistEntry, Shared};
+
+#[derive(Clone)]
+pub enum TaskKind {
+    /// Actively audit these requests.
+    Audit(Vec<HistEntry>),
+    /// Actively audit one request with Collaborator payloads the caller has
+    /// already generated (per-parameter OOB slots and Burp's SMTP header
+    /// injection pairs), as the "Do active scan" action does. Saved with a
+    /// project as a plain `Audit`: payloads belong to the session.
+    Single {
+        entry: HistEntry,
+        oob: Vec<(String, String, String)>,
+        smtp: Vec<crate::scan::SmtpOob>,
+    },
+    /// Fetch the URLs, crawl from them unless `audit_only`, audit what is found.
+    CrawlAudit { urls: Vec<String>, audit_only: bool },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TaskState {
+    Queued,
+    Running,
+    Paused,
+    Finished,
+    Cancelled,
+}
+
+impl TaskState {
+    pub fn label(self) -> &'static str {
+        match self {
+            TaskState::Queued => "Waiting to start",
+            TaskState::Running => "Running",
+            TaskState::Paused => "Paused",
+            TaskState::Finished => "Finished",
+            TaskState::Cancelled => "Cancelled",
+        }
+    }
+
+    pub fn is_open(self) -> bool {
+        matches!(self, TaskState::Queued | TaskState::Running | TaskState::Paused)
+    }
+}
+
+#[derive(Clone)]
+pub struct ScanTask {
+    pub id: u64,
+    pub name: String,
+    pub kind: TaskKind,
+    pub state: TaskState,
+    /// Requests audited so far and in all (Audit tasks; a crawl does not
+    /// know its total in advance).
+    pub done: usize,
+    pub total: Option<usize>,
+    /// Issues reported while the task ran.
+    pub issues_found: usize,
+    pub created: u64,
+    pub finished: Option<u64>,
+}
+
+/// Add a scan to the queue and make sure the runner is going. Returns its id.
+pub fn enqueue(shared: &Arc<Shared>, name: impl Into<String>, kind: TaskKind) -> u64 {
+    let id = shared.next_task_id.fetch_add(1, Ordering::SeqCst);
+    let total = match &kind {
+        TaskKind::Audit(e) => Some(e.len()),
+        TaskKind::Single { .. } => Some(1),
+        TaskKind::CrawlAudit { .. } => None,
+    };
+    shared.tasks.lock().unwrap().push(ScanTask {
+        id,
+        name: name.into(),
+        kind,
+        state: TaskState::Queued,
+        done: 0,
+        total,
+        issues_found: 0,
+        created: crate::util::now_secs(),
+        finished: None,
+    });
+    ensure_runner(shared);
+    shared.wake();
+    id
+}
+
+fn set_state(shared: &Shared, id: u64, state: TaskState) {
+    if let Some(t) = shared.tasks.lock().unwrap().iter_mut().find(|t| t.id == id) {
+        t.state = state;
+        if !state.is_open() {
+            t.finished = Some(crate::util::now_secs());
+        }
+    }
+    shared.wake();
+}
+
+fn state_of(shared: &Shared, id: u64) -> Option<TaskState> {
+    shared.tasks.lock().unwrap().iter().find(|t| t.id == id).map(|t| t.state)
+}
+
+/// Pause a task: a running one stops sending at its next request.
+pub fn pause(shared: &Shared, id: u64) {
+    match state_of(shared, id) {
+        Some(TaskState::Running) => {
+            shared.scan_paused.store(true, Ordering::SeqCst);
+            set_state(shared, id, TaskState::Paused);
+        }
+        Some(TaskState::Queued) => set_state(shared, id, TaskState::Paused),
+        _ => {}
+    }
+}
+
+/// Resume a paused task (a queued-then-paused one goes back in the queue).
+pub fn resume(shared: &Shared, id: u64) {
+    if state_of(shared, id) == Some(TaskState::Paused) {
+        let running = shared.running_task.load(Ordering::SeqCst) == id;
+        if running {
+            shared.scan_paused.store(false, Ordering::SeqCst);
+        }
+        set_state(shared, id, if running { TaskState::Running } else { TaskState::Queued });
+    }
+}
+
+/// Cancel a task; a running one is stopped.
+pub fn cancel(shared: &Shared, id: u64) {
+    let Some(state) = state_of(shared, id) else { return };
+    if !state.is_open() {
+        return;
+    }
+    if shared.running_task.load(Ordering::SeqCst) == id {
+        shared.scan_stop.store(true, Ordering::SeqCst);
+        shared.scan_paused.store(false, Ordering::SeqCst);
+    }
+    set_state(shared, id, TaskState::Cancelled);
+}
+
+/// Remove a finished or cancelled task from the list.
+pub fn remove(shared: &Shared, id: u64) {
+    shared.tasks.lock().unwrap().retain(|t| t.id != id || t.state.is_open());
+    shared.wake();
+}
+
+/// Block while the scanner is paused (called before every scanner request).
+pub fn wait_while_paused(shared: &Shared) {
+    while shared.scan_paused.load(Ordering::SeqCst) && !shared.scan_stop.load(Ordering::SeqCst) {
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+/// Start the runner thread once per `Shared`.
+pub fn ensure_runner(shared: &Arc<Shared>) {
+    if shared.task_runner.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let shared = shared.clone();
+    std::thread::Builder::new()
+        .name("scan-tasks".into())
+        .spawn(move || loop {
+            let next = {
+                let tasks = shared.tasks.lock().unwrap();
+                tasks.iter().find(|t| t.state == TaskState::Queued).map(|t| (t.id, t.kind.clone()))
+            };
+            match next {
+                Some((id, kind)) if !shared.scan_busy.load(Ordering::SeqCst) => run(&shared, id, kind),
+                _ => std::thread::sleep(Duration::from_millis(200)),
+            }
+        })
+        .expect("scan task runner thread");
+}
+
+fn wait_idle(shared: &Shared) {
+    while shared.scan_busy.load(Ordering::SeqCst) {
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+fn run(shared: &Arc<Shared>, id: u64, kind: TaskKind) {
+    let issues_before = shared.issues.lock().unwrap().len();
+    shared.running_task.store(id, Ordering::SeqCst);
+    shared.scan_stop.store(false, Ordering::SeqCst);
+    shared.scan_paused.store(false, Ordering::SeqCst);
+    set_state(shared, id, TaskState::Running);
+    let _tool = crate::net::tool_scope("Scanner");
+    // One (entry, prepared payloads) item per request; plain audits draw
+    // their OOB payloads from the pool when they reach it.
+    type Prepared = Option<(Vec<(String, String, String)>, Vec<crate::scan::SmtpOob>)>;
+    let items: Vec<(HistEntry, Prepared)> = match kind {
+        TaskKind::Audit(entries) => entries.into_iter().map(|e| (e, None)).collect(),
+        TaskKind::Single { entry, oob, smtp } => vec![(entry, Some((oob, smtp)))],
+        TaskKind::CrawlAudit { urls, audit_only } => {
+            crate::scan::crawl_and_audit(shared, &urls, audit_only);
+            wait_idle(shared);
+            Vec::new()
+        }
+    };
+    if !items.is_empty() {
+        shared.oob_wanted.store(true, Ordering::SeqCst);
+        for (e, prepared) in items {
+            wait_while_paused(shared);
+            if state_of(shared, id) == Some(TaskState::Cancelled) {
+                break;
+            }
+            let (oob, smtp) = prepared.unwrap_or_else(|| (crate::scan::pooled_oob(shared, &e.req_raw), Vec::new()));
+            crate::scan::start_active_scan(shared.clone(), e, &oob, &smtp);
+            std::thread::sleep(Duration::from_millis(50));
+            wait_idle(shared);
+            if let Some(t) = shared.tasks.lock().unwrap().iter_mut().find(|t| t.id == id) {
+                // An item cut short by Cancel was not audited.
+                if t.state != TaskState::Cancelled {
+                    t.done += 1;
+                }
+                t.issues_found = shared.issues.lock().unwrap().len().saturating_sub(issues_before);
+            }
+            shared.wake();
+        }
+        shared.oob_wanted.store(false, Ordering::SeqCst);
+    }
+    shared.running_task.store(0, Ordering::SeqCst);
+    shared.scan_paused.store(false, Ordering::SeqCst);
+    let found = shared.issues.lock().unwrap().len().saturating_sub(issues_before);
+    if let Some(t) = shared.tasks.lock().unwrap().iter_mut().find(|t| t.id == id) {
+        t.issues_found = found;
+        if t.state.is_open() {
+            t.state = TaskState::Finished;
+            t.finished = Some(crate::util::now_secs());
+        }
+    }
+    shared.log(&format!("Task {id} ended: {found} issue(s)"));
+    shared.wake();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{Read, Write};
+
+    /// A local site whose requests are counted.
+    fn origin() -> (u16, Arc<std::sync::atomic::AtomicUsize>) {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let hits = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let h = hits.clone();
+        std::thread::spawn(move || {
+            for mut s in listener.incoming().flatten() {
+                h.fetch_add(1, Ordering::SeqCst);
+                let mut buf = [0u8; 4096];
+                let _ = s.read(&mut buf);
+                let _ = s.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 5\r\nConnection: close\r\n\r\nhello");
+            }
+        });
+        (port, hits)
+    }
+
+    fn entry(port: u16, path: &str) -> HistEntry {
+        HistEntry {
+            id: 1,
+            method: "GET".into(),
+            host: "127.0.0.1".into(),
+            port,
+            path: path.into(),
+            req_raw: format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n").into_bytes(),
+            ..Default::default()
+        }
+    }
+
+    fn wait_for(shared: &Shared, id: u64, want: TaskState, secs: u64) -> bool {
+        let t0 = std::time::Instant::now();
+        while t0.elapsed() < Duration::from_secs(secs) {
+            if state_of(shared, id) == Some(want) {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        false
+    }
+
+    #[test]
+    fn tasks_run_in_order_and_can_be_paused_resumed_and_cancelled() {
+        let shared = Shared::new();
+        let (port, hits) = origin();
+        let a = enqueue(&shared, "first", TaskKind::Audit(vec![entry(port, "/a?x=1"), entry(port, "/b?y=2")]));
+        let b = enqueue(&shared, "second", TaskKind::Audit(vec![entry(port, "/c?z=3")]));
+        // The second waits while the first runs.
+        assert!(wait_for(&shared, a, TaskState::Running, 10));
+        assert_eq!(state_of(&shared, b), Some(TaskState::Queued));
+        // Pause: no further requests reach the site.
+        pause(&shared, a);
+        std::thread::sleep(Duration::from_millis(400));
+        let paused_at = hits.load(Ordering::SeqCst);
+        std::thread::sleep(Duration::from_millis(800));
+        assert_eq!(hits.load(Ordering::SeqCst), paused_at, "no traffic while paused");
+        assert_eq!(state_of(&shared, b), Some(TaskState::Queued), "the queue waits behind a paused task");
+        resume(&shared, a);
+        assert!(wait_for(&shared, a, TaskState::Finished, 120), "{:?}", state_of(&shared, a));
+        let t = shared.tasks.lock().unwrap().iter().find(|t| t.id == a).cloned().unwrap();
+        assert_eq!((t.done, t.total), (2, Some(2)));
+        assert!(hits.load(Ordering::SeqCst) > paused_at);
+        // The second then runs; cancel it.
+        assert!(wait_for(&shared, b, TaskState::Running, 30));
+        cancel(&shared, b);
+        assert_eq!(state_of(&shared, b), Some(TaskState::Cancelled));
+        assert!(wait_for(&shared, b, TaskState::Cancelled, 5));
+        // Let the interrupted item wind down: it does not count as audited.
+        std::thread::sleep(Duration::from_millis(800));
+        assert_eq!(shared.tasks.lock().unwrap().iter().find(|t| t.id == b).unwrap().done, 0);
+        // A cancelled or finished task can be removed; an open one cannot.
+        let c = enqueue(&shared, "third", TaskKind::Audit(Vec::new()));
+        pause(&shared, c);
+        remove(&shared, c);
+        remove(&shared, a);
+        let ids: Vec<u64> = shared.tasks.lock().unwrap().iter().map(|t| t.id).collect();
+        assert!(!ids.contains(&a) && ids.contains(&c) && ids.contains(&b));
+    }
+
+    /// A one-request scan started while another task runs waits its turn
+    /// instead of being dropped ("a scan is already running"), and is saved
+    /// with the project as a plain audit of that request.
+    #[test]
+    fn single_scan_queues_behind_a_running_task() {
+        let shared = Shared::new();
+        let (port, hits) = origin();
+        let a = enqueue(&shared, "first", TaskKind::Audit(vec![entry(port, "/a?x=1")]));
+        assert!(wait_for(&shared, a, TaskState::Running, 10));
+        let s = enqueue(&shared, "single", TaskKind::Single { entry: entry(port, "/only?q=1"), oob: Vec::new(), smtp: Vec::new() });
+        let saved = crate::project::ProjectScanTask::save_all(&shared.tasks.lock().unwrap());
+        let single = saved.iter().find(|t| t.name == "single").expect("open single task saved");
+        assert_eq!((single.entries.len(), single.urls.len()), (1, 0));
+        assert!(wait_for(&shared, s, TaskState::Finished, 120), "{:?}", state_of(&shared, s));
+        let t = shared.tasks.lock().unwrap().iter().find(|t| t.id == s).cloned().unwrap();
+        assert_eq!((t.done, t.total), (1, Some(1)));
+        assert!(hits.load(Ordering::SeqCst) > 0);
+    }
+}

@@ -1,0 +1,27 @@
+[package]
+name = "webprobe-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+brotli = "7"
+flate2 = "1"
+hpack = "0.3"
+regex = "1"
+rcgen = "0.13"
+rand = "0.8"
+rsa = "0.9"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+time = "0.3"
+webpki-roots = "0.26"
+# interactsh client (Collaborator on a public OAST host): RSA-OAEP-SHA256
+# key unwrap + AES-CTR message decryption (verified live against oast.pro:
+# CFB decrypts only the first block, CTR all of it).
+sha2 = "0.10"
+aes = "0.8"
+ctr = "0.9"
+base64 = "0.22"
+# Browser-driven crawl: Chrome DevTools Protocol over WebSocket.
+tungstenite = { version = "0.24", default-features = false, features = ["handshake"] }

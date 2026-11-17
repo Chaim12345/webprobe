@@ -1,0 +1,428 @@
+{
+  "id": "ev_0cf32f68c20a502131bbd70c79e97d64fd827055a6c1fdbaa1d8a62d348c6b47",
+  "subject": {
+    "kind": "java-class",
+    "sha256": "69f65f612977248bdef437cfccc8a396c38883c6bc253fdebdee254cff547d37",
+    "name": "Zhjs.class"
+  },
+  "operation": "java_method_show",
+  "params": {
+    "class_name": null,
+    "decompile": false,
+    "descriptor": null,
+    "limit": 60,
+    "method_name": "ZK",
+    "offset": 0,
+    "path": "/root/burp-re/in/extract/burp/Zhjs.class"
+  },
+  "result": {
+    "access": [
+      "public",
+      "static"
+    ],
+    "class": "burp.Zhjs",
+    "descriptor": "(Lburp/Zx9j;)Ljava/util/List;",
+    "entry": "Zhjs.class",
+    "exception_table": [],
+    "instructions": [
+      {
+        "len": 1,
+        "offset": "0000",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 1,
+        "offset": "0001",
+        "opcode": "0x3d",
+        "text": "istore_2"
+      },
+      {
+        "len": 3,
+        "offset": "0002",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zg6r.ZI()[Lburp/Zrop;"
+      },
+      {
+        "len": 1,
+        "offset": "0005",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 5,
+        "offset": "0006",
+        "opcode": "0xb9",
+        "text": "invokeinterface burp.Zx9j.ZKz()I"
+      },
+      {
+        "len": 1,
+        "offset": "000b",
+        "opcode": "0x3e",
+        "text": "istore_3"
+      },
+      {
+        "len": 1,
+        "offset": "000c",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 2,
+        "offset": "000d",
+        "opcode": "0x36",
+        "text": "istore 4"
+      },
+      {
+        "len": 1,
+        "offset": "000f",
+        "opcode": "0x4c",
+        "text": "astore_1"
+      },
+      {
+        "len": 1,
+        "offset": "0010",
+        "opcode": "0x1c",
+        "text": "iload_2"
+      },
+      {
+        "len": 1,
+        "offset": "0011",
+        "opcode": "0x1d",
+        "text": "iload_3"
+      },
+      {
+        "len": 3,
+        "offset": "0012",
+        "opcode": "0xa2",
+        "text": "if_icmpge 47"
+      },
+      {
+        "len": 1,
+        "offset": "0015",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 1,
+        "offset": "0016",
+        "opcode": "0x1c",
+        "text": "iload_2"
+      },
+      {
+        "len": 5,
+        "offset": "0017",
+        "opcode": "0xb9",
+        "text": "invokeinterface burp.Zx9j.ZY3(I)B"
+      },
+      {
+        "len": 2,
+        "offset": "001c",
+        "opcode": "0x10",
+        "text": "bipush 32"
+      },
+      {
+        "len": 3,
+        "offset": "001e",
+        "opcode": "0xa4",
+        "text": "if_icmple 47"
+      },
+      {
+        "len": 3,
+        "offset": "0021",
+        "opcode": "0x84",
+        "text": "iinc 2, 1"
+      },
+      {
+        "len": 1,
+        "offset": "0024",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "0025",
+        "opcode": "0xc7",
+        "text": "ifnonnull 16"
+      },
+      {
+        "len": 1,
+        "offset": "0028",
+        "opcode": "0x05",
+        "text": "iconst_2"
+      },
+      {
+        "len": 3,
+        "offset": "0029",
+        "opcode": "0xbd",
+        "text": "anewarray burp.Zrop"
+      },
+      {
+        "len": 3,
+        "offset": "002c",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zrop.Zg([Lburp/Zrop;)V"
+      },
+      {
+        "len": 1,
+        "offset": "002f",
+        "opcode": "0x1c",
+        "text": "iload_2"
+      },
+      {
+        "len": 1,
+        "offset": "0030",
+        "opcode": "0x1d",
+        "text": "iload_3"
+      },
+      {
+        "len": 3,
+        "offset": "0031",
+        "opcode": "0xa2",
+        "text": "if_icmpge 71"
+      },
+      {
+        "len": 1,
+        "offset": "0034",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 1,
+        "offset": "0035",
+        "opcode": "0x1c",
+        "text": "iload_2"
+      },
+      {
+        "len": 5,
+        "offset": "0036",
+        "opcode": "0xb9",
+        "text": "invokeinterface burp.Zx9j.ZY3(I)B"
+      },
+      {
+        "len": 2,
+        "offset": "003b",
+        "opcode": "0x10",
+        "text": "bipush 32"
+      },
+      {
+        "len": 3,
+        "offset": "003d",
+        "opcode": "0xa0",
+        "text": "if_icmpne 71"
+      },
+      {
+        "len": 3,
+        "offset": "0040",
+        "opcode": "0x84",
+        "text": "iinc 2, 1"
+      },
+      {
+        "len": 1,
+        "offset": "0043",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "0044",
+        "opcode": "0xc7",
+        "text": "ifnonnull 47"
+      },
+      {
+        "len": 3,
+        "offset": "0047",
+        "opcode": "0xbb",
+        "text": "new java.util.LinkedList"
+      },
+      {
+        "len": 1,
+        "offset": "004a",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 3,
+        "offset": "004b",
+        "opcode": "0xb7",
+        "text": "invokespecial java.util.LinkedList.<init>()V"
+      },
+      {
+        "len": 2,
+        "offset": "004e",
+        "opcode": "0x3a",
+        "text": "astore 5"
+      },
+      {
+        "len": 1,
+        "offset": "0050",
+        "opcode": "0x1c",
+        "text": "iload_2"
+      },
+      {
+        "len": 1,
+        "offset": "0051",
+        "opcode": "0x1d",
+        "text": "iload_3"
+      },
+      {
+        "len": 3,
+        "offset": "0052",
+        "opcode": "0xa2",
+        "text": "if_icmpge 282"
+      },
+      {
+        "len": 1,
+        "offset": "0055",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 1,
+        "offset": "0056",
+        "opcode": "0x1c",
+        "text": "iload_2"
+      },
+      {
+        "len": 5,
+        "offset": "0057",
+        "opcode": "0xb9",
+        "text": "invokeinterface burp.Zx9j.ZY3(I)B"
+      },
+      {
+        "len": 2,
+        "offset": "005c",
+        "opcode": "0x10",
+        "text": "bipush 47"
+      },
+      {
+        "len": 3,
+        "offset": "005e",
+        "opcode": "0x9f",
+        "text": "if_icmpeq 100"
+      },
+      {
+        "len": 2,
+        "offset": "0061",
+        "opcode": "0x19",
+        "text": "aload 5"
+      },
+      {
+        "len": 1,
+        "offset": "0063",
+        "opcode": "0xb0",
+        "text": "areturn"
+      },
+      {
+        "len": 3,
+        "offset": "0064",
+        "opcode": "0x84",
+        "text": "iinc 2, 1"
+      },
+      {
+        "len": 1,
+        "offset": "0067",
+        "opcode": "0x1c",
+        "text": "iload_2"
+      },
+      {
+        "len": 2,
+        "offset": "0068",
+        "opcode": "0x36",
+        "text": "istore 6"
+      },
+      {
+        "len": 1,
+        "offset": "006a",
+        "opcode": "0x1c",
+        "text": "iload_2"
+      },
+      {
+        "len": 1,
+        "offset": "006b",
+        "opcode": "0x1d",
+        "text": "iload_3"
+      },
+      {
+        "len": 3,
+        "offset": "006c",
+        "opcode": "0xa2",
+        "text": "if_icmpge 173"
+      },
+      {
+        "len": 1,
+        "offset": "006f",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 1,
+        "offset": "0070",
+        "opcode": "0x1c",
+        "text": "iload_2"
+      },
+      {
+        "len": 5,
+        "offset": "0071",
+        "opcode": "0xb9",
+        "text": "invokeinterface burp.Zx9j.ZY3(I)B"
+      },
+      {
+        "len": 2,
+        "offset": "0076",
+        "opcode": "0x36",
+        "text": "istore 7"
+      },
+      {
+        "len": 2,
+        "offset": "0078",
+        "opcode": "0x15",
+        "text": "iload 7"
+      },
+      {
+        "len": 2,
+        "offset": "007a",
+        "opcode": "0x10",
+        "text": "bipush 32"
+      }
+    ],
+    "instructions_total": 130,
+    "listing": "0000: iconst_0\n0001: istore_2\n0002: invokestatic burp.Zg6r.ZI()[Lburp/Zrop;\n0005: aload_0\n0006: invokeinterface burp.Zx9j.ZKz()I\n000b: istore_3\n000c: iconst_0\n000d: istore 4\n000f: astore_1\n0010: iload_2\n0011: iload_3\n0012: if_icmpge 47\n0015: aload_0\n0016: iload_2\n0017: invokeinterface burp.Zx9j.ZY3(I)B\n001c: bipush 32\n001e: if_icmple 47\n0021: iinc 2, 1\n0024: aload_1\n0025: ifnonnull 16\n0028: iconst_2\n0029: anewarray burp.Zrop\n002c: invokestatic burp.Zrop.Zg([Lburp/Zrop;)V\n002f: iload_2\n0030: iload_3\n0031: if_icmpge 71\n0034: aload_0\n0035: iload_2\n0036: invokeinterface burp.Zx9j.ZY3(I)B\n003b: bipush 32\n003d: if_icmpne 71\n0040: iinc 2, 1\n0043: aload_1\n0044: ifnonnull 47\n0047: new java.util.LinkedList\n004a: dup\n004b: invokespecial java.util.LinkedList.<init>()V\n004e: astore 5\n0050: iload_2\n0051: iload_3\n0052: if_icmpge 282\n0055: aload_0\n0056: iload_2\n0057: invokeinterface burp.Zx9j.ZY3(I)B\n005c: bipush 47\n005e: if_icmpeq 100\n0061: aload 5\n0063: areturn\n0064: iinc 2, 1\n0067: iload_2\n0068: istore 6\n006a: iload_2\n006b: iload_3\n006c: if_icmpge 173\n006f: aload_0\n0070: iload_2\n0071: invokeinterface burp.Zx9j.ZY3(I)B\n0076: istore 7\n0078: iload 7\n007a: bipush 32",
+    "max_locals": 8,
+    "max_stack": 8,
+    "method": "burp.Zhjs.ZK(Lburp/Zx9j;)Ljava/util/List;",
+    "overloads": [
+      "(Lburp/Zx9j;)Ljava/util/List;"
+    ],
+    "pseudo_java": null,
+    "signature": "public static java.util.List ZK(burp.Zx9j)",
+    "throws": []
+  },
+  "summary": "burp.Zhjs.ZK(Lburp/Zx9j;)Ljava/util/List; (Zhjs.class): 130 instructions.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "partial",
+    "examined": 60,
+    "total": 130,
+    "next_offset": 60
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/root/burp-re/in/extract/burp/Zhjs.class"
+    },
+    {
+      "kind": "method",
+      "value": "burp.Zhjs.ZK(Lburp/Zx9j;)Ljava/util/List;"
+    }
+  ],
+  "links": []
+}

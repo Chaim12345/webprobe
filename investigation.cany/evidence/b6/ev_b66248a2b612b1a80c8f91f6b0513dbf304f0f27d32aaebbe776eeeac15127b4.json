@@ -1,0 +1,138 @@
+{
+  "id": "ev_b66248a2b612b1a80c8f91f6b0513dbf304f0f27d32aaebbe776eeeac15127b4",
+  "subject": {
+    "kind": "java-class",
+    "sha256": "dcf92f3c56d939c967d8c1d9d8489e14da5c7193dd52b5f21df1767b44730b96",
+    "name": "Zi6p.class"
+  },
+  "operation": "java_method_show",
+  "params": {
+    "class_name": null,
+    "decompile": false,
+    "descriptor": null,
+    "limit": 60,
+    "method_name": "ZZ",
+    "offset": 0,
+    "path": "/root/burp-re/in/extract/burp/Zi6p.class"
+  },
+  "result": {
+    "access": [
+      "private"
+    ],
+    "class": "burp.Zi6p",
+    "descriptor": "(Lburp/Zsz4;)V",
+    "entry": "Zi6p.class",
+    "exception_table": [],
+    "instructions": [
+      {
+        "len": 1,
+        "offset": "0000",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0001",
+        "opcode": "0xb4",
+        "text": "getfield burp.Zi6p.Zr:burp.Zggx"
+      },
+      {
+        "len": 3,
+        "offset": "0004",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zcot.XSS_STORED:burp.Zcot"
+      },
+      {
+        "len": 3,
+        "offset": "0007",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zwx_.IN_BAND:burp.Zwx_"
+      },
+      {
+        "len": 5,
+        "offset": "000a",
+        "opcode": "0xb9",
+        "text": "invokeinterface burp.Zggx.Zr(Lburp/Zp9h;Lburp/Zwx_;)Z"
+      },
+      {
+        "len": 3,
+        "offset": "000f",
+        "opcode": "0x99",
+        "text": "ifeq 29"
+      },
+      {
+        "len": 1,
+        "offset": "0012",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0013",
+        "opcode": "0xb4",
+        "text": "getfield burp.Zi6p.ZM:burp.Zw7s"
+      },
+      {
+        "len": 3,
+        "offset": "0016",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zw7s.ZM()Lburp/Zx5c;"
+      },
+      {
+        "len": 1,
+        "offset": "0019",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "001a",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zx5c.ZI(Lburp/Zsz4;)V"
+      },
+      {
+        "len": 1,
+        "offset": "001d",
+        "opcode": "0xb1",
+        "text": "return"
+      }
+    ],
+    "instructions_total": 12,
+    "listing": "0000: aload_0\n0001: getfield burp.Zi6p.Zr:burp.Zggx\n0004: getstatic burp.Zcot.XSS_STORED:burp.Zcot\n0007: getstatic burp.Zwx_.IN_BAND:burp.Zwx_\n000a: invokeinterface burp.Zggx.Zr(Lburp/Zp9h;Lburp/Zwx_;)Z\n000f: ifeq 29\n0012: aload_0\n0013: getfield burp.Zi6p.ZM:burp.Zw7s\n0016: invokevirtual burp.Zw7s.ZM()Lburp/Zx5c;\n0019: aload_1\n001a: invokevirtual burp.Zx5c.ZI(Lburp/Zsz4;)V\n001d: return",
+    "max_locals": 2,
+    "max_stack": 3,
+    "method": "burp.Zi6p.ZZ(Lburp/Zsz4;)V",
+    "overloads": [
+      "(Lburp/Zsz4;)V"
+    ],
+    "pseudo_java": null,
+    "signature": "private void ZZ(burp.Zsz4)",
+    "throws": []
+  },
+  "summary": "burp.Zi6p.ZZ(Lburp/Zsz4;)V (Zi6p.class): 12 instructions.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 12,
+    "total": 12
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/root/burp-re/in/extract/burp/Zi6p.class"
+    },
+    {
+      "kind": "method",
+      "value": "burp.Zi6p.ZZ(Lburp/Zsz4;)V"
+    }
+  ],
+  "links": []
+}

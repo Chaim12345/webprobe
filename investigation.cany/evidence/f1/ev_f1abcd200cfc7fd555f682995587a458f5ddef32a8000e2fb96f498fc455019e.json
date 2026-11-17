@@ -1,0 +1,157 @@
+{
+  "id": "ev_f1abcd200cfc7fd555f682995587a458f5ddef32a8000e2fb96f498fc455019e",
+  "subject": {
+    "kind": "java-class",
+    "sha256": "d913a4438db8e90f5442f6ab3e581c0a04fba2b59b3e42bda097978becf73daa",
+    "name": "Zgum.class"
+  },
+  "operation": "java_method_show",
+  "params": {
+    "class_name": null,
+    "decompile": false,
+    "descriptor": null,
+    "limit": 60,
+    "method_name": "Zc",
+    "offset": 0,
+    "path": "/root/burp-re/in/extract/burp/Zgum.class"
+  },
+  "result": {
+    "access": [
+      "private",
+      "static"
+    ],
+    "class": "burp.Zgum",
+    "descriptor": "(Lburp/Zp42;Ljava/lang/String;Ljava/util/List;Lburp/Zgx0;Ljava/util/Map;B)Lburp/Zeke;",
+    "entry": "Zgum.class",
+    "exception_table": [],
+    "instructions": [
+      {
+        "len": 3,
+        "offset": "0000",
+        "opcode": "0xbb",
+        "text": "new burp.Zrh"
+      },
+      {
+        "len": 1,
+        "offset": "0003",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 3,
+        "offset": "0004",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zcot.CLIENT_SIDE_TEMPLATE_ENGINE_INJECTION:burp.Zcot"
+      },
+      {
+        "len": 1,
+        "offset": "0007",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 1,
+        "offset": "0008",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 2,
+        "offset": "0009",
+        "opcode": "0x19",
+        "text": "aload 4"
+      },
+      {
+        "len": 1,
+        "offset": "000b",
+        "opcode": "0x2c",
+        "text": "aload_2"
+      },
+      {
+        "len": 2,
+        "offset": "000c",
+        "opcode": "0x15",
+        "text": "iload 5"
+      },
+      {
+        "len": 1,
+        "offset": "000e",
+        "opcode": "0x07",
+        "text": "iconst_4"
+      },
+      {
+        "len": 1,
+        "offset": "000f",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 1,
+        "offset": "0010",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "0011",
+        "opcode": "0xb8",
+        "text": "invokestatic net.portswigger.Zhs.Zq(Ljava/lang/String;)[B"
+      },
+      {
+        "len": 1,
+        "offset": "0014",
+        "opcode": "0x2d",
+        "text": "aload_3"
+      },
+      {
+        "len": 3,
+        "offset": "0015",
+        "opcode": "0xb7",
+        "text": "invokespecial burp.Zrh.<init>(Lburp/Zp9h;BILjava/util/Map;Ljava/util/List;BBLburp/Zp42;[BLburp/Zgx0;)V"
+      },
+      {
+        "len": 1,
+        "offset": "0018",
+        "opcode": "0xb0",
+        "text": "areturn"
+      }
+    ],
+    "instructions_total": 15,
+    "listing": "0000: new burp.Zrh\n0003: dup\n0004: getstatic burp.Zcot.CLIENT_SIDE_TEMPLATE_ENGINE_INJECTION:burp.Zcot\n0007: iconst_0\n0008: iconst_0\n0009: aload 4\n000b: aload_2\n000c: iload 5\n000e: iconst_4\n000f: aload_0\n0010: aload_1\n0011: invokestatic net.portswigger.Zhs.Zq(Ljava/lang/String;)[B\n0014: aload_3\n0015: invokespecial burp.Zrh.<init>(Lburp/Zp9h;BILjava/util/Map;Ljava/util/List;BBLburp/Zp42;[BLburp/Zgx0;)V\n0018: areturn",
+    "max_locals": 6,
+    "max_stack": 12,
+    "method": "burp.Zgum.Zc(Lburp/Zp42;Ljava/lang/String;Ljava/util/List;Lburp/Zgx0;Ljava/util/Map;B)Lburp/Zeke;",
+    "overloads": [
+      "(Lburp/Zp42;Ljava/lang/String;Ljava/util/List;Lburp/Zgx0;Ljava/util/Map;B)Lburp/Zeke;"
+    ],
+    "pseudo_java": null,
+    "signature": "private static burp.Zeke Zc(burp.Zp42, java.lang.String, java.util.List, burp.Zgx0, java.util.Map, byte)",
+    "throws": []
+  },
+  "summary": "burp.Zgum.Zc(Lburp/Zp42;Ljava/lang/String;Ljava/util/List;Lburp/Zgx0;Ljava/util/Map;B)Lburp/Zeke; (Zgum.class): 15 instructions.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 15,
+    "total": 15
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/root/burp-re/in/extract/burp/Zgum.class"
+    },
+    {
+      "kind": "method",
+      "value": "burp.Zgum.Zc(Lburp/Zp42;Ljava/lang/String;Ljava/util/List;Lburp/Zgx0;Ljava/util/Map;B)Lburp/Zeke;"
+    }
+  ],
+  "links": []
+}

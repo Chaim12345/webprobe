@@ -1,0 +1,1828 @@
+//! Project snapshot persistence.
+//!
+//! Live state stays in memory; this module defines the serializable subset
+//! written to a project file and the save/load helpers used by the UI.
+//!
+//! A project file is one self-describing document: a magic header line
+//! (`WEBPROBE PROJECT <version>`) followed by pretty-printed JSON. Older
+//! bare-JSON files without the header still load, and files from a newer
+//! build are rejected with a clear error instead of being misread.
+//!
+//! Saves serialize first, then replace the destination through a temporary
+//! file in the same directory. A serialization or write failure therefore
+//! never truncates an existing project file.
+
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use serde::{Deserialize, Serialize};
+
+use crate::upstream::UpstreamConfig;
+
+/// First token of the header line that identifies a WebProbe project file.
+pub const PROJECT_MAGIC: &str = "WEBPROBE PROJECT";
+
+/// Current project-file format version. `load` accepts older versions and
+/// rejects anything newer.
+pub const PROJECT_VERSION: u32 = 2;
+
+/// Oldest format version `load` still understands. Version 1 files were bare
+/// JSON without a header.
+const MIN_PROJECT_VERSION: u32 = 1;
+
+/// One proxy history entry as stored in a project file.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ProjectHistory {
+    pub id: u64,
+    /// Unix timestamp in seconds, matching `util::now_secs`.
+    pub timestamp: u64,
+    pub method: String,
+    pub host: String,
+    pub port: u16,
+    #[serde(default)]
+    pub https: bool,
+    pub path: String,
+    pub status: String,
+    pub request: String,
+    pub response: Option<String>,
+    pub note: Option<String>,
+    /// Exact bytes (base64) when the request / response is not valid UTF-8;
+    /// `request` / `response` then hold a lossy text view only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_b64: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response_b64: Option<String>,
+}
+
+/// A message for a project file: its text, plus the exact bytes in base64
+/// when they are not valid UTF-8 (images, compressed or binary bodies).
+pub fn encode_message(bytes: &[u8]) -> (String, Option<String>) {
+    match std::str::from_utf8(bytes) {
+        Ok(t) => (t.to_string(), None),
+        Err(_) => (
+            String::from_utf8_lossy(bytes).into_owned(),
+            Some(base64::Engine::encode(&base64::engine::general_purpose::STANDARD, bytes)),
+        ),
+    }
+}
+
+/// The bytes of a stored message: the exact base64 copy when present.
+pub fn decode_message(text: &str, b64: Option<&str>) -> Vec<u8> {
+    b64.and_then(|b| base64::Engine::decode(&base64::engine::general_purpose::STANDARD, b).ok())
+        .unwrap_or_else(|| text.as_bytes().to_vec())
+}
+
+/// One match-and-replace rule.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ProjectRule {
+    pub enabled: bool,
+    pub kind: String,
+    pub match_text: String,
+    pub replacement: String,
+    pub comment: String,
+    pub is_regex: bool,
+}
+
+/// One target-scope entry.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ProjectScope {
+    pub enabled: bool,
+    pub include: bool,
+    pub pattern: String,
+    pub is_regex: bool,
+}
+
+/// One session-handling rule.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ProjectSessionRule {
+    pub enabled: bool,
+    pub name: String,
+    pub action: String,
+    pub match_text: String,
+    pub value: String,
+    /// Tool scope. Rules saved before scopes existed ran on proxy traffic
+    /// only, so that is what a missing list means.
+    #[serde(default = "proxy_only")]
+    pub tools: Vec<String>,
+    #[serde(default)]
+    pub check: String,
+    #[serde(default = "yes")]
+    pub check_invalid_on_match: bool,
+}
+
+fn proxy_only() -> Vec<String> {
+    vec!["Proxy".to_string()]
+}
+
+
+
+/// One reusable macro request.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ProjectMacro {
+    pub name: String,
+    pub request: String,
+}
+
+/// One Repeater tab.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ProjectRepeater {
+    pub name: String,
+    pub host: String,
+    pub port: u16,
+    #[serde(default)]
+    pub https: bool,
+    pub request: String,
+    pub response: Option<String>,
+    pub result_line: String,
+}
+
+/// One scanner issue.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ProjectIssue {
+    pub id: u64,
+    pub severity: String,
+    pub name: String,
+    pub host: String,
+    pub path: String,
+    pub detail: String,
+    /// Burp "False positive" classification (Ze1r line 12); defaults false for
+    /// legacy project files.
+    #[serde(default)]
+    pub false_positive: bool,
+    /// Burp confidence (Certain | Firm | Tentative); legacy files load as Firm.
+    #[serde(default = "default_confidence")]
+    pub confidence: String,
+    /// When the issue was reported (unix seconds); 0 in older files.
+    #[serde(default)]
+    pub timestamp: u64,
+    /// Burp's numeric issue type; 0 for WebProbe's own issues and older files.
+    #[serde(default)]
+    pub type_id: u64,
+    /// The exchanges that confirmed the issue; absent in older files.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub evidence: Vec<ProjectEvidence>,
+}
+
+/// One confirming request/response pair of an issue, base64 so binary
+/// messages survive exactly.
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
+pub struct ProjectEvidence {
+    pub request_b64: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response_b64: Option<String>,
+}
+
+impl ProjectEvidence {
+    pub fn encode(request: &[u8], response: Option<&[u8]>) -> Self {
+        let b64 = |b: &[u8]| base64::Engine::encode(&base64::engine::general_purpose::STANDARD, b);
+        ProjectEvidence { request_b64: b64(request), response_b64: response.map(b64) }
+    }
+
+    /// The request and response bytes; `None` when the stored text is not base64.
+    pub fn decode(&self) -> Option<(Vec<u8>, Option<Vec<u8>>)> {
+        let de = |t: &str| base64::Engine::decode(&base64::engine::general_purpose::STANDARD, t).ok();
+        let request = de(&self.request_b64)?;
+        let response = match &self.response_b64 {
+            Some(t) => Some(de(t)?),
+            None => None,
+        };
+        Some((request, response))
+    }
+}
+
+fn default_confidence() -> String {
+    "Firm".into()
+}
+
+/// One captured WebSocket record.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ProjectWebsocket {
+    pub id: u64,
+    /// Unix timestamp in seconds, matching `util::now_secs`.
+    pub timestamp: u64,
+    pub host: String,
+    pub direction: String,
+    pub opcode: String,
+    pub payload: String,
+}
+
+/// One Logger entry (Burp keeps these separate from proxy history).
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ProjectLoggerEntry {
+    pub id: u64,
+    /// Unix timestamp in seconds, matching `util::now_secs`.
+    pub timestamp: u64,
+    /// Tool that produced the entry (`proxy`, `repeater`, `intruder`, ...).
+    pub tool: String,
+    pub method: String,
+    pub host: String,
+    pub port: u16,
+    #[serde(default)]
+    pub https: bool,
+    pub path: String,
+    pub status: String,
+    pub request: String,
+    pub response: Option<String>,
+    pub note: Option<String>,
+    #[serde(default)]
+    pub req_len: usize,
+    #[serde(default)]
+    pub resp_len: usize,
+    #[serde(default)]
+    pub mime: String,
+}
+
+/// One Organizer item: a request the user pinned for later.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ProjectOrganizerItem {
+    pub id: u64,
+    /// Unix timestamp in seconds, matching `util::now_secs`.
+    pub timestamp: u64,
+    pub title: String,
+    pub host: String,
+    pub path: String,
+    pub request: String,
+    pub response: Option<String>,
+    pub comment: String,
+}
+
+/// One Intruder result row.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ProjectIntruderResult {
+    pub payload: String,
+    pub status: String,
+    pub length: usize,
+    pub request: String,
+    pub response: Option<String>,
+}
+
+/// Intruder configuration and results as persisted with the project.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ProjectIntruder {
+    /// Attack type label (`sniper`, `battering_ram`, `pitchfork`,
+    /// `cluster_bomb`).
+    pub attack: String,
+    pub host: String,
+    pub port: u16,
+    #[serde(default)]
+    pub https: bool,
+    /// The request template, including its `§` position markers.
+    pub base_request: String,
+    /// Raw payload text per position, one payload per line.
+    #[serde(default)]
+    pub payload_sets: Vec<String>,
+    #[serde(default)]
+    pub results: Vec<ProjectIntruderResult>,
+}
+
+impl Default for ProjectIntruder {
+    fn default() -> Self {
+        Self {
+            attack: "sniper".into(),
+            host: String::new(),
+            port: 443,
+            https: false,
+            base_request: String::new(),
+            payload_sets: Vec::new(),
+            results: Vec::new(),
+        }
+    }
+}
+
+/// One Decoder conversion step (input and its output).
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ProjectDecoderStep {
+    pub input: String,
+    pub output: String,
+}
+
+/// Decoder pane state: current input, latest output and the step history.
+#[derive(Clone, Default, Serialize, Deserialize)]
+pub struct ProjectDecoder {
+    #[serde(default)]
+    pub input: String,
+    #[serde(default)]
+    pub output: String,
+    #[serde(default)]
+    pub steps: Vec<ProjectDecoderStep>,
+}
+
+/// One row of the Target site map.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ProjectTargetItem {
+    pub host: String,
+    pub method: String,
+    pub path: String,
+    /// History entry this row was derived from (0 when unknown).
+    pub history_id: u64,
+}
+
+/// One HTTP header of a Collaborator interaction.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ProjectHeader {
+    pub name: String,
+    pub value: String,
+}
+
+/// One Collaborator interaction, flattened to plain data.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ProjectCollaboratorInteraction {
+    pub id: u64,
+    /// Unix timestamp in seconds, matching `util::now_secs`.
+    pub at: u64,
+    pub source: String,
+    pub token: Option<String>,
+    /// `http` or `dns`.
+    pub kind: String,
+    /// HTTP method (empty for DNS).
+    pub method: String,
+    /// HTTP request target (empty for DNS).
+    pub target: String,
+    /// HTTP body, lossy UTF-8 (empty for DNS).
+    pub body: String,
+    /// DNS query name (empty for HTTP).
+    pub qname: String,
+    /// DNS query type (0 for HTTP).
+    pub qtype: u16,
+    #[serde(default)]
+    pub headers: Vec<ProjectHeader>,
+}
+
+/// Collaborator payloads and observed interactions.
+#[derive(Clone, Default, Serialize, Deserialize)]
+pub struct ProjectCollaborator {
+    #[serde(default)]
+    pub payloads: Vec<String>,
+    #[serde(default)]
+    pub interactions: Vec<ProjectCollaboratorInteraction>,
+    /// Server setting (public default or private `host[:port]`). The auth
+    /// token is not saved: it is a secret and stays out of project files.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub poll_secs: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retention_secs: Option<u64>,
+}
+
+/// UI appearance persisted with the project (M-05).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Appearance {
+    /// `dark`, `light` or `high_contrast`.
+    #[serde(default = "default_palette")]
+    pub palette: String,
+    /// `compact` or `comfortable`.
+    #[serde(default = "default_density")]
+    pub density: String,
+    /// Font size multiplier (0.7 - 2.0).
+    #[serde(default = "default_font_scale")]
+    pub font_scale: f32,
+}
+
+fn default_palette() -> String {
+    "light".into()
+}
+
+fn default_density() -> String {
+    "compact".into()
+}
+
+fn default_font_scale() -> f32 {
+    1.0
+}
+
+impl Default for Appearance {
+    fn default() -> Self {
+        Self {
+            palette: default_palette(),
+            density: default_density(),
+            font_scale: default_font_scale(),
+        }
+    }
+}
+
+/// Scanner configuration (J-01). Defaults are Shared's startup values
+/// (AuditDefaults.json scan_speed / scan_accuracy "normal").
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ProjectScanner {
+    /// 0 fast, 1 normal, 2 thorough.
+    #[serde(default = "one_u8")]
+    pub speed: u8,
+    /// 0 minimise false negatives, 1 normal, 2 minimise false positives.
+    #[serde(default = "one_u8")]
+    pub accuracy: u8,
+    #[serde(default)]
+    pub extra_checks: bool,
+    /// Check ids switched off in the scan configuration.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub disabled_checks: Vec<String>,
+    /// Insertion point types switched off.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub disabled_insertion_points: Vec<String>,
+}
+
+fn one_u8() -> u8 {
+    1
+}
+
+fn yes() -> bool {
+    true
+}
+
+impl Default for ProjectScanner {
+    fn default() -> Self {
+        Self { speed: 1, accuracy: 1, extra_checks: false, disabled_checks: Vec::new(), disabled_insertion_points: Vec::new() }
+    }
+}
+
+/// One extra proxy listener (the primary one is `listener_port`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ProjectListener {
+    pub bind: String,
+    pub port: u16,
+}
+
+/// Proxy configuration beyond listeners and rules (J-01).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ProjectProxy {
+    /// Extra listeners (Proxy settings > Proxy listeners).
+    #[serde(default)]
+    pub listeners: Vec<ProjectListener>,
+    /// WebSocket interception per direction (ProjectDefaults.json default on).
+    #[serde(default = "yes")]
+    pub ws_intercept_client: bool,
+    #[serde(default = "yes")]
+    pub ws_intercept_server: bool,
+    /// Listener redirects: (listener port, target host, target port).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub redirects: Vec<(u16, String, u16)>,
+}
+
+impl Default for ProjectProxy {
+    fn default() -> Self {
+        Self { listeners: Vec::new(), ws_intercept_client: true, ws_intercept_server: true, redirects: Vec::new() }
+    }
+}
+
+/// Dashboard task switches (J-01 task queue). Running active scans and
+/// crawls are not resumable; only the standing tasks are restored.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ProjectTasks {
+    /// "Live passive crawl from Proxy".
+    #[serde(default = "yes")]
+    pub live_passive_crawl: bool,
+    /// "Live audit from Proxy" (passive scan of proxied traffic).
+    #[serde(default = "yes")]
+    pub live_audit: bool,
+    /// Scan tasks not yet finished; queued again when the project opens.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scans: Vec<ProjectScanTask>,
+}
+
+/// An unfinished scan task as saved.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ProjectScanTask {
+    pub name: String,
+    /// Requests to audit (an audit task).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub entries: Vec<ProjectHistory>,
+    /// URLs to crawl and audit (a crawl-and-audit task).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub urls: Vec<String>,
+    #[serde(default)]
+    pub audit_only: bool,
+    #[serde(default)]
+    pub paused: bool,
+}
+
+impl ProjectScanTask {
+    /// The open tasks of a queue, as saved. Progress inside a task is not
+    /// kept: a task starts again from its first item.
+    pub fn save_all(tasks: &[crate::tasks::ScanTask]) -> Vec<Self> {
+        tasks
+            .iter()
+            .filter(|t| t.state.is_open())
+            .map(|t| {
+                let paused = t.state == crate::tasks::TaskState::Paused;
+                match &t.kind {
+                    crate::tasks::TaskKind::Audit(e) => ProjectScanTask { name: t.name.clone(), entries: e.iter().map(ProjectHistory::from_entry).collect(), urls: Vec::new(), audit_only: true, paused },
+                    crate::tasks::TaskKind::Single { entry, .. } => ProjectScanTask { name: t.name.clone(), entries: vec![ProjectHistory::from_entry(entry)], urls: Vec::new(), audit_only: true, paused },
+                    crate::tasks::TaskKind::CrawlAudit { urls, audit_only } => ProjectScanTask { name: t.name.clone(), entries: Vec::new(), urls: urls.clone(), audit_only: *audit_only, paused },
+                }
+            })
+            .collect()
+    }
+
+    /// Queue the saved tasks again (paused ones stay paused).
+    pub fn restore_all(saved: &[Self], shared: &std::sync::Arc<crate::net::Shared>) {
+        for s in saved {
+            let kind = if s.urls.is_empty() {
+                crate::tasks::TaskKind::Audit(s.entries.iter().map(ProjectHistory::to_entry).collect())
+            } else {
+                crate::tasks::TaskKind::CrawlAudit { urls: s.urls.clone(), audit_only: s.audit_only }
+            };
+            let id = crate::tasks::enqueue(shared, s.name.clone(), kind);
+            if s.paused {
+                crate::tasks::pause(shared, id);
+            }
+        }
+    }
+}
+
+impl Default for ProjectTasks {
+    fn default() -> Self {
+        Self { live_passive_crawl: true, live_audit: true, scans: Vec::new() }
+    }
+}
+
+/// UI layout (J-01): selected tool and sub-tabs, splitter, dock.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct ProjectLayout {
+    /// Top-level tool (`dashboard`, `proxy`, ...). Empty = leave as is.
+    #[serde(default)]
+    pub tab: String,
+    #[serde(default)]
+    pub proxy_sub: Option<usize>,
+    #[serde(default)]
+    pub target_sub: Option<usize>,
+    #[serde(default)]
+    pub target_view: Option<usize>,
+    #[serde(default)]
+    pub intruder_sub: Option<usize>,
+    #[serde(default)]
+    pub sequencer_sub: Option<usize>,
+    #[serde(default)]
+    pub dashboard_task: Option<usize>,
+    #[serde(default)]
+    pub dock: Option<usize>,
+    #[serde(default)]
+    pub split_detail: Option<f32>,
+    #[serde(default)]
+    pub repeater_tab: Option<usize>,
+}
+
+/// Editor buffers not covered by the Repeater / Intruder / Decoder sections.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct ProjectEditors {
+    #[serde(default)]
+    pub intruder_target: String,
+    #[serde(default)]
+    pub comparer_items: Vec<String>,
+    #[serde(default)]
+    pub macro_name: String,
+    #[serde(default)]
+    pub macro_request: String,
+    #[serde(default)]
+    pub sequencer_manual: String,
+}
+
+/// The cookie jar as saved: its cookies and which tools feed and use it.
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug, Default)]
+pub struct ProjectCookieJar {
+    #[serde(default)]
+    pub cookies: Vec<ProjectCookie>,
+    #[serde(default)]
+    pub update_from: Vec<String>,
+    #[serde(default)]
+    pub apply_to: Vec<String>,
+}
+
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
+pub struct ProjectCookie {
+    pub domain: String,
+    #[serde(default)]
+    pub host_only: bool,
+    pub path: String,
+    pub name: String,
+    pub value: String,
+    #[serde(default)]
+    pub secure: bool,
+    /// Unix seconds; absent for a session cookie.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expires: Option<u64>,
+}
+
+impl ProjectCookieJar {
+    pub fn from_jar(jar: &crate::cookie_jar::CookieJar) -> Self {
+        ProjectCookieJar {
+            cookies: jar
+                .cookies
+                .iter()
+                .map(|c| ProjectCookie {
+                    domain: c.domain.clone(),
+                    host_only: c.host_only,
+                    path: c.path.clone(),
+                    name: c.name.clone(),
+                    value: c.value.clone(),
+                    secure: c.secure,
+                    expires: c.expires,
+                })
+                .collect(),
+            update_from: jar.update_from.clone(),
+            apply_to: jar.apply_to.clone(),
+        }
+    }
+
+    pub fn to_jar(&self) -> crate::cookie_jar::CookieJar {
+        crate::cookie_jar::CookieJar {
+            cookies: self
+                .cookies
+                .iter()
+                .map(|c| crate::cookie_jar::Cookie {
+                    domain: c.domain.clone(),
+                    host_only: c.host_only,
+                    path: c.path.clone(),
+                    name: c.name.clone(),
+                    value: c.value.clone(),
+                    secure: c.secure,
+                    expires: c.expires,
+                })
+                .collect(),
+            update_from: self.update_from.clone(),
+            apply_to: self.apply_to.clone(),
+        }
+    }
+}
+
+/// Everything the application persists in a project file.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ProjectData {
+    pub version: u32,
+    /// Unix timestamp in seconds, matching `util::now_secs`.
+    #[serde(default)]
+    pub saved_at: u64,
+    #[serde(default)]
+    pub appearance: Appearance,
+    #[serde(default)]
+    pub history: Vec<ProjectHistory>,
+    #[serde(default)]
+    pub match_request: Vec<ProjectRule>,
+    #[serde(default)]
+    pub match_response: Vec<ProjectRule>,
+    #[serde(default)]
+    pub scope: Vec<ProjectScope>,
+    #[serde(default)]
+    pub session_rules: Vec<ProjectSessionRule>,
+    /// The session-handling cookie jar; absent in older files, which load
+    /// with an empty jar and Burp's default tool selection.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cookie_jar: Option<ProjectCookieJar>,
+    /// Request interception rules; absent in older files (Burp's defaults).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intercept_rules: Option<Vec<crate::intercept_rules::InterceptRule>>,
+    #[serde(default)]
+    pub macros: Vec<ProjectMacro>,
+    #[serde(default)]
+    pub repeaters: Vec<ProjectRepeater>,
+    #[serde(default)]
+    pub issues: Vec<ProjectIssue>,
+    #[serde(default)]
+    pub websockets: Vec<ProjectWebsocket>,
+    #[serde(default)]
+    pub logger: Vec<ProjectLoggerEntry>,
+    #[serde(default)]
+    pub organizer: Vec<ProjectOrganizerItem>,
+    #[serde(default)]
+    pub intruder: ProjectIntruder,
+    #[serde(default)]
+    pub decoder: ProjectDecoder,
+    #[serde(default)]
+    pub target: Vec<ProjectTargetItem>,
+    #[serde(default)]
+    pub collaborator: ProjectCollaborator,
+    #[serde(default)]
+    pub upstream: UpstreamConfig,
+    #[serde(default = "default_listener_port")]
+    pub listener_port: u16,
+    /// Site-map items requested by the crawler / content discovery (not
+    /// proxy history), and unrequested links from the live passive crawl.
+    #[serde(default)]
+    pub crawl_items: Vec<ProjectHistory>,
+    #[serde(default)]
+    pub site_links: Vec<(String, String)>,
+    #[serde(default)]
+    pub scanner: ProjectScanner,
+    #[serde(default)]
+    pub proxy: ProjectProxy,
+    #[serde(default)]
+    pub tasks: ProjectTasks,
+    #[serde(default)]
+    pub layout: ProjectLayout,
+    #[serde(default)]
+    pub editors: ProjectEditors,
+}
+
+fn default_listener_port() -> u16 {
+    8080
+}
+
+impl Default for ProjectData {
+    fn default() -> Self {
+        Self {
+            version: PROJECT_VERSION,
+            saved_at: 0,
+            appearance: Appearance::default(),
+            history: Vec::new(),
+            match_request: Vec::new(),
+            match_response: Vec::new(),
+            scope: Vec::new(),
+            session_rules: Vec::new(),
+            cookie_jar: None,
+            intercept_rules: None,
+            macros: Vec::new(),
+            repeaters: Vec::new(),
+            issues: Vec::new(),
+            websockets: Vec::new(),
+            logger: Vec::new(),
+            organizer: Vec::new(),
+            intruder: ProjectIntruder::default(),
+            decoder: ProjectDecoder::default(),
+            target: Vec::new(),
+            collaborator: ProjectCollaborator::default(),
+            upstream: UpstreamConfig::default(),
+            listener_port: default_listener_port(),
+            crawl_items: Vec::new(),
+            site_links: Vec::new(),
+            scanner: ProjectScanner::default(),
+            proxy: ProjectProxy::default(),
+            tasks: ProjectTasks::default(),
+            layout: ProjectLayout::default(),
+            editors: ProjectEditors::default(),
+        }
+    }
+}
+
+/// The header line written before the JSON body.
+fn header_line() -> String {
+    format!("{PROJECT_MAGIC} {PROJECT_VERSION}\n")
+}
+
+/// The full document bytes: header, JSON, trailing newline.
+fn document_bytes(data: &ProjectData) -> Result<Vec<u8>, String> {
+    let mut normalized = data.clone();
+    normalized.version = PROJECT_VERSION;
+    let json = serde_json::to_vec_pretty(&normalized)
+        .map_err(|err| format!("cannot serialize project: {err}"))?;
+
+    let mut bytes = header_line().into_bytes();
+    bytes.extend_from_slice(&json);
+    bytes.push(b'\n');
+    Ok(bytes)
+}
+
+impl ProjectHistory {
+    /// A history item as saved: text when it is UTF-8, base64 otherwise, so
+    /// binary messages survive exactly.
+    pub fn from_entry(e: &crate::net::HistEntry) -> Self {
+        ProjectHistory {
+            id: e.id,
+            timestamp: e.ts,
+            method: e.method.clone(),
+            host: e.host.clone(),
+            port: e.port,
+            https: e.https,
+            path: e.path.clone(),
+            status: e.status.clone(),
+            request: encode_message(&e.req_raw).0,
+            response: e.resp_raw.as_ref().map(|r| encode_message(r).0),
+            note: e.note.clone(),
+            request_b64: encode_message(&e.req_raw).1,
+            response_b64: e.resp_raw.as_ref().and_then(|r| encode_message(r).1),
+        }
+    }
+
+    /// The history item back, with the derived columns recomputed.
+    pub fn to_entry(&self) -> crate::net::HistEntry {
+        let resp_raw = self.response.as_deref().map(|r| decode_message(r, self.response_b64.as_deref()));
+        let mut e = crate::net::HistEntry {
+            id: self.id,
+            ts: self.timestamp,
+            method: self.method.clone(),
+            host: self.host.clone(),
+            port: self.port,
+            https: self.https,
+            path: self.path.clone(),
+            status: self.status.clone(),
+            resp_len: resp_raw.as_ref().map(Vec::len).unwrap_or(0),
+            req_raw: decode_message(&self.request, self.request_b64.as_deref()),
+            resp_raw,
+            note: self.note.clone(),
+            ..Default::default()
+        };
+        let (params, extension, title, cookies) = crate::net::derive_history_fields(&e);
+        e.params = params;
+        e.extension = extension;
+        e.title = title;
+        e.cookies = cookies;
+        e
+    }
+}
+
+impl ProjectIssue {
+    pub fn from_issue(i: &crate::scan::ScanIssue) -> Self {
+        ProjectIssue {
+            id: i.id,
+            severity: i.sev.clone(),
+            name: i.name.clone(),
+            host: i.host.clone(),
+            path: i.path.clone(),
+            detail: i.detail.clone(),
+            false_positive: i.false_positive,
+            confidence: i.confidence.clone(),
+            timestamp: i.ts,
+            type_id: i.type_id,
+            evidence: i.evidence.iter().map(|e| ProjectEvidence::encode(&e.request, e.response.as_deref())).collect(),
+        }
+    }
+
+    pub fn to_issue(&self) -> crate::scan::ScanIssue {
+        crate::scan::ScanIssue {
+            id: self.id,
+            sev: self.severity.clone(),
+            name: self.name.clone(),
+            host: self.host.clone(),
+            path: self.path.clone(),
+            detail: self.detail.clone(),
+            false_positive: self.false_positive,
+            confidence: self.confidence.clone(),
+            ts: self.timestamp,
+            type_id: self.type_id,
+            evidence: self.evidence.iter().filter_map(|e| e.decode()).map(|(req, resp)| crate::scan::ScanEvidence::new(&req, resp.as_deref())).collect(),
+        }
+    }
+}
+
+/// The settings of a project without its data: what "Export settings"
+/// writes. Traffic, issues, tabs, editor buffers and stored cookies are left
+/// out; rules, scope, session handling, listeners, scan and proxy options,
+/// appearance and macros stay.
+pub fn settings_only(data: &ProjectData) -> ProjectData {
+    let blank = ProjectData::default();
+    ProjectData {
+        history: Vec::new(),
+        repeaters: Vec::new(),
+        issues: Vec::new(),
+        websockets: Vec::new(),
+        logger: Vec::new(),
+        organizer: Vec::new(),
+        target: Vec::new(),
+        crawl_items: Vec::new(),
+        site_links: Vec::new(),
+        intruder: blank.intruder,
+        decoder: blank.decoder,
+        editors: blank.editors,
+        layout: blank.layout,
+        cookie_jar: data.cookie_jar.as_ref().map(|j| ProjectCookieJar { cookies: Vec::new(), ..j.clone() }),
+        ..data.clone()
+    }
+}
+
+/// `current` with its settings replaced by those in `settings` ("Import
+/// settings"): the project's data, layout and stored cookies are kept.
+pub fn apply_settings(current: &ProjectData, settings: &ProjectData) -> ProjectData {
+    let cookies = current.cookie_jar.as_ref().map(|j| j.cookies.clone()).unwrap_or_default();
+    let cookie_jar = match (&settings.cookie_jar, cookies.is_empty()) {
+        (Some(j), _) => Some(ProjectCookieJar { cookies, ..j.clone() }),
+        (None, false) => Some(ProjectCookieJar { cookies, update_from: vec!["Proxy".into()], apply_to: vec!["Scanner".into()] }),
+        (None, true) => None,
+    };
+    ProjectData {
+        appearance: settings.appearance.clone(),
+        match_request: settings.match_request.clone(),
+        match_response: settings.match_response.clone(),
+        scope: settings.scope.clone(),
+        session_rules: settings.session_rules.clone(),
+        cookie_jar,
+        intercept_rules: settings.intercept_rules.clone(),
+        macros: settings.macros.clone(),
+        collaborator: settings.collaborator.clone(),
+        upstream: settings.upstream.clone(),
+        listener_port: settings.listener_port,
+        scanner: settings.scanner.clone(),
+        proxy: settings.proxy.clone(),
+        tasks: settings.tasks.clone(),
+        ..current.clone()
+    }
+}
+
+/// `current` with every setting back at its default ("Restore defaults").
+/// The listening port is kept: restoring defaults should not move the proxy
+/// out from under a configured browser.
+pub fn with_default_settings(current: &ProjectData) -> ProjectData {
+    let defaults = ProjectData { listener_port: current.listener_port, ..ProjectData::default() };
+    apply_settings(current, &defaults)
+}
+
+/// A settings page whose values can be put back to their defaults on
+/// their own (the per-page "Restore defaults").
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SettingsSection {
+    Appearance,
+    /// Listeners, interception rules, match and replace, WebSocket options.
+    Proxy,
+    /// Session handling rules, macros and the cookie jar's tool scopes
+    /// (stored cookies are data and stay).
+    Sessions,
+    Scope,
+    /// Server, poll interval and retention (payloads and interactions stay).
+    Collaborator,
+    /// Scanner configuration and the live audit / crawl switches (queued
+    /// scans stay).
+    Tasks,
+    /// Upstream proxy servers.
+    Network,
+}
+
+/// `current` with one settings page back at its defaults; everything else,
+/// and the listening port, unchanged.
+pub fn with_section_defaults(current: &ProjectData, section: SettingsSection) -> ProjectData {
+    let d = ProjectData::default();
+    let mut out = current.clone();
+    match section {
+        SettingsSection::Appearance => out.appearance = d.appearance,
+        SettingsSection::Proxy => {
+            out.match_request = d.match_request;
+            out.match_response = d.match_response;
+            out.intercept_rules = d.intercept_rules;
+            out.proxy = d.proxy;
+        }
+        SettingsSection::Sessions => {
+            out.session_rules = d.session_rules;
+            out.macros = d.macros;
+            let cookies = current.cookie_jar.as_ref().map(|j| j.cookies.clone()).unwrap_or_default();
+            out.cookie_jar = (!cookies.is_empty()).then(|| ProjectCookieJar { cookies, update_from: vec!["Proxy".into()], apply_to: vec!["Scanner".into()] });
+        }
+        SettingsSection::Scope => out.scope = d.scope,
+        SettingsSection::Collaborator => {
+            out.collaborator.server = None;
+            out.collaborator.poll_secs = None;
+            out.collaborator.retention_secs = None;
+        }
+        SettingsSection::Tasks => {
+            out.scanner = d.scanner;
+            out.tasks = ProjectTasks { scans: current.tasks.scans.clone(), ..d.tasks };
+        }
+        SettingsSection::Network => out.upstream = d.upstream,
+    }
+    out
+}
+
+/// Serialize `data` as a project document and atomically replace `path`.
+///
+/// The destination is only touched after serialization succeeds. The target
+/// is written through a uniquely named file in the same directory, flushed,
+/// and then renamed into place, so a failed write leaves the previous project
+/// intact.
+pub fn save(path: &Path, data: &ProjectData) -> Result<(), String> {
+    let bytes = document_bytes(data)?;
+
+    let temporary = temporary_path(path)?;
+    // The temp file is deleted only after create_new succeeds; a failing open
+    // must not remove an unrelated file that blocked the unique name.
+    let mut file = match std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)
+    {
+        Ok(file) => file,
+        Err(err) => {
+            return Err(format!(
+                "cannot create project temporary file {}: {err}",
+                temporary.display()
+            ));
+        }
+    };
+
+    if let Err(err) = file.write_all(&bytes).and_then(|()| file.sync_all()) {
+        let _ = std::fs::remove_file(&temporary);
+        return Err(format!(
+            "cannot write project temporary file {}: {err}",
+            temporary.display()
+        ));
+    }
+
+    if let Err(err) = std::fs::rename(&temporary, path) {
+        let _ = std::fs::remove_file(&temporary);
+        return Err(format!(
+            "cannot replace project file {}: {err}",
+            path.display()
+        ));
+    }
+
+    // Persist the directory entry too; best effort, the file data is already
+    // durable and a failure here must not turn a good save into an error.
+    sync_parent(path);
+    Ok(())
+}
+
+/// Read and validate a project file.
+pub fn load(path: &Path) -> Result<ProjectData, String> {
+    let bytes = std::fs::read(path)
+        .map_err(|err| format!("cannot read project {}: {err}", path.display()))?;
+    decode(&bytes, &path.display().to_string())
+}
+
+/// Render a project document as a string (header plus JSON), for tests and
+/// clipboard export.
+pub fn export_json(data: &ProjectData) -> Result<String, String> {
+    let bytes = document_bytes(data)?;
+    String::from_utf8(bytes).map_err(|err| format!("project document is not UTF-8: {err}"))
+}
+
+/// Parse a project document from a string. Accepts both the header format and
+/// legacy bare-JSON files.
+pub fn import_json(text: &str) -> Result<ProjectData, String> {
+    decode(text.as_bytes(), "input")
+}
+
+/// Split a document into its header version (if any) and the JSON body.
+///
+/// A body that starts with `{` is treated as a legacy headerless file.
+fn split_document<'a>(text: &'a str, label: &str) -> Result<(Option<u32>, &'a str), String> {
+    let trimmed = text.trim_start();
+    if trimmed.starts_with('{') {
+        return Ok((None, trimmed));
+    }
+
+    let (header, body) = trimmed.split_once('\n').ok_or_else(|| {
+        format!(
+            "not a WebProbe project file {label}: missing \"{PROJECT_MAGIC} <version>\" header"
+        )
+    })?;
+    let header = header.trim_end_matches('\r');
+
+    let rest = match header.strip_prefix(PROJECT_MAGIC) {
+        Some(rest) if rest.is_empty() || rest.starts_with(char::is_whitespace) => rest,
+        _ => {
+            return Err(format!(
+                "not a WebProbe project file {label}: wrong magic header {header:?} (expected {PROJECT_MAGIC:?})"
+            ));
+        }
+    };
+
+    let version_text = rest.trim();
+    let version = version_text.parse::<u32>().map_err(|_| {
+        format!("invalid project header {header:?} in {label}: version {version_text:?} is not a number")
+    })?;
+    Ok((Some(version), body))
+}
+
+/// Reject versions this build cannot read.
+fn check_supported(version: u32, label: &str) -> Result<(), String> {
+    if version > PROJECT_VERSION {
+        return Err(format!(
+            "project version {version} in {label} is newer than this build supports ({PROJECT_VERSION}); upgrade WebProbe to open it"
+        ));
+    }
+    if version < MIN_PROJECT_VERSION {
+        return Err(format!(
+            "unsupported project version {version} in {label} (expected {MIN_PROJECT_VERSION}..={PROJECT_VERSION})"
+        ));
+    }
+    Ok(())
+}
+
+/// Parse a project document from raw bytes, validating the header and version.
+fn decode(bytes: &[u8], label: &str) -> Result<ProjectData, String> {
+    let text = std::str::from_utf8(bytes)
+        .map_err(|err| format!("cannot parse project {label}: not UTF-8 ({err})"))?;
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
+
+    let (header_version, body) = split_document(text, label)?;
+    if let Some(version) = header_version {
+        check_supported(version, label)?;
+    }
+
+    let mut data: ProjectData = serde_json::from_str(body)
+        .map_err(|err| format!("cannot parse project {label}: {err}"))?;
+
+    // The body carries a version too; the header wins when both are present,
+    // so a headerless legacy file is still checked against this build.
+    check_supported(data.version, label)?;
+    data.version = PROJECT_VERSION;
+    Ok(data)
+}
+
+/// A unique sibling of the destination, so rename stays on one filesystem.
+fn temporary_path(path: &Path) -> Result<PathBuf, String> {
+    if path.file_name().is_none() {
+        return Err(format!(
+            "project path has no file name: {}",
+            path.display()
+        ));
+    }
+
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(0);
+    let sequence = TEMPORARY_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+
+    Ok(parent.join(format!(
+        ".webprobe-project-{}-{stamp}-{sequence}.tmp",
+        std::process::id()
+    )))
+}
+
+/// Flush the directory entry after a rename (POSIX only; best effort).
+fn sync_parent(path: &Path) {
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    if let Ok(dir) = std::fs::File::open(parent) {
+        let _ = dir.sync_all();
+    }
+}
+
+static TEMPORARY_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn one_settings_page_resets_and_the_rest_stays() {
+        let mut cur = ProjectData::default();
+        cur.scope = vec![ProjectScope { enabled: true, include: true, pattern: "https://a/".into(), is_regex: false }];
+        cur.collaborator.poll_secs = Some(30);
+        cur.collaborator.payloads = vec!["p".into()];
+        cur.listener_port = 6566;
+        let out = with_section_defaults(&cur, SettingsSection::Collaborator);
+        assert_eq!(out.collaborator.poll_secs, None);
+        assert_eq!(out.collaborator.payloads, vec!["p".to_string()], "data stays");
+        assert_eq!(out.scope.len(), 1, "other pages untouched");
+        assert_eq!(out.listener_port, 6566);
+        let out = with_section_defaults(&cur, SettingsSection::Scope);
+        assert!(out.scope.is_empty());
+        assert_eq!(out.collaborator.poll_secs, Some(30));
+    }
+
+    fn sample() -> ProjectData {
+        ProjectData {
+            version: PROJECT_VERSION,
+            saved_at: 1_760_000_002,
+            appearance: Appearance { palette: "light".into(), density: "compact".into(), font_scale: 1.1 },
+            history: vec![ProjectHistory {
+                id: 7,
+                timestamp: 1_760_000_000,
+                method: "GET".into(),
+                host: "example.com".into(),
+                port: 443,
+                https: true,
+                path: "/index.html".into(),
+                status: "200".into(),
+                request: "GET /index.html HTTP/1.1\r\nHost: example.com\r\n\r\n".into(),
+                response: Some("HTTP/1.1 200 OK\r\n\r\nok".into()),
+                note: Some("checked".into()),
+                request_b64: None,
+                response_b64: None,
+            }],
+            match_request: vec![ProjectRule {
+                enabled: true,
+                kind: "request".into(),
+                match_text: "old".into(),
+                replacement: "new".into(),
+                comment: "rewrite".into(),
+                is_regex: false,
+            }],
+            match_response: vec![ProjectRule {
+                enabled: false,
+                kind: "response".into(),
+                match_text: "server".into(),
+                replacement: "hidden".into(),
+                comment: String::new(),
+                is_regex: true,
+            }],
+            scope: vec![ProjectScope {
+                enabled: true,
+                include: true,
+                pattern: "example\\.com".into(),
+                is_regex: true,
+            }],
+            session_rules: vec![ProjectSessionRule {
+                enabled: true,
+                name: "auth".into(),
+                action: "set header".into(),
+                match_text: "example.com".into(),
+                value: "Authorization: Bearer token".into(),
+                tools: vec!["Scanner".into(), "Repeater".into()],
+                check: "Please log in".into(),
+                check_invalid_on_match: false,
+            }],
+            cookie_jar: Some(ProjectCookieJar {
+                cookies: vec![
+                    ProjectCookie { domain: "example.com".into(), host_only: false, path: "/".into(), name: "sid".into(), value: "abc".into(), secure: true, expires: Some(1_900_000_000) },
+                    ProjectCookie { domain: "app.example.com".into(), host_only: true, path: "/account".into(), name: "pref".into(), value: "1".into(), secure: false, expires: None },
+                ],
+                update_from: vec!["Proxy".into(), "Repeater".into()],
+                apply_to: vec!["Scanner".into()],
+            }),
+            intercept_rules: Some(crate::intercept_rules::defaults()),
+            macros: vec![ProjectMacro {
+                name: "login".into(),
+                request: "POST /login HTTP/1.1\r\n\r\nuser=a".into(),
+            }],
+            repeaters: vec![ProjectRepeater {
+                name: "Repeater 1".into(),
+                host: "example.com".into(),
+                port: 443,
+                https: true,
+                request: "GET / HTTP/1.1\r\n\r\n".into(),
+                response: Some("HTTP/1.1 200 OK\r\n\r\n".into()),
+                result_line: "200 OK".into(),
+            }],
+            issues: vec![ProjectIssue {
+                id: 11,
+                severity: "medium".into(),
+                name: "Missing header".into(),
+                host: "example.com".into(),
+                path: "/index.html".into(),
+                detail: "Content-Security-Policy is absent".into(),
+                false_positive: false,
+                confidence: "Firm".into(),
+                timestamp: 1_760_000_006,
+                type_id: 5_244_416,
+                evidence: vec![ProjectEvidence::encode(b"GET /index.html HTTP/1.1\r\n\r\n", Some(&[b'H', 0xff, 0x00, b'\n']))],
+            }],
+            websockets: vec![ProjectWebsocket {
+                id: 13,
+                timestamp: 1_760_000_001,
+                host: "example.com".into(),
+                direction: "out".into(),
+                opcode: "text".into(),
+                payload: "hello".into(),
+            }],
+            logger: vec![ProjectLoggerEntry {
+                id: 17,
+                timestamp: 1_760_000_003,
+                tool: "proxy".into(),
+                method: "POST".into(),
+                host: "api.example.com".into(),
+                port: 8443,
+                https: true,
+                path: "/v1/items".into(),
+                status: "201".into(),
+                request: "POST /v1/items HTTP/1.1\r\n\r\n{\"a\":1}".into(),
+                response: Some("HTTP/1.1 201 Created\r\n\r\n{}".into()),
+                note: Some("logger note".into()),
+                req_len: 30,
+                resp_len: 27,
+                mime: "JSON".into(),
+            }],
+            organizer: vec![ProjectOrganizerItem {
+                id: 19,
+                timestamp: 1_760_000_004,
+                title: "Interesting endpoint".into(),
+                host: "example.com".into(),
+                path: "/admin".into(),
+                request: "GET /admin HTTP/1.1\r\n\r\n".into(),
+                response: Some("HTTP/1.1 403 Forbidden\r\n\r\n".into()),
+                comment: "check auth bypass".into(),
+            }],
+            intruder: ProjectIntruder {
+                attack: "cluster_bomb".into(),
+                host: "example.com".into(),
+                port: 443,
+                https: true,
+                base_request: "GET /?a=§1§&b=§2§ HTTP/1.1\r\n\r\n".into(),
+                payload_sets: vec!["x\ny".into(), "1\n2".into()],
+                results: vec![ProjectIntruderResult {
+                    payload: "x,1".into(),
+                    status: "200".into(),
+                    length: 1234,
+                    request: "GET /?a=x&b=1 HTTP/1.1\r\n\r\n".into(),
+                    response: Some("HTTP/1.1 200 OK\r\n\r\n".into()),
+                }],
+            },
+            decoder: ProjectDecoder {
+                input: "aGVsbG8=".into(),
+                output: "hello".into(),
+                steps: vec![ProjectDecoderStep {
+                    input: "aGVsbG8=".into(),
+                    output: "hello".into(),
+                }],
+            },
+            target: vec![ProjectTargetItem {
+                host: "example.com".into(),
+                method: "GET".into(),
+                path: "/index.html".into(),
+                history_id: 7,
+            }],
+            collaborator: ProjectCollaborator {
+                payloads: vec!["http://127.0.0.1:9000/token".into()],
+                interactions: vec![ProjectCollaboratorInteraction {
+                    id: 23,
+                    at: 1_760_000_005,
+                    source: "10.0.0.5".into(),
+                    token: Some("token".into()),
+                    kind: "http".into(),
+                    method: "GET".into(),
+                    target: "/token".into(),
+                    body: "ping".into(),
+                    qname: String::new(),
+                    qtype: 0,
+                    headers: vec![ProjectHeader { name: "Host".into(), value: "127.0.0.1".into() }],
+                }],
+                server: Some("oast.example.com:8443".into()),
+                poll_secs: Some(10),
+                retention_secs: Some(3600),
+            },
+            upstream: UpstreamConfig::default(),
+            listener_port: 8080,
+            crawl_items: vec![ProjectHistory {
+                id: 29,
+                timestamp: 1_760_000_007,
+                method: "GET".into(),
+                host: "example.com".into(),
+                port: 443,
+                https: true,
+                path: "/admin/".into(),
+                status: "200".into(),
+                request: "GET /admin/ HTTP/1.1\r\n\r\n".into(),
+                response: Some("HTTP/1.1 200 OK\r\n\r\n".into()),
+                note: None,
+                request_b64: None,
+                response_b64: None,
+            }],
+            site_links: vec![("https://example.com".into(), "/unvisited".into())],
+            scanner: ProjectScanner { speed: 2, accuracy: 0, extra_checks: true, disabled_checks: vec!["active.csrf".into()], disabled_insertion_points: vec!["header".into()] },
+            proxy: ProjectProxy {
+                listeners: vec![ProjectListener { bind: "127.0.0.1".into(), port: 18_090 }],
+                ws_intercept_client: false,
+                ws_intercept_server: true,
+                redirects: vec![(18_090, "127.0.0.1".into(), 3001)],
+            },
+            tasks: ProjectTasks { live_passive_crawl: false, live_audit: true, scans: vec![ProjectScanTask { name: "Audit of https://example.com/".into(), entries: Vec::new(), urls: vec!["https://example.com/".into()], audit_only: true, paused: true }] },
+            layout: ProjectLayout {
+                tab: "repeater".into(),
+                proxy_sub: Some(1),
+                target_sub: Some(2),
+                target_view: Some(0),
+                intruder_sub: Some(1),
+                sequencer_sub: Some(0),
+                dashboard_task: Some(2),
+                dock: Some(1),
+                split_detail: Some(300.0),
+                repeater_tab: Some(1),
+            },
+            editors: ProjectEditors {
+                intruder_target: "https://example.com".into(),
+                comparer_items: vec!["a".into(), "b".into()],
+                macro_name: "Macro 1".into(),
+                macro_request: "GET /login HTTP/1.1\r\n\r\n".into(),
+                sequencer_manual: "tok1\ntok2".into(),
+            },
+        }
+    }
+
+    fn temporary_project(tag: &str) -> PathBuf {
+        static SEQUENCE: AtomicU64 = AtomicU64::new(0);
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or(0);
+        let sequence = SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        std::env::temp_dir().join(format!(
+            "webprobe-project-test-{tag}-{}-{stamp}-{sequence}.burp",
+            std::process::id()
+        ))
+    }
+
+    fn expect_error(result: Result<ProjectData, String>) -> String {
+        match result {
+            Ok(_) => panic!("expected project load to fail"),
+            Err(err) => err,
+        }
+    }
+
+    #[test]
+    fn round_trip_preserves_every_field() {
+        let path = temporary_project("round-trip");
+        let data = sample();
+
+        save(&path, &data).unwrap();
+        let loaded = load(&path).unwrap();
+
+        assert_eq!(
+            serde_json::to_value(&loaded).unwrap(),
+            serde_json::to_value(&data).unwrap()
+        );
+        assert_eq!(loaded.version, PROJECT_VERSION);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// J-01: a file written before the scanner / proxy / tasks / layout /
+    /// editors / crawl sections existed still loads, with defaults.
+    #[test]
+    fn pre_j01_file_loads_with_defaults_for_new_sections() {
+        let mut v = serde_json::to_value(sample()).unwrap();
+        let obj = v.as_object_mut().unwrap();
+        for k in ["crawl_items", "site_links", "scanner", "proxy", "tasks", "layout", "editors"] {
+            assert!(obj.remove(k).is_some(), "{k} missing from sample");
+        }
+        obj["issues"][0].as_object_mut().unwrap().remove("timestamp");
+        obj["logger"][0].as_object_mut().unwrap().remove("mime");
+        let text = format!("{PROJECT_MAGIC} 2\n{}", serde_json::to_string(&v).unwrap());
+        let d = import_json(&text).unwrap();
+        assert_eq!(d.scanner, ProjectScanner::default());
+        assert_eq!(d.scanner.speed, 1);
+        assert_eq!(d.proxy, ProjectProxy::default());
+        assert!(d.proxy.ws_intercept_client && d.tasks.live_audit && d.tasks.live_passive_crawl);
+        assert_eq!(d.layout, ProjectLayout::default());
+        assert_eq!(d.editors, ProjectEditors::default());
+        assert!(d.crawl_items.is_empty() && d.site_links.is_empty());
+        assert_eq!(d.issues[0].timestamp, 0);
+        assert_eq!(d.logger[0].mime, "");
+        assert_eq!(d.history.len(), 1);
+        // And the new sections round-trip.
+        let back = import_json(&export_json(&sample()).unwrap()).unwrap();
+        assert_eq!(back.layout.tab, "repeater");
+        assert_eq!(back.proxy.listeners[0].port, 18_090);
+        assert_eq!(back.editors.comparer_items, vec!["a".to_string(), "b".to_string()]);
+    }
+
+    #[test]
+    fn save_writes_magic_header_before_json() {
+        let path = temporary_project("header");
+        save(&path, &sample()).unwrap();
+
+        let text = std::fs::read_to_string(&path).unwrap();
+        let first = text.lines().next().unwrap();
+        assert_eq!(first, format!("{PROJECT_MAGIC} {PROJECT_VERSION}"));
+        assert!(text.trim_start_matches(first).trim_start().starts_with('{'));
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn load_accepts_legacy_bare_json() {
+        let path = temporary_project("legacy");
+        let legacy = r#"{
+            "version": 1,
+            "saved_at": 123,
+            "history": [{
+                "id": 1, "timestamp": 2, "method": "GET", "host": "old.test",
+                "port": 80, "path": "/", "status": "200",
+                "request": "GET / HTTP/1.1\r\n\r\n", "response": null, "note": null
+            }]
+        }"#;
+        std::fs::write(&path, legacy).unwrap();
+
+        let loaded = load(&path).unwrap();
+        assert_eq!(loaded.history.len(), 1);
+        assert_eq!(loaded.history[0].host, "old.test");
+        assert_eq!(loaded.version, PROJECT_VERSION);
+        assert!(loaded.logger.is_empty());
+        assert!(loaded.organizer.is_empty());
+        assert!(loaded.target.is_empty());
+        assert_eq!(loaded.listener_port, 8080);
+        assert_eq!(loaded.appearance, Appearance::default());
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn load_accepts_older_header_version() {
+        let path = temporary_project("older-header");
+        std::fs::write(
+            &path,
+            b"WEBPROBE PROJECT 1\n{\"version\":1,\"history\":[]}\n",
+        )
+        .unwrap();
+
+        let loaded = load(&path).unwrap();
+        assert_eq!(loaded.version, PROJECT_VERSION);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn load_rejects_wrong_magic() {
+        let path = temporary_project("magic");
+        std::fs::write(&path, b"WEBPROBE PROJECTX 2\n{\"version\":2}").unwrap();
+
+        let err = expect_error(load(&path));
+        assert!(err.contains("magic"), "{err}");
+
+        std::fs::write(&path, b"some other tool's file\n{}").unwrap();
+        let err = expect_error(load(&path));
+        assert!(err.contains("magic"), "{err}");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn load_rejects_newer_version() {
+        let path = temporary_project("version");
+        let newer = PROJECT_VERSION + 1;
+        std::fs::write(
+            &path,
+            format!("{PROJECT_MAGIC} {newer}\n{{\"version\":{newer}}}"),
+        )
+        .unwrap();
+
+        let err = expect_error(load(&path));
+        assert!(err.contains("version"), "{err}");
+        assert!(err.contains("newer"), "{err}");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn load_rejects_truncated_file() {
+        let path = temporary_project("truncated");
+        save(&path, &sample()).unwrap();
+        let bytes = std::fs::read(&path).unwrap();
+        std::fs::write(&path, &bytes[..bytes.len() / 2]).unwrap();
+
+        let err = expect_error(load(&path));
+        assert!(err.contains("parse"), "{err}");
+        let _ = std::fs::remove_file(&path);
+
+        // A header with no body is also truncated.
+        std::fs::write(&path, b"WEBPROBE PROJECT 2\n").unwrap();
+        let err = expect_error(load(&path));
+        assert!(err.contains("parse"), "{err}");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn load_rejects_malformed_json() {
+        let path = temporary_project("malformed");
+        std::fs::write(&path, b"{\"version\": 1").unwrap();
+
+        let err = expect_error(load(&path));
+
+        assert!(err.contains("parse"), "{err}");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn load_reports_missing_file() {
+        let path = temporary_project("missing");
+        let err = expect_error(load(&path));
+
+        assert!(err.contains("read"), "{err}");
+    }
+
+    #[test]
+    fn save_rejects_path_without_file_name() {
+        let err = match save(Path::new("/"), &sample()) {
+            Ok(()) => panic!("expected save to fail"),
+            Err(err) => err,
+        };
+
+        assert!(err.contains("file name"), "{err}");
+    }
+
+    #[test]
+    fn save_leaves_no_temporary_file() {
+        // A private directory: parallel tests in this process also write temp
+        // files into the shared temp dir, so a global count would race.
+        let dir = temporary_project("atomic-dir");
+        std::fs::create_dir(&dir).unwrap();
+        let path = dir.join("project.burp");
+
+        save(&path, &sample()).unwrap();
+        assert!(path.exists());
+
+        let mut names: Vec<String> = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        assert_eq!(names, vec!["project.burp".to_string()]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn unicode_and_crlf_bodies_survive() {
+        let path = temporary_project("unicode");
+        let mut data = sample();
+        let request = "GET /caf\u{e9}/\u{65e5}\u{672c}\u{8a9e}?q=\u{2713} HTTP/1.1\r\nHost: ex\u{e4}mple.test\r\nX-Emoji: \u{1f600}\r\n\r\nna\u{ef}ve\r\n";
+        let response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n\u{4f60}\u{597d}\r\n\u{1f680}";
+        data.history[0].request = request.into();
+        data.history[0].response = Some(response.into());
+        data.history[0].note = Some("n\u{f6}te \u{2713}".into());
+        data.decoder.input = "\u{fffd}\u{4e16}\u{754c}".into();
+
+        save(&path, &data).unwrap();
+        let loaded = load(&path).unwrap();
+
+        assert_eq!(loaded.history[0].request, request);
+        assert_eq!(loaded.history[0].response.as_deref(), Some(response));
+        assert_eq!(loaded.history[0].note.as_deref(), Some("n\u{f6}te \u{2713}"));
+        assert_eq!(loaded.decoder.input, "\u{fffd}\u{4e16}\u{754c}");
+        assert!(loaded.history[0].request.contains("\r\n"));
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn settings_export_import_and_restore_defaults_leave_the_data_alone() {
+        let full = sample();
+        let exported = settings_only(&full);
+        // Data is gone, settings stay.
+        assert!(exported.history.is_empty() && exported.issues.is_empty() && exported.repeaters.is_empty() && exported.websockets.is_empty());
+        assert_eq!(exported.session_rules.len(), full.session_rules.len());
+        assert_eq!(exported.scope.len(), full.scope.len());
+        assert_eq!(exported.intercept_rules, full.intercept_rules);
+        let jar = exported.cookie_jar.as_ref().unwrap();
+        assert!(jar.cookies.is_empty());
+        assert_eq!(jar.update_from, ["Proxy", "Repeater"]);
+
+        // Import those settings into another project: its traffic and its
+        // stored cookies survive, its rules are replaced.
+        let mut other = ProjectData::default();
+        other.history = full.history.clone();
+        other.cookie_jar = Some(ProjectCookieJar { cookies: full.cookie_jar.as_ref().unwrap().cookies.clone(), update_from: vec!["Proxy".into()], apply_to: Vec::new() });
+        let merged = apply_settings(&other, &exported);
+        assert_eq!(merged.history.len(), full.history.len());
+        assert_eq!(merged.session_rules.len(), full.session_rules.len());
+        let jar = merged.cookie_jar.as_ref().unwrap();
+        assert_eq!(jar.cookies.len(), 2);
+        assert_eq!(jar.update_from, ["Proxy", "Repeater"]);
+
+        // Restore defaults: rules cleared, data and port kept.
+        let mut configured = full.clone();
+        configured.listener_port = 9191;
+        let reset = with_default_settings(&configured);
+        assert!(reset.session_rules.is_empty() && reset.scope.is_empty() && reset.macros.is_empty());
+        assert!(reset.intercept_rules.is_none(), "None restores Burp's default rules on load");
+        assert_eq!(reset.history.len(), full.history.len());
+        assert_eq!(reset.listener_port, 9191);
+        assert_eq!(reset.cookie_jar.as_ref().unwrap().cookies.len(), 2);
+        assert_eq!(reset.cookie_jar.as_ref().unwrap().update_from, ["Proxy"]);
+    }
+
+    #[test]
+    fn history_and_issues_convert_both_ways() {
+        let e = crate::net::HistEntry {
+            id: 4,
+            ts: 1_800_000_000,
+            method: "POST".into(),
+            host: "app.test".into(),
+            port: 8443,
+            https: true,
+            path: "/login.php?x=1".into(),
+            status: "200".into(),
+            req_raw: b"POST /login.php?x=1 HTTP/1.1\r\nHost: app.test\r\n\r\nu=a".to_vec(),
+            resp_raw: Some(vec![b'H', 0xff, 0x00, b'\n']),
+            note: Some("n".into()),
+            ..Default::default()
+        };
+        let back = ProjectHistory::from_entry(&e).to_entry();
+        assert_eq!((back.id, back.ts, back.method.as_str(), back.port, back.https), (4, 1_800_000_000, "POST", 8443, true));
+        assert_eq!((back.req_raw.clone(), back.resp_raw.clone()), (e.req_raw.clone(), e.resp_raw.clone()));
+        assert_eq!(back.resp_len, 4);
+        assert!(back.params, "derived columns are recomputed");
+        assert_eq!(back.extension, "php");
+        let issue = crate::scan::ScanIssue {
+            id: 9,
+            sev: "high".into(),
+            name: "SQL injection".into(),
+            confidence: "Firm".into(),
+            type_id: 1_049_088,
+            evidence: vec![crate::scan::ScanEvidence::new(b"GET /?q=' HTTP/1.1\r\n\r\n", Some(&b"HTTP/1.1 500\r\n\r\n"[..]))],
+            ..Default::default()
+        };
+        let i2 = ProjectIssue::from_issue(&issue).to_issue();
+        assert_eq!((i2.id, i2.sev.as_str(), i2.type_id, i2.evidence.len()), (9, "high", 1_049_088, 1));
+        assert_eq!(&*i2.evidence[0].request, &*issue.evidence[0].request);
+    }
+
+    #[test]
+    fn cookie_jar_round_trips_and_old_files_get_the_default_jar() {
+        let mut jar = crate::cookie_jar::CookieJar::default();
+        jar.set_cookie("a.example.com", "/x/y", "sid=1; Domain=example.com; Path=/; Secure; Max-Age=100", 1_000);
+        jar.set_cookie("a.example.com", "/x/y", "local=2", 1_000);
+        jar.update_from.push("Intruder".into());
+        let saved = ProjectCookieJar::from_jar(&jar);
+        let json = serde_json::to_string(&saved).unwrap();
+        let back: ProjectCookieJar = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.to_jar(), jar);
+        // A session cookie writes no "expires" key.
+        assert_eq!(json.matches("expires").count(), 1);
+        // A project written before the jar existed has no such section.
+        let old: ProjectData = serde_json::from_str(r#"{"version":1}"#).unwrap();
+        assert!(old.cookie_jar.is_none());
+    }
+
+    #[test]
+    fn issue_evidence_round_trips_and_old_issues_load_without_it() {
+        let request = b"POST /upload HTTP/1.1\r\n\r\n\x00\xff\xfe binary".to_vec();
+        let response = vec![b'H', b'T', 0x80, 0x00, b'\n'];
+        let issue = ProjectIssue {
+            id: 7,
+            severity: "high".into(),
+            name: "SQL injection".into(),
+            host: "127.0.0.1".into(),
+            path: "/item".into(),
+            detail: "d".into(),
+            false_positive: false,
+            confidence: "Firm".into(),
+            timestamp: 1,
+            type_id: 1_049_088,
+            evidence: vec![ProjectEvidence::encode(&request, Some(&response)), ProjectEvidence::encode(&request, None)],
+        };
+        let json = serde_json::to_string(&issue).unwrap();
+        let back: ProjectIssue = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.type_id, 1_049_088);
+        assert_eq!(back.evidence.len(), 2);
+        assert_eq!(back.evidence[0].decode(), Some((request.clone(), Some(response))));
+        assert_eq!(back.evidence[1].decode(), Some((request, None)));
+
+        // A file written before evidence existed: both fields take defaults,
+        // and an issue without evidence does not write the key at all.
+        let old = r#"{"id":1,"severity":"low","name":"n","host":"h","path":"/","detail":""}"#;
+        let old: ProjectIssue = serde_json::from_str(old).unwrap();
+        assert_eq!((old.type_id, old.evidence.len()), (0, 0));
+        assert!(!serde_json::to_string(&old).unwrap().contains("evidence"));
+        // Damaged base64 is skipped, not a panic.
+        assert_eq!(ProjectEvidence { request_b64: "***".into(), response_b64: None }.decode(), None);
+    }
+
+    #[test]
+    fn binary_messages_round_trip_exactly() {
+        let body: Vec<u8> = [b"HTTP/1.1 200 OK\r\nContent-Type: image/png\r\n\r\n".to_vec(), vec![0x89, b'P', b'N', b'G', 0xff, 0x00, 0xfe]].concat();
+        let (text, b64) = encode_message(&body);
+        assert!(b64.is_some(), "non-UTF-8 bytes are kept exactly");
+        assert_eq!(decode_message(&text, b64.as_deref()), body);
+        let (t2, none) = encode_message(b"GET / HTTP/1.1\r\n\r\n");
+        assert!(none.is_none());
+        assert_eq!(decode_message(&t2, None), b"GET / HTTP/1.1\r\n\r\n");
+    }
+
+    #[test]
+    fn large_history_round_trips() {
+        let path = temporary_project("large");
+        let mut data = sample();
+        data.history = (0..1000)
+            .map(|i| ProjectHistory {
+                id: i,
+                timestamp: 1_760_000_000 + i,
+                method: "GET".into(),
+                host: format!("host{}.test", i % 17),
+                port: 443,
+                https: true,
+                path: format!("/item/{i}"),
+                status: "200".into(),
+                request: format!("GET /item/{i} HTTP/1.1\r\nHost: h\r\n\r\n"),
+                response: Some(format!("HTTP/1.1 200 OK\r\n\r\n{i}")),
+                note: None,
+                request_b64: None,
+                response_b64: None,
+            })
+            .collect();
+
+        save(&path, &data).unwrap();
+        let loaded = load(&path).unwrap();
+
+        assert_eq!(loaded.history.len(), 1000);
+        assert_eq!(loaded.history[0].id, 0);
+        assert_eq!(loaded.history[999].path, "/item/999");
+        assert_eq!(loaded.history[999].response.as_deref(), Some("HTTP/1.1 200 OK\r\n\r\n999"));
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn export_and_import_json_round_trip() {
+        let data = sample();
+        let text = export_json(&data).unwrap();
+        assert!(text.starts_with(PROJECT_MAGIC));
+
+        let loaded = import_json(&text).unwrap();
+        assert_eq!(
+            serde_json::to_value(&loaded).unwrap(),
+            serde_json::to_value(&data).unwrap()
+        );
+
+        // Legacy text without a header is accepted too.
+        let legacy = import_json("{\"version\":1,\"scope\":[]}").unwrap();
+        assert!(legacy.scope.is_empty());
+        assert_eq!(legacy.version, PROJECT_VERSION);
+    }
+
+    #[test]
+    fn save_reports_rename_failure_and_keeps_existing_file() {
+        let path = temporary_project("keep");
+        save(&path, &sample()).unwrap();
+        let original = std::fs::read(&path).unwrap();
+
+        // A directory at the destination makes the rename fail; the existing
+        // project bytes must be untouched and the destination unchanged.
+        let blocked = temporary_project("keep-blocked");
+        std::fs::create_dir(&blocked).unwrap();
+        let err = match save(&blocked, &sample()) {
+            Ok(()) => panic!("expected save to fail"),
+            Err(err) => err,
+        };
+        assert!(err.contains("replace"), "{err}");
+        assert!(blocked.is_dir());
+        assert_eq!(std::fs::read(&path).unwrap(), original);
+        let _ = std::fs::remove_dir(&blocked);
+        let _ = std::fs::remove_file(&path);
+    }
+}

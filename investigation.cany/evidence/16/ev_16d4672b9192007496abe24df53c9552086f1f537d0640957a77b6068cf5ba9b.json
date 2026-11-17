@@ -1,0 +1,440 @@
+{
+  "id": "ev_16d4672b9192007496abe24df53c9552086f1f537d0640957a77b6068cf5ba9b",
+  "subject": {
+    "kind": "java-class",
+    "sha256": "1d351a7019284433fab5823daf63c39b52a6d0d453bd9017d32e3e9726218bae",
+    "name": "Zuq.class"
+  },
+  "operation": "java_method_show",
+  "params": {
+    "class_name": null,
+    "decompile": false,
+    "descriptor": null,
+    "limit": 60,
+    "method_name": "ZP",
+    "offset": 0,
+    "path": "/root/burp-re/in/extract/burp/Zuq.class"
+  },
+  "result": {
+    "access": [
+      "private"
+    ],
+    "class": "burp.Zuq",
+    "descriptor": "()V",
+    "entry": "Zuq.class",
+    "exception_table": [
+      {
+        "catch_type": "java.lang.Exception",
+        "end_pc": 194,
+        "handler_pc": 197,
+        "start_pc": 0
+      }
+    ],
+    "instructions": [
+      {
+        "len": 1,
+        "offset": "0000",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0001",
+        "opcode": "0xb4",
+        "text": "getfield burp.Zuq.Zx:burp.Zw2_"
+      },
+      {
+        "len": 5,
+        "offset": "0004",
+        "opcode": "0xb9",
+        "text": "invokeinterface burp.Zw2_.Zo()[B"
+      },
+      {
+        "len": 1,
+        "offset": "0009",
+        "opcode": "0x4c",
+        "text": "astore_1"
+      },
+      {
+        "len": 3,
+        "offset": "000a",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zuq.ZZ:burp.Zpbf"
+      },
+      {
+        "len": 1,
+        "offset": "000d",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "000e",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zpbf.Zq([B)Lburp/Zu7k;"
+      },
+      {
+        "len": 3,
+        "offset": "0011",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zu7k.Zq()I"
+      },
+      {
+        "len": 1,
+        "offset": "0014",
+        "opcode": "0x3d",
+        "text": "istore_2"
+      },
+      {
+        "len": 1,
+        "offset": "0015",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 1,
+        "offset": "0016",
+        "opcode": "0x3e",
+        "text": "istore_3"
+      },
+      {
+        "len": 3,
+        "offset": "0017",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zuq.Zt:burp.Zpbf"
+      },
+      {
+        "len": 1,
+        "offset": "001a",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 1,
+        "offset": "001b",
+        "opcode": "0x1d",
+        "text": "iload_3"
+      },
+      {
+        "len": 1,
+        "offset": "001c",
+        "opcode": "0x1c",
+        "text": "iload_2"
+      },
+      {
+        "len": 3,
+        "offset": "001d",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zpbf.Zl([BII)Lburp/Zu7k;"
+      },
+      {
+        "len": 2,
+        "offset": "0020",
+        "opcode": "0x3a",
+        "text": "astore 4"
+      },
+      {
+        "len": 2,
+        "offset": "0022",
+        "opcode": "0x19",
+        "text": "aload 4"
+      },
+      {
+        "len": 3,
+        "offset": "0024",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zu7k.ZB()Z"
+      },
+      {
+        "len": 3,
+        "offset": "0027",
+        "opcode": "0x99",
+        "text": "ifeq 186"
+      },
+      {
+        "len": 3,
+        "offset": "002a",
+        "opcode": "0xbb",
+        "text": "new java.lang.StringBuilder"
+      },
+      {
+        "len": 1,
+        "offset": "002d",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 3,
+        "offset": "002e",
+        "opcode": "0xb7",
+        "text": "invokespecial java.lang.StringBuilder.<init>()V"
+      },
+      {
+        "len": 2,
+        "offset": "0031",
+        "opcode": "0x3a",
+        "text": "astore 5"
+      },
+      {
+        "len": 3,
+        "offset": "0033",
+        "opcode": "0xbb",
+        "text": "new java.lang.StringBuilder"
+      },
+      {
+        "len": 1,
+        "offset": "0036",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 3,
+        "offset": "0037",
+        "opcode": "0xb7",
+        "text": "invokespecial java.lang.StringBuilder.<init>()V"
+      },
+      {
+        "len": 2,
+        "offset": "003a",
+        "opcode": "0x3a",
+        "text": "astore 6"
+      },
+      {
+        "len": 1,
+        "offset": "003c",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 2,
+        "offset": "003d",
+        "opcode": "0x19",
+        "text": "aload 4"
+      },
+      {
+        "len": 3,
+        "offset": "003f",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zu7k.ZO()I"
+      },
+      {
+        "len": 1,
+        "offset": "0042",
+        "opcode": "0x05",
+        "text": "iconst_2"
+      },
+      {
+        "len": 1,
+        "offset": "0043",
+        "opcode": "0x60",
+        "text": "iadd"
+      },
+      {
+        "len": 1,
+        "offset": "0044",
+        "opcode": "0x1c",
+        "text": "iload_2"
+      },
+      {
+        "len": 2,
+        "offset": "0045",
+        "opcode": "0x19",
+        "text": "aload 5"
+      },
+      {
+        "len": 3,
+        "offset": "0047",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zuq.Zp([BIILjava/lang/StringBuilder;)I"
+      },
+      {
+        "len": 1,
+        "offset": "004a",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 1,
+        "offset": "004b",
+        "opcode": "0x60",
+        "text": "iadd"
+      },
+      {
+        "len": 2,
+        "offset": "004c",
+        "opcode": "0x36",
+        "text": "istore 7"
+      },
+      {
+        "len": 2,
+        "offset": "004e",
+        "opcode": "0x15",
+        "text": "iload 7"
+      },
+      {
+        "len": 2,
+        "offset": "0050",
+        "opcode": "0x36",
+        "text": "istore 8"
+      },
+      {
+        "len": 1,
+        "offset": "0052",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 2,
+        "offset": "0053",
+        "opcode": "0x15",
+        "text": "iload 7"
+      },
+      {
+        "len": 1,
+        "offset": "0055",
+        "opcode": "0x1c",
+        "text": "iload_2"
+      },
+      {
+        "len": 3,
+        "offset": "0056",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zuq.Zv([BII)I"
+      },
+      {
+        "len": 2,
+        "offset": "0059",
+        "opcode": "0x36",
+        "text": "istore 7"
+      },
+      {
+        "len": 2,
+        "offset": "005b",
+        "opcode": "0x15",
+        "text": "iload 7"
+      },
+      {
+        "len": 2,
+        "offset": "005d",
+        "opcode": "0x36",
+        "text": "istore 9"
+      },
+      {
+        "len": 1,
+        "offset": "005f",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 2,
+        "offset": "0060",
+        "opcode": "0x15",
+        "text": "iload 7"
+      },
+      {
+        "len": 1,
+        "offset": "0062",
+        "opcode": "0x1c",
+        "text": "iload_2"
+      },
+      {
+        "len": 2,
+        "offset": "0063",
+        "opcode": "0x19",
+        "text": "aload 6"
+      },
+      {
+        "len": 3,
+        "offset": "0065",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zuq.Ze([BIILjava/lang/StringBuilder;)I"
+      },
+      {
+        "len": 2,
+        "offset": "0068",
+        "opcode": "0x36",
+        "text": "istore 7"
+      },
+      {
+        "len": 2,
+        "offset": "006a",
+        "opcode": "0x19",
+        "text": "aload 5"
+      },
+      {
+        "len": 3,
+        "offset": "006c",
+        "opcode": "0xb6",
+        "text": "invokevirtual java.lang.StringBuilder.toString()Ljava/lang/String;"
+      },
+      {
+        "len": 2,
+        "offset": "006f",
+        "opcode": "0x3a",
+        "text": "astore 10"
+      },
+      {
+        "len": 3,
+        "offset": "0071",
+        "opcode": "0xbb",
+        "text": "new burp.Zr4u"
+      },
+      {
+        "len": 1,
+        "offset": "0074",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "0075",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      }
+    ],
+    "instructions_total": 100,
+    "listing": "0000: aload_0\n0001: getfield burp.Zuq.Zx:burp.Zw2_\n0004: invokeinterface burp.Zw2_.Zo()[B\n0009: astore_1\n000a: getstatic burp.Zuq.ZZ:burp.Zpbf\n000d: aload_1\n000e: invokevirtual burp.Zpbf.Zq([B)Lburp/Zu7k;\n0011: invokevirtual burp.Zu7k.Zq()I\n0014: istore_2\n0015: iconst_0\n0016: istore_3\n0017: getstatic burp.Zuq.Zt:burp.Zpbf\n001a: aload_1\n001b: iload_3\n001c: iload_2\n001d: invokevirtual burp.Zpbf.Zl([BII)Lburp/Zu7k;\n0020: astore 4\n0022: aload 4\n0024: invokevirtual burp.Zu7k.ZB()Z\n0027: ifeq 186\n002a: new java.lang.StringBuilder\n002d: dup\n002e: invokespecial java.lang.StringBuilder.<init>()V\n0031: astore 5\n0033: new java.lang.StringBuilder\n0036: dup\n0037: invokespecial java.lang.StringBuilder.<init>()V\n003a: astore 6\n003c: aload_1\n003d: aload 4\n003f: invokevirtual burp.Zu7k.ZO()I\n0042: iconst_2\n0043: iadd\n0044: iload_2\n0045: aload 5\n0047: invokestatic burp.Zuq.Zp([BIILjava/lang/StringBuilder;)I\n004a: iconst_1\n004b: iadd\n004c: istore 7\n004e: iload 7\n0050: istore 8\n0052: aload_1\n0053: iload 7\n0055: iload_2\n0056: invokestatic burp.Zuq.Zv([BII)I\n0059: istore 7\n005b: iload 7\n005d: istore 9\n005f: aload_1\n0060: iload 7\n0062: iload_2\n0063: aload 6\n0065: invokestatic burp.Zuq.Ze([BIILjava/lang/StringBuilder;)I\n0068: istore 7\n006a: aload 5\n006c: invokevirtual java.lang.StringBuilder.toString()Ljava/lang/String;\n006f: astore 10\n0071: new burp.Zr4u\n0074: dup\n0075: aload_0",
+    "max_locals": 12,
+    "max_stack": 7,
+    "method": "burp.Zuq.ZP()V",
+    "overloads": [
+      "()V",
+      "([BII)Lburp/Zwz4;"
+    ],
+    "pseudo_java": null,
+    "signature": "private void ZP()",
+    "throws": []
+  },
+  "summary": "burp.Zuq.ZP()V (Zuq.class): 100 instructions, 1 try block(s).",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [
+    {
+      "code": "overload_chosen",
+      "message": "ZP has 2 overloads; showing the first. Pass descriptor to pick another."
+    }
+  ],
+  "coverage": {
+    "status": "partial",
+    "examined": 60,
+    "total": 100,
+    "next_offset": 60
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/root/burp-re/in/extract/burp/Zuq.class"
+    },
+    {
+      "kind": "method",
+      "value": "burp.Zuq.ZP()V"
+    }
+  ],
+  "links": []
+}

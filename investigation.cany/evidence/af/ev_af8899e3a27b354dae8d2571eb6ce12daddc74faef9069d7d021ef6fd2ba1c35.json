@@ -1,0 +1,384 @@
+{
+  "id": "ev_af8899e3a27b354dae8d2571eb6ce12daddc74faef9069d7d021ef6fd2ba1c35",
+  "subject": {
+    "kind": "java-class",
+    "sha256": "1d351a7019284433fab5823daf63c39b52a6d0d453bd9017d32e3e9726218bae",
+    "name": "Zuq.class"
+  },
+  "operation": "java_method_show",
+  "params": {
+    "class_name": null,
+    "decompile": false,
+    "descriptor": null,
+    "limit": 60,
+    "method_name": "Zs",
+    "offset": 0,
+    "path": "/root/burp-re/in/extract/burp/Zuq.class"
+  },
+  "result": {
+    "access": [
+      "public"
+    ],
+    "class": "burp.Zuq",
+    "descriptor": "()Lburp/Zril;",
+    "entry": "Zuq.class",
+    "exception_table": [],
+    "instructions": [
+      {
+        "len": 1,
+        "offset": "0000",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0001",
+        "opcode": "0xb4",
+        "text": "getfield burp.Zuq.ZG:burp.Zp0a"
+      },
+      {
+        "len": 3,
+        "offset": "0004",
+        "opcode": "0xc6",
+        "text": "ifnull 39"
+      },
+      {
+        "len": 1,
+        "offset": "0007",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0008",
+        "opcode": "0xb4",
+        "text": "getfield burp.Zuq.ZG:burp.Zp0a"
+      },
+      {
+        "len": 5,
+        "offset": "000b",
+        "opcode": "0xb9",
+        "text": "invokeinterface burp.Zp0a.isEmpty()Z"
+      },
+      {
+        "len": 3,
+        "offset": "0010",
+        "opcode": "0x9a",
+        "text": "ifne 39"
+      },
+      {
+        "len": 1,
+        "offset": "0013",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 1,
+        "offset": "0014",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0015",
+        "opcode": "0xb4",
+        "text": "getfield burp.Zuq.ZG:burp.Zp0a"
+      },
+      {
+        "len": 3,
+        "offset": "0018",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zuq.ZQ(Lburp/Zp0a;)V"
+      },
+      {
+        "len": 3,
+        "offset": "001b",
+        "opcode": "0xbb",
+        "text": "new burp.Zril"
+      },
+      {
+        "len": 1,
+        "offset": "001e",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "001f",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0020",
+        "opcode": "0xb4",
+        "text": "getfield burp.Zuq.Zu:java.util.List"
+      },
+      {
+        "len": 3,
+        "offset": "0023",
+        "opcode": "0xb7",
+        "text": "invokespecial burp.Zril.<init>(Ljava/util/List;)V"
+      },
+      {
+        "len": 1,
+        "offset": "0026",
+        "opcode": "0xb0",
+        "text": "areturn"
+      },
+      {
+        "len": 1,
+        "offset": "0027",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0028",
+        "opcode": "0xbb",
+        "text": "new java.util.ArrayList"
+      },
+      {
+        "len": 1,
+        "offset": "002b",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 3,
+        "offset": "002c",
+        "opcode": "0xb7",
+        "text": "invokespecial java.util.ArrayList.<init>()V"
+      },
+      {
+        "len": 3,
+        "offset": "002f",
+        "opcode": "0xb5",
+        "text": "putfield burp.Zuq.ZA:java.util.List"
+      },
+      {
+        "len": 1,
+        "offset": "0032",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 1,
+        "offset": "0033",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 3,
+        "offset": "0034",
+        "opcode": "0xb5",
+        "text": "putfield burp.Zuq.Zm:boolean"
+      },
+      {
+        "len": 1,
+        "offset": "0037",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0038",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zuq.ZT()V"
+      },
+      {
+        "len": 1,
+        "offset": "003b",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "003c",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zuq.Ze()V"
+      },
+      {
+        "len": 1,
+        "offset": "003f",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0040",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zuq.Zy()V"
+      },
+      {
+        "len": 1,
+        "offset": "0043",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0044",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zuq.ZP()V"
+      },
+      {
+        "len": 1,
+        "offset": "0047",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0048",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zuq.Zq()V"
+      },
+      {
+        "len": 1,
+        "offset": "004b",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "004c",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zuq.Za()V"
+      },
+      {
+        "len": 1,
+        "offset": "004f",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0050",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zuq.Zp()V"
+      },
+      {
+        "len": 1,
+        "offset": "0053",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0054",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zuq.Zb()V"
+      },
+      {
+        "len": 1,
+        "offset": "0057",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0058",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zuq.ZX()V"
+      },
+      {
+        "len": 1,
+        "offset": "005b",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "005c",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zuq.ZY()V"
+      },
+      {
+        "len": 1,
+        "offset": "005f",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0060",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zuq.ZG()V"
+      },
+      {
+        "len": 3,
+        "offset": "0063",
+        "opcode": "0xbb",
+        "text": "new burp.Zril"
+      },
+      {
+        "len": 1,
+        "offset": "0066",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "0067",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0068",
+        "opcode": "0xb4",
+        "text": "getfield burp.Zuq.Zu:java.util.List"
+      },
+      {
+        "len": 3,
+        "offset": "006b",
+        "opcode": "0xb7",
+        "text": "invokespecial burp.Zril.<init>(Ljava/util/List;)V"
+      },
+      {
+        "len": 1,
+        "offset": "006e",
+        "opcode": "0xb0",
+        "text": "areturn"
+      }
+    ],
+    "instructions_total": 53,
+    "listing": "0000: aload_0\n0001: getfield burp.Zuq.ZG:burp.Zp0a\n0004: ifnull 39\n0007: aload_0\n0008: getfield burp.Zuq.ZG:burp.Zp0a\n000b: invokeinterface burp.Zp0a.isEmpty()Z\n0010: ifne 39\n0013: aload_0\n0014: aload_0\n0015: getfield burp.Zuq.ZG:burp.Zp0a\n0018: invokevirtual burp.Zuq.ZQ(Lburp/Zp0a;)V\n001b: new burp.Zril\n001e: dup\n001f: aload_0\n0020: getfield burp.Zuq.Zu:java.util.List\n0023: invokespecial burp.Zril.<init>(Ljava/util/List;)V\n0026: areturn\n0027: aload_0\n0028: new java.util.ArrayList\n002b: dup\n002c: invokespecial java.util.ArrayList.<init>()V\n002f: putfield burp.Zuq.ZA:java.util.List\n0032: aload_0\n0033: iconst_0\n0034: putfield burp.Zuq.Zm:boolean\n0037: aload_0\n0038: invokevirtual burp.Zuq.ZT()V\n003b: aload_0\n003c: invokevirtual burp.Zuq.Ze()V\n003f: aload_0\n0040: invokevirtual burp.Zuq.Zy()V\n0043: aload_0\n0044: invokevirtual burp.Zuq.ZP()V\n0047: aload_0\n0048: invokevirtual burp.Zuq.Zq()V\n004b: aload_0\n004c: invokevirtual burp.Zuq.Za()V\n004f: aload_0\n0050: invokevirtual burp.Zuq.Zp()V\n0053: aload_0\n0054: invokevirtual burp.Zuq.Zb()V\n0057: aload_0\n0058: invokevirtual burp.Zuq.ZX()V\n005b: aload_0\n005c: invokevirtual burp.Zuq.ZY()V\n005f: aload_0\n0060: invokevirtual burp.Zuq.ZG()V\n0063: new burp.Zril\n0066: dup\n0067: aload_0\n0068: getfield burp.Zuq.Zu:java.util.List\n006b: invokespecial burp.Zril.<init>(Ljava/util/List;)V\n006e: areturn",
+    "max_locals": 1,
+    "max_stack": 3,
+    "method": "burp.Zuq.Zs()Lburp/Zril;",
+    "overloads": [
+      "()Lburp/Zril;"
+    ],
+    "pseudo_java": null,
+    "signature": "public burp.Zril Zs()",
+    "throws": []
+  },
+  "summary": "burp.Zuq.Zs()Lburp/Zril; (Zuq.class): 53 instructions.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 53,
+    "total": 53
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/root/burp-re/in/extract/burp/Zuq.class"
+    },
+    {
+      "kind": "method",
+      "value": "burp.Zuq.Zs()Lburp/Zril;"
+    }
+  ],
+  "links": []
+}

@@ -59,18 +59,29 @@ wid() {
   echo "$w"
 }
 
-app_pid() { pgrep -f 'debug/webprobe$' | head -1; }
+# The app runs in its own session (setsid), so its PID is also its process
+# group: stopping the group takes extension and browser children with it.
+# Tracked by PID file, not by name, so a QA_BIN copy is found too.
+PIDFILE="${QA_PIDFILE:-/tmp/webprobe-qa.pid}"
+app_pid() { local p; p=$(cat "$PIDFILE" 2>/dev/null) && kill -0 "$p" 2>/dev/null && echo "$p"; }
+stop_app() {
+  local p; p=$(app_pid) || return 1
+  kill -TERM -- "-$p" 2>/dev/null || kill -TERM "$p"
+  for _ in 1 2 3 4 5 6 7 8 9 10; do kill -0 "$p" 2>/dev/null || break; sleep 0.3; done
+  kill -0 "$p" 2>/dev/null && { kill -KILL -- "-$p" 2>/dev/null || kill -KILL "$p"; }
+  rm -f "$PIDFILE"
+}
 
 cmd_up() {
   ensure_x
-  pkill -f 'debug/webprobe$' 2>/dev/null
-  sleep 1
+  stop_app && sleep 1
   rm -f "$WIDFILE"
   [ -x "$BIN" ] || { echo "build first: (cd $ROOT/app && cargo build)" >&2; exit 1; }
   # Test ports, never the defaults: 8080/8081 belong to working tools on this
   # machine. Later assignments win, so an explicit VAR=val argument overrides.
   env WEBPROBE_PORT="${QA_PORT:-6566}" WEBPROBE_COLLAB_PORT="${QA_COLLAB_PORT:-6567}" \
       "$@" setsid nohup "$BIN" >"$LOG" 2>&1 </dev/null &
+  echo $! >"$PIDFILE"
   local w="" start=$SECONDS
   while [ $((SECONDS - start)) -lt 60 ]; do
     w=$(find_wid)
@@ -89,7 +100,7 @@ cmd_up() {
   echo "up: window $w, $(xwininfo -id "$w" | awk '/Width:/{w=$2} /Height:/{h=$2} END{print w"x"h}') on $DISP, mapped in $((SECONDS - start))s"
 }
 
-cmd_down() { pkill -f 'debug/webprobe$' 2>/dev/null && echo "stopped" || echo "was not running"; rm -f "$WIDFILE"; }
+cmd_down() { stop_app && echo "stopped" || echo "was not running"; rm -f "$WIDFILE"; }
 
 cmd_info() {
   local w

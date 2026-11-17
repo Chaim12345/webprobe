@@ -719,7 +719,7 @@ pub fn palette_ui(
         }
     });
 
-    egui::Area::new(egui::Id::new("command_palette"))
+    egui::Area::new(egui::Id::unique("command_palette"))
         .anchor(egui::Align2::CENTER_TOP, egui::vec2(0.0, 84.0))
         .order(egui::Order::Foreground)
         .show(ctx, |ui| {
@@ -845,7 +845,7 @@ pub fn settings_ui(ui: &mut Ui, shortcuts: &mut Shortcuts, notice: &mut Option<S
     // scrolls too).
     egui::Frame::default()
         .fill(theme::chrome())
-        .inner_margin(egui::Margin::same(8.0))
+        .inner_margin(egui::Margin::same(8))
         .show(ui, |ui| {
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])

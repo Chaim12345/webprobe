@@ -1,1031 +1,1125 @@
 {
- "project": "webprobe",
- "generated": "2026-11-15",
- "source": "TASKS.md",
- "summary": {
-  "total": 101,
-  "p0": 64,
-  "p1": 29,
-  "p2": 8,
-  "by_status": {
-   "done": 24,
-   "in_progress": 12,
-   "todo": 65
-  }
- },
- "tasks": [
-  {
-   "id": "A-01",
-   "epic": "A — HTTP engine correctness",
-   "priority": "P0",
-   "title": "Decode `Transfer-Encoding: chunked` for requests and responses",
-   "acceptance": "Chunked bodies are reassembled before storage/display; `Content-Length` and byte counts are correct; tests cover single/multi-chunk and trailers",
-   "effort": "M",
-   "status": "done",
-   "completed": "2026-11-12",
-   "evidence": "app/src/codec.rs (chunked/codec + normalize + tests), app/src/net.rs (pool/keep-alive + proxy integration tests), app/src/util.rs (parse_http folding/dup/absolute-form tests); 52 cargo tests pass"
-  },
-  {
-   "id": "A-02",
-   "epic": "A — HTTP engine correctness",
-   "priority": "P0",
-   "title": "Decode `Content-Encoding: gzip`, `deflate`, `br`",
-   "acceptance": "Compressed response bodies are decoded for passive checks and display; original encoding kept for forwarding; tests per codec",
-   "effort": "M",
-   "status": "done",
-   "completed": "2026-11-12",
-   "evidence": "app/src/codec.rs (chunked/codec + normalize + tests), app/src/net.rs (pool/keep-alive + proxy integration tests), app/src/util.rs (parse_http folding/dup/absolute-form tests); 52 cargo tests pass"
-  },
-  {
-   "id": "A-03",
-   "epic": "A — HTTP engine correctness",
-   "priority": "P0",
-   "title": "Keep-alive and connection reuse",
-   "acceptance": "Upstream connections are pooled per host; `Connection: close` is not forced; pipelining is off; tests assert socket reuse",
-   "effort": "M",
-   "status": "done",
-   "completed": "2026-11-12",
-   "evidence": "app/src/codec.rs (chunked/codec + normalize + tests), app/src/net.rs (pool/keep-alive + proxy integration tests), app/src/util.rs (parse_http folding/dup/absolute-form tests); 52 cargo tests pass"
-  },
-  {
-   "id": "A-04",
-   "epic": "A — HTTP engine correctness",
-   "priority": "P0",
-   "title": "Robust HTTP/1.x parsing",
-   "acceptance": "Absolute-form, origin-form, header folding, duplicate headers, `Content-Length` + chunked conflict, 4 MiB+ bodies; malformed input never panics",
-   "effort": "M",
-   "status": "done",
-   "completed": "2026-11-12",
-   "evidence": "app/src/codec.rs (chunked/codec + normalize + tests), app/src/net.rs (pool/keep-alive + proxy integration tests), app/src/util.rs (parse_http folding/dup/absolute-form tests); 52 cargo tests pass"
-  },
-  {
-   "id": "A-05",
-   "epic": "A — HTTP engine correctness",
-   "priority": "P0",
-   "title": "HTTP/2 upstream and h2c",
-   "acceptance": "Requests negotiate h2 over TLS via ALPN and h2c when offered; HTTP/2 responses are stored with a normalized HTTP/1.1 view; tests against a local h2 server",
-   "effort": "L",
-   "status": "done",
-   "completed": "2026-11-12",
-   "evidence": "app/src/h2.rs (sync HTTP/2 client: preface/SETTINGS/HEADERS+HPACK/DATA/flow-control, normalization to HTTP/1.1), net.rs (ALPN h2 in tls_upstream, try_h2c_upgrade + fallback), tls.rs (server_config_with_alpn); tests: h2c upgrade roundtrip, h2c decline fallback, TLS ALPN h2 roundtrip; 57 tests pass"
-  },
-  {
-   "id": "A-06",
-   "epic": "A — HTTP engine correctness",
-   "priority": "P0",
-   "title": "TLS pass-through and mTLS",
-   "acceptance": "Host exclusion list bypasses MITM; client certificates can be configured per host; tests with a local TLS server",
-   "effort": "M",
-   "status": "done",
-   "completed": "2026-11-12",
-   "evidence": "net.rs: tls_bypass list (exact + *.wildcard) with relay_tunnel byte pass-through in handle_connect; ClientCertRule + tls_client_config per-host mTLS upstream; tls.rs: client_auth_config, MitmAuthority::client_certificate, server_config_with_client_auth; tests: tls_bypass_relays_raw_bytes, client_certificate_presented_to_mtls_server, host_matching_exact_and_wildcard; 60 tests pass"
-  },
-  {
-   "id": "A-07",
-   "epic": "A — HTTP engine correctness",
-   "priority": "P0",
-   "title": "Proxy listener options",
-   "acceptance": "Multiple listeners, bind address, port validation/restart without losing history; status shown in UI",
-   "effort": "M",
-   "status": "done",
-   "completed": "2026-11-12",
-   "evidence": "net.rs: ListenerSpec/ListenerState + extra listener workers (non-blocking accept, generation-based restart), set_listeners validation (empty bind/port 0/duplicates), listener_status snapshot; ui.rs dashboard shows every listener + error; tests: extra_listener_serves_traffic, listener_validation, listener_restart_keeps_history"
-  },
-  {
-   "id": "A-08",
-   "epic": "A — HTTP engine correctness",
-   "priority": "P0",
-   "title": "Invisible proxying",
-   "acceptance": "Reconstruct origin-form requests from absolute-form and Host; non-proxy clients work; tests for both forms",
-   "effort": "M",
-   "status": "done",
-   "completed": "2026-11-12",
-   "evidence": "net.rs host_of already routes origin-form via Host header (invisible proxying); tests: invisible_proxying_uses_host_header (origin-form + Host routed, upstream sees origin-form), absolute_form_forwarded_as_origin_form"
-  },
-  {
-   "id": "B-01",
-   "epic": "B — Proxy UI and message editing",
-   "priority": "P0",
-   "title": "History table with filter/sort/columns",
-   "acceptance": "Filter bar (text, regex, method, status, MIME, in-scope), sortable columns, column chooser, resizable widths, sticky header, virtualized rendering above 10k rows",
-   "effort": "L",
-   "status": "done",
-   "completed": "2026-11-15",
-   "evidence": "history_filter.rs (text/regex/method/status/MIME/in-scope filter bar, broken-regex message), table.rs (sortable+resizable header, column chooser, virtualized show_viewport body, empty state), ui.rs history_view = one tested pipeline (newest first, filter and sort the whole list, then cap); tests: history_filters_full_list_before_limiting_rendered_rows, history_sorts_by_method_before_limiting, the_cap_applies_after_the_sort, history_filter tests; live check on Xvfb 2026-11-15: typing POST gave '29 of 200' with only POST rows, Status header click re-sorted (qa/qa.sh, shots qa-02/qa-03)"
-  },
-  {
-   "id": "B-02",
-   "epic": "B — Proxy UI and message editing",
-   "priority": "P0",
-   "title": "Message editor",
-   "acceptance": "Raw editor with syntax highlighting, line numbers, wrap toggle, font size, find-in-message, hex edit; request editable in place and sendable",
-   "effort": "L",
-   "status": "in_progress",
-   "evidence": "editor.rs: line numbers, wrap, font size (Aa 13.0 pt), find-in-message box, hex view with hex_encode/hex_decode/hex_dump round-trip, syntax colouring; 7 editor tests. REMAINING: the Proxy history message pane is read-only; edit-in-place + send from history is not wired (only Repeater/Intruder/Intercept edit)"
-  },
-  {
-   "id": "B-03",
-   "epic": "B — Proxy UI and message editing",
-   "priority": "P0",
-   "title": "Response views",
-   "acceptance": "Raw / Params / Headers / Hex / Render (HTML) with correct entity decoding; JSON/XML pretty view; image preview",
-   "effort": "M",
-   "status": "todo",
-   "evidence": "P-05 added the history columns and derived fields; B-03 owns the response views (Pretty, Renderer) and the remaining message-pane work."
-  },
-  {
-   "id": "B-04",
-   "epic": "B — Proxy UI and message editing",
-   "priority": "P0",
-   "title": "Context menus",
-   "acceptance": "Right-click menus for history, site map, repeater, issues, decoder results; copy/save/send-to/add-to-scope",
-   "effort": "M",
-   "status": "todo"
-  },
-  {
-   "id": "B-05",
-   "epic": "B — Proxy UI and message editing",
-   "priority": "P0",
-   "title": "Resizable layout + status bar",
-   "acceptance": "Splitters between every pane; status bar with listener, intercept, queue, scan/attack progress, last error; layout persisted",
-   "effort": "L",
-   "status": "in_progress",
-   "evidence": "status bar (listener, intercept, held, history, messages, last message) and a draggable splitter between history table and message pane, live-verified 2026-11-15. REMAINING: splitters between every other pane, scan/attack progress in the bar, layout persistence"
-  },
-  {
-   "id": "B-06",
-   "epic": "B — Proxy UI and message editing",
-   "priority": "P0",
-   "title": "Site map tree",
-   "acceptance": "Branch/leaf tree with method, URL, status, length, comment; expand/collapse, filter, scope colouring, annotations",
-   "effort": "L",
-   "status": "todo"
-  },
-  {
-   "id": "B-07",
-   "epic": "B — Proxy UI and message editing",
-   "priority": "P0",
-   "title": "Multi-select and bulk actions",
-   "acceptance": "Select ranges with shift/ctrl; bulk send-to, export, add-to-scope, delete",
-   "effort": "M",
-   "status": "todo"
-  },
-  {
-   "id": "B-08",
-   "epic": "B — Proxy UI and message editing",
-   "priority": "P0",
-   "title": "Proxy options UI",
-   "acceptance": "Listener, interception (request/response/WebSocket), match & replace import/export, upstream per-host rules, TLS/HTTP settings",
-   "effort": "L",
-   "status": "todo"
-  },
-  {
-   "id": "B-09",
-   "epic": "B — Proxy UI and message editing",
-   "priority": "P0",
-   "title": "WebSocket interception",
-   "acceptance": "Hold, edit and forward frames; WebSocket history with filters and search; TLS WebSocket relay verified",
-   "effort": "L",
-   "status": "todo"
-  },
-  {
-   "id": "C-01",
-   "epic": "C — Intruder parity",
-   "priority": "P0",
-   "title": "Four attack types",
-   "acceptance": "Sniper, battering ram, pitchfork, cluster bomb produce the correct request matrix; tests assert counts and payload placement",
-   "effort": "M",
-   "status": "done",
-   "evidence": "intruder::requests/count (sniper, battering ram, pitchfork, cluster bomb, limit, empty/missing set errors) with 6 matrix tests + intruder_runner_sends_the_matrix; reachable from the Intruder tab attack-type selector (P-10).",
-   "completed": "2026-11-15"
-  },
-  {
-   "id": "C-02",
-   "epic": "C — Intruder parity",
-   "priority": "P0",
-   "title": "Payload positions",
-   "acceptance": "Auto-mark, clear, add-from-selection, marker highlighting, multiple positions per request",
-   "effort": "M",
-   "status": "in_progress",
-   "evidence": "intruder.rs add_marker/clear_markers/auto_mark (query, cookie, form, JSON) with 2 tests; UI has Auto § and Clear §; marker highlighting not drawn. REMAINING: Add § from a selection (needs an editable editor), marker highlight in the editor."
-  },
-  {
-   "id": "C-03",
-   "epic": "C — Intruder parity",
-   "priority": "P0",
-   "title": "Payload sets",
-   "acceptance": "Simple list, runtime file, custom iterator, brute forcer, case modification, numbers, dates, usernames, null payloads, character frobber",
-   "effort": "L",
-   "status": "in_progress",
-   "evidence": "intruder::PayloadSource with generate()/len() + resolve_sets(): SimpleList, RuntimeFile (lines read at generation, CR trimmed, blanks skipped, unreadable = empty set), Numbers (base 10/16, min_digits zero padding, fraction padding, step 0 -> 1), BruteForcer (lexicographic, charset order, 1M cap), Dates (UTC strftime subset %Y %m %d %H %M %S %s), CharacterBlocks; 11 source tests. REMAINING: usernames, null payloads, character frobber, case-modification and custom-iterator sources; no payload-source editor in the Intruder UI yet."
-  },
-  {
-   "id": "C-04",
-   "epic": "C — Intruder parity",
-   "priority": "P0",
-   "title": "Payload processing",
-   "acceptance": "Prefix/suffix, substring, encode (URL/Base64/HTML/hex), hash, regex, skip; ordered pipeline",
-   "effort": "M",
-   "status": "done",
-   "evidence": "intruder::Processor pipeline: AddPrefix, AddSuffix, MatchReplace (capture groups, invalid regex skipped), Substring (negative offsets, clamped), Reverse, Lowercase, Uppercase, Base64Encode/Decode, UrlEncodeAll, UrlEncodeKey, HtmlEncode, HexEncode, Md5, Sha1, Sha256, SkipIfMatches, MakeUnique (dedupe + cap); ordered process()/process_set() with skip-drop and dedupe; 15 processor tests incl. rule-order, bad regex/Base64 tolerance and dedupe cap. Engine-level; no pipeline editor in the Intruder UI yet (ui.rs owned by another worker).",
-   "completed": "2026-11-15"
-  },
-  {
-   "id": "C-05",
-   "epic": "C — Intruder parity",
-   "priority": "P0",
-   "title": "Result analysis",
-   "acceptance": "Grep match, grep extract, grep capture, grep payloads; configurable result columns; per-row detail",
-   "effort": "L",
-   "status": "todo"
-  },
-  {
-   "id": "C-06",
-   "epic": "C — Intruder parity",
-   "priority": "P0",
-   "title": "Attack control",
-   "acceptance": "Pause/resume/stop, concurrency, throttle, resource pool, retry/backoff, progress",
-   "effort": "M",
-   "status": "todo"
-  },
-  {
-   "id": "C-07",
-   "epic": "C — Intruder parity",
-   "priority": "P0",
-   "title": "Results I/O",
-   "acceptance": "Save/export results (CSV/XML), send row to Repeater/Comparer, copy as curl",
-   "effort": "M",
-   "status": "todo"
-  },
-  {
-   "id": "D-01",
-   "epic": "D — Scanner parity",
-   "priority": "P0",
-   "title": "Crawl engine",
-   "acceptance": "Follow links, forms, scripts, redirects; depth/location caps; scope rules; produce a site map; tests on a local multi-page fixture",
-   "effort": "L",
-   "status": "todo"
-  },
-  {
-   "id": "D-02",
-   "epic": "D — Scanner parity",
-   "priority": "P0",
-   "title": "Audit check library",
-   "acceptance": "≥ 40 checks with severity, confidence, description, remediation, references; unit tests per check with positive/negative fixtures",
-   "effort": "L",
-   "status": "in_progress",
-   "evidence": "app/src/scan.rs passive engine rebuilt on a CheckDef registry (stable id + severity + confidence) with 30 checks: passive.hsts-missing, csp-missing, frame-ancestors-missing, x-content-type-options-missing, referrer-policy-missing, permissions-policy-missing, server-version, x-powered-by, aspnet-version, cookie-httponly-missing, cookie-secure-missing, cookie-samesite-missing, cookie-samesite-none-insecure, cors-wildcard-origin, cors-wildcard-origin-credentials, cors-reflected-origin, cors-reflected-origin-credentials, cors-null-origin, directory-listing, git-directory-exposed, env-file-exposed, login-form-http, mixed-content, cacheable-https-response, session-cookie-cross-host-redirect, password-autocomplete, email-disclosed, private-ip-disclosed, credit-card-disclosed, robots-txt; binary bodies skipped, body work capped at 256 KB, 23 scan tests (positive+negative per check, dedupe, cap) green. Still missing: remediation/references fields and ~10 more checks for the ≥40 acceptance."
-  },
-  {
-   "id": "D-03",
-   "epic": "D — Scanner parity",
-   "priority": "P0",
-   "title": "Insertion points",
-   "acceptance": "Query, body, headers, cookies, path segments, multipart; max 30 per base request; tests per point type",
-   "effort": "L",
-   "status": "todo"
-  },
-  {
-   "id": "D-04",
-   "epic": "D — Scanner parity",
-   "priority": "P0",
-   "title": "Scan configuration",
-   "acceptance": "Crawl/audit/optimization/insertion-point/speed settings; persisted; check selection",
-   "effort": "M",
-   "status": "todo"
-  },
-  {
-   "id": "D-05",
-   "epic": "D — Scanner parity",
-   "priority": "P0",
-   "title": "Task queue",
-   "acceptance": "New scan, pause/resume/cancel, per-task progress, live audit/crawl, queue persistence",
-   "effort": "L",
-   "status": "todo"
-  },
-  {
-   "id": "D-06",
-   "epic": "D — Scanner parity",
-   "priority": "P0",
-   "title": "Issue activity",
-   "acceptance": "Group by host/issue, filter by severity/confidence, evidence, detail view, false-positive marking",
-   "effort": "M",
-   "status": "todo"
-  },
-  {
-   "id": "D-07",
-   "epic": "D — Scanner parity",
-   "priority": "P0",
-   "title": "Reporting",
-   "acceptance": "Export HTML/CSV/XML; summary + detail; severity/confidence tables; remediation text",
-   "effort": "M",
-   "status": "todo"
-  },
-  {
-   "id": "D-08",
-   "epic": "D — Scanner parity",
-   "priority": "P0",
-   "title": "Collaborator integration",
-   "acceptance": "Active checks generate OAST payloads and confirm interactions; blind SSRF/XXE/OOB findings",
-   "effort": "M",
-   "status": "todo"
-  },
-  {
-   "id": "E-01",
-   "epic": "E — Repeater parity",
-   "priority": "P0",
-   "title": "Request/response editors",
-   "acceptance": "Raw, Params, Headers, Hex, Render; editable request; syntax highlighting; find",
-   "effort": "L",
-   "status": "todo"
-  },
-  {
-   "id": "E-02",
-   "epic": "E — Repeater parity",
-   "priority": "P0",
-   "title": "Follow redirects",
-   "acceptance": "Never / on-site / always; \"follow and enumerate\"; redirect chain shown",
-   "effort": "M",
-   "status": "todo"
-  },
-  {
-   "id": "E-03",
-   "epic": "E — Repeater parity",
-   "priority": "P0",
-   "title": "Send-to and copy",
-   "acceptance": "Send to Intruder, Comparer, Decoder, Scanner; copy as curl, Python requests, raw; save item",
-   "effort": "M",
-   "status": "todo"
-  },
-  {
-   "id": "E-04",
-   "epic": "E — Repeater parity",
-   "priority": "P0",
-   "title": "Tab management",
-   "acceptance": "Rename, close, reorder, duplicate, persisted order and contents",
-   "effort": "M",
-   "status": "todo"
-  },
-  {
-   "id": "E-05",
-   "epic": "E — Repeater parity",
-   "priority": "P0",
-   "title": "Compare",
-   "acceptance": "Diff current response against previous; request diff; send both sides to Comparer",
-   "effort": "M",
-   "status": "todo"
-  },
-  {
-   "id": "E-06",
-   "epic": "E — Repeater parity",
-   "priority": "P0",
-   "title": "Editing helpers",
-   "acceptance": "Paste URL, change method, URL-encode as you type, content-type-aware body editing",
-   "effort": "M",
-   "status": "todo"
-  },
-  {
-   "id": "F-01",
-   "epic": "F — Decoder and Comparer",
-   "priority": "P1",
-   "title": "Decoder operations",
-   "acceptance": "Smart decode, MD5/SHA-1/SHA-256, ROT13, ASCII hex, URL/Base64/HTML/hex, construct",
-   "effort": "M",
-   "status": "done",
-   "completed": "2026-11-15",
-   "evidence": "app/src/decoder_ops.rs: Op enum (URL, HTML, base64, ASCII hex, hex, ROT13, MD5, SHA-1, SHA-256, SHA-512, SmartDecode), apply(), pure codecs/digests; 9 tests with known vectors (base64, digests incl. padding boundaries, URL/HTML/hex round-trips, ROT13, smart decode, pipeline order). Engine done; UI controls remain P-07."
-  },
-  {
-   "id": "F-02",
-   "epic": "F — Decoder and Comparer",
-   "priority": "P1",
-   "title": "Decoder pipeline",
-   "acceptance": "Multi-stage encode/decode chain with editable stages and live output",
-   "effort": "M",
-   "status": "done",
-   "completed": "2026-11-15",
-   "evidence": "decoder_ops::pipeline applies ops in order and names the failing step; tests pipeline_applies_ops_in_order, pipeline_names_the_failing_step. Engine done; the Decoder screen still needs the stage UI (P-07)."
-  },
-  {
-   "id": "F-03",
-   "epic": "F — Decoder and Comparer",
-   "priority": "P1",
-   "title": "Comparer modes",
-   "acceptance": "Word, byte and character diff; merge; export; three-way compare",
-   "effort": "M",
-   "status": "todo"
-  },
-  {
-   "id": "G-01",
-   "epic": "G — Sequencer",
-   "priority": "P1",
-   "title": "Live capture",
-   "acceptance": "Capture tokens over TLS and plain HTTP, auto-capture N samples, ignore-abnormal toggle",
-   "effort": "M",
-   "status": "todo"
-  },
-  {
-   "id": "G-02",
-   "epic": "G — Sequencer",
-   "priority": "P1",
-   "title": "Analysis depth",
-   "acceptance": "Character-level and bit-level entropy, FIPS-style tests, confidence rating, charts",
-   "effort": "M",
-   "status": "todo"
-  },
-  {
-   "id": "G-03",
-   "epic": "G — Sequencer",
-   "priority": "P1",
-   "title": "Export",
-   "acceptance": "Results to CSV/JSON; sample set save/load",
-   "effort": "S",
-   "status": "todo"
-  },
-  {
-   "id": "H-01",
-   "epic": "H — Sessions and macros",
-   "priority": "P1",
-   "title": "Cookie jar",
-   "acceptance": "Shared cookie store updated from responses and sent on matching requests; per-domain rules",
-   "effort": "M",
-   "status": "todo"
-  },
-  {
-   "id": "H-02",
-   "epic": "H — Sessions and macros",
-   "priority": "P1",
-   "title": "Macro recorder",
-   "acceptance": "Record a proxy-driven sequence, parameterize values, replay, save/load",
-   "effort": "L",
-   "status": "todo"
-  },
-  {
-   "id": "H-03",
-   "epic": "H — Sessions and macros",
-   "priority": "P1",
-   "title": "Recorded login sequences",
-   "acceptance": "Capture login, extract token, apply to session rules; validate session",
-   "effort": "L",
-   "status": "todo"
-  },
-  {
-   "id": "H-04",
-   "epic": "H — Sessions and macros",
-   "priority": "P1",
-   "title": "Session rule actions",
-   "acceptance": "Set header, set cookie, run macro, validate session, browser recovery, post-request match/replace",
-   "effort": "M",
-   "status": "todo"
-  },
-  {
-   "id": "I-01",
-   "epic": "I — Collaborator / OAST",
-   "priority": "P0",
-   "title": "Payload generation",
-   "acceptance": "HTTP, DNS and SMTP payloads with unique IDs; copy/insert into requests",
-   "effort": "M",
-   "status": "todo"
-  },
-  {
-   "id": "I-02",
-   "epic": "I — Collaborator / OAST",
-   "priority": "P0",
-   "title": "Interaction polling",
-   "acceptance": "Poll public relay or self-hosted server; list HTTP/DNS/SMTP interactions with source IP and timing",
-   "effort": "M",
-   "status": "todo"
-  },
-  {
-   "id": "I-03",
-   "epic": "I — Collaborator / OAST",
-   "priority": "P0",
-   "title": "Scanner integration",
-   "acceptance": "Blind checks use generated payloads and raise findings on interaction",
-   "effort": "M",
-   "status": "todo"
-  },
-  {
-   "id": "I-04",
-   "epic": "I — Collaborator / OAST",
-   "priority": "P0",
-   "title": "Private instance",
-   "acceptance": "Configurable server, polling interval, retention, secret; docs for self-hosting",
-   "effort": "M",
-   "status": "todo"
-  },
-  {
-   "id": "J-01",
-   "epic": "J — Project, settings and state",
-   "priority": "P1",
-   "title": "Full-state project file",
-   "acceptance": "Version 2 format: settings, proxy config, CA metadata, scanner config, task queue, UI layout, editor buffers",
-   "effort": "L",
-   "status": "todo"
-  },
-  {
-   "id": "J-02",
-   "epic": "J — Project, settings and state",
-   "priority": "P1",
-   "title": "Autosave and recovery",
-   "acceptance": "Periodic autosave, crash recovery prompt, temp project support",
-   "effort": "M",
-   "status": "todo"
-  },
-  {
-   "id": "J-03",
-   "epic": "J — Project, settings and state",
-   "priority": "P1",
-   "title": "Settings UI",
-   "acceptance": "Searchable settings with sections, import/export, restore defaults, per-setting reset",
-   "effort": "L",
-   "status": "todo"
-  },
-  {
-   "id": "J-04",
-   "epic": "J — Project, settings and state",
-   "priority": "P1",
-   "title": "New/open project flow",
-   "acceptance": "Start screen, recent projects, new temporary project, project integrity checks",
-   "effort": "M",
-   "status": "todo"
-  },
-  {
-   "id": "K-01",
-   "epic": "K — Extensions",
-   "priority": "P2",
-   "title": "Native extension API",
-   "acceptance": "Stable Rust/WASM ABI for custom tabs, issue definitions, request/response hooks; example extension",
-   "effort": "L",
-   "status": "todo"
-  },
-  {
-   "id": "K-02",
-   "epic": "K — Extensions",
-   "priority": "P2",
-   "title": "JVM/Montoya host",
-   "acceptance": "Embed a JVM (JNI) or a subprocess host; load a subset of Montoya API; sandbox and error reporting",
-   "effort": "L",
-   "status": "todo"
-  },
-  {
-   "id": "K-03",
-   "epic": "K — Extensions",
-   "priority": "P2",
-   "title": "Extension manager",
-   "acceptance": "Install/enable/disable/remove, dependency view, BApp-like catalogue (no copied assets)",
-   "effort": "M",
-   "status": "todo"
-  },
-  {
-   "id": "L-01",
-   "epic": "L — Engagement and utility features",
-   "priority": "P1",
-   "title": "CSRF PoC generator",
-   "acceptance": "Generate an HTML form PoC from a request; copy/download",
-   "effort": "S",
-   "status": "todo"
-  },
-  {
-   "id": "L-02",
-   "epic": "L — Engagement and utility features",
-   "priority": "P1",
-   "title": "Engagement tools",
-   "acceptance": "Find comments, find scripts, find references, copy URLs, copy as curl",
-   "effort": "M",
-   "status": "todo"
-  },
-  {
-   "id": "L-03",
-   "epic": "L — Engagement and utility features",
-   "priority": "P1",
-   "title": "Content discovery",
-   "acceptance": "Wordlist-based path discovery with extension set, recursion, scope, result table",
-   "effort": "M",
-   "status": "todo"
-  },
-  {
-   "id": "L-04",
-   "epic": "L — Engagement and utility features",
-   "priority": "P1",
-   "title": "Logger",
-   "acceptance": "Global traffic log across tools with filters, search, export; independent of Proxy history",
-   "effort": "M",
-   "status": "todo"
-  },
-  {
-   "id": "L-05",
-   "epic": "L — Engagement and utility features",
-   "priority": "P1",
-   "title": "Embedded browser",
-   "acceptance": "Launch a configured Chromium for proxy testing, or a documented \"use your browser\" flow",
-   "effort": "L",
-   "status": "todo",
-   "evidence": "Evaluated 2026-11-15 (docs/EVAL-OBSCURA.md): Obscura is headless, so it cannot be Burp's interactive browser; split into P-15 (interactive launcher) and P-16 (headless engine). Still todo."
-  },
-  {
-   "id": "M-01",
-   "epic": "M — UI/UX system",
-   "priority": "P0",
-   "title": "Design tokens",
-   "acceptance": "One token module for colour, spacing, radius, typography, density; no ad-hoc hex in widgets",
-   "effort": "M",
-   "status": "done",
-   "completed": "2026-11-12",
-   "evidence": "theme.rs: full token module — spacing (XS..XL), radius, typography scale (H1/H2/body/small/mono), named colors (URL_KEY/URL_VALUE/SELECTION_SUBTLE); all widget hex inlined colors replaced by tokens; widgets use theme constants"
-  },
-  {
-   "id": "M-02",
-   "epic": "M — UI/UX system",
-   "priority": "P0",
-   "title": "Table component",
-   "acceptance": "Shared sortable/filterable/virtualized table used by Proxy, Target, Scanner, Intruder, Collaborator",
-   "effort": "L",
-   "status": "done",
-   "completed": "2026-11-12",
-   "evidence": "app/src/table.rs: Column/TableState + sort_rows/filter_rows + table_body/data_table virtualized via ScrollArea::show_rows with clickable rows and header sorting; wired into Proxy history, Target requests, Scanner issues, Intruder results and Collaborator interactions (table + detail pane); ui.rs history_rows sorts before the 1000-row render cap; tests cover sort asc/desc, stable order, case-insensitive filter, empty filter"
-  },
-  {
-   "id": "M-03",
-   "epic": "M — UI/UX system",
-   "priority": "P0",
-   "title": "Editor component",
-   "acceptance": "Shared message editor/view used by Proxy, Repeater, Intruder, Sequencer, Decoder",
-   "effort": "L",
-   "status": "done",
-   "completed": "2026-11-12",
-   "evidence": "app/src/editor.rs: EditorState (wrap/search), message_editor (monospace code editor + find count), message_view (tinted head lines, single-block body), bytes_view; split_message/match_count helpers; wired into Proxy detail raw view, Proxy intercept, Repeater, Intruder, Sequencer manual samples and Decoder; tests cover CRLF/LF splitting, headless messages, case-insensitive match counting"
-  },
-  {
-   "id": "M-04",
-   "epic": "M — UI/UX system",
-   "priority": "P0",
-   "title": "Feedback and errors",
-   "acceptance": "Progress bars, cancel buttons, toasts, inline errors, retry actions, empty/loading states",
-   "effort": "M",
-   "status": "done",
-   "completed": "2026-11-12",
-   "evidence": "app/src/feedback.rs: Toasts queue (6 s TTL, max 4, dismiss), process-wide toast() + drain for worker threads, progress bar with Cancel, inline_error with Retry, empty_state and loading; wired into main.rs frame loop, project save/restore, Scanner start/cancel/finish plus progress, Intruder progress/cancel and empty state, target site-map loading/empty and filter-empty states, Repeater inline error + Retry + completion toasts, listener bind-failure toast, scan-start warning when no request is selected; tests cover TTL expiry, cap, queue drain; 77 tests pass"
-  },
-  {
-   "id": "M-05",
-   "epic": "M — UI/UX system",
-   "priority": "P0",
-   "title": "Theming and density",
-   "acceptance": "Dark/light/high-contrast, compact/comfortable, font size, persisted",
-   "effort": "M",
-   "status": "done",
-   "completed": "2026-11-12",
-   "evidence": "theme.rs: Palette (dark/light/high_contrast) + Density (compact/comfortable) + font scale; apply_as(ctx,palette,density,scale) applied every frame; live appearance statics (set_appearance/appearance); persisted in ProjectData.appearance (serde defaults, old files load fine); appearance editor (palette/density/font size) in tools.rs dashboard; 65 tests pass"
-  },
-  {
-   "id": "M-06",
-   "epic": "M — UI/UX system",
-   "priority": "P0",
-   "title": "Keyboard and accessibility",
-   "acceptance": "Shortcut help overlay, customizable hotkeys, focus order, contrast, screen-reader labels",
-   "effort": "M",
-   "status": "done",
-   "completed": "2026-11-15",
-   "evidence": "shortcuts.rs: ACTIONS is Burp build 52685's own 50-pair table, read from resources/Preferences/UserDefaults.json user_options.misc.hotkeys and joined to burp.Zmcg ids/labels (Zj()=label, ZB()=id, Ze()=category); 48 of 50 map, the 2 misses (send_to_burp_at/open_burp_at) are extension-provided. Chord::parse enforces Burp's rule that every hotkey uses Ctrl (shipped docs settings/ui/hotkeys.html) and round-trips all 50 defaults. Shortcuts::set refuses a chord used by another action AND an action that already has a chord, matching burp.Zfhv.ZT (evidence ev_7dbf2c50b84b2abd63c5e2a9d791530ac9fd90e09a80d33f9f974724ef3ff761). Persistence is user-level (~/.config/webprobe/hotkeys.json) and file-authoritative like burp.Zfhv.Zh (ev_e199c6630d23d2f9df87cc0c3add80d5f8320325e3d630de68b7c3ad3767135f), so an unbound action stays unbound. Command palette Ctrl+K lists wired commands recents-first with category and chord, arrows navigate, Enter runs, Escape closes; capture mode consumes the key event so it never fires a command. Settings window (top bar) hosts Appearance + Hotkeys with per-row Clear/Reset, duplicate and save errors shown inline. Focus: only Wired chords are consumed, so Ctrl+C/V/X/Z/Y/A and word navigation reach the focused editor (egui handles those natively). 86 tests pass; verified by rendering the Settings and palette screenshots."
-  },
-  {
-   "id": "M-07",
-   "epic": "M — UI/UX system",
-   "priority": "P0",
-   "title": "Onboarding",
-   "acceptance": "First-run CA/proxy setup, verification checklist, sample traffic, docs links",
-   "effort": "M",
-   "status": "done",
-   "completed": "2026-11-15",
-   "evidence": "onboarding.rs: checks() derives the four checklist lines from live state (listener_running, history length, count of https exchanges, intercept flag) so it cannot claim a step that is not true. The proxy answers http://webprobe (and http://burpsuite, so a Burp tutorial still works) locally instead of forwarding upstream, serving a setup page with the CA in PEM (/webprobe-ca.pem) and DER (/webprobe-ca.der) plus the listener port, matching the shipped docs: certificate/index.html says the CA is fetched through the proxy and confirmed by visiting an HTTPS URL with no warning, proxy-troubleshooting.html documents http://burpsuite and the 127.0.0.1:8080 listener. sample_traffic() routes one real request through the listener and toasts the status line. Dashboard panel with Hide; docs links go to the public documentation, and the module records that WebProbe has no bundled browser (L-05) instead of pretending otherwise. Tests: setup hosts answered locally, CA content types, page documents both paths and the real port, and sample traffic reaching the listener end to end."
-  },
-  {
-   "id": "N-01",
-   "epic": "N — Quality, performance and build",
-   "priority": "P0",
-   "title": "Parser/engine tests",
-   "acceptance": "Unit + integration tests for chunked, gzip, keep-alive, h2, TLS, proxy; run in CI",
-   "effort": "L",
-   "status": "todo"
-  },
-  {
-   "id": "N-02",
-   "epic": "N — Quality, performance and build",
-   "priority": "P0",
-   "title": "Performance",
-   "acceptance": "10k history entries and 1k site-map nodes render at 60 fps; no per-frame full-list scans",
-   "effort": "M",
-   "status": "todo"
-  },
-  {
-   "id": "N-03",
-   "epic": "N — Quality, performance and build",
-   "priority": "P0",
-   "title": "Fuzzing",
-   "acceptance": "Malformed HTTP/TLS/WebSocket inputs never panic or hang; fuzz targets in CI",
-   "effort": "M",
-   "status": "todo"
-  },
-  {
-   "id": "N-04",
-   "epic": "N — Quality, performance and build",
-   "priority": "P0",
-   "title": "Builder reliability",
-   "acceptance": "Fix the `omp` model-routing 404s (glm-5.3 / kimi-k3.1) so rounds complete; add a working fallback",
-   "effort": "S",
-   "status": "todo"
-  },
-  {
-   "id": "N-05",
-   "epic": "N — Quality, performance and build",
-   "priority": "P0",
-   "title": "Release build",
-   "acceptance": "`cargo build --release` under 3 minutes; binary starts in under 1 s; screenshot check passes",
-   "effort": "S",
-   "status": "todo"
-  },
-  {
-   "id": "P-01",
-   "epic": "P — Live Burp parity gaps (found 2026-11-15)",
-   "priority": "P0",
-   "title": "Top menu bar",
-   "acceptance": "Burp, Project, Intruder, Repeater, View, Help menus in the window chrome; Burp menu lists Search, Settings, Configuration library, User settings >, Log in, Exit; every item either works or is disabled with a reason; shortcuts shown beside items match shortcuts.rs",
-   "effort": "M",
-   "status": "done",
-   "completed": "2026-11-15",
-   "evidence": "Menu bar added above the tab row (menu row y~13, tab row y~44, Proxy action buttons moved to y~245): WebProbe (Settings..., Quit), Project (Project options...), Intruder (Send to Intruder), Repeater (Send to Repeater, Send request), View (13 tabs + Light theme checkbox), Help (Keyboard shortcuts, About WebProbe). All six open and list these items in qa/../webprobe-shots/cmp/v8-menu-*.png. Not yet Burp-complete: Burp also lists Search, Configuration library, User settings >, Log in, Burp Infiltrator, Burp Clickbandit (tracked as an open gap in qa/VISUAL-DIFF-2026-11-15.md)."
-  },
-  {
-   "id": "P-02",
-   "epic": "P — Live Burp parity gaps (found 2026-11-15)",
-   "priority": "P1",
-   "title": "Tab bar and global controls parity",
-   "acceptance": "Single tab row in Burp order (Dashboard, Target, Proxy, Intruder, Repeater, Collaborator, Sequencer, Decoder, Comparer, Logger, Organizer, Extensions, Discover) with no 'More tools' overflow at 1440 px; top-right global search, settings gear and browser launcher; active tab shown with an underline",
-   "effort": "M",
-   "status": "in_progress",
-   "evidence": "Top bar now renders all 13 tabs in one row in Burp order (Dashboard, Target, Proxy, Intruder, Repeater, Collaborator, Sequencer, Decoder, Comparer, Scanner, Sessions, Search, Extensions), no 'More tools' overflow; active tab is an orange underline (not a pill). Live shot p02-tabs.png at 1440x900. REMAINING: top-right global search button, browser launcher (P-15), arrange/hide tabs and reset layout, title bar project name (J-04). 118 tests pass."
-  },
-  {
-   "id": "P-03",
-   "epic": "P — Live Burp parity gaps (found 2026-11-15)",
-   "priority": "P0",
-   "title": "Settings dialog parity",
-   "acceptance": "Searchable dialog with All/User/Project filter pills and a category tree (Tools: Proxy, Intruder, Repeater, Sequencer, Comparer; Project; Sessions; Network; User interface; Suite; Extensions; Configuration library); Proxy page has a listeners table (Running, Interface, Invisible, Redirect, Certificate, TLS protocols) with Add/Edit/Remove, CA import/export/regenerate, request-interception rules table with Up/Down",
-   "effort": "L",
-   "status": "todo",
-   "depends_on": [
-    "J-03",
-    "B-08"
-   ]
-  },
-  {
-   "id": "P-04",
-   "epic": "P — Live Burp parity gaps (found 2026-11-15)",
-   "priority": "P0",
-   "title": "Repeater layout parity",
-   "acceptance": "Numbered tabs with close and '+', primary Send, Cancel, back/forward history, Target field with edit action, Request | Response | Inspector panes with side-by-side/stacked/tabbed toggles, Pretty/Raw/Hex views, wrap/non-printable/newline toggles, search bar with highlight count, right dock (Inspector, Notes, Explanations, Custom actions), status line",
-   "effort": "L",
-   "status": "done",
-   "depends_on": [
-    "E-01",
-    "E-04"
-   ],
-   "evidence": "Repeater now has numbered tab + '+', primary Send (Ctrl+Space), Raw/Hex/Pretty response sub-tabs, a status line (e.g. '200 | 85 bytes | 1 ms'), and an Inspector collapsible with request line, query params, request headers and response headers. Live test 2026-11-15: seeded request to local origin, Ctrl+Space sent it, response 200 with JSON body; shot p04-repeater-raw.png. REMAINING: tab close/rename/reorder/groups, Cancel, back/forward history, Target field with edit, layout toggles, follow redirects. 118 tests pass. Rewritten as a three-pane layout: Request | Response | Inspector, numbered tabs with close and +, a command row with Send/Cancel/Target/HTTPS/status, Pretty/Raw/Hex per pane. Shot tour/08-repeater.png. REMAINING: back/forward history, follow redirects, tab groups. v8 verification 2026-11-15: three-pane Request | Response | Inspector layout with horizontal request text confirmed in webprobe-shots/cmp/v8-repeater.png (Inspector shows request line, request headers, response headers). Editor zero-width bug fixed at root: pane bodies wrapped in ui.vertical, set_width, desired_width = available_width().max(120). Remaining for full Burp parity (tracked separately): back/forward history, Target edit action, right vertical dock, line numbers, per-pane status line.",
-   "completed": "2026-11-15"
-  },
-  {
-   "id": "P-05",
-   "epic": "P — Live Burp parity gaps (found 2026-11-15)",
-   "priority": "P0",
-   "title": "HTTP history columns and views",
-   "acceptance": "Add Params, Edited, Extension and Title columns; Pretty and Renderer views in the message pane; column chooser exposes all of them",
-   "effort": "M",
-   "status": "in_progress",
-   "depends_on": [
-    "B-01",
-    "B-03"
-   ],
-   "evidence": "HistEntry gained params, edited, extension, title, cookies, listener_port; computed once at insert by net::derive_history_fields (query/body/cookie, URL extension, HTML <title>, Set-Cookie join, listener port); record() takes listener_port; project restore recomputes them. History table now 14 columns (# Method Host URL Status Length MIME Extension Title TLS Cookies Port Params Edited) with matching sort keys; live shot p05-history2.png (40 of 40, Params yes on seeded even ids). REMAINING: Pretty and Renderer views in the message pane (moved to B-03). 118 tests pass."
-  },
-  {
-   "id": "P-06",
-   "epic": "P — Live Burp parity gaps (found 2026-11-15)",
-   "priority": "P1",
-   "title": "Intercept bar parity",
-   "acceptance": "Intercept on/off toggle, Forward and Drop as split buttons with dropdown actions (forward all, drop all), Open browser, help and overflow menu; empty state text explaining intercept",
-   "effort": "S",
-   "status": "todo"
-  },
-  {
-   "id": "P-07",
-   "epic": "P — Live Burp parity gaps (found 2026-11-15)",
-   "priority": "P1",
-   "title": "Decoder layout and operations",
-   "acceptance": "Text/Hex input toggle; 'Decode as', 'Encode as' and 'Hash' dropdowns; Smart decode; chained output panes",
-   "effort": "M",
-   "status": "in_progress",
-   "depends_on": [
-    "F-01",
-    "F-02"
-   ],
-   "evidence": "Decoder screen rebuilt on decoder_ops (P-07): Input label with Text/Hex toggle, 'Decode as'/'Encode as'/'Hash' dropdowns, Smart decode, bordered Output pane with Copy and 'Use output as input', results history. Engine F-01/F-02 done (127 tests). REMAINING: chained multi-stage pipeline UI with editable stages."
-  },
-  {
-   "id": "P-08",
-   "epic": "P — Live Burp parity gaps (found 2026-11-15)",
-   "priority": "P1",
-   "title": "Comparer item tables",
-   "acceptance": "Two item tables (# / Length / Data) with Paste, Load, Remove, Clear and Compare Words / Bytes buttons",
-   "effort": "M",
-   "status": "todo",
-   "depends_on": [
-    "F-03"
-   ]
-  },
-  {
-   "id": "P-09",
-   "epic": "P — Live Burp parity gaps (found 2026-11-15)",
-   "priority": "P1",
-   "title": "Dashboard task model",
-   "acceptance": "Task cards (live audit, live crawl, scans) with pause/resume, issue counters and Summary / Audit items / Issues / Event log / Logger / Audit log tabs; 'Task execution is paused' banner",
-   "effort": "L",
-   "status": "in_progress",
-   "depends_on": [
-    "D-05",
-    "D-06"
-   ],
-   "evidence": "Dashboard rebuilt (P-09): two-column layout with a Tasks panel (live audit running/paused, passive scan progress, pause/resume), an Issues-by-severity breakdown (high/medium/low/info), and an issue table with severity, name and host+path columns; stat cards and recent activity retained. Live shot tour/01-dashboard.png. REMAINING: task cards with per-task issue counters and rename, Summary/Audit items/Event log/Logger/Audit log tabs, banner when paused."
-  },
-  {
-   "id": "P-10",
-   "epic": "P — Live Burp parity gaps (found 2026-11-15)",
-   "priority": "P0",
-   "title": "Wire Intruder UI to intruder.rs",
-   "acceptance": "Attack-type selector, Auto/Add/Clear position buttons with marker highlighting, one payload set per position, request count preview with the limit error shown, runner replaces net::start_attack; empty-state text 'To get started, send a request to Intruder from anywhere in Burp'",
-   "effort": "M",
-   "status": "in_progress",
-   "depends_on": [
-    "C-01",
-    "C-02"
-   ],
-   "evidence": "Intruder screen rebuilt (src/ui.rs): attack-type selector (Sniper, Battering ram, Pitchfork, Cluster bomb), Auto § and Clear § buttons, live request-count preview with position and set counts, one payload editor per position (C-03 UI side). net::start_attack is now the generic matrix runner over intruder::requests (limit 100k, stop/progress/cancel kept, payload joined for the row); test intruder_runner_sends_the_matrix (cluster bomb 2x2 = 4 rows, all 200). Live check 2026-11-15: shot p10-intruder.png. REMAINING: Add § (needs an editable editor with selection), resource pool, payload types beyond simple lists (C-03), processing (C-04). 118 tests pass."
-  },
-  {
-   "id": "P-11",
-   "epic": "P — Live Burp parity gaps (found 2026-11-15)",
-   "priority": "P2",
-   "title": "Light theme as the default option",
-   "acceptance": "Light palette matches Burp's default look (flat white, orange underline accent) and is selectable in Settings; dark remains available",
-   "effort": "S",
-   "status": "in_progress",
-   "evidence": "MiniMax M3.1 Flash review (qa/minimax-visual-review-2026-11-15.md) drove: secondary text 0x6A6A6C -> 0x9AA0A6 (>=4.5:1), type floor 10.5/11.0/11.5 -> 11.5/12.0, history table fills remaining height, Intruder empty state in a bordered card. REMAINING: single active-navigation accent, toolbar grouping on Proxy/Intruder, Repeater lower-area balance. Re-review: Intruder card + legible text confirmed; history filter row fixed; 'unused vertical space' disproved (table fills to splitter, blank area is the message pane). Smallest helper copy 11.5 -> 12.0."
-  },
-  {
-   "id": "P-12",
-   "epic": "P — Live Burp parity gaps (found 2026-11-15)",
-   "priority": "P2",
-   "title": "Known small defects",
-   "acceptance": "Target scope header repeats its inner 'Scope' label; onboarding counts seeded history as real HTTPS traffic; selection stays on a row the filter hides; Burp history comparison needs a populated Burp table (listener answered but history stayed empty)",
-   "effort": "S",
-   "status": "todo"
-  },
-  {
-   "id": "P-13",
-   "epic": "P — Live Burp parity gaps (found 2026-11-15)",
-   "priority": "P0",
-   "title": "WSL2 rendering fix and live QA driver",
-   "acceptance": "App opens a window on WSL2/Xvfb without env tweaks; QA driver clicks, types, scrolls and screenshots; policy tested",
-   "effort": "M",
-   "status": "done",
-   "completed": "2026-11-15",
-   "evidence": "Root cause: LIBGL_ALWAYS_INDIRECT=1 (~/.zshrc:296) made glutin's GLX FBConfig fail (GLXBadFBConfig) and, with no /dev/dri render node, Mesa 26 fell to zink (failed to choose pdev). app/src/gl_env.rs drops the indirect flag, forces software GL and X11 when there is no render node (WEBPROBE_GL=native opts out); 6 tests; matrix run on Xvfb: window mapped with 3000+ colours. qa/qa.sh up/shot/click/dclick/rclick/drag/type/key/scroll with proxy 6566 and collaborator 6567 (never 8080/8081). theme::install_fonts adds Hack as fallback; glyph guard test every_glyph_the_ui_prints_can_be_drawn. Commits 10bafe7, 6a969c1"
-  },
-  {
-   "id": "P-14",
-   "epic": "P — Live Burp parity gaps (found 2026-11-15)",
-   "priority": "P0",
-   "title": "Repair UI wiring lost in a bad edit",
-   "acceptance": "Filter bar, Comparer, Target scope, project controls, listener status/editor and appearance options are all reachable again; no dead helpers left",
-   "effort": "M",
-   "status": "done",
-   "completed": "2026-11-15",
-   "evidence": "Recovered from the dead-code warnings (about 40 down to 5 design tokens): history filter bar call restored, analysis_ui::show_comparer, tools::scope_editor, tools::project_controls, tools::appearance_options, net::listener_status/set_listeners with a new Dashboard Listeners panel and an add/remove editor in Proxy > Options (net::listener_specs), duplicate ScrollArea ids fixed (Match/replace, Intruder, Sequencer, Sessions, Search), Settings window centred, Target host chips wrap, dead editor::bytes_view removed. 117 tests pass. Commits 10bafe7, 6a969c1"
-  },
-  {
-   "id": "P-15",
-   "epic": "P — Live Burp parity gaps (found 2026-11-15)",
-   "priority": "P1",
-   "title": "Interactive Open browser launcher",
-   "acceptance": "'Open browser' (Intercept bar, empty states, Dashboard) launches the user's Chrome/Chromium or a downloaded Chrome for Testing with a throwaway profile, --proxy-server set to the active listener and the WebProbe CA trusted for that profile only; reports clearly when no browser is found",
-   "effort": "M",
-   "status": "todo",
-   "depends_on": [
-    "L-05",
-    "M-07"
-   ]
-  },
-  {
-   "id": "P-16",
-   "epic": "P — Live Burp parity gaps (found 2026-11-15)",
-   "priority": "P1",
-   "title": "Headless engine trait + Obscura sidecar spike",
-   "acceptance": "HeadlessBrowser trait with an Obscura implementation behind it; gate = the 5 acceptance checks in docs/EVAL-OBSCURA.md (JS crawl finds more links, all traffic incl. HTTPS in history via SSL_CERT_FILE, stored response to PNG <2 s and <150 MB, stealth/tracker blocking off, version pinned and digest verified); also compare Lightpanda in the same fixtures",
-   "effort": "M",
-   "status": "todo",
-   "depends_on": [
-    "D-01"
-   ]
-  },
-  {
-   "id": "UAT-01",
-   "epic": "UAT 2026-11-16 — blocking defects",
-   "priority": "P0",
-   "title": "Intruder attack-results window ignores all input (cannot close, cannot select a row)",
-   "acceptance": "The results window closes via its X/Escape and selecting a row shows the request/response; verified by an automated UAT pass.",
-   "effort": "S",
-   "status": "todo",
-   "evidence": "Isolated UAT 2026-11-16: clicks at 999/1002/1007 px on the title-bar X, row clicks at (250,171), and Escape all had no effect; Settings X closes normally. Shots /root/webprobe-uat/shots/68..71."
-  },
-  {
-   "id": "UAT-02",
-   "epic": "UAT 2026-11-16 — blocking defects",
-   "priority": "P0",
-   "title": "Repeater Cancel does not abort an in-flight request",
-   "acceptance": "Cancel aborts the worker; the status line reports cancellation; the response never arrives after cancel.",
-   "effort": "M",
-   "status": "todo",
-   "evidence": "Isolated UAT 2026-11-16: GET /slow?ms=8000 completed 200 in 8214 ms after two clicks on the enabled Cancel button. Shots 94/95."
-  },
-  {
-   "id": "UAT-03",
-   "epic": "UAT 2026-11-16 — blocking defects",
-   "priority": "P0",
-   "title": "Comparer uses one shared item collection and Paste is inert",
-   "acceptance": "Item 1 and item 2 hold independent lists; Paste adds to the targeted list; loading two files then Compare produces the expected diff.",
-   "effort": "M",
-   "status": "todo",
-   "evidence": "Isolated UAT 2026-11-16: loading cmp-a and cmp-b puts both entries in BOTH tables; Paste adds nothing. Shots 80-82."
-  },
-  {
-   "id": "UAT-04",
-   "epic": "UAT 2026-11-16 — blocking defects",
-   "priority": "P1",
-   "title": "Persist proxy history (and site map) in the project file across restarts",
-   "acceptance": "Quit and relaunch with the same project restores HTTP history rows and the site map.",
-   "effort": "M",
-   "status": "todo",
-   "evidence": "Isolated UAT 2026-11-16: 11 captured rows present before restart, empty after relaunch. Shot 47."
-  },
-  {
-   "id": "UAT-05",
-   "epic": "UAT 2026-11-16 — blocking defects",
-   "priority": "P1",
-   "title": "Window intermittently starts unmapped (process spins, proxy bound, no visible UI)",
-   "acceptance": "Every launch maps the window; a regression test or startup timeout surfaces the failure instead of spinning.",
-   "effort": "M",
-   "status": "todo",
-   "evidence": "Isolated UAT 2026-11-16: 2 of 4 launches left Map State IsUnMapped at ~115% CPU; external xdotool windowmap made the UI appear. Shots 98."
-  },
-  {
-   "id": "UAT-06",
-   "epic": "UAT 2026-11-16 — blocking defects",
-   "priority": "P1",
-   "title": "Paste into request/message editors is ignored or delivers stale clipboard",
-   "acceptance": "Ctrl+V inserts the current clipboard text into Repeater/Intruder request editors, preserving line breaks (LF and CRLF).",
-   "effort": "M",
-   "status": "todo",
-   "evidence": "Isolated UAT 2026-11-16: paste works in the Target single-line field but not reliably in request editors; one paste delivered the previous clipboard. Shots 30-37, 65."
-  },
-  {
-   "id": "UAT-07",
-   "epic": "UAT 2026-11-16 — polish",
-   "priority": "P2",
-   "title": "History Time column is truncated and the table needs horizontal scrolling at 1440 px",
-   "acceptance": "Time shows full HH:MM:SS without clipping; default column widths fit the reference window; message panes show more than ~4 lines.",
-   "effort": "S",
-   "status": "todo",
-   "evidence": "Isolated UAT 2026-11-16: Time renders as '08:39:'; horizontal scrollbar spans the viewport. Shots 02/05."
-  },
-  {
-   "id": "UAT-08",
-   "epic": "UAT 2026-11-16 — polish",
-   "priority": "P2",
-   "title": "Menu bar parity: WebProbe menu only has Search, Settings, Quit",
-   "acceptance": "Menus match the reference structure (Burp/Project/Intruder/Repeater/View/Help) with the expected items.",
-   "effort": "M",
-   "status": "todo",
-   "evidence": "Isolated UAT 2026-11-16: shot 100-menu-burp.png."
-  },
-  {
-   "id": "UAT-09",
-   "epic": "Automation / MCP integration",
-   "priority": "P2",
-   "title": "Publish a usable accessibility tree and IPC socket for MCP automation",
-   "acceptance": "With accesskit enabled, agent-desktop and egui-mcp see the widget tree and can click elements; egui-mcp check_connection succeeds once egui 0.33 + egui-mcp-client is embedded.",
-   "effort": "L",
-   "status": "in_progress",
-   "evidence": "accesskit build in /root/webprobe-a11y appears on the AT-SPI bus but the frame lacks native-window mapping; egui-mcp-server 0.0.5 installed and registered in ~/.config/opencode/opencode.json (ping=pong, check_connection=false). egui 0.33 + egui-mcp-client trial build in /root/webprobe-egui33."
-  }
- ]
+  "project": "webprobe",
+  "generated": "2026-11-15",
+  "source": "TASKS.md",
+  "summary": {
+    "total": 101,
+    "p0": 64,
+    "p1": 29,
+    "p2": 8,
+    "by_status": {
+      "done": 59,
+      "in_progress": 28,
+      "todo": 13,
+      "rejected": 1
+    }
+  },
+  "tasks": [
+    {
+      "id": "A-01",
+      "epic": "A — HTTP engine correctness",
+      "priority": "P0",
+      "title": "Decode `Transfer-Encoding: chunked` for requests and responses",
+      "acceptance": "Chunked bodies are reassembled before storage/display; `Content-Length` and byte counts are correct; tests cover single/multi-chunk and trailers",
+      "effort": "M",
+      "status": "done",
+      "completed": "2026-11-12",
+      "evidence": "app/src/codec.rs (chunked/codec + normalize + tests), app/src/net.rs (pool/keep-alive + proxy integration tests), app/src/util.rs (parse_http folding/dup/absolute-form tests); 52 cargo tests pass"
+    },
+    {
+      "id": "A-02",
+      "epic": "A — HTTP engine correctness",
+      "priority": "P0",
+      "title": "Decode `Content-Encoding: gzip`, `deflate`, `br`",
+      "acceptance": "Compressed response bodies are decoded for passive checks and display; original encoding kept for forwarding; tests per codec",
+      "effort": "M",
+      "status": "done",
+      "completed": "2026-11-12",
+      "evidence": "app/src/codec.rs (chunked/codec + normalize + tests), app/src/net.rs (pool/keep-alive + proxy integration tests), app/src/util.rs (parse_http folding/dup/absolute-form tests); 52 cargo tests pass"
+    },
+    {
+      "id": "A-03",
+      "epic": "A — HTTP engine correctness",
+      "priority": "P0",
+      "title": "Keep-alive and connection reuse",
+      "acceptance": "Upstream connections are pooled per host; `Connection: close` is not forced; pipelining is off; tests assert socket reuse",
+      "effort": "M",
+      "status": "done",
+      "completed": "2026-11-12",
+      "evidence": "app/src/codec.rs (chunked/codec + normalize + tests), app/src/net.rs (pool/keep-alive + proxy integration tests), app/src/util.rs (parse_http folding/dup/absolute-form tests); 52 cargo tests pass"
+    },
+    {
+      "id": "A-04",
+      "epic": "A — HTTP engine correctness",
+      "priority": "P0",
+      "title": "Robust HTTP/1.x parsing",
+      "acceptance": "Absolute-form, origin-form, header folding, duplicate headers, `Content-Length` + chunked conflict, 4 MiB+ bodies; malformed input never panics",
+      "effort": "M",
+      "status": "done",
+      "completed": "2026-11-12",
+      "evidence": "app/src/codec.rs (chunked/codec + normalize + tests), app/src/net.rs (pool/keep-alive + proxy integration tests), app/src/util.rs (parse_http folding/dup/absolute-form tests); 52 cargo tests pass"
+    },
+    {
+      "id": "A-05",
+      "epic": "A — HTTP engine correctness",
+      "priority": "P0",
+      "title": "HTTP/2 upstream and h2c",
+      "acceptance": "Requests negotiate h2 over TLS via ALPN and h2c when offered; HTTP/2 responses are stored with a normalized HTTP/1.1 view; tests against a local h2 server",
+      "effort": "L",
+      "status": "done",
+      "completed": "2026-11-12",
+      "evidence": "app/src/h2.rs (sync HTTP/2 client: preface/SETTINGS/HEADERS+HPACK/DATA/flow-control, normalization to HTTP/1.1), net.rs (ALPN h2 in tls_upstream, try_h2c_upgrade + fallback), tls.rs (server_config_with_alpn); tests: h2c upgrade roundtrip, h2c decline fallback, TLS ALPN h2 roundtrip; 57 tests pass"
+    },
+    {
+      "id": "A-06",
+      "epic": "A — HTTP engine correctness",
+      "priority": "P0",
+      "title": "TLS pass-through and mTLS",
+      "acceptance": "Host exclusion list bypasses MITM; client certificates can be configured per host; tests with a local TLS server",
+      "effort": "M",
+      "status": "done",
+      "completed": "2026-11-12",
+      "evidence": "net.rs: tls_bypass list (exact + *.wildcard) with relay_tunnel byte pass-through in handle_connect; ClientCertRule + tls_client_config per-host mTLS upstream; tls.rs: client_auth_config, MitmAuthority::client_certificate, server_config_with_client_auth; tests: tls_bypass_relays_raw_bytes, client_certificate_presented_to_mtls_server, host_matching_exact_and_wildcard; 60 tests pass"
+    },
+    {
+      "id": "A-07",
+      "epic": "A — HTTP engine correctness",
+      "priority": "P0",
+      "title": "Proxy listener options",
+      "acceptance": "Multiple listeners, bind address, port validation/restart without losing history; status shown in UI",
+      "effort": "M",
+      "status": "done",
+      "completed": "2026-11-12",
+      "evidence": "net.rs: ListenerSpec/ListenerState + extra listener workers (non-blocking accept, generation-based restart), set_listeners validation (empty bind/port 0/duplicates), listener_status snapshot; ui.rs dashboard shows every listener + error; tests: extra_listener_serves_traffic, listener_validation, listener_restart_keeps_history"
+    },
+    {
+      "id": "A-08",
+      "epic": "A — HTTP engine correctness",
+      "priority": "P0",
+      "title": "Invisible proxying",
+      "acceptance": "Reconstruct origin-form requests from absolute-form and Host; non-proxy clients work; tests for both forms",
+      "effort": "M",
+      "status": "done",
+      "completed": "2026-11-12",
+      "evidence": "net.rs host_of already routes origin-form via Host header (invisible proxying); tests: invisible_proxying_uses_host_header (origin-form + Host routed, upstream sees origin-form), absolute_form_forwarded_as_origin_form"
+    },
+    {
+      "id": "B-01",
+      "epic": "B — Proxy UI and message editing",
+      "priority": "P0",
+      "title": "History table with filter/sort/columns",
+      "acceptance": "Filter bar (text, regex, method, status, MIME, in-scope), sortable columns, column chooser, resizable widths, sticky header, virtualized rendering above 10k rows",
+      "effort": "L",
+      "status": "done",
+      "completed": "2026-11-15",
+      "evidence": "history_filter.rs (text/regex/method/status/MIME/in-scope filter bar, broken-regex message), table.rs (sortable+resizable header, column chooser, virtualized show_viewport body, empty state), ui.rs history_view = one tested pipeline (newest first, filter and sort the whole list, then cap); tests: history_filters_full_list_before_limiting_rendered_rows, history_sorts_by_method_before_limiting, the_cap_applies_after_the_sort, history_filter tests; live check on Xvfb 2026-11-15: typing POST gave '29 of 200' with only POST rows, Status header click re-sorted (qa/qa.sh, shots qa-02/qa-03)"
+    },
+    {
+      "id": "B-02",
+      "epic": "B — Proxy UI and message editing",
+      "priority": "P0",
+      "title": "Message editor",
+      "acceptance": "Raw editor with syntax highlighting, line numbers, wrap toggle, font size, find-in-message, hex edit; request editable in place and sendable",
+      "effort": "L",
+      "status": "in_progress",
+      "evidence": "editor.rs: line numbers, wrap, font size (Aa 13.0 pt), find-in-message box, hex view with hex_encode/hex_decode/hex_dump round-trip, syntax colouring; 7 editor tests. REMAINING: the Proxy history message pane is read-only; edit-in-place + send from history is not wired (only Repeater/Intruder/Intercept edit)"
+    },
+    {
+      "id": "B-03",
+      "epic": "B — Proxy UI and message editing",
+      "priority": "P0",
+      "title": "Response views",
+      "acceptance": "Raw / Params / Headers / Hex / Render (HTML) with correct entity decoding; JSON/XML pretty view; image preview",
+      "effort": "M",
+      "status": "done",
+      "evidence": "P-05 added the history columns and derived fields; B-03 owns the response views (Pretty, Renderer) and the remaining message-pane work.",
+      "notes": "2026-11-17 wave 59: response views complete: Raw, Hex, Render (HTML as text through html2text; PNG/JPEG/GIF as the picture, msgpane::decode_image), Pretty for JSON and now XML (msgpane::pretty_xml), parameters and headers in the Inspector. Tests: image_bodies_are_recognised_and_decoded, xml_is_indented_and_other_text_is_left_alone. The Juice Shop logo rendered in the GUI as 'PNG image, 2268 x 2535 pixels' (qa-egui37-merged/62c.png). XML pretty view is unit-tested, not seen in the GUI."
+    },
+    {
+      "id": "B-04",
+      "epic": "B — Proxy UI and message editing",
+      "priority": "P0",
+      "title": "Context menus",
+      "acceptance": "Right-click menus for history, site map, repeater, issues, decoder results; copy/save/send-to/add-to-scope",
+      "effort": "M",
+      "status": "in_progress",
+      "notes": "2026-11-17 wave 53: site-map node menu now has Add to scope, Remove from scope, Passively/Actively scan this host and this branch (scan::audit_entries), Issues > Report issues / Delete issues, Delete host/branch, Copy URLs, Engagement tools. Menu seen in the GUI and 'Actively scan this branch' run against local Juice Shop (two items audited in turn; qa-egui37-merged/44c.png, 46c.png). History and Repeater menus exist from earlier waves. Missing: issue-row menu beyond 'Report selected issues', Decoder result menu, Send-to items on site-map leaf nodes."
+    },
+    {
+      "id": "B-05",
+      "epic": "B — Proxy UI and message editing",
+      "priority": "P0",
+      "title": "Resizable layout + status bar",
+      "acceptance": "Splitters between every pane; status bar with listener, intercept, queue, scan/attack progress, last error; layout persisted",
+      "effort": "L",
+      "status": "in_progress",
+      "evidence": "status bar (listener, intercept, held, history, messages, last message) and a draggable splitter between history table and message pane, live-verified 2026-11-15. REMAINING: splitters between every other pane, scan/attack progress in the bar, layout persistence"
+    },
+    {
+      "id": "B-06",
+      "epic": "B — Proxy UI and message editing",
+      "priority": "P0",
+      "title": "Site map tree",
+      "acceptance": "Branch/leaf tree with method, URL, status, length, comment; expand/collapse, filter, scope colouring, annotations",
+      "effort": "L",
+      "status": "done",
+      "notes": "2026-11-17 wave 65: site map now has all acceptance items: branch/leaf tree with expand/collapse (existing), table with method, URL, status, length, MIME, title and a Comment column (history notes); filter bar (text, in-scope only, hide unrequested; site_map::SiteFilter); scope colouring (out-of-scope hosts grey, in-scope bold when a scope is set); issue markers (dot in the colour of the most severe issue under a node; site_map::worst_issue). The filtered contents are cached by input key, not rebuilt per frame. Tests site_map::tests (2). Seen in the GUI: marker on the host, Comment column, filter 'whoami' narrowing tree and table (qa-egui37-merged/69c.png, 70c.png). Scope colouring not seen on screen (no scope set in the run)."
+    },
+    {
+      "id": "B-07",
+      "epic": "B — Proxy UI and message editing",
+      "priority": "P0",
+      "title": "Multi-select and bulk actions",
+      "acceptance": "Select ranges with shift/ctrl; bulk send-to, export, add-to-scope, delete",
+      "effort": "M",
+      "status": "done",
+      "notes": "2026-11-17 wave 61: Proxy history supports Burp's selection model (click, Ctrl+click toggle, Shift+click range from the anchor, Ctrl+A) through table::MultiSelect (test multi_select_follows_click_ctrl_and_shift); a menu command on a selected row applies to the whole selection: add to scope, active/passive scan, Send to Repeater/Organizer/Comparer, highlight, save items (export), delete. In the GUI: shift+ctrl selected 5 rows, the menu read '5 items selected', Delete item removed all 5 (qa-egui37-merged/63c.png, 64c.png). Other tables (Logger, site map, issues) remain single-select."
+    },
+    {
+      "id": "B-08",
+      "epic": "B — Proxy UI and message editing",
+      "priority": "P0",
+      "title": "Proxy options UI",
+      "acceptance": "Listener, interception (request/response/WebSocket), match & replace import/export, upstream per-host rules, TLS/HTTP settings",
+      "effort": "L",
+      "status": "in_progress",
+      "notes": "2026-11-17 wave 56: interception rules, listeners table and CA buttons are in Settings > Tools > Proxy; rules persist in the project file. Not checked this wave: match-and-replace import/export, per-host upstream rules."
+    },
+    {
+      "id": "B-09",
+      "epic": "B — Proxy UI and message editing",
+      "priority": "P0",
+      "title": "WebSocket interception",
+      "acceptance": "Hold, edit and forward frames; WebSocket history with filters and search; TLS WebSocket relay verified",
+      "effort": "L",
+      "status": "done",
+      "notes": "2026-11-16 wave 42: WebSocket messages held/edited/forwarded per direction while Intercept is on (net.rs intercept_ws_stream), loopback tests for plain and TLS; WebSockets history view with filter/search seen on the QA display. GUI editing of a held frame not exercised; fragmented messages not reassembled."
+    },
+    {
+      "id": "C-01",
+      "epic": "C — Intruder parity",
+      "priority": "P0",
+      "title": "Four attack types",
+      "acceptance": "Sniper, battering ram, pitchfork, cluster bomb produce the correct request matrix; tests assert counts and payload placement",
+      "effort": "M",
+      "status": "done",
+      "evidence": "intruder::requests/count (sniper, battering ram, pitchfork, cluster bomb, limit, empty/missing set errors) with 6 matrix tests + intruder_runner_sends_the_matrix; reachable from the Intruder tab attack-type selector (P-10).",
+      "completed": "2026-11-15"
+    },
+    {
+      "id": "C-02",
+      "epic": "C — Intruder parity",
+      "priority": "P0",
+      "title": "Payload positions",
+      "acceptance": "Auto-mark, clear, add-from-selection, marker highlighting, multiple positions per request",
+      "effort": "M",
+      "status": "in_progress",
+      "evidence": "intruder.rs add_marker/clear_markers/auto_mark (query, cookie, form, JSON) with 2 tests; UI has Auto § and Clear §; marker highlighting not drawn. REMAINING: Add § from a selection (needs an editable editor), marker highlight in the editor."
+    },
+    {
+      "id": "C-03",
+      "epic": "C — Intruder parity",
+      "priority": "P0",
+      "title": "Payload sets",
+      "acceptance": "Simple list, runtime file, custom iterator, brute forcer, case modification, numbers, dates, usernames, null payloads, character frobber",
+      "effort": "L",
+      "status": "done",
+      "evidence": "Done: Simple list, Runtime file, Numbers, Dates, Brute forcer, Character blocks wired to Burp's Payload type dropdown (ui.rs payload_source_config, intruder.rs PayloadSource; live Numbers attack). Missing: custom iterator, case modification, usernames, null payloads, character frobber.",
+      "notes": "2026-11-16 wave 42: all 19 Burp payload types present in Burp order with per-type panels and exact-output unit tests (intruder.rs); dropdown and a live 3-request attack checked on the QA display."
+    },
+    {
+      "id": "C-04",
+      "epic": "C — Intruder parity",
+      "priority": "P0",
+      "title": "Payload processing",
+      "acceptance": "Prefix/suffix, substring, encode (URL/Base64/HTML/hex), hash, regex, skip; ordered pipeline",
+      "effort": "M",
+      "status": "done",
+      "evidence": "intruder::Processor pipeline: AddPrefix, AddSuffix, MatchReplace (capture groups, invalid regex skipped), Substring (negative offsets, clamped), Reverse, Lowercase, Uppercase, Base64Encode/Decode, UrlEncodeAll, UrlEncodeKey, HtmlEncode, HexEncode, Md5, Sha1, Sha256, SkipIfMatches, MakeUnique (dedupe + cap); ordered process()/process_set() with skip-drop and dedupe; 15 processor tests incl. rule-order, bad regex/Base64 tolerance and dedupe cap. Engine-level; no pipeline editor in the Intruder UI yet (ui.rs owned by another worker).",
+      "completed": "2026-11-15"
+    },
+    {
+      "id": "C-05",
+      "epic": "C — Intruder parity",
+      "priority": "P0",
+      "title": "Result analysis",
+      "acceptance": "Grep match, grep extract, grep capture, grep payloads; configurable result columns; per-row detail",
+      "effort": "L",
+      "status": "in_progress",
+      "notes": "2026-11-16 wave 42: Grep - Match (20 Burp defaults), Grep - Extract, Grep - Payloads implemented with tests (intruder_run.rs); settings dock seen. Result columns with grep enabled not yet checked in the GUI."
+    },
+    {
+      "id": "C-06",
+      "epic": "C — Intruder parity",
+      "priority": "P0",
+      "title": "Attack control",
+      "acceptance": "Pause/resume/stop, concurrency, throttle, resource pool, retry/backoff, progress",
+      "effort": "M",
+      "status": "in_progress",
+      "notes": "2026-11-16 wave 42: new runner: 10 workers, pause/resume/stop, fixed/random/increasing delay, 3 retries with 2000 ms pause (Burp defaults), progress bar; tests pass. Pause/Resume not exercised in the GUI; no auto-throttle on 429/503."
+    },
+    {
+      "id": "C-07",
+      "epic": "C — Intruder parity",
+      "priority": "P0",
+      "title": "Results I/O",
+      "acceptance": "Save/export results (CSV/XML), send row to Repeater/Comparer, copy as curl",
+      "effort": "M",
+      "status": "done",
+      "notes": "2026-11-16 wave 42: Save as CSV, row menu (Send to Repeater, request/response to Comparer, Copy as curl) implemented; row menu seen. CSV save not clicked; XML export missing.",
+      "evidence": "Intruder results window: Save as CSV (results_csv, test) and Save as XML with base64 request/response (results_xml, test xml_export_escapes_and_carries_messages); row menu Send to Repeater, Send request/response to Comparer, Copy as curl.",
+      "completed": "2026-11-17"
+    },
+    {
+      "id": "D-01",
+      "epic": "D — Scanner parity",
+      "priority": "P0",
+      "title": "Crawl engine",
+      "acceptance": "Follow links, forms, scripts, redirects; depth/location caps; scope rules; produce a site map; tests on a local multi-page fixture",
+      "effort": "L",
+      "status": "done",
+      "completed": "2026-11-16",
+      "evidence": "crawl.rs: static crawl (links, robots, sitemap, depth 4 / 1500 locations) + headless-Chromium crawl over CDP (links, router links, clicks, in-browser form fill+submit, browser-captured responses); scan::crawl_and_audit; tests forms/links/browser_response; live: lab crawl from / gives 21/21 Burp issues"
+    },
+    {
+      "id": "D-02",
+      "epic": "D — Scanner parity",
+      "priority": "P0",
+      "title": "Audit check library",
+      "acceptance": "≥ 40 checks with severity, confidence, description, remediation, references; unit tests per check with positive/negative fixtures",
+      "effort": "L",
+      "status": "in_progress",
+      "evidence": "Active families ported from source and lab-verified (see Craft unk_e8d35ba47ccfba29, fnd_83/84): SQLi, XSS, SSTI, open redirect, header injection, LDAP, SSI, XXE, traversal, link manipulation, input returned, SMTP, CORS, OpenAPI, TRACE, XML injection; passive library 35+ checks. Missing: PHP code injection (echo), stored XSS, client-side template injection; timing-based families excluded.",
+      "notes": "2026-11-16 wave 42: added PHP code injection (echo, file-upload parts), stored XSS, client-side template injection, XML injection out-of-band half (active_checks.rs) with tests. Missing: in-band out-of-band resource load, Collaborator-everywhere, Collaborator half of PHP; timing family excluded. Lab parity figure is stale after D-03. | 2026-11-17 wave 43: scanner restructured into a check registry (scan_checks.rs: 20 point checks, 9 request checks; start_active_scan 1,136 -> 44 lines) with a 50-row characterisation test that did not change. Still single-threaded; Collaborator ids still only on the UI scan path. | 2026-11-17 wave 44: Crawl & Audit scans now get Collaborator payloads from a pool the UI thread refills (Shared::oob_pool, scan::pooled_oob, test pooled_oob_hands_out_one_payload_per_slot_until_the_pool_is_dry). Headless self-test path still has none. Not exercised against a live Collaborator."
+    },
+    {
+      "id": "D-03",
+      "epic": "D — Scanner parity",
+      "priority": "P0",
+      "title": "Insertion points",
+      "acceptance": "Query, body, headers, cookies, path segments, multipart; max 30 per base request; tests per point type",
+      "effort": "L",
+      "status": "done",
+      "evidence": "Done: query, URL-encoded body, JSON leaves (scan::insertion_points, test body_and_json_insertion_points), URL path filename/folders (path_insertion_points). Missing: header and cookie insertion points, multipart parts.",
+      "notes": "2026-11-16 wave 42: cookie, header (X-*, User-Agent, Referer), multipart incl. file parts, path folder/filename points in Burp's order with the 30-point cap last (scan.rs insertion_points/inject); one test per kind plus a loopback end-to-end scan. Not built: entire-body, nested, XML-tag, parameter-name points; session-cookie skip rule."
+    },
+    {
+      "id": "D-04",
+      "epic": "D — Scanner parity",
+      "priority": "P0",
+      "title": "Scan configuration",
+      "acceptance": "Crawl/audit/optimization/insertion-point/speed settings; persisted; check selection",
+      "effort": "M",
+      "status": "in_progress",
+      "notes": "2026-11-17 wave 62: scan configuration with Burp's insertion point types (URL, body, cookie, header, path folder, path filename) and a per-check on/off list for all 29 registered checks (scan_config.rs, scan::check_catalogue), applied by the scan driver and saved in the project; audit speed and accuracy on the same page. Test scan_configuration_switches_checks_and_insertion_types_off runs real scans against a local server. Page seen in the GUI (qa-egui37-merged/65c.png). Missing: crawl settings (depth, strategy), named saved configurations (configuration library)."
+    },
+    {
+      "id": "D-05",
+      "epic": "D — Scanner parity",
+      "priority": "P0",
+      "title": "Task queue",
+      "acceptance": "New scan, pause/resume/cancel, per-task progress, live audit/crawl, queue persistence",
+      "effort": "L",
+      "status": "done",
+      "evidence": "core/src/tasks.rs queue (enqueue/pause/resume/cancel/remove), project persistence, Do active scan queued as TaskKind::Single. GUI-verified over egui MCP 2026-11-17: queued \"Active scan selected message\" card, pause from the card button (\"Paused: 0 of 1 items\"), card menu Resume/Cancel/Delete (Delete disabled while open), cancelled item not counted as done, no phantom card after delete (Shared::direct_scan). Tests: tasks_run_in_order_and_can_be_paused_resumed_and_cancelled, single_scan_queues_behind_a_running_task.",
+      "completed": "2026-11-17"
+    },
+    {
+      "id": "D-06",
+      "epic": "D — Scanner parity",
+      "priority": "P0",
+      "title": "Issue activity",
+      "acceptance": "Group by host/issue, filter by severity/confidence, evidence, detail view, false-positive marking",
+      "effort": "M",
+      "status": "done",
+      "notes": " | 2026-11-17 wave 45: issue detail view with Advisory (severity, confidence, host, path, detail, Burp KB background/remediation/references) and Request/Response tabs per stored evidence (issue_view.rs); severity/confidence/false-positive filter bar; selected-row highlight; false-positive marking kept. Seen in the GUI after a local active scan (qa-egui37-merged/18c, 20c, 22c). Missing: grouping by host/issue. | 2026-11-17 wave 46: grouping by issue type or host with counts, most severe group first (issue_view::group_issues, test groups_put_the_most_severe_first_and_count_members); seen in the GUI (qa-egui37-merged/25c.png). All five acceptance items now present."
+    },
+    {
+      "id": "D-07",
+      "epic": "D — Scanner parity",
+      "priority": "P0",
+      "title": "Reporting",
+      "acceptance": "Export HTML/CSV/XML; summary + detail; severity/confidence tables; remediation text",
+      "effort": "M",
+      "status": "in_progress",
+      "notes": "2026-11-16 wave 42: HTML and Burp-layout XML report with options window (report.rs); an HTML report was generated from the GUI and inspected. CSV export missing; HTML markup is not Burp's (its writer strings are encrypted); evidence is the newest history entry for the path, not the attack probe. | 2026-11-17 wave 43: issues now carry the confirming request/response (ScanIssue.evidence, type_id) and the report uses them. Evidence is not saved in the project file yet. | 2026-11-17 wave 44: issue evidence and type id are saved in the project file (project::ProjectEvidence, test issue_evidence_round_trips_and_old_issues_load_without_it)."
+    },
+    {
+      "id": "D-08",
+      "epic": "D — Scanner parity",
+      "priority": "P0",
+      "title": "Collaborator integration",
+      "acceptance": "Active checks generate OAST payloads and confirm interactions; blind SSRF/XXE/OOB findings",
+      "effort": "M",
+      "status": "done",
+      "completed": "2026-11-16",
+      "evidence": "scan.rs OOB probe per parameter via Collaborator payloads; ui.rs sync_oob_issues raises Burp's 'External service interaction (DNS)/(HTTP)' (high, certain) per interaction type and SMTP header injection via its own token"
+    },
+    {
+      "id": "E-01",
+      "epic": "E — Repeater parity",
+      "priority": "P0",
+      "title": "Request/response editors",
+      "acceptance": "Raw, Params, Headers, Hex, Render; editable request; syntax highlighting; find",
+      "effort": "L",
+      "status": "done",
+      "evidence": "Pretty/Raw/Hex/Render views, editable request with syntax colouring and search. Inspector editing (core/src/inspector.rs, 7 tests) and editable Hex tab (msgpane::hex_editor). GUI-verified over MCP: Inspector edit of q -> request line q=a%20b%26c with decoded value shown; hex byte 47->50 turned GET into PET.",
+      "completed": "2026-11-17"
+    },
+    {
+      "id": "E-02",
+      "epic": "E — Repeater parity",
+      "priority": "P0",
+      "title": "Follow redirects",
+      "acceptance": "Never / on-site / always; \"follow and enumerate\"; redirect chain shown",
+      "effort": "M",
+      "status": "in_progress",
+      "notes": "2026-11-16 wave 42: Never/On-site/In-scope/Always, Follow redirection button, process cookies, 10-hop cap (repeater_ops.rs, loopback tests); button and settings menu seen. Missing: follow-and-enumerate, redirect chain display, per-tab settings."
+    },
+    {
+      "id": "E-03",
+      "epic": "E — Repeater parity",
+      "priority": "P0",
+      "title": "Send-to and copy",
+      "acceptance": "Send to Intruder, Comparer, Decoder, Scanner; copy as curl, Python requests, raw; save item",
+      "effort": "M",
+      "status": "done",
+      "notes": "2026-11-16 wave 42: Repeater editor context menu with all Send-to items, Copy URL, Burp-format curl, Save item; menu seen. Missing: Copy as Python requests. | 2026-11-17 wave 54: Repeater request menu now also has Copy as Python requests (repeater_ops::python_requests, test python_script_repeats_the_request) and Copy raw request, next to the Send-to items, Copy URL, Burp-format curl and Save item. Menu seen in the GUI (qa-egui37-merged/47c.png); the Python output itself is unit-tested, not pasted from the GUI."
+    },
+    {
+      "id": "E-04",
+      "epic": "E — Repeater parity",
+      "priority": "P0",
+      "title": "Tab management",
+      "acceptance": "Rename, close, reorder, duplicate, persisted order and contents",
+      "effort": "M",
+      "status": "in_progress",
+      "notes": "2026-11-16 wave 42: rename, close, duplicate, reorder, close others/left/right, reopen closed tab; order and contents persist. Rename and drag not exercised in the GUI; per-tab send history not saved."
+    },
+    {
+      "id": "E-05",
+      "epic": "E — Repeater parity",
+      "priority": "P0",
+      "title": "Compare",
+      "acceptance": "Diff current response against previous; request diff; send both sides to Comparer",
+      "effort": "M",
+      "status": "done",
+      "notes": "2026-11-17 wave 54: Repeater menu: Compare response with previous response, Compare request with previous request, Send request and response to Comparer. Response comparison run in the GUI: both responses arrived in Comparer (qa-egui37-merged/48c.png). The diff itself is Comparer's (Words/Bytes); there is no inline diff inside Repeater."
+    },
+    {
+      "id": "E-06",
+      "epic": "E — Repeater parity",
+      "priority": "P0",
+      "title": "Editing helpers",
+      "acceptance": "Paste URL, change method, URL-encode as you type, content-type-aware body editing",
+      "effort": "M",
+      "status": "in_progress",
+      "notes": "2026-11-16 wave 42: Paste URL as request, Change request method, URL-encode as you type implemented with tests. Missing: Change body encoding."
+    },
+    {
+      "id": "F-01",
+      "epic": "F — Decoder and Comparer",
+      "priority": "P1",
+      "title": "Decoder operations",
+      "acceptance": "Smart decode, MD5/SHA-1/SHA-256, ROT13, ASCII hex, URL/Base64/HTML/hex, construct",
+      "effort": "M",
+      "status": "done",
+      "completed": "2026-11-15",
+      "evidence": "app/src/decoder_ops.rs: Op enum (URL, HTML, base64, ASCII hex, hex, ROT13, MD5, SHA-1, SHA-256, SHA-512, SmartDecode), apply(), pure codecs/digests; 9 tests with known vectors (base64, digests incl. padding boundaries, URL/HTML/hex round-trips, ROT13, smart decode, pipeline order). Engine done; UI controls remain P-07."
+    },
+    {
+      "id": "F-02",
+      "epic": "F — Decoder and Comparer",
+      "priority": "P1",
+      "title": "Decoder pipeline",
+      "acceptance": "Multi-stage encode/decode chain with editable stages and live output",
+      "effort": "M",
+      "status": "done",
+      "completed": "2026-11-15",
+      "evidence": "decoder_ops::pipeline applies ops in order and names the failing step; tests pipeline_applies_ops_in_order, pipeline_names_the_failing_step. Engine done; the Decoder screen still needs the stage UI (P-07)."
+    },
+    {
+      "id": "F-03",
+      "epic": "F — Decoder and Comparer",
+      "priority": "P1",
+      "title": "Comparer modes",
+      "acceptance": "Word, byte and character diff; merge; export; three-way compare",
+      "effort": "M",
+      "status": "done",
+      "evidence": "Words, Bytes, Characters diff (core/src/compare.rs, Myers), HTML export, results window Text|Hex view (compare::hex_spans, test) and Sync views (default off, as Burp user_options.comparer.sync_views=false). GUI-verified over MCP: character and byte compares of two loaded files, Hex view with highlighted bytes. Merge and three-way compare are not Burp features (Burp docs desktop/tools/comparer.html: Words, Bytes, Sync views, Text, Hex only) and are dropped from scope. Burp Target \"Compare site maps\" added (core/src/sitemap_compare.rs, 4 tests; wizard + results in src/sitemap_compare_ui.rs, GUI-verified: re-request in current session, 4 items Unmodified with Date ignored).",
+      "completed": "2026-11-17"
+    },
+    {
+      "id": "G-01",
+      "epic": "G — Sequencer",
+      "priority": "P1",
+      "title": "Live capture",
+      "acceptance": "Capture tokens over TLS and plain HTTP, auto-capture N samples, ignore-abnormal toggle",
+      "effort": "M",
+      "status": "done",
+      "evidence": "Live capture over plain HTTP and TLS, Stop after N (100..20000), Auto analyze, Ignore abnormal-length tokens (Sequencer settings). GUI-verified over MCP: 200 sid tokens from a local HTTP origin (32 hex chars, 4.0 bits/char) and 200 tls_sid tokens from a local self-signed HTTPS origin (24 chars, 6.0 bits/char), capture stopped at 200 and analysed automatically. Cookie list now selects a cookie the response actually sets.",
+      "completed": "2026-11-17"
+    },
+    {
+      "id": "G-02",
+      "epic": "G — Sequencer",
+      "priority": "P1",
+      "title": "Analysis depth",
+      "acceptance": "Character-level and bit-level entropy, FIPS-style tests, confidence rating, charts",
+      "effort": "M",
+      "status": "done",
+      "notes": "2026-11-17 wave 47: bit-level analysis added (seq_bits.rs): characters converted to bits by character-set size as in Burp, monobit/poker/runs/long-runs p-values per bit, effective entropy at Burp's five significance levels, overall rating with Burp's thresholds and wording (Zr8b.ZF), bit chart. Character-level entropy and chi-square already existed; their p-values were wrong until the log-gamma sign fix in analysis.rs (test incomplete_gamma_matches_known_values). 600 hex tokens rated 'very good', 64 bits, in the GUI (qa-egui37-merged/30c.png). Not implemented: Burp's spectral, correlation and compression tests."
+    },
+    {
+      "id": "G-03",
+      "epic": "G — Sequencer",
+      "priority": "P1",
+      "title": "Export",
+      "acceptance": "Results to CSV/JSON; sample set save/load",
+      "effort": "S",
+      "status": "done",
+      "notes": "2026-11-17 wave 47: Save tokens, Export analysis (CSV) and (JSON) buttons; token sets load from a file (Manual load). CSV export exercised in the GUI (65 lines for 64 bits). Fixed along the way: the token box grew without bound and the tab did not scroll, so results were unreachable after loading a file."
+    },
+    {
+      "id": "H-01",
+      "epic": "H — Sessions and macros",
+      "priority": "P1",
+      "title": "Cookie jar",
+      "acceptance": "Shared cookie store updated from responses and sent on matching requests; per-domain rules",
+      "effort": "M",
+      "status": "done",
+      "notes": "2026-11-17 wave 48: suite-wide cookie jar (cookie_jar.rs) following RFC 6265 domain/path/Secure/expiry rules; fed by proxied responses and by any tool ticked under 'Monitor', applied to requests of the tools ticked under 'Use cookies' (Burp defaults: Proxy feeds, Scanner uses); Sessions settings panel with the two tool rows, cookie table, Remove and Clear. Tests: cookie_jar::tests (6), net::cookie_jar_tests (2, loopback). Panel seen in the GUI (qa-egui37-merged/32c.png) with an empty jar; a populated table was not seen. Not done: the jar is not saved in the project file; no manual add/edit of a cookie. | 2026-11-17 wave 49: jar saved in and restored from the project file (project::ProjectCookieJar, test cookie_jar_round_trips_and_old_files_get_the_default_jar); manual 'Add cookie' row; cookie table with fixed columns. A hand-added cookie seen in the table in the GUI (qa-egui37-merged/35c.png). Not exercised in the GUI: a scan picking up a proxied session cookie end to end (covered by the loopback test net::cookie_jar_tests)."
+    },
+    {
+      "id": "H-02",
+      "epic": "H — Sessions and macros",
+      "priority": "P1",
+      "title": "Macro recorder",
+      "acceptance": "Record a proxy-driven sequence, parameterize values, replay, save/load",
+      "effort": "L",
+      "status": "done",
+      "notes": "2026-11-17 wave 51: macros are multi-step (macros.rs: '###' step lines, 'https', 'derive=a,b'): record by adding the request selected in Proxy history as a step, parameterise by deriving values from the previous response (form field, JSON member, cookie) into query/form/JSON parameters, replay with 'Test macro' (per-step status and derived values) or 'run', saved in the project file as before. Requests carry and feed the cookie jar. Tests: macros::tests (5), net::session_rule_tests::multi_step_macro_derives_a_token_and_carries_cookies. Recorded two steps from history and tested them in the GUI against local Juice Shop (qa-egui37-merged/39c.png). The editor is text, not Burp's per-item dialog."
+    },
+    {
+      "id": "H-03",
+      "epic": "H — Sessions and macros",
+      "priority": "P1",
+      "title": "Recorded login sequences",
+      "acceptance": "Capture login, extract token, apply to session rules; validate session",
+      "effort": "L",
+      "status": "done",
+      "notes": "2026-11-17 wave 51: a login captured as a macro supplies the session to later requests: its cookies through the cookie jar, and a token through {name} placeholders in rule values (net::expand_placeholders), with 'check session' deciding when to log in. Loopback tests: check_session_logs_in_once_and_only_for_tools_in_scope and recorded_login_supplies_a_bearer_token_to_later_requests. Not exercised in the GUI. This is macro-based; Burp's browser-recorded login scripts for the crawler are not implemented."
+    },
+    {
+      "id": "H-04",
+      "epic": "H — Sessions and macros",
+      "priority": "P1",
+      "title": "Session rule actions",
+      "acceptance": "Set header, set cookie, run macro, validate session, browser recovery, post-request match/replace",
+      "effort": "M",
+      "status": "in_progress",
+      "notes": "2026-11-17 wave 50: session rules now have a tool scope (Burp's default: all but Proxy) and run for tool requests as well as proxy traffic; actions: set header, set cookie, use cookie, use cookie jar, run macro (its cookies feed the jar, then the request), check session (validation request, expression, valid/invalid sense, login macro), post-request macro. Loopback tests net::session_rule_tests (3), including a login performed once and reused. Rule editor row seen in the GUI (qa-egui37-merged/37c.png); the check-session fields were not exercised on screen. Not done: in-browser session recovery, post-request match/replace, a multi-request macro."
+    },
+    {
+      "id": "I-01",
+      "epic": "I — Collaborator / OAST",
+      "priority": "P0",
+      "title": "Payload generation",
+      "acceptance": "HTTP, DNS and SMTP payloads with unique IDs; copy/insert into requests",
+      "effort": "M",
+      "status": "done",
+      "completed": "2026-11-16",
+      "evidence": "collaborator.rs generate_payload (unique tokens, HTTP/DNS names), Collaborator tab copy/insert; interactsh.rs for a public relay"
+    },
+    {
+      "id": "I-02",
+      "epic": "I — Collaborator / OAST",
+      "priority": "P0",
+      "title": "Interaction polling",
+      "acceptance": "Poll public relay or self-hosted server; list HTTP/DNS/SMTP interactions with source IP and timing",
+      "effort": "M",
+      "status": "done",
+      "completed": "2026-11-16",
+      "evidence": "collaborator.rs interactions() + polling of the local HTTP/DNS listeners and interactsh; Collaborator tab lists type, source and time"
+    },
+    {
+      "id": "I-03",
+      "epic": "I — Collaborator / OAST",
+      "priority": "P0",
+      "title": "Scanner integration",
+      "acceptance": "Blind checks use generated payloads and raise findings on interaction",
+      "effort": "M",
+      "status": "done",
+      "completed": "2026-11-16",
+      "evidence": "scan.rs registers OOB tokens in Shared::oob_pending; ui.rs sync_oob_issues confirms on interaction (see D-08)"
+    },
+    {
+      "id": "I-04",
+      "epic": "I — Collaborator / OAST",
+      "priority": "P0",
+      "title": "Private instance",
+      "acceptance": "Configurable server, polling interval, retention, secret; docs for self-hosting",
+      "effort": "M",
+      "status": "done",
+      "evidence": "core/src/interactsh.rs: private server host[:port] (parse_server), auth token sent as Authorization header (Session::register_with). core/src/collaborator.rs: live poll interval (set_poll_secs 1..3600 s), interaction retention (set_retention_secs). UI: Collaborator settings (server field + public list, token, poll every, keep for). Settings saved with the project (ProjectCollaborator server/poll_secs/retention_secs; token deliberately not saved). docs/collaborator-private-server.md (DNS, interactsh-server -token, WebProbe settings, troubleshooting). Tests: server_settings_parse_host_and_port, retention_drops_old_interactions_and_poll_interval_is_clamped.",
+      "completed": "2026-11-17"
+    },
+    {
+      "id": "J-01",
+      "epic": "J — Project, settings and state",
+      "priority": "P1",
+      "title": "Full-state project file",
+      "acceptance": "Version 2 format: settings, proxy config, CA metadata, scanner config, task queue, UI layout, editor buffers",
+      "effort": "L",
+      "status": "in_progress",
+      "notes": "2026-11-16 wave 42: scanner config, listeners, layout, editor buffers, crawler items saved; Logger/Organizer/Intruder/Decoder sections now written. Collaborator state not saved; running scans not resumable; autosave ignores layout-only changes."
+    },
+    {
+      "id": "J-02",
+      "epic": "J — Project, settings and state",
+      "priority": "P1",
+      "title": "Autosave and recovery",
+      "acceptance": "Periodic autosave, crash recovery prompt, temp project support",
+      "effort": "M",
+      "status": "in_progress",
+      "evidence": "Done: periodic autosave (60 s when changed) and save on exit, autoload at startup. Missing: crash-recovery prompt and temporary-project mode.",
+      "notes": "2026-11-16 wave 42: running-marker crash detection, restore/temporary/start-clean prompt, WEBPROBE_TEMP_PROJECT (recovery.rs, 7 tests). Prompt not yet seen in the GUI."
+    },
+    {
+      "id": "J-03",
+      "epic": "J — Project, settings and state",
+      "priority": "P1",
+      "title": "Settings UI",
+      "acceptance": "Searchable settings with sections, import/export, restore defaults, per-setting reset",
+      "effort": "L",
+      "status": "done",
+      "notes": "2026-11-17 wave 55: settings are searchable and sectioned (15 pages; tests tree_follows_burps_groups_in_order, pills_and_search_narrow_the_tree). Missing: settings import/export, restore defaults, per-setting reset. | 2026-11-17 wave 57: Settings > Manage settings: Save settings (the project's settings without traffic, issues, tabs or stored cookies), Load settings (replaces settings, keeps data) and Restore defaults (keeps data and the listening port); project::settings_only / apply_settings / with_default_settings, test settings_export_import_and_restore_defaults_leave_the_data_alone. In the GUI: a saved file held 0 history rows and the 4 interception rules while the app kept its history; Restore defaults ran and the history row was still there (qa-egui37-merged/58c.png). Load settings was not clicked. Missing: per-setting reset (only the interception rules table has its own Restore defaults).",
+      "evidence": "Settings dialog: searchable pages with All/User/Project filters, Save settings / Load settings (project::settings_only / apply_settings), Restore defaults for all, and per-page Restore defaults (project::with_section_defaults, test one_settings_page_resets_and_the_rest_stays).",
+      "completed": "2026-11-17"
+    },
+    {
+      "id": "J-04",
+      "epic": "J — Project, settings and state",
+      "priority": "P1",
+      "title": "New/open project flow",
+      "acceptance": "Start screen, recent projects, new temporary project, project integrity checks",
+      "effort": "M",
+      "status": "done",
+      "evidence": "Start window (project_start.rs): current project, Temporary project, New/Open with Check (project_files::check), recent projects (WEBPROBE_CONFIG_DIR/recent-projects.json). GUI-verified over MCP: corrupt file rejected with the parse error; New created /tmp/wp-j04/new-proj.json and moved it to the top of the recent list. Found and fixed a save deadlock on the way (save_project locked scan_config twice in one statement; every save hung) with test project_save_completes_and_restores.",
+      "completed": "2026-11-17"
+    },
+    {
+      "id": "K-01",
+      "epic": "K — Extensions",
+      "priority": "P2",
+      "title": "Native extension API",
+      "acceptance": "Stable Rust/WASM ABI for custom tabs, issue definitions, request/response hooks; example extension",
+      "effort": "L",
+      "status": "done",
+      "evidence": "Stable language-neutral ABI: WebProbe extension API v1 = JSON lines over stdio (docs/extensions.md). core/src/ext_process.rs: request/response hooks (edit via base64 raw or drop), issue definitions + reported issues (added to the issue list via Shared::collect_ext_issues), custom tab (tab_title/tab_content/refresh_tab, refreshed off the UI thread), 2 s per-call deadline, stops after 3 failures or exit, stderr kept for Errors. Example: extensions/examples/marker_reflection.py. ProxyHooks trait gained the same surface for in-process Rust extensions; hooks now run on an Arc snapshot outside the registry lock. Tests: example_extension_edits_reports_and_drops, hung_or_crashed_extensions_degrade_to_pass_through, version_mismatch_and_bad_programs_are_refused.",
+      "completed": "2026-11-17"
+    },
+    {
+      "id": "K-02",
+      "epic": "K — Extensions",
+      "priority": "P2",
+      "title": "JVM/Montoya host",
+      "acceptance": "Embed a JVM (JNI) or a subprocess host; load a subset of Montoya API; sandbox and error reporting",
+      "effort": "L",
+      "status": "in_progress",
+      "evidence": "2026-11-17: subprocess hosts: sidecar JVM for Montoya jars (ext_host::JavaSidecar, stderr now captured to Errors, health shown) and the process API (ext_process). Isolation: separate process, cleared environment, temp working dir, per-call deadline. Montoya subset: initialize, logging, proxy request/response continue-or-drop (no message edits through the bridge yet)."
+    },
+    {
+      "id": "K-03",
+      "epic": "K — Extensions",
+      "priority": "P2",
+      "title": "Extension manager",
+      "acceptance": "Install/enable/disable/remove, dependency view, BApp-like catalogue (no copied assets)",
+      "effort": "M",
+      "status": "in_progress",
+      "evidence": "2026-11-17: Installed tab: Add (WebProbe process or Java jar, loaded in the background), Remove, Up/Down, enable checkbox; list saved in the user config dir (core/src/ext_store.rs, extensions.json) and reloaded at start-up (WEBPROBE_NO_EXTENSIONS skips). Details show source, status, issue types, own tab; Errors show extension stderr. BApp Store tab is an offline list. Missing: dependency view, installable catalogue."
+    },
+    {
+      "id": "L-01",
+      "epic": "L — Engagement and utility features",
+      "priority": "P1",
+      "title": "CSRF PoC generator",
+      "acceptance": "Generate an HTML form PoC from a request; copy/download",
+      "effort": "S",
+      "status": "done",
+      "completed": "2026-11-16",
+      "evidence": "ui.rs 'CSRF PoC generator' window from the history context menu (Engagement tools > Generate CSRF PoC): HTML form PoC, copy"
+    },
+    {
+      "id": "L-02",
+      "epic": "L — Engagement and utility features",
+      "priority": "P1",
+      "title": "Engagement tools",
+      "acceptance": "Find comments, find scripts, find references, copy URLs, copy as curl",
+      "effort": "M",
+      "status": "in_progress",
+      "notes": "2026-11-16 wave 42: Find comments/scripts/references and Copy URLs implemented with tests (engagement.rs); site-map menu seen. Results window not yet checked."
+    },
+    {
+      "id": "L-03",
+      "epic": "L — Engagement and utility features",
+      "priority": "P1",
+      "title": "Content discovery",
+      "acceptance": "Wordlist-based path discovery with extension set, recursion, scope, result table",
+      "effort": "M",
+      "status": "in_progress",
+      "notes": "2026-11-16 wave 42: wordlist discovery with soft-404 detection, recursion, request cap (discovery.rs, 8 loopback tests). Window not checked; extension list and thread count are guesses; traffic not in Logger."
+    },
+    {
+      "id": "L-04",
+      "epic": "L — Engagement and utility features",
+      "priority": "P1",
+      "title": "Logger",
+      "acceptance": "Global traffic log across tools with filters, search, export; independent of Proxy history",
+      "effort": "M",
+      "status": "done",
+      "evidence": "Done: logger.rs bounded engine + ui.rs logger_view (capture filter, search, table, message panes). Missing: export.",
+      "notes": "2026-11-16 wave 42: CSV export of filtered rows added. Gap found in QA: Logger mirrors Proxy history only; Repeater/Intruder/Scanner traffic is not logged. | 2026-11-17 wave 43: Logger now receives every tool's requests (net::tool_scope + Shared::tool_log; Proxy, Repeater and Intruder rows seen in the GUI; test tool_requests_are_logged_under_the_tool_name_and_untagged_ones_are_not). Tool rows are summaries: no request/response detail pane yet. | 2026-11-17 wave 44: Logger lists every tool (Proxy, Repeater, Intruder, Scanner, Target, Sequencer) with filters, search and CSV export; a selected row shows its own request/response (tool rows keep bytes for the newest 500; proxy rows read their history item). Proxy, Repeater and Intruder rows and both detail cases seen in the GUI. Fixed: the detail pane looked history up by Logger id and could show the wrong message."
+    },
+    {
+      "id": "L-05",
+      "epic": "L — Engagement and utility features",
+      "priority": "P1",
+      "title": "Embedded browser",
+      "acceptance": "Launch a configured Chromium for proxy testing, or a documented \"use your browser\" flow",
+      "effort": "L",
+      "status": "done",
+      "evidence": "tools.rs launch_preconfigured_browser: Burp's bundled Chromium or system Chrome, private random-port listener (net::browser_listener), --proxy-bypass-list=<-loopback>, per-run profile, --no-sandbox as root, WebProbe CA trusted via a private NSS db; verified live as root with burpsy on 8080 (HTTPS without warning, history populated)",
+      "completed": "2026-11-16"
+    },
+    {
+      "id": "M-01",
+      "epic": "M — UI/UX system",
+      "priority": "P0",
+      "title": "Design tokens",
+      "acceptance": "One token module for colour, spacing, radius, typography, density; no ad-hoc hex in widgets",
+      "effort": "M",
+      "status": "done",
+      "completed": "2026-11-12",
+      "evidence": "theme.rs: full token module — spacing (XS..XL), radius, typography scale (H1/H2/body/small/mono), named colors (URL_KEY/URL_VALUE/SELECTION_SUBTLE); all widget hex inlined colors replaced by tokens; widgets use theme constants"
+    },
+    {
+      "id": "M-02",
+      "epic": "M — UI/UX system",
+      "priority": "P0",
+      "title": "Table component",
+      "acceptance": "Shared sortable/filterable/virtualized table used by Proxy, Target, Scanner, Intruder, Collaborator",
+      "effort": "L",
+      "status": "done",
+      "completed": "2026-11-12",
+      "evidence": "app/src/table.rs: Column/TableState + sort_rows/filter_rows + table_body/data_table virtualized via ScrollArea::show_rows with clickable rows and header sorting; wired into Proxy history, Target requests, Scanner issues, Intruder results and Collaborator interactions (table + detail pane); ui.rs history_rows sorts before the 1000-row render cap; tests cover sort asc/desc, stable order, case-insensitive filter, empty filter"
+    },
+    {
+      "id": "M-03",
+      "epic": "M — UI/UX system",
+      "priority": "P0",
+      "title": "Editor component",
+      "acceptance": "Shared message editor/view used by Proxy, Repeater, Intruder, Sequencer, Decoder",
+      "effort": "L",
+      "status": "done",
+      "completed": "2026-11-12",
+      "evidence": "app/src/editor.rs: EditorState (wrap/search), message_editor (monospace code editor + find count), message_view (tinted head lines, single-block body), bytes_view; split_message/match_count helpers; wired into Proxy detail raw view, Proxy intercept, Repeater, Intruder, Sequencer manual samples and Decoder; tests cover CRLF/LF splitting, headless messages, case-insensitive match counting"
+    },
+    {
+      "id": "M-04",
+      "epic": "M — UI/UX system",
+      "priority": "P0",
+      "title": "Feedback and errors",
+      "acceptance": "Progress bars, cancel buttons, toasts, inline errors, retry actions, empty/loading states",
+      "effort": "M",
+      "status": "done",
+      "completed": "2026-11-12",
+      "evidence": "app/src/feedback.rs: Toasts queue (6 s TTL, max 4, dismiss), process-wide toast() + drain for worker threads, progress bar with Cancel, inline_error with Retry, empty_state and loading; wired into main.rs frame loop, project save/restore, Scanner start/cancel/finish plus progress, Intruder progress/cancel and empty state, target site-map loading/empty and filter-empty states, Repeater inline error + Retry + completion toasts, listener bind-failure toast, scan-start warning when no request is selected; tests cover TTL expiry, cap, queue drain; 77 tests pass"
+    },
+    {
+      "id": "M-05",
+      "epic": "M — UI/UX system",
+      "priority": "P0",
+      "title": "Theming and density",
+      "acceptance": "Dark/light/high-contrast, compact/comfortable, font size, persisted",
+      "effort": "M",
+      "status": "done",
+      "completed": "2026-11-12",
+      "evidence": "theme.rs: Palette (dark/light/high_contrast) + Density (compact/comfortable) + font scale; apply_as(ctx,palette,density,scale) applied every frame; live appearance statics (set_appearance/appearance); persisted in ProjectData.appearance (serde defaults, old files load fine); appearance editor (palette/density/font size) in tools.rs dashboard; 65 tests pass"
+    },
+    {
+      "id": "M-06",
+      "epic": "M — UI/UX system",
+      "priority": "P0",
+      "title": "Keyboard and accessibility",
+      "acceptance": "Shortcut help overlay, customizable hotkeys, focus order, contrast, screen-reader labels",
+      "effort": "M",
+      "status": "done",
+      "completed": "2026-11-15",
+      "evidence": "shortcuts.rs: ACTIONS is Burp build 52685's own 50-pair table, read from resources/Preferences/UserDefaults.json user_options.misc.hotkeys and joined to burp.Zmcg ids/labels (Zj()=label, ZB()=id, Ze()=category); 48 of 50 map, the 2 misses (send_to_burp_at/open_burp_at) are extension-provided. Chord::parse enforces Burp's rule that every hotkey uses Ctrl (shipped docs settings/ui/hotkeys.html) and round-trips all 50 defaults. Shortcuts::set refuses a chord used by another action AND an action that already has a chord, matching burp.Zfhv.ZT (evidence ev_7dbf2c50b84b2abd63c5e2a9d791530ac9fd90e09a80d33f9f974724ef3ff761). Persistence is user-level (~/.config/webprobe/hotkeys.json) and file-authoritative like burp.Zfhv.Zh (ev_e199c6630d23d2f9df87cc0c3add80d5f8320325e3d630de68b7c3ad3767135f), so an unbound action stays unbound. Command palette Ctrl+K lists wired commands recents-first with category and chord, arrows navigate, Enter runs, Escape closes; capture mode consumes the key event so it never fires a command. Settings window (top bar) hosts Appearance + Hotkeys with per-row Clear/Reset, duplicate and save errors shown inline. Focus: only Wired chords are consumed, so Ctrl+C/V/X/Z/Y/A and word navigation reach the focused editor (egui handles those natively). 86 tests pass; verified by rendering the Settings and palette screenshots."
+    },
+    {
+      "id": "M-07",
+      "epic": "M — UI/UX system",
+      "priority": "P0",
+      "title": "Onboarding",
+      "acceptance": "First-run CA/proxy setup, verification checklist, sample traffic, docs links",
+      "effort": "M",
+      "status": "done",
+      "completed": "2026-11-15",
+      "evidence": "onboarding.rs: checks() derives the four checklist lines from live state (listener_running, history length, count of https exchanges, intercept flag) so it cannot claim a step that is not true. The proxy answers http://webprobe (and http://burpsuite, so a Burp tutorial still works) locally instead of forwarding upstream, serving a setup page with the CA in PEM (/webprobe-ca.pem) and DER (/webprobe-ca.der) plus the listener port, matching the shipped docs: certificate/index.html says the CA is fetched through the proxy and confirmed by visiting an HTTPS URL with no warning, proxy-troubleshooting.html documents http://burpsuite and the 127.0.0.1:8080 listener. sample_traffic() routes one real request through the listener and toasts the status line. Dashboard panel with Hide; docs links go to the public documentation, and the module records that WebProbe has no bundled browser (L-05) instead of pretending otherwise. Tests: setup hosts answered locally, CA content types, page documents both paths and the real port, and sample traffic reaching the listener end to end."
+    },
+    {
+      "id": "N-01",
+      "epic": "N — Quality, performance and build",
+      "priority": "P0",
+      "title": "Parser/engine tests",
+      "acceptance": "Unit + integration tests for chunked, gzip, keep-alive, h2, TLS, proxy; run in CI",
+      "effort": "L",
+      "status": "todo",
+      "notes": "2026-11-17: engine tests now run as their own crate (365 in webprobe-core); connection cap test (net::...::connections_beyond_the_limit_get_a_503_and_slots_are_returned). No CI configured."
+    },
+    {
+      "id": "N-02",
+      "epic": "N — Quality, performance and build",
+      "priority": "P0",
+      "title": "Performance",
+      "acceptance": "10k history entries and 1k site-map nodes render at 60 fps; no per-frame full-list scans",
+      "effort": "M",
+      "status": "in_progress",
+      "notes": "2026-11-17 wave 64: measured on the QA display (software GL): 10,000 history rows cost the same CPU as an empty history (virtualised table). Redraws are now event-driven (Shared::set_waker / notice::set_waker; 1 s idle, 200 ms while a tool works): idle CPU with 10k rows fell from 142 to 28-30 ticks per 5 s. The 1,000-row display cap is gone (Burp shows everything): the view is cached behind an Arc (no per-frame copy) and new traffic is put on top incrementally (ui::history_new_rows, test history_view_keeps_every_match_and_new_rows_go_on_top). '#' column widened for 5-digit ids. Not measured: frame time in ms (no frame counter), 1k-node site map."
+    },
+    {
+      "id": "N-03",
+      "epic": "N — Quality, performance and build",
+      "priority": "P0",
+      "title": "Fuzzing",
+      "acceptance": "Malformed HTTP/TLS/WebSocket inputs never panic or hang; fuzz targets in CI",
+      "effort": "M",
+      "status": "in_progress",
+      "notes": "2026-11-17 wave 63: deterministic fuzz test core/src/fuzz_tests.rs: 3000 random and mutated inputs through HTTP parsing, chunked/gzip/deflate/brotli decoding, WebSocket frames, HTTP/2 against a hostile server, insertion points, passive checks, Intruder templates, macros, cookie jar, project JSON. Found and fixed three panics: util::url_decode (multi-byte after %), cookie_jar::parse_http_date (multi-byte month token), util::patch_header (empty message), and a header-placement bug in patch_header that broke upstream proxy Proxy-Authorization. Runs in the normal suite. Missing: coverage-guided fuzzing (cargo-fuzz) and CI."
+    },
+    {
+      "id": "N-04",
+      "epic": "N — Quality, performance and build",
+      "priority": "P0",
+      "title": "Builder reliability",
+      "acceptance": "Fix the `omp` model-routing 404s (glm-5.3 / kimi-k3.1) so rounds complete; add a working fallback",
+      "effort": "S",
+      "status": "todo"
+    },
+    {
+      "id": "N-05",
+      "epic": "N — Quality, performance and build",
+      "priority": "P0",
+      "title": "Release build",
+      "acceptance": "`cargo build --release` under 3 minutes; binary starts in under 1 s; screenshot check passes",
+      "effort": "S",
+      "status": "done",
+      "evidence": "From-scratch `cargo build --release` with the shared sccache warm: 114 s, 337/337 dependency hits (target/release removed first). Incremental release rebuild after a workspace edit: 65 s (desktop crate 58 s). Cold release (empty cache) is ~450 s. Release binary to mapped window on Xvfb: 871 ms cold start, ~410 ms warm. Screenshot checks run through the egui MCP (take_screenshot). Note: sccache keys include the target directory, so a new CARGO_TARGET_DIR builds cold.",
+      "completed": "2026-11-17"
+    },
+    {
+      "id": "P-01",
+      "epic": "P — Live Burp parity gaps (found 2026-11-15)",
+      "priority": "P0",
+      "title": "Top menu bar",
+      "acceptance": "Burp, Project, Intruder, Repeater, View, Help menus in the window chrome; Burp menu lists Search, Settings, Configuration library, User settings >, Log in, Exit; every item either works or is disabled with a reason; shortcuts shown beside items match shortcuts.rs",
+      "effort": "M",
+      "status": "done",
+      "completed": "2026-11-15",
+      "evidence": "Menu bar added above the tab row (menu row y~13, tab row y~44, Proxy action buttons moved to y~245): WebProbe (Settings..., Quit), Project (Project options...), Intruder (Send to Intruder), Repeater (Send to Repeater, Send request), View (13 tabs + Light theme checkbox), Help (Keyboard shortcuts, About WebProbe). All six open and list these items in qa/../webprobe-shots/cmp/v8-menu-*.png. Not yet Burp-complete: Burp also lists Search, Configuration library, User settings >, Log in, Burp Infiltrator, Burp Clickbandit (tracked as an open gap in qa/VISUAL-DIFF-2026-11-15.md)."
+    },
+    {
+      "id": "P-02",
+      "epic": "P — Live Burp parity gaps (found 2026-11-15)",
+      "priority": "P1",
+      "title": "Tab bar and global controls parity",
+      "acceptance": "Single tab row in Burp order (Dashboard, Target, Proxy, Intruder, Repeater, Collaborator, Sequencer, Decoder, Comparer, Logger, Organizer, Extensions, Discover) with no 'More tools' overflow at 1440 px; top-right global search, settings gear and browser launcher; active tab shown with an underline",
+      "effort": "M",
+      "status": "done",
+      "evidence": "Top bar now renders all 13 tabs in one row in Burp order (Dashboard, Target, Proxy, Intruder, Repeater, Collaborator, Sequencer, Decoder, Comparer, Scanner, Sessions, Search, Extensions), no 'More tools' overflow; active tab is an orange underline (not a pill). Live shot p02-tabs.png at 1440x900. REMAINING: top-right global search button, browser launcher (P-15), arrange/hide tabs and reset layout, title bar project name (J-04). 118 tests pass.",
+      "notes": " | 2026-11-17 wave 44: single 13-tab row in Burp order with no overflow at 1440 px, active-tab underline, top-right browser launcher, search and settings gear; seen on egui 0.37 (qa-egui37-merged/sheet.png)."
+    },
+    {
+      "id": "P-03",
+      "epic": "P — Live Burp parity gaps (found 2026-11-15)",
+      "priority": "P0",
+      "title": "Settings dialog parity",
+      "acceptance": "Searchable dialog with All/User/Project filter pills and a category tree (Tools: Proxy, Intruder, Repeater, Sequencer, Comparer; Project; Sessions; Network; User interface; Suite; Extensions; Configuration library); Proxy page has a listeners table (Running, Interface, Invisible, Redirect, Certificate, TLS protocols) with Add/Edit/Remove, CA import/export/regenerate, request-interception rules table with Up/Down",
+      "effort": "L",
+      "status": "in_progress",
+      "depends_on": [
+        "J-03",
+        "B-08"
+      ],
+      "notes": "2026-11-17 wave 55: Settings dialog rebuilt (settings_dialog.rs): search box, All/User/Project pills, Burp's category tree (Tools: Proxy, Intruder, Repeater, Sequencer, Comparer; Project: Scope, Collaborator, Tasks; Sessions; Network; User interface; Suite; Extensions; Configuration library), each page tagged user or project. Seen in the GUI with search and the Project pill working (qa-egui37-merged/49-settings.png, 51c.png). Missing on the Proxy page: the listeners table with Burp's columns and Edit, CA import/regenerate, the request-interception rules table. | 2026-11-17 wave 56: Proxy page now has the listeners table with Burp's columns and Add/Edit/Remove (proxy_settings.rs), CA certificate export (PEM, DER) and Regenerate (tls::retire_ca; takes effect at restart, as in Burp), and the request interception rules table with Add/Remove/Up/Down/Restore defaults backed by a real rule engine (intercept_rules.rs; Burp's four default rows). Seen in the GUI (qa-egui37-merged/52c.png); Regenerate exercised against a throwaway CA folder; with Intercept on, a .ico request passed through and an API request was held (53c.png). Missing: CA import; Invisible and Redirect listener modes (columns are shown empty). | 2026-11-17 wave 58: listener Redirect mode (Shared::listener_redirects; saved in the project) with Set/Clear in the listeners table; non-proxy-style plain HTTP requests are accepted on every listener (invisible proxying over HTTP). Integration test net::...::listener_redirect_and_non_proxy_style_requests against a real listener. In the GUI a redirect to local Juice Shop was set and a request naming no-such-host.invalid returned 200 (qa-egui37-merged/60c.png). Missing: invisible proxying of direct TLS connections, CA import."
+    },
+    {
+      "id": "P-04",
+      "epic": "P — Live Burp parity gaps (found 2026-11-15)",
+      "priority": "P0",
+      "title": "Repeater layout parity",
+      "acceptance": "Numbered tabs with close and '+', primary Send, Cancel, back/forward history, Target field with edit action, Request | Response | Inspector panes with side-by-side/stacked/tabbed toggles, Pretty/Raw/Hex views, wrap/non-printable/newline toggles, search bar with highlight count, right dock (Inspector, Notes, Explanations, Custom actions), status line",
+      "effort": "L",
+      "status": "done",
+      "depends_on": [
+        "E-01",
+        "E-04"
+      ],
+      "evidence": "Repeater now has numbered tab + '+', primary Send (Ctrl+Space), Raw/Hex/Pretty response sub-tabs, a status line (e.g. '200 | 85 bytes | 1 ms'), and an Inspector collapsible with request line, query params, request headers and response headers. Live test 2026-11-15: seeded request to local origin, Ctrl+Space sent it, response 200 with JSON body; shot p04-repeater-raw.png. REMAINING: tab close/rename/reorder/groups, Cancel, back/forward history, Target field with edit, layout toggles, follow redirects. 118 tests pass. Rewritten as a three-pane layout: Request | Response | Inspector, numbered tabs with close and +, a command row with Send/Cancel/Target/HTTPS/status, Pretty/Raw/Hex per pane. Shot tour/08-repeater.png. REMAINING: back/forward history, follow redirects, tab groups. v8 verification 2026-11-15: three-pane Request | Response | Inspector layout with horizontal request text confirmed in webprobe-shots/cmp/v8-repeater.png (Inspector shows request line, request headers, response headers). Editor zero-width bug fixed at root: pane bodies wrapped in ui.vertical, set_width, desired_width = available_width().max(120). Remaining for full Burp parity (tracked separately): back/forward history, Target edit action, right vertical dock, line numbers, per-pane status line.",
+      "completed": "2026-11-15"
+    },
+    {
+      "id": "P-05",
+      "epic": "P — Live Burp parity gaps (found 2026-11-15)",
+      "priority": "P0",
+      "title": "HTTP history columns and views",
+      "acceptance": "Add Params, Edited, Extension and Title columns; Pretty and Renderer views in the message pane; column chooser exposes all of them",
+      "effort": "M",
+      "status": "in_progress",
+      "depends_on": [
+        "B-01",
+        "B-03"
+      ],
+      "evidence": "HistEntry gained params, edited, extension, title, cookies, listener_port; computed once at insert by net::derive_history_fields (query/body/cookie, URL extension, HTML <title>, Set-Cookie join, listener port); record() takes listener_port; project restore recomputes them. History table now 14 columns (# Method Host URL Status Length MIME Extension Title TLS Cookies Port Params Edited) with matching sort keys; live shot p05-history2.png (40 of 40, Params yes on seeded even ids). REMAINING: Pretty and Renderer views in the message pane (moved to B-03). 118 tests pass."
+    },
+    {
+      "id": "P-06",
+      "epic": "P — Live Burp parity gaps (found 2026-11-15)",
+      "priority": "P1",
+      "title": "Intercept bar parity",
+      "acceptance": "Intercept on/off toggle, Forward and Drop as split buttons with dropdown actions (forward all, drop all), Open browser, help and overflow menu; empty state text explaining intercept",
+      "effort": "S",
+      "status": "done",
+      "evidence": "Done: Intercept on/off, Forward, Drop, Open browser, empty-state text. Missing: Forward/Drop split-button dropdown actions (forward all, drop all) and overflow menu.",
+      "notes": "2026-11-16 wave 42: held-messages table and Options menu (column checklist, restore layout) added and seen; split buttons done earlier. Missing: empty-state text when Intercept is off. | 2026-11-17 wave 44: toggle, Forward/Drop split buttons with Forward all/Drop all, Open browser, help, Options menu and the 'Intercept is off/on' empty state are all present (ui.rs proxy_intercept); menu and buttons seen in the GUI."
+    },
+    {
+      "id": "P-07",
+      "epic": "P — Live Burp parity gaps (found 2026-11-15)",
+      "priority": "P1",
+      "title": "Decoder layout and operations",
+      "acceptance": "Text/Hex input toggle; 'Decode as', 'Encode as' and 'Hash' dropdowns; Smart decode; chained output panes",
+      "effort": "M",
+      "status": "in_progress",
+      "depends_on": [
+        "F-01",
+        "F-02"
+      ],
+      "evidence": "Decoder screen rebuilt on decoder_ops (P-07): Input label with Text/Hex toggle, 'Decode as'/'Encode as'/'Hash' dropdowns, Smart decode, bordered Output pane with Copy and 'Use output as input', results history. Engine F-01/F-02 done (127 tests). REMAINING: chained multi-stage pipeline UI with editable stages."
+    },
+    {
+      "id": "P-08",
+      "epic": "P — Live Burp parity gaps (found 2026-11-15)",
+      "priority": "P1",
+      "title": "Comparer item tables",
+      "acceptance": "Two item tables (# / Length / Data) with Paste, Load, Remove, Clear and Compare Words / Bytes buttons",
+      "effort": "M",
+      "status": "done",
+      "depends_on": [
+        "F-03"
+      ],
+      "notes": " | 2026-11-17 wave 44: Comparer shows two item tables (# / Length / Data) with Paste, Load, Remove, Clear and Compare Words/Bytes; seen in qa-egui37-merged/07-comparer.png. Diff output itself not re-exercised in this pass."
+    },
+    {
+      "id": "P-09",
+      "epic": "P — Live Burp parity gaps (found 2026-11-15)",
+      "priority": "P1",
+      "title": "Dashboard task model",
+      "acceptance": "Task cards (live audit, live crawl, scans) with pause/resume, issue counters and Summary / Audit items / Issues / Event log / Logger / Audit log tabs; 'Task execution is paused' banner",
+      "effort": "L",
+      "status": "in_progress",
+      "depends_on": [
+        "D-05",
+        "D-06"
+      ],
+      "evidence": "Dashboard rebuilt (P-09): two-column layout with a Tasks panel (live audit running/paused, passive scan progress, pause/resume), an Issues-by-severity breakdown (high/medium/low/info), and an issue table with severity, name and host+path columns; stat cards and recent activity retained. Live shot tour/01-dashboard.png. REMAINING: task cards with per-task issue counters and rename, Summary/Audit items/Event log/Logger/Audit log tabs, banner when paused."
+    },
+    {
+      "id": "P-10",
+      "epic": "P — Live Burp parity gaps (found 2026-11-15)",
+      "priority": "P0",
+      "title": "Wire Intruder UI to intruder.rs",
+      "acceptance": "Attack-type selector, Auto/Add/Clear position buttons with marker highlighting, one payload set per position, request count preview with the limit error shown, runner replaces net::start_attack; empty-state text 'To get started, send a request to Intruder from anywhere in Burp'",
+      "effort": "M",
+      "status": "done",
+      "depends_on": [
+        "C-01",
+        "C-02"
+      ],
+      "evidence": "ui.rs Intruder: attack-type selector, Auto/Add/Clear §, marker highlighting, one payload set per position, payload/request count preview, empty-state text; runs through intruder.rs; live attack verified 2026-11-16",
+      "completed": "2026-11-16"
+    },
+    {
+      "id": "P-11",
+      "epic": "P — Live Burp parity gaps (found 2026-11-15)",
+      "priority": "P2",
+      "title": "Light theme as the default option",
+      "acceptance": "Light palette matches Burp's default look (flat white, orange underline accent) and is selectable in Settings; dark remains available",
+      "effort": "S",
+      "status": "done",
+      "evidence": "MiniMax M3.1 Flash review (qa/minimax-visual-review-2026-11-15.md) drove: secondary text 0x6A6A6C -> 0x9AA0A6 (>=4.5:1), type floor 10.5/11.0/11.5 -> 11.5/12.0, history table fills remaining height, Intruder empty state in a bordered card. REMAINING: single active-navigation accent, toolbar grouping on Proxy/Intruder, Repeater lower-area balance. Re-review: Intruder card + legible text confirmed; history filter row fixed; 'unused vertical space' disproved (table fills to splitter, blank area is the message pane). Smallest helper copy 11.5 -> 12.0.",
+      "notes": "2026-11-17 wave 59: light is the default palette and Settings > User interface > Appearance offers dark, light and high contrast (seen in qa-egui37-merged/49-settings.png); the active tab keeps its orange underline."
+    },
+    {
+      "id": "P-12",
+      "epic": "P — Live Burp parity gaps (found 2026-11-15)",
+      "priority": "P2",
+      "title": "Known small defects",
+      "acceptance": "Target scope header repeats its inner 'Scope' label; onboarding counts seeded history as real HTTPS traffic; selection stays on a row the filter hides; Burp history comparison needs a populated Burp table (listener answered but history stayed empty)",
+      "effort": "S",
+      "status": "done",
+      "notes": "2026-11-17 wave 59: three defects fixed: the repeated 'Scope' label is gone (tools::scope_editor); onboarding ignores seeded rows (onboarding::real_count / real_https_count, test seeded_rows_do_not_count_as_traffic); a history row hidden by the filter loses its selection (seen in the GUI: re-enabling the filter cleared the row and the panes, 62c.png). The fourth item, a Burp history comparison needing a populated Burp table, is about the comparison rig, not WebProbe, and Burp comparisons are stopped at the user's request."
+    },
+    {
+      "id": "P-13",
+      "epic": "P — Live Burp parity gaps (found 2026-11-15)",
+      "priority": "P0",
+      "title": "WSL2 rendering fix and live QA driver",
+      "acceptance": "App opens a window on WSL2/Xvfb without env tweaks; QA driver clicks, types, scrolls and screenshots; policy tested",
+      "effort": "M",
+      "status": "done",
+      "completed": "2026-11-15",
+      "evidence": "Root cause: LIBGL_ALWAYS_INDIRECT=1 (~/.zshrc:296) made glutin's GLX FBConfig fail (GLXBadFBConfig) and, with no /dev/dri render node, Mesa 26 fell to zink (failed to choose pdev). app/src/gl_env.rs drops the indirect flag, forces software GL and X11 when there is no render node (WEBPROBE_GL=native opts out); 6 tests; matrix run on Xvfb: window mapped with 3000+ colours. qa/qa.sh up/shot/click/dclick/rclick/drag/type/key/scroll with proxy 6566 and collaborator 6567 (never 8080/8081). theme::install_fonts adds Hack as fallback; glyph guard test every_glyph_the_ui_prints_can_be_drawn. Commits 10bafe7, 6a969c1"
+    },
+    {
+      "id": "P-14",
+      "epic": "P — Live Burp parity gaps (found 2026-11-15)",
+      "priority": "P0",
+      "title": "Repair UI wiring lost in a bad edit",
+      "acceptance": "Filter bar, Comparer, Target scope, project controls, listener status/editor and appearance options are all reachable again; no dead helpers left",
+      "effort": "M",
+      "status": "done",
+      "completed": "2026-11-15",
+      "evidence": "Recovered from the dead-code warnings (about 40 down to 5 design tokens): history filter bar call restored, analysis_ui::show_comparer, tools::scope_editor, tools::project_controls, tools::appearance_options, net::listener_status/set_listeners with a new Dashboard Listeners panel and an add/remove editor in Proxy > Options (net::listener_specs), duplicate ScrollArea ids fixed (Match/replace, Intruder, Sequencer, Sessions, Search), Settings window centred, Target host chips wrap, dead editor::bytes_view removed. 117 tests pass. Commits 10bafe7, 6a969c1"
+    },
+    {
+      "id": "P-15",
+      "epic": "P — Live Burp parity gaps (found 2026-11-15)",
+      "priority": "P1",
+      "title": "Interactive Open browser launcher",
+      "acceptance": "'Open browser' (Intercept bar, empty states, Dashboard) launches the user's Chrome/Chromium or a downloaded Chrome for Testing with a throwaway profile, --proxy-server set to the active listener and the WebProbe CA trusted for that profile only; reports clearly when no browser is found",
+      "effort": "M",
+      "status": "done",
+      "depends_on": [
+        "L-05",
+        "M-07"
+      ],
+      "completed": "2026-11-16",
+      "evidence": "Same launcher as L-05: Intercept bar / top bar / empty states call tools::launch_preconfigured_browser; throwaway profile, CA trusted for that profile only, reports the failing candidate when none starts; process tree closed on exit (util::kill_process_tree, tests a_headless_browser_leaves_no_processes_behind)"
+    },
+    {
+      "id": "P-16",
+      "epic": "P — Live Burp parity gaps (found 2026-11-15)",
+      "priority": "P1",
+      "title": "Headless engine trait + Obscura sidecar spike",
+      "acceptance": "HeadlessBrowser trait with an Obscura implementation behind it; gate = the 5 acceptance checks in docs/EVAL-OBSCURA.md (JS crawl finds more links, all traffic incl. HTTPS in history via SSL_CERT_FILE, stored response to PNG <2 s and <150 MB, stealth/tracker blocking off, version pinned and digest verified); also compare Lightpanda in the same fixtures",
+      "effort": "M",
+      "status": "todo",
+      "depends_on": [
+        "D-01"
+      ]
+    },
+    {
+      "id": "UAT-01",
+      "epic": "UAT 2026-11-16 — blocking defects",
+      "priority": "P0",
+      "title": "Intruder attack-results window ignores all input (cannot close, cannot select a row)",
+      "acceptance": "The results window closes via its X/Escape and selecting a row shows the request/response; verified by an automated UAT pass.",
+      "effort": "S",
+      "status": "done",
+      "evidence": "ui.rs Intruder results window bounded to the screen (max_size/constrain, clamped pane height); live QA on :97 against the Juice bench: row click selects and fills request/response, window stays on screen (shots in7/in8)",
+      "completed": "2026-11-16"
+    },
+    {
+      "id": "UAT-02",
+      "epic": "UAT 2026-11-16 — blocking defects",
+      "priority": "P0",
+      "title": "Repeater Cancel does not abort an in-flight request",
+      "acceptance": "Cancel aborts the worker; the status line reports cancellation; the response never arrives after cancel.",
+      "effort": "M",
+      "status": "done",
+      "evidence": "ui.rs cancel_repeater_send + Shared::rep_gen generation token; the worker drops a stale result; test ui::repeater_fix_tests::cancel_abandons_the_in_flight_send",
+      "completed": "2026-11-16"
+    },
+    {
+      "id": "UAT-03",
+      "epic": "UAT 2026-11-16 — blocking defects",
+      "priority": "P0",
+      "title": "Comparer uses one shared item collection and Paste is inert",
+      "acceptance": "Item 1 and item 2 hold independent lists; Paste adds to the targeted list; loading two files then Compare produces the expected diff.",
+      "effort": "M",
+      "status": "rejected",
+      "evidence": "Not a defect: Burp's Comparer itself shows one shared item list in both tables with independent selections ('Select item 1' / 'Select item 2'); WebProbe matches (cmp_sel1/cmp_sel2 independent). Paste adds to the shared list as in Burp.",
+      "completed": "2026-11-16"
+    },
+    {
+      "id": "UAT-04",
+      "epic": "UAT 2026-11-16 — blocking defects",
+      "priority": "P1",
+      "title": "Persist proxy history (and site map) in the project file across restarts",
+      "acceptance": "Quit and relaunch with the same project restores HTTP history rows and the site map.",
+      "effort": "M",
+      "status": "done",
+      "evidence": "main.rs autoload of the project file at startup + autosave every 60 s when changed and on exit (WEBPROBE_NO_AUTOSAVE opts out); tools.rs save_project/restore_project; byte-exact bodies (project::encode_message/decode_message, test binary_messages_round_trip_exactly); restore advances next_id",
+      "completed": "2026-11-16"
+    },
+    {
+      "id": "UAT-05",
+      "epic": "UAT 2026-11-16 — blocking defects",
+      "priority": "P1",
+      "title": "Window intermittently starts unmapped (process spins, proxy bound, no visible UI)",
+      "acceptance": "Every launch maps the window; a regression test or startup timeout surfaces the failure instead of spinning.",
+      "effort": "M",
+      "status": "done",
+      "evidence": "Isolated UAT 2026-11-16: 2 of 4 launches left Map State IsUnMapped at ~115% CPU; external xdotool windowmap made the UI appear. Shots 98.",
+      "notes": "2026-11-17 wave 59: every launch in this session mapped its window: about 60 consecutive 'qa.sh up' runs on the QA display, each reporting 'mapped in 3-5s'. qa.sh up waits for the window and reports a failure instead of spinning, which is the guard the task asked for. No unmapped start was seen, so the original intermittent cause was not identified."
+    },
+    {
+      "id": "UAT-06",
+      "epic": "UAT 2026-11-16 — blocking defects",
+      "priority": "P1",
+      "title": "Paste into request/message editors is ignored or delivers stale clipboard",
+      "acceptance": "Ctrl+V inserts the current clipboard text into Repeater/Intruder request editors, preserving line breaks (LF and CRLF).",
+      "effort": "M",
+      "status": "in_progress",
+      "evidence": "Isolated UAT 2026-11-16: paste works in the Target single-line field but not reliably in request editors; one paste delivered the previous clipboard. Shots 30-37, 65.",
+      "notes": "2026-11-16 wave 42: CRLF-preserving paste handled in the editor (msgpane.rs, headless tests). 'Paste ignored / stale clipboard' root cause not found (clipboard path not reproducible headless)."
+    },
+    {
+      "id": "UAT-07",
+      "epic": "UAT 2026-11-16 — polish",
+      "priority": "P2",
+      "title": "History Time column is truncated and the table needs horizontal scrolling at 1440 px",
+      "acceptance": "Time shows full HH:MM:SS without clipping; default column widths fit the reference window; message panes show more than ~4 lines.",
+      "effort": "S",
+      "status": "done",
+      "evidence": "Isolated UAT 2026-11-16: Time renders as '08:39:'; horizontal scrollbar spans the viewport. Shots 02/05.",
+      "notes": " | 2026-11-17 wave 44: Time column widened to 140 px and other defaults trimmed so '00:46:37 17 Nov 2026' shows unclipped at 1440 px; request and response are side by side under the table (about 16 lines each, was 4-5). Seen in 13-history-layout.png. The table still scrolls horizontally for the two extra columns (Listener port, Diff count)."
+    },
+    {
+      "id": "UAT-08",
+      "epic": "UAT 2026-11-16 — polish",
+      "priority": "P2",
+      "title": "Menu bar parity: WebProbe menu only has Search, Settings, Quit",
+      "acceptance": "Menus match the reference structure (Burp/Project/Intruder/Repeater/View/Help) with the expected items.",
+      "effort": "M",
+      "status": "done",
+      "evidence": "Isolated UAT 2026-11-16: shot 100-menu-burp.png.",
+      "notes": "2026-11-17 wave 52: the six menus carry Burp's items in Burp's order, read from the decompiled menu classes (Burp Zc6t, Project Zpn_, Intruder Zcur, Repeater Zcu0, View Zupi, Help Zup4). Working: Search, Settings, Collaborator client, Exit; Save copy, Import project file / Project file window; Start attack, Send to Repeater, New tab behavior, Automatic payload positions; Update Content-Length, Follow redirections, Process cookies, Action; Restore default tab layout and the tool list; Getting started, Keyboard shortcuts, Diagnostics, browser health check, License. Items without a backend are shown disabled (Infiltrator, Clickbandit, Configuration library, Rename, saved attacks and attack configs, HTTP/2 connection options, documentation and update items). All six menus seen open in the GUI (qa-egui37-merged/40c.png). Save copy itself was not clicked."
+    },
+    {
+      "id": "UAT-09",
+      "epic": "Automation / MCP integration",
+      "priority": "P2",
+      "title": "Publish a usable accessibility tree and IPC socket for MCP automation",
+      "acceptance": "With accesskit enabled, agent-desktop and egui-mcp see the widget tree and can click elements; egui-mcp check_connection succeeds once egui 0.33 + egui-mcp-client is embedded.",
+      "effort": "L",
+      "status": "done",
+      "evidence": "egui 0.37 + vendored egui-mcp-client/server. Tree on AT-SPI with real ids (128-bit AccessKit ids folded to 53 bits), case-insensitive app match, accessible names for hand-painted tabs/docks/toggles/column headers, request editor and search fields; keyboard_input text/keys/combos; ordered input queue; socket not stolen by a second instance (EGUI_MCP_SOCKET). Verified: check_connection, get_ui_tree, find_by_label(_exact), get_bounds, is_visible, click_element, set_text, get_text, click_at, keyboard_input, scroll, drag, take_screenshot, screenshot_element.",
+      "notes": " | 2026-11-17 wave 43: app is on egui/eframe 0.37 (rustc 1.100). The egui-mcp-client hook is not wired yet.",
+      "completed": "2026-11-17"
+    }
+  ]
 }

@@ -75,50 +75,13 @@ impl Default for HistoryFilter {
     }
 }
 
-/// Burp's MIME-type column value (stated/inferred type families as Burp names
-/// them: HTML, script, CSS, XML, JSON, text, image formats, app).
-pub fn burp_mime(content_type: &str, body: &[u8]) -> &'static str {
-    let ct = content_type.to_ascii_lowercase();
-    let t = ct.split(';').next().unwrap_or("").trim();
-    match t {
-        "" => {
-            let head: String = String::from_utf8_lossy(&body[..body.len().min(256)]).trim_start().to_ascii_lowercase();
-            if head.starts_with("<!doctype html") || head.starts_with("<html") {
-                "HTML"
-            } else if head.starts_with('{') || head.starts_with('[') {
-                "JSON"
-            } else if body.is_empty() {
-                ""
-            } else {
-                "text"
-            }
-        }
-        "text/html" | "application/xhtml+xml" => "HTML",
-        "application/json" | "text/json" => "JSON",
-        "text/css" => "CSS",
-        "text/xml" | "application/xml" => "XML",
-        "image/png" => "PNG",
-        "image/jpeg" | "image/jpg" => "JPEG",
-        "image/gif" => "GIF",
-        "image/svg+xml" => "XML",
-        "image/x-icon" | "image/vnd.microsoft.icon" => "ICO",
-        "application/x-shockwave-flash" => "flash",
-        _ if t.contains("javascript") || t.contains("ecmascript") => "script",
-        _ if t.ends_with("+json") => "JSON",
-        _ if t.ends_with("+xml") => "XML",
-        _ if t.starts_with("image/") => "image",
-        _ if t.starts_with("text/") => "text",
-        _ => "app",
-    }
-}
+#[cfg(test)]
+use crate::mime::burp_mime;
 
 impl HistoryFilter {
     /// Burp's MIME family of an entry, for the column and the MIME filter.
     pub fn burp_mime_of(entry: &HistEntry) -> &'static str {
-        let Some(resp) = &entry.resp_raw else { return "" };
-        let parts = crate::util::parse_http(resp);
-        let value = crate::util::get_header(&parts.headers, "Content-Type").unwrap_or_default();
-        burp_mime(&value, &resp[parts.head_len.min(resp.len())..])
+        crate::mime::burp_mime_of(entry)
     }
 
     /// The one-line summary Burp prints after "Filter settings:".
@@ -322,7 +285,8 @@ impl HistoryFilter {
             let right_w = 400.0;
             let w = (ui.available_width() - right_w).max(200.0);
             let (rect, resp) = ui.allocate_exact_size(egui::vec2(w, 20.0), egui::Sense::click());
-            ui.painter().rect(rect, 2.0, theme::header_bg(), egui::Stroke::new(1.0, theme::line()));
+            resp.widget_info(|| egui::WidgetInfo::labeled(egui::accesskit::Role::Button, true, "Filter settings"));
+            ui.painter().rect(rect, 2.0, theme::header_bg(), egui::Stroke::new(1.0, theme::line()), egui::StrokeKind::Outside);
             let label = format!("\u{25BD}  Filter settings: {}", self.summary());
             ui.painter().with_clip_rect(rect.shrink(2.0)).text(
                 egui::pos2(rect.left() + 8.0, rect.center().y),
@@ -347,7 +311,7 @@ impl HistoryFilter {
         });
         if self.open {
             let mut open = self.open;
-            egui::Window::new("HTTP history filter")
+            egui::Window::new("HTTP history filter").default_pos(crate::theme::window_pos(ui.ctx()))
                 .open(&mut open)
                 .collapsible(false)
                 .resizable(false)
@@ -434,6 +398,8 @@ pub fn toggle(on: &mut bool) -> impl egui::Widget + '_ {
             *on = !*on;
             resp.mark_changed();
         }
+        let state = *on;
+        resp.widget_info(|| egui::WidgetInfo::selected(egui::accesskit::Role::Switch, true, state, "Toggle"));
         let t = ui.ctx().animate_bool(resp.id, *on);
         let bg = if *on { c(0x26649D) } else { theme::line_strong() };
         ui.painter().rect_filled(rect, rect.height() / 2.0, bg);

@@ -4,7 +4,6 @@
 // Toasts can be raised from any module without threading a UI handle through:
 // `toast` pushes into a process-wide queue that the UI drains once per frame.
 
-use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use eframe::egui::{self, RichText, Ui};
@@ -16,23 +15,16 @@ pub const TOAST_TTL: Duration = Duration::from_secs(6);
 /// Maximum toasts kept at once; older ones drop off.
 pub const TOAST_MAX: usize = 4;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Level {
-    Info,
-    Success,
-    Warn,
-    Error,
-}
+pub use crate::notice::{toast, Level};
 
-impl Level {
-    pub fn colour(self) -> egui::Color32 {
-        match self {
+/// The colour a notice level is drawn in (the level itself is engine data).
+pub fn level_colour(level: Level) -> egui::Color32 {
+        match level {
             Level::Info => theme::ink_faint(),
             Level::Success => c(theme::GOOD),
             Level::Warn => c(theme::WARN),
             Level::Error => c(theme::BAD),
         }
-    }
 }
 
 pub struct Toast {
@@ -77,17 +69,17 @@ impl Toasts {
             return;
         }
         let mut dismiss = None;
-        egui::Area::new(egui::Id::new("toasts"))
+        egui::Area::new(egui::Id::unique("toasts"))
             .anchor(egui::Align2::RIGHT_BOTTOM, egui::vec2(-16.0, -16.0))
             .interactable(true)
             .show(ctx, |ui| {
                 for (i, t) in self.items.iter().enumerate() {
                     egui::Frame::popup(ui.style())
                         .fill(theme::surface())
-                        .stroke(egui::Stroke::new(1.0, t.level.colour()))
+                        .stroke(egui::Stroke::new(1.0, level_colour(t.level)))
                         .show(ui, |ui| {
                             ui.horizontal(|ui| {
-                                ui.label(RichText::new(t.text.clone()).size(12.0).color(t.level.colour()));
+                                ui.label(RichText::new(t.text.clone()).size(12.0).color(level_colour(t.level)));
                                 if ui.small_button("\u{00D7}").clicked() {
                                     dismiss = Some(i);
                                 }
@@ -101,21 +93,9 @@ impl Toasts {
     }
 }
 
-static QUEUE: Mutex<Vec<(Level, String)>> = Mutex::new(Vec::new());
-
-/// Raise a toast from anywhere (network threads included).
-pub fn toast(level: Level, text: impl Into<String>) {
-    if let Ok(mut q) = QUEUE.lock() {
-        q.push((level, text.into()));
-        if q.len() > TOAST_MAX * 4 {
-            q.remove(0);
-        }
-    }
-}
-
 /// Move queued toasts onto the app's list. Returns how many were moved.
 pub fn drain(toasts: &mut Toasts) -> usize {
-    let queued = QUEUE.lock().map(|mut q| std::mem::take(&mut *q)).unwrap_or_default();
+    let queued = crate::notice::take_queued();
     let n = queued.len();
     for (level, text) in queued {
         toasts.push(level, text);

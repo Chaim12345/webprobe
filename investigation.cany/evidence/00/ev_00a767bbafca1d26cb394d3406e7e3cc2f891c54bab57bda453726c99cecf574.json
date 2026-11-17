@@ -1,0 +1,138 @@
+{
+  "id": "ev_00a767bbafca1d26cb394d3406e7e3cc2f891c54bab57bda453726c99cecf574",
+  "subject": {
+    "kind": "java-class",
+    "sha256": "354e401b921ca38b4e33ed89120d8a0fe6d0f4f2527c3eeb1afcfcda50e13ca3",
+    "name": "Ze_f.class"
+  },
+  "operation": "java_method_show",
+  "params": {
+    "class_name": null,
+    "decompile": false,
+    "descriptor": null,
+    "limit": 60,
+    "method_name": "Zr",
+    "offset": 0,
+    "path": "/root/burp-re/in/extract/burp/Ze_f.class"
+  },
+  "result": {
+    "access": [
+      "private"
+    ],
+    "class": "burp.Ze_f",
+    "descriptor": "(Lnet/portswigger/Zwl;Lburp/Zuxr;)Ljava/lang/String;",
+    "entry": "Ze_f.class",
+    "exception_table": [],
+    "instructions": [
+      {
+        "len": 1,
+        "offset": "0000",
+        "opcode": "0x2c",
+        "text": "aload_2"
+      },
+      {
+        "len": 1,
+        "offset": "0001",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "0002",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zuxr.Zt(Lnet/portswigger/Zwl;)Ljava/lang/String;"
+      },
+      {
+        "len": 3,
+        "offset": "0005",
+        "opcode": "0x11",
+        "text": "sipush 3103"
+      },
+      {
+        "len": 3,
+        "offset": "0008",
+        "opcode": "0x11",
+        "text": "sipush 2717"
+      },
+      {
+        "len": 3,
+        "offset": "000b",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Ze_f.a(II)Ljava/lang/String;"
+      },
+      {
+        "len": 1,
+        "offset": "000e",
+        "opcode": "0x5f",
+        "text": "swap"
+      },
+      {
+        "len": 3,
+        "offset": "000f",
+        "opcode": "0x11",
+        "text": "sipush 3102"
+      },
+      {
+        "len": 3,
+        "offset": "0012",
+        "opcode": "0x11",
+        "text": "sipush 12447"
+      },
+      {
+        "len": 3,
+        "offset": "0015",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Ze_f.a(II)Ljava/lang/String;"
+      },
+      {
+        "len": 5,
+        "offset": "0018",
+        "opcode": "0xba",
+        "text": "invokedynamic makeConcatWithConstants(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;"
+      },
+      {
+        "len": 1,
+        "offset": "001d",
+        "opcode": "0xb0",
+        "text": "areturn"
+      }
+    ],
+    "instructions_total": 12,
+    "listing": "0000: aload_2\n0001: aload_1\n0002: invokevirtual burp.Zuxr.Zt(Lnet/portswigger/Zwl;)Ljava/lang/String;\n0005: sipush 3103\n0008: sipush 2717\n000b: invokestatic burp.Ze_f.a(II)Ljava/lang/String;\n000e: swap\n000f: sipush 3102\n0012: sipush 12447\n0015: invokestatic burp.Ze_f.a(II)Ljava/lang/String;\n0018: invokedynamic makeConcatWithConstants(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;\n001d: areturn",
+    "max_locals": 3,
+    "max_stack": 4,
+    "method": "burp.Ze_f.Zr(Lnet/portswigger/Zwl;Lburp/Zuxr;)Ljava/lang/String;",
+    "overloads": [
+      "(Lnet/portswigger/Zwl;Lburp/Zuxr;)Ljava/lang/String;"
+    ],
+    "pseudo_java": null,
+    "signature": "private java.lang.String Zr(net.portswigger.Zwl, burp.Zuxr)",
+    "throws": []
+  },
+  "summary": "burp.Ze_f.Zr(Lnet/portswigger/Zwl;Lburp/Zuxr;)Ljava/lang/String; (Ze_f.class): 12 instructions.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 12,
+    "total": 12
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/root/burp-re/in/extract/burp/Ze_f.class"
+    },
+    {
+      "kind": "method",
+      "value": "burp.Ze_f.Zr(Lnet/portswigger/Zwl;Lburp/Zuxr;)Ljava/lang/String;"
+    }
+  ],
+  "links": []
+}

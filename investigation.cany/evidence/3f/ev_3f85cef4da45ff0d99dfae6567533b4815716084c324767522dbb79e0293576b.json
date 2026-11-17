@@ -1,0 +1,209 @@
+{
+  "id": "ev_3f85cef4da45ff0d99dfae6567533b4815716084c324767522dbb79e0293576b",
+  "subject": {
+    "kind": "jar",
+    "sha256": "510bf1c87c766f09c3c20d3ef75e7a6978e60dd38346965dd4836ce64417becf",
+    "name": "burpsuite.jar"
+  },
+  "operation": "java_class_show",
+  "params": {
+    "class_name": "burp.Zmqs",
+    "decompile": false,
+    "path": null
+  },
+  "result": {
+    "access": [],
+    "annotations": [],
+    "entry": "burp/Zmqs.class",
+    "fields": [
+      {
+        "access": [
+          "private",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Zf5z;",
+        "name": "ZZ",
+        "signature": null,
+        "type": "burp.Zf5z"
+      },
+      {
+        "access": [
+          "private"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Lburp/Z_wf;",
+        "name": "Zy",
+        "signature": null,
+        "type": "burp.Z_wf"
+      }
+    ],
+    "inner_classes": [],
+    "interfaces": [
+      "burp.Zfbs"
+    ],
+    "internal": "burp/Zmqs",
+    "java_version": "Java 21",
+    "methods": [
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 10,
+        "deprecated": false,
+        "descriptor": "(Lburp/Zf5z;)V",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "<init>",
+        "signature": "public <init>(burp.Zf5z)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 4,
+        "deprecated": false,
+        "descriptor": "()Lburp/Zt7o;",
+        "max_locals": 1,
+        "max_stack": 1,
+        "name": "Ztt",
+        "signature": "public burp.Zt7o Ztt()",
+        "signature_attr": "()Lburp/Zt7o<+Lburp/Zfbs;>;",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 108,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;)V",
+        "max_locals": 5,
+        "max_stack": 3,
+        "name": "Zwm",
+        "signature": "public void Zwm(java.lang.String)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 2
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 22,
+        "deprecated": false,
+        "descriptor": "()Ljava/lang/String;",
+        "max_locals": 3,
+        "max_stack": 2,
+        "name": "toString",
+        "signature": "public java.lang.String toString()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 2
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 25,
+        "deprecated": false,
+        "descriptor": "(Lburp/Zdsl;)Lburp/Zklf;",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "ZW",
+        "signature": "public burp.Zklf ZW(burp.Zdsl)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 6,
+        "deprecated": false,
+        "descriptor": "()V",
+        "max_locals": 1,
+        "max_stack": 2,
+        "name": "ZZg",
+        "signature": "public void ZZg()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public"
+        ],
+        "code_bytes": 8,
+        "deprecated": false,
+        "descriptor": "(Lburp/Zer3;)V",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "ZQ",
+        "signature": "public void ZQ(burp.Zer3)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "public",
+          "bridge",
+          "synthetic"
+        ],
+        "code_bytes": 6,
+        "deprecated": false,
+        "descriptor": "(Lburp/Zdsl;)Lburp/Zfg0;",
+        "max_locals": 2,
+        "max_stack": 2,
+        "name": "Zx",
+        "signature": "public bridge synthetic burp.Zfg0 Zx(burp.Zdsl)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      }
+    ],
+    "name": "burp.Zmqs",
+    "pseudo_java": null,
+    "signature": null,
+    "source_file": null,
+    "superclass": "burp.Zmde",
+    "version": {
+      "major": 65,
+      "minor": 0
+    }
+  },
+  "summary": "burp.Zmqs (Java 21) extends burp.Zmde: 2 fields, 8 methods.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 1,
+    "total": 1
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/opt/BurpSuite/burpsuite.jar"
+    },
+    {
+      "kind": "class",
+      "value": "burp/Zmqs"
+    }
+  ],
+  "links": []
+}

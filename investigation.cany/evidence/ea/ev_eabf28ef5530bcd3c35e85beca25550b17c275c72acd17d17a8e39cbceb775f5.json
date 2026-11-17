@@ -1,0 +1,427 @@
+{
+  "id": "ev_eabf28ef5530bcd3c35e85beca25550b17c275c72acd17d17a8e39cbceb775f5",
+  "subject": {
+    "kind": "java-class",
+    "sha256": "961ee243f0f599b6e21ecc8f7072e1d0bf167c810d5f2518b541604ec968f6ed",
+    "name": "Zc3f.class"
+  },
+  "operation": "java_method_show",
+  "params": {
+    "class_name": null,
+    "decompile": false,
+    "descriptor": null,
+    "limit": 60,
+    "method_name": "Zi",
+    "offset": 0,
+    "path": "/root/burp-re/in/extract/burp/Zc3f.class"
+  },
+  "result": {
+    "access": [
+      "public"
+    ],
+    "class": "burp.Zc3f",
+    "descriptor": "(Lburp/Zgx0;)Lburp/Ze1v;",
+    "entry": "Zc3f.class",
+    "exception_table": [],
+    "instructions": [
+      {
+        "len": 1,
+        "offset": "0000",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0001",
+        "opcode": "0xb4",
+        "text": "getfield burp.Zc3f.Za:burp.Zedv"
+      },
+      {
+        "len": 1,
+        "offset": "0004",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "0005",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zedv.ZQ(Lburp/Zgx0;)Lburp/Zpu2;"
+      },
+      {
+        "len": 1,
+        "offset": "0008",
+        "opcode": "0x4d",
+        "text": "astore_2"
+      },
+      {
+        "len": 3,
+        "offset": "0009",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zegx.Zt:java.util.List"
+      },
+      {
+        "len": 1,
+        "offset": "000c",
+        "opcode": "0x2c",
+        "text": "aload_2"
+      },
+      {
+        "len": 3,
+        "offset": "000d",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zpu2.ZC(Ljava/util/List;Lburp/Zpu2;)Z"
+      },
+      {
+        "len": 3,
+        "offset": "0010",
+        "opcode": "0x99",
+        "text": "ifeq 47"
+      },
+      {
+        "len": 3,
+        "offset": "0013",
+        "opcode": "0xbb",
+        "text": "new burp.Zbiw"
+      },
+      {
+        "len": 1,
+        "offset": "0016",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 3,
+        "offset": "0017",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zs_g.XML_INJECTION:burp.Zs_g"
+      },
+      {
+        "len": 1,
+        "offset": "001a",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "001b",
+        "opcode": "0xb4",
+        "text": "getfield burp.Zc3f.ZS:net.portswigger.Zo1"
+      },
+      {
+        "len": 1,
+        "offset": "001e",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "001f",
+        "opcode": "0xb4",
+        "text": "getfield burp.Zc3f.Zy:int"
+      },
+      {
+        "len": 1,
+        "offset": "0022",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0023",
+        "opcode": "0xb4",
+        "text": "getfield burp.Zc3f.ZT:int"
+      },
+      {
+        "len": 1,
+        "offset": "0026",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0027",
+        "opcode": "0xb4",
+        "text": "getfield burp.Zc3f.Ze:burp.Zie"
+      },
+      {
+        "len": 1,
+        "offset": "002a",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "002b",
+        "opcode": "0xb7",
+        "text": "invokespecial burp.Zbiw.<init>(Lburp/Zs_g;Lnet/portswigger/Zo1;IILburp/Zie;Lburp/Zgx0;)V"
+      },
+      {
+        "len": 1,
+        "offset": "002e",
+        "opcode": "0xb0",
+        "text": "areturn"
+      },
+      {
+        "len": 3,
+        "offset": "002f",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zeg3.Zm:java.util.List"
+      },
+      {
+        "len": 1,
+        "offset": "0032",
+        "opcode": "0x2c",
+        "text": "aload_2"
+      },
+      {
+        "len": 3,
+        "offset": "0033",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zpu2.ZC(Ljava/util/List;Lburp/Zpu2;)Z"
+      },
+      {
+        "len": 3,
+        "offset": "0036",
+        "opcode": "0x99",
+        "text": "ifeq 85"
+      },
+      {
+        "len": 3,
+        "offset": "0039",
+        "opcode": "0xbb",
+        "text": "new burp.Ze_f"
+      },
+      {
+        "len": 1,
+        "offset": "003c",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 3,
+        "offset": "003d",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zs_g.XML_INJECTION:burp.Zs_g"
+      },
+      {
+        "len": 1,
+        "offset": "0040",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0041",
+        "opcode": "0xb4",
+        "text": "getfield burp.Zc3f.ZS:net.portswigger.Zo1"
+      },
+      {
+        "len": 1,
+        "offset": "0044",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0045",
+        "opcode": "0xb4",
+        "text": "getfield burp.Zc3f.Zy:int"
+      },
+      {
+        "len": 1,
+        "offset": "0048",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0049",
+        "opcode": "0xb4",
+        "text": "getfield burp.Zc3f.ZT:int"
+      },
+      {
+        "len": 1,
+        "offset": "004c",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "004d",
+        "opcode": "0xb4",
+        "text": "getfield burp.Zc3f.Ze:burp.Zie"
+      },
+      {
+        "len": 1,
+        "offset": "0050",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "0051",
+        "opcode": "0xb7",
+        "text": "invokespecial burp.Ze_f.<init>(Lburp/Zs_g;Lnet/portswigger/Zo1;IILburp/Zie;Lburp/Zgx0;)V"
+      },
+      {
+        "len": 1,
+        "offset": "0054",
+        "opcode": "0xb0",
+        "text": "areturn"
+      },
+      {
+        "len": 1,
+        "offset": "0055",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 3,
+        "offset": "0056",
+        "opcode": "0xb2",
+        "text": "getstatic net.portswigger.Zzd.Zx:net.portswigger.Zzd"
+      },
+      {
+        "len": 1,
+        "offset": "0059",
+        "opcode": "0x2c",
+        "text": "aload_2"
+      },
+      {
+        "len": 3,
+        "offset": "005a",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zpu2.ZQ()I"
+      },
+      {
+        "len": 1,
+        "offset": "005d",
+        "opcode": "0x85",
+        "text": "i2l"
+      },
+      {
+        "len": 3,
+        "offset": "005e",
+        "opcode": "0xb8",
+        "text": "invokestatic net.portswigger.Zp2.Zl(ZLnet/portswigger/Zzd;J)V"
+      },
+      {
+        "len": 3,
+        "offset": "0061",
+        "opcode": "0xbb",
+        "text": "new burp.Zbiw"
+      },
+      {
+        "len": 1,
+        "offset": "0064",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 3,
+        "offset": "0065",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zs_g.XML_INJECTION:burp.Zs_g"
+      },
+      {
+        "len": 1,
+        "offset": "0068",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0069",
+        "opcode": "0xb4",
+        "text": "getfield burp.Zc3f.ZS:net.portswigger.Zo1"
+      },
+      {
+        "len": 1,
+        "offset": "006c",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "006d",
+        "opcode": "0xb4",
+        "text": "getfield burp.Zc3f.Zy:int"
+      },
+      {
+        "len": 1,
+        "offset": "0070",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0071",
+        "opcode": "0xb4",
+        "text": "getfield burp.Zc3f.ZT:int"
+      },
+      {
+        "len": 1,
+        "offset": "0074",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0075",
+        "opcode": "0xb4",
+        "text": "getfield burp.Zc3f.Ze:burp.Zie"
+      },
+      {
+        "len": 1,
+        "offset": "0078",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "0079",
+        "opcode": "0xb7",
+        "text": "invokespecial burp.Zbiw.<init>(Lburp/Zs_g;Lnet/portswigger/Zo1;IILburp/Zie;Lburp/Zgx0;)V"
+      }
+    ],
+    "instructions_total": 61,
+    "listing": "0000: aload_0\n0001: getfield burp.Zc3f.Za:burp.Zedv\n0004: aload_1\n0005: invokevirtual burp.Zedv.ZQ(Lburp/Zgx0;)Lburp/Zpu2;\n0008: astore_2\n0009: getstatic burp.Zegx.Zt:java.util.List\n000c: aload_2\n000d: invokestatic burp.Zpu2.ZC(Ljava/util/List;Lburp/Zpu2;)Z\n0010: ifeq 47\n0013: new burp.Zbiw\n0016: dup\n0017: getstatic burp.Zs_g.XML_INJECTION:burp.Zs_g\n001a: aload_0\n001b: getfield burp.Zc3f.ZS:net.portswigger.Zo1\n001e: aload_0\n001f: getfield burp.Zc3f.Zy:int\n0022: aload_0\n0023: getfield burp.Zc3f.ZT:int\n0026: aload_0\n0027: getfield burp.Zc3f.Ze:burp.Zie\n002a: aload_1\n002b: invokespecial burp.Zbiw.<init>(Lburp/Zs_g;Lnet/portswigger/Zo1;IILburp/Zie;Lburp/Zgx0;)V\n002e: areturn\n002f: getstatic burp.Zeg3.Zm:java.util.List\n0032: aload_2\n0033: invokestatic burp.Zpu2.ZC(Ljava/util/List;Lburp/Zpu2;)Z\n0036: ifeq 85\n0039: new burp.Ze_f\n003c: dup\n003d: getstatic burp.Zs_g.XML_INJECTION:burp.Zs_g\n0040: aload_0\n0041: getfield burp.Zc3f.ZS:net.portswigger.Zo1\n0044: aload_0\n0045: getfield burp.Zc3f.Zy:int\n0048: aload_0\n0049: getfield burp.Zc3f.ZT:int\n004c: aload_0\n004d: getfield burp.Zc3f.Ze:burp.Zie\n0050: aload_1\n0051: invokespecial burp.Ze_f.<init>(Lburp/Zs_g;Lnet/portswigger/Zo1;IILburp/Zie;Lburp/Zgx0;)V\n0054: areturn\n0055: iconst_0\n0056: getstatic net.portswigger.Zzd.Zx:net.portswigger.Zzd\n0059: aload_2\n005a: invokevirtual burp.Zpu2.ZQ()I\n005d: i2l\n005e: invokestatic net.portswigger.Zp2.Zl(ZLnet/portswigger/Zzd;J)V\n0061: new burp.Zbiw\n0064: dup\n0065: getstatic burp.Zs_g.XML_INJECTION:burp.Zs_g\n0068: aload_0\n0069: getfield burp.Zc3f.ZS:net.portswigger.Zo1\n006c: aload_0\n006d: getfield burp.Zc3f.Zy:int\n0070: aload_0\n0071: getfield burp.Zc3f.ZT:int\n0074: aload_0\n0075: getfield burp.Zc3f.Ze:burp.Zie\n0078: aload_1\n0079: invokespecial burp.Zbiw.<init>(Lburp/Zs_g;Lnet/portswigger/Zo1;IILburp/Zie;Lburp/Zgx0;)V",
+    "max_locals": 3,
+    "max_stack": 8,
+    "method": "burp.Zc3f.Zi(Lburp/Zgx0;)Lburp/Ze1v;",
+    "overloads": [
+      "(Lburp/Zgx0;)Lburp/Ze1v;"
+    ],
+    "pseudo_java": null,
+    "signature": "public burp.Ze1v Zi(burp.Zgx0)",
+    "throws": []
+  },
+  "summary": "burp.Zc3f.Zi(Lburp/Zgx0;)Lburp/Ze1v; (Zc3f.class): 61 instructions.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "partial",
+    "examined": 60,
+    "total": 61,
+    "next_offset": 60
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/root/burp-re/in/extract/burp/Zc3f.class"
+    },
+    {
+      "kind": "method",
+      "value": "burp.Zc3f.Zi(Lburp/Zgx0;)Lburp/Ze1v;"
+    }
+  ],
+  "links": []
+}

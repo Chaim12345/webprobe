@@ -9,7 +9,7 @@
 use eframe::egui::{self, RichText, Ui};
 
 use crate::collaborator::{
-    CollaboratorState, InteractionDetail, InteractionKind, Interaction, MAX_INTERACTIONS,
+    CollaboratorState, InteractionDetail, InteractionKind, Interaction,
     MAX_PAYLOADS,
 };
 use crate::theme::{self, c};
@@ -69,6 +69,7 @@ fn listener_notes(ui: &mut Ui, protocol: &str) {
 /// Collaborator / Response from Collaborator. Server and listener settings
 /// sit behind the gear.
 pub fn show(state: &mut CollaboratorState, ui: &mut egui::Ui) {
+    poll_registration(state, ui);
     if !state.ui_started {
         ui.add_space(ui.available_height() * 0.25);
         ui.vertical_centered(|ui| {
@@ -118,7 +119,7 @@ pub fn show(state: &mut CollaboratorState, ui: &mut egui::Ui) {
     });
     ui.add_space(6.0);
     if state.ui_settings {
-        egui::Frame::none().fill(theme::chrome()).stroke(egui::Stroke::new(1.0, theme::line())).inner_margin(egui::Margin::same(8.0)).show(ui, |ui| {
+        egui::Frame::NONE.fill(theme::chrome()).stroke(egui::Stroke::new(1.0, theme::line())).inner_margin(egui::Margin::same(8)).show(ui, |ui| {
             settings_panel(state, ui);
         });
         ui.add_space(6.0);
@@ -133,7 +134,10 @@ pub fn show(state: &mut CollaboratorState, ui: &mut egui::Ui) {
     ];
     let mut selected = state.selected;
     let full = ui.available_height();
-    let mut tbl = state.table.clone();
+    // Sort/width state of the interaction table is UI state: it lives in
+    // egui's memory, not in the Collaborator engine.
+    let tbl_id = egui::Id::unique("collaborator-interactions-table");
+    let mut tbl: crate::table::TableState = ui.data_mut(|d| d.get_temp(tbl_id)).unwrap_or_default();
     egui_extras::StripBuilder::new(ui)
         .size(egui_extras::Size::relative(0.45))
         .size(egui_extras::Size::remainder())
@@ -165,7 +169,7 @@ pub fn show(state: &mut CollaboratorState, ui: &mut egui::Ui) {
                 let Some(i) = selected.and_then(|id| interactions.iter().find(|x| x.id == id)) else {
                     if interactions.is_empty() {
                         ui.add_space(10.0);
-                        ui.label(RichText::new(if state.remote_server().is_some() { "No interactions yet. Payloads are polled every 3 seconds; click Poll now to check immediately." } else { "No interactions yet. Copy a payload, use it in a request, then poll. Configure a server with the gear." }).size(12.5).color(theme::ink_dim()));
+                        ui.label(RichText::new(if state.remote_server().is_some() { format!("No interactions yet. The server is polled every {} s; click Poll now to check immediately.", state.poll_secs()) } else { "No interactions yet. Copy a payload, use it in a request, then poll. Configure a server with the gear.".to_string() }).size(12.5).color(theme::ink_dim()));
                     }
                     return;
                 };
@@ -198,43 +202,86 @@ pub fn show(state: &mut CollaboratorState, ui: &mut egui::Ui) {
                 });
             });
         });
-    state.table = tbl;
+    ui.data_mut(|d| d.insert_temp(tbl_id, tbl));
     state.selected = selected;
 }
 
 /// Server and listener configuration (the gear in Burp's client).
-fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
+/// Report a finished background registration (called by both views).
+fn poll_registration(state: &mut CollaboratorState, ui: &egui::Ui) {
+    match state.finish_registration() {
+        Some(Ok(d)) => crate::feedback::toast(crate::feedback::Level::Info, format!("Collaborator registered on {d}")),
+        Some(Err(e)) => crate::feedback::toast(crate::feedback::Level::Error, format!("Collaborator server: {e}")),
+        None if state.is_registering() => ui.ctx().request_repaint_after(std::time::Duration::from_millis(200)),
+        None => {}
+    }
+}
+
+pub(crate) fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
+    poll_registration(state, ui);
     hint(
         ui,
-        "Use a public interactsh server so targets on the internet can reach the payloads (DNS, HTTP and SMTP, polled every 3 s); the loopback listeners only see traffic from this machine.",
+        "Use a public interactsh server, or your own (see docs/collaborator-private-server.md), so targets on the internet can reach the payloads (DNS, HTTP and SMTP); the loopback listeners only see traffic from this machine.",
     );
     ui.add_space(6.0);
 
     // ------------------------- Public server (interactsh) -------------
     ui.group(|ui| {
-        ui.label(RichText::new("Public server (interactsh)").size(13.0).strong().color(c(theme::ORANGE)));
+        ui.label(RichText::new("Collaborator server (interactsh)").size(13.0).strong().color(c(theme::ORANGE)));
         let active = state.remote_server();
         ui.horizontal(|ui| {
+            ui.add_enabled(
+                active.is_none(),
+                egui::TextEdit::singleline(&mut state.remote_choice).desired_width(200.0).hint_text("host or host:port"),
+            )
+            .on_hover_text("A public server from the list, or your own interactsh-server (host or host:port, HTTPS)");
             egui::ComboBox::from_id_salt("collab_remote_server")
-                .selected_text(state.remote_choice.clone())
+                .selected_text("Public")
+                .width(70.0)
                 .show_ui(ui, |ui| {
                     for srv in crate::interactsh::DEFAULT_SERVERS {
                         ui.selectable_value(&mut state.remote_choice, srv.to_string(), srv);
                     }
                 });
-            if active.is_some() {
+            if active.is_some() || state.is_registering() {
                 if ui.button("Stop").clicked() {
                     state.stop_remote();
                 }
-            } else if ui.button("Use public server").clicked() {
-                let choice = state.remote_choice.clone();
-                match state.start_remote(&choice) {
-                    Ok(d) => crate::feedback::toast(crate::feedback::Level::Info, &format!("Collaborator registered on {d}")),
-                    Err(e) => crate::feedback::toast(crate::feedback::Level::Error, &e),
+                if state.is_registering() {
+                    ui.spinner();
+                    ui.label(RichText::new("Registering...").size(12.0).color(c(theme::MONO6)));
                 }
+            } else if ui.button("Use server").clicked() {
+                let choice = state.remote_choice.clone();
+                state.start_remote_in_background(&choice);
             }
         });
-        status_label(ui, active.is_some(), "public payloads", active.map(|d| format!("*.{d}")));
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("Auth token").size(12.0).color(c(theme::MONO6)));
+            ui.add_enabled(
+                active.is_none(),
+                egui::TextEdit::singleline(&mut state.remote_token).password(true).desired_width(200.0).hint_text("only for a private server"),
+            )
+            .on_hover_text("Sent as the Authorization header to a server started with -auth or -token");
+        });
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("Poll every").size(12.0).color(c(theme::MONO6)));
+            let mut secs = state.poll_secs();
+            if ui.add(egui::DragValue::new(&mut secs).range(1..=3600).suffix(" s")).changed() {
+                state.set_poll_secs(secs);
+            }
+            ui.add_space(12.0);
+            ui.label(RichText::new("Keep interactions for").size(12.0).color(c(theme::MONO6)));
+            let mut mins = state.retention_secs() / 60;
+            if ui
+                .add(egui::DragValue::new(&mut mins).range(0..=10_080).custom_formatter(|v, _| if v == 0.0 { "ever".into() } else { format!("{v} min") }))
+                .on_hover_text("0 keeps them until the 500-interaction limit")
+                .changed()
+            {
+                state.set_retention_secs(mins * 60);
+            }
+        });
+        status_label(ui, active.is_some(), "server payloads", active.map(|d| format!("*.{d}")));
         error_label(ui, state.remote_error());
     });
     ui.add_space(6.0);
@@ -274,8 +321,8 @@ fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
         }
         if want_start {
             match state.start_http() {
-                Ok(_) => {}
-                Err(_) => {}
+                Ok(_) => crate::feedback::toast(crate::feedback::Level::Success, "Collaborator HTTP listener started"),
+                Err(e) => crate::feedback::toast(crate::feedback::Level::Error, format!("Collaborator HTTP listener failed: {e}")),
             }
         }
         let running_now = state.http.is_running();
@@ -322,8 +369,8 @@ fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
         }
         if want_start {
             match state.start_dns() {
-                Ok(_) => {}
-                Err(_) => {}
+                Ok(_) => crate::feedback::toast(crate::feedback::Level::Success, "Collaborator DNS listener started"),
+                Err(e) => crate::feedback::toast(crate::feedback::Level::Error, format!("Collaborator DNS listener failed: {e}")),
             }
         }
         let running_now = state.dns.is_running();

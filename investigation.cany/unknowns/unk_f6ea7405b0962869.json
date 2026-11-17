@@ -1,14 +1,18 @@
 {
   "id": "unk_f6ea7405b0962869",
-  "revision": 1,
+  "revision": 4,
   "question": "What rule does Burp 52685s browser crawler use to choose which links to visit? It skipped /ftp/legal.md and /ftp/announcement_encrypted.md on Juice Shop and followed no links on a plain test site.",
   "severity": "medium",
   "domain": "general",
-  "status": "open",
+  "status": "resolved",
   "probes": [
     "Capture the crawler browser traffic and DevTools events during a crawl (Burp crawl logging_directory option)",
     "Vary Content-Type and Content-Disposition of linked downloads in the test site"
   ],
-  "evidence_for": [],
-  "evidence_against": []
+  "evidence_for": [
+    "ev_5bdaa08d8a597502fcfca6861c56e873c8d7e4cab19863e2aaef6f6376d64ff1",
+    "ev_deca062d2b53dd8157077270342a9d64038e42a7ab128e276e062f3e14d15084"
+  ],
+  "evidence_against": [],
+  "resolution": "RESOLVED (2026-11-16): the rule is Burp's crawl strategy (enum burp.Zmqs, default NORMAL). Its link-pruning tolerances (unmatchedAnchorTolerance=2, total unmatched actions 2, URL-action masking threshold 1, maxLocationsPerUrl=10) make the crawler skip links whose action descriptors match ones already explored. /ftp/legal.md and /ftp/announcement_encrypted.md fall under that. An uncapped fresh-project Burp crawl of Juice visits the same 21 locations, so the 10-minute cap was not the cause. The 'no links on a plain test site' observation came from the legacy crawler (browser disabled as root). See fnd_82. WebProbe follows every link (a superset); porting the masking itself needs the crawl-graph engine (net.portswigger.crawlgraph), which is not decompiled."
 }

@@ -1,0 +1,372 @@
+{
+  "id": "ev_f5c8ae9972297cb5b034418c0c22035f88f2bf3fa6ca703c7abcbd883879bf9c",
+  "subject": {
+    "kind": "java-class",
+    "sha256": "ca817388a408354cc1f1f8569aa3a81e0c3a89f90ce58b870b0675e39bf22a04",
+    "name": "Zmh4.class"
+  },
+  "operation": "java_method_show",
+  "params": {
+    "class_name": null,
+    "decompile": false,
+    "descriptor": null,
+    "limit": 60,
+    "method_name": "ZT",
+    "offset": 0,
+    "path": "/root/burp-re/in/extract/burp/Zmh4.class"
+  },
+  "result": {
+    "access": [
+      "public"
+    ],
+    "class": "burp.Zmh4",
+    "descriptor": "(B)Lburp/Zh38;",
+    "entry": "Zmh4.class",
+    "exception_table": [],
+    "instructions": [
+      {
+        "len": 1,
+        "offset": "0000",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0001",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zmh4.Zy()[B"
+      },
+      {
+        "len": 1,
+        "offset": "0004",
+        "opcode": "0x4e",
+        "text": "astore_3"
+      },
+      {
+        "len": 3,
+        "offset": "0005",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zr54.Zo()[Ljava/lang/String;"
+      },
+      {
+        "len": 1,
+        "offset": "0008",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 1,
+        "offset": "0009",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "000a",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zmh4.Zy()[B"
+      },
+      {
+        "len": 3,
+        "offset": "000d",
+        "opcode": "0xb5",
+        "text": "putfield burp.Zmh4.Zs:byte[]"
+      },
+      {
+        "len": 1,
+        "offset": "0010",
+        "opcode": "0x06",
+        "text": "iconst_3"
+      },
+      {
+        "len": 3,
+        "offset": "0011",
+        "opcode": "0xbd",
+        "text": "anewarray byte[]"
+      },
+      {
+        "len": 1,
+        "offset": "0014",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "0015",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 1,
+        "offset": "0016",
+        "opcode": "0x2d",
+        "text": "aload_3"
+      },
+      {
+        "len": 1,
+        "offset": "0017",
+        "opcode": "0x53",
+        "text": "aastore"
+      },
+      {
+        "len": 1,
+        "offset": "0018",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "0019",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 3,
+        "offset": "001a",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zrmh.Zi:byte[]"
+      },
+      {
+        "len": 1,
+        "offset": "001d",
+        "opcode": "0x53",
+        "text": "aastore"
+      },
+      {
+        "len": 1,
+        "offset": "001e",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "001f",
+        "opcode": "0x05",
+        "text": "iconst_2"
+      },
+      {
+        "len": 1,
+        "offset": "0020",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0021",
+        "opcode": "0xb4",
+        "text": "getfield burp.Zmh4.Zs:byte[]"
+      },
+      {
+        "len": 1,
+        "offset": "0024",
+        "opcode": "0x53",
+        "text": "aastore"
+      },
+      {
+        "len": 3,
+        "offset": "0025",
+        "opcode": "0xb8",
+        "text": "invokestatic net.portswigger.Zru.ZO([[B)[B"
+      },
+      {
+        "len": 2,
+        "offset": "0028",
+        "opcode": "0x3a",
+        "text": "astore 4"
+      },
+      {
+        "len": 1,
+        "offset": "002a",
+        "opcode": "0x4d",
+        "text": "astore_2"
+      },
+      {
+        "len": 1,
+        "offset": "002b",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 1,
+        "offset": "002c",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "002d",
+        "opcode": "0xb4",
+        "text": "getfield burp.Zmh4.ZB:burp.Zehl"
+      },
+      {
+        "len": 2,
+        "offset": "0030",
+        "opcode": "0x19",
+        "text": "aload 4"
+      },
+      {
+        "len": 1,
+        "offset": "0032",
+        "opcode": "0x1b",
+        "text": "iload_1"
+      },
+      {
+        "len": 5,
+        "offset": "0033",
+        "opcode": "0xb9",
+        "text": "invokeinterface burp.Zehl.ZC([BB)Lburp/Zbtt;"
+      },
+      {
+        "len": 3,
+        "offset": "0038",
+        "opcode": "0xb5",
+        "text": "putfield burp.Zmh4.Zv:burp.Zbtt"
+      },
+      {
+        "len": 3,
+        "offset": "003b",
+        "opcode": "0xbb",
+        "text": "new burp.Z_y"
+      },
+      {
+        "len": 1,
+        "offset": "003e",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "003f",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0040",
+        "opcode": "0xb4",
+        "text": "getfield burp.Zmh4.ZB:burp.Zehl"
+      },
+      {
+        "len": 1,
+        "offset": "0043",
+        "opcode": "0x1b",
+        "text": "iload_1"
+      },
+      {
+        "len": 2,
+        "offset": "0044",
+        "opcode": "0x19",
+        "text": "aload 4"
+      },
+      {
+        "len": 1,
+        "offset": "0046",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 1,
+        "offset": "0047",
+        "opcode": "0x05",
+        "text": "iconst_2"
+      },
+      {
+        "len": 3,
+        "offset": "0048",
+        "opcode": "0xb7",
+        "text": "invokespecial burp.Z_y.<init>(Lburp/Zehl;B[BBB)V"
+      },
+      {
+        "len": 1,
+        "offset": "004b",
+        "opcode": "0x2d",
+        "text": "aload_3"
+      },
+      {
+        "len": 3,
+        "offset": "004c",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zpfn.Zj([B)Lburp/Zpfn;"
+      },
+      {
+        "len": 3,
+        "offset": "004f",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Z_y.ZZ(Lburp/Zp8u;)Lburp/Zh38;"
+      },
+      {
+        "len": 3,
+        "offset": "0052",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zrop.ZlM()[Lburp/Zrop;"
+      },
+      {
+        "len": 3,
+        "offset": "0055",
+        "opcode": "0xc6",
+        "text": "ifnull 95"
+      },
+      {
+        "len": 1,
+        "offset": "0058",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 3,
+        "offset": "0059",
+        "opcode": "0xbd",
+        "text": "anewarray java.lang.String"
+      },
+      {
+        "len": 3,
+        "offset": "005c",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zr54.ZP([Ljava/lang/String;)V"
+      },
+      {
+        "len": 1,
+        "offset": "005f",
+        "opcode": "0xb0",
+        "text": "areturn"
+      }
+    ],
+    "instructions_total": 51,
+    "listing": "0000: aload_0\n0001: invokevirtual burp.Zmh4.Zy()[B\n0004: astore_3\n0005: invokestatic burp.Zr54.Zo()[Ljava/lang/String;\n0008: aload_0\n0009: aload_0\n000a: invokevirtual burp.Zmh4.Zy()[B\n000d: putfield burp.Zmh4.Zs:byte[]\n0010: iconst_3\n0011: anewarray byte[]\n0014: dup\n0015: iconst_0\n0016: aload_3\n0017: aastore\n0018: dup\n0019: iconst_1\n001a: getstatic burp.Zrmh.Zi:byte[]\n001d: aastore\n001e: dup\n001f: iconst_2\n0020: aload_0\n0021: getfield burp.Zmh4.Zs:byte[]\n0024: aastore\n0025: invokestatic net.portswigger.Zru.ZO([[B)[B\n0028: astore 4\n002a: astore_2\n002b: aload_0\n002c: aload_0\n002d: getfield burp.Zmh4.ZB:burp.Zehl\n0030: aload 4\n0032: iload_1\n0033: invokeinterface burp.Zehl.ZC([BB)Lburp/Zbtt;\n0038: putfield burp.Zmh4.Zv:burp.Zbtt\n003b: new burp.Z_y\n003e: dup\n003f: aload_0\n0040: getfield burp.Zmh4.ZB:burp.Zehl\n0043: iload_1\n0044: aload 4\n0046: iconst_1\n0047: iconst_2\n0048: invokespecial burp.Z_y.<init>(Lburp/Zehl;B[BBB)V\n004b: aload_3\n004c: invokestatic burp.Zpfn.Zj([B)Lburp/Zpfn;\n004f: invokevirtual burp.Z_y.ZZ(Lburp/Zp8u;)Lburp/Zh38;\n0052: invokestatic burp.Zrop.ZlM()[Lburp/Zrop;\n0055: ifnull 95\n0058: iconst_1\n0059: anewarray java.lang.String\n005c: invokestatic burp.Zr54.ZP([Ljava/lang/String;)V\n005f: areturn",
+    "max_locals": 5,
+    "max_stack": 7,
+    "method": "burp.Zmh4.ZT(B)Lburp/Zh38;",
+    "overloads": [
+      "(B)Lburp/Zh38;"
+    ],
+    "pseudo_java": null,
+    "signature": "public burp.Zh38 ZT(byte)",
+    "throws": []
+  },
+  "summary": "burp.Zmh4.ZT(B)Lburp/Zh38; (Zmh4.class): 51 instructions.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 51,
+    "total": 51
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/root/burp-re/in/extract/burp/Zmh4.class"
+    },
+    {
+      "kind": "method",
+      "value": "burp.Zmh4.ZT(B)Lburp/Zh38;"
+    }
+  ],
+  "links": []
+}

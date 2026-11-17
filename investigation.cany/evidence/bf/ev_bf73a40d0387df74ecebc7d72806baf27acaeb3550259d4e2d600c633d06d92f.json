@@ -1,0 +1,534 @@
+{
+  "id": "ev_bf73a40d0387df74ecebc7d72806baf27acaeb3550259d4e2d600c633d06d92f",
+  "subject": {
+    "kind": "java-class",
+    "sha256": "72ec6d372c61cd797c8dca8a98ac6f993a0ac0d1e1cdeb699b3954951b382c13",
+    "name": "Zrmh.class"
+  },
+  "operation": "java_method_show",
+  "params": {
+    "class_name": null,
+    "decompile": true,
+    "descriptor": null,
+    "limit": 400,
+    "method_name": "<clinit>",
+    "offset": 0,
+    "path": "/root/burp-re/in/extract/burp/Zrmh.class"
+  },
+  "result": {
+    "access": [
+      "static"
+    ],
+    "class": "burp.Zrmh",
+    "descriptor": "()V",
+    "entry": "Zrmh.class",
+    "exception_table": [],
+    "instructions": [
+      {
+        "len": 2,
+        "offset": "0000",
+        "opcode": "0x10",
+        "text": "bipush 61"
+      },
+      {
+        "len": 2,
+        "offset": "0002",
+        "opcode": "0x12",
+        "text": "ldc \"T9m^\\u{1f}O_\\u{18}l<JJ\\u{5}\""
+      },
+      {
+        "len": 1,
+        "offset": "0004",
+        "opcode": "0x02",
+        "text": "iconst_m1"
+      },
+      {
+        "len": 3,
+        "offset": "0005",
+        "opcode": "0xa7",
+        "text": "goto 12"
+      },
+      {
+        "len": 1,
+        "offset": "0008",
+        "opcode": "0x4b",
+        "text": "astore_0"
+      },
+      {
+        "len": 3,
+        "offset": "0009",
+        "opcode": "0xa7",
+        "text": "goto 154"
+      },
+      {
+        "len": 1,
+        "offset": "000c",
+        "opcode": "0x5b",
+        "text": "dup_x2"
+      },
+      {
+        "len": 1,
+        "offset": "000d",
+        "opcode": "0x57",
+        "text": "pop"
+      },
+      {
+        "len": 3,
+        "offset": "000e",
+        "opcode": "0xb6",
+        "text": "invokevirtual java.lang.String.toCharArray()[C"
+      },
+      {
+        "len": 1,
+        "offset": "0011",
+        "opcode": "0x5a",
+        "text": "dup_x1"
+      },
+      {
+        "len": 1,
+        "offset": "0012",
+        "opcode": "0xbe",
+        "text": "arraylength"
+      },
+      {
+        "len": 1,
+        "offset": "0013",
+        "opcode": "0x5b",
+        "text": "dup_x2"
+      },
+      {
+        "len": 1,
+        "offset": "0014",
+        "opcode": "0x57",
+        "text": "pop"
+      },
+      {
+        "len": 1,
+        "offset": "0015",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 1,
+        "offset": "0016",
+        "opcode": "0x3c",
+        "text": "istore_1"
+      },
+      {
+        "len": 1,
+        "offset": "0017",
+        "opcode": "0x5d",
+        "text": "dup2_x1"
+      },
+      {
+        "len": 1,
+        "offset": "0018",
+        "opcode": "0x58",
+        "text": "pop2"
+      },
+      {
+        "len": 1,
+        "offset": "0019",
+        "opcode": "0x5b",
+        "text": "dup_x2"
+      },
+      {
+        "len": 1,
+        "offset": "001a",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 3,
+        "offset": "001b",
+        "opcode": "0xa3",
+        "text": "if_icmpgt 128"
+      },
+      {
+        "len": 1,
+        "offset": "001e",
+        "opcode": "0x5c",
+        "text": "dup2"
+      },
+      {
+        "len": 1,
+        "offset": "001f",
+        "opcode": "0x5f",
+        "text": "swap"
+      },
+      {
+        "len": 1,
+        "offset": "0020",
+        "opcode": "0x1b",
+        "text": "iload_1"
+      },
+      {
+        "len": 1,
+        "offset": "0021",
+        "opcode": "0x5d",
+        "text": "dup2_x1"
+      },
+      {
+        "len": 1,
+        "offset": "0022",
+        "opcode": "0x34",
+        "text": "caload"
+      },
+      {
+        "len": 1,
+        "offset": "0023",
+        "opcode": "0x5f",
+        "text": "swap"
+      },
+      {
+        "len": 1,
+        "offset": "0024",
+        "opcode": "0x1b",
+        "text": "iload_1"
+      },
+      {
+        "len": 2,
+        "offset": "0025",
+        "opcode": "0x10",
+        "text": "bipush 7"
+      },
+      {
+        "len": 1,
+        "offset": "0027",
+        "opcode": "0x70",
+        "text": "irem"
+      },
+      {
+        "len": 40,
+        "offset": "0028",
+        "opcode": "0xaa",
+        "text": "tableswitch  # default -> 110; 0 -> 80, 1 -> 85, 2 -> 90, 3 -> 95, 4 -> 100, 5 -> 105"
+      },
+      {
+        "len": 2,
+        "offset": "0050",
+        "opcode": "0x10",
+        "text": "bipush 18"
+      },
+      {
+        "len": 3,
+        "offset": "0052",
+        "opcode": "0xa7",
+        "text": "goto 112"
+      },
+      {
+        "len": 2,
+        "offset": "0055",
+        "opcode": "0x10",
+        "text": "bipush 127"
+      },
+      {
+        "len": 3,
+        "offset": "0057",
+        "opcode": "0xa7",
+        "text": "goto 112"
+      },
+      {
+        "len": 2,
+        "offset": "005a",
+        "opcode": "0x10",
+        "text": "bipush 49"
+      },
+      {
+        "len": 3,
+        "offset": "005c",
+        "opcode": "0xa7",
+        "text": "goto 112"
+      },
+      {
+        "len": 2,
+        "offset": "005f",
+        "opcode": "0x10",
+        "text": "bipush 94"
+      },
+      {
+        "len": 3,
+        "offset": "0061",
+        "opcode": "0xa7",
+        "text": "goto 112"
+      },
+      {
+        "len": 2,
+        "offset": "0064",
+        "opcode": "0x10",
+        "text": "bipush 10"
+      },
+      {
+        "len": 3,
+        "offset": "0066",
+        "opcode": "0xa7",
+        "text": "goto 112"
+      },
+      {
+        "len": 2,
+        "offset": "0069",
+        "opcode": "0x10",
+        "text": "bipush 69"
+      },
+      {
+        "len": 3,
+        "offset": "006b",
+        "opcode": "0xa7",
+        "text": "goto 112"
+      },
+      {
+        "len": 2,
+        "offset": "006e",
+        "opcode": "0x10",
+        "text": "bipush 72"
+      },
+      {
+        "len": 1,
+        "offset": "0070",
+        "opcode": "0x82",
+        "text": "ixor"
+      },
+      {
+        "len": 1,
+        "offset": "0071",
+        "opcode": "0x82",
+        "text": "ixor"
+      },
+      {
+        "len": 1,
+        "offset": "0072",
+        "opcode": "0x92",
+        "text": "i2c"
+      },
+      {
+        "len": 1,
+        "offset": "0073",
+        "opcode": "0x55",
+        "text": "castore"
+      },
+      {
+        "len": 3,
+        "offset": "0074",
+        "opcode": "0x84",
+        "text": "iinc 1, 1"
+      },
+      {
+        "len": 1,
+        "offset": "0077",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 3,
+        "offset": "0078",
+        "opcode": "0x9a",
+        "text": "ifne 128"
+      },
+      {
+        "len": 1,
+        "offset": "007b",
+        "opcode": "0x5c",
+        "text": "dup2"
+      },
+      {
+        "len": 1,
+        "offset": "007c",
+        "opcode": "0x5a",
+        "text": "dup_x1"
+      },
+      {
+        "len": 3,
+        "offset": "007d",
+        "opcode": "0xa7",
+        "text": "goto 33"
+      },
+      {
+        "len": 1,
+        "offset": "0080",
+        "opcode": "0x5d",
+        "text": "dup2_x1"
+      },
+      {
+        "len": 1,
+        "offset": "0081",
+        "opcode": "0x58",
+        "text": "pop2"
+      },
+      {
+        "len": 1,
+        "offset": "0082",
+        "opcode": "0x5b",
+        "text": "dup_x2"
+      },
+      {
+        "len": 1,
+        "offset": "0083",
+        "opcode": "0x1b",
+        "text": "iload_1"
+      },
+      {
+        "len": 3,
+        "offset": "0084",
+        "opcode": "0xa3",
+        "text": "if_icmpgt 30"
+      },
+      {
+        "len": 1,
+        "offset": "0087",
+        "opcode": "0x57",
+        "text": "pop"
+      },
+      {
+        "len": 3,
+        "offset": "0088",
+        "opcode": "0xbb",
+        "text": "new java.lang.String"
+      },
+      {
+        "len": 1,
+        "offset": "008b",
+        "opcode": "0x5a",
+        "text": "dup_x1"
+      },
+      {
+        "len": 1,
+        "offset": "008c",
+        "opcode": "0x5f",
+        "text": "swap"
+      },
+      {
+        "len": 3,
+        "offset": "008d",
+        "opcode": "0xb7",
+        "text": "invokespecial java.lang.String.<init>([C)V"
+      },
+      {
+        "len": 3,
+        "offset": "0090",
+        "opcode": "0xb6",
+        "text": "invokevirtual java.lang.String.intern()Ljava/lang/String;"
+      },
+      {
+        "len": 1,
+        "offset": "0093",
+        "opcode": "0x5f",
+        "text": "swap"
+      },
+      {
+        "len": 1,
+        "offset": "0094",
+        "opcode": "0x57",
+        "text": "pop"
+      },
+      {
+        "len": 1,
+        "offset": "0095",
+        "opcode": "0x5f",
+        "text": "swap"
+      },
+      {
+        "len": 1,
+        "offset": "0096",
+        "opcode": "0x57",
+        "text": "pop"
+      },
+      {
+        "len": 3,
+        "offset": "0097",
+        "opcode": "0xa7",
+        "text": "goto 8"
+      },
+      {
+        "len": 1,
+        "offset": "009a",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "009b",
+        "opcode": "0xb8",
+        "text": "invokestatic net.portswigger.Zhs.Zq(Ljava/lang/String;)[B"
+      },
+      {
+        "len": 3,
+        "offset": "009e",
+        "opcode": "0xb3",
+        "text": "putstatic burp.Zrmh.Zi:byte[]"
+      },
+      {
+        "len": 1,
+        "offset": "00a1",
+        "opcode": "0xb1",
+        "text": "return"
+      }
+    ],
+    "instructions_total": 73,
+    "listing": "0000: bipush 61\n0002: ldc \"T9m^\\u{1f}O_\\u{18}l<JJ\\u{5}\"\n0004: iconst_m1\n0005: goto 12\n0008: astore_0\n0009: goto 154\n000c: dup_x2\n000d: pop\n000e: invokevirtual java.lang.String.toCharArray()[C\n0011: dup_x1\n0012: arraylength\n0013: dup_x2\n0014: pop\n0015: iconst_0\n0016: istore_1\n0017: dup2_x1\n0018: pop2\n0019: dup_x2\n001a: iconst_1\n001b: if_icmpgt 128\n001e: dup2\n001f: swap\n0020: iload_1\n0021: dup2_x1\n0022: caload\n0023: swap\n0024: iload_1\n0025: bipush 7\n0027: irem\n0028: tableswitch  # default -> 110; 0 -> 80, 1 -> 85, 2 -> 90, 3 -> 95, 4 -> 100, 5 -> 105\n0050: bipush 18\n0052: goto 112\n0055: bipush 127\n0057: goto 112\n005a: bipush 49\n005c: goto 112\n005f: bipush 94\n0061: goto 112\n0064: bipush 10\n0066: goto 112\n0069: bipush 69\n006b: goto 112\n006e: bipush 72\n0070: ixor\n0071: ixor\n0072: i2c\n0073: castore\n0074: iinc 1, 1\n0077: dup\n0078: ifne 128\n007b: dup2\n007c: dup_x1\n007d: goto 33\n0080: dup2_x1\n0081: pop2\n0082: dup_x2\n0083: iload_1\n0084: if_icmpgt 30\n0087: pop\n0088: new java.lang.String\n008b: dup_x1\n008c: swap\n008d: invokespecial java.lang.String.<init>([C)V\n0090: invokevirtual java.lang.String.intern()Ljava/lang/String;\n0093: swap\n0094: pop\n0095: swap\n0096: pop\n0097: goto 8\n009a: aload_0\n009b: invokestatic net.portswigger.Zhs.Zq(Ljava/lang/String;)[B\n009e: putstatic burp.Zrmh.Zi:byte[]\n00a1: return",
+    "max_locals": 2,
+    "max_stack": 10,
+    "method": "burp.Zrmh.<clinit>()V",
+    "overloads": [
+      "()V"
+    ],
+    "pseudo_java": {
+      "code": "static <clinit>() {\n    goto L14;\n    v0 = -1;\n    goto L9e;\n    L14:\n    61.toCharArray().length;\n    v1 = 0;\n    if (? <= 1) {\n        switch ((v1 % 7)) {\n            case 0:\n                goto L73;\n            case 1:\n                goto L73;\n            case 2:\n                goto L73;\n            case 3:\n                goto L73;\n            case 4:\n                goto L73;\n            case 5:\n                goto L73;\n            default:\n                L73:\n                49[94] = (char) (10 ^ (69 ^ 72));\n                v1 += 1;\n                if (127 == 0) {\n                    goto L28;\n                }\n        }\n    }\n    if (18 > v1) goto L28;\n    goto L8;\n    L9e:\n    Zrmh.Zi = Zhs.Zq(v0);\n    return;\n}",
+      "confidence": "inferred",
+      "fully_structured": false,
+      "signature": "static <clinit>()"
+    },
+    "signature": "static <clinit>()",
+    "throws": []
+  },
+  "summary": "burp.Zrmh.<clinit>()V (Zrmh.class): 73 instructions.",
+  "confidence": "inferred",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [
+    {
+      "code": "decompiler_inferred",
+      "message": "This pseudo-Java is reconstructed from bytecode by Craft Anything's built-in decompiler; it is a best guess, not the original source. The bytecode disassembly is the evidence."
+    },
+    {
+      "code": "generics_erased",
+      "message": "Generic type arguments are erased in bytecode and are not shown."
+    },
+    {
+      "code": "names_and_types_inferred",
+      "message": "Local variables are named v0, v1, … (no debug names); their declared types are not reconstructed."
+    },
+    {
+      "code": "desugaring_not_reversed",
+      "message": "Synthetic members, lambda/invokedynamic desugaring, enum scaffolding and string-switch hashing are not turned back into source."
+    },
+    {
+      "code": "control_flow_partly_structured",
+      "message": "Some control flow could not be recovered and is shown with labels and goto statements."
+    },
+    {
+      "code": "stack_reconstruction_approximate",
+      "message": "Some stack operations (complex dup/swap, invokedynamic/lambda, jsr/ret) are approximated; read the bytecode listing for the exact behaviour."
+    }
+  ],
+  "coverage": {
+    "status": "complete",
+    "examined": 73,
+    "total": 73
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/root/burp-re/in/extract/burp/Zrmh.class"
+    },
+    {
+      "kind": "method",
+      "value": "burp.Zrmh.<clinit>()V"
+    }
+  ],
+  "links": []
+}

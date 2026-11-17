@@ -212,3 +212,62 @@ pub fn show_comparer(
     });
 }
 
+/// Bit-level results (Burp's Sequencer summary): the overall rating, the
+/// effective entropy at each significance level, a bar per bit position and
+/// the export buttons. `export_path` is the file the buttons write to.
+pub fn show_bit_report(ui: &mut egui::Ui, report: &crate::seq_bits::BitReport, samples: &[Vec<u8>], export_path: &mut String) {
+    use crate::seq_bits as sb;
+    ui.add_space(10.0);
+    ui.label(egui::RichText::new("Overall result").strong().size(14.0).color(theme::ink()));
+    ui.label(egui::RichText::new(sb::summary(report)).size(12.5).color(theme::ink_dim()));
+    ui.add_space(6.0);
+    ui.label(egui::RichText::new("Effective entropy").strong().size(13.0).color(theme::ink()));
+    egui::Grid::new("seq_effective_entropy").striped(true).num_columns(2).spacing([24.0, 3.0]).show(ui, |ui| {
+        ui.label(egui::RichText::new("Significance level").size(12.5).color(theme::ink_faint()));
+        ui.label(egui::RichText::new("Bits").size(12.5).color(theme::ink_faint()));
+        ui.end_row();
+        for (label, bits) in sb::LEVEL_LABELS.iter().zip(report.effective_entropy) {
+            ui.label(egui::RichText::new(*label).size(12.5).color(theme::ink()));
+            ui.label(egui::RichText::new(format!("{bits} of {}", report.token_bits)).size(12.5).color(theme::ink_dim()));
+            ui.end_row();
+        }
+    });
+    ui.add_space(6.0);
+    ui.label(egui::RichText::new("Bit-level results (one bar per bit position; taller is more random, red fails at 1%)").size(12.5).color(theme::ink()));
+    // One bar per bit: height is the combined p-value on a log scale from
+    // 0.001% (empty) to 100% (full), as in Burp's bit-level chart.
+    let width = ui.available_width().min(report.bits.len() as f32 * 6.0 + 2.0).max(60.0);
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(width, 90.0), egui::Sense::hover());
+    let painter = ui.painter_at(rect);
+    painter.rect_filled(rect, 0.0, theme::chrome());
+    let step = rect.width() / report.bits.len().max(1) as f32;
+    for (i, bit) in report.bits.iter().enumerate() {
+        let frac = ((bit.combined.max(1e-5).log10() + 5.0) / 5.0).clamp(0.0, 1.0) as f32;
+        let x0 = rect.left() + i as f32 * step;
+        let bar = egui::Rect::from_min_max(egui::pos2(x0 + 0.5, rect.bottom() - 2.0 - frac * (rect.height() - 4.0)), egui::pos2(x0 + step - 0.5, rect.bottom()));
+        painter.rect_filled(bar, 0.0, if bit.combined >= 0.01 { c(theme::GOOD) } else { c(theme::BAD) });
+    }
+    ui.add_space(6.0);
+    ui.horizontal(|ui| {
+        ui.add(egui::TextEdit::singleline(export_path).hint_text("file").desired_width(260.0));
+        let write = |what: &str, bytes: Vec<u8>, path: &str| {
+            if path.trim().is_empty() {
+                crate::feedback::toast(crate::feedback::Level::Warn, "Enter a file path first");
+                return;
+            }
+            match std::fs::write(path.trim(), bytes) {
+                Ok(()) => crate::feedback::toast(crate::feedback::Level::Success, format!("{what} saved to {}", path.trim())),
+                Err(e) => crate::feedback::toast(crate::feedback::Level::Error, format!("Could not save {what}: {e}")),
+            }
+        };
+        if ui.button("Save tokens").clicked() {
+            write("Tokens", sb::tokens_text(samples), export_path);
+        }
+        if ui.button("Export analysis (CSV)").clicked() {
+            write("Analysis", sb::report_csv(report).into_bytes(), export_path);
+        }
+        if ui.button("Export analysis (JSON)").clicked() {
+            write("Analysis", sb::report_json(report).into_bytes(), export_path);
+        }
+    });
+}

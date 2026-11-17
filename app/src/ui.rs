@@ -5,7 +5,6 @@ use std::sync::atomic::Ordering;
 
 use eframe::egui::{self, RichText, Ui};
 
-use crate::editor;
 use crate::intruder;
 use crate::feedback;
 use crate::net;
@@ -53,7 +52,8 @@ const TABS: [(&str, Tab); 13] = [
     ("Discover", Tab::Discover),
 ];
 
-pub fn show(app: &mut App, ctx: &egui::Context) {
+pub fn show(app: &mut App, ui: &mut egui::Ui) {
+    let ctx = &ui.ctx().clone();
     // M-06: key capture for the hotkey settings table comes first, so the
     // pressed chord becomes a binding instead of firing a command.
     if app.hotkey_capture.is_some() {
@@ -98,65 +98,108 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
         run_shortcut(app, idx);
     }
     settings_window(app, ctx);
-    app.toasts.show(ctx);
+    crate::menus::project_window(app, ctx);
+    crate::project_start::window(app, ctx);
+    // Toasts are drawn once, by App::ui after this function returns, so
+    // they sit above everything (drawing them here too doubled every toast's
+    // widget ids).
 
     // P-01: Burp's menu row sits above the tab row. Only items that do
     // something real are here; the rest of Burp's menus arrive with their
     // features (P-03 Settings, D-06 issues, K-03 extensions).
-    egui::TopBottomPanel::top("menu_bar")
-        .exact_height(26.0)
+    egui::Panel::top("menu_bar")
+        .exact_size(26.0)
         .frame(
             egui::Frame::default()
                 .fill(theme::chrome_alt())
-                .inner_margin(egui::Margin::symmetric(6.0, 2.0)),
+                .inner_margin(egui::Margin::symmetric(6, 2)),
         )
-        .show(ctx, |ui| {
-            egui::menu::bar(ui, |ui| {
+        .show(ui, |ui| {
+            egui::MenuBar::new().ui(ui, |ui| {
+                // Menu contents follow build 52685: Burp (Zc6t), Project (Zpn_),
+                // Intruder (Zcur), Repeater (Zcu0), View (Zupi), Help (Zup4).
+                // Items WebProbe has no backend for are shown disabled, not
+                // pretended away.
+                let off = |ui: &mut Ui, label: &str| {
+                    ui.add_enabled(false, egui::Button::new(label));
+                };
                 ui.menu_button("WebProbe", |ui| {
                     ui.spacing_mut().item_spacing.y = 0.0;
                     ui.spacing_mut().button_padding.y = 4.0;
                     if ui.button("Search").clicked() {
                         app.search_open = true;
-                        ui.close_menu();
+                        ui.close();
                     }
                     if ui.button("Settings").clicked() {
                         app.settings_open = true;
-                        ui.close_menu();
+                        ui.close();
+                    }
+                    off(ui, "Configuration library");
+                    ui.separator();
+                    off(ui, "WebProbe Infiltrator");
+                    off(ui, "WebProbe Clickbandit");
+                    if ui.button("WebProbe Collaborator client").clicked() {
+                        app.tab = Tab::Collaborator;
+                        ui.close();
                     }
                     ui.separator();
-                    if ui.button("Quit").clicked() {
+                    if ui.button("Exit").clicked() {
                         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     }
                 });
                 ui.menu_button("Project", |ui| {
                     ui.spacing_mut().item_spacing.y = 0.0;
                     ui.spacing_mut().button_padding.y = 4.0;
-                    if ui.button("Project options\u{2026}").clicked() {
-                        app.settings_open = true;
-                        ui.close_menu();
+                    if ui.button("New temporary project").clicked() {
+                        if let Err(e) = crate::project_start::new_project(app, None) {
+                            feedback::toast(feedback::Level::Error, e);
+                        }
+                        ui.close();
+                    }
+                    if ui.button("New or open project\u{2026}").clicked() {
+                        app.chooser.open = true;
+                        app.chooser.at_start = false;
+                        ui.close();
+                    }
+                    let recent = webprobe_core::project_files::recent_file().map(|f| webprobe_core::project_files::load_recent(&f)).unwrap_or_default();
+                    ui.add_enabled_ui(!recent.is_empty(), |ui| {
+                        ui.menu_button("Open recent project", |ui| {
+                            for p in recent {
+                                let exists = std::path::Path::new(&p).is_file();
+                                if ui.add_enabled(exists, egui::Button::new(p.clone())).clicked() {
+                                    if let Err(e) = crate::project_start::open(app, &p) {
+                                        feedback::toast(feedback::Level::Error, e);
+                                    }
+                                    ui.close();
+                                }
+                            }
+                        });
+                    });
+                    ui.separator();
+                    off(ui, "Rename");
+                    if ui.button("Save copy").clicked() {
+                        crate::menus::save_project_copy(app);
+                        ui.close();
+                    }
+                    if ui.button("Import project file").clicked() {
+                        ui.data_mut(|d| d.insert_temp(crate::menus::project_window_id(), true));
+                        ui.close();
+                    }
+                    ui.separator();
+                    if ui.button("Project file\u{2026}").clicked() {
+                        ui.data_mut(|d| d.insert_temp(crate::menus::project_window_id(), true));
+                        ui.close();
                     }
                 });
                 ui.menu_button("Intruder", |ui| {
                     ui.spacing_mut().item_spacing.y = 0.0;
                     ui.spacing_mut().button_padding.y = 4.0;
-                    if ui.button("Send to Intruder").clicked() {
-                        send_history_to_intruder(app);
-                        app.tab = Tab::Intruder;
-                        ui.close_menu();
-                    }
+                    crate::menus::intruder_menu(app, ui);
                 });
                 ui.menu_button("Repeater", |ui| {
                     ui.spacing_mut().item_spacing.y = 0.0;
                     ui.spacing_mut().button_padding.y = 4.0;
-                    if ui.button("Send to Repeater").clicked() {
-                        send_history_to_repeater(app);
-                        app.tab = Tab::Repeater;
-                        ui.close_menu();
-                    }
-                    if ui.button("Send request").clicked() {
-                        repeater_send(app);
-                        ui.close_menu();
-                    }
+                    crate::menus::repeater_menu(app, ui);
                 });
                 ui.menu_button("View", |ui| {
                     ui.spacing_mut().item_spacing.y = 0.0;
@@ -165,7 +208,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                     // alphabetically (theme lives in Settings > Appearance).
                     if ui.button("Restore default tab layout").clicked() {
                         app.tab = Tab::Dashboard;
-                        ui.close_menu();
+                        ui.close();
                     }
                     ui.separator();
                     let mut names: Vec<(&str, Tab)> = TABS.to_vec();
@@ -173,7 +216,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                     for (name, tab) in names {
                         if ui.button(name).clicked() {
                             app.tab = tab;
-                            ui.close_menu();
+                            ui.close();
                         }
                     }
                 });
@@ -183,23 +226,15 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                 ui.menu_button("Help", |ui| {
                     ui.spacing_mut().item_spacing.y = 0.0;
                     ui.spacing_mut().button_padding.y = 4.0;
-                    if ui.button("Keyboard shortcuts").clicked() {
-                        app.settings_help = SettingsPane::Hotkeys;
-                        app.settings_open = true;
-                        ui.close_menu();
-                    }
-                    if ui.button("About WebProbe").clicked() {
-                        feedback::toast(feedback::Level::Info, "WebProbe \u{2014} Burp-compatible proxy");
-                        ui.close_menu();
-                    }
+                    crate::menus::help_menu(app, ui);
                 });
             });
         });
 
-    egui::TopBottomPanel::top("main_bar")
-        .exact_height(38.0)
-        .frame(egui::Frame::default().fill(theme::surface()).inner_margin(egui::Margin::symmetric(0.0, 0.0)))
-        .show(ctx, |ui| {
+    egui::Panel::top("main_bar")
+        .exact_size(38.0)
+        .frame(egui::Frame::default().fill(theme::surface()).inner_margin(egui::Margin::symmetric(0, 0)))
+        .show(ui, |ui| {
             ui.horizontal_centered(|ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
                 // Burp's tool tabs: plain labels, orange[1] underline on the
@@ -208,6 +243,8 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                     let sel = app.tab == *tab;
                     let galley = ui.painter().layout_no_wrap(name.to_string(), egui::FontId::proportional(12.5), theme::ink());
                     let (rect, resp) = ui.allocate_exact_size(egui::vec2(galley.size().x + 22.0, 38.0), egui::Sense::click());
+                    // Painted by hand, so name it for accessibility / UI automation.
+                    resp.widget_info(|| egui::WidgetInfo::selected(egui::accesskit::Role::Tab, true, sel, *name));
                     if resp.hovered() && !sel {
                         ui.painter().rect_filled(rect, 0.0, theme::zebra());
                     }
@@ -231,7 +268,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                     )
                     .fill(theme::surface())
                     .stroke(egui::Stroke::new(1.5, c(0xFFB090)))
-                    .rounding(6.0)
+                    .corner_radius(6.0)
                     .min_size(egui::vec2(112.0, 26.0));
                     if ui.add(pill).clicked() {
                         app.tab = Tab::BurpAi;
@@ -266,14 +303,14 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
     // Status bar, as Burp draws it: "Event log" and "All issues" on the left,
     // the memory gauge on the right. WebProbe adds the listener and intercept
     // state in the same muted style, because there is no title-bar for them.
-    egui::TopBottomPanel::bottom("status_bar")
-        .exact_height(36.0)
+    egui::Panel::bottom("status_bar")
+        .exact_size(36.0)
         .frame(
             egui::Frame::default()
                 .fill(theme::chrome())
-                .inner_margin(egui::Margin::symmetric(8.0, 3.0)),
+                .inner_margin(egui::Margin::symmetric(8, 3)),
         )
-        .show(ctx, |ui| {
+        .show(ui, |ui| {
             let r = ui.max_rect();
             ui.painter().hline(r.x_range(), r.top() - 3.0, egui::Stroke::new(1.0, theme::line()));
             ui.horizontal_centered(|ui| {
@@ -337,15 +374,18 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
     history_menu_windows(app, ctx);
 
     egui::CentralPanel::default()
-        .frame(egui::Frame::default().fill(theme::surface()).inner_margin(egui::Margin::same(10.0)))
-        .show(ctx, |ui| match app.tab {
+        .frame(egui::Frame::default().fill(theme::surface()).inner_margin(egui::Margin::same(10)))
+        .show(ui, |ui| match app.tab {
             Tab::Dashboard => dashboard(app, ui),
             Tab::Target => target(app, ui),
             Tab::Proxy => proxy(app, ui),
             Tab::Scanner => scanner(app, ui),
             Tab::Intruder => intruder(app, ui),
             Tab::Repeater => repeater(app, ui),
-            Tab::Sequencer => crate::tools::sequencer(app, ui),
+            // The analysis results run past one screen: the tab scrolls.
+            Tab::Sequencer => {
+                egui::ScrollArea::vertical().id_salt("sequencer_tab").auto_shrink([false, false]).show(ui, |ui| crate::tools::sequencer(app, ui));
+            }
             Tab::Comparer => comparer(app, ui),
             Tab::Logger => logger_view(app, ui),
             Tab::Organizer => organizer_view(app, ui),
@@ -359,9 +399,12 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
         });
 }
 
-/// Most matching history rows laid out in one go. Older rows stay in the model,
-/// they are just not drawn (N-02).
-const HISTORY_RENDER_LIMIT: usize = 1000;
+/// Rows appended to the history since the cached view was built, filtered and
+/// newest first: what goes on top of the view while the default newest-first
+/// order is in force, so streaming traffic never rebuilds the whole view.
+fn history_new_rows(history: &[net::HistEntry], from: usize, keep: impl Fn(&net::HistEntry) -> bool) -> Vec<net::HistEntry> {
+    history.get(from..).unwrap_or_default().iter().rev().filter(|e| keep(e)).cloned().collect()
+}
 
 /// The rows the history table shows: newest first, filtered, sorted, then capped.
 /// The order of those steps is the contract: the filter and the sort see the
@@ -403,14 +446,14 @@ pub(crate) fn csrf_poc_html(e: &net::HistEntry) -> String {
 fn history_menu_windows(app: &mut App, ctx: &egui::Context) {
     if let Some((title, url)) = app.browser_url.clone() {
         let mut open = true;
-        egui::Window::new(title).open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {
+        egui::Window::new(title).default_pos(crate::theme::window_pos(&ctx)).open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {
             ui.label("To show this item in your browser, copy the URL below and paste it into a browser that is configured to use WebProbe as its proxy.");
             ui.add_space(6.0);
             let mut u = url.clone();
             ui.add(egui::TextEdit::singleline(&mut u).desired_width(420.0));
             ui.horizontal(|ui| {
                 if ui.button("Copy").clicked() {
-                    ui.output_mut(|o| o.copied_text = url.clone());
+                    ui.ctx().copy_text(url.clone());
                 }
                 if ui.button("Close").clicked() {
                     app.browser_url = None;
@@ -423,13 +466,13 @@ fn history_menu_windows(app: &mut App, ctx: &egui::Context) {
     }
     if let Some(html) = app.csrf_poc.clone() {
         let mut open = true;
-        egui::Window::new("CSRF PoC generator").open(&mut open).default_size(egui::vec2(640.0, 420.0)).show(ctx, |ui| {
+        egui::Window::new("CSRF PoC generator").default_pos(crate::theme::window_pos(&ctx)).open(&mut open).default_size(egui::vec2(640.0, 420.0)).show(ctx, |ui| {
             ui.label(RichText::new("CSRF HTML:").strong());
             let mut h = html.clone();
             ui.add(egui::TextEdit::multiline(&mut h).font(egui::TextStyle::Monospace).desired_width(f32::INFINITY).desired_rows(16));
             ui.horizontal(|ui| {
                 if ui.button("Copy HTML").clicked() {
-                    ui.output_mut(|o| o.copied_text = html.clone());
+                    ui.ctx().copy_text(html.clone());
                 }
                 if ui.button("Close").clicked() {
                     app.csrf_poc = None;
@@ -442,7 +485,7 @@ fn history_menu_windows(app: &mut App, ctx: &egui::Context) {
     }
     if app.hist_window_open {
         let mut open = true;
-        egui::Window::new("HTTP history").open(&mut open).default_size(egui::vec2(900.0, 420.0)).show(ctx, |ui| {
+        egui::Window::new("HTTP history").default_pos(crate::theme::window_pos(&ctx)).open(&mut open).default_size(egui::vec2(900.0, 420.0)).show(ctx, |ui| {
             ui.add(egui::TextEdit::singleline(&mut app.hist_window_filter).hint_text("Search").desired_width(260.0));
             let q = app.hist_window_filter.to_ascii_lowercase();
             let rows: Vec<net::HistEntry> = app.shared.history.lock().unwrap().iter().rev().filter(|e| q.is_empty() || history_url(e).to_ascii_lowercase().contains(&q)).cloned().collect();
@@ -496,15 +539,7 @@ pub(crate) fn highlight_colours(k: u8) -> (egui::Color32, egui::Color32) {
 
 /// Burp's Host column: scheme://host, with the port only when it is not the
 /// scheme default.
-pub(crate) fn history_host(e: &net::HistEntry) -> String {
-    let scheme = if e.https { "https" } else { "http" };
-    let default = if e.https { 443 } else { 80 };
-    if e.port == default || e.port == 0 {
-        format!("{scheme}://{}", e.host)
-    } else {
-        format!("{scheme}://{}:{}", e.host, e.port)
-    }
-}
+pub(crate) use crate::net::history_host;
 
 /// Burp's Time column ("22:05:18 15 Nov 2026").
 pub(crate) fn history_time(ts: u64) -> String {
@@ -547,9 +582,88 @@ fn history_view(
         17 => format!("{:010}", e.diffs),
         _ => String::new(),
     });
-    let truncated = rows.len() > HISTORY_RENDER_LIMIT;
-    rows.truncate(HISTORY_RENDER_LIMIT);
-    (rows, truncated)
+    // Every matching row is kept: the table body is virtualised, so only the
+    // visible rows are laid out (Burp shows the whole history too).
+    (rows, false)
+}
+
+/// A history menu command applied to several selected rows at once.
+fn bulk_history_command(app: &mut App, entries: &[net::HistEntry], cmd: &str) {
+    let n = entries.len();
+    let ids: Vec<u64> = entries.iter().map(|e| e.id).collect();
+    match cmd {
+        "scope" => {
+            let mut scope = app.shared.scope.lock().unwrap();
+            let mut added = std::collections::BTreeSet::new();
+            for e in entries {
+                let rule = format!("{}://{}", if e.https { "https" } else { "http" }, e.host);
+                if added.insert(rule.clone()) && !scope.iter().any(|r| r.include && r.pattern == rule) {
+                    scope.push(net::ScopeRule::include(rule, false));
+                }
+            }
+            feedback::toast(feedback::Level::Success, format!("Added {} host(s) to target scope", added.len()));
+        }
+        "scan" => {
+            crate::scan::audit_entries(app.shared.clone(), entries.to_vec());
+            feedback::toast(feedback::Level::Info, format!("Active scan of {n} item(s) started"));
+        }
+        "passive" => {
+            for e in entries {
+                crate::scan::add_passive_issues(&app.shared, crate::scan::passive_check(e));
+            }
+            feedback::toast(feedback::Level::Success, format!("Passive scan of {n} item(s) done"));
+        }
+        "repeater" => {
+            for e in entries {
+                app.history_sel = Some(e.id);
+                send_history_to_repeater(app);
+            }
+            app.tab = Tab::Repeater;
+        }
+        "organizer" => {
+            for e in entries {
+                let req_text = String::from_utf8_lossy(&e.req_raw).into_owned();
+                let resp_text = e.resp_raw.as_ref().map(|r| String::from_utf8_lossy(r).into_owned()).unwrap_or_default();
+                app.organizer.add(&format!("{} {}", e.method, e.path), "", &req_text, &resp_text, util::now_secs());
+            }
+            feedback::toast(feedback::Level::Success, format!("Sent {n} item(s) to Organizer"));
+        }
+        "cmp_req" | "cmp_resp" => {
+            for e in entries {
+                app.cmp_items.push(if cmd == "cmp_req" { request_for_tools(&e.req_raw) } else { e.resp_raw.as_ref().map(|r| String::from_utf8_lossy(r).into_owned()).unwrap_or_default() });
+            }
+            app.tab = Tab::Comparer;
+        }
+        "delete" => {
+            app.shared.history.lock().unwrap().retain(|h| !ids.contains(&h.id));
+            app.hist_cache_key.clear();
+            feedback::toast(feedback::Level::Success, format!("Deleted {n} item(s)"));
+        }
+        "save_item" => {
+            let dir = std::env::current_dir().map(|d| d.join("saved-items")).unwrap_or_else(|_| "saved-items".into());
+            let _ = std::fs::create_dir_all(&dir);
+            let mut saved = 0;
+            for e in entries {
+                let mut bytes = e.req_raw.clone();
+                bytes.extend_from_slice(b"\r\n\r\n");
+                if let Some(r) = &e.resp_raw {
+                    bytes.extend_from_slice(r);
+                }
+                if std::fs::write(dir.join(format!("item-{}.http", e.id)), bytes).is_ok() {
+                    saved += 1;
+                }
+            }
+            feedback::toast(feedback::Level::Success, format!("Saved {saved} item(s) to {}", dir.display()));
+        }
+        hl if hl.starts_with("hl_") => {
+            let k = HIGHLIGHT_CMDS.iter().position(|c| *c == hl).map(|k| k as u8);
+            for h in app.shared.history.lock().unwrap().iter_mut().filter(|h| ids.contains(&h.id)) {
+                h.highlight = k;
+            }
+            app.hist_cache_key.clear();
+        }
+        _ => {}
+    }
 }
 
 /// Proxy > HTTP history (B-01).
@@ -559,29 +673,33 @@ fn history_view(
 fn proxy_history(app: &mut App, ui: &mut Ui) {
     let total = app.shared.history.lock().map(|h| h.len()).unwrap_or(0);
 
-    // N-02: the filtered view is recomputed only when an input changed, never
-    // once per frame. The key covers every filter input plus the history size
-    // and the sort column, so anything the user can change invalidates it.
-    let key = format!(
-        "{}|{}|{}|{}",
-        total,
-        app.hist_filter.key(),
-        app.hist_table.sort_col,
-        app.hist_table.sort_asc,
-    );
-    let (rows, truncated) = if key != app.hist_cache_key || total < app.hist_cache_len {
+    // N-02: the filtered view is rebuilt only when a filter or sort input
+    // changed. New traffic in the default newest-first order is put on top
+    // of the cached view instead, and frames share the view (an Arc), so a
+    // frame never copies the history.
+    let key = format!("{}|{}|{}", app.hist_filter.key(), app.hist_table.sort_col, app.hist_table.sort_asc);
+    let newest_first = (app.hist_table.sort_col == 0 && !app.hist_table.sort_asc) || app.hist_table.sort_col == usize::MAX;
+    if key != app.hist_cache_key || total < app.hist_cache_len || (total > app.hist_cache_len && !newest_first) {
         let (rows, truncated) = {
             let history = app.shared.history.lock().unwrap();
             history_view(&history, |e| app.hist_filter.matches(e, &app.shared), &app.hist_table)
         };
-        app.hist_cache_len = total;
-        app.hist_cache = rows;
+        app.hist_cache = std::sync::Arc::new(rows);
         app.hist_cache_truncated = truncated;
         app.hist_cache_key = key;
-        (app.hist_cache.clone(), truncated)
-    } else {
-        (app.hist_cache.clone(), app.hist_cache_truncated)
-    };
+        app.hist_cache_len = total;
+    } else if total > app.hist_cache_len {
+        let fresh = {
+            let history = app.shared.history.lock().unwrap();
+            history_new_rows(&history, app.hist_cache_len, |e| app.hist_filter.matches(e, &app.shared))
+        };
+        let old = std::mem::take(std::sync::Arc::make_mut(&mut app.hist_cache));
+        let mut rows = fresh;
+        rows.extend(old);
+        app.hist_cache = std::sync::Arc::new(rows);
+        app.hist_cache_len = total;
+    }
+    let (rows, truncated) = (app.hist_cache.clone(), app.hist_cache_truncated);
 
     // B-01 filter bar, between the sub-tabs and the table. An edit is picked up
     // by the cache key on the next frame (the app repaints continuously).
@@ -597,22 +715,22 @@ fn proxy_history(app: &mut App, ui: &mut Ui) {
 
     // Burp's HTTP history columns, in Burp's order (live 52685 window).
     let columns = [
-        table::Column::new("#", 38.0),
-        table::Column::new("Host", 168.0),
+        table::Column::new("#", 54.0),
+        table::Column::new("Host", 150.0),
         table::Column::new("Method", 56.0),
-        table::Column::new("URL", 200.0),
+        table::Column::new("URL", 190.0),
         table::Column::new("Params", 54.0),
         table::Column::new("Edited", 54.0),
         table::Column::new("Status code", 80.0),
         table::Column::new("Length", 54.0),
         table::Column::new("MIME type", 66.0),
         table::Column::new("Extension", 66.0),
-        table::Column::new("Title", 134.0),
-        table::Column::new("Notes", 100.0),
+        table::Column::new("Title", 110.0),
+        table::Column::new("Notes", 70.0),
         table::Column::new("TLS", 38.0),
-        table::Column::new("IP", 108.0),
-        table::Column::new("Cookies", 108.0),
-        table::Column::new("Time", 80.0),
+        table::Column::new("IP", 96.0),
+        table::Column::new("Cookies", 90.0),
+        table::Column::new("Time", 140.0),
         table::Column::new("Listener port", 84.0),
         // "Diff count", Proxy history (build 52685 burp.Zxwu.java:56); off by default.
         table::Column::new("Diff count", 64.0),
@@ -630,7 +748,7 @@ fn proxy_history(app: &mut App, ui: &mut Ui) {
     }
 
     // Burp: Up/Down move the selection when no text field has the keyboard.
-    if !ui.ctx().wants_keyboard_input() && !rows.is_empty() {
+    if !ui.ctx().egui_wants_keyboard_input() && !rows.is_empty() {
         let (up, down) = ui.input(|i| (i.key_pressed(egui::Key::ArrowUp), i.key_pressed(egui::Key::ArrowDown)));
         if up || down {
             let pos = app.history_sel.and_then(|id| rows.iter().position(|r| r.id == id));
@@ -643,6 +761,19 @@ fn proxy_history(app: &mut App, ui: &mut Ui) {
         }
     }
 
+    // A row the filter or search no longer shows cannot stay selected: its
+    // messages would sit in the panes below with no row to account for them.
+    if app.history_sel.is_some_and(|id| !rows.iter().any(|r| r.id == id)) {
+        app.history_sel = None;
+    }
+    let order: Vec<u64> = rows.iter().map(|r| r.id).collect();
+    app.history_multi.retain_visible(&order);
+    // Ctrl+A selects every visible row while no text field has the keyboard.
+    if !ui.ctx().egui_wants_keyboard_input() && ui.input(|i| i.modifiers.command && i.key_pressed(egui::Key::A)) {
+        app.history_multi.select_all(&order);
+    }
+    let multi = app.history_multi.clone();
+    let mut click: Option<(u64, bool, bool)> = None;
     let mut selected = app.history_sel;
     // Burp's JTable rows are ~16 px; keep a little air for egui's text.
     let row_height = 19.0;
@@ -668,15 +799,15 @@ fn proxy_history(app: &mut App, ui: &mut Ui) {
             ui.cursor().min,
             egui::vec2(ui.available_width(), row_height),
         );
-        if selected == Some(e.id) {
+        if selected == Some(e.id) || multi.ids.contains(&e.id) {
             // Burp's selectionBackground, so a selected row reads as selected
             // and not as a warning.
-            ui.painter().rect_filled(row_rect, egui::Rounding::ZERO, theme::selection_bg());
-            ui.painter().rect_stroke(row_rect.shrink(0.5), egui::Rounding::ZERO, egui::Stroke::new(1.0, c(0x5384B2)));
+            ui.painter().rect_filled(row_rect, egui::CornerRadius::ZERO, theme::selection_bg());
+            ui.painter().rect_stroke(row_rect.shrink(0.5), egui::CornerRadius::ZERO, egui::Stroke::new(1.0, c(0x5384B2)), egui::StrokeKind::Outside);
         } else if let Some(k) = e.highlight {
-            ui.painter().rect_filled(row_rect, egui::Rounding::ZERO, highlight_colours(k).0);
+            ui.painter().rect_filled(row_rect, egui::CornerRadius::ZERO, highlight_colours(k).0);
         } else if e.id % 2 == 0 {
-            ui.painter().rect_filled(row_rect, egui::Rounding::ZERO, theme::zebra());
+            ui.painter().rect_filled(row_rect, egui::CornerRadius::ZERO, theme::zebra());
         }
         let row = ui
             .horizontal(|ui| {
@@ -711,6 +842,8 @@ fn proxy_history(app: &mut App, ui: &mut Ui) {
             .interact(egui::Sense::click());
         if row.clicked() {
             selected = Some(e.id);
+            let m = ui.input(|i| i.modifiers);
+            click = Some((e.id, m.command, m.shift));
         }
         // History context menu, items and order grounded in the live 52685
         // reference (right-click on a populated history row, 2026-11-15):
@@ -730,7 +863,12 @@ fn proxy_history(app: &mut App, ui: &mut Ui) {
             // Swing menu density: ~22 px items.
             ui.spacing_mut().item_spacing.y = 0.0;
             ui.spacing_mut().button_padding.y = 4.0;
-            ui.label(RichText::new(history_url(e)).strong().size(12.5));
+            let n = multi.targets(&order, e.id).len();
+            if n > 1 {
+                ui.label(RichText::new(format!("{n} items selected")).strong().size(12.5));
+            } else {
+                ui.label(RichText::new(history_url(e)).strong().size(12.5));
+            }
             ui.separator();
             if menu_action(ui, "Add to scope") {
                 pending_menu = Some((e.clone(), "scope"));
@@ -793,12 +931,12 @@ fn proxy_history(app: &mut App, ui: &mut Ui) {
                     let (bg, _) = highlight_colours(k as u8);
                     if ui.add(egui::Button::new(RichText::new(*name).size(13.0)).fill(bg)).clicked() {
                         pending_menu = Some((e.clone(), HIGHLIGHT_CMDS[k]));
-                        ui.close_menu();
+                        ui.close();
                     }
                 }
                 if ui.button("None").clicked() {
                     pending_menu = Some((e.clone(), "hl_none"));
-                    ui.close_menu();
+                    ui.close();
                 }
             });
             if menu_action(ui, "Delete item") {
@@ -809,13 +947,13 @@ fn proxy_history(app: &mut App, ui: &mut Ui) {
             }
             ui.separator();
             if menu_action(ui, "Copy URL") {
-                ui.output_mut(|o| o.copied_text = history_url(e));
+                ui.ctx().copy_text(history_url(e));
             }
             if menu_action(ui, "Copy as curl command (bash)") {
-                ui.output_mut(|o| o.copied_text = curl_command_of(e));
+                ui.ctx().copy_text(curl_command_of(e));
             }
             if menu_action(ui, "Copy links in response") {
-                ui.output_mut(|o| o.copied_text = links_in_response(e));
+                ui.ctx().copy_text(links_in_response(e));
             }
             if menu_action(ui, "Save item") {
                 pending_menu = Some((e.clone(), "save_item"));
@@ -826,6 +964,23 @@ fn proxy_history(app: &mut App, ui: &mut Ui) {
             }
         });
     });
+    if let Some((id, ctrl, shift)) = click {
+        app.history_multi.click(&order, id, ctrl, shift);
+    }
+    // Commands that act on every selected row when the clicked row is part of
+    // a multi-row selection (Burp applies them to the whole selection).
+    if let Some((e, cmd)) = &pending_menu {
+        let ids = app.history_multi.targets(&order, e.id);
+        if ids.len() > 1 && matches!(*cmd, "scope" | "scan" | "passive" | "repeater" | "organizer" | "delete" | "save_item" | "cmp_req" | "cmp_resp") || (ids.len() > 1 && cmd.starts_with("hl_")) {
+            let entries: Vec<net::HistEntry> = rows.iter().filter(|r| ids.contains(&r.id)).cloned().collect();
+            bulk_history_command(app, &entries, cmd);
+            if *cmd == "delete" {
+                selected = None;
+                app.history_multi = table::MultiSelect::default();
+            }
+            pending_menu = None;
+        }
+    }
     if let Some((e, cmd)) = pending_menu {
         match cmd {
             "scope" => {
@@ -932,7 +1087,7 @@ fn splitter(ui: &mut Ui, split: &mut f32, total: f32) {
         egui::vec2(ui.available_width(), 7.0),
         egui::Sense::hover(),
     );
-    let drag = ui.interact(rect, ui.id().with("splitter"), egui::Sense::drag());
+    let drag = ui.interact(rect, ui.scope_id().with("splitter"), egui::Sense::drag());
     if drag.dragged() {
         let next = *split - drag.drag_delta().y;
         *split = next.clamp(90.0, (total - 140.0).max(90.0));
@@ -941,19 +1096,19 @@ fn splitter(ui: &mut Ui, split: &mut f32, total: f32) {
     let y = rect.center().y;
     ui.painter().rect_filled(
         egui::Rect::from_min_size(egui::pos2(rect.left(), y - 0.5), egui::vec2(rect.width(), 1.0)),
-        egui::Rounding::ZERO,
+        egui::CornerRadius::ZERO,
         if active { c(theme::ORANGE) } else { theme::line() },
     );
     if active {
         ui.painter().rect_filled(
             egui::Rect::from_min_size(egui::pos2(rect.center().x - 14.0, y - 1.5), egui::vec2(28.0, 3.0)),
-            egui::Rounding::same(1.5),
+            egui::CornerRadius::same(2),
             c(theme::ORANGE),
         );
     }
 }
 
-fn proxy_options(app: &mut App, ui: &mut Ui) {
+pub(crate) fn proxy_options(app: &mut App, ui: &mut Ui) {
     // Burp: the gear tab opens Settings > Tools > Proxy (listeners, interception
     // rules, WebSockets, response modification).
     ui.label(RichText::new("Connection and listeners").color(theme::ink()).size(14.0).strong());
@@ -975,9 +1130,14 @@ fn proxy_options(app: &mut App, ui: &mut Ui) {
         }
     });
     ui.add_space(8.0);
-    listeners_panel(app, ui, true);
+    crate::proxy_settings::listeners_table(app, ui);
     ui.add_space(10.0);
-    // Proxy settings > WebSockets: frame interception (Burp default: off).
+    crate::proxy_settings::ca_buttons(app, ui);
+    ui.add_space(10.0);
+    crate::proxy_settings::intercept_rules_table(app, ui);
+    ui.add_space(10.0);
+    // Proxy settings > WebSockets: which directions are held while Intercept
+    // is on (Burp default: both, ProjectDefaults intercept_web_sockets_messages).
     ui.label(RichText::new("WebSockets").color(theme::ink()).size(14.0).strong());
     ui.add_space(4.0);
     ui.horizontal(|ui| {
@@ -1063,18 +1223,20 @@ fn detail(app: &mut App, ui: &mut Ui) {
     }
     sb.size(egui_extras::Size::exact(dock_w)).horizontal(|mut strip| {
         strip.cell(|ui| {
+            // Burp's default message layout here is request and response side
+            // by side; stacked, each pane showed only four or five lines.
             let full = ui.available_height();
             egui_extras::StripBuilder::new(ui)
                 .size(egui_extras::Size::relative(0.5))
                 .size(egui_extras::Size::remainder())
-                .vertical(|mut col| {
+                .horizontal(|mut col| {
                     col.cell(|ui| {
-                        crate::msgpane::message_pane(ui, "hist_req", "Request", req.as_deref(), &mut app.req_pane, false, full / 2.0);
+                        crate::msgpane::message_pane(ui, "hist_req", "Request", req.as_deref(), &mut app.req_pane, false, full);
                     });
                     col.cell(|ui| {
                         let r = ui.max_rect();
-                        ui.painter().hline(r.x_range(), r.top(), egui::Stroke::new(1.0, theme::line()));
-                        crate::msgpane::message_pane(ui, "hist_resp", "Response", resp.as_deref(), &mut app.resp_pane, true, ui.available_height());
+                        ui.painter().vline(r.left(), r.y_range(), egui::Stroke::new(1.0, theme::line()));
+                        crate::msgpane::message_pane(ui, "hist_resp", "Response", resp.as_deref(), &mut app.resp_pane, true, full);
                     });
                 });
         });
@@ -1097,6 +1259,8 @@ fn detail(app: &mut App, ui: &mut Ui) {
                             if let Some(h) = app.shared.history.lock().unwrap().iter_mut().find(|h| h.id == e.id) {
                                 h.note = if note.is_empty() { None } else { Some(note) };
                             }
+                            // The filtered rows are cached copies: refresh the Notes column now.
+                            app.hist_cache_key.clear();
                         }
                     }
                 }
@@ -1141,7 +1305,7 @@ fn scan_sev_label(sev: &str) -> &'static str {
 /// interaction. Burp family: SCANNER_ACTIVE_CHECKS_EXTERNAL_INTERACTION.
 fn sync_oob_issues(app: &mut App) {
     let interactions = app.collab_state.interactions();
-    let Ok(mut pending) = app.shared.oob_pending.lock() else { return };
+    let mut pending = app.shared.oob_pending.lock().unwrap();
     if pending.is_empty() || interactions.is_empty() {
         return;
     }
@@ -1149,14 +1313,46 @@ fn sync_oob_issues(app: &mut App) {
     for it in &interactions {
         let Some(token) = &it.token else { continue };
         let kind = it.kind().label();
-        if let Some(pos) = pending.iter().position(|(t, k, _)| t == token && k.is_none_or(|k| k == kind)) {
+        let Some(pos) = pending.iter().position(|(t, k, _)| t == token && k.is_none_or(|k| k == kind)) else { continue };
+        if pending[pos].1.is_some() {
+            // A check that names its own issue (SMTP header injection).
             let (_, _, mut issue) = pending.remove(pos);
             issue.detail = format!("Collaborator interaction observed: {} (source {})", it.headline(), it.source);
             issues.push(issue);
+            continue;
+        }
+        // The external-interaction probe: Burp raises one issue per
+        // interaction type, "External service interaction (DNS)" and
+        // "(HTTP)" (high, certain), so the token stays pending until both
+        // have been seen.
+        if !oob_reported().lock().unwrap().insert(format!("{token}|{kind}")) {
+            continue;
+        }
+        let mut issue = pending[pos].2.clone();
+        issue.name = format!("External service interaction ({kind})");
+        issue.sev = "high".into();
+        issue.confidence = "Certain".into();
+        issue.detail = format!(
+            "It is possible to induce the application to perform server-side {kind} interactions with an arbitrary domain. The payload {token} was submitted and a {kind} interaction was received: {} (source {}).",
+            it.headline(),
+            it.source
+        );
+        issues.push(issue);
+        let r = oob_reported().lock().unwrap();
+        if r.contains(&format!("{token}|DNS")) && r.contains(&format!("{token}|HTTP")) {
+            drop(r);
+            pending.remove(pos);
         }
     }
     drop(pending);
     crate::scan::add_issues(&app.shared, issues);
+}
+
+/// (token, interaction type) pairs already reported as External service
+/// interaction issues.
+fn oob_reported() -> &'static std::sync::Mutex<std::collections::HashSet<String>> {
+    static S: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
+    S.get_or_init(Default::default)
 }
 
 fn scanner(app: &mut App, ui: &mut Ui) {
@@ -1200,6 +1396,9 @@ fn scanner(app: &mut App, ui: &mut Ui) {
     });
     ui.add_space(2.0);
 
+    // D-07: "Report issues" (the rows shown) / "Report selected issues".
+    let mut report_ids: Option<Vec<u64>> = None;
+    let mut report_all = false;
     let busy = app.shared.scan_busy.load(Ordering::SeqCst);
     let (done, total) = (
         app.shared.scan_done.load(Ordering::SeqCst),
@@ -1233,6 +1432,9 @@ fn scanner(app: &mut App, ui: &mut Ui) {
             if ui.button("Clear issues").clicked() {
                 app.shared.issues.lock().unwrap().clear();
             }
+            if ui.button("Report issues").on_hover_text("Report the issues shown in the table as HTML or XML").clicked() {
+                report_all = true;
+            }
             ui.label(
                 RichText::new(format!("{} issues", app.shared.issues.lock().unwrap().len()))
                     .size(12.0)
@@ -1241,9 +1443,13 @@ fn scanner(app: &mut App, ui: &mut Ui) {
         });
     });
 
-    ui.add_space(6.0);
-    let issues = app.shared.issues.lock().unwrap().clone();
-    let table_h = if app.scan_sel.is_some() { (ui.available_height() - 220.0).max(140.0) } else { ui.available_height() - 10.0 };
+    ui.add_space(4.0);
+    app.issue_filter.bar(ui);
+    ui.add_space(4.0);
+    let issues: Vec<scan::ScanIssue> = app.shared.issues.lock().unwrap().iter().filter(|i| app.issue_filter.matches(i)).cloned().collect();
+    // With an issue selected the table keeps the upper part and the advisory
+    // and evidence tabs get the rest, as in Burp's issue activity view.
+    let table_h = if app.scan_sel.is_some() { (ui.available_height() * 0.4).max(140.0) } else { ui.available_height() - 10.0 };
     let columns = [
         table::Column::new("Severity", 78.0),
         table::Column::new("Confidence", 78.0),
@@ -1252,6 +1458,7 @@ fn scanner(app: &mut App, ui: &mut Ui) {
         table::Column::new("Path", 260.0),
     ];
     let mut selected = app.scan_sel;
+    let filter_default = app.issue_filter.is_default();
     let filtered = table::filter_rows(&issues, &app.scan_table, |i| {
         format!("{} {} {} {}", i.sev, i.name, i.host, i.path)
     });
@@ -1267,9 +1474,33 @@ fn scanner(app: &mut App, ui: &mut Ui) {
         _ => row.3.path.clone(),
     });
     let rows: Vec<scan::ScanIssue> = sortable.into_iter().map(|r| r.3).collect();
+    if report_all {
+        report_ids = Some(rows.iter().map(|i| i.id).collect());
+    }
+    let grouping = app.issue_filter.grouping;
+    if grouping != crate::issue_view::Grouping::None {
+        egui::ScrollArea::vertical().id_salt("scan_issues_grouped").max_height(table_h.max(140.0)).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            crate::issue_view::grouped_list(
+                ui,
+                &rows,
+                grouping,
+                &mut selected,
+                |i| if i.false_positive { "False positive".to_string() } else { scan_sev_label(&i.sev).to_string() },
+                |i| if i.false_positive { theme::ink_faint() } else { scan_sev_color(&i.sev) },
+            );
+            if rows.is_empty() {
+                feedback::empty_state(ui, "No issues to group", "Browse sites through the proxy, run an active scan, or widen the filter.");
+            }
+        });
+    } else {
     egui::ScrollArea::vertical().max_height(table_h.max(140.0)).show(ui, |ui| {
         let row_h = theme::appearance().1.row_height();
         table::data_table(ui, "scan_issues", &columns, &rows, &mut app.scan_table, row_h, |iss, ui| {
+            if selected == Some(iss.id) {
+                let rr = egui::Rect::from_min_size(ui.cursor().min, egui::vec2(ui.available_width(), row_h));
+                ui.painter().rect_filled(rr, 0.0, theme::selection_bg());
+            }
             let row = ui
                 .horizontal(|ui| {
                     let sev_text = if iss.false_positive { "False positive" } else { scan_sev_label(&iss.sev) };
@@ -1285,27 +1516,34 @@ fn scanner(app: &mut App, ui: &mut Ui) {
             if row.clicked() {
                 selected = Some(iss.id);
             }
+            row.context_menu(|ui| {
+                if ui.button("Report selected issues").clicked() {
+                    report_ids = Some(vec![iss.id]);
+                    ui.close();
+                }
+            });
         });
         if rows.is_empty() {
-            if issues.is_empty() {
+            if issues.is_empty() && filter_default {
                 feedback::empty_state(ui, "No issues yet", "Browse sites through the proxy, or run an active scan on a request.");
             } else {
-                feedback::empty_state(ui, "No issues match the filter", "Clear the filter box to see every issue.");
+                feedback::empty_state(ui, "No issues match the filter", "Clear the filter box and tick every severity and confidence to see every issue.");
             }
         }
     });
+    }
     app.scan_sel = selected;
+    if let Some(ids) = report_ids.take() {
+        app.eng.report.open_for(ids);
+    }
 
     if let Some(id) = app.scan_sel {
-        if let Some(issue) = issues.iter().find(|i| i.id == id) {
+        if let Some(issue) = issues.iter().find(|i| i.id == id).cloned() {
             ui.add_space(4.0);
             let label = if issue.false_positive { "False positive" } else { scan_sev_label(&issue.sev) };
             let colour = if issue.false_positive { theme::ink_faint() } else { scan_sev_color(&issue.sev) };
-            ui.label(RichText::new(format!("{label} - {}", issue.name)).size(13.0).strong().color(colour));
-            hint(ui, &format!("{} {} - {}", issue.host, issue.path, issue.detail));
-            // Burp's False positive classification (build 52685, burp.Ze1r line 12).
-            if ui.button(if issue.false_positive { "Unmark false positive" } else { "Mark as false positive" }).clicked() {
-                if let Some(mut it) = app.shared.issues.lock().unwrap().iter_mut().find(|i| i.id == id) {
+            if crate::issue_view::issue_detail(app, ui, &issue, label, colour) {
+                if let Some(it) = app.shared.issues.lock().unwrap().iter_mut().find(|i| i.id == id) {
                     it.false_positive = !it.false_positive;
                 }
             }
@@ -1341,8 +1579,8 @@ fn with_target_host(req: &str, target: &str) -> String {
 }
 
 fn intruder(app: &mut App, ui: &mut Ui) {
-    let attack = app.shared.attack.lock().unwrap().clone();
-    let running = attack.running.load(Ordering::SeqCst);
+    // Attacks run through intruder_run (pool, retries, grep, recursive grep).
+    let running = crate::intruder_ui::is_running(app);
     if app.intr_req.trim().is_empty() {
         // Burp's empty state (live 52685): illustration + "To get started".
         egui_extras::StripBuilder::new(ui)
@@ -1384,12 +1622,21 @@ fn intruder(app: &mut App, ui: &mut Ui) {
     while app.intr_sets.len() < positions.max(1) {
         app.intr_sets.push(String::new());
     }
+    while app.intr_sources.len() < app.intr_sets.len() {
+        app.intr_sources.push(intruder::PayloadSource::SimpleList { items: Vec::new() });
+    }
     let needed = app.intr_attack.sets_needed(positions).max(1);
+    let bases: Vec<String> = intruder::Template::parse(&app.intr_req).map(|t| t.position_values().to_vec()).unwrap_or_default();
     let sets: Vec<Vec<String>> = app
         .intr_sets
         .iter()
+        .zip(app.intr_sources.iter())
         .take(needed)
-        .map(|text| text.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect())
+        .enumerate()
+        .map(|(i, (text, source))| match source {
+            intruder::PayloadSource::SimpleList { .. } => text.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect(),
+            other => other.generate_for_base(bases.get(i).map(String::as_str).unwrap_or("")),
+        })
         .collect();
 
     let side_w = if app.intr_dock < 3 { 400.0 } else { 0.0 };
@@ -1423,11 +1670,10 @@ fn intruder(app: &mut App, ui: &mut Ui) {
                     .min_size(egui::vec2(130.0, 24.0));
                     if ui.add(start).clicked() {
                         if running {
-                            attack.stop.store(true, Ordering::SeqCst);
+                            crate::intruder_ui::stop(app);
                         } else {
                             let req = if app.intr_update_host { with_target_host(&app.intr_req, &app.intr_target) } else { app.intr_req.clone() };
-                            let https = app.intr_target.starts_with("https://");
-                            match net::start_attack(app.shared.clone(), req, app.intr_attack, sets.clone(), https) {
+                            match crate::intruder_ui::start_attack(app, &req) {
                                 Ok(()) => {
                                     app.intr_results_open = true;
                                     app.intr_attack_no += 1;
@@ -1530,11 +1776,23 @@ fn intruder(app: &mut App, ui: &mut Ui) {
                                 });
                                 ui.end_row();
                                 ui.label(RichText::new("Payload type:").size(12.5).color(theme::ink()));
-                                ui.label(RichText::new("Simple list").size(12.5).color(theme::ink_dim()));
+                                let current = app.intr_sources[set_n].label();
+                                egui::ComboBox::from_id_salt("intr_ptype").selected_text(current).show_ui(ui, |ui| {
+                                    for d in intruder::PayloadSource::defaults() {
+                                        let l = d.label();
+                                        if ui.selectable_label(current == l, l).clicked() && current != l {
+                                            let mut d = d;
+                                            // The frobber works on the position's base value.
+                                            if let intruder::PayloadSource::CharacterFrobber { base } = &mut d {
+                                                *base = intruder::Template::parse(&app.intr_req).ok().and_then(|t| t.position_values().get(set_n).cloned()).unwrap_or_default();
+                                            }
+                                            app.intr_sources[set_n] = d;
+                                        }
+                                    }
+                                });
                                 ui.end_row();
                                 let count = sets.get(set_n).map(Vec::len).unwrap_or(0);
-                                let lens: Vec<usize> = sets.iter().map(Vec::len).collect();
-                                let reqs = intruder::count(app.intr_attack, positions, &lens).map(|n| n.to_string()).unwrap_or_else(|| "too many".into());
+                                let reqs = crate::intruder_ui::request_count_text(app);
                                 ui.label(RichText::new("Payload count:").size(12.5).color(theme::ink()));
                                 ui.label(RichText::new(count.to_string()).size(12.5).color(theme::ink_dim()));
                                 ui.end_row();
@@ -1544,6 +1802,9 @@ fn intruder(app: &mut App, ui: &mut Ui) {
                             });
                             ui.add_space(10.0);
                             ui.label(RichText::new("Payload configuration").strong().size(13.0).color(theme::ink()));
+                            if !matches!(app.intr_sources[set_n], intruder::PayloadSource::SimpleList { .. }) {
+                                payload_source_config(ui, &mut app.intr_sources[set_n]);
+                            } else {
                             ui.label(RichText::new("This payload type lets you configure a simple list of strings that are used as payloads.").size(12.0).color(theme::ink_dim()));
                             ui.add_space(6.0);
                             ui.horizontal_top(|ui| {
@@ -1576,8 +1837,8 @@ fn intruder(app: &mut App, ui: &mut Ui) {
                                     }
                                 });
                                 let set = &mut app.intr_sets[set_n];
-                                egui::Frame::none().stroke(egui::Stroke::new(1.0, theme::line())).fill(theme::surface()).show(ui, |ui| {
-                                    ui.add(egui::TextEdit::multiline(set).font(egui::TextStyle::Monospace).desired_rows(8).desired_width(ui.available_width() - 8.0).frame(false));
+                                egui::Frame::NONE.stroke(egui::Stroke::new(1.0, theme::line())).fill(theme::surface()).show(ui, |ui| {
+                                    ui.add(egui::TextEdit::multiline(set).font(egui::TextStyle::Monospace).desired_rows(8).desired_width(ui.available_width() - 8.0).frame(egui::Frame::NONE.inner_margin(egui::Margin::symmetric(4, 2))));
                                 });
                             });
                             ui.horizontal(|ui| {
@@ -1594,6 +1855,7 @@ fn intruder(app: &mut App, ui: &mut Ui) {
                                 ui.add_space(100.0);
                                 ui.add(egui::TextEdit::singleline(&mut app.intr_load_path).hint_text("File to load (Load ...)").desired_width(ui.available_width() - 8.0));
                             });
+                            }
                         });
                         if app.intr_paste_pending {
                             app.intr_paste_pending = false;
@@ -1601,7 +1863,7 @@ fn intruder(app: &mut App, ui: &mut Ui) {
                         }
                         let pasted: Option<String> = ui.input(|i| i.events.iter().find_map(|e| if let egui::Event::Paste(t) = e { Some(t.clone()) } else { None }));
                         if let Some(t) = pasted {
-                            if !ui.ctx().wants_keyboard_input() {
+                            if !ui.ctx().egui_wants_keyboard_input() {
                                 let set_n = app.intr_set_sel.min(needed - 1);
                                 let set = &mut app.intr_sets[set_n];
                                 if !set.is_empty() && !set.ends_with('\n') { set.push('\n'); }
@@ -1609,13 +1871,9 @@ fn intruder(app: &mut App, ui: &mut Ui) {
                             }
                         }
                     }
-                    1 => {
-                        ui.label(RichText::new("Requests are sent one at a time with a 50 ms pause between them (WebProbe's single default resource pool).").size(12.5).color(theme::ink_dim()));
-                    }
+                    1 => crate::intruder_ui::resource_pool_panel(ui, &mut app.intr_x),
                     _ => {
-                        ui.label(RichText::new("Attack results record status code, length and timing for every request; open the results window with Start attack.").size(12.5).color(theme::ink_dim()));
-                        ui.add_space(6.0);
-                        if ui.button("Show last attack results").clicked() {
+                        if crate::intruder_ui::settings_panel(ui, &mut app.intr_x) {
                             app.intr_results_open = true;
                         }
                     }
@@ -1628,6 +1886,7 @@ fn intruder(app: &mut App, ui: &mut Ui) {
                 ui.painter().vline(r.left(), r.y_range(), egui::Stroke::new(1.0, theme::line()));
                 for (i, label) in ["Payloads", "Resource pool", "Settings"].iter().enumerate() {
                     let (rect, resp) = ui.allocate_exact_size(egui::vec2(32.0, 130.0), egui::Sense::click());
+                    resp.widget_info(|| egui::WidgetInfo::selected(egui::accesskit::Role::Tab, true, app.intr_dock == i, *label));
                     if app.intr_dock == i {
                         ui.painter().rect_filled(rect, 0.0, c(0xCADAF0));
                     }
@@ -1643,69 +1902,7 @@ fn intruder(app: &mut App, ui: &mut Ui) {
         });
 
     // Burp opens each attack in its own results window.
-    if app.intr_results_open {
-        let mut open = true;
-        let target = app.intr_target.clone();
-        egui::Window::new(format!("{}. Intruder attack of {target}", app.intr_attack_no.max(1)))
-            .open(&mut open)
-            .default_size(egui::vec2(980.0, 640.0))
-            .show(ui.ctx(), |ui| {
-                let (done, total) = (attack.done.load(Ordering::SeqCst), attack.total.load(Ordering::SeqCst));
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new(if running { format!("Attack running: {done} of {total}") } else { format!("Finished: {done} of {total} requests") }).size(12.5).color(theme::ink_dim()));
-                    if running && ui.button("Pause / Stop").clicked() {
-                        attack.stop.store(true, Ordering::SeqCst);
-                    }
-                });
-                let rows: Vec<(usize, net::AttackRow)> = attack.rows.lock().unwrap().clone().into_iter().enumerate().collect();
-                let cols = [
-                    table::Column::new("Request", 70.0),
-                    table::Column::new("Payload", 260.0),
-                    table::Column::new("Status code", 90.0),
-                    table::Column::new("Response received", 130.0),
-                    table::Column::new("Error", 60.0),
-                    table::Column::new("Length", 80.0),
-                ];
-                let mut st = app.intr_table.clone();
-                let mut pick = None;
-                let sel = app.intr_row_sel;
-                table::table_body(ui, "intr_results", &cols, &rows, &mut st, 19.0, 300.0, &mut |(i, r), ui| {
-                    let rr = egui::Rect::from_min_size(ui.cursor().min, egui::vec2(ui.available_width(), 19.0));
-                    if sel == Some(*i) {
-                        ui.painter().rect_filled(rr, 0.0, theme::selection_bg());
-                    }
-                    let row = ui.horizontal(|ui| {
-                        table::cells(ui, &cols, &table::TableState::default(), 19.0, &[
-                            (0, (i + 1).to_string(), None),
-                            (1, r.payload.clone(), None),
-                            (2, r.status.clone(), None),
-                            (3, r.ms.to_string(), None),
-                            (4, if r.ok { String::new() } else { theme::icon::CHECK.to_string() }, None),
-                            (5, r.len.to_string(), None),
-                        ]);
-                    }).response.interact(egui::Sense::click());
-                    if row.clicked() {
-                        pick = Some(*i);
-                    }
-                });
-                app.intr_table = st;
-                if pick.is_some() {
-                    app.intr_row_sel = pick;
-                }
-                let chosen = app.intr_row_sel.and_then(|i| rows.get(i).map(|x| x.1.clone()));
-                let h = ui.available_height().max(200.0);
-                egui_extras::StripBuilder::new(ui)
-                    .size(egui_extras::Size::remainder())
-                    .size(egui_extras::Size::remainder())
-                    .horizontal(|mut s2| {
-                        s2.cell(|ui| crate::msgpane::message_pane(ui, "intr_res_req", "Request", chosen.as_ref().map(|r| r.req.as_slice()), &mut app.intr_res_req_pane, false, h));
-                        s2.cell(|ui| crate::msgpane::message_pane(ui, "intr_res_resp", "Response", chosen.as_ref().and_then(|r| r.resp.as_deref()), &mut app.intr_res_resp_pane, true, h));
-                    });
-            });
-        if !open {
-            app.intr_results_open = false;
-        }
-    }
+    crate::intruder_ui::results_window(app, ui.ctx());
 }
 
 // ================= Repeater =================
@@ -1714,58 +1911,9 @@ fn repeater(app: &mut App, ui: &mut Ui) {
     // Burp's Repeater: a strip of numbered tabs (close cross, "+"), a toolbar
     // (orange Send, settings, Cancel, history arrows ... Target on the
     // right), then Request | Response | Inspector with the vertical dock, and
-    // a status line at the bottom (live 52685 reference).
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 2.0;
-        let names: Vec<String> = app.shared.repeaters.lock().unwrap().iter().map(|r| r.name.clone()).collect();
-        let reps_len = names.len();
-        let mut close: Option<usize> = None;
-        for (i, name) in names.iter().enumerate() {
-            let sel = app.rep_sel == i;
-            let label = if name.starts_with("Rep ") { format!("{}", i + 1) } else { name.clone() };
-            let frame = egui::Frame::none()
-                .fill(if sel { theme::surface() } else { theme::chrome() })
-                .stroke(egui::Stroke::new(1.0, theme::line()))
-                .inner_margin(egui::Margin::symmetric(8.0, 3.0));
-            frame.show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    if ui.add(egui::Label::new(RichText::new(label).size(12.5).color(theme::ink())).sense(egui::Sense::click())).clicked() {
-                        app.rep_sel = i;
-                    }
-                    if reps_len > 1
-                        && ui.add(egui::Label::new(RichText::new("\u{00d7}").size(12.0).color(theme::ink_faint())).sense(egui::Sense::click())).clicked()
-                    {
-                        close = Some(i);
-                    }
-                });
-            });
-            if sel {
-                let r = ui.min_rect();
-                let _ = r;
-            }
-        }
-        if ui.add(egui::Button::new(RichText::new("+").size(14.0)).frame(false)).on_hover_text("New tab").clicked() {
-            let mut reps = app.shared.repeaters.lock().unwrap();
-            let n = reps.len() + 1;
-            reps.push(net::RepTab {
-                name: format!("Rep {n}"),
-                host: String::new(),
-                port: 80,
-                https: false,
-                request: String::new(),
-                response: None,
-                result_line: String::new(),
-            history: Vec::new(),
-            hist_pos: 0,
-            });
-            app.rep_sel = n - 1;
-        }
-        if let Some(i) = close {
-            let mut reps = app.shared.repeaters.lock().unwrap();
-            reps.remove(i);
-            app.rep_sel = app.rep_sel.saturating_sub(1).min(reps.len().saturating_sub(1));
-        }
-    });
+    // a status line at the bottom (live 52685 reference). E-04: the tab
+    // strip (rename, close, duplicate, reorder) lives in repeater_ops.
+    crate::repeater_ops::tab_strip(app, ui);
     ui.add_space(4.0);
 
     let busy = app.shared.rep_busy.load(Ordering::SeqCst);
@@ -1793,14 +1941,24 @@ fn repeater(app: &mut App, ui: &mut Ui) {
         if ui.add_enabled(!busy, send).on_hover_text("Send (Ctrl+Space)").clicked() {
             repeater_send(app);
         }
-        ui.menu_button(RichText::new(theme::icon::GEAR).size(15.0), |ui| {
+        egui::menu::MenuButton::new(RichText::new(theme::icon::GEAR).size(15.0)).config(egui::menu::MenuConfig::new().close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)).ui(ui, |ui| {
             // Burp's Repeater settings menu (the options WebProbe implements).
-            ui.checkbox(&mut app.rep_update_cl, "Update Content-Length");
+            crate::repeater_ops::settings_menu(ui, app);
         })
-        .response
+        .0
         .on_hover_text("Repeater settings");
         if ui.add_enabled(busy, egui::Button::new("Cancel").min_size(egui::vec2(64.0, 24.0))).clicked() {
-            app.shared.rep_cancel.store(true, Ordering::SeqCst);
+            cancel_repeater_send(&app.shared);
+        }
+        // E-02: Burp's "Follow redirection" button, shown for a 3xx response.
+        if crate::repeater_ops::can_follow(app)
+            && ui
+                .add_enabled(!busy, egui::Button::new("Follow redirection").min_size(egui::vec2(64.0, 24.0)))
+                .on_hover_text("Follow the redirection in the current response")
+                .clicked()
+            && crate::repeater_ops::load_redirect(app)
+        {
+            repeater_send(app);
         }
         // Burp's per-tab request history.
         let (pos, len) = {
@@ -1832,7 +1990,7 @@ fn repeater(app: &mut App, ui: &mut Ui) {
     });
     if app.rep_target_edit {
         let mut open = true;
-        egui::Window::new("Configure target details")
+        egui::Window::new("Configure target details").default_pos(crate::theme::window_pos(ui.ctx()))
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
@@ -1880,6 +2038,7 @@ fn repeater(app: &mut App, ui: &mut Ui) {
     let body_h = (ui.available_height() - status_h).max(120.0);
     let dock_w = 32.0;
     let side_w = if app.dock_sel < 2 { 330.0 } else { 0.0 };
+    let mut rep_action: Option<crate::repeater_ops::RepAction> = None;
     ui.allocate_ui(egui::vec2(ui.available_width(), body_h), |ui| {
         let mut sb = egui_extras::StripBuilder::new(ui)
             .size(egui_extras::Size::remainder().at_least(200.0))
@@ -1889,9 +2048,23 @@ fn repeater(app: &mut App, ui: &mut Ui) {
         }
         sb.size(egui_extras::Size::exact(dock_w)).horizontal(|mut strip| {
             strip.cell(|ui| {
+                // E-06 "Paste URL as request" lands here before the editor
+                // could take the paste.
+                crate::repeater_ops::poll_paste_url(app, ui);
                 let i = app.rep_sel.min(app.shared.repeaters.lock().unwrap().len().saturating_sub(1));
-                let mut text = app.shared.repeaters.lock().unwrap()[i].request.clone();
-                if crate::msgpane::editable_pane(ui, "rep_req", "Request", &mut text, &mut app.rep_req_pane, body_h) {
+                let (mut text, has_resp) = {
+                    let reps = app.shared.repeaters.lock().unwrap();
+                    (reps[i].request.clone(), reps[i].response.is_some())
+                };
+                app.rep_req_pane.live_url_encode = app.rops.url_encode_live;
+                // E-03: Burp's request-editor context menu.
+                let rops = &mut app.rops;
+                let mut menu = |ui: &mut Ui, sel: Option<String>| {
+                    if let Some(a) = crate::repeater_ops::request_menu(ui, rops, sel.is_some(), sel.as_deref(), has_resp) {
+                        rep_action = Some(a);
+                    }
+                };
+                if crate::msgpane::editable_pane_ex(ui, "rep_req", "Request", &mut text, &mut app.rep_req_pane, body_h, Some(&mut menu)) {
                     app.shared.repeaters.lock().unwrap()[i].request = text;
                 }
             });
@@ -1911,7 +2084,11 @@ fn repeater(app: &mut App, ui: &mut Ui) {
                         reps[i].request.clone()
                     };
                     let reqb = (!req.trim().is_empty()).then(|| req.into_bytes());
-                    crate::msgpane::inspector(ui, "rep_insp", reqb.as_deref(), resp.as_deref(), &mut app.insp_state);
+                    if let Some(new) = crate::msgpane::inspector_ex(ui, "rep_insp", reqb.as_deref(), resp.as_deref(), &mut app.insp_state, true) {
+                        let mut reps = app.shared.repeaters.lock().unwrap();
+                        let i = app.rep_sel.min(reps.len().saturating_sub(1));
+                        reps[i].request = String::from_utf8_lossy(&new).into_owned();
+                    }
                 });
             }
             strip.cell(|ui| {
@@ -1924,6 +2101,22 @@ fn repeater(app: &mut App, ui: &mut Ui) {
             });
         });
     });
+    if let Some(action) = rep_action {
+        use crate::repeater_ops::RepAction;
+        match action {
+            RepAction::ActiveScan => {
+                if let Some(e) = crate::repeater_ops::tab_entry(app) {
+                    run_active_scan_on(app, &e);
+                }
+            }
+            RepAction::ToIntruder => repeater_tab_to_intruder(app),
+            RepAction::ToRepeater => repeater_tab_to_new_tab(app),
+            other => {
+                let ctx = ui.ctx().clone();
+                crate::repeater_ops::apply_action(app, &ctx, other);
+            }
+        }
+    }
     let r = ui.cursor();
     ui.painter().hline(ui.max_rect().x_range(), r.top(), egui::Stroke::new(1.0, theme::line()));
     ui.horizontal(|ui| {
@@ -1952,7 +2145,7 @@ pub(crate) fn update_content_length(req: &str) -> String {
     String::from_utf8_lossy(&fixed).into_owned()
 }
 
-fn repeater_send(app: &mut App) {
+pub(crate) fn repeater_send(app: &mut App) {
     if app.rep_update_cl {
         let mut reps = app.shared.repeaters.lock().unwrap();
         let i = app.rep_sel.min(reps.len().saturating_sub(1));
@@ -1961,12 +2154,12 @@ fn repeater_send(app: &mut App) {
     }
     let reps_len = app.shared.repeaters.lock().unwrap().len();
     let i = app.rep_sel.min(reps_len.saturating_sub(1));
-    let (idx, name, request, port, https) = {
+    let (idx, tab_id, request, port, https) = {
         let reps = app.shared.repeaters.lock().unwrap();
         let r = &reps[i];
         let parts = util::parse_http(r.request.as_bytes());
         let host = util::get_header(&parts.headers, "Host").unwrap_or_default();
-        (i, r.name.clone(), r.request.clone(), if host.contains(':') { split_port(&host).unwrap_or(r.port) } else { r.port }, r.https)
+        (i, r.id, r.request.clone(), if host.contains(':') { split_port(&host).unwrap_or(r.port) } else { r.port }, r.https)
     };
     let host = {
         let reps = app.shared.repeaters.lock().unwrap();
@@ -1980,20 +2173,39 @@ fn repeater_send(app: &mut App) {
     let (h, p) = net::split_h_p(&host, port);
     app.shared.rep_busy.store(true, Ordering::SeqCst);
     *app.shared.rep_result.lock().unwrap() = "sending...".into();
+    let gen = app.shared.rep_gen.fetch_add(1, Ordering::SeqCst) + 1;
     let sh = app.shared.clone();
+    // E-02: Repeater settings > Follow redirections / Process cookies.
+    let (follow, cookies) = (app.rops.follow, app.rops.process_cookies);
     std::thread::spawn(move || {
+        let _tool = net::tool_scope("Repeater");
         let t0 = std::time::Instant::now();
-        let up = if https {
-            net::send_tls_raw(&sh, &h, p, request.as_bytes())
-        } else {
-            net::send_raw(&sh, &h, p, request.as_bytes())
-        };
+        let service = crate::repeater_ops::Service::new(&h, p, https);
+        let stale = || sh.rep_gen.load(Ordering::SeqCst) != gen;
+        let fr = crate::repeater_ops::send_following(&sh, &request, &service, follow, cookies, &stale);
+        let up = net::Upstream { resp: fr.response, error: fr.error };
+        let followed = fr.followed;
+        // After followed redirections the tab shows the last request sent
+        // and its target, as Burp's item does (Zrr5.ZA), so the history
+        // entry and "Follow redirection" continue from the last hop.
+        let last = (followed > 0).then_some((fr.request, fr.service));
         let ms = t0.elapsed().as_millis();
+        // Cancelled (or superseded) while in flight: the result is dropped.
+        if sh.rep_gen.load(Ordering::SeqCst) != gen {
+            return;
+        }
         let mut reps = sh.repeaters.lock().unwrap();
-        let target = reps.iter_mut().find(|r| r.name == name);
+        let target = reps.iter_mut().find(|r| r.id == tab_id);
         if let Some(r) = target {
             r.response = up.resp.clone();
-            let sent_req = request.clone();
+            let mut sent_req = request.clone();
+            if let Some((req, svc)) = last {
+                sent_req = req.clone();
+                r.request = req;
+                r.host = svc.host;
+                r.port = svc.port;
+                r.https = svc.https;
+            }
             r.result_line = match &up.resp {
                 Some(resp) => {
                     // Burp's Repeater status line: "Done" ... "1,976 bytes | 21 millis".
@@ -2005,7 +2217,11 @@ fn repeater_send(app: &mut App) {
                         }
                         grouped.push(ch);
                     }
-                    format!("Done\t{grouped} bytes | {ms} millis")
+                    match followed {
+                        0 => format!("Done\t{grouped} bytes | {ms} millis"),
+                        1 => format!("Done (followed 1 redirection)\t{grouped} bytes | {ms} millis"),
+                        n => format!("Done (followed {n} redirections)\t{grouped} bytes | {ms} millis"),
+                    }
                 }
                 None => format!("error: {}", up.error.clone().unwrap_or_default()),
             };
@@ -2015,7 +2231,7 @@ fn repeater_send(app: &mut App) {
         sh.rep_busy.store(false, Ordering::SeqCst);
         let line = reps
             .iter()
-            .find(|r| r.name == name)
+            .find(|r| r.id == tab_id)
             .map(|r| r.result_line.clone())
             .unwrap_or_default();
         // Burp reports the outcome in the status line only; errors still toast.
@@ -2024,6 +2240,17 @@ fn repeater_send(app: &mut App) {
         }
         *sh.rep_result.lock().unwrap() = line;
     });
+}
+
+/// Repeater Cancel: abandon the in-flight send. The tab is free at once and
+/// the late response, if any, never lands (its generation is stale).
+pub(crate) fn cancel_repeater_send(shared: &net::Shared) {
+    if !shared.rep_busy.load(Ordering::SeqCst) {
+        return;
+    }
+    shared.rep_gen.fetch_add(1, Ordering::SeqCst);
+    shared.rep_busy.store(false, Ordering::SeqCst);
+    *shared.rep_result.lock().unwrap() = "Request cancelled".into();
 }
 
 fn split_port(host: &str) -> Option<u16> {
@@ -2044,14 +2271,14 @@ fn decoder(app: &mut App, ui: &mut Ui) {
             ui.horizontal_top(|ui| {
                 let w = (ui.available_width() - 230.0).max(200.0);
                 let hex = if k == 0 { app.dec_editor.hex } else { app.dec_chain[k - 1].1 };
-                egui::Frame::none().stroke(egui::Stroke::new(1.0, theme::line())).fill(theme::surface()).show(ui, |ui| {
+                egui::Frame::NONE.stroke(egui::Stroke::new(1.0, theme::line())).fill(theme::surface()).show(ui, |ui| {
                     ui.set_width(w);
                     let text: &mut String = if k == 0 { &mut app.dec_input } else { &mut app.dec_chain[k - 1].0 };
                     if hex {
                         let mut shown = util::hex_view(text.as_bytes(), 65536);
-                        ui.add(egui::TextEdit::multiline(&mut shown).font(egui::TextStyle::Monospace).desired_rows(6).desired_width(w - 8.0).frame(false).interactive(false));
+                        ui.add(egui::TextEdit::multiline(&mut shown).font(egui::TextStyle::Monospace).desired_rows(6).desired_width(w - 8.0).frame(egui::Frame::NONE.inner_margin(egui::Margin::symmetric(4, 2))).interactive(false));
                     } else {
-                        ui.add(egui::TextEdit::multiline(text).font(egui::TextStyle::Monospace).desired_rows(6).desired_width(w - 8.0).frame(false));
+                        ui.add(egui::TextEdit::multiline(text).font(egui::TextStyle::Monospace).desired_rows(6).desired_width(w - 8.0).frame(egui::Frame::NONE.inner_margin(egui::Margin::symmetric(4, 2))));
                     }
                 });
                 ui.add_space(6.0);
@@ -2137,6 +2364,11 @@ fn run_shortcut(app: &mut App, idx: usize) {
     use crate::shortcuts::ACTIONS;
     let Some(def) = ACTIONS.get(idx) else { return };
     match def.id {
+        // In Repeater, Burp sends the current tab's request (Ctrl+R opens a
+        // copy in a new tab, Ctrl+I loads it into Intruder); elsewhere the
+        // selected history item.
+        "send_to_repeater" if app.tab == Tab::Repeater => repeater_tab_to_new_tab(app),
+        "send_to_intruder" if app.tab == Tab::Repeater => repeater_tab_to_intruder(app),
         "send_to_repeater" => {
             if app.history_sel.is_none() {
                 feedback::toast(feedback::Level::Warn, "Select a history entry first");
@@ -2149,10 +2381,16 @@ fn run_shortcut(app: &mut App, idx: usize) {
             }
             send_history_to_intruder(app);
         }
-        "forward_intercepted_proxy_message" => net::intercept_forward(&app.shared, false),
+        "forward_intercepted_proxy_message" => {
+            // The message on screen, with its edits (Burp forwards the selection).
+            let done = app.intercept_cur.take().is_some_and(|id| net::intercept_release(&app.shared, id, false, Some(app.intercept_text.clone())));
+            if !done {
+                net::intercept_forward(&app.shared, false);
+            }
+        }
         "toggle_proxy_interception" => {
             let now = !app.shared.intercept_on.load(Ordering::SeqCst);
-            app.shared.intercept_on.store(now, Ordering::SeqCst);
+            set_intercept(app, now);
             app.shared.log(if now {
                 "Interception enabled (Ctrl+T)"
             } else {
@@ -2203,7 +2441,7 @@ fn menu_action(ui: &mut Ui, label: &str) -> bool {
         .add(egui::Button::new(RichText::new(label).size(13.0)).wrap_mode(egui::TextWrapMode::Extend))
         .clicked()
     {
-        ui.close_menu();
+        ui.close();
         true
     } else {
         false
@@ -2218,7 +2456,7 @@ fn menu_action(ui: &mut Ui, label: &str) -> bool {
 fn run_active_scan_on(app: &mut App, e: &net::HistEntry) {
     let parts = util::parse_http(&e.req_raw);
     let names: Vec<String> = scan::query_params(&parts.path).into_iter().map(|(n, _)| n).collect();
-    let oob: Vec<(String, String, String)> = names
+    let oob: Vec<(String, String, String)> = scan::oob_slots(&e.req_raw)
         .iter()
         .map(|name| {
             let p = app.collab_state.generate_payload();
@@ -2237,8 +2475,9 @@ fn run_active_scan_on(app: &mut App, e: &net::HistEntry) {
     } else {
         Vec::new()
     };
-    crate::scan::start_active_scan(app.shared.clone(), e.clone(), &oob, &smtp);
-    feedback::toast(feedback::Level::Info, "Active scan started");
+    let name = format!("Active scan of {}", history_url(e));
+    crate::tasks::enqueue(&app.shared, name, crate::tasks::TaskKind::Single { entry: e.clone(), oob, smtp });
+    feedback::toast(feedback::Level::Info, "Active scan queued");
 }
 
 /// The absolute URL of a history entry, the way the "Copy URL" menu item
@@ -2252,21 +2491,9 @@ fn history_url(e: &net::HistEntry) -> String {
     format!("{}://{}{}", if e.https { "https" } else { "http" }, host, parts.path)
 }
 
-/// "Copy as curl command (bash)": a bash curl line reproducing the request.
+/// "Copy as curl command (bash)": Burp's curl line (Zc2z) for the request.
 fn curl_command_of(e: &net::HistEntry) -> String {
-    let parts = util::parse_http(&e.req_raw);
-    let mut cmd = format!("curl -i -s -k -X {}", parts.method);
-    for (k, v) in &parts.headers {
-        if k.eq_ignore_ascii_case("Connection") || k.eq_ignore_ascii_case("Content-Length") {
-            continue;
-        }
-        cmd.push_str(&format!(" -H '{}'{}: {}'", k, "", v.replace('\'', "'\\''")));
-    }
-    let body = String::from_utf8_lossy(&e.req_raw[parts.head_len.min(e.req_raw.len())..]);
-    if !body.trim().is_empty() {
-        cmd.push_str(&format!(" --data-raw '{}'", body.replace('\'', "'\\''")));
-    }
-    format!("{} '{}'", cmd, history_url(e))
+    crate::repeater_ops::curl_command(&e.req_raw, &history_url(e))
 }
 
 /// Links found in a response body (href/src/action attribute values and bare
@@ -2316,9 +2543,10 @@ pub fn send_history_to_repeater(app: &mut App) {
     let entry = app.shared.history.lock().unwrap().iter().find(|e| e.id == id).cloned();
     if let Some(e) = entry {
         let mut reps = app.shared.repeaters.lock().unwrap();
-        let n = reps.len() + 1;
+        let id = app.shared.next_rep_id.fetch_add(1, Ordering::SeqCst);
         reps.push(net::RepTab {
-            name: format!("Rep {n}"),
+            id,
+            name: id.to_string(),
             host: e.host.clone(),
             port: e.port,
             https: e.https,
@@ -2329,9 +2557,46 @@ pub fn send_history_to_repeater(app: &mut App) {
             history: Vec::new(),
             hist_pos: 0,
         });
-        app.rep_sel = n - 1;
+        app.rep_sel = reps.len() - 1;
         app.tab = Tab::Repeater;
     }
+}
+
+/// The selected Repeater tab's (request, https, host, port).
+fn current_repeater(app: &App) -> Option<(String, bool, String, u16)> {
+    let reps = app.shared.repeaters.lock().unwrap();
+    let r = reps.get(app.rep_sel.min(reps.len().saturating_sub(1)))?;
+    Some((r.request.clone(), r.https, r.host.clone(), r.port))
+}
+
+fn repeater_tab_to_intruder(app: &mut App) {
+    let Some((req, https, _, _)) = current_repeater(app) else { return };
+    if req.trim().is_empty() {
+        feedback::toast(feedback::Level::Warn, "The Repeater tab has no request");
+        return;
+    }
+    app.intr_req = req;
+    app.intr_https = https;
+    app.tab = Tab::Intruder;
+}
+
+fn repeater_tab_to_new_tab(app: &mut App) {
+    let Some((request, https, host, port)) = current_repeater(app) else { return };
+    let mut reps = app.shared.repeaters.lock().unwrap();
+    let id = app.shared.next_rep_id.fetch_add(1, Ordering::SeqCst);
+    reps.push(net::RepTab {
+        id,
+        name: id.to_string(),
+        host,
+        port,
+        https,
+        request,
+        response: None,
+        result_line: String::new(),
+        history: Vec::new(),
+        hist_pos: 0,
+    });
+    app.rep_sel = reps.len() - 1;
 }
 
 pub fn send_history_to_intruder(app: &mut App) {
@@ -2342,6 +2607,85 @@ pub fn send_history_to_intruder(app: &mut App) {
         app.intr_https = e.https;
         app.tab = Tab::Intruder;
     }
+}
+
+/// Burp's per-type payload configuration panels for the generated types.
+fn payload_source_config(ui: &mut Ui, src: &mut intruder::PayloadSource) {
+    use intruder::PayloadSource as P;
+    fn note(ui: &mut Ui, t: &str) {
+        ui.label(RichText::new(t).size(12.0).color(theme::ink_dim()));
+        ui.add_space(6.0);
+    }
+    fn row(ui: &mut Ui, label: &str, add: impl FnOnce(&mut Ui)) {
+        ui.horizontal(|ui| {
+            ui.add_sized([120.0, 20.0], egui::Label::new(RichText::new(label).size(12.5).color(theme::ink())));
+            add(ui);
+        });
+    }
+    match src {
+        P::SimpleList { .. } => {}
+        P::RuntimeFile { path } => {
+            note(ui, "This payload type lets you configure a file from which to read payload strings at runtime.");
+            row(ui, "Select file:", |ui| {
+                ui.add(egui::TextEdit::singleline(path).hint_text("/path/to/payloads.txt").desired_width(230.0));
+            });
+        }
+        P::Numbers { from, to, step, base, min_digits, .. } => {
+            note(ui, "This payload type generates numeric payloads within a given range and in a specified format.");
+            row(ui, "From:", |ui| { ui.add(egui::DragValue::new(from)); });
+            row(ui, "To:", |ui| { ui.add(egui::DragValue::new(to)); });
+            row(ui, "Step:", |ui| { ui.add(egui::DragValue::new(step).range(1..=i64::MAX)); });
+            row(ui, "Base:", |ui| {
+                ui.radio_value(base, intruder::NumberBase::Decimal, "Decimal");
+                ui.radio_value(base, intruder::NumberBase::Hex, "Hex");
+            });
+            row(ui, "Min integer digits:", |ui| { ui.add(egui::DragValue::new(min_digits).range(0..=64)); });
+        }
+        P::Dates { from, to, step_secs, format } => {
+            note(ui, "This payload type generates date payloads within a given range and in a specified format (UTC).");
+            row(ui, "From (Unix time):", |ui| { ui.add(egui::DragValue::new(from)); });
+            row(ui, "To (Unix time):", |ui| { ui.add(egui::DragValue::new(to)); });
+            row(ui, "Step (seconds):", |ui| { ui.add(egui::DragValue::new(step_secs).range(1..=u64::MAX)); });
+            row(ui, "Format:", |ui| { ui.add(egui::TextEdit::singleline(format).desired_width(160.0)); });
+        }
+        P::BruteForcer { charset, min_len, max_len } => {
+            note(ui, "This payload type generates payloads of specified lengths that contain all permutations of a specified character set.");
+            row(ui, "Character set:", |ui| { ui.add(egui::TextEdit::singleline(charset).desired_width(230.0)); });
+            row(ui, "Min length:", |ui| { ui.add(egui::DragValue::new(min_len).range(0..=32)); });
+            row(ui, "Max length:", |ui| { ui.add(egui::DragValue::new(max_len).range(0..=32)); });
+        }
+        P::NullPayloads { count } => {
+            note(ui, "This payload type generates payloads whose value is an empty string. With no payload markers configured, this can be used to repeatedly issue the base request unmodified.");
+            row(ui, "Generate:", |ui| { ui.add(egui::DragValue::new(count).range(1..=1_000_000)); ui.label("payloads"); });
+        }
+        P::CaseModification { items, no_change, lower, upper, propername, proper_name } => {
+            note(ui, "This payload type lets you configure a list of strings and apply various case modifications to each item on the list.");
+            let mut text = items.join("\n");
+            // split('\n') keeps the trailing empty line so Enter starts a new item;
+            // generate() skips blank items.
+            if ui.add(egui::TextEdit::multiline(&mut text).desired_rows(5).desired_width(ui.available_width() - 8.0).font(egui::TextStyle::Monospace)).changed() {
+                *items = text.split('\n').map(str::to_string).collect();
+            }
+            ui.checkbox(no_change, "No change");
+            ui.checkbox(lower, "To lower case");
+            ui.checkbox(upper, "To upper case");
+            ui.checkbox(propername, "To Propername");
+            ui.checkbox(proper_name, "To ProperName");
+        }
+        P::CharacterFrobber { base } => {
+            note(ui, "This payload type operates on the base value of the payload position and modifies the value of each character position in turn by incrementing its ASCII code by one.");
+            row(ui, "Base value:", |ui| { ui.add(egui::TextEdit::singleline(base).desired_width(230.0)); });
+        }
+        P::CharacterBlocks { base, min_len, max_len } => {
+            note(ui, "This payload type generates blocks of a given input string, with specified lengths.");
+            row(ui, "Base string:", |ui| { ui.add(egui::TextEdit::singleline(base).desired_width(230.0)); });
+            row(ui, "Min length:", |ui| { ui.add(egui::DragValue::new(min_len).range(0..=100_000)); });
+            row(ui, "Max length:", |ui| { ui.add(egui::DragValue::new(max_len).range(0..=100_000)); });
+        }
+        _ => crate::intruder_ui::source_config(ui, &mut *src),
+    }
+    ui.add_space(4.0);
+    ui.label(RichText::new(crate::intruder_ui::generated_note(src)).size(12.0).color(theme::ink_hint()));
 }
 
 /// A muted one-line explanation under a heading.
@@ -2393,7 +2737,8 @@ fn proxy(app: &mut App, ui: &mut Ui) {
     match app.proxy_sub {
         0 => proxy_intercept(app, ui),
         1 => proxy_history(app, ui),
-        2 => crate::tools::websocket_history(app, ui),
+        // B-09: WebSockets history with direction/search filters.
+        2 => crate::repeater_ops::ws_history_view(app, ui),
         3 => proxy_match_replace(app, ui),
         _ => proxy_options(app, ui),
     }
@@ -2411,13 +2756,23 @@ fn proxy_match_replace(app: &mut App, ui: &mut Ui) {
 
 fn proxy_intercept(app: &mut App, ui: &mut Ui) {
     // Burp's Intercept tab (live 52685): toolbar [Intercept on/off] [Forward]
-    // [Drop] ... [Open browser], then either the held message or the
-    // "Intercept is off/on" empty state. The held item is only peeked at: it
-    // stays queued (and the proxy keeps waiting) until Forward or Drop.
+    // [Drop] ... [Open browser] (?) (Options), then the held-messages table
+    // and the selected message, or the "Intercept is off/on" empty state.
+    // Held items stay queued (the proxy keeps waiting) until Forward or Drop.
+    // P-06/B-09: the table lists HTTP requests and WebSocket messages; the
+    // Options button (Burp's Zube) picks its columns.
     let on = app.shared.intercept_on.load(Ordering::SeqCst);
+    let rows = crate::repeater_ops::held_rows(&app.shared);
+    // Keep the selected row while it is held; otherwise the oldest.
+    if !rows.iter().any(|r| Some(r.id) == app.rops.intercept_sel) {
+        app.rops.intercept_sel = rows.first().map(|r| r.id);
+    }
     let head = {
         let q = app.shared.queue.lock().unwrap();
-        q.first().map(|i| (i.id, i.host.clone(), i.port, i.edited.clone(), q.len()))
+        app.rops
+            .intercept_sel
+            .and_then(|id| q.iter().find(|i| i.id == id))
+            .map(|i| (i.id, i.host.clone(), i.port, i.edited.clone(), i.kind, q.len()))
     };
     let mut forward = false;
     let mut drop = false;
@@ -2427,26 +2782,55 @@ fn proxy_intercept(app: &mut App, ui: &mut Ui) {
         let b = egui::Button::new(RichText::new(label).strong().color(if on { egui::Color32::WHITE } else { theme::ink() }))
             .fill(if on { c(0x26649D) } else { theme::header_bg() })
             .min_size(egui::vec2(160.0, 22.0));
-        if ui.add(b).on_hover_text("Ctrl+T").clicked() {
-            app.shared.intercept_on.store(!on, Ordering::SeqCst);
+        if ui.add(b).on_hover_text("Toggle message interception (Ctrl+T)").clicked() {
+            set_intercept(app, !on);
         }
         ui.add_space(8.0);
         let has = head.is_some();
-        if ui.add_enabled(has, egui::Button::new(RichText::new(format!("{}  Forward", theme::icon::ARROW_RIGHT)).strong()).min_size(egui::vec2(160.0, 22.0))).clicked() {
+        // Burp's split buttons: the arrow picks the mode, the button runs it.
+        let fwd_label = if app.intercept_fwd_all { "Forward all" } else { "Forward" };
+        if ui.add_enabled(has, egui::Button::new(RichText::new(format!("{}  {fwd_label}", theme::icon::ARROW_RIGHT)).strong()).min_size(egui::vec2(140.0, 22.0))).clicked() {
             forward = true;
         }
+        ui.menu_button(RichText::new("\u{25BE}").size(12.0), |ui| {
+            if ui.selectable_label(!app.intercept_fwd_all, "Forward").clicked() {
+                app.intercept_fwd_all = false;
+                ui.close();
+            }
+            if ui.selectable_label(app.intercept_fwd_all, "Forward all").clicked() {
+                app.intercept_fwd_all = true;
+                ui.close();
+            }
+        });
         ui.add_space(8.0);
-        if ui.add_enabled(has, egui::Button::new(RichText::new("Drop").strong()).min_size(egui::vec2(160.0, 22.0))).clicked() {
+        let drop_label = if app.intercept_drop_all { "Drop all" } else { "Drop" };
+        if ui.add_enabled(has, egui::Button::new(RichText::new(drop_label).strong()).min_size(egui::vec2(140.0, 22.0))).clicked() {
             drop = true;
         }
-        if let Some((_, _, _, _, n)) = &head {
+        ui.menu_button(RichText::new("\u{25BE}").size(12.0), |ui| {
+            if ui.selectable_label(!app.intercept_drop_all, "Drop").clicked() {
+                app.intercept_drop_all = false;
+                ui.close();
+            }
+            if ui.selectable_label(app.intercept_drop_all, "Drop all").clicked() {
+                app.intercept_drop_all = true;
+                ui.close();
+            }
+        });
+        if let Some((_, _, _, _, _, n)) = &head {
             ui.add_space(10.0);
             ui.label(RichText::new(format!("{n} held")).size(12.5).color(theme::ink_dim()));
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.add_space(10.0);
+            // P-06: Burp's overflow ("Options") button at the far right.
+            egui::menu::MenuButton::new(RichText::new(theme::icon::DOTS_THREE_VERTICAL).size(14.0)).config(egui::menu::MenuConfig::new().close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)).ui(ui, |ui| {
+                crate::repeater_ops::intercept_options_menu(ui, &mut app.rops);
+            })
+            .0
+            .on_hover_text("Options");
             let _ = ui.add(egui::Button::new(RichText::new(theme::icon::QUESTION).size(16.0)).frame(false)).on_hover_text("Held messages wait here until you forward or drop them.");
-            if ui.add(egui::Button::new(RichText::new(format!("{}  Open browser", theme::icon::GLOBE)).strong()).min_size(egui::vec2(140.0, 22.0))).clicked() {
+            if ui.add(egui::Button::new(RichText::new(format!("{}  Open browser", theme::icon::GLOBE)).strong()).min_size(egui::vec2(140.0, 22.0))).on_hover_text("Open pre-configured browser").clicked() {
                 match crate::tools::launch_preconfigured_browser(&app.shared) {
                     Ok(name) => feedback::toast(feedback::Level::Success, format!("Launched {name} with the proxy preconfigured")),
                     Err(e) => feedback::toast(feedback::Level::Error, e),
@@ -2456,7 +2840,7 @@ fn proxy_intercept(app: &mut App, ui: &mut Ui) {
     });
     ui.add_space(8.0);
 
-    let Some((id, host, port, edited, _)) = head else {
+    let Some((id, host, port, edited, kind, _)) = head else {
         ui.add_space(ui.available_height() * 0.28);
         ui.vertical_centered(|ui| {
             ui.label(RichText::new(theme::icon::TRAFFIC_SIGNAL).size(56.0).color(c(0x26649D)));
@@ -2464,7 +2848,7 @@ fn proxy_intercept(app: &mut App, ui: &mut Ui) {
             ui.label(RichText::new(if on { "Intercept is on" } else { "Intercept is off" }).strong().size(18.0).color(theme::ink()));
             ui.add_space(8.0);
             ui.label(RichText::new(if on {
-                "Requests passing through the proxy will be held here so you can analyze and modify them before you forward them."
+                "Messages between WebProbe's browser and your target servers are held here. This enables you to analyze and modify these messages, before you forward them."
             } else {
                 "If you turn Intercept on, messages between WebProbe's browser and your target servers are held here. This enables you to analyze and modify these messages, before you forward them."
             }).size(12.5).color(theme::ink_dim()));
@@ -2486,95 +2870,69 @@ fn proxy_intercept(app: &mut App, ui: &mut Ui) {
         return;
     };
     if app.intercept_cur != Some(id) {
+        // Switching rows keeps the edit made to the previous message.
+        if let Some(prev) = app.intercept_cur {
+            if let Some(item) = app.shared.queue.lock().unwrap().iter_mut().find(|i| i.id == prev) {
+                item.edited = app.intercept_text.clone();
+            }
+        }
         app.intercept_cur = Some(id);
         app.intercept_text = edited;
     }
+    let table_h = (rows.len() as f32 * 20.0 + 4.0).clamp(24.0, 140.0);
+    crate::repeater_ops::intercept_table(ui, &mut app.rops, &rows, table_h);
+    ui.add_space(6.0);
+    let (heading, title) = match kind {
+        net::InterceptKind::Request { https } => {
+            let svc = crate::repeater_ops::Service::new(&host, port, https || port == 443);
+            (format!("Request to {}", svc.origin()), "Request")
+        }
+        net::InterceptKind::WebSocket { to_server: true } => (format!("WebSocket message to server {host}"), "Message"),
+        net::InterceptKind::WebSocket { to_server: false } => (format!("WebSocket message to client from {host}"), "Message"),
+    };
     ui.horizontal(|ui| {
         ui.add_space(14.0);
-        let scheme = if port == 443 { "https" } else { "http" };
-        ui.label(RichText::new(format!("Request to {scheme}://{host}:{port}")).strong().size(13.0).color(theme::ink()));
+        ui.label(RichText::new(heading).strong().size(13.0).color(theme::ink()));
     });
     let h = ui.available_height();
-    crate::msgpane::editable_pane(ui, "intercept_edit", "Request", &mut app.intercept_text, &mut app.intercept_pane, h);
+    // A WebSocket payload is not an HTTP message: pasted LF stays LF.
+    app.intercept_pane.crlf_paste = matches!(kind, net::InterceptKind::Request { .. });
+    crate::msgpane::editable_pane(ui, "intercept_edit", title, &mut app.intercept_text, &mut app.intercept_pane, h);
     if forward || drop {
-        if forward {
+        let all = if drop { app.intercept_drop_all } else { app.intercept_fwd_all };
+        if all {
+            if let Some(item) = app.shared.queue.lock().unwrap().iter_mut().find(|i| i.id == id) {
+                item.edited = app.intercept_text.clone();
+            }
+            let n = net::intercept_release_all(&app.shared, drop);
+            app.shared.log(&format!("{} {n} held message(s)", if drop { "dropped" } else { "forwarded" }));
+        } else {
+            net::intercept_release(&app.shared, id, drop, (!drop).then(|| app.intercept_text.clone()));
+            app.shared.log(&format!("{} {host} message", if drop { "dropped" } else { "forwarded" }));
+        }
+        app.intercept_cur = None;
+        app.rops.intercept_sel = None;
+    }
+}
+
+/// Intercept on/off. Turning it off releases every held message unchanged
+/// except for edits already made, as Burp forwards automatically while off.
+fn set_intercept(app: &mut App, on: bool) {
+    app.shared.intercept_on.store(on, Ordering::SeqCst);
+    if !on {
+        if let Some(id) = app.intercept_cur.take() {
             if let Some(item) = app.shared.queue.lock().unwrap().iter_mut().find(|i| i.id == id) {
                 item.edited = app.intercept_text.clone();
             }
         }
-        net::intercept_forward(&app.shared, drop);
-        app.shared.log(&format!("{} {host} request", if drop { "dropped" } else { "forwarded" }));
-        app.intercept_cur = None;
+        let n = net::intercept_release_all(&app.shared, false);
+        if n > 0 {
+            app.shared.log(&format!("Interception turned off: forwarded {n} held message(s)"));
+        }
     }
 }
 
 // ================= Listeners (A-07) =================
-
-/// Every proxy listener with its state. The first row is the primary listener
-/// (the port box in Proxy > Options); the rest are extra bind:port pairs.
-/// `editable` adds the add/remove controls. A failed bind shows its error here
-/// instead of a quiet status dot.
-fn listeners_panel(app: &mut App, ui: &mut Ui, editable: bool) {
-    ui.label(RichText::new("Listeners").size(13.0).strong().color(theme::ink()));
-    ui.add_space(2.0);
-    let mut remove: Option<usize> = None;
-    for (i, (addr, running, error)) in net::listener_status(&app.shared).iter().enumerate() {
-        ui.horizontal(|ui| {
-            let (word, colour) = if *running { ("running", c(theme::GOOD)) } else { ("stopped", c(theme::BAD)) };
-            ui.label(RichText::new(word).size(12.0).color(colour));
-            ui.label(RichText::new(addr.as_str()).monospace().size(12.0).color(theme::ink_dim()));
-            if let Some(err) = error {
-                ui.label(RichText::new(err.as_str()).size(12.0).color(c(theme::BAD)));
-            }
-            if editable && i > 0 && ui.small_button("Remove").clicked() {
-                remove = Some(i - 1);
-            }
-        });
-    }
-    if let Some(index) = remove {
-        let mut specs = net::listener_specs(&app.shared);
-        specs.remove(index);
-        if let Err(e) = net::set_listeners(&app.shared, specs) {
-            feedback::toast(feedback::Level::Error, e);
-        }
-    }
-    if !editable {
-        return;
-    }
-
-    // The draft row lives in egui's temp memory, so it needs no App field.
-    let id = ui.id().with("new_listener");
-    let (mut bind, mut port): (String, String) = ui
-        .data_mut(|d| d.get_temp(id))
-        .unwrap_or_else(|| ("127.0.0.1".to_string(), String::new()));
-    ui.horizontal(|ui| {
-        ui.label(RichText::new("bind").size(12.0).color(theme::ink_faint()));
-        ui.add(egui::TextEdit::singleline(&mut bind).desired_width(120.0).font(egui::TextStyle::Monospace));
-        ui.label(RichText::new("port").size(12.0).color(theme::ink_faint()));
-        ui.add(egui::TextEdit::singleline(&mut port).desired_width(60.0).font(egui::TextStyle::Monospace));
-        if ui.button("Add listener").clicked() {
-            match port.trim().parse::<u16>() {
-                Ok(p) => {
-                    let mut specs = net::listener_specs(&app.shared);
-                    specs.push(net::ListenerSpec { bind: bind.trim().to_string(), port: p });
-                    match net::set_listeners(&app.shared, specs) {
-                        Ok(()) => {
-                            feedback::toast(
-                                feedback::Level::Success,
-                                format!("Listener added on {}:{p}", bind.trim()),
-                            );
-                            port.clear();
-                        }
-                        Err(e) => feedback::toast(feedback::Level::Error, e),
-                    }
-                }
-                Err(_) => feedback::toast(feedback::Level::Error, "Port must be 1-65535"),
-            }
-        }
-    });
-    ui.data_mut(|d| d.insert_temp(id, (bind, port)));
-    hint(ui, "Extra listeners keep the history and every other setting; the primary port is set above.");
-}
 
 // ================= Settings window =================
 
@@ -2586,61 +2944,24 @@ pub enum SettingsPane {
     Hotkeys,
     Proxy,
     Sessions,
+    Intruder,
+    Repeater,
+    Sequencer,
+    Comparer,
+    Scope,
+    Collaborator,
+    Tasks,
+    Network,
+    Suite,
+    Extensions,
+    ConfigurationLibrary,
 }
 
 fn settings_window(app: &mut App, ctx: &egui::Context) {
-    if !app.settings_open {
-        return;
-    }
-    let mut open = app.settings_open;
-    let mut close = false;
-    egui::Window::new("Settings")
-        .open(&mut open)
-        .default_pos(ctx.screen_rect().center() - egui::vec2(310.0, 260.0))
-        .resizable(true)
-        .default_width(900.0)
-        .default_height(600.0)
-        .show(ctx, |ui| {
-            // Burp's Settings dialog: a navigation tree on the left (User /
-            // Project groups), the selected page on the right.
-            ui.horizontal_top(|ui| {
-                ui.vertical(|ui| {
-                    ui.set_width(180.0);
-                    for (group, items) in [
-                        ("User interface", vec![("Appearance", SettingsPane::Appearance), ("Hotkeys", SettingsPane::Hotkeys)]),
-                        ("Tools", vec![("Proxy", SettingsPane::Proxy)]),
-                        ("Project", vec![("Sessions", SettingsPane::Sessions)]),
-                    ] {
-                        ui.label(RichText::new(group).strong().size(12.5).color(theme::ink()));
-                        for (name, pane) in items {
-                            ui.horizontal(|ui| {
-                                ui.add_space(12.0);
-                                if ui.selectable_label(app.settings_help == pane, name).clicked() {
-                                    app.settings_help = pane;
-                                }
-                            });
-                        }
-                        ui.add_space(6.0);
-                    }
-                    ui.add_space(12.0);
-                    if ui.button("Close").clicked() {
-                        close = true;
-                    }
-                });
-                ui.separator();
-                ui.vertical(|ui| {
-                    egui::ScrollArea::vertical().id_salt("settings_page").show(ui, |ui| match app.settings_help {
-                        SettingsPane::Appearance => crate::tools::appearance_options(ui),
-                        SettingsPane::Hotkeys => crate::shortcuts::settings_panel(app, ui),
-                        SettingsPane::Proxy => proxy_options(app, ui),
-                        SettingsPane::Sessions => crate::tools::sessions(app, ui),
-                    });
-                });
-            });
-        });
-    if !open || close {
-        app.settings_open = false;
-    }
+    // Report, Find results, Discover content and crash-recovery windows
+    // (engagement.rs); drawn here because this runs every frame on any tab.
+    crate::engagement::windows(app, ctx);
+    crate::settings_dialog::window(app, ctx);
 }
 
 /// Process memory in MB and machine memory in MB (sysinfo), refreshed at most
@@ -2665,7 +2986,7 @@ fn event_log_window(app: &mut App, ctx: &egui::Context) {
         return;
     }
     let mut open = true;
-    egui::Window::new("Event log")
+    egui::Window::new("Event log").default_pos(crate::theme::window_pos(&ctx))
         .open(&mut open)
         .default_size(egui::vec2(760.0, 320.0))
         .show(ctx, |ui| {
@@ -2697,7 +3018,7 @@ fn search_window(app: &mut App, ctx: &egui::Context) {
         return;
     }
     let mut open = true;
-    egui::Window::new("Search")
+    egui::Window::new("Search").default_pos(crate::theme::window_pos(&ctx))
         .open(&mut open)
         .default_size(egui::vec2(820.0, 520.0))
         .show(ctx, |ui| crate::tools::search(app, ui));
@@ -2711,7 +3032,7 @@ fn discover(app: &mut App, ui: &mut Ui) {
     let r = ui.available_rect_before_wrap();
     let hero = egui::Rect::from_min_size(r.min, egui::vec2(r.width(), 300.0_f32.min(r.height())));
     ui.painter().rect_filled(hero, 0.0, c(0x14102A));
-    ui.allocate_ui_at_rect(hero.shrink2(egui::vec2(r.width() * 0.3, 80.0)), |ui| {
+    ui.scope_builder(egui::UiBuilder::new().max_rect(hero.shrink2(egui::vec2(r.width() * 0.3, 80.0))), |ui| {
         ui.label(RichText::new("WebProbe").size(44.0).strong().color(egui::Color32::WHITE));
         ui.add_space(8.0);
         ui.label(RichText::new("Intercept, replay, fuzz and audit HTTP traffic from one window.").size(18.0).color(egui::Color32::WHITE));
@@ -2735,7 +3056,9 @@ fn discover(app: &mut App, ui: &mut Ui) {
     // The first-run setup checklist lives here, under the learning cards
     // (Burp's Dashboard has none).
     ui.add_space(16.0);
-    if !app.onboarding_hidden && crate::onboarding::panel(app, ui) {}
+    if !app.onboarding_hidden && crate::onboarding::panel(app, ui) {
+        app.onboarding_hidden = true;
+    }
 }
 
 // ================= Dashboard =================
@@ -2751,7 +3074,7 @@ fn dashboard(app: &mut App, ui: &mut Ui) {
         let r = ui.available_rect_before_wrap();
         let band = egui::Rect::from_min_size(r.min - egui::vec2(10.0, 10.0), egui::vec2(r.width() + 20.0, 28.0));
         ui.painter().rect_filled(band, 0.0, c(0xEBF1F6));
-        ui.allocate_ui_at_rect(band, |ui| {
+        ui.scope_builder(egui::UiBuilder::new().max_rect(band), |ui| {
             ui.horizontal_centered(|ui| {
                 ui.add_space(band.width() / 2.0 - 120.0);
                 ui.label(RichText::new("Task execution is paused").size(13.5).color(theme::ink()));
@@ -2775,7 +3098,10 @@ fn dashboard(app: &mut App, ui: &mut Ui) {
     let scan_total = app.shared.scan_total.load(Ordering::SeqCst);
     let busy = app.shared.scan_busy.load(Ordering::SeqCst);
     let has_active = scan_total > 0 || busy;
-    if app.dash_task > 1 && !has_active {
+    // Scan tasks have card ids 1000 + task id (0 and 1 are the live tasks).
+    let task_list: Vec<crate::tasks::ScanTask> = app.shared.tasks.lock().unwrap().clone();
+    let card_task = |id: usize| -> Option<&crate::tasks::ScanTask> { id.checked_sub(1000).and_then(|t| task_list.iter().find(|x| x.id as usize == t)) };
+    if (app.dash_task == 2 && !(has_active && app.shared.direct_scan.load(Ordering::SeqCst))) || (app.dash_task >= 1000 && card_task(app.dash_task).is_none()) {
         app.dash_task = 1;
     }
 
@@ -2824,9 +3150,18 @@ fn dashboard(app: &mut App, ui: &mut Ui) {
                 ui.add_space(8.0);
                 // Task cards, newest first.
                 let mut cards: Vec<(usize, String, String, bool)> = Vec::new();
-                if has_active {
+                for t in task_list.iter().rev() {
+                    let progress = match (t.state, t.total) {
+                        (crate::tasks::TaskState::Running, Some(n)) => format!("Auditing: {} of {n} items", t.done),
+                        (crate::tasks::TaskState::Running, None) => format!("Crawling and auditing: request {} of {}", app.shared.scan_done.load(Ordering::SeqCst), scan_total),
+                        (s, Some(n)) => format!("{}: {} of {n} items", s.label(), t.done),
+                        (s, None) => s.label().to_string(),
+                    };
+                    cards.push((1000 + t.id as usize, format!("{}. {}", t.id + 2, t.name), progress, false));
+                }
+                if has_active && app.shared.direct_scan.load(Ordering::SeqCst) {
                     let done = app.shared.scan_done.load(Ordering::SeqCst);
-                    cards.push((2, "3. Active scan".into(), if busy { format!("Auditing: {done} of {scan_total} requests") } else { format!("Finished: {done} requests") }, false));
+                    cards.push((2, format!("{}. Active scan", app.shared.next_task_id.load(Ordering::SeqCst) + 2), if busy { format!("Auditing: {done} of {scan_total} requests") } else { format!("Finished: {done} requests") }, false));
                 }
                 cards.push((1, "2. Live audit from Proxy (all traffic)".into(), "Audit checks - passive".into(), true));
                 cards.push((0, "1. Live passive crawl from Proxy (all traffic)".into(), "Add links. Add item itself, same domain and URLs in suite scope.".into(), true));
@@ -2836,38 +3171,87 @@ fn dashboard(app: &mut App, ui: &mut Ui) {
                         continue;
                     }
                     let sel = app.dash_task == id;
-                    let frame = egui::Frame::none()
+                    // The card's click area goes in before its contents, so
+                    // the menu and pause buttons stay on top of it (egui hit-
+                    // tests the last widget first). Its size is last frame's.
+                    let rect_key = egui::Id::unique(("dash-card-rect", id));
+                    let card_click = ui
+                        .data(|d| d.get_temp::<egui::Rect>(rect_key))
+                        .map(|r| ui.interact(r, egui::Id::unique(("dash-card", id)), egui::Sense::click()));
+                    let frame = egui::Frame::NONE
                         .fill(if sel { c(0xEBF1F6) } else { theme::surface() })
                         .stroke(egui::Stroke::new(1.0, theme::line()))
-                        .rounding(4.0)
-                        .inner_margin(egui::Margin::symmetric(14.0, 10.0))
-                        .outer_margin(egui::Margin::symmetric(8.0, 4.0));
+                        .corner_radius(4.0)
+                        .inner_margin(egui::Margin::symmetric(14, 10))
+                        .outer_margin(egui::Margin::symmetric(8, 4));
                     let resp = frame
                         .show(ui, |ui| {
                             ui.set_width(rail_w - 46.0);
                             ui.horizontal(|ui| {
-                                ui.label(RichText::new(&title).strong().size(13.0).color(theme::ink()));
                                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                    // Buttons first (right to left), then the title in what
+                                    // is left, truncated, so a long URL never runs under them.
+                                    let title_label = |ui: &mut Ui| {
+                                        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                                            ui.add(egui::Label::new(RichText::new(&title).strong().size(13.0).color(theme::ink())).truncate().selectable(false));
+                                        });
+                                    };
                                     // Per-task pause and menu (Burp: pause/resume, view details).
                                     let flag = match id {
                                         0 => Some(&app.shared.crawl_capture),
                                         1 => Some(&app.shared.scan_enabled),
                                         _ => None,
                                     };
+                                    if let Some(t) = card_task(id) {
+                                        // A scan task: pause/resume, cancel, remove.
+                                        let (tid, state) = (t.id, t.state);
+                                        ui.menu_button(RichText::new(theme::icon::DOTS_THREE_VERTICAL).size(14.0), |ui| {
+                                            if state == crate::tasks::TaskState::Paused {
+                                                if ui.button("Resume task").clicked() {
+                                                    crate::tasks::resume(&app.shared, tid);
+                                                    ui.close();
+                                                }
+                                            } else if ui.add_enabled(state.is_open(), egui::Button::new("Pause task")).clicked() {
+                                                crate::tasks::pause(&app.shared, tid);
+                                                ui.close();
+                                            }
+                                            if ui.add_enabled(state.is_open(), egui::Button::new("Cancel task")).clicked() {
+                                                crate::tasks::cancel(&app.shared, tid);
+                                                ui.close();
+                                            }
+                                            if ui.add_enabled(!state.is_open(), egui::Button::new("Delete task")).clicked() {
+                                                crate::tasks::remove(&app.shared, tid);
+                                                ui.close();
+                                            }
+                                        });
+                                        if state.is_open() {
+                                            let paused = state == crate::tasks::TaskState::Paused;
+                                            let glyph = if paused { theme::icon::PLAY_CIRCLE } else { theme::icon::PAUSE_CIRCLE };
+                                            if ui.add(egui::Button::new(RichText::new(glyph).size(14.0)).frame(false)).on_hover_text(if paused { "Resume" } else { "Pause" }).clicked() {
+                                                if paused {
+                                                    crate::tasks::resume(&app.shared, tid);
+                                                } else {
+                                                    crate::tasks::pause(&app.shared, tid);
+                                                }
+                                            }
+                                        }
+                                        title_label(ui);
+                                        return;
+                                    }
                                     let running = flag.map(|f| f.load(Ordering::SeqCst)).unwrap_or(busy);
                                     ui.menu_button(RichText::new(theme::icon::DOTS_THREE_VERTICAL).size(14.0), |ui| {
                                         if let Some(f) = flag {
                                             if ui.button(if running { "Pause task" } else { "Resume task" }).clicked() {
                                                 f.store(!running, Ordering::SeqCst);
-                                                ui.close_menu();
+                                                ui.close();
                                             }
                                         } else if ui.add_enabled(busy, egui::Button::new("Stop scan")).clicked() {
                                             app.shared.scan_stop.store(true, Ordering::SeqCst);
-                                            ui.close_menu();
+                                            ui.close();
                                         }
                                         if ui.button("View details").clicked() {
                                             app.dash_task = id;
-                                            ui.close_menu();
+                                            ui.close();
                                         }
                                     });
                                     let glyph = if running { theme::icon::PAUSE_CIRCLE } else { theme::icon::PLAY_CIRCLE };
@@ -2877,6 +3261,7 @@ fn dashboard(app: &mut App, ui: &mut Ui) {
                                             None => app.shared.scan_stop.store(true, Ordering::SeqCst),
                                         }
                                     }
+                                    title_label(ui);
                                 });
                             });
                             ui.add_space(4.0);
@@ -2905,7 +3290,7 @@ fn dashboard(app: &mut App, ui: &mut Ui) {
                                 ui.horizontal(|ui| {
                                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                         for (k, col) in [(3, 0xB0AFAF), (2, 0x26649D), (1, 0xFF6633), (0, 0xD6213F)] {
-                                            egui::Frame::none().fill(c(col)).rounding(8.0).inner_margin(egui::Margin::symmetric(9.0, 1.0)).show(ui, |ui| {
+                                            egui::Frame::NONE.fill(c(col)).corner_radius(8.0).inner_margin(egui::Margin::symmetric(9, 1)).show(ui, |ui| {
                                                 ui.label(RichText::new(v[k].to_string()).size(11.5).strong().color(egui::Color32::WHITE));
                                             });
                                         }
@@ -2919,16 +3304,25 @@ fn dashboard(app: &mut App, ui: &mut Ui) {
                         let rr = resp.rect;
                         ui.painter().vline(rr.right() - 2.0, rr.y_range(), egui::Stroke::new(4.0, c(0x26649D)));
                     }
-                    if resp.interact(egui::Sense::click()).clicked() {
+                    ui.data_mut(|d| d.insert_temp(rect_key, resp.rect));
+                    if card_click.is_some_and(|r| r.clicked()) {
                         app.dash_task = id;
                     }
                 }
             });
             // ---------------- Selected task ----------------
             strip.cell(|ui| {
+                let task_title;
                 let title = match app.dash_task {
                     0 => "1. Live passive crawl from Proxy (all traffic)",
-                    2 => "3. Active scan",
+                    2 => {
+                        task_title = format!("{}. Active scan", app.shared.next_task_id.load(Ordering::SeqCst) + 2);
+                        task_title.as_str()
+                    }
+                    id if id >= 1000 => {
+                        task_title = card_task(id).map(|t| format!("{}. {} \u{2014} {}, {} issue(s)", t.id + 2, t.name, t.state.label(), t.issues_found)).unwrap_or_default();
+                        task_title.as_str()
+                    }
                     _ => "2. Live audit from Proxy (all traffic)",
                 };
                 ui.horizontal(|ui| {
@@ -2998,7 +3392,7 @@ fn dashboard(app: &mut App, ui: &mut Ui) {
 
     if app.new_scan_open {
         let mut open = true;
-        egui::Window::new("New scan")
+        egui::Window::new("New scan").default_pos(crate::theme::window_pos(ui.ctx()))
             .open(&mut open)
             .collapsible(false)
             .default_width(560.0)
@@ -3039,11 +3433,11 @@ fn dashboard(app: &mut App, ui: &mut Ui) {
 /// configuration / progress / log cards.
 fn dashboard_summary(app: &mut App, ui: &mut Ui, issues: &[crate::scan::ScanIssue]) {
     let card = |ui: &mut Ui, title: &str, glyph: &str, add: &mut dyn FnMut(&mut Ui)| {
-        egui::Frame::none()
+        egui::Frame::NONE
             .fill(theme::chrome())
-            .rounding(4.0)
-            .inner_margin(egui::Margin::same(14.0))
-            .outer_margin(egui::Margin::symmetric(10.0, 6.0))
+            .corner_radius(4.0)
+            .inner_margin(egui::Margin::same(14))
+            .outer_margin(egui::Margin::symmetric(10, 6))
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.horizontal(|ui| {
@@ -3063,7 +3457,7 @@ fn dashboard_summary(app: &mut App, ui: &mut Ui, issues: &[crate::scan::ScanIssu
                     let mut v: Vec<&crate::scan::ScanIssue> = issues.iter().filter(|i| !i.false_positive).collect();
                     let rank = |s: &str| match s { "high" => 0, "medium" => 1, "low" => 2, _ => 3 };
                     v.sort_by_key(|i| (rank(&i.sev), std::cmp::Reverse(i.ts)));
-                    egui::Frame::none().stroke(egui::Stroke::new(1.0, theme::line())).show(ui, |ui| {
+                    egui::Frame::NONE.stroke(egui::Stroke::new(1.0, theme::line())).show(ui, |ui| {
                         ui.set_width(ui.available_width());
                         ui.set_min_height((ui.available_height() - 20.0).max(200.0));
                         egui::Grid::new("dash_top").num_columns(3).striped(true).min_col_width(80.0).show(ui, |ui| {
@@ -3150,10 +3544,9 @@ fn dashboard_summary(app: &mut App, ui: &mut Ui, issues: &[crate::scan::ScanIssu
 /// Dashboard > New scan: fetch each URL once and run the active audit on it,
 /// one after the other (Burp: "Audit" scan type over the listed URLs).
 fn start_url_scan(app: &mut App, urls: Vec<String>) {
-    let shared = app.shared.clone();
     let audit_only = app.new_scan_type == 1;
-    shared.scan_stop.store(false, Ordering::SeqCst);
-    std::thread::spawn(move || crate::scan::crawl_and_audit(&shared, &urls, audit_only));
+    let name = format!("{} of {}", if audit_only { "Audit" } else { "Crawl and audit" }, urls.first().cloned().unwrap_or_default());
+    crate::tasks::enqueue(&app.shared, name, crate::tasks::TaskKind::CrawlAudit { urls, audit_only });
 }
 
 // ================= Target =================
@@ -3222,19 +3615,57 @@ fn target(app: &mut App, ui: &mut Ui) {
             let sel = app.target_view == i;
             let b = egui::Button::new(RichText::new(*label).size(12.0).color(if sel { egui::Color32::WHITE } else { theme::ink() }))
                 .fill(if sel { c(0x26649D) } else { theme::header_bg() })
-                .rounding(2.0);
+                .corner_radius(2.0);
             if ui.add(b).clicked() {
                 app.target_view = i;
             }
         }
     });
-    ui.add_space(6.0);
+    ui.add_space(4.0);
+    // Burp's site map filter: text, in-scope only, unrequested items.
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(theme::icon::FUNNEL).size(13.0).color(theme::ink_dim()));
+        ui.add(egui::TextEdit::singleline(&mut app.site_filter.text).hint_text("Filter by host or path").desired_width(220.0));
+        ui.checkbox(&mut app.site_filter.in_scope_only, "Show only in-scope items");
+        ui.checkbox(&mut app.site_filter.hide_unrequested, "Hide unrequested items");
+    });
+    ui.add_space(4.0);
 
-    let mut entries: Vec<net::HistEntry> = app.shared.history.lock().unwrap().clone();
-    // Crawler requests are site-map contents too (Burp keeps them out of
-    // Proxy history but in the site map).
-    entries.extend(app.shared.crawl_items.lock().unwrap().iter().cloned());
-    let links: Vec<(String, String)> = app.shared.site_links.lock().unwrap().iter().cloned().collect();
+    // The site contents are rebuilt only when the history, the crawl, the
+    // scope or the filter changed, not on every frame.
+    let (hist_len, crawl_len) = (app.shared.history.lock().unwrap().len(), app.shared.crawl_items.lock().unwrap().len());
+    let scope_key = app.shared.scope.lock().unwrap().iter().map(|r| format!("{}{}{}{}", r.enabled, r.include, r.is_regex, r.pattern)).collect::<Vec<_>>().join("|");
+    let key = format!("{hist_len}|{crawl_len}|{}|{}|{}|{scope_key}", app.site_filter.text, app.site_filter.in_scope_only, app.site_filter.hide_unrequested);
+    if key != app.site_cache_key {
+        let mut all: Vec<net::HistEntry> = app.shared.history.lock().unwrap().clone();
+        // Crawler requests are site-map contents too (Burp keeps them out of
+        // Proxy history but in the site map).
+        all.extend(app.shared.crawl_items.lock().unwrap().iter().cloned());
+        let shared = app.shared.clone();
+        let filter = app.site_filter.clone();
+        let kept: Vec<net::HistEntry> = all.into_iter().filter(|e| filter.keeps(&history_host(e), &e.path, || net::in_scope(&shared, &history_url(e)))).collect();
+        let links: Vec<(String, String)> = if filter.hide_unrequested {
+            Vec::new()
+        } else {
+            app.shared.site_links.lock().unwrap().iter().filter(|(o, p)| filter.keeps(o, p, || net::in_scope(&shared, &format!("{o}{p}")))).cloned().collect()
+        };
+        app.site_cache = std::sync::Arc::new((kept, links));
+        app.site_cache_key = key;
+    }
+    let cache = app.site_cache.clone();
+    let entries: &Vec<net::HistEntry> = &cache.0;
+    let links: &Vec<(String, String)> = &cache.1;
+    // Issue markers: the most severe issue under each node gets a dot.
+    let issue_marks: Vec<(String, String, usize)> = app
+        .shared
+        .issues
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|i| !i.false_positive)
+        .map(|i| (i.host.clone(), i.path.clone(), crate::report::severity_index(&i.sev)))
+        .collect();
+    let scope_set = app.shared.scope.lock().unwrap().iter().any(|r| r.enabled && r.include);
     if entries.is_empty() && links.is_empty() {
         ui.add_space(ui.available_height() * 0.25);
         ui.vertical_centered(|ui| {
@@ -3264,14 +3695,14 @@ fn target(app: &mut App, ui: &mut Ui) {
     // Build the tree: requested items from the history, unrequested ones from
     // the live passive crawl (shown grey, as in Burp).
     let mut roots: std::collections::BTreeMap<String, MapNode> = std::collections::BTreeMap::new();
-    for e in &entries {
+    for e in entries.iter() {
         let segs = path_segments(&e.path);
         let refs: Vec<&str> = segs.iter().map(String::as_str).collect();
         let root = roots.entry(history_host(e)).or_default();
         if refs.is_empty() { root.requested = true; } else { root.insert(&refs, true); }
     }
     if app.target_view == 0 {
-        for (origin, path) in &links {
+        for (origin, path) in links.iter() {
             let segs = path_segments(path);
             let refs: Vec<&str> = segs.iter().map(String::as_str).collect();
             roots.entry(origin.clone()).or_default().insert(&refs, false);
@@ -3292,7 +3723,7 @@ fn target(app: &mut App, ui: &mut Ui) {
                     ui.spacing_mut().interact_size.y = 18.0;
                     if app.target_view == 1 {
                         ui.label(RichText::new("Crawl paths (links found by the live passive crawl)").size(12.0).color(theme::ink_hint()));
-                        for (origin, path) in &links {
+                        for (origin, path) in links.iter() {
                             let label = format!("{origin}{path}");
                             let sel = app.target_node.as_ref() == Some(&(origin.clone(), path.clone()));
                             if ui.selectable_label(sel, RichText::new(label).size(12.5).color(theme::ink_faint())).clicked() {
@@ -3301,36 +3732,62 @@ fn target(app: &mut App, ui: &mut Ui) {
                         }
                         return;
                     }
-                    fn draw(ui: &mut Ui, app: &mut App, origin: &str, prefix: &str, name: &str, node: &MapNode, depth: usize) {
+                    struct Marks<'a> {
+                        issues: &'a [(String, String, usize)],
+                        scope_set: bool,
+                    }
+                    fn draw(ui: &mut Ui, app: &mut App, marks: &Marks, origin: &str, prefix: &str, name: &str, node: &MapNode, depth: usize) {
                         let full = format!("{prefix}{name}");
                         let sel = app.target_node.as_ref().map(|(o, p)| o == origin && p == &full).unwrap_or(false);
-                        let colour = if node.any_requested() { theme::ink() } else { theme::ink_hint() };
+                        // Burp: unrequested items grey; with a scope defined,
+                        // hosts outside it grey and in-scope hosts in bold.
+                        let in_scope = depth > 0 || !marks.scope_set || net::in_scope(&app.shared, origin);
+                        let colour = if node.any_requested() && in_scope { theme::ink() } else { theme::ink_hint() };
                         let icon = if node.children.is_empty() { theme::icon::FILE } else { theme::icon::FOLDER };
-                        let text = RichText::new(format!("{icon} {}", if depth == 0 { origin } else { name })).size(12.5).color(colour);
+                        let mut text = RichText::new(format!("{icon} {}", if depth == 0 { origin } else { name })).size(12.5).color(colour);
+                        if depth == 0 && marks.scope_set && in_scope {
+                            text = text.strong();
+                        }
+                        let host = crate::engagement::origin_host(origin);
+                        let worst = crate::site_map::worst_issue(marks.issues, host, &full);
+                        let dot = |ui: &mut Ui| {
+                            if let Some(rank) = worst {
+                                let sev = ["high", "medium", "low", "info"][rank.min(3)];
+                                ui.label(RichText::new("\u{25cf}").size(10.0).color(scan_sev_color(sev))).on_hover_text(format!("{} issue(s) here", crate::report::SEVERITIES[rank.min(3)]));
+                            }
+                        };
                         if node.children.is_empty() {
                             ui.horizontal(|ui| {
                                 ui.add_space(18.0);
-                                if ui.selectable_label(sel, text).clicked() {
+                                let r = ui.selectable_label(sel, text);
+                                dot(ui);
+                                if r.clicked() {
                                     app.target_node = Some((origin.to_string(), full.clone()));
                                 }
+                                // L-02: copy URLs / Engagement tools.
+                                r.context_menu(|ui| crate::engagement::site_map_menu(ui, app, origin, &full));
                             });
                         } else {
                             let id = ui.make_persistent_id(("site", origin, &full));
                             egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, depth == 0)
                                 .show_header(ui, |ui| {
-                                    if ui.selectable_label(sel, text).clicked() {
+                                    let r = ui.selectable_label(sel, text);
+                                    dot(ui);
+                                    if r.clicked() {
                                         app.target_node = Some((origin.to_string(), full.clone()));
                                     }
+                                    r.context_menu(|ui| crate::engagement::site_map_menu(ui, app, origin, &full));
                                 })
                                 .body(|ui| {
                                     for (child, n) in &node.children {
-                                        draw(ui, app, origin, &full, child, n, depth + 1);
+                                        draw(ui, app, marks, origin, &full, child, n, depth + 1);
                                     }
                                 });
                         }
                     }
+                    let marks = Marks { issues: &issue_marks, scope_set };
                     for (origin, node) in &roots {
-                        draw(ui, app, origin, "/", "", node, 0);
+                        draw(ui, app, &marks, origin, "/", "", node, 0);
                     }
                 });
             });
@@ -3356,6 +3813,7 @@ fn target(app: &mut App, ui: &mut Ui) {
                                 table::Column::new("Length", 60.0),
                                 table::Column::new("MIME type", 70.0),
                                 table::Column::new("Title", 160.0),
+                                table::Column::new("Comment", 140.0),
                             ];
                             let mut st = app.target_table.clone();
                             let mut pick = None;
@@ -3376,6 +3834,7 @@ fn target(app: &mut App, ui: &mut Ui) {
                                         (5, e.resp_len.to_string(), None),
                                         (6, crate::history_filter::HistoryFilter::burp_mime_of(e).to_string(), None),
                                         (7, e.title.clone(), None),
+                                        (8, e.note.clone().unwrap_or_default(), None),
                                     ]);
                                 }).response.interact(egui::Sense::click());
                                 if row.clicked() {
@@ -3450,13 +3909,19 @@ fn comparer(app: &mut App, ui: &mut Ui) {
                                 ui.painter().rect_filled(rr, 0.0, theme::selection_bg());
                             }
                             let preview: String = d.chars().take(200).map(|c| if c.is_control() { ' ' } else { c }).collect();
-                            let row = ui.horizontal(|ui| {
+                            // The row's click area is registered before its
+                            // cells, under an id unique to this table and row,
+                            // so a click lands even when press and release come
+                            // in one frame (automation) and the two tables'
+                            // rows never share an id.
+                            let row = ui.interact(rr, egui::Id::unique(("comparer-row", k, *i)), egui::Sense::click());
+                            ui.horizontal(|ui| {
                                 table::cells(ui, &cols, &table::TableState::default(), 19.0, &[
                                     (0, (i + 1).to_string(), None),
                                     (1, d.len().to_string(), None),
                                     (2, preview, None),
                                 ]);
-                            }).response.interact(egui::Sense::click());
+                            });
                             if row.clicked() {
                                 pick = Some(*i);
                             }
@@ -3501,16 +3966,25 @@ fn comparer(app: &mut App, ui: &mut Ui) {
                     app.cmp_sel1 = None;
                     app.cmp_sel2 = None;
                 }
-                ui.add_space((ui.available_height() - 80.0).max(10.0));
+                ui.add_space((ui.available_height() - 108.0).max(10.0));
                 ui.label(RichText::new("Compare ...").size(12.5).color(theme::ink()));
                 let ready = app.cmp_sel1.is_some() && app.cmp_sel2.is_some();
-                for (label, bytes) in [("Words", false), ("Bytes", true)] {
+                for (label, bytes) in [("Words", false), ("Bytes", true), ("Characters", false)] {
                     if ui.add_enabled(ready, egui::Button::new(RichText::new(label).strong()).min_size(egui::vec2(btn_w, 22.0))).clicked() {
                         let (a, b) = (app.cmp_sel1.unwrap(), app.cmp_sel2.unwrap());
                         app.comparer_state.left = app.cmp_items.get(a).cloned().unwrap_or_default();
                         app.comparer_state.right = app.cmp_items.get(b).cloned().unwrap_or_default();
                         app.comparer_state.recompute();
+                        let unit = match label {
+                            "Bytes" => crate::compare::Unit::Bytes,
+                            "Characters" => crate::compare::Unit::Chars,
+                            _ => crate::compare::Unit::Words,
+                        };
+                        app.cmp_unit_label = label;
+                        app.cmp_result = Some(crate::compare::compare(app.comparer_state.left.as_bytes(), app.comparer_state.right.as_bytes(), unit));
                         app.cmp_window = Some((a, b, bytes));
+                        app.cmp_hex = bytes;
+                        app.cmp_scroll = egui::Vec2::ZERO;
                     }
                 }
             });
@@ -3524,46 +3998,99 @@ fn comparer(app: &mut App, ui: &mut Ui) {
     }
     if let Some((a, b, bytes)) = app.cmp_window {
         let mut open = true;
-        let st = &app.comparer_state;
-        let diffs = st.added + st.removed;
-        egui::Window::new(format!("{} compare of #{} and #{} ({} differences)", if bytes { "Byte" } else { "Word" }, a + 1, b + 1, diffs))
+        let Some(result) = app.cmp_result.clone() else {
+            app.cmp_window = None;
+            return;
+        };
+        let unit_name = match app.cmp_unit_label {
+            "Bytes" => "Byte",
+            "Characters" => "Character",
+            _ => "Word",
+        };
+        let title = format!("{unit_name} compare of #{} and #{} ({} differences)", a + 1, b + 1, result.differences);
+        egui::Window::new(title.clone()).default_pos(crate::theme::window_pos(ui.ctx()))
             .open(&mut open)
             .default_size(egui::vec2(1000.0, 620.0))
             .show(ui.ctx(), |ui| {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new("Key:").size(12.5));
                     for (name, col) in [("Modified", 0x9FBBD4), ("Deleted", 0xEE95A1), ("Added", 0x9BCF88)] {
-                        egui::Frame::none().fill(c(col)).inner_margin(egui::Margin::symmetric(6.0, 1.0)).show(ui, |ui| {
+                        egui::Frame::NONE.fill(c(col)).inner_margin(egui::Margin::symmetric(6, 1)).show(ui, |ui| {
                             ui.label(RichText::new(name).size(12.0).color(egui::Color32::BLACK));
                         });
                     }
+                    if result.capped {
+                        ui.label(RichText::new("(very different: the middle is shown as one block)").size(12.0).color(theme::ink_faint()));
+                    }
+                    // Burp's result window: Text | Hex view and Sync views.
+                    ui.add_space(16.0);
+                    ui.radio_value(&mut app.cmp_hex, false, "Text");
+                    ui.radio_value(&mut app.cmp_hex, true, "Hex");
+                    ui.add_space(8.0);
+                    ui.checkbox(&mut app.cmp_sync, "Sync views");
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.button("Export").on_hover_text("Write both sides with the differences highlighted as an HTML page").clicked() {
+                            let path = app.cmp_export_path.trim().to_string();
+                            match std::fs::write(&path, crate::compare::export_html(&result, &title)) {
+                                Ok(()) => feedback::toast(feedback::Level::Success, format!("Comparison written to {path}")),
+                                Err(e) => feedback::toast(feedback::Level::Error, format!("Could not write {path}: {e}")),
+                            }
+                        }
+                        ui.add(egui::TextEdit::singleline(&mut app.cmp_export_path).desired_width(220.0));
+                    });
                 });
                 ui.add_space(6.0);
+                // Byte compares show unprintable bytes as dots so the
+                // highlighted runs keep their position.
+                let shown = |t: &str| -> String {
+                    if bytes {
+                        t.chars().map(|ch| if ch == '\n' || ch == '\r' || ch == '\t' || !ch.is_control() { ch } else { '\u{b7}' }).collect()
+                    } else {
+                        t.to_string()
+                    }
+                };
+                let (hex, sync) = (app.cmp_hex, app.cmp_sync);
+                let mut scroll = app.cmp_scroll;
                 ui.columns(2, |cols2| {
                     for (side, col) in cols2.iter_mut().enumerate() {
-                        col.label(RichText::new(format!("#{}  Length: {}", if side == 0 { a + 1 } else { b + 1 }, if side == 0 { st.left.len() } else { st.right.len() })).size(12.5).strong());
-                        egui::ScrollArea::both().id_salt(("cmpw", side)).auto_shrink([false, false]).show(col, |ui| {
-                            for r in &st.rows {
-                                let present = if side == 0 { r.left_line.is_some() } else { r.right_line.is_some() };
-                                if !present {
-                                    continue;
-                                }
-                                let bg = match (r.kind, side) {
-                                    (crate::analysis::DiffKind::Removed, 0) => Some(c(0xEE95A1)),
-                                    (crate::analysis::DiffKind::Added, 1) => Some(c(0x9BCF88)),
-                                    (crate::analysis::DiffKind::Changed, _) => Some(c(0x9FBBD4)),
-                                    _ => None,
+                        let raw = if side == 0 { &result.left } else { &result.right };
+                        let len: usize = raw.iter().map(|s| s.text.len()).sum();
+                        let hexed;
+                        let spans = if hex {
+                            hexed = crate::compare::hex_spans(raw);
+                            &hexed
+                        } else {
+                            raw
+                        };
+                        col.label(RichText::new(format!("#{}  Length: {len}", if side == 0 { a + 1 } else { b + 1 })).size(12.5).color(theme::ink_dim()));
+                        let mut area = egui::ScrollArea::both().id_salt(("cmpw", side)).auto_shrink([false, false]);
+                        if sync {
+                            area = area.vertical_scroll_offset(scroll.y).horizontal_scroll_offset(scroll.x);
+                        }
+                        let shown_area = area.show(col, |ui| {
+                            let font = egui::FontId::monospace(12.5);
+                            let mut job = egui::text::LayoutJob::default();
+                            for sp in spans {
+                                let bg = match sp.kind {
+                                    crate::compare::Kind::Same => egui::Color32::TRANSPARENT,
+                                    crate::compare::Kind::Modified => c(0x9FBBD4),
+                                    crate::compare::Kind::Deleted => c(0xEE95A1),
+                                    crate::compare::Kind::Added => c(0x9BCF88),
                                 };
-                                let text = if bytes { util::hex_view(r.text.as_bytes(), 4096) } else { r.text.clone() };
-                                let mut rt = RichText::new(text).monospace().size(12.5).color(theme::editor_colours().text);
-                                if let Some(bg) = bg {
-                                    rt = rt.background_color(bg).color(egui::Color32::BLACK);
-                                }
-                                ui.label(rt);
+                                let fg = if sp.kind == crate::compare::Kind::Same { theme::editor_colours().text } else { egui::Color32::BLACK };
+                                let text = if hex { sp.text.clone() } else { shown(&sp.text) };
+                                job.append(&text, 0.0, egui::TextFormat { font_id: font.clone(), color: fg, background: bg, ..Default::default() });
                             }
+                            job.wrap.max_width = if hex { f32::INFINITY } else { ui.available_width() };
+                            ui.label(job);
                         });
+                        // With Sync views, whichever side moved leads both.
+                        if sync && shown_area.state.offset() != scroll {
+                            scroll = shown_area.state.offset();
+                        }
                     }
                 });
+                app.cmp_scroll = scroll;
             });
         if !open {
             app.cmp_window = None;
@@ -3618,11 +4145,11 @@ fn burp_ai(app: &mut App, ui: &mut Ui) {
         }
         for m in &msgs {
             let mine = m.role == "user";
-            egui::Frame::none()
+            egui::Frame::NONE
                 .fill(if mine { c(0xEBF1F6) } else { theme::chrome() })
-                .rounding(6.0)
-                .inner_margin(egui::Margin::same(8.0))
-                .outer_margin(egui::Margin::symmetric(4.0, 3.0))
+                .corner_radius(6.0)
+                .inner_margin(egui::Margin::same(8))
+                .outer_margin(egui::Margin::symmetric(4, 3))
                 .show(ui, |ui| {
                     ui.set_width(ui.available_width());
                     ui.label(RichText::new(if mine { "You" } else { "WebProbe AI" }).strong().size(12.0).color(theme::ink()));
@@ -3658,9 +4185,9 @@ fn logger_view(app: &mut App, ui: &mut Ui) {
     // Burp's Logger (live 52685): a capture-filter bar with the "Logging on"
     // switch, then the log table and the message panes.
     ui.horizontal(|ui| {
-        let w = (ui.available_width() - 330.0).max(200.0);
+        let w = (ui.available_width() - 395.0).max(200.0);
         let (rect, _) = ui.allocate_exact_size(egui::vec2(w, 20.0), egui::Sense::hover());
-        ui.painter().rect(rect, 2.0, theme::header_bg(), egui::Stroke::new(1.0, theme::line()));
+        ui.painter().rect(rect, 2.0, theme::header_bg(), egui::Stroke::new(1.0, theme::line()), egui::StrokeKind::Outside);
         ui.painter().with_clip_rect(rect.shrink(2.0)).text(
             egui::pos2(rect.left() + 8.0, rect.center().y),
             egui::Align2::LEFT_CENTER,
@@ -3677,6 +4204,25 @@ fn logger_view(app: &mut App, ui: &mut Ui) {
             app.logger.clear();
             app.log_sel = None;
         }
+        // L-04: export the rows the table shows (filtered, newest first).
+        egui::menu::MenuButton::new("Export").config(egui::menu::MenuConfig::new().close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)).ui(ui, |ui| {
+            if app.eng.log_export_path.is_empty() {
+                app.eng.log_export_path = std::env::current_dir()
+                    .map(|d| d.join("webprobe-logger.csv").display().to_string())
+                    .unwrap_or_else(|_| "webprobe-logger.csv".into());
+            }
+            ui.label("Save to");
+            ui.add(egui::TextEdit::singleline(&mut app.eng.log_export_path).desired_width(320.0));
+            if ui.button("Export as CSV").clicked() {
+                let rows: Vec<crate::logger::LogEntry> = app.logger.filter(&app.log_filter).into_iter().rev().cloned().collect();
+                let csv = crate::logger::to_csv(&rows, history_time);
+                match std::fs::write(&app.eng.log_export_path, csv) {
+                    Ok(()) => feedback::toast(feedback::Level::Success, format!("Exported {} row(s) to {}", rows.len(), app.eng.log_export_path)),
+                    Err(e) => feedback::toast(feedback::Level::Error, format!("Export failed: {e}")),
+                }
+                ui.close();
+            }
+        });
     });
     ui.add_space(6.0);
     let rows: Vec<crate::logger::LogEntry> = app.logger.filter(&app.log_filter).into_iter().rev().cloned().collect();
@@ -3740,9 +4286,17 @@ fn logger_view(app: &mut App, ui: &mut Ui) {
                 }
             });
             col.cell(|ui| {
-                let e = app.log_sel.and_then(|id| app.shared.history.lock().unwrap().iter().find(|h| h.id == id).cloned());
-                let req = e.as_ref().map(|e| util::origin_form(&e.req_raw));
-                let resp = e.as_ref().and_then(|e| e.resp_raw.clone());
+                // A proxy row shows the history item it mirrors; a tool row
+                // (Repeater, Intruder, Scanner, ...) carries its own messages.
+                let row = app.log_sel.and_then(|id| app.logger.get(id).cloned());
+                let (req, resp) = match &row {
+                    Some(r) if r.hist_id.is_some() => {
+                        let e = app.shared.history.lock().unwrap().iter().find(|h| Some(h.id) == r.hist_id).cloned();
+                        (e.as_ref().map(|e| util::origin_form(&e.req_raw)), e.and_then(|e| e.resp_raw))
+                    }
+                    Some(r) => (r.request.as_ref().map(|b| b.to_vec()), r.response.as_ref().map(|b| b.to_vec())),
+                    None => (None, None),
+                };
                 let h = ui.available_height().max(full * 0.5);
                 egui_extras::StripBuilder::new(ui)
                     .size(egui_extras::Size::remainder())
@@ -3892,8 +4446,41 @@ fn organizer_view(app: &mut App, ui: &mut Ui) {
 }
 
 #[cfg(test)]
+mod repeater_fix_tests {
+    use super::*;
+
+    /// Issue #2 item 2: Cancel frees the tab at once and a late response
+    /// is dropped (its generation is stale).
+    #[test]
+    fn cancel_abandons_the_in_flight_send() {
+        let sh = net::Shared::new();
+        sh.rep_busy.store(true, Ordering::SeqCst);
+        let gen = sh.rep_gen.fetch_add(1, Ordering::SeqCst) + 1;
+        cancel_repeater_send(&sh);
+        assert!(!sh.rep_busy.load(Ordering::SeqCst));
+        assert_eq!(*sh.rep_result.lock().unwrap(), "Request cancelled");
+        assert_ne!(sh.rep_gen.load(Ordering::SeqCst), gen, "the worker sees a stale generation");
+        // Cancel with nothing in flight changes nothing.
+        let before = sh.rep_gen.load(Ordering::SeqCst);
+        cancel_repeater_send(&sh);
+        assert_eq!(sh.rep_gen.load(Ordering::SeqCst), before);
+    }
+
+    /// Issue #2 item 1: tab numbers are never reused, so routing by id can
+    /// not hit a different tab after a close.
+    #[test]
+    fn repeater_tab_ids_are_never_reused() {
+        let sh = net::Shared::new();
+        let first = sh.repeaters.lock().unwrap()[0].id;
+        let a = sh.next_rep_id.fetch_add(1, Ordering::SeqCst);
+        let b = sh.next_rep_id.fetch_add(1, Ordering::SeqCst);
+        assert!(a != first && b != a && b != first);
+    }
+}
+
+#[cfg(test)]
 mod tests {
-    use super::{history_view, HISTORY_RENDER_LIMIT};
+    use super::{history_new_rows, history_view};
     use crate::net::HistEntry;
     use crate::table::TableState;
 
@@ -3925,22 +4512,28 @@ mod tests {
     }
 
     #[test]
-    fn history_filters_full_list_before_limiting_rendered_rows() {
-        let history: Vec<_> = (1..=(HISTORY_RENDER_LIMIT as u64 + 1))
-            .map(|id| entry(id, if id == 1 { "old.example" } else { "other.example" }))
-            .collect();
-
-        // The only match is the oldest entry, far behind the render cap.
-        let (rows, truncated) =
-            history_view(&history, |e| e.host.contains("old.example"), &TableState::new());
+    fn history_view_keeps_every_match_and_new_rows_go_on_top() {
+        let history: Vec<_> = (1..=1500u64).map(|id| entry(id, if id == 1 { "old.example" } else { "other.example" })).collect();
+        // The only match is the oldest entry.
+        let (rows, truncated) = history_view(&history, |e| e.host.contains("old.example"), &TableState::new());
         assert_eq!(rows.iter().map(|row| row.id).collect::<Vec<_>>(), [1]);
         assert!(!truncated);
-
+        // No cap: all 1500 rows, newest first.
         let (rows, truncated) = history_view(&history, |_| true, &TableState::new());
-        assert_eq!(rows.len(), HISTORY_RENDER_LIMIT);
-        assert!(truncated);
-        assert_eq!(rows.first().unwrap().id, HISTORY_RENDER_LIMIT as u64 + 1);
-        assert_eq!(rows.last().unwrap().id, 2);
+        assert_eq!(rows.len(), 1500);
+        assert!(!truncated);
+        assert_eq!((rows.first().unwrap().id, rows.last().unwrap().id), (1500, 1));
+        // Appended rows, filtered and newest first, are what an incremental
+        // update puts on top: the result equals a full rebuild.
+        let mut grown = history.clone();
+        grown.extend((1501..=1505u64).map(|id| entry(id, if id % 2 == 0 { "old.example" } else { "x" })));
+        let keep = |e: &crate::net::HistEntry| e.host.contains("old.example");
+        let mut incremental = history_new_rows(&grown, history.len(), keep);
+        incremental.extend(history_view(&history, keep, &TableState::new()).0);
+        let full = history_view(&grown, keep, &TableState::new()).0;
+        assert_eq!(incremental.iter().map(|r| r.id).collect::<Vec<_>>(), full.iter().map(|r| r.id).collect::<Vec<_>>());
+        assert_eq!(full.iter().map(|r| r.id).collect::<Vec<_>>(), [1504, 1502, 1]);
+        assert!(history_new_rows(&history, 9999, keep).is_empty());
     }
 
     #[test]
@@ -3989,16 +4582,15 @@ mod tests {
     }
 
     #[test]
-    fn the_cap_applies_after_the_sort() {
-        let mut history: Vec<_> = (1..=(HISTORY_RENDER_LIMIT as u64 + 1))
-            .map(|id| entry(id, "example.test"))
-            .collect();
-        history[0].method = "POST".to_string(); // the oldest entry, behind the cap
+    fn a_sort_sees_the_whole_history() {
+        let mut history: Vec<_> = (1..=1500u64).map(|id| entry(id, "example.test")).collect();
+        history[0].method = "POST".to_string(); // the oldest entry
         let mut state = TableState::new();
         state.sort_col = 2; // Method
         state.sort_asc = false; // POST first
         let (rows, truncated) = history_view(&history, |_| true, &state);
-        assert!(truncated);
-        assert_eq!(rows[0].id, 1, "the sort must see the whole list before the cap");
+        assert!(!truncated);
+        assert_eq!(rows.len(), 1500);
+        assert_eq!(rows[0].id, 1, "the sort must see the whole list");
     }
 }

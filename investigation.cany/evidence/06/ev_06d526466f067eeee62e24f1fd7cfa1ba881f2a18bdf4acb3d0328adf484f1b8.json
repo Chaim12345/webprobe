@@ -1,0 +1,115 @@
+{
+  "id": "ev_06d526466f067eeee62e24f1fd7cfa1ba881f2a18bdf4acb3d0328adf484f1b8",
+  "subject": {
+    "kind": "java-class",
+    "sha256": "b2b112ce0317b7ef5ac74697c352bfe716f97e913307de04f0b06364c731dde8",
+    "name": "Zwez.class"
+  },
+  "operation": "java_method_show",
+  "params": {
+    "class_name": null,
+    "decompile": false,
+    "descriptor": null,
+    "limit": 60,
+    "method_name": "lambda$static$0",
+    "offset": 0,
+    "path": "/root/burp-re/in/extract/burp/Zwez.class"
+  },
+  "result": {
+    "access": [
+      "private",
+      "static"
+    ],
+    "class": "burp.Zwez",
+    "descriptor": "(Lburp/Zuzp;Lburp/Ze9d;IZ)Lburp/Zefl;",
+    "entry": "Zwez.class",
+    "exception_table": [],
+    "instructions": [
+      {
+        "len": 1,
+        "offset": "0000",
+        "opcode": "0x1c",
+        "text": "iload_2"
+      },
+      {
+        "len": 1,
+        "offset": "0001",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 5,
+        "offset": "0002",
+        "opcode": "0xb9",
+        "text": "invokeinterface burp.Ze9d.ZM6()I"
+      },
+      {
+        "len": 3,
+        "offset": "0007",
+        "opcode": "0xa1",
+        "text": "if_icmplt 16"
+      },
+      {
+        "len": 3,
+        "offset": "000a",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zefl.VETOED_DUE_TO_LIMIT:burp.Zefl"
+      },
+      {
+        "len": 3,
+        "offset": "000d",
+        "opcode": "0xa7",
+        "text": "goto 19"
+      },
+      {
+        "len": 3,
+        "offset": "0010",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zefl.ALLOWED:burp.Zefl"
+      },
+      {
+        "len": 1,
+        "offset": "0013",
+        "opcode": "0xb0",
+        "text": "areturn"
+      }
+    ],
+    "instructions_total": 8,
+    "listing": "0000: iload_2\n0001: aload_1\n0002: invokeinterface burp.Ze9d.ZM6()I\n0007: if_icmplt 16\n000a: getstatic burp.Zefl.VETOED_DUE_TO_LIMIT:burp.Zefl\n000d: goto 19\n0010: getstatic burp.Zefl.ALLOWED:burp.Zefl\n0013: areturn",
+    "max_locals": 4,
+    "max_stack": 2,
+    "method": "burp.Zwez.lambda$static$0(Lburp/Zuzp;Lburp/Ze9d;IZ)Lburp/Zefl;",
+    "overloads": [
+      "(Lburp/Zuzp;Lburp/Ze9d;IZ)Lburp/Zefl;"
+    ],
+    "pseudo_java": null,
+    "signature": "private static burp.Zefl lambda$static$0(burp.Zuzp, burp.Ze9d, int, boolean)",
+    "throws": []
+  },
+  "summary": "burp.Zwez.lambda$static$0(Lburp/Zuzp;Lburp/Ze9d;IZ)Lburp/Zefl; (Zwez.class): 8 instructions.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 8,
+    "total": 8
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/root/burp-re/in/extract/burp/Zwez.class"
+    },
+    {
+      "kind": "method",
+      "value": "burp.Zwez.lambda$static$0(Lburp/Zuzp;Lburp/Ze9d;IZ)Lburp/Zefl;"
+    }
+  ],
+  "links": []
+}

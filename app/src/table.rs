@@ -209,7 +209,7 @@ fn table_body_inner<R, F>(
     // the sorted column, 1px dividers you can drag, and a right-click menu that
     // switches columns on and off.
     let visible = state.visible_indices(columns);
-    let header = egui::Frame::none()
+    let header = egui::Frame::NONE
         .fill(theme::header_bg())
         .show(ui, |ui| {
             ui.set_min_width(ui.available_width());
@@ -225,6 +225,7 @@ fn table_body_inner<R, F>(
                         col.label.to_string()
                     };
                     let (rect, resp) = ui.allocate_exact_size(egui::vec2(width, row_height), egui::Sense::click());
+                    resp.widget_info(|| egui::WidgetInfo::labeled(egui::accesskit::Role::ColumnHeader, true, col.label));
                     if resp.hovered() {
                         ui.painter().rect_filled(rect, 0.0, theme::line());
                     }
@@ -245,7 +246,7 @@ fn table_body_inner<R, F>(
                     }
                     // Divider: drag to resize.
                     let (rect, _) = ui.allocate_exact_size(egui::vec2(DIVIDER, row_height), egui::Sense::hover());
-                    let drag = ui.interact(rect.expand2(egui::vec2(2.0, 0.0)), ui.id().with(("resize", i)), egui::Sense::drag());
+                    let drag = ui.interact(rect.expand2(egui::vec2(2.0, 0.0)), ui.scope_id().with(("resize", i)), egui::Sense::drag());
                     if drag.hovered() || drag.dragged() {
                         ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeColumn);
                     }
@@ -264,14 +265,14 @@ fn table_body_inner<R, F>(
                     let active = drag.dragged() || drag.hovered();
                     ui.painter().rect_filled(
                         egui::Rect::from_min_size(egui::pos2(rect.center().x, rect.top() + 2.0), egui::vec2(1.0, (row_height - 4.0).max(1.0))),
-                        egui::Rounding::ZERO,
+                        egui::CornerRadius::ZERO,
                         if active { c(theme::ORANGE) } else { theme::line_strong() },
                     );
                 }
             });
         })
         .response;
-    header.interact(egui::Sense::click()).context_menu(|ui| {
+    egui::Popup::context_menu(&header.interact(egui::Sense::click())).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
         for (i, col) in columns.iter().enumerate() {
             let mut on = state.is_visible(i);
             if ui.checkbox(&mut on, col.label).changed() {
@@ -363,7 +364,10 @@ pub fn cell_w(
     let rich = RichText::new(text.into())
         .size(12.5)
         .color(color.unwrap_or_else(|| theme::ink_dim()));
-    let label = egui::Label::new(rich).truncate();
+    // Not selectable: a selectable label senses clicks and drags itself, so a
+    // click on a cell's text never reached the row (only clicks on the empty
+    // part of a row selected it). Burp's table cells are not text-selectable.
+    let label = egui::Label::new(rich).truncate().selectable(false);
     let rect = ui
         .allocate_exact_size(egui::vec2(width, row_height), egui::Sense::hover())
         .0
@@ -396,9 +400,136 @@ pub fn cells(
     }
 }
 
+/// Multi-row selection of a table, as in Burp's JTables: a click selects one
+/// row, Ctrl+click toggles a row, Shift+click selects the range from the last
+/// plain or Ctrl click (the anchor). `order` is the visible row order.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct MultiSelect {
+    pub ids: std::collections::BTreeSet<u64>,
+    pub anchor: Option<u64>,
+}
+
+impl MultiSelect {
+    pub fn click(&mut self, order: &[u64], clicked: u64, ctrl: bool, shift: bool) {
+        match (shift, self.anchor.and_then(|a| order.iter().position(|id| *id == a)), order.iter().position(|id| *id == clicked)) {
+            (true, Some(a), Some(c)) => {
+                if !ctrl {
+                    self.ids.clear();
+                }
+                let (lo, hi) = if a <= c { (a, c) } else { (c, a) };
+                self.ids.extend(order[lo..=hi].iter().copied());
+            }
+            _ if ctrl => {
+                if !self.ids.remove(&clicked) {
+                    self.ids.insert(clicked);
+                }
+                self.anchor = Some(clicked);
+            }
+            _ => {
+                self.ids.clear();
+                self.ids.insert(clicked);
+                self.anchor = Some(clicked);
+            }
+        }
+    }
+
+    /// Select every visible row (Ctrl+A).
+    pub fn select_all(&mut self, order: &[u64]) {
+        self.ids = order.iter().copied().collect();
+        self.anchor = order.first().copied();
+    }
+
+    /// Drop ids that are no longer visible.
+    pub fn retain_visible(&mut self, order: &[u64]) {
+        let visible: std::collections::BTreeSet<u64> = order.iter().copied().collect();
+        self.ids.retain(|id| visible.contains(id));
+        if self.anchor.is_some_and(|a| !visible.contains(&a)) {
+            self.anchor = None;
+        }
+    }
+
+    /// The rows a context-menu command acts on: the whole selection when the
+    /// clicked row is part of it, otherwise just that row (Burp's rule).
+    pub fn targets(&self, order: &[u64], clicked: u64) -> Vec<u64> {
+        if self.ids.len() > 1 && self.ids.contains(&clicked) {
+            order.iter().copied().filter(|id| self.ids.contains(id)).collect()
+        } else {
+            vec![clicked]
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Clicks on table rows, with press and release in separate frames (a
+    /// person) and in one frame (automation over egui-mcp).
+    #[test]
+    fn rows_receive_clicks() {
+        let ctx = egui::Context::default();
+        let screen = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(800.0, 600.0));
+        let cols = [Column::new("#", 60.0), Column::new("Data", 300.0)];
+        let rows: Vec<usize> = (0..5).collect();
+        let run = |events: Vec<egui::Event>| -> Option<usize> {
+            let mut hit = None;
+            let mut st = TableState::new();
+            ctx.run_ui(egui::RawInput { screen_rect: Some(screen), events, ..Default::default() }, |ui| {
+                egui::CentralPanel::default().show(ui, |ui| {
+                    table_body(ui, "t", &cols, &rows, &mut st, 19.0, 300.0, &mut |i, ui| {
+                        let rr = egui::Rect::from_min_size(ui.cursor().min, egui::vec2(ui.available_width(), 19.0));
+                        let r = ui.interact(rr, egui::Id::unique(("row", *i)), egui::Sense::click());
+                        // A long cell under the pointer, as in a real table.
+                        cell(ui, &Column::new("Data", 300.0), format!("row {i} with a long text cell under the pointer"), None, 19.0);
+                        if r.clicked() {
+                            hit = Some(*i);
+                        }
+                    });
+                });
+            })
+            .drop_without_applying_deltas();
+            hit
+        };
+        // Row 2 sits under the header: header ~19 px, rows of 19 px.
+        let at = egui::pos2(100.0, 8.0 + 19.0 + 19.0 * 2.0 + 9.0 + 8.0);
+        let press = |pressed| egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() };
+        run(vec![]);
+        run(vec![egui::Event::PointerMoved(at)]);
+        let mut got = run(vec![press(true)]);
+        got = got.or(run(vec![press(false)]));
+        let slow = got;
+        run(vec![]);
+        let fast = run(vec![egui::Event::PointerMoved(at), press(true), press(false)]).or(run(vec![]));
+        assert!(slow.is_some() && fast.is_some(), "slow click -> {slow:?}, one-frame click -> {fast:?}");
+        assert_eq!(slow, fast);
+    }
+
+    #[test]
+    fn multi_select_follows_click_ctrl_and_shift() {
+        let order = [10, 11, 12, 13, 14];
+        let mut s = MultiSelect::default();
+        s.click(&order, 11, false, false);
+        assert_eq!(s.ids.iter().copied().collect::<Vec<_>>(), [11]);
+        s.click(&order, 13, false, true); // shift: range from the anchor
+        assert_eq!(s.ids.iter().copied().collect::<Vec<_>>(), [11, 12, 13]);
+        s.click(&order, 10, false, true); // shift again: the range moves, anchor stays
+        assert_eq!(s.ids.iter().copied().collect::<Vec<_>>(), [10, 11]);
+        s.click(&order, 14, true, false); // ctrl adds and moves the anchor
+        assert_eq!(s.ids.iter().copied().collect::<Vec<_>>(), [10, 11, 14]);
+        s.click(&order, 11, true, false); // ctrl again removes
+        assert_eq!(s.ids.iter().copied().collect::<Vec<_>>(), [10, 14]);
+        s.click(&order, 12, true, true); // ctrl+shift extends without clearing
+        assert_eq!(s.ids.iter().copied().collect::<Vec<_>>(), [10, 11, 12, 14]);
+        // Commands act on the selection only when the clicked row is in it.
+        assert_eq!(s.targets(&order, 12), [10, 11, 12, 14]);
+        assert_eq!(s.targets(&order, 13), [13]);
+        s.retain_visible(&[10, 12]);
+        assert_eq!(s.ids.iter().copied().collect::<Vec<_>>(), [10, 12]);
+        s.select_all(&order);
+        assert_eq!(s.ids.len(), 5);
+        s.click(&order, 12, false, false);
+        assert_eq!(s.targets(&order, 12), [12]);
+    }
 
     fn rows() -> Vec<(u64, String, String)> {
         vec![

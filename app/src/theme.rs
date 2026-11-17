@@ -293,8 +293,31 @@ pub fn issue_colour(sev: &str) -> Color32 {
 
 pub fn apply(ctx: &egui::Context) {
     install_fonts(ctx);
+    // The dark palette starts from the context's style; give it egui 0.29's
+    // default button padding (0.37 widened it to 8x2).
+    ctx.all_styles_mut(|s| s.spacing.button_padding = egui::vec2(4.0, 1.0));
+    // egui 0.37 pads text edits by spacing.button_padding; 0.29 used 4x2.
+    ctx.replace_widget_theme::<egui::widget_style::TextEditStyle>(TextEditMargin);
     let (p, d, f) = appearance();
     apply_as(ctx, p, d, f);
+}
+
+/// The default text edit style with egui 0.29's fixed 4x2 text margin in
+/// place of the button padding egui 0.37 uses.
+struct TextEditMargin;
+
+impl egui::theme::StyleProvider<egui::widget_style::TextEditStyle> for TextEditMargin {
+    fn style(&mut self, args: &egui::widget_style::StyleArgs<'_>) -> egui::widget_style::TextEditStyle {
+        let mut s = egui::theme::StyleProvider::<egui::widget_style::TextEditStyle>::style(&mut egui::theme::DefaultStyle, args);
+        let pad = args.style.spacing.button_padding;
+        let (dx, dy) = ((pad.x - 4.0).round() as i8, (pad.y - 2.0).round() as i8);
+        let m = &mut s.atom_layout.frame.inner_margin;
+        m.left -= dx;
+        m.right -= dx;
+        m.top -= dy;
+        m.bottom -= dy;
+        s
+    }
 }
 
 /// egui's proportional faces lack some arrows and symbols the UI prints, and a
@@ -445,7 +468,7 @@ impl Palette {
 
 /// Apply the full appearance (M-01/M-05): palette, density and font scale.
 pub fn apply_as(ctx: &egui::Context, palette: Palette, density: Density, font_scale: f32) {
-    let mut sty = (*ctx.style()).clone();
+    let mut sty = (*ctx.global_style()).clone();
     sty.spacing.item_spacing = egui::vec2(SPACE_S, SPACE_S);
     // A scroll bar you can actually see: egui's default floats over the content
     // and is nearly invisible on a dark palette. Ours allocates its own gutter.
@@ -455,10 +478,10 @@ pub fn apply_as(ctx: &egui::Context, palette: Palette, density: Density, font_sc
     sty.spacing.scroll.bar_inner_margin = 2.0;
     sty.spacing.scroll.bar_outer_margin = 2.0;
     sty.spacing.button_padding = egui::vec2(SPACE_S, SPACE_XS);
-    sty.spacing.window_margin = egui::Margin::symmetric(SPACE_M, SPACE_M);
+    sty.spacing.window_margin = egui::Margin::symmetric(SPACE_M as i8, SPACE_M as i8);
     if palette == Palette::Dark {
         // The dark palette keeps the original Burp-derived styling.
-        let mut dark = (*ctx.style()).clone();
+        let mut dark = (*ctx.global_style()).clone();
         let v = &mut dark.visuals;
         *v = egui::Visuals::dark();
         v.panel_fill = c(MONO1);
@@ -526,10 +549,34 @@ pub fn apply_as(ctx: &egui::Context, palette: Palette, density: Density, font_sc
         }
         sty.text_styles = base_text_styles(font_scale);
     }
+    // egui 0.37 changed these widget defaults; keep the egui 0.29 look.
+    let w = &mut sty.visuals.widgets;
+    w.noninteractive.corner_radius = egui::CornerRadius::same(2);
+    w.inactive.corner_radius = egui::CornerRadius::same(2);
+    w.hovered.corner_radius = egui::CornerRadius::same(3);
+    w.active.corner_radius = egui::CornerRadius::same(2);
+    w.open.corner_radius = egui::CornerRadius::same(2);
+    w.hovered.expansion = 1.0;
+    w.active.expansion = 1.0;
+    if palette != Palette::Light {
+        // Button fills of egui 0.29's Visuals::dark().
+        w.inactive.weak_bg_fill = Color32::from_gray(60);
+        w.hovered.weak_bg_fill = Color32::from_gray(70);
+        w.active.weak_bg_fill = Color32::from_gray(55);
+    }
+    // egui 0.29 rasterised glyphs unhinted, at whole-pixel positions, with
+    // alpha = coverage^0.55 (matched by ink density against 0.29 shots), and
+    // drew hint text in override_text_color (always set here), not dimmed.
+    sty.visuals.text_options.color_transfer_function = egui::epaint::FontColorTransferFunction::Gamma(0.55);
+    sty.visuals.text_options.font_hinting = false;
+    sty.visuals.text_options.subpixel_binning = false;
+    sty.visuals.weak_text_color = Some(sty.visuals.text_color());
+    sty.animation_time = 1.0 / 12.0;
+    sty.interaction.resize_grab_radius_side = 5.0;
     // Density applies in every palette.
     let row = density.row_height();
     sty.spacing.interact_size = egui::vec2(row, row);
-    ctx.set_style(sty);
+    ctx.set_global_style(sty);
 }
 
 fn base_text_styles(font_scale: f32) -> std::collections::BTreeMap<egui::TextStyle, egui::FontId> {
@@ -617,9 +664,9 @@ mod tests {
 
     fn missing(ctx: &egui::Context) -> Vec<char> {
         // Fonts are (re)built at the start of a pass.
-        let _ = ctx.run(egui::RawInput::default(), |_| {});
+        ctx.run_ui(egui::RawInput::default(), |_| {}).drop_without_applying_deltas();
         let font = egui::FontId::proportional(13.0);
-        ctx.fonts(|f| UI_GLYPHS.iter().copied().filter(|&c| !f.has_glyph(&font, c)).collect())
+        ctx.fonts_mut(|f| UI_GLYPHS.iter().copied().filter(|&c| !f.has_glyph(&font, c)).collect())
     }
 
     #[test]
@@ -694,4 +741,12 @@ mod tests {
             assert!(luma(fg) < 120.0, "{name} should be dark ink, got {fg:?}");
         }
     }
+}
+
+/// Where a floating window opens when it has no better place: below the menu
+/// and tab rows and a little in from the left. Without a position egui 0.37
+/// puts new windows in the top-left corner, over the menu bar.
+pub fn window_pos(ctx: &egui::Context) -> egui::Pos2 {
+    let r = ctx.content_rect();
+    egui::pos2(r.left() + 60.0, r.top() + 96.0)
 }

@@ -1,0 +1,222 @@
+{
+  "id": "ev_4ea8d990325f02c210b78baa035308c64c0de5e87b101685f55cb4b171435131",
+  "subject": {
+    "kind": "java-class",
+    "sha256": "0b4d6fd31f0f68a075640a9b109b3a4cb588ef1a664b910acd4925a301ac8ee9",
+    "name": "Zs15.class"
+  },
+  "operation": "java_class_show",
+  "params": {
+    "class_name": null,
+    "decompile": false,
+    "path": "/root/burp-re/in/extract/burp/Zs15.class"
+  },
+  "result": {
+    "access": [],
+    "annotations": [],
+    "entry": "Zs15.class",
+    "fields": [
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "Ljava/util/Set;",
+        "name": "Zu",
+        "signature": "Ljava/util/Set<Ljava/lang/String;>;",
+        "type": "java.util.Set"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "[Ljava/lang/String;",
+        "name": "a",
+        "signature": null,
+        "type": "java.lang.String[]"
+      },
+      {
+        "access": [
+          "private",
+          "static",
+          "final"
+        ],
+        "constant_value": null,
+        "deprecated": false,
+        "descriptor": "[Ljava/lang/String;",
+        "name": "b",
+        "signature": null,
+        "type": "java.lang.String[]"
+      }
+    ],
+    "inner_classes": [],
+    "interfaces": [],
+    "internal": "burp/Zs15",
+    "java_version": "Java 21",
+    "methods": [
+      {
+        "access": [
+          "static"
+        ],
+        "code_bytes": 105,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;ZZ)Z",
+        "max_locals": 4,
+        "max_stack": 3,
+        "name": "ZW",
+        "signature": "static boolean ZW(java.lang.String, boolean, boolean)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "static"
+        ],
+        "code_bytes": 6,
+        "deprecated": false,
+        "descriptor": "(Ljava/util/List;)Ljava/lang/String;",
+        "max_locals": 1,
+        "max_stack": 2,
+        "name": "Z_",
+        "signature": "static java.lang.String Z_(java.util.List)",
+        "signature_attr": "(Ljava/util/List<Ljava/lang/String;>;)Ljava/lang/String;",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "static"
+        ],
+        "code_bytes": 285,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;Ljava/util/List;)Ljava/lang/String;",
+        "max_locals": 10,
+        "max_stack": 3,
+        "name": "ZC",
+        "signature": "static java.lang.String ZC(java.lang.String, java.util.List)",
+        "signature_attr": "(Ljava/lang/String;Ljava/util/List<Ljava/lang/String;>;)Ljava/lang/String;",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "static"
+        ],
+        "code_bytes": 13,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;)Ljava/lang/String;",
+        "max_locals": 1,
+        "max_stack": 3,
+        "name": "Zz",
+        "signature": "static java.lang.String Zz(java.lang.String)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "static"
+        ],
+        "code_bytes": 38,
+        "deprecated": false,
+        "descriptor": "(Ljava/lang/String;)Lnet/portswigger/Za9;",
+        "max_locals": 4,
+        "max_stack": 3,
+        "name": "ZZ",
+        "signature": "static net.portswigger.Za9 ZZ(java.lang.String)",
+        "signature_attr": "(Ljava/lang/String;)Lnet/portswigger/Za9<Ljava/lang/String;Ljava/lang/String;>;",
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "static"
+        ],
+        "code_bytes": 126,
+        "deprecated": false,
+        "descriptor": "(Lburp/Zhem;ZZLjava/lang/String;)Ljava/lang/String;",
+        "max_locals": 8,
+        "max_stack": 3,
+        "name": "Zy",
+        "signature": "static java.lang.String Zy(burp.Zhem, boolean, boolean, java.lang.String)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "static"
+        ],
+        "code_bytes": 423,
+        "deprecated": false,
+        "descriptor": "()V",
+        "max_locals": 7,
+        "max_stack": 10,
+        "name": "<clinit>",
+        "signature": "static <clinit>()",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      },
+      {
+        "access": [
+          "private",
+          "static"
+        ],
+        "code_bytes": 2620,
+        "deprecated": false,
+        "descriptor": "(II)Ljava/lang/String;",
+        "max_locals": 9,
+        "max_stack": 5,
+        "name": "a",
+        "signature": "private static java.lang.String a(int, int)",
+        "signature_attr": null,
+        "throws": [],
+        "try_blocks": 0
+      }
+    ],
+    "name": "burp.Zs15",
+    "pseudo_java": null,
+    "signature": null,
+    "source_file": null,
+    "superclass": "java.lang.Object",
+    "version": {
+      "major": 65,
+      "minor": 0
+    }
+  },
+  "summary": "burp.Zs15 (Java 21) extends Object: 3 fields, 8 methods.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 1,
+    "total": 1
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/root/burp-re/in/extract/burp/Zs15.class"
+    },
+    {
+      "kind": "class",
+      "value": "burp/Zs15"
+    }
+  ],
+  "links": []
+}

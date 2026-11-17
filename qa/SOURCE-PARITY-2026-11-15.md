@@ -569,3 +569,233 @@ holding 127.0.0.1:8080 and a desktop Chromium already running:
 - http://webprobe (the setup page) is no longer recorded in history or
   scanned, matching http://burpsuite (live: Burp's history stays empty).
   The page shows the real listener port.
+
+### Wave 41 (2026-11-16): review fixes and Intruder payload types
+
+- **Intruder payload types**: Burp's "Payload type" dropdown is wired to the existing generators, with per-type panels using Burp's wording: Simple list, Runtime file, Numbers, Dates, Brute forcer and Character blocks. Verified live with a Numbers 1–10 attack on the Juice bench.
+- **Repeater**:
+  - Tabs have stable ids and are numbered 1, 2, 3, ... without reuse, as in Burp.
+  - Cancel now works: the in-flight send is abandoned.
+  - Ctrl+I and Ctrl+R act on the current Repeater tab, as in Burp.
+- **Project file**:
+  - Autoloaded at startup, autosaved every 60 s when changed and on exit, like Burp's disk project.
+  - Binary messages are stored byte-exact.
+  - Restore no longer reuses ids.
+- **Intruder results window**: now bounded to the screen. It used to grow off-screen and move under the first clicks.
+- **Issue #2 medium items**, all verified first and then fixed:
+  - Toasts drawn twice.
+  - Onboarding Hide.
+  - Stale Notes cache.
+  - Collaborator start errors.
+  - Inspector collapse state keyed by name instead of position.
+  - Case-sensitive search in the Hex and Render views.
+  - Header-line cap.
+  - CA-step wording.
+  - Orphaned settings modules deleted.
+- **Not fixed, because they aren't bugs**: Comparer (one shared list with two selections is Burp's design) and the finished-scan card (it stays selectable).
+- The sample-traffic test is now hermetic: a local upstream replaces example.com.
+
+## Wave 42 (2026-11-16): four parallel agents, then a visual pass
+
+Suite after the wave: 423 tests, 413 pass, 0 fail, 10 ignored. Screenshots: `/root/webprobe-parity/qa-w42/`.
+
+| Area | Landed | Checked on the QA display | Open |
+|---|---|---|---|
+| Scanner | cookie/header/multipart/path insertion points with the 30-point cap; PHP code injection (echo), stored XSS, client-side template injection, XML injection out-of-band half (`active_checks.rs`) | not GUI work; loopback end-to-end scan test | entire-body/nested/XML-tag/parameter-name points; out-of-band resource load; Collaborator-everywhere; lab parity figure is stale |
+| Intruder | all 19 payload types, Grep Match/Extract/Payloads, 10-worker runner with pause/throttle/retry, CSV and row menu | type list, Resource pool and Settings docks, a 3-request attack on local Juice Shop, row menu | grep columns, Pause/Resume, CSV save not exercised; payload processing rules not wired |
+| Repeater / Proxy | follow redirects, paste URL, change method, tab management, editor context menu, Intercept held-messages table and Options menu, WebSocket hold/edit/forward, WebSockets history | context menu, settings menu, Follow redirection button, Options menu, WebSockets history (empty) | follow-and-enumerate; Copy as Python; Intercept-off empty state; clipboard root cause (UAT-06) |
+| Project / tools | HTML and XML report, Logger CSV export, crash recovery, engagement tools, content discovery, fuller project file | Report issues window, an HTML report generated and inspected, site-map menu, Logger Export button | discovery/find/recovery windows unseen; report CSV; Logger shows Proxy traffic only |
+
+Defects found and fixed in the pass: seeded history reused the last seeded id for the first real exchange (`main.rs`, test hook only); the Intercept Options button rendered as a missing glyph (`ui.rs`, now the phosphor icon).
+
+QA rig note: a synthetic click that presses and releases inside one frame does not register on table rows; `/root/webprobe-parity/sclick.sh` holds the button for 0.25 s.
+
+## Wave 43 (2026-11-17): architecture
+
+Suite: 434 tests, 424 pass, 0 fail, 10 ignored, built with rustc 1.100 (`app/.cargo/config.toml`). Screenshots: `/root/webprobe-parity/qa-egui37-merged/`.
+
+- **egui/eframe 0.29 -> 0.37.** Ported in an isolated copy and three-way merged. `theme.rs` restores the 0.29 look (button padding, text-edit margin, corner radius, glyph rasterisation, animation time). Eight main screens compared against the wave 42 screenshots. One regression found and fixed: the Intruder results window opened over the tab bar.
+- **Scanner.** `scan_checks.rs` holds a `PointCheck`/`RequestCheck` registry; `start_active_scan` is a 44-line driver. `ScanIssue` gained `type_id` and `evidence` (confirming request/response, capped at 256 KB each); `report.rs` uses it. Guarded by `characterisation_active_scan_issue_list`.
+- **Layering.** Engine modules no longer name UI modules: toast queue -> `notice.rs`, MIME families -> `mime.rs`, setup page -> `setup_page.rs`, `history_host` -> `net.rs`, Collaborator table state -> egui memory. Enforced by `layering_tests::engine_modules_do_not_depend_on_the_ui`.
+- **Locking.** `sync::Mutex` hands out the guard after a panic on another thread; used by `net::Shared`, `App`, TLS, Intruder runner, discovery, extension host.
+- **Logger.** `net::tool_scope("Repeater" | "Intruder" | "Scanner" | "Target" | "Sequencer")` tags a worker thread; `send_raw`/`send_tls_raw` record tagged exchanges in `Shared::tool_log`; the Logger collects them each frame.
+
+Open: physical split into core and UI crates; splitting `Shared`/`App` by subsystem; disk-backed history; evidence in the project file; Collaborator ids on non-UI scan paths; `egui-mcp-client` hook. Build note: `wp-queue` always builds the live crate unless `WP_APP_DIR` is set.
+
+## Wave 44 (2026-11-17): gaps from the QA passes
+
+- Logger detail: tool rows carry their request/response (newest 500), proxy rows point at their history item; the old lookup compared Logger ids with history ids.
+- Crawl & Audit scans draw Collaborator payloads from `Shared::oob_pool`, refilled on the UI thread while `oob_wanted`.
+- Issue evidence and type id persist in the project file.
+- HTTP history: Time column fits, request/response side by side.
+- Intruder results window opens below the tab bar on egui 0.37.
+Screenshots: `/root/webprobe-parity/qa-egui37-merged/13-history-layout.png`, `16c.png`.
+
+## Wave 45 (2026-11-17): issue activity view
+
+- `issue_view.rs`: Advisory / Request N / Response N tabs for the selected issue, fed by `ScanIssue.evidence` and the Burp knowledge base; severity, confidence and false-positive filter bar; selected-row highlight.
+- Scan progress no longer shows more done than total (`scan_checks::bump_progress`).
+- Checked with an active scan of `/rest/products/search?q=` on local Juice Shop: six issues, SQL injection with two evidence pairs (probe `q=apple'`, 500 response).
+Suite: 441 tests, 431 pass, 0 fail, 10 ignored.
+
+## Wave 46 (2026-11-17): issue grouping
+
+Issues can be grouped by issue type or host (`issue_view::group_issues`, `grouped_list`): collapsible headers with counts, the most severe group first. Suite: 442 tests, 432 pass, 0 fail, 10 ignored.
+
+## Wave 47 (2026-11-17): Sequencer depth
+
+- `seq_bits.rs`: bit-level randomness analysis with Burp's rating thresholds (`Zr8b.ZF`) and summary wording; characters are converted to bits by the character set seen at each position.
+- `analysis.rs`: `ln_gamma` had its leading terms negated, so every chi-square p-value was wrong; fixed with known-value tests.
+- Sequencer tab scrolls; the manual-load box has a fixed height; Save tokens / Export analysis (CSV, JSON).
+Suite: 448 tests, 438 pass, 0 fail, 10 ignored. Screenshot: `qa-egui37-merged/30c.png`.
+
+## Wave 48 (2026-11-17): session-handling cookie jar
+
+`cookie_jar.rs` (RFC 6265 storage and matching), `Shared::cookie_jar`, proxy feed in `net::record`, tool feed/apply in `send_raw`/`send_tls_raw` by `tool_scope`, Sessions settings panel. Defaults as in Burp: Proxy updates the jar, Scanner requests use it. Suite: 456 tests, 446 pass, 0 fail, 10 ignored.
+
+## Wave 49 (2026-11-17): cookie jar persistence and editing
+
+The cookie jar is saved in the project file (`ProjectCookieJar`, absent in older files) and can be edited by hand (Add cookie, Remove, Clear). Suite: 457 tests, 447 pass, 0 fail, 10 ignored.
+
+## Wave 50 (2026-11-17): session rule actions
+
+`net::apply_session_rules_for(tool, …)`: tool-scoped rules with set header, set cookie, use cookie jar, run macro, check session and post-request macro; applied in `send_raw`/`send_tls_raw` for the tool on the current thread and on proxy traffic for rules scoped to Proxy. Old project rules load as Proxy-only. Suite: 460 tests, 450 pass, 0 fail, 10 ignored.
+
+## Wave 51 (2026-11-17): macro recorder and recorded logins
+
+- `macros.rs`: multi-step macro text format with `derive=` (values from the prior response into query, form or JSON parameters).
+- `net::run_macro_text`: steps run through the cookie jar; `Shared::macro_last_response` feeds `{name}` placeholders in session rule values.
+- Sessions panel: "Add step" from the selected history item, "Test macro" with per-step results. The default macro text is empty (it used to name example.com).
+Suite: 467 tests, 457 pass, 0 fail, 10 ignored. Screenshot: `qa-egui37-merged/39c.png`.
+
+## Wave 52 (2026-11-17): menu bar
+
+`menus.rs`: the six top-level menus follow Burp's item lists (decompiled Zc6t, Zpn_, Zcur, Zcu0, Zupi, Zup4); items with no backend are disabled. The Project file window (save / restore, previously unreachable from the UI) opens from the Project menu. Thirteen windows that had no explicit position now open below the tab bar (`theme::window_pos`); egui 0.37 put them over the menu bar. Suite: 469 tests, 459 pass, 0 fail, 10 ignored.
+
+## Wave 53 (2026-11-17): site-map context menu
+
+`engagement::site_map_menu` gained scope, passive/active scan of a host or branch (`scan::audit_entries`), Issues > Report/Delete, and Delete host/branch, with scan item names from `burp.Zeem`. Suite: 470 tests, 460 pass, 0 fail, 10 ignored.
+
+## Wave 54 (2026-11-17): Repeater copy and compare
+
+Request menu: Copy as Python requests, Copy raw request, Send request and response to Comparer, Compare response/request with the previous one. Suite: 472 tests, 462 pass, 0 fail, 10 ignored.
+
+## Wave 55 (2026-11-17): Settings dialog
+
+`settings_dialog.rs`: search, All/User/Project pills and Burp's category tree; pages reuse the existing panels (proxy options, session handling, scope editor, Collaborator settings, upstream proxy, appearance, hotkeys, project file, extensions) plus new Intruder, Repeater, Sequencer and Tasks pages. Suite: 474 tests, 464 pass, 0 fail, 10 ignored.
+
+## Wave 56 (2026-11-17): Proxy settings page
+
+- `intercept_rules.rs`: Burp's request interception rule table as an engine (operator, match type, relationship, condition; rows combined top to bottom), replacing the hard-coded extension list in `net::intercept_request`; saved in the project file.
+- `proxy_settings.rs`: listeners table (Running, Interface, Invisible, Redirect, Certificate, TLS protocols; Add/Edit/Remove), CA export and regenerate (`tls::retire_ca`), rules table with Up/Down.
+Suite: 478 tests, 468 pass, 0 fail, 10 ignored. Screenshots: `qa-egui37-merged/52c.png`, `53c.png`.
+
+## Wave 57 (2026-11-17): settings save, load and restore defaults
+
+Settings dialog > Manage settings. Implemented over the project format: a settings file is a project file with the data sections empty. Suite: 479 tests, 469 pass, 0 fail, 10 ignored.
+
+## Wave 58 (2026-11-17): listener redirect
+
+A listener can redirect every request to a fixed host and port (Burp's "Redirect to host / port"); origin-form plain HTTP requests are routed by their Host header on any listener. Suite: 481 tests, 471 pass, 0 fail, 10 ignored.
+
+## Wave 59 (2026-11-17): response views and small defects
+
+- Render tab shows PNG/JPEG/GIF responses as pictures (`image` crate, direct dependency); Pretty indents XML.
+- Fixed: duplicate "Scope" label, seeded rows counted by onboarding, selection staying on a row the filter hides.
+Suite: 484 tests, 474 pass, 0 fail, 10 ignored. Screenshot: `qa-egui37-merged/62c.png`.
+
+## Wave 60 (2026-11-17): engine crate split and headless runner
+
+- `app/core` is a new library crate, `webprobe-core`, holding the 33 engine modules (proxy, TLS, HTTP/2, scanner and its check registry, Intruder engine and runner, session handling, cookie jar, macros, project format, report generators, Collaborator, Logger store, Sequencer analysis). It has no GUI dependency; `layering_tests::engine_crate_has_no_gui_dependency` guards its manifest.
+- `app` (the desktop app) depends on it; `app/Cargo.toml` is a workspace with `default-members = [".", "core"]`, so `wp-queue build|test` cover both crates.
+- Moved into the engine: project-file conversions (`ProjectHistory::from_entry/to_entry`, `ProjectIssue::from_issue/to_issue`) and the report generators; the desktop crate keeps only the report options window.
+- `webprobe-headless` (core/src/bin): `proxy` runs the intercepting proxy with the live passive scan and saves a project; `scan` audits URLs and prints JSON issues, `--report` writes the HTML report or XML export. Checked against local Juice Shop: 8 issues in 10-14 s; three proxied exchanges saved; the binary links no X11/GL library.
+- Scans without a payload supplier no longer wait for Collaborator payloads (`Shared::oob_supplier`).
+Suite: 486 tests (core 360, desktop 126), 476 pass, 0 fail, 10 ignored.
+
+## Wave 61-62 (2026-11-17): multi-select and scan configuration
+
+- `table::MultiSelect`: click / Ctrl / Shift / Ctrl+A selection in Proxy history; menu commands act on the whole selection.
+- `scan_config.rs`: insertion point types and per-check switches, applied in `start_active_scan` / `run_point_checks` / `run_request_checks`, saved in the project, shown in Settings > Project > Tasks.
+Suite: 488 tests (core 361, desktop 127), 478 pass, 0 fail, 10 ignored.
+
+## Wave 63 (2026-11-17): fuzzing the parsers
+
+`core/src/fuzz_tests.rs` (3000 seeded cases per run) found three panics and one wrong-output bug, all fixed with regression tests: `url_decode`, `parse_http_date`, `patch_header` (empty message; blank line re-emitted before the patched header, which broke upstream proxy authentication). Suite: 491 tests (core 364, desktop 127), 481 pass.
+
+## Wave 64 (2026-11-17): robustness and performance
+
+- Proxy connections are capped at 1024 per instance (`net::MAX_CONNECTIONS`); extras get a 503 (`Shared::active_connections`).
+- Event-driven redraws: the engine calls `Shared::wake` on log lines, new history, held messages and WebSocket frames, `notice::toast` wakes too; the UI redraws every 1 s when idle (200 ms while a tool works). Idle CPU with 10k rows: 142 -> 28 ticks / 5 s.
+- History shows every row (the 1,000-row cap is gone); the filtered view is shared per frame and grows incrementally.
+Suite: 492 tests (core 365, desktop 127), 482 pass, 0 fail, 10 ignored.
+
+## Wave 65 (2026-11-17): build speed and site map
+
+- Build speed: a from-scratch build is ~474 s even with no queue at 12 jobs (the queues add ~1 s; incremental edit-and-build is 2-12 s). sccache was disabled by `rustc-wrapper = ""` in `app/.cargo/config.toml`; it is now enabled, and a warm-cache from-scratch build takes 96 s (257/257 dependency crates from cache). The remaining time is proc-macro crates (uncacheable) and the two workspace crates. Stripping dependencies is not needed for speed. A 434 s test build seen earlier was a one-off: a `RUSTC_BOOTSTRAP=1` profiling run had invalidated every dependency.
+- Site map: filter bar, scope colouring, issue markers, Comment column; contents cached by input key.
+
+## Wave 66 (2026-11-17): queue flow, Inspector editing, private Collaborator, extension API
+
+- Scan queue: "Do active scan" (Repeater, history menus) is now a queued task (`TaskKind::Single`, with the Collaborator and SMTP payloads prepared by the UI). Before, `start_active_scan` silently refused it while any queued task was running. The direct-scan card is numbered after the task numbers; it used to share "3." with the first task.
+- Inspector editing (E-01): `core/src/inspector.rs` models the sections and applies an edit, add or remove to the raw request (attributes, query, form body with Content-Length restamped, cookies, headers; keeps bare-LF requests as LF). Repeater's Inspector has Apply changes / Remove / Cancel / Add. The request editor's Hex tab is editable (virtualized byte cells; the cell after the last byte appends).
+- Private Collaborator (I-04): interactsh server given as `host[:port]` with an optional auth token (`Authorization` header), live poll interval, interaction retention, settings saved with the project (not the token), `docs/collaborator-private-server.md`.
+- Extension API (K-01): WebProbe extension API v1, any executable speaking JSON lines (`docs/extensions.md`). It covers hooks that edit or drop messages, issue definitions and reported issues, a custom tab, a 2 s deadline per call, and a stop after 3 failures or on exit with pass-through afterwards. stderr goes to Errors. Example: `extensions/examples/marker_reflection.py`. Hooks for all extensions now run on a snapshot outside the registry lock, so a slow extension no longer serializes every proxied connection.
+- Extension manager (K-03, partial): load in the background (the dialog used to block the UI while a JVM started), list saved to `extensions.json` in the config dir and reloaded at start-up, Details show source, status, issue types and the extension's tab. Sidecar JVM stderr is captured (K-02).
+- Warnings: unused imports and needless `mut` removed, deprecated `Id::new` replaced.
+
+Suite: 519 tests (core 388, desktop 131), 509 pass, 0 fail, 10 ignored.
+
+## Wave 67 (2026-11-17): egui MCP made fully usable; more flow fixes
+
+UI automation over egui-mcp now works end to end against WebProbe on Xvfb. Checked tool by tool on :97: check_connection, get_ui_tree, find_by_label / find_by_label_exact, get_bounds, is_visible, click_element, set_text, get_text, click_at, keyboard_input, scroll, drag, take_screenshot, screenshot_element.
+
+- **Widget tree was empty.** AccessKit names the app after its executable (`webprobe`). The server matched "WebProbe" case-sensitively. The match is now case-insensitive.
+- **Every node had id 0.** AccessKit 0.25 puts 128-bit node ids in AT-SPI paths, and the server parsed them as `u64`. Ids are now folded to 53 bits so JavaScript clients keep them exact. All lookups use the same function, so the tree has no zero ids and the element tools work. The server is vendored at `vendor/egui-mcp-server`, with a test.
+- **Keyboard lost characters.** The stock client turned single letters into key presses with no text, and named keys (`space`) were typed literally. `mcp_hook::key_events` now handles:
+  - text, which types itself, so a whole string can be typed in one call;
+  - key names, including X11 spellings;
+  - `ctrl+a` / `shift+Tab` combos, with ctrl+c and ctrl+x as Copy and Cut;
+  - `text:` for literal words that are also key names.
+  - All agent inputs share one ordered queue, one step per frame, so a key never overtakes the click that focused its field. 3 tests.
+- **Socket stolen.** A second app instance deleted and rebound the shared `egui-mcp.sock`, cutting the first app off. It now refuses with a message. `EGUI_MCP_SOCKET` (client and server) gives each app its own socket.
+- **Unnamed fields.** The request editor and the search boxes now carry accessible names ("Request", "Search").
+- **Card clicks stolen.** The Dashboard task card's click area was registered after its menu and pause buttons and took their clicks. It is now registered first. Long titles are truncated before the buttons.
+- **Phantom card.** Deleting a task brought back a stale "Active scan" card; that card now only shows direct (non-queued) scans (`Shared::direct_scan`). A cancelled item no longer counts as done.
+- **Proxy bind failure.** It now raises an error toast with Burp's wording.
+- **Background loading.** Collaborator server registration runs in the background (it used to freeze the UI for up to 10 s on a slow server). Extension start-up gets its own 20 s deadline, separate from the 2 s hook deadline.
+- **QA rig.** `qa/qa.sh` tracks the app by PID file and stops its process group; matching by name missed `QA_BIN` copies and left orphans holding the proxy port.
+
+GUI-verified this wave over MCP:
+- Inspector parameter edit: `q=a%20b%26c` in the request line, decoded value shown;
+- hex byte edit;
+- loading a process extension: header added, `/blocked` dropped, issue reported, custom tab counters;
+- queued "Active scan selected message" task, then pause, cancel and delete from its card.
+
+Suite: core 390 (380 pass, 10 ignored), desktop 134, 0 fail.
+
+## Wave 68 (2026-11-17): GUI verification sweep, save deadlock, site map compare, session recovery
+
+- **Save deadlock (critical).** `tools::save_project` locked `scan_config` twice inside one struct literal. Rust keeps the first guard until the end of the statement, so every save hung the UI: New project, Save, autosave. It also held about 17 shared locks at once, in an order opposite to the scan task runner (issues then tasks here, tasks then issues there).
+  - Each locked field is now computed in its own statement.
+  - A scan of the whole tree finds no other statement that locks one mutex twice.
+  - Regression test `project_save_completes_and_restores` (60 s timeout). It runs through the new `App::new(shared)` constructor; the App literal moved out of `main()`, so desktop flows can be tested.
+- **Accessibility for automation.** Hand-painted widgets now carry accessible names and roles: main tool tabs, sub-tab strips, side docks, the filter bar, toggles and table column headers. Agents can click a tool tab by name (`/root/webprobe-parity/egui-click.sh LABEL ROLE`).
+- **Comparer (F-03).** The results window has Text|Hex views (`compare::hex_spans`) and Sync views; Sync views is off by default, as in Burp's `user_options.comparer.sync_views`. A Bytes compare opens in Hex. Merge and three-way compare are dropped: Burp's Comparer documentation lists only Words, Bytes, Sync views, Text and Hex.
+- **Compare site maps (Target).** New feature, matching Burp's wizard:
+  - sources: current site map, a project file, or site map 1 re-requested in the current session context as the Target tool;
+  - request matching: path, method, query/body by names or names and values with ignore lists, headers;
+  - response comparison: ignored headers and form fields, whitespace, text-only;
+  - a results table (Deleted / Added / Modified / Unmodified) with both responses diffed.
+  - Engine in `core/src/sitemap_compare.rs`, 4 tests.
+- **Session handling (H-04).** "Check session" gains Burp's "Prompt for in-browser session recovery". The request waits, a Session recovery window offers Open browser / Done / Cancel, and the request continues with the cookies the proxied login put in the jar. Test `browser_recovery_waits_for_the_login_and_uses_the_new_cookie`.
+- **Settings (J-03).** Per-page "Restore defaults" (`project::with_section_defaults`, test).
+- **Intruder (C-07).** Results save as XML with base64 messages, alongside CSV (test).
+- **Sequencer (G-01).** The cookie list selects a cookie the response actually sets; it used to stay on a stale "session".
+- **GUI-verified over MCP this wave:**
+  - D-05: card pause, menu cancel and delete; no phantom card.
+  - F-03: character and byte compares, Hex view.
+  - G-01: live capture over HTTP and TLS, stop after 200, auto analyse.
+  - J-04: corrupt file rejected; New project written and added to the recent list.
+  - Site map comparison run.
+- **N-05.** Release startup to a mapped window takes 871 ms cold and about 410 ms warm. An incremental release rebuild takes 65 s (the desktop crate is 58 s of it). The cache misses after a target-dir change: sccache keys include the target directory.

@@ -1,0 +1,127 @@
+{
+  "id": "ev_e1a9090712da869e078f38de1cdb54e3c9ea5c141dd70daddbd136bda9dbb1ff",
+  "subject": {
+    "kind": "java-class",
+    "sha256": "aa585f0d230edfd1c345cf9b73e519de3559f9de40530aededa6159d37557770",
+    "name": "Ze2v.class"
+  },
+  "operation": "java_method_show",
+  "params": {
+    "class_name": null,
+    "decompile": false,
+    "descriptor": null,
+    "limit": 60,
+    "method_name": "ZV",
+    "offset": 0,
+    "path": "/root/burp-re/in/extract/burp/Ze2v.class"
+  },
+  "result": {
+    "access": [
+      "private",
+      "static"
+    ],
+    "class": "burp.Ze2v",
+    "descriptor": "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;",
+    "entry": "Ze2v.class",
+    "exception_table": [],
+    "instructions": [
+      {
+        "len": 1,
+        "offset": "0000",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 1,
+        "offset": "0001",
+        "opcode": "0x05",
+        "text": "iconst_2"
+      },
+      {
+        "len": 2,
+        "offset": "0002",
+        "opcode": "0x10",
+        "text": "bipush 12"
+      },
+      {
+        "len": 1,
+        "offset": "0004",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 3,
+        "offset": "0005",
+        "opcode": "0xb6",
+        "text": "invokevirtual java.lang.String.length()I"
+      },
+      {
+        "len": 3,
+        "offset": "0008",
+        "opcode": "0xb8",
+        "text": "invokestatic java.lang.Math.min(II)I"
+      },
+      {
+        "len": 3,
+        "offset": "000b",
+        "opcode": "0xb6",
+        "text": "invokevirtual java.lang.String.substring(II)Ljava/lang/String;"
+      },
+      {
+        "len": 1,
+        "offset": "000e",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 5,
+        "offset": "000f",
+        "opcode": "0xba",
+        "text": "invokedynamic makeConcatWithConstants(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;"
+      },
+      {
+        "len": 1,
+        "offset": "0014",
+        "opcode": "0xb0",
+        "text": "areturn"
+      }
+    ],
+    "instructions_total": 10,
+    "listing": "0000: aload_1\n0001: iconst_2\n0002: bipush 12\n0004: aload_1\n0005: invokevirtual java.lang.String.length()I\n0008: invokestatic java.lang.Math.min(II)I\n000b: invokevirtual java.lang.String.substring(II)Ljava/lang/String;\n000e: aload_0\n000f: invokedynamic makeConcatWithConstants(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;\n0014: areturn",
+    "max_locals": 2,
+    "max_stack": 4,
+    "method": "burp.Ze2v.ZV(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;",
+    "overloads": [
+      "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;"
+    ],
+    "pseudo_java": null,
+    "signature": "private static java.lang.String ZV(java.lang.String, java.lang.String)",
+    "throws": []
+  },
+  "summary": "burp.Ze2v.ZV(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String; (Ze2v.class): 10 instructions.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 10,
+    "total": 10
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/root/burp-re/in/extract/burp/Ze2v.class"
+    },
+    {
+      "kind": "method",
+      "value": "burp.Ze2v.ZV(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;"
+    }
+  ],
+  "links": []
+}

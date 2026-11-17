@@ -1,0 +1,264 @@
+{
+  "id": "ev_8d45475f23654ce863de397428a44d1193e4620db097f205d0e1df09cfcd32ac",
+  "subject": {
+    "kind": "java-class",
+    "sha256": "72ec6d372c61cd797c8dca8a98ac6f993a0ac0d1e1cdeb699b3954951b382c13",
+    "name": "Zrmh.class"
+  },
+  "operation": "java_method_show",
+  "params": {
+    "class_name": null,
+    "decompile": false,
+    "descriptor": null,
+    "limit": 60,
+    "method_name": "Zw",
+    "offset": 0,
+    "path": "/root/burp-re/in/extract/burp/Zrmh.class"
+  },
+  "result": {
+    "access": [
+      "public"
+    ],
+    "class": "burp.Zrmh",
+    "descriptor": "(Lburp/Zc58;Lburp/Zsz4;)V",
+    "entry": "Zrmh.class",
+    "exception_table": [],
+    "instructions": [
+      {
+        "len": 3,
+        "offset": "0000",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zr54.Zo()[Ljava/lang/String;"
+      },
+      {
+        "len": 1,
+        "offset": "0003",
+        "opcode": "0x4e",
+        "text": "astore_3"
+      },
+      {
+        "len": 3,
+        "offset": "0004",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zwe8.PLAIN_REFLECTION_TYPES:java.util.List"
+      },
+      {
+        "len": 5,
+        "offset": "0007",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.List.iterator()Ljava/util/Iterator;"
+      },
+      {
+        "len": 2,
+        "offset": "000c",
+        "opcode": "0x3a",
+        "text": "astore 4"
+      },
+      {
+        "len": 2,
+        "offset": "000e",
+        "opcode": "0x19",
+        "text": "aload 4"
+      },
+      {
+        "len": 5,
+        "offset": "0010",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.Iterator.hasNext()Z"
+      },
+      {
+        "len": 3,
+        "offset": "0015",
+        "opcode": "0x99",
+        "text": "ifeq 78"
+      },
+      {
+        "len": 2,
+        "offset": "0018",
+        "opcode": "0x19",
+        "text": "aload 4"
+      },
+      {
+        "len": 5,
+        "offset": "001a",
+        "opcode": "0xb9",
+        "text": "invokeinterface java.util.Iterator.next()Ljava/lang/Object;"
+      },
+      {
+        "len": 3,
+        "offset": "001f",
+        "opcode": "0xc0",
+        "text": "checkcast burp.Zwe8"
+      },
+      {
+        "len": 2,
+        "offset": "0022",
+        "opcode": "0x3a",
+        "text": "astore 5"
+      },
+      {
+        "len": 1,
+        "offset": "0024",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 2,
+        "offset": "0025",
+        "opcode": "0x19",
+        "text": "aload 5"
+      },
+      {
+        "len": 3,
+        "offset": "0027",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zrmh.Z_(Lburp/Zwe8;)Z"
+      },
+      {
+        "len": 3,
+        "offset": "002a",
+        "opcode": "0x9a",
+        "text": "ifne 48"
+      },
+      {
+        "len": 3,
+        "offset": "002d",
+        "opcode": "0xa7",
+        "text": "goto 14"
+      },
+      {
+        "len": 2,
+        "offset": "0030",
+        "opcode": "0x19",
+        "text": "aload 5"
+      },
+      {
+        "len": 3,
+        "offset": "0032",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zwe8.Zs()B"
+      },
+      {
+        "len": 2,
+        "offset": "0035",
+        "opcode": "0x36",
+        "text": "istore 6"
+      },
+      {
+        "len": 1,
+        "offset": "0037",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 1,
+        "offset": "0038",
+        "opcode": "0x2b",
+        "text": "aload_1"
+      },
+      {
+        "len": 1,
+        "offset": "0039",
+        "opcode": "0x2c",
+        "text": "aload_2"
+      },
+      {
+        "len": 1,
+        "offset": "003a",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "003b",
+        "opcode": "0xb4",
+        "text": "getfield burp.Zrmh.ZN:burp.Zmh4"
+      },
+      {
+        "len": 2,
+        "offset": "003e",
+        "opcode": "0x15",
+        "text": "iload 6"
+      },
+      {
+        "len": 3,
+        "offset": "0040",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zmh4.ZT(B)Lburp/Zh38;"
+      },
+      {
+        "len": 3,
+        "offset": "0043",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zrmh.ZK(Lburp/Zc58;Lburp/Zsz4;Lburp/Zh38;)Z"
+      },
+      {
+        "len": 3,
+        "offset": "0046",
+        "opcode": "0x99",
+        "text": "ifeq 74"
+      },
+      {
+        "len": 1,
+        "offset": "0049",
+        "opcode": "0xb1",
+        "text": "return"
+      },
+      {
+        "len": 1,
+        "offset": "004a",
+        "opcode": "0x2d",
+        "text": "aload_3"
+      },
+      {
+        "len": 3,
+        "offset": "004b",
+        "opcode": "0xc6",
+        "text": "ifnull 14"
+      },
+      {
+        "len": 1,
+        "offset": "004e",
+        "opcode": "0xb1",
+        "text": "return"
+      }
+    ],
+    "instructions_total": 33,
+    "listing": "0000: invokestatic burp.Zr54.Zo()[Ljava/lang/String;\n0003: astore_3\n0004: getstatic burp.Zwe8.PLAIN_REFLECTION_TYPES:java.util.List\n0007: invokeinterface java.util.List.iterator()Ljava/util/Iterator;\n000c: astore 4\n000e: aload 4\n0010: invokeinterface java.util.Iterator.hasNext()Z\n0015: ifeq 78\n0018: aload 4\n001a: invokeinterface java.util.Iterator.next()Ljava/lang/Object;\n001f: checkcast burp.Zwe8\n0022: astore 5\n0024: aload_0\n0025: aload 5\n0027: invokevirtual burp.Zrmh.Z_(Lburp/Zwe8;)Z\n002a: ifne 48\n002d: goto 14\n0030: aload 5\n0032: invokevirtual burp.Zwe8.Zs()B\n0035: istore 6\n0037: aload_0\n0038: aload_1\n0039: aload_2\n003a: aload_0\n003b: getfield burp.Zrmh.ZN:burp.Zmh4\n003e: iload 6\n0040: invokevirtual burp.Zmh4.ZT(B)Lburp/Zh38;\n0043: invokevirtual burp.Zrmh.ZK(Lburp/Zc58;Lburp/Zsz4;Lburp/Zh38;)Z\n0046: ifeq 74\n0049: return\n004a: aload_3\n004b: ifnull 14\n004e: return",
+    "max_locals": 7,
+    "max_stack": 5,
+    "method": "burp.Zrmh.Zw(Lburp/Zc58;Lburp/Zsz4;)V",
+    "overloads": [
+      "(Lburp/Zc58;Lburp/Zsz4;)V"
+    ],
+    "pseudo_java": null,
+    "signature": "public void Zw(burp.Zc58, burp.Zsz4)",
+    "throws": []
+  },
+  "summary": "burp.Zrmh.Zw(Lburp/Zc58;Lburp/Zsz4;)V (Zrmh.class): 33 instructions.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "complete",
+    "examined": 33,
+    "total": 33
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/root/burp-re/in/extract/burp/Zrmh.class"
+    },
+    {
+      "kind": "method",
+      "value": "burp.Zrmh.Zw(Lburp/Zc58;Lburp/Zsz4;)V"
+    }
+  ],
+  "links": []
+}

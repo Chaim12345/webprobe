@@ -1,0 +1,1026 @@
+{
+  "id": "ev_e35aac888a545a7b2846640c3b63b8fa150af81c7485d8c4798f5f5bc3c983bd",
+  "subject": {
+    "kind": "java-class",
+    "sha256": "55ea2ecf76066b2e87597b8804e68c6460ff40180f28a74950c6e4ae427f9b6e",
+    "name": "Zr54.class"
+  },
+  "operation": "java_method_show",
+  "params": {
+    "class_name": null,
+    "decompile": true,
+    "descriptor": null,
+    "limit": 400,
+    "method_name": "<clinit>",
+    "offset": 0,
+    "path": "/root/burp-re/in/extract/burp/Zr54.class"
+  },
+  "result": {
+    "access": [
+      "static"
+    ],
+    "class": "burp.Zr54",
+    "descriptor": "()V",
+    "entry": "Zr54.class",
+    "exception_table": [],
+    "instructions": [
+      {
+        "len": 1,
+        "offset": "0000",
+        "opcode": "0x07",
+        "text": "iconst_4"
+      },
+      {
+        "len": 3,
+        "offset": "0001",
+        "opcode": "0xbd",
+        "text": "anewarray java.lang.String"
+      },
+      {
+        "len": 2,
+        "offset": "0004",
+        "opcode": "0x3a",
+        "text": "astore 5"
+      },
+      {
+        "len": 1,
+        "offset": "0006",
+        "opcode": "0x01",
+        "text": "aconst_null"
+      },
+      {
+        "len": 1,
+        "offset": "0007",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 1,
+        "offset": "0008",
+        "opcode": "0x3e",
+        "text": "istore_3"
+      },
+      {
+        "len": 2,
+        "offset": "0009",
+        "opcode": "0x12",
+        "text": "ldc \"è\\u{ad}1\\u{e}\\u{9c}\\u{10}¹\\u{ad}¹µ¡\\u{95}}ª\\u{8e}Ó\\u{18}\\u{8c}¯x\\u{3};\\\"v\""
+      },
+      {
+        "len": 1,
+        "offset": "000b",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "000c",
+        "opcode": "0x4d",
+        "text": "astore_2"
+      },
+      {
+        "len": 3,
+        "offset": "000d",
+        "opcode": "0xb6",
+        "text": "invokevirtual java.lang.String.length()I"
+      },
+      {
+        "len": 2,
+        "offset": "0010",
+        "opcode": "0x36",
+        "text": "istore 4"
+      },
+      {
+        "len": 3,
+        "offset": "0012",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zr54.ZP([Ljava/lang/String;)V"
+      },
+      {
+        "len": 2,
+        "offset": "0015",
+        "opcode": "0x10",
+        "text": "bipush 20"
+      },
+      {
+        "len": 1,
+        "offset": "0017",
+        "opcode": "0x3c",
+        "text": "istore_1"
+      },
+      {
+        "len": 1,
+        "offset": "0018",
+        "opcode": "0x02",
+        "text": "iconst_m1"
+      },
+      {
+        "len": 1,
+        "offset": "0019",
+        "opcode": "0x3b",
+        "text": "istore_0"
+      },
+      {
+        "len": 2,
+        "offset": "001a",
+        "opcode": "0x10",
+        "text": "bipush 118"
+      },
+      {
+        "len": 3,
+        "offset": "001c",
+        "opcode": "0x84",
+        "text": "iinc 0, 1"
+      },
+      {
+        "len": 1,
+        "offset": "001f",
+        "opcode": "0x2c",
+        "text": "aload_2"
+      },
+      {
+        "len": 1,
+        "offset": "0020",
+        "opcode": "0x1a",
+        "text": "iload_0"
+      },
+      {
+        "len": 1,
+        "offset": "0021",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "0022",
+        "opcode": "0x1b",
+        "text": "iload_1"
+      },
+      {
+        "len": 1,
+        "offset": "0023",
+        "opcode": "0x60",
+        "text": "iadd"
+      },
+      {
+        "len": 3,
+        "offset": "0024",
+        "opcode": "0xb6",
+        "text": "invokevirtual java.lang.String.substring(II)Ljava/lang/String;"
+      },
+      {
+        "len": 1,
+        "offset": "0027",
+        "opcode": "0x02",
+        "text": "iconst_m1"
+      },
+      {
+        "len": 3,
+        "offset": "0028",
+        "opcode": "0xa7",
+        "text": "goto 144"
+      },
+      {
+        "len": 2,
+        "offset": "002b",
+        "opcode": "0x19",
+        "text": "aload 5"
+      },
+      {
+        "len": 1,
+        "offset": "002d",
+        "opcode": "0x5f",
+        "text": "swap"
+      },
+      {
+        "len": 1,
+        "offset": "002e",
+        "opcode": "0x1d",
+        "text": "iload_3"
+      },
+      {
+        "len": 3,
+        "offset": "002f",
+        "opcode": "0x84",
+        "text": "iinc 3, 1"
+      },
+      {
+        "len": 1,
+        "offset": "0032",
+        "opcode": "0x5f",
+        "text": "swap"
+      },
+      {
+        "len": 1,
+        "offset": "0033",
+        "opcode": "0x53",
+        "text": "aastore"
+      },
+      {
+        "len": 1,
+        "offset": "0034",
+        "opcode": "0x1a",
+        "text": "iload_0"
+      },
+      {
+        "len": 1,
+        "offset": "0035",
+        "opcode": "0x1b",
+        "text": "iload_1"
+      },
+      {
+        "len": 1,
+        "offset": "0036",
+        "opcode": "0x60",
+        "text": "iadd"
+      },
+      {
+        "len": 1,
+        "offset": "0037",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "0038",
+        "opcode": "0x3b",
+        "text": "istore_0"
+      },
+      {
+        "len": 2,
+        "offset": "0039",
+        "opcode": "0x15",
+        "text": "iload 4"
+      },
+      {
+        "len": 3,
+        "offset": "003b",
+        "opcode": "0xa2",
+        "text": "if_icmpge 71"
+      },
+      {
+        "len": 1,
+        "offset": "003e",
+        "opcode": "0x2c",
+        "text": "aload_2"
+      },
+      {
+        "len": 1,
+        "offset": "003f",
+        "opcode": "0x1a",
+        "text": "iload_0"
+      },
+      {
+        "len": 3,
+        "offset": "0040",
+        "opcode": "0xb6",
+        "text": "invokevirtual java.lang.String.charAt(I)C"
+      },
+      {
+        "len": 1,
+        "offset": "0043",
+        "opcode": "0x3c",
+        "text": "istore_1"
+      },
+      {
+        "len": 3,
+        "offset": "0044",
+        "opcode": "0xa7",
+        "text": "goto 26"
+      },
+      {
+        "len": 2,
+        "offset": "0047",
+        "opcode": "0x12",
+        "text": "ldc \"æh*\\u{6}ìïzÉ\\u{88}Ø\""
+      },
+      {
+        "len": 1,
+        "offset": "0049",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "004a",
+        "opcode": "0x4d",
+        "text": "astore_2"
+      },
+      {
+        "len": 3,
+        "offset": "004b",
+        "opcode": "0xb6",
+        "text": "invokevirtual java.lang.String.length()I"
+      },
+      {
+        "len": 2,
+        "offset": "004e",
+        "opcode": "0x36",
+        "text": "istore 4"
+      },
+      {
+        "len": 1,
+        "offset": "0050",
+        "opcode": "0x06",
+        "text": "iconst_3"
+      },
+      {
+        "len": 1,
+        "offset": "0051",
+        "opcode": "0x3c",
+        "text": "istore_1"
+      },
+      {
+        "len": 1,
+        "offset": "0052",
+        "opcode": "0x02",
+        "text": "iconst_m1"
+      },
+      {
+        "len": 1,
+        "offset": "0053",
+        "opcode": "0x3b",
+        "text": "istore_0"
+      },
+      {
+        "len": 2,
+        "offset": "0054",
+        "opcode": "0x10",
+        "text": "bipush 113"
+      },
+      {
+        "len": 3,
+        "offset": "0056",
+        "opcode": "0x84",
+        "text": "iinc 0, 1"
+      },
+      {
+        "len": 1,
+        "offset": "0059",
+        "opcode": "0x2c",
+        "text": "aload_2"
+      },
+      {
+        "len": 1,
+        "offset": "005a",
+        "opcode": "0x1a",
+        "text": "iload_0"
+      },
+      {
+        "len": 1,
+        "offset": "005b",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "005c",
+        "opcode": "0x1b",
+        "text": "iload_1"
+      },
+      {
+        "len": 1,
+        "offset": "005d",
+        "opcode": "0x60",
+        "text": "iadd"
+      },
+      {
+        "len": 3,
+        "offset": "005e",
+        "opcode": "0xb6",
+        "text": "invokevirtual java.lang.String.substring(II)Ljava/lang/String;"
+      },
+      {
+        "len": 1,
+        "offset": "0061",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 3,
+        "offset": "0062",
+        "opcode": "0xa7",
+        "text": "goto 144"
+      },
+      {
+        "len": 2,
+        "offset": "0065",
+        "opcode": "0x19",
+        "text": "aload 5"
+      },
+      {
+        "len": 1,
+        "offset": "0067",
+        "opcode": "0x5f",
+        "text": "swap"
+      },
+      {
+        "len": 1,
+        "offset": "0068",
+        "opcode": "0x1d",
+        "text": "iload_3"
+      },
+      {
+        "len": 3,
+        "offset": "0069",
+        "opcode": "0x84",
+        "text": "iinc 3, 1"
+      },
+      {
+        "len": 1,
+        "offset": "006c",
+        "opcode": "0x5f",
+        "text": "swap"
+      },
+      {
+        "len": 1,
+        "offset": "006d",
+        "opcode": "0x53",
+        "text": "aastore"
+      },
+      {
+        "len": 1,
+        "offset": "006e",
+        "opcode": "0x1a",
+        "text": "iload_0"
+      },
+      {
+        "len": 1,
+        "offset": "006f",
+        "opcode": "0x1b",
+        "text": "iload_1"
+      },
+      {
+        "len": 1,
+        "offset": "0070",
+        "opcode": "0x60",
+        "text": "iadd"
+      },
+      {
+        "len": 1,
+        "offset": "0071",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 1,
+        "offset": "0072",
+        "opcode": "0x3b",
+        "text": "istore_0"
+      },
+      {
+        "len": 2,
+        "offset": "0073",
+        "opcode": "0x15",
+        "text": "iload 4"
+      },
+      {
+        "len": 3,
+        "offset": "0075",
+        "opcode": "0xa2",
+        "text": "if_icmpge 129"
+      },
+      {
+        "len": 1,
+        "offset": "0078",
+        "opcode": "0x2c",
+        "text": "aload_2"
+      },
+      {
+        "len": 1,
+        "offset": "0079",
+        "opcode": "0x1a",
+        "text": "iload_0"
+      },
+      {
+        "len": 3,
+        "offset": "007a",
+        "opcode": "0xb6",
+        "text": "invokevirtual java.lang.String.charAt(I)C"
+      },
+      {
+        "len": 1,
+        "offset": "007d",
+        "opcode": "0x3c",
+        "text": "istore_1"
+      },
+      {
+        "len": 3,
+        "offset": "007e",
+        "opcode": "0xa7",
+        "text": "goto 84"
+      },
+      {
+        "len": 2,
+        "offset": "0081",
+        "opcode": "0x19",
+        "text": "aload 5"
+      },
+      {
+        "len": 3,
+        "offset": "0083",
+        "opcode": "0xb3",
+        "text": "putstatic burp.Zr54.b:java.lang.String[]"
+      },
+      {
+        "len": 1,
+        "offset": "0086",
+        "opcode": "0x07",
+        "text": "iconst_4"
+      },
+      {
+        "len": 3,
+        "offset": "0087",
+        "opcode": "0xbd",
+        "text": "anewarray java.lang.String"
+      },
+      {
+        "len": 3,
+        "offset": "008a",
+        "opcode": "0xb3",
+        "text": "putstatic burp.Zr54.c:java.lang.String[]"
+      },
+      {
+        "len": 3,
+        "offset": "008d",
+        "opcode": "0xa7",
+        "text": "goto 300"
+      },
+      {
+        "len": 1,
+        "offset": "0090",
+        "opcode": "0x5b",
+        "text": "dup_x2"
+      },
+      {
+        "len": 1,
+        "offset": "0091",
+        "opcode": "0x57",
+        "text": "pop"
+      },
+      {
+        "len": 3,
+        "offset": "0092",
+        "opcode": "0xb6",
+        "text": "invokevirtual java.lang.String.toCharArray()[C"
+      },
+      {
+        "len": 1,
+        "offset": "0095",
+        "opcode": "0x5a",
+        "text": "dup_x1"
+      },
+      {
+        "len": 1,
+        "offset": "0096",
+        "opcode": "0xbe",
+        "text": "arraylength"
+      },
+      {
+        "len": 1,
+        "offset": "0097",
+        "opcode": "0x5b",
+        "text": "dup_x2"
+      },
+      {
+        "len": 1,
+        "offset": "0098",
+        "opcode": "0x57",
+        "text": "pop"
+      },
+      {
+        "len": 1,
+        "offset": "0099",
+        "opcode": "0x03",
+        "text": "iconst_0"
+      },
+      {
+        "len": 2,
+        "offset": "009a",
+        "opcode": "0x36",
+        "text": "istore 6"
+      },
+      {
+        "len": 1,
+        "offset": "009c",
+        "opcode": "0x5d",
+        "text": "dup2_x1"
+      },
+      {
+        "len": 1,
+        "offset": "009d",
+        "opcode": "0x58",
+        "text": "pop2"
+      },
+      {
+        "len": 1,
+        "offset": "009e",
+        "opcode": "0x5b",
+        "text": "dup_x2"
+      },
+      {
+        "len": 1,
+        "offset": "009f",
+        "opcode": "0x04",
+        "text": "iconst_1"
+      },
+      {
+        "len": 3,
+        "offset": "00a0",
+        "opcode": "0xa3",
+        "text": "if_icmpgt 260"
+      },
+      {
+        "len": 1,
+        "offset": "00a3",
+        "opcode": "0x5c",
+        "text": "dup2"
+      },
+      {
+        "len": 1,
+        "offset": "00a4",
+        "opcode": "0x5f",
+        "text": "swap"
+      },
+      {
+        "len": 2,
+        "offset": "00a5",
+        "opcode": "0x15",
+        "text": "iload 6"
+      },
+      {
+        "len": 1,
+        "offset": "00a7",
+        "opcode": "0x5d",
+        "text": "dup2_x1"
+      },
+      {
+        "len": 1,
+        "offset": "00a8",
+        "opcode": "0x34",
+        "text": "caload"
+      },
+      {
+        "len": 1,
+        "offset": "00a9",
+        "opcode": "0x5f",
+        "text": "swap"
+      },
+      {
+        "len": 2,
+        "offset": "00aa",
+        "opcode": "0x15",
+        "text": "iload 6"
+      },
+      {
+        "len": 2,
+        "offset": "00ac",
+        "opcode": "0x10",
+        "text": "bipush 7"
+      },
+      {
+        "len": 1,
+        "offset": "00ae",
+        "opcode": "0x70",
+        "text": "irem"
+      },
+      {
+        "len": 37,
+        "offset": "00af",
+        "opcode": "0xaa",
+        "text": "tableswitch  # default -> 242; 0 -> 212, 1 -> 217, 2 -> 222, 3 -> 227, 4 -> 232, 5 -> 237"
+      },
+      {
+        "len": 2,
+        "offset": "00d4",
+        "opcode": "0x10",
+        "text": "bipush 77"
+      },
+      {
+        "len": 3,
+        "offset": "00d6",
+        "opcode": "0xa7",
+        "text": "goto 244"
+      },
+      {
+        "len": 2,
+        "offset": "00d9",
+        "opcode": "0x10",
+        "text": "bipush 88"
+      },
+      {
+        "len": 3,
+        "offset": "00db",
+        "opcode": "0xa7",
+        "text": "goto 244"
+      },
+      {
+        "len": 2,
+        "offset": "00de",
+        "opcode": "0x10",
+        "text": "bipush 126"
+      },
+      {
+        "len": 3,
+        "offset": "00e0",
+        "opcode": "0xa7",
+        "text": "goto 244"
+      },
+      {
+        "len": 2,
+        "offset": "00e3",
+        "opcode": "0x10",
+        "text": "bipush 6"
+      },
+      {
+        "len": 3,
+        "offset": "00e5",
+        "opcode": "0xa7",
+        "text": "goto 244"
+      },
+      {
+        "len": 2,
+        "offset": "00e8",
+        "opcode": "0x10",
+        "text": "bipush 27"
+      },
+      {
+        "len": 3,
+        "offset": "00ea",
+        "opcode": "0xa7",
+        "text": "goto 244"
+      },
+      {
+        "len": 2,
+        "offset": "00ed",
+        "opcode": "0x10",
+        "text": "bipush 78"
+      },
+      {
+        "len": 3,
+        "offset": "00ef",
+        "opcode": "0xa7",
+        "text": "goto 244"
+      },
+      {
+        "len": 2,
+        "offset": "00f2",
+        "opcode": "0x10",
+        "text": "bipush 75"
+      },
+      {
+        "len": 1,
+        "offset": "00f4",
+        "opcode": "0x82",
+        "text": "ixor"
+      },
+      {
+        "len": 1,
+        "offset": "00f5",
+        "opcode": "0x82",
+        "text": "ixor"
+      },
+      {
+        "len": 1,
+        "offset": "00f6",
+        "opcode": "0x92",
+        "text": "i2c"
+      },
+      {
+        "len": 1,
+        "offset": "00f7",
+        "opcode": "0x55",
+        "text": "castore"
+      },
+      {
+        "len": 3,
+        "offset": "00f8",
+        "opcode": "0x84",
+        "text": "iinc 6, 1"
+      },
+      {
+        "len": 1,
+        "offset": "00fb",
+        "opcode": "0x59",
+        "text": "dup"
+      },
+      {
+        "len": 3,
+        "offset": "00fc",
+        "opcode": "0x9a",
+        "text": "ifne 260"
+      },
+      {
+        "len": 1,
+        "offset": "00ff",
+        "opcode": "0x5c",
+        "text": "dup2"
+      },
+      {
+        "len": 1,
+        "offset": "0100",
+        "opcode": "0x5a",
+        "text": "dup_x1"
+      },
+      {
+        "len": 3,
+        "offset": "0101",
+        "opcode": "0xa7",
+        "text": "goto 167"
+      },
+      {
+        "len": 1,
+        "offset": "0104",
+        "opcode": "0x5d",
+        "text": "dup2_x1"
+      },
+      {
+        "len": 1,
+        "offset": "0105",
+        "opcode": "0x58",
+        "text": "pop2"
+      },
+      {
+        "len": 1,
+        "offset": "0106",
+        "opcode": "0x5b",
+        "text": "dup_x2"
+      },
+      {
+        "len": 2,
+        "offset": "0107",
+        "opcode": "0x15",
+        "text": "iload 6"
+      },
+      {
+        "len": 3,
+        "offset": "0109",
+        "opcode": "0xa3",
+        "text": "if_icmpgt 163"
+      },
+      {
+        "len": 1,
+        "offset": "010c",
+        "opcode": "0x57",
+        "text": "pop"
+      },
+      {
+        "len": 3,
+        "offset": "010d",
+        "opcode": "0xbb",
+        "text": "new java.lang.String"
+      },
+      {
+        "len": 1,
+        "offset": "0110",
+        "opcode": "0x5a",
+        "text": "dup_x1"
+      },
+      {
+        "len": 1,
+        "offset": "0111",
+        "opcode": "0x5f",
+        "text": "swap"
+      },
+      {
+        "len": 3,
+        "offset": "0112",
+        "opcode": "0xb7",
+        "text": "invokespecial java.lang.String.<init>([C)V"
+      },
+      {
+        "len": 3,
+        "offset": "0115",
+        "opcode": "0xb6",
+        "text": "invokevirtual java.lang.String.intern()Ljava/lang/String;"
+      },
+      {
+        "len": 1,
+        "offset": "0118",
+        "opcode": "0x5f",
+        "text": "swap"
+      },
+      {
+        "len": 1,
+        "offset": "0119",
+        "opcode": "0x57",
+        "text": "pop"
+      },
+      {
+        "len": 1,
+        "offset": "011a",
+        "opcode": "0x5f",
+        "text": "swap"
+      },
+      {
+        "len": 17,
+        "offset": "011b",
+        "opcode": "0xaa",
+        "text": "tableswitch  # default -> 43; 0 -> 101"
+      },
+      {
+        "len": 3,
+        "offset": "012c",
+        "opcode": "0x11",
+        "text": "sipush -13252"
+      },
+      {
+        "len": 3,
+        "offset": "012f",
+        "opcode": "0x11",
+        "text": "sipush -8167"
+      },
+      {
+        "len": 3,
+        "offset": "0132",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zr54.a(II)Ljava/lang/String;"
+      },
+      {
+        "len": 3,
+        "offset": "0135",
+        "opcode": "0xb8",
+        "text": "invokestatic java.util.regex.Pattern.compile(Ljava/lang/String;)Ljava/util/regex/Pattern;"
+      },
+      {
+        "len": 3,
+        "offset": "0138",
+        "opcode": "0xb3",
+        "text": "putstatic burp.Zr54.ZJ:java.util.regex.Pattern"
+      },
+      {
+        "len": 1,
+        "offset": "013b",
+        "opcode": "0xb1",
+        "text": "return"
+      }
+    ],
+    "instructions_total": 155,
+    "listing": "0000: iconst_4\n0001: anewarray java.lang.String\n0004: astore 5\n0006: aconst_null\n0007: iconst_0\n0008: istore_3\n0009: ldc \"è\\u{ad}1\\u{e}\\u{9c}\\u{10}¹\\u{ad}¹µ¡\\u{95}}ª\\u{8e}Ó\\u{18}\\u{8c}¯x\\u{3};\\\"v\"\n000b: dup\n000c: astore_2\n000d: invokevirtual java.lang.String.length()I\n0010: istore 4\n0012: invokestatic burp.Zr54.ZP([Ljava/lang/String;)V\n0015: bipush 20\n0017: istore_1\n0018: iconst_m1\n0019: istore_0\n001a: bipush 118\n001c: iinc 0, 1\n001f: aload_2\n0020: iload_0\n0021: dup\n0022: iload_1\n0023: iadd\n0024: invokevirtual java.lang.String.substring(II)Ljava/lang/String;\n0027: iconst_m1\n0028: goto 144\n002b: aload 5\n002d: swap\n002e: iload_3\n002f: iinc 3, 1\n0032: swap\n0033: aastore\n0034: iload_0\n0035: iload_1\n0036: iadd\n0037: dup\n0038: istore_0\n0039: iload 4\n003b: if_icmpge 71\n003e: aload_2\n003f: iload_0\n0040: invokevirtual java.lang.String.charAt(I)C\n0043: istore_1\n0044: goto 26\n0047: ldc \"æh*\\u{6}ìïzÉ\\u{88}Ø\"\n0049: dup\n004a: astore_2\n004b: invokevirtual java.lang.String.length()I\n004e: istore 4\n0050: iconst_3\n0051: istore_1\n0052: iconst_m1\n0053: istore_0\n0054: bipush 113\n0056: iinc 0, 1\n0059: aload_2\n005a: iload_0\n005b: dup\n005c: iload_1\n005d: iadd\n005e: invokevirtual java.lang.String.substring(II)Ljava/lang/String;\n0061: iconst_0\n0062: goto 144\n0065: aload 5\n0067: swap\n0068: iload_3\n0069: iinc 3, 1\n006c: swap\n006d: aastore\n006e: iload_0\n006f: iload_1\n0070: iadd\n0071: dup\n0072: istore_0\n0073: iload 4\n0075: if_icmpge 129\n0078: aload_2\n0079: iload_0\n007a: invokevirtual java.lang.String.charAt(I)C\n007d: istore_1\n007e: goto 84\n0081: aload 5\n0083: putstatic burp.Zr54.b:java.lang.String[]\n0086: iconst_4\n0087: anewarray java.lang.String\n008a: putstatic burp.Zr54.c:java.lang.String[]\n008d: goto 300\n0090: dup_x2\n0091: pop\n0092: invokevirtual java.lang.String.toCharArray()[C\n0095: dup_x1\n0096: arraylength\n0097: dup_x2\n0098: pop\n0099: iconst_0\n009a: istore 6\n009c: dup2_x1\n009d: pop2\n009e: dup_x2\n009f: iconst_1\n00a0: if_icmpgt 260\n00a3: dup2\n00a4: swap\n00a5: iload 6\n00a7: dup2_x1\n00a8: caload\n00a9: swap\n00aa: iload 6\n00ac: bipush 7\n00ae: irem\n00af: tableswitch  # default -> 242; 0 -> 212, 1 -> 217, 2 -> 222, 3 -> 227, 4 -> 232, 5 -> 237\n00d4: bipush 77\n00d6: goto 244\n00d9: bipush 88\n00db: goto 244\n00de: bipush 126\n00e0: goto 244\n00e3: bipush 6\n00e5: goto 244\n00e8: bipush 27\n00ea: goto 244\n00ed: bipush 78\n00ef: goto 244\n00f2: bipush 75\n00f4: ixor\n00f5: ixor\n00f6: i2c\n00f7: castore\n00f8: iinc 6, 1\n00fb: dup\n00fc: ifne 260\n00ff: dup2\n0100: dup_x1\n0101: goto 167\n0104: dup2_x1\n0105: pop2\n0106: dup_x2\n0107: iload 6\n0109: if_icmpgt 163\n010c: pop\n010d: new java.lang.String\n0110: dup_x1\n0111: swap\n0112: invokespecial java.lang.String.<init>([C)V\n0115: invokevirtual java.lang.String.intern()Ljava/lang/String;\n0118: swap\n0119: pop\n011a: swap\n011b: tableswitch  # default -> 43; 0 -> 101\n012c: sipush -13252\n012f: sipush -8167\n0132: invokestatic burp.Zr54.a(II)Ljava/lang/String;\n0135: invokestatic java.util.regex.Pattern.compile(Ljava/lang/String;)Ljava/util/regex/Pattern;\n0138: putstatic burp.Zr54.ZJ:java.util.regex.Pattern\n013b: return",
+    "max_locals": 7,
+    "max_stack": 10,
+    "method": "burp.Zr54.<clinit>()V",
+    "overloads": [
+      "()V"
+    ],
+    "pseudo_java": {
+      "code": "static <clinit>() {\n    v5 = new String[4];\n    v3 = 0;\n    v2 = \"è\\u{ad}1\\u{e}\\u{9c}\\u{10}¹\\u{ad}¹µ¡\\u{95}}ª\\u{8e}Ó\\u{18}\\u{8c}¯x\\u{3};\\\"v\";\n    v4 = \"è\\u{ad}1\\u{e}\\u{9c}\\u{10}¹\\u{ad}¹µ¡\\u{95}}ª\\u{8e}Ó\\u{18}\\u{8c}¯x\\u{3};\\\"v\".length();\n    Zr54.ZP(null);\n    v1 = 20;\n    v0 = -1;\n    v0 += 1;\n    goto L91;\n    v3 += 1;\n    v5[v3] = -1;\n    v0 = (v0 + v1);\n    if ((v0 + v1) < v4) {\n        v1 = v2.charAt(v0);\n        goto L1c;\n    }\n    v2 = \"æh*\\u{6}ìïzÉ\\u{88}Ø\";\n    v4 = \"æh*\\u{6}ìïzÉ\\u{88}Ø\".length();\n    v1 = 3;\n    v0 = -1;\n    v0 += 1;\n    goto L91;\n    v3 += 1;\n    v5[v3] = 0;\n    v0 = (v0 + v1);\n    if ((v0 + v1) < v4) {\n        v1 = v2.charAt(v0);\n        goto L56;\n    }\n    Zr54.b = v5;\n    Zr54.c = new String[4];\n    goto L138;\n    L91:\n    v2.substring(v0, (v0 + v1));\n    113.toCharArray().length;\n    v6 = 0;\n    v2.substring(v0, (v0 + v1));\n    if (118 <= 1) {\n        switch ((v6 % 7)) {\n            case 0:\n                goto Lf7;\n            case 1:\n                goto Lf7;\n            case 2:\n                goto Lf7;\n            case 3:\n                goto Lf7;\n            case 4:\n                goto Lf7;\n            case 5:\n                goto Lf7;\n            default:\n                Lf7:\n                126[6] = (char) (27 ^ (78 ^ 75));\n                v6 += 1;\n                if (88 == 0) {\n                    goto Laf;\n                }\n        }\n    }\n    if (77 > v6) goto Laf;\n    switch (?) {\n        case 0: goto L69;\n        default: goto L2f;\n    }\n    L138:\n    Zr54.ZJ = Pattern.compile(Zr54.a(-13252, -8167));\n    return;\n}",
+      "confidence": "inferred",
+      "fully_structured": false,
+      "signature": "static <clinit>()"
+    },
+    "signature": "static <clinit>()",
+    "throws": []
+  },
+  "summary": "burp.Zr54.<clinit>()V (Zr54.class): 155 instructions.",
+  "confidence": "inferred",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [
+    {
+      "code": "decompiler_inferred",
+      "message": "This pseudo-Java is reconstructed from bytecode by Craft Anything's built-in decompiler; it is a best guess, not the original source. The bytecode disassembly is the evidence."
+    },
+    {
+      "code": "generics_erased",
+      "message": "Generic type arguments are erased in bytecode and are not shown."
+    },
+    {
+      "code": "names_and_types_inferred",
+      "message": "Local variables are named v0, v1, … (no debug names); their declared types are not reconstructed."
+    },
+    {
+      "code": "desugaring_not_reversed",
+      "message": "Synthetic members, lambda/invokedynamic desugaring, enum scaffolding and string-switch hashing are not turned back into source."
+    },
+    {
+      "code": "control_flow_partly_structured",
+      "message": "Some control flow could not be recovered and is shown with labels and goto statements."
+    },
+    {
+      "code": "stack_reconstruction_approximate",
+      "message": "Some stack operations (complex dup/swap, invokedynamic/lambda, jsr/ret) are approximated; read the bytecode listing for the exact behaviour."
+    }
+  ],
+  "coverage": {
+    "status": "complete",
+    "examined": 155,
+    "total": 155
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/root/burp-re/in/extract/burp/Zr54.class"
+    },
+    {
+      "kind": "method",
+      "value": "burp.Zr54.<clinit>()V"
+    }
+  ],
+  "links": []
+}

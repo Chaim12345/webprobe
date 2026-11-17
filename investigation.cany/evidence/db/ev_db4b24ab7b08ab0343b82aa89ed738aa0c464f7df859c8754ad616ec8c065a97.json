@@ -1,0 +1,427 @@
+{
+  "id": "ev_db4b24ab7b08ab0343b82aa89ed738aa0c464f7df859c8754ad616ec8c065a97",
+  "subject": {
+    "kind": "java-class",
+    "sha256": "2b7268e372f86f3216d006542ae47269e9c275f064869a38c18ad1cd3c7a8a71",
+    "name": "Zxvv.class"
+  },
+  "operation": "java_method_show",
+  "params": {
+    "class_name": null,
+    "decompile": false,
+    "descriptor": null,
+    "limit": 60,
+    "method_name": "Zg",
+    "offset": 0,
+    "path": "/root/burp-re/in/extract/burp/Zxvv.class"
+  },
+  "result": {
+    "access": [
+      "protected"
+    ],
+    "class": "burp.Zxvv",
+    "descriptor": "(Ljava/lang/String;)Ljava/lang/String;",
+    "entry": "Zxvv.class",
+    "exception_table": [],
+    "instructions": [
+      {
+        "len": 3,
+        "offset": "0000",
+        "opcode": "0x11",
+        "text": "sipush 25585"
+      },
+      {
+        "len": 3,
+        "offset": "0003",
+        "opcode": "0x11",
+        "text": "sipush -24276"
+      },
+      {
+        "len": 3,
+        "offset": "0006",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zxvv.a(II)Ljava/lang/String;"
+      },
+      {
+        "len": 1,
+        "offset": "0009",
+        "opcode": "0x4d",
+        "text": "astore_2"
+      },
+      {
+        "len": 1,
+        "offset": "000a",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "000b",
+        "opcode": "0xb4",
+        "text": "getfield burp.Zxvv.Zy:burp.Zse"
+      },
+      {
+        "len": 3,
+        "offset": "000e",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zcot.PHP_CODE_INJECTION:burp.Zcot"
+      },
+      {
+        "len": 3,
+        "offset": "0011",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zwx_.PHP_ECHO_BASED:burp.Zwx_"
+      },
+      {
+        "len": 5,
+        "offset": "0014",
+        "opcode": "0xb9",
+        "text": "invokeinterface burp.Zse.Zr(Lburp/Zp9h;Lburp/Zwx_;)Z"
+      },
+      {
+        "len": 3,
+        "offset": "0019",
+        "opcode": "0x9a",
+        "text": "ifne 43"
+      },
+      {
+        "len": 1,
+        "offset": "001c",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "001d",
+        "opcode": "0xb4",
+        "text": "getfield burp.Zxvv.Zy:burp.Zse"
+      },
+      {
+        "len": 3,
+        "offset": "0020",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zcot.INPUT_RETRIEVAL_REFLECTED:burp.Zcot"
+      },
+      {
+        "len": 5,
+        "offset": "0023",
+        "opcode": "0xb9",
+        "text": "invokeinterface burp.Zse.ZG(Lburp/Zp9h;)Z"
+      },
+      {
+        "len": 3,
+        "offset": "0028",
+        "opcode": "0x99",
+        "text": "ifeq 110"
+      },
+      {
+        "len": 1,
+        "offset": "002b",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "002c",
+        "opcode": "0xb4",
+        "text": "getfield burp.Zxvv.Zu:net.portswigger.Zwl"
+      },
+      {
+        "len": 3,
+        "offset": "002f",
+        "opcode": "0xb6",
+        "text": "invokevirtual net.portswigger.Zwl.toString()Ljava/lang/String;"
+      },
+      {
+        "len": 1,
+        "offset": "0032",
+        "opcode": "0x4e",
+        "text": "astore_3"
+      },
+      {
+        "len": 3,
+        "offset": "0033",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zcub.PHP_PAYLOAD_ONE:burp.Zcub"
+      },
+      {
+        "len": 1,
+        "offset": "0036",
+        "opcode": "0x2d",
+        "text": "aload_3"
+      },
+      {
+        "len": 3,
+        "offset": "0037",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zg1y.Zr(Lburp/Zcub;Ljava/lang/String;)Ljava/lang/String;"
+      },
+      {
+        "len": 2,
+        "offset": "003a",
+        "opcode": "0x3a",
+        "text": "astore 4"
+      },
+      {
+        "len": 3,
+        "offset": "003c",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zcub.PHP_PAYLOAD_TWO:burp.Zcub"
+      },
+      {
+        "len": 1,
+        "offset": "003f",
+        "opcode": "0x2d",
+        "text": "aload_3"
+      },
+      {
+        "len": 3,
+        "offset": "0040",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zg1y.Zr(Lburp/Zcub;Ljava/lang/String;)Ljava/lang/String;"
+      },
+      {
+        "len": 2,
+        "offset": "0043",
+        "opcode": "0x3a",
+        "text": "astore 5"
+      },
+      {
+        "len": 1,
+        "offset": "0045",
+        "opcode": "0x2c",
+        "text": "aload_2"
+      },
+      {
+        "len": 2,
+        "offset": "0046",
+        "opcode": "0x19",
+        "text": "aload 4"
+      },
+      {
+        "len": 2,
+        "offset": "0048",
+        "opcode": "0x19",
+        "text": "aload 5"
+      },
+      {
+        "len": 3,
+        "offset": "004a",
+        "opcode": "0x11",
+        "text": "sipush 25586"
+      },
+      {
+        "len": 3,
+        "offset": "004d",
+        "opcode": "0x11",
+        "text": "sipush -27749"
+      },
+      {
+        "len": 3,
+        "offset": "0050",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zxvv.a(II)Ljava/lang/String;"
+      },
+      {
+        "len": 1,
+        "offset": "0053",
+        "opcode": "0x5b",
+        "text": "dup_x2"
+      },
+      {
+        "len": 1,
+        "offset": "0054",
+        "opcode": "0x57",
+        "text": "pop"
+      },
+      {
+        "len": 3,
+        "offset": "0055",
+        "opcode": "0x11",
+        "text": "sipush 25589"
+      },
+      {
+        "len": 3,
+        "offset": "0058",
+        "opcode": "0x11",
+        "text": "sipush 26455"
+      },
+      {
+        "len": 3,
+        "offset": "005b",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zxvv.a(II)Ljava/lang/String;"
+      },
+      {
+        "len": 1,
+        "offset": "005e",
+        "opcode": "0x5f",
+        "text": "swap"
+      },
+      {
+        "len": 3,
+        "offset": "005f",
+        "opcode": "0x11",
+        "text": "sipush 25590"
+      },
+      {
+        "len": 3,
+        "offset": "0062",
+        "opcode": "0x11",
+        "text": "sipush 32371"
+      },
+      {
+        "len": 3,
+        "offset": "0065",
+        "opcode": "0xb8",
+        "text": "invokestatic burp.Zxvv.a(II)Ljava/lang/String;"
+      },
+      {
+        "len": 5,
+        "offset": "0068",
+        "opcode": "0xba",
+        "text": "invokedynamic makeConcatWithConstants(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;"
+      },
+      {
+        "len": 1,
+        "offset": "006d",
+        "opcode": "0x4d",
+        "text": "astore_2"
+      },
+      {
+        "len": 1,
+        "offset": "006e",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "006f",
+        "opcode": "0xb4",
+        "text": "getfield burp.Zxvv.ZN:burp.Zie"
+      },
+      {
+        "len": 5,
+        "offset": "0072",
+        "opcode": "0xb9",
+        "text": "invokeinterface burp.Zie.Ze()Z"
+      },
+      {
+        "len": 3,
+        "offset": "0077",
+        "opcode": "0x99",
+        "text": "ifeq 151"
+      },
+      {
+        "len": 1,
+        "offset": "007a",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "007b",
+        "opcode": "0xb4",
+        "text": "getfield burp.Zxvv.Zy:burp.Zse"
+      },
+      {
+        "len": 3,
+        "offset": "007e",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zcot.PHP_CODE_INJECTION:burp.Zcot"
+      },
+      {
+        "len": 3,
+        "offset": "0081",
+        "opcode": "0xb2",
+        "text": "getstatic burp.Zwx_.COLLABORATOR_BASED:burp.Zwx_"
+      },
+      {
+        "len": 5,
+        "offset": "0084",
+        "opcode": "0xb9",
+        "text": "invokeinterface burp.Zse.Zr(Lburp/Zp9h;Lburp/Zwx_;)Z"
+      },
+      {
+        "len": 3,
+        "offset": "0089",
+        "opcode": "0x99",
+        "text": "ifeq 151"
+      },
+      {
+        "len": 1,
+        "offset": "008c",
+        "opcode": "0x2c",
+        "text": "aload_2"
+      },
+      {
+        "len": 1,
+        "offset": "008d",
+        "opcode": "0x2a",
+        "text": "aload_0"
+      },
+      {
+        "len": 3,
+        "offset": "008e",
+        "opcode": "0xb6",
+        "text": "invokevirtual burp.Zxvv.ZQ()Ljava/lang/String;"
+      },
+      {
+        "len": 5,
+        "offset": "0091",
+        "opcode": "0xba",
+        "text": "invokedynamic makeConcatWithConstants(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;"
+      },
+      {
+        "len": 1,
+        "offset": "0096",
+        "opcode": "0x4d",
+        "text": "astore_2"
+      },
+      {
+        "len": 1,
+        "offset": "0097",
+        "opcode": "0x2c",
+        "text": "aload_2"
+      }
+    ],
+    "instructions_total": 67,
+    "listing": "0000: sipush 25585\n0003: sipush -24276\n0006: invokestatic burp.Zxvv.a(II)Ljava/lang/String;\n0009: astore_2\n000a: aload_0\n000b: getfield burp.Zxvv.Zy:burp.Zse\n000e: getstatic burp.Zcot.PHP_CODE_INJECTION:burp.Zcot\n0011: getstatic burp.Zwx_.PHP_ECHO_BASED:burp.Zwx_\n0014: invokeinterface burp.Zse.Zr(Lburp/Zp9h;Lburp/Zwx_;)Z\n0019: ifne 43\n001c: aload_0\n001d: getfield burp.Zxvv.Zy:burp.Zse\n0020: getstatic burp.Zcot.INPUT_RETRIEVAL_REFLECTED:burp.Zcot\n0023: invokeinterface burp.Zse.ZG(Lburp/Zp9h;)Z\n0028: ifeq 110\n002b: aload_0\n002c: getfield burp.Zxvv.Zu:net.portswigger.Zwl\n002f: invokevirtual net.portswigger.Zwl.toString()Ljava/lang/String;\n0032: astore_3\n0033: getstatic burp.Zcub.PHP_PAYLOAD_ONE:burp.Zcub\n0036: aload_3\n0037: invokestatic burp.Zg1y.Zr(Lburp/Zcub;Ljava/lang/String;)Ljava/lang/String;\n003a: astore 4\n003c: getstatic burp.Zcub.PHP_PAYLOAD_TWO:burp.Zcub\n003f: aload_3\n0040: invokestatic burp.Zg1y.Zr(Lburp/Zcub;Ljava/lang/String;)Ljava/lang/String;\n0043: astore 5\n0045: aload_2\n0046: aload 4\n0048: aload 5\n004a: sipush 25586\n004d: sipush -27749\n0050: invokestatic burp.Zxvv.a(II)Ljava/lang/String;\n0053: dup_x2\n0054: pop\n0055: sipush 25589\n0058: sipush 26455\n005b: invokestatic burp.Zxvv.a(II)Ljava/lang/String;\n005e: swap\n005f: sipush 25590\n0062: sipush 32371\n0065: invokestatic burp.Zxvv.a(II)Ljava/lang/String;\n0068: invokedynamic makeConcatWithConstants(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;\n006d: astore_2\n006e: aload_0\n006f: getfield burp.Zxvv.ZN:burp.Zie\n0072: invokeinterface burp.Zie.Ze()Z\n0077: ifeq 151\n007a: aload_0\n007b: getfield burp.Zxvv.Zy:burp.Zse\n007e: getstatic burp.Zcot.PHP_CODE_INJECTION:burp.Zcot\n0081: getstatic burp.Zwx_.COLLABORATOR_BASED:burp.Zwx_\n0084: invokeinterface burp.Zse.Zr(Lburp/Zp9h;Lburp/Zwx_;)Z\n0089: ifeq 151\n008c: aload_2\n008d: aload_0\n008e: invokevirtual burp.Zxvv.ZQ()Ljava/lang/String;\n0091: invokedynamic makeConcatWithConstants(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;\n0096: astore_2\n0097: aload_2",
+    "max_locals": 6,
+    "max_stack": 7,
+    "method": "burp.Zxvv.Zg(Ljava/lang/String;)Ljava/lang/String;",
+    "overloads": [
+      "(Ljava/lang/String;)Ljava/lang/String;"
+    ],
+    "pseudo_java": null,
+    "signature": "protected java.lang.String Zg(java.lang.String)",
+    "throws": []
+  },
+  "summary": "burp.Zxvv.Zg(Ljava/lang/String;)Ljava/lang/String; (Zxvv.class): 67 instructions.",
+  "confidence": "observed",
+  "authority": "original-files",
+  "environment": {
+    "clean_room": false,
+    "engine": "builtin",
+    "engine_version": "0.6.0",
+    "host": "linux-x86_64"
+  },
+  "limitations": [],
+  "coverage": {
+    "status": "partial",
+    "examined": 60,
+    "total": 67,
+    "next_offset": 60
+  },
+  "locations": [
+    {
+      "kind": "path",
+      "value": "/root/burp-re/in/extract/burp/Zxvv.class"
+    },
+    {
+      "kind": "method",
+      "value": "burp.Zxvv.Zg(Ljava/lang/String;)Ljava/lang/String;"
+    }
+  ],
+  "links": []
+}

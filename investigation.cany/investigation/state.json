@@ -1,5 +1,5 @@
 {
-  "revision": 130,
+  "revision": 139,
   "brief": {
     "question": "Rebuild WebProbe, a clone of Burp Suite Pro (reference build 52685, v2026.7.3), to feature parity with the 76-task backlog in tasks.json, and produce a readable, evidence-backed name map for the obfuscated Burp jar.",
     "purpose": "Interoperable reimplementation plus per-build deobfuscation; behaviour claims must come from the shipped jar or the running reference app, never guessed.",
@@ -723,8 +723,100 @@
         "ev_22ac8017b038172f9879f838cb7ea9b52db927eff053122e2f141dd2a0fd0d9c"
       ],
       "confidence": "observed"
+    },
+    {
+      "id": "fnd_82",
+      "statement": "Burp 52685's browser crawler prunes links by crawl strategy (enum burp.Zmqs, Crawl strategy setting; default NORMAL). Each strategy is a parameter set, read from Zmqs.<clinit> and dumped by reflection. NORMAL: unmatchedAnchorTolerance=2, totalUnmatchedActionDescriptorTolerance=2, incomingUrlActionDescriptorMaskingThreshold=1, page/loopback masking=2, maxLocationsPerUrl=10. MOST_COMPLETE: tolerances 0, masking 2/4/4, maxLocationsPerUrl=20. FASTEST: incyWincy, tolerances 3, maxLocationsPerUrl unlimited. A link whose action descriptor matches one already explored past the tolerance is not visited. On Juice Shop an uncapped NORMAL crawl (fresh project, 2026-11-16) visited 21 locations and skipped /ftp/legal.md and /ftp/announcement_encrypted.md, which have the same response shape as acquisitions.md. The 10-minute cap was not the cause.",
+      "evidence_ids": [
+        "ev_deca062d2b53dd8157077270342a9d64038e42a7ab128e276e062f3e14d15084",
+        "ev_5bdaa08d8a597502fcfca6861c56e873c8d7e4cab19863e2aaef6f6376d64ff1"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_83",
+      "statement": "HTTP TRACE method is enabled (burp.Zs6x, issue burp.Zuer: information, certain, once per host). Burp sends `TRACE /` with the base request's headers and the Cookie header set to a random 10-character value (Zs6x.a = \"Cookie\", read by reflection). It reports when the status is 200 and the body echoes the value. Ported to WebProbe as burp_checks::trace_probe/trace_hit and run per host from run_burp_request_checks (test trace_probe_and_detection_follow_zs6x).",
+      "evidence_ids": [
+        "ev_ebbf0b8274175020ff35f8031b1f70ced8b4d35345d83eee768af579d21569f4",
+        "ev_2ee1ef56dd12c3edda45810084265ae046f83ca6f6b23521c7a2a83c0d850bd7"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_84",
+      "statement": "XML injection, error-based half of burp.Zp7s (issue burp.Zp9s: medium, tentative). The check runs only when the base value has no '<' or '>' (Zp7s.ZQ). It appends the payload ]]>< (Zp7s.Zq) in insertion mode 1, for 1-3 rounds by audit accuracy (Zp7s.Zq), and reports when the response shows XML/SOAP markers that the round's baseline did not. Markers inside an ASP.NET __VIEWSTATE are ignored (Zw4k.ZI). The 14 case-insensitive markers in Zp7s.ZJ were recovered by walking their compiled byte tries (burp.Zeec): xml., xml&nbsp;, xmlschema, xmlsoap, xmlns:soap, xmlns:xsd, xmlns:xsi, soap , soap., soap:, soapenv, soap-env, soap:env, soap:body. Ported as scan::run_xml_injection_check (test xml_injection_follows_zp7s). The Collaborator half (XInclude/entity via burp.Zsrh) is not ported.",
+      "evidence_ids": [
+        "ev_efdfaaed5192e6358f6c2eba809a456948213a7621f961fc3a22a45b93516a3c",
+        "ev_f0be66ab9bdea7124a5aabbd8585857141c4a9f521f40249e3a64921e3f034c6"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_85",
+      "statement": "D-03 insertion points: burp.Zuq.Zs builds points in this order: entire body (XML/JSON), URL and body params (Zuq.Ze; Ze9r maps COOKIE to the case Ze skips), cookies (Zuq.Zy), every X-* header present (Zuq.ZP searches '\\r\\nx-'), nested/XML-tag/param-name points, User-Agent and Referer (existing value, or synthesised https://example.com/ by Zuq.ZE), URL path folders (ZX), URL path filename (ZY). Path folders are numbered per non-empty segment (Zhjs.ZK). The 30-point cap is the last Zwez veto (count >= max -> VETOED_DUE_TO_LIMIT) after the skip-list filters (cookies _ga, _gid, _gat, _ga_*, _gac_*, AWSALB*).",
+      "evidence_ids": [
+        "ev_af8899e3a27b354dae8d2571eb6ce12daddc74faef9069d7d021ef6fd2ba1c35",
+        "ev_16d4672b9192007496abe24df53c9552086f1f537d0640957a77b6068cf5ba9b",
+        "ev_2e947693fc86afba41bb6dbd059b41a24f0cf3e82fa17d9a6adf55ab14fdea7f",
+        "ev_06d526466f067eeee62e24f1fd7cfa1ba881f2a18bdf4acb3d0328adf484f1b8",
+        "ev_4d83e10b4d376e4d7b743ce06e2ea55319e08ee153e340b605fa2f2b99da2257",
+        "ev_0cf32f68c20a502131bbd70c79e97d64fd827055a6c1fdbaa1d8a62d348c6b47"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_86",
+      "statement": "PHP code injection, echo-based (Zsn3 -> Zgeo.Zv -> Zi0f/Zpza -> Zxvv) runs only on file-upload insertion points (Zcgg.Zw is true only for Ziqg multipart parts with a filename), not 'only when input is reflected'. It uploads <orig><token[2..12]>.php as text/plain with <?php printf(\"ONE\".(7*6).\"TWO\");?> where ONE/TWO are the last 10 chars of the token shifted 17/18 places in a-z0-9 (Zcub), and reports PHP code injection (High, Certain: Zbr5.Zs bytes 3/4) when ONE+\"42\"+TWO (Zg1y.a = \"42\") appears in the response or its redirect chain (Zcgg.ZI). Zsn3 also starts the timing engine Zwj_, which is not ported.",
+      "evidence_ids": [
+        "ev_dd5308b4eabc8be20cfb92a6804e8068777e9549a9e2fede509ff19759788fb5",
+        "ev_db4b24ab7b08ab0343b82aa89ed738aa0c464f7df859c8754ad616ec8c065a97",
+        "ev_4ee54f20d06e71237817c0461d56cdaba21f9b3fd4c6315aeadc2302bf38d93d",
+        "ev_e1a9090712da869e078f38de1cdb54e3c9ea5c141dd70daddbd136bda9dbb1ff",
+        "ev_d80ceb42450be6beef0a82f5bb950fea088f908056eed1adbf1c133d44dbc908",
+        "ev_0ca8aa2ba7fd7473ac4355c60c36df2f62b755e53bd71df6a272c4db2fa8c517",
+        "ev_0b8511d468235fa4908099f18c3077d84222b873992795a25ed3e26fa2fd93a1"
+      ],
+      "confidence": "derived"
+    },
+    {
+      "id": "fnd_87",
+      "statement": "Cross-site scripting (stored): burp.Zi6p.ZZ runs the same breakout engine as reflected XSS when the sender is a stored (injection + retrieval) context; Zwwb.Zv gives XSS_STORED severity High (Info when the retrieval is a 3xx). Zwwb.Zv also lowers reflected XSS to Low on HTTP header points and Medium on cookie points.",
+      "evidence_ids": [
+        "ev_b66248a2b612b1a80c8f91f6b0513dbf304f0f27d32aaebbe776eeeac15127b4",
+        "ev_93250be20a08aa28177123e0771cbe5af9d9278057b37081d63628a9b7fc816f"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_88",
+      "statement": "Client-side template injection (burp.Zrmh): payload m1 + '{{a=(7*7.0)}}' + m2 (Zrmh.Zi decoded from <clinit>); gated on the plain reflection sitting in a text or attribute-value context (Zcle.ZA) inside an ng-app element range and outside ng-non-bindable (Zg1t); reported when the HTML-decoded m1..m2 span still holds the expression (Zmh4.Zf). Severity High; confidence Firm when a page script shows (AngularJS v[0-9.]+) (Zr54), else Tentative (Zgum).",
+      "evidence_ids": [
+        "ev_bf73a40d0387df74ecebc7d72806baf27acaeb3550259d4e2d600c633d06d92f",
+        "ev_8d45475f23654ce863de397428a44d1193e4620db097f205d0e1df09cfcd32ac",
+        "ev_10fd7da7a68c462e44bed5a959084f59399c75d6b50a47b24554df1a60505c51",
+        "ev_f5c8ae9972297cb5b034418c0c22035f88f2bf3fa6ca703c7abcbd883879bf9c",
+        "ev_0dd7613f5a5819e376185763ab19631f6b04782655aba959630af4e092b5792c",
+        "ev_edab7d01b55d7827bc21f47588c7634703ccc38a155fa466825b8deceeb45fb9",
+        "ev_f1abcd200cfc7fd555f682995587a458f5ddef32a8000e2fb96f498fc455019e"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_89",
+      "statement": "XML injection, Collaborator half (Zp7s -> Zsrh): for values without markup on non-header points (Zxmw.Zl excludes HEADER and param-name kinds), the value is replaced by <tag xmlns=\"http://a.b/\" xmlns:xsi=... xsi:schemaLocation=\"http://a.b/ http://HOST/tag.xsd\">tag</tag> (Ze_f) and then by <tag xmlns:xi=\"http://www.w3.org/2001/XInclude\"><xi:include href=\"http://HOST/foo\"/></tag> (Zbiw), built by Zsdg with a random 3-letter tag. An interaction later maps through Zc3f (Zs_g.XML_INJECTION) to Zp9s.ZC: XML injection, Medium, Certain. Settled: Zggo/Zu2y <clinit> map Zs_g.XML_INJECTION to case 3, which selects Zuzl (Zp9s.ZC); OUT_BAND_RESOURCE_LOAD (Zp7s's own inline Zsrh) selects Zx7b (Out-of-band resource load).",
+      "evidence_ids": [
+        "ev_acb1544c4f2b9575a2a44b02532488748315134d41d139a5ed734dda52f2b1b9",
+        "ev_00a767bbafca1d26cb394d3406e7e3cc2f891c54bab57bda453726c99cecf574",
+        "ev_c12355d1448476dfbb2ab2eec1386567bf566493425807364fdbfe4d633f1cef",
+        "ev_babb04535aab877b4a6ca29a730341e0e8bd1980087fe63d97d878351e773b9b",
+        "ev_eabf28ef5530bcd3c35e85beca25550b17c275c72acd17d17a8e39cbceb775f5",
+        "ev_526265719fe16620c42491ded4723dd7142d9f6f4dc9c12eeedf6e78d57b1436",
+        "ev_5052982c5df290a97796e741468e837dcab50e00264b97681af40614726fc6ba",
+        "ev_3da3535e75a3116219ad5e8e03dc09a1333d5b65d3cda06faa402a5351fea526"
+      ],
+      "confidence": "observed"
     }
   ],
   "handoff": "Wave 39 complete (2026-11-16). Scanner: Juice Shop 75/75 exact vs Burp oracle given Burp's audited URLs; lab 18=18. UI: all 13 tools plus chrome rebuilt to Burp's light layouts with working dynamic behaviour (intercept hold/forward, Repeater history, Intruder attacks + results window, Sequencer live capture, Comparer windows, Decoder chain, site map + live passive crawl, Logger toggle, Collaborator loopback/public). Open: active crawler (coverage parity), live passive audit diff through both proxies, Burp AI tab is a placeholder, some context-menu items visibly disabled (browser open, save item, engagement tools). Time-based injection family intentionally not pursued (safety stop). Evidence /tmp/parity-evidence-w39; doc qa/SOURCE-PARITY-2026-11-15.md wave 39.",
-  "updated": "2026-11-16T03:54:06Z"
+  "updated": "2026-11-16T20:01:58Z"
 }

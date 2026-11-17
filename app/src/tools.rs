@@ -30,7 +30,8 @@ fn selected_history(app: &App) -> Option<net::HistEntry> {
 // ================= Target scope =================
 
 pub fn scope_editor(app: &mut App, ui: &mut Ui) {
-    ui.label(RichText::new("Scope").size(12.5).color(theme::ink_faint()));
+    // No heading here: the Target > Scope tab and the Settings page already
+    // name it (the label used to repeat under the tab of the same name).
     let mut rules = app.shared.scope.lock().unwrap().clone();
     let mut remove = None;
     egui::Grid::new("scope_grid").striped(true).num_columns(5).show(ui, |ui| {
@@ -169,8 +170,18 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
     // Drain samples gathered by a running live capture.
     if let Some(buf) = &app.seq_live_buf {
         let got: Vec<Vec<u8>> = std::mem::take(&mut *buf.lock().unwrap());
+        let before = app.seq_samples.len();
         for t in got {
             add_sequencer_sample(app, t);
+        }
+        // Burp's "Auto analyze": refresh the results every 100 tokens while
+        // the capture runs (from the 100 the bit-level tests need).
+        let after = app.seq_samples.len();
+        if app.seq_auto_analyze && after >= crate::seq_bits::MIN_SAMPLES && after / 100 != before / 100 {
+            app.seq_stats = Some(analysis::analyze_tokens(&app.seq_samples));
+            let tokens: Vec<String> = app.seq_samples.iter().map(|s| String::from_utf8_lossy(s).into_owned()).collect();
+            app.seq_report = Some(analysis::analyze_sequence(&tokens));
+            app.seq_status = format!("analyzed {after} sample(s)");
         }
     }
     let live_running = app.seq_live_stop.as_ref().map(|f| !f.load(std::sync::atomic::Ordering::SeqCst)).unwrap_or(false);
@@ -251,6 +262,11 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
                         start_live_capture(app, e);
                     }
                 }
+                ui.add_space(10.0);
+                ui.label(RichText::new("Stop after").size(12.5).color(theme::ink_dim()));
+                ui.add(egui::DragValue::new(&mut app.seq_capture_limit).range(100..=20_000).speed(50.0));
+                ui.label(RichText::new("tokens").size(12.5).color(theme::ink_dim()));
+                ui.checkbox(&mut app.seq_auto_analyze, "Auto analyze");
                 if !app.seq_samples.is_empty() {
                     ui.add_space(10.0);
                     if ui.button(format!("Analyze now ({} tokens)", app.seq_samples.len())).clicked() {
@@ -274,6 +290,14 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
             let resp = app.seq_req_sel.and_then(|i| app.seq_requests.get(i)).and_then(|e| e.resp_raw.clone()).unwrap_or_default();
             let cookies = set_cookie_names(&resp);
             let fields = form_field_names(&resp);
+            // Like Burp, pick a token the selected response actually carries
+            // instead of keeping a name it does not set.
+            if !cookies.is_empty() && !cookies.contains(&app.seq_selector) {
+                app.seq_selector = cookies[0].clone();
+            }
+            if !fields.is_empty() && !fields.contains(&app.seq_field) {
+                app.seq_field = fields[0].clone();
+            }
             egui::Grid::new("seq_loc").num_columns(3).spacing([8.0, 6.0]).show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.add_space(28.0);
@@ -281,7 +305,7 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
                 });
                 egui::ComboBox::from_id_salt("seq_cookie").width(340.0).selected_text(if app.seq_loc == 0 { app.seq_selector.clone() } else { String::new() }).show_ui(ui, |ui| {
                     for n in &cookies {
-                        if ui.selectable_label(false, n).clicked() { app.seq_loc = 0; app.seq_selector = n.clone(); }
+                        if ui.selectable_label(*n == app.seq_selector, n).clicked() { app.seq_loc = 0; app.seq_selector = n.clone(); }
                     }
                 });
                 ui.label("");
@@ -292,7 +316,7 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
                 });
                 egui::ComboBox::from_id_salt("seq_field").width(340.0).selected_text(if app.seq_loc == 1 { app.seq_field.clone() } else { String::new() }).show_ui(ui, |ui| {
                     for n in &fields {
-                        if ui.selectable_label(false, n).clicked() { app.seq_loc = 1; app.seq_field = n.clone(); }
+                        if ui.selectable_label(*n == app.seq_field, n).clicked() { app.seq_loc = 1; app.seq_field = n.clone(); }
                     }
                 });
                 ui.label("");
@@ -330,7 +354,12 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
                         app.seq_manual.clear();
                     }
                 });
-                ui.add(egui::TextEdit::multiline(&mut app.seq_manual).font(egui::TextStyle::Monospace).desired_rows(10).desired_width(500.0));
+                // A loaded token file can run to thousands of lines: the box
+                // scrolls inside a fixed height, so the Analyze button and the
+                // results below it stay on screen.
+                egui::ScrollArea::vertical().id_salt("seq_manual_tokens").max_height(170.0).show(ui, |ui| {
+                    ui.add(egui::TextEdit::multiline(&mut app.seq_manual).font(egui::TextStyle::Monospace).desired_rows(10).desired_width(500.0));
+                });
             });
             ui.add_space(6.0);
             ui.horizontal(|ui| {
@@ -375,6 +404,27 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
         ui.add_space(8.0);
         crate::analysis_ui::show_sequencer_report(ui, report);
     }
+    // Bit-level analysis follows the character-level one and is redone when
+    // the analysed sample count changes.
+    match &app.seq_stats {
+        Some(stats) => {
+            if app.seq_bits.as_ref().map(|b| b.samples) != Some(stats.sample_count) {
+                app.seq_bits = crate::seq_bits::analyze(&app.seq_samples);
+            }
+            match &app.seq_bits {
+                Some(bits) => crate::analysis_ui::show_bit_report(ui, bits, &app.seq_samples, &mut app.seq_export_path),
+                None => {
+                    ui.add_space(8.0);
+                    ui.label(
+                        RichText::new(format!("Bit-level analysis needs at least {} tokens of non-zero length.", crate::seq_bits::MIN_SAMPLES))
+                            .size(12.5)
+                            .color(theme::ink_dim()),
+                    );
+                }
+            }
+        }
+        None => app.seq_bits = None,
+    }
 }
 
 /// Burp's live capture: re-issue the request in the background and collect
@@ -398,17 +448,20 @@ fn start_live_capture(app: &mut App, e: net::HistEntry) {
     let (h, p) = net::split_h_p(&host, e.port);
     let req = crate::util::origin_form(&e.req_raw);
     let https = e.https;
-    let buf = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let buf = std::sync::Arc::new(crate::sync::Mutex::new(Vec::new()));
     let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     app.seq_live_buf = Some(buf.clone());
     app.seq_live_stop = Some(stop.clone());
     app.seq_samples.clear();
     app.seq_status = "live capture running".into();
     let shared = app.shared.clone();
+    // Burp captures at most 20,000 tokens; fewer when the user asks.
+    let limit = app.seq_capture_limit.clamp(100, 20_000);
     std::thread::spawn(move || {
+        let _tool = net::tool_scope("Sequencer");
         let mut n = 0;
         let mut misses = 0;
-        while !stop.load(std::sync::atomic::Ordering::SeqCst) && n < 20_000 {
+        while !stop.load(std::sync::atomic::Ordering::SeqCst) && n < limit {
             let up = if https { net::send_tls_raw(&shared, &h, p, &req) } else { net::send_raw(&shared, &h, p, &req) };
             if let Some(t) = up.resp.and_then(|r| extract_token(&r, mode, &selector)) {
                 buf.lock().unwrap().push(t);
@@ -438,33 +491,176 @@ mod seq_tests {
     }
 }
 
+/// Burp's Sessions > Cookie jar: which tools' responses update the jar, which
+/// tools' requests get its cookies, and the jar's contents ("Open cookie jar").
+fn cookie_jar_panel(app: &mut App, ui: &mut Ui) {
+    ui.label(RichText::new("Cookie jar").color(theme::ink()).size(14.0).strong());
+    hint(ui, "WebProbe keeps a cookie jar of the cookies set by the applications you visit. Session handling uses it to keep tool requests in session.");
+    let mut jar = app.shared.cookie_jar.lock().unwrap().clone();
+    let before = jar.clone();
+    let tool_row = |ui: &mut Ui, label: &str, list: &mut Vec<String>| {
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(label).size(12.5).color(theme::ink_dim()));
+            for tool in crate::cookie_jar::TOOLS {
+                let mut on = list.iter().any(|t| t == tool);
+                if ui.checkbox(&mut on, tool).changed() {
+                    if on {
+                        list.push(tool.to_string());
+                    } else {
+                        list.retain(|t| t != tool);
+                    }
+                }
+            }
+        });
+    };
+    tool_row(ui, "Monitor the following tools' traffic to update the cookie jar:", &mut jar.update_from);
+    tool_row(ui, "Use cookies from the cookie jar in requests made by:", &mut jar.apply_to);
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(format!("{} cookie(s)", jar.cookies.len())).size(12.5).color(theme::ink_dim()));
+        if ui.add_enabled(!jar.cookies.is_empty(), egui::Button::new("Clear cookie jar")).clicked() {
+            jar.cookies.clear();
+        }
+    });
+    let mut remove = None;
+    if !jar.cookies.is_empty() {
+        egui::ScrollArea::vertical().id_salt("cookie_jar_rows").max_height(180.0).show(ui, |ui| {
+            egui::Grid::new("cookie_jar").striped(true).num_columns(7).spacing([14.0, 3.0]).show(ui, |ui| {
+                // Fixed widths: a truncating label in a grid otherwise shrinks
+                // to a few characters.
+                const WIDTHS: [f32; 6] = [170.0, 110.0, 130.0, 220.0, 50.0, 150.0];
+                for (head, w) in ["Domain", "Path", "Name", "Value", "Secure", "Expires"].iter().zip(WIDTHS) {
+                    ui.add_sized([w, 16.0], egui::Label::new(RichText::new(*head).size(12.0).color(theme::ink_faint())).halign(egui::Align::Min));
+                }
+                ui.label("");
+                ui.end_row();
+                for (i, cookie) in jar.cookies.iter().enumerate() {
+                    let mut col = 0;
+                    let mut cell = |ui: &mut Ui, text: String| {
+                        ui.add_sized([WIDTHS[col], 18.0], egui::Label::new(RichText::new(text).size(12.5).color(theme::ink())).truncate().halign(egui::Align::Min));
+                        col += 1;
+                    };
+                    cell(ui, if cookie.host_only { cookie.domain.clone() } else { format!(".{}", cookie.domain) });
+                    cell(ui, cookie.path.clone());
+                    cell(ui, cookie.name.clone());
+                    cell(ui, cookie.value.chars().take(60).collect());
+                    cell(ui, if cookie.secure { "Yes".into() } else { String::new() });
+                    cell(ui, cookie.expires.map(crate::ui::history_time).unwrap_or_else(|| "Session".into()));
+                    if ui.small_button("Remove").clicked() {
+                        remove = Some(i);
+                    }
+                    ui.end_row();
+                }
+            });
+        });
+    }
+    if let Some(i) = remove {
+        jar.cookies.remove(i);
+    }
+    // Add or overwrite a cookie by hand (Burp's cookie jar editor): the host
+    // and a Set-Cookie style value, stored under the same rules as a response.
+    let mut added = None;
+    ui.horizontal(|ui| {
+        let id = egui::Id::unique("cookie_jar_add");
+        let (mut host, mut value): (String, String) = ui.data_mut(|d| d.get_temp(id)).unwrap_or_default();
+        ui.add(egui::TextEdit::singleline(&mut host).hint_text("host").desired_width(160.0));
+        ui.add(egui::TextEdit::singleline(&mut value).hint_text("name=value; Path=/").desired_width(280.0));
+        if ui.add_enabled(!host.trim().is_empty() && value.contains('='), egui::Button::new("Add cookie")).clicked() {
+            added = Some((host.trim().to_string(), value.trim().to_string()));
+            value.clear();
+        }
+        ui.data_mut(|d| d.insert_temp(id, (host, value)));
+    });
+    if let Some((host, value)) = added {
+        let ok = app.shared.cookie_jar.lock().unwrap().set_cookie(&host, "/", &value, crate::util::now_secs());
+        if !ok {
+            crate::feedback::toast(crate::feedback::Level::Warn, "Cookie rejected: it needs a name, and a Domain must cover the host");
+        }
+    }
+    if jar != before {
+        // Only the user's edits are written back: cookies the proxy stored
+        // since this frame began must not be lost.
+        let mut live = app.shared.cookie_jar.lock().unwrap();
+        live.update_from = jar.update_from;
+        live.apply_to = jar.apply_to;
+        if jar.cookies.len() != before.cookies.len() {
+            live.cookies.retain(|c| jar.cookies.contains(c) || !before.cookies.contains(c));
+        }
+    }
+}
+
 // ================= Sessions and macros =================
 
 pub fn sessions(app: &mut App, ui: &mut Ui) {
     ui.heading(RichText::new("Session handling").color(theme::ink()).size(15.0));
     ui.add_space(4.0);
-    hint(ui, "Rules run before match-and-replace. Set-header takes 'Name: value'; use-cookie names a captured cookie; run-macro executes a stored request first.");
+    hint(ui, "Each rule applies to the ticked tools, on hosts matching its pattern, in order. A macro's cookies go to the cookie jar and from there onto the request. In a header or cookie value, {name} is replaced by that value from the last macro response, e.g. Authorization: Bearer {token}.");
     let mut rules = app.shared.session_rules.lock().unwrap().clone();
+    let macro_names: Vec<String> = app.shared.macros.lock().unwrap().iter().map(|m| m.name.clone()).collect();
     let mut remove = None;
-    egui::Grid::new("session_rules").striped(true).num_columns(6).show(ui, |ui| {
-        for (i, rule) in rules.iter_mut().enumerate() {
-            ui.checkbox(&mut rule.enabled, "");
-            ui.add(egui::TextEdit::singleline(&mut rule.name).desired_width(140.0).font(egui::TextStyle::Monospace));
+    for (i, rule) in rules.iter_mut().enumerate() {
+        ui.push_id(("session_rule", i), |ui| {
             ui.horizontal(|ui| {
-                for action in ["set header", "use cookie", "run macro"] {
-                    if ui.selectable_label(rule.action == action, RichText::new(action).size(12.0).color(if rule.action == action { c(theme::ORANGE) } else { theme::ink_faint() })).clicked() {
-                        rule.action = action.into();
+                ui.checkbox(&mut rule.enabled, "");
+                ui.add(egui::TextEdit::singleline(&mut rule.name).desired_width(150.0));
+                egui::ComboBox::from_id_salt("action").selected_text(rule.action.clone()).width(150.0).show_ui(ui, |ui| {
+                    for action in net::SESSION_ACTIONS {
+                        ui.selectable_value(&mut rule.action, action.to_string(), action);
+                    }
+                });
+                ui.add(egui::TextEdit::singleline(&mut rule.host_match).desired_width(130.0).hint_text("host contains"));
+                // What the action's value means depends on the action.
+                let uses_macro = matches!(rule.action.as_str(), "run macro" | "post-request macro" | "check session");
+                if uses_macro {
+                    let shown = if rule.value.is_empty() { "choose a macro".to_string() } else { rule.value.clone() };
+                    let shown = if rule.value == crate::net::BROWSER_RECOVERY { "In-browser session recovery".to_string() } else { shown };
+                    egui::ComboBox::from_id_salt("macro").selected_text(shown).width(190.0).show_ui(ui, |ui| {
+                        for name in &macro_names {
+                            ui.selectable_value(&mut rule.value, name.clone(), name);
+                        }
+                        // Burp's other "if session is invalid" choice.
+                        if rule.action == "check session" {
+                            ui.separator();
+                            ui.selectable_value(&mut rule.value, crate::net::BROWSER_RECOVERY.to_string(), "Prompt for in-browser session recovery");
+                        }
+                    });
+                } else if rule.action != "use cookie jar" {
+                    let hint_text = match rule.action.as_str() {
+                        "set header" => "Name: value",
+                        "set cookie" => "name=value",
+                        _ => "cookie name",
+                    };
+                    ui.add(egui::TextEdit::singleline(&mut rule.value).desired_width(200.0).hint_text(hint_text));
+                }
+                if ui.button("Remove").clicked() {
+                    remove = Some(i);
+                }
+            });
+            ui.horizontal(|ui| {
+                ui.add_space(24.0);
+                ui.label(RichText::new("Tools scope:").size(12.0).color(theme::ink_faint()));
+                for tool in crate::cookie_jar::TOOLS {
+                    let mut on = rule.tools.iter().any(|t| t == tool);
+                    if ui.checkbox(&mut on, tool).changed() {
+                        if on {
+                            rule.tools.push(tool.to_string());
+                        } else {
+                            rule.tools.retain(|t| t != tool);
+                        }
                     }
                 }
             });
-            ui.add(egui::TextEdit::singleline(&mut rule.host_match).desired_width(120.0).hint_text("host contains").font(egui::TextStyle::Monospace));
-            ui.add(egui::TextEdit::singleline(&mut rule.value).desired_width(190.0).hint_text("value").font(egui::TextStyle::Monospace));
-            if ui.button("x").clicked() {
-                remove = Some(i);
+            if rule.action == "check session" {
+                ui.horizontal(|ui| {
+                    ui.add_space(24.0);
+                    ui.label(RichText::new("Look for expression:").size(12.0).color(theme::ink_faint()));
+                    ui.add(egui::TextEdit::singleline(&mut rule.check).desired_width(220.0).hint_text("e.g. Please log in"));
+                    ui.radio_value(&mut rule.check_invalid_on_match, true, "Match indicates invalid session");
+                    ui.radio_value(&mut rule.check_invalid_on_match, false, "Match indicates valid session");
+                });
             }
-            ui.end_row();
-        }
-    });
+            ui.add_space(4.0);
+        });
+    }
     if let Some(i) = remove {
         rules.remove(i);
     }
@@ -474,25 +670,18 @@ pub fn sessions(app: &mut App, ui: &mut Ui) {
     *app.shared.session_rules.lock().unwrap() = rules;
 
     ui.add_space(10.0);
+    cookie_jar_panel(app, ui);
+
+    ui.add_space(10.0);
     ui.label(RichText::new("Macros").color(theme::ink()).size(14.0).strong());
     let macros = app.shared.macros.lock().unwrap().clone();
     egui::Grid::new("macros").striped(true).num_columns(3).show(ui, |ui| {
         for (i, m) in macros.iter().enumerate() {
             ui.label(RichText::new(m.name.clone()).size(12.0).color(theme::ink_dim()));
             if ui.button("run").clicked() {
-                let parts = crate::util::parse_http(m.request.as_bytes());
-                let host = crate::util::get_header(&parts.headers, "Host").unwrap_or_default();
-                if host.is_empty() {
-                    app.shared.log("Macro has no Host header");
-                } else {
-                    let (h, p) = net::split_h_p(&host, 80);
-                    let up = net::send_raw(&app.shared, &h, p, m.request.as_bytes());
-                    app.shared.log(&format!(
-                        "Macro {} {}",
-                        m.name,
-                        if up.resp.is_some() { "completed" } else { "failed" }
-                    ));
-                }
+                let steps = net::run_macro_text(&app.shared, &m.request);
+                let ok = steps.last().is_some_and(|s| s.response.is_some());
+                app.shared.log(&format!("Macro {} {} ({} step(s))", m.name, if ok { "completed" } else { "failed" }, steps.len()));
             }
             if ui.button("load into editor").clicked() {
                 app.macro_name = m.name.clone();
@@ -515,6 +704,46 @@ pub fn sessions(app: &mut App, ui: &mut Ui) {
             }
         }
     });
+    // Recording: add the request selected in Proxy > HTTP history as the next
+    // step. Testing: run the editor's steps and show what each one did.
+    let test_id = egui::Id::unique("macro_test_results");
+    ui.horizontal(|ui| {
+        let selected = app.history_sel.and_then(|id| app.shared.history.lock().unwrap().iter().find(|e| e.id == id).cloned());
+        let label = match &selected {
+            Some(e) => format!("Add step: {} {}", e.method, e.path.chars().take(40).collect::<String>()),
+            None => "Add step from selected history item".to_string(),
+        };
+        if ui.add_enabled(selected.is_some(), egui::Button::new(label)).on_disabled_hover_text("Select a request in Proxy > HTTP history first").clicked() {
+            if let Some(e) = selected {
+                // An editor still holding a single plain request becomes step one.
+                if !app.macro_request.trim().is_empty() && !app.macro_request.contains("###") {
+                    app.macro_request = crate::macros::step_text(app.macro_request.as_bytes(), false, &[]);
+                }
+                app.macro_request.push_str(&crate::macros::step_text(&crate::util::origin_form(&e.req_raw), e.https, &[]));
+            }
+        }
+        if ui.button("Test macro").clicked() {
+            let lines: Vec<String> = net::run_macro_text(&app.shared, &app.macro_request)
+                .iter()
+                .enumerate()
+                .map(|(i, r)| {
+                    let first = String::from_utf8_lossy(r.request.split(|b| *b == b'\n').next().unwrap_or_default()).trim().to_string();
+                    let status = match &r.response {
+                        Some(resp) => String::from_utf8_lossy(resp.split(|b| *b == b'\n').next().unwrap_or_default()).trim().to_string(),
+                        None => "no response".to_string(),
+                    };
+                    let derived = if r.derived.is_empty() { String::new() } else { format!("  derived: {}", r.derived.iter().map(|(n, v)| format!("{n}={v}")).collect::<Vec<_>>().join(", ")) };
+                    format!("{}. {first}  ->  {status}{derived}", i + 1)
+                })
+                .collect();
+            ui.data_mut(|d| d.insert_temp(test_id, if lines.is_empty() { vec!["The macro has no requests.".to_string()] } else { lines }));
+        }
+    });
+    hint(ui, "Separate steps with a line starting with ###. Add 'https' to send a step over TLS and 'derive=name1,name2' to fill those parameters from the previous response.");
+    let results: Vec<String> = ui.data_mut(|d| d.get_temp(test_id)).unwrap_or_default();
+    for line in &results {
+        ui.label(RichText::new(line).size(12.0).monospace().color(theme::ink_dim()));
+    }
     egui::ScrollArea::vertical().id_salt("macro_scroll").max_height(180.0).show(ui, |ui| {
         egui::TextEdit::multiline(&mut app.macro_request)
             .font(egui::TextStyle::Monospace)
@@ -872,6 +1101,10 @@ fn browser_args(port: u16, root: bool) -> Vec<String> {
     if root {
         v.push("--no-sandbox".into());
     }
+    // Burp's embedded browser opens as a chrome-less app window; --app gives
+    // the standalone window the same surface (no tab strip / omnibox), the
+    // closest parity without bundling a private Chromium build.
+    v.push("--app=http://webprobe/".into());
     v.push("http://webprobe/".into());
     v
 }
@@ -974,7 +1207,6 @@ pub fn launch_preconfigured_browser(shared: &std::sync::Arc<crate::net::Shared>)
 }
 
 pub fn extensions(app: &mut App, ui: &mut Ui) {
-    use crate::ext_host::ProxyHooks as _;
     // Burp's Extensions (live 52685): Installed | BApp Store | APIs | Custom
     // scan checks | Bambda library | Extensions settings. Installed shows the
     // system-impact bar, the extension table with Add / Remove / Up / Down,
@@ -985,188 +1217,7 @@ pub fn extensions(app: &mut App, ui: &mut Ui) {
     ui.add_space(6.0);
     match app.ext_sub {
         0 => {
-            let n = app.shared.ext_host.lock().unwrap().extensions.len();
-            ui.horizontal(|ui| {
-                ui.add_space(8.0);
-                ui.label(RichText::new("Total estimated system impact:").size(12.5).color(theme::ink()));
-                ui.label(RichText::new(if n == 0 { "None" } else { "Low" }).strong().size(12.5).color(theme::ink()));
-            });
-            ui.add_space(8.0);
-            ui.horizontal(|ui| {
-                ui.add_space(8.0);
-                ui.label(RichText::new("WebProbe extensions").strong().size(14.0).color(theme::ink()));
-            });
-            ui.horizontal(|ui| {
-                ui.add_space(8.0);
-                ui.label(RichText::new("Extensions let you customize WebProbe's behavior using your own or third-party code (Rust hooks in-process, Montoya .jar extensions through the sidecar JVM).").size(12.5).color(theme::ink_dim()));
-            });
-            ui.add_space(6.0);
-            let mut action: Option<&str> = None;
-            ui.horizontal_top(|ui| {
-                ui.add_space(8.0);
-                ui.vertical(|ui| {
-                    for label in ["Add", "Remove", "Up", "Down"] {
-                        if ui.add_sized([90.0, 22.0], egui::Button::new(RichText::new(label).strong())).clicked() {
-                            action = Some(label);
-                        }
-                    }
-                });
-                let cols = [
-                    crate::table::Column::new("Loaded", 60.0),
-                    crate::table::Column::new("Type", 70.0),
-                    crate::table::Column::new("Name", 360.0),
-                    crate::table::Column::new("Hooks", 360.0),
-                ];
-                let rows: Vec<(usize, bool, String, String)> = app
-                    .shared
-                    .ext_host
-                    .lock()
-                    .unwrap()
-                    .extensions
-                    .iter()
-                    .enumerate()
-                    .map(|(i, e)| (i, e.enabled, e.hooks.extension_name().to_string(), e.hooks.hooks_registered().to_string()))
-                    .collect();
-                let mut st = app.ext_table.clone();
-                let mut pick = None;
-                let mut toggle = None;
-                let sel = app.ext_sel;
-                ui.allocate_ui_with_layout(egui::vec2(ui.available_width() - 16.0, 160.0), egui::Layout::top_down(egui::Align::Min), |ui| {
-                    crate::table::table_body(ui, "ext_rows", &cols, &rows, &mut st, 19.0, 130.0, &mut |(i, en, name, hooks), ui| {
-                        let rr = egui::Rect::from_min_size(ui.cursor().min, egui::vec2(ui.available_width(), 19.0));
-                        if sel == Some(*i) {
-                            ui.painter().rect_filled(rr, 0.0, theme::selection_bg());
-                        }
-                        let row = ui.horizontal(|ui| {
-                            let mut on = *en;
-                            ui.allocate_ui(egui::vec2(60.0 + crate::table::DIVIDER, 19.0), |ui| {
-                                if ui.checkbox(&mut on, "").changed() {
-                                    toggle = Some(*i);
-                                }
-                            });
-                            let ty = if hooks.contains("sidecar") || name.ends_with(".jar") { "Java" } else { "Rust" };
-                            crate::table::cell_w(ui, &cols[1], 70.0, ty, None, 19.0);
-                            ui.add_space(crate::table::DIVIDER);
-                            crate::table::cell_w(ui, &cols[2], 360.0, name.clone(), None, 19.0);
-                            ui.add_space(crate::table::DIVIDER);
-                            crate::table::cell_w(ui, &cols[3], 360.0, hooks.clone(), None, 19.0);
-                        }).response.interact(egui::Sense::click());
-                        if row.clicked() {
-                            pick = Some(*i);
-                        }
-                    });
-                });
-                app.ext_table = st;
-                if pick.is_some() {
-                    app.ext_sel = pick;
-                }
-                if let Some(i) = toggle {
-                    let mut host = app.shared.ext_host.lock().unwrap();
-                    if let Some(e) = host.extensions.get_mut(i) {
-                        e.enabled = !e.enabled;
-                        app.shared.log(&format!("Extension {} {}", e.hooks.extension_name(), if e.enabled { "enabled" } else { "disabled" }));
-                    }
-                }
-            });
-            match action {
-                Some("Add") => app.ext_add_open = true,
-                Some("Remove") => {
-                    if let Some(i) = app.ext_sel.take() {
-                        let mut host = app.shared.ext_host.lock().unwrap();
-                        if i < host.extensions.len() {
-                            let e = host.extensions.remove(i);
-                            app.shared.log(&format!("Removed extension {}", e.hooks.extension_name()));
-                        }
-                    }
-                }
-                Some(dir @ ("Up" | "Down")) => {
-                    if let Some(i) = app.ext_sel {
-                        let mut host = app.shared.ext_host.lock().unwrap();
-                        let j = if dir == "Up" { i.checked_sub(1) } else { (i + 1 < host.extensions.len()).then_some(i + 1) };
-                        if let Some(j) = j {
-                            host.extensions.swap(i, j);
-                            app.ext_sel = Some(j);
-                        }
-                    }
-                }
-                _ => {}
-            }
-            ui.add_space(8.0);
-            ui.horizontal(|ui| {
-                ui.add_space(8.0);
-                if let Some(v) = crate::msgpane::underline_tabs(ui, &["Details", "Output", "Errors"], app.ext_detail, 13.0) {
-                    app.ext_detail = v;
-                }
-            });
-            let r = ui.cursor();
-            ui.painter().hline(ui.max_rect().x_range(), r.top(), egui::Stroke::new(1.0, theme::line()));
-            ui.add_space(6.0);
-            let sel = app.ext_sel.and_then(|i| {
-                let host = app.shared.ext_host.lock().unwrap();
-                host.extensions.get(i).map(|e| (e.enabled, e.hooks.extension_name().to_string(), e.hooks.hooks_registered().to_string()))
-            });
-            let events: Vec<String> = app.shared.events.lock().map(|e| e.clone()).unwrap_or_default();
-            egui::ScrollArea::vertical().id_salt("ext_detail").auto_shrink([false, false]).show(ui, |ui| match (app.ext_detail, &sel) {
-                (_, None) => {
-                    ui.label(RichText::new("Select an extension to see its details, output and errors.").size(12.5).color(theme::ink_dim()));
-                }
-                (0, Some((en, name, hooks))) => {
-                    egui::Grid::new("ext_det").num_columns(2).spacing([20.0, 6.0]).show(ui, |ui| {
-                        for (k, v) in [("Extension loaded", if *en { "Yes".to_string() } else { "No".to_string() }), ("Name", name.clone()), ("Hooks registered", hooks.clone())] {
-                            ui.label(RichText::new(k).size(12.5).color(theme::ink()));
-                            ui.label(RichText::new(v).size(12.5).color(theme::ink_dim()));
-                            ui.end_row();
-                        }
-                    });
-                }
-                (k, Some((_, name, _))) => {
-                    let want_err = k == 2;
-                    for ev in events.iter().filter(|e| e.contains(name.as_str()) || e.contains("Sidecar") || e.contains("Extension")) {
-                        let is_err = ev.to_ascii_lowercase().contains("fail") || ev.to_ascii_lowercase().contains("error");
-                        if is_err == want_err {
-                            ui.label(RichText::new(ev).monospace().size(12.0).color(theme::ink_dim()));
-                        }
-                    }
-                }
-            });
-            if app.ext_add_open {
-                let mut open = true;
-                egui::Window::new("Load extension").open(&mut open).collapsible(false).default_width(520.0).show(ui.ctx(), |ui| {
-                    ui.label(RichText::new("Extension details").strong().size(13.0));
-                    ui.horizontal(|ui| {
-                        ui.label("Extension type:");
-                        ui.label(RichText::new("Java (Montoya API, sidecar JVM)").color(theme::ink_dim()));
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label("Extension file (.jar):");
-                        ui.add(egui::TextEdit::singleline(&mut app.ext_add_path).desired_width(300.0));
-                    });
-                    ui.add_space(8.0);
-                    ui.horizontal(|ui| {
-                        let next = egui::Button::new(RichText::new("Next").strong().color(egui::Color32::WHITE)).fill(c(theme::ORANGE_1));
-                        if ui.add(next).clicked() {
-                            let path = app.ext_add_path.trim().to_string();
-                            match crate::ext_host::JavaSidecar::spawn(&path) {
-                                Ok(sidecar) => {
-                                    app.shared.log(&format!("Sidecar JVM loaded Montoya extension: {} ({})", sidecar.extension_name(), sidecar.hooks_registered()));
-                                    app.shared.ext_host.lock().unwrap().extensions.push(crate::ext_host::LoadedExtension { enabled: true, hooks: Box::new(sidecar) });
-                                    app.ext_add_open = false;
-                                }
-                                Err(e) => {
-                                    app.shared.log(&format!("Sidecar JVM failed to load {path}: {e}"));
-                                    crate::feedback::toast(crate::feedback::Level::Error, format!("Could not load the extension: {e}"));
-                                }
-                            }
-                        }
-                        if ui.button("Cancel").clicked() {
-                            app.ext_add_open = false;
-                        }
-                    });
-                });
-                if !open {
-                    app.ext_add_open = false;
-                }
-            }
+            extensions_installed(app, ui);
         }
         1 => {
             ui.label(RichText::new("Customize WebProbe with extensions").strong().size(14.0).color(theme::ink()));
@@ -1195,7 +1246,7 @@ pub fn extensions(app: &mut App, ui: &mut Ui) {
         }
         2 => {
             ui.label(RichText::new("APIs").strong().size(14.0).color(theme::ink()));
-            ui.label(RichText::new("Montoya API: Java extensions run against Burp's own Montoya classes through the sidecar JVM (initialize, logging, request/response continue-or-drop). Rust extensions implement ProxyHooks in-process.").size(12.5).color(theme::ink_dim()));
+            ui.label(RichText::new("WebProbe extension API v1: any program speaking JSON lines on stdin/stdout can edit or drop requests and responses, report issues of its own declared types and show a tab (docs/extensions.md; example: extensions/examples/marker_reflection.py). Montoya API: Java extensions run against Burp's own Montoya classes through the sidecar JVM (initialize, logging, request/response continue-or-drop). Rust extensions implement ProxyHooks in-process.").size(12.5).color(theme::ink_dim()));
         }
         3 => {
             ui.label(RichText::new("Custom scan checks").strong().size(14.0).color(theme::ink()));
@@ -1208,6 +1259,286 @@ pub fn extensions(app: &mut App, ui: &mut Ui) {
         _ => {
             ui.label(RichText::new("Extensions settings").strong().size(14.0).color(theme::ink()));
             ui.label(RichText::new(format!("Java runtime for extensions: sidecar JVM against {}", crate::ext_host::JavaSidecar::burp_jar())).size(12.5).color(theme::ink_dim()));
+        }
+    }
+}
+
+/// Extensions > Installed: the extension table (Add / Remove / Up / Down,
+/// enable checkbox) and Details / Output / Errors / the extension's own tab
+/// for the selection. User-added extensions are remembered (ext_store).
+fn extensions_installed(app: &mut App, ui: &mut Ui) {
+    use std::sync::atomic::Ordering as O;
+    use webprobe_core::ext_store;
+    let save = |app: &App| {
+        if let Err(e) = ext_store::save(&ext_store::current(&app.shared)) {
+            app.shared.log(&format!("Could not save the extension list: {e}"));
+        }
+    };
+    let n = app.shared.ext_host.lock().unwrap().extensions.len();
+    ui.horizontal(|ui| {
+        ui.add_space(8.0);
+        ui.label(RichText::new("Total estimated system impact:").size(12.5).color(theme::ink()));
+        ui.label(RichText::new(if n == 0 { "None" } else { "Low" }).strong().size(12.5).color(theme::ink()));
+    });
+    ui.add_space(8.0);
+    ui.horizontal(|ui| {
+        ui.add_space(8.0);
+        ui.label(RichText::new("WebProbe extensions").strong().size(14.0).color(theme::ink()));
+    });
+    ui.horizontal(|ui| {
+        ui.add_space(8.0);
+        ui.label(RichText::new("Extensions let you customize WebProbe's behavior using your own or third-party code: WebProbe extensions (any program speaking the JSON-lines API, docs/extensions.md) and Montoya .jar extensions through the sidecar JVM.").size(12.5).color(theme::ink_dim()));
+    });
+    ui.add_space(6.0);
+    let mut action: Option<&str> = None;
+    ui.horizontal_top(|ui| {
+        ui.add_space(8.0);
+        ui.vertical(|ui| {
+            for label in ["Add", "Remove", "Up", "Down"] {
+                if ui.add_sized([90.0, 22.0], egui::Button::new(RichText::new(label).strong())).clicked() {
+                    action = Some(label);
+                }
+            }
+        });
+        let cols = [
+            crate::table::Column::new("Loaded", 60.0),
+            crate::table::Column::new("Type", 70.0),
+            crate::table::Column::new("Name", 360.0),
+            crate::table::Column::new("Hooks", 360.0),
+        ];
+        let rows: Vec<(usize, bool, String, String, String)> = app
+            .shared
+            .ext_host
+            .lock()
+            .unwrap()
+            .extensions
+            .iter()
+            .enumerate()
+            .map(|(i, e)| {
+                let hooks = e.hooks.hooks_registered().to_string();
+                let ty = match &e.source {
+                    Some(src) => src.kind.label(),
+                    None if hooks.contains("sidecar") => "Java",
+                    None if hooks.contains("process") => "Process",
+                    None => "Rust",
+                };
+                let name = if e.hooks.healthy() { e.hooks.extension_name().to_string() } else { format!("{} (stopped)", e.hooks.extension_name()) };
+                (i, e.enabled, ty.to_string(), name, hooks)
+            })
+            .collect();
+        let mut st = app.ext_table.clone();
+        let mut pick = None;
+        let mut toggle = None;
+        let sel = app.ext_sel;
+        ui.allocate_ui_with_layout(egui::vec2(ui.available_width() - 16.0, 160.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+            crate::table::table_body(ui, "ext_rows", &cols, &rows, &mut st, 19.0, 130.0, &mut |(i, en, ty, name, hooks), ui| {
+                let rr = egui::Rect::from_min_size(ui.cursor().min, egui::vec2(ui.available_width(), 19.0));
+                if sel == Some(*i) {
+                    ui.painter().rect_filled(rr, 0.0, theme::selection_bg());
+                }
+                let row = ui.horizontal(|ui| {
+                    let mut on = *en;
+                    ui.allocate_ui(egui::vec2(60.0 + crate::table::DIVIDER, 19.0), |ui| {
+                        if ui.checkbox(&mut on, "").changed() {
+                            toggle = Some(*i);
+                        }
+                    });
+                    crate::table::cell_w(ui, &cols[1], 70.0, ty.clone(), None, 19.0);
+                    ui.add_space(crate::table::DIVIDER);
+                    crate::table::cell_w(ui, &cols[2], 360.0, name.clone(), None, 19.0);
+                    ui.add_space(crate::table::DIVIDER);
+                    crate::table::cell_w(ui, &cols[3], 360.0, hooks.clone(), None, 19.0);
+                }).response.interact(egui::Sense::click());
+                if row.clicked() {
+                    pick = Some(*i);
+                }
+            });
+        });
+        app.ext_table = st;
+        if pick.is_some() {
+            app.ext_sel = pick;
+        }
+        if let Some(i) = toggle {
+            {
+                let mut host = app.shared.ext_host.lock().unwrap();
+                if let Some(e) = host.extensions.get_mut(i) {
+                    e.enabled = !e.enabled;
+                    app.shared.log(&format!("Extension {} {}", e.hooks.extension_name(), if e.enabled { "enabled" } else { "disabled" }));
+                }
+            }
+            save(app);
+        }
+    });
+    match action {
+        Some("Add") => app.ext_add_open = true,
+        Some("Remove") => {
+            if let Some(i) = app.ext_sel.take() {
+                let removed = {
+                    let mut host = app.shared.ext_host.lock().unwrap();
+                    (i < host.extensions.len()).then(|| host.extensions.remove(i))
+                };
+                if let Some(e) = removed {
+                    app.shared.log(&format!("Removed extension {}", e.hooks.extension_name()));
+                    save(app);
+                }
+            }
+        }
+        Some(dir @ ("Up" | "Down")) => {
+            if let Some(i) = app.ext_sel {
+                let moved = {
+                    let mut host = app.shared.ext_host.lock().unwrap();
+                    let j = if dir == "Up" { i.checked_sub(1) } else { (i + 1 < host.extensions.len()).then_some(i + 1) };
+                    j.inspect(|&j| host.extensions.swap(i, j))
+                };
+                if let Some(j) = moved {
+                    app.ext_sel = Some(j);
+                    save(app);
+                }
+            }
+        }
+        _ => {}
+    }
+    ui.add_space(8.0);
+    let sel = app.ext_sel.and_then(|i| {
+        let host = app.shared.ext_host.lock().unwrap();
+        host.extensions.get(i).map(|e| (e.enabled, std::sync::Arc::clone(&e.hooks), e.source.clone()))
+    });
+    let own_tab = sel.as_ref().and_then(|(_, h, _)| h.tab_title());
+    let mut labels = vec!["Details".to_string(), "Output".to_string(), "Errors".to_string()];
+    labels.extend(own_tab.clone());
+    if app.ext_detail >= labels.len() {
+        app.ext_detail = 0;
+    }
+    ui.horizontal(|ui| {
+        ui.add_space(8.0);
+        let refs: Vec<&str> = labels.iter().map(String::as_str).collect();
+        if let Some(v) = crate::msgpane::underline_tabs(ui, &refs, app.ext_detail, 13.0) {
+            app.ext_detail = v;
+        }
+    });
+    let r = ui.cursor();
+    ui.painter().hline(ui.max_rect().x_range(), r.top(), egui::Stroke::new(1.0, theme::line()));
+    ui.add_space(6.0);
+    // The extension's tab: refresh its text off the UI thread about once a second.
+    if let (3, Some((_, hooks, _))) = (app.ext_detail, &sel) {
+        let now = ui.input(|i| i.time);
+        if now - app.ext_tab_at > 1.0 && !app.ext_tab_busy.swap(true, O::SeqCst) {
+            app.ext_tab_at = now;
+            let (hooks, busy, ctx) = (std::sync::Arc::clone(hooks), std::sync::Arc::clone(&app.ext_tab_busy), ui.ctx().clone());
+            std::thread::spawn(move || {
+                hooks.refresh_tab();
+                busy.store(false, O::SeqCst);
+                ctx.request_repaint();
+            });
+        }
+        ui.ctx().request_repaint_after(std::time::Duration::from_secs(1));
+    }
+    let events: Vec<String> = app.shared.events.lock().map(|e| e.clone()).unwrap_or_default();
+    egui::ScrollArea::vertical().id_salt("ext_detail").auto_shrink([false, false]).show(ui, |ui| match (app.ext_detail, &sel) {
+        (_, None) => {
+            ui.label(RichText::new("Select an extension to see its details, output and errors.").size(12.5).color(theme::ink_dim()));
+        }
+        (0, Some((en, hooks, source))) => {
+            egui::Grid::new("ext_det").num_columns(2).spacing([20.0, 6.0]).show(ui, |ui| {
+                let mut rows = vec![
+                    ("Extension loaded", if *en { "Yes".to_string() } else { "No".to_string() }),
+                    ("Name", hooks.extension_name().to_string()),
+                    ("Status", if hooks.healthy() { "Running".to_string() } else { "Stopped (hooks pass everything through); see Errors".to_string() }),
+                    ("Hooks registered", hooks.hooks_registered().to_string()),
+                ];
+                if let Some(src) = source {
+                    rows.push(("Source", format!("{} {}", src.kind.label(), src.source)));
+                }
+                if let Some(t) = hooks.tab_title() {
+                    rows.push(("Tab", t));
+                }
+                for (k, v) in rows {
+                    ui.label(RichText::new(k).size(12.5).color(theme::ink()));
+                    ui.label(RichText::new(v).size(12.5).color(theme::ink_dim()));
+                    ui.end_row();
+                }
+            });
+            let defs = hooks.issue_definitions();
+            if !defs.is_empty() {
+                ui.add_space(8.0);
+                ui.label(RichText::new("Issue types").strong().size(12.5).color(theme::ink()));
+                egui::Grid::new("ext_issue_defs").striped(true).num_columns(3).spacing([16.0, 4.0]).show(ui, |ui| {
+                    for d in defs {
+                        ui.label(RichText::new(&d.name).size(12.5).color(theme::ink()));
+                        ui.label(RichText::new(&d.severity).size(12.5).color(theme::ink_dim()));
+                        ui.label(RichText::new(&d.description).size(12.5).color(theme::ink_dim()));
+                        ui.end_row();
+                    }
+                });
+            }
+        }
+        (3, Some((_, hooks, _))) => {
+            let text = hooks.tab_content();
+            ui.label(RichText::new(if text.is_empty() { "(no content yet)".to_string() } else { text }).monospace().size(12.5).color(theme::ink()));
+        }
+        (k, Some((_, hooks, _))) => {
+            let want_err = k == 2;
+            let name = hooks.extension_name().to_string();
+            for ev in events.iter().filter(|e| e.contains(name.as_str()) || e.contains("Sidecar") || e.contains("Extension")) {
+                let is_err = ev.to_ascii_lowercase().contains("fail") || ev.to_ascii_lowercase().contains("error");
+                if is_err == want_err {
+                    ui.label(RichText::new(ev).monospace().size(12.0).color(theme::ink_dim()));
+                }
+            }
+            if want_err {
+                for e in hooks.errors() {
+                    ui.label(RichText::new(e).monospace().size(12.0).color(theme::ink_dim()));
+                }
+            }
+        }
+    });
+    if app.ext_add_open {
+        let mut open = true;
+        let loading = app.ext_loading.load(O::SeqCst);
+        egui::Window::new("Load extension").default_pos(crate::theme::window_pos(ui.ctx())).open(&mut open).collapsible(false).default_width(560.0).show(ui.ctx(), |ui| {
+            ui.label(RichText::new("Extension details").strong().size(13.0));
+            ui.horizontal(|ui| {
+                ui.label("Extension type:");
+                ui.radio_value(&mut app.ext_add_kind, ext_store::Kind::Process, "WebProbe (process)");
+                ui.radio_value(&mut app.ext_add_kind, ext_store::Kind::Java, "Java (Montoya API, sidecar JVM)");
+            });
+            ui.horizontal(|ui| {
+                let (label, hint) = match app.ext_add_kind {
+                    ext_store::Kind::Process => ("Command:", "python3 -I extensions/examples/marker_reflection.py"),
+                    ext_store::Kind::Java => ("Extension file (.jar):", "/path/to/extension.jar"),
+                };
+                ui.label(label);
+                ui.add_enabled(!loading, egui::TextEdit::singleline(&mut app.ext_add_path).hint_text(hint).desired_width(360.0));
+            });
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                let next = egui::Button::new(RichText::new(if loading { "Loading..." } else { "Next" }).strong().color(egui::Color32::WHITE)).fill(c(theme::ORANGE_1));
+                if ui.add_enabled(!loading && !app.ext_add_path.trim().is_empty(), next).clicked() {
+                    let item = ext_store::Installed { kind: app.ext_add_kind, source: app.ext_add_path.trim().to_string(), enabled: true };
+                    app.ext_loading.store(true, O::SeqCst);
+                    let (flag, done, shared) = (std::sync::Arc::clone(&app.ext_loading), std::sync::Arc::clone(&app.ext_add_done), std::sync::Arc::clone(&app.shared));
+                    ext_store::start_in_background(&app.shared, item, move |res| {
+                        flag.store(false, O::SeqCst);
+                        match res {
+                            Ok(name) => {
+                                done.store(true, O::SeqCst);
+                                if let Err(e) = ext_store::save(&ext_store::current(&shared)) {
+                                    shared.log(&format!("Could not save the extension list: {e}"));
+                                }
+                                crate::feedback::toast(crate::feedback::Level::Success, format!("Loaded extension {name}"));
+                            }
+                            Err(e) => crate::feedback::toast(crate::feedback::Level::Error, format!("Could not load the extension: {e}")),
+                        }
+                    });
+                }
+                if ui.button("Cancel").clicked() {
+                    app.ext_add_open = false;
+                }
+            });
+        });
+        // Close once a load started from the dialog has finished.
+        if !open || app.ext_add_done.swap(false, O::SeqCst) {
+            app.ext_add_open = false;
         }
     }
 }
@@ -1271,197 +1602,455 @@ fn net_rule(rule: &project::ProjectRule) -> crate::rules::MrRule {
     }
 }
 
+/// A stored history row back as a live entry (derived columns filled in).
+fn attack_name(a: crate::intruder::AttackType) -> &'static str {
+    match a {
+        crate::intruder::AttackType::Sniper => "sniper",
+        crate::intruder::AttackType::BatteringRam => "battering_ram",
+        crate::intruder::AttackType::Pitchfork => "pitchfork",
+        crate::intruder::AttackType::ClusterBomb => "cluster_bomb",
+    }
+}
+
+fn attack_of(name: &str) -> Option<crate::intruder::AttackType> {
+    match name {
+        "sniper" => Some(crate::intruder::AttackType::Sniper),
+        "battering_ram" => Some(crate::intruder::AttackType::BatteringRam),
+        "pitchfork" => Some(crate::intruder::AttackType::Pitchfork),
+        "cluster_bomb" => Some(crate::intruder::AttackType::ClusterBomb),
+        _ => None,
+    }
+}
+
+/// Top-level tool names for the project layout (same words as WEBPROBE_TAB).
+const TAB_NAMES: [(&str, crate::ui::Tab); 17] = [
+    ("dashboard", crate::ui::Tab::Dashboard),
+    ("target", crate::ui::Tab::Target),
+    ("proxy", crate::ui::Tab::Proxy),
+    ("scanner", crate::ui::Tab::Scanner),
+    ("intruder", crate::ui::Tab::Intruder),
+    ("repeater", crate::ui::Tab::Repeater),
+    ("sequencer", crate::ui::Tab::Sequencer),
+    ("comparer", crate::ui::Tab::Comparer),
+    ("logger", crate::ui::Tab::Logger),
+    ("organizer", crate::ui::Tab::Organizer),
+    ("sessions", crate::ui::Tab::Sessions),
+    ("decoder", crate::ui::Tab::Decoder),
+    ("search", crate::ui::Tab::Search),
+    ("collaborator", crate::ui::Tab::Collaborator),
+    ("extensions", crate::ui::Tab::Extensions),
+    ("burp_ai", crate::ui::Tab::BurpAi),
+    ("discover", crate::ui::Tab::Discover),
+];
+
+fn tab_name(t: crate::ui::Tab) -> &'static str {
+    TAB_NAMES.iter().find(|(_, x)| *x == t).map(|(n, _)| *n).unwrap_or("dashboard")
+}
+
+fn tab_of(name: &str) -> Option<crate::ui::Tab> {
+    TAB_NAMES.iter().find(|(n, _)| *n == name).map(|(_, t)| *t)
+}
+
+/// Burp Pro keeps its project on disk as you work, so reopening it brings
+/// back the history. WebProbe does the same with its project file: it is
+/// restored at startup when present (main.rs) and saved every minute while
+/// something changed, and on exit (App::on_exit).
+pub fn save_project(app: &mut App, quiet: bool) {
+    // J-02: while the crash-recovery prompt is open, autosave (and the save
+    // on exit) must not overwrite the project the user may want back; the
+    // new session goes to a per-process temporary file instead.
+    let target = if quiet && app.eng.suppress_autosave {
+        crate::recovery::temporary_project_path(&std::env::temp_dir(), std::process::id(), 0).display().to_string()
+    } else {
+        app.project_path.clone()
+    };
+    let to_project_history = project::ProjectHistory::from_entry;
+    let crawl_items: Vec<project::ProjectHistory> = app.shared.crawl_items.lock().unwrap().iter().map(to_project_history).collect();
+    let history = app.shared.history.lock().unwrap().iter().map(to_project_history).collect();
+    // Each shared lock is taken and released in its own statement: in one
+    // struct literal every guard would live to the end of the statement, so
+    // a second lock of the same mutex deadlocked (scan_config, every save
+    // hung) and holding ~17 locks at once risked lock-order deadlocks with
+    // engine threads (issues -> tasks here, tasks -> issues in the runner).
+    let locked_match_request = app.shared.mr_request.lock().unwrap().iter().map(|r| project_rule("request", r)).collect();
+    let locked_match_response = app.shared.mr_response.lock().unwrap().iter().map(|r| project_rule("response", r)).collect();
+    let locked_scope = app.shared.scope.lock().unwrap().iter().map(|s| project::ProjectScope {
+        enabled: s.enabled,
+        include: s.include,
+        pattern: s.pattern.clone(),
+        is_regex: s.is_regex,
+    }).collect();
+    let locked_cookie_jar = Some(project::ProjectCookieJar::from_jar(&app.shared.cookie_jar.lock().unwrap()));
+    let locked_intercept_rules = Some(app.shared.intercept_rules.lock().unwrap().clone());
+    let locked_session_rules = app.shared.session_rules.lock().unwrap().iter().map(|s| project::ProjectSessionRule {
+        enabled: s.enabled,
+        name: s.name.clone(),
+        action: s.action.clone(),
+        match_text: s.host_match.clone(),
+        value: s.value.clone(),
+        tools: s.tools.clone(),
+        check: s.check.clone(),
+        check_invalid_on_match: s.check_invalid_on_match,
+    }).collect();
+    let locked_macros = app.shared.macros.lock().unwrap().iter().map(|m| project::ProjectMacro {
+        name: m.name.clone(),
+        request: m.request.clone(),
+    }).collect();
+    let locked_repeaters = app.shared.repeaters.lock().unwrap().iter().map(|r| project::ProjectRepeater {
+        name: r.name.clone(),
+        host: r.host.clone(),
+        port: r.port,
+        https: r.https,
+        request: r.request.clone(),
+        response: r.response.as_ref().map(|v| String::from_utf8_lossy(v).into_owned()),
+        result_line: r.result_line.clone(),
+    }).collect();
+    let locked_issues = app.shared.issues.lock().unwrap().iter().map(project::ProjectIssue::from_issue).collect();
+    let locked_websockets = app.shared.ws_history.lock().unwrap().iter().map(|w| project::ProjectWebsocket {
+        id: w.id,
+        timestamp: w.ts,
+        host: w.host.clone(),
+        direction: w.direction.clone(),
+        opcode: w.opcode.clone(),
+        payload: w.payload.clone(),
+    }).collect();
+    let locked_upstream = app.shared.upstream.lock().unwrap().clone();
+    let locked_site_links = app.shared.site_links.lock().unwrap().iter().cloned().collect();
+    let scan_cfg = app.shared.scan_config.lock().unwrap().clone();
+    let locked_scanner = project::ProjectScanner {
+        speed: app.shared.scan_speed.load(Ordering::SeqCst),
+        accuracy: app.shared.scan_accuracy.load(Ordering::SeqCst),
+        extra_checks: app.shared.extra_checks.load(Ordering::SeqCst),
+        disabled_checks: scan_cfg.disabled_checks.iter().cloned().collect(),
+        disabled_insertion_points: scan_cfg.disabled_insertion.iter().cloned().collect(),
+    };
+    let locked_proxy = project::ProjectProxy {
+        listeners: net::listener_specs(&app.shared).into_iter().map(|l| project::ProjectListener { bind: l.bind, port: l.port }).collect(),
+        ws_intercept_client: app.shared.ws_intercept_client.load(Ordering::SeqCst),
+        ws_intercept_server: app.shared.ws_intercept_server.load(Ordering::SeqCst),
+        redirects: {
+            let mut v: Vec<(u16, String, u16)> = app.shared.listener_redirects.lock().unwrap().iter().map(|(lp, (h, p))| (*lp, h.clone(), *p)).collect();
+            v.sort();
+            v
+        },
+    };
+    let locked_tasks = project::ProjectTasks {
+        live_passive_crawl: app.shared.crawl_capture.load(Ordering::SeqCst),
+        live_audit: app.shared.scan_enabled.load(Ordering::SeqCst),
+        scans: project::ProjectScanTask::save_all(&app.shared.tasks.lock().unwrap()),
+    };
+    let data = project::ProjectData {
+        version: project::PROJECT_VERSION,
+        saved_at: crate::util::now_secs(),
+        history,
+        match_request: locked_match_request,
+        match_response: locked_match_response,
+        scope: locked_scope,
+        cookie_jar: locked_cookie_jar,
+        intercept_rules: locked_intercept_rules,
+        session_rules: locked_session_rules,
+        macros: locked_macros,
+        repeaters: locked_repeaters,
+        issues: locked_issues,
+        websockets: locked_websockets,
+        upstream: locked_upstream,
+        listener_port: app.shared.proxy_port.load(Ordering::SeqCst),
+        appearance: {
+            let (palette, density, font_scale) = crate::theme::appearance();
+            project::Appearance {
+                palette: palette.label().into(),
+                density: density.label().into(),
+                font_scale,
+            }
+        },
+        logger: app.logger.entries.iter().map(|e| project::ProjectLoggerEntry {
+            id: e.id,
+            timestamp: e.ts,
+            tool: e.tool.clone(),
+            method: e.method.clone(),
+            host: e.host.clone(),
+            port: e.port,
+            https: false,
+            path: e.path.clone(),
+            status: e.status.clone(),
+            request: String::new(),
+            response: None,
+            note: None,
+            req_len: e.req_len,
+            resp_len: e.resp_len,
+            mime: e.mime.clone(),
+        }).collect(),
+        organizer: app.organizer.items.iter().map(|o| project::ProjectOrganizerItem {
+            id: o.id,
+            timestamp: o.created,
+            title: o.name.clone(),
+            host: String::new(),
+            path: String::new(),
+            request: o.request.clone(),
+            response: Some(o.response.clone()),
+            comment: o.note.clone(),
+        }).collect(),
+        intruder: project::ProjectIntruder {
+            attack: attack_name(app.intr_attack).into(),
+            host: String::new(),
+            port: 0,
+            https: app.intr_https,
+            base_request: app.intr_req.clone(),
+            payload_sets: app.intr_sets.clone(),
+            results: Vec::new(),
+        },
+        decoder: project::ProjectDecoder {
+            input: app.dec_input.clone(),
+            output: app.dec_output.clone(),
+            steps: Vec::new(),
+        },
+        crawl_items,
+        site_links: locked_site_links,
+        scanner: locked_scanner,
+        proxy: locked_proxy,
+        tasks: locked_tasks,
+        layout: project::ProjectLayout {
+            tab: tab_name(app.tab).into(),
+            proxy_sub: Some(app.proxy_sub),
+            target_sub: Some(app.target_sub),
+            target_view: Some(app.target_view),
+            intruder_sub: Some(app.intr_sub),
+            sequencer_sub: Some(app.seq_sub),
+            dashboard_task: Some(app.dash_task),
+            dock: Some(app.dock_sel),
+            split_detail: Some(app.split_detail),
+            repeater_tab: Some(app.rep_sel),
+        },
+        editors: project::ProjectEditors {
+            intruder_target: app.intr_target.clone(),
+            comparer_items: app.cmp_items.clone(),
+            macro_name: app.macro_name.clone(),
+            macro_request: app.macro_request.clone(),
+            sequencer_manual: app.seq_manual.clone(),
+        },
+        // Target rows are derived from history + crawl items. Collaborator
+        // interactions belong to the server session; its settings are kept.
+        collaborator: project::ProjectCollaborator {
+            server: Some(app.collab_state.remote_choice.clone()),
+            poll_secs: Some(app.collab_state.poll_secs()),
+            retention_secs: Some(app.collab_state.retention_secs()),
+            ..Default::default()
+        },
+        ..project::ProjectData::default()
+    };
+    match project::save(std::path::Path::new(&target), &data) {
+        Ok(()) => {
+            app.project_status = format!("saved {target}");
+            if !quiet { crate::feedback::toast(crate::feedback::Level::Success, format!("Project saved to {target}")); }
+        }
+        Err(e) => {
+            app.project_status = format!("save failed: {e}");
+            crate::feedback::toast(crate::feedback::Level::Error, format!("Save failed: {e}"));
+        }
+    }
+}
+
+pub fn restore_project(app: &mut App, quiet: bool) {
+    match project::load(std::path::Path::new(&app.project_path)) {
+        Ok(data) => {
+            *app.shared.history.lock().unwrap() = data.history.iter().map(project::ProjectHistory::to_entry).collect();
+            *app.shared.mr_request.lock().unwrap() = data.match_request.iter().filter(|r| r.kind == "request").map(net_rule).collect();
+            *app.shared.mr_response.lock().unwrap() = data.match_response.iter().filter(|r| r.kind == "response").map(net_rule).collect();
+            *app.shared.scope.lock().unwrap() = data.scope.iter().map(|s| net::ScopeRule {
+                enabled: s.enabled,
+                include: s.include,
+                pattern: s.pattern.clone(),
+                is_regex: s.is_regex,
+            }).collect();
+            *app.shared.cookie_jar.lock().unwrap() = data.cookie_jar.as_ref().map(|j| j.to_jar()).unwrap_or_default();
+            *app.shared.intercept_rules.lock().unwrap() = data.intercept_rules.clone().unwrap_or_else(crate::intercept_rules::defaults);
+            *app.shared.session_rules.lock().unwrap() = data.session_rules.iter().map(|s| net::SessionRule {
+                enabled: s.enabled,
+                name: s.name.clone(),
+                action: s.action.clone(),
+                host_match: s.match_text.clone(),
+                value: s.value.clone(),
+                tools: s.tools.clone(),
+                check: s.check.clone(),
+                check_invalid_on_match: s.check_invalid_on_match,
+            }).collect();
+            *app.shared.macros.lock().unwrap() = data.macros.iter().map(|m| net::Macro {
+                name: m.name.clone(),
+                request: m.request.clone(),
+            }).collect();
+            *app.shared.repeaters.lock().unwrap() = data.repeaters.iter().map(|r| net::RepTab {
+                id: app.shared.next_rep_id.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
+                name: r.name.clone(),
+                host: r.host.clone(),
+                port: r.port,
+                https: r.https,
+                request: r.request.clone(),
+                response: r.response.as_ref().map(|v| v.as_bytes().to_vec()),
+                result_line: r.result_line.clone(),
+            history: Vec::new(),
+            hist_pos: 0,
+            }).collect();
+            *app.shared.issues.lock().unwrap() = data.issues.iter().map(project::ProjectIssue::to_issue).collect();
+            *app.shared.ws_history.lock().unwrap() = data.websockets.iter().map(|w| net::WsEntry {
+                id: w.id,
+                ts: w.timestamp,
+                host: w.host.clone(),
+                direction: w.direction.clone(),
+                opcode: w.opcode.clone(),
+                payload: w.payload.clone(),
+            }).collect();
+            *app.shared.upstream.lock().unwrap() = data.upstream.clone();
+            app.shared.proxy_port.store(data.listener_port, Ordering::SeqCst);
+            app.shared.listener_restart.store(true, Ordering::SeqCst);
+            // M-05: apply the persisted appearance.
+            crate::theme::set_appearance(
+                crate::theme::Palette::parse(&data.appearance.palette),
+                crate::theme::Density::parse(&data.appearance.density),
+                data.appearance.font_scale,
+            );
+            restore_j01_sections(app, &data);
+            // Ids handed out after the restore must not collide with restored ones.
+            {
+                let max_id = app.shared.history.lock().unwrap().iter().map(|e| e.id)
+                    .chain(app.shared.crawl_items.lock().unwrap().iter().map(|e| e.id))
+                    .chain(app.shared.issues.lock().unwrap().iter().map(|i| i.id))
+                    .chain(app.shared.ws_history.lock().unwrap().iter().map(|w| w.id))
+                    .max()
+                    .unwrap_or(0);
+                app.shared.next_id.fetch_max(max_id + 1, Ordering::SeqCst);
+            }
+            app.map_cache_len = usize::MAX;
+            app.project_status = format!("restored {}", app.project_path);
+            if !quiet { crate::feedback::toast(crate::feedback::Level::Success, format!("Project restored from {}", app.project_path)); }
+        }
+        Err(e) => app.project_status = format!("restore failed: {e}"),
+    }
+}
+
+/// J-01 sections: crawl items, scanner / proxy / task settings, layout and
+/// editor buffers, Logger, Organizer, Intruder and Decoder state. Sections
+/// missing from older files come back as defaults; layout fields that were
+/// never saved (None) leave the current UI alone.
+fn restore_j01_sections(app: &mut App, data: &project::ProjectData) {
+    *app.shared.crawl_items.lock().unwrap() = data.crawl_items.iter().map(project::ProjectHistory::to_entry).collect();
+    *app.shared.site_links.lock().unwrap() = data.site_links.iter().cloned().collect();
+    let cs = &data.collaborator;
+    if let Some(server) = cs.server.as_ref().filter(|s| !s.trim().is_empty()) {
+        app.collab_state.remote_choice = server.clone();
+    }
+    if let Some(secs) = cs.poll_secs {
+        app.collab_state.set_poll_secs(secs);
+    }
+    if let Some(secs) = cs.retention_secs {
+        app.collab_state.set_retention_secs(secs);
+    }
+    let s = &data.scanner;
+    *app.shared.scan_config.lock().unwrap() = crate::scan_config::ScanConfig {
+        disabled_checks: s.disabled_checks.iter().cloned().collect(),
+        disabled_insertion: s.disabled_insertion_points.iter().cloned().collect(),
+    };
+    app.shared.scan_speed.store(s.speed.min(2), Ordering::SeqCst);
+    app.shared.scan_accuracy.store(s.accuracy.min(2), Ordering::SeqCst);
+    app.shared.extra_checks.store(s.extra_checks, Ordering::SeqCst);
+    app.shared.ws_intercept_client.store(data.proxy.ws_intercept_client, Ordering::SeqCst);
+    app.shared.ws_intercept_server.store(data.proxy.ws_intercept_server, Ordering::SeqCst);
+    *app.shared.listener_redirects.lock().unwrap() = data.proxy.redirects.iter().map(|(lp, h, p)| (*lp, (h.clone(), *p))).collect();
+    let specs: Vec<net::ListenerSpec> = data.proxy.listeners.iter().map(|l| net::ListenerSpec { bind: l.bind.clone(), port: l.port }).collect();
+    if specs != net::listener_specs(&app.shared) {
+        if let Err(e) = net::set_listeners(&app.shared, specs) {
+            app.shared.log(&format!("Project listeners not restored: {e}"));
+        }
+    }
+    app.shared.crawl_capture.store(data.tasks.live_passive_crawl, Ordering::SeqCst);
+    app.shared.scan_enabled.store(data.tasks.live_audit, Ordering::SeqCst);
+    // Scan tasks still open in the current session are dropped in favour of
+    // the project's (opening a project replaces the session).
+    {
+        let ids: Vec<u64> = app.shared.tasks.lock().unwrap().iter().filter(|t| t.state.is_open()).map(|t| t.id).collect();
+        for id in ids {
+            crate::tasks::cancel(&app.shared, id);
+        }
+        app.shared.tasks.lock().unwrap().clear();
+    }
+    project::ProjectScanTask::restore_all(&data.tasks.scans, &app.shared);
+    let l = &data.layout;
+    // QA launch hooks (main.rs) win over the saved layout.
+    if std::env::var_os("WEBPROBE_TAB").is_none() {
+        if let Some(t) = tab_of(&l.tab) {
+            app.tab = t;
+        }
+    }
+    if std::env::var_os("WEBPROBE_PROXY_SUB").is_none() {
+        if let Some(v) = l.proxy_sub { app.proxy_sub = v.min(4); }
+    }
+    if let Some(v) = l.target_sub { app.target_sub = v.min(2); }
+    if let Some(v) = l.target_view { app.target_view = v.min(1); }
+    if let Some(v) = l.intruder_sub { app.intr_sub = v; }
+    if let Some(v) = l.sequencer_sub { app.seq_sub = v; }
+    if let Some(v) = l.dashboard_task { app.dash_task = v.min(2); }
+    if let Some(v) = l.dock { app.dock_sel = v.min(2); }
+    if let Some(v) = l.split_detail { app.split_detail = v.clamp(80.0, 2000.0); }
+    if let Some(v) = l.repeater_tab { app.rep_sel = v; }
+    let ed = &data.editors;
+    app.intr_target = ed.intruder_target.clone();
+    app.cmp_items = ed.comparer_items.clone();
+    if !ed.macro_name.is_empty() { app.macro_name = ed.macro_name.clone(); }
+    if !ed.macro_request.is_empty() { app.macro_request = ed.macro_request.clone(); }
+    app.seq_manual = ed.sequencer_manual.clone();
+    // Intruder and Decoder buffers.
+    if let Some(a) = attack_of(&data.intruder.attack) {
+        app.intr_attack = a;
+    }
+    app.intr_req = data.intruder.base_request.clone();
+    app.intr_https = data.intruder.https;
+    app.intr_sets = if data.intruder.payload_sets.is_empty() { vec![String::new()] } else { data.intruder.payload_sets.clone() };
+    app.intr_set_sel = 0;
+    app.dec_input = data.decoder.input.clone();
+    app.dec_output = data.decoder.output.clone();
+    // Organizer.
+    app.organizer.items = data.organizer.iter().map(|o| crate::organizer::OrganizerItem {
+        id: o.id,
+        name: o.title.clone(),
+        note: o.comment.clone(),
+        request: o.request.clone(),
+        response: o.response.clone().unwrap_or_default(),
+        created: o.timestamp,
+    }).collect();
+    app.organizer.next_id = app.organizer.items.iter().map(|i| i.id).max().unwrap_or(0) + 1;
+    app.org_sel = None;
+    // Logger: restore the rows and mark the restored history as mirrored,
+    // so the per-frame mirror does not add every row a second time.
+    if !data.logger.is_empty() {
+        app.logger.entries = data.logger.iter().map(|e| crate::logger::LogEntry {
+            id: e.id,
+            ts: e.timestamp,
+            tool: e.tool.clone(),
+            method: e.method.clone(),
+            host: e.host.clone(),
+            port: e.port,
+            path: e.path.clone(),
+            status: e.status.clone(),
+            req_len: e.req_len,
+            resp_len: e.resp_len,
+            mime: e.mime.clone(),
+            source: String::new(),
+            ..Default::default()
+        }).collect();
+        app.logger.next_id = app.logger.entries.iter().map(|e| e.id).max().unwrap_or(0) + 1;
+        app.log_seen = app.shared.history.lock().unwrap().iter().map(|e| e.id).max().unwrap_or(0);
+        app.log_sel = None;
+    }
+}
+
 pub fn project_controls(app: &mut App, ui: &mut Ui) {
     ui.horizontal(|ui| {
         ui.label(RichText::new("Project file").size(12.0).color(theme::ink_faint()));
         ui.add(egui::TextEdit::singleline(&mut app.project_path).desired_width(330.0).font(egui::TextStyle::Monospace));
         if ui.button("Save project").clicked() {
-            let history = app.shared.history.lock().unwrap().iter().map(|e| project::ProjectHistory {
-                id: e.id,
-                timestamp: e.ts,
-                method: e.method.clone(),
-                host: e.host.clone(),
-                port: e.port,
-                https: e.https,
-                path: e.path.clone(),
-                status: e.status.clone(),
-                request: String::from_utf8_lossy(&e.req_raw).into_owned(),
-                response: e.resp_raw.as_ref().map(|r| String::from_utf8_lossy(r).into_owned()),
-                note: e.note.clone(),
-            }).collect();
-            let data = project::ProjectData {
-                version: project::PROJECT_VERSION,
-                saved_at: crate::util::now_secs(),
-                history,
-                match_request: app.shared.mr_request.lock().unwrap().iter().map(|r| project_rule("request", r)).collect(),
-                match_response: app.shared.mr_response.lock().unwrap().iter().map(|r| project_rule("response", r)).collect(),
-                scope: app.shared.scope.lock().unwrap().iter().map(|s| project::ProjectScope {
-                    enabled: s.enabled,
-                    include: s.include,
-                    pattern: s.pattern.clone(),
-                    is_regex: s.is_regex,
-                }).collect(),
-                session_rules: app.shared.session_rules.lock().unwrap().iter().map(|s| project::ProjectSessionRule {
-                    enabled: s.enabled,
-                    name: s.name.clone(),
-                    action: s.action.clone(),
-                    match_text: s.host_match.clone(),
-                    value: s.value.clone(),
-                }).collect(),
-                macros: app.shared.macros.lock().unwrap().iter().map(|m| project::ProjectMacro {
-                    name: m.name.clone(),
-                    request: m.request.clone(),
-                }).collect(),
-                repeaters: app.shared.repeaters.lock().unwrap().iter().map(|r| project::ProjectRepeater {
-                    name: r.name.clone(),
-                    host: r.host.clone(),
-                    port: r.port,
-                    https: r.https,
-                    request: r.request.clone(),
-                    response: r.response.as_ref().map(|v| String::from_utf8_lossy(v).into_owned()),
-                    result_line: r.result_line.clone(),
-                }).collect(),
-                issues: app.shared.issues.lock().unwrap().iter().map(|i| project::ProjectIssue {
-                    id: i.id,
-                    severity: i.sev.clone(),
-                    name: i.name.clone(),
-                    host: i.host.clone(),
-                    path: i.path.clone(),
-                    detail: i.detail.clone(),
-                    false_positive: i.false_positive,
-                    confidence: i.confidence.clone(),
-                }).collect(),
-                websockets: app.shared.ws_history.lock().unwrap().iter().map(|w| project::ProjectWebsocket {
-                    id: w.id,
-                    timestamp: w.ts,
-                    host: w.host.clone(),
-                    direction: w.direction.clone(),
-                    opcode: w.opcode.clone(),
-                    payload: w.payload.clone(),
-                }).collect(),
-                upstream: app.shared.upstream.lock().unwrap().clone(),
-                listener_port: app.shared.proxy_port.load(Ordering::SeqCst),
-                appearance: {
-                    let (palette, density, font_scale) = crate::theme::appearance();
-                    project::Appearance {
-                        palette: palette.label().into(),
-                        density: density.label().into(),
-                        font_scale,
-                    }
-                },
-                // Logger, Organizer, Intruder, Decoder, Target and Collaborator
-                // are persisted but not yet wired into the save path.
-                ..project::ProjectData::default()
-            };
-            match project::save(std::path::Path::new(&app.project_path), &data) {
-                Ok(()) => {
-                    app.project_status = format!("saved {}", app.project_path);
-                    crate::feedback::toast(crate::feedback::Level::Success, format!("Project saved to {}", app.project_path));
-                }
-                Err(e) => {
-                    app.project_status = format!("save failed: {e}");
-                    crate::feedback::toast(crate::feedback::Level::Error, format!("Save failed: {e}"));
-                }
-            }
+            save_project(app, false);
         }
         if ui.button("Restore project").clicked() {
-            match project::load(std::path::Path::new(&app.project_path)) {
-                Ok(data) => {
-                    *app.shared.history.lock().unwrap() = data.history.iter().map(|h| net::HistEntry {
-                        id: h.id,
-                        ts: h.timestamp,
-                        method: h.method.clone(),
-                        host: h.host.clone(),
-                        port: h.port,
-                        https: h.https,
-                        path: h.path.clone(),
-                        status: h.status.clone(),
-                        resp_len: h.response.as_deref().map(|r| r.len()).unwrap_or(0),
-                        req_raw: h.request.clone().into_bytes(),
-                        resp_raw: h.response.clone().map(|r| r.into_bytes()),
-                        note: h.note.clone(),
-                        highlight: None,
-                        audited: false,
-                        params: false,
-                        edited: false,
-                        extension: String::new(),
-                        title: String::new(),
-                        cookies: String::new(),
-                        listener_port: 0,
-                        ip: String::new(),
-                        diffs: 0,
-                    }).collect();
-                    for e in app.shared.history.lock().unwrap().iter_mut() {
-                        let (params, extension, title, cookies) = crate::net::derive_history_fields(e);
-                        e.params = params;
-                        e.extension = extension;
-                        e.title = title;
-                        e.cookies = cookies;
-                    }
-                    *app.shared.mr_request.lock().unwrap() = data.match_request.iter().filter(|r| r.kind == "request").map(net_rule).collect();
-                    *app.shared.mr_response.lock().unwrap() = data.match_response.iter().filter(|r| r.kind == "response").map(net_rule).collect();
-                    *app.shared.scope.lock().unwrap() = data.scope.iter().map(|s| net::ScopeRule {
-                        enabled: s.enabled,
-                        include: s.include,
-                        pattern: s.pattern.clone(),
-                        is_regex: s.is_regex,
-                    }).collect();
-                    *app.shared.session_rules.lock().unwrap() = data.session_rules.iter().map(|s| net::SessionRule {
-                        enabled: s.enabled,
-                        name: s.name.clone(),
-                        action: s.action.clone(),
-                        host_match: s.match_text.clone(),
-                        value: s.value.clone(),
-                    }).collect();
-                    *app.shared.macros.lock().unwrap() = data.macros.iter().map(|m| net::Macro {
-                        name: m.name.clone(),
-                        request: m.request.clone(),
-                    }).collect();
-                    *app.shared.repeaters.lock().unwrap() = data.repeaters.iter().map(|r| net::RepTab {
-                        name: r.name.clone(),
-                        host: r.host.clone(),
-                        port: r.port,
-                        https: r.https,
-                        request: r.request.clone(),
-                        response: r.response.as_ref().map(|v| v.as_bytes().to_vec()),
-                        result_line: r.result_line.clone(),
-                    history: Vec::new(),
-                    hist_pos: 0,
-                    }).collect();
-                    *app.shared.issues.lock().unwrap() = data.issues.iter().map(|i| crate::scan::ScanIssue {
-                        id: i.id,
-                        sev: i.severity.clone(),
-                        name: i.name.clone(),
-                        host: i.host.clone(),
-                        path: i.path.clone(),
-                        detail: i.detail.clone(),
-                        false_positive: i.false_positive,
-                        confidence: i.confidence.clone(),
-                        ts: 0,
-                    }).collect();
-                    *app.shared.ws_history.lock().unwrap() = data.websockets.iter().map(|w| net::WsEntry {
-                        id: w.id,
-                        ts: w.timestamp,
-                        host: w.host.clone(),
-                        direction: w.direction.clone(),
-                        opcode: w.opcode.clone(),
-                        payload: w.payload.clone(),
-                    }).collect();
-                    *app.shared.upstream.lock().unwrap() = data.upstream.clone();
-                    app.shared.proxy_port.store(data.listener_port, Ordering::SeqCst);
-                    app.shared.listener_restart.store(true, Ordering::SeqCst);
-                    // M-05: apply the persisted appearance.
-                    crate::theme::set_appearance(
-                        crate::theme::Palette::parse(&data.appearance.palette),
-                        crate::theme::Density::parse(&data.appearance.density),
-                        data.appearance.font_scale,
-                    );
-                    app.map_cache_len = usize::MAX;
-                    app.project_status = format!("restored {}", app.project_path);
-                    crate::feedback::toast(crate::feedback::Level::Success, format!("Project restored from {}", app.project_path));
-                }
-                Err(e) => app.project_status = format!("restore failed: {e}"),
-            }
+            restore_project(app, false);
         }
     });
     if !app.project_status.is_empty() {
@@ -1541,5 +2130,38 @@ mod tests {
         clear_stale_lock(&d);
         assert!(std::fs::symlink_metadata(&lock).is_ok(), "live lock kept");
         let _ = std::fs::remove_dir_all(&d);
+    }
+}
+
+#[cfg(test)]
+mod save_restore_tests {
+    use super::*;
+
+    /// Saving must not deadlock (two locks of one mutex in a single statement
+    /// hung every save) and must round-trip what it wrote.
+    #[test]
+    fn project_save_completes_and_restores() {
+        let dir = std::env::temp_dir().join(format!("wp-save-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("p.json").to_string_lossy().into_owned();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let p2 = path.clone();
+        std::thread::spawn(move || {
+            let mut app = crate::App::new(net::Shared::new());
+            app.project_path = p2;
+            app.shared.scan_config.lock().unwrap().disabled_checks.insert("xss".into());
+            app.shared.scan_config.lock().unwrap().disabled_insertion.insert("cookie".into());
+            app.collab_state.set_poll_secs(9);
+            save_project(&mut app, true);
+            let mut fresh = crate::App::new(net::Shared::new());
+            fresh.project_path = app.project_path.clone();
+            restore_project(&mut fresh, true);
+            let cfg = fresh.shared.scan_config.lock().unwrap().clone();
+            let _ = tx.send((cfg.disabled_checks.contains("xss"), cfg.disabled_insertion.contains("cookie"), fresh.collab_state.poll_secs(), fresh.project_status.clone()));
+        });
+        let (checks, points, poll, status) = rx.recv_timeout(std::time::Duration::from_secs(60)).expect("save/restore finished (no deadlock)");
+        assert!(checks && points, "scanner settings restored ({status})");
+        assert_eq!(poll, 9, "Collaborator poll interval restored");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
