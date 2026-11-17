@@ -2958,24 +2958,6 @@ fn handle_connect(shared: Arc<Shared>, mut stream: TcpStream, host: String, port
     let _ = tls.flush();
 }
 
-// ProjectDefaults.json proxy.intercept_client_requests.rules[0]: enabled AND
-// file_extension does_not_match this exact set. Startup interception is separately
-// disabled by UserDefaults.json misc.enable_proxy_interception_at_startup=never.
-const DEFAULT_INTERCEPT_EXCLUDED_EXTENSIONS: [&str; 11] = [
-    "gif", "jpg", "png", "css", "js", "ico", "svg", "eot", "woff", "woff2", "ttf",
-];
-
-fn default_intercept_allows_path(path: &str) -> bool {
-    let path_without_query = path.split(['?', '#']).next().unwrap_or(path);
-    let file_name = path_without_query.rsplit('/').next().unwrap_or(path_without_query);
-    let Some((_, extension)) = file_name.rsplit_once('.') else {
-        return true;
-    };
-    !DEFAULT_INTERCEPT_EXCLUDED_EXTENSIONS
-        .iter()
-        .any(|excluded| extension.eq_ignore_ascii_case(excluded))
-}
-
 /// What Forward sends for a held message: the original bytes when the text
 /// is unchanged from what was shown (a binary body survives exactly, its
 /// lossy text view would replace bytes with U+FFFD), else the edited text.
@@ -3547,14 +3529,6 @@ mod tests {
         assert_eq!(derive_history_fields(&e).1, "");
     }
 
-    #[test]
-    fn default_intercept_rule_skips_static_asset_extensions() {
-        assert!(!default_intercept_allows_path("/assets/site.CSS?version=2"));
-        assert!(!default_intercept_allows_path("http://example.com/app.js#main"));
-        assert!(default_intercept_allows_path("/assets/site.css.map"));
-        assert!(default_intercept_allows_path("/api/users?id=app.js"));
-        assert!(default_intercept_allows_path("/login"));
-    }
     fn read_request_head<R: Read>(s: &mut R) -> Vec<u8> {
         let req = read_request(s).unwrap();
         req

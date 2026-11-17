@@ -417,7 +417,11 @@ public class MontoyaBridge {
     // ---------- main loop ----------
 
     public static void main(String[] args) throws Exception {
-        PrintStream out = new PrintStream(System.out, true, StandardCharsets.UTF_8);
+        // Replies go to the real stdout only. Extensions printing with
+        // System.out would otherwise put lines into the reply stream, and
+        // WebProbe would apply one message's verdict to the next.
+        PrintStream out = new PrintStream(new java.io.FileOutputStream(java.io.FileDescriptor.out), true, StandardCharsets.UTF_8);
+        System.setOut(System.err);
         if (args.length < 1) {
             System.err.println("usage: java -cp burpsuite.jar MontoyaBridge.java <ext.jar>");
             System.exit(2);
@@ -453,6 +457,8 @@ public class MontoyaBridge {
 
             MsgState state = stateOf(msg);
             boolean drop = false;
+            final MsgState original = state;
+            try {
             // Each handler gets the message as the previous one left it.
             if (type.equals("request")) {
                 for (ProxyRequestHandler h : REQ_HANDLERS) {
@@ -470,6 +476,13 @@ public class MontoyaBridge {
                     MsgState next = act == null ? null : stateOfStub(act.response());
                     if (next != null) state = next;
                 }
+            }
+            } catch (Throwable t) {
+                // One failing handler must not end the bridge for every later
+                // message: report it and let this message through unchanged.
+                System.err.println("[bridge] handler failed on message " + original.id + ": " + t);
+                state = original;
+                drop = false;
             }
             StringBuilder reply = new StringBuilder("{\"id\":" + state.id + ",\"action\":\"" + (drop ? "drop" : "continue") + "\"");
             if (!drop && state.edited) {

@@ -121,19 +121,6 @@ pub fn progress(ui: &mut Ui, done: usize, total: usize, cancel: bool) -> bool {
     cancelled
 }
 
-/// Inline error with an optional retry button. Returns true when retry is pressed.
-pub fn inline_error(ui: &mut Ui, message: &str, retry: bool) -> bool {
-    let mut retried = false;
-    ui.horizontal_wrapped(|ui| {
-        ui.label(RichText::new("⚠").size(13.0).color(c(theme::BAD)));
-        ui.label(RichText::new(message.to_string()).size(12.0).color(c(theme::BAD)));
-        if retry && ui.small_button("Retry").clicked() {
-            retried = true;
-        }
-    });
-    retried
-}
-
 /// Empty state: a headline and a hint, centred-ish and muted.
 pub fn empty_state(ui: &mut Ui, title: &str, detail: &str) {
     ui.add_space(18.0);
@@ -142,14 +129,6 @@ pub fn empty_state(ui: &mut Ui, title: &str, detail: &str) {
         ui.label(RichText::new(detail.to_string()).size(12.0).color(theme::ink_hint()));
     });
     ui.add_space(18.0);
-}
-
-/// Loading state with an animated spinner and label.
-pub fn loading(ui: &mut Ui, label: &str) {
-    ui.horizontal(|ui| {
-        ui.spinner();
-        ui.label(RichText::new(label.to_string()).size(12.0).color(theme::ink_faint()));
-    });
 }
 
 #[cfg(test)]

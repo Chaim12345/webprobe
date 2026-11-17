@@ -42,8 +42,6 @@ pub(crate) struct Baseline {
     pub raw: Vec<u8>,
     /// The response body (after the header block), lossy UTF-8.
     pub body: String,
-    /// Round-trip time of the baseline request.
-    pub ms: u128,
 }
 
 /// Count one finished scan request. The planned total is an estimate (it
@@ -93,7 +91,6 @@ impl ScanCtx {
         // The baseline request runs here, not on the caller's (UI) thread: a
         // slow or dead target used to freeze the window for the full read
         // timeout before the scan even started.
-        let t0 = std::time::Instant::now();
         let base_up = if entry.https {
             net::send_tls_raw(&shared, &host, port, req.as_bytes())
         } else {
@@ -108,9 +105,8 @@ impl ScanCtx {
                 String::from_utf8_lossy(&r[p.head_len.min(r.len())..]).into_owned()
             })
             .unwrap_or_default();
-        let ms = t0.elapsed().as_millis();
         bump_progress(&shared);
-        let baseline = Baseline { resp: base_up.resp, raw, body, ms };
+        let baseline = Baseline { resp: base_up.resp, raw, body };
         let retrieval_reqs = stored_retrieval_requests(&shared, &entry, &req, &baseline.raw);
         let host_hdr = util::get_header(&parts.headers, "Host").unwrap_or_default();
         ScanCtx { shared, entry, req, parts, host, port, host_hdr, settings, baseline, oob, smtp, retrieval_reqs }
@@ -1050,8 +1046,10 @@ impl PointCheck for SqlErrorInjection {
             // burp.Zh6 issue text: flag 32 (database error) / 64 (general error).
             let general = hit.database == "General";
             let text = format!(
-                "The <b>{name}</b> parameter appears to be vulnerable to SQL injection attacks. A single quote was submitted in the {name} parameter, and a {} error message was returned. Two single quotes were then submitted and the error message disappeared. You should review the contents of the error message, and the application's handling of other input, to confirm whether a vulnerability is present.",
-                if general { "general" } else { "database" }
+                "The <b>{name}</b> parameter appears to be vulnerable to SQL injection attacks. A single quote was submitted in the {name} parameter, and a {} error message was returned.{} You should review the contents of the error message, and the application's handling of other input, to confirm whether a vulnerability is present.",
+                if general { "general" } else { "database" },
+                // Only a confirmed hit saw the balanced probe come back clean.
+                if hit.confirmed { " Two single quotes were then submitted and the error message disappeared." } else { "" }
             );
             let mut i = mk("high", "SQL injection", &cx.entry, text);
             i.confidence = if general { "Tentative".into() } else if hit.confirmed { "Certain".into() } else { "Firm".into() };

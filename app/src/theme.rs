@@ -155,10 +155,6 @@ pub fn zebra() -> Color32 {
 pub fn selection_bg() -> Color32 {
     Tokens::current().selection_bg
 }
-/// Faint tint behind the logo mark.
-pub fn subtle_bg() -> Color32 {
-    Tokens::current().subtle_bg
-}
 /// Primary text: headings and strong labels.
 pub fn ink() -> Color32 {
     Tokens::current().ink
@@ -175,23 +171,6 @@ pub fn ink_faint() -> Color32 {
 pub fn ink_hint() -> Color32 {
     Tokens::current().ink_hint
 }
-/// Request/status lines and other accent-blue text.
-pub fn header_ink() -> Color32 {
-    Tokens::current().header_ink
-}
-/// Text inside a message editor.
-pub fn editor_ink() -> Color32 {
-    Tokens::current().editor_ink
-}
-/// Query-parameter name in the Params view.
-pub fn url_key() -> Color32 {
-    Tokens::current().url_key
-}
-/// Query-parameter value in the Params view.
-pub fn url_value() -> Color32 {
-    Tokens::current().url_value
-}
-
 fn is_light() -> bool {
     appearance().0 == Palette::Light
 }
@@ -343,16 +322,8 @@ pub fn install_fonts(ctx: &egui::Context) {
 pub const SPACE_XS: f32 = 4.0;
 pub const SPACE_S: f32 = 8.0;
 pub const SPACE_M: f32 = 12.0;
-pub const SPACE_L: f32 = 16.0;
-pub const SPACE_XL: f32 = 24.0;
-
-/// Corner radii.
-pub const RADIUS_S: f32 = 2.0;
-pub const RADIUS_M: f32 = 4.0;
-
 /// Typography scale.
 pub const FONT_H1: f32 = 18.0;
-pub const FONT_H2: f32 = 15.0;
 pub const FONT_BODY: f32 = 13.0;
 pub const FONT_SMALL: f32 = 11.0;
 /// `display.http_message_display.font_size` (UserDefaults.json) = 13.
@@ -388,13 +359,6 @@ impl Density {
         match self {
             Density::Compact => 20.0,
             Density::Comfortable => 26.0,
-        }
-    }
-    /// Spacing between items.
-    pub fn item_spacing(self) -> f32 {
-        match self {
-            Density::Compact => SPACE_XS,
-            Density::Comfortable => SPACE_S,
         }
     }
 }

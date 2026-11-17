@@ -158,7 +158,7 @@ impl ProxyHooks for ExampleHeaderExtension {
 // ---------- Path B: sidecar JVM for real Montoya .jar extensions ----------
 
 use std::io::{BufRead, BufReader, Write};
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use crate::sync::Mutex;
@@ -172,11 +172,19 @@ use crate::sync::Mutex;
 /// continue/drop verdicts; the *Received halves run, the *ToBeSent halves
 /// do not (WebProbe's hooks have no ToBeSent stage either). If the sidecar
 /// dies, hooks degrade to pass-through instead of breaking the proxy.
+/// How long a Montoya handler may take on one message before the bridge is
+/// stopped (its hooks then pass everything through).
+const HOOK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
 pub struct JavaSidecar {
     name: String,
     child: Mutex<Option<Child>>,
-    stdin: Mutex<Option<ChildStdin>>,
-    stdout: Mutex<Option<BufReader<ChildStdout>>>,
+    /// Lines to the bridge, written by a writer thread: a bridge that stops
+    /// reading must not block a proxy thread on a full pipe.
+    to_bridge: Mutex<Option<std::sync::mpsc::Sender<String>>>,
+    /// Lines from the bridge, read by a reader thread, so a reply can be
+    /// waited for with a deadline.
+    from_bridge: Mutex<std::sync::mpsc::Receiver<String>>,
     io_lock: Mutex<()>,
     next_id: AtomicU64,
     dead: AtomicBool,
@@ -317,8 +325,24 @@ impl JavaSidecar {
                 }
             });
         }
-        let stdin = child.stdin.take().ok_or("sidecar stdin unavailable")?;
+        let mut stdin = child.stdin.take().ok_or("sidecar stdin unavailable")?;
         let stdout = BufReader::new(child.stdout.take().ok_or("sidecar stdout unavailable")?);
+        let (to_bridge, writer_rx) = std::sync::mpsc::channel::<String>();
+        std::thread::spawn(move || {
+            for line in writer_rx {
+                if writeln!(stdin, "{line}").and_then(|_| stdin.flush()).is_err() {
+                    break;
+                }
+            }
+        });
+        let (reader_tx, from_bridge) = std::sync::mpsc::channel::<String>();
+        std::thread::spawn(move || {
+            for line in stdout.lines().map_while(Result::ok) {
+                if reader_tx.send(line).is_err() {
+                    break;
+                }
+            }
+        });
         let file_label = std::path::Path::new(ext_jar)
             .file_name()
             .map(|s| s.to_string_lossy().into_owned())
@@ -326,13 +350,15 @@ impl JavaSidecar {
         let sidecar = JavaSidecar {
             name: format!("Montoya bridge ({file_label})"),
             child: Mutex::new(Some(child)),
-            stdin: Mutex::new(Some(stdin)),
-            stdout: Mutex::new(Some(stdout)),
+            to_bridge: Mutex::new(Some(to_bridge)),
+            from_bridge: Mutex::new(from_bridge),
             io_lock: Mutex::new(()),
             next_id: AtomicU64::new(1),
             dead: AtomicBool::new(false),
             errors,
         };
+        // Loading the jar and running initialize() may take a while; it must
+        // not take forever (load_all waits for every extension in turn).
         if let Err(e) = sidecar.ping() {
             // The JVM's own words are the useful part of a load failure.
             std::thread::sleep(std::time::Duration::from_millis(200));
@@ -343,7 +369,7 @@ impl JavaSidecar {
     }
 
     fn ping(&self) -> Result<(), String> {
-        let reply = self.exchange(r#"{"type":"ping"}"#)?;
+        let reply = self.exchange(r#"{"type":"ping"}"#, None, std::time::Duration::from_secs(60))?;
         match reply.get("type").and_then(|v| v.as_str()) {
             Some("pong") => Ok(()),
             other => Err(format!("unexpected ping reply: {other:?}")),
@@ -351,45 +377,54 @@ impl JavaSidecar {
     }
 
     /// One JSON-lines round trip; any failure marks the sidecar dead so the
-    /// hooks degrade to pass-through without blocking the pipeline.
-    fn exchange(&self, line: &str) -> Result<serde_json::Value, String> {
+    /// hooks degrade to pass-through without blocking the pipeline. The reply
+    /// must carry `id` (pings have none and answer `{"type":"pong"}`); other
+    /// lines are logged and skipped. No reply within `wait` stops the bridge.
+    fn exchange(&self, line: &str, id: Option<u64>, wait: std::time::Duration) -> Result<serde_json::Value, String> {
         let _guard = self.io_lock.lock().unwrap();
         if self.dead.load(Ordering::Relaxed) {
             return Err("sidecar is dead".into());
         }
-        let mark_dead = |sc: &Self| {
+        let mark_dead = |sc: &Self, why: &str| {
             sc.dead.store(true, Ordering::Relaxed);
-            push_line(&sc.errors, "sidecar stopped; its hooks now let everything through".into());
+            push_line(&sc.errors, format!("sidecar stopped ({why}); its hooks now let everything through"));
+            sc.kill();
         };
-        {
-            let mut stdin = self.stdin.lock().unwrap();
-            let w = stdin.as_mut().ok_or("sidecar stdin closed")?;
-            if let Err(e) = writeln!(w, "{line}").and_then(|_| w.flush()) {
-                mark_dead(self);
-                return Err(format!("sidecar write failed: {e}"));
+        let sent = self.to_bridge.lock().unwrap().as_ref().is_some_and(|tx| tx.send(line.to_string()).is_ok());
+        if !sent {
+            mark_dead(self, "stdin closed");
+            return Err("sidecar stdin closed".into());
+        }
+        let deadline = std::time::Instant::now() + wait;
+        let rx = self.from_bridge.lock().unwrap();
+        loop {
+            let left = deadline.saturating_duration_since(std::time::Instant::now());
+            match rx.recv_timeout(left) {
+                Ok(buf) => {
+                    let Ok(reply) = serde_json::from_str::<serde_json::Value>(&buf) else {
+                        push_line(&self.errors, format!("stdout: {buf}"));
+                        continue;
+                    };
+                    let matches = match id {
+                        Some(id) => reply.get("id").and_then(|v| v.as_u64()) == Some(id),
+                        None => reply.get("type").is_some(),
+                    };
+                    if matches {
+                        return Ok(reply);
+                    }
+                    // A late reply to a message that already timed out.
+                    push_line(&self.errors, format!("skipped unmatched reply: {buf}"));
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    mark_dead(self, &format!("no reply within {} s", wait.as_secs()));
+                    return Err("sidecar did not answer in time".into());
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                    mark_dead(self, "stdout closed");
+                    return Err("sidecar closed stdout (extension load failure?)".into());
+                }
             }
         }
-        let mut stdout = self.stdout.lock().unwrap();
-        let reader = match stdout.as_mut() {
-            Some(r) => r,
-            None => {
-                mark_dead(self);
-                return Err("sidecar stdout closed".into());
-            }
-        };
-        let mut buf = String::new();
-        let n = match reader.read_line(&mut buf) {
-            Ok(n) => n,
-            Err(e) => {
-                mark_dead(self);
-                return Err(format!("sidecar read failed: {e}"));
-            }
-        };
-        if n == 0 {
-            mark_dead(self);
-            return Err("sidecar closed stdout (extension load failure?)".into());
-        }
-        serde_json::from_str(&buf).map_err(|e| format!("bad sidecar reply: {e}: {buf}"))
     }
 
     fn kill(&self) {
@@ -448,7 +483,7 @@ impl ProxyHooks for JavaSidecar {
             "secure": false,
             "httpVersion": "HTTP/1.1",
         });
-        match self.exchange(&msg.to_string()) {
+        match self.exchange(&msg.to_string(), Some(id), HOOK_TIMEOUT) {
             Ok(reply) if reply.get("action").and_then(|a| a.as_str()) == Some("drop") => {
                 ProxyAction::Drop
             }
@@ -488,7 +523,7 @@ impl ProxyHooks for JavaSidecar {
             "status": status,
             "reason": reason,
         });
-        match self.exchange(&msg.to_string()) {
+        match self.exchange(&msg.to_string(), Some(id), HOOK_TIMEOUT) {
             Ok(reply) if reply.get("action").and_then(|a| a.as_str()) == Some("drop") => {
                 ProxyAction::Drop
             }

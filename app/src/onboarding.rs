@@ -27,7 +27,7 @@ use crate::theme::{self, c};
 use crate::App;
 
 #[cfg(test)]
-use crate::setup_page::{local_response, setup_page};
+use webprobe_core::setup_page::{local_response, setup_page};
 
 /// A checklist line, derived from live state rather than from a stored flag, so
 /// it cannot claim a step is done when it is not.

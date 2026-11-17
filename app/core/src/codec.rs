@@ -254,7 +254,7 @@ pub fn normalize_response(raw: &[u8]) -> Vec<u8> {
 /// final. Returns the response and whether the connection may be reused:
 /// not after an EOF-delimited or malformed body, a truncated read or a
 /// size cap.
-pub fn read_message<R: std::io::Read + crate::net::ResponseRead>(
+pub(crate) fn read_message<R: std::io::Read + crate::net::ResponseRead>(
     stream: &mut R,
     buffer: &mut Vec<u8>,
     method: &str,

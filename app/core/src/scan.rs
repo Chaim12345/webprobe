@@ -360,7 +360,6 @@ pub fn add_issues(shared: &Shared, mut issues: Vec<ScanIssue>) {
         return;
     }
     let mut iss = shared.issues.lock().unwrap();
-    let incoming = issues.len();
     for issue in issues.iter_mut() {
         issue.id = shared.next_id.fetch_add(1, Ordering::SeqCst);
         // Issues renamed after construction (the Collaborator matcher)
@@ -2491,7 +2490,6 @@ pub(crate) fn sql_error_in(body: &str, baseline: &str) -> Option<(usize, &'stati
 
 pub(crate) struct SqlErrorHit {
     pub database: &'static str,
-    pub signature: &'static str,
     pub payload: String,
     pub confirmed: bool,
 }
@@ -2524,11 +2522,10 @@ pub(crate) fn run_sql_error_check<F: FnMut(&str) -> Option<String>>(
                     .or_else(|| generic_error_in(st, body, base_status, base_body).map(|w| (usize::MAX, w)))
             })
         };
-        let Some((db, sig)) = probe(s[0]) else { continue };
+        let Some((db, _)) = probe(s[0]) else { continue };
         let second_clean = probe(s[1]).is_none();
         let hit = |confirmed| SqlErrorHit {
             database: if db == usize::MAX { "General" } else { SQL_ERRORS[db].0 },
-            signature: sig,
             payload: format!("{value}{}", s[0]),
             confirmed,
         };
@@ -3033,35 +3030,6 @@ pub(crate) fn with_path_segment(path: &str, idx: usize, value: &str) -> String {
     match q {
         Some(q) => format!("{joined}?{q}"),
         None => joined,
-    }
-}
-
-/// The last path segment (Burp's "URL path filename" insertion point), when
-/// there is one.
-pub(crate) fn path_filename(path: &str) -> Option<String> {
-    let p = path.split('?').next().unwrap_or("");
-    let p = match p.split_once("://") {
-        Some((_, rest)) => rest.find('/').map(|i| &rest[i..]).unwrap_or("/"),
-        None => p,
-    };
-    let last = p.rsplit('/').next().unwrap_or("");
-    (!last.is_empty()).then(|| last.to_string())
-}
-
-/// `path` with its last segment replaced by `name` (query string kept).
-pub(crate) fn with_path_filename(path: &str, name: &str) -> String {
-    let (p, q) = match path.split_once('?') {
-        Some((p, q)) => (p, Some(q)),
-        None => (path, None),
-    };
-    let base = match p.rfind('/') {
-        Some(i) => &p[..=i],
-        None => "/",
-    };
-    let enc = encode_query_payload(name);
-    match q {
-        Some(q) => format!("{base}{enc}?{q}"),
-        None => format!("{base}{enc}"),
     }
 }
 
@@ -5647,14 +5615,6 @@ mod tests {
         assert_eq!(g, "GET /view HTTP/1.1\r\nHost: h\r\nCookie: s=1\r\n\r\n");
     }
 
-    #[test]
-    fn url_path_filename_insertion_point() {
-        assert_eq!(path_filename("/ftp/quarantine/a.url").as_deref(), Some("a.url"));
-        assert_eq!(path_filename("/ftp/").as_deref(), None);
-        assert_eq!(path_filename("http://h:1/x/y?q=1").as_deref(), Some("y"));
-        assert_eq!(with_path_filename("/ftp/a.url", "a.urlzz"), "/ftp/a.urlzz");
-        assert_eq!(with_path_filename("/x/y?q=1", "zz"), "/x/zz?q=1");
-    }
 
     #[test]
     fn email_finder_follows_burp_zflt() {

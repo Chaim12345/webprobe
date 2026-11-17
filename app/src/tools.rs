@@ -22,11 +22,6 @@ fn hint(ui: &mut Ui, text: &str) {
     );
 }
 
-fn selected_history(app: &App) -> Option<net::HistEntry> {
-    let id = app.history_sel?;
-    app.shared.history.lock().unwrap().iter().find(|e| e.id == id).cloned()
-}
-
 // ================= Target scope =================
 
 pub fn scope_editor(app: &mut App, ui: &mut Ui) {
@@ -806,65 +801,6 @@ pub fn sessions(app: &mut App, ui: &mut Ui) {
 }
 
 // ================= WebSocket history =================
-
-pub fn websocket_history(app: &mut App, ui: &mut Ui) {
-    ui.label(RichText::new("WebSocket history").color(theme::ink()).size(14.0).strong());
-    ui.add_space(4.0);
-    hint(ui, "Plain-HTTP upgrades are relayed and every frame is captured. TLS handshakes are recorded; encrypted frame relay is not supported yet.");
-    ui.add_space(2.0);
-    let entries = app.shared.ws_history.lock().unwrap().clone();
-    let mut selected = app.ws_sel;
-    egui::ScrollArea::vertical().id_salt("ws_scroll").show(ui, |ui| {
-        egui::Grid::new("ws_grid").striped(true).num_columns(7).show(ui, |ui| {
-            for e in entries.iter().rev() {
-                let is_sel = selected == Some(e.id);
-                let row = ui
-                    .horizontal(|ui| {
-                        ui.monospace(RichText::new(e.id.to_string()).size(12.0).color(theme::ink_faint()));
-                        ui.monospace(RichText::new(crate::ui::time_of_day(e.ts)).size(12.0).color(theme::ink_faint()));
-                        ui.monospace(RichText::new(e.host.clone()).size(12.0).color(theme::ink_dim()));
-                        ui.monospace(RichText::new(e.direction.clone()).size(12.0).color(theme::ink_faint()));
-                        ui.monospace(RichText::new(e.opcode.clone()).size(12.0).color(c(theme::ORANGE)));
-                        ui.monospace(RichText::new(e.payload.len().to_string()).size(12.0).color(theme::ink_faint()));
-                        ui.monospace(RichText::new(e.payload.clone()).size(12.0).color(theme::ink_dim()));
-                    })
-                    .response
-                    .interact(egui::Sense::click());
-                if row.clicked() {
-                    selected = if is_sel { None } else { Some(e.id) };
-                }
-                ui.end_row();
-            }
-        });
-        if entries.is_empty() {
-            ui.label(RichText::new("no WebSocket traffic yet").size(12.0).color(theme::ink_faint()));
-        }
-    });
-    app.ws_sel = selected;
-
-    // Frame inspector: the selected frame's payload, editable for replay prep.
-    if let Some(id) = app.ws_sel {
-        if let Some(e) = entries.iter().find(|e| e.id == id) {
-            ui.add_space(6.0);
-            ui.label(
-                RichText::new(format!("#{} {} {} {} ({} B)", e.id, e.direction, e.host, e.opcode, e.payload.len()))
-                    .monospace()
-                    .size(12.0)
-                    .color(theme::header_ink()),
-            );
-            let mut text = e.payload.clone();
-            egui::ScrollArea::vertical().id_salt("ws_payload_scroll").max_height(160.0).show(ui, |ui| {
-                ui.add(
-                    egui::TextEdit::multiline(&mut text)
-                        .font(egui::TextStyle::Monospace)
-                        .code_editor()
-                        .desired_rows(6)
-                        .desired_width(ui.available_width()),
-                );
-            });
-        }
-    }
-}
 
 // ================= Cross-tool search =================
 

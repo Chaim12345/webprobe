@@ -266,12 +266,6 @@ pub fn message_lines(bytes: &[u8], pretty: bool) -> Vec<(LineKind, String)> {
     out
 }
 
-/// Byte ranges of case-insensitive matches of `needle` in `hay` (ASCII folding,
-/// so ranges stay on char boundaries).
-pub fn match_ranges(hay: &str, needle: &str) -> Vec<(usize, usize)> {
-    match_ranges_cs(hay, needle, false)
-}
-
 /// `match_ranges` with an explicit case-sensitivity switch.
 pub fn match_ranges_cs(hay: &str, needle: &str, case_sensitive: bool) -> Vec<(usize, usize)> {
     if needle.is_empty() {
@@ -926,12 +920,6 @@ pub struct InspectorState {
 
 use webprobe_core::inspector::{self as insp, Section};
 
-/// The Inspector sections Burp lists for a request/response pair, with counts.
-/// Sections with nothing to show are omitted, as in Burp.
-pub fn inspector_sections(req: &[u8], resp: Option<&[u8]>) -> Vec<(&'static str, Vec<(String, String)>)> {
-    insp::sections(req, resp).into_iter().map(|(s, rows)| (s.label(), rows)).collect()
-}
-
 /// Burp's Inspector panel, read-only (history, site map).
 pub fn inspector(ui: &mut Ui, id: &str, req: Option<&[u8]>, resp: Option<&[u8]>, st: &mut InspectorState) {
     let _ = inspector_ex(ui, id, req, resp, st, false);
@@ -1120,11 +1108,6 @@ mod tests {
         assert_eq!(raw.last().unwrap().1, "{\"a\":1}");
     }
 
-    #[test]
-    fn search_ranges_are_case_insensitive() {
-        assert_eq!(match_ranges("Host: HOST host", "host"), vec![(0, 4), (6, 10), (11, 15)]);
-        assert!(match_ranges("abc", "").is_empty());
-    }
 
     #[test]
     fn hex_cells_set_and_append_bytes() {
@@ -1138,23 +1121,6 @@ mod tests {
         assert_eq!(t, "PET /A");
     }
 
-    #[test]
-    fn inspector_counts_match_the_message() {
-        let req = b"GET /a?x=1&y=2 HTTP/1.1\r\nHost: h\r\nCookie: s=1; t=2\r\n\r\n";
-        let resp = b"HTTP/1.1 200 OK\r\nA: 1\r\nB: 2\r\nC: 3\r\n\r\nbody";
-        let s = inspector_sections(req, Some(resp));
-        let names: Vec<_> = s.iter().map(|x| (x.0, x.1.len())).collect();
-        assert_eq!(
-            names,
-            vec![
-                ("Request attributes", 2),
-                ("Request query parameters", 2),
-                ("Request cookies", 2),
-                ("Request headers", 2),
-                ("Response headers", 3),
-            ]
-        );
-    }
 
     /// UAT-06, headless: click into the Repeater-style editor, then Ctrl+V
     /// (egui-winit delivers the clipboard as one Paste event with CRLF

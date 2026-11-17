@@ -2256,7 +2256,7 @@ fn decoder(app: &mut App, ui: &mut Ui) {
         for k in 0..stages {
             ui.horizontal_top(|ui| {
                 let w = (ui.available_width() - 230.0).max(200.0);
-                let hex = if k == 0 { app.dec_editor.hex } else { app.dec_chain[k - 1].1 };
+                let hex = if k == 0 { app.dec_hex } else { app.dec_chain[k - 1].1 };
                 egui::Frame::NONE.stroke(egui::Stroke::new(1.0, theme::line())).fill(theme::surface()).show(ui, |ui| {
                     ui.set_width(w);
                     let text: &mut String = if k == 0 { &mut app.dec_input } else { &mut app.dec_chain[k - 1].0 };
@@ -2274,7 +2274,7 @@ fn decoder(app: &mut App, ui: &mut Ui) {
                         let mut h = hex;
                         if ui.radio(!h, "Text").clicked() { h = false; }
                         if ui.radio(h, "Hex").clicked() { h = true; }
-                        if k == 0 { app.dec_editor.hex = h; } else { app.dec_chain[k - 1].1 = h; }
+                        if k == 0 { app.dec_hex = h; } else { app.dec_chain[k - 1].1 = h; }
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             let _ = ui.add(egui::Button::new(RichText::new(theme::icon::QUESTION).size(15.0)).frame(false)).on_hover_text("Transform the data with the menus below; each result opens a new panel underneath.");
                         });
@@ -2329,17 +2329,6 @@ fn op_label(op: crate::decoder_ops::Op) -> &'static str {
         Sha512 => "SHA-512",
         SmartDecode => "Smart decode",
     }
-}
-
-fn dec_add(app: &mut App, label: &str, value: String) {
-    app.dec_results.insert(0, (label.to_string(), value));
-    if app.dec_results.len() > 20 {
-        app.dec_results.truncate(20);
-    }
-}
-
-fn dec_result(app: &mut App, label: &str, r: Result<String, String>) {
-    dec_add(app, label, r.unwrap_or_else(|e| format!("<error: {e}>")));
 }
 
 // ================= hotkeys =================
@@ -4100,8 +4089,8 @@ fn comparer(app: &mut App, ui: &mut Ui) {
                             ui.label(job);
                         });
                         // With Sync views, whichever side moved leads both.
-                        if sync && shown_area.state.offset() != scroll {
-                            scroll = shown_area.state.offset();
+                        if sync && shown_area.state.unclamped_offset() != scroll {
+                            scroll = shown_area.state.unclamped_offset();
                         }
                     }
                 });
@@ -4181,10 +4170,10 @@ fn burp_ai(app: &mut App, ui: &mut Ui) {
         let r = ui.add(egui::TextEdit::multiline(&mut app.ai.input).desired_rows(3).desired_width(w).hint_text("Ask WebProbe AI"));
         let enter = r.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter) && i.modifiers.ctrl);
         let can = app.ai.configured() && !busy;
-        if (ui.add_enabled(can, egui::Button::new(RichText::new("Send").strong().color(egui::Color32::WHITE)).fill(c(theme::ORANGE_1)).min_size(egui::vec2(70.0, 26.0)))
+        if ui.add_enabled(can, egui::Button::new(RichText::new("Send").strong().color(egui::Color32::WHITE)).fill(c(theme::ORANGE_1)).min_size(egui::vec2(70.0, 26.0)))
             .on_disabled_hover_text("Set the model endpoint first")
             .clicked()
-            || (enter && can))
+            || (enter && can)
         {
             let text = std::mem::take(&mut app.ai.input);
             app.ai.send(app.shared.clone(), text);

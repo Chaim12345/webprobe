@@ -13,7 +13,6 @@ use webprobe_core::crawl;
 mod collaborator_ui;
 use webprobe_core::decoder_ops;
 mod discovery;
-mod editor;
 mod engagement;
 use webprobe_core::ext_host;
 mod feedback;
@@ -48,7 +47,6 @@ use webprobe_core::scan;
 use webprobe_core::scan_config;
 use webprobe_core::seq_bits;
 mod settings_dialog;
-use webprobe_core::setup_page;
 mod shortcuts;
 mod site_map;
 mod sitemap_compare_ui;
@@ -149,13 +147,8 @@ pub struct App {
     pub settings_help: ui::SettingsPane,
     /// First-run setup panel dismissed for this session (M-07).
     pub onboarding_hidden: bool,
-    /// Shared editor state for each message editor/view (M-03).
-    pub detail_editor: editor::EditorState,
-    pub intercept_editor: editor::EditorState,
-    pub intr_editor: editor::EditorState,
-    pub rep_editor: editor::EditorState,
-    pub seq_editor: editor::EditorState,
-    pub dec_editor: editor::EditorState,
+    /// Decoder: the input pane shows hex.
+    pub dec_hex: bool,
     pub intercept_edit: String,
     pub detail_sub: usize,
     /// Burp message panes and Inspector under the Proxy history.
@@ -267,7 +260,7 @@ pub struct App {
     pub site_cache: Arc<(Vec<net::HistEntry>, Vec<(String, String)>)>,
     pub site_cache_key: String,
     /// The site map tree built from `site_cache`, and the key it was built for.
-    pub site_tree: Arc<std::collections::BTreeMap<String, ui::MapNode>>,
+    pub(crate) site_tree: Arc<std::collections::BTreeMap<String, ui::MapNode>>,
     pub site_tree_key: String,
     /// Indices into `site_cache` for the selected site map node.
     pub site_rows: Arc<Vec<usize>>,
@@ -791,12 +784,7 @@ impl App {
             settings_open: false,
             settings_help: ui::SettingsPane::Appearance,
             onboarding_hidden: false,
-            detail_editor: editor::EditorState::default(),
-            intercept_editor: editor::EditorState::default(),
-            intr_editor: editor::EditorState::default(),
-            rep_editor: editor::EditorState::default(),
-            seq_editor: editor::EditorState::default(),
-            dec_editor: editor::EditorState::default(),
+            dec_hex: false,
             intercept_edit: String::new(),
             detail_sub: 0,
             req_pane: msgpane::PaneState::default(),
