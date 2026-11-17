@@ -811,3 +811,4 @@ Suite: core 390 (380 pass, 10 ignored), desktop 134, 0 fail.
 - **Project files** record the intercepting CA's SHA-256 fingerprint; opening a project under a different CA logs and toasts it (J-01). GUI-verified D-07: HTML report written from the wizard.
 - **Repeater:** new "Change body encoding" (urlencoded <-> multipart), GUI-verified (E-06).
 - **Montoya sidecar (K-02).** Extensions can edit messages with Montoya's `with*` methods; edits chain across handlers and are applied to the proxied message (binary bodies preserved). The demo extension adds X-Montoya-Demo / X-Montoya-Seen. Verified with a real JVM test.
+- GUI-verified C-02 (Add § from a selection, two positions), P-07 (Decoder stage chain), P-09 (paused banner and Resume, Dashboard tabs).

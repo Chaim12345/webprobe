@@ -213,8 +213,9 @@
       "title": "Payload positions",
       "acceptance": "Auto-mark, clear, add-from-selection, marker highlighting, multiple positions per request",
       "effort": "M",
-      "status": "in_progress",
-      "evidence": "intruder.rs add_marker/clear_markers/auto_mark (query, cookie, form, JSON) with 2 tests; UI has Auto § and Clear §; marker highlighting not drawn. REMAINING: Add § from a selection (needs an editable editor), marker highlight in the editor."
+      "status": "done",
+      "evidence": "intruder.rs add_marker/clear_markers/auto_mark (tests); editor highlights § pairs (msgpane marker_line_job). GUI-verified 2026-11-17 over MCP: Auto § marked the file parameter; selecting \"curl/8.22.0\" (set_text_selection) and Add § made a second position; both highlighted, \"1 payload position\" counter updates.",
+      "completed": "2026-11-17"
     },
     {
       "id": "C-03",
@@ -899,12 +900,13 @@
       "title": "HTTP history columns and views",
       "acceptance": "Add Params, Edited, Extension and Title columns; Pretty and Renderer views in the message pane; column chooser exposes all of them",
       "effort": "M",
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [
         "B-01",
         "B-03"
       ],
-      "evidence": "HistEntry gained params, edited, extension, title, cookies, listener_port; computed once at insert by net::derive_history_fields (query/body/cookie, URL extension, HTML <title>, Set-Cookie join, listener port); record() takes listener_port; project restore recomputes them. History table now 14 columns (# Method Host URL Status Length MIME Extension Title TLS Cookies Port Params Edited) with matching sort keys; live shot p05-history2.png (40 of 40, Params yes on seeded even ids). REMAINING: Pretty and Renderer views in the message pane (moved to B-03). 118 tests pass."
+      "evidence": "History columns Params, Edited, Extension, Title, TLS, Cookies, Port, IP with sort keys and the column chooser; message pane Pretty / Raw / Hex / Render (response) views (msgpane). GUI-verified across the 2026-11-17 sessions (history rows, Render tab in Repeater/History panes).",
+      "completed": "2026-11-17"
     },
     {
       "id": "P-06",
@@ -924,12 +926,13 @@
       "title": "Decoder layout and operations",
       "acceptance": "Text/Hex input toggle; 'Decode as', 'Encode as' and 'Hash' dropdowns; Smart decode; chained output panes",
       "effort": "M",
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [
         "F-01",
         "F-02"
       ],
-      "evidence": "Decoder screen rebuilt on decoder_ops (P-07): Input label with Text/Hex toggle, 'Decode as'/'Encode as'/'Hash' dropdowns, Smart decode, bordered Output pane with Copy and 'Use output as input', results history. Engine F-01/F-02 done (127 tests). REMAINING: chained multi-stage pipeline UI with editable stages."
+      "evidence": "Decoder: stack of stages, each with Text/Hex, Decode as / Encode as / Hash and Smart decode; applying an operation adds or replaces the stages below. GUI-verified 2026-11-17: admin:secret -> Encode as Base64 created stage 2 \"YWRtaW46c2VjcmV0\" with its own controls.",
+      "completed": "2026-11-17"
     },
     {
       "id": "P-08",
@@ -951,12 +954,13 @@
       "title": "Dashboard task model",
       "acceptance": "Task cards (live audit, live crawl, scans) with pause/resume, issue counters and Summary / Audit items / Issues / Event log / Logger / Audit log tabs; 'Task execution is paused' banner",
       "effort": "L",
-      "status": "in_progress",
+      "status": "done",
       "depends_on": [
         "D-05",
         "D-06"
       ],
-      "evidence": "Dashboard rebuilt (P-09): two-column layout with a Tasks panel (live audit running/paused, passive scan progress, pause/resume), an Issues-by-severity breakdown (high/medium/low/info), and an issue table with severity, name and host+path columns; stat cards and recent activity retained. Live shot tour/01-dashboard.png. REMAINING: task cards with per-task issue counters and rename, Summary/Audit items/Event log/Logger/Audit log tabs, banner when paused."
+      "evidence": "Dashboard: task cards (live passive crawl, live audit, queued scans) with pause/resume, menus, issue counters; Summary / Audit items / Issues / Event log / Logger / Audit log tabs; global pause shows the \"Task execution is paused\" banner with Resume. GUI-verified 2026-11-17 (banner, tabs, counters, card pause/cancel/delete).",
+      "completed": "2026-11-17"
     },
     {
       "id": "P-10",
