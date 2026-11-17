@@ -569,8 +569,8 @@ fn add_new_to_site_map(app: &mut crate::App) {
             path: f.path.clone(),
             status: f.status.to_string(),
             resp_len: f.response.len(),
-            req_raw: f.request.clone(),
-            resp_raw: Some(f.response.clone()),
+            req_raw: f.request.clone().into(),
+            resp_raw: Some(f.response.clone().into()),
             ..Default::default()
         };
         let (params, extension, title, cookies) = crate::net::derive_history_fields(&e);
@@ -581,7 +581,7 @@ fn add_new_to_site_map(app: &mut crate::App) {
         items.push(e);
     }
     app.eng.discovery.added = found.len();
-    app.shared.crawl_items.lock().unwrap().extend(items);
+    app.shared.add_crawl_items(items);
     app.map_cache_len = usize::MAX;
 }
 

@@ -644,7 +644,7 @@ fn bulk_history_command(app: &mut App, entries: &[net::HistEntry], cmd: &str) {
             let _ = std::fs::create_dir_all(&dir);
             let mut saved = 0;
             for e in entries {
-                let mut bytes = e.req_raw.clone();
+                let mut bytes = e.req_raw.to_vec();
                 bytes.extend_from_slice(b"\r\n\r\n");
                 if let Some(r) = &e.resp_raw {
                     bytes.extend_from_slice(r);
@@ -1030,7 +1030,7 @@ fn proxy_history(app: &mut App, ui: &mut Ui) {
                 let dir = std::env::current_dir().map(|d| d.join("saved-items")).unwrap_or_else(|_| "saved-items".into());
                 let _ = std::fs::create_dir_all(&dir);
                 let path = dir.join(format!("item-{}.http", e.id));
-                let mut bytes = e.req_raw.clone();
+                let mut bytes = e.req_raw.to_vec();
                 bytes.extend_from_slice(b"\r\n\r\n");
                 if let Some(r) = &e.resp_raw {
                     bytes.extend_from_slice(r);
@@ -4307,7 +4307,7 @@ fn logger_view(app: &mut App, ui: &mut Ui) {
                 let (req, resp) = match &row {
                     Some(r) if r.hist_id.is_some() => {
                         let e = app.shared.history.lock().unwrap().iter().find(|h| Some(h.id) == r.hist_id).cloned();
-                        (e.as_ref().map(|e| util::origin_form(&e.req_raw)), e.and_then(|e| e.resp_raw))
+                        (e.as_ref().map(|e| util::origin_form(&e.req_raw)), e.and_then(|e| e.resp_raw).map(|b| b.to_vec()))
                     }
                     Some(r) => (r.request.as_ref().map(|b| b.to_vec()), r.response.as_ref().map(|b| b.to_vec())),
                     None => (None, None),
@@ -4509,7 +4509,7 @@ mod tests {
             path: "/".to_string(),
             status: "200".to_string(),
             resp_len: 0,
-            req_raw: Vec::new(),
+            req_raw: Vec::new().into(),
             resp_raw: None,
             https: false,
             note: None,
@@ -4571,7 +4571,7 @@ mod tests {
         e.host = "h".into();
         e.port = 80;
         e.path = "/change".into();
-        e.req_raw = b"POST /change HTTP/1.1\r\nHost: h\r\n\r\nemail=a%40b.c&x=1".to_vec();
+        e.req_raw = b"POST /change HTTP/1.1\r\nHost: h\r\n\r\nemail=a%40b.c&x=1".to_vec().into();
         let html = crate::ui::csrf_poc_html(&e);
         assert!(html.contains("action=\"http://h/change\"") && html.contains("name=\"email\" value=\"a@b.c\""), "{html}");
     }

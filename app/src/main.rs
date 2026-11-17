@@ -559,9 +559,10 @@ impl eframe::App for App {
             let sig = autosave_signature(self);
             if sig != self.autosave_sig {
                 self.autosave_sig = sig;
-                tools::save_project(self, true);
+                tools::autosave_project(self);
             }
         }
+        tools::drain_save_results(self);
         feedback::drain(&mut self.toasts);
         self.toasts.tick(std::time::Instant::now());
         // Mirror new proxy traffic before drawing, so the Logger view and the
@@ -1032,8 +1033,8 @@ fn main() {
                 path: path.clone(),
                 status: status.into(),
                 resp_len: resp.len(),
-                req_raw: format!("{method} {path} HTTP/1.1\r\nHost: h\r\n\r\n").into_bytes(),
-                resp_raw: Some(resp.into_bytes()),
+                req_raw: format!("{method} {path} HTTP/1.1\r\nHost: h\r\n\r\n").into_bytes().into(),
+                resp_raw: Some(resp.into_bytes().into()),
                 https: i % 3 == 0,
                 note: None,
                 highlight: None,
@@ -1046,7 +1047,7 @@ fn main() {
                 listener_port: 6566,
                 ip: String::new(),
                 diffs: 0,
-            });
+            }.spilled());
         }
         // Seeded ids are base+1..=base+n; the next real exchange must not reuse
         // the last one (two rows with one id select and send as the first).
@@ -1311,9 +1312,9 @@ mod tests {
             path: "/a".into(),
             status: "200".into(),
             resp_len: 0,
-            req_raw: b"GET /a HTTP/1.1\r\nHost: example.com\r\n\r\n".to_vec(),
+            req_raw: b"GET /a HTTP/1.1\r\nHost: example.com\r\n\r\n".to_vec().into(),
             resp_raw: Some(
-                b"HTTP/1.1 200 OK\r\nContent-Type: Application/JSON; charset=utf-8\r\n\r\n{}".to_vec(),
+                b"HTTP/1.1 200 OK\r\nContent-Type: Application/JSON; charset=utf-8\r\n\r\n{}".to_vec().into(),
             ),
             note: None,
             highlight: None,

@@ -3,6 +3,7 @@
 //! (`webprobe`) is one front end on top of it; a headless runner or an API
 //! server can be another.
 
+pub mod body;
 pub mod ai;
 pub mod analysis;
 pub mod burp_checks;

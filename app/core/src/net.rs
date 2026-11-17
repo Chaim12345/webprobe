@@ -30,8 +30,10 @@ pub struct HistEntry {
     pub path: String,
     pub status: String,
     pub resp_len: usize,
-    pub req_raw: Vec<u8>,
-    pub resp_raw: Option<Vec<u8>>,
+    /// Request and response bytes: cheap to clone; Proxy history keeps them
+    /// in the on-disk store (`body::spill`).
+    pub req_raw: crate::body::Body,
+    pub resp_raw: Option<crate::body::Body>,
     pub note: Option<String>,
     /// Burp's row highlight (ui.highlight.0..8 in LightTheme.json).
     pub highlight: Option<u8>,
@@ -56,6 +58,16 @@ pub struct HistEntry {
     /// How many response attributes changed vs. the previous exchange of the
     /// same request location ("Diff count" column, burp.Zxwu.java:56).
     pub diffs: usize,
+}
+
+impl HistEntry {
+    /// This entry with its bodies in the on-disk store, as Proxy history
+    /// keeps every entry (N-06).
+    pub fn spilled(mut self) -> Self {
+        self.req_raw = crate::body::spill(&self.req_raw);
+        self.resp_raw = self.resp_raw.as_ref().map(crate::body::spill);
+        self
+    }
 }
 
 /// Host -> resolved-IP cache backing the history "IP" column, so repeated
@@ -1027,7 +1039,15 @@ impl Shared {
         self.wake();
     }
 
+    /// Add crawl-only site map items (Target), bodies in the on-disk store
+    /// like Proxy history.
+    pub fn add_crawl_items(&self, items: impl IntoIterator<Item = HistEntry>) {
+        let items: Vec<HistEntry> = items.into_iter().map(HistEntry::spilled).collect();
+        self.crawl_items.lock().unwrap().extend(items);
+    }
+
     pub fn push_history(&self, e: HistEntry) {
+        let e = e.spilled();
         self.history.lock().unwrap().push(e);
         self.messages.fetch_add(1, Ordering::SeqCst);
         self.wake();
@@ -2150,8 +2170,8 @@ fn record(shared: &Shared, req: &[u8], resp: Option<Vec<u8>>, note: Option<Strin
         path: path_of(&parts),
         status,
         resp_len,
-        req_raw: req.to_vec(),
-        resp_raw: resp,
+        req_raw: req.to_vec().into(),
+        resp_raw: resp.map(Into::into),
         note,
         highlight: None,
         audited: false,
@@ -3440,8 +3460,8 @@ mod tests {
         e.method = "GET".into();
         e.host = "h".into();
         e.port = 80;
-        e.req_raw = b"GET http://h/a?b=1 HTTP/1.1\r\nHost: h\r\n\r\n".to_vec();
-        e.resp_raw = Some(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok".to_vec());
+        e.req_raw = b"GET http://h/a?b=1 HTTP/1.1\r\nHost: h\r\n\r\n".to_vec().into();
+        e.resp_raw = Some(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok".to_vec().into());
         shared.history.lock().unwrap().push(e);
         let show = String::from_utf8(browser_item_response(&shared, "/show/7").unwrap()).unwrap();
         assert!(show.ends_with("ok") && show.contains("200 OK"));
@@ -3453,11 +3473,11 @@ mod tests {
     #[test]
     fn extension_comes_from_the_last_path_segment_of_absolute_form() {
         let mut e = HistEntry::default();
-        e.req_raw = b"GET http://127.0.0.1:3001/rest/user/login HTTP/1.1\r\nHost: 127.0.0.1:3001\r\n\r\n".to_vec();
+        e.req_raw = b"GET http://127.0.0.1:3001/rest/user/login HTTP/1.1\r\nHost: 127.0.0.1:3001\r\n\r\n".to_vec().into();
         assert_eq!(derive_history_fields(&e).1, "");
-        e.req_raw = b"GET http://127.0.0.1:3001/main.js?v=1 HTTP/1.1\r\nHost: x\r\n\r\n".to_vec();
+        e.req_raw = b"GET http://127.0.0.1:3001/main.js?v=1 HTTP/1.1\r\nHost: x\r\n\r\n".to_vec().into();
         assert_eq!(derive_history_fields(&e).1, "js");
-        e.req_raw = b"GET /a.b/c HTTP/1.1\r\nHost: x\r\n\r\n".to_vec();
+        e.req_raw = b"GET /a.b/c HTTP/1.1\r\nHost: x\r\n\r\n".to_vec().into();
         assert_eq!(derive_history_fields(&e).1, "");
     }
 
@@ -4530,7 +4550,7 @@ mod tests {
             path: "/".into(),
             status: "200".into(),
             resp_len: 0,
-            req_raw: Vec::new(),
+            req_raw: Vec::new().into(),
             resp_raw: None,
             note: None,
             highlight: None,

@@ -26,7 +26,10 @@ WP_APP_DIR=$PWD wp-queue run -- cargo build --release
 ```
 
 A first start shows the project chooser. Projects are single files (header `WEBPROBE PROJECT 2`) and autosave every
-minute when they change.
+minute when they change. Autosave writes on a background thread.
+
+While the app runs, Proxy history keeps message bodies in mapped files under `~/.cache/webprobe`, not in memory. The
+files are unlinked as soon as they are created, so nothing is left behind after exit.
 
 Useful environment variables:
 
@@ -37,6 +40,7 @@ Useful environment variables:
 | `WEBPROBE_NO_AUTOSAVE=1`, `WEBPROBE_NO_EXTENSIONS=1` | scripted runs |
 | `WEBPROBE_CONFIG_DIR` | where recent projects and the extension list live |
 | `WEBPROBE_EXTENSIONS_DIR` | extension catalogue location |
+| `WEBPROBE_BODY_DIR` | where history bodies are kept while running (default `$XDG_CACHE_HOME/webprobe`; avoid tmpfs) |
 
 SIGTERM or SIGINT closes the app cleanly: the project is saved and no crash-recovery prompt appears next time.
 

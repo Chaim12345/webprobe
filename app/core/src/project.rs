@@ -32,8 +32,10 @@ pub const PROJECT_VERSION: u32 = 2;
 /// JSON without a header.
 const MIN_PROJECT_VERSION: u32 = 1;
 
-/// One proxy history entry as stored in a project file.
-#[derive(Clone, Serialize, Deserialize)]
+/// One proxy history entry as stored in a project file. The messages are
+/// shared handles ([`crate::body::Body`]), written as text (plus base64 when
+/// not UTF-8) only while the file is being written, one entry at a time.
+#[derive(Clone)]
 pub struct ProjectHistory {
     pub id: u64,
     /// Unix timestamp in seconds, matching `util::now_secs`.
@@ -41,19 +43,110 @@ pub struct ProjectHistory {
     pub method: String,
     pub host: String,
     pub port: u16,
-    #[serde(default)]
     pub https: bool,
     pub path: String,
     pub status: String,
-    pub request: String,
-    pub response: Option<String>,
+    pub request: crate::body::Body,
+    pub response: Option<crate::body::Body>,
     pub note: Option<String>,
-    /// Exact bytes (base64) when the request / response is not valid UTF-8;
-    /// `request` / `response` then hold a lossy text view only.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub request_b64: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub response_b64: Option<String>,
+}
+
+/// The file form of [`ProjectHistory`] (unchanged since version 2):
+/// `request`/`response` text, and the exact bytes in `request_b64` /
+/// `response_b64` when they are not valid UTF-8.
+#[derive(Serialize)]
+struct HistoryOut<'a> {
+    id: u64,
+    timestamp: u64,
+    method: &'a str,
+    host: &'a str,
+    port: u16,
+    https: bool,
+    path: &'a str,
+    status: &'a str,
+    request: std::borrow::Cow<'a, str>,
+    response: Option<std::borrow::Cow<'a, str>>,
+    note: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    request_b64: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response_b64: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct HistoryIn {
+    id: u64,
+    timestamp: u64,
+    method: String,
+    host: String,
+    port: u16,
+    #[serde(default)]
+    https: bool,
+    path: String,
+    status: String,
+    request: String,
+    response: Option<String>,
+    note: Option<String>,
+    #[serde(default)]
+    request_b64: Option<String>,
+    #[serde(default)]
+    response_b64: Option<String>,
+}
+
+/// Text view and, when the bytes are not UTF-8, their base64.
+fn message_out(bytes: &[u8]) -> (std::borrow::Cow<'_, str>, Option<String>) {
+    match std::str::from_utf8(bytes) {
+        Ok(t) => (std::borrow::Cow::Borrowed(t), None),
+        Err(_) => (String::from_utf8_lossy(bytes), Some(base64::Engine::encode(&base64::engine::general_purpose::STANDARD, bytes))),
+    }
+}
+
+impl Serialize for ProjectHistory {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        let (request, request_b64) = message_out(&self.request);
+        let (response, response_b64) = match &self.response {
+            Some(r) => {
+                let (t, b) = message_out(r);
+                (Some(t), b)
+            }
+            None => (None, None),
+        };
+        HistoryOut {
+            id: self.id,
+            timestamp: self.timestamp,
+            method: &self.method,
+            host: &self.host,
+            port: self.port,
+            https: self.https,
+            path: &self.path,
+            status: &self.status,
+            request,
+            response,
+            note: self.note.as_deref(),
+            request_b64,
+            response_b64,
+        }
+        .serialize(s)
+    }
+}
+
+impl<'de> Deserialize<'de> for ProjectHistory {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let h = HistoryIn::deserialize(d)?;
+        Ok(ProjectHistory {
+            id: h.id,
+            timestamp: h.timestamp,
+            method: h.method,
+            host: h.host,
+            port: h.port,
+            https: h.https,
+            path: h.path,
+            status: h.status,
+            request: decode_message(&h.request, h.request_b64.as_deref()).into(),
+            response: h.response.as_deref().map(|r| decode_message(r, h.response_b64.as_deref()).into()),
+            note: h.note,
+        })
+    }
 }
 
 /// A message for a project file: its text, plus the exact bytes in base64
@@ -818,17 +911,14 @@ impl ProjectHistory {
             https: e.https,
             path: e.path.clone(),
             status: e.status.clone(),
-            request: encode_message(&e.req_raw).0,
-            response: e.resp_raw.as_ref().map(|r| encode_message(r).0),
+            request: e.req_raw.clone(),
+            response: e.resp_raw.clone(),
             note: e.note.clone(),
-            request_b64: encode_message(&e.req_raw).1,
-            response_b64: e.resp_raw.as_ref().and_then(|r| encode_message(r).1),
         }
     }
 
     /// The history item back, with the derived columns recomputed.
     pub fn to_entry(&self) -> crate::net::HistEntry {
-        let resp_raw = self.response.as_deref().map(|r| decode_message(r, self.response_b64.as_deref()));
         let mut e = crate::net::HistEntry {
             id: self.id,
             ts: self.timestamp,
@@ -838,9 +928,9 @@ impl ProjectHistory {
             https: self.https,
             path: self.path.clone(),
             status: self.status.clone(),
-            resp_len: resp_raw.as_ref().map(Vec::len).unwrap_or(0),
-            req_raw: decode_message(&self.request, self.request_b64.as_deref()),
-            resp_raw,
+            resp_len: self.response.as_ref().map(|r| r.len()).unwrap_or(0),
+            req_raw: self.request.clone(),
+            resp_raw: self.response.clone(),
             note: self.note.clone(),
             ..Default::default()
         };
@@ -1013,12 +1103,11 @@ pub fn with_section_defaults(current: &ProjectData, section: SettingsSection) ->
 /// and then renamed into place, so a failed write leaves the previous project
 /// intact.
 pub fn save(path: &Path, data: &ProjectData) -> Result<(), String> {
-    let bytes = document_bytes(data)?;
 
     let temporary = temporary_path(path)?;
     // The temp file is deleted only after create_new succeeds; a failing open
     // must not remove an unrelated file that blocked the unique name.
-    let mut file = match std::fs::OpenOptions::new()
+    let file = match std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(&temporary)
@@ -1032,7 +1121,25 @@ pub fn save(path: &Path, data: &ProjectData) -> Result<(), String> {
         }
     };
 
-    if let Err(err) = file.write_all(&bytes).and_then(|()| file.sync_all()) {
+    // Streamed: the document is never held in memory as a whole (bodies
+    // are written from their handles one history item at a time).
+    let written = (|| -> std::io::Result<()> {
+        let mut w = std::io::BufWriter::with_capacity(1 << 20, &file);
+        w.write_all(header_line().as_bytes())?;
+        if data.version == PROJECT_VERSION {
+            serde_json::to_writer_pretty(&mut w, data)
+        } else {
+            let mut normalized = data.clone();
+            normalized.version = PROJECT_VERSION;
+            serde_json::to_writer_pretty(&mut w, &normalized)
+        }
+        .map_err(|err| std::io::Error::other(format!("cannot serialize project: {err}")))?;
+        w.write_all(b"\n")?;
+        w.flush()?;
+        drop(w);
+        file.sync_all()
+    })();
+    if let Err(err) = written {
         let _ = std::fs::remove_file(&temporary);
         return Err(format!(
             "cannot write project temporary file {}: {err}",
@@ -1052,6 +1159,63 @@ pub fn save(path: &Path, data: &ProjectData) -> Result<(), String> {
     // durable and a failure here must not turn a good save into an error.
     sync_parent(path);
     Ok(())
+}
+
+/// Project saves off the UI thread (N-06). The UI takes a snapshot, which is
+/// cheap now that message bodies are shared handles, and one worker thread
+/// writes it. While a save runs, a newer snapshot replaces any waiting one:
+/// only the latest state is written. `wait_for_saves` blocks until the
+/// worker is idle (exit, tests).
+pub type SaveDone = Box<dyn FnOnce(Result<(), String>) + Send>;
+
+struct Saver {
+    pending: Option<(std::path::PathBuf, ProjectData, SaveDone)>,
+    busy: bool,
+}
+
+fn saver() -> &'static (std::sync::Mutex<Saver>, std::sync::Condvar) {
+    static S: std::sync::OnceLock<(std::sync::Mutex<Saver>, std::sync::Condvar)> = std::sync::OnceLock::new();
+    S.get_or_init(|| (std::sync::Mutex::new(Saver { pending: None, busy: false }), std::sync::Condvar::new()))
+}
+
+/// Queue `data` to be written to `path`; `done` runs on the worker with the
+/// result. A snapshot still waiting is replaced (its `done` is dropped).
+pub fn save_in_background(path: std::path::PathBuf, data: ProjectData, done: SaveDone) {
+    let (lock, cv) = saver();
+    let mut s = lock.lock().unwrap();
+    s.pending = Some((path, data, done));
+    if s.busy {
+        return;
+    }
+    s.busy = true;
+    drop(s);
+    std::thread::Builder::new()
+        .name("project-save".into())
+        .spawn(move || loop {
+            let job = {
+                let mut s = lock.lock().unwrap();
+                match s.pending.take() {
+                    Some(job) => job,
+                    None => {
+                        s.busy = false;
+                        cv.notify_all();
+                        return;
+                    }
+                }
+            };
+            let (path, data, done) = job;
+            done(save(&path, &data));
+        })
+        .expect("spawn project-save thread");
+}
+
+/// Block until no save is queued or running.
+pub fn wait_for_saves() {
+    let (lock, cv) = saver();
+    let mut s = lock.lock().unwrap();
+    while s.busy {
+        s = cv.wait(s).unwrap();
+    }
 }
 
 /// Read and validate a project file.
@@ -1218,8 +1382,6 @@ mod tests {
                 request: "GET /index.html HTTP/1.1\r\nHost: example.com\r\n\r\n".into(),
                 response: Some("HTTP/1.1 200 OK\r\n\r\nok".into()),
                 note: Some("checked".into()),
-                request_b64: None,
-                response_b64: None,
             }],
             match_request: vec![ProjectRule {
                 enabled: true,
@@ -1386,8 +1548,6 @@ mod tests {
                 request: "GET /admin/ HTTP/1.1\r\n\r\n".into(),
                 response: Some("HTTP/1.1 200 OK\r\n\r\n".into()),
                 note: None,
-                request_b64: None,
-                response_b64: None,
             }],
             site_links: vec![("https://example.com".into(), "/unvisited".into())],
             scanner: ProjectScanner { speed: 2, accuracy: 0, extra_checks: true, disabled_checks: vec!["active.csrf".into()], disabled_insertion_points: vec!["header".into()], crawl_max_depth: Some(2), crawl_max_locations: Some(100), crawl_robots: Some(false), crawl_sitemap: Some(true), crawl_engine: Some("Lightpanda".into()) },
@@ -1656,10 +1816,10 @@ mod tests {
         let loaded = load(&path).unwrap();
 
         assert_eq!(loaded.history[0].request, request);
-        assert_eq!(loaded.history[0].response.as_deref(), Some(response));
+        assert_eq!(loaded.history[0].response.as_deref(), Some(response.as_bytes()));
         assert_eq!(loaded.history[0].note.as_deref(), Some("n\u{f6}te \u{2713}"));
         assert_eq!(loaded.decoder.input, "\u{fffd}\u{4e16}\u{754c}");
-        assert!(loaded.history[0].request.contains("\r\n"));
+        assert!(loaded.history[0].request.windows(2).any(|w| w == b"\r\n"));
         let _ = std::fs::remove_file(&path);
     }
 
@@ -1700,6 +1860,114 @@ mod tests {
         assert_eq!(reset.cookie_jar.as_ref().unwrap().update_from, ["Proxy"]);
     }
 
+    /// Saves queued while one is running collapse to the latest snapshot,
+    /// and `wait_for_saves` returns only once that one is on disk.
+    #[test]
+    fn background_saves_keep_the_latest_snapshot() {
+        let dir = std::env::temp_dir().join(format!("wp-saver-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("p.json");
+        let done = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        for i in 0..20u64 {
+            let mut data = ProjectData::default();
+            data.saved_at = i;
+            data.history = (0..200).map(|k| ProjectHistory::from_entry(&crate::net::HistEntry { id: k, req_raw: vec![b'x'; 2000].into(), ..Default::default() })).collect();
+            let d = done.clone();
+            save_in_background(path.clone(), data, Box::new(move |r| {
+                r.unwrap();
+                d.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            }));
+        }
+        wait_for_saves();
+        let loaded = load(&path).unwrap();
+        assert_eq!(loaded.saved_at, 19, "the last snapshot wins");
+        assert_eq!(loaded.history.len(), 200);
+        let n = done.load(std::sync::atomic::Ordering::SeqCst);
+        assert!((1..=20).contains(&n), "{n} saves ran");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Proxy history keeps bodies in the on-disk store, and a project
+    /// written from those handles reads back byte for byte.
+    #[test]
+    fn history_bodies_are_spilled_and_saved_exactly() {
+        let shared = crate::net::Shared::new();
+        let body: Vec<u8> = (0..5000u32).map(|i| (i % 256) as u8).collect();
+        shared.push_history(crate::net::HistEntry { id: 1, req_raw: b"GET / HTTP/1.1\r\n\r\n".into(), resp_raw: Some(body.clone().into()), ..Default::default() });
+        let e = shared.history.lock().unwrap()[0].clone();
+        if cfg!(unix) {
+            assert!(e.resp_raw.as_ref().unwrap().is_stored());
+        }
+        let dir = std::env::temp_dir().join(format!("wp-spill-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("p.json");
+        let mut data = ProjectData::default();
+        data.history = vec![ProjectHistory::from_entry(&e)];
+        save(&path, &data).unwrap();
+        let back = load(&path).unwrap().history[0].to_entry();
+        assert_eq!(back.resp_raw.unwrap(), body);
+        assert_eq!(back.req_raw, "GET / HTTP/1.1\r\n\r\n");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// N-06 baseline (WEBPROBE_BENCH=1, WEBPROBE_BENCH_N items, default
+    /// 20000): memory held by history and the time of one full project
+    /// save, which autosave repeats every minute on the UI thread.
+    #[test]
+    fn history_memory_and_save_baseline() {
+        if std::env::var("WEBPROBE_BENCH").as_deref() != Ok("1") {
+            return;
+        }
+        // Anonymous memory: what history costs the process. File-backed
+        // pages of the body store are reported apart; the kernel can drop
+        // and reread them.
+        let field = |name: &str| {
+            std::fs::read_to_string("/proc/self/status").ok().and_then(|s| {
+                s.lines().find(|l| l.starts_with(name)).and_then(|l| l.split_whitespace().nth(1)?.parse::<u64>().ok())
+            }).unwrap_or(0)
+        };
+        let rss = || field("RssAnon:");
+        let n: usize = std::env::var("WEBPROBE_BENCH_N").ok().and_then(|v| v.parse().ok()).unwrap_or(20_000);
+        let before = rss();
+        let body = "x".repeat(4096);
+        let shared = crate::net::Shared::new();
+        for i in 0..n {
+            shared.push_history(crate::net::HistEntry {
+                id: i as u64,
+                method: "GET".into(),
+                host: "app.test".into(),
+                port: 80,
+                path: format!("/item/{i}?q=1"),
+                status: "200".into(),
+                req_raw: format!("GET /item/{i}?q=1 HTTP/1.1\r\nHost: app.test\r\n\r\n").into_bytes().into(),
+                resp_raw: Some(format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n{body}").into_bytes().into()),
+                ..Default::default()
+            });
+        }
+        let held = rss();
+        // Not the temp dir: /tmp is often tmpfs (RAM).
+        let dir = std::env::var_os("HOME").map(std::path::PathBuf::from).unwrap_or_else(std::env::temp_dir).join(".cache/webprobe").join(format!("hist-bench-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("p.json");
+        let t0 = std::time::Instant::now();
+        let mut data = ProjectData::default();
+        data.history = shared.history.lock().unwrap().iter().map(ProjectHistory::from_entry).collect();
+        save(&path, &data).unwrap();
+        let save_ms = t0.elapsed().as_millis();
+        let peak = rss();
+        let size = std::fs::metadata(&path).unwrap().len();
+        let line = format!(
+            "history n={n}: anonymous memory held {} MB (body store pages {} MB, reclaimable), during save {} MB more, save {save_ms} ms, file {} MB\n",
+            held.saturating_sub(before) / 1024,
+            field("RssFile:") / 1024,
+            peak.saturating_sub(held) / 1024,
+            size / 1_048_576
+        );
+        eprint!("{line}");
+        std::fs::write("/tmp/history-bench.txt", line).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn history_and_issues_convert_both_ways() {
         let e = crate::net::HistEntry {
@@ -1711,8 +1979,8 @@ mod tests {
             https: true,
             path: "/login.php?x=1".into(),
             status: "200".into(),
-            req_raw: b"POST /login.php?x=1 HTTP/1.1\r\nHost: app.test\r\n\r\nu=a".to_vec(),
-            resp_raw: Some(vec![b'H', 0xff, 0x00, b'\n']),
+            req_raw: b"POST /login.php?x=1 HTTP/1.1\r\nHost: app.test\r\n\r\nu=a".to_vec().into(),
+            resp_raw: Some(vec![b'H', 0xff, 0x00, b'\n'].into()),
             note: Some("n".into()),
             ..Default::default()
         };
@@ -1812,11 +2080,9 @@ mod tests {
                 https: true,
                 path: format!("/item/{i}"),
                 status: "200".into(),
-                request: format!("GET /item/{i} HTTP/1.1\r\nHost: h\r\n\r\n"),
-                response: Some(format!("HTTP/1.1 200 OK\r\n\r\n{i}")),
+                request: format!("GET /item/{i} HTTP/1.1\r\nHost: h\r\n\r\n").into(),
+                response: Some(format!("HTTP/1.1 200 OK\r\n\r\n{i}").into()),
                 note: None,
-                request_b64: None,
-                response_b64: None,
             })
             .collect();
 
@@ -1826,7 +2092,7 @@ mod tests {
         assert_eq!(loaded.history.len(), 1000);
         assert_eq!(loaded.history[0].id, 0);
         assert_eq!(loaded.history[999].path, "/item/999");
-        assert_eq!(loaded.history[999].response.as_deref(), Some("HTTP/1.1 200 OK\r\n\r\n999"));
+        assert_eq!(loaded.history[999].response.as_deref(), Some(&b"HTTP/1.1 200 OK\r\n\r\n999"[..]));
         let _ = std::fs::remove_file(&path);
     }
 

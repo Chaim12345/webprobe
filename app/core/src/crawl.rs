@@ -121,9 +121,9 @@ fn fetch(shared: &Arc<Shared>, https: bool, host: &str, port: u16, authority: &s
         https,
         path: path.to_string(),
         status,
-        req_raw: raw.into_bytes(),
+        req_raw: raw.into_bytes().into(),
         resp_len: up.resp.as_ref().map(|r| r.len()).unwrap_or(0),
-        resp_raw: up.resp,
+        resp_raw: up.resp.map(Into::into),
         note: up.error,
         ..Default::default()
     };
@@ -845,9 +845,9 @@ pub fn replay_seen(shared: &Arc<Shared>, r: &SeenRequest) -> HistEntry {
         https,
         path: path.to_string(),
         status,
-        req_raw: raw.into_bytes(),
+        req_raw: raw.into_bytes().into(),
         resp_len: up.resp.as_ref().map(|x| x.len()).unwrap_or(0),
-        resp_raw: up.resp,
+        resp_raw: up.resp.map(Into::into),
         note: up.error,
         ..Default::default()
     };
@@ -910,7 +910,7 @@ mod browser_resp_tests {
         let mk = |path: &str, ext: &str, ct: &str, body: &str| HistEntry {
             path: path.into(),
             extension: ext.into(),
-            resp_raw: Some(format!("HTTP/1.1 200 OK\r\nContent-Type: {ct}\r\n\r\n{body}").into_bytes()),
+            resp_raw: Some(format!("HTTP/1.1 200 OK\r\nContent-Type: {ct}\r\n\r\n{body}").into_bytes().into()),
             ..Default::default()
         };
         let items = vec![

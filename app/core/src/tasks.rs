@@ -265,7 +265,7 @@ mod tests {
             host: "127.0.0.1".into(),
             port,
             path: path.into(),
-            req_raw: format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n").into_bytes(),
+            req_raw: format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n").into_bytes().into(),
             ..Default::default()
         }
     }

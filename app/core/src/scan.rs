@@ -1263,7 +1263,7 @@ pub fn crawl_and_audit(shared: &Arc<Shared>, start_urls: &[String], audit_only: 
             }
         }
         shared.log(&format!("Crawl of {url}: {} item(s)", items.len()));
-        shared.crawl_items.lock().unwrap().extend(items.iter().cloned());
+        shared.add_crawl_items(items.iter().cloned());
         let static_refs = crate::crawl::static_reference_corpus(&items);
         for e in items.into_iter().filter(|e| crate::crawl::auditable(e) || crate::crawl::referenced_static(e, &static_refs)) {
             if shared.scan_stop.load(Ordering::SeqCst) {
@@ -3607,6 +3607,16 @@ mod tests {
         let q = |qtype| InteractionDetail::Dns(DnsInteraction { qname: "tokcmd.oob.invalid".into(), qtype, raw_query: Vec::new() });
         assert_eq!(match_oob_interactions(&shared, &[it(6, "tokcmd", q(1))]), 0, "an A lookup is not command execution");
         assert_eq!(match_oob_interactions(&shared, &[it(7, "tokcmd", q(5))]), 1);
+        // The same verdict from a public Collaborator (interactsh) report,
+        // whose DNS query type arrives as a label.
+        let cmd = ScanIssue { name: "OS command injection".into(), ..ScanIssue::default() };
+        shared.oob_pending.lock().unwrap().push(("tokpub".to_string(), Some("CNAME"), cmd));
+        let report = |qt: &str| {
+            let r = crate::interactsh::parse_interaction(&format!(r#"{{"protocol":"dns","unique-id":"tokpub","full-id":"tokpub","q-type":"{qt}","raw-request":"","remote-address":"192.0.2.1"}}"#)).unwrap();
+            Interaction { id: 9, at: 0, source: r.remote_address.clone(), token: Some(r.unique_id.clone()), detail: crate::collaborator::remote_detail(&r).unwrap() }
+        };
+        assert_eq!(match_oob_interactions(&shared, &[report("A")]), 0);
+        assert_eq!(match_oob_interactions(&shared, &[report("CNAME")]), 1);
         let names: Vec<String> = shared.issues.lock().unwrap().iter().map(|i| i.name.clone()).collect();
         for n in ["External service interaction (DNS)", "External service interaction (HTTP)", "SMTP header injection", "OS command injection"] {
             assert!(names.iter().any(|x| x == n), "{n} missing: {names:?}");
@@ -3653,7 +3663,7 @@ mod tests {
             let path = parts.first.split_whitespace().nth(1).unwrap_or("/").to_string();
             let entry = HistEntry {
                 id: 1, ts: 0, method: parts.first.split_whitespace().next().unwrap_or("GET").into(), host: lh.into(), port,
-                https: false, path: path.clone(), status: "200".into(), resp_len: 0, req_raw: raw.clone().into_bytes(),
+                https: false, path: path.clone(), status: "200".into(), resp_len: 0, req_raw: raw.clone().into_bytes().into(),
                 resp_raw: None, note: None, highlight: None, audited: false, params: true, edited: false, extension: String::new(), title: String::new(),
                 cookies: String::new(), listener_port: 0, ip: String::new(), diffs: 0,
             };
@@ -3733,8 +3743,8 @@ mod tests {
             let resp = net::send_raw(&shared, th, port, raw.as_bytes()).resp;
             let mut entry = HistEntry {
                 id: 1, ts: 0, method: "GET".into(), host: th.into(), port,
-                https: false, path: path.to_string(), status: "200".into(), resp_len: 0, req_raw: raw.clone().into_bytes(),
-                resp_raw: resp, note: None, highlight: None, audited: false, params: path.contains('?'), edited: false, extension: String::new(), title: String::new(),
+                https: false, path: path.to_string(), status: "200".into(), resp_len: 0, req_raw: raw.clone().into_bytes().into(),
+                resp_raw: resp.map(Into::into), note: None, highlight: None, audited: false, params: path.contains('?'), edited: false, extension: String::new(), title: String::new(),
                 cookies: String::new(), listener_port: 0, ip: String::new(), diffs: 0,
             };
             entry.host = format!("{th}:{port}");
@@ -3875,7 +3885,7 @@ mod tests {
             path: "/read?file=about.txt".into(),
             status: "200".into(),
             resp_len: 0,
-            req_raw: req.into_bytes(),
+            req_raw: req.into_bytes().into(),
             resp_raw: None,
             note: None,
             highlight: None,
@@ -4340,7 +4350,7 @@ mod tests {
         let req = format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
         let entry = HistEntry {
             id: 1, ts: 0, method: "GET".into(), host: "127.0.0.1".into(), port, https: false, path: path.into(),
-            status: "200".into(), resp_len: 0, req_raw: req.into_bytes(), resp_raw: None, note: None, highlight: None, audited: false, params: true,
+            status: "200".into(), resp_len: 0, req_raw: req.into_bytes().into(), resp_raw: None, note: None, highlight: None, audited: false, params: true,
             edited: false, extension: String::new(), title: String::new(), cookies: String::new(), listener_port: 0,
             ip: String::new(), diffs: 0,
         };
@@ -4566,8 +4576,8 @@ mod tests {
             path: path.into(),
             status: "200".into(),
             resp_len: resp.len(),
-            req_raw: req.into_bytes(),
-            resp_raw: Some(resp.as_bytes().to_vec()),
+            req_raw: req.into_bytes().into(),
+            resp_raw: Some(resp.as_bytes().to_vec().into()),
             note: None,
             highlight: None,
             audited: false,
@@ -4659,7 +4669,7 @@ mod tests {
         assert!(!has(&passive_check(&entry("/", true, &resp("302 Found", &h, linked))), CH_FRAME));
         assert!(!has(&passive_check(&entry("/", true, &resp("200 OK", CLEAN_HEADERS, linked))), CH_FRAME));
         let mut post = entry("/", true, &resp("200 OK", &h, linked));
-        post.req_raw = b"POST / HTTP/1.1\r\nHost: example.com\r\n\r\n".to_vec();
+        post.req_raw = b"POST / HTTP/1.1\r\nHost: example.com\r\n\r\n".to_vec().into();
         assert!(!has(&passive_check(&post), CH_FRAME));
     }
 
@@ -4867,7 +4877,7 @@ mod tests {
         let mut raw = b"HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nStrict-Transport-Security: max-age=31536000\r\n\r\n".to_vec();
         raw.extend_from_slice(&body);
         let mut e = entry("/", true, &clean());
-        e.resp_raw = Some(raw);
+        e.resp_raw = Some(raw.into());
         assert!(passive_check(&e).is_empty());
     }
 
@@ -5007,7 +5017,7 @@ mod tests {
         e.method = "POST".into();
         e.host = "127.0.0.1".into();
         e.port = port;
-        e.req_raw = req.into_bytes();
+        e.req_raw = req.into_bytes().into();
         start_active_scan(shared.clone(), e, &[], &[]);
         let t0 = std::time::Instant::now();
         while shared.scan_busy.load(Ordering::SeqCst) && t0.elapsed() < std::time::Duration::from_secs(120) {
@@ -5171,7 +5181,7 @@ mod tests {
             let mut e = entry("/item?id=5", false, "");
             e.host = "127.0.0.1".into();
             e.port = port;
-            e.req_raw = format!("GET /item?id=5 HTTP/1.1\r\nHost: {host}\r\n\r\n").into_bytes();
+            e.req_raw = format!("GET /item?id=5 HTTP/1.1\r\nHost: {host}\r\n\r\n").into_bytes().into();
             start_active_scan(shared.clone(), e, &[], &[]);
             let t0 = std::time::Instant::now();
             while shared.scan_busy.load(Ordering::SeqCst) && t0.elapsed() < std::time::Duration::from_secs(120) {
@@ -5228,7 +5238,7 @@ mod tests {
             e.method = method.into();
             e.host = "127.0.0.1".into();
             e.port = port;
-            e.req_raw = req.into_bytes();
+            e.req_raw = req.into_bytes().into();
             start_active_scan(shared.clone(), e, &[], &[]);
             let t0 = std::time::Instant::now();
             while shared.scan_busy.load(Ordering::SeqCst) && t0.elapsed() < std::time::Duration::from_secs(180) {
@@ -5279,7 +5289,7 @@ mod tests {
         let mut e = entry("/go?url=x", false, "");
         e.host = "127.0.0.1".into();
         e.port = port;
-        e.req_raw = format!("GET /go?url=x HTTP/1.1\r\nHost: {host}\r\n\r\n").into_bytes();
+        e.req_raw = format!("GET /go?url=x HTTP/1.1\r\nHost: {host}\r\n\r\n").into_bytes().into();
         start_active_scan(default.clone(), e, &[], &[]);
         let t0 = std::time::Instant::now();
         while default.scan_busy.load(Ordering::SeqCst) && t0.elapsed() < std::time::Duration::from_secs(180) {
@@ -5360,7 +5370,7 @@ mod tests {
         let mut e = entry("/search?q=hello", false, "");
         e.host = "127.0.0.1".into();
         e.port = port;
-        e.req_raw = req.into_bytes();
+        e.req_raw = req.into_bytes().into();
         start_active_scan(shared.clone(), e, &oob, &smtp);
         let t0 = std::time::Instant::now();
         while shared.scan_busy.load(Ordering::SeqCst) && t0.elapsed() < std::time::Duration::from_secs(180) {

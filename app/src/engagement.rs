@@ -553,7 +553,7 @@ mod tests {
             port: 80,
             path: path.into(),
             method: "GET".into(),
-            resp_raw: Some(resp.as_bytes().to_vec()),
+            resp_raw: Some(resp.as_bytes().to_vec().into()),
             ..Default::default()
         }
     }

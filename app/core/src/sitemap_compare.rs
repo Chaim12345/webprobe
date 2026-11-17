@@ -300,7 +300,7 @@ pub fn rerequest(shared: &crate::net::Shared, items: &[HistEntry], stop: &std::s
         let mut n = e.clone();
         n.status = up.resp.as_ref().map(|r| util::parse_http(r).status).unwrap_or_default();
         n.resp_len = up.resp.as_ref().map(|r| r.len().saturating_sub(util::parse_http(r).head_len)).unwrap_or(0);
-        n.resp_raw = up.resp;
+        n.resp_raw = up.resp.map(Into::into);
         n.ts = util::now_secs();
         out.push(n);
         done.fetch_add(1, Ordering::SeqCst);
@@ -332,7 +332,7 @@ mod tests {
         } else {
             format!("{method} {path} HTTP/1.1\r\nHost: app\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {}\r\n\r\n{body}", body.len())
         };
-        HistEntry { method: method.into(), host: "app".into(), port: 80, path: path.into(), req_raw: req.into_bytes(), resp_raw: Some(resp.as_bytes().to_vec()), ..Default::default() }
+        HistEntry { method: method.into(), host: "app".into(), port: 80, path: path.into(), req_raw: req.into_bytes().into(), resp_raw: Some(resp.as_bytes().to_vec().into()), ..Default::default() }
     }
 
     const OK: &str = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nDate: Mon\r\n\r\n<p>Welcome   admin</p>";
@@ -380,7 +380,7 @@ mod tests {
         let mut item = e("GET", "/admin", "", OK);
         item.host = "127.0.0.1".into();
         item.port = port;
-        item.req_raw = format!("GET /admin HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n").into_bytes();
+        item.req_raw = format!("GET /admin HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n").into_bytes().into();
         let (stop, done) = (std::sync::atomic::AtomicBool::new(false), std::sync::atomic::AtomicUsize::new(0));
         let fresh = rerequest(&shared, std::slice::from_ref(&item), &stop, &done);
         assert_eq!(fresh[0].status, "403");

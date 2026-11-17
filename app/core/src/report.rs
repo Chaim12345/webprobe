@@ -378,8 +378,8 @@ pub fn build_report_issues(issues: &[ScanIssue], history: &[crate::net::HistEntr
                     ev.map(|e| {
                         vec![Evidence {
                             method: e.method.clone(),
-                            request: e.req_raw.clone(),
-                            response: e.resp_raw.clone(),
+                            request: e.req_raw.to_vec(),
+                            response: e.resp_raw.as_deref().map(<[u8]>::to_vec),
                             redirected: false,
                         }]
                     })
@@ -978,8 +978,8 @@ mod tests {
             port: 80,
             path: "/page".into(),
             method: "GET".into(),
-            req_raw: b"GET /page HTTP/1.1\r\nHost: example.com\r\n\r\n".to_vec(),
-            resp_raw: Some(b"HTTP/1.1 200 OK\r\n\r\nhi".to_vec()),
+            req_raw: b"GET /page HTTP/1.1\r\nHost: example.com\r\n\r\n".to_vec().into(),
+            resp_raw: Some(b"HTTP/1.1 200 OK\r\n\r\nhi".to_vec().into()),
             ..Default::default()
         };
         let issue = |evidence: Vec<ScanEvidence>| ScanIssue { sev: "high".into(), name: "SQL injection".into(), host: "example.com".into(), path: "/page".into(), confidence: "Firm".into(), evidence, ..Default::default() };
@@ -1210,7 +1210,7 @@ mod tests {
         a.https = true;
         a.path = "/login?x=1".into();
         a.method = "POST".into();
-        a.req_raw = b"POST /login?x=1 HTTP/1.1\r\n\r\n".to_vec();
+        a.req_raw = b"POST /login?x=1 HTTP/1.1\r\n\r\n".to_vec().into();
         a.ip = "10.0.0.2".into();
         let mut b = a.clone();
         b.id = 3;

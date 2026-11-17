@@ -173,7 +173,7 @@ fn parsers_survive_random_and_mutated_input() {
         let _ = crate::net::parse_ws_frame(&input);
         // Scanner and tools that take user or server data.
         let _ = crate::scan::insertion_points(&text);
-        let _ = crate::scan::passive_check(&crate::net::HistEntry { req_raw: seeds[0].clone(), resp_raw: Some(input.clone()), host: "h".into(), path: "/".into(), ..Default::default() });
+        let _ = crate::scan::passive_check(&crate::net::HistEntry { req_raw: seeds[0].clone().into(), resp_raw: Some(input.clone().into()), host: "h".into(), path: "/".into(), ..Default::default() });
         let _ = crate::intruder::Template::parse(&text);
         let _ = crate::macros::parse(&text);
         let _ = crate::macros::extract_value(&input, "csrf");

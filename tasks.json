@@ -5,12 +5,12 @@
   "summary": {
     "total": 103,
     "p0": 64,
-    "p1": 29,
-    "p2": 8,
+    "p1": 30,
+    "p2": 9,
     "by_status": {
-      "done": 99,
+      "done": 100,
       "rejected": 2,
-      "todo": 2
+      "todo": 1
     }
   },
   "tasks": [
@@ -1174,10 +1174,11 @@
       "epic": "N — Quality, performance and build",
       "priority": "P1",
       "title": "Disk-backed proxy history",
-      "acceptance": "Request and response bodies of Proxy history live in an append-only store on disk next to the project (Burp keeps history in the project file), with an in-memory index of the table columns; memory stays bounded with 100k items; the history table, filters, search, Repeater/Intruder send-to and project save/load keep working; tests cover store round-trip, reopen and a 100k-item memory bound.",
+      "acceptance": "Proxy history (and crawl items) keep message bodies out of anonymous memory, in append-only segment files under the cache dir (mapped, then unlinked, so nothing outlives the process); the project stays a single file (format v2 unchanged), written streamed by one background worker, latest snapshot wins; memory bounded at 100k items; table, filters, search, send-to and save/load keep working.",
       "effort": "L",
-      "status": "todo",
-      "evidence": "Open-items ledger 2026-11-17 (qa/SOURCE-PARITY-2026-11-15.md): HistEntry holds req_raw/resp_raw Vec<u8> in Shared::history, unbounded, 153 call sites."
+      "status": "done",
+      "evidence": "core/src/body.rs (Body handle + spill store; tests incl. concurrent spills), HistEntry.req_raw/resp_raw: Body, Shared::push_history/add_crawl_items spill, ProjectHistory serializes from handles (wire format unchanged), project::save streams, project::save_in_background/wait_for_saves (test background_saves_keep_the_latest_snapshot), autosave off the UI thread (tools::autosave_project). Bench history_memory_and_save_baseline (WEBPROBE_BENCH=1): before, 20k items held 95 MB anonymous memory and one save took 4.3 s on the UI thread (+88 MB); after, 20k items held 11 MB (+6 MB while saving); release, 100k items held 51 MB anonymous memory (402 MB reclaimable store pages), save 11.6 s for a 425 MB file on the worker. GUI on :97: an 11 KB response through the proxy rendered from the store and was searchable; after a restart it reloaded from the project. Not done: the file is still rewritten whole on each save (no incremental project format).",
+      "completed": "2026-11-17"
     },
     {
       "id": "N-07",

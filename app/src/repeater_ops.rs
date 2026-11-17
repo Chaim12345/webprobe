@@ -1396,8 +1396,8 @@ pub fn tab_entry(app: &crate::App) -> Option<net::HistEntry> {
         path: request_path(&parts.path).to_string(),
         status,
         resp_len: resp.as_ref().map(|r| r.len()).unwrap_or(0),
-        req_raw: req.into_bytes(),
-        resp_raw: resp,
+        req_raw: req.into_bytes().into(),
+        resp_raw: resp.map(Into::into),
         ts: util::now_secs(),
         ..Default::default()
     })

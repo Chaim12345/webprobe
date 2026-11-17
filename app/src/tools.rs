@@ -1749,7 +1749,45 @@ fn tab_of(name: &str) -> Option<crate::ui::Tab> {
 /// back the history. WebProbe does the same with its project file: it is
 /// restored at startup when present (main.rs) and saved every minute while
 /// something changed, and on exit (App::on_exit).
+/// Save the project and wait until it is on disk.
 pub fn save_project(app: &mut App, quiet: bool) {
+    save_project_with(app, quiet, false);
+}
+
+/// Autosave: queue the save and return; the UI thread only takes the
+/// snapshot (message bodies are shared handles), the project-save worker
+/// writes it. Its result shows up through [`drain_save_results`].
+pub fn autosave_project(app: &mut App) {
+    save_project_with(app, true, true);
+}
+
+type SaveResult = (String, bool, Result<(), String>);
+
+fn save_results() -> &'static std::sync::Mutex<Vec<SaveResult>> {
+    static R: std::sync::OnceLock<std::sync::Mutex<Vec<SaveResult>>> = std::sync::OnceLock::new();
+    R.get_or_init(Default::default)
+}
+
+/// Report finished saves (status line, toasts). Called every frame.
+pub fn drain_save_results(app: &mut App) {
+    let done = std::mem::take(&mut *save_results().lock().unwrap());
+    for (target, quiet, result) in done {
+        match result {
+            Ok(()) => {
+                app.project_status = format!("saved {target}");
+                if !quiet { crate::feedback::toast(crate::feedback::Level::Success, format!("Project saved to {target}")); }
+            }
+            Err(e) => {
+                app.project_status = format!("save failed: {e}");
+                crate::feedback::toast(crate::feedback::Level::Error, format!("Save failed: {e}"));
+            }
+        }
+    }
+}
+
+/// Every save goes through the single project-save worker, in order, so an
+/// older snapshot can never land after a newer one.
+fn save_project_with(app: &mut App, quiet: bool, background: bool) {
     // J-02: while the crash-recovery prompt is open, autosave (and the save
     // on exit) must not overwrite the project the user may want back; the
     // new session goes to a per-process temporary file instead.
@@ -1944,22 +1982,22 @@ pub fn save_project(app: &mut App, quiet: bool) {
         ca_fingerprint: Some(app.shared.mitm.ca_fingerprint()),
         ..project::ProjectData::default()
     };
-    match project::save(std::path::Path::new(&target), &data) {
-        Ok(()) => {
-            app.project_status = format!("saved {target}");
-            if !quiet { crate::feedback::toast(crate::feedback::Level::Success, format!("Project saved to {target}")); }
-        }
-        Err(e) => {
-            app.project_status = format!("save failed: {e}");
-            crate::feedback::toast(crate::feedback::Level::Error, format!("Save failed: {e}"));
-        }
+    let reported = target.clone();
+    project::save_in_background(
+        std::path::PathBuf::from(&target),
+        data,
+        Box::new(move |result| save_results().lock().unwrap().push((reported, quiet, result))),
+    );
+    if !background {
+        project::wait_for_saves();
+        drain_save_results(app);
     }
 }
 
 pub fn restore_project(app: &mut App, quiet: bool) {
     match project::load(std::path::Path::new(&app.project_path)) {
         Ok(data) => {
-            *app.shared.history.lock().unwrap() = data.history.iter().map(project::ProjectHistory::to_entry).collect();
+            *app.shared.history.lock().unwrap() = data.history.iter().map(|h| h.to_entry().spilled()).collect();
             *app.shared.mr_request.lock().unwrap() = data.match_request.iter().filter(|r| r.kind == "request").map(net_rule).collect();
             *app.shared.mr_response.lock().unwrap() = data.match_response.iter().filter(|r| r.kind == "response").map(net_rule).collect();
             *app.shared.scope.lock().unwrap() = data.scope.iter().map(|s| net::ScopeRule {
@@ -2051,7 +2089,7 @@ pub fn restore_project(app: &mut App, quiet: bool) {
 /// missing from older files come back as defaults; layout fields that were
 /// never saved (None) leave the current UI alone.
 fn restore_j01_sections(app: &mut App, data: &project::ProjectData) {
-    *app.shared.crawl_items.lock().unwrap() = data.crawl_items.iter().map(project::ProjectHistory::to_entry).collect();
+    *app.shared.crawl_items.lock().unwrap() = data.crawl_items.iter().map(|h| h.to_entry().spilled()).collect();
     *app.shared.site_links.lock().unwrap() = data.site_links.iter().cloned().collect();
     let cs = &data.collaborator;
     if let Some(server) = cs.server.as_ref().filter(|s| !s.trim().is_empty()) {
