@@ -149,7 +149,9 @@ pub fn start_in_background(shared: &Arc<Shared>, item: Installed, done: impl FnO
     std::thread::spawn(move || {
         let result = start(&item).map(|ext| {
             let name = ext.hooks.extension_name().to_string();
-            shared.ext_host.lock().unwrap().extensions.push(ext);
+            let mut host = shared.ext_host.lock().unwrap();
+            host.not_loaded.retain(|i| i.source != item.source);
+            host.extensions.push(ext);
             name
         });
         match &result {
@@ -164,13 +166,13 @@ pub fn start_in_background(shared: &Arc<Shared>, item: Installed, done: impl FnO
 /// The host's extensions that came from the store, in host order, with
 /// their current enabled state (what `save` should write).
 pub fn current(shared: &Shared) -> Vec<Installed> {
-    shared
-        .ext_host
-        .lock()
-        .unwrap()
-        .extensions
+    let host = shared.ext_host.lock().unwrap();
+    host.extensions
         .iter()
         .filter_map(|e| e.source.clone().map(|s| Installed { enabled: e.enabled, ..s }))
+        // Entries that failed to load stay remembered: saving after any other
+        // change used to drop them from extensions.json.
+        .chain(host.not_loaded.iter().cloned())
         .collect()
 }
 
@@ -189,7 +191,10 @@ pub fn load_all(shared: &Arc<Shared>) {
                     shared.ext_host.lock().unwrap().extensions.push(ext);
                 }
                 // Kept in the list: a failed load is reported, not forgotten.
-                Err(e) => shared.log(&format!("Extension failed to load ({} {}): {e}", item.kind.label(), item.source)),
+                Err(e) => {
+                    shared.log(&format!("Extension failed to load ({} {}): {e}", item.kind.label(), item.source));
+                    shared.ext_host.lock().unwrap().not_loaded.push(item.clone());
+                }
             }
             shared.wake();
         }

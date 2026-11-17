@@ -1315,6 +1315,29 @@ fn extensions_installed(app: &mut App, ui: &mut Ui) {
         ui.add_space(8.0);
         ui.label(RichText::new("Extensions let you customize WebProbe's behavior using your own or third-party code: WebProbe extensions (any program speaking the JSON-lines API, docs/extensions.md) and Montoya .jar extensions through the sidecar JVM.").size(12.5).color(theme::ink_dim()));
     });
+    // Remembered extensions that failed to load this session: kept in the
+    // saved list until the user forgets them, and retried on request.
+    let not_loaded = app.shared.ext_host.lock().unwrap().not_loaded.clone();
+    for item in not_loaded {
+        ui.horizontal(|ui| {
+            ui.add_space(8.0);
+            ui.label(RichText::new(format!("Not loaded: {} ({})", item.source, item.kind.label())).size(12.5).color(theme::ink_dim()));
+            if ui.small_button("Retry").clicked() {
+                let shared = app.shared.clone();
+                ext_store::start_in_background(&app.shared, item.clone(), move |res| {
+                    if res.is_ok() {
+                        if let Err(e) = ext_store::save(&ext_store::current(&shared)) {
+                            shared.log(&format!("Could not save the extension list: {e}"));
+                        }
+                    }
+                });
+            }
+            if ui.small_button("Forget").clicked() {
+                app.shared.ext_host.lock().unwrap().not_loaded.retain(|i| i.source != item.source);
+                save(app);
+            }
+        });
+    }
     ui.add_space(6.0);
     let mut action: Option<&str> = None;
     ui.horizontal_top(|ui| {

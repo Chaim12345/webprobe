@@ -1074,34 +1074,34 @@ impl Shared {
         self.queue.lock().map(|q| q.len()).unwrap_or(0)
     }
 
-    /// Extension request hooks (Montoya-shaped, Path A): run every enabled
-    /// extension in registration order; false means one dropped the message.
     /// The upstream route for a destination host (Settings > Network >
     /// Upstream proxy servers, then the global setting).
     pub fn upstream_for(&self, host: &str) -> crate::upstream::UpstreamConfig {
         crate::upstream::choose(&self.upstream_rules.lock().unwrap(), &self.upstream.lock().unwrap(), host)
     }
 
+    /// Extension request hooks (Montoya-shaped, Path A): run every enabled
+    /// extension in registration order; false means one dropped the message.
     /// The registry is only locked to take the list, not while hooks run.
-    pub fn ext_handle_request(&self, method: &str, path: &str, req: &mut Vec<u8>) -> bool {
+    pub fn ext_handle_request(&self, svc: &crate::ext_host::HttpService, method: &str, path: &str, req: &mut Vec<u8>) -> bool {
         let exts = self.ext_host.lock().unwrap().active();
         if exts.is_empty() {
             return true;
         }
-        let pass = crate::ext_host::run_request_hooks(&exts, method, path, req);
-        self.collect_ext_issues(&exts, "", path);
+        let pass = crate::ext_host::run_request_hooks(&exts, svc, method, path, req);
+        self.collect_ext_issues(&exts, &svc.host, path);
         pass
     }
 
     /// Extension response hooks: false means one dropped the message. Issues
     /// the extensions reported are added for `host` + `path`.
-    pub fn ext_handle_response(&self, host: &str, method: &str, path: &str, resp: &mut Vec<u8>) -> bool {
+    pub fn ext_handle_response(&self, svc: &crate::ext_host::HttpService, method: &str, path: &str, resp: &mut Vec<u8>) -> bool {
         let exts = self.ext_host.lock().unwrap().active();
         if exts.is_empty() {
             return true;
         }
-        let pass = crate::ext_host::run_response_hooks(&exts, method, path, resp);
-        self.collect_ext_issues(&exts, host, path);
+        let pass = crate::ext_host::run_response_hooks(&exts, svc, method, path, resp);
+        self.collect_ext_issues(&exts, &svc.host, path);
         pass
     }
 
@@ -2564,7 +2564,7 @@ fn handle_websocket(shared: Arc<Shared>, mut client: TcpStream, req: Vec<u8>) {
     let (host, port) = host_of(&parts, 80);
     let req_session = apply_session_rules(&shared, &req, 80);
     let mut req_out = crate::rules::apply_rules(&req_session, &shared.mr_request.lock().unwrap());
-    if !shared.ext_handle_request(&parts.method, &path_of(&parts), &mut req_out) {
+    if !shared.ext_handle_request(&crate::ext_host::HttpService::new(&host, port, false), &parts.method, &path_of(&parts), &mut req_out) {
         shared.log("WebSocket handshake dropped by an extension hook");
         return;
     }
@@ -2669,7 +2669,7 @@ fn handle_tls_websocket(
     let parts = util::parse_http(&req);
     let req_session = apply_session_rules(&shared, &req, 443);
     let mut req_out = crate::rules::apply_rules(&req_session, &shared.mr_request.lock().unwrap());
-    if !shared.ext_handle_request(&parts.method, &path_of(&parts), &mut req_out) {
+    if !shared.ext_handle_request(&crate::ext_host::HttpService::new(&host, port, true), &parts.method, &path_of(&parts), &mut req_out) {
         shared.log("TLS WebSocket handshake dropped by an extension hook");
         return;
     }
@@ -3084,7 +3084,7 @@ fn upstream_and_deliver<S: ProxyIo>(
     let mut req_out = crate::rules::apply_rules(&req_session, &shared.mr_request.lock().unwrap());
     // Extension hooks run after the built-in chain (session rules, M&R);
     // a Drop verdict closes the client connection without a response.
-    if !shared.ext_handle_request(&parts.method, &path_of(&parts), &mut req_out) {
+    if !shared.ext_handle_request(&crate::ext_host::HttpService::new(&host, port, use_tls), &parts.method, &path_of(&parts), &mut req_out) {
         shared.log("Request dropped by an extension hook");
         return;
     }
@@ -3097,7 +3097,7 @@ fn upstream_and_deliver<S: ProxyIo>(
     match up.resp {
         Some(resp) => {
             let mut resp = crate::rules::apply_rules(&resp, &shared.mr_response.lock().unwrap());
-            if !shared.ext_handle_response(&host, &parts.method, &path_of(&parts), &mut resp) {
+            if !shared.ext_handle_response(&crate::ext_host::HttpService::new(&host, port, use_tls), &parts.method, &path_of(&parts), &mut resp) {
                 shared.log("Response dropped by an extension hook");
                 return;
             }

@@ -16,8 +16,8 @@
 //!   {"id":N,"text":"tab content"}
 
 use std::collections::VecDeque;
-use std::io::{BufRead, BufReader, Write};
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::io::{BufRead, BufReader, Read, Write};
+use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::time::Duration;
@@ -37,6 +37,10 @@ pub const REGISTER_TIMEOUT: Duration = Duration::from_secs(20);
 /// Consecutive failed calls before the extension is treated as dead.
 const MAX_FAILURES: usize = 3;
 
+/// Longest line read from an extension (64 MiB of base64 is about the
+/// largest message the proxy carries).
+const MAX_LINE: usize = 96 * 1024 * 1024;
+
 pub struct ProcessExtension {
     name: String,
     path: String,
@@ -44,7 +48,9 @@ pub struct ProcessExtension {
     tab: Option<String>,
     definitions: Vec<IssueDefinition>,
     child: Mutex<Option<Child>>,
-    stdin: Mutex<Option<ChildStdin>>,
+    /// Lines to the extension, written by a writer thread: an extension that
+    /// stops reading must not block a proxy thread on a full pipe.
+    stdin: Mutex<Option<mpsc::Sender<String>>>,
     /// Lines from the extension's stdout (a reader thread feeds it, so a
     /// silent extension cannot block the caller past its deadline).
     lines: Mutex<Receiver<String>>,
@@ -55,7 +61,10 @@ pub struct ProcessExtension {
     failures: AtomicUsize,
     dead: AtomicBool,
     errors: std::sync::Arc<Mutex<VecDeque<String>>>,
-    issues: Mutex<Vec<ExtIssue>>,
+    /// Issues per calling thread: hooks and their collection run on one
+    /// proxy thread back to back, so a concurrent connection can never take
+    /// (and mislabel) another connection's issues.
+    issues: Mutex<std::collections::HashMap<std::thread::ThreadId, Vec<ExtIssue>>>,
     tab_text: Mutex<String>,
 }
 
@@ -87,15 +96,38 @@ impl ProcessExtension {
             }
         }
         let mut child = cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| format!("cannot start {program}: {e}"))?;
-        let stdin = child.stdin.take().ok_or("extension stdin unavailable")?;
+        let mut pipe = child.stdin.take().ok_or("extension stdin unavailable")?;
+        let (stdin, to_write) = mpsc::channel::<String>();
+        std::thread::Builder::new()
+            .name("ext-stdin".into())
+            .spawn(move || {
+                for line in to_write {
+                    if writeln!(pipe, "{line}").and_then(|_| pipe.flush()).is_err() {
+                        break;
+                    }
+                }
+            })
+            .map_err(|e| e.to_string())?;
         let stdout = child.stdout.take().ok_or("extension stdout unavailable")?;
         let stderr = child.stderr.take().ok_or("extension stderr unavailable")?;
-        let (tx, rx) = mpsc::channel();
+        // Bounded: a chatty extension waits for us instead of filling memory,
+        // and one line is at most MAX_LINE bytes.
+        let (tx, rx) = mpsc::sync_channel(64);
         std::thread::Builder::new()
             .name("ext-stdout".into())
             .spawn(move || {
-                for line in BufReader::new(stdout).lines() {
-                    let Ok(line) = line else { break };
+                let mut reader = BufReader::new(stdout);
+                loop {
+                    let mut buf = Vec::new();
+                    match (&mut reader).take(MAX_LINE as u64).read_until(b'\n', &mut buf) {
+                        Ok(0) | Err(_) => break,
+                        Ok(_) => {}
+                    }
+                    if buf.len() >= MAX_LINE && buf.last() != Some(&b'\n') {
+                        // Skip the rest of an oversized line.
+                        let _ = reader.skip_until(b'\n');
+                    }
+                    let line = String::from_utf8_lossy(&buf).trim_end_matches(['\r', '\n']).to_string();
                     if tx.send(line).is_err() {
                         break;
                     }
@@ -128,7 +160,7 @@ impl ProcessExtension {
             failures: AtomicUsize::new(0),
             dead: AtomicBool::new(false),
             errors,
-            issues: Mutex::new(Vec::new()),
+            issues: Mutex::new(std::collections::HashMap::new()),
             tab_text: Mutex::new(String::new()),
         };
         let reg = ext.call_within(serde_json::json!({ "type": "hello", "api": API_VERSION }), None, REGISTER_TIMEOUT.max(timeout))?;
@@ -182,9 +214,9 @@ impl ProcessExtension {
         }
         let result = (|| {
             {
-                let mut stdin = self.stdin.lock().unwrap();
-                let w = stdin.as_mut().ok_or("stdin closed")?;
-                writeln!(w, "{msg}").and_then(|_| w.flush()).map_err(|e| format!("write failed: {e}"))?;
+                let stdin = self.stdin.lock().unwrap();
+                let w = stdin.as_ref().ok_or("stdin closed")?;
+                w.send(msg.to_string()).map_err(|_| "write failed: extension input closed".to_string())?;
             }
             let deadline = std::time::Instant::now() + timeout;
             let rx = self.lines.lock().unwrap();
@@ -231,7 +263,7 @@ impl ProcessExtension {
             return ProxyAction::Continue;
         };
         if let Some(found) = reply.get("issues").and_then(|i| i.as_array()) {
-            self.issues.lock().unwrap().extend(found.iter().filter_map(parse_issue));
+            self.issues.lock().unwrap().entry(std::thread::current().id()).or_default().extend(found.iter().filter_map(parse_issue));
         }
         if let Some(raw) = reply.get("raw").and_then(|r| r.as_str()) {
             match B64.decode(raw) {
@@ -278,17 +310,17 @@ impl ProxyHooks for ProcessExtension {
     fn hooks_registered(&self) -> &'static str {
         "WebProbe extension API v1 (process)"
     }
-    fn handle_request_received(&self, method: &str, path: &str, req: &mut Vec<u8>) -> ProxyAction {
+    fn handle_request_received(&self, _svc: &crate::ext_host::HttpService, method: &str, path: &str, req: &mut Vec<u8>) -> ProxyAction {
         self.hook("request", method, path, req)
     }
-    fn handle_response_received(&self, method: &str, path: &str, resp: &mut Vec<u8>) -> ProxyAction {
+    fn handle_response_received(&self, _svc: &crate::ext_host::HttpService, method: &str, path: &str, resp: &mut Vec<u8>) -> ProxyAction {
         self.hook("response", method, path, resp)
     }
     fn issue_definitions(&self) -> Vec<IssueDefinition> {
         self.definitions.clone()
     }
     fn take_issues(&self) -> Vec<ExtIssue> {
-        std::mem::take(&mut *self.issues.lock().unwrap())
+        self.issues.lock().unwrap().remove(&std::thread::current().id()).unwrap_or_default()
     }
     fn tab_title(&self) -> Option<String> {
         self.tab.clone()
@@ -331,18 +363,18 @@ mod tests {
         assert_eq!(ext.issue_definitions()[0].name, "Marker reflected in response");
         // The request hook adds the marker header.
         let mut req = b"GET /a HTTP/1.1\r\nHost: h\r\n\r\n".to_vec();
-        assert!(matches!(ext.handle_request_received("GET", "/a", &mut req), ProxyAction::Continue));
+        assert!(matches!(ext.handle_request_received(&crate::ext_host::HttpService::new("qa.test", 80, false), "GET", "/a", &mut req), ProxyAction::Continue));
         assert!(String::from_utf8_lossy(&req).contains("X-Marker: wpx1"), "{}", String::from_utf8_lossy(&req));
         // A response echoing the marker yields an issue.
         let mut resp = b"HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\nhi wpx1 !".to_vec();
-        assert!(matches!(ext.handle_response_received("GET", "/a", &mut resp), ProxyAction::Continue));
+        assert!(matches!(ext.handle_response_received(&crate::ext_host::HttpService::new("qa.test", 80, false), "GET", "/a", &mut resp), ProxyAction::Continue));
         let issues = ext.take_issues();
         assert_eq!(issues.len(), 1);
         assert_eq!((issues[0].name.as_str(), issues[0].severity.as_str()), ("Marker reflected in response", "info"));
         assert!(ext.take_issues().is_empty(), "issues are handed over once");
         // Requests to /blocked are dropped.
         let mut blocked = b"GET /blocked HTTP/1.1\r\nHost: h\r\n\r\n".to_vec();
-        assert!(matches!(ext.handle_request_received("GET", "/blocked", &mut blocked), ProxyAction::Drop));
+        assert!(matches!(ext.handle_request_received(&crate::ext_host::HttpService::new("qa.test", 80, false), "GET", "/blocked", &mut blocked), ProxyAction::Drop));
         ext.refresh_tab();
         assert!(ext.tab_content().contains("requests seen: 2"), "{}", ext.tab_content());
         assert!(ext.healthy());
@@ -357,7 +389,7 @@ mod tests {
         let mut req = b"GET / HTTP/1.1\r\n\r\n".to_vec();
         let before = req.clone();
         for _ in 0..MAX_FAILURES {
-            assert!(matches!(ext.handle_request_received("GET", "/", &mut req), ProxyAction::Continue));
+            assert!(matches!(ext.handle_request_received(&crate::ext_host::HttpService::new("qa.test", 80, false), "GET", "/", &mut req), ProxyAction::Continue));
         }
         assert_eq!(req, before);
         assert!(!ext.healthy(), "stopped after repeated timeouts");
@@ -366,7 +398,7 @@ mod tests {
         let crash = "import json,sys\nprint(json.dumps({'type':'register','name':'crash','hooks':['request']}),flush=True)\nsys.stderr.write('boom\\n')\n";
         let ext = ProcessExtension::spawn(&py, &["-I".into(), "-c".into(), crash.into()], Duration::from_secs(5)).unwrap();
         std::thread::sleep(Duration::from_millis(300));
-        assert!(matches!(ext.handle_request_received("GET", "/", &mut req), ProxyAction::Continue));
+        assert!(matches!(ext.handle_request_received(&crate::ext_host::HttpService::new("qa.test", 80, false), "GET", "/", &mut req), ProxyAction::Continue));
         assert!(!ext.healthy());
         std::thread::sleep(Duration::from_millis(100));
         assert!(ext.errors().iter().any(|e| e == "stderr: boom"), "{:?}", ext.errors());

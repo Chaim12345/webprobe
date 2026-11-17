@@ -17,6 +17,33 @@ pub enum ProxyAction {
     Drop,
 }
 
+/// The service a message goes to (Montoya `HttpService`): host, port and
+/// whether TLS is used, so extensions that scope by service or URL see the
+/// real target.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct HttpService {
+    pub host: String,
+    pub port: u16,
+    pub secure: bool,
+}
+
+impl HttpService {
+    pub fn new(host: &str, port: u16, secure: bool) -> Self {
+        HttpService { host: host.to_string(), port, secure }
+    }
+
+    /// `scheme://host[:port]`, the port omitted when it is the default.
+    pub fn origin(&self) -> String {
+        let scheme = if self.secure { "https" } else { "http" };
+        let default = if self.secure { 443 } else { 80 };
+        if self.port == default || self.port == 0 {
+            format!("{scheme}://{}", self.host)
+        } else {
+            format!("{scheme}://{}:{}", self.host, self.port)
+        }
+    }
+}
+
 /// The hook surface an extension registers. Every method defaults to
 /// Continue with no edits, mirroring Montoya's default implementations.
 pub trait ProxyHooks: Send + Sync {
@@ -27,10 +54,10 @@ pub trait ProxyHooks: Send + Sync {
     fn hooks_registered(&self) -> &'static str {
         ""
     }
-    fn handle_request_received(&self, _method: &str, _path: &str, _req: &mut Vec<u8>) -> ProxyAction {
+    fn handle_request_received(&self, _svc: &crate::ext_host::HttpService, _method: &str, _path: &str, _req: &mut Vec<u8>) -> ProxyAction {
         ProxyAction::Continue
     }
-    fn handle_response_received(&self, _method: &str, _path: &str, _resp: &mut Vec<u8>) -> ProxyAction {
+    fn handle_response_received(&self, _svc: &crate::ext_host::HttpService, _method: &str, _path: &str, _resp: &mut Vec<u8>) -> ProxyAction {
         ProxyAction::Continue
     }
     /// Issue types the extension can report (Burp's custom issue
@@ -109,6 +136,9 @@ impl LoadedExtension {
 #[derive(Default)]
 pub struct ExtensionHost {
     pub extensions: Vec<LoadedExtension>,
+    /// Remembered extensions that failed to load this session (no `java`,
+    /// a moved jar): kept so saving the list does not forget them.
+    pub not_loaded: Vec<crate::ext_store::Installed>,
 }
 
 impl ExtensionHost {
@@ -119,23 +149,23 @@ impl ExtensionHost {
         self.extensions.iter().filter(|e| e.enabled).map(|e| Arc::clone(&e.hooks)).collect()
     }
 
-    pub fn run_request_hooks(&self, method: &str, path: &str, req: &mut Vec<u8>) -> bool {
-        run_request_hooks(&self.active(), method, path, req)
+    pub fn run_request_hooks(&self, svc: &HttpService, method: &str, path: &str, req: &mut Vec<u8>) -> bool {
+        run_request_hooks(&self.active(), svc, method, path, req)
     }
 
-    pub fn run_response_hooks(&self, method: &str, path: &str, resp: &mut Vec<u8>) -> bool {
-        run_response_hooks(&self.active(), method, path, resp)
+    pub fn run_response_hooks(&self, svc: &HttpService, method: &str, path: &str, resp: &mut Vec<u8>) -> bool {
+        run_response_hooks(&self.active(), svc, method, path, resp)
     }
 }
 
 /// Run request hooks in order; false when one dropped the message.
-pub fn run_request_hooks(exts: &[Arc<dyn ProxyHooks>], method: &str, path: &str, req: &mut Vec<u8>) -> bool {
-    exts.iter().all(|e| !matches!(e.handle_request_received(method, path, req), ProxyAction::Drop))
+pub fn run_request_hooks(exts: &[Arc<dyn ProxyHooks>], svc: &HttpService, method: &str, path: &str, req: &mut Vec<u8>) -> bool {
+    exts.iter().all(|e| !matches!(e.handle_request_received(svc, method, path, req), ProxyAction::Drop))
 }
 
 /// Run response hooks in order; false when one dropped the message.
-pub fn run_response_hooks(exts: &[Arc<dyn ProxyHooks>], method: &str, path: &str, resp: &mut Vec<u8>) -> bool {
-    exts.iter().all(|e| !matches!(e.handle_response_received(method, path, resp), ProxyAction::Drop))
+pub fn run_response_hooks(exts: &[Arc<dyn ProxyHooks>], svc: &HttpService, method: &str, path: &str, resp: &mut Vec<u8>) -> bool {
+    exts.iter().all(|e| !matches!(e.handle_response_received(svc, method, path, resp), ProxyAction::Drop))
 }
 
 /// Built-in example (QA hook WEBPROBE_EXT_TEST): adds an X-WebProbe-Extension
@@ -149,7 +179,7 @@ impl ProxyHooks for ExampleHeaderExtension {
     fn hooks_registered(&self) -> &'static str {
         "ProxyRequestHandler"
     }
-    fn handle_request_received(&self, _method: &str, _path: &str, req: &mut Vec<u8>) -> ProxyAction {
+    fn handle_request_received(&self, _svc: &crate::ext_host::HttpService, _method: &str, _path: &str, req: &mut Vec<u8>) -> ProxyAction {
         *req = crate::net::replace_or_add_header(req, "X-WebProbe-Extension", "example");
         ProxyAction::Continue
     }
@@ -264,9 +294,19 @@ fn apply_bridge_edit(orig: &[u8], reply: &serde_json::Value, request: bool) -> O
         sep.map(|p| orig[p..].to_vec()).unwrap_or_default()
     };
     let mut out = first.into_bytes();
+    // A changed body is sent as one plain body: any chunked coding is gone
+    // and Content-Length is set even when the message had none (an extension
+    // adding a body to a POST, or editing a chunked response, used to send
+    // a message whose framing no longer matched).
+    let framing = |k: &str| k.eq_ignore_ascii_case("content-length") || k.eq_ignore_ascii_case("transfer-encoding");
     for (k, v) in &headers {
-        let v = if body_changed && k.eq_ignore_ascii_case("content-length") { body.len().to_string() } else { v.clone() };
+        if body_changed && framing(k) {
+            continue;
+        }
         out.extend_from_slice(format!("\r\n{k}: {v}").as_bytes());
+    }
+    if body_changed && (!body.is_empty() || headers.iter().any(|(k, _)| framing(k))) {
+        out.extend_from_slice(format!("\r\nContent-Length: {}", body.len()).as_bytes());
     }
     out.extend_from_slice(b"\r\n\r\n");
     out.extend_from_slice(&body);
@@ -458,17 +498,14 @@ impl ProxyHooks for JavaSidecar {
         !self.dead.load(Ordering::Relaxed)
     }
 
-    fn handle_request_received(&self, method: &str, path: &str, req: &mut Vec<u8>) -> ProxyAction {
+    fn handle_request_received(&self, svc: &crate::ext_host::HttpService, method: &str, path: &str, req: &mut Vec<u8>) -> ProxyAction {
         if self.dead.load(Ordering::Relaxed) {
             return ProxyAction::Continue;
         }
         let (headers, body) = split_headers_body(req);
-        let host = headers
-            .iter()
-            .find(|(k, _)| k.eq_ignore_ascii_case("Host"))
-            .map(|(_, v)| v.clone())
-            .unwrap_or_default();
-        let url = format!("http://{host}{path}");
+        // The real service: extensions scope by httpService() and URL.
+        let (host, port, secure) = (svc.host.clone(), svc.port, svc.secure);
+        let url = if path.contains("://") { path.to_string() } else { format!("{}{path}", svc.origin()) };
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let msg = serde_json::json!({
             "type": "request",
@@ -479,8 +516,8 @@ impl ProxyHooks for JavaSidecar {
             "body": body,
             "url": url,
             "host": host,
-            "port": 80,
-            "secure": false,
+            "port": port,
+            "secure": secure,
             "httpVersion": "HTTP/1.1",
         });
         match self.exchange(&msg.to_string(), Some(id), HOOK_TIMEOUT) {
@@ -497,17 +534,14 @@ impl ProxyHooks for JavaSidecar {
         }
     }
 
-    fn handle_response_received(&self, method: &str, path: &str, resp: &mut Vec<u8>) -> ProxyAction {
+    fn handle_response_received(&self, svc: &crate::ext_host::HttpService, method: &str, path: &str, resp: &mut Vec<u8>) -> ProxyAction {
         if self.dead.load(Ordering::Relaxed) {
             return ProxyAction::Continue;
         }
         let (headers, body) = split_headers_body(resp);
         let (version, status, reason) = response_status_line(resp);
-        let host = headers
-            .iter()
-            .find(|(k, _)| k.eq_ignore_ascii_case("Host"))
-            .map(|(_, v)| v.clone())
-            .unwrap_or_default();
+        // The request's service (a response has no Host header of its own).
+        let (host, port, secure) = (svc.host.clone(), svc.port, svc.secure);
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let msg = serde_json::json!({
             "type": "response",
@@ -517,8 +551,8 @@ impl ProxyHooks for JavaSidecar {
             "headers": headers.iter().map(|(k, v)| [k, v]).collect::<Vec<_>>(),
             "body": body,
             "host": host,
-            "port": 80,
-            "secure": false,
+            "port": port,
+            "secure": secure,
             "httpVersion": version,
             "status": status,
             "reason": reason,
@@ -542,13 +576,34 @@ impl ProxyHooks for JavaSidecar {
 mod tests {
     use super::*;
 
+    /// Second review, finding 11: an extension's body edit leaves a message
+    /// with consistent framing.
+    #[test]
+    fn bridge_body_edits_reframe_the_message() {
+        let orig = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nX: 1\r\n\r\n3\r\nabc\r\n0\r\n\r\n";
+        let reply = serde_json::json!({"edited": true, "httpVersion": "HTTP/1.1", "status": 200, "reason": "OK", "body": "hello", "headers": [["Transfer-Encoding", "chunked"], ["X", "1"]]});
+        let out = String::from_utf8(apply_bridge_edit(orig, &reply, false).unwrap()).unwrap();
+        assert_eq!(out, "HTTP/1.1 200 OK\r\nX: 1\r\nContent-Length: 5\r\n\r\nhello");
+        let post = b"POST /a HTTP/1.1\r\nHost: h\r\n\r\n";
+        let reply = serde_json::json!({"edited": true, "method": "POST", "path": "/a", "httpVersion": "HTTP/1.1", "body": "x=1", "headers": [["Host", "h"]]});
+        let out = String::from_utf8(apply_bridge_edit(post, &reply, true).unwrap()).unwrap();
+        assert!(out.ends_with("Host: h\r\nContent-Length: 3\r\n\r\nx=1"), "{out}");
+    }
+
+    #[test]
+    fn http_service_origin_omits_default_ports() {
+        assert_eq!(HttpService::new("h", 443, true).origin(), "https://h");
+        assert_eq!(HttpService::new("h", 8443, true).origin(), "https://h:8443");
+        assert_eq!(HttpService::new("h", 80, false).origin(), "http://h");
+    }
+
     /// An extension that drops every request and counts invocations.
     struct DropExtension;
     impl ProxyHooks for DropExtension {
         fn extension_name(&self) -> &str {
             "Dropper"
         }
-        fn handle_request_received(&self, _: &str, _: &str, _: &mut Vec<u8>) -> ProxyAction {
+        fn handle_request_received(&self, _svc: &crate::ext_host::HttpService, _: &str, _: &str, _: &mut Vec<u8>) -> ProxyAction {
             ProxyAction::Drop
         }
     }
@@ -561,7 +616,7 @@ mod tests {
         fn extension_name(&self) -> &str {
             &self.name
         }
-        fn handle_request_received(&self, method: &str, path: &str, req: &mut Vec<u8>) -> ProxyAction {
+        fn handle_request_received(&self, _svc: &crate::ext_host::HttpService, method: &str, path: &str, req: &mut Vec<u8>) -> ProxyAction {
             req.extend_from_slice(format!("|{method}{path}").as_bytes());
             ProxyAction::Continue
         }
@@ -571,39 +626,42 @@ mod tests {
     fn empty_host_lets_everything_through() {
         let host = ExtensionHost::default();
         let mut req = b"GET / HTTP/1.1\r\n\r\n".to_vec();
-        assert!(host.run_request_hooks("GET", "/", &mut req));
-        assert!(host.run_response_hooks("GET", "/", &mut req));
+        assert!(host.run_request_hooks(&crate::ext_host::HttpService::new("qa.test", 80, false), "GET", "/", &mut req));
+        assert!(host.run_response_hooks(&crate::ext_host::HttpService::new("qa.test", 80, false), "GET", "/", &mut req));
     }
 
     #[test]
     fn drop_stops_the_chain_and_later_extensions_do_not_run() {
         let host = ExtensionHost {
+            not_loaded: Vec::new(),
             extensions: vec![
                 LoadedExtension { enabled: true, hooks: Arc::new(DropExtension), source: None },
                 LoadedExtension { enabled: true, hooks: Arc::new(EchoExtension { name: "Second".into() }), source: None },
             ],
         };
         let mut req = b"GET / HTTP/1.1\r\n\r\n".to_vec();
-        assert!(!host.run_request_hooks("GET", "/", &mut req));
+        assert!(!host.run_request_hooks(&crate::ext_host::HttpService::new("qa.test", 80, false), "GET", "/", &mut req));
         assert!(!req.windows(5).any(|w| w == b"|GET/"), "the extension after the Drop never ran");
     }
 
     #[test]
     fn disabled_extensions_are_skipped() {
         let host = ExtensionHost {
+            not_loaded: Vec::new(),
             extensions: vec![
                 LoadedExtension { enabled: false, hooks: Arc::new(DropExtension), source: None },
                 LoadedExtension { enabled: true, hooks: Arc::new(EchoExtension { name: "Echo".into() }), source: None },
             ],
         };
         let mut req = b"GET / HTTP/1.1\r\n\r\n".to_vec();
-        assert!(host.run_request_hooks("GET", "/", &mut req), "the disabled Dropper is skipped");
+        assert!(host.run_request_hooks(&crate::ext_host::HttpService::new("qa.test", 80, false), "GET", "/", &mut req), "the disabled Dropper is skipped");
         assert!(req.windows(5).any(|w| w == b"|GET/"), "the enabled Echo ran and edited the message");
     }
 
     #[test]
     fn example_extension_adds_its_header() {
         let host = ExtensionHost {
+            not_loaded: Vec::new(),
             extensions: vec![LoadedExtension {
                 enabled: true,
                 hooks: Arc::new(ExampleHeaderExtension),
@@ -611,7 +669,7 @@ mod tests {
             }],
         };
         let mut req = b"GET / HTTP/1.1\r\nHost: example.com\r\n\r\n".to_vec();
-        assert!(host.run_request_hooks("GET", "/", &mut req));
+        assert!(host.run_request_hooks(&crate::ext_host::HttpService::new("qa.test", 80, false), "GET", "/", &mut req));
         let text = String::from_utf8_lossy(&req);
         assert!(text.contains("X-WebProbe-Extension: example"));
     }
@@ -638,20 +696,21 @@ mod tests {
         };
         assert_eq!(sidecar.extension_name(), "Montoya bridge (demo-ext.jar)");
         let host = ExtensionHost {
+            not_loaded: Vec::new(),
             extensions: vec![LoadedExtension { enabled: true, hooks: Arc::new(sidecar), source: None }],
         };
         // The demo extension drops any path containing "/admin-drop".
         let mut req = b"GET /admin-drop/panel HTTP/1.1\r\nHost: qa.test\r\n\r\n".to_vec();
-        assert!(!host.run_request_hooks("GET", "/admin-drop/panel", &mut req));
+        assert!(!host.run_request_hooks(&crate::ext_host::HttpService::new("qa.test", 80, false), "GET", "/admin-drop/panel", &mut req));
         // Everything else continues, edited by the extension (withAddedHeader).
         let mut req = b"GET http://qa.test/normal HTTP/1.1\r\nHost: qa.test\r\n\r\n".to_vec();
-        assert!(host.run_request_hooks("GET", "/normal", &mut req));
+        assert!(host.run_request_hooks(&crate::ext_host::HttpService::new("qa.test", 80, false), "GET", "/normal", &mut req));
         let text = String::from_utf8_lossy(&req);
         assert!(text.starts_with("GET http://qa.test/normal HTTP/1.1\r\n"), "target kept: {text}");
         assert!(text.contains("\r\nX-Montoya-Demo: 1\r\n"), "{text}");
         // Response hooks run and edit too.
         let mut resp = b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\nhello".to_vec();
-        assert!(host.run_response_hooks("GET", "/normal", &mut resp));
+        assert!(host.run_response_hooks(&crate::ext_host::HttpService::new("qa.test", 80, false), "GET", "/normal", &mut resp));
         let text = String::from_utf8_lossy(&resp);
         assert!(text.starts_with("HTTP/1.1 200 OK\r\n") && text.contains("X-Montoya-Seen: 1") && text.ends_with("\r\n\r\nhello"), "{text}");
     }
