@@ -83,10 +83,11 @@ fn run(mut cmd: Command, deadline: Duration) -> Result<String, String> {
     crate::util::own_process_group(&mut cmd);
     let mut child = cmd.stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::null()).spawn().map_err(|e| e.to_string())?;
     let mut out = child.stdout.take().ok_or("no stdout")?;
-    let reader = std::thread::spawn(move || {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
         let mut s = String::new();
         let _ = out.read_to_string(&mut s);
-        s
+        let _ = tx.send(s);
     });
     let t0 = std::time::Instant::now();
     let pgid = child.id();
@@ -94,7 +95,11 @@ fn run(mut cmd: Command, deadline: Duration) -> Result<String, String> {
     loop {
         peak = peak.max(group_rss_kb(pgid));
         if let Ok(Some(status)) = child.try_wait() {
-            let text = reader.join().unwrap_or_default();
+            // The engine's helpers (renderer, zygote) may outlive it and keep
+            // stdout open: stop the whole group, then take what was read,
+            // without waiting forever on a pipe a stray helper still holds.
+            crate::util::kill_process_tree(pgid, None, Duration::from_millis(500));
+            let text = rx.recv_timeout(Duration::from_secs(2)).unwrap_or_default();
             LAST_RUN.with(|c| c.set(RunStats { elapsed: t0.elapsed(), peak_rss_kb: peak }));
             return if status.success() || !text.trim().is_empty() { Ok(text) } else { Err(format!("exited with {status}")) };
         }

@@ -17,6 +17,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # N-06: history bodies in mapped, unlinked segment files (core/src/body.rs).
 memmap2 = "0.9"
+# webprobe-headless proxy: Ctrl+C / SIGTERM end the run and save the project.
+signal-hook = "0.3"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 time = "0.3"
 webpki-roots = "0.26"

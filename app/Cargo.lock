@@ -4870,6 +4870,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "signal-hook",
  "time",
  "tungstenite",
  "webpki-roots 0.26.11",

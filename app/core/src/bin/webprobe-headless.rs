@@ -90,8 +90,12 @@ fn proxy(mut args: Vec<String>) {
         std::thread::sleep(Duration::from_millis(50));
     }
     eprintln!("proxy listening on 127.0.0.1:{port}");
-    // Stop on end of standard input (Ctrl+D, or the parent closing it).
+    // Stop on end of standard input (Ctrl+D, or the parent closing it), and
+    // on Ctrl+C / SIGTERM: the run then ends normally, so --project is saved.
     let stdin_closed = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    for sig in [signal_hook::consts::SIGINT, signal_hook::consts::SIGTERM] {
+        let _ = signal_hook::flag::register(sig, stdin_closed.clone());
+    }
     if seconds.is_none() {
         let flag = stdin_closed.clone();
         std::thread::spawn(move || {
@@ -101,17 +105,18 @@ fn proxy(mut args: Vec<String>) {
     }
     let mut printed = 0usize;
     loop {
-        {
+        // Copy the new rows out first: printing to a slow pipe must not hold
+        // the history lock every proxy thread needs to record.
+        let fresh: Vec<String> = {
             let history = shared.history.lock().unwrap();
-            for e in history.iter().skip(printed) {
-                println!("{}\t{}\t{}\t{}\t{}", e.id, e.method, net::history_host(e), e.path, e.status);
-            }
+            let rows = history.iter().skip(printed).map(|e| format!("{}\t{}\t{}\t{}\t{}", e.id, e.method, net::history_host(e), e.path, e.status)).collect();
             printed = history.len();
-        }
-        let done = match seconds {
-            Some(s) => started.elapsed() >= Duration::from_secs(s),
-            None => stdin_closed.load(Ordering::SeqCst),
+            rows
         };
+        for row in fresh {
+            println!("{row}");
+        }
+        let done = stdin_closed.load(Ordering::SeqCst) || seconds.is_some_and(|s| started.elapsed() >= Duration::from_secs(s));
         if done {
             break;
         }

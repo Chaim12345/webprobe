@@ -55,9 +55,23 @@ pub fn choose(rules: &[UpstreamRule], default: &UpstreamConfig, host: &str) -> U
 
 fn connect_socket(host: &str, port: u16) -> Result<TcpStream, String> {
     let addrs = crate::net::resolve(host, port, DNS_TIMEOUT_MS)?;
-    let addr = addrs.first().ok_or_else(|| format!("no address for {host}:{port}"))?;
-    let stream = TcpStream::connect_timeout(addr, Duration::from_millis(CONNECT_TIMEOUT_MS))
-        .map_err(|e| format!("connect {addr}: {e}"))?;
+    if addrs.is_empty() {
+        return Err(format!("no address for {host}:{port}"));
+    }
+    // Every resolved address in turn: `localhost` often resolves to ::1
+    // first, and a server bound to IPv4 only was then unreachable.
+    let mut errors = Vec::new();
+    let mut connected = None;
+    for addr in &addrs {
+        match TcpStream::connect_timeout(addr, Duration::from_millis(CONNECT_TIMEOUT_MS)) {
+            Ok(s) => {
+                connected = Some(s);
+                break;
+            }
+            Err(e) => errors.push(format!("connect {addr}: {e}")),
+        }
+    }
+    let stream = connected.ok_or_else(|| errors.join("; "))?;
     stream
         .set_read_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)))
         .map_err(|e| format!("set read timeout: {e}"))?;
@@ -217,6 +231,9 @@ pub fn absolute_form_request(config: &UpstreamConfig, raw: &[u8], host: &str, po
     let parts = util::parse_http(&request);
     let raw_parts = util::parse_http(raw);
     let path = if parts.path.is_empty() { "/" } else { parts.path.as_str() };
+    // An IPv6 literal is bracketed in a URI (RFC 3986): "http://::1:80/"
+    // is not one.
+    let host = if host.contains(':') && !host.starts_with('[') { format!("[{host}]") } else { host.to_string() };
     let first = format!("{} http://{}:{}{} HTTP/1.1", parts.method, host, port, path);
     // Reuse the original header/body bytes rather than reconstructing each field.
     let line_end = raw.iter().position(|b| *b == b'\n').map(|i| i + 1).unwrap_or(raw.len());
@@ -235,6 +252,26 @@ pub fn absolute_form_request(config: &UpstreamConfig, raw: &[u8], host: &str, po
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Second review, finding 16: an IPv6 target is bracketed in the
+    /// absolute-form URI sent to an HTTP upstream proxy.
+    #[test]
+    fn ipv6_targets_are_bracketed_for_http_proxies() {
+        let cfg = UpstreamConfig { kind: UpstreamKind::Http, host: "proxy".into(), port: "3128".into(), ..Default::default() };
+        let out = absolute_form_request(&cfg, b"GET /x HTTP/1.1\r\nHost: [::1]\r\n\r\n", "::1", 8080);
+        assert!(out.starts_with(b"GET http://[::1]:8080/x HTTP/1.1\r\n"), "{}", String::from_utf8_lossy(&out));
+        let out = absolute_form_request(&cfg, b"GET /x HTTP/1.1\r\n\r\n", "[::1]", 80);
+        assert!(out.starts_with(b"GET http://[::1]:80/x"), "already bracketed stays as is");
+    }
+
+    /// A server listening on IPv4 only is reached even when the name
+    /// resolves to ::1 first.
+    #[test]
+    fn every_resolved_address_is_tried() {
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        assert!(connect_socket("localhost", port).is_ok());
+    }
 
     #[test]
     fn upstream_rules_pick_the_first_match() {
