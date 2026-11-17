@@ -196,6 +196,72 @@ pub fn load_all(shared: &Arc<Shared>) {
     });
 }
 
+/// One catalogue entry (the BApp Store's role for WebProbe extensions):
+/// `extensions/catalogue.json` next to the binary or in the source tree.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct CatalogueEntry {
+    pub name: String,
+    pub description: String,
+    pub kind: Kind,
+    /// Command line (process) or jar path (java); `{dir}` is the catalogue's
+    /// directory.
+    pub command: String,
+    /// Programs the extension needs on PATH (its dependency view).
+    #[serde(default)]
+    pub requires: Vec<String>,
+}
+
+impl CatalogueEntry {
+    /// What to install: the command with `{dir}` filled in.
+    pub fn installed(&self, dir: &std::path::Path) -> Installed {
+        let d = dir.to_string_lossy();
+        // A process command is split like a shell line, so the directory is
+        // quoted (installations live under paths with spaces); a jar path
+        // is used as it is.
+        let filled = match self.kind {
+            Kind::Process => self.command.replace("{dir}", &format!("'{}'", d.replace('\'', "'\\''"))),
+            Kind::Java => self.command.replace("{dir}", &d),
+        };
+        Installed { kind: self.kind, source: filled, enabled: true }
+    }
+}
+
+/// Where the catalogue lives: $WEBPROBE_EXTENSIONS_DIR, `extensions/` next to
+/// the binary (or two levels up from target/<profile>), else the source tree.
+pub fn catalogue_dir() -> Option<PathBuf> {
+    let mut candidates: Vec<PathBuf> = std::env::var_os("WEBPROBE_EXTENSIONS_DIR").map(PathBuf::from).into_iter().collect();
+    if let Ok(exe) = std::env::current_exe() {
+        for up in exe.ancestors().skip(1).take(4) {
+            candidates.push(up.join("extensions"));
+        }
+    }
+    candidates.push(PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../extensions")));
+    candidates.into_iter().find(|d| d.join("catalogue.json").is_file()).map(|d| std::fs::canonicalize(&d).unwrap_or(d))
+}
+
+pub fn load_catalogue(dir: &std::path::Path) -> Result<Vec<CatalogueEntry>, String> {
+    let text = std::fs::read_to_string(dir.join("catalogue.json")).map_err(|e| e.to_string())?;
+    serde_json::from_str(&text).map_err(|e| format!("catalogue.json: {e}"))
+}
+
+/// Whether `program` is runnable: an existing path, or found on PATH.
+pub fn program_available(program: &str) -> bool {
+    let p = std::path::Path::new(program);
+    if p.components().count() > 1 {
+        return p.is_file();
+    }
+    std::env::var_os("PATH").is_some_and(|path| std::env::split_paths(&path).any(|d| d.join(program).is_file()))
+}
+
+/// The runtime an installed extension depends on: the process command's
+/// program, or java for a Montoya jar.
+pub fn runtime_of(item: &Installed) -> String {
+    match item.kind {
+        Kind::Java => "java".into(),
+        Kind::Process => split_command(&item.source).into_iter().next().unwrap_or_default(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -214,6 +280,23 @@ mod tests {
         assert_eq!(&w[..2], ["python3", "-I"], "a program name on PATH is left alone");
         assert!(std::path::Path::new(&w[2]).is_absolute() && w[2].ends_with("marker_reflection.py"), "{w:?}");
         assert_eq!(&w[3..], ["--x", "1"]);
+    }
+
+    #[test]
+    fn catalogue_loads_and_fills_its_directory() {
+        let dir = catalogue_dir().expect("source-tree catalogue");
+        let cat = load_catalogue(&dir).unwrap();
+        assert!(cat.len() >= 3);
+        let item = cat.iter().find(|c| c.name.starts_with("Security headers")).unwrap().installed(&dir);
+        assert_eq!(item.kind, Kind::Process);
+        assert!(!item.source.contains("{dir}") && item.source.ends_with("examples/security_headers.py"), "{}", item.source);
+        // Directories with spaces (and quotes) survive the command split.
+        let spaced = CatalogueEntry { name: "x".into(), description: String::new(), kind: Kind::Process, command: "python3 -I {dir}/a.py".into(), requires: vec![] };
+        let words = split_command(&spaced.installed(std::path::Path::new("/opt/Craft Anything/it's")).source);
+        assert_eq!(words, ["python3", "-I", "/opt/Craft Anything/it's/a.py"]);
+        assert_eq!(runtime_of(&item), "python3");
+        assert!(program_available("sh"));
+        assert!(!program_available("definitely-not-a-program-xyz"));
     }
 
     #[test]

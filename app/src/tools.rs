@@ -1219,31 +1219,7 @@ pub fn extensions(app: &mut App, ui: &mut Ui) {
         0 => {
             extensions_installed(app, ui);
         }
-        1 => {
-            ui.label(RichText::new("Customize WebProbe with extensions").strong().size(14.0).color(theme::ink()));
-            ui.label(RichText::new("The BApp Store is not fetched (offline); these well-known BApps are Java jars you can load with Installed > Add.").size(12.5).color(theme::ink_dim()));
-            ui.add_space(6.0);
-            const CATALOG: &[(&str, &str)] = &[
-                ("Active Scan++", "Additional active scan checks for common and unusual server misconfigurations."),
-                ("Autorize", "Repeats requests with a low-privileged session to detect broken access control."),
-                ("Collaborator Everywhere", "Injects Collaborator payloads into headers to surface out-of-band blind vulnerabilities."),
-                ("JWT*", "Decodes, manipulates and attacks JSON Web Tokens."),
-                ("Logger++", "Logs all requests and responses with a rich search and filter language."),
-                ("Param Miner", "Discovers hidden parameters by fuzzing and observes their effect on responses."),
-                ("Turbo Intruder", "High-speed HTTP brute-forcing for large-scale attacks."),
-                ("Upload Scanner", "Uploads files with payload injection to test file-handling endpoints."),
-            ];
-            egui::Grid::new("bapps").striped(true).num_columns(2).spacing([24.0, 6.0]).show(ui, |ui| {
-                ui.label(RichText::new("Name").strong());
-                ui.label(RichText::new("Detail").strong());
-                ui.end_row();
-                for (name, desc) in CATALOG {
-                    ui.label(RichText::new(*name).size(12.5).color(theme::ink()));
-                    ui.label(RichText::new(*desc).size(12.5).color(theme::ink_dim()));
-                    ui.end_row();
-                }
-            });
-        }
+        1 => bapp_store(app, ui),
         2 => {
             ui.label(RichText::new("APIs").strong().size(14.0).color(theme::ink()));
             ui.label(RichText::new("WebProbe extension API v1: any program speaking JSON lines on stdin/stdout can edit or drop requests and responses, report issues of its own declared types and show a tab (docs/extensions.md; example: extensions/examples/marker_reflection.py). Montoya API: Java extensions run against Burp's own Montoya classes through the sidecar JVM (initialize, logging, request/response continue-or-drop). Rust extensions implement ProxyHooks in-process.").size(12.5).color(theme::ink_dim()));
@@ -1261,6 +1237,69 @@ pub fn extensions(app: &mut App, ui: &mut Ui) {
             ui.label(RichText::new(format!("Java runtime for extensions: sidecar JVM against {}", crate::ext_host::JavaSidecar::burp_jar())).size(12.5).color(theme::ink_dim()));
         }
     }
+}
+
+/// Extensions > BApp Store: the installable catalogue
+/// (extensions/catalogue.json), with each entry's runtime dependencies and
+/// whether they are available, and Install (loads in the background and
+/// adds it to the saved extension list).
+fn bapp_store(app: &mut App, ui: &mut Ui) {
+    use webprobe_core::ext_store;
+    ui.label(RichText::new("Customize WebProbe with extensions").strong().size(14.0).color(theme::ink()));
+    ui.label(RichText::new("Extensions in this installation's catalogue. Install starts one in the background and keeps it in your extension list. Burp .jar extensions (BApps) load through Installed > Add > Java.").size(12.5).color(theme::ink_dim()));
+    ui.add_space(6.0);
+    let Some(dir) = ext_store::catalogue_dir() else {
+        ui.label(RichText::new("No extension catalogue found (extensions/catalogue.json; set WEBPROBE_EXTENSIONS_DIR).").size(12.5).color(theme::ink_dim()));
+        return;
+    };
+    let cat = match ext_store::load_catalogue(&dir) {
+        Ok(c) => c,
+        Err(e) => {
+            ui.label(RichText::new(format!("Could not read the catalogue: {e}")).size(12.5).color(theme::ink_dim()));
+            return;
+        }
+    };
+    let installed: Vec<String> = app.shared.ext_host.lock().unwrap().extensions.iter().filter_map(|e| e.source.as_ref().map(|s| s.source.clone())).collect();
+    let loading = app.ext_loading.load(std::sync::atomic::Ordering::SeqCst);
+    egui::Grid::new("bapps").striped(true).num_columns(5).spacing([18.0, 6.0]).show(ui, |ui| {
+        for h in ["Name", "Type", "Requires", "Detail", ""] {
+            ui.label(RichText::new(h).strong());
+        }
+        ui.end_row();
+        for entry in &cat {
+            let item = entry.installed(&dir);
+            let deps_ok = entry.requires.iter().all(|r| ext_store::program_available(r));
+            ui.label(RichText::new(&entry.name).size(12.5).color(theme::ink()));
+            ui.label(RichText::new(entry.kind.label()).size(12.5).color(theme::ink_dim()));
+            let deps = entry.requires.iter().map(|r| format!("{r} ({})", if ext_store::program_available(r) { "found" } else { "missing" })).collect::<Vec<_>>().join(", ");
+            ui.label(RichText::new(if deps.is_empty() { "-".to_string() } else { deps }).size(12.5).color(if deps_ok { theme::ink_dim() } else { egui::Color32::from_rgb(0xD6, 0x21, 0x3F) }));
+            // A fixed width: a wrapping label in a grid otherwise shrinks to
+            // one word per line.
+            ui.vertical(|ui| {
+                ui.set_width(560.0);
+                ui.add(egui::Label::new(RichText::new(&entry.description).size(12.5).color(theme::ink_dim())).wrap());
+            });
+            if installed.contains(&item.source) {
+                ui.label(RichText::new("Installed").size(12.5).color(theme::ink_dim()));
+            } else if ui.add_enabled(deps_ok && !loading, egui::Button::new("Install")).on_disabled_hover_text("A required program is missing, or another extension is loading").clicked() {
+                app.ext_loading.store(true, std::sync::atomic::Ordering::SeqCst);
+                let (flag, shared) = (std::sync::Arc::clone(&app.ext_loading), std::sync::Arc::clone(&app.shared));
+                ext_store::start_in_background(&app.shared, item, move |res| {
+                    flag.store(false, std::sync::atomic::Ordering::SeqCst);
+                    match res {
+                        Ok(name) => {
+                            if let Err(e) = ext_store::save(&ext_store::current(&shared)) {
+                                shared.log(&format!("Could not save the extension list: {e}"));
+                            }
+                            crate::feedback::toast(crate::feedback::Level::Success, format!("Installed {name}"));
+                        }
+                        Err(e) => crate::feedback::toast(crate::feedback::Level::Error, format!("Could not install: {e}")),
+                    }
+                });
+            }
+            ui.end_row();
+        }
+    });
 }
 
 /// Extensions > Installed: the extension table (Add / Remove / Up / Down,
@@ -1448,6 +1487,10 @@ fn extensions_installed(app: &mut App, ui: &mut Ui) {
                 ];
                 if let Some(src) = source {
                     rows.push(("Source", format!("{} {}", src.kind.label(), src.source)));
+                    // Dependency view: the runtime it needs and whether it is there.
+                    let rt = webprobe_core::ext_store::runtime_of(src);
+                    let ok = webprobe_core::ext_store::program_available(&rt);
+                    rows.push(("Runtime", format!("{rt} ({})", if ok { "available" } else { "not found on PATH" })));
                 }
                 if let Some(t) = hooks.tab_title() {
                     rows.push(("Tab", t));
