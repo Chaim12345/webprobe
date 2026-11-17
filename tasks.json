@@ -373,8 +373,10 @@
       "title": "Follow redirects",
       "acceptance": "Never / on-site / always; \"follow and enumerate\"; redirect chain shown",
       "effort": "M",
-      "status": "in_progress",
-      "notes": "2026-11-16 wave 42: Never/On-site/In-scope/Always, Follow redirection button, process cookies, 10-hop cap (repeater_ops.rs, loopback tests); button and settings menu seen. Missing: follow-and-enumerate, redirect chain display, per-tab settings."
+      "status": "done",
+      "notes": "2026-11-16 wave 42: Never/On-site/In-scope/Always, Follow redirection button, process cookies, 10-hop cap (repeater_ops.rs, loopback tests); button and settings menu seen. Missing: follow-and-enumerate, redirect chain display, per-tab settings.",
+      "completed": "2026-11-17",
+      "evidence": "Burp's Follow redirections setting: Never / On-site only / In-scope only / Always, Process cookies in redirections (repeater_ops::send_following, test send_following_walks_a_local_redirect_chain), \"Follow redirection\" button on a 3xx and </> history through the hops. GUI-verified 2026-11-17 against a local /r1->/r2->/final origin: 302 shown with Follow redirection button. \"Follow and enumerate\" is not a Burp option (dropped). Fixed on the way: Repeater sent to the Host header instead of the tab Target; now the Target decides (Host header attacks reach the real server), Host only fills an empty target. GUI-verified: Target 127.0.0.1:18780 with Host: evil.example reached the lab."
     },
     {
       "id": "E-03",
@@ -393,8 +395,10 @@
       "title": "Tab management",
       "acceptance": "Rename, close, reorder, duplicate, persisted order and contents",
       "effort": "M",
-      "status": "in_progress",
-      "notes": "2026-11-16 wave 42: rename, close, duplicate, reorder, close others/left/right, reopen closed tab; order and contents persist. Rename and drag not exercised in the GUI; per-tab send history not saved."
+      "status": "done",
+      "notes": "2026-11-16 wave 42: rename, close, duplicate, reorder, close others/left/right, reopen closed tab; order and contents persist. Rename and drag not exercised in the GUI; per-tab send history not saved.",
+      "completed": "2026-11-17",
+      "evidence": "repeater_ops: tab menu Rename / Close / Duplicate / Close other tabs / Close tabs to the right / reopen closed, double-click rename, drag to reorder (move_tab, test). GUI-verified over MCP 2026-11-17: duplicated tab 1, renamed the copy \"login check\", dragged it before tab 1; autosave wrote repeaters [\"login check\",\"1\"] in that order. Tabs now exposed to accessibility as Tab role."
     },
     {
       "id": "E-05",

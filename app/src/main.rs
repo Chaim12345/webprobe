@@ -523,6 +523,11 @@ impl eframe::App for App {
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = &ui.ctx().clone();
+        // SIGTERM / SIGINT: close through the normal path, so on_exit saves
+        // the project and the next start shows no crash-recovery prompt.
+        if TERMINATE.load(Ordering::SeqCst) {
+            ctx.send_viewport_cmd(ViewportCommand::Close);
+        }
         theme::apply_current(ctx);
         // Autosave once a minute when the project changed.
         if autosave_enabled() && self.autosave_at.elapsed() >= std::time::Duration::from_secs(60) {
@@ -926,7 +931,13 @@ impl App {
     }
 }
 
+/// Set by SIGTERM / SIGINT (see `main`); the next frame closes the window.
+static TERMINATE: std::sync::LazyLock<Arc<std::sync::atomic::AtomicBool>> = std::sync::LazyLock::new(Default::default);
+
 fn main() {
+    for sig in [signal_hook::consts::SIGTERM, signal_hook::consts::SIGINT] {
+        let _ = signal_hook::flag::register(sig, Arc::clone(&TERMINATE));
+    }
     // Must run before any thread or window exists (see gl_env for why).
     gl_env::apply();
 

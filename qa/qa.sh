@@ -67,7 +67,9 @@ app_pid() { local p; p=$(cat "$PIDFILE" 2>/dev/null) && kill -0 "$p" 2>/dev/null
 stop_app() {
   local p; p=$(app_pid) || return 1
   kill -TERM -- "-$p" 2>/dev/null || kill -TERM "$p"
-  for _ in 1 2 3 4 5 6 7 8 9 10; do kill -0 "$p" 2>/dev/null || break; sleep 0.3; done
+  # The app closes on SIGTERM through its normal exit (saves the project),
+  # which can take a few seconds; KILL only if it is still there after 8 s.
+  for _ in $(seq 1 27); do kill -0 "$p" 2>/dev/null || break; sleep 0.3; done
   kill -0 "$p" 2>/dev/null && { kill -KILL -- "-$p" 2>/dev/null || kill -KILL "$p"; }
   rm -f "$PIDFILE"
 }

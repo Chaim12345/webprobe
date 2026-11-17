@@ -2154,23 +2154,27 @@ pub(crate) fn repeater_send(app: &mut App) {
     }
     let reps_len = app.shared.repeaters.lock().unwrap().len();
     let i = app.rep_sel.min(reps_len.saturating_sub(1));
-    let (idx, tab_id, request, port, https) = {
-        let reps = app.shared.repeaters.lock().unwrap();
-        let r = &reps[i];
-        let parts = util::parse_http(r.request.as_bytes());
-        let host = util::get_header(&parts.headers, "Host").unwrap_or_default();
-        (i, r.id, r.request.clone(), if host.contains(':') { split_port(&host).unwrap_or(r.port) } else { r.port }, r.https)
+    // Burp sends to the tab's Target; the Host header is just a header (so
+    // Host header attacks reach the real server). Only a tab without a
+    // target falls back to the Host header, which then becomes its target.
+    let (tab_id, request, h, p, https) = {
+        let mut reps = app.shared.repeaters.lock().unwrap();
+        let r = &mut reps[i];
+        if r.host.trim().is_empty() {
+            let parts = util::parse_http(r.request.as_bytes());
+            let host = util::get_header(&parts.headers, "Host").unwrap_or_default();
+            if host.is_empty() {
+                drop(reps);
+                *app.shared.rep_result.lock().unwrap() = "no target and no Host header in request".into();
+                return;
+            }
+            let default_port = if r.port == 0 { if r.https { 443 } else { 80 } } else { r.port };
+            let (h, p) = net::split_h_p(&host, default_port);
+            r.host = h;
+            r.port = p;
+        }
+        (r.id, r.request.clone(), r.host.clone(), r.port, r.https)
     };
-    let host = {
-        let reps = app.shared.repeaters.lock().unwrap();
-        let parts = util::parse_http(reps[idx].request.as_bytes());
-        util::get_header(&parts.headers, "Host").unwrap_or_default()
-    };
-    if host.is_empty() {
-        *app.shared.rep_result.lock().unwrap() = "no Host header in request".into();
-        return;
-    }
-    let (h, p) = net::split_h_p(&host, port);
     app.shared.rep_busy.store(true, Ordering::SeqCst);
     *app.shared.rep_result.lock().unwrap() = "sending...".into();
     let gen = app.shared.rep_gen.fetch_add(1, Ordering::SeqCst) + 1;
@@ -2251,10 +2255,6 @@ pub(crate) fn cancel_repeater_send(shared: &net::Shared) {
     shared.rep_gen.fetch_add(1, Ordering::SeqCst);
     shared.rep_busy.store(false, Ordering::SeqCst);
     *shared.rep_result.lock().unwrap() = "Request cancelled".into();
-}
-
-fn split_port(host: &str) -> Option<u16> {
-    host.rsplit(':').next()?.parse().ok()
 }
 
 // ================= Decoder =================

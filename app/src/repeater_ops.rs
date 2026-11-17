@@ -1235,7 +1235,10 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
                         }
                     } else {
                         let label = name.strip_prefix("Rep ").unwrap_or(name).to_string();
-                        let l = ui.add(egui::Label::new(RichText::new(label).size(12.5).color(theme::ink())).sense(egui::Sense::click_and_drag()));
+                        let l = ui.add(egui::Label::new(RichText::new(label.clone()).size(12.5).color(theme::ink())).sense(egui::Sense::click_and_drag()));
+                        // A tab to accessibility / UI automation, not a plain label.
+                        let selected = app.rep_sel == i;
+                        l.widget_info(|| egui::WidgetInfo::selected(egui::accesskit::Role::Tab, true, selected, &label));
                         if l.clicked() {
                             app.rep_sel = i;
                         }
