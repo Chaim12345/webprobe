@@ -257,6 +257,64 @@ fn mk_burp(kb_name: &str, sev: &str, confidence: &str, e: &HistEntry, param: &st
     i
 }
 
+/// Match Collaborator interactions against the ids the active scans
+/// embedded (`Shared::oob_pending`) and raise the issues they prove.
+/// Burp family SCANNER_ACTIVE_CHECKS_EXTERNAL_INTERACTION.
+///
+/// A check that names its own issue (SMTP header injection, XML injection)
+/// waits for one interaction of its kind. The plain external-interaction
+/// probe raises one issue per interaction type, as Burp does ("External
+/// service interaction (DNS)" and "(HTTP)", high, certain), so its id stays
+/// pending until both have been seen. Returns the number of issues raised.
+/// Called by whoever owns the Collaborator, every frame or poll; it is
+/// independent of which view is open.
+pub fn match_oob_interactions(shared: &Shared, interactions: &[crate::collaborator::Interaction]) -> usize {
+    let mut issues = Vec::new();
+    {
+        let mut pending = shared.oob_pending.lock().unwrap();
+        if pending.is_empty() {
+            return 0;
+        }
+        let mut reported = shared.oob_reported.lock().unwrap();
+        for it in interactions {
+            let Some(token) = &it.token else { continue };
+            let kind = it.kind().label();
+            // "CNAME": a DNS lookup of type CNAME, which only the injected
+            // `nslookup -q=cname` makes (burp.Zing.ZR: DNS and type 5).
+            let cname = it.dns().is_some_and(|d| d.qtype == 5);
+            let fits = |k: &str| k == kind || (k == "CNAME" && cname);
+            let Some(pos) = pending.iter().position(|(t, k, _)| t == token && k.is_none_or(fits)) else { continue };
+            if pending[pos].1.is_some() {
+                let (_, _, mut issue) = pending.remove(pos);
+                issue.detail = format!("Collaborator interaction observed: {} (source {})", it.headline(), it.source);
+                issues.push(issue);
+                continue;
+            }
+            if !reported.insert(format!("{token}|{kind}")) {
+                continue;
+            }
+            let mut issue = pending[pos].2.clone();
+            issue.name = format!("External service interaction ({kind})");
+            issue.sev = "high".into();
+            issue.confidence = "Certain".into();
+            issue.detail = format!(
+                "It is possible to induce the application to perform server-side {kind} interactions with an arbitrary domain. The payload {token} was submitted and a {kind} interaction was received: {} (source {}).",
+                it.headline(),
+                it.source
+            );
+            issues.push(issue);
+            if reported.contains(&format!("{token}|DNS")) && reported.contains(&format!("{token}|HTTP")) {
+                pending.remove(pos);
+            }
+        }
+    }
+    let n = issues.len();
+    if n > 0 {
+        add_issues(shared, issues);
+    }
+    n
+}
+
 pub fn add_issues(shared: &Shared, mut issues: Vec<ScanIssue>) {
     if issues.is_empty() {
         return;
@@ -1019,8 +1077,8 @@ pub fn query_params(path: &str) -> Vec<(String, String)> {
 ///
 /// `oob` carries one Collaborator payload per slot of [`oob_slots`]
 /// (slot, token, payload): the payload replaces the value and the
-/// interaction itself is detected asynchronously by the UI matcher
-/// (`ui.rs::sync_oob_issues`) against `Shared::oob_pending`. Burp family:
+/// interaction itself is detected asynchronously by
+/// [`match_oob_interactions`] against `Shared::oob_pending`. Burp family:
 /// SCANNER_ACTIVE_CHECKS_EXTERNAL_INTERACTION.
 ///
 /// `smtp` carries, per parameter, the two Collaborator ids for Burp's SMTP
@@ -1482,7 +1540,7 @@ pub(crate) fn run_open_redirect_check<F: FnMut(&str) -> Option<Vec<u8>>>(
 //   decoded to strings), Zw_c.Ze (shadow regex), Zp3a.ZJ (path-like value).
 
 /// burp.Zsv7: audit speed. A payload is used when configured >= payload tier
-/// (Zsv7.Zi). WebProbe has no audit-speed setting; scans run at NORMAL.
+/// (Zsv7.Zi). Set in Settings > Scanner > Audit speed (`Shared::scan_speed`).
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub(crate) enum ScanSpeed {
     Fast,
@@ -2604,12 +2662,6 @@ pub(crate) fn run_sql_boolean_check<F: FnMut(&str) -> Option<Vec<u8>>>(
     None
 }
 
-/// Blind OS-command detection: the `;sleep 3` probe must be slow while the
-/// baseline was fast. Burp family: SCANNER_ACTIVE_CHECKS_OS_COMMAND_INJECTION.
-fn is_blind_cmd_hit(baseline_ms: u128, probe_ms: u128) -> bool {
-    baseline_ms < 2_000 && probe_ms >= baseline_ms + 2_500
-}
-
 // ================= LDAP injection (burp.Zwkf) =================
 
 /// burp.Zwkf.ZM/ZR: not for boolean literals, and only when every char after
@@ -3334,6 +3386,10 @@ pub fn oob_slots(req_raw: &[u8]) -> Vec<String> {
             out.push(format!("#{i}:xsd"));
             out.push(format!("#{i}:xi"));
         }
+        // OS command injection (burp.Zc99): one id per nslookup payload.
+        for k in 0..4 {
+            out.push(format!("#{i}:cmd{k}"));
+        }
     }
     out
 }
@@ -3525,6 +3581,37 @@ fn rebuild_with_path(req: &str, new_path: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    /// Collaborator matching lives in the engine and needs no UI: a plain
+    /// external-interaction id raises one issue per interaction type and is
+    /// retired after DNS and HTTP; a kind-bound id (SMTP) raises its own
+    /// issue once; repeats and unknown ids raise nothing.
+    #[test]
+    fn oob_interactions_raise_issues_without_the_ui() {
+        use crate::collaborator::{DnsInteraction, HttpInteraction, Interaction, InteractionDetail, SmtpInteraction};
+        let shared = net::Shared::new();
+        let base = ScanIssue { host: "127.0.0.1:1".into(), path: "/".into(), ..Default::default() };
+        let smtp = ScanIssue { name: "SMTP header injection".into(), sev: "medium".into(), ..base.clone() };
+        shared.oob_pending.lock().unwrap().extend([("tokplain".to_string(), None, base), ("toksmtp".to_string(), Some("SMTP"), smtp)]);
+        let it = |id, token: &str, detail| Interaction { id, at: 0, source: "127.0.0.1".into(), token: Some(token.into()), detail };
+        let dns = || InteractionDetail::Dns(DnsInteraction { qname: "tokplain.oob.invalid".into(), qtype: 1, raw_query: Vec::new() });
+        let http = || InteractionDetail::Http(HttpInteraction { method: "GET".into(), target: "/".into(), ..Default::default() });
+        assert_eq!(match_oob_interactions(&shared, &[it(1, "tokplain", dns()), it(2, "unknown", dns())]), 1);
+        assert_eq!(match_oob_interactions(&shared, &[it(1, "tokplain", dns())]), 0, "a repeat raises nothing");
+        assert_eq!(match_oob_interactions(&shared, &[it(3, "toksmtp", http())]), 0, "SMTP id ignores HTTP");
+        assert_eq!(match_oob_interactions(&shared, &[it(4, "tokplain", http()), it(5, "toksmtp", InteractionDetail::Smtp(SmtpInteraction::default()))]), 2);
+        assert!(shared.oob_pending.lock().unwrap().is_empty(), "both ids retired");
+        // OS command injection waits for a CNAME lookup (burp.Zing.ZR).
+        let cmd = ScanIssue { name: "OS command injection".into(), ..ScanIssue::default() };
+        shared.oob_pending.lock().unwrap().push(("tokcmd".to_string(), Some("CNAME"), cmd));
+        let q = |qtype| InteractionDetail::Dns(DnsInteraction { qname: "tokcmd.oob.invalid".into(), qtype, raw_query: Vec::new() });
+        assert_eq!(match_oob_interactions(&shared, &[it(6, "tokcmd", q(1))]), 0, "an A lookup is not command execution");
+        assert_eq!(match_oob_interactions(&shared, &[it(7, "tokcmd", q(5))]), 1);
+        let names: Vec<String> = shared.issues.lock().unwrap().iter().map(|i| i.name.clone()).collect();
+        for n in ["External service interaction (DNS)", "External service interaction (HTTP)", "SMTP header injection", "OS command injection"] {
+            assert!(names.iter().any(|x| x == n), "{n} missing: {names:?}");
+        }
+    }
     use super::*;
 
     /// Live parity run against the local lab (`/tmp/parity-lab/lab.py`):
@@ -3979,19 +4066,6 @@ mod tests {
         assert!(run_ssti_check("q", |p| Some(p.to_string())).is_none());
         // A page that ignores the parameter: nothing.
         assert!(run_ssti_check("q", |_| Some("<html>ok</html>".into())).is_none());
-    }
-
-    #[test]
-    fn blind_cmd_hit_needs_fast_baseline_and_slow_probe() {
-        // Fast baseline + delayed probe: hit.
-        assert!(is_blind_cmd_hit(120, 3_500));
-        assert!(is_blind_cmd_hit(1_900, 4_900));
-        // Slow baseline: network jitter, no signal.
-        assert!(!is_blind_cmd_hit(2_500, 5_200));
-        // Fast probe despite fast baseline: nothing executed.
-        assert!(!is_blind_cmd_hit(120, 400));
-        // Marginal delta under the threshold.
-        assert!(!is_blind_cmd_hit(1_000, 3_200));
     }
 
     #[test]
@@ -5135,6 +5209,8 @@ mod tests {
     fn characterisation_active_scan_issue_list() {
         let port = characterisation_server();
         let shared = net::Shared::new();
+        // Every check, the WebProbe-only ones included, is characterised.
+        shared.extra_checks.store(true, Ordering::SeqCst);
         let host = format!("127.0.0.1:{port}");
         let form = "amount=10&csrf_token=abcdef123456";
         let xml = "<?xml version=\"1.0\"?><user><n>bob</n></user>";
@@ -5195,6 +5271,23 @@ mod tests {
         assert!(String::from_utf8_lossy(&xxe.evidence[0].request).contains("<!DOCTYPE"));
         assert!(String::from_utf8_lossy(xxe.evidence[0].response.as_deref().unwrap()).contains("root:x:0:0"));
         assert_eq!(find("Active probe: TRACE method enabled (cross-site tracing)", "/go").type_id, 0);
+        drop(issues);
+
+        // By default (extra checks off) only issue types Burp has are
+        // reported: the same scan of /go raises no "Active probe" issue.
+        let default = net::Shared::new();
+        let mut e = entry("/go?url=x", false, "");
+        e.host = "127.0.0.1".into();
+        e.port = port;
+        e.req_raw = format!("GET /go?url=x HTTP/1.1\r\nHost: {host}\r\n\r\n").into_bytes();
+        start_active_scan(default.clone(), e, &[], &[]);
+        let t0 = std::time::Instant::now();
+        while default.scan_busy.load(Ordering::SeqCst) && t0.elapsed() < std::time::Duration::from_secs(180) {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        let names: Vec<String> = default.issues.lock().unwrap().iter().map(|i| i.name.clone()).collect();
+        assert!(names.iter().any(|n| n == "Open redirection (reflected)"), "{names:?}");
+        assert!(names.iter().all(|n| is_burp_issue(n)), "non-Burp issue types by default: {names:?}");
     }
 
     /// Recorded from the pre-refactor scanner (single-threaded
@@ -5276,7 +5369,7 @@ mod tests {
         assert!(!shared.scan_busy.load(Ordering::SeqCst), "scan did not finish");
         let pending = shared.oob_pending.lock().unwrap();
         let get = |token: &str| pending.iter().find(|(t, _, _)| t == token).unwrap_or_else(|| panic!("{token} not pending"));
-        for (token, kind, needle) in [("tok0", None, "tok0.oob.invalid"), ("tok1", Some("DNS"), "tok1.oob.invalid"), ("tok2", Some("DNS"), "tok2.oob.invalid"), ("smtpa", Some("SMTP"), "smtpa.oob.invalid"), ("smtpb", Some("SMTP"), "smtpb.oob.invalid")] {
+        for (token, kind, needle) in [("tok0", None, "tok0.oob.invalid"), ("tok1", Some("DNS"), "tok1.oob.invalid"), ("tok2", Some("DNS"), "tok2.oob.invalid"), ("smtpa", Some("SMTP"), "smtpa.oob.invalid"), ("smtpb", Some("SMTP"), "smtpb.oob.invalid"), ("tok3", Some("CNAME"), "tok3.oob.invalid"), ("tok6", Some("CNAME"), "tok6.oob.invalid")] {
             let (_, k, issue) = get(token);
             assert_eq!(*k, kind, "{token}");
             assert_eq!(issue.evidence.len(), 1, "{token}");
@@ -5286,6 +5379,11 @@ mod tests {
         }
         assert_eq!(get("tok1").2.type_id, issue_type_id("XML injection"));
         assert_eq!(get("smtpa").2.type_id, issue_type_id("SMTP header injection"));
+        // burp.Zc99 at normal speed: replace, pipe, ampersand, combined.
+        assert_eq!(&slots[3..7], ["#0:cmd0", "#0:cmd1", "#0:cmd2", "#0:cmd3"]);
+        let cmd = &get("tok3").2;
+        assert_eq!((cmd.name.as_str(), cmd.sev.as_str(), cmd.confidence.as_str()), ("OS command injection", "high", "Firm"));
+        assert!(String::from_utf8_lossy(&cmd.evidence[0].request).contains("nslookup"), "replace payload sent");
     }
 
     /// Passive issues carry the audited exchange; the report shows stored
@@ -5432,7 +5530,17 @@ mod tests {
     fn oob_slots_cover_every_point_and_xml_oob_where_it_applies() {
         let req = b"GET /p?q=1 HTTP/1.1\r\nHost: h\r\n\r\n";
         // q (query), Referer (header), filename "p" (path).
-        assert_eq!(oob_slots(req), vec!["#0:ext", "#0:xsd", "#0:xi", "#1:ext", "#2:ext", "#2:xsd", "#2:xi"]);
+        let cmd = |i: usize| (0..4).map(move |k| format!("#{i}:cmd{k}"));
+        let want: Vec<String> = ["#0:ext", "#0:xsd", "#0:xi"]
+            .iter()
+            .map(|s| s.to_string())
+            .chain(cmd(0))
+            .chain(["#1:ext".to_string()])
+            .chain(cmd(1))
+            .chain(["#2:ext", "#2:xsd", "#2:xi"].iter().map(|s| s.to_string()))
+            .chain(cmd(2))
+            .collect();
+        assert_eq!(oob_slots(req), want);
         let oob = vec![
             ("#0:xi".to_string(), "t1".to_string(), "h1".to_string()),
             ("q".to_string(), "t0".to_string(), "h0".to_string()),

@@ -3,15 +3,14 @@
   "generated": "2026-11-15",
   "source": "TASKS.md",
   "summary": {
-    "total": 101,
+    "total": 103,
     "p0": 64,
     "p1": 29,
     "p2": 8,
     "by_status": {
-      "done": 59,
-      "in_progress": 28,
-      "todo": 13,
-      "rejected": 1
+      "done": 99,
+      "rejected": 2,
+      "todo": 2
     }
   },
   "tasks": [
@@ -1169,6 +1168,26 @@
       "evidence": "egui 0.37 + vendored egui-mcp-client/server. Tree on AT-SPI with real ids (128-bit AccessKit ids folded to 53 bits), case-insensitive app match, accessible names for hand-painted tabs/docks/toggles/column headers, request editor and search fields; keyboard_input text/keys/combos; ordered input queue; socket not stolen by a second instance (EGUI_MCP_SOCKET). Verified: check_connection, get_ui_tree, find_by_label(_exact), get_bounds, is_visible, click_element, set_text, get_text, click_at, keyboard_input, scroll, drag, take_screenshot, screenshot_element.",
       "notes": " | 2026-11-17 wave 43: app is on egui/eframe 0.37 (rustc 1.100). The egui-mcp-client hook is not wired yet.",
       "completed": "2026-11-17"
+    },
+    {
+      "id": "N-06",
+      "epic": "N — Quality, performance and build",
+      "priority": "P1",
+      "title": "Disk-backed proxy history",
+      "acceptance": "Request and response bodies of Proxy history live in an append-only store on disk next to the project (Burp keeps history in the project file), with an in-memory index of the table columns; memory stays bounded with 100k items; the history table, filters, search, Repeater/Intruder send-to and project save/load keep working; tests cover store round-trip, reopen and a 100k-item memory bound.",
+      "effort": "L",
+      "status": "todo",
+      "evidence": "Open-items ledger 2026-11-17 (qa/SOURCE-PARITY-2026-11-15.md): HistEntry holds req_raw/resp_raw Vec<u8> in Shared::history, unbounded, 153 call sites."
+    },
+    {
+      "id": "N-07",
+      "epic": "N — Quality, performance and build",
+      "priority": "P2",
+      "title": "Split Shared and App by subsystem",
+      "acceptance": "net::Shared (76 public fields) and App are split into per-subsystem state (proxy, scanner, collaborator, intruder, extensions, project), each with its own lock, so one subsystem's lock never blocks another; the layering test stays green and no behaviour changes.",
+      "effort": "L",
+      "status": "todo",
+      "evidence": "Open-items ledger 2026-11-17; listed as open in Wave 44 architecture notes."
     }
   ]
 }

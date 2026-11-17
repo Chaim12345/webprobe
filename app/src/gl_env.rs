@@ -75,6 +75,50 @@ pub fn apply() {
     }
 }
 
+/// Second chance for the render-node guess. A node can exist and still be
+/// unusable from the X server the window lands on (seen 2026-11-17: a kernel
+/// that exposes `/dev/dri/renderD128` under WSL, and Xvfb, which has no DRI;
+/// Mesa falls through to zink and glutin fails with "provided native window
+/// is not supported"). The edits for one software retry: exactly the
+/// no-render-node plan, plus a guard so it happens once. `None` when the user
+/// chose the GL path, software GL was already in use, or this is the retry.
+pub fn software_retry(env: impl Fn(&str) -> Option<String>) -> Option<Plan> {
+    if env("WEBPROBE_GL").as_deref() == Some("native")
+        || env("WEBPROBE_GL_RETRY").is_some()
+        || env("LIBGL_ALWAYS_SOFTWARE").map_or(false, |v| !v.is_empty())
+    {
+        return None;
+    }
+    let mut plan = plan(false, env);
+    plan.set.push(("WEBPROBE_GL_RETRY", "1"));
+    Some(plan)
+}
+
+/// Replace this process with a fresh copy on software GL, when
+/// [`software_retry`] allows it. Returns only if it does not apply or the exec
+/// failed. Sockets and files are close-on-exec, so the new copy rebinds the
+/// proxy listener; the caller removes its session marker first.
+#[cfg(unix)]
+pub fn reexec_with_software_gl() {
+    use std::os::unix::process::CommandExt;
+    let Some(plan) = software_retry(|name| std::env::var(name).ok()) else { return };
+    let Ok(exe) = std::env::current_exe() else { return };
+    eprintln!("webprobe: the window could not be created on hardware GL; restarting once with software GL (set {:?})", plan.set);
+    let mut cmd = std::process::Command::new(exe);
+    cmd.args(std::env::args_os().skip(1));
+    for name in &plan.unset {
+        cmd.env_remove(name);
+    }
+    for (name, value) in &plan.set {
+        cmd.env(name, value);
+    }
+    let err = cmd.exec();
+    eprintln!("webprobe: restart failed: {err}");
+}
+
+#[cfg(not(unix))]
+pub fn reexec_with_software_gl() {}
+
 #[cfg(target_os = "linux")]
 fn has_render_node() -> bool {
     std::fs::read_dir("/dev/dri")
@@ -100,6 +144,16 @@ mod tests {
         let map: HashMap<String, String> =
             pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
         move |name| map.get(name).cloned()
+    }
+
+    #[test]
+    fn unusable_render_node_gets_one_software_retry() {
+        let p = software_retry(env(&[("DISPLAY", ":97"), ("WAYLAND_DISPLAY", "wayland-0")])).expect("retry");
+        assert_eq!(p.set, vec![("LIBGL_ALWAYS_SOFTWARE", "1"), ("WEBPROBE_GL_RETRY", "1")]);
+        assert_eq!(p.unset, vec!["WAYLAND_DISPLAY"]);
+        assert!(software_retry(env(&[("WEBPROBE_GL_RETRY", "1")])).is_none(), "only once");
+        assert!(software_retry(env(&[("LIBGL_ALWAYS_SOFTWARE", "1")])).is_none(), "already software");
+        assert!(software_retry(env(&[("WEBPROBE_GL", "native")])).is_none(), "user's choice");
     }
 
     #[test]

@@ -830,6 +830,9 @@ pub struct Shared {
     /// Collaborator ids the active scan embedded: (id, required interaction
     /// kind label such as "SMTP" or None for any, issue to raise).
     pub oob_pending: Mutex<Vec<(String, Option<&'static str>, crate::scan::ScanIssue)>>,
+    /// "token|kind" pairs already raised as External service interaction
+    /// issues (one per interaction type, see `scan::match_oob_interactions`).
+    pub oob_reported: Mutex<std::collections::HashSet<String>>,
     /// Captured WebSocket handshakes and frames.
     pub ws_history: Mutex<Vec<WsEntry>>,
     /// Diff-count state for the history table ("Diff count", burp.Zxwu.java:56).
@@ -977,6 +980,7 @@ impl Shared {
             browser_recovery: BrowserRecovery::default(),
             macros: Mutex::new(Vec::new()),
             oob_pending: Mutex::new(Vec::new()),
+            oob_reported: Mutex::new(std::collections::HashSet::new()),
             ws_history: Mutex::new(Vec::new()),
             diff_tracker: Mutex::new(DiffTracker::default()),
             ext_host: Mutex::new(crate::ext_host::ExtensionHost::default()),

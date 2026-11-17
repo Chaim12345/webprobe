@@ -1316,64 +1316,7 @@ fn scan_sev_label(sev: &str) -> &'static str {
     }
 }
 
-/// Match Collaborator interactions against the tokens the active scan
-/// embedded (`Shared::oob_pending`). Runs on the UI thread each frame the
-/// Scanner or Dashboard view is open; raises one issue per observed
-/// interaction. Burp family: SCANNER_ACTIVE_CHECKS_EXTERNAL_INTERACTION.
-fn sync_oob_issues(app: &mut App) {
-    let interactions = app.collab_state.interactions();
-    let mut pending = app.shared.oob_pending.lock().unwrap();
-    if pending.is_empty() || interactions.is_empty() {
-        return;
-    }
-    let mut issues = Vec::new();
-    for it in &interactions {
-        let Some(token) = &it.token else { continue };
-        let kind = it.kind().label();
-        let Some(pos) = pending.iter().position(|(t, k, _)| t == token && k.is_none_or(|k| k == kind)) else { continue };
-        if pending[pos].1.is_some() {
-            // A check that names its own issue (SMTP header injection).
-            let (_, _, mut issue) = pending.remove(pos);
-            issue.detail = format!("Collaborator interaction observed: {} (source {})", it.headline(), it.source);
-            issues.push(issue);
-            continue;
-        }
-        // The external-interaction probe: Burp raises one issue per
-        // interaction type, "External service interaction (DNS)" and
-        // "(HTTP)" (high, certain), so the token stays pending until both
-        // have been seen.
-        if !oob_reported().lock().unwrap().insert(format!("{token}|{kind}")) {
-            continue;
-        }
-        let mut issue = pending[pos].2.clone();
-        issue.name = format!("External service interaction ({kind})");
-        issue.sev = "high".into();
-        issue.confidence = "Certain".into();
-        issue.detail = format!(
-            "It is possible to induce the application to perform server-side {kind} interactions with an arbitrary domain. The payload {token} was submitted and a {kind} interaction was received: {} (source {}).",
-            it.headline(),
-            it.source
-        );
-        issues.push(issue);
-        let r = oob_reported().lock().unwrap();
-        if r.contains(&format!("{token}|DNS")) && r.contains(&format!("{token}|HTTP")) {
-            drop(r);
-            pending.remove(pos);
-        }
-    }
-    drop(pending);
-    crate::scan::add_issues(&app.shared, issues);
-}
-
-/// (token, interaction type) pairs already reported as External service
-/// interaction issues.
-fn oob_reported() -> &'static std::sync::Mutex<std::collections::HashSet<String>> {
-    static S: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
-    S.get_or_init(Default::default)
-}
-
 fn scanner(app: &mut App, ui: &mut Ui) {
-    sync_oob_issues(app);
     ui.label(RichText::new("Scanner").color(theme::ink()).size(14.0).strong());
     ui.add_space(2.0);
     hint(ui, "Every proxied response is audited live (passive checks). Select a request in the history and press Run active scan to send light active probes (URL parameters, max 30).");
@@ -1405,7 +1348,7 @@ fn scanner(app: &mut App, ui: &mut Ui) {
         let mut extra = app.shared.extra_checks.load(Ordering::SeqCst);
         if ui
             .checkbox(&mut extra, "WebProbe extra checks")
-            .on_hover_text("Also report passive checks Burp does not have (missing CSP, Referrer-Policy, version banners, ...)")
+            .on_hover_text("Also run checks Burp does not have: passive (missing CSP, Referrer-Policy, version banners, ...) and active (reflected DOM canary, stored echo, TRACE echo, OPTIONS methods, header reflection). Off: a scan sends and reports what Burp's would.")
             .changed()
         {
             app.shared.extra_checks.store(extra, Ordering::SeqCst);
@@ -3111,7 +3054,6 @@ fn discover(app: &mut App, ui: &mut Ui) {
 // ================= Dashboard =================
 
 fn dashboard(app: &mut App, ui: &mut Ui) {
-    sync_oob_issues(app);
     // Burp's Dashboard (live 52685 reference): optional "Task execution is
     // paused" banner, a Tasks rail on the left (New scan / New live task,
     // filter + search, one card per task) and the selected task on the right

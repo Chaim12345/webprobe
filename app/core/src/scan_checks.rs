@@ -125,8 +125,21 @@ impl ScanCtx {
         send_one(&self.shared, self.entry.https, &self.host, self.port, raw)
     }
 
-    /// Hand issues to the Issues list (ids are assigned there).
-    pub(crate) fn report(&self, issues: Vec<ScanIssue>) {
+    /// Whether a check reporting `issue` runs: Burp's issue types always,
+    /// WebProbe's own probes only with "WebProbe extra checks" on, so a
+    /// default scan sends only the traffic Burp's scan would.
+    pub(crate) fn runs(&self, issue: &str) -> bool {
+        is_burp_issue(issue) || self.shared.extra_checks.load(Ordering::SeqCst)
+    }
+
+    /// Report what a check proved (ids are assigned by the Issues list). Issue types Burp does not have (the
+    /// WebProbe-only probes) stay hidden unless Settings > Scanner >
+    /// "WebProbe extra checks" is on, the same rule as passive issues, so the
+    /// default issue list is the one Burp would produce.
+    pub(crate) fn report(&self, mut issues: Vec<ScanIssue>) {
+        if !self.shared.extra_checks.load(Ordering::SeqCst) {
+            issues.retain(|i| is_burp_issue(&i.name));
+        }
         add_issues(&self.shared, issues);
     }
 
@@ -267,6 +280,8 @@ pub(crate) trait RequestCheck: Sync {
 /// Insertion-point checks, in run order.
 pub(crate) static POINT_CHECKS: &[&dyn PointCheck] = &[
     &LightProbes,
+    &ExternalInteraction,
+    &OsCommandInjection,
     &PathTraversal,
     &LinkManipulation,
     &FilePathManipulation,
@@ -312,7 +327,7 @@ pub(crate) fn run_point_checks(cx: &ScanCtx, points: &[InsertionPoint]) {
         }
         let mut pt = PointRun { idx, ip, sqli_reported: false };
         for check in POINT_CHECKS {
-            if check.applies_to(&ip.kind) && config.check_enabled(check.id()) {
+            if check.applies_to(&ip.kind) && config.check_enabled(check.id()) && cx.runs(check.issue()) {
                 check.run(cx, &mut st, &mut pt);
             }
         }
@@ -324,7 +339,7 @@ pub(crate) fn run_request_checks(cx: &ScanCtx) {
     let mut open: Vec<(&'static str, bool)> = Vec::new();
     let config = cx.shared.scan_config.lock().unwrap().clone();
     for check in REQUEST_CHECKS {
-        if !config.check_enabled(check.id()) {
+        if !config.check_enabled(check.id()) || !cx.runs(check.issue()) {
             continue;
         }
         if let Some(g) = check.group() {
@@ -346,10 +361,45 @@ pub(crate) fn run_request_checks(cx: &ScanCtx) {
 
 // ---------------------------------------------------------------- point checks
 
-/// The first probes of every point, in one paced loop moved unchanged from
-/// the old inline scanner: among them the reflected-DOM canary and the
-/// Collaborator payload of SCANNER_ACTIVE_CHECKS_EXTERNAL_INTERACTION when
-/// the scan has one for this point. Also seeds the stored-echo markers.
+/// SCANNER_ACTIVE_CHECKS_EXTERNAL_INTERACTION: the Collaborator payload
+/// replaces the value, and the id is registered so
+/// `scan::match_oob_interactions` raises "External service interaction
+/// (DNS)" / "(HTTP)" when the Collaborator logs an interaction for it. Runs
+/// only when the scan has Collaborator ids.
+pub(crate) struct ExternalInteraction;
+
+impl PointCheck for ExternalInteraction {
+    fn id(&self) -> &'static str {
+        "active.external-interaction"
+    }
+    fn issue(&self) -> &'static str {
+        "External service interaction (DNS)"
+    }
+    fn run(&self, cx: &ScanCtx, st: &mut ScanState, pt: &mut PointRun) {
+        let (idx, ip) = (pt.idx, pt.ip);
+        let Some((_, token, domain)) = oob_slot(&cx.oob, idx, &ip.name, "ext", &mut st.oob_used) else { return };
+        if cx.stopped() {
+            return;
+        }
+        let new_req = inject(&cx.req, ip, domain);
+        let resp = cx.send(new_req.as_bytes());
+        let issue = mk(
+            "medium",
+            &format!("Out-of-band payload embedded via parameter {}", ip.name),
+            &cx.entry,
+            format!("Collaborator token {token} replaced the value; confirmed when an interaction is observed."),
+        )
+        .with_evidence(vec![ScanEvidence::new(new_req.as_bytes(), resp.as_deref())]);
+        cx.shared.oob_pending.lock().unwrap().push((token.clone(), None, issue));
+        cx.progress();
+        cx.pace(50);
+    }
+}
+
+/// WebProbe's own reflected-DOM canary (Burp finds DOM issues by analysing
+/// JavaScript, which is not this): a plain canary reflected unencoded into
+/// script data or an attribute value of an HTML response. Also seeds the
+/// stored-echo markers. A WebProbe extra check, off by default.
 pub(crate) struct LightProbes;
 
 impl PointCheck for LightProbes {
@@ -361,101 +411,80 @@ impl PointCheck for LightProbes {
     }
     fn run(&self, cx: &ScanCtx, st: &mut ScanState, pt: &mut PointRun) {
         let (idx, ip) = (pt.idx, pt.ip);
-        let (name, value) = (&ip.name, &ip.value);
-        let (req, entry, shared) = (&cx.req, &cx.entry, &cx.shared);
-        let (host, port) = (&cx.host, cx.port);
-        let baseline_ms = cx.baseline.ms;
-        // SQL error probe: append ' to the raw value
-        let xss_marker = format!("wb{idx:03}scan");
-        let xss_path = inject(req, ip, &format!("{value}{}{xss_marker}{}", "'\"<", ">"));
-        // Blind OS-command probe: a shell that evaluates the injection
-        // delays the response by the sleep duration.
-        let cmd_path = inject(req, ip, &format!("{value};sleep 3"));
-        // Reflected DOM (SCANNER_ACTIVE_CHECKS_REFLECTED_DOM): a plain
-        // canary reflected into script data or an attribute value is a
-        // DOM-sink context; the body of the match arm checks the context.
-        // (Stored XSS proper is Burp's breakout engine over an injection
-        // and a retrieval request, see StoredXss.)
+        if cx.stopped() {
+            return;
+        }
         let dom_canary = format!("wb{idx:03}dom");
-        let refdom_path = inject(req, ip, &format!("{value}{dom_canary}"));
-        st.stored_markers.push((name.clone(), dom_canary.clone()));
-        // Out-of-band probe (SCANNER_ACTIVE_CHECKS_EXTERNAL_INTERACTION):
-        // the Collaborator payload replaces the value entirely.
-        let oob_for_param = oob_slot(&cx.oob, idx, name, "ext", &mut st.oob_used);
-        let oob_probe = oob_for_param.map(|(_, token, marker)| (token.clone(), inject(req, ip, marker)));
-        let mut probes: Vec<(&str, String)> = vec![("reflect", xss_path), ("refdom", refdom_path)];
-        // The pre-existing timing probe keeps its original reach (URL,
-        // form and JSON values); the insertion point kinds added for
-        // D-03 do not extend it.
-        if matches!(ip.kind, IpKind::Query | IpKind::Body | IpKind::Json(_)) {
-            probes.insert(1, ("cmd", cmd_path));
+        st.stored_markers.push((ip.name.clone(), dom_canary.clone()));
+        let new_req = inject(&cx.req, ip, &format!("{}{dom_canary}", ip.value));
+        if let Some(resp) = cx.send(new_req.as_bytes()) {
+            let rp = util::parse_http(&resp);
+            let body = String::from_utf8_lossy(&resp[rp.head_len.min(resp.len())..]);
+            let ct = util::get_header(&rp.headers, "Content-Type").unwrap_or_default();
+            if ct.to_ascii_lowercase().contains("html") && is_reflected_dom_hit(&body, &dom_canary) {
+                cx.report(vec![mk(
+                    "high",
+                    &format!("Active probe: DOM-based cross-site scripting (reflected) via parameter {}", ip.name),
+                    &cx.entry,
+                    format!("Canary {dom_canary} is reflected unencoded into script data or an attribute value, a context DOM sinks can reach."),
+                )
+                .with_evidence(vec![ScanEvidence::new(new_req.as_bytes(), Some(&resp[..]))])]);
+            }
         }
-        if let Some((token, path)) = &oob_probe {
-            probes.push(("oob", path.clone()));
-            // Register the token so the UI matcher raises the issue the
-            // moment the Collaborator logs an interaction for it. The
-            // request is known now; the response is added once it arrives.
-            let issue = mk(
-                "medium",
-                &format!("Out-of-band payload embedded via parameter {name}"),
-                entry,
-                format!("Collaborator token {token} replaced the value; confirmed when an interaction is observed."),
-            )
-            .with_evidence(vec![ScanEvidence::new(path.as_bytes(), None)]);
-            shared.oob_pending.lock().unwrap().push((token.clone(), None, issue));
-        }
-        for (probe, path_probe) in probes {
+        cx.progress();
+        cx.pace(50);
+    }
+}
+
+/// OS command injection, Burp's Collaborator flow (burp.Zc99 payloads,
+/// burp.Zfw7 verdict). Each `nslookup -q=cname` payload carries its own
+/// Collaborator id; a DNS CNAME lookup of that id (burp.Zing.ZR) raises "OS
+/// command injection", high and firm (burp.Zwvy.ZR: Zrh confidence 2,
+/// severity 4). Burp's other flow (burp.Zxom, `ping` delays) is timing-based
+/// and not ported. Runs only when the scan has Collaborator ids.
+pub(crate) struct OsCommandInjection;
+
+impl PointCheck for OsCommandInjection {
+    fn id(&self) -> &'static str {
+        "active.os-command-injection"
+    }
+    fn issue(&self) -> &'static str {
+        "OS command injection"
+    }
+    fn run(&self, cx: &ScanCtx, st: &mut ScanState, pt: &mut PointRun) {
+        let (idx, ip) = (pt.idx, pt.ip);
+        let mut ids = std::collections::HashMap::new();
+        let payloads = active_checks::os_cmd_payloads(cx.settings.speed, |slot| {
+            let (_, token, domain) = oob_slot(&cx.oob, idx, &ip.name, slot, &mut st.oob_used)?;
+            ids.insert(slot.to_string(), token.clone());
+            Some(domain.clone())
+        });
+        for (slot, payload, append) in payloads {
             if cx.stopped() {
                 break;
             }
-            let new_req = path_probe.clone();
-            let probe_t0 = std::time::Instant::now();
-            let up = if entry.https {
-                net::send_tls_raw(shared, host, port, new_req.as_bytes())
+            let value = if append { format!("{}{payload}", ip.value) } else { payload.clone() };
+            let new_req = inject(&cx.req, ip, &encode_query_payload(&value));
+            let up = if cx.entry.https {
+                net::send_tls_raw(&cx.shared, &cx.host, cx.port, new_req.as_bytes())
             } else {
-                net::send_raw(shared, host, port, new_req.as_bytes())
+                net::send_raw(&cx.shared, &cx.host, cx.port, new_req.as_bytes())
             };
-            let probe_ms = probe_t0.elapsed().as_millis();
-            if probe == "oob" {
-                if let (Some((token, _)), Some(resp)) = (&oob_probe, &up.resp) {
-                    if let Some(p) = shared.oob_pending.lock().unwrap().iter_mut().find(|(t, k, _)| t == token && k.is_none()) {
-                        p.2.evidence = vec![ScanEvidence::new(new_req.as_bytes(), Some(&resp[..]))];
-                    }
-                }
-            }
-            if let Some(resp) = &up.resp {
-                let mut issues = Vec::new();
-                let rp = util::parse_http(resp);
-                let body = String::from_utf8_lossy(&resp[rp.head_len.min(resp.len())..]);
-                match probe {
-                    "cmd" => {
-                        if is_blind_cmd_hit(baseline_ms, probe_ms) {
-                            issues.push(mk(
-                                "high",
-                                &format!("Active probe: OS command injection via parameter {name} (time-based)"),
-                                entry,
-                                format!("Appending ';sleep 3' delayed the response to {probe_ms} ms vs a {baseline_ms} ms baseline."),
-                            ));
-                        }
-                    }
-                    "refdom" => {
-                        let ct = util::get_header(&rp.headers, "Content-Type").unwrap_or_default();
-                        if ct.to_ascii_lowercase().contains("html") && is_reflected_dom_hit(&body, &dom_canary) {
-                            issues.push(
-                                mk(
-                                    "high",
-                                    &format!("Active probe: DOM-based cross-site scripting (reflected) via parameter {name}"),
-                                    entry,
-                                    format!("Canary {dom_canary} is reflected unencoded into script data or an attribute value, a context DOM sinks can reach."),
-                                )
-                                .with_evidence(vec![ScanEvidence::new(new_req.as_bytes(), Some(&resp[..]))]),
-                            );
-                        }
-                    }
-                    _ => {}
-                }
-                cx.report(issues);
-            }
+            let token = ids[slot].clone();
+            let issue = mk_burp(
+                "OS command injection",
+                "high",
+                "Firm",
+                &cx.entry,
+                &ip.name,
+                format!(
+                    "The payload {payload} was {} the value of the {} parameter. The application performed a DNS lookup of type CNAME for the Collaborator id {token}, indicating that the injected command was executed.",
+                    if append { "appended to" } else { "submitted as" },
+                    ip.name
+                ),
+            )
+            .with_evidence(vec![ScanEvidence::new(new_req.as_bytes(), up.resp.as_deref())]);
+            cx.shared.oob_pending.lock().unwrap().push((token, Some("CNAME"), issue));
             cx.progress();
             cx.pace(50);
         }
@@ -1222,7 +1251,7 @@ impl PointCheck for LdapInjection {
 /// SMTP header injection, Burp's own check (burp.Zgcg/Zrok): two payloads
 /// per parameter, each with its own Collaborator id; the response is not
 /// inspected, an SMTP interaction for the id raises the issue
-/// (ui.rs::sync_oob_issues, kind SMTP).
+/// (scan::match_oob_interactions, kind SMTP).
 pub(crate) struct SmtpHeaderInjection;
 
 impl PointCheck for SmtpHeaderInjection {
@@ -2036,6 +2065,8 @@ mod tests {
             points,
             [
                 "active.light-probes",
+                "active.external-interaction",
+                "active.os-command-injection",
                 "active.file-path-traversal",
                 "active.link-manipulation",
                 "active.file-path-manipulation",

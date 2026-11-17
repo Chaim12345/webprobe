@@ -840,3 +840,33 @@ Suite: core 390 (380 pass, 10 ignored), desktop 134, 0 fail.
     - the version and binary digest are pinned.
   - Lightpanda matches its speed and memory (0.18 s and 22 MB a page) but cannot take screenshots. Obscura is therefore listed first and is the default headless engine. The Chromium CDP crawler stays the default for "Crawl and audit", because it also observes XHR calls.
 - **Message panes.** The wrap and non-printable toggles hide in narrow panes; they used to cover the Render tab.
+
+## Open-items ledger (2026-11-17)
+
+This ledger re-audits every open, partial, missing or unverified marker in this document against the code. Rows marked "stale" were closed by later waves; the earlier text is kept as history.
+
+| Line | Marker | Verdict | Evidence |
+|---|---|---|---|
+| 22, 24, 25 | Burp AI, Logger, Organizer tabs MISSING | closed | `TABS` (app/src/ui.rs:39); Burp AI is the "WebProbe AI" button on the right, as in Burp |
+| 29, 127 | Tab order differs | closed | Same 13 tabs in the same order as live Burp v2026.7.3 (`/root/webprobe-shots/burp-real-01.png`): Dashboard, Target, Proxy, Intruder, Repeater, Collaborator, Sequencer, Decoder, Comparer, Logger, Organizer, Extensions, Discover. Sessions and Search are no longer tabs. |
+| 53, 54 | Intruder Positions/Payloads MISSING | closed | Fixed 2026-11-15 (item 4 above), 2026 layout in Wave 39 |
+| 96 | WebSocket frames over TLS unsupported | closed | `relay_ws_tls` records both directions through `intercept_ws_stream` (core/src/net.rs:2571) |
+| 105, 126, 140 | Information / False positive | closed | Row 106 and the issue context menu (B-04) |
+| 118 | Discover has no Burp counterpart | closed | Burp v2026.7.3 has a Discover tab (same screenshot) |
+| 131 | Repeater Send/Pretty/Hex/Raw not located | closed | Rebuilt from the live layout in Wave 39; Pretty/Raw/Hex panes in every message editor |
+| 132 | Logger/Organizer columns not extracted | closed | Rebuilt from the live layouts in Wave 39 |
+| 179-181 | Active CSRF omitted | closed | Ported in Wave 31 (`burp.Zg8u`), check `active.csrf` |
+| 357 | Multi-step macro parameter chains | closed | `macros::prepare` derives each step's parameters from the previous response (`extract_value`, `substitute_param`; tests in core/src/macros.rs) |
+| 367 | 15 families name-grounded only | closed | Every check whose issue type Burp has cites its Burp class (registry in core/src/scan_checks.rs). OS command injection was ported today from `burp.Zc99` (Collaborator `nslookup -q=cname`, raised on a CNAME lookup as in `burp.Zing.ZR`, high/firm per `burp.Zwvy.ZR`). It replaces WebProbe's single-sample `;sleep 3` probe. WebProbe's own probes (DOM canary, stored echo, TRACE echo, OPTIONS, header reflection) no longer run or report unless "WebProbe extra checks" is on (`ScanCtx::runs`/`report`). Burp's timing-only flows (`burp.Zxom` ping delays, `burp.Zg_v` server-side JavaScript) are not ported: no timing-based detection. |
+| 369 | Viewstate exclusion, audit speed | closed | `scan.rs` viewstate regions (`burp.Zw4k.ZI`, test) and Settings > Scanner audit speed/accuracy (`burp.Zsv7`, `burp.Zgnf`) |
+| 381 | Crawl coverage parity | closed | Wave 40 browser crawler: 21/21 issues on the second app |
+| 623 | Core/UI split, evidence in project, Collaborator ids off the UI thread, MCP hook | closed | `webprobe-core` workspace crate, `ProjectEvidence` (core/src/project.rs:165), `oob_pool`, vendored egui-mcp-client. Collaborator matching moved into the engine today: `scan::match_oob_interactions`, run every frame instead of only while Scanner/Dashboard is open (test `oob_interactions_raise_issues_without_the_ui`) |
+| 623 | Disk-backed history | **open: N-06** | History bodies are `Vec<u8>` in `Shared::history`, unbounded |
+| 623 | Split `Shared`/`App` by subsystem | **open: N-07** | `Shared` has 76 public fields |
+| 744 | K-03 partial | closed | Row 815 (catalogue install, GUI-verified) |
+
+Also verified on 2026-11-17:
+
+- **Response interception, GUI check over MCP on :97.** The switch is off by default. With it on, the request was held and forwarded, and the response was held ("← Response"). The body was edited in the editor, and after Forward the client received the edited body.
+- **Renderer fallback.** A kernel exposing `/dev/dri/renderD128` made the app keep hardware GL on Xvfb and panic at start. It now restarts once on software GL (`gl_env::software_retry`, test `unusable_render_node_gets_one_software_retry`).
+

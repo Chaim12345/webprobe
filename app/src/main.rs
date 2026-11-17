@@ -387,6 +387,19 @@ impl App {
         }
     }
 
+    /// Raise the issues proved by Collaborator interactions, every frame
+    /// whatever view is open (it used to run only while the Scanner or
+    /// Dashboard was visible). The matching itself lives in the engine.
+    fn match_oob(&mut self) {
+        if self.shared.oob_pending.lock().unwrap().is_empty() {
+            return;
+        }
+        let interactions = self.collab_state.interactions();
+        if !interactions.is_empty() {
+            scan::match_oob_interactions(&self.shared, &interactions);
+        }
+    }
+
     /// Mirror proxy history into the Logger, once per history id.
     ///
     /// Rows are copied out under the history lock, the lock is dropped, and
@@ -555,6 +568,7 @@ impl eframe::App for App {
         // history table show the same frame's entries.
         self.sync_logger();
         self.refill_oob_pool();
+        self.match_oob();
         ui::show(self, ui);
         self.toasts.show(ctx);
         // After the UI: frame-time stats cover the whole build, highlights
@@ -1180,15 +1194,23 @@ fn main() {
         project_files::note_used(&app.project_path.clone());
     }
 
-    eframe::run_native(
+    let marker = app.eng.marker.clone();
+    if let Err(e) = eframe::run_native(
         "WebProbe",
         options,
         Box::new(|cc| {
             theme::apply(&cc.egui_ctx);
             Ok(Box::new(app) as Box<dyn eframe::App>)
         }),
-    )
-    .expect("failed to start app");
+    ) {
+        eprintln!("webprobe: failed to start the window: {e}");
+        // Nothing ran yet: leave no crash marker for the restarted copy.
+        if let Some(m) = &marker {
+            recovery::remove_marker(m, std::process::id());
+        }
+        gl_env::reexec_with_software_gl();
+        panic!("failed to start app: {e}");
+    }
 }
 
 #[cfg(test)]

