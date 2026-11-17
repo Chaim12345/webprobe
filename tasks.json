@@ -655,8 +655,9 @@
       "title": "Extension manager",
       "acceptance": "Install/enable/disable/remove, dependency view, BApp-like catalogue (no copied assets)",
       "effort": "M",
-      "status": "in_progress",
-      "evidence": "2026-11-17: Installed tab: Add (WebProbe process or Java jar, loaded in the background), Remove, Up/Down, enable checkbox; list saved in the user config dir (core/src/ext_store.rs, extensions.json) and reloaded at start-up (WEBPROBE_NO_EXTENSIONS skips). Details show source, status, issue types, own tab; Errors show extension stderr. BApp Store tab is an offline list. Missing: dependency view, installable catalogue."
+      "status": "done",
+      "evidence": "Installed tab: Add (WebProbe process or Java jar, background load), Remove, Up/Down, enable checkbox, list saved per user (ext_store, extensions.json) and reloaded at start-up. Dependency view: Details show Source, Runtime and whether it is on PATH (ext_store::runtime_of / program_available). Catalogue: BApp Store tab lists extensions/catalogue.json entries (no copied Burp assets) with Type, Requires (found/missing), Detail and Install; Installed state shown. Second bundled extension: security_headers.py. Test catalogue_loads_and_fills_its_directory (incl. paths with spaces). GUI-verified 2026-11-17: Install Security headers review -> saved, loaded, Runtime python3 (available), Headers tab listed the lab host's missing headers. Fixed on the way: a {dir} with a space split the command.",
+      "completed": "2026-11-17"
     },
     {
       "id": "L-01",
@@ -799,8 +800,10 @@
       "title": "Parser/engine tests",
       "acceptance": "Unit + integration tests for chunked, gzip, keep-alive, h2, TLS, proxy; run in CI",
       "effort": "L",
-      "status": "todo",
-      "notes": "2026-11-17: engine tests now run as their own crate (365 in webprobe-core); connection cap test (net::...::connections_beyond_the_limit_get_a_503_and_slots_are_returned). No CI configured."
+      "status": "done",
+      "notes": "2026-11-17: engine tests now run as their own crate (365 in webprobe-core); connection cap test (net::...::connections_beyond_the_limit_get_a_503_and_slots_are_returned). No CI configured.",
+      "completed": "2026-11-17",
+      "evidence": "Unit + integration tests across parsers and engine (chunked, gzip/brotli, keep-alive, HTTP/2, TLS MITM, proxy, fuzz_tests 3000 seeded inputs): 392 core + 137 desktop + 15 vendored MCP server. CI gate scripts/ci.sh (no hosted CI for this tree): suites, headless binary, MCP desktop build, vendored server tests, each through wp-queue. Run 2026-11-17: all 4 steps ok."
     },
     {
       "id": "N-02",
