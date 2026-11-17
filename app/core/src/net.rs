@@ -1171,7 +1171,28 @@ fn read_request<R: Read>(stream: &mut R) -> std::io::Result<Vec<u8>> {
         Some(h) => h,
         None => return Ok(buf),
     };
-    if let Some(len) = content_length(&buf[..head_len]) {
+    let too_large = || std::io::Error::new(std::io::ErrorKind::InvalidData, "request body too large");
+    // Transfer-Encoding wins over Content-Length (RFC 9112 §6.3). A chunked
+    // upload is read to its last chunk; it used to be forwarded with only the
+    // bytes of the first read.
+    let head = String::from_utf8_lossy(&buf[..head_len]).to_ascii_lowercase();
+    let chunked = head.lines().any(|l| l.starts_with("transfer-encoding:") && l.contains("chunked"));
+    if chunked {
+        let mut cur = crate::codec::ChunkCursor::default();
+        while crate::codec::scan_chunked(&buf[head_len..], &mut cur, |_| {}) == crate::codec::Chunked::Partial {
+            if buf.len() - head_len > crate::codec::MAX_BODY {
+                return Err(too_large());
+            }
+            let n = stream.read(&mut chunk)?;
+            if n == 0 {
+                break;
+            }
+            buf.extend_from_slice(&chunk[..n]);
+        }
+    } else if let Some(len) = content_length(&buf[..head_len]) {
+        if len > crate::codec::MAX_BODY {
+            return Err(too_large());
+        }
         while buf.len() < head_len + len {
             let n = stream.read(&mut chunk)?;
             if n == 0 {
@@ -1225,24 +1246,27 @@ impl ResponseRead for UpstreamConn {
 }
 
 impl UpstreamConn {
-    fn writable(&self) -> bool {
-        // A pooled connection is only reusable if the peer has not closed it.
-        // A zero-byte peek returning 0 means EOF.
+    fn writable(&mut self) -> bool {
+        // A pooled connection is reusable only if the peer has neither closed
+        // it nor sent anything unasked: bytes waiting now (a late or extra
+        // response) would otherwise be read as the next request's response.
         let mut b = [0u8; 1];
         match self {
             UpstreamConn::Plain(s) => {
-                // Peek without blocking: no bytes waiting is good, EOF is not.
                 let _ = s.set_nonblocking(true);
-                let alive = match s.peek(&mut b) {
-                    Ok(0) => false,
-                    Ok(_) => true,
-                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => true,
-                    Err(_) => false,
-                };
+                let idle = matches!(s.peek(&mut b), Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock);
                 let _ = s.set_nonblocking(false);
-                alive
+                idle
             }
-            UpstreamConn::Tls(_) => true, // rustls has no peek; errors surface on use
+            UpstreamConn::Tls(tls) => {
+                // TLS 1.3 servers send session tickets after the handshake:
+                // records that carry no application data. Let rustls consume
+                // whatever is waiting; only plaintext or a close is stale.
+                let _ = tls.sock.set_nonblocking(true);
+                let idle = matches!(tls.read(&mut b), Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock);
+                let _ = tls.sock.set_nonblocking(false);
+                idle
+            }
         }
     }
 }
@@ -1590,7 +1614,8 @@ fn try_h2c_upgrade<S: Read + Write + ResponseRead>(stream: &mut S, routed: &[u8]
     match kind {
         crate::codec::BodyKind::None => {}
         crate::codec::BodyKind::Length(n) => {
-            while msg.len() < head_len + n {
+            let end = head_len.saturating_add(n);
+            while msg.len() < end && msg.len() - head_len <= crate::codec::MAX_BODY {
                 let mut chunk = [0u8; 16384];
                 match stream.read(&mut chunk) {
                     Ok(0) => break,
@@ -1598,11 +1623,12 @@ fn try_h2c_upgrade<S: Read + Write + ResponseRead>(stream: &mut S, routed: &[u8]
                     Err(_) => break,
                 }
             }
-            msg.truncate((head_len + n).min(msg.len()));
+            msg.truncate(end.min(msg.len()));
         }
         crate::codec::BodyKind::Chunked => {
+            let mut cur = crate::codec::ChunkCursor::default();
             loop {
-                if crate::codec::decode_chunked(&msg[head_len..]).is_some() {
+                if crate::codec::scan_chunked(&msg[head_len..], &mut cur, |_| {}) != crate::codec::Chunked::Partial || msg.len() - head_len > crate::codec::MAX_BODY {
                     break;
                 }
                 let mut chunk = [0u8; 16384];
@@ -1699,7 +1725,7 @@ fn send_inner(shared: &Shared, host: &str, port: u16, req: &[u8]) -> Result<Vec<
         }
     }
     let result = match exchange(&mut stream, &routed) {
-        Ok(r) => Ok((r, stream)),
+        Ok((r, reusable)) => Ok((r, reusable, stream)),
         Err(e) => {
             if reused {
                 let mut fresh = UpstreamConn::Plain({
@@ -1708,14 +1734,14 @@ fn send_inner(shared: &Shared, host: &str, port: u16, req: &[u8]) -> Result<Vec<
                     tcp
                 });
                 shared.conns_opened.fetch_add(1, Ordering::SeqCst);
-                exchange(&mut fresh, &routed).map(|r| (r, fresh)).map_err(|e2| format!("{e}; retry: {e2}"))
+                exchange(&mut fresh, &routed).map(|(r, reusable)| (r, reusable, fresh)).map_err(|e2| format!("{e}; retry: {e2}"))
             } else {
                 Err(e)
             }
         }
     }?;
-    let (resp, stream) = result;
-    if keep_alive && response_allows_reuse(&resp) {
+    let (resp, reusable, stream) = result;
+    if keep_alive && reusable && response_allows_reuse(&resp) {
         shared.pool.lock().unwrap().insert(key, stream);
         if reused {
             shared.pool_hits.fetch_add(1, Ordering::SeqCst);
@@ -1805,20 +1831,20 @@ fn send_tls_inner(shared: &Shared, host: &str, port: u16, req: &[u8]) -> Result<
         }
     }
     let result = match exchange(&mut stream, &req) {
-        Ok(r) => Ok((r, stream)),
+        Ok((r, reusable)) => Ok((r, reusable, stream)),
         Err(e) => {
             // A reused connection may have been closed by the peer; try once more
             // on a fresh one before reporting the failure.
             if reused {
                 let mut fresh = new_tls_conn(shared, &config, host, port)?;
-                exchange(&mut fresh, &req).map(|r| (r, fresh)).map_err(|e2| format!("{e}; retry: {e2}"))
+                exchange(&mut fresh, &req).map(|(r, reusable)| (r, reusable, fresh)).map_err(|e2| format!("{e}; retry: {e2}"))
             } else {
                 Err(e)
             }
         }
     }?;
-    let (result, stream) = result;
-    if keep_alive && response_allows_reuse(&result) {
+    let (result, reusable, stream) = result;
+    if keep_alive && reusable && response_allows_reuse(&result) {
         shared.tls_pool.lock().unwrap().insert(key, stream);
         if reused {
             shared.pool_hits.fetch_add(1, Ordering::SeqCst);
@@ -1842,19 +1868,18 @@ fn new_tls_conn(
     Ok(UpstreamConn::Tls(Box::new(rustls::StreamOwned::new(conn, tcp))))
 }
 
-/// Write a request and read exactly one framed response, leaving any bytes past
-/// the body in `leftover` so a pipelined follow-up is never silently dropped.
-fn exchange<S: Read + Write + ResponseRead>(stream: &mut S, req: &[u8]) -> Result<Vec<u8>, String> {
+/// Write a request and read exactly one framed response. Returns the response
+/// and whether the connection may go back to the pool: not when the body was
+/// EOF-delimited, malformed or cut short, and not when the peer sent bytes
+/// past it (pipelining stays off, MECHANICS.md A-03; those bytes would
+/// otherwise become the next request's response).
+fn exchange<S: Read + Write + ResponseRead>(stream: &mut S, req: &[u8]) -> Result<(Vec<u8>, bool), String> {
     stream.write_all(req).map_err(|e| format!("write: {e}"))?;
     stream.flush().ok();
+    let method = req.split(|&b| b == b' ').next().map(String::from_utf8_lossy).unwrap_or_default();
     let mut buffer = Vec::new();
-    let resp = crate::codec::read_message(stream, &mut buffer).map_err(|e| format!("read: {e}"))?;
-    if !buffer.is_empty() {
-        // Bytes beyond the framed body: the peer is ahead of us. Closing is the
-        // only safe option; pipelining stays off (MECHANICS.md A-03).
-        return Ok(resp);
-    }
-    Ok(resp)
+    let (resp, reusable) = crate::codec::read_message(stream, &mut buffer, &method).map_err(|e| format!("read: {e}"))?;
+    Ok((resp, reusable && buffer.is_empty()))
 }
 
 // ---------- the proxy loop ----------

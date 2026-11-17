@@ -3,3 +3,6 @@ app/target/
 inbox/
 capture/
 **/target/
+
+# graphify code graph (local search index)
+app/graphify-out/
