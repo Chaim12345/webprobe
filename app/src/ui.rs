@@ -1082,6 +1082,21 @@ fn proxy_history(app: &mut App, ui: &mut Ui) {
 
 /// A draggable horizontal divider: `split` is the height of the pane below it.
 /// Dragging it down shrinks the table, dragging it up grows the message pane.
+/// A draggable vertical divider at `x` between two side-by-side panes;
+/// `frac` is the left pane's share of `total` width (kept 0.15..0.85).
+pub(crate) fn vsplit_handle(ui: &mut Ui, id: &str, x: f32, y: std::ops::RangeInclusive<f32>, frac: &mut f32, total: f32) {
+    let rect = egui::Rect::from_x_y_ranges((x - 3.0)..=(x + 3.0), y);
+    let drag = ui.interact(rect, egui::Id::unique(("vsplit", id)), egui::Sense::drag());
+    if drag.dragged() && total > 0.0 {
+        *frac = (*frac + drag.drag_delta().x / total).clamp(0.15, 0.85);
+    }
+    if drag.hovered() || drag.dragged() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+        ui.painter().vline(x, rect.y_range(), egui::Stroke::new(2.0, c(theme::ORANGE)));
+    }
+    drag.widget_info(|| egui::WidgetInfo::labeled(egui::accesskit::Role::Splitter, true, id));
+}
+
 fn splitter(ui: &mut Ui, split: &mut f32, total: f32) {
     let (rect, _) = ui.allocate_exact_size(
         egui::vec2(ui.available_width(), 7.0),
@@ -2059,9 +2074,14 @@ fn repeater(app: &mut App, ui: &mut Ui) {
     let dock_w = 32.0;
     let side_w = if app.dock_sel < 2 { 330.0 } else { 0.0 };
     let mut rep_action: Option<crate::repeater_ops::RepAction> = None;
+    // Request | response divider: draggable (Burp's split pane), kept in
+    // the project layout as a fraction of the two panes' width.
+    let panes_w = (ui.available_width() - side_w - dock_w).max(400.0);
+    let req_w = (panes_w * app.rep_split).clamp(200.0, panes_w - 200.0);
+    let panes_top = ui.cursor().min;
     ui.allocate_ui(egui::vec2(ui.available_width(), body_h), |ui| {
         let mut sb = egui_extras::StripBuilder::new(ui)
-            .size(egui_extras::Size::remainder().at_least(200.0))
+            .size(egui_extras::Size::exact(req_w))
             .size(egui_extras::Size::remainder().at_least(200.0));
         if side_w > 0.0 {
             sb = sb.size(egui_extras::Size::exact(side_w));
@@ -2121,6 +2141,7 @@ fn repeater(app: &mut App, ui: &mut Ui) {
             });
         });
     });
+    vsplit_handle(ui, "rep_split", panes_top.x + req_w, panes_top.y..=panes_top.y + body_h, &mut app.rep_split, panes_w);
     if let Some(action) = rep_action {
         use crate::repeater_ops::RepAction;
         match action {
@@ -3729,7 +3750,11 @@ fn target(app: &mut App, ui: &mut Ui) {
         }
     }
 
-    let tree_w = 330.0;
+    // Tree | contents divider: draggable, kept in the project layout.
+    let map_w = ui.available_width().max(500.0);
+    let tree_w = (map_w * app.map_split).clamp(180.0, map_w - 300.0);
+    let map_top = ui.cursor().min;
+    let map_h = ui.available_height();
     egui_extras::StripBuilder::new(ui)
         .size(egui_extras::Size::exact(tree_w))
         .size(egui_extras::Size::remainder())
@@ -3886,6 +3911,7 @@ fn target(app: &mut App, ui: &mut Ui) {
                     });
             });
         });
+    vsplit_handle(ui, "map_split", map_top.x + tree_w, map_top.y..=map_top.y + map_h, &mut app.map_split, map_w);
 }
 
 // ================= Comparer =================

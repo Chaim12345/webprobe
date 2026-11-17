@@ -559,6 +559,12 @@ pub struct ProjectLayout {
     pub dock: Option<usize>,
     #[serde(default)]
     pub split_detail: Option<f32>,
+    /// Repeater request|response split (request share of the width).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rep_split: Option<f32>,
+    /// Site map tree | contents split (tree share of the width).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub map_split: Option<f32>,
     #[serde(default)]
     pub repeater_tab: Option<usize>,
 }
@@ -1376,6 +1382,8 @@ mod tests {
                 dashboard_task: Some(2),
                 dock: Some(1),
                 split_detail: Some(300.0),
+                rep_split: Some(0.4),
+                map_split: Some(0.3),
                 repeater_tab: Some(1),
             },
             editors: ProjectEditors {

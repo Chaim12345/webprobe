@@ -1862,6 +1862,8 @@ pub fn save_project(app: &mut App, quiet: bool) {
             dashboard_task: Some(app.dash_task),
             dock: Some(app.dock_sel),
             split_detail: Some(app.split_detail),
+            rep_split: Some(app.rep_split),
+            map_split: Some(app.map_split),
             repeater_tab: Some(app.rep_sel),
         },
         editors: project::ProjectEditors {
@@ -2046,6 +2048,8 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData) {
     if let Some(v) = l.dashboard_task { app.dash_task = v.min(2); }
     if let Some(v) = l.dock { app.dock_sel = v.min(2); }
     if let Some(v) = l.split_detail { app.split_detail = v.clamp(80.0, 2000.0); }
+    if let Some(v) = l.rep_split { app.rep_split = v.clamp(0.15, 0.85); }
+    if let Some(v) = l.map_split { app.map_split = v.clamp(0.15, 0.85); }
     if let Some(v) = l.repeater_tab { app.rep_sel = v; }
     let ed = &data.editors;
     app.intr_target = ed.intruder_target.clone();

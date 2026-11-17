@@ -105,6 +105,10 @@ pub struct App {
     pub mcp: mcp_hook::Mcp,
     /// Height of the Proxy message pane, dragged by the splitter (B-05).
     pub split_detail: f32,
+    /// Repeater request pane's share of the request|response width.
+    pub rep_split: f32,
+    /// Site map tree's share of the Target width.
+    pub map_split: f32,
     pub target_host_sel: Option<String>,
     pub target_hosts: Vec<String>,
     pub target_items: Vec<(String, String, String, u64)>, // host, method, path, hist id
@@ -745,6 +749,8 @@ impl App {
             waker_installed: false,
             mcp: mcp_hook::Mcp::start(),
             split_detail: 260.0,
+            rep_split: 0.5,
+            map_split: 0.24,
             target_host_sel: None,
             target_hosts: Vec::new(),
             target_items: Vec::new(),

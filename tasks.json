@@ -155,8 +155,9 @@
       "title": "Resizable layout + status bar",
       "acceptance": "Splitters between every pane; status bar with listener, intercept, queue, scan/attack progress, last error; layout persisted",
       "effort": "L",
-      "status": "in_progress",
-      "evidence": "status bar (listener, intercept, held, history, messages, last message) and a draggable splitter between history table and message pane, live-verified 2026-11-15. REMAINING: splitters between every other pane, scan/attack progress in the bar, layout persistence"
+      "status": "done",
+      "evidence": "Draggable dividers: HTTP history table|message (splitter), Repeater request|response and Target site map tree|contents (new ui::vsplit_handle, accessible Splitter role), all kept in the project layout (split_detail, rep_split, map_split). Status bar: listener, intercept state, scan progress (Scan n/m), memory, last event; Event log / All issues buttons. GUI-verified 2026-11-17: dragged the Repeater and site map dividers over MCP; layout restored on restart.",
+      "completed": "2026-11-17"
     },
     {
       "id": "B-06",

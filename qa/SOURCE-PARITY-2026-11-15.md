@@ -814,3 +814,4 @@ Suite: core 390 (380 pass, 10 ignored), desktop 134, 0 fail.
 - GUI-verified C-02 (Add § from a selection, two positions), P-07 (Decoder stage chain), P-09 (paused banner and Resume, Dashboard tabs).
 - **Extension catalogue (K-03).** The BApp Store tab installs from `extensions/catalogue.json` (marker reflection, security headers review, Montoya demo), showing runtime dependencies (found/missing); Installed details show the Runtime. Fixed: a `{dir}` containing a space split the command. **CI (N-01).** `scripts/ci.sh` passes all 4 steps.
 - **Issue lists** get Burp's context menu: Report, Set severity, Set confidence, false positive, Copy URL (scheme and port from the matching site map item), Delete. GUI-verified (B-04).
+- **Split panes (B-05).** Repeater request|response and site map tree|contents dividers are draggable and saved in the project layout; GUI-verified.
