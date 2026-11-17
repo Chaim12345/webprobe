@@ -1108,7 +1108,12 @@ pub fn start_active_scan(shared: Arc<Shared>, entry: HistEntry, oob: &[(String, 
     shared.scan_total.store(planned_progress(&entry, points.len(), oob.len()), Ordering::SeqCst);
     shared.scan_done.store(0, Ordering::SeqCst);
     shared.scan_stop.store(false, Ordering::SeqCst);
-    shared.scan_busy.store(true, Ordering::SeqCst);
+    // Claim the scanner atomically: the check at the top is only a fast path,
+    // two callers could both have passed it.
+    if shared.scan_busy.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+        shared.log("Scanner: a scan is already running");
+        return;
+    }
     shared.direct_scan.store(shared.running_task.load(Ordering::SeqCst) == 0, Ordering::SeqCst);
     shared.log(&format!("Scanner: active scan started ({} insertion point(s), light active checks)", points.len()));
 
@@ -1119,13 +1124,30 @@ pub fn start_active_scan(shared: Arc<Shared>, entry: HistEntry, oob: &[(String, 
     let (oob, smtp) = (oob.to_vec(), smtp.to_vec());
     std::thread::spawn(move || {
         let _tool = crate::net::tool_scope("Scanner");
-        let cx = checks::ScanCtx::start(shared, entry, req, parts, host, port, settings, oob, smtp);
-        checks::run_point_checks(&cx, &points);
-        checks::run_request_checks(&cx);
-        let shared = &cx.shared;
-        // The planned total assumes every check runs; settle it at the end.
-        shared.scan_total.store(shared.scan_done.load(Ordering::SeqCst), Ordering::SeqCst);
-        shared.scan_busy.store(false, Ordering::SeqCst);
+        // The scanner is released however this thread ends: a panicking
+        // check used to leave scan_busy set, so every later scan was refused
+        // and the task runner waited forever.
+        struct Release(Arc<Shared>);
+        impl Drop for Release {
+            fn drop(&mut self) {
+                self.0.scan_total.store(self.0.scan_done.load(Ordering::SeqCst), Ordering::SeqCst);
+                self.0.scan_busy.store(false, Ordering::SeqCst);
+            }
+        }
+        let _release = Release(shared.clone());
+        let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let cx = checks::ScanCtx::start(shared.clone(), entry, req, parts, host, port, settings, oob, smtp);
+            checks::run_point_checks(&cx, &points);
+            checks::run_request_checks(&cx);
+        }));
+        if let Err(e) = run {
+            let why = e.downcast_ref::<&str>().map(|s| s.to_string()).or_else(|| e.downcast_ref::<String>().cloned()).unwrap_or_default();
+            shared.log(&format!("Scanner: the scan stopped on an internal error: {why}"));
+            crate::notice::toast(crate::notice::Level::Error, format!("Active scan stopped on an internal error: {why}"));
+            return;
+        }
+        drop(_release);
+        let shared = &shared;
         shared.log("Scanner: active scan finished");
         let found = shared.issues.lock().map(|i| i.len()).unwrap_or(0);
         crate::notice::toast(

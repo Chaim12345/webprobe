@@ -1785,17 +1785,9 @@ pub fn drain_save_results(app: &mut App) {
     }
 }
 
-/// Every save goes through the single project-save worker, in order, so an
-/// older snapshot can never land after a newer one.
-fn save_project_with(app: &mut App, quiet: bool, background: bool) {
-    // J-02: while the crash-recovery prompt is open, autosave (and the save
-    // on exit) must not overwrite the project the user may want back; the
-    // new session goes to a per-process temporary file instead.
-    let target = if quiet && app.eng.suppress_autosave {
-        crate::recovery::temporary_project_path(&std::env::temp_dir(), std::process::id(), 0).display().to_string()
-    } else {
-        app.project_path.clone()
-    };
+/// The whole project as data, in memory (bodies are shared handles, so
+/// this is cheap): what a save writes and what Settings works on.
+pub fn project_snapshot(app: &mut App) -> project::ProjectData {
     let to_project_history = project::ProjectHistory::from_entry;
     let crawl_items: Vec<project::ProjectHistory> = app.shared.crawl_items.lock().unwrap().iter().map(to_project_history).collect();
     let history = app.shared.history.lock().unwrap().iter().map(to_project_history).collect();
@@ -1879,7 +1871,7 @@ fn save_project_with(app: &mut App, quiet: bool, background: bool) {
         live_audit: app.shared.scan_enabled.load(Ordering::SeqCst),
         scans: project::ProjectScanTask::save_all(&app.shared.tasks.lock().unwrap()),
     };
-    let data = project::ProjectData {
+    project::ProjectData {
         version: project::PROJECT_VERSION,
         saved_at: crate::util::now_secs(),
         history,
@@ -1981,7 +1973,21 @@ fn save_project_with(app: &mut App, quiet: bool, background: bool) {
         },
         ca_fingerprint: Some(app.shared.mitm.ca_fingerprint()),
         ..project::ProjectData::default()
+    }
+}
+
+/// Every save goes through the single project-save worker, in order, so an
+/// older snapshot can never land after a newer one.
+fn save_project_with(app: &mut App, quiet: bool, background: bool) {
+    // J-02: while the crash-recovery prompt is open, autosave (and the save
+    // on exit) must not overwrite the project the user may want back; the
+    // new session goes to a per-process temporary file instead.
+    let target = if quiet && app.eng.suppress_autosave {
+        crate::recovery::temporary_project_path(&std::env::temp_dir(), std::process::id(), 0).display().to_string()
+    } else {
+        app.project_path.clone()
     };
+    let data = project_snapshot(app);
     let reported = target.clone();
     project::save_in_background(
         std::path::PathBuf::from(&target),
@@ -1994,89 +2000,101 @@ fn save_project_with(app: &mut App, quiet: bool, background: bool) {
     }
 }
 
+/// Put loaded project data into the running app. With `content` false
+/// (Settings > Restore defaults, settings import) only settings change:
+/// history, issues, Repeater tabs, scan tasks and editors are left as they
+/// are, so traffic that arrived meanwhile is never rolled back.
+pub fn apply_project(app: &mut App, data: &project::ProjectData, content: bool) {
+    if content {
+        *app.shared.history.lock().unwrap() = data.history.iter().map(|h| h.to_entry().spilled()).collect();
+    }
+    *app.shared.mr_request.lock().unwrap() = data.match_request.iter().filter(|r| r.kind == "request").map(net_rule).collect();
+    *app.shared.mr_response.lock().unwrap() = data.match_response.iter().filter(|r| r.kind == "response").map(net_rule).collect();
+    *app.shared.scope.lock().unwrap() = data.scope.iter().map(|s| net::ScopeRule {
+        enabled: s.enabled,
+        include: s.include,
+        pattern: s.pattern.clone(),
+        is_regex: s.is_regex,
+    }).collect();
+    *app.shared.cookie_jar.lock().unwrap() = data.cookie_jar.as_ref().map(|j| j.to_jar()).unwrap_or_default();
+    *app.shared.intercept_rules.lock().unwrap() = data.intercept_rules.clone().unwrap_or_else(crate::intercept_rules::defaults);
+    *app.shared.session_rules.lock().unwrap() = data.session_rules.iter().map(|s| net::SessionRule {
+        enabled: s.enabled,
+        name: s.name.clone(),
+        action: s.action.clone(),
+        host_match: s.match_text.clone(),
+        value: s.value.clone(),
+        tools: s.tools.clone(),
+        check: s.check.clone(),
+        check_invalid_on_match: s.check_invalid_on_match,
+    }).collect();
+    *app.shared.macros.lock().unwrap() = data.macros.iter().map(|m| net::Macro {
+        name: m.name.clone(),
+        request: m.request.clone(),
+    }).collect();
+    if content {
+        *app.shared.repeaters.lock().unwrap() = data.repeaters.iter().map(|r| net::RepTab {
+            id: app.shared.next_rep_id.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
+            name: r.name.clone(),
+            host: r.host.clone(),
+            port: r.port,
+            https: r.https,
+            request: r.request.clone(),
+            response: r.response.as_ref().map(|v| v.as_bytes().to_vec()),
+            result_line: r.result_line.clone(),
+        history: Vec::new(),
+        hist_pos: 0,
+        }).collect();
+        *app.shared.issues.lock().unwrap() = data.issues.iter().map(project::ProjectIssue::to_issue).collect();
+        *app.shared.ws_history.lock().unwrap() = data.websockets.iter().map(|w| net::WsEntry {
+            id: w.id,
+            ts: w.timestamp,
+            host: w.host.clone(),
+            direction: w.direction.clone(),
+            opcode: w.opcode.clone(),
+            payload: w.payload.clone(),
+        }).collect();
+    }
+    *app.shared.upstream.lock().unwrap() = data.upstream.clone();
+    *app.shared.upstream_rules.lock().unwrap() = data.upstream_rules.clone();
+    // An explicit WEBPROBE_PORT (QA runs, a second instance) wins
+    // over the port saved in the project.
+    if std::env::var_os("WEBPROBE_PORT").is_none() && data.listener_port != app.shared.proxy_port.load(Ordering::SeqCst) {
+        app.shared.proxy_port.store(data.listener_port, Ordering::SeqCst);
+        app.shared.listener_restart.store(true, Ordering::SeqCst);
+    }
+    // M-05: apply the persisted appearance.
+    crate::theme::set_appearance(
+        crate::theme::Palette::parse(&data.appearance.palette),
+        crate::theme::Density::parse(&data.appearance.density),
+        data.appearance.font_scale,
+    );
+    restore_j01_sections(app, data, content);
+    // The traffic in this project was intercepted under another CA:
+    // browsers trusting only the current CA will reject the old one's
+    // certificates, and evidence refers to a different CA.
+    if let Some(fp) = data.ca_fingerprint.as_ref().filter(|fp| **fp != app.shared.mitm.ca_fingerprint()) {
+        let msg = format!("This project was recorded with a different CA certificate ({}…); the current CA is {}…", &fp[..fp.len().min(23)], &app.shared.mitm.ca_fingerprint()[..23]);
+        app.shared.log(&msg);
+        crate::feedback::toast(crate::feedback::Level::Info, msg);
+    }
+    // Ids handed out after the restore must not collide with restored ones.
+    {
+        let max_id = app.shared.history.lock().unwrap().iter().map(|e| e.id)
+            .chain(app.shared.crawl_items.lock().unwrap().iter().map(|e| e.id))
+            .chain(app.shared.issues.lock().unwrap().iter().map(|i| i.id))
+            .chain(app.shared.ws_history.lock().unwrap().iter().map(|w| w.id))
+            .max()
+            .unwrap_or(0);
+        app.shared.next_id.fetch_max(max_id + 1, Ordering::SeqCst);
+    }
+    app.map_cache_len = usize::MAX;
+}
+
 pub fn restore_project(app: &mut App, quiet: bool) {
     match project::load(std::path::Path::new(&app.project_path)) {
         Ok(data) => {
-            *app.shared.history.lock().unwrap() = data.history.iter().map(|h| h.to_entry().spilled()).collect();
-            *app.shared.mr_request.lock().unwrap() = data.match_request.iter().filter(|r| r.kind == "request").map(net_rule).collect();
-            *app.shared.mr_response.lock().unwrap() = data.match_response.iter().filter(|r| r.kind == "response").map(net_rule).collect();
-            *app.shared.scope.lock().unwrap() = data.scope.iter().map(|s| net::ScopeRule {
-                enabled: s.enabled,
-                include: s.include,
-                pattern: s.pattern.clone(),
-                is_regex: s.is_regex,
-            }).collect();
-            *app.shared.cookie_jar.lock().unwrap() = data.cookie_jar.as_ref().map(|j| j.to_jar()).unwrap_or_default();
-            *app.shared.intercept_rules.lock().unwrap() = data.intercept_rules.clone().unwrap_or_else(crate::intercept_rules::defaults);
-            *app.shared.session_rules.lock().unwrap() = data.session_rules.iter().map(|s| net::SessionRule {
-                enabled: s.enabled,
-                name: s.name.clone(),
-                action: s.action.clone(),
-                host_match: s.match_text.clone(),
-                value: s.value.clone(),
-                tools: s.tools.clone(),
-                check: s.check.clone(),
-                check_invalid_on_match: s.check_invalid_on_match,
-            }).collect();
-            *app.shared.macros.lock().unwrap() = data.macros.iter().map(|m| net::Macro {
-                name: m.name.clone(),
-                request: m.request.clone(),
-            }).collect();
-            *app.shared.repeaters.lock().unwrap() = data.repeaters.iter().map(|r| net::RepTab {
-                id: app.shared.next_rep_id.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
-                name: r.name.clone(),
-                host: r.host.clone(),
-                port: r.port,
-                https: r.https,
-                request: r.request.clone(),
-                response: r.response.as_ref().map(|v| v.as_bytes().to_vec()),
-                result_line: r.result_line.clone(),
-            history: Vec::new(),
-            hist_pos: 0,
-            }).collect();
-            *app.shared.issues.lock().unwrap() = data.issues.iter().map(project::ProjectIssue::to_issue).collect();
-            *app.shared.ws_history.lock().unwrap() = data.websockets.iter().map(|w| net::WsEntry {
-                id: w.id,
-                ts: w.timestamp,
-                host: w.host.clone(),
-                direction: w.direction.clone(),
-                opcode: w.opcode.clone(),
-                payload: w.payload.clone(),
-            }).collect();
-            *app.shared.upstream.lock().unwrap() = data.upstream.clone();
-            *app.shared.upstream_rules.lock().unwrap() = data.upstream_rules.clone();
-            // An explicit WEBPROBE_PORT (QA runs, a second instance) wins
-            // over the port saved in the project.
-            if std::env::var_os("WEBPROBE_PORT").is_none() && data.listener_port != app.shared.proxy_port.load(Ordering::SeqCst) {
-                app.shared.proxy_port.store(data.listener_port, Ordering::SeqCst);
-                app.shared.listener_restart.store(true, Ordering::SeqCst);
-            }
-            // M-05: apply the persisted appearance.
-            crate::theme::set_appearance(
-                crate::theme::Palette::parse(&data.appearance.palette),
-                crate::theme::Density::parse(&data.appearance.density),
-                data.appearance.font_scale,
-            );
-            restore_j01_sections(app, &data);
-            // The traffic in this project was intercepted under another CA:
-            // browsers trusting only the current CA will reject the old one's
-            // certificates, and evidence refers to a different CA.
-            if let Some(fp) = data.ca_fingerprint.as_ref().filter(|fp| **fp != app.shared.mitm.ca_fingerprint()) {
-                let msg = format!("This project was recorded with a different CA certificate ({}…); the current CA is {}…", &fp[..fp.len().min(23)], &app.shared.mitm.ca_fingerprint()[..23]);
-                app.shared.log(&msg);
-                crate::feedback::toast(crate::feedback::Level::Info, msg);
-            }
-            // Ids handed out after the restore must not collide with restored ones.
-            {
-                let max_id = app.shared.history.lock().unwrap().iter().map(|e| e.id)
-                    .chain(app.shared.crawl_items.lock().unwrap().iter().map(|e| e.id))
-                    .chain(app.shared.issues.lock().unwrap().iter().map(|i| i.id))
-                    .chain(app.shared.ws_history.lock().unwrap().iter().map(|w| w.id))
-                    .max()
-                    .unwrap_or(0);
-                app.shared.next_id.fetch_max(max_id + 1, Ordering::SeqCst);
-            }
-            app.map_cache_len = usize::MAX;
+            apply_project(app, &data, true);
             app.project_status = format!("restored {}", app.project_path);
             if !quiet { crate::feedback::toast(crate::feedback::Level::Success, format!("Project restored from {}", app.project_path)); }
         }
@@ -2088,9 +2106,13 @@ pub fn restore_project(app: &mut App, quiet: bool) {
 /// editor buffers, Logger, Organizer, Intruder and Decoder state. Sections
 /// missing from older files come back as defaults; layout fields that were
 /// never saved (None) leave the current UI alone.
-fn restore_j01_sections(app: &mut App, data: &project::ProjectData) {
-    *app.shared.crawl_items.lock().unwrap() = data.crawl_items.iter().map(|h| h.to_entry().spilled()).collect();
-    *app.shared.site_links.lock().unwrap() = data.site_links.iter().cloned().collect();
+/// Sections of a project beyond the core lists. With `content` false only
+/// settings are applied: recorded traffic, tasks, editors and layout stay.
+fn restore_j01_sections(app: &mut App, data: &project::ProjectData, content: bool) {
+    if content {
+        *app.shared.crawl_items.lock().unwrap() = data.crawl_items.iter().map(|h| h.to_entry().spilled()).collect();
+        *app.shared.site_links.lock().unwrap() = data.site_links.iter().cloned().collect();
+    }
     let cs = &data.collaborator;
     if let Some(server) = cs.server.as_ref().filter(|s| !s.trim().is_empty()) {
         app.collab_state.remote_choice = server.clone();
@@ -2132,6 +2154,9 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData) {
     }
     app.shared.crawl_capture.store(data.tasks.live_passive_crawl, Ordering::SeqCst);
     app.shared.scan_enabled.store(data.tasks.live_audit, Ordering::SeqCst);
+    if !content {
+        return;
+    }
     // Scan tasks still open in the current session are dropped in favour of
     // the project's (opening a project replaces the session).
     {
@@ -2307,6 +2332,23 @@ mod tests {
 #[cfg(test)]
 mod save_restore_tests {
     use super::*;
+
+    /// Review finding 12: Settings > Restore defaults changes settings only.
+    /// Traffic recorded after the snapshot was taken survives, and no file is
+    /// written.
+    #[test]
+    fn settings_restore_keeps_traffic_and_writes_nothing() {
+        let mut app = crate::App::new(net::Shared::new());
+        app.project_path = "/nonexistent/should-not-be-written.json".into();
+        app.shared.scan_speed.store(2, Ordering::SeqCst);
+        let snap = crate::settings_dialog::snapshot(&mut app).unwrap();
+        app.shared.push_history(net::HistEntry { id: 77, host: "late.test".into(), ..Default::default() });
+        app.shared.issues.lock().unwrap().push(crate::scan::ScanIssue { id: 78, name: "late".into(), ..Default::default() });
+        crate::settings_dialog::install(&mut app, &project::with_section_defaults(&snap, project::SettingsSection::Tasks)).unwrap();
+        assert!(app.shared.history.lock().unwrap().iter().any(|e| e.id == 77), "history kept");
+        assert!(app.shared.issues.lock().unwrap().iter().any(|i| i.id == 78), "issues kept");
+        assert!(!std::path::Path::new("/nonexistent/should-not-be-written.json").exists());
+    }
 
     /// Saving must not deadlock (two locks of one mutex in a single statement
     /// hung every save) and must round-trip what it wrote.

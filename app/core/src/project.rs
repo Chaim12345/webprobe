@@ -1164,6 +1164,11 @@ pub fn save(path: &Path, data: &ProjectData) -> Result<(), String> {
         }
     };
 
+    // The replacement keeps the project's permissions: a file the user made
+    // private (0600) must not become world-readable on the next save.
+    if let Ok(meta) = std::fs::metadata(path) {
+        let _ = file.set_permissions(meta.permissions());
+    }
     // Streamed: the document is never held in memory as a whole (bodies
     // are written from their handles one history item at a time).
     let written = (|| -> std::io::Result<()> {
@@ -1206,38 +1211,66 @@ pub fn save(path: &Path, data: &ProjectData) -> Result<(), String> {
 
 /// Project saves off the UI thread (N-06). The UI takes a snapshot, which is
 /// cheap now that message bodies are shared handles, and one worker thread
-/// writes it. While a save runs, a newer snapshot replaces any waiting one:
-/// only the latest state is written. `wait_for_saves` blocks until the
+/// writes the queue in order. A newer snapshot for a path that is still
+/// waiting replaces it (only the latest state of a file is written); saves
+/// to different files are never merged. `wait_for_saves` blocks until the
 /// worker is idle (exit, tests).
 pub type SaveDone = Box<dyn FnOnce(Result<(), String>) + Send>;
 
 struct Saver {
-    pending: Option<(std::path::PathBuf, ProjectData, SaveDone)>,
+    pending: std::collections::VecDeque<(std::path::PathBuf, ProjectData, SaveDone)>,
     busy: bool,
 }
 
 fn saver() -> &'static (std::sync::Mutex<Saver>, std::sync::Condvar) {
     static S: std::sync::OnceLock<(std::sync::Mutex<Saver>, std::sync::Condvar)> = std::sync::OnceLock::new();
-    S.get_or_init(|| (std::sync::Mutex::new(Saver { pending: None, busy: false }), std::sync::Condvar::new()))
+    S.get_or_init(|| (std::sync::Mutex::new(Saver { pending: Default::default(), busy: false }), std::sync::Condvar::new()))
+}
+
+/// One queued save, isolated: a panic in serialization or in `done` is
+/// reported as an error and never takes the worker down.
+fn run_save(path: &std::path::Path, data: &ProjectData, done: SaveDone) {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| save(path, data)))
+        .unwrap_or_else(|_| Err(format!("saving {} failed with an internal error", path.display())));
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| done(result)));
 }
 
 /// Queue `data` to be written to `path`; `done` runs on the worker with the
-/// result. A snapshot still waiting is replaced (its `done` is dropped).
+/// result. A snapshot for the same path still waiting is replaced (its
+/// `done` is dropped).
 pub fn save_in_background(path: std::path::PathBuf, data: ProjectData, done: SaveDone) {
     let (lock, cv) = saver();
-    let mut s = lock.lock().unwrap();
-    s.pending = Some((path, data, done));
+    let mut s = lock.lock().unwrap_or_else(|p| p.into_inner());
+    if let Some(slot) = s.pending.iter_mut().find(|(p, _, _)| *p == path) {
+        *slot = (path, data, done);
+    } else {
+        s.pending.push_back((path, data, done));
+    }
     if s.busy {
         return;
     }
     s.busy = true;
     drop(s);
-    std::thread::Builder::new()
-        .name("project-save".into())
-        .spawn(move || loop {
+    let worker = move || {
+        // Only on a panic: clear `busy` so later saves start a new worker.
+        // The normal exit clears it under the same lock that saw the queue
+        // empty, so a save queued in between is never stranded.
+        struct OnPanic;
+        impl Drop for OnPanic {
+            fn drop(&mut self) {
+                if std::thread::panicking() {
+                    let (lock, cv) = saver();
+                    let mut s = lock.lock().unwrap_or_else(|p| p.into_inner());
+                    s.busy = false;
+                    cv.notify_all();
+                }
+            }
+        }
+        let _guard = OnPanic;
+        loop {
             let job = {
-                let mut s = lock.lock().unwrap();
-                match s.pending.take() {
+                let mut s = lock.lock().unwrap_or_else(|p| p.into_inner());
+                match s.pending.pop_front() {
                     Some(job) => job,
                     None => {
                         s.busy = false;
@@ -1247,17 +1280,31 @@ pub fn save_in_background(path: std::path::PathBuf, data: ProjectData, done: Sav
                 }
             };
             let (path, data, done) = job;
-            done(save(&path, &data));
-        })
-        .expect("spawn project-save thread");
+            run_save(&path, &data, done);
+        }
+    };
+    if let Err(e) = std::thread::Builder::new().name("project-save".into()).spawn(worker) {
+        // No thread: save on this one rather than lose the snapshot.
+        eprintln!("webprobe: project-save thread unavailable ({e}); saving inline");
+        loop {
+            let job = lock.lock().unwrap_or_else(|p| p.into_inner()).pending.pop_front();
+            match job {
+                Some((path, data, done)) => run_save(&path, &data, done),
+                None => break,
+            }
+        }
+        let mut s = lock.lock().unwrap_or_else(|p| p.into_inner());
+        s.busy = false;
+        cv.notify_all();
+    }
 }
 
 /// Block until no save is queued or running.
 pub fn wait_for_saves() {
     let (lock, cv) = saver();
-    let mut s = lock.lock().unwrap();
+    let mut s = lock.lock().unwrap_or_else(|p| p.into_inner());
     while s.busy {
-        s = cv.wait(s).unwrap();
+        s = cv.wait(s).unwrap_or_else(|p| p.into_inner());
     }
 }
 
@@ -1909,6 +1956,45 @@ mod tests {
         assert_eq!(reset.listener_port, 9191);
         assert_eq!(reset.cookie_jar.as_ref().unwrap().cookies.len(), 2);
         assert_eq!(reset.cookie_jar.as_ref().unwrap().update_from, ["Proxy"]);
+    }
+
+    /// Review finding 12: saving keeps the project file's permissions.
+    #[cfg(unix)]
+    #[test]
+    fn save_keeps_file_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("wp-perm-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("p.json");
+        save(&path, &ProjectData::default()).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        save(&path, &ProjectData::default()).unwrap();
+        assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Review finding 12: saves to different files are queued, not merged,
+    /// so a settings snapshot can never replace a pending project autosave.
+    #[test]
+    fn background_saves_to_different_files_all_land() {
+        let dir = std::env::temp_dir().join(format!("wp-saver2-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for i in 0..5u64 {
+            for name in ["a.json", "b.json"] {
+                let mut data = ProjectData::default();
+                data.saved_at = i;
+                save_in_background(dir.join(name), data, Box::new(|r| r.unwrap()));
+            }
+        }
+        // A `done` that panics does not take the worker down.
+        save_in_background(dir.join("c.json"), ProjectData::default(), Box::new(|_| panic!("callback failure")));
+        save_in_background(dir.join("d.json"), ProjectData::default(), Box::new(|r| r.unwrap()));
+        wait_for_saves();
+        for name in ["a.json", "b.json"] {
+            assert_eq!(load(&dir.join(name)).unwrap().saved_at, 4, "{name}");
+        }
+        assert!(load(&dir.join("d.json")).is_ok(), "the queue kept running after a panicking callback");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// Saves queued while one is running collapse to the latest snapshot,

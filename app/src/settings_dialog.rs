@@ -175,26 +175,16 @@ fn page(app: &mut App, ui: &mut Ui, pane: SettingsPane) {
     }
 }
 
-/// The project as data, taken through the same code that saves it.
+/// The project as data, built in memory by the same code that saves it.
 pub(crate) fn snapshot(app: &mut App) -> Result<crate::project::ProjectData, String> {
-    let tmp = std::env::temp_dir().join(format!("webprobe-settings-{}.json", std::process::id()));
-    let original = std::mem::replace(&mut app.project_path, tmp.display().to_string());
-    crate::tools::save_project(app, true);
-    app.project_path = original;
-    let loaded = crate::project::load(&tmp);
-    let _ = std::fs::remove_file(&tmp);
-    loaded
+    Ok(crate::tools::project_snapshot(app))
 }
 
-/// Put project data into the running app through the same code that loads a
-/// project file.
+/// Apply the settings in `data` to the running app through the same code that
+/// loads a project. Recorded traffic, issues, Repeater tabs and scan tasks
+/// are left alone, so nothing that arrived meanwhile is lost.
 pub(crate) fn install(app: &mut App, data: &crate::project::ProjectData) -> Result<(), String> {
-    let tmp = std::env::temp_dir().join(format!("webprobe-settings-{}.json", std::process::id()));
-    crate::project::save(&tmp, data)?;
-    let original = std::mem::replace(&mut app.project_path, tmp.display().to_string());
-    crate::tools::restore_project(app, true);
-    app.project_path = original;
-    let _ = std::fs::remove_file(&tmp);
+    crate::tools::apply_project(app, data, false);
     Ok(())
 }
 
