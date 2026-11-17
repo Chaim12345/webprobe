@@ -788,7 +788,8 @@ pub struct Shared {
     pub browsers: Mutex<Vec<(u32, String)>>,
     pub issues: Mutex<Vec<crate::scan::ScanIssue>>,
     pub scan_enabled: AtomicBool,
-    pub scan_busy: AtomicBool,
+    /// The active scanner's run state (claim, stop, pause, progress).
+    pub scan: crate::scan_run::ScanRun,
     /// Collaborator payloads (token, DNS name) minted ahead of time for scans
     /// that run off the UI thread (Crawl & Audit): the Collaborator state
     /// lives on the UI thread, which tops this pool up while `oob_wanted`.
@@ -803,14 +804,6 @@ pub struct Shared {
     pub tasks: Mutex<Vec<crate::tasks::ScanTask>>,
     pub next_task_id: AtomicU64,
     pub task_runner: AtomicBool,
-    /// Id of the task being run, 0 when none.
-    pub running_task: AtomicU64,
-    /// The last active scan was started outside the task queue (the
-    /// selftest hook, the headless runner); the Dashboard shows it as its
-    /// own card. Queued scans are shown by their task card instead.
-    pub direct_scan: AtomicBool,
-    /// Scanner requests wait while this is set (a paused task).
-    pub scan_paused: AtomicBool,
     /// Called when engine state a front end shows has changed (new traffic,
     /// a held message, a log line): lets a UI redraw on events instead of
     /// polling.
@@ -822,9 +815,6 @@ pub struct Shared {
     /// Burp scan configuration "Audit accuracy" (burp.Zgnf): 0 minimise false
     /// negatives, 1 normal, 2 minimise false positives.
     pub scan_accuracy: AtomicU8,
-    pub scan_stop: AtomicBool,
-    pub scan_done: AtomicUsize,
-    pub scan_total: AtomicUsize,
     /// unique locations already passively audited (CrawlDefaults.json max 1500)
     pub scan_locations: Mutex<std::collections::BTreeSet<String>>,
     /// Match and replace rule lists (Proxy options; separate request/response sets)
@@ -967,8 +957,8 @@ impl Shared {
             browser_port: std::sync::atomic::AtomicU16::new(0),
             browsers: Mutex::new(Vec::new()),
             issues: Mutex::new(Vec::new()),
+            scan: Default::default(),
             scan_enabled: AtomicBool::new(true),
-            scan_busy: AtomicBool::new(false),
             oob_pool: Mutex::new(Vec::new()),
             oob_wanted: AtomicBool::new(false),
             oob_supplier: AtomicBool::new(false),
@@ -976,17 +966,11 @@ impl Shared {
             tasks: Mutex::new(Vec::new()),
             next_task_id: AtomicU64::new(1),
             task_runner: AtomicBool::new(false),
-            running_task: AtomicU64::new(0),
-            direct_scan: AtomicBool::new(false),
-            scan_paused: AtomicBool::new(false),
             waker: Mutex::new(None),
             scan_config: Mutex::new(crate::scan_config::ScanConfig::default()),
             // AuditDefaults.json: scan_speed / scan_accuracy "normal"
             scan_speed: AtomicU8::new(1),
             scan_accuracy: AtomicU8::new(1),
-            scan_stop: AtomicBool::new(false),
-            scan_done: AtomicUsize::new(0),
-            scan_total: AtomicUsize::new(0),
             scan_locations: Mutex::new(std::collections::BTreeSet::new()),
             mr_request: Mutex::new(Vec::new()),
             mr_response: Mutex::new(Vec::new()),

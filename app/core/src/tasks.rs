@@ -109,7 +109,7 @@ fn state_of(shared: &Shared, id: u64) -> Option<TaskState> {
 pub fn pause(shared: &Shared, id: u64) {
     match state_of(shared, id) {
         Some(TaskState::Running) => {
-            shared.scan_paused.store(true, Ordering::SeqCst);
+            shared.scan.paused.store(true, Ordering::SeqCst);
             set_state(shared, id, TaskState::Paused);
         }
         Some(TaskState::Queued) => set_state(shared, id, TaskState::Paused),
@@ -120,9 +120,9 @@ pub fn pause(shared: &Shared, id: u64) {
 /// Resume a paused task (a queued-then-paused one goes back in the queue).
 pub fn resume(shared: &Shared, id: u64) {
     if state_of(shared, id) == Some(TaskState::Paused) {
-        let running = shared.running_task.load(Ordering::SeqCst) == id;
+        let running = shared.scan.running_task.load(Ordering::SeqCst) == id;
         if running {
-            shared.scan_paused.store(false, Ordering::SeqCst);
+            shared.scan.paused.store(false, Ordering::SeqCst);
         }
         set_state(shared, id, if running { TaskState::Running } else { TaskState::Queued });
     }
@@ -134,9 +134,9 @@ pub fn cancel(shared: &Shared, id: u64) {
     if !state.is_open() {
         return;
     }
-    if shared.running_task.load(Ordering::SeqCst) == id {
-        shared.scan_stop.store(true, Ordering::SeqCst);
-        shared.scan_paused.store(false, Ordering::SeqCst);
+    if shared.scan.running_task.load(Ordering::SeqCst) == id {
+        shared.scan.stop.store(true, Ordering::SeqCst);
+        shared.scan.paused.store(false, Ordering::SeqCst);
     }
     set_state(shared, id, TaskState::Cancelled);
 }
@@ -149,7 +149,7 @@ pub fn remove(shared: &Shared, id: u64) {
 
 /// Block while the scanner is paused (called before every scanner request).
 pub fn wait_while_paused(shared: &Shared) {
-    while shared.scan_paused.load(Ordering::SeqCst) && !shared.scan_stop.load(Ordering::SeqCst) {
+    while shared.scan.paused.load(Ordering::SeqCst) && !shared.scan.stop.load(Ordering::SeqCst) {
         std::thread::sleep(Duration::from_millis(100));
     }
 }
@@ -168,7 +168,7 @@ pub fn ensure_runner(shared: &Arc<Shared>) {
                 tasks.iter().find(|t| t.state == TaskState::Queued).map(|t| (t.id, t.kind.clone()))
             };
             match next {
-                Some((id, kind)) if !shared.scan_busy.load(Ordering::SeqCst) => run(&shared, id, kind),
+                Some((id, kind)) if !shared.scan.is_busy() => run(&shared, id, kind),
                 _ => std::thread::sleep(Duration::from_millis(200)),
             }
         })
@@ -176,16 +176,14 @@ pub fn ensure_runner(shared: &Arc<Shared>) {
 }
 
 fn wait_idle(shared: &Shared) {
-    while shared.scan_busy.load(Ordering::SeqCst) {
-        std::thread::sleep(Duration::from_millis(100));
-    }
+    shared.scan.wait_idle(None);
 }
 
 fn run(shared: &Arc<Shared>, id: u64, kind: TaskKind) {
     let issues_before = shared.issues.lock().unwrap().len();
-    shared.running_task.store(id, Ordering::SeqCst);
-    shared.scan_stop.store(false, Ordering::SeqCst);
-    shared.scan_paused.store(false, Ordering::SeqCst);
+    shared.scan.running_task.store(id, Ordering::SeqCst);
+    shared.scan.stop.store(false, Ordering::SeqCst);
+    shared.scan.paused.store(false, Ordering::SeqCst);
     set_state(shared, id, TaskState::Running);
     let _tool = crate::net::tool_scope("Scanner");
     // One (entry, prepared payloads) item per request; plain audits draw
@@ -226,8 +224,8 @@ fn run(shared: &Arc<Shared>, id: u64, kind: TaskKind) {
         }
         shared.oob_wanted.store(false, Ordering::SeqCst);
     }
-    shared.running_task.store(0, Ordering::SeqCst);
-    shared.scan_paused.store(false, Ordering::SeqCst);
+    shared.scan.running_task.store(0, Ordering::SeqCst);
+    shared.scan.paused.store(false, Ordering::SeqCst);
     let found = shared.issues.lock().unwrap().len().saturating_sub(issues_before);
     if let Some(t) = shared.tasks.lock().unwrap().iter_mut().find(|t| t.id == id) {
         t.issues_found = found;

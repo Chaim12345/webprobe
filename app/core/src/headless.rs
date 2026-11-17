@@ -261,7 +261,7 @@ pub fn js_crawl(engine: &dyn HeadlessBrowser, shared: &Arc<Shared>, start_url: &
     let mut queue = VecDeque::from([(start_url.to_string(), 0usize)]);
     let mut out = Vec::new();
     while let Some((url, depth)) = queue.pop_front() {
-        if shared.scan_stop.load(std::sync::atomic::Ordering::SeqCst) || out.len() >= limits.max_locations {
+        if shared.scan.stop.load(std::sync::atomic::Ordering::SeqCst) || out.len() >= limits.max_locations {
             break;
         }
         if !seen.insert(url.clone()) {

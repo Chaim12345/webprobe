@@ -36,6 +36,7 @@ pub mod report;
 pub mod rules;
 pub mod scan;
 pub mod scan_config;
+pub mod scan_run;
 pub mod seq_bits;
 pub mod setup_page;
 pub mod sitemap_compare;

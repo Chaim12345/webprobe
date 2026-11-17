@@ -576,7 +576,7 @@ impl eframe::App for App {
             notice::set_waker(Arc::new(move || c.request_repaint()));
             self.waker_installed = true;
         }
-        let busy = self.shared.scan_busy.load(Ordering::SeqCst)
+        let busy = self.shared.scan.is_busy()
             || self.shared.rep_busy.load(Ordering::SeqCst)
             || crate::intruder_ui::is_running(self)
             || self.seq_live_stop.as_ref().is_some_and(|s| !s.load(Ordering::SeqCst));

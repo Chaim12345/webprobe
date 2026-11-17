@@ -154,9 +154,7 @@ fn scan_urls(mut args: Vec<String>) {
     let started = Instant::now();
     scan::crawl_and_audit(&shared, &args, !crawl);
     // crawl_and_audit returns once the last item's audit has finished.
-    while shared.scan_busy.load(Ordering::SeqCst) {
-        std::thread::sleep(Duration::from_millis(100));
-    }
+    shared.scan.wait_idle(None);
     let issues = shared.issues.lock().unwrap().clone();
     for i in &issues {
         println!("{}", issue_json(i));

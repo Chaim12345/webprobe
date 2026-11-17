@@ -48,8 +48,8 @@ pub(crate) struct Baseline {
 /// predates several check families), so it is raised whenever the count
 /// passes it: the UI never shows more done than total.
 pub(crate) fn bump_progress(shared: &Shared) {
-    let done = shared.scan_done.fetch_add(1, Ordering::SeqCst) + 1;
-    shared.scan_total.fetch_max(done, Ordering::SeqCst);
+    let done = shared.scan.done.fetch_add(1, Ordering::SeqCst) + 1;
+    shared.scan.total.fetch_max(done, Ordering::SeqCst);
 }
 
 /// Everything a check needs about the scan, shared by all checks.
@@ -113,7 +113,7 @@ impl ScanCtx {
     }
 
     pub(crate) fn stopped(&self) -> bool {
-        self.shared.scan_stop.load(Ordering::SeqCst)
+        self.shared.scan.stop.load(Ordering::SeqCst)
     }
 
     /// One request to the scan target, plain or TLS.

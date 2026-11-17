@@ -1121,7 +1121,7 @@ pub fn query_params(path: &str) -> Vec<(String, String)> {
 /// It is empty unless a public Collaborator (interactsh) is active, as Burp
 /// runs the check only with Collaborator enabled (burp.Zgcg.Zw: Za.Ze()).
 pub fn start_active_scan(shared: Arc<Shared>, entry: HistEntry, oob: &[(String, String, String)], smtp: &[SmtpOob]) {
-    if shared.scan_busy.load(Ordering::SeqCst) {
+    if shared.scan.is_busy() {
         shared.log("Scanner: a scan is already running");
         return;
     }
@@ -1140,16 +1140,16 @@ pub fn start_active_scan(shared: Arc<Shared>, entry: HistEntry, oob: &[(String, 
         // path-relative style sheets, OpenAPI discovery) on such requests.
         shared.log("Scanner: no query parameters; running per-request and per-host checks only");
     }
-    shared.scan_total.store(planned_progress(&entry, points.len(), oob.len()), Ordering::SeqCst);
-    shared.scan_done.store(0, Ordering::SeqCst);
-    shared.scan_stop.store(false, Ordering::SeqCst);
-    // Claim the scanner atomically: the check at the top is only a fast path,
-    // two callers could both have passed it.
-    if shared.scan_busy.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+    // Claim the scanner before touching its progress: a refused second
+    // scan must not reset the running one's counters.
+    let Some(guard) = crate::scan_run::try_claim(&shared) else {
         shared.log("Scanner: a scan is already running");
         return;
-    }
-    shared.direct_scan.store(shared.running_task.load(Ordering::SeqCst) == 0, Ordering::SeqCst);
+    };
+    shared.scan.total.store(planned_progress(&entry, points.len(), oob.len()), Ordering::SeqCst);
+    shared.scan.done.store(0, Ordering::SeqCst);
+    shared.scan.stop.store(false, Ordering::SeqCst);
+    shared.scan.direct.store(shared.scan.running_task.load(Ordering::SeqCst) == 0, Ordering::SeqCst);
     shared.log(&format!("Scanner: active scan started ({} insertion point(s), light active checks)", points.len()));
 
     let settings = checks::Settings {
@@ -1159,17 +1159,10 @@ pub fn start_active_scan(shared: Arc<Shared>, entry: HistEntry, oob: &[(String, 
     let (oob, smtp) = (oob.to_vec(), smtp.to_vec());
     std::thread::spawn(move || {
         let _tool = crate::net::tool_scope("Scanner");
-        // The scanner is released however this thread ends: a panicking
-        // check used to leave scan_busy set, so every later scan was refused
-        // and the task runner waited forever.
-        struct Release(Arc<Shared>);
-        impl Drop for Release {
-            fn drop(&mut self) {
-                self.0.scan_total.store(self.0.scan_done.load(Ordering::SeqCst), Ordering::SeqCst);
-                self.0.scan_busy.store(false, Ordering::SeqCst);
-            }
-        }
-        let _release = Release(shared.clone());
+        // The guard releases the scanner however this thread ends: a
+        // panicking check used to leave it claimed, so every later scan was
+        // refused and the task runner waited forever.
+        let _guard = guard;
         let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let cx = checks::ScanCtx::start(shared.clone(), entry, req, parts, host, port, settings, oob, smtp);
             checks::run_point_checks(&cx, &points);
@@ -1181,7 +1174,7 @@ pub fn start_active_scan(shared: Arc<Shared>, entry: HistEntry, oob: &[(String, 
             crate::notice::toast(crate::notice::Level::Error, format!("Active scan stopped on an internal error: {why}"));
             return;
         }
-        drop(_release);
+        drop(_guard);
         let shared = &shared;
         shared.log("Scanner: active scan finished");
         let found = shared.issues.lock().map(|i| i.len()).unwrap_or(0);
@@ -1326,16 +1319,14 @@ pub fn crawl_and_audit(shared: &Arc<Shared>, start_urls: &[String], audit_only: 
         shared.add_crawl_items(items.iter().cloned());
         let static_refs = crate::crawl::static_reference_corpus(&items);
         for e in items.into_iter().filter(|e| crate::crawl::auditable(e) || crate::crawl::referenced_static(e, &static_refs)) {
-            if shared.scan_stop.load(Ordering::SeqCst) {
+            if shared.scan.stop.load(Ordering::SeqCst) {
                 return;
             }
             add_passive_issues(shared, passive_check(&e));
             let oob = pooled_oob(shared, &e.req_raw);
             start_active_scan(shared.clone(), e, &oob, &[]);
-            std::thread::sleep(std::time::Duration::from_millis(200));
-            while shared.scan_busy.load(Ordering::SeqCst) {
-                std::thread::sleep(std::time::Duration::from_millis(100));
-            }
+            // start_active_scan claims the scanner before it returns.
+            shared.scan.wait_idle(None);
         }
     }
     shared.log("Crawl and audit finished");
@@ -3721,7 +3712,7 @@ mod tests {
             start_active_scan(shared.clone(), entry, &[], &[]);
             let t0 = std::time::Instant::now();
             std::thread::sleep(std::time::Duration::from_millis(300));
-            while shared.scan_busy.load(Ordering::SeqCst) && t0.elapsed() < std::time::Duration::from_secs(300) {
+            while shared.scan.is_busy() && t0.elapsed() < std::time::Duration::from_secs(300) {
                 std::thread::sleep(std::time::Duration::from_millis(200));
             }
             for i in shared.issues.lock().unwrap().iter() {
@@ -3805,7 +3796,7 @@ mod tests {
             start_active_scan(shared.clone(), entry, &[], &[]);
             let t0 = std::time::Instant::now();
             std::thread::sleep(std::time::Duration::from_millis(300));
-            while shared.scan_busy.load(Ordering::SeqCst) && t0.elapsed() < std::time::Duration::from_secs(300) {
+            while shared.scan.is_busy() && t0.elapsed() < std::time::Duration::from_secs(300) {
                 std::thread::sleep(std::time::Duration::from_millis(200));
             }
             for i in shared.issues.lock().unwrap().iter() {
@@ -3952,10 +3943,10 @@ mod tests {
         };
         start_active_scan(shared.clone(), entry, &[], &[]);
         let t0 = std::time::Instant::now();
-        while shared.scan_busy.load(Ordering::SeqCst) && t0.elapsed() < std::time::Duration::from_secs(90) {
+        while shared.scan.is_busy() && t0.elapsed() < std::time::Duration::from_secs(90) {
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
-        assert!(!shared.scan_busy.load(Ordering::SeqCst), "scan did not finish");
+        assert!(!shared.scan.is_busy(), "scan did not finish");
         let issues = shared.issues.lock().unwrap();
         let trav: Vec<_> = issues.iter().filter(|i| i.name == "File path traversal").collect();
         assert_eq!(trav.len(), 1, "issues: {:?}", issues.iter().map(|i| &i.name).collect::<Vec<_>>());
@@ -4411,7 +4402,7 @@ mod tests {
         let plan = vec![SmtpOob { param: "email".into(), simple: (a.token.clone(), a.dns_name), enclosed: (b.token.clone(), b.dns_name) }];
         start_active_scan(shared.clone(), entry, &[], &plan);
         let t0 = std::time::Instant::now();
-        while shared.scan_busy.load(Ordering::SeqCst) && t0.elapsed() < std::time::Duration::from_secs(120) {
+        while shared.scan.is_busy() && t0.elapsed() < std::time::Duration::from_secs(120) {
             std::thread::sleep(std::time::Duration::from_millis(200));
         }
         let pending: Vec<_> = shared.oob_pending.lock().unwrap().iter().map(|(t, k, _)| (t.clone(), *k)).collect();
@@ -5076,10 +5067,10 @@ mod tests {
         e.req_raw = req.into_bytes().into();
         start_active_scan(shared.clone(), e, &[], &[]);
         let t0 = std::time::Instant::now();
-        while shared.scan_busy.load(Ordering::SeqCst) && t0.elapsed() < std::time::Duration::from_secs(120) {
+        while shared.scan.is_busy() && t0.elapsed() < std::time::Duration::from_secs(120) {
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
-        assert!(!shared.scan_busy.load(Ordering::SeqCst), "scan did not finish");
+        assert!(!shared.scan.is_busy(), "scan did not finish");
         let issues = shared.issues.lock().unwrap();
         let names: Vec<_> = issues.iter().map(|i| (i.name.clone(), i.sev.clone(), i.detail.chars().take(60).collect::<String>())).collect();
         let stored_xss = issues.iter().find(|i| i.name == "Cross-site scripting (stored)").unwrap_or_else(|| panic!("no stored XSS: {names:?}"));
@@ -5240,10 +5231,10 @@ mod tests {
             e.req_raw = format!("GET /item?id=5 HTTP/1.1\r\nHost: {host}\r\n\r\n").into_bytes().into();
             start_active_scan(shared.clone(), e, &[], &[]);
             let t0 = std::time::Instant::now();
-            while shared.scan_busy.load(Ordering::SeqCst) && t0.elapsed() < std::time::Duration::from_secs(120) {
+            while shared.scan.is_busy() && t0.elapsed() < std::time::Duration::from_secs(120) {
                 std::thread::sleep(std::time::Duration::from_millis(50));
             }
-            assert_eq!(shared.scan_total.load(Ordering::SeqCst), shared.scan_done.load(Ordering::SeqCst), "progress settles at the end");
+            assert_eq!(shared.scan.total.load(Ordering::SeqCst), shared.scan.done.load(Ordering::SeqCst), "progress settles at the end");
             let mut names: Vec<String> = shared.issues.lock().unwrap().iter().map(|i| i.name.clone()).collect();
             names.sort();
             names.dedup();
@@ -5297,10 +5288,10 @@ mod tests {
             e.req_raw = req.into_bytes().into();
             start_active_scan(shared.clone(), e, &[], &[]);
             let t0 = std::time::Instant::now();
-            while shared.scan_busy.load(Ordering::SeqCst) && t0.elapsed() < std::time::Duration::from_secs(180) {
+            while shared.scan.is_busy() && t0.elapsed() < std::time::Duration::from_secs(180) {
                 std::thread::sleep(std::time::Duration::from_millis(50));
             }
-            assert!(!shared.scan_busy.load(Ordering::SeqCst), "scan of {path} did not finish");
+            assert!(!shared.scan.is_busy(), "scan of {path} did not finish");
         }
         // /item is boolean-injectable on its own, so its single SQL injection
         // row proves the error-based hit suppresses the boolean check.
@@ -5348,7 +5339,7 @@ mod tests {
         e.req_raw = format!("GET /go?url=x HTTP/1.1\r\nHost: {host}\r\n\r\n").into_bytes().into();
         start_active_scan(default.clone(), e, &[], &[]);
         let t0 = std::time::Instant::now();
-        while default.scan_busy.load(Ordering::SeqCst) && t0.elapsed() < std::time::Duration::from_secs(180) {
+        while default.scan.is_busy() && t0.elapsed() < std::time::Duration::from_secs(180) {
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
         let names: Vec<String> = default.issues.lock().unwrap().iter().map(|i| i.name.clone()).collect();
@@ -5429,10 +5420,10 @@ mod tests {
         e.req_raw = req.into_bytes().into();
         start_active_scan(shared.clone(), e, &oob, &smtp);
         let t0 = std::time::Instant::now();
-        while shared.scan_busy.load(Ordering::SeqCst) && t0.elapsed() < std::time::Duration::from_secs(180) {
+        while shared.scan.is_busy() && t0.elapsed() < std::time::Duration::from_secs(180) {
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
-        assert!(!shared.scan_busy.load(Ordering::SeqCst), "scan did not finish");
+        assert!(!shared.scan.is_busy(), "scan did not finish");
         let pending = shared.oob_pending.lock().unwrap();
         let get = |token: &str| pending.iter().find(|(t, _, _)| t == token).unwrap_or_else(|| panic!("{token} not pending"));
         for (token, kind, needle) in [("tok0", None, "tok0.oob.invalid"), ("tok1", Some("DNS"), "tok1.oob.invalid"), ("tok2", Some("DNS"), "tok2.oob.invalid"), ("smtpa", Some("SMTP"), "smtpa.oob.invalid"), ("smtpb", Some("SMTP"), "smtpb.oob.invalid"), ("tok3", Some("CNAME"), "tok3.oob.invalid"), ("tok6", Some("CNAME"), "tok6.oob.invalid")] {

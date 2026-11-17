@@ -197,7 +197,7 @@ pub fn crawl(shared: &Arc<Shared>, start_url: &str) -> Vec<HistEntry> {
         }
     }
     while let Some((path, depth)) = queue.pop_front() {
-        if shared.scan_stop.load(Ordering::SeqCst) {
+        if shared.scan.stop.load(Ordering::SeqCst) {
             break;
         }
         let e = fetch(shared, https, &host, port, authority, &path, shared.next_id.fetch_add(1, Ordering::SeqCst));
@@ -719,7 +719,7 @@ pub fn browser_crawl(shared: &Arc<Shared>, start_url: &str) -> Result<Vec<SeenRe
         let mut form_keys: BTreeSet<String> = BTreeSet::new();
         let mut clicked: BTreeSet<String> = BTreeSet::new();
         while let Some((url, depth)) = queue.pop_front() {
-            if shared.scan_stop.load(Ordering::SeqCst) || pages >= limits.max_locations {
+            if shared.scan.stop.load(Ordering::SeqCst) || pages >= limits.max_locations {
                 break;
             }
             if cdp.call("Page.navigate", serde_json::json!({"url": url})).is_err() {
@@ -776,7 +776,7 @@ pub fn browser_crawl(shared: &Arc<Shared>, start_url: &str) -> Result<Vec<SeenRe
             let sigs: Vec<String> = eval_json(&mut cdp, CLICKABLES_JS).unwrap_or_default();
             let mut done = 0;
             for (idx, sig) in sigs.iter().enumerate() {
-                if done >= MAX_CLICKS_PER_PAGE || shared.scan_stop.load(Ordering::SeqCst) {
+                if done >= MAX_CLICKS_PER_PAGE || shared.scan.stop.load(Ordering::SeqCst) {
                     break;
                 }
                 if !clicked.insert(sig.clone()) {

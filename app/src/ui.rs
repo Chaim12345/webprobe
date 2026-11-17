@@ -329,9 +329,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                 let waiting = app.shared.count_waiting();
                 let port = app.shared.proxy_port.load(Ordering::SeqCst);
                 let (busy, done, scan_total) = (
-                    app.shared.scan_busy.load(Ordering::SeqCst),
-                    app.shared.scan_done.load(Ordering::SeqCst),
-                    app.shared.scan_total.load(Ordering::SeqCst),
+                    app.shared.scan.is_busy(),
+                    app.shared.scan.done.load(Ordering::SeqCst),
+                    app.shared.scan.total.load(Ordering::SeqCst),
                 );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.add_space(8.0);
@@ -1370,10 +1370,10 @@ fn scanner(app: &mut App, ui: &mut Ui) {
     let mut report_ids: Option<Vec<u64>> = None;
     let mut issue_action: Option<(u64, crate::issue_view::IssueAction)> = None;
     let mut report_all = false;
-    let busy = app.shared.scan_busy.load(Ordering::SeqCst);
+    let busy = app.shared.scan.is_busy();
     let (done, total) = (
-        app.shared.scan_done.load(Ordering::SeqCst),
-        app.shared.scan_total.load(Ordering::SeqCst),
+        app.shared.scan.done.load(Ordering::SeqCst),
+        app.shared.scan.total.load(Ordering::SeqCst),
     );
     ui.horizontal(|ui| {
         let btn = RichText::new(if busy { "scanning..." } else { "Run active scan on selected request" })
@@ -1390,7 +1390,7 @@ fn scanner(app: &mut App, ui: &mut Ui) {
             }
         }
         if total > 0 && feedback::progress(ui, done, total, busy) {
-            app.shared.scan_stop.store(true, Ordering::SeqCst);
+            app.shared.scan.stop.store(true, Ordering::SeqCst);
             feedback::toast(feedback::Level::Warn, "Active scan cancelled");
         }
         ui.separator();
@@ -3074,13 +3074,13 @@ fn dashboard(app: &mut App, ui: &mut Ui) {
         }
         v
     };
-    let scan_total = app.shared.scan_total.load(Ordering::SeqCst);
-    let busy = app.shared.scan_busy.load(Ordering::SeqCst);
+    let scan_total = app.shared.scan.total.load(Ordering::SeqCst);
+    let busy = app.shared.scan.is_busy();
     let has_active = scan_total > 0 || busy;
     // Scan tasks have card ids 1000 + task id (0 and 1 are the live tasks).
     let task_list: Vec<crate::tasks::ScanTask> = app.shared.tasks.lock().unwrap().clone();
     let card_task = |id: usize| -> Option<&crate::tasks::ScanTask> { id.checked_sub(1000).and_then(|t| task_list.iter().find(|x| x.id as usize == t)) };
-    if (app.dash_task == 2 && !(has_active && app.shared.direct_scan.load(Ordering::SeqCst))) || (app.dash_task >= 1000 && card_task(app.dash_task).is_none()) {
+    if (app.dash_task == 2 && !(has_active && app.shared.scan.direct.load(Ordering::SeqCst))) || (app.dash_task >= 1000 && card_task(app.dash_task).is_none()) {
         app.dash_task = 1;
     }
 
@@ -3132,14 +3132,14 @@ fn dashboard(app: &mut App, ui: &mut Ui) {
                 for t in task_list.iter().rev() {
                     let progress = match (t.state, t.total) {
                         (crate::tasks::TaskState::Running, Some(n)) => format!("Auditing: {} of {n} items", t.done),
-                        (crate::tasks::TaskState::Running, None) => format!("Crawling and auditing: request {} of {}", app.shared.scan_done.load(Ordering::SeqCst), scan_total),
+                        (crate::tasks::TaskState::Running, None) => format!("Crawling and auditing: request {} of {}", app.shared.scan.done.load(Ordering::SeqCst), scan_total),
                         (s, Some(n)) => format!("{}: {} of {n} items", s.label(), t.done),
                         (s, None) => s.label().to_string(),
                     };
                     cards.push((1000 + t.id as usize, format!("{}. {}", t.id + 2, t.name), progress, false));
                 }
-                if has_active && app.shared.direct_scan.load(Ordering::SeqCst) {
-                    let done = app.shared.scan_done.load(Ordering::SeqCst);
+                if has_active && app.shared.scan.direct.load(Ordering::SeqCst) {
+                    let done = app.shared.scan.done.load(Ordering::SeqCst);
                     cards.push((2, format!("{}. Active scan", app.shared.next_task_id.load(Ordering::SeqCst) + 2), if busy { format!("Auditing: {done} of {scan_total} requests") } else { format!("Finished: {done} requests") }, false));
                 }
                 cards.push((1, "2. Live audit from Proxy (all traffic)".into(), "Audit checks - passive".into(), true));
@@ -3225,7 +3225,7 @@ fn dashboard(app: &mut App, ui: &mut Ui) {
                                                 ui.close();
                                             }
                                         } else if ui.add_enabled(busy, egui::Button::new("Stop scan")).clicked() {
-                                            app.shared.scan_stop.store(true, Ordering::SeqCst);
+                                            app.shared.scan.stop.store(true, Ordering::SeqCst);
                                             ui.close();
                                         }
                                         if ui.button("View details").clicked() {
@@ -3237,7 +3237,7 @@ fn dashboard(app: &mut App, ui: &mut Ui) {
                                     if ui.add(egui::Button::new(RichText::new(glyph).size(14.0)).frame(false)).on_hover_text(if running { "Pause" } else { "Resume" }).clicked() {
                                         match flag {
                                             Some(f) => f.store(!running, Ordering::SeqCst),
-                                            None => app.shared.scan_stop.store(true, Ordering::SeqCst),
+                                            None => app.shared.scan.stop.store(true, Ordering::SeqCst),
                                         }
                                     }
                                     title_label(ui);
@@ -3484,9 +3484,9 @@ fn dashboard_summary(app: &mut App, ui: &mut Ui, issues: &[crate::scan::ScanIssu
                 });
                 let total = app.shared.history.len();
                 let (done, all, busy) = (
-                    app.shared.scan_done.load(Ordering::SeqCst),
-                    app.shared.scan_total.load(Ordering::SeqCst),
-                    app.shared.scan_busy.load(Ordering::SeqCst),
+                    app.shared.scan.done.load(Ordering::SeqCst),
+                    app.shared.scan.total.load(Ordering::SeqCst),
+                    app.shared.scan.is_busy(),
                 );
                 let msgs = app.shared.messages.load(Ordering::SeqCst);
                 let (audited, net_errors) = {
