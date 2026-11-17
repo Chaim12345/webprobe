@@ -1994,7 +1994,7 @@ pub fn apply_project(app: &mut App, data: &project::ProjectData, content: bool) 
     }).collect();
     if content {
         *app.shared.repeaters.lock().unwrap() = data.repeaters.iter().map(|r| net::RepTab {
-            id: app.shared.next_rep_id.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
+            id: app.shared.rep.new_tab_id(),
             name: r.name.clone(),
             host: r.host.clone(),
             port: r.port,

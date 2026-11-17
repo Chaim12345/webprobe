@@ -792,6 +792,8 @@ pub struct Shared {
     pub scan: crate::scan_run::ScanRun,
     /// Collaborator ids: the payload pool, registered ids and matching.
     pub oob: crate::oob::OobState,
+    /// Repeater: send in flight, its generation, status line, tab ids.
+    pub rep: crate::repeater_run::RepeaterRun,
     /// Client connections being handled right now (see `MAX_CONNECTIONS`).
     pub active_connections: AtomicUsize,
     /// The scan task queue (`tasks.rs`).
@@ -864,15 +866,6 @@ pub struct Shared {
     pub upstream_rules: Mutex<Vec<crate::upstream::UpstreamRule>>,
     pub listener_running: AtomicBool,
     pub listener_restart: AtomicBool,
-    pub rep_busy: AtomicBool,
-    /// Repeater send generation. Each Send takes the next value; Cancel bumps
-    /// it, so the in-flight send's late response is discarded and the tab is
-    /// usable at once (Burp's Cancel abandons the request).
-    pub rep_gen: AtomicU64,
-    /// Next Repeater tab number. Burp numbers tabs 1, 2, 3 ... and never
-    /// reuses a number after a tab closes.
-    pub next_rep_id: AtomicU64,
-    pub rep_result: Mutex<String>,
     /// `http.http1.enable_keep_alive` (ProjectDefaults.json): off by default,
     /// matching the original's outgoing suite requests.
     pub keep_alive: AtomicBool,
@@ -942,6 +935,7 @@ impl Shared {
             issues: Mutex::new(Vec::new()),
             scan: Default::default(),
             oob: Default::default(),
+            rep: Default::default(),
             scan_enabled: AtomicBool::new(true),
             active_connections: AtomicUsize::new(0),
             tasks: Mutex::new(Vec::new()),
@@ -975,10 +969,6 @@ impl Shared {
             upstream_rules: Mutex::new(Vec::new()),
             listener_running: AtomicBool::new(false),
             listener_restart: AtomicBool::new(false),
-            rep_busy: AtomicBool::new(false),
-            rep_gen: AtomicU64::new(0),
-            next_rep_id: AtomicU64::new(2),
-            rep_result: Mutex::new(String::new()),
             keep_alive: AtomicBool::new(false),
             tls_bypass: Mutex::new(Vec::new()),
             client_certs: Mutex::new(Vec::new()),

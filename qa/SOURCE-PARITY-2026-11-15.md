@@ -861,8 +861,8 @@ This ledger re-audits every open, partial, missing or unverified marker in this 
 | 369 | Viewstate exclusion, audit speed | closed | `scan.rs` viewstate regions (`burp.Zw4k.ZI`, test) and Settings > Scanner audit speed/accuracy (`burp.Zsv7`, `burp.Zgnf`) |
 | 381 | Crawl coverage parity | closed | Wave 40 browser crawler: 21/21 issues on the second app |
 | 623 | Core/UI split, evidence in project, Collaborator ids off the UI thread, MCP hook | closed | `webprobe-core` workspace crate, `ProjectEvidence` (core/src/project.rs:165), `oob_pool`, vendored egui-mcp-client. Collaborator matching moved into the engine today: `scan::match_oob_interactions`, run every frame instead of only while Scanner/Dashboard is open (test `oob_interactions_raise_issues_without_the_ui`) |
-| 623 | Disk-backed history | **open: N-06** | History bodies are `Vec<u8>` in `Shared::history`, unbounded |
-| 623 | Split `Shared`/`App` by subsystem | **open: N-07** | `Shared` has 76 public fields |
+| 623 | Disk-backed history | closed (N-06, 2026-11-17) | `body::Body` handles in mapped, unlinked segment files; streamed saves off the UI thread |
+| 623 | Split `Shared`/`App` by subsystem | closed (N-07, 2026-11-18) | Subsystem types with private state: `history::ProxyHistory`, `scan_run::ScanRun`, `oob::OobState`, `repeater_run::RepeaterRun`. `App` and the config-like fields stay (one Mutex each) |
 | 744 | K-03 partial | closed | Row 815 (catalogue install, GUI-verified) |
 
 Also verified on 2026-11-17:

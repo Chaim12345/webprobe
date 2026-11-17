@@ -33,6 +33,7 @@ pub mod oob;
 pub mod organizer;
 pub mod project;
 pub mod project_files;
+pub mod repeater_run;
 pub mod report;
 pub mod rules;
 pub mod scan;

@@ -573,7 +573,7 @@ impl eframe::App for App {
             self.waker_installed = true;
         }
         let busy = self.shared.scan.is_busy()
-            || self.shared.rep_busy.load(Ordering::SeqCst)
+            || self.shared.rep.is_busy()
             || crate::intruder_ui::is_running(self)
             || self.seq_live_stop.as_ref().is_some_and(|s| !s.load(Ordering::SeqCst));
         ctx.request_repaint_after(std::time::Duration::from_millis(if busy { 200 } else { 1000 }));

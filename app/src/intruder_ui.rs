@@ -612,7 +612,7 @@ fn intern(label: &str) -> &'static str {
 
 fn send_row_to_repeater(app: &mut App, r: &ResultRow, target: &(String, u16, bool)) {
     let mut reps = app.shared.repeaters.lock().unwrap();
-    let id = app.shared.next_rep_id.fetch_add(1, Ordering::SeqCst);
+    let id = app.shared.rep.new_tab_id();
     reps.push(crate::net::RepTab {
         id,
         name: id.to_string(),

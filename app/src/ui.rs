@@ -1906,7 +1906,7 @@ fn repeater(app: &mut App, ui: &mut Ui) {
     crate::repeater_ops::tab_strip(app, ui);
     ui.add_space(4.0);
 
-    let busy = app.shared.rep_busy.load(Ordering::SeqCst);
+    let busy = app.shared.rep.is_busy();
     let (target, result_line, https) = {
         let reps = app.shared.repeaters.lock().unwrap();
         let i = app.rep_sel.min(reps.len().saturating_sub(1));
@@ -2152,7 +2152,7 @@ pub(crate) fn repeater_send(app: &mut App) {
             let host = util::get_header(&parts.headers, "Host").unwrap_or_default();
             if host.is_empty() {
                 drop(reps);
-                *app.shared.rep_result.lock().unwrap() = "no target and no Host header in request".into();
+                app.shared.rep.set_result("no target and no Host header in request");
                 return;
             }
             let default_port = if r.port == 0 { if r.https { 443 } else { 80 } } else { r.port };
@@ -2162,9 +2162,7 @@ pub(crate) fn repeater_send(app: &mut App) {
         }
         (r.id, r.request.clone(), r.host.clone(), r.port, r.https)
     };
-    app.shared.rep_busy.store(true, Ordering::SeqCst);
-    *app.shared.rep_result.lock().unwrap() = "sending...".into();
-    let gen = app.shared.rep_gen.fetch_add(1, Ordering::SeqCst) + 1;
+    let gen = app.shared.rep.begin();
     let sh = app.shared.clone();
     // E-02: Repeater settings > Follow redirections / Process cookies.
     let (follow, cookies) = (app.rops.follow, app.rops.process_cookies);
@@ -2172,7 +2170,7 @@ pub(crate) fn repeater_send(app: &mut App) {
         let _tool = net::tool_scope("Repeater");
         let t0 = std::time::Instant::now();
         let service = crate::repeater_ops::Service::new(&h, p, https);
-        let stale = || sh.rep_gen.load(Ordering::SeqCst) != gen;
+        let stale = || !sh.rep.is_current(gen);
         let fr = crate::repeater_ops::send_following(&sh, &request, &service, follow, cookies, &stale);
         let up = net::Upstream { resp: fr.response, error: fr.error };
         let followed = fr.followed;
@@ -2182,7 +2180,7 @@ pub(crate) fn repeater_send(app: &mut App) {
         let last = (followed > 0).then_some((fr.request, fr.service));
         let ms = t0.elapsed().as_millis();
         // Cancelled (or superseded) while in flight: the result is dropped.
-        if sh.rep_gen.load(Ordering::SeqCst) != gen {
+        if !sh.rep.is_current(gen) {
             return;
         }
         let mut reps = sh.repeaters.lock().unwrap();
@@ -2219,29 +2217,24 @@ pub(crate) fn repeater_send(app: &mut App) {
             r.history.push((sent_req, r.response.clone(), r.result_line.clone()));
             r.hist_pos = r.history.len() - 1;
         }
-        sh.rep_busy.store(false, Ordering::SeqCst);
         let line = reps
             .iter()
             .find(|r| r.id == tab_id)
             .map(|r| r.result_line.clone())
             .unwrap_or_default();
         // Burp reports the outcome in the status line only; errors still toast.
+        drop(reps);
         if let Some(err) = line.strip_prefix("error: ") {
             crate::feedback::toast(crate::feedback::Level::Error, format!("Repeater failed: {err}"));
         }
-        *sh.rep_result.lock().unwrap() = line;
+        sh.rep.finish(gen, line);
     });
 }
 
 /// Repeater Cancel: abandon the in-flight send. The tab is free at once and
 /// the late response, if any, never lands (its generation is stale).
 pub(crate) fn cancel_repeater_send(shared: &net::Shared) {
-    if !shared.rep_busy.load(Ordering::SeqCst) {
-        return;
-    }
-    shared.rep_gen.fetch_add(1, Ordering::SeqCst);
-    shared.rep_busy.store(false, Ordering::SeqCst);
-    *shared.rep_result.lock().unwrap() = "Request cancelled".into();
+    shared.rep.cancel();
 }
 
 // ================= Decoder =================
@@ -2519,7 +2512,7 @@ pub fn send_history_to_repeater(app: &mut App) {
     let entry = app.shared.history.get(id);
     if let Some(e) = entry {
         let mut reps = app.shared.repeaters.lock().unwrap();
-        let id = app.shared.next_rep_id.fetch_add(1, Ordering::SeqCst);
+        let id = app.shared.rep.new_tab_id();
         reps.push(net::RepTab {
             id,
             name: id.to_string(),
@@ -2559,7 +2552,7 @@ fn repeater_tab_to_intruder(app: &mut App) {
 fn repeater_tab_to_new_tab(app: &mut App) {
     let Some((request, https, host, port)) = current_repeater(app) else { return };
     let mut reps = app.shared.repeaters.lock().unwrap();
-    let id = app.shared.next_rep_id.fetch_add(1, Ordering::SeqCst);
+    let id = app.shared.rep.new_tab_id();
     reps.push(net::RepTab {
         id,
         name: id.to_string(),
@@ -4467,16 +4460,14 @@ mod repeater_fix_tests {
     #[test]
     fn cancel_abandons_the_in_flight_send() {
         let sh = net::Shared::new();
-        sh.rep_busy.store(true, Ordering::SeqCst);
-        let gen = sh.rep_gen.fetch_add(1, Ordering::SeqCst) + 1;
+        let gen = sh.rep.begin();
         cancel_repeater_send(&sh);
-        assert!(!sh.rep_busy.load(Ordering::SeqCst));
-        assert_eq!(*sh.rep_result.lock().unwrap(), "Request cancelled");
-        assert_ne!(sh.rep_gen.load(Ordering::SeqCst), gen, "the worker sees a stale generation");
+        assert!(!sh.rep.is_busy());
+        assert_eq!(sh.rep.result(), "Request cancelled");
+        assert!(!sh.rep.is_current(gen), "the worker sees a stale generation");
         // Cancel with nothing in flight changes nothing.
-        let before = sh.rep_gen.load(Ordering::SeqCst);
         cancel_repeater_send(&sh);
-        assert_eq!(sh.rep_gen.load(Ordering::SeqCst), before);
+        assert_eq!(sh.rep.result(), "Request cancelled");
     }
 
     /// Issue #2 item 1: tab numbers are never reused, so routing by id can
@@ -4485,8 +4476,8 @@ mod repeater_fix_tests {
     fn repeater_tab_ids_are_never_reused() {
         let sh = net::Shared::new();
         let first = sh.repeaters.lock().unwrap()[0].id;
-        let a = sh.next_rep_id.fetch_add(1, Ordering::SeqCst);
-        let b = sh.next_rep_id.fetch_add(1, Ordering::SeqCst);
+        let a = sh.rep.new_tab_id();
+        let b = sh.rep.new_tab_id();
         assert!(a != first && b != a && b != first);
     }
 }

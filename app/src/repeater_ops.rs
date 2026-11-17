@@ -1212,15 +1212,15 @@ pub fn apply_tab_command(shared: &net::Shared, st: &mut State, idx: usize, selec
             selected
         }
         TabCommand::Close(which) => {
-            let fallback = close_tabs(&mut reps, idx, which, &mut st.closed, || shared.next_rep_id.fetch_add(1, Ordering::SeqCst));
+            let fallback = close_tabs(&mut reps, idx, which, &mut st.closed, || shared.rep.new_tab_id());
             sel_id.and_then(|id| reps.iter().position(|t| t.id == id)).unwrap_or(fallback)
         }
         TabCommand::Duplicate => {
-            let id = shared.next_rep_id.fetch_add(1, Ordering::SeqCst);
+            let id = shared.rep.new_tab_id();
             duplicate_tab(&mut reps, idx, id).unwrap_or(selected)
         }
         TabCommand::Reopen => {
-            let id = shared.next_rep_id.fetch_add(1, Ordering::SeqCst);
+            let id = shared.rep.new_tab_id();
             reopen_tab(&mut reps, &mut st.closed, id).unwrap_or(selected)
         }
     }
@@ -1295,7 +1295,7 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
             rects.push(inner.response.rect);
         }
         if ui.add(egui::Button::new(RichText::new("+").size(14.0)).frame(false)).on_hover_text("New tab").clicked() {
-            let id = app.shared.next_rep_id.fetch_add(1, Ordering::SeqCst);
+            let id = app.shared.rep.new_tab_id();
             let mut reps = app.shared.repeaters.lock().unwrap();
             reps.push(new_tab(id, "", 80, false, String::new()));
             app.rep_sel = reps.len() - 1;

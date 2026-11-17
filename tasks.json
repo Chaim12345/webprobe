@@ -8,9 +8,8 @@
     "p1": 30,
     "p2": 9,
     "by_status": {
-      "done": 100,
-      "rejected": 2,
-      "todo": 1
+      "done": 101,
+      "rejected": 2
     }
   },
   "tasks": [
@@ -1187,8 +1186,9 @@
       "title": "Split Shared and App by subsystem",
       "acceptance": "Engine state that carries invariants is owned by subsystem types with private fields whose methods enforce them: Proxy history / crawl items (every write spills bodies; scoped reads), the scan run (claimed and released only through a guard; idle waits without polling), Collaborator ids (registered, pooled and matched through one API, shortfalls reported), Repeater tabs. Each step keeps the full suite and layering test green. Not split: App (single-threaded UI state) and the remaining config-like Shared fields, which are already one Mutex each.",
       "effort": "L",
-      "status": "todo",
-      "evidence": "Open-items ledger 2026-11-17; listed as open in Wave 44 architecture notes."
+      "status": "done",
+      "evidence": "Subsystem types with private state, one commit each, full suite green at the end of the wave: core/src/history.rs ProxyHistory (6b7871f: every write spills bodies; scoped reads; 69 lock sites moved; fixed seed hook), core/src/scan_run.rs ScanRun + ScanGuard (8fe804e: claim/release only via guard, Condvar idle waits replace sleep-polling, claim before progress reset), core/src/oob.rs OobState (d52cc73: register / take / refill / match in one place; pool shortfalls logged instead of silently skipped), core/src/repeater_run.rs RepeaterRun (begin / finish / cancel under one lock: a cancelled send can no longer overwrite a newer one; tab ids). Tests: writes_spill_and_reads_are_scoped, one_claim_at_a_time_and_idle_waits_wake, take_hands_out_what_there_is_and_waits_only_when_asked, a_cancelled_send_cannot_finish. App and config-like Shared fields stay as they are (single-threaded UI state / one Mutex each).",
+      "completed": "2026-11-18"
     }
   ]
 }
