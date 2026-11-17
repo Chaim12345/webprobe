@@ -2151,8 +2151,10 @@ pub(crate) fn repeater_send(app: &mut App) {
             let parts = util::parse_http(r.request.as_bytes());
             let host = util::get_header(&parts.headers, "Host").unwrap_or_default();
             if host.is_empty() {
+                // Shown where the user looks: the tab's status line.
+                r.result_line = "error: no target and no Host header in request".into();
                 drop(reps);
-                app.shared.rep.set_result("no target and no Host header in request");
+                crate::feedback::toast(crate::feedback::Level::Error, "Repeater: set a target or a Host header first");
                 return;
             }
             let default_port = if r.port == 0 { if r.https { 443 } else { 80 } } else { r.port };
@@ -2162,7 +2164,7 @@ pub(crate) fn repeater_send(app: &mut App) {
         }
         (r.id, r.request.clone(), r.host.clone(), r.port, r.https)
     };
-    let gen = app.shared.rep.begin();
+    let gen = app.shared.rep.begin(tab_id);
     let sh = app.shared.clone();
     // E-02: Repeater settings > Follow redirections / Process cookies.
     let (follow, cookies) = (app.rops.follow, app.rops.process_cookies);
@@ -2179,62 +2181,64 @@ pub(crate) fn repeater_send(app: &mut App) {
         // entry and "Follow redirection" continue from the last hop.
         let last = (followed > 0).then_some((fr.request, fr.service));
         let ms = t0.elapsed().as_millis();
-        // Cancelled (or superseded) while in flight: the result is dropped.
-        if !sh.rep.is_current(gen) {
-            return;
-        }
-        let mut reps = sh.repeaters.lock().unwrap();
-        let target = reps.iter_mut().find(|r| r.id == tab_id);
-        if let Some(r) = target {
-            r.response = up.resp.clone();
-            let mut sent_req = request.clone();
-            if let Some((req, svc)) = last {
-                sent_req = req.clone();
-                r.request = req;
-                r.host = svc.host;
-                r.port = svc.port;
-                r.https = svc.https;
-            }
-            r.result_line = match &up.resp {
-                Some(resp) => {
-                    // Burp's Repeater status line: "Done" ... "1,976 bytes | 21 millis".
-                    let n = resp.len().to_string();
-                    let mut grouped = String::new();
-                    for (k, ch) in n.chars().enumerate() {
-                        if k > 0 && (n.len() - k) % 3 == 0 {
-                            grouped.push(',');
-                        }
-                        grouped.push(ch);
-                    }
-                    match followed {
-                        0 => format!("Done\t{grouped} bytes | {ms} millis"),
-                        1 => format!("Done (followed 1 redirection)\t{grouped} bytes | {ms} millis"),
-                        n => format!("Done (followed {n} redirections)\t{grouped} bytes | {ms} millis"),
-                    }
+        // Cancelled (or superseded) while in flight: nothing is written. The
+        // check and the tab write happen under one lock (finish_with), so a
+        // Cancel cannot slip in between.
+        let mut line = String::new();
+        let finished = sh.rep.finish_with(gen, || {
+            let mut reps = sh.repeaters.lock().unwrap();
+            let target = reps.iter_mut().find(|r| r.id == tab_id);
+            if let Some(r) = target {
+                r.response = up.resp.clone();
+                let mut sent_req = request.clone();
+                if let Some((req, svc)) = last {
+                    sent_req = req.clone();
+                    r.request = req;
+                    r.host = svc.host;
+                    r.port = svc.port;
+                    r.https = svc.https;
                 }
-                None => format!("error: {}", up.error.clone().unwrap_or_default()),
-            };
-            r.history.push((sent_req, r.response.clone(), r.result_line.clone()));
-            r.hist_pos = r.history.len() - 1;
-        }
-        let line = reps
-            .iter()
-            .find(|r| r.id == tab_id)
-            .map(|r| r.result_line.clone())
-            .unwrap_or_default();
+                r.result_line = match &up.resp {
+                    Some(resp) => {
+                        // Burp's Repeater status line: "Done" ... "1,976 bytes | 21 millis".
+                        let n = resp.len().to_string();
+                        let mut grouped = String::new();
+                        for (k, ch) in n.chars().enumerate() {
+                            if k > 0 && (n.len() - k) % 3 == 0 {
+                                grouped.push(',');
+                            }
+                            grouped.push(ch);
+                        }
+                        match followed {
+                            0 => format!("Done\t{grouped} bytes | {ms} millis"),
+                            1 => format!("Done (followed 1 redirection)\t{grouped} bytes | {ms} millis"),
+                            n => format!("Done (followed {n} redirections)\t{grouped} bytes | {ms} millis"),
+                        }
+                    }
+                    None => format!("error: {}", up.error.clone().unwrap_or_default()),
+                };
+                r.history.push((sent_req, r.response.clone(), r.result_line.clone()));
+                r.hist_pos = r.history.len() - 1;
+            }
+            line = reps.iter().find(|r| r.id == tab_id).map(|r| r.result_line.clone()).unwrap_or_default();
+            line.clone()
+        });
         // Burp reports the outcome in the status line only; errors still toast.
-        drop(reps);
-        if let Some(err) = line.strip_prefix("error: ") {
+        if let Some(err) = line.strip_prefix("error: ").filter(|_| finished) {
             crate::feedback::toast(crate::feedback::Level::Error, format!("Repeater failed: {err}"));
         }
-        sh.rep.finish(gen, line);
     });
 }
 
 /// Repeater Cancel: abandon the in-flight send. The tab is free at once and
 /// the late response, if any, never lands (its generation is stale).
 pub(crate) fn cancel_repeater_send(shared: &net::Shared) {
-    shared.rep.cancel();
+    if let Some(tab) = shared.rep.cancel() {
+        // The status line the user sees is the tab's.
+        if let Some(r) = shared.repeaters.lock().unwrap().iter_mut().find(|r| r.id == tab) {
+            r.result_line = "Request cancelled".into();
+        }
+    }
 }
 
 // ================= Decoder =================
@@ -4460,8 +4464,10 @@ mod repeater_fix_tests {
     #[test]
     fn cancel_abandons_the_in_flight_send() {
         let sh = net::Shared::new();
-        let gen = sh.rep.begin();
+        let tab = sh.repeaters.lock().unwrap()[0].id;
+        let gen = sh.rep.begin(tab);
         cancel_repeater_send(&sh);
+        assert_eq!(sh.repeaters.lock().unwrap()[0].result_line, "Request cancelled", "shown in the tab's status line");
         assert!(!sh.rep.is_busy());
         assert_eq!(sh.rep.result(), "Request cancelled");
         assert!(!sh.rep.is_current(gen), "the worker sees a stale generation");

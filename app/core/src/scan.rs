@@ -1162,6 +1162,8 @@ pub fn pooled_oob(shared: &Shared, req_raw: &[u8]) -> Vec<(String, String, Strin
     if slots.is_empty() {
         return Vec::new();
     }
+    // Wake the front end now so it stocks the pool on its next frame.
+    shared.wake();
     let ids = shared.oob.take(slots.len(), std::time::Duration::from_millis(1500));
     if ids.len() < slots.len() && !ids.is_empty() {
         shared.log(&format!("Scanner: only {} of {} Collaborator ids available; {} out-of-band probe(s) skipped", ids.len(), slots.len(), slots.len() - ids.len()));

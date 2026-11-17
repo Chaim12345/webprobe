@@ -31,6 +31,8 @@ pub struct OobState {
     wanted: AtomicBool,
     /// A front end with a Collaborator keeps the pool stocked.
     supplier: AtomicBool,
+    /// Ids a waiting `take` needs: `refill` stocks at least this many.
+    demand: std::sync::atomic::AtomicUsize,
 }
 
 impl OobState {
@@ -74,10 +76,14 @@ impl OobState {
     }
 
     /// Top the pool up to `high` with `mint` when it is below `low`.
+    /// Below `low`, or below what a waiting `take` needs, the pool is
+    /// stocked up to the larger of `high` and that need.
     pub fn refill(&self, low: usize, high: usize, mut mint: impl FnMut() -> (String, String)) {
+        let need = self.demand.load(Ordering::SeqCst);
         let mut pool = self.pool.lock().unwrap();
-        if pool.len() < low {
-            while pool.len() < high {
+        if pool.len() < low || pool.len() < need {
+            let target = high.max(need);
+            while pool.len() < target {
                 pool.push(mint());
             }
         }
@@ -97,9 +103,15 @@ impl OobState {
     /// runs short (the caller reports the shortfall).
     pub fn take(&self, n: usize, wait: Duration) -> Vec<(String, String)> {
         let deadline = Instant::now() + wait;
+        if self.pool_len() < n {
+            // Tell the supplier how many are needed: its low-water refill
+            // alone would never stock a request needing more than that.
+            self.demand.fetch_max(n, Ordering::SeqCst);
+        }
         while self.supplier.load(Ordering::SeqCst) && self.is_wanted() && self.pool_len() < n && Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(25));
         }
+        self.demand.store(0, Ordering::SeqCst);
         let mut pool = self.pool.lock().unwrap();
         let k = n.min(pool.len());
         let at = pool.len() - k;
@@ -208,5 +220,21 @@ mod tests {
         assert_eq!(oob.pool_len(), 20);
         oob.refill(10, 20, || unreachable!("above the low mark: no refill"));
         assert_eq!(oob.take(4, Duration::ZERO).len(), 4);
+        // A request needing more than the pool holds (16 of 30): the waiting
+        // take's demand makes the next refill stock enough.
+        let o2 = std::sync::Arc::new(OobState::default());
+        o2.set_supplier(true);
+        o2.want(true);
+        o2.stock((0..16).map(|i| (format!("s{i}"), String::new())));
+        let taker = { let o = o2.clone(); std::thread::spawn(move || o.take(30, Duration::from_secs(5)).len()) };
+        while o2.demand.load(Ordering::SeqCst) == 0 {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        let mut k = 0;
+        o2.refill(10, 20, || {
+            k += 1;
+            (format!("r{k}"), String::new())
+        });
+        assert_eq!(taker.join().unwrap(), 30, "the demand was stocked");
     }
 }
