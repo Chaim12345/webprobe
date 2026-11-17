@@ -420,6 +420,13 @@ pub fn encode_png(w: u32, h: u32, rgba: &[u8]) -> Vec<u8> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn content_length_is_restamped() {
+        assert_eq!(update_content_length(b"POST / HTTP/1.1\r\nContent-Length: 1\r\n\r\nabc"), b"POST / HTTP/1.1\r\nContent-Length: 3\r\n\r\nabc".to_vec());
+        assert_eq!(update_content_length(b"POST / HTTP/1.1\r\nHost: h\r\n\r\nab"), b"POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 2\r\n\r\nab".to_vec());
+        assert_eq!(update_content_length(b"GET / HTTP/1.1\r\nHost: h\r\n\r\n"), b"GET / HTTP/1.1\r\nHost: h\r\n\r\n".to_vec());
+    }
+
     /// A-04: obsolete line folding (RFC 9112 §5.2) is joined into one value.
     #[test]
     fn folded_header_lines_are_joined() {
@@ -572,4 +579,19 @@ mod process_tree_tests {
         assert_eq!(alive_with(&marker), 0, "no browser process may survive");
         let _ = std::fs::remove_dir_all(&profile);
     }
+}
+
+/// Burp's "Update Content-Length": restamp the header to the body length
+/// (added when the message has a body but no header). Messages without a
+/// head/body separator are returned unchanged.
+pub fn update_content_length(raw: &[u8]) -> Vec<u8> {
+    let Some(head_end) = find_sub(raw, b"\r\n\r\n").map(|i| i + 4) else { return raw.to_vec() };
+    let body_len = raw.len() - head_end;
+    let head = String::from_utf8_lossy(&raw[..head_end]);
+    let has_cl = head.lines().any(|l| l.to_ascii_lowercase().starts_with("content-length:"));
+    let chunked = head.lines().any(|l| l.to_ascii_lowercase().starts_with("transfer-encoding:") && l.to_ascii_lowercase().contains("chunked"));
+    if chunked || (!has_cl && body_len == 0) {
+        return raw.to_vec();
+    }
+    crate::net::replace_or_add_header(raw, "Content-Length", &body_len.to_string())
 }

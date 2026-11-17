@@ -2117,18 +2117,9 @@ fn repeater(app: &mut App, ui: &mut Ui) {
     });
 }
 
-/// Burp's "Update Content-Length": restamp the header to the body length.
+/// Burp's "Update Content-Length" (the engine's `util::update_content_length`).
 pub(crate) fn update_content_length(req: &str) -> String {
-    let (head, body) = match req.find("\r\n\r\n") {
-        Some(i) => (&req[..i], &req[i + 4..]),
-        None => return req.to_string(),
-    };
-    let has_cl = head.lines().any(|l| l.to_ascii_lowercase().starts_with("content-length:"));
-    if !has_cl && body.is_empty() {
-        return req.to_string();
-    }
-    let fixed = net::replace_or_add_header(req.as_bytes(), "Content-Length", &body.len().to_string());
-    String::from_utf8_lossy(&fixed).into_owned()
+    String::from_utf8_lossy(&util::update_content_length(req.as_bytes())).into_owned()
 }
 
 pub(crate) fn repeater_send(app: &mut App) {

@@ -537,6 +537,15 @@ pub fn settings_panel(ui: &mut Ui, x: &mut IntruderExtra) -> bool {
             });
         });
 
+        // ---------------- Payload encoding ----------------
+        heading(ui, "Payload encoding");
+        note(ui, "This setting can be used to URL-encode selected characters within the final payload, for safe transmission within HTTP requests.");
+        let enc = &mut x.settings.encoding;
+        ui.checkbox(&mut enc.enabled, "URL-encode these characters:");
+        ui.add_enabled_ui(enc.enabled, |ui| {
+            ui.add(egui::TextEdit::singleline(&mut enc.chars).desired_width(240.0).font(egui::TextStyle::Monospace));
+        });
+        ui.add_space(10.0);
         // ---------------- Grep - Payloads ----------------
         heading(ui, "Grep - Payloads");
         note(ui, "These settings can be used to flag result items containing reflections of the submitted payload.");

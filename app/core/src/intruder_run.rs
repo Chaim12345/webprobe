@@ -180,8 +180,8 @@ pub struct GrepPayloads {
     pub enabled: bool,
     pub case_sensitive: bool,
     pub exclude_headers: bool,
-    /// WebProbe applies no URL-encoding to payloads, so the pre- and
-    /// post-encoding forms are the same string.
+    /// Grep for the payload as generated (true) or as URL-encoded into the
+    /// request (false), see [`PayloadEncoding`].
     pub match_pre_encoded: bool,
 }
 
@@ -198,6 +198,45 @@ pub struct AttackSettings {
     pub grep_match: GrepMatch,
     pub grep_extract: GrepExtract,
     pub grep_payloads: GrepPayloads,
+    pub encoding: PayloadEncoding,
+}
+
+/// Burp's "Payload encoding": characters of this set in a payload are
+/// URL-encoded before it is placed (burp.Zg3x / Zr71: on by default,
+/// ` ./\=<>?+&*;:"{}|^`#`). Without it a payload with a space or `&` broke
+/// the request line or split the parameter.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PayloadEncoding {
+    pub enabled: bool,
+    pub chars: String,
+}
+
+impl Default for PayloadEncoding {
+    fn default() -> Self {
+        Self { enabled: true, chars: " ./\\=<>?+&*;:\"{}|^`#".into() }
+    }
+}
+
+impl PayloadEncoding {
+    /// `payload` with every character of the set percent-encoded (each of
+    /// its UTF-8 bytes, upper-case hex), the rest unchanged.
+    pub fn apply(&self, payload: &str) -> String {
+        if !self.enabled {
+            return payload.to_string();
+        }
+        let mut out = String::with_capacity(payload.len());
+        for ch in payload.chars() {
+            if self.chars.contains(ch) {
+                let mut buf = [0u8; 4];
+                for b in ch.encode_utf8(&mut buf).bytes() {
+                    out.push_str(&format!("%{b:02X}"));
+                }
+            } else {
+                out.push(ch);
+            }
+        }
+        out
+    }
 }
 
 // ---------- pure helpers ----------
@@ -585,6 +624,9 @@ pub struct RunState {
     pub kind: AttackType,
     pub target: (String, u16, bool),
     pub error: Mutex<Option<String>>,
+    /// The parsed request template: each request is rendered from it with
+    /// the encoded payloads.
+    pub template: Template,
 }
 
 impl RunState {
@@ -615,7 +657,14 @@ fn analyse(row: &mut ResultRow, settings: &AttackSettings) {
         row.extracts = extract_all(&settings.grep_extract, resp);
     }
     if settings.grep_payloads.enabled {
-        row.reflected = payloads_reflected(&settings.grep_payloads, &row.payloads, resp);
+        // "Match against pre-URL-encoded payloads" off: look for the payload
+        // as it was placed in the request.
+        let placed: Vec<Option<String>> = if settings.grep_payloads.match_pre_encoded {
+            row.payloads.clone()
+        } else {
+            row.payloads.iter().map(|p| p.as_deref().map(|v| settings.encoding.apply(v))).collect()
+        };
+        row.reflected = payloads_reflected(&settings.grep_payloads, &placed, resp);
     }
 }
 
@@ -638,6 +687,7 @@ pub fn start(
     if specs.len() < sets {
         return Err(format!("{} needs {sets} payload set(s)", kind.label()));
     }
+    let state_template = template.clone();
     let (source, total, workers) = match RecursiveWalk::new(kind, &specs[..sets]) {
         Some(walk) => {
             if !settings.grep_extract.enabled || settings.grep_extract.items.is_empty() {
@@ -664,6 +714,7 @@ pub fn start(
         kind,
         target,
         error: Mutex::new(None),
+        template: state_template,
     });
     shared.log(&format!(
         "Intruder attack started: {} x {} request(s), {workers} thread(s)",
@@ -753,7 +804,13 @@ fn worker(shared: &net::Shared, state: &RunState, source: &Source, gate: &Mutex<
             return;
         }
         let (host, port, https) = state.target.clone();
-        let bytes = attack.request.as_bytes().to_vec();
+        // Payloads URL-encoded per the encoding set, then Content-Length
+        // restamped (Burp's "Update Content-Length header", on by default):
+        // a body of another length made the server wait for missing bytes
+        // or left bytes on a pooled connection.
+        let encoded: Vec<Option<String>> = attack.payloads.iter().map(|p| p.as_deref().map(|v| state.settings.encoding.apply(v))).collect();
+        let request = state.template.render(&encoded.iter().map(|p| p.as_deref()).collect::<Vec<_>>());
+        let bytes = crate::util::update_content_length(request.as_bytes());
         let t0 = Instant::now();
         let (resp, attempts) = send_with_retry(
             &state.settings.retry,
@@ -798,6 +855,17 @@ fn worker(shared: &net::Shared, state: &RunState, source: &Source, gate: &Mutex<
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Second review, finding 4: payloads are URL-encoded with Burp's
+    /// default set, and only those characters.
+    #[test]
+    fn payload_encoding_follows_burps_default_set() {
+        let enc = PayloadEncoding::default();
+        assert_eq!(enc.apply("a b&c=d/é"), "a%20b%26c%3Dd%2Fé");
+        assert_eq!(enc.apply("ok-_~"), "ok-_~");
+        assert_eq!(enc.apply("\"{}|^`#"), "%22%7B%7D%7C%5E%60%23");
+        assert_eq!(PayloadEncoding { enabled: false, ..enc }.apply("a b"), "a b");
+    }
 
     #[test]
     fn throttle_follows_burps_fixed_random_and_increment_rules() {
