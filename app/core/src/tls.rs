@@ -27,6 +27,48 @@ const CA_VALIDITY_YEARS: i32 = 10;
 const LEAF_BACKDATE_DAYS: i64 = 14;
 const LEAF_VALIDITY_DAYS: i64 = 199;
 
+/// PEM or DER input: the first PEM block's contents, or the bytes as they are.
+fn der_of(input: &[u8]) -> Vec<u8> {
+    let text = String::from_utf8_lossy(input);
+    if let (Some(a), Some(b)) = (text.find("-----BEGIN "), text.find("-----END ")) {
+        let body_start = text[a..].find('\n').map(|i| a + i + 1).unwrap_or(a);
+        let b64: String = text[body_start..b].chars().filter(|c| !c.is_whitespace()).collect();
+        if let Ok(d) = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, b64) {
+            return d;
+        }
+    }
+    input.to_vec()
+}
+
+/// Check that `cert_der` is a CA certificate and `key_pkcs8` its private key.
+fn check_ca_pair(cert_der: &[u8], key_pkcs8: &[u8]) -> Result<(Vec<u8>, KeyPair), String> {
+    let (_, cert) = x509_parser::parse_x509_certificate(cert_der).map_err(|e| format!("not an X.509 certificate: {e}"))?;
+    let is_ca = cert.basic_constraints().ok().flatten().is_some_and(|b| b.value.ca);
+    if !is_ca {
+        return Err("the certificate is not a CA certificate (basicConstraints CA:TRUE missing)".into());
+    }
+    let key = KeyPair::try_from(key_pkcs8).map_err(|e| format!("private key (PKCS#8 expected): {e}"))?;
+    if key.public_key_der() != cert.public_key().raw {
+        return Err("the private key does not belong to the certificate".into());
+    }
+    Ok((cert_der.to_vec(), key))
+}
+
+/// Import a CA certificate and its private key (PEM or DER; PKCS#8 key),
+/// as Burp's "Import certificate and key". It replaces the saved CA in `dir`
+/// and takes effect on the next start. Returns the new CA's SHA-256
+/// fingerprint.
+pub fn import_ca(dir: &std::path::Path, cert: &[u8], key: &[u8]) -> Result<String, String> {
+    let (cert_der, key_der) = (der_of(cert), der_of(key));
+    check_ca_pair(&cert_der, &key_der)?;
+    let enc = |b: &[u8]| base64::Engine::encode(&base64::engine::general_purpose::STANDARD, b);
+    let saved = serde_json::json!({ "imported": true, "cert_der": enc(&cert_der), "key_pkcs8": enc(&key_der) });
+    let file = dir.join("ca.json");
+    write_private(dir, &file, saved.to_string().as_bytes()).map_err(|e| format!("{}: {e}", file.display()))?;
+    use sha2::Digest;
+    Ok(sha2::Sha256::digest(&cert_der).iter().map(|b| format!("{b:02X}")).collect::<Vec<_>>().join(":"))
+}
+
 fn generate_rsa_key() -> Result<KeyPair, String> {
     let mut rng = rand::rngs::OsRng;
     let key = rsa::RsaPrivateKey::new(&mut rng, RSA_BITS).map_err(|e| format!("generate RSA key: {e}"))?;
@@ -152,6 +194,10 @@ impl MitmAuthority {
 
     fn from_saved(text: &str) -> Result<Self, String> {
         let v: serde_json::Value = serde_json::from_str(text).map_err(|e| e.to_string())?;
+        if v["imported"].as_bool() == Some(true) {
+            let b64 = |k: &str| base64::Engine::decode(&base64::engine::general_purpose::STANDARD, v[k].as_str().unwrap_or_default()).map_err(|e| format!("{k}: {e}"));
+            return Self::from_imported(&b64("cert_der")?, &b64("key_pkcs8")?);
+        }
         let seed = CaSeed {
             serial: v["serial"].as_u64().ok_or("no serial")?,
             not_before: v["not_before"].as_i64().ok_or("no not_before")?,
@@ -192,6 +238,19 @@ impl MitmAuthority {
             next_serial: AtomicI32::new(leaf_seed),
             hosts: Mutex::new(HashMap::new()),
         })
+    }
+
+    /// A CA the user imported: leaf certificates are issued under its own
+    /// subject and key, and the original certificate is the one exported
+    /// and trusted.
+    fn from_imported(cert_der: &[u8], key_pkcs8: &[u8]) -> Result<Self, String> {
+        let (_, key) = check_ca_pair(cert_der, key_pkcs8)?;
+        let params = CertificateParams::from_ca_cert_der(&CertificateDer::from(cert_der.to_vec())).map_err(|e| format!("CA certificate: {e}"))?;
+        let issuer = params.self_signed(&key).map_err(|e| format!("CA certificate: {e}"))?;
+        let ca_der = CertificateDer::from(cert_der.to_vec());
+        let ca_pem = crate::tls::pem_armor(cert_der, "CERTIFICATE");
+        let leaf_seed = (OffsetDateTime::now_utc().unix_timestamp_nanos() / 1_000_000) as i32;
+        Ok(Self { ca_cert: issuer, ca_key: key, ca_der, ca_pem, next_serial: AtomicI32::new(leaf_seed), hosts: Mutex::new(HashMap::new()) })
     }
 
     pub fn ca_pem(&self) -> &str {
@@ -448,6 +507,52 @@ pub fn client_auth_config(cert_pem: &str, key_pem: &str, roots: RootCertStore) -
 
 #[cfg(test)]
 mod tests {
+    /// An imported CA (certificate + PKCS#8 key, PEM) is used after the next
+    /// load: the trusted certificate is the original one, and host
+    /// certificates it issues validate against it in a real TLS handshake.
+    #[test]
+    fn imported_ca_issues_host_certificates_that_chain_to_it() {
+        use rcgen::{BasicConstraints, CertificateParams, DnType, IsCa, KeyPair};
+        use std::sync::Arc;
+        let dir = std::env::temp_dir().join(format!("wp-ca-import-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let key = KeyPair::generate().unwrap();
+        let mut params = CertificateParams::default();
+        params.distinguished_name.push(DnType::CommonName, "Engagement Test CA");
+        params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+        let ca = params.self_signed(&key).unwrap();
+        // Not a CA, and a key from elsewhere: both refused.
+        let leafish = CertificateParams::new(vec!["x.test".into()]).unwrap().self_signed(&key).unwrap();
+        assert!(super::import_ca(&dir, leafish.pem().as_bytes(), key.serialize_pem().as_bytes()).unwrap_err().contains("not a CA"));
+        let other = KeyPair::generate().unwrap();
+        assert!(super::import_ca(&dir, ca.pem().as_bytes(), other.serialize_pem().as_bytes()).unwrap_err().contains("does not belong"));
+        let fp = super::import_ca(&dir, ca.pem().as_bytes(), key.serialize_pem().as_bytes()).unwrap();
+        let auth = super::MitmAuthority::load_or_create(Some(dir.clone())).unwrap();
+        assert_eq!(auth.ca_der().as_ref(), ca.der().as_ref(), "the imported certificate is the trusted one");
+        assert_eq!(auth.ca_fingerprint(), fp);
+        // Handshake: client trusts only the imported CA.
+        let mut roots = rustls::RootCertStore::empty();
+        roots.add(ca.der().clone()).unwrap();
+        let client_cfg = Arc::new(rustls::ClientConfig::builder().with_root_certificates(roots).with_no_client_auth());
+        let mut client = rustls::ClientConnection::new(client_cfg, "shop.example.test".try_into().unwrap()).unwrap();
+        let mut server = rustls::ServerConnection::new(auth.server_config("shop.example.test").unwrap()).unwrap();
+        for _ in 0..10 {
+            let mut buf = Vec::new();
+            client.write_tls(&mut buf).unwrap();
+            server.read_tls(&mut buf.as_slice()).unwrap();
+            server.process_new_packets().unwrap();
+            let mut back = Vec::new();
+            server.write_tls(&mut back).unwrap();
+            client.read_tls(&mut back.as_slice()).unwrap();
+            client.process_new_packets().expect("host certificate chains to the imported CA");
+            if !client.is_handshaking() && !server.is_handshaking() {
+                break;
+            }
+        }
+        assert!(!client.is_handshaking());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn retiring_the_ca_renames_it_and_a_new_one_is_made_on_next_load() {
         let dir = std::env::temp_dir().join(format!("wp-ca-retire-{}-{:?}", std::process::id(), std::thread::current().id()));

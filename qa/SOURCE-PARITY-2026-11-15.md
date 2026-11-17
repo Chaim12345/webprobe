@@ -821,3 +821,4 @@ Suite: core 390 (380 pass, 10 ignored), desktop 134, 0 fail.
   - The MCP hook now reports per-frame UI build time to `get_frame_stats`.
 - **Fuzzing (N-03).** New live-proxy fuzz test: hostile connections (garbage, oversized headers, garbage TLS after CONNECT, truncated bodies, WebSocket noise). No hung handlers, and the proxy still serves.
 - **Scan configuration (D-04).** Crawl limits (link depth, unique locations, robots.txt, sitemap.xml) are configurable, used by both crawlers and saved with the project (test).
+- **CA import (P-03).** Proxy settings can import an existing CA (PEM/DER certificate + PKCS#8 key). It is validated (must be a CA; key must match), the old CA is kept as a backup, and it is used from the next start; host certificates chain to it (handshake test).

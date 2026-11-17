@@ -191,9 +191,41 @@ pub fn ca_buttons(app: &mut App, ui: &mut Ui) {
                 None => feedback::toast(Level::Error, "No CA folder is configured"),
             }
         }
-        ui.add_enabled(false, egui::Button::new("Import certificate and key")).on_disabled_hover_text("Importing an existing CA is not supported yet");
     });
-    ui.label(RichText::new("Regenerating takes effect when WebProbe is restarted; browsers must then trust the new certificate.").size(12.0).color(theme::ink_faint()));
+    // Burp's "Import certificate and key": an existing CA (PEM or DER
+    // certificate, PKCS#8 private key) replaces this installation's CA.
+    let imp_id = egui::Id::unique("proxy_ca_import_paths");
+    let (mut cert_path, mut key_path): (String, String) = ui.data_mut(|d| d.get_temp(imp_id)).unwrap_or_default();
+    ui.horizontal(|ui| {
+        ui.label(RichText::new("Certificate").size(12.0).color(theme::ink_faint()));
+        ui.add(egui::TextEdit::singleline(&mut cert_path).hint_text("ca.pem or ca.der").desired_width(220.0));
+        ui.label(RichText::new("Private key").size(12.0).color(theme::ink_faint()));
+        ui.add(egui::TextEdit::singleline(&mut key_path).hint_text("key.pem (PKCS#8)").desired_width(220.0));
+        let ready = !cert_path.trim().is_empty() && !key_path.trim().is_empty();
+        if ui.add_enabled(ready, egui::Button::new("Import certificate and key")).clicked() {
+            let result = (|| {
+                let dir = crate::tls::default_ca_dir().ok_or("No CA folder is configured")?;
+                let cert = std::fs::read(cert_path.trim()).map_err(|e| format!("{}: {e}", cert_path.trim()))?;
+                let key = std::fs::read(key_path.trim()).map_err(|e| format!("{}: {e}", key_path.trim()))?;
+                // Validate before touching the current CA, then keep it as a backup.
+                let probe = std::env::temp_dir().join(format!("webprobe-ca-check-{}", std::process::id()));
+                crate::tls::import_ca(&probe, &cert, &key)?;
+                let _ = std::fs::remove_dir_all(&probe);
+                let backup = crate::tls::retire_ca(&dir).ok();
+                let fp = crate::tls::import_ca(&dir, &cert, &key)?;
+                Ok::<_, String>((fp, backup))
+            })();
+            match result {
+                Ok((fp, backup)) => feedback::toast(
+                    Level::Success,
+                    format!("CA imported ({}…); it is used from the next start{}", &fp[..23.min(fp.len())], backup.map(|b| format!("; the previous CA is kept as {}", b.display())).unwrap_or_default()),
+                ),
+                Err(e) => feedback::toast(Level::Error, format!("Could not import the CA: {e}")),
+            }
+        }
+    });
+    ui.data_mut(|d| d.insert_temp(imp_id, (cert_path, key_path)));
+    ui.label(RichText::new("Regenerating or importing takes effect when WebProbe is restarted; browsers must then trust the new certificate.").size(12.0).color(theme::ink_faint()));
 }
 
 /// Burp's "Request interception rules" table with Add / Remove / Up / Down.
