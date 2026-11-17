@@ -430,6 +430,8 @@ pub struct ProjectScanner {
     pub crawl_robots: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub crawl_sitemap: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crawl_engine: Option<String>,
 }
 
 fn one_u8() -> u8 {
@@ -442,7 +444,7 @@ fn yes() -> bool {
 
 impl Default for ProjectScanner {
     fn default() -> Self {
-        Self { speed: 1, accuracy: 1, extra_checks: false, disabled_checks: Vec::new(), disabled_insertion_points: Vec::new(), crawl_max_depth: None, crawl_max_locations: None, crawl_robots: None, crawl_sitemap: None }
+        Self { speed: 1, accuracy: 1, extra_checks: false, disabled_checks: Vec::new(), disabled_insertion_points: Vec::new(), crawl_max_depth: None, crawl_max_locations: None, crawl_robots: None, crawl_sitemap: None, crawl_engine: None }
     }
 }
 
@@ -467,11 +469,17 @@ pub struct ProjectProxy {
     /// Listener redirects: (listener port, target host, target port).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub redirects: Vec<(u16, String, u16)>,
+    /// Response interception rules (absent: Burp's defaults, off).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response_rules: Option<crate::net::ResponseInterceptRules>,
+    /// TLS pass-through hosts (exact names or *.example.com).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tls_pass_through: Vec<String>,
 }
 
 impl Default for ProjectProxy {
     fn default() -> Self {
-        Self { listeners: Vec::new(), ws_intercept_client: true, ws_intercept_server: true, redirects: Vec::new() }
+        Self { listeners: Vec::new(), ws_intercept_client: true, ws_intercept_server: true, redirects: Vec::new(), response_rules: None, tls_pass_through: Vec::new() }
     }
 }
 
@@ -709,6 +717,9 @@ pub struct ProjectData {
     pub collaborator: ProjectCollaborator,
     #[serde(default)]
     pub upstream: UpstreamConfig,
+    /// Per-destination upstream proxy rules.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub upstream_rules: Vec<crate::upstream::UpstreamRule>,
     #[serde(default = "default_listener_port")]
     pub listener_port: u16,
     /// Site-map items requested by the crawler / content discovery (not
@@ -762,6 +773,7 @@ impl Default for ProjectData {
             target: Vec::new(),
             collaborator: ProjectCollaborator::default(),
             upstream: UpstreamConfig::default(),
+            upstream_rules: Vec::new(),
             listener_port: default_listener_port(),
             crawl_items: Vec::new(),
             site_links: Vec::new(),
@@ -920,6 +932,7 @@ pub fn apply_settings(current: &ProjectData, settings: &ProjectData) -> ProjectD
         macros: settings.macros.clone(),
         collaborator: settings.collaborator.clone(),
         upstream: settings.upstream.clone(),
+        upstream_rules: settings.upstream_rules.clone(),
         listener_port: settings.listener_port,
         scanner: settings.scanner.clone(),
         proxy: settings.proxy.clone(),
@@ -985,7 +998,10 @@ pub fn with_section_defaults(current: &ProjectData, section: SettingsSection) ->
             out.scanner = d.scanner;
             out.tasks = ProjectTasks { scans: current.tasks.scans.clone(), ..d.tasks };
         }
-        SettingsSection::Network => out.upstream = d.upstream,
+        SettingsSection::Network => {
+            out.upstream = d.upstream;
+            out.upstream_rules = d.upstream_rules;
+        }
     }
     out
 }
@@ -1356,6 +1372,7 @@ mod tests {
                 retention_secs: Some(3600),
             },
             upstream: UpstreamConfig::default(),
+            upstream_rules: Vec::new(),
             listener_port: 8080,
             crawl_items: vec![ProjectHistory {
                 id: 29,
@@ -1373,12 +1390,14 @@ mod tests {
                 response_b64: None,
             }],
             site_links: vec![("https://example.com".into(), "/unvisited".into())],
-            scanner: ProjectScanner { speed: 2, accuracy: 0, extra_checks: true, disabled_checks: vec!["active.csrf".into()], disabled_insertion_points: vec!["header".into()], crawl_max_depth: Some(2), crawl_max_locations: Some(100), crawl_robots: Some(false), crawl_sitemap: Some(true) },
+            scanner: ProjectScanner { speed: 2, accuracy: 0, extra_checks: true, disabled_checks: vec!["active.csrf".into()], disabled_insertion_points: vec!["header".into()], crawl_max_depth: Some(2), crawl_max_locations: Some(100), crawl_robots: Some(false), crawl_sitemap: Some(true), crawl_engine: Some("Lightpanda".into()) },
             proxy: ProjectProxy {
                 listeners: vec![ProjectListener { bind: "127.0.0.1".into(), port: 18_090 }],
                 ws_intercept_client: false,
                 ws_intercept_server: true,
                 redirects: vec![(18_090, "127.0.0.1".into(), 3001)],
+                response_rules: Some(crate::net::ResponseInterceptRules { enabled: true, ..Default::default() }),
+                tls_pass_through: vec!["*.bank.example".into()],
             },
             tasks: ProjectTasks { live_passive_crawl: false, live_audit: true, scans: vec![ProjectScanTask { name: "Audit of https://example.com/".into(), entries: Vec::new(), urls: vec!["https://example.com/".into()], audit_only: true, paused: true }] },
             layout: ProjectLayout {

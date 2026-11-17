@@ -186,8 +186,10 @@
       "title": "Proxy options UI",
       "acceptance": "Listener, interception (request/response/WebSocket), match & replace import/export, upstream per-host rules, TLS/HTTP settings",
       "effort": "L",
-      "status": "in_progress",
-      "notes": "2026-11-17 wave 56: interception rules, listeners table and CA buttons are in Settings > Tools > Proxy; rules persist in the project file. Not checked this wave: match-and-replace import/export, per-host upstream rules."
+      "status": "done",
+      "notes": "2026-11-17 wave 56: interception rules, listeners table and CA buttons are in Settings > Tools > Proxy; rules persist in the project file. Not checked this wave: match-and-replace import/export, per-host upstream rules.",
+      "completed": "2026-11-17",
+      "evidence": "Proxy settings: listeners table (Add/Edit/Remove, bind address, invisible mode, redirect), request interception rules (Add/Remove/Up/Down/Restore defaults), new response interception rules (Burp defaults, held responses forwarded/edited/dropped; tests response_rules_follow_burps_defaults, matching_responses_are_held_and_forwarded_edited), WebSocket interception per direction, match and replace rules (save/load with the settings, per-page Restore defaults), TLS pass-through list (UI + project), CA export/regenerate/import; Network: global upstream (HTTP/SOCKS5 with auth) and new per-destination upstream proxy rules (test upstream_rules_pick_the_first_match), keep-alive and timeouts (ProjectDefaults)."
     },
     {
       "id": "B-09",
@@ -1058,10 +1060,11 @@
       "title": "Headless engine trait + Obscura sidecar spike",
       "acceptance": "HeadlessBrowser trait with an Obscura implementation behind it; gate = the 5 acceptance checks in docs/EVAL-OBSCURA.md (JS crawl finds more links, all traffic incl. HTTPS in history via SSL_CERT_FILE, stored response to PNG <2 s and <150 MB, stealth/tracker blocking off, version pinned and digest verified); also compare Lightpanda in the same fixtures",
       "effort": "M",
-      "status": "todo",
+      "status": "in_progress",
       "depends_on": [
         "D-01"
-      ]
+      ],
+      "evidence": "2026-11-17: core/src/headless.rs HeadlessBrowser trait (render through the WebProbe proxy, DOM after scripts) with Chromium, Lightpanda and Obscura engines; js_crawl within the scan crawl limits; Crawl and audit can use Lightpanda/Obscura (Settings > scan configuration > JavaScript crawl engine, saved with the project). Test js_crawl_follows_script_written_links_through_the_proxy (Lightpanda installed here). OPEN: the Obscura binary is not installed on this box, so the 5 EVAL-OBSCURA.md acceptance checks are not run yet."
     },
     {
       "id": "UAT-01",

@@ -32,6 +32,9 @@ pub struct CrawlLimits {
     pub max_locations: usize,
     pub robots: bool,
     pub sitemap: bool,
+    /// Headless engine for the JavaScript crawl: "" = Chromium over CDP
+    /// (the default), or "Lightpanda" / "Obscura" (headless::js_crawl).
+    pub engine: String,
 }
 
 impl Default for CrawlLimits {
@@ -39,7 +42,7 @@ impl Default for CrawlLimits {
         // crawl_optimization.maximum_link_depth = 4,
         // crawl_limits.maximum_unique_locations = 1500,
         // customization.request_robots_txt / request_sitemap = true.
-        Self { max_depth: 4, max_locations: 1500, robots: true, sitemap: true }
+        Self { max_depth: 4, max_locations: 1500, robots: true, sitemap: true, engine: String::new() }
     }
 }
 

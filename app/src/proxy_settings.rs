@@ -228,6 +228,57 @@ pub fn ca_buttons(app: &mut App, ui: &mut Ui) {
     ui.label(RichText::new("Regenerating or importing takes effect when WebProbe is restarted; browsers must then trust the new certificate.").size(12.0).color(theme::ink_faint()));
 }
 
+/// Burp's "Response interception rules" (its default rule set, each rule
+/// switchable) and "TLS pass through" host list.
+pub fn response_rules_and_pass_through(app: &mut App, ui: &mut Ui) {
+    heading(ui, "Response interception rules");
+    let mut r = app.shared.response_rules.lock().unwrap().clone();
+    let before = r.clone();
+    ui.checkbox(&mut r.enabled, "Intercept responses based on the following rules");
+    ui.add_enabled_ui(r.enabled, |ui| {
+        egui::Grid::new("resp_rules").num_columns(4).spacing([12.0, 4.0]).show(ui, |ui| {
+            ui.checkbox(&mut r.content_type_on, "");
+            ui.label("");
+            ui.label("Content type header matches");
+            ui.add(egui::TextEdit::singleline(&mut r.content_type).desired_width(160.0));
+            ui.end_row();
+            ui.checkbox(&mut r.was_modified, "");
+            ui.label("Or");
+            ui.label("Request was modified");
+            ui.label("");
+            ui.end_row();
+            ui.checkbox(&mut r.was_intercepted, "");
+            ui.label("Or");
+            ui.label("Request was intercepted");
+            ui.label("");
+            ui.end_row();
+            ui.checkbox(&mut r.status_not_on, "");
+            ui.label("And");
+            ui.label("Status code does not match");
+            ui.add(egui::TextEdit::singleline(&mut r.status_not).desired_width(160.0));
+            ui.end_row();
+            ui.checkbox(&mut r.in_scope, "");
+            ui.label("And");
+            ui.label("URL is in target scope");
+            ui.label("");
+            ui.end_row();
+        });
+        if ui.small_button("Restore defaults").clicked() {
+            r = crate::net::ResponseInterceptRules { enabled: r.enabled, ..Default::default() };
+        }
+    });
+    if r != before {
+        *app.shared.response_rules.lock().unwrap() = r;
+    }
+    ui.add_space(8.0);
+    heading(ui, "TLS pass through");
+    ui.label(RichText::new("TLS connections to these hosts are tunnelled without interception (one per line; *.example.com matches subdomains).").size(12.5).color(theme::ink_dim()));
+    let mut text = app.shared.tls_bypass.lock().unwrap().join("\n");
+    if ui.add(egui::TextEdit::multiline(&mut text).desired_rows(3).desired_width(420.0).hint_text("*.bank.example")).changed() {
+        *app.shared.tls_bypass.lock().unwrap() = text.lines().map(str::trim).filter(|l| !l.is_empty()).map(str::to_string).collect();
+    }
+}
+
 /// Burp's "Request interception rules" table with Add / Remove / Up / Down.
 pub fn intercept_rules_table(app: &mut App, ui: &mut Ui) {
     heading(ui, "Request interception rules");

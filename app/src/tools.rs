@@ -98,6 +98,57 @@ pub fn upstream_options(app: &mut App, ui: &mut Ui) {
     });
     *app.shared.upstream.lock().unwrap() = config;
     hint(ui, "HTTP routing uses absolute-form requests and CONNECT for TLS; SOCKS5 supports username/password authentication.");
+    // Burp's "Upstream proxy servers": per-destination rules, first enabled
+    // match wins; hosts no rule matches use the setting above.
+    ui.add_space(6.0);
+    ui.label(RichText::new("Upstream proxy servers (per destination)").color(theme::ink()).size(13.0).strong());
+    let mut rules = app.shared.upstream_rules.lock().unwrap().clone();
+    let mut remove = None;
+    let mut swap = None;
+    egui::Grid::new("upstream_rules").num_columns(9).spacing([8.0, 4.0]).show(ui, |ui| {
+        for h in ["On", "Destination host", "Type", "Proxy host", "Port", "Username", "Password", "", ""] {
+            ui.label(RichText::new(h).size(12.0).color(theme::ink_faint()));
+        }
+        ui.end_row();
+        let n = rules.len();
+        for (i, r) in rules.iter_mut().enumerate() {
+            ui.checkbox(&mut r.enabled, "");
+            ui.add(egui::TextEdit::singleline(&mut r.destination).hint_text("*.example.com").desired_width(150.0));
+            egui::ComboBox::from_id_salt(("upstream_rule_kind", i))
+                .selected_text(match r.config.kind { UpstreamKind::None => "direct", UpstreamKind::Http => "HTTP", UpstreamKind::Socks5 => "SOCKS5" })
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut r.config.kind, UpstreamKind::None, "direct");
+                    ui.selectable_value(&mut r.config.kind, UpstreamKind::Http, "HTTP");
+                    ui.selectable_value(&mut r.config.kind, UpstreamKind::Socks5, "SOCKS5");
+                });
+            ui.add(egui::TextEdit::singleline(&mut r.config.host).desired_width(120.0));
+            ui.add(egui::TextEdit::singleline(&mut r.config.port).desired_width(50.0));
+            ui.add(egui::TextEdit::singleline(&mut r.config.username).desired_width(90.0));
+            ui.add(egui::TextEdit::singleline(&mut r.config.password).password(true).desired_width(90.0));
+            ui.horizontal(|ui| {
+                if ui.add_enabled(i > 0, egui::Button::new("Up").small()).clicked() {
+                    swap = Some((i, i - 1));
+                }
+                if ui.add_enabled(i + 1 < n, egui::Button::new("Down").small()).clicked() {
+                    swap = Some((i, i + 1));
+                }
+            });
+            if ui.small_button("Remove").clicked() {
+                remove = Some(i);
+            }
+            ui.end_row();
+        }
+    });
+    if let Some((a, b)) = swap {
+        rules.swap(a, b);
+    }
+    if let Some(i) = remove {
+        rules.remove(i);
+    }
+    if ui.small_button("Add rule").clicked() {
+        rules.push(crate::upstream::UpstreamRule { enabled: true, destination: "*".into(), config: Default::default() });
+    }
+    *app.shared.upstream_rules.lock().unwrap() = rules;
 }
 
 // ================= Sequencer =================
@@ -1758,6 +1809,7 @@ pub fn save_project(app: &mut App, quiet: bool) {
         payload: w.payload.clone(),
     }).collect();
     let locked_upstream = app.shared.upstream.lock().unwrap().clone();
+    let locked_upstream_rules = app.shared.upstream_rules.lock().unwrap().clone();
     let locked_site_links = app.shared.site_links.lock().unwrap().iter().cloned().collect();
     let scan_cfg = app.shared.scan_config.lock().unwrap().clone();
     let locked_scanner = project::ProjectScanner {
@@ -1770,6 +1822,7 @@ pub fn save_project(app: &mut App, quiet: bool) {
         crawl_max_locations: Some(scan_cfg.crawl.max_locations),
         crawl_robots: Some(scan_cfg.crawl.robots),
         crawl_sitemap: Some(scan_cfg.crawl.sitemap),
+        crawl_engine: Some(scan_cfg.crawl.engine.clone()).filter(|e| !e.is_empty()),
     };
     let locked_proxy = project::ProjectProxy {
         listeners: net::listener_specs(&app.shared).into_iter().map(|l| project::ProjectListener { bind: l.bind, port: l.port }).collect(),
@@ -1780,6 +1833,8 @@ pub fn save_project(app: &mut App, quiet: bool) {
             v.sort();
             v
         },
+        response_rules: Some(app.shared.response_rules.lock().unwrap().clone()),
+        tls_pass_through: app.shared.tls_bypass.lock().unwrap().clone(),
     };
     let locked_tasks = project::ProjectTasks {
         live_passive_crawl: app.shared.crawl_capture.load(Ordering::SeqCst),
@@ -1801,6 +1856,7 @@ pub fn save_project(app: &mut App, quiet: bool) {
         issues: locked_issues,
         websockets: locked_websockets,
         upstream: locked_upstream,
+        upstream_rules: locked_upstream_rules,
         listener_port: app.shared.proxy_port.load(Ordering::SeqCst),
         appearance: {
             let (palette, density, font_scale) = crate::theme::appearance();
@@ -1950,6 +2006,7 @@ pub fn restore_project(app: &mut App, quiet: bool) {
                 payload: w.payload.clone(),
             }).collect();
             *app.shared.upstream.lock().unwrap() = data.upstream.clone();
+            *app.shared.upstream_rules.lock().unwrap() = data.upstream_rules.clone();
             // An explicit WEBPROBE_PORT (QA runs, a second instance) wins
             // over the port saved in the project.
             if std::env::var_os("WEBPROBE_PORT").is_none() && data.listener_port != app.shared.proxy_port.load(Ordering::SeqCst) {
@@ -2017,6 +2074,7 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData) {
                 max_locations: s.crawl_max_locations.unwrap_or(d.max_locations).clamp(1, 100_000),
                 robots: s.crawl_robots.unwrap_or(d.robots),
                 sitemap: s.crawl_sitemap.unwrap_or(d.sitemap),
+                engine: s.crawl_engine.clone().unwrap_or_default(),
             }
         },
     };
@@ -2025,6 +2083,8 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData) {
     app.shared.extra_checks.store(s.extra_checks, Ordering::SeqCst);
     app.shared.ws_intercept_client.store(data.proxy.ws_intercept_client, Ordering::SeqCst);
     app.shared.ws_intercept_server.store(data.proxy.ws_intercept_server, Ordering::SeqCst);
+    *app.shared.response_rules.lock().unwrap() = data.proxy.response_rules.clone().unwrap_or_default();
+    *app.shared.tls_bypass.lock().unwrap() = data.proxy.tls_pass_through.clone();
     *app.shared.listener_redirects.lock().unwrap() = data.proxy.redirects.iter().map(|(lp, h, p)| (*lp, (h.clone(), *p))).collect();
     let specs: Vec<net::ListenerSpec> = data.proxy.listeners.iter().map(|l| net::ListenerSpec { bind: l.bind.clone(), port: l.port }).collect();
     if specs != net::listener_specs(&app.shared) {

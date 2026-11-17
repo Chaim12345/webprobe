@@ -245,7 +245,7 @@ mod tests {
         let shared = Shared::new();
         {
             let mut c = shared.scan_config.lock().unwrap();
-            c.crawl = crate::scan_config::CrawlLimits { max_depth: 1, max_locations: 100, robots: false, sitemap: false };
+            c.crawl = crate::scan_config::CrawlLimits { max_depth: 1, max_locations: 100, robots: false, sitemap: false, engine: String::new() };
         }
         let _ = crawl(&shared, &format!("http://127.0.0.1:{port}/"));
         let paths = seen.lock().unwrap().clone();

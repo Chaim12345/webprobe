@@ -1592,6 +1592,11 @@ pub fn held_rows(shared: &net::Shared) -> Vec<HeldRow> {
                     let svc = Service::new(&i.host, i.port, https);
                     ("HTTP", "\u{2192} Request", parts.method.clone(), format!("{}{}", svc.origin(), request_path(&parts.path)), https)
                 }
+                net::InterceptKind::Response { https } => {
+                    let parts = util::parse_http(i.edited.as_bytes());
+                    let svc = Service::new(&i.host, i.port, https);
+                    ("HTTP", "\u{2190} Response", parts.status.split_whitespace().next().unwrap_or("").to_string(), svc.origin(), https)
+                }
                 net::InterceptKind::WebSocket { to_server } => (
                     "WS",
                     if to_server { "\u{2192} To server" } else { "\u{2190} To client" },

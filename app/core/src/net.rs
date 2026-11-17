@@ -91,7 +91,88 @@ fn resolve_ip(shared: &Shared, host: &str) -> String {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InterceptKind {
     Request { https: bool },
+    /// A response held by the response interception rules.
+    Response { https: bool },
     WebSocket { to_server: bool },
+}
+
+/// What happened to a request on its way through Intercept, for the
+/// response interception rules ("Request was modified / was intercepted").
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ReqState {
+    pub edited: bool,
+    pub held: bool,
+}
+
+/// Burp's "Response interception rules" (Proxy settings), with its defaults:
+/// the master switch off; Content type header matches `text` (on); Or
+/// request was modified (off); Or request was intercepted (off); And status
+/// code does not match `^304$` (on); And URL is in target scope (off).
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ResponseInterceptRules {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "rir_true")]
+    pub content_type_on: bool,
+    #[serde(default = "rir_text")]
+    pub content_type: String,
+    #[serde(default)]
+    pub was_modified: bool,
+    #[serde(default)]
+    pub was_intercepted: bool,
+    #[serde(default = "rir_true")]
+    pub status_not_on: bool,
+    #[serde(default = "rir_304")]
+    pub status_not: String,
+    #[serde(default)]
+    pub in_scope: bool,
+}
+
+fn rir_true() -> bool {
+    true
+}
+fn rir_text() -> String {
+    "text".into()
+}
+fn rir_304() -> String {
+    "^304$".into()
+}
+
+impl Default for ResponseInterceptRules {
+    fn default() -> Self {
+        Self { enabled: false, content_type_on: true, content_type: rir_text(), was_modified: false, was_intercepted: false, status_not_on: true, status_not: rir_304(), in_scope: false }
+    }
+}
+
+impl ResponseInterceptRules {
+    /// Burp evaluates the enabled rules in order, each joined to the result
+    /// so far by its operator (Or, Or, And, And here).
+    pub fn matches(&self, content_type: &str, status: &str, req: ReqState, in_scope: bool) -> bool {
+        if !self.enabled {
+            return false;
+        }
+        let re = |p: &str, t: &str| regex::RegexBuilder::new(p).case_insensitive(true).build().map(|r| r.is_match(t)).unwrap_or(false);
+        let rules: [(bool, bool, bool); 5] = [
+            // (enabled, is_and, result)
+            (self.content_type_on, false, re(&self.content_type, content_type)),
+            (self.was_modified, false, req.edited),
+            (self.was_intercepted, false, req.held),
+            (self.status_not_on, true, !re(&self.status_not, status)),
+            (self.in_scope, true, in_scope),
+        ];
+        let mut acc: Option<bool> = None;
+        for (on, is_and, result) in rules {
+            if !on {
+                continue;
+            }
+            acc = Some(match acc {
+                None => result,
+                Some(a) if is_and => a && result,
+                Some(a) => a || result,
+            });
+        }
+        acc.unwrap_or(true)
+    }
 }
 
 pub struct InterceptItem {
@@ -666,6 +747,8 @@ pub struct Shared {
     pub mitm: crate::tls::MitmAuthority,
     pub tls_upstream: Arc<rustls::ClientConfig>,
     pub intercept_on: AtomicBool,
+    /// Response interception rules (Proxy settings).
+    pub response_rules: Mutex<ResponseInterceptRules>,
     pub queue: Mutex<Vec<InterceptItem>>,
     pub history: Mutex<Vec<HistEntry>>,
     pub events: Mutex<Vec<String>>,
@@ -786,6 +869,8 @@ pub struct Shared {
     pub messages: std::sync::atomic::AtomicUsize,
     /// Upstream direct/HTTP/SOCKS routing configuration.
     pub upstream: Mutex<crate::upstream::UpstreamConfig>,
+    /// Per-destination upstream proxy rules, checked before `upstream`.
+    pub upstream_rules: Mutex<Vec<crate::upstream::UpstreamRule>>,
     pub listener_running: AtomicBool,
     pub listener_restart: AtomicBool,
     pub rep_busy: AtomicBool,
@@ -825,6 +910,7 @@ impl Shared {
             mitm,
             tls_upstream: crate::tls::upstream_config(),
             intercept_on: AtomicBool::new(false), // Burp default: never intercept at startup
+            response_rules: Mutex::new(ResponseInterceptRules::default()),
             queue: Mutex::new(Vec::new()),
             history: Mutex::new(Vec::new()),
             events: Mutex::new(Vec::new()),
@@ -904,6 +990,7 @@ impl Shared {
             intercept_rules: Mutex::new(crate::intercept_rules::defaults()),
             listener_redirects: Mutex::new(std::collections::HashMap::new()),
             upstream: Mutex::new(crate::upstream::UpstreamConfig::default()),
+            upstream_rules: Mutex::new(Vec::new()),
             listener_running: AtomicBool::new(false),
             listener_restart: AtomicBool::new(false),
             rep_busy: AtomicBool::new(false),
@@ -961,6 +1048,12 @@ impl Shared {
 
     /// Extension request hooks (Montoya-shaped, Path A): run every enabled
     /// extension in registration order; false means one dropped the message.
+    /// The upstream route for a destination host (Settings > Network >
+    /// Upstream proxy servers, then the global setting).
+    pub fn upstream_for(&self, host: &str) -> crate::upstream::UpstreamConfig {
+        crate::upstream::choose(&self.upstream_rules.lock().unwrap(), &self.upstream.lock().unwrap(), host)
+    }
+
     /// The registry is only locked to take the list, not while hooks run.
     pub fn ext_handle_request(&self, method: &str, path: &str, req: &mut Vec<u8>) -> bool {
         let exts = self.ext_host.lock().unwrap().active();
@@ -1527,7 +1620,7 @@ fn response_allows_reuse(resp: &[u8]) -> bool {
 }
 
 fn send_inner(shared: &Shared, host: &str, port: u16, req: &[u8]) -> Result<Vec<u8>, String> {
-    let config = shared.upstream.lock().unwrap().clone();
+    let config = shared.upstream_for(&host);
     let req = util::origin_form(req);
     let routed = crate::upstream::absolute_form_request(&config, &req, host, port);
     let keep_alive = shared.keep_alive.load(Ordering::SeqCst);
@@ -1621,7 +1714,7 @@ pub fn send_tls_raw(shared: &Shared, host: &str, port: u16, request: &[u8]) -> U
 }
 
 fn send_tls_inner(shared: &Shared, host: &str, port: u16, req: &[u8]) -> Result<Vec<u8>, String> {
-    let config = shared.upstream.lock().unwrap().clone();
+    let config = shared.upstream_for(&host);
     let req = util::origin_form(req);
     let keep_alive = shared.keep_alive.load(Ordering::SeqCst);
     let req = if keep_alive { set_connection(&req, "keep-alive") } else { set_connection(&req, "close") };
@@ -2424,7 +2517,7 @@ fn handle_websocket(shared: Arc<Shared>, mut client: TcpStream, req: Vec<u8>) {
         shared.log("WebSocket handshake dropped by an extension hook");
         return;
     }
-    let config = shared.upstream.lock().unwrap().clone();
+    let config = shared.upstream_for(&host);
     let mut upstream = match crate::upstream::connect_target(&config, &host, port) {
         Ok(s) => s,
         Err(e) => {
@@ -2529,7 +2622,7 @@ fn handle_tls_websocket(
         shared.log("TLS WebSocket handshake dropped by an extension hook");
         return;
     }
-    let config = shared.upstream.lock().unwrap().clone();
+    let config = shared.upstream_for(&host);
     let upstream_tcp = match crate::upstream::connect_tls_target(&config, &host, port) {
         Ok(stream) => stream,
         Err(e) => {
@@ -2701,7 +2794,7 @@ fn handle_conn(shared: Arc<Shared>, mut stream: TcpStream) {
         return;
     }
 
-    let (req, was_edited) = intercept_request(&shared, req, 80);
+    let (req, req_state) = intercept_request(&shared, req, 80);
     let Some(req) = req else { return };
     let is_ws = util::get_header(&parts.headers, "Upgrade")
         .map(|v| v.eq_ignore_ascii_case("websocket"))
@@ -2710,7 +2803,7 @@ fn handle_conn(shared: Arc<Shared>, mut stream: TcpStream) {
         handle_websocket(shared, stream, req);
         return;
     }
-    upstream_and_deliver(&shared, &mut stream, req, 80, false, was_edited);
+    upstream_and_deliver(&shared, &mut stream, req, 80, false, req_state);
 }
 
 /// Copy bytes both ways until either direction closes (SSL pass-through tunnel).
@@ -2750,7 +2843,7 @@ fn handle_connect(shared: Arc<Shared>, mut stream: TcpStream, host: String, port
         .iter()
         .any(|pattern| host_matches(pattern, &host));
     if bypassed {
-        let config = shared.upstream.lock().unwrap().clone();
+        let config = shared.upstream_for(&host);
         let mut upstream = match crate::upstream::connect_target(&config, &host, port) {
             Ok(s) => s,
             Err(e) => {
@@ -2793,7 +2886,7 @@ fn handle_connect(shared: Arc<Shared>, mut stream: TcpStream, host: String, port
             return;
         }
     };
-    let (req, was_edited) = intercept_request(&shared, req, 443);
+    let (req, req_state) = intercept_request(&shared, req, 443);
     let Some(req) = req else { return };
     let ws_parts = util::parse_http(&req);
     let is_ws = util::get_header(&ws_parts.headers, "Upgrade")
@@ -2803,7 +2896,7 @@ fn handle_connect(shared: Arc<Shared>, mut stream: TcpStream, host: String, port
         handle_tls_websocket(shared, tls, req, host, port);
         return;
     }
-    upstream_and_deliver(&shared, &mut tls, req, 443, true, was_edited);
+    upstream_and_deliver(&shared, &mut tls, req, 443, true, req_state);
     tls.conn.send_close_notify();
     let _ = tls.flush();
 }
@@ -2826,9 +2919,9 @@ fn default_intercept_allows_path(path: &str) -> bool {
         .any(|excluded| extension.eq_ignore_ascii_case(excluded))
 }
 
-fn intercept_request(shared: &Shared, req: Vec<u8>, default_port: u16) -> (Option<Vec<u8>>, bool) {
+fn intercept_request(shared: &Shared, req: Vec<u8>, default_port: u16) -> (Option<Vec<u8>>, ReqState) {
     if !shared.intercept_on.load(Ordering::SeqCst) {
-        return (Some(req), false);
+        return (Some(req), ReqState::default());
     }
     let parts = util::parse_http(&req);
     let (host, port) = host_of(&parts, default_port);
@@ -2846,7 +2939,7 @@ fn intercept_request(shared: &Shared, req: Vec<u8>, default_port: u16) -> (Optio
             url,
         };
         if !crate::intercept_rules::should_intercept(&shared.intercept_rules.lock().unwrap(), &facts) {
-            return (Some(req), false);
+            return (Some(req), ReqState::default());
         }
     }
     let (tx, rx) = mpsc::channel::<Option<String>>();
@@ -2863,13 +2956,39 @@ fn intercept_request(shared: &Shared, req: Vec<u8>, default_port: u16) -> (Optio
     match rx.recv() {
         Ok(Some(edited)) => {
             let changed = edited.as_bytes() != req.as_slice();
-            (Some(edited.into_bytes()), changed)
+            (Some(edited.into_bytes()), ReqState { edited: changed, held: true })
         }
         Ok(None) => {
             shared.log("Intercepted request dropped");
-            (None, false)
+            (None, ReqState { edited: false, held: true })
         }
-        Err(_) => (None, false),
+        Err(_) => (None, ReqState { edited: false, held: true }),
+    }
+}
+
+/// Hold a response that the response interception rules select, as Burp
+/// does: the user forwards (possibly edited) or drops it.
+fn intercept_response(shared: &Shared, resp: Vec<u8>, host: &str, port: u16, https: bool, url: &str, st: ReqState) -> Option<Vec<u8>> {
+    if !shared.intercept_on.load(Ordering::SeqCst) {
+        return Some(resp);
+    }
+    let p = util::parse_http(&resp);
+    let ct = util::get_header(&p.headers, "Content-Type").unwrap_or_default();
+    let status = p.status.split_whitespace().next().unwrap_or("").to_string();
+    let rules = shared.response_rules.lock().unwrap().clone();
+    if !rules.matches(&ct, &status, st, rules.in_scope && in_scope(shared, url)) {
+        return Some(resp);
+    }
+    let (tx, rx) = mpsc::channel::<Option<String>>();
+    let id = shared.next_id.fetch_add(1, Ordering::SeqCst);
+    shared.queue.lock().unwrap().push(InterceptItem::new(id, host, port, String::from_utf8_lossy(&resp).into_owned(), tx, InterceptKind::Response { https }));
+    shared.wake();
+    match rx.recv() {
+        Ok(Some(edited)) => Some(edited.into_bytes()),
+        _ => {
+            shared.log("Intercepted response dropped");
+            None
+        }
     }
 }
 
@@ -2879,8 +2998,9 @@ fn upstream_and_deliver<S: ProxyIo>(
     req: Vec<u8>,
     default_port: u16,
     use_tls: bool,
-    was_edited: bool,
+    req_state: ReqState,
 ) {
+    let was_edited = req_state.edited;
     let parts = util::parse_http(&req);
     let (host, port) = host_of(&parts, default_port);
 
@@ -2936,6 +3056,8 @@ fn upstream_and_deliver<S: ProxyIo>(
                 shared.log("Response dropped by an extension hook");
                 return;
             }
+            let url = history_host(&HistEntry { host: host.clone(), port, https: use_tls, ..Default::default() }) + &path_of(&parts);
+            let Some(resp) = intercept_response(shared, resp, &host, port, use_tls, &url, req_state) else { return };
             let status = util::parse_http(&resp).first.split_whitespace().nth(1).unwrap_or("").to_string();
             let _ = stream.write_all(&resp);
             let _ = stream.flush();
@@ -3111,6 +3233,71 @@ pub fn intercept_release(shared: &Shared, id: u64, drop: bool, edited: Option<St
 #[cfg(test)]
 mod intercept_all_tests {
     use super::*;
+
+    /// Burp's default response rules: off until enabled; then text content
+    /// that is not a 304; "was intercepted" / "was modified" Or in.
+    #[test]
+    fn response_rules_follow_burps_defaults() {
+        let mut r = ResponseInterceptRules::default();
+        let plain = ReqState::default();
+        assert!(!r.matches("text/html", "200", plain, false), "off by default");
+        r.enabled = true;
+        assert!(r.matches("text/html; charset=utf-8", "200", plain, false));
+        assert!(!r.matches("image/png", "200", plain, false));
+        assert!(!r.matches("text/html", "304", plain, false), "And not 304");
+        r.was_intercepted = true;
+        assert!(r.matches("image/png", "200", ReqState { edited: false, held: true }, false), "Or was intercepted");
+        r.in_scope = true;
+        assert!(!r.matches("text/html", "200", plain, false), "And in scope");
+        assert!(r.matches("text/html", "200", plain, true));
+    }
+
+    /// A response the rules select is held in the Intercept queue; Forward
+    /// with an edit delivers the edited response to the client.
+    #[test]
+    fn matching_responses_are_held_and_forwarded_edited() {
+        use std::io::{Read, Write};
+        let origin = TcpListener::bind("127.0.0.1:0").unwrap();
+        let oport = origin.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for mut s in origin.incoming().flatten() {
+                let mut buf = [0u8; 2048];
+                let _ = s.read(&mut buf);
+                let _ = s.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/css\r\nContent-Length: 4\r\nConnection: close\r\n\r\nbody");
+            }
+        });
+        let shared = Shared::new();
+        let pport = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        shared.proxy_port.store(pport, Ordering::SeqCst);
+        shared.intercept_on.store(true, Ordering::SeqCst);
+        shared.response_rules.lock().unwrap().enabled = true;
+        start_proxy(shared.clone());
+        while !shared.listener_running.load(Ordering::SeqCst) {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let client = std::thread::spawn(move || {
+            let mut c = TcpStream::connect(("127.0.0.1", pport)).unwrap();
+            c.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+            // A .css request: Burp's default request rules do not hold it.
+            write!(c, "GET http://127.0.0.1:{oport}/site.css HTTP/1.1\r\nHost: 127.0.0.1:{oport}\r\nConnection: close\r\n\r\n").unwrap();
+            let mut out = Vec::new();
+            let _ = c.read_to_end(&mut out);
+            out
+        });
+        let t0 = std::time::Instant::now();
+        let held = loop {
+            if let Some(i) = shared.queue.lock().unwrap().iter().find(|i| matches!(i.kind, InterceptKind::Response { .. })).map(|i| (i.id, i.edited.clone())) {
+                break i;
+            }
+            assert!(t0.elapsed() < Duration::from_secs(10), "no response held");
+            std::thread::sleep(Duration::from_millis(20));
+        };
+        assert!(held.1.ends_with("\r\n\r\nbody"));
+        let item = { let mut q = shared.queue.lock().unwrap(); let i = q.iter().position(|i| i.id == held.0).unwrap(); q.remove(i) };
+        item.tx.send(Some(held.1.replace("body", "EDIT"))).unwrap();
+        let out = String::from_utf8(client.join().unwrap()).unwrap();
+        assert!(out.ends_with("EDIT"), "{out}");
+    }
 
     /// burp.Zub8 / Zubj "Forward all" / "Drop all": every held message is
     /// released, forwarded with its edited content or dropped.

@@ -822,3 +822,15 @@ Suite: core 390 (380 pass, 10 ignored), desktop 134, 0 fail.
 - **Fuzzing (N-03).** New live-proxy fuzz test: hostile connections (garbage, oversized headers, garbage TLS after CONNECT, truncated bodies, WebSocket noise). No hung handlers, and the proxy still serves.
 - **Scan configuration (D-04).** Crawl limits (link depth, unique locations, robots.txt, sitemap.xml) are configurable, used by both crawlers and saved with the project (test).
 - **CA import (P-03).** Proxy settings can import an existing CA (PEM/DER certificate + PKCS#8 key). It is validated (must be a CA; key must match), the old CA is kept as a backup, and it is used from the next start; host certificates chain to it (handshake test).
+- **Proxy options (B-08).**
+  - Response interception, as Burp's "Response interception rules": master switch off by default; Content-Type matches `text`, Or request was modified, Or request was intercepted, And status not `^304$`, And URL in scope. A matching response is held in the Intercept queue (shown as "← Response"), editable, and forwarded or dropped (tests `response_rules_follow_burps_defaults`, `matching_responses_are_held_and_forwarded_edited`).
+  - TLS pass-through gets a settings UI and is saved with the project.
+  - Per-destination upstream proxy rules ("Upstream proxy servers"; first enabled match, else the global route; test `upstream_rules_pick_the_first_match`) are used by every upstream connection and saved with the project.
+- **Headless engines (P-16, partial).** New `core/src/headless.rs`:
+  - a `HeadlessBrowser` trait that renders a page through the WebProbe proxy (its traffic lands in history) and returns the post-script DOM;
+  - Chromium (`--dump-dom`), Lightpanda (`fetch --dump html`) and Obscura (`fetch --dump html`, CA via `SSL_CERT_FILE`) implementations;
+  - `js_crawl` follows links in the rendered DOM within the scan's crawl limits.
+  - "Crawl and audit" can use Lightpanda or Obscura instead of the Chromium CDP crawler (Settings > scan configuration > JavaScript crawl engine; saved with the project).
+  - Test: a link written only by JavaScript is found, and its request is in Proxy history.
+  - Still open: the Obscura binary is not installed here, so the five acceptance checks in docs/EVAL-OBSCURA.md have not been run.
+- **Message panes.** The wrap and non-printable toggles hide in narrow panes; they used to cover the Render tab.

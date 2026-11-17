@@ -1150,6 +1150,8 @@ pub(crate) fn proxy_options(app: &mut App, ui: &mut Ui) {
     crate::proxy_settings::ca_buttons(app, ui);
     ui.add_space(10.0);
     crate::proxy_settings::intercept_rules_table(app, ui);
+    ui.add_space(8.0);
+    crate::proxy_settings::response_rules_and_pass_through(app, ui);
     ui.add_space(10.0);
     // Proxy settings > WebSockets: which directions are held while Intercept
     // is on (Burp default: both, ProjectDefaults intercept_web_sockets_messages).
@@ -2928,6 +2930,10 @@ fn proxy_intercept(app: &mut App, ui: &mut Ui) {
             let svc = crate::repeater_ops::Service::new(&host, port, https || port == 443);
             (format!("Request to {}", svc.origin()), "Request")
         }
+        net::InterceptKind::Response { https } => {
+            let svc = crate::repeater_ops::Service::new(&host, port, https || port == 443);
+            (format!("Response from {}", svc.origin()), "Response")
+        }
         net::InterceptKind::WebSocket { to_server: true } => (format!("WebSocket message to server {host}"), "Message"),
         net::InterceptKind::WebSocket { to_server: false } => (format!("WebSocket message to client from {host}"), "Message"),
     };
@@ -2937,7 +2943,7 @@ fn proxy_intercept(app: &mut App, ui: &mut Ui) {
     });
     let h = ui.available_height();
     // A WebSocket payload is not an HTTP message: pasted LF stays LF.
-    app.intercept_pane.crlf_paste = matches!(kind, net::InterceptKind::Request { .. });
+    app.intercept_pane.crlf_paste = matches!(kind, net::InterceptKind::Request { .. } | net::InterceptKind::Response { .. });
     crate::msgpane::editable_pane(ui, "intercept_edit", title, &mut app.intercept_text, &mut app.intercept_pane, h);
     if forward || drop {
         let all = if drop { app.intercept_drop_all } else { app.intercept_fwd_all };

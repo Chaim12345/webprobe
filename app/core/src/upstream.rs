@@ -27,6 +27,32 @@ pub struct UpstreamConfig {
     pub password: String,
 }
 
+/// One row of Burp's "Upstream proxy servers" table: traffic to hosts
+/// matching `destination` (exact, `*`, or `*.example.com`) goes through
+/// `config` (kind None = direct). The first enabled matching rule wins.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct UpstreamRule {
+    #[serde(default)]
+    pub enabled: bool,
+    pub destination: String,
+    pub config: UpstreamConfig,
+}
+
+fn host_matches(pattern: &str, host: &str) -> bool {
+    let (p, h) = (pattern.trim().to_ascii_lowercase(), host.to_ascii_lowercase());
+    match p.strip_prefix("*.") {
+        _ if p == "*" => true,
+        Some(suffix) => h == suffix || h.ends_with(&format!(".{suffix}")),
+        None => p == h,
+    }
+}
+
+/// The upstream route for `host`: the first enabled rule that matches it,
+/// else the global setting.
+pub fn choose(rules: &[UpstreamRule], default: &UpstreamConfig, host: &str) -> UpstreamConfig {
+    rules.iter().find(|r| r.enabled && host_matches(&r.destination, host)).map(|r| r.config.clone()).unwrap_or_else(|| default.clone())
+}
+
 fn connect_socket(host: &str, port: u16) -> Result<TcpStream, String> {
     let addrs = crate::net::resolve(host, port, DNS_TIMEOUT_MS)?;
     let addr = addrs.first().ok_or_else(|| format!("no address for {host}:{port}"))?;
@@ -209,6 +235,21 @@ pub fn absolute_form_request(config: &UpstreamConfig, raw: &[u8], host: &str, po
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn upstream_rules_pick_the_first_match() {
+        let via = |h: &str| UpstreamConfig { kind: UpstreamKind::Http, host: h.into(), port: "8888".into(), ..Default::default() };
+        let rules = vec![
+            UpstreamRule { enabled: false, destination: "*".into(), config: via("off") },
+            UpstreamRule { enabled: true, destination: "*.corp.example".into(), config: via("corp") },
+            UpstreamRule { enabled: true, destination: "api.example".into(), config: UpstreamConfig::default() },
+        ];
+        let global = via("global");
+        assert_eq!(choose(&rules, &global, "app.corp.example").host, "corp");
+        assert_eq!(choose(&rules, &global, "CORP.EXAMPLE").host, "corp", "the bare domain matches *.domain");
+        assert_eq!(choose(&rules, &global, "api.example").kind, UpstreamKind::None, "direct for this host");
+        assert_eq!(choose(&rules, &global, "other.test").host, "global");
+    }
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::thread;

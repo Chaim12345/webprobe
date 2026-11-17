@@ -251,6 +251,17 @@ fn scan_configuration(app: &mut App, ui: &mut Ui) {
         ui.checkbox(&mut config.crawl.robots, "Request robots.txt");
         ui.checkbox(&mut config.crawl.sitemap, "Request sitemap.xml");
     });
+    ui.horizontal(|ui| {
+        ui.label("JavaScript crawl engine");
+        let shown = if config.crawl.engine.is_empty() { "Chromium (default)".to_string() } else { config.crawl.engine.clone() };
+        egui::ComboBox::from_id_salt("crawl_engine").selected_text(shown).show_ui(ui, |ui| {
+            ui.selectable_value(&mut config.crawl.engine, String::new(), "Chromium (default)");
+            for e in webprobe_core::headless::engines().iter().skip(1) {
+                let label = if e.binary().is_some() { e.name().to_string() } else { format!("{} (not installed)", e.name()) };
+                ui.selectable_value(&mut config.crawl.engine, e.name().to_string(), label);
+            }
+        });
+    });
     ui.add_space(8.0);
     ui.label(RichText::new("Insertion point types").strong().size(13.5).color(theme::ink()));
     ui.horizontal_wrapped(|ui| {

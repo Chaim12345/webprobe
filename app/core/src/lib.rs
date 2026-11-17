@@ -16,6 +16,7 @@ pub mod ext_host;
 pub mod ext_process;
 pub mod ext_store;
 pub mod h2;
+pub mod headless;
 pub mod interactsh;
 pub mod inspector;
 pub mod intercept_rules;

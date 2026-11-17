@@ -456,6 +456,11 @@ pub fn message_pane(
                 if let Some(v) = underline_tabs(ui, labels, st.view, 13.0) {
                     st.view = v;
                 }
+                // The toggles only where they fit: in a narrow pane they used
+                // to sit on top of the last view tab.
+                if ui.available_width() < 96.0 {
+                    return;
+                }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.add_space(8.0);
                     ui.toggle_value(&mut st.show_np, RichText::new("\\n").size(12.0))
