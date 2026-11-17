@@ -532,16 +532,15 @@ pub fn results_csv(rows: &[Arc<ResultRow>], sets: usize, cfg: &AttackSettings) -
 pub fn results_xml(rows: &[Arc<ResultRow>], sets: usize, cfg: &AttackSettings) -> String {
     use base64::Engine as _;
     let esc = |t: &str| t.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;");
-    let tag = |c: &str| {
-        let t: String = c.chars().map(|ch| if ch.is_ascii_alphanumeric() { ch.to_ascii_lowercase() } else { '_' }).collect();
-        if t.starts_with(|ch: char| ch.is_ascii_digit()) { format!("c_{t}") } else { t }
-    };
     let cols = result_columns(sets, cfg);
     let mut out = String::from("<?xml version=\"1.0\"?>\n<items>\n");
     for row in rows {
         out.push_str("  <item>\n");
         for (c, v) in cols.iter().zip(row.cells(sets, cfg)) {
-            out.push_str(&format!("    <{t} name=\"{n}\">{v}</{t}>\n", t = tag(c), n = esc(c), v = esc(&v)));
+            // One element type keyed by the column title: titles such as
+            // "Request" / "Error" and grep expressions like "error" would
+            // otherwise collide with each other and with <request>.
+            out.push_str(&format!("    <column name=\"{n}\">{v}</column>\n", n = esc(c), v = esc(&v)));
         }
         let b64 = base64::engine::general_purpose::STANDARD;
         out.push_str(&format!("    <request base64=\"true\">{}</request>\n", b64.encode(&row.request)));
@@ -930,8 +929,9 @@ mod tests {
         r.request = b"GET / HTTP/1.1\r\n\r\n".to_vec();
         r.response = Some(b"HTTP/1.1 200 OK\r\n\r\nhi".to_vec());
         let xml = results_xml(&[Arc::new(r)], 1, &AttackSettings::default());
-        assert!(xml.contains("<payload name=\"Payload\">&lt;a&amp;b&gt;</payload>"), "{xml}");
-        assert!(xml.contains("<status_code name=\"Status code\">200</status_code>"), "{xml}");
+        assert!(xml.contains("<column name=\"Payload\">&lt;a&amp;b&gt;</column>"), "{xml}");
+        assert!(xml.contains("<column name=\"Status code\">200</column>"), "{xml}");
+        assert_eq!(xml.matches("<request").count(), 1, "only the message is a <request>");
         assert!(xml.contains("<request base64=\"true\">R0VUIC8gSFRUUC8xLjENCg0K</request>"), "{xml}");
         assert!(xml.contains("<response base64=\"true\">"));
     }
@@ -960,6 +960,59 @@ mod tests {
 
     /// The runner end to end against a 127.0.0.1 origin: concurrency,
     /// Grep - Extract feeding a recursive grep walk, and Stop.
+    /// Pause holds the attack (no requests while paused), Resume continues
+    /// it, and Stop ends it early with the requests so far.
+    #[test]
+    fn attack_pauses_resumes_and_stops() {
+        use std::io::{Read, Write};
+        let origin = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = origin.local_addr().unwrap().port();
+        let hits = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let h2 = hits.clone();
+        std::thread::spawn(move || {
+            for conn in origin.incoming() {
+                let Ok(mut s) = conn else { break };
+                h2.fetch_add(1, Ordering::SeqCst);
+                let mut buf = [0u8; 2048];
+                let _ = s.read(&mut buf);
+                std::thread::sleep(Duration::from_millis(30));
+                let _ = s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok");
+            }
+        });
+        let template = format!("GET /?n=§x§ HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
+        let parsed = Template::parse(&template).unwrap();
+        let items: Vec<String> = (0..200).map(|i| i.to_string()).collect();
+        let specs = intruder::resolve_specs(&parsed, AttackType::Sniper, &[intruder::PayloadSource::SimpleList { items }]).unwrap();
+        let mut settings = AttackSettings::default();
+        settings.pool.max_concurrent = 2;
+        settings.retry = RetryConfig { retries: 0, pause_ms: 0 };
+        let run = start(net::Shared::new(), &template, AttackType::Sniper, specs, ("127.0.0.1".into(), port, false), settings).unwrap();
+        while run.progress().0 < 5 {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        run.paused.store(true, Ordering::SeqCst);
+        std::thread::sleep(Duration::from_millis(300)); // in-flight requests finish
+        let held = hits.load(Ordering::SeqCst);
+        std::thread::sleep(Duration::from_millis(500));
+        assert_eq!(hits.load(Ordering::SeqCst), held, "no requests while paused");
+        assert!(run.is_running());
+        run.paused.store(false, Ordering::SeqCst);
+        let t0 = std::time::Instant::now();
+        while hits.load(Ordering::SeqCst) < held + 5 {
+            assert!(t0.elapsed() < Duration::from_secs(10), "resumed");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        run.stop.store(true, Ordering::SeqCst);
+        for _ in 0..500 {
+            if !run.is_running() { break; }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(!run.is_running(), "stopped");
+        let (done, total) = run.progress();
+        assert_eq!(total, Some(200));
+        assert!(done < 200, "stopped early at {done}");
+    }
+
     #[test]
     fn runner_walks_recursive_grep_against_a_local_origin() {
         use std::io::{Read, Write};

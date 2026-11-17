@@ -245,8 +245,10 @@
       "title": "Result analysis",
       "acceptance": "Grep match, grep extract, grep capture, grep payloads; configurable result columns; per-row detail",
       "effort": "L",
-      "status": "in_progress",
-      "notes": "2026-11-16 wave 42: Grep - Match (20 Burp defaults), Grep - Extract, Grep - Payloads implemented with tests (intruder_run.rs); settings dock seen. Result columns with grep enabled not yet checked in the GUI."
+      "status": "done",
+      "notes": "2026-11-16 wave 42: Grep - Match (20 Burp defaults), Grep - Extract, Grep - Payloads implemented with tests (intruder_run.rs); settings dock seen. Result columns with grep enabled not yet checked in the GUI.",
+      "completed": "2026-11-17",
+      "evidence": "intruder_run: Grep - Match (Burp default list, simple/regex, case, exclude headers; test grep_match_flags_each_default_expression), Grep - Extract (start/end, offsets, regex group; test grep_extract_follows_burps_delimiter_and_regex_rules), Grep - Payloads (test grep_payloads_flags_reflections), recursive grep (test). Results table columns follow the settings (result_columns), table column chooser, per-row request/response panes. GUI-verified 2026-11-17: attack on a local lab with Grep - Match on showed one column per expression; Save as XML/CSV wrote the rows."
     },
     {
       "id": "C-06",
@@ -255,8 +257,10 @@
       "title": "Attack control",
       "acceptance": "Pause/resume/stop, concurrency, throttle, resource pool, retry/backoff, progress",
       "effort": "M",
-      "status": "in_progress",
-      "notes": "2026-11-16 wave 42: new runner: 10 workers, pause/resume/stop, fixed/random/increasing delay, 3 retries with 2000 ms pause (Burp defaults), progress bar; tests pass. Pause/Resume not exercised in the GUI; no auto-throttle on 429/503."
+      "status": "done",
+      "notes": "2026-11-16 wave 42: new runner: 10 workers, pause/resume/stop, fixed/random/increasing delay, 3 retries with 2000 ms pause (Burp defaults), progress bar; tests pass. Pause/Resume not exercised in the GUI; no auto-throttle on 429/503.",
+      "completed": "2026-11-17",
+      "evidence": "Results window Pause/Resume/Stop and progress; resource pool (max concurrent, fixed/random/increment delay), retries with pause (tests throttle_follows_burps_fixed_random_and_increment_rules, retries_pause_between_attempts_and_give_up). New test attack_pauses_resumes_and_stops: no requests while paused, resumes, Stop ends early (done < total)."
     },
     {
       "id": "C-07",
