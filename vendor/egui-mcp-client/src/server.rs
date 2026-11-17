@@ -96,13 +96,7 @@ impl IpcServer {
 
                 // Wait for the screenshot with timeout (no polling needed)
                 match tokio::time::timeout(Duration::from_secs(5), rx).await {
-                    Ok(Ok(data)) => {
-                        let encoded = base64::engine::general_purpose::STANDARD.encode(&data);
-                        Response::Screenshot {
-                            data: encoded,
-                            format: "png".to_string(),
-                        }
-                    }
+                    Ok(Ok(data)) => Self::screenshot_response(data),
                     Ok(Err(_)) => Response::Error {
                         message: "Screenshot request was cancelled".to_string(),
                     },
@@ -198,14 +192,7 @@ impl IpcServer {
                     Ok(Ok(data)) => {
                         // Crop the screenshot to the specified region
                         match Self::crop_screenshot(&data, *x, *y, *width, *height) {
-                            Ok(cropped) => {
-                                let encoded =
-                                    base64::engine::general_purpose::STANDARD.encode(&cropped);
-                                Response::Screenshot {
-                                    data: encoded,
-                                    format: "png".to_string(),
-                                }
-                            }
+                            Ok(cropped) => Self::screenshot_response(cropped),
                             Err(e) => Response::Error {
                                 message: format!("Failed to crop screenshot: {}", e),
                             },
@@ -280,6 +267,35 @@ impl IpcServer {
     }
 
     /// Crop a PNG screenshot to the specified region
+    /// A screenshot reply that fits the protocol's 1 MiB message limit: a
+    /// larger PNG is scaled down by half until its base64 fits (an oversized
+    /// reply used to drop the connection instead of answering).
+    fn screenshot_response(png: Vec<u8>) -> Response {
+        const BUDGET: usize = egui_mcp_protocol::MAX_MESSAGE_SIZE - 4096;
+        let mut png = png;
+        for _ in 0..6 {
+            let encoded = base64::engine::general_purpose::STANDARD.encode(&png);
+            if encoded.len() <= BUDGET {
+                return Response::Screenshot { data: encoded, format: "png".to_string() };
+            }
+            match Self::half_size(&png) {
+                Ok(smaller) => png = smaller,
+                Err(e) => return Response::Error { message: format!("Screenshot too large and could not be scaled: {e}") },
+            }
+        }
+        Response::Error { message: "Screenshot too large for the 1 MiB message limit".to_string() }
+    }
+
+    fn half_size(png: &[u8]) -> Result<Vec<u8>, String> {
+        use image::GenericImageView;
+        let img = image::load_from_memory(png).map_err(|e| e.to_string())?;
+        let (w, h) = img.dimensions();
+        let small = img.resize((w / 2).max(1), (h / 2).max(1), image::imageops::FilterType::Triangle);
+        let mut out = std::io::Cursor::new(Vec::new());
+        small.write_to(&mut out, image::ImageFormat::Png).map_err(|e| e.to_string())?;
+        Ok(out.into_inner())
+    }
+
     fn crop_screenshot(
         png_data: &[u8],
         x: f32,

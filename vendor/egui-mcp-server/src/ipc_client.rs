@@ -60,38 +60,45 @@ impl IpcClient {
         Ok(guard)
     }
 
-    /// Connect to the egui application and send a request
+    /// Connect to the egui application and send a request.
     ///
-    /// This method reuses an existing connection if available.
-    /// If the connection fails, it automatically reconnects and retries once.
+    /// The cached connection is reused. Only a failure before the request
+    /// was fully written is retried on a fresh connection: once the app may
+    /// have received it, a retry could deliver a click or key press twice.
+    /// The reply is awaited for at most 30 s.
     async fn send_request(&self, request: &Request) -> Result<Response, ProtocolError> {
-        // Try with existing or new connection
-        let result = self.try_send_request(request).await;
-
-        match result {
-            Ok(response) => Ok(response),
+        let mut guard = match self.get_connection().await {
+            Ok(g) => g,
             Err(_) => {
-                // Connection failed, clear it and try once more with a fresh connection
                 *self.connection.lock().await = None;
-                self.try_send_request(request).await
+                self.get_connection().await?
+            }
+        };
+        let written = match guard.as_mut() {
+            Some(conn) => write_request(&mut conn.writer, request).await,
+            None => Err(ProtocolError::Io(std::io::Error::new(std::io::ErrorKind::NotConnected, "No connection available"))),
+        };
+        if written.is_err() {
+            // Not delivered: reconnect once and send again.
+            *guard = None;
+            let stream = UnixStream::connect(&self.socket_path).await?;
+            let (reader, writer) = stream.into_split();
+            *guard = Some(CachedConnection { reader, writer });
+            let conn = guard.as_mut().expect("just set");
+            write_request(&mut conn.writer, request).await?;
+        }
+        let conn = guard.as_mut().expect("connected above");
+        match tokio::time::timeout(std::time::Duration::from_secs(30), read_response(&mut conn.reader)).await {
+            Ok(Ok(response)) => Ok(response),
+            Ok(Err(e)) => {
+                *guard = None;
+                Err(e)
+            }
+            Err(_) => {
+                *guard = None;
+                Err(ProtocolError::Io(std::io::Error::new(std::io::ErrorKind::TimedOut, "no reply from the app within 30 s")))
             }
         }
-    }
-
-    /// Try to send a request using the cached connection
-    async fn try_send_request(&self, request: &Request) -> Result<Response, ProtocolError> {
-        let mut guard = self.get_connection().await?;
-        let conn = guard.as_mut().ok_or_else(|| {
-            ProtocolError::Io(std::io::Error::new(
-                std::io::ErrorKind::NotConnected,
-                "No connection available",
-            ))
-        })?;
-
-        write_request(&mut conn.writer, request).await?;
-        let response = read_response(&mut conn.reader).await?;
-
-        Ok(response)
     }
 
     /// Ping the egui application
