@@ -2442,7 +2442,7 @@ fn menu_action(ui: &mut Ui, label: &str) -> bool {
 fn run_active_scan_on(app: &mut App, e: &net::HistEntry) {
     let parts = util::parse_http(&e.req_raw);
     let names: Vec<String> = scan::query_params(&parts.path).into_iter().map(|(n, _)| n).collect();
-    let oob: Vec<(String, String, String)> = scan::oob_slots(&e.req_raw)
+    let oob: Vec<(String, String, String)> = scan::oob_slots(&app.shared, &e.req_raw)
         .iter()
         .map(|name| {
             let p = app.collab_state.generate_payload();

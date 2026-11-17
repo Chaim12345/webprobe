@@ -283,7 +283,28 @@ pub fn match_oob_interactions(shared: &Shared, interactions: &[crate::collaborat
             // `nslookup -q=cname` makes (burp.Zing.ZR: DNS and type 5).
             let cname = it.dns().is_some_and(|d| d.qtype == 5);
             let fits = |k: &str| k == kind || (k == "CNAME" && cname);
-            let Some(pos) = pending.iter().position(|(t, k, _)| t == token && k.is_none_or(fits)) else { continue };
+            let Some(pos) = pending.iter().position(|(t, k, _)| t == token && k.is_none_or(fits)) else {
+                // An OS-command id that saw some other interaction (an A
+                // lookup, an HTTP fetch): Burp reports External service
+                // interaction for it (burp.Zfw7.Zr: not Zing.ZR -> Zuet.ZJ)
+                // and keeps waiting for the CNAME.
+                if let Some(p) = pending.iter().find(|(t, k, _)| t == token && *k == Some("CNAME")) {
+                    if (kind == "DNS" || kind == "HTTP") && reported.insert(format!("{token}|{kind}")) {
+                        let mut issue = p.2.clone();
+                        issue.name = format!("External service interaction ({kind})");
+                        issue.sev = "high".into();
+                        issue.confidence = "Certain".into();
+                        issue.type_id = 0;
+                        issue.detail = format!(
+                            "The nslookup payload's Collaborator id {token} received a {kind} interaction: {} (source {}).",
+                            it.headline(),
+                            it.source
+                        );
+                        issues.push(issue);
+                    }
+                }
+                continue;
+            };
             if pending[pos].1.is_some() {
                 let (_, _, mut issue) = pending.remove(pos);
                 issue.detail = format!("Collaborator interaction observed: {} (source {})", it.headline(), it.source);
@@ -321,15 +342,14 @@ pub fn add_issues(shared: &Shared, mut issues: Vec<ScanIssue>) {
     }
     let mut iss = shared.issues.lock().unwrap();
     let incoming = issues.len();
-    for (i, issue) in issues.iter_mut().enumerate() {
+    for issue in issues.iter_mut() {
         issue.id = shared.next_id.fetch_add(1, Ordering::SeqCst);
-        // Issues renamed after construction (the Collaborator matcher in
-        // ui.rs) get their type from the final name.
+        // Issues renamed after construction (the Collaborator matcher)
+        // get their type from the final name. Every issue is kept, as in
+        // Burp: the list used to drop the oldest past 500, triaged High
+        // findings included.
         if issue.type_id == 0 {
             issue.type_id = issue_type_id(&issue.name);
-        }
-        if iss.len() + incoming - i > 500 {
-            iss.remove(0);
         }
         iss.push(issue.clone());
     }
@@ -367,11 +387,8 @@ pub fn add_passive_issues(shared: &Shared, mut issues: Vec<ScanIssue>) {
         iss.iter().map(&key).collect();
     issues.retain(|i| known.insert(key(i)));
     let incoming = issues.len();
-    for (i, issue) in issues.iter_mut().enumerate() {
+    for issue in issues.iter_mut() {
         issue.id = shared.next_id.fetch_add(1, Ordering::SeqCst);
-        if iss.len() + incoming - i > 500 {
-            iss.remove(0);
-        }
         iss.push(issue.clone());
     }
     if incoming > 0 {
@@ -1206,7 +1223,7 @@ pub fn audit_entries(shared: Arc<Shared>, entries: Vec<HistEntry>) {
 /// (their out-of-band checks are skipped); with no UI to fill the pool, as in
 /// a headless run, this is empty.
 pub fn pooled_oob(shared: &Shared, req_raw: &[u8]) -> Vec<(String, String, String)> {
-    let slots = oob_slots(req_raw);
+    let slots = oob_slots(shared, req_raw);
     if slots.is_empty() {
         return Vec::new();
     }
@@ -3399,7 +3416,13 @@ pub(crate) fn reflected_xss_severity(kind: &IpKind) -> &'static str {
 /// and `#<point>:xi` for the out-of-band half of XML injection (burp.Zp7s ->
 /// Zsrh with Ze_f / Zbiw) on the points that check applies to. The UI mints
 /// one Collaborator payload per slot and passes them back as `oob`.
-pub fn oob_slots(req_raw: &[u8]) -> Vec<String> {
+pub fn oob_slots(shared: &Shared, req_raw: &[u8]) -> Vec<String> {
+    slots_for(req_raw, ScanSpeed::from_u8(shared.scan_speed.load(Ordering::SeqCst)))
+}
+
+/// The slots at audit speed `speed`: at Fast, OS command injection runs only
+/// its combined payload (burp.Zc99), so only that slot gets an id.
+pub(crate) fn slots_for(req_raw: &[u8], speed: ScanSpeed) -> Vec<String> {
     let req = String::from_utf8_lossy(req_raw);
     let mut out = Vec::new();
     for (i, ip) in insertion_points(&req).iter().enumerate() {
@@ -3409,7 +3432,8 @@ pub fn oob_slots(req_raw: &[u8]) -> Vec<String> {
             out.push(format!("#{i}:xi"));
         }
         // OS command injection (burp.Zc99): one id per nslookup payload.
-        for k in 0..4 {
+        let first = if speed == ScanSpeed::Fast { 3 } else { 0 };
+        for k in first..4 {
             out.push(format!("#{i}:cmd{k}"));
         }
     }
@@ -3627,7 +3651,10 @@ mod tests {
         let cmd = ScanIssue { name: "OS command injection".into(), ..ScanIssue::default() };
         shared.oob_pending.lock().unwrap().push(("tokcmd".to_string(), Some("CNAME"), cmd));
         let q = |qtype| InteractionDetail::Dns(DnsInteraction { qname: "tokcmd.oob.invalid".into(), qtype, raw_query: Vec::new() });
-        assert_eq!(match_oob_interactions(&shared, &[it(6, "tokcmd", q(1))]), 0, "an A lookup is not command execution");
+        // An A lookup is not command execution: Burp reports it as External
+        // service interaction (burp.Zfw7) and keeps waiting for the CNAME.
+        assert_eq!(match_oob_interactions(&shared, &[it(6, "tokcmd", q(1))]), 1, "an A lookup is an external interaction");
+        assert_eq!(match_oob_interactions(&shared, &[it(6, "tokcmd", q(1))]), 0, "reported once");
         assert_eq!(match_oob_interactions(&shared, &[it(7, "tokcmd", q(5))]), 1);
         // The same verdict from a public Collaborator (interactsh) report,
         // whose DNS query type arrives as a label.
@@ -3637,7 +3664,7 @@ mod tests {
             let r = crate::interactsh::parse_interaction(&format!(r#"{{"protocol":"dns","unique-id":"tokpub","full-id":"tokpub","q-type":"{qt}","raw-request":"","remote-address":"192.0.2.1"}}"#)).unwrap();
             Interaction { id: 9, at: 0, source: r.remote_address.clone(), token: Some(r.unique_id.clone()), detail: crate::collaborator::remote_detail(&r).unwrap() }
         };
-        assert_eq!(match_oob_interactions(&shared, &[report("A")]), 0);
+        assert_eq!(match_oob_interactions(&shared, &[report("A")]), 1, "External service interaction (DNS)");
         assert_eq!(match_oob_interactions(&shared, &[report("CNAME")]), 1);
         let names: Vec<String> = shared.issues.lock().unwrap().iter().map(|i| i.name.clone()).collect();
         for n in ["External service interaction (DNS)", "External service interaction (HTTP)", "SMTP header injection", "OS command injection"] {
@@ -5385,7 +5412,7 @@ mod tests {
         let port = characterisation_server();
         let shared = net::Shared::new();
         let req = format!("GET /search?q=hello HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
-        let slots = oob_slots(req.as_bytes());
+        let slots = slots_for(req.as_bytes(), ScanSpeed::Normal);
         assert_eq!(&slots[..3], ["#0:ext", "#0:xsd", "#0:xi"]);
         let oob: Vec<(String, String, String)> = slots.iter().enumerate().map(|(i, s)| (s.clone(), format!("tok{i}"), format!("tok{i}.oob.invalid"))).collect();
         let smtp = vec![SmtpOob { param: "q".into(), simple: ("smtpa".into(), "smtpa.oob.invalid".into()), enclosed: ("smtpb".into(), "smtpb.oob.invalid".into()) }];
@@ -5542,7 +5569,7 @@ mod tests {
     fn pooled_oob_hands_out_one_payload_per_slot_until_the_pool_is_dry() {
         let shared = Shared::new();
         let req = b"GET /a?x=1&y=2 HTTP/1.1\r\nHost: h\r\n\r\n";
-        let slots = oob_slots(req);
+        let slots = slots_for(req, ScanSpeed::Normal);
         assert!(slots.len() >= 2, "{slots:?}");
         // No pool (headless): nothing, and no waiting because nobody was asked.
         assert!(pooled_oob(&shared, req).is_empty());
@@ -5572,7 +5599,8 @@ mod tests {
             .chain(["#2:ext", "#2:xsd", "#2:xi"].iter().map(|s| s.to_string()))
             .chain(cmd(2))
             .collect();
-        assert_eq!(oob_slots(req), want);
+        assert_eq!(slots_for(req, ScanSpeed::Normal), want);
+        assert_eq!(slots_for(req, ScanSpeed::Fast).iter().filter(|s| s.contains(":cmd")).count(), 3, "Fast: the combined payload only, one per point");
         let oob = vec![
             ("#0:xi".to_string(), "t1".to_string(), "h1".to_string()),
             ("q".to_string(), "t0".to_string(), "h0".to_string()),

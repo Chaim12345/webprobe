@@ -2240,7 +2240,9 @@ fn record(shared: &Shared, req: &[u8], resp: Option<Vec<u8>>, note: Option<Strin
     // bounded by the crawler's unique-location cap (CrawlDefaults.json: 1500)
     if shared.scan_enabled.load(Ordering::SeqCst) && e.path != "/favicon.ico" {
         let loc = format!("{}:{}{}", e.host, e.port, e.path.split('?').next().unwrap_or(""));
-        let within_scope = in_scope(shared, &loc);
+        // Scope rules match full URLs ("https://host/..."): the location key
+        // has no scheme, so with any include rule nothing was ever in scope.
+        let within_scope = in_scope(shared, &(history_host(&e) + &e.path));
         let within_cap = {
             let mut locs = shared.scan_locations.lock().unwrap();
             if locs.contains(&loc) || locs.len() < crate::scan::CRAWL_MAX_UNIQUE_LOCATIONS {
@@ -2964,6 +2966,18 @@ fn default_intercept_allows_path(path: &str) -> bool {
         .any(|excluded| extension.eq_ignore_ascii_case(excluded))
 }
 
+/// What Forward sends for a held message: the original bytes when the text
+/// is unchanged from what was shown (a binary body survives exactly, its
+/// lossy text view would replace bytes with U+FFFD), else the edited text.
+/// Returns the bytes and whether the user changed the message.
+fn forwarded(original: Vec<u8>, shown: &str, edited: String) -> (Vec<u8>, bool) {
+    if edited == shown {
+        (original, false)
+    } else {
+        (edited.into_bytes(), true)
+    }
+}
+
 fn intercept_request(shared: &Shared, req: Vec<u8>, default_port: u16) -> (Option<Vec<u8>>, ReqState) {
     if !shared.intercept_on.load(Ordering::SeqCst) {
         return (Some(req), ReqState::default());
@@ -2989,20 +3003,13 @@ fn intercept_request(shared: &Shared, req: Vec<u8>, default_port: u16) -> (Optio
     }
     let (tx, rx) = mpsc::channel::<Option<String>>();
     let id = shared.next_id.fetch_add(1, Ordering::SeqCst);
-    shared.queue.lock().unwrap().push(InterceptItem::new(
-        id,
-        &host,
-        port,
-        String::from_utf8_lossy(&req).into_owned(),
-        tx,
-        InterceptKind::Request { https: default_port == 443 },
-    ));
+    let shown = String::from_utf8_lossy(&req).into_owned();
+    shared.queue.lock().unwrap().push(InterceptItem::new(id, &host, port, shown.clone(), tx, InterceptKind::Request { https: default_port == 443 }));
     shared.wake();
     match rx.recv() {
-        Ok(Some(edited)) => {
-            let changed = edited.as_bytes() != req.as_slice();
-            (Some(edited.into_bytes()), ReqState { edited: changed, held: true })
-        }
+        Ok(Some(edited)) => match forwarded(req, &shown, edited) {
+            (bytes, changed) => (Some(bytes), ReqState { edited: changed, held: true }),
+        },
         Ok(None) => {
             shared.log("Intercepted request dropped");
             (None, ReqState { edited: false, held: true })
@@ -3026,10 +3033,11 @@ fn intercept_response(shared: &Shared, resp: Vec<u8>, host: &str, port: u16, htt
     }
     let (tx, rx) = mpsc::channel::<Option<String>>();
     let id = shared.next_id.fetch_add(1, Ordering::SeqCst);
-    shared.queue.lock().unwrap().push(InterceptItem::new(id, host, port, String::from_utf8_lossy(&resp).into_owned(), tx, InterceptKind::Response { https }));
+    let shown = String::from_utf8_lossy(&resp).into_owned();
+    shared.queue.lock().unwrap().push(InterceptItem::new(id, host, port, shown.clone(), tx, InterceptKind::Response { https }));
     shared.wake();
     match rx.recv() {
-        Ok(Some(edited)) => Some(edited.into_bytes()),
+        Ok(Some(edited)) => Some(forwarded(resp, &shown, edited).0),
         _ => {
             shared.log("Intercepted response dropped");
             None
@@ -3299,6 +3307,33 @@ mod intercept_all_tests {
 
     /// A response the rules select is held in the Intercept queue; Forward
     /// with an edit delivers the edited response to the client.
+    /// Review finding 10: with a scope rule, in-scope traffic is still
+    /// passively audited (the scope check used a URL without its scheme).
+    #[test]
+    fn passive_audit_runs_for_in_scope_traffic() {
+        let shared = Shared::new();
+        shared.scan_enabled.store(true, Ordering::SeqCst);
+        shared.scope.lock().unwrap().push(ScopeRule { enabled: true, include: true, pattern: "http://app.test".into(), is_regex: false });
+        let resp = b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nSet-Cookie: sid=abc; Path=/\r\n\r\n<html></html>".to_vec();
+        record(&shared, b"GET http://app.test/login HTTP/1.1\r\nHost: app.test\r\n\r\n", Some(resp.clone()), None, 80, false, 8080, false);
+        let n = shared.issues.lock().unwrap().len();
+        assert!(n > 0, "in-scope response audited");
+        record(&shared, b"GET http://other.test/login HTTP/1.1\r\nHost: other.test\r\n\r\n", Some(resp), None, 80, false, 8080, false);
+        assert!(shared.issues.lock().unwrap().iter().all(|i| !i.host.contains("other.test")), "out-of-scope response not audited");
+    }
+
+    /// Review finding 8: forwarding a held binary message unchanged sends
+    /// its exact bytes and does not mark it edited.
+    #[test]
+    fn unchanged_binary_messages_forward_exactly() {
+        let original = b"POST /up HTTP/1.1\r\nContent-Length: 4\r\n\r\n\xff\x00\xfe\x01".to_vec();
+        let shown = String::from_utf8_lossy(&original).into_owned();
+        assert_eq!(forwarded(original.clone(), &shown, shown.clone()), (original.clone(), false));
+        let edited = shown.replace("/up", "/up2");
+        let (bytes, changed) = forwarded(original, &shown, edited.clone());
+        assert!(changed && bytes == edited.into_bytes());
+    }
+
     #[test]
     fn matching_responses_are_held_and_forwarded_edited() {
         use std::io::{Read, Write};

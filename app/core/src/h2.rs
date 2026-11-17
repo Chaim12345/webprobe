@@ -39,6 +39,10 @@ const DEFAULT_MAX_FRAME: usize = 16_384;
 /// so treat it as a hard ceiling for anything we allocate.
 const MAX_FRAME: usize = 0xFF_FFFF;
 const MAX_BODY: usize = 256 * 1024 * 1024;
+/// Largest header block accepted across HEADERS + CONTINUATION frames:
+/// endless CONTINUATION frames must not grow memory without bound
+/// (the CVE-2024-27316 class).
+const MAX_HEADER_BLOCK: usize = 256 * 1024;
 
 fn write_frame<W: Write>(w: &mut W, ty: u8, flags: u8, stream: u32, payload: &[u8]) -> std::io::Result<()> {
     let len = payload.len();
@@ -68,8 +72,10 @@ fn read_frame<R: Read>(r: &mut R) -> std::io::Result<Frame> {
     let mut head = [0u8; 9];
     r.read_exact(&mut head)?;
     let len = ((head[0] as usize) << 16) | ((head[1] as usize) << 8) | head[2] as usize;
-    if len > MAX_FRAME {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "frame too large"));
+    // We never advertise SETTINGS_MAX_FRAME_SIZE, so the peer may send at
+    // most the default 16 KiB (RFC 9113 §4.2: larger is FRAME_SIZE_ERROR).
+    if len > DEFAULT_MAX_FRAME {
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "frame larger than SETTINGS_MAX_FRAME_SIZE"));
     }
     let mut payload = vec![0u8; len];
     r.read_exact(&mut payload)?;
@@ -216,7 +222,12 @@ impl Rx {
     /// table for the connection, so blocks must be fed in order.
     fn absorb_block(&mut self) -> Result<(), String> {
         let block = std::mem::take(&mut self.block);
-        let fields = self.dec.decode(&block).map_err(|e| format!("h2 decode: {e:?}"))?;
+        // hpack 0.3 panics on some truncated encodings (e.g. a dynamic table
+        // size update cut short); a hostile server must not take the proxy
+        // thread down. The connection is dropped with the error.
+        let decoded = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.dec.decode(&block)))
+            .map_err(|_| "h2 decode: malformed header block".to_string())?;
+        let fields = decoded.map_err(|e| format!("h2 decode: {e:?}"))?;
         let mut status: Option<String> = None;
         let mut headers: Vec<(String, String)> = Vec::new();
         for (name, value) in fields {
@@ -330,6 +341,9 @@ impl Rx {
             }
             FRAME_HEADERS if f.stream == 1 => {
                 self.block.extend_from_slice(header_fragment(f.flags, &f.payload)?);
+                if self.block.len() > MAX_HEADER_BLOCK {
+                    return Err("h2: header block too large".into());
+                }
                 if f.flags & FLAG_END_HEADERS != 0 {
                     self.in_continuation = false;
                     self.absorb_block()?;
@@ -343,6 +357,9 @@ impl Rx {
             }
             FRAME_CONTINUATION if f.stream == 1 => {
                 self.block.extend_from_slice(&f.payload);
+                if self.block.len() > MAX_HEADER_BLOCK {
+                    return Err("h2: header block too large".into());
+                }
                 if f.flags & FLAG_END_HEADERS != 0 {
                     self.in_continuation = false;
                     self.absorb_block()?;
@@ -622,6 +639,27 @@ mod tests {
             headers: vec![("User-Agent".into(), "probe".into())],
             body: Vec::new(),
         }
+    }
+
+    /// Review finding 3: a hostile server cannot panic the HPACK decoder,
+    /// grow a header block without bound, or send oversized frames.
+    #[test]
+    fn hostile_header_blocks_and_frames_are_rejected() {
+        // Truncated dynamic table size update: hpack 0.3 panics on it.
+        let mut s = scripted(&[(FRAME_SETTINGS, 0, 0, &[]), (FRAME_HEADERS, FLAG_END_HEADERS, 1, &[0x3f])]);
+        assert!(exchange(&mut s, &get_request()).is_err());
+        // Endless CONTINUATION frames: stopped at MAX_HEADER_BLOCK.
+        let chunk = vec![0x40u8; 16_000];
+        let mut frames: Vec<(u8, u8, u32, &[u8])> = vec![(FRAME_SETTINGS, 0, 0, &[]), (FRAME_HEADERS, 0, 1, &chunk)];
+        for _ in 0..40 {
+            frames.push((FRAME_CONTINUATION, 0, 1, &chunk));
+        }
+        let err = exchange(&mut scripted(&frames), &get_request()).unwrap_err();
+        assert!(err.contains("header block too large"), "{err}");
+        // A frame over the 16 KiB we allow.
+        let big = vec![0u8; 20_000];
+        let err = exchange(&mut scripted(&[(FRAME_SETTINGS, 0, 0, &[]), (FRAME_DATA, 0, 1, &big)]), &get_request()).unwrap_err();
+        assert!(err.contains("SETTINGS_MAX_FRAME_SIZE"), "{err}");
     }
 
     /// Malformed control frames must produce an error, never a panic.

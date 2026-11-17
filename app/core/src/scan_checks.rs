@@ -465,11 +465,9 @@ impl PointCheck for OsCommandInjection {
             }
             let value = if append { format!("{}{payload}", ip.value) } else { payload.clone() };
             let new_req = inject(&cx.req, ip, &encode_query_payload(&value));
-            let up = if cx.entry.https {
-                net::send_tls_raw(&cx.shared, &cx.host, cx.port, new_req.as_bytes())
-            } else {
-                net::send_raw(&cx.shared, &cx.host, cx.port, new_req.as_bytes())
-            };
+            // Through the scan's own sender: it honours pause and the
+            // resource pool, as every other check does.
+            let resp = cx.send(new_req.as_bytes());
             let token = ids[slot].clone();
             let issue = mk_burp(
                 "OS command injection",
@@ -483,7 +481,7 @@ impl PointCheck for OsCommandInjection {
                     ip.name
                 ),
             )
-            .with_evidence(vec![ScanEvidence::new(new_req.as_bytes(), up.resp.as_deref())]);
+            .with_evidence(vec![ScanEvidence::new(new_req.as_bytes(), resp.as_deref())]);
             cx.shared.oob_pending.lock().unwrap().push((token, Some("CNAME"), issue));
             cx.progress();
             cx.pace(50);
