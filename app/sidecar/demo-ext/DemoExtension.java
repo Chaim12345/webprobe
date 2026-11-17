@@ -1,6 +1,7 @@
 // DemoExtension.java — a real Montoya extension used to verify the Path B
 // sidecar bridge end-to-end. Drops any request whose path contains
-// "/admin-drop", continues everything else, and logs every hook run.
+// "/admin-drop", adds an X-Montoya-Demo header to every other request and
+// an X-Montoya-Seen header to responses, and logs every hook run.
 //
 // Built (see build-demo-ext.sh) into demo-ext.jar with a
 // META-INF/services/burp.api.montoya.BurpExtension registration so
@@ -36,7 +37,7 @@ public class DemoExtension implements BurpExtension, ProxyRequestHandler, ProxyR
             apiLog("dropping " + request.path());
             return ProxyRequestReceivedAction.drop();
         }
-        return ProxyRequestReceivedAction.continueWith(request);
+        return ProxyRequestReceivedAction.continueWith(request.withAddedHeader("X-Montoya-Demo", "1"));
     }
 
     @Override
@@ -50,7 +51,7 @@ public class DemoExtension implements BurpExtension, ProxyRequestHandler, ProxyR
     @Override
     public ProxyResponseReceivedAction handleResponseReceived(InterceptedResponse response) {
         apiLog("response hook: " + response.statusCode() + " " + response.reasonPhrase());
-        return ProxyResponseReceivedAction.continueWith(response);
+        return ProxyResponseReceivedAction.continueWith(response.withAddedHeader("X-Montoya-Seen", "1"));
     }
 
     @Override

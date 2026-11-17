@@ -643,8 +643,9 @@
       "title": "JVM/Montoya host",
       "acceptance": "Embed a JVM (JNI) or a subprocess host; load a subset of Montoya API; sandbox and error reporting",
       "effort": "L",
-      "status": "in_progress",
-      "evidence": "2026-11-17: subprocess hosts: sidecar JVM for Montoya jars (ext_host::JavaSidecar, stderr now captured to Errors, health shown) and the process API (ext_process). Isolation: separate process, cleared environment, temp working dir, per-call deadline. Montoya subset: initialize, logging, proxy request/response continue-or-drop (no message edits through the bridge yet)."
+      "status": "done",
+      "evidence": "Subprocess hosts. (1) Sidecar JVM for real Montoya .jar extensions (app/sidecar/MontoyaBridge.java against /opt/BurpSuite/burpsuite.jar): initialize, logging, Proxy request/response handlers, continue/drop, and now message edits through the immutable with* methods (withAddedHeader/UpdatedHeader/Header/RemovedHeader/Body/Method/Path/StatusCode/ReasonPhrase), chained across handlers; ext_host::apply_bridge_edit rebuilds the raw message (target and binary body bytes kept unless changed, Content-Length restamped). Errors: JVM stderr captured to the Errors pane, health shown. (2) WebProbe process API v1 (ext_process). Tests: java_sidecar_runs_a_real_montoya_extension (real JVM: drop, header added to request and response), bridge_edits_rebuild_messages.",
+      "completed": "2026-11-17"
     },
     {
       "id": "K-03",

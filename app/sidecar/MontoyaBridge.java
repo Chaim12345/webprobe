@@ -12,16 +12,21 @@
 //       "headers":[["Host","a.com"]],"body":"...","url":"...",
 //       "host":"a.com","port":80,"secure":false,"httpVersion":"HTTP/1.1"}
 //      => {"id":N,"action":"continue"|"drop"}
+//         plus, when a handler continued with an edited message
+//         (withAddedHeader / withBody / withMethod ...):
+//         "edited":true,"method","path","httpVersion","headers","body"
 //   -> {"type":"response","id":N,"status":200,"reason":"OK",...same}
-//      => {"id":N,"action":"continue"|"drop"}
+//      => {"id":N,"action":"continue"|"drop"}  (+ "edited", "status",
+//         "reason", "headers", "body" for an edited response)
 //   -> {"type":"shutdown"}                      (bridge exits 0)
 //
 // stdout carries ONLY protocol replies; extension logging goes to stderr.
 //
 // Honest v1 scope (documented in qa/SOURCE-PARITY-2026-11-15.md):
-//  - extensions load, initialize, log, and may continue or drop messages;
-//  - message edits (withUpdatedBody / new HttpRequest via utilities()) and
-//    UI-related APIs (http(), burpSuite(), collaborator(), utilities())
+//  - extensions load, initialize, log, continue or drop messages, and edit
+//    them with the immutable with* methods (headers, body, method, path,
+//    status, reason); handlers see the previous handler's edits;
+//  - UI-related APIs (http(), burpSuite(), collaborator(), utilities())
 //    throw UnsupportedOperationException — WebProbe has no matching UI;
 //  - only handleRequestReceived / handleResponseReceived are invoked
 //    (matching WebProbe's ProxyHooks surface), not the *ToBeSent halves.
@@ -77,6 +82,29 @@ public class MontoyaBridge {
         String reason = "OK";
         String body = "";
         List<String[]> headers = new ArrayList<>();
+        boolean edited = false;
+
+        MsgState copy() {
+            MsgState c = new MsgState();
+            c.type = type; c.id = id; c.method = method; c.path = path; c.url = url; c.host = host;
+            c.port = port; c.secure = secure; c.httpVersion = httpVersion; c.status = status;
+            c.reason = reason; c.body = body; c.edited = true;
+            for (String[] h : headers) c.headers.add(new String[] { h[0], h[1] });
+            return c;
+        }
+    }
+
+    /// Header (name, value) from a with* argument: (String, String) or an HttpHeader.
+    static String[] headerArg(Object[] a) {
+        if (a.length >= 2) return new String[] { String.valueOf(a[0]), String.valueOf(a[1]) };
+        HttpHeader h = (HttpHeader) a[0];
+        return new String[] { h.name(), h.value() };
+    }
+
+    /// The state behind one of our message stubs, or null for a foreign object.
+    static MsgState stateOfStub(Object o) {
+        if (o != null && Proxy.isProxyClass(o.getClass()) && Proxy.getInvocationHandler(o) instanceof MsgStub ms) return ms.s;
+        return null;
     }
 
     static final class MsgStub implements InvocationHandler {
@@ -90,6 +118,28 @@ public class MontoyaBridge {
         }
 
         @Override public Object invoke(Object proxy, Method m, Object[] args) {
+            // Immutable edits: each with* returns a new message.
+            switch (m.getName()) {
+                case "withAddedHeader": { MsgState c = s.copy(); c.headers.add(headerArg(args)); return newStub(c); }
+                case "withUpdatedHeader": case "withHeader": {
+                    MsgState c = s.copy(); String[] h = headerArg(args); boolean found = false;
+                    for (String[] x : c.headers) if (x[0].equalsIgnoreCase(h[0])) { x[1] = h[1]; found = true; }
+                    if (!found && m.getName().equals("withHeader")) c.headers.add(h);
+                    return newStub(c);
+                }
+                case "withRemovedHeader": {
+                    MsgState c = s.copy();
+                    String name = args[0] instanceof HttpHeader hh ? hh.name() : String.valueOf(args[0]);
+                    c.headers.removeIf(x -> x[0].equalsIgnoreCase(name));
+                    return newStub(c);
+                }
+                case "withBody": { MsgState c = s.copy(); c.body = String.valueOf(args[0]); return newStub(c); }
+                case "withMethod": { MsgState c = s.copy(); c.method = String.valueOf(args[0]); return newStub(c); }
+                case "withPath": { MsgState c = s.copy(); c.path = String.valueOf(args[0]); return newStub(c); }
+                case "withStatusCode": { MsgState c = s.copy(); c.status = ((Number) args[0]).intValue(); return newStub(c); }
+                case "withReasonPhrase": { MsgState c = s.copy(); c.reason = String.valueOf(args[0]); return newStub(c); }
+                default: break;
+            }
             switch (m.getName()) {
                 case "method": return s.method;
                 case "path": case "pathWithoutQuery": return s.path;
@@ -403,20 +453,41 @@ public class MontoyaBridge {
 
             MsgState state = stateOf(msg);
             boolean drop = false;
+            // Each handler gets the message as the previous one left it.
             if (type.equals("request")) {
-                InterceptedRequest stub = (InterceptedRequest) MsgStub.newStub(state);
                 for (ProxyRequestHandler h : REQ_HANDLERS) {
+                    InterceptedRequest stub = (InterceptedRequest) MsgStub.newStub(state);
                     ProxyRequestReceivedAction act = h.handleRequestReceived(stub);
                     if (act != null && act.action() == MessageReceivedAction.DROP) { drop = true; break; }
+                    MsgState next = act == null ? null : stateOfStub(act.request());
+                    if (next != null) state = next;
                 }
             } else {
-                InterceptedResponse stub = (InterceptedResponse) MsgStub.newStub(state);
                 for (ProxyResponseHandler h : RESP_HANDLERS) {
+                    InterceptedResponse stub = (InterceptedResponse) MsgStub.newStub(state);
                     ProxyResponseReceivedAction act = h.handleResponseReceived(stub);
                     if (act != null && act.action() == MessageReceivedAction.DROP) { drop = true; break; }
+                    MsgState next = act == null ? null : stateOfStub(act.response());
+                    if (next != null) state = next;
                 }
             }
-            out.println("{\"id\":" + state.id + ",\"action\":\"" + (drop ? "drop" : "continue") + "\"}");
+            StringBuilder reply = new StringBuilder("{\"id\":" + state.id + ",\"action\":\"" + (drop ? "drop" : "continue") + "\"");
+            if (!drop && state.edited) {
+                reply.append(",\"edited\":true,\"method\":").append(Json.esc(state.method))
+                        .append(",\"path\":").append(Json.esc(state.path))
+                        .append(",\"httpVersion\":").append(Json.esc(state.httpVersion))
+                        .append(",\"status\":").append(state.status)
+                        .append(",\"reason\":").append(Json.esc(state.reason))
+                        .append(",\"body\":").append(Json.esc(state.body))
+                        .append(",\"headers\":[");
+                for (int k = 0; k < state.headers.size(); k++) {
+                    String[] h = state.headers.get(k);
+                    if (k > 0) reply.append(',');
+                    reply.append('[').append(Json.esc(h[0])).append(',').append(Json.esc(h[1])).append(']');
+                }
+                reply.append(']');
+            }
+            out.println(reply.append('}'));
         }
         out.flush();
     }

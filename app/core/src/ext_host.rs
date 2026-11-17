@@ -217,6 +217,54 @@ fn split_headers_body(raw: &[u8]) -> (Vec<(String, String)>, String) {
     (headers, String::from_utf8_lossy(&body).into_owned())
 }
 
+/// The message a Montoya extension continued with (the bridge reports
+/// `"edited":true` with method/path/status, headers and body). The original
+/// request target is kept unless the path changed (absolute-form proxy
+/// targets survive), and the original body bytes are kept unless the body
+/// changed, so binary bodies are not re-encoded; Content-Length follows.
+fn apply_bridge_edit(orig: &[u8], reply: &serde_json::Value, request: bool) -> Option<Vec<u8>> {
+    if reply.get("edited").and_then(|e| e.as_bool()) != Some(true) {
+        return None;
+    }
+    let s = |k: &str| reply.get(k).and_then(|v| v.as_str()).unwrap_or_default().to_string();
+    let headers: Vec<(String, String)> = reply
+        .get("headers")?
+        .as_array()?
+        .iter()
+        .filter_map(|h| Some((h.get(0)?.as_str()?.to_string(), h.get(1)?.as_str()?.to_string())))
+        .collect();
+    let (_, orig_body) = split_headers_body(orig);
+    let first_orig = String::from_utf8_lossy(orig.split(|&b| b == b'\n').next().unwrap_or(&[])).trim_end().to_string();
+    let version = s("httpVersion");
+    let first = if request {
+        let mut w = first_orig.split_whitespace();
+        let (_, target) = (w.next(), w.next().unwrap_or("/"));
+        let orig_path = target.find("://").and_then(|i| target[i + 3..].find('/').map(|j| &target[i + 3 + j..])).unwrap_or(target);
+        let path = s("path");
+        let target = if path.is_empty() || path == orig_path { target.to_string() } else { path };
+        format!("{} {} {}", s("method"), target, if version.is_empty() { "HTTP/1.1" } else { &version })
+    } else {
+        let status = reply.get("status").and_then(|v| v.as_i64()).unwrap_or(200);
+        format!("{} {} {}", if version.is_empty() { "HTTP/1.1" } else { &version }, status, s("reason"))
+    };
+    let new_body = s("body");
+    let body_changed = new_body != orig_body;
+    let body: Vec<u8> = if body_changed {
+        new_body.into_bytes()
+    } else {
+        let sep = orig.windows(4).position(|w| w == b"\r\n\r\n").map(|p| p + 4).or_else(|| orig.windows(2).position(|w| w == b"\n\n").map(|p| p + 2));
+        sep.map(|p| orig[p..].to_vec()).unwrap_or_default()
+    };
+    let mut out = first.into_bytes();
+    for (k, v) in &headers {
+        let v = if body_changed && k.eq_ignore_ascii_case("content-length") { body.len().to_string() } else { v.clone() };
+        out.extend_from_slice(format!("\r\n{k}: {v}").as_bytes());
+    }
+    out.extend_from_slice(b"\r\n\r\n");
+    out.extend_from_slice(&body);
+    Some(out)
+}
+
 /// First line of a raw response, e.g. ("HTTP/1.1", 200, "OK").
 fn response_status_line(raw: &[u8]) -> (String, i64, String) {
     let head = raw.split(|&b| b == b'\n').next().unwrap_or(&[]);
@@ -404,7 +452,12 @@ impl ProxyHooks for JavaSidecar {
             Ok(reply) if reply.get("action").and_then(|a| a.as_str()) == Some("drop") => {
                 ProxyAction::Drop
             }
-            Ok(_) => ProxyAction::Continue,
+            Ok(reply) => {
+                if let Some(edited) = apply_bridge_edit(req, &reply, true) {
+                    *req = edited;
+                }
+                ProxyAction::Continue
+            }
             Err(_) => ProxyAction::Continue, // degrade to pass-through
         }
     }
@@ -439,7 +492,12 @@ impl ProxyHooks for JavaSidecar {
             Ok(reply) if reply.get("action").and_then(|a| a.as_str()) == Some("drop") => {
                 ProxyAction::Drop
             }
-            Ok(_) => ProxyAction::Continue,
+            Ok(reply) => {
+                if let Some(edited) = apply_bridge_edit(resp, &reply, false) {
+                    *resp = edited;
+                }
+                ProxyAction::Continue
+            }
             Err(_) => ProxyAction::Continue,
         }
     }
@@ -550,12 +608,33 @@ mod tests {
         // The demo extension drops any path containing "/admin-drop".
         let mut req = b"GET /admin-drop/panel HTTP/1.1\r\nHost: qa.test\r\n\r\n".to_vec();
         assert!(!host.run_request_hooks("GET", "/admin-drop/panel", &mut req));
-        // Everything else continues.
-        let mut req = b"GET /normal HTTP/1.1\r\nHost: qa.test\r\n\r\n".to_vec();
+        // Everything else continues, edited by the extension (withAddedHeader).
+        let mut req = b"GET http://qa.test/normal HTTP/1.1\r\nHost: qa.test\r\n\r\n".to_vec();
         assert!(host.run_request_hooks("GET", "/normal", &mut req));
-        // Response hooks run too.
+        let text = String::from_utf8_lossy(&req);
+        assert!(text.starts_with("GET http://qa.test/normal HTTP/1.1\r\n"), "target kept: {text}");
+        assert!(text.contains("\r\nX-Montoya-Demo: 1\r\n"), "{text}");
+        // Response hooks run and edit too.
         let mut resp = b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\nhello".to_vec();
         assert!(host.run_response_hooks("GET", "/normal", &mut resp));
+        let text = String::from_utf8_lossy(&resp);
+        assert!(text.starts_with("HTTP/1.1 200 OK\r\n") && text.contains("X-Montoya-Seen: 1") && text.ends_with("\r\n\r\nhello"), "{text}");
+    }
+
+    /// Rebuilding an edited message keeps binary bodies byte for byte and
+    /// restamps Content-Length only when the body changed.
+    #[test]
+    fn bridge_edits_rebuild_messages() {
+        let orig = b"POST /up HTTP/1.1\r\nHost: h\r\nContent-Length: 3\r\n\r\n\xff\x00\x01".to_vec();
+        let reply = serde_json::json!({"edited": true, "method": "POST", "path": "/up", "httpVersion": "HTTP/1.1",
+            "body": String::from_utf8_lossy(&orig[orig.len() - 3..]), "headers": [["Host", "h"], ["Content-Length", "3"], ["X-A", "1"]]});
+        let out = apply_bridge_edit(&orig, &reply, true).unwrap();
+        assert!(out.ends_with(b"X-A: 1\r\n\r\n\xff\x00\x01"), "{:?}", String::from_utf8_lossy(&out));
+        let reply = serde_json::json!({"edited": true, "method": "PUT", "path": "/other", "httpVersion": "HTTP/1.1",
+            "body": "longer body", "headers": [["Host", "h"], ["Content-Length", "3"]]});
+        let out = String::from_utf8(apply_bridge_edit(&orig, &reply, true).unwrap()).unwrap();
+        assert_eq!(out, "PUT /other HTTP/1.1\r\nHost: h\r\nContent-Length: 11\r\n\r\nlonger body");
+        assert!(apply_bridge_edit(&orig, &serde_json::json!({"action": "continue"}), true).is_none());
     }
 
     /// Header/body parsing for the sidecar protocol (pure Rust, no JVM).
