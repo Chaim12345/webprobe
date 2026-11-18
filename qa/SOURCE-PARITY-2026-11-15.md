@@ -1036,3 +1036,16 @@ Open after this wave:
 - Not ported in the passive merge: the catch-all after 19 identifiers on a host (`Zwlr.Zh:104`), the `Zbvp`
   same-type merge, and any merging for active issues.
 
+## Wave 64 (2026-11-18): Montoya stage 3 (R-03, part)
+
+Commit 462793f. Extension suite tabs show in a Swing window per extension, opened from the Extensions
+tab (Swing is not embedded in WebProbe's window). Context menu items, extension-provided editors,
+`persistence()` and `utilities()` work. Checked on the QA display with unmodified BApps
+(`qa/r03-2026-11-18/`): JWT Monitor replaces the Authorization header of proxied requests; JWT4B loads
+and its tab, context menu, editor tab and history notes work.
+
+Open after this wave:
+- Taking an edited request back from JWT4B's editor into Repeater returned the original; not established whether JWT4B reports the edit. In progress.
+- Still Unsupported: menuBar, hotkeys, settings panels, WebSocket editor providers, Brotli, and the API areas of stages 4-5 (scanner, collaborator, intruder, proxy rest, scope, siteMap, repeater, organizer). In progress.
+- Decided without evidence: the theme reports LIGHT; preferences are keyed by extension name; headless is chosen from DISPLAY / WAYLAND_DISPLAY only.
+
