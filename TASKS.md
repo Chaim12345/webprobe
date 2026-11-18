@@ -377,7 +377,7 @@ Method: the reference jar was launched from `/opt/BurpSuite` on its own display,
 
 ## 8. Status as of 2026-11-18 (generated from tasks.json)
 
-126 tasks: 103 done, 2 rejected, 21 todo. Acceptance criteria and evidence are in `tasks.json`.
+126 tasks: 104 done, 2 rejected, 20 todo. Acceptance criteria and evidence are in `tasks.json`.
 
 ### A — HTTP engine correctness
 
@@ -583,7 +583,7 @@ Method: the reference jar was launched from `/opt/BurpSuite` on its own display,
 |---|---|---|---|
 | D-11 | P1 | ✅ done | Remaining Burp insertion points |
 | D-09 | P1 | ✅ done | Remaining Collaborator check variants |
-| D-10 | P2 | todo | Stored XSS retrieval pairing as Burp |
+| D-10 | P2 | ✅ done | Stored XSS retrieval pairing as Burp |
 | D-12 | P2 | todo | Collaborator leftovers: SNI variant and scheme payload variants |
 
 ### R — Roadmap (zoom-out review 2026-11-18)

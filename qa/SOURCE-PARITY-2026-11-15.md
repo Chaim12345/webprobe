@@ -957,3 +957,28 @@ Open after this wave:
 - Assumed without source evidence: the in-band marker is the reversed token; in-band issues are High/Certain.
 - Lab parity re-measure is running (results go to `/root/webprobe-parity/parity-2026-11-18/`).
 
+## Wave 60 (2026-11-18): stored input pairing (D-10) and the parity re-measure
+
+D-10 is ported as Burp does it (`core/src/stored.rs`; class references in `tasks.json` D-10): tokens
+seeded per point, one search of every scanner response, "Input returned in response (stored)", and a
+post-audit stage that runs stored XSS per recorded pair with the retrieval item's own request replayed.
+
+Parity re-measure (`qa/parity-2026-11-18/SUMMARY.md`):
+- **The Burp baselines cannot be redone.** The stored Burp issue lists (scans 5, 7-10), `paths.txt` and the
+  lab app (`lab.py`) were in `/tmp` and were lost in the 2026-11-16 wipe; Craft keeps only hashes and the
+  per-type counts of scan 7. The 75/75 (Juice Shop) and 21/21 (lab) results stand as measured on
+  2026-11-16 and are not re-verified for the code after D-09..D-11.
+- Redone: Juice Shop crawl-and-audit at four commits. The issue list is identical before D-11, after D-11
+  and after D-09 (73 issues; requests 6175 / 7267 / 6181). After D-10 and the fix below: 64 issues, 5473 requests.
+- By issue type against Burp scan 7: Input returned (reflected) 4 = 4, Unencrypted 1 = 1, Robots.txt 1 = 1,
+  OpenAPI 1 = 1, Path-relative style sheet 1 = 1; CORS 28 + 28 against Burp's 25 + 25 (three more crawled
+  locations; the container image is newer than the one Burp scanned, not attributable further).
+- Fixed: 9 "File path manipulation" false positives on static files. `Zp3a.Zw` never runs that check on
+  URL path points or `http(s):` values. The bug predates D-11.
+
+Open after this wave:
+- A fresh Burp baseline for Juice Shop and a rebuilt lab app are needed to re-verify URL-level parity; a new
+  Burp scan is excluded by the standing "no Burp comparison scans" rule, so this waits for a decision.
+- D-10 has not found a stored pair on a real application yet (Juice Shop's crawled items are static GETs).
+- Not ported: the `Zi5k` pair filters; D-12.
+

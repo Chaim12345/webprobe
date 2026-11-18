@@ -1,5 +1,5 @@
 {
-  "revision": 147,
+  "revision": 148,
   "brief": {
     "question": "Rebuild WebProbe, a clone of Burp Suite Pro (reference build 52685, v2026.7.3), to feature parity with the task backlog in tasks.json, and produce a readable, evidence-backed name map for the obfuscated Burp jar.",
     "purpose": "Interoperable reimplementation plus per-build deobfuscation; behaviour claims must come from the shipped jar or the running reference app, never guessed.",
@@ -68,8 +68,8 @@
     },
     {
       "title": "D-10 stored XSS retrieval pairing beyond safe GETs",
-      "status": "doing",
-      "why": "Burp's token pairing traced (Zhqw, Zml_->Zwcz, Zwp6/Zh7d, Zpqv.Z_); worker implementing after the lab parity re-measure"
+      "status": "done",
+      "why": "core/src/stored.rs; Zi5k filters not ported; no stored pair seen on a real app yet"
     },
     {
       "title": "D-12 Collaborator leftovers: SNI variant and Zbxl scheme payload variants",
@@ -170,6 +170,11 @@
       "title": "R-19 [P2/S] UI parity re-score",
       "status": "todo",
       "why": "qa/parity-scores-2026-11-15.md never redone; no record of Logger/Organizer/WS intercept GUI checks."
+    },
+    {
+      "title": "Re-verify URL-level lab parity (Juice Shop 75/75, lab 21/21) for the code after D-09..D-11",
+      "status": "blocked",
+      "why": "stored Burp lists, paths.txt and lab.py were lost with /tmp; needs a fresh Burp baseline, which the no-Burp-scans rule excludes until the user decides (qa/parity-2026-11-18/SUMMARY.md)"
     }
   ],
   "hypotheses": [],
@@ -938,5 +943,5 @@
     }
   ],
   "handoff": "2026-11-18 (zoom-out). tasks.json: 125 tasks, 101 done, 2 rejected, 22 todo: D-09, D-10, D-11 (D-11 was the duplicate id D-08, renumbered) and the new roadmap epic R-01..R-19 from the zoom-out review (qa/ZOOM-OUT-REVIEW-2026-11-18.md). Honest standing: scanner matches Burp 100% on the lab apps but reports only 48 of 183 issue types; Montoya API ~10% (only proxy() and logging()); Proxy ~75% (no browser-side HTTP/2, no streaming); Intruder ~85%; Repeater ~70%. Order: D-11 (in progress, spec /root/webprobe-parity/specs/D-11-insertion-points.md), D-09, D-10, then P0 R-01 docs truth pass, R-02 portable build, R-03 Montoya bridge, R-04 passive registry + pack, then P1 R-05..R-11, then P2. Five open unknowns: the scanner-family one (unk_e8d35ba47ccfba29), timing-only checks, BApp Montoya usage, Burp's DOM engine, server-side skip-list callers. Wave gate 2026-11-18: 426 core + 133 app tests green, cargo check clean. Working mode: one persistent worker subagent, continued with SendMessage, does implementation; the main session orchestrates, writes specs, reviews, commits. Traps: cargo only through wp-queue; never touch 8080/8081; no time-based detection; Craft 0.6.1 via `mcporter call craft.<tool>` or craft-anything-cli subcommands; the sidecar test needs up to 180 s for the first JVM load.",
-  "updated": "2026-11-18T01:32:00Z"
+  "updated": "2026-11-18T02:23:20Z"
 }

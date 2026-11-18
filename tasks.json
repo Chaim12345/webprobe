@@ -8,9 +8,9 @@
     "p1": 39,
     "p2": 19,
     "by_status": {
-      "done": 103,
+      "done": 104,
       "rejected": 2,
-      "todo": 21
+      "todo": 20
     }
   },
   "tasks": [
@@ -1220,8 +1220,9 @@
       "title": "Stored XSS retrieval pairing as Burp",
       "acceptance": "Stored input is paired with any later request whose response showed it (as Burp does), not only safe GETs (base GET, same-origin redirect target, up to 3 crawled GETs); test with a local multi-page fixture.",
       "effort": "M",
-      "status": "todo",
-      "evidence": "Craft unknown unk_e8d35ba47ccfba29 probes."
+      "status": "done",
+      "evidence": "core/src/stored.rs (StoredInputs) + scan.rs stage A4: per-point token seeding (Zwp0 A2, Zuvm.ZO, Zi00, Zx2y), one-pass search of every scanner response at ScanCtx::send (Zhqw, Zchm, Zwd9; own token dropped as Zp0f), new issue 'Input returned in response (stored)' Information/Certain (Zpwn, Zmkj, text Zwfa), post-audit stage per recorded pair running stored XSS (Zi6p stored branch) with the retrieval item's own request replayed unmodified, any method (Zpqv.Z_; Zwp6, Zh7d). Old heuristic (base GET, redirect target, 3 crawled GETs) removed. Tests stored::tests::* (3) and scan::tests::{stored_input_pairs_across_items_and_stage_a4_finds_stored_xss, a_post_can_be_the_retrieval_request_and_own_reflection_is_not_stored, nothing_is_recorded_without_a_returned_token_and_scans_do_not_share_the_store, stop_ends_the_stored_stage}; suite 454 + 133. Not ported: the Zi5k pair filters (Zur.Zl / Zhnt.ZD not established); the CDP crawler's own traffic is not searched. Assumed without source: token format zwq7 + 12 chars (Burp uses Collaborator-style ids); seeding per item, not across all items first; stored XSS reads the last response of a redirect chain. Not exercised on a real app: the Juice Shop crawl recorded no pairs.",
+      "completed": "2026-11-18"
     },
     {
       "id": "D-12",

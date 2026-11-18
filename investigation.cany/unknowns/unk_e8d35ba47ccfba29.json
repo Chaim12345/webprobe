@@ -1,6 +1,6 @@
 {
   "id": "unk_e8d35ba47ccfba29",
-  "revision": 17,
+  "revision": 18,
   "question": "Are the remaining active-check families (SQLi, reflected/stored XSS & DOM, open redirect, header injection, SSTI, OS command, LDAP, code injection, SMTP, server-level, external interaction, header manipulation) implemented with Burp's actual payloads, detection logic and confirmation steps, or only matched to Burp by family name?",
   "severity": "high",
   "domain": "scanner",
@@ -18,6 +18,7 @@
     "2026-11-16: HTTP TRACE method (Zs6x, fnd_83) and the error-based half of XML injection (Zp7s, fnd_84) ported with tests; OOB interactions now raise Burp's 'External service interaction (DNS)/(HTTP)' issues instead of a WebProbe-only name.",
     "2026-11-16 (D-03, fnd_85): insertion points follow burp.Zuq.Zs order and the Zwez cap: URL/body/multipart/JSON params, cookies (skip-listed _ga/_gid/_gat/_ga_*/_gac_*/AWSALB* dropped), X-* headers, User-Agent, Referer (synthesised https://example.com/ when absent), URL path folders, URL path filename; one cap of 30 over accepted points. scan.rs insertion_points/inject; tests insertion_points_follow_burp_order_and_cap, query_/cookie_/header_/multipart_/url_path_folder_and_filename_insertion_points. Reflected XSS severity per point kind (Zwwb.Zv).",
     "2026-11-16 (D-02): ported with positive and negative unit tests in active_checks.rs: PHP code injection echo-based on file-upload parts (fnd_86), Cross-site scripting (stored) as Burp's breakout engine over injection + safe GET retrieval (fnd_87; also verified end to end on 127.0.0.1 by active_scan_finds_stored_xss_and_cookie_xss_on_a_local_server), Client-side template injection (fnd_88), XML injection Collaborator half with Ze_f/Zbiw payloads registered as 'XML injection' on DNS interaction (fnd_89).",
-    "2026-11-17/18 (branch parity/2026-11-17): OS command injection Collaborator flow ported from burp.Zc99/Zfw7/Zwvy (CNAME verdict, External service interaction for other interactions); WebProbe-only probes gated off by default so default scans match Burp; payloads encoded per insertion point (scan::inject_payload); CORS flag 64 from Zrbl.Zh; two independent code reviews fixed (qa/SOURCE-PARITY-2026-11-15.md)."
+    "2026-11-17/18 (branch parity/2026-11-17): OS command injection Collaborator flow ported from burp.Zc99/Zfw7/Zwvy (CNAME verdict, External service interaction for other interactions); WebProbe-only probes gated off by default so default scans match Burp; payloads encoded per insertion point (scan::inject_payload); CORS flag 64 from Zrbl.Zh; two independent code reviews fixed (qa/SOURCE-PARITY-2026-11-15.md).",
+    "2026-11-18: D-11 (insertion points, ec380b4), D-09 (Collaborator variants, e7b5eff) and D-10 (stored input pairing, core/src/stored.rs) ported from the source with tests; suite 454 + 133. Remaining from this question: D-12 (SNI and Zbxl scheme variants), Zi5k pair filters, and the unowned issue families now tracked as R-04, R-09, R-10, R-13."
   ]
 }
