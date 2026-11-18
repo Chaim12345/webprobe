@@ -205,13 +205,17 @@ fn proxy(mut args: Vec<String>) {
         // start without one instead).
         let kb = std::sync::Arc::new(report::KnowledgeBase::discover());
         match rest_api::start(&shared, &api, kb) {
-            Ok(api_port) => eprintln!("REST API listening on {}:{api_port}", if api.listen_mode == "all_interfaces" { "0.0.0.0" } else { "127.0.0.1" }),
+            Ok(api_port) => {
+                eprintln!("REST API listening on {}:{api_port}", if api.listen_mode == "all_interfaces" { "0.0.0.0" } else { "127.0.0.1" });
+                shared.api_started.store(true, Ordering::SeqCst);
+            }
             Err(e) => {
                 eprintln!("{e}");
                 std::process::exit(1);
             }
         }
     }
+    *shared.api_config.lock().unwrap() = api;
     shared.proxy_port.store(port, Ordering::SeqCst);
     net::start_proxy(shared.clone());
     let started = Instant::now();
