@@ -1291,6 +1291,7 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
                             }
                         }
                     } else {
+                        crate::repeater_groups::chip(ui, &app.rep_groups, *id);
                         let label = name.strip_prefix("Rep ").unwrap_or(name).to_string();
                         let l = ui.add(egui::Label::new(RichText::new(label.clone()).size(12.5).color(theme::ink())).sense(egui::Sense::click_and_drag()));
                         // A tab to accessibility / UI automation, not a plain label.
@@ -1310,6 +1311,8 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
                             if let Some(c) = tab_menu(ui, i, n, can_reopen) {
                                 cmd = Some((i, c));
                             }
+                            // R-12: group items (add/remove/edit/send group).
+                            crate::repeater_groups::menu_section(ui, app, i);
                         });
                     }
                     if ui.add(egui::Label::new(RichText::new("\u{00d7}").size(12.0).color(theme::ink_faint())).sense(egui::Sense::click())).on_hover_text("Close tab").clicked() {
@@ -1355,10 +1358,14 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
         }
     }
     if let Some((i, c)) = cmd {
+        let closed_any = matches!(c, TabCommand::Close(_));
         if c == TabCommand::Rename {
             app.rops.rename_focus = true;
         }
         app.rep_sel = apply_tab_command(&app.shared, &mut app.rops, i, app.rep_sel, c);
+        if closed_any {
+            crate::repeater_groups::prune(app);
+        }
     }
 }
 

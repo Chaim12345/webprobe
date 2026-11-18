@@ -1830,6 +1830,11 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
         response_b64: project::ProjectRepeater::encode_response(r.response.as_deref()).1,
         result_line: r.result_line.clone(),
     }).collect();
+    // R-12: the Repeater groups, members as positions in the saved tab list.
+    let locked_rep_groups = {
+        let order: Vec<u64> = app.shared.repeaters.lock().unwrap().iter().map(|r| r.id).collect();
+        webprobe_core::send_group::to_project(&app.rep_groups, &order)
+    };
     let locked_issues = app.shared.issues.lock().unwrap().iter().map(project::ProjectIssue::from_issue).collect();
     let locked_websockets = app.shared.ws_history.with_rows(|rows| rows.iter().map(project::ProjectWebsocket::from_entry).collect());
     let locked_upstream = app.shared.upstream.lock().unwrap().clone();
@@ -1880,6 +1885,7 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
         session_rules: locked_session_rules,
         macros: locked_macros,
         repeaters: locked_repeaters,
+        repeater_groups: locked_rep_groups,
         issues: locked_issues,
         websockets: locked_websockets,
         upstream: locked_upstream,
@@ -2048,6 +2054,10 @@ pub fn apply_project(app: &mut App, data: &project::ProjectData, content: bool) 
         hist_pos: 0,
         ws: None,
         }).collect();
+        // R-12: the project's groups over the tabs' fresh ids.
+        let fresh: Vec<u64> = app.shared.repeaters.lock().unwrap().iter().map(|r| r.id).collect();
+        let rep_groups = webprobe_core::send_group::from_project(&data.repeater_groups, &fresh, || app.shared.rep.new_tab_id());
+        app.rep_groups = rep_groups;
         *app.shared.issues.lock().unwrap() = data.issues.iter().map(project::ProjectIssue::to_issue).collect();
         // Cross-response passive state belongs to the project it was built in.
         app.shared.passive.clear();
