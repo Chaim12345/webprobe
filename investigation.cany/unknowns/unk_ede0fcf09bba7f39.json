@@ -1,16 +1,17 @@
 {
   "id": "unk_ede0fcf09bba7f39",
-  "revision": 1,
+  "revision": 2,
   "question": "Which Montoya API interfaces and methods do the most-installed BApps actually call (at load and at run time), so the bridge can be built in the order that makes real extensions work?",
   "severity": "high",
   "domain": "extensions",
   "status": "open",
   "probes": [
-    "Static call survey over the BApp jars available locally (javap -c, count Montoya interface calls)",
-    "Load one unmodified BApp in the sidecar and log the first unsupported call"
+    "Rerun the survey on more BApp jars (the sample is 4, three of them JWT tools) before finalising stages 4-5",
+    "Load JWT Monitor unmodified in the sidecar and log the first unsupported call"
   ],
   "evidence_for": [
-    "sidecar/MontoyaBridge.java:276-287: only proxy() and logging() answer; most BApps call api.extension().setName() first"
+    "sidecar/MontoyaBridge.java:276-287: only proxy() and logging() answer; most BApps call api.extension().setName() first",
+    "2026-11-18 static survey of the 4 locally installed BApps (JWT Monitor, JWT4B, JWT Editor, MCP Server; /root/webprobe-parity/tools/bapp_montoya_survey.py): MontoyaApi accessors used, of 4: extension 4, logging 4, userInterface 4, http 3, burpSuite 3, persistence 2, proxy 2, collaborator 2, intruder 2, utilities 2, scanner 1, organizer 1, repeater 1, siteMap 1. Smallest target: JWT Monitor (3 classes, 21 Montoya methods). Build order in /root/webprobe-parity/specs/R-03-montoya-bridge.md."
   ],
   "evidence_against": []
 }
