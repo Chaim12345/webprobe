@@ -824,33 +824,58 @@ impl PointCheck for ExternalInteraction {
     }
     fn run(&self, cx: &ScanCtx, st: &mut ScanState, pt: &mut PointRun) {
         let (idx, ip) = (pt.idx, pt.ip);
-        let Some((_, token, domain)) = oob_slot(&cx.oob, idx, &ip.name, "ext", &mut st.oob_used) else { return };
-        if cx.stopped() {
-            return;
-        }
-        let new_req = inject(&cx.req, ip, domain);
-        let resp = cx.send(new_req.as_bytes());
-        let issue = mk(
-            "medium",
-            &format!("Out-of-band payload embedded via parameter {}", ip.name),
-            &cx.entry,
-            format!("Collaborator token {token} replaced the value; confirmed when an interaction is observed."),
-        )
-        .with_evidence(vec![ScanEvidence::new(new_req.as_bytes(), resp.as_deref())]);
-        // burp.Zez7.Ze (URL payload) wording for the issue the interaction raises.
-        let point = ip.describe_short(true);
-        let delivery = crate::oob::delivery_sentence("The payload", domain, &point, ".");
-        cx.shared.oob.register_delivered(token.clone(), None, issue, delivery);
-        // burp.Zxfo.lambda$doCheck$0: the response itself may carry what the
-        // Collaborator served for this id (Ze2n.Zt): the server fetched the
-        // URL and returned its content in-band.
-        if let Some(r) = resp.as_deref() {
-            if inband_hit(r, token) {
-                cx.report(vec![oob_resource_load_issue(&cx.entry, &crate::oob::delivery_sentence("The payload", domain, &point, ""), &new_req, r)]);
+        let value = ip.decoded_value();
+        // burp.Zxfo.doCheck: one request per burp.Zbxl.Zu variant, each with
+        // a Collaborator id of its own.
+        for (k, variant) in ext_variants(ip, cx.settings.speed).into_iter().enumerate() {
+            let Some((_, token, domain)) = oob_slot(&cx.oob, idx, &ip.name, &ext_slot(k), &mut st.oob_used) else { continue };
+            if cx.stopped() {
+                return;
             }
+            let shown = crate::url_payloads::payload(&value, variant, domain);
+            let new_req = inject(&cx.req, ip, &shown);
+            let resp = cx.send(new_req.as_bytes());
+            let issue = mk(
+                "medium",
+                &format!("Out-of-band payload embedded via parameter {}", ip.name),
+                &cx.entry,
+                format!("Collaborator token {token} replaced the value; confirmed when an interaction is observed."),
+            )
+            .with_evidence(vec![ScanEvidence::new(new_req.as_bytes(), resp.as_deref())]);
+            // burp.Zez7.Ze (URL payload) wording for the issue the interaction raises.
+            let point = ip.describe_short(true);
+            let delivery = crate::oob::delivery_sentence("The payload", &shown, &point, ".");
+            cx.shared.oob.register_delivered(token.clone(), None, issue, delivery);
+            // burp.Zxfo.lambda$doCheck$0: the response itself may carry what the
+            // Collaborator served for this id (Ze2n.Zt): the server fetched the
+            // URL and returned its content in-band.
+            if let Some(r) = resp.as_deref() {
+                if inband_hit(r, token) {
+                    cx.report(vec![oob_resource_load_issue(&cx.entry, &crate::oob::delivery_sentence("The payload", &shown, &point, ""), &new_req, r)]);
+                }
+            }
+            cx.progress();
+            cx.pace(50);
         }
-        cx.progress();
-        cx.pace(50);
+    }
+}
+
+/// burp.Zbxl.Zu's URL payload variants for the point (burp.Zxfo: the
+/// audit thoroughness, Thorough when the base value looks like a URL,
+/// Zibp.ZN). Slot allocation and the check both use this, so they agree.
+pub(crate) fn ext_variants(ip: &InsertionPoint, speed: ScanSpeed) -> Vec<crate::url_payloads::UrlVariant> {
+    let value = ip.decoded_value();
+    let thorough = speed == ScanSpeed::Thorough || crate::url_payloads::looks_like_url(&value);
+    crate::url_payloads::variants(&value, thorough)
+}
+
+/// The Collaborator slot of variant `k`: "ext" for the first (also keyed
+/// by parameter name in older callers), "ext1".. for the rest.
+pub(crate) fn ext_slot(k: usize) -> String {
+    if k == 0 {
+        "ext".to_string()
+    } else {
+        format!("ext{k}")
     }
 }
 
