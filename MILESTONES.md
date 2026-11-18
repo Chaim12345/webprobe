@@ -63,7 +63,7 @@ Small slices:
 
 ## M5 — R-11 scan configuration library
 
-**Status:** in progress (2026-11-18 evening): the persistent Claude worker in the main checkout, not `.worktrees/r11`. Another agent should not start M5 in parallel.
+**Status:** implemented 2026-11-18 (aa490e8, 09e87f8), compiled with 18 smoke tests; full suite and UI not yet run. Work stopped by the user; unclaimed.
 
 Worktree: `.worktrees/r11`.
 
@@ -78,7 +78,7 @@ Small slices:
 
 ## M6 — D-12 and R-12 network features
 
-**Status:** in progress (2026-11-18 evening): a Claude subagent in `.worktrees/m6` (branch `wp-m6`). Another agent should not start M6 in parallel.
+**Status:** paused 2026-11-18 by the user. Branch `wp-m6` (pushed): D-12a SNI probe done (97b41bd); D-12b and R-12 send groups partial (9d7de42, compiles, untested). Unclaimed; resume from that branch.
 
 Worktree: `.worktrees/r07` after M2 integration.
 

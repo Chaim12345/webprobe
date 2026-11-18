@@ -1,5 +1,5 @@
 {
-  "revision": 157,
+  "revision": 159,
   "brief": {
     "question": "Rebuild WebProbe, a clone of Burp Suite Pro (reference build 52685, v2026.7.3), to feature parity with the task backlog in tasks.json, and produce a readable, evidence-backed name map for the obfuscated Burp jar.",
     "purpose": "Interoperable reimplementation plus per-build deobfuscation; behaviour claims must come from the shipped jar or the running reference app, never guessed.",
@@ -119,12 +119,12 @@
     {
       "title": "R-11 [P1/M] Scan configuration library",
       "status": "doing",
-      "why": "next (MILESTONES.md M5); research note docs/specs/R-11-scan-configs.research.md"
+      "why": "implemented aa490e8 + 09e87f8, compiled, smoke tests only; full suite and UI pending"
     },
     {
       "title": "R-12 [P2/M] Repeater send groups and single-packet attack",
-      "status": "todo",
-      "why": "Not in the code. Needs R-05."
+      "status": "doing",
+      "why": "branch wp-m6: D-12a done (97b41bd), D-12b and R-12 partial (9d7de42)"
     },
     {
       "title": "R-17 [P2/S] Intruder payload completeness",
@@ -153,8 +153,8 @@
     },
     {
       "title": "D-12 Collaborator leftovers: SNI variant and Zbxl scheme payload variants",
-      "status": "todo",
-      "why": "not ported in D-09"
+      "status": "doing",
+      "why": "branch wp-m6: D-12a done (97b41bd), D-12b and R-12 partial (9d7de42)"
     },
     {
       "title": "R-01 [P0/S] Docs truth pass",
@@ -180,6 +180,56 @@
       "title": "Re-verify URL-level lab parity (Juice Shop 75/75, lab 21/21) for the code after D-09..D-11",
       "status": "blocked",
       "why": "stored Burp lists, paths.txt and lab.py were lost with /tmp; needs a fresh Burp baseline, which the no-Burp-scans rule excludes until the user decides (qa/parity-2026-11-18/SUMMARY.md)"
+    },
+    {
+      "title": "AR-01 [P1/S] Quick architecture fixes: lints, compiled rule sets, intercept liveness, test CA isolation",
+      "status": "todo",
+      "why": "qa/ARCH-REVIEW-2026-11-18.md"
+    },
+    {
+      "title": "AR-02 [P1/M] Engine duties out of App into core",
+      "status": "todo",
+      "why": "qa/ARCH-REVIEW-2026-11-18.md"
+    },
+    {
+      "title": "AR-03 [P1/M] Settings snapshot, then the engine split of Shared",
+      "status": "todo",
+      "why": "qa/ARCH-REVIEW-2026-11-18.md"
+    },
+    {
+      "title": "AR-04 [P1/M] Explicit send context instead of thread-locals",
+      "status": "todo",
+      "why": "qa/ARCH-REVIEW-2026-11-18.md"
+    },
+    {
+      "title": "AR-05 [P2/L] Scanner worker pool and passive-check queue",
+      "status": "todo",
+      "why": "qa/ARCH-REVIEW-2026-11-18.md"
+    },
+    {
+      "title": "AR-06 [P2/M] Lifecycle: cancellation, named joinable threads, no sleep-polling",
+      "status": "todo",
+      "why": "qa/ARCH-REVIEW-2026-11-18.md"
+    },
+    {
+      "title": "AR-07 [P2/M] Event channel and append-only history to the UI",
+      "status": "todo",
+      "why": "qa/ARCH-REVIEW-2026-11-18.md"
+    },
+    {
+      "title": "AR-08 [P2/M] Java sidecar: route replies by id, no lock across the round trip",
+      "status": "todo",
+      "why": "qa/ARCH-REVIEW-2026-11-18.md"
+    },
+    {
+      "title": "AR-09 [P2/M] Bytes, not lossy text, in tool state",
+      "status": "todo",
+      "why": "qa/ARCH-REVIEW-2026-11-18.md"
+    },
+    {
+      "title": "AR-10 [P2/S] One extensibility pattern and a project format plan",
+      "status": "todo",
+      "why": "qa/ARCH-REVIEW-2026-11-18.md"
     }
   ],
   "hypotheses": [],
@@ -947,6 +997,6 @@
       "confidence": "observed"
     }
   ],
-  "handoff": "2026-11-18 evening. tasks.json: 127 tasks, 114 done, 2 rejected, 11 todo (D-12, R-11..R-20 minus done). Since the last handoff a second session worked the roadmap in milestones (MILESTONES.md, worktrees under .worktrees/: fixes, r07, scanner, r11, r15) and finished R-07, R-09 and R-10 with tests (commits 94dbaa7, f7794db, 371ebc5, 54d2343); PR #4 (qa/fixes-2026-11-18: h2 test-lab race, R-10 characterisation rows) merged into parity. Next: R-11 scan configuration library (M5), then D-12/R-12 (M6), R-15 (M7), R-17/R-13 (M8); extension items (R-14, R-16, R-20) last by the user's rule; R-18 decomposition after behaviour work. Open unknowns: timing-only detection for Perl/Python/Ruby code injection; Burp's DOM engine; the scanner-family question. BLOCKED on the user: a fresh Burp baseline for URL-level parity. Traps: cargo only through wp-queue; never 8080/8081; never restart the paseo daemon (it has a zod mismatch that breaks omp/opencode agent creation; fix needs a restart, user's call); NVIDIA NIM free key is heavily throttled; keep evidence out of /tmp; test committed revisions in a .worktrees/ worktree, not in a tree someone is editing.",
-  "updated": "2026-11-18T17:44:59Z"
+  "handoff": "2026-11-18 night, work stopped by the user. parity/2026-11-17 is synced to GitHub. Done today: R-07, R-09, R-10 (omp session + PR #4 tests + cache-poisoning rule from Zg1g), R-01..R-04, R-06, R-05, R-08, D-09..D-11. R-11 scan configuration library implemented (aa490e8, 09e87f8) but only smoke-tested: run the full suite in .worktrees/review and click through Settings > Configuration library next. M6 paused on branch wp-m6 (D-12a done; D-12b and R-12 partial, compiles). Architecture review qa/ARCH-REVIEW-2026-11-18.md added tasks AR-01..AR-10 (keep sync threads; fix engine work on the UI frame, Shared god object, thread lifecycle, per-message regex compiles); AR-01 is next after R-11 testing. Open PRs: #4 (Instinct; its remaining commit f9a4bba contradicts Burp's cache rule, comment posted asking to drop it), #5 (Instinct M7/R-15 claim; comment posted to rebase and not duplicate R-11's config model). Known flaky test: headless::tests::js_crawl_follows_script_written_links_through_the_proxy (Obscura, under load). Blocked on the user: a fresh Burp baseline for URL-level parity. Free models: NVIDIA NIM free key heavily throttled (Kimi K3.1 Pro added to pi/opencode/kilo/omp, effectively unusable today); codebuddy credits exhausted except hy3; paseo cannot create omp/opencode agents (daemon zod mismatch, needs a restart: user's call); pi with nvidia/stepfun-ai/step-5-preview answered.",
+  "updated": "2026-11-18T18:41:53Z"
 }

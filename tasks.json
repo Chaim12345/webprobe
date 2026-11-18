@@ -1232,7 +1232,7 @@
       "acceptance": "Collaborator-everywhere SNI probe (needs a custom SNI in the TLS sender) and the scheme-dependent external-interaction payload variants of burp.Zbxl (http://, Http://, own scheme; trace Zpgu / ZY first), with tests.",
       "effort": "S",
       "status": "todo",
-      "evidence": "Not ported in D-09 (e7b5eff): net sender cannot set a custom SNI; Zpgu/ZY not traced. External interaction still sends only the bare domain."
+      "evidence": "Not ported in D-09 (e7b5eff): net sender cannot set a custom SNI; Zpgu/ZY not traced. External interaction still sends only the bare domain. Progress 2026-11-18: branch wp-m6 (pushed): 97b41bd D-12a Collaborator-everywhere SNI probe with a custom-SNI TLS sender; 9d7de42 WIP D-12b scheme payload variants (partial, compiles, untested)."
     },
     {
       "id": "R-01",
@@ -1352,7 +1352,7 @@
       "acceptance": "Burp's 29 BuiltInConfigs load and can be selected/combined for a scan; 'Audit checks - passive' runs only passive checks; custom configs can be saved and imported from Burp JSON.",
       "effort": "M",
       "status": "todo",
-      "evidence": "src/settings_dialog.rs:172-173 ('not available yet'); /root/burp-re/in/extract/resources/BuiltInConfigs/. Needs R-04."
+      "evidence": "src/settings_dialog.rs:172-173 ('not available yet'); /root/burp-re/in/extract/resources/BuiltInConfigs/. Needs R-04. Progress 2026-11-18 (aa490e8, 09e87f8): library implemented (core/src/scan_library.rs, src/scan_library_ui.rs): 29 built-ins load from the user's Burp jar, per-key overlay in load order as Burp, issue selection enforced at dispatch and report, crawl time/request limits, 'not applied by WebProbe' list, Settings > Configuration library, ordered 'Select from library'; live passive auditing keeps its own issue selection. Compiled, 18 smoke tests; full suite and UI NOT yet run. Known gap: one global scan config (per-scan config with AR-02)."
     },
     {
       "id": "R-12",
@@ -1362,7 +1362,7 @@
       "acceptance": "Tab groups send in sequence (single connection / separate) and in parallel (single-packet over h2, last-byte sync over h1); 20 grouped requests reach a local lab within 5 ms.",
       "effort": "M",
       "status": "todo",
-      "evidence": "Not in the code. Needs R-05."
+      "evidence": "Not in the code. Needs R-05. Progress 2026-11-18: WIP on branch wp-m6 (9d7de42, core/src/send_group.rs partial, compiles, untested). Design note: use an explicit send context, not thread-locals (AR-04 / review F6)."
     },
     {
       "id": "R-13",
