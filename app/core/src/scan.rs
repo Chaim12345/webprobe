@@ -5000,6 +5000,8 @@ mod tests {
         ("SQL injection", "high", "Certain", "/item"),
         ("SQL injection", "high", "Certain", "/search"),
         ("Server-side template injection", "high", "Tentative", "/search"),
+        ("Spoofable client IP address", "info", "Tentative", "/search"),
+        ("Spoofable client IP address", "info", "Tentative", "/search"),
         ("XML external entity injection", "high", "Firm", "/xml"),
     ];
 

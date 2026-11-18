@@ -493,6 +493,19 @@ fn lab(shared: &Shared, alpn: Vec<Vec<u8>>) -> (u16, std::thread::JoinHandle<Str
                         let hb = hpack::Encoder::new().encode(vec![(b":status".as_ref(), b"200".as_ref())]);
                         write_frame(&mut tls, HEADERS, END_HEADERS, f.stream, &hb).unwrap();
                         write_frame(&mut tls, DATA, END_STREAM, f.stream, b"h2").unwrap();
+                        let _ = tls.flush();
+                        // Do not exit with client frames (SETTINGS ACK) still
+                        // unread: closing then sends RST and the response just
+                        // written never reaches the client. Drain until the
+                        // client is done (it closes once it has the response).
+                        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+                        let mut sink = [0u8; 4096];
+                        while std::time::Instant::now() < deadline {
+                            match tls.read(&mut sink) {
+                                Ok(0) | Err(_) => break,
+                                Ok(_) => {}
+                            }
+                        }
                         return "h2".into();
                     }
                 }
