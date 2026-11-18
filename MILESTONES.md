@@ -89,7 +89,7 @@ Worktree: `.worktrees/r07` after M2 integration.
 
 ## M7 — R-15 CLI, configuration and REST
 
-**Status:** pending.
+**Status:** in progress (2026-11-18 evening): claimed by the Instinct task agent (QA/roadmap lane), branch `r15/cli-rest`, not `.worktrees/r15`. Another agent should not start M7 in parallel.
 
 Worktree: `.worktrees/r15`.
 
