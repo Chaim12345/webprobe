@@ -30,6 +30,7 @@ pub mod mime;
 pub mod net;
 pub mod notice;
 pub mod oob;
+pub mod paths;
 pub mod organizer;
 pub mod project;
 pub mod project_files;

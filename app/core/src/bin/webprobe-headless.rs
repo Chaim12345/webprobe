@@ -166,7 +166,11 @@ fn scan_urls(mut args: Vec<String>) {
         let mut known: Vec<net::HistEntry> = shared.crawl_items.snapshot();
         known.extend(shared.history.snapshot().iter().cloned());
         let chosen = report::select_issues(&issues, &options);
-        let items = report::build_report_issues(&chosen, &known, &report::KnowledgeBase::discover());
+        let kb = report::KnowledgeBase::discover_checked().unwrap_or_else(|missing| {
+            eprintln!("{missing}");
+            report::KnowledgeBase::default()
+        });
+        let items = report::build_report_issues(&chosen, &known, &kb);
         let text = report::render(&items, &options, webprobe_core::util::now_secs());
         match std::fs::write(&path, text) {
             Ok(()) => eprintln!("report of {} issue(s) written to {path}", items.len()),

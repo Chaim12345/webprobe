@@ -22,6 +22,16 @@ pub(crate) mod checks;
 /// and point wording (burp.Zbg8, Zuq, Zwez, Zfw9, Zsg0).
 #[path = "insertion.rs"]
 pub(crate) mod insertion;
+
+/// Passive checks, one registered unit each (R-04).
+#[path = "passive_checks.rs"]
+pub(crate) mod passive_checks;
+
+/// Content security policy issues (burp.Zxr9 / Zupz / Zifp).
+#[path = "retirejs.rs"]
+pub(crate) mod retirejs;
+#[path = "csp.rs"]
+pub(crate) mod csp;
 pub(crate) use insertion::{audit_points, inject, inject_payload, InsertionPoint, IpKind};
 #[cfg(test)]
 pub(crate) use insertion::{insertion_points, NameSite, SYNTH_REFERER};
@@ -708,326 +718,22 @@ fn location_host(loc: &str) -> Option<String> {
 /// Passive audit of one exchange. Every issue carries that exchange as its
 /// evidence (one shared, bounded copy).
 pub fn passive_check(e: &HistEntry) -> Vec<ScanIssue> {
-    let mut v = passive_issues(e);
+    passive_check_with(e, &|_| true)
+}
+
+/// [`passive_check`] with the checks switched off in `shared`'s scan
+/// configuration left out (Settings > Scanner > scan configuration).
+pub fn passive_check_for(shared: &Shared, e: &HistEntry) -> Vec<ScanIssue> {
+    let config = shared.scan_config.lock().unwrap().clone();
+    passive_check_with(e, &|id| config.check_enabled(id))
+}
+
+fn passive_check_with(e: &HistEntry, enabled: &dyn Fn(&str) -> bool) -> Vec<ScanIssue> {
+    let mut v = passive_checks::run_passive(e, enabled);
     if !v.is_empty() {
         let ev = ScanEvidence::new(&e.req_raw, e.resp_raw.as_deref());
         for i in &mut v {
             i.evidence = vec![ev.clone()];
-        }
-    }
-    v
-}
-
-fn passive_issues(e: &HistEntry) -> Vec<ScanIssue> {
-    let mut v: Vec<ScanIssue> = Vec::new();
-    let Some(resp) = &e.resp_raw else { return v };
-    let p = util::parse_http(resp);
-    let req = util::parse_http(&e.req_raw);
-    let ok_status = p.status.starts_with('2') || p.status.starts_with('3');
-    let ct = util::get_header(&p.headers, "Content-Type").unwrap_or_default();
-    let body = body_slice(resp, p.head_len);
-    let binary = is_binary(&ct, body);
-    let html = is_document(&ct) && !binary;
-    let text = if binary { String::new() } else { String::from_utf8_lossy(body).into_owned() };
-    let low = text.to_ascii_lowercase();
-
-    // CSRF: a password-bearing POST form without an anti-CSRF token field
-    // (burp.Zbjf SCANNER_ACTIVE_CHECKS_CSRF; passive variant of the family).
-    {
-        let req_body = String::from_utf8_lossy(body_slice(&e.req_raw, req.head_len.min(e.req_raw.len()))).to_lowercase();
-        let method_post = req.first.trim_start().to_ascii_uppercase().starts_with("POST");
-        if method_post && req_body.contains("password") {
-            let has_token = ["csrf", "token", "nonce", "authenticity"].iter().any(|t| req_body.contains(t));
-            if !has_token {
-                v.push(mk_check(CH_CSRF, e,
-                    "POST body carries a password field but no anti-CSRF token field name (csrf/token/nonce/authenticity)."));
-            }
-        }
-    }
-
-    // Content type / charset (burp.Zf9p, PPR_MisstatedMimeType): skipped for
-    // redirects; known charsets are Zf9p.ZY (runtime-dumped).
-    if let Some(resp) = &e.resp_raw {
-        for i in mime_issues(resp) {
-            let mut issue = mk_check(i, e, match i.id {
-                "passive.html-no-charset" => "The response states the content type as HTML but does not specify a character set.",
-                "passive.html-unrecognized-charset" => "The response specifies a character set that is not a recognized standard one.",
-                "passive.content-type-missing" => "The response does not contain a Content-Type header.",
-                _ => "The response contains multiple Content-Type statements.",
-            });
-            issue.confidence = "Certain".into();
-            v.push(issue);
-        }
-    }
-
-    // OpenAPI definition found (passive scan check), burp.Zge_.
-    if let Some(resp) = &e.resp_raw {
-        let path = e.path.split_once("://").and_then(|(_, r)| r.find('/').map(|i| r[i..].to_string())).unwrap_or_else(|| e.path.clone());
-        if crate::burp_checks::openapi_passive(&path, resp) {
-            v.push(mk_check(CH_OPENAPI_PASSIVE, e, "The response contains an OpenAPI definition."));
-        }
-    }
-
-    // Unencrypted communications (Burp KB): the response was served over
-    // plain HTTP, so all of it is interceptable.
-    if !e.https {
-        // Burp raises this once per host, against the root path.
-        let mut i = mk_check(CH_CLEARTEXT, e, "The site communicates over plain HTTP; traffic can be read or modified in transit.");
-        i.path = "/".into();
-        v.push(i);
-    }
-
-    // Frameable response (burp.Zm7y.ZL, issue burp.Zpe_: info / firm): a GET
-    // answered with a non-redirect, sniffed-HTML page that carries at least
-    // one URL-bearing element (burp.Zeyc) and no X-Frame-Options DENY or
-    // SAMEORIGIN. A CSP frame-ancestors policy does not suppress it.
-    {
-        let get = req.first.trim_start().to_ascii_uppercase().starts_with("GET ");
-        let redirect = p.status.starts_with('3');
-        let xfo = util::get_header(&p.headers, "X-Frame-Options").unwrap_or_default();
-        let blocked = xfo.trim().eq_ignore_ascii_case("deny") || xfo.trim().eq_ignore_ascii_case("sameorigin");
-        if get && !redirect && html && !blocked && !burp_sniff_unknown(resp, p.head_len) && has_url_element(&low) {
-            v.push(mk_check(CH_FRAME, e, "The response may be framed by another site (clickjacking risk)."));
-        }
-    }
-
-    if ok_status {
-        // HSTS only means anything over HTTPS.
-        if e.https && !has_header(&p.headers, "Strict-Transport-Security") {
-            v.push(mk_check(CH_HSTS, e,
-                "No HSTS policy on an HTTPS response; downgrade and cookie-stripping attacks stay possible."));
-        }
-        if html {
-            let csp = util::get_header(&p.headers, "Content-Security-Policy").unwrap_or_default();
-            if csp.is_empty() {
-                v.push(mk_check(CH_CSP, e,
-                    "No Content-Security-Policy, so injected scripts are not restricted by a content policy."));
-            }
-            if !has_header(&p.headers, "X-Content-Type-Options") {
-                v.push(mk_check(CH_XCTO, e,
-                    "No nosniff directive; browsers may guess the content type."));
-            }
-            if !has_header(&p.headers, "Referrer-Policy") {
-                v.push(mk_check(CH_REFERRER, e,
-                    "No Referrer-Policy, so URLs (possibly with tokens) leak in the Referer header."));
-            }
-            if !has_header(&p.headers, "Permissions-Policy")
-                && !has_header(&p.headers, "Feature-Policy")
-            {
-                v.push(mk_check(CH_PERMISSIONS, e,
-                    "No Permissions-Policy; powerful browser features are left enabled for embedded content."));
-            }
-            if let Some(server) = util::get_header(&p.headers, "Server") {
-                let discloses = server.contains('/')
-                    || !server.split_whitespace().skip(1).next().unwrap_or("").is_empty();
-                if discloses {
-                    v.push(mk_check(CH_SERVER, e, format!("Server header: {server}")));
-                }
-            }
-            if let Some(xpb) = util::get_header(&p.headers, "X-Powered-By") {
-                v.push(mk_check(CH_XPB, e, format!("X-Powered-By header: {xpb}")));
-            }
-            for h in ["X-AspNet-Version", "X-AspNetMvc-Version"] {
-                if let Some(val) = util::get_header(&p.headers, h) {
-                    v.push(mk_check(CH_ASPNET, e, format!("{h} header: {val}")));
-                }
-            }
-        }
-
-        // cookies lacking flags (all Set-Cookie values; repeated headers included)
-        for (k, val) in &p.headers {
-            if !k.eq_ignore_ascii_case("Set-Cookie") {
-                continue;
-            }
-            let c = parse_cookie(val);
-            let secure = has_flag(&c.attrs, "secure");
-            if e.https && !secure {
-                v.push(mk_check(CH_COOKIE_SECURE, e, val.clone()));
-            }
-            if looks_session_cookie(c.name, c.value) && !has_flag(&c.attrs, "httponly") {
-                v.push(mk_check(CH_COOKIE_HTTPONLY, e, val.clone()));
-            }
-            match attr_value(&c.attrs, "samesite") {
-                None => v.push(mk_check(CH_COOKIE_SAMESITE, e, val.clone())),
-                Some("none") if !secure => {
-                    v.push(mk_check(CH_COOKIE_SAMESITE_NONE, e, val.clone()))
-                }
-                _ => {}
-            }
-        }
-
-        // CORS: compare the response against the Origin that was actually sent.
-        let acao = util::get_header(&p.headers, "Access-Control-Allow-Origin").unwrap_or_default();
-        let acac = util::get_header(&p.headers, "Access-Control-Allow-Credentials")
-            .map(|v| v.eq_ignore_ascii_case("true"))
-            .unwrap_or(false);
-        if acao == "*" && acac {
-            v.push(mk_check(CH_CORS_WILDCARD_CREDS, e,
-                "Access-Control-Allow-Origin: * with credentials (browsers reject it, but the policy is broken)."));
-        } else if acao == "*" {
-            v.push(mk_check(CH_CORS_WILDCARD, e,
-                "Access-Control-Allow-Origin: * lets any site read the response."));
-        } else if acao.eq_ignore_ascii_case("null") {
-            v.push(mk_check(CH_CORS_NULL, e,
-                "Access-Control-Allow-Origin: null trusts sandboxed/data: origins."));
-        } else if let Some(origin) = util::get_header(&req.headers, "Origin") {
-            if !acao.is_empty() && acao.eq_ignore_ascii_case(&origin) {
-                if acac {
-                    v.push(mk_check(CH_CORS_CREDS, e,
-                        format!("Access-Control-Allow-Origin reflects {origin} and allows credentials.")));
-                } else {
-                    v.push(mk_check(CH_CORS_REFLECT, e,
-                        format!("Access-Control-Allow-Origin reflects the caller-supplied origin {origin}.")));
-                }
-            }
-        }
-
-        // A redirect that hands a session cookie to a different host.
-        if p.status.starts_with('3') {
-            if let Some(loc) = util::get_header(&p.headers, "Location") {
-                let same_host = location_host(&loc)
-                    .map(|h| h == e.host.to_ascii_lowercase())
-                    .unwrap_or(true);
-                let session_cookie = p.headers.iter().filter(|(k, _)| k.eq_ignore_ascii_case("Set-Cookie"))
-                    .any(|(_, val)| {
-                        let c = parse_cookie(val);
-                        looks_session_cookie(c.name, c.value)
-                    });
-                if !same_host && session_cookie {
-                    v.push(mk_check(CH_REDIRECT_COOKIE, e,
-                        format!("302 to {loc} sets a session cookie that is not scoped to the target host.")));
-                }
-            }
-        }
-
-        // Sensitive HTTPS response that a shared cache may store.
-        if e.https {
-            let cc = util::get_header(&p.headers, "Cache-Control")
-                .unwrap_or_default()
-                .to_ascii_lowercase();
-            let set_cookie = p.headers.iter().any(|(k, _)| k.eq_ignore_ascii_case("Set-Cookie"));
-            let sensitive = set_cookie
-                || low.contains("\"token\"")
-                || low.contains("password")
-                || low.contains("api_key");
-            let cacheable = cc.is_empty() || (cc.contains("public") && !cc.contains("no-store"));
-            if sensitive && cacheable {
-                v.push(mk_check(CH_CACHE, e,
-                    "Sensitive HTTPS response without Cache-Control: no-store/private."));
-            }
-        }
-    }
-
-    if !binary {
-        // error / stack-trace signatures in the response body
-        for (sig, name) in ERROR_SIGNATURES {
-            if body.windows(sig.len()).any(|w| w.eq_ignore_ascii_case(sig.as_bytes())) {
-                v.push(mk("medium", name, e, format!("Signature matched: {sig}")));
-            }
-        }
-        // secrets in HTML comments
-        let mut start = 0;
-        while let Some(copen) = text[start..].find("<!--") {
-            let cstart = start + copen + 4;
-            let Some(cend) = text[cstart..].find("-->") else { break };
-            let comment = &text[cstart..cstart + cend];
-            for (kw, name) in SECRET_KEYWORDS {
-                if comment.to_ascii_lowercase().contains(&kw.to_ascii_lowercase()) {
-                    v.push(mk("info", name, e, comment.trim().chars().take(120).collect::<String>()));
-                }
-            }
-            start = cstart + cend + 3;
-        }
-        // exposed metadata / backup files
-        if ok_status {
-            let path = e.path.to_ascii_lowercase();
-            if (path.contains("/.git/") || path.ends_with("/.git"))
-                && (text.contains("[core]") || text.contains("ref: refs/"))
-            {
-                v.push(mk_check(CH_GIT, e,
-                    "Git metadata served by the web root (repository layout and history are exposed)."));
-            }
-            let env_path = path.ends_with("/.env") || path.contains("/.env?");
-            if env_path && (text.contains("APP_KEY=") || text.contains("DB_PASSWORD=") || text.contains("SECRET_KEY=")) {
-                v.push(mk_check(CH_ENV, e,
-                    "Environment file served by the web root (secrets and credentials are exposed)."));
-            }
-            if html
-                && (low.contains("<title>index of") || low.contains("<h1>index of")
-                    || low.contains("directory listing for"))
-            {
-                v.push(mk_check(CH_DIR_LISTING, e,
-                    "The server returns a directory index instead of refusing the request."));
-            }
-            if path.ends_with("/robots.txt") {
-                v.push(mk_check(CH_ROBOTS, e,
-                    "robots.txt is reachable; its Disallow entries map the hidden parts of the site."));
-            }
-        }
-        if !text.is_empty() {
-            // burp.Zbz9: an unknown sniffed MIME limits the search to the headers.
-            let head_text;
-            let text: &str = if burp_sniff_unknown(resp, p.head_len) {
-                head_text = String::from_utf8_lossy(&resp[..p.head_len.min(resp.len())]).into_owned();
-                &head_text
-            } else {
-                &text
-            };
-            if let Some(addr) = find_email_excluding(text, &String::from_utf8_lossy(&e.req_raw)) {
-                v.push(mk_check(CH_EMAIL, e, format!("Address found in the response: {addr}")));
-            }
-            if let Some(ip) = find_private_ip(text) {
-                v.push(mk_check(CH_PRIVATE_IP, e, format!("Address found in the response: {ip}")));
-            }
-            if let Some(card) = find_card(text) {
-                v.push(mk_check(CH_CREDIT_CARD, e, format!("Luhn-valid number found in the response: {card}")));
-            }
-        }
-    }
-
-    if html {
-        // mixed content: an HTTPS document pulling subresources over HTTP
-        let mixed = ["script", "iframe", "img", "source", "video", "audio"]
-            .iter()
-            .flat_map(|t| tags(&low, *t))
-            .find(|t| t.contains("http://"));
-        let mixed_link = tags(&low, "link")
-            .into_iter()
-            .find(|t| t.contains("stylesheet") && t.contains("http://"));
-        if e.https {
-            if let Some(tag) = mixed.or(mixed_link) {
-                v.push(mk_check(CH_MIXED, e,
-                    format!("HTTPS page loads a subresource over HTTP: {}", tag.trim())));
-            }
-        }
-        // login form posted in clear text
-        if has_password_input(&low) {
-            let forms = tags(&low, "form");
-            let http_action = forms
-                .iter()
-                .find(|t| t.contains("action=\"http://") || t.contains("action='http://"));
-            let relative_action = !e.https
-                && forms
-                    .iter()
-                    .any(|t| !t.contains("action=\"http") && !t.contains("action='http"));
-            if let Some(tag) = http_action {
-                v.push(mk_check(CH_LOGIN_HTTP, e,
-                    format!("Password form submits over HTTP: {}", tag.trim())));
-            } else if relative_action {
-                v.push(mk_check(CH_LOGIN_HTTP, e,
-                    "Password form on a plain-HTTP page submits its credentials unencrypted."));
-            }
-            // password field with autocomplete enabled
-            let weak = tags(&low, "input").into_iter().find(|t| {
-                (t.contains("type=\"password\"") || t.contains("type='password'"))
-                    && !(t.contains("autocomplete=\"off\"")
-                        || t.contains("autocomplete='off'")
-                        || t.contains("autocomplete=\"new-password\"")
-                        || t.contains("autocomplete='new-password'"))
-            });
-            if let Some(tag) = weak {
-                v.push(mk_check(CH_AUTOCOMPLETE, e, tag.trim().to_string()));
-            }
         }
     }
     v
@@ -1319,7 +1025,7 @@ pub fn crawl_and_audit(shared: &Arc<Shared>, start_urls: &[String], audit_only: 
             if shared.scan.stop.load(Ordering::SeqCst) {
                 return;
             }
-            add_passive_issues(shared, passive_check(&e));
+            add_passive_issues(shared, passive_check_for(shared, &e));
             let oob = pooled_oob(shared, &e.req_raw);
             start_active_scan(shared.clone(), e, &oob, &[]);
             // start_active_scan claims the scanner before it returns.
@@ -3016,14 +2722,34 @@ pub(crate) fn with_path_segment(path: &str, idx: usize, value: &str) -> String {
 }
 
 
-/// Every audit check as (id, issue it reports, true for per-point checks),
-/// in run order, for the scan configuration's check list.
-pub fn check_catalogue() -> Vec<(&'static str, &'static str, bool)> {
-    let mut v: Vec<(&'static str, &'static str, bool)> = vec![(checks::STORED_INPUT_ID, checks::STORED_INPUT_ISSUE, true)];
-    v.extend(checks::POINT_CHECKS.iter().map(|c| (c.id(), c.issue(), true)));
-    v.extend(checks::STORED_CHECKS.iter().map(|c| (c.id(), c.issue(), true)));
-    v.extend(checks::REQUEST_CHECKS.iter().map(|c| (c.id(), c.issue(), false)));
+/// Where a check runs, for the scan configuration's check list.
+pub const SCOPE_POINT: &str = "per insertion point";
+pub const SCOPE_REQUEST: &str = "per request / host";
+pub const SCOPE_PASSIVE: &str = "passive, per response";
+
+/// Every audit check as (id, issue it reports, scope), in run order: the
+/// active checks, then the passive ones (R-04), for the scan
+/// configuration's check list.
+pub fn check_catalogue() -> Vec<(&'static str, &'static str, &'static str)> {
+    let mut v: Vec<(&'static str, &'static str, &'static str)> = vec![(checks::STORED_INPUT_ID, checks::STORED_INPUT_ISSUE, SCOPE_POINT)];
+    v.extend(checks::POINT_CHECKS.iter().map(|c| (c.id(), c.issue(), SCOPE_POINT)));
+    v.extend(checks::STORED_CHECKS.iter().map(|c| (c.id(), c.issue(), SCOPE_POINT)));
+    v.extend(checks::REQUEST_CHECKS.iter().map(|c| (c.id(), c.issue(), SCOPE_REQUEST)));
+    v.extend(passive_checks::PASSIVE_CHECKS.iter().map(|c| (c.id, c.issue, SCOPE_PASSIVE)));
     v
+}
+
+/// What a check needs and lacks, for the Settings check list: the
+/// vulnerable-dependency check without a retire.js repository says so.
+pub fn check_note(id: &str) -> Option<String> {
+    if id != retirejs::CH_VULNERABLE_JS.id {
+        return None;
+    }
+    match retirejs::repository() {
+        Err(e) => Some(e),
+        Ok(r) if !r.skipped.is_empty() => Some(format!("{} retire.js extractor(s) use regex features WebProbe does not support (look-around, back-references) and are skipped: {}", r.skipped.len(), r.skipped.join("; "))),
+        Ok(_) => None,
+    }
 }
 
 /// The multipart boundary of a `multipart/form-data` Content-Type.

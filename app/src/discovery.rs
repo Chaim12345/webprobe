@@ -102,33 +102,28 @@ pub const BUILTIN_DIRS: &[&str] = &[
     "users", "v1", "v2", "vendor", "web", "webadmin", ".git", ".svn", "console", "manage", "management", "portal", "internal",
 ];
 
-/// Where Burp's PayloadStrings may be found at runtime.
-pub fn wordlist_dirs() -> Vec<std::path::PathBuf> {
-    let mut v = Vec::new();
-    if let Some(d) = std::env::var_os("WEBPROBE_WORDLIST_DIR") {
-        v.push(std::path::PathBuf::from(d));
-    }
-    v.push(std::path::PathBuf::from("/root/burp-re/in/extract/resources/PayloadStrings"));
-    v
-}
+
 
 /// One-entry-per-line list, blank lines and `#` comments dropped.
 pub fn parse_wordlist(text: &str) -> Vec<String> {
     text.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')).map(str::to_string).collect()
 }
 
-/// Burp's named list ("Filenames - short", ...) or the built-in fallback.
+/// Burp's named list ("Filenames - short", ...) from the directory
+/// `paths::payload_strings` resolves, or the built-in fallback; the source
+/// string says which, and why when Burp's lists are not found.
 pub fn load_named_list(name: &str, fallback: &[&str]) -> (Vec<String>, String) {
-    for d in wordlist_dirs() {
-        let p = d.join(format!("{name}.pay"));
-        if let Ok(t) = std::fs::read_to_string(&p) {
-            let words = parse_wordlist(&t);
-            if !words.is_empty() {
-                return (words, p.display().to_string());
+    let builtin = || fallback.iter().map(|s| s.to_string()).collect();
+    match webprobe_core::paths::payload_strings() {
+        Ok(d) => {
+            let p = d.join(format!("{name}.pay"));
+            match std::fs::read_to_string(&p).map(|t| parse_wordlist(&t)) {
+                Ok(words) if !words.is_empty() => (words, p.display().to_string()),
+                _ => (builtin(), format!("built-in ({} not found)", p.display())),
             }
         }
+        Err(missing) => (builtin(), format!("built-in ({missing})")),
     }
-    (fallback.iter().map(|s| s.to_string()).collect(), "built-in".into())
 }
 
 /// One reported item.

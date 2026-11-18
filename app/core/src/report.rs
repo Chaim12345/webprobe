@@ -27,7 +27,7 @@
 
 
 use std::collections::{BTreeMap, HashMap};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::scan::ScanIssue;
 use crate::util::html_encode;
@@ -235,32 +235,19 @@ impl KnowledgeBase {
         kb
     }
 
-    /// Where a Burp KnowledgeBase may live on this machine, in order:
-    /// `$WEBPROBE_KB_DIR`, `~/.config/webprobe/KnowledgeBase/Issues`, and an
-    /// extracted Burp jar under /root/burp-re. Nothing is bundled: the texts
-    /// are PortSwigger's; without a KB those sections are omitted, as Burp
-    /// omits them when an issue has none.
-    pub fn candidate_dirs() -> Vec<PathBuf> {
-        let mut v = Vec::new();
-        if let Some(d) = std::env::var_os("WEBPROBE_KB_DIR") {
-            v.push(PathBuf::from(d));
-        }
-        if let Some(home) = std::env::var_os("HOME") {
-            v.push(PathBuf::from(home).join(".config/webprobe/KnowledgeBase/Issues"));
-        }
-        v.push(PathBuf::from("/root/burp-re/in/extract/resources/KnowledgeBase/Issues"));
-        v
+    /// Burp's KnowledgeBase from wherever `paths::knowledge_base` finds it
+    /// (an override, an extracted Burp `resources/` directory, or
+    /// `~/.config/webprobe/KnowledgeBase/Issues`). Nothing is bundled: the
+    /// texts are PortSwigger's. Without one, reports omit those sections
+    /// (as Burp does for an issue with none) and the caller shows why.
+    pub fn discover_checked() -> Result<Self, crate::paths::Missing> {
+        let dir = crate::paths::knowledge_base()?;
+        Ok(Self::load_dir(&dir))
     }
 
-    /// The first candidate directory holding definitions.
+    /// [`KnowledgeBase::discover_checked`], empty when there is none.
     pub fn discover() -> Self {
-        for d in Self::candidate_dirs() {
-            let kb = Self::load_dir(&d);
-            if !kb.entries.is_empty() {
-                return kb;
-            }
-        }
-        Self::default()
+        Self::discover_checked().unwrap_or_default()
     }
 
     /// Definition for an issue name. Names with a qualifier in parentheses

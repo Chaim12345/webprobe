@@ -2210,7 +2210,7 @@ fn record(shared: &Shared, req: &[u8], resp: Option<Vec<u8>>, note: Option<Strin
             }
         };
         if within_scope && within_cap {
-            let issues = crate::scan::passive_check(&e);
+            let issues = crate::scan::passive_check_for(shared, &e);
             crate::scan::add_passive_issues(shared, issues);
         }
     }

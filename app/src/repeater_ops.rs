@@ -1417,7 +1417,7 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
     match action {
         RepAction::PassiveScan => {
             if let Some(e) = tab_entry(app) {
-                let issues = crate::scan::passive_check(&e);
+                let issues = crate::scan::passive_check_for(&app.shared, &e);
                 let n = issues.len();
                 crate::scan::add_passive_issues(&app.shared, issues);
                 toast(Level::Info, format!("Passive scan done: {n} issue(s)"));

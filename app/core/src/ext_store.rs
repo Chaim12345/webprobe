@@ -231,17 +231,11 @@ impl CatalogueEntry {
     }
 }
 
-/// Where the catalogue lives: $WEBPROBE_EXTENSIONS_DIR, `extensions/` next to
-/// the binary (or two levels up from target/<profile>), else the source tree.
+/// Where the catalogue lives (`paths::extensions_dir`): an override, an
+/// `extensions/` directory next to the binary, else the catalogue embedded
+/// in the binary, written out to WebProbe's data directory.
 pub fn catalogue_dir() -> Option<PathBuf> {
-    let mut candidates: Vec<PathBuf> = std::env::var_os("WEBPROBE_EXTENSIONS_DIR").map(PathBuf::from).into_iter().collect();
-    if let Ok(exe) = std::env::current_exe() {
-        for up in exe.ancestors().skip(1).take(4) {
-            candidates.push(up.join("extensions"));
-        }
-    }
-    candidates.push(PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../extensions")));
-    candidates.into_iter().find(|d| d.join("catalogue.json").is_file()).map(|d| std::fs::canonicalize(&d).unwrap_or(d))
+    crate::paths::extensions_dir().ok().map(|d| std::fs::canonicalize(&d).unwrap_or(d))
 }
 
 pub fn load_catalogue(dir: &std::path::Path) -> Result<Vec<CatalogueEntry>, String> {

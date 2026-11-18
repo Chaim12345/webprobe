@@ -194,7 +194,13 @@ pub fn report_window(app: &mut crate::App, ctx: &egui::Context) {
         let selected = select_issues(&chosen, &app.eng.report.options);
         let history = app.shared.history.snapshot();
         if app.eng.kb.is_none() {
-            app.eng.kb = Some(KnowledgeBase::discover());
+            app.eng.kb = Some(match KnowledgeBase::discover_checked() {
+                Ok(kb) => kb,
+                Err(missing) => {
+                    crate::feedback::toast(crate::feedback::Level::Warn, missing.to_string());
+                    KnowledgeBase::default()
+                }
+            });
         }
         let kb = app.eng.kb.as_ref().unwrap();
         let ris = build_report_issues(&selected, &history, kb);

@@ -285,9 +285,9 @@ fn scan_configuration(app: &mut App, ui: &mut Ui) {
             config.disabled_checks = crate::scan::check_catalogue().into_iter().map(|(id, _, _)| id.to_string()).collect();
         }
     });
-    ui.label(RichText::new("Checks per insertion point, then checks per request or host. A check that is off does not run and reports nothing.").size(12.0).color(theme::ink_faint()));
+    ui.label(RichText::new("Checks per insertion point, then per request or host, then the passive checks. A check that is off does not run and reports nothing.").size(12.0).color(theme::ink_faint()));
     egui::Grid::new("scan_checks").striped(true).num_columns(3).spacing([12.0, 2.0]).show(ui, |ui| {
-        for (id, issue, per_point) in crate::scan::check_catalogue() {
+        for (id, issue, scope) in crate::scan::check_catalogue() {
             let mut on = config.check_enabled(id);
             if ui.checkbox(&mut on, "").changed() {
                 if on {
@@ -299,9 +299,15 @@ fn scan_configuration(app: &mut App, ui: &mut Ui) {
             ui.label(RichText::new(issue).size(12.5).color(theme::ink()));
             // The id names the method, which tells apart checks reporting the
             // same issue (error-based and boolean SQL injection, say).
-            let method = id.trim_start_matches("active.").replace('-', " ");
-            let scope = if per_point { "per insertion point" } else { "per request / host" };
-            ui.label(RichText::new(format!("{method} \u{b7} {scope}")).size(12.0).color(theme::ink_faint()));
+            let method = id.trim_start_matches("active.").trim_start_matches("passive.").replace('-', " ");
+            let label = ui.label(RichText::new(format!("{method} \u{b7} {scope}")).size(12.0).color(theme::ink_faint()));
+            if let Some(note) = crate::scan::check_note(id) {
+                label.on_hover_text(&note);
+                ui.end_row();
+                ui.label("");
+                ui.label(RichText::new(note).size(11.5).color(theme::c(theme::WARN)));
+                ui.label("");
+            }
             ui.end_row();
         }
     });

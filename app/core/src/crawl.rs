@@ -291,13 +291,7 @@ mod tests {
 /// Locate a Chromium/Chrome binary (the real one, not a wrapper script that
 /// forces a shared profile).
 pub fn chromium_binary() -> Option<String> {
-    let mut cands: Vec<String> = vec!["/usr/bin/chromium".into(), "/usr/bin/google-chrome".into(), "/usr/bin/chromium-browser".into()];
-    if let Ok(rd) = std::fs::read_dir("/opt/BurpSuite/burpbrowser") {
-        for d in rd.flatten() {
-            cands.push(d.path().join("chrome").display().to_string());
-        }
-    }
-    cands.into_iter().find(|b| std::path::Path::new(b).exists())
+    crate::paths::chromium().ok().map(|p| p.display().to_string())
 }
 
 /// A request the page made, as reported by DevTools.
@@ -660,7 +654,7 @@ fn eval_json<T: serde::de::DeserializeOwned>(cdp: &mut Cdp, js: &str) -> Option<
 /// (--host-resolver-rules) and its background services are off, so nothing
 /// leaves for other hosts.
 pub fn browser_crawl(shared: &Arc<Shared>, start_url: &str) -> Result<Vec<SeenRequest>, String> {
-    let bin = chromium_binary().ok_or("no Chromium/Chrome binary found")?;
+    let bin = crate::paths::chromium().map_err(|m| m.to_string())?.display().to_string();
     let limits = shared.scan_config.lock().unwrap().crawl.clone();
     let (scheme, rest) = start_url.split_once("://").unwrap_or(("http", start_url));
     let authority = rest.split('/').next().unwrap_or("").to_string();

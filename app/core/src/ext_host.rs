@@ -325,28 +325,20 @@ fn response_status_line(raw: &[u8]) -> (String, i64, String) {
 }
 
 impl JavaSidecar {
-    /// Burp jar carrying the Montoya API classes (override with
-    /// WEBPROBE_BURP_JAR).
-    pub fn burp_jar() -> String {
-        std::env::var("WEBPROBE_BURP_JAR")
-            .unwrap_or_else(|_| "/opt/BurpSuite/burpsuite.jar".into())
-    }
+
 
     /// Launches the sidecar JVM and waits for it to load the extension
     /// (the ping reply only comes back after `initialize()` completed).
     pub fn spawn(ext_jar: &str) -> Result<JavaSidecar, String> {
-        let burp_jar = Self::burp_jar();
-        let bridge = concat!(env!("CARGO_MANIFEST_DIR"), "/../sidecar/MontoyaBridge.java");
-        if !std::path::Path::new(&burp_jar).exists() {
-            return Err(format!("Burp jar with the Montoya API not found: {burp_jar}"));
-        }
-        if !std::path::Path::new(bridge).exists() {
-            return Err(format!("Bridge source missing: {bridge}"));
-        }
+        // The Montoya API classes come from the jar the resolver finds; the
+        // bridge is WebProbe's own source, embedded and written out.
+        let java = crate::paths::java().map_err(|m| m.to_string())?;
+        let burp_jar = crate::paths::montoya_jar().map_err(|m| m.to_string())?;
+        let bridge = crate::paths::montoya_bridge_source().map_err(|e| format!("could not write the Montoya bridge source: {e}"))?;
         if !std::path::Path::new(ext_jar).exists() {
             return Err(format!("Extension jar not found: {ext_jar}"));
         }
-        let mut child = Command::new("java")
+        let mut child = Command::new(java)
             .arg("-cp")
             .arg(&burp_jar)
             .arg(bridge)
@@ -683,7 +675,7 @@ mod tests {
     #[test]
     fn java_sidecar_runs_a_real_montoya_extension() {
         let jar = concat!(env!("CARGO_MANIFEST_DIR"), "/../sidecar/demo-ext/demo-ext.jar");
-        if !std::path::Path::new(&JavaSidecar::burp_jar()).exists()
+        if crate::paths::montoya_jar().is_err()
             || !std::path::Path::new(jar).exists()
         {
             eprintln!("skipping: sidecar prerequisites missing (Burp jar or demo-ext.jar)");

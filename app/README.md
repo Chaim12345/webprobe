@@ -42,6 +42,20 @@ Useful environment variables:
 | `WEBPROBE_EXTENSIONS_DIR` | extension catalogue location |
 | `WEBPROBE_BODY_DIR` | where history bodies are kept while running (default `$XDG_CACHE_HOME/webprobe`; avoid tmpfs) |
 
+External resources (`core/src/paths.rs`). Nothing of PortSwigger's is bundled; where a resource is missing, the
+feature that needs it says what is missing, where it looked and how to provide it.
+
+| Variable | Resource | Then tried |
+|---|---|---|
+| `WEBPROBE_BURP_RESOURCES` | a `resources/` directory extracted from burpsuite.jar (`unzip burpsuite.jar 'resources/*'`) | — |
+| `WEBPROBE_KB_DIR` | issue texts for reports | `$WEBPROBE_BURP_RESOURCES/KnowledgeBase/Issues`, `~/.config/webprobe/KnowledgeBase/Issues`, `<data>/KnowledgeBase/Issues` |
+| `WEBPROBE_WORDLIST_DIR` | content discovery wordlists (`*.pay`) | `…/PayloadStrings` in the same places |
+| `WEBPROBE_RETIREJS` | a retire.js `jsrepository.json` | `…/RetireJS/retirejs_repository.json` or `jsrepository.json` in the same places |
+| `WEBPROBE_BURP_JAR` | Montoya API classes for Java extensions (burpsuite.jar or montoya-api.jar) | `~/.config/webprobe/montoya-api.jar`, `$WEBPROBE_BURP_HOME`, `/opt/BurpSuite*`, `~/BurpSuite*` |
+| `WEBPROBE_JAVA` | `java` for Java (Montoya) extensions | `$JAVA_HOME/bin/java`, `java` on `$PATH` |
+| `WEBPROBE_CHROMIUM`, `WEBPROBE_BURP_BROWSER` | browser for the crawler / Open browser | `/usr/bin/chromium` etc., Burp's `burpbrowser/` |
+| `WEBPROBE_DATA_DIR` | where WebProbe writes out its own embedded files (Montoya bridge, extension catalogue) | `$XDG_DATA_HOME/webprobe`, `~/.local/share/webprobe` |
+
 SIGTERM or SIGINT closes the app cleanly: the project is saved and no crash-recovery prompt appears next time.
 
 ## UI automation

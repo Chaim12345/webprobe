@@ -882,8 +882,8 @@ pub fn search(app: &mut App, ui: &mut Ui) {
 /// versions are installed.
 fn burp_bundled_browsers() -> Vec<std::path::PathBuf> {
     let mut out: Vec<(u64, std::path::PathBuf)> = Vec::new();
-    for root in ["/opt/BurpSuite/burpbrowser", "/usr/lib/burpbrowser"] {
-        let Ok(entries) = std::fs::read_dir(root) else { continue };
+    for root in webprobe_core::paths::burp_browser_roots() {
+        let Ok(entries) = std::fs::read_dir(&root) else { continue };
         for e in entries.flatten() {
             let p = e.path();
             let chrome = p.join("chrome");
@@ -1221,7 +1221,11 @@ pub fn extensions(app: &mut App, ui: &mut Ui) {
         }
         _ => {
             ui.label(RichText::new("Extensions settings").strong().size(14.0).color(theme::ink()));
-            ui.label(RichText::new(format!("Java runtime for extensions: sidecar JVM against {}", crate::ext_host::JavaSidecar::burp_jar())).size(12.5).color(theme::ink_dim()));
+            let jar = match webprobe_core::paths::montoya_jar() {
+                Ok(p) => format!("sidecar JVM against {}", p.display()),
+                Err(missing) => missing.to_string(),
+            };
+            ui.label(RichText::new(format!("Java runtime for extensions: {jar}")).size(12.5).color(theme::ink_dim()));
         }
     }
 }
@@ -1236,7 +1240,7 @@ fn bapp_store(app: &mut App, ui: &mut Ui) {
     ui.label(RichText::new("Extensions in this installation's catalogue. Install starts one in the background and keeps it in your extension list. Burp .jar extensions (BApps) load through Installed > Add > Java.").size(12.5).color(theme::ink_dim()));
     ui.add_space(6.0);
     let Some(dir) = ext_store::catalogue_dir() else {
-        ui.label(RichText::new("No extension catalogue found (extensions/catalogue.json; set WEBPROBE_EXTENSIONS_DIR).").size(12.5).color(theme::ink_dim()));
+        ui.label(RichText::new("The extension catalogue could not be written out to WebProbe's data directory (set WEBPROBE_EXTENSIONS_DIR or WEBPROBE_DATA_DIR).").size(12.5).color(theme::ink_dim()));
         return;
     };
     let cat = match ext_store::load_catalogue(&dir) {

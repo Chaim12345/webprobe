@@ -627,7 +627,7 @@ fn bulk_history_command(app: &mut App, entries: &[net::HistEntry], cmd: &str) {
         }
         "passive" => {
             for e in entries {
-                crate::scan::add_passive_issues(&app.shared, crate::scan::passive_check(e));
+                crate::scan::add_passive_issues(&app.shared, crate::scan::passive_check_for(&app.shared, e));
             }
             feedback::toast(feedback::Level::Success, format!("Passive scan of {n} item(s) done"));
         }
@@ -1033,7 +1033,7 @@ fn proxy_history(app: &mut App, ui: &mut Ui) {
                 app.tab = Tab::BurpAi;
             }
             "passive" => {
-                crate::scan::add_passive_issues(&app.shared, crate::scan::passive_check(&e));
+                crate::scan::add_passive_issues(&app.shared, crate::scan::passive_check_for(&app.shared, &e));
                 feedback::toast(feedback::Level::Info, "Passive scan of the selected message done");
             }
             "show_browser" => app.browser_url = Some(("Show response in browser".into(), format!("http://webprobe/show/{}", e.id))),

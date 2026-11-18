@@ -341,7 +341,7 @@ pub fn site_map_menu(ui: &mut egui::Ui, app: &mut crate::App, origin: &str, bran
             crate::feedback::toast(crate::feedback::Level::Info, format!("Active scan of {n} item(s) started"));
         } else {
             for e in &entries {
-                crate::scan::add_passive_issues(&app.shared, crate::scan::passive_check(e));
+                crate::scan::add_passive_issues(&app.shared, crate::scan::passive_check_for(&app.shared, e));
             }
             crate::feedback::toast(crate::feedback::Level::Success, format!("Passive scan of {n} item(s) done"));
         }
