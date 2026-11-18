@@ -38,7 +38,7 @@ pub(crate) struct PassiveCtx<'a> {
 }
 
 impl<'a> PassiveCtx<'a> {
-    fn new(e: &'a HistEntry, resp: &'a [u8], state: Option<&'a crate::passive_state::PassiveState>, enabled: &'a dyn Fn(&str) -> bool) -> Self {
+    pub(crate) fn new(e: &'a HistEntry, resp: &'a [u8], state: Option<&'a crate::passive_state::PassiveState>, enabled: &'a dyn Fn(&str) -> bool) -> Self {
         let p = util::parse_http(resp);
         let req = util::parse_http(&e.req_raw);
         let ok_status = p.status.starts_with('2') || p.status.starts_with('3');
@@ -76,6 +76,7 @@ pub(crate) static PASSIVE_CHECKS: &[PassiveCheck] = &[
     unit!(CH_HTML_NO_CHARSET, |cx, v| mime(cx, v, CH_HTML_NO_CHARSET)),
     unit!(CH_HTML_BAD_CHARSET, |cx, v| mime(cx, v, CH_HTML_BAD_CHARSET)),
     unit!(CH_OPENAPI_PASSIVE, openapi),
+    unit!(CH_GRAPHQL_ENDPOINT_FOUND, graphql_endpoint_found),
     unit!(CH_CLEARTEXT, unencrypted),
     unit!(CH_FRAME, frameable),
     unit!(CH_HSTS, hsts),
@@ -342,6 +343,16 @@ fn private_key(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
     }
     if found {
         v.push(mk_check(CH_PRIVATE_KEY, cx.e, "The response appears to contain a cryptographic private key."));
+    }
+}
+
+/// burp.Zwg_: the existing exchange carries a GraphQL query and a parsed
+/// GraphQL response. No probe is sent (Information, Certain).
+pub(crate) const CH_GRAPHQL_ENDPOINT_FOUND: CheckDef = CheckDef { id: "passive.graphql-endpoint-found", name: "GraphQL endpoint found", sev: "info", confidence: "Certain" };
+
+fn graphql_endpoint_found(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
+    if crate::scan::checks::graphql_query(&cx.e.req_raw).is_some() && crate::scan::checks::graphql_response(cx.resp).is_some() {
+        v.push(mk_check(CH_GRAPHQL_ENDPOINT_FOUND, cx.e, "The request and response identify a GraphQL endpoint."));
     }
 }
 
@@ -1360,6 +1371,17 @@ mod tests {
             assert!(only(&ex("/e", true, HTML, neg), pack::CH_DB_CONNECTION).is_empty(), "{neg}");
         }
         assert_eq!(pack::db_strings(b"provider=sqloledb;data source=srv;initial catalog=x;uid=u;pwd= ;'....................").1, 2 | 4, "the first pair (provider=) is skipped; an empty pwd counts but adds no flag");
+    }
+
+    #[test]
+    fn graphql_endpoint_found_requires_query_and_graphql_response() {
+        let req = "POST /graphql HTTP/1.1\r\nHost: example.com\r\nContent-Type: application/json\r\nContent-Length: 27\r\n\r\n{\"query\":\"query{__typename}\"}";
+        let found = ex_req("/graphql", req, "Content-Type: application/json\r\n", r#"{"data":{"__typename":"Query"}}"#);
+        assert_eq!(only(&found, CH_GRAPHQL_ENDPOINT_FOUND).len(), 1);
+        let ordinary = ex_req("/graphql", req, "Content-Type: application/json\r\n", r#"{"ordinary":true}"#);
+        assert!(only(&ordinary, CH_GRAPHQL_ENDPOINT_FOUND).is_empty());
+        let no_query = ex_req("/graphql", "POST /graphql HTTP/1.1\r\nHost: example.com\r\nContent-Length: 2\r\n\r\n{}", "Content-Type: application/json\r\n", r#"{"data":{}}"#);
+        assert!(only(&no_query, CH_GRAPHQL_ENDPOINT_FOUND).is_empty());
     }
 
     /// The new pack, each switched off in the scan configuration.

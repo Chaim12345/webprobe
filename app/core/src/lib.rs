@@ -55,6 +55,8 @@ pub mod ws_repeater;
 #[cfg(test)]
 mod ws_tests;
 #[cfg(test)]
+mod jwt_tests;
+#[cfg(test)]
 mod streaming_tests;
 pub mod setup_page;
 pub mod sitemap_compare;
