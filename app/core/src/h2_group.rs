@@ -117,3 +117,74 @@ fn finish_item(shared: &Shared, item: &GroupItem, request: Vec<u8>, up: crate::n
     r.arrival = arrival.map(|a| (a, total));
     on_result(n, r);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use std::sync::{Arc, Barrier};
+
+    /// R-12 over HTTP/2, the single-packet attack: the whole group goes
+    /// out on ONE connection at once. The lab answers each request only
+    /// once ALL of them have arrived (a barrier per request): a client
+    /// that sent the group one request at a time, waiting for each
+    /// response, would deadlock against the barrier and time out instead
+    /// of passing.
+    #[test]
+    fn parallel_single_packet_one_connection_all_at_once() {
+        const N: usize = 6;
+        let mut shared = Shared::new();
+        // Trust the lab's CA for the upstream side (the pattern of
+        // net::tests::tls_alpn_h2_roundtrip).
+        let mut roots = rustls::RootCertStore::empty();
+        roots.add(shared.mitm.ca_der()).unwrap();
+        let mut cfg = rustls::ClientConfig::builder().with_root_certificates(roots).with_no_client_auth();
+        cfg.alpn_protocols = vec![b"h2".to_vec()];
+        Arc::get_mut(&mut shared).unwrap().tls_upstream = Arc::new(cfg);
+        let server_config = shared.mitm.server_config_with_alpn("localhost", vec![b"h2".to_vec()]).unwrap();
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        let gate = Arc::new(Barrier::new(N));
+        let server = std::thread::spawn(move || {
+            // ONE connection is all the lab serves; a second would hang.
+            let (s, _) = l.accept().unwrap();
+            s.set_read_timeout(Some(std::time::Duration::from_secs(60))).ok();
+            let conn = rustls::ServerConnection::new(server_config).unwrap();
+            let mut tls = rustls::StreamOwned::new(conn, s);
+            tls.conn.complete_io(&mut tls.sock).ok();
+            assert_eq!(tls.conn.alpn_protocol(), Some(b"h2".as_slice()), "the group must negotiate h2");
+            let handler: crate::h2_server::Handler = Arc::new(move |raw, mut out| {
+                let path = String::from_utf8_lossy(&raw).lines().next().unwrap_or("").split(' ').nth(1).unwrap_or("").to_string();
+                // Answer only once every request is in.
+                gate.wait();
+                let _ = out.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{path}", path.len()).as_bytes());
+            });
+            crate::h2_server::serve(&mut tls, handler);
+        });
+        let items: Vec<GroupItem> = (0..N).map(|i| GroupItem {
+            tab: i as u64,
+            host: "localhost".into(),
+            port,
+            https: true,
+            request: format!("GET /r{i} HTTP/1.1\r\nHost: localhost\r\n\r\n").into_bytes(),
+            http2: true,
+            websocket: false,
+        }).collect();
+        let cancel = AtomicBool::new(false);
+        let got = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let keep = got.clone();
+        let end = send_group::run_parallel(&shared, &items, &cancel, move |n, r| keep.lock().unwrap().push((n, r)));
+        assert_eq!(end, SequenceEnd::Completed);
+        server.join().unwrap();
+        let got = got.lock().unwrap();
+        assert_eq!(got.len(), N);
+        for (n, r) in got.iter() {
+            let body = String::from_utf8_lossy(r.response.as_deref().unwrap_or_else(|| panic!("tab {n}: {:?}", r.error))).rsplit("\r\n\r\n").next().unwrap_or("").to_string();
+            assert_eq!(body, format!("/r{n}"), "stream {n} got its own response");
+        }
+        let mut arrivals: Vec<usize> = got.iter().map(|(_, r)| r.arrival.map(|(a, _)| a).unwrap_or(0)).collect();
+        arrivals.sort_unstable();
+        assert_eq!(arrivals, (1..=N).collect::<Vec<_>>(), "every stream has its arrival number");
+        assert!(got.iter().all(|(_, r)| r.arrival.is_some_and(|(_, total)| total == N)));
+    }
+}
