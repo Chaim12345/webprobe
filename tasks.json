@@ -1351,8 +1351,8 @@
       "title": "Scan configuration library",
       "acceptance": "Burp's 29 BuiltInConfigs load and can be selected/combined for a scan; 'Audit checks - passive' runs only passive checks; custom configs can be saved and imported from Burp JSON.",
       "effort": "M",
-      "status": "todo",
-      "evidence": "src/settings_dialog.rs:172-173 ('not available yet'); /root/burp-re/in/extract/resources/BuiltInConfigs/. Needs R-04. Progress 2026-11-18 (aa490e8, 09e87f8): library implemented (core/src/scan_library.rs, src/scan_library_ui.rs): 29 built-ins load from the user's Burp jar, per-key overlay in load order as Burp, issue selection enforced at dispatch and report, crawl time/request limits, 'not applied by WebProbe' list, Settings > Configuration library, ordered 'Select from library'; live passive auditing keeps its own issue selection. Compiled, 18 smoke tests; full suite and UI NOT yet run. Known gap: one global scan config (per-scan config with AR-02)."
+      "status": "done",
+      "evidence": "core/src/scan_library.rs implements Burp's library: parse all 29 built-ins from burpsuite.jar or an extracted BuiltInConfigs tree (builtins_load_from_the_local_burp_install, run against the real community jar via WEBPROBE_BURP_JAR/WEBPROBE_BURP_BUILTINS added in 9c08144), last-write-wins overlay with whole-list replace (later_configs_win), passive-only/selected-issue dispatch (passive_only_allows_passive_types_only, 09e87f8 live passive audit selection), crawl time/count limits + audit options applied with unsupported keys listed (applying_overlays, not_applied), custom round-trip (saving_edits). Selection UI with import/export and not-applied counts at Suite > Configuration library (scan_library_ui, screenshot-verified). Full core suite 645 passed / 0 failed; desktop cargo check --tests clean."
     },
     {
       "id": "R-12",
