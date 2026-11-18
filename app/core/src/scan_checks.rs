@@ -4301,6 +4301,35 @@ mod tests {
         assert!(got.contains(&("Backup file", "info", "Certain")), "{got:?}");
     }
 
+    /// R-10 point checks: Expression Language and XPath injection against
+    /// a live lab. The lab "evaluates" Burp's EL probe (echoing d1 z b z
+    /// d2 back) and answers a value with a trailing quote with an XPath
+    /// error message.
+    #[test]
+    fn r10_el_and_xpath_against_a_live_lab() {
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = lab_serve(l, |_method, target, _raw| {
+            let q = target.split_once('?').map(|(_, q)| q.to_string()).unwrap_or_default();
+            let v = q.split('&').find_map(|kv| kv.strip_prefix("name=")).unwrap_or("");
+            let v = util::url_decode(&v.replace('+', " "));
+            let el = regex::Regex::new(r#"([a-z]+)\$\{"z([a-z]+)z"\.toString\(\)\.replace\("([a-z]+)", "([a-z]+)"\)\}([a-z]+)"#).unwrap();
+            let body = if let Some(c) = el.captures(&v) {
+                format!("<html><body>profile {}{}{}{}{}</body></html>", &c[1], "z", &c[4], "z", &c[5])
+            } else if v.ends_with('\'') || v.ends_with('"') {
+                "<html><body>javax.xml.xpath.XPathExpressionException: Unexpected quote</body></html>".to_string()
+            } else {
+                "<html><body>profile page</body></html>".to_string()
+            };
+            format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        });
+        let host = format!("127.0.0.1:{port}");
+        let req = format!("GET /profile?name=x HTTP/1.1\r\nHost: {host}\r\n\r\n");
+        let got = lab_scan(port, &["active.expression-language-injection", "active.xpath-injection"], "GET", "/profile?name=x", req);
+        let got: Vec<(&str, &str, &str)> = got.iter().map(|(a, b, c)| (a.as_str(), b.as_str(), c.as_str())).collect();
+        assert!(got.contains(&("Expression Language injection", "high", "Certain")), "{got:?}");
+        assert!(got.contains(&("XPath injection", "high", "Firm")), "{got:?}");
+    }
+
     #[test]
     fn collaborator_everywhere_builds_burps_request_set() {
         let collab = |slot: &str| Some(format!("{slot}.oast.test"));
