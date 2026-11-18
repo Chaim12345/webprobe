@@ -4,6 +4,7 @@
 
 use webprobe_core::ai;
 use webprobe_core::analysis;
+use webprobe_core::burp_config;
 use webprobe_core::codec;
 mod analysis_ui;
 use webprobe_core::collaborator;
@@ -36,6 +37,8 @@ use webprobe_core::notice;
 mod onboarding;
 use webprobe_core::organizer;
 use webprobe_core::project;
+use webprobe_core::report as core_report;
+use webprobe_core::rest_api;
 use webprobe_core::project_files;
 mod project_start;
 mod proxy_settings;
@@ -957,16 +960,84 @@ fn main() {
     gl_env::apply();
 
     let mut screenshot: Option<PathBuf> = None;
+    // Burp's command line flags (R-15): --project-file FILE opens that
+    // project, --config-file FILE applies project options JSON and
+    // --user-config-file FILE user options JSON (both repeatable, last
+    // wins), --unpause-spider-and-scanner is accepted for parity,
+    // --version / --help print and exit.
+    let mut project_file: Option<String> = None;
+    let mut config_files: Vec<String> = Vec::new();
+    let mut user_config_files: Vec<String> = Vec::new();
     let args: Vec<String> = std::env::args().collect();
     let mut i = 1;
     while i < args.len() {
-        if args[i] == "--screenshot" {
-            if let Some(v) = args.get(i + 1) {
-                screenshot = Some(PathBuf::from(v));
+        match args[i].as_str() {
+            "--screenshot" => {
+                if let Some(v) = args.get(i + 1) {
+                    screenshot = Some(PathBuf::from(v));
+                }
+                i += 2;
             }
-            i += 2;
-        } else {
-            i += 1;
+            "--project-file" => {
+                project_file = args.get(i + 1).cloned();
+                i += 2;
+            }
+            "--config-file" => {
+                if let Some(v) = args.get(i + 1) {
+                    config_files.push(v.clone());
+                }
+                i += 2;
+            }
+            "--user-config-file" => {
+                if let Some(v) = args.get(i + 1) {
+                    user_config_files.push(v.clone());
+                }
+                i += 2;
+            }
+            "--unpause-spider-and-scanner" => i += 1,
+            "--version" => {
+                println!("webprobe {}", env!("CARGO_PKG_VERSION"));
+                return;
+            }
+            "--help" => {
+                println!("usage: webprobe [--project-file FILE] [--config-file FILE]... [--user-config-file FILE]... [--unpause-spider-and-scanner] [--screenshot FILE]");
+                return;
+            }
+            _ => i += 1,
+        }
+    }
+    if let Some(f) = &project_file {
+        if !std::path::Path::new(f).is_file() {
+            eprintln!("could not open project file {f}");
+            std::process::exit(1);
+        }
+    }
+    // Read and merge the config JSONs (notes name files and sections only;
+    // API keys are never logged).
+    let mut listener = burp_config::ProxyListener::default();
+    let mut api = burp_config::ApiConfig::default();
+    let read_config = |path: &str| -> serde_json::Value {
+        let text = std::fs::read_to_string(path).unwrap_or_else(|e| {
+            eprintln!("cannot read {path}: {e}");
+            std::process::exit(1);
+        });
+        serde_json::from_str(&text).unwrap_or_else(|e| {
+            eprintln!("{path}: not a JSON object: {e}");
+            std::process::exit(1);
+        })
+    };
+    for f in &config_files {
+        let mut notes = Vec::new();
+        burp_config::apply_project_options(&read_config(f), &mut listener, &mut notes);
+        for n in notes {
+            eprintln!("{f}: {n}");
+        }
+    }
+    for f in &user_config_files {
+        let mut notes = Vec::new();
+        burp_config::apply_user_options(&read_config(f), &mut api, &mut notes);
+        for n in notes {
+            eprintln!("{f}: {n}");
         }
     }
 
@@ -979,6 +1050,25 @@ fn main() {
     }
     if std::env::var("WEBPROBE_INTERCEPT").as_deref() == Ok("1") {
         shared.intercept_on.store(true, Ordering::SeqCst);
+    }
+    // --config-file's proxy listener wins over WEBPROBE_PORT (the later,
+    // explicit source). A disabled listener only notes itself: the desktop
+    // listener toggle is the UI for it.
+    if !config_files.is_empty() {
+        shared.proxy_port.store(listener.port, Ordering::SeqCst);
+        if !listener.running {
+            eprintln!("note: proxy listener disabled by configuration");
+        }
+    }
+    if api.enabled {
+        let kb = std::sync::Arc::new(core_report::KnowledgeBase::discover());
+        match rest_api::start(&shared, &api, kb) {
+            Ok(api_port) => eprintln!("REST API listening on {}:{api_port}", if api.listen_mode == "all_interfaces" { "0.0.0.0" } else { "127.0.0.1" }),
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
     }
     let mut collab_state = collaborator::CollaboratorState::new();
     if let Some(p) = std::env::var("WEBPROBE_COLLAB_PORT")
@@ -1124,7 +1214,7 @@ fn main() {
     };
     // The default project lives in WebProbe's data directory, not in the
     // directory WebProbe was started from (a checkout must not collect one).
-    let project_path = webprobe_core::paths::Lookup::process().data_dir().join("webprobe-project.json").display().to_string();
+    let project_path = project_file.clone().unwrap_or_else(|| webprobe_core::paths::Lookup::process().data_dir().join("webprobe-project.json").display().to_string());
     // Debug hook: WEBPROBE_SETTINGS=hotkeys|appearance opens Burp's Settings
     // window on that pane (used by the screenshot checks).
     let settings_help = match std::env::var("WEBPROBE_SETTINGS").unwrap_or_default().as_str() {
@@ -1168,6 +1258,7 @@ fn main() {
     // already up, nor in scripted runs (no autosave, a fixed tab, or
     // WEBPROBE_NO_START_SCREEN).
     if autosave_enabled()
+        && project_file.is_none()
         && app.eng.recovery.is_none()
         && std::env::var_os("WEBPROBE_TAB").is_none()
         && std::env::var_os("WEBPROBE_NO_START_SCREEN").is_none()
