@@ -1515,6 +1515,9 @@ fn extensions_installed(app: &mut App, ui: &mut Ui) {
                     ui.end_row();
                 }
             });
+            if let Some(u) = hooks.ui() {
+                ext_ui_section(ui, hooks.as_ref(), &u);
+            }
             let defs = hooks.issue_definitions();
             if !defs.is_empty() {
                 ui.add_space(8.0);
@@ -1899,6 +1902,7 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
         crawl_items,
         site_links: locked_site_links,
         scanner: locked_scanner,
+        extension_data: app.shared.ext_host.lock().unwrap().data_to_save(),
         proxy: locked_proxy,
         tasks: locked_tasks,
         layout: project::ProjectLayout {
@@ -2007,6 +2011,8 @@ pub fn apply_project(app: &mut App, data: &project::ProjectData, content: bool) 
         *app.shared.issues.lock().unwrap() = data.issues.iter().map(project::ProjectIssue::to_issue).collect();
         // Cross-response passive state belongs to the project it was built in.
         app.shared.passive.clear();
+        // Montoya extensions get this project's extensionData().
+        app.shared.ext_host.lock().unwrap().restore_data(data.extension_data.clone());
         *app.shared.ws_history.lock().unwrap() = data.websockets.iter().map(|w| net::WsEntry {
             id: w.id,
             ts: w.timestamp,
@@ -2327,5 +2333,43 @@ mod save_restore_tests {
         assert!(checks && points, "scanner settings restored ({status})");
         assert_eq!(poll, 9, "Collaborator poll interval restored");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+/// The Montoya extension's own UI in the Extensions tab: its registered
+/// tabs with "Open", or why they cannot be shown.
+fn ext_ui_section(ui: &mut egui::Ui, hooks: &dyn webprobe_core::ext_host::ProxyHooks, u: &webprobe_core::ext_host::ExtUi) {
+    if u.tabs.is_empty() && u.menu_providers == 0 && u.request_editors + u.response_editors == 0 {
+        return;
+    }
+    ui.add_space(8.0);
+    ui.label(RichText::new("Extension UI").strong().size(12.5).color(theme::ink()));
+    ui.label(
+        RichText::new(if u.headless {
+            "This extension's JVM runs without a display, so its Swing tabs and editors cannot be shown. Its context-menu items still work."
+        } else {
+            "Swing tabs and editors are shown in a window owned by the extension's JVM; WebProbe cannot embed Swing in its own window."
+        })
+        .size(12.0)
+        .color(theme::ink_dim()),
+    );
+    egui::Grid::new("ext_ui_tabs").num_columns(2).spacing([16.0, 4.0]).show(ui, |ui| {
+        for t in &u.tabs {
+            ui.label(RichText::new(t).size(12.5).color(theme::ink()));
+            if ui.add_enabled(!u.headless, egui::Button::new("Open")).on_hover_text("Show the extension's window").clicked() {
+                hooks.show_window();
+            }
+            ui.end_row();
+        }
+    });
+    let mut also = Vec::new();
+    if u.menu_providers > 0 {
+        also.push("context-menu items (under Extensions in Proxy history and Repeater menus)".to_string());
+    }
+    if u.request_editors + u.response_editors > 0 {
+        also.push(format!("{} message editor(s) (Repeater request menu > Extension editors)", u.request_editors + u.response_editors));
+    }
+    if !also.is_empty() {
+        ui.label(RichText::new(format!("Also registered: {}.", also.join("; "))).size(12.0).color(theme::ink_dim()));
     }
 }

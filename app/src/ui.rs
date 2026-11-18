@@ -808,6 +808,7 @@ fn proxy_history(app: &mut App, ui: &mut Ui) {
     // Context-menu commands captured during the frame, applied right after
     // table_body returns (the row closure cannot borrow `app` mutably).
     let mut pending_menu: Option<(net::HistEntry, &'static str)> = None;
+    let ext_shared = app.shared.clone();
     table::table_body(ui, "proxy_history", &columns, &rows, &mut app.hist_table, row_height, table_h, &mut |e, ui| {
         let row_rect = egui::Rect::from_min_size(
             ui.cursor().min,
@@ -976,6 +977,15 @@ fn proxy_history(app: &mut App, ui: &mut Ui) {
             if menu_action(ui, "Proxy history documentation") {
                 pending_menu = Some((e.clone(), "docs"));
             }
+            // Montoya extensions' items (the history is read-only: a
+            // message an action sets is not applied here).
+            let ctx = webprobe_core::ext_host::MenuContext {
+                tool: "Proxy".into(),
+                invocation: "PROXY_HISTORY".into(),
+                messages: vec![crate::ext_menu::message_of(e)],
+                editor: None,
+            };
+            crate::ext_menu::submenu(ui, &ext_shared, &ctx);
         });
     });
     if let Some((id, ctrl, shift)) = click {
@@ -2054,13 +2064,40 @@ fn repeater(app: &mut App, ui: &mut Ui) {
                 app.rep_req_pane.live_url_encode = app.rops.url_encode_live;
                 // E-03: Burp's request-editor context menu.
                 let rops = &mut app.rops;
+                let ext_shared = app.shared.clone();
+                let (rep_service, rep_text) = {
+                    let reps = app.shared.repeaters.lock().unwrap();
+                    (webprobe_core::ext_host::HttpService::new(&reps[i].host, reps[i].port, reps[i].https), reps[i].request.clone())
+                };
+                let mut ext_edit: Option<Vec<u8>> = None;
                 let mut menu = |ui: &mut Ui, sel: Option<String>| {
                     if let Some(a) = crate::repeater_ops::request_menu(ui, rops, sel.is_some(), sel.as_deref(), has_resp) {
                         rep_action = Some(a);
                     }
+                    // Montoya extensions' items, with the editor's selection
+                    // (located by its first occurrence in the request).
+                    let raw = rep_text.replace("\r\n", "\n").replace('\n', "\r\n").into_bytes();
+                    let at = sel.as_deref().and_then(|s| String::from_utf8_lossy(&raw).find(&s.replace("\r\n", "\n").replace('\n', "\r\n")).map(|a| (a, a + s.len())));
+                    let (start, end) = at.unwrap_or((0, 0));
+                    let ctx = webprobe_core::ext_host::MenuContext {
+                        tool: "Repeater".into(),
+                        invocation: "MESSAGE_EDITOR_REQUEST".into(),
+                        messages: vec![webprobe_core::ext_host::MenuMessage { request: raw, response: None, service: rep_service.clone() }],
+                        editor: Some(("REQUEST".into(), start, end, start)),
+                    };
+                    if let Some(o) = crate::ext_menu::submenu(ui, &ext_shared, &ctx) {
+                        ext_edit = o.request;
+                    }
+                    if let Some(r) = crate::ext_menu::editor_items(ui, &ext_shared, &ctx.messages[0], "Repeater") {
+                        ext_edit = Some(r);
+                    }
                 };
                 if crate::msgpane::editable_pane_ex(ui, "rep_req", "Request", &mut text, &mut app.rep_req_pane, body_h, Some(&mut menu)) {
                     app.shared.repeaters.lock().unwrap()[i].request = text;
+                }
+                // An extension action that set the editor's request.
+                if let Some(raw) = ext_edit {
+                    app.shared.repeaters.lock().unwrap()[i].request = String::from_utf8_lossy(&raw).into_owned();
                 }
             });
             strip.cell(|ui| {

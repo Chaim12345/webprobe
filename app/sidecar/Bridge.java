@@ -1,8 +1,8 @@
 // Bridge.java: the MontoyaApi the extension gets, and the state behind it
 // (name, registered handlers, unloading handlers). Bridged so far (R-03
-// stages 1-2): extension(), burpSuite(), logging(), http(), proxy() request
-// and response handlers, and userInterface().registerSuiteTab (accepted,
-// not shown). Every other accessor or method throws
+// stages 1-4): extension(), burpSuite(), logging(), http(), proxy() request
+// and response handlers, userInterface() (Ui), persistence() (Persist) and
+// utilities() (Utils). Every other accessor or method throws
 // UnsupportedOperationException("<Interface>.<method> is not supported by
 // WebProbe"), reported once on the extension's error output.
 
@@ -22,7 +22,6 @@ import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.http.message.responses.HttpResponse;
 import burp.api.montoya.proxy.http.ProxyRequestHandler;
 import burp.api.montoya.proxy.http.ProxyResponseHandler;
-import burp.api.montoya.ui.UserInterface;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -37,7 +36,6 @@ final class Bridge {
     static final List<HttpHandler> HTTP_HANDLERS = new CopyOnWriteArrayList<>();
     static final List<ProxyRequestHandler> PROXY_REQUEST = new CopyOnWriteArrayList<>();
     static final List<ProxyResponseHandler> PROXY_RESPONSE = new CopyOnWriteArrayList<>();
-    static final List<String> SUITE_TABS = new CopyOnWriteArrayList<>();
     static volatile TaskExecutionEngine.TaskExecutionEngineState taskState = TaskExecutionEngine.TaskExecutionEngineState.RUNNING;
 
     /** The annotations of the exchange the current thread is handling. */
@@ -67,7 +65,7 @@ final class Bridge {
         Extension extension = extension();
         BurpSuite suite = burpSuite();
         Http http = http();
-        UserInterface ui = userInterface();
+        burp.api.montoya.ui.UserInterface ui = Ui.userInterface();
         burp.api.montoya.proxy.Proxy proxy = proxy();
         burp.api.montoya.logging.Logging logging = Logs.logging();
         return Api.obj()
@@ -77,17 +75,25 @@ final class Bridge {
                 .on("logging", a -> logging)
                 .on("userInterface", a -> ui)
                 .on("proxy", a -> proxy)
+                .on("persistence", a -> Persist.persistence())
+                .on("utilities", a -> Utils.utilities())
                 .text("WebProbe MontoyaApi")
                 .as(MontoyaApi.class);
     }
 
     static Extension extension() {
         return Api.obj()
-                .on("setName", a -> { name = String.valueOf(a[0]); return null; })
+                .on("setName", a -> {
+                    name = String.valueOf(a[0]);
+                    if (Ui.frame != null) Ui.onEdt(() -> Ui.frame.setTitle(Ui.title()));
+                    Ui.pushState();
+                    return null;
+                })
                 .on("filename", a -> jarPath)
                 .on("isBapp", a -> jarPath.replace('\\', '/').contains("/.BurpSuite/bapps/"))
                 .on("unload", a -> {
                     unloadHandlers();
+                    Ui.dispose();
                     Wire.event("info", "extension unloaded itself");
                     Wire.out.flush();
                     System.exit(0);
@@ -120,17 +126,6 @@ final class Bridge {
                 .on("commandLineArguments", a -> List.of())
                 .on("taskExecutionEngine", a -> engine)
                 .as(BurpSuite.class);
-    }
-
-    static UserInterface userInterface() {
-        return Api.obj()
-                .on("registerSuiteTab", a -> {
-                    String title = String.valueOf(a[0]);
-                    SUITE_TABS.add(title);
-                    Logs.output("[bridge] suite tab \"" + title + "\" registered; WebProbe does not show extension Swing tabs yet");
-                    return register(new ArrayList<>(), title);
-                })
-                .as(UserInterface.class);
     }
 
     static burp.api.montoya.proxy.Proxy proxy() {

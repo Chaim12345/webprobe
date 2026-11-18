@@ -333,7 +333,7 @@ fn first_dir_with(cands: &[PathBuf], ok: impl Fn(&Path) -> bool) -> Option<PathB
 /// The Montoya bridge's source (WebProbe's own), compiled into the binary.
 /// The Montoya bridge sources (one per API area; Java's multi-file source
 /// launcher compiles them together from `MontoyaBridge.java`).
-pub const MONTOYA_BRIDGE_SOURCES: [(&str, &str); 7] = [
+pub const MONTOYA_BRIDGE_SOURCES: [(&str, &str); 10] = [
     ("MontoyaBridge.java", include_str!("../../sidecar/MontoyaBridge.java")),
     ("Api.java", include_str!("../../sidecar/Api.java")),
     ("Wire.java", include_str!("../../sidecar/Wire.java")),
@@ -341,6 +341,9 @@ pub const MONTOYA_BRIDGE_SOURCES: [(&str, &str); 7] = [
     ("Messages.java", include_str!("../../sidecar/Messages.java")),
     ("Factory.java", include_str!("../../sidecar/Factory.java")),
     ("Bridge.java", include_str!("../../sidecar/Bridge.java")),
+    ("Ui.java", include_str!("../../sidecar/Ui.java")),
+    ("Persist.java", include_str!("../../sidecar/Persist.java")),
+    ("Utils.java", include_str!("../../sidecar/Utils.java")),
 ];
 const DEMO_EXT_JAR: &[u8] = include_bytes!("../../sidecar/demo-ext/demo-ext.jar");
 const CATALOGUE_JSON: &str = include_str!("../../extensions/catalogue.json");
@@ -355,7 +358,11 @@ fn write_out(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    std::fs::write(path, bytes)
+    // Write beside and rename: a JVM starting at the same moment never
+    // compiles a half-written file.
+    let tmp = path.with_extension(format!("tmp{}", std::process::id()));
+    std::fs::write(&tmp, bytes)?;
+    std::fs::rename(&tmp, path)
 }
 
 #[cfg(test)]

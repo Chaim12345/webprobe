@@ -104,6 +104,115 @@ pub trait ProxyHooks: Send + Sync {
     fn healthy(&self) -> bool {
         true
     }
+    /// The extension's Swing UI, for extensions that have one (Montoya).
+    fn ui(&self) -> Option<ExtUi> {
+        None
+    }
+    /// Show (or raise) the extension's own window.
+    fn show_window(&self) {}
+    /// Items the extension adds to a context menu for these messages.
+    fn menu_items(&self, _ctx: &MenuContext) -> Vec<MenuItem> {
+        Vec::new()
+    }
+    /// Run a menu item from the last `menu_items` call; a message the
+    /// action set in the editor comes back.
+    fn invoke_menu_item(&self, _id: &str) -> MenuOutcome {
+        MenuOutcome::default()
+    }
+    /// Hand a message to the extension's own editors (shown in its window).
+    fn open_in_editors(&self, _msg: &MenuMessage, _tool: &str) -> Vec<EditorTab> {
+        Vec::new()
+    }
+    /// A request an extension editor changed, if any.
+    fn edited_request(&self) -> Option<Vec<u8>> {
+        None
+    }
+    /// The extension's saved data (Montoya `extensionData()`), as JSON.
+    fn extension_data(&self) -> Option<serde_json::Value> {
+        None
+    }
+    /// Replace the extension's saved data (a project was loaded).
+    fn restore_data(&self, _data: &serde_json::Value) {}
+}
+
+/// What an extension registered in Montoya's `userInterface()`.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ExtUi {
+    /// Suite tabs (and extension editors shown as tabs), by title.
+    pub tabs: Vec<String>,
+    /// No display: tabs cannot be shown.
+    pub headless: bool,
+    pub visible: bool,
+    pub menu_providers: usize,
+    pub request_editors: usize,
+    pub response_editors: usize,
+}
+
+/// One message of a context menu: request, optional response, service.
+#[derive(Clone, Debug, Default)]
+pub struct MenuMessage {
+    pub request: Vec<u8>,
+    pub response: Option<Vec<u8>>,
+    pub service: HttpService,
+}
+
+/// Where a context menu was opened (Montoya `ContextMenuEvent`).
+#[derive(Clone, Debug, Default)]
+pub struct MenuContext {
+    /// "Proxy", "Repeater" ... (ToolType).
+    pub tool: String,
+    /// Montoya InvocationType name, e.g. PROXY_HISTORY,
+    /// MESSAGE_EDITOR_REQUEST.
+    pub invocation: String,
+    pub messages: Vec<MenuMessage>,
+    /// For a message editor: "REQUEST" / "RESPONSE", selection and caret
+    /// (byte offsets in the message).
+    pub editor: Option<(String, usize, usize, usize)>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MenuItem {
+    pub id: String,
+    /// "Submenu > Item" for items in an extension's submenus.
+    pub label: String,
+}
+
+/// What a menu action did to the editor's message.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct MenuOutcome {
+    pub ok: bool,
+    pub request: Option<Vec<u8>>,
+    pub response: Option<Vec<u8>>,
+}
+
+/// An extension editor a message was offered to.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EditorTab {
+    pub caption: String,
+    pub enabled: bool,
+    pub request: bool,
+}
+
+/// How a Montoya extension's JVM is started.
+#[derive(Clone, Debug, Default)]
+pub struct SidecarOptions {
+    /// Run without a display (no windows): forced on when there is none.
+    pub headless: bool,
+    /// Loaded with WebProbe: the window opens on demand only.
+    pub startup: bool,
+    /// Saved `extensionData()` from the project.
+    pub data: Option<serde_json::Value>,
+    /// Where `preferences()` files go (default
+    /// `~/.config/webprobe/extension-preferences`).
+    pub prefs_dir: Option<std::path::PathBuf>,
+}
+
+impl SidecarOptions {
+    /// Headless when there is no X11 / Wayland display.
+    pub fn for_this_session() -> Self {
+        let no_display = std::env::var_os("DISPLAY").is_none_or(|d| d.is_empty()) && std::env::var_os("WAYLAND_DISPLAY").is_none_or(|d| d.is_empty());
+        SidecarOptions { headless: no_display, ..Default::default() }
+    }
 }
 
 /// Montoya annotations of one exchange: the comment and highlight Proxy
@@ -175,9 +284,42 @@ pub struct ExtensionHost {
     /// Remembered extensions that failed to load this session (no `java`,
     /// a moved jar): kept so saving the list does not forget them.
     pub not_loaded: Vec<crate::ext_store::Installed>,
+    /// The project's saved extension data (Montoya `extensionData()`), by
+    /// extension key ([`extension_key`]): handed to an extension when it
+    /// starts and kept for extensions not running now.
+    pub saved_data: std::collections::BTreeMap<String, serde_json::Value>,
+}
+
+/// The key an extension's saved data is filed under in the project: where
+/// it was installed from, else its name.
+pub fn extension_key(e: &LoadedExtension) -> String {
+    e.source.as_ref().map(|s| s.source.trim().to_string()).unwrap_or_else(|| e.hooks.extension_name().to_string())
 }
 
 impl ExtensionHost {
+    /// Every extension's data for the project file: the running ones' live
+    /// data over what the project had.
+    pub fn data_to_save(&self) -> std::collections::BTreeMap<String, serde_json::Value> {
+        let mut out = self.saved_data.clone();
+        for e in &self.extensions {
+            if let Some(d) = e.hooks.extension_data() {
+                out.insert(extension_key(e), d);
+            }
+        }
+        out
+    }
+
+    /// A project was loaded: keep its data and give each running extension
+    /// its own (an empty object when the project has none for it).
+    pub fn restore_data(&mut self, data: std::collections::BTreeMap<String, serde_json::Value>) {
+        for e in &self.extensions {
+            if e.hooks.extension_data().is_some() || data.contains_key(&extension_key(e)) {
+                e.hooks.restore_data(data.get(&extension_key(e)).unwrap_or(&serde_json::json!({})));
+            }
+        }
+        self.saved_data = data;
+    }
+
     /// The enabled extensions, in order. Callers run hooks on this snapshot
     /// with the host unlocked, so one slow extension does not hold up every
     /// other connection waiting for the registry.
@@ -295,6 +437,10 @@ pub struct JavaSidecar {
     /// JVM stderr (the extension's output and errors) and bridge errors,
     /// last 200 lines, for the Errors pane.
     errors: Arc<Mutex<std::collections::VecDeque<String>>>,
+    /// Latest userInterface() state the bridge reported.
+    ui: Arc<Mutex<ExtUi>>,
+    /// Latest extensionData() (saved with the project).
+    data: Arc<Mutex<Option<serde_json::Value>>>,
 }
 
 fn push_line(errors: &Mutex<std::collections::VecDeque<String>>, line: String) {
@@ -315,6 +461,11 @@ impl JavaSidecar {
     /// Launches the sidecar JVM and waits for it to load the extension
     /// (the ping reply only comes back after `initialize()` completed).
     pub fn spawn_with(ext_jar: &str, link: Option<Arc<HostLink>>) -> Result<JavaSidecar, String> {
+        Self::spawn_opts(ext_jar, link, SidecarOptions::for_this_session())
+    }
+
+    /// [`JavaSidecar::spawn_with`] with explicit start options.
+    pub fn spawn_opts(ext_jar: &str, link: Option<Arc<HostLink>>, opts: SidecarOptions) -> Result<JavaSidecar, String> {
         // The Montoya API classes come from the jar the resolver finds; the
         // bridge is WebProbe's own source, embedded and written out.
         let java = crate::paths::java().map_err(|m| m.to_string())?;
@@ -323,12 +474,23 @@ impl JavaSidecar {
         if !std::path::Path::new(ext_jar).exists() {
             return Err(format!("Extension jar not found: {ext_jar}"));
         }
-        let mut child = Command::new(java)
-            // Extension tabs are not shown (yet); Swing still builds them.
-            .arg("-Djava.awt.headless=true")
-            .arg("-cp")
-            .arg(&api_jar)
-            .arg(bridge)
+        let mut cmd = Command::new(java);
+        if opts.headless {
+            cmd.arg("-Djava.awt.headless=true");
+        }
+        cmd.arg("-cp").arg(&api_jar).arg(bridge);
+        if opts.startup {
+            cmd.arg("--startup");
+        }
+        if let Some(d) = &opts.data {
+            let f = std::env::temp_dir().join(format!("webprobe-extdata-{}-{}.json", std::process::id(), crate::util::now_secs()));
+            std::fs::write(&f, d.to_string()).map_err(|e| format!("could not write extension data: {e}"))?;
+            cmd.arg("--data").arg(f);
+        }
+        if let Some(p) = opts.prefs_dir.clone().or_else(|| crate::paths::config_dir().map(|c| c.join("extension-preferences"))) {
+            cmd.arg("--prefs").arg(p);
+        }
+        let mut child = cmd
             .arg(ext_jar)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -355,13 +517,28 @@ impl JavaSidecar {
             }
         });
         let (reader_tx, from_bridge) = std::sync::mpsc::channel::<String>();
+        let ui = Arc::new(Mutex::new(ExtUi { headless: opts.headless, ..Default::default() }));
+        let data = Arc::new(Mutex::new(opts.data.clone()));
         {
-            let (errors, back) = (Arc::clone(&errors), to_bridge.clone());
+            let (errors, back, ui, data) = (Arc::clone(&errors), to_bridge.clone(), Arc::clone(&ui), Arc::clone(&data));
             std::thread::spawn(move || {
                 for line in stdout.lines().map_while(Result::ok) {
                     let msg: serde_json::Value = serde_json::from_str(&line).unwrap_or_default();
                     match msg.get("type").and_then(|t| t.as_str()) {
                         Some("send") => serve_send(&msg, link.clone(), back.clone()),
+                        Some("ui") => {
+                            let names = |k: &str| msg[k].as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect()).unwrap_or_default();
+                            let n = |k: &str| msg[k].as_u64().unwrap_or(0) as usize;
+                            *ui.lock().unwrap() = ExtUi {
+                                tabs: names("tabs"),
+                                headless: msg["headless"].as_bool().unwrap_or(false),
+                                visible: msg["visible"].as_bool().unwrap_or(false),
+                                menu_providers: n("menus"),
+                                request_editors: n("requestEditors"),
+                                response_editors: n("responseEditors"),
+                            };
+                        }
+                        Some("persist") => *data.lock().unwrap() = Some(msg["data"].clone()),
                         Some("event") => {
                             let (level, text) = (msg["level"].as_str().unwrap_or("info"), msg["message"].as_str().unwrap_or(""));
                             push_line(&errors, format!("[event {level}] {text}"));
@@ -391,6 +568,8 @@ impl JavaSidecar {
             next_id: AtomicU64::new(1),
             dead: AtomicBool::new(false),
             errors,
+            ui,
+            data,
         };
         // Loading the jar and running initialize() may take a while; it must
         // not take forever (load_all waits for every extension in turn).
@@ -537,6 +716,40 @@ impl JavaSidecar {
     }
 }
 
+impl JavaSidecar {
+    /// A line the bridge does not answer.
+    fn tell(&self, line: String) {
+        if let Some(tx) = self.to_bridge.lock().unwrap().as_ref() {
+            let _ = tx.send(line);
+        }
+    }
+
+    /// A request/reply on the bridge's id sequence (menus, editors).
+    fn ask(&self, mut line: serde_json::Value) -> Option<serde_json::Value> {
+        if self.dead.load(Ordering::Relaxed) {
+            return None;
+        }
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        line["id"] = id.into();
+        self.exchange(&line.to_string(), Some(id), HOOK_TIMEOUT).ok()
+    }
+}
+
+fn message_json(m: &MenuMessage) -> serde_json::Value {
+    let mut v = serde_json::json!({
+        "request": crate::util::b64_encode(&m.request),
+        "host": m.service.host, "port": m.service.port, "secure": m.service.secure,
+    });
+    if let Some(r) = &m.response {
+        v["response"] = crate::util::b64_encode(r).into();
+    }
+    v
+}
+
+fn b64_field(v: &serde_json::Value, k: &str) -> Option<Vec<u8>> {
+    v.get(k).and_then(|x| x.as_str()).and_then(|x| crate::util::b64_decode(x).ok())
+}
+
 /// Answer one `Http.sendRequest` from the bridge on its own thread (the
 /// extension may be waiting inside a handler).
 fn serve_send(msg: &serde_json::Value, link: Option<Arc<HostLink>>, back: std::sync::mpsc::Sender<String>) {
@@ -557,7 +770,12 @@ fn serve_send(msg: &serde_json::Value, link: Option<Arc<HostLink>>, back: std::s
 }
 
 impl Drop for JavaSidecar {
+    /// Unloading runs the extension's unloading handlers and closes its
+    /// window (the JVM is killed if it does not exit in time).
     fn drop(&mut self) {
+        if !self.dead.load(Ordering::Relaxed) {
+            self.unload();
+        }
         self.kill();
     }
 }
@@ -581,6 +799,69 @@ impl ProxyHooks for JavaSidecar {
 
     fn handle_request_received(&self, svc: &crate::ext_host::HttpService, method: &str, path: &str, req: &mut Vec<u8>) -> ProxyAction {
         self.handle_request(svc, method, path, req, &mut Annotations::default())
+    }
+
+    fn ui(&self) -> Option<ExtUi> {
+        Some(self.ui.lock().unwrap().clone())
+    }
+
+    fn show_window(&self) {
+        self.tell(r#"{"type":"show"}"#.into());
+    }
+
+    fn menu_items(&self, ctx: &MenuContext) -> Vec<MenuItem> {
+        if self.ui.lock().unwrap().menu_providers == 0 {
+            return Vec::new();
+        }
+        let mut line = serde_json::json!({
+            "type": "menu", "tool": ctx.tool, "invocation": ctx.invocation,
+            "messages": ctx.messages.iter().map(message_json).collect::<Vec<_>>(),
+        });
+        if let Some((context, start, end, caret)) = &ctx.editor {
+            line["editor"] = serde_json::json!({"context": context, "start": start, "end": end, "caret": caret});
+        }
+        let Some(reply) = self.ask(line) else { return Vec::new() };
+        reply["items"]
+            .as_array()
+            .map(|a| a.iter().filter_map(|i| Some(MenuItem { id: i["id"].as_str()?.to_string(), label: i["label"].as_str()?.to_string() })).collect())
+            .unwrap_or_default()
+    }
+
+    fn invoke_menu_item(&self, id: &str) -> MenuOutcome {
+        let Some(reply) = self.ask(serde_json::json!({"type": "menu-invoke", "item": id})) else { return MenuOutcome::default() };
+        MenuOutcome { ok: reply["ok"].as_bool().unwrap_or(false), request: b64_field(&reply, "request"), response: b64_field(&reply, "response") }
+    }
+
+    fn open_in_editors(&self, msg: &MenuMessage, tool: &str) -> Vec<EditorTab> {
+        let ui = self.ui.lock().unwrap().clone();
+        if ui.request_editors + ui.response_editors == 0 {
+            return Vec::new();
+        }
+        let mut line = message_json(msg);
+        line["type"] = "editors".into();
+        line["tool"] = tool.into();
+        let Some(reply) = self.ask(line) else { return Vec::new() };
+        reply["editors"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .map(|e| EditorTab { caption: e["caption"].as_str().unwrap_or("").to_string(), enabled: e["enabled"].as_bool().unwrap_or(false), request: e["request"].as_bool().unwrap_or(false) })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    fn edited_request(&self) -> Option<Vec<u8>> {
+        b64_field(&self.ask(serde_json::json!({"type": "editor-get"}))?, "request")
+    }
+
+    fn extension_data(&self) -> Option<serde_json::Value> {
+        self.data.lock().unwrap().clone()
+    }
+
+    fn restore_data(&self, data: &serde_json::Value) {
+        *self.data.lock().unwrap() = Some(data.clone());
+        self.tell(serde_json::json!({"type": "restore", "data": data}).to_string());
     }
 
     fn handle_response_received(&self, svc: &crate::ext_host::HttpService, method: &str, path: &str, resp: &mut Vec<u8>) -> ProxyAction {
@@ -644,6 +925,7 @@ mod tests {
     fn drop_stops_the_chain_and_later_extensions_do_not_run() {
         let host = ExtensionHost {
             not_loaded: Vec::new(),
+            saved_data: Default::default(),
             extensions: vec![
                 LoadedExtension { enabled: true, hooks: Arc::new(DropExtension), source: None },
                 LoadedExtension { enabled: true, hooks: Arc::new(EchoExtension { name: "Second".into() }), source: None },
@@ -658,6 +940,7 @@ mod tests {
     fn disabled_extensions_are_skipped() {
         let host = ExtensionHost {
             not_loaded: Vec::new(),
+            saved_data: Default::default(),
             extensions: vec![
                 LoadedExtension { enabled: false, hooks: Arc::new(DropExtension), source: None },
                 LoadedExtension { enabled: true, hooks: Arc::new(EchoExtension { name: "Echo".into() }), source: None },
@@ -672,6 +955,7 @@ mod tests {
     fn example_extension_adds_its_header() {
         let host = ExtensionHost {
             not_loaded: Vec::new(),
+            saved_data: Default::default(),
             extensions: vec![LoadedExtension {
                 enabled: true,
                 hooks: Arc::new(ExampleHeaderExtension),
@@ -707,6 +991,7 @@ mod tests {
         assert_eq!(sidecar.extension_name(), "Montoya bridge (demo-ext.jar)");
         let host = ExtensionHost {
             not_loaded: Vec::new(),
+            saved_data: Default::default(),
             extensions: vec![LoadedExtension { enabled: true, hooks: Arc::new(sidecar), source: None }],
         };
         // The demo extension drops any path containing "/admin-drop".
@@ -732,7 +1017,8 @@ mod tests {
         let api = crate::paths::montoya_jar().ok()?;
         let java = crate::paths::java().ok()?;
         let javac = [java.with_file_name("javac"), std::fs::canonicalize(&java).ok()?.with_file_name("javac")].into_iter().find(|p| p.is_file())?;
-        let dir = std::env::temp_dir().join(format!("wp-stage-{name}-{}-{}", std::process::id(), crate::util::now_secs()));
+        static N: AtomicU64 = AtomicU64::new(0);
+        let dir = std::env::temp_dir().join(format!("wp-stage-{name}-{}-{}-{}", std::process::id(), crate::util::now_secs(), N.fetch_add(1, Ordering::Relaxed)));
         std::fs::create_dir_all(dir.join("META-INF/services")).ok()?;
         std::fs::write(dir.join("META-INF/services/burp.api.montoya.BurpExtension"), format!("{name}\n")).ok()?;
         let src = concat!(env!("CARGO_MANIFEST_DIR"), "/../sidecar/stage-tests/").to_string() + name + ".java";
@@ -763,14 +1049,14 @@ mod tests {
             "[out] via output stream".into(),
             "[out] version=WebProbe edition=COMMUNITY_EDITION".into(),
             "[out] state=PAUSED args=0".into(),
-            "[out] caught: MontoyaApi.persistence is not supported by WebProbe".into(),
+            "[out] caught: MontoyaApi.scanner is not supported by WebProbe".into(),
             "[out] caught: BurpSuite.exportProjectOptionsAsJson is not supported by WebProbe".into(),
             "[event info] stage1 event".into(),
             "[out] stage1 unloaded".into(),
         ] {
             assert!(log.contains(&want), "missing {want:?} in {log:#?}");
         }
-        assert_eq!(log.iter().filter(|l| *l == "[error] MontoyaApi.persistence is not supported by WebProbe").count(), 1, "reported once");
+        assert_eq!(log.iter().filter(|l| *l == "[error] MontoyaApi.scanner is not supported by WebProbe").count(), 1, "reported once");
         assert!(events.lock().unwrap().contains(&"info: stage1 event".to_string()));
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -833,6 +1119,104 @@ mod tests {
         assert_eq!(a.highlight, None);
         a.set_colour(None);
         assert_eq!(a.colour_name(), None);
+    }
+
+
+    fn stage3(data: Option<serde_json::Value>, prefs: &std::path::Path) -> Option<(JavaSidecar, std::path::PathBuf)> {
+        let dir = stage_extension("Stage3Extension")?;
+        let opts = SidecarOptions { headless: true, startup: false, data, prefs_dir: Some(prefs.to_path_buf()) };
+        let sc = JavaSidecar::spawn_opts(dir.to_str().unwrap(), None, opts).expect("stage 3 loads");
+        Some((sc, dir))
+    }
+
+    /// Wait for an asynchronous bridge report (ui state, persisted data).
+    fn eventually<T>(mut f: impl FnMut() -> Option<T>) -> T {
+        for _ in 0..100 {
+            if let Some(v) = f() {
+                return v;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        panic!("the bridge never reported it");
+    }
+
+    /// R-03 stage 3, headless: the tab registers but cannot be shown, the
+    /// context-menu items round-trip (an action sets the editor's request
+    /// from the selection), the request editor takes a message, and
+    /// utilities() work.
+    #[test]
+    fn stage3_ui_headless_menus_editors_and_utilities() {
+        let prefs = std::env::temp_dir().join(format!("wp-prefs-{}-{}", std::process::id(), crate::util::now_secs()));
+        let Some((sc, dir)) = stage3(None, &prefs) else {
+            eprintln!("skipping: no JDK or Montoya API jar");
+            return;
+        };
+        assert_eq!(sc.extension_name(), format!("Stage Three ({})", dir.file_name().unwrap().to_string_lossy()));
+        let u = eventually(|| sc.ui().filter(|u| u.request_editors == 1));
+        assert_eq!((u.tabs.clone(), u.headless, u.visible, u.menu_providers), (vec!["Stage3".to_string()], true, false, 1));
+        sc.show_window(); // headless: a no-op, nothing throws
+        let req = b"GET /x HTTP/1.1\r\nHost: qa.test\r\nX-Edit: 1\r\n\r\nbody".to_vec();
+        let msg = MenuMessage { request: req.clone(), response: None, service: HttpService::new("qa.test", 80, false) };
+        let ctx = MenuContext { tool: "Repeater".into(), invocation: "MESSAGE_EDITOR_REQUEST".into(), messages: vec![msg.clone()], editor: Some(("REQUEST".into(), 4, 6, 4)) };
+        let items = sc.menu_items(&ctx);
+        assert_eq!(items.iter().map(|i| i.label.as_str()).collect::<Vec<_>>(), ["Log selection", "Tools > Tag request"]);
+        let out = sc.invoke_menu_item(&items[1].id);
+        assert!(out.ok);
+        let edited = String::from_utf8(out.request.expect("the action set the request")).unwrap();
+        assert!(edited.contains("\r\nX-Stage3: /x REQUEST\r\n"), "{edited}");
+        let out = sc.invoke_menu_item(&items[0].id);
+        assert_eq!((out.ok, out.request), (true, None));
+        let tabs = sc.open_in_editors(&msg, "Repeater");
+        assert_eq!(tabs, vec![EditorTab { caption: "Stage3 editor".into(), enabled: true, request: true }]);
+        assert_eq!(sc.edited_request(), None, "nothing typed in the editor");
+        let mut plain = msg.clone();
+        plain.request = b"GET / HTTP/1.1\r\nHost: qa.test\r\n\r\n".to_vec();
+        assert!(!sc.open_in_editors(&plain, "Repeater")[0].enabled);
+        sc.unload();
+        let log = sc.errors();
+        for want in ["[out] menu tool=Repeater type=MESSAGE_EDITOR_REQUEST", "[out] pref=dark", "[out] b64=aGk=", "[out] sha256=ba7816bf", "[out] gzip=zip me", "[out] url=a+b%26c html=&lt;x&gt; hex=ff", "[out] json=2 {\"a\":2}", "[out] headless window=HeadlessException"] {
+            assert!(log.iter().any(|l| l == want), "missing {want:?} in {log:#?}");
+        }
+        assert!(std::fs::read_to_string(prefs.join("Stage Three.json")).unwrap().contains("\"theme\":\"dark\""));
+        let _ = std::fs::remove_dir_all(dir);
+        let _ = std::fs::remove_dir_all(prefs);
+    }
+
+    /// extensionData() goes into the project file and comes back: a second
+    /// load sees the first one's data, and loading a project hands a
+    /// running extension that project's data.
+    #[test]
+    fn stage3_extension_data_round_trips_through_a_project_file() {
+        let prefs = std::env::temp_dir().join(format!("wp-prefs2-{}-{}", std::process::id(), crate::util::now_secs()));
+        let Some((sc, dir)) = stage3(None, &prefs) else {
+            eprintln!("skipping: no JDK or Montoya API jar");
+            return;
+        };
+        let source = crate::ext_store::Installed { kind: crate::ext_store::Kind::Java, source: dir.to_string_lossy().into_owned(), enabled: true };
+        let mut host = ExtensionHost::default();
+        host.extensions.push(LoadedExtension { enabled: true, hooks: Arc::new(sc), source: Some(source.clone()) });
+        let saved = eventually(|| host.data_to_save().get(&source.source).filter(|d| d.get("HttpRequest").is_some()).cloned());
+        assert_eq!(saved["Integer"]["runs"], 1);
+        assert_eq!(saved["ChildObject"]["child"]["StringList"]["names"], serde_json::json!(["a", "b"]));
+        // Through a project file.
+        let file = std::env::temp_dir().join(format!("wp-extdata-{}.json", std::process::id()));
+        let data = crate::project::ProjectData { extension_data: host.data_to_save(), ..Default::default() };
+        crate::project::save(&file, &data).unwrap();
+        let back = crate::project::load(&file).unwrap();
+        assert_eq!(back.extension_data, data.extension_data);
+        // A new load of the extension with the project's data sees it.
+        let opts = SidecarOptions { headless: true, startup: true, data: back.extension_data.get(&source.source).cloned(), prefs_dir: Some(prefs.clone()) };
+        let again = JavaSidecar::spawn_opts(&source.source, None, opts).unwrap();
+        let second = eventually(|| again.extension_data().filter(|d| d["Integer"]["runs"] == 2));
+        assert_eq!(second["HttpRequest"]["req"]["request"], saved["HttpRequest"]["req"]["request"]);
+        again.unload();
+        assert!(again.errors().iter().any(|l| l == "[out] runs before=1 child=[a, b]"), "{:#?}", again.errors());
+        // Loading another project hands the running extension that data.
+        host.restore_data([(source.source.clone(), serde_json::json!({"Integer": {"runs": 7}}))].into_iter().collect());
+        assert_eq!(host.extensions[0].hooks.extension_data().unwrap()["Integer"]["runs"], 7);
+        let _ = std::fs::remove_file(file);
+        let _ = std::fs::remove_dir_all(dir);
+        let _ = std::fs::remove_dir_all(prefs);
     }
 
 }

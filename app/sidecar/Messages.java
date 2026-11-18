@@ -321,6 +321,10 @@ final class Messages {
          .on("withRemovedHeader", a -> editReq(r, svc, x -> x.remove(a[0] instanceof HttpHeader h ? h.name() : String.valueOf(a[0]))))
          .on("withRemovedHeaders", a -> editReq(r, svc, x -> { for (Object h : many(a)) x.remove(h instanceof HttpHeader hh ? hh.name() : String.valueOf(h)); }))
          .on("withBody", a -> editReq(r, svc, x -> x.setBody(bodyArg(a[0]))))
+         .on("withParameter", a -> editReq(r, svc, x -> editParams(x, many(a), 's')))
+         .on("withAddedParameters", a -> editReq(r, svc, x -> editParams(x, many(a), 'a')))
+         .on("withUpdatedParameters", a -> editReq(r, svc, x -> editParams(x, many(a), 'u')))
+         .on("withRemovedParameters", a -> editReq(r, svc, x -> editParams(x, many(a), 'r')))
          .on("withMarkers", a -> request(raw, svc, null, HttpRequest.class))
          .text(new String(raw, L1));
         if (extra != null) o.impl.putAll(extra.impl);
@@ -384,6 +388,77 @@ final class Messages {
         String cookie = r.value("Cookie");
         if (cookie != null) pairs(cookie, ";", HttpParameterType.COOKIE, only, out);
         return out;
+    }
+
+    /** An HttpParameter value (HttpParameter.urlParameter(..) etc.). */
+    static burp.api.montoya.http.message.params.HttpParameter parameter(String name, String value, HttpParameterType type) {
+        return Api.obj()
+                .on("name", a -> name)
+                .on("value", a -> value)
+                .on("type", a -> type)
+                .text(name + "=" + value)
+                .as(burp.api.montoya.http.message.params.HttpParameter.class);
+    }
+
+    /** Add, update or remove URL, body and cookie parameters (others are
+     *  not supported). `mode`: 'a' add, 'u' update, 's' set (update or
+     *  add), 'r' remove. */
+    static void editParams(Raw r, List<Object> params, char mode) {
+        String[] fl = r.first.split(" ", 3);
+        String target = fl.length > 1 ? fl[1] : "/";
+        int q = target.indexOf('?');
+        List<String[]> url = split(q < 0 ? "" : target.substring(q + 1), "&");
+        boolean form = r.value("Content-Type") != null && r.value("Content-Type").toLowerCase(Locale.ROOT).contains("x-www-form-urlencoded");
+        List<String[]> body = split(new String(r.body, L1), "&");
+        List<String[]> cookies = split(r.value("Cookie") == null ? "" : r.value("Cookie"), ";");
+        boolean bodyTouched = false, cookieTouched = false, urlTouched = false;
+        for (Object o : params) {
+            burp.api.montoya.http.message.params.HttpParameter p = (burp.api.montoya.http.message.params.HttpParameter) o;
+            List<String[]> list;
+            switch (p.type()) {
+                case URL: list = url; urlTouched = true; break;
+                case BODY: list = body; bodyTouched = true; break;
+                case COOKIE: list = cookies; cookieTouched = true; break;
+                default: throw Api.unsupported("HttpRequest", "withParameter(" + p.type() + ")");
+            }
+            boolean found = false;
+            for (java.util.Iterator<String[]> it = list.iterator(); it.hasNext();) {
+                String[] kv = it.next();
+                if (!kv[0].equals(p.name())) continue;
+                found = true;
+                if (mode == 'r') it.remove(); else if (mode != 'a') kv[1] = p.value();
+            }
+            if (mode == 'a' || (mode == 's' && !found)) list.add(new String[] { p.name(), p.value() });
+        }
+        if (urlTouched) {
+            String base = q < 0 ? target : target.substring(0, q);
+            String qs = join(url, "&");
+            r.first = fl[0] + " " + base + (qs.isEmpty() ? "" : "?" + qs) + (fl.length > 2 ? " " + fl[2] : "");
+        }
+        if (bodyTouched) {
+            if (!form) r.set("Content-Type", "application/x-www-form-urlencoded", true);
+            r.setBody(join(body, "&").getBytes(L1));
+        }
+        if (cookieTouched) {
+            if (cookies.isEmpty()) r.remove("Cookie"); else r.set("Cookie", join(cookies, "; "), true);
+        }
+    }
+
+    private static List<String[]> split(String s, String sep) {
+        List<String[]> out = new ArrayList<>();
+        for (String p : s.split(sep)) {
+            p = p.trim();
+            if (p.isEmpty()) continue;
+            int e = p.indexOf('=');
+            out.add(e < 0 ? new String[] { p, "" } : new String[] { p.substring(0, e), p.substring(e + 1) });
+        }
+        return out;
+    }
+
+    private static String join(List<String[]> kv, String sep) {
+        StringBuilder b = new StringBuilder();
+        for (String[] p : kv) b.append(b.length() > 0 ? sep : "").append(p[0]).append('=').append(p[1]);
+        return b.toString();
     }
 
     private static void pairs(String s, String sep, HttpParameterType type, HttpParameterType only, List<ParsedHttpParameter> out) {

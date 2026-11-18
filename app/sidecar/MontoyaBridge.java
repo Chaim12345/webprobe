@@ -4,11 +4,17 @@
 // is several source files in one directory, run with Java's multi-file
 // source launcher (Java 22 or later, no build step):
 //
-//   java -cp montoya-api.jar MontoyaBridge.java <ext.jar>
+//   java -cp montoya-api.jar MontoyaBridge.java [--startup] [--data FILE]
+//        [--prefs DIR] <ext.jar>
+//
+// --startup: loaded with WebProbe (its window opens on demand only);
+// --data: the extension's saved extensionData() (JSON) from the project;
+// --prefs: where preferences() files live.
 //
 // Files: Api (proxy helper, Unsupported), Wire (protocol), Logs (logging()),
 // Messages (HTTP value types), Factory (MontoyaObjectFactory), Bridge
-// (MontoyaApi, extension(), burpSuite(), http(), proxy(), userInterface()).
+// (MontoyaApi, extension(), burpSuite(), http(), proxy()), Ui
+// (userInterface()), Persist (persistence()), Utils (utilities()).
 //
 // Protocol: one JSON object per line. Messages travel as Base64 bytes.
 //   -> {"type":"ping"}                         <= {"type":"pong","name":..,"handlers":{..}}
@@ -22,6 +28,16 @@
 //   -> {"type":"sent","sid":K,"raw":b64}  or  {"type":"sent","sid":K,"error":".."}
 //   <= {"type":"event","level":"info"|..,"message":..}             (raise*Event)
 //   -> {"type":"shutdown"}  (unloading handlers run, bridge exits 0)
+//   <= {"type":"ui","tabs":[..],"headless","visible","menus","requestEditors","responseEditors"}
+//   <= {"type":"persist","data":{..}}                 (extensionData() changed)
+//   -> {"type":"show"}                                (open / raise the window)
+//   -> {"type":"restore","data":{..}}                 (a project was loaded)
+//   -> {"type":"menu","id":N,"tool","invocation","messages":[{request,response,host,port,secure}],
+//       "editor":{"context","start","end","caret"}}   <= {"id":N,"items":[{"id","label"}]}
+//   -> {"type":"menu-invoke","id":N,"item":id}         <= {"id":N,"ok","request"?,"response"?}
+//   -> {"type":"editors","id":N,request,response,host,port,secure,tool}
+//                                                      <= {"id":N,"editors":[{"caption","enabled","request"}]}
+//   -> {"type":"editor-get","id":N}                    <= {"id":N,"request"?}
 //
 // Handler order follows Burp: for a request the Proxy's
 // handleRequestReceived, its handleRequestToBeSent, then every HTTP
@@ -61,20 +77,42 @@ public class MontoyaBridge {
 
     public static void main(String[] args) throws Exception {
         Wire.start();
-        if (args.length < 1) {
-            Logs.error("usage: java -cp montoya-api.jar MontoyaBridge.java <ext.jar>");
+        String jar = null;
+        for (int i = 0; i < args.length; i++) {
+            switch (args[i]) {
+                case "--startup": Ui.startup = true; break;
+                case "--data": {
+                    String text = java.nio.file.Files.readString(java.nio.file.Path.of(args[++i]), StandardCharsets.UTF_8);
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> data = (Map<String, Object>) Wire.Json.parse(text);
+                    Persist.fromJson(Persist.ROOT, data);
+                    break;
+                }
+                case "--prefs": Persist.prefsDir = java.nio.file.Path.of(args[++i]); break;
+                default: jar = args[i];
+            }
+        }
+        if (jar == null) {
+            Logs.error("usage: java -cp montoya-api.jar MontoyaBridge.java [--startup] [--data FILE] [--prefs DIR] <ext.jar>");
             System.exit(2);
         }
-        Bridge.jarPath = new File(args[0]).getAbsolutePath();
+        Persist.ROOT.onChange = () -> Wire.send("{\"type\":\"persist\",\"data\":" + Persist.toJson(Persist.ROOT) + "}");
+        Bridge.jarPath = new File(jar).getAbsolutePath();
         ObjectFactoryLocator.FACTORY = Factory.create();
-        List<BurpExtension> exts = discover(args[0]);
+        List<BurpExtension> exts = discover(jar);
         if (exts.isEmpty()) {
-            Logs.error("[bridge] no burp.api.montoya.BurpExtension implementation found in " + args[0]);
+            Logs.error("[bridge] no burp.api.montoya.BurpExtension implementation found in " + jar);
             System.exit(2);
         }
         for (BurpExtension ext : exts) {
             Logs.output("[bridge] initializing " + ext.getClass().getName());
-            ext.initialize(Bridge.api());
+            try {
+                ext.initialize(Bridge.api());
+            } catch (Throwable t) {
+                Logs.error("[bridge] the extension's initialize() failed: " + Logs.trace(t));
+                Wire.out.flush();
+                System.exit(3);
+            }
         }
         Logs.output("[bridge] ready: " + Bridge.HTTP_HANDLERS.size() + " HTTP handler(s), " + Bridge.PROXY_REQUEST.size()
                 + " proxy request handler(s), " + Bridge.PROXY_RESPONSE.size() + " proxy response handler(s)");
@@ -82,7 +120,29 @@ public class MontoyaBridge {
             Map<String, Object> msg = Wire.INBOX.take();
             String type = Wire.str(msg, "type", "");
             if (type.equals("shutdown")) break;
+            if (type.equals("show")) { Ui.show(); continue; }
+            if (type.equals("restore")) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> data = (Map<String, Object>) msg.get("data");
+                Persist.fromJson(Persist.ROOT, data);
+                continue;
+            }
+            int mid = (int) Wire.num(msg.get("id"));
+            try {
+                switch (type) {
+                    case "menu": Wire.send(Ui.menu(mid, msg)); continue;
+                    case "menu-invoke": Wire.send(Ui.invoke(mid, Wire.str(msg, "item", ""))); continue;
+                    case "editors": Wire.send(Ui.editors(mid, msg)); continue;
+                    case "editor-get": Wire.send(Ui.edited(mid)); continue;
+                    default: break;
+                }
+            } catch (Throwable t) {
+                Logs.error("[bridge] " + type + " failed: " + Logs.trace(t));
+                Wire.send("{\"id\":" + mid + ",\"error\":" + Wire.Json.esc(String.valueOf(t)) + "}");
+                continue;
+            }
             if (type.equals("ping")) {
+                Ui.pushState();
                 Wire.send("{\"type\":\"pong\",\"name\":" + Wire.Json.esc(Bridge.name) + ",\"httpHandlers\":" + Bridge.HTTP_HANDLERS.size()
                         + ",\"proxyHandlers\":" + (Bridge.PROXY_REQUEST.size() + Bridge.PROXY_RESPONSE.size()) + "}");
                 continue;
@@ -90,6 +150,7 @@ public class MontoyaBridge {
             if (type.equals("request") || type.equals("response")) Wire.send(exchange(msg, type.equals("request")));
         }
         Bridge.unloadHandlers();
+        Ui.dispose();
         Wire.out.flush();
         System.exit(0);
     }

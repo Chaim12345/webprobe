@@ -897,6 +897,9 @@ pub struct ProjectData {
     /// records which one it was, so opening it under another CA is noticed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ca_fingerprint: Option<String>,
+    /// Montoya extensions' `extensionData()`, by extension (jar path).
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub extension_data: std::collections::BTreeMap<String, serde_json::Value>,
 }
 
 fn default_listener_port() -> u16 {
@@ -906,6 +909,7 @@ fn default_listener_port() -> u16 {
 impl Default for ProjectData {
     fn default() -> Self {
         Self {
+            extension_data: Default::default(),
             version: PROJECT_VERSION,
             saved_at: 0,
             appearance: Appearance::default(),
@@ -1064,6 +1068,7 @@ pub fn settings_only(data: &ProjectData) -> ProjectData {
         target: Vec::new(),
         crawl_items: Vec::new(),
         site_links: Vec::new(),
+        extension_data: Default::default(),
         intruder: blank.intruder,
         decoder: blank.decoder,
         editors: blank.editors,
@@ -1494,6 +1499,7 @@ mod tests {
 
     fn sample() -> ProjectData {
         ProjectData {
+            extension_data: [("/opt/ext/demo.jar".to_string(), serde_json::json!({"String": {"k": "v"}}))].into_iter().collect(),
             version: PROJECT_VERSION,
             saved_at: 1_760_000_002,
             appearance: Appearance { palette: "light".into(), density: "compact".into(), font_scale: 1.1 },

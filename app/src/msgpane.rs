@@ -787,6 +787,7 @@ pub fn editable_pane_ex(ui: &mut Ui, id: &str, title: &str, text: &mut String, s
                         && focused
                         && ui.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Text(_))));
                     let before = typing.then(|| text.clone());
+                    let prev_sel = st.sel;
                     let out = egui::TextEdit::multiline(text)
                         .id(edit_id)
                         .font(font.clone())
@@ -808,11 +809,22 @@ pub fn editable_pane_ex(ui: &mut Ui, id: &str, title: &str, text: &mut String, s
                             ui.ctx().request_repaint();
                         }
                     }
+                    // A right-click keeps the selection (egui would move the
+                    // cursor to the click), so the context menu acts on it.
+                    let secondary = out.response.hovered() && ui.input(|i| i.pointer.secondary_pressed() || i.pointer.secondary_down() || i.pointer.secondary_released());
+                    if secondary {
+                        if let Some((a, b)) = prev_sel.filter(|(a, b)| a < b) {
+                            let mut state = egui::TextEdit::load_state(ui.ctx(), edit_id).unwrap_or_default();
+                            state.cursor.set_char_range(Some(egui::text::CCursorRange::two(egui::text::CCursor::new(a), egui::text::CCursor::new(b))));
+                            state.store(ui.ctx(), edit_id);
+                            st.sel = prev_sel;
+                        }
+                    }
                     if let Some(menu) = menu.as_mut() {
                         let sel = st.sel.and_then(|(a, b)| (a < b).then(|| text.chars().skip(a).take(b - a).collect::<String>()));
                         out.response.context_menu(|ui| menu(ui, sel));
                     }
-                    if out.response.has_focus() {
+                    if out.response.has_focus() && !secondary {
                         if let Some(cr) = out.cursor_range {
                             let [a, b] = cr.sorted_cursors();
                             st.sel = Some((a.index.0, b.index.0));

@@ -9,7 +9,6 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
@@ -117,7 +116,7 @@ final class Wire {
             }
         }
         Map<String, Object> obj() {
-            Map<String, Object> m = new HashMap<>();
+            Map<String, Object> m = new java.util.LinkedHashMap<>();
             i++; ws();
             if (peek() == '}') { i++; return m; }
             while (true) {

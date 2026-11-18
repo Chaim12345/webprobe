@@ -14,6 +14,7 @@ mod collaborator_ui;
 use webprobe_core::decoder_ops;
 mod discovery;
 mod engagement;
+mod ext_menu;
 use webprobe_core::ext_host;
 mod feedback;
 mod gl_env;
@@ -1050,7 +1051,8 @@ fn main() {
     // Path B: load a real Montoya .jar extension through the sidecar JVM,
     // e.g. WEBPROBE_EXT_JAR=app/sidecar/demo-ext/demo-ext.jar
     if let Ok(ext_jar) = std::env::var("WEBPROBE_EXT_JAR") {
-        match ext_host::JavaSidecar::spawn_with(&ext_jar, Some(ext_host::HostLink::to_shared(&shared))) {
+        let opts = ext_host::SidecarOptions { startup: true, ..ext_host::SidecarOptions::for_this_session() };
+        match ext_host::JavaSidecar::spawn_opts(&ext_jar, Some(ext_host::HostLink::to_shared(&shared)), opts) {
             Ok(sidecar) => {
                 shared.log(&format!(
                     "Sidecar JVM loaded Montoya extension: {} ({})",

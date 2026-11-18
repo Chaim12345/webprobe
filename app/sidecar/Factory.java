@@ -82,9 +82,26 @@ final class Factory {
                 }
                 return Messages.annotations(notes, c);
             }
+            case "highlightColor": {
+                // HighlightColor.highlightColor("Red"): by display name or constant name.
+                String want = String.valueOf(a[0]).trim();
+                for (HighlightColor c : HighlightColor.values()) {
+                    if (c.name().equalsIgnoreCase(want) || c.displayName().equalsIgnoreCase(want)) return c;
+                }
+                return HighlightColor.NONE;
+            }
+            case "range": return Ui.range(((Number) a[0]).intValue(), ((Number) a[1]).intValue());
+            case "selection":
+                if (a.length == 1) return Ui.selection((ByteArray) a[0], 0, ((ByteArray) a[0]).length());
+                if (a.length == 2) return Ui.selection(Messages.bytes(new byte[0]), ((Number) a[0]).intValue(), ((Number) a[1]).intValue());
+                return Ui.selection((ByteArray) a[0], ((Number) a[1]).intValue(), ((Number) a[2]).intValue());
+            case "parameter":
+                return Messages.parameter(String.valueOf(a[0]), String.valueOf(a[1]), (burp.api.montoya.http.message.params.HttpParameterType) a[2]);
+            case "persistedObject": return Persist.object(new Persist.Store());
             default:
                 break;
         }
+        if (n.startsWith("persisted") && n.endsWith("List")) return Persist.list();
         if (ret.getSimpleName().endsWith("Action")) return action(n, ret, a);
         throw Api.unsupported("MontoyaObjectFactory", n);
     }
