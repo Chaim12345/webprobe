@@ -24,7 +24,7 @@ so WebProbe does not ship it.
 | organizer | partial | status is always NEW |
 | persistence | full | |
 | project | unsupported | |
-| proxy | full | WebSocket `send*` / `close`; "to be sent" WebSocket handlers run before the user's intercept edit (Burp: after) |
+| proxy | full | WebSocket `send*` / `close` |
 | repeater | full | |
 | scanner | partial | `startAudit`, `startCrawl`, `generateReport`, `registerAuditIssueHandler`, `bChecks` |
 | scope | full | the change handler fires only for changes made through the API |
@@ -35,6 +35,10 @@ so WebProbe does not ship it.
 
 Session handling: extension actions are available as the rule action "invoke extension"; they receive
 an empty macro list.
+
+Proxy WebSocket handlers run in Burp's order: "received" handlers before interception (their verdict
+can force or skip it), "to be sent" handlers after the user's edit. Calls into an extension's JVM
+(payload generation and processing, context-menu items, extension editors) never run on the UI thread.
 
 ## Unmodified BApps checked on the QA display (screenshots in `qa/r03-2026-11-18/`)
 

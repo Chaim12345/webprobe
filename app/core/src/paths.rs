@@ -262,6 +262,8 @@ impl Lookup {
         let out = dir.join(format!("classes-{:016x}", h.finish()));
         let _one = COMPILING.lock().unwrap_or_else(|p| p.into_inner());
         if out.join("MontoyaBridge.class").is_file() {
+            mark_used(&out);
+            prune_bridge_classes(&dir, &out);
             return Ok(out);
         }
         // A key directory without the classes is not trusted: rebuilt.
@@ -292,6 +294,7 @@ impl Lookup {
                 return Err("could not store the compiled Montoya bridge".into());
             }
         }
+        mark_used(&out);
         prune_bridge_classes(&dir, &out);
         Ok(out)
     }
@@ -365,20 +368,37 @@ pub fn montoya_bridge_source() -> std::io::Result<PathBuf> {
     Lookup::process().montoya_bridge_source()
 }
 
-/// After a new bridge build is installed: drop the class directories of
-/// older bridge sources, and temporary ones a killed compile left behind
-/// (older than an hour, so a compile running in another process is kept).
+/// A bridge build's "last-used" stamp, rewritten at every sidecar launch.
+const USED_STAMP: &str = "last-used";
+/// A build no launch has used for this long is pruned.
+const BRIDGE_CLASSES_TTL: std::time::Duration = std::time::Duration::from_secs(7 * 86_400);
+
+fn mark_used(classes: &Path) {
+    let _ = std::fs::write(classes.join(USED_STAMP), crate::util::now_secs().to_string());
+}
+
+/// Drop bridge builds no WebProbe has launched for a week (another
+/// WebProbe, older or newer, still running stamps its own build at every
+/// sidecar launch, so a build in use is never pruned), and temporary
+/// directories a killed compile left behind (older than an hour, so a
+/// compile running in another process is kept).
 fn prune_bridge_classes(dir: &Path, keep: &Path) {
     let Ok(entries) = std::fs::read_dir(dir) else { return };
-    let hour_ago = std::time::SystemTime::now() - std::time::Duration::from_secs(3600);
+    let now = std::time::SystemTime::now();
+    let older = |p: &Path, age: std::time::Duration| std::fs::metadata(p).and_then(|m| m.modified()).is_ok_and(|t| now.duration_since(t).is_ok_and(|d| d > age));
     for e in entries.flatten() {
         let path = e.path();
         let name = e.file_name().to_string_lossy().into_owned();
         if path == keep || !name.starts_with("classes-") {
             continue;
         }
-        let stale_tmp = name.starts_with("classes-tmp") && e.metadata().and_then(|m| m.modified()).is_ok_and(|t| t < hour_ago);
-        if !name.starts_with("classes-tmp") || stale_tmp {
+        let stale = if name.starts_with("classes-tmp") {
+            older(&path, std::time::Duration::from_secs(3600))
+        } else {
+            let stamp = path.join(USED_STAMP);
+            older(if stamp.exists() { &stamp } else { &path }, BRIDGE_CLASSES_TTL)
+        };
+        if stale {
             let _ = std::fs::remove_dir_all(&path);
         }
     }
@@ -505,8 +525,7 @@ mod tests {
     }
 
     /// The bridge is compiled once into `classes-<key>`; a partial
-    /// directory is never used, and an older build is pruned when a new one
-    /// is installed.
+    /// directory is never used, and builds unused for a week are pruned.
     #[test]
     fn bridge_classes_are_compiled_once_and_old_ones_pruned() {
         let (Ok(java), Ok(api)) = (super::java(), super::montoya_jar()) else {
@@ -516,12 +535,20 @@ mod tests {
         let data = std::env::temp_dir().join(format!("wp-bridge-classes-{}", std::process::id()));
         let lk = Lookup::with_vars(vec![("WEBPROBE_DATA_DIR", data.clone())]);
         let sidecar = data.join("sidecar");
-        // A half-written temp dir from a killed compile and an old build.
-        std::fs::create_dir_all(sidecar.join("classes-0000000000000000")).unwrap();
+        // A temp dir of a compile in progress, an older build another
+        // WebProbe used yesterday, and one unused for eight days.
+        let week_ago = std::time::SystemTime::now() - std::time::Duration::from_secs(8 * 86_400);
+        let day_ago = std::time::SystemTime::now() - std::time::Duration::from_secs(86_400);
+        for (name, used) in [("classes-0000000000000001", day_ago), ("classes-0000000000000002", week_ago)] {
+            std::fs::create_dir_all(sidecar.join(name)).unwrap();
+            let f = std::fs::File::create(sidecar.join(name).join(USED_STAMP)).unwrap();
+            f.set_modified(used).unwrap();
+        }
         std::fs::create_dir_all(sidecar.join("classes-tmp1-0")).unwrap();
         let out = lk.montoya_bridge_classes(&java, &api).unwrap();
-        assert!(out.join("MontoyaBridge.class").is_file() && out.join("Engine.class").is_file());
-        assert!(!sidecar.join("classes-0000000000000000").exists(), "an older build is pruned");
+        assert!(out.join("MontoyaBridge.class").is_file() && out.join("Engine.class").is_file() && out.join(USED_STAMP).is_file());
+        assert!(sidecar.join("classes-0000000000000001").exists(), "a build used recently may belong to a running WebProbe");
+        assert!(!sidecar.join("classes-0000000000000002").exists(), "a build unused for a week is pruned");
         assert!(sidecar.join("classes-tmp1-0").exists(), "a recent temp dir may be another process compiling");
         // Cached: the same directory, not compiled again.
         let stamp = std::fs::metadata(out.join("MontoyaBridge.class")).unwrap().modified().unwrap();

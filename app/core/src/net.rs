@@ -801,6 +801,15 @@ pub struct Shared {
     /// Browsers opened from WebProbe (main pid, profile dir), closed on exit.
     pub browsers: Mutex<Vec<(u32, String)>>,
     pub issues: Mutex<Vec<crate::scan::ScanIssue>>,
+    /// Proxy listener option "Support HTTP/2" (ProjectDefaults.json
+    /// request_listeners[].enable_http2, default on): ALPN offers h2 to
+    /// HTTPS clients. One switch for every listener.
+    pub listener_http2: AtomicBool,
+    /// Streaming responses (Settings > Network > HTTP; R-06).
+    pub streaming: Mutex<crate::streaming::StreamSettings>,
+    /// (host, reason) pairs already reported as skipped for a streaming
+    /// response: the Event log says it once per host and reason.
+    pub stream_skips: Mutex<std::collections::HashSet<(String, &'static str)>>,
     /// The Organizer's items (shared, so extensions can add and read them).
     pub organizer: Mutex<crate::organizer::Organizer>,
     /// What extensions sent to tools whose state is the desktop app's
@@ -957,6 +966,9 @@ impl Shared {
             browser_port: std::sync::atomic::AtomicU16::new(0),
             browsers: Mutex::new(Vec::new()),
             issues: Mutex::new(Vec::new()),
+            listener_http2: AtomicBool::new(true),
+            streaming: Mutex::new(crate::streaming::StreamSettings::default()),
+            stream_skips: Mutex::new(std::collections::HashSet::new()),
             organizer: Mutex::new(crate::organizer::Organizer::new()),
             tool_sends: Mutex::new(Vec::new()),
             scan: Default::default(),
@@ -1222,10 +1234,10 @@ impl Write for UpstreamConn {
 }
 
 impl ResponseRead for UpstreamConn {
-    fn set_open_ended_timeout(&self) -> std::io::Result<()> {
+    fn set_read_timeout_ms(&self, ms: u64) -> std::io::Result<()> {
         match self {
-            UpstreamConn::Plain(s) => s.set_read_timeout(Some(Duration::from_millis(OPEN_ENDED_RESPONSE_TIMEOUT_MS))),
-            UpstreamConn::Tls(s) => s.get_ref().set_read_timeout(Some(Duration::from_millis(OPEN_ENDED_RESPONSE_TIMEOUT_MS))),
+            UpstreamConn::Plain(s) => s.set_read_timeout(Some(Duration::from_millis(ms))),
+            UpstreamConn::Tls(s) => s.get_ref().set_read_timeout(Some(Duration::from_millis(ms))),
         }
     }
 }
@@ -1298,13 +1310,116 @@ pub fn history_host(e: &HistEntry) -> String {
 /// connection is pooled per host when keep-alive is enabled
 /// (ProjectDefaults.json http.http1.enable_keep_alive, default false).
 pub fn send_raw(shared: &Shared, host: &str, port: u16, request: &[u8]) -> Upstream {
+    send_raw_with(shared, host, port, request, None)
+}
+
+/// [`send_raw`] with a response sink (streaming responses, R-06); without
+/// one, the tool on this thread gets Burp's "other tools" handling: a
+/// streaming response is cut after its head.
+pub fn send_raw_with(shared: &Shared, host: &str, port: u16, request: &[u8], sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>) -> Upstream {
     let request = jar_request(shared, host, false, request);
     let request = session_request(shared, port, false, request);
-    let up = send_from(shared, host, port, &request);
+    let mut tool_sink = tool_sink(shared, host, port, false, &request);
+    let up = match (sink, tool_sink.as_mut()) {
+        (Some(s), _) => send_from(shared, host, port, &request, Some(s)),
+        (None, Some(t)) => send_from(shared, host, port, &request, Some(t)),
+        (None, None) => send_from(shared, host, port, &request, None),
+    };
     jar_response(shared, host, &request, &up);
     session_after(shared, host);
     log_tool_exchange(shared, host, port, false, &request, &up);
     up
+}
+
+/// The full URL of a request sent to host:port (for the streaming rule).
+pub(crate) fn request_url(host: &str, port: u16, https: bool, request: &[u8]) -> String {
+    let parts = util::parse_http(request);
+    history_host(&HistEntry { host: host.to_string(), port, https, ..Default::default() }) + &path_of(&parts)
+}
+
+/// Burp's "other tools ignore streaming responses and close the
+/// connection": the sink of a tool (Scanner, Intruder, crawler, ...) other
+/// than the Proxy and Repeater, which bring their own.
+struct ToolSink<'a> {
+    shared: &'a Shared,
+    url: String,
+    settings: crate::streaming::StreamSettings,
+}
+
+impl crate::streaming::ResponseSink for ToolSink<'_> {
+    fn head(&mut self, head: &[u8]) -> crate::streaming::BodyMode {
+        if crate::streaming::decide(&self.url, head, &self.settings) == crate::streaming::Decision::Buffered {
+            return crate::streaming::BodyMode::Buffer;
+        }
+        let tool = TOOL.with(|t| t.get()).unwrap_or("A tool");
+        self.shared.log(&format!("{tool} ignored the streaming response from {} and closed the connection", self.url));
+        crate::streaming::BodyMode::HeadOnly
+    }
+    fn wire(&mut self, _: &[u8]) -> std::io::Result<()> {
+        Ok(())
+    }
+    fn payload(&mut self, _: &[u8]) {}
+    fn end(&mut self, _: bool) {}
+}
+
+fn tool_sink<'a>(shared: &'a Shared, host: &str, port: u16, https: bool, request: &[u8]) -> Option<ToolSink<'a>> {
+    let tool = TOOL.with(|t| t.get())?;
+    if tool == "Proxy" || tool == "Repeater" {
+        return None;
+    }
+    Some(ToolSink { shared, url: request_url(host, port, https, request), settings: shared.streaming.lock().unwrap().clone() })
+}
+
+/// How a sender wants HTTP/2 used on its thread (Repeater's protocol
+/// control): `want_h2` Some(true) = HTTP/2 only, Some(false) = HTTP/1
+/// only, None = negotiate by ALPN (the Proxy, and Repeater with "Allow
+/// HTTP/2 ALPN override"). `strip_connection`: Repeater's "Strip
+/// Connection header over HTTP/2" (default on).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Http2Choice {
+    pub want_h2: Option<bool>,
+    pub strip_connection: bool,
+}
+
+thread_local! {
+    static H2_CHOICE: std::cell::Cell<Option<Http2Choice>> = const { std::cell::Cell::new(None) };
+    static LAST_PROTOCOL: std::cell::Cell<&'static str> = const { std::cell::Cell::new("HTTP/1.1") };
+}
+
+/// Restores the thread's previous HTTP/2 choice when dropped.
+pub struct Http2Scope(Option<Http2Choice>);
+
+impl Drop for Http2Scope {
+    fn drop(&mut self) {
+        H2_CHOICE.with(|c| c.set(self.0));
+    }
+}
+
+/// Use `choice` for sends on this thread until the scope ends.
+pub fn http2_scope(choice: Http2Choice) -> Http2Scope {
+    Http2Scope(H2_CHOICE.with(|c| c.replace(Some(choice))))
+}
+
+/// The protocol the last send on this thread used ("HTTP/1.1"/"HTTP/2").
+pub fn last_protocol() -> &'static str {
+    LAST_PROTOCOL.with(|p| p.get())
+}
+
+/// An HTTP/1.1 request line for a request shown as `HTTP/2` (the
+/// listener's h2 requests, Repeater tabs) that goes out over HTTP/1.
+fn as_http1(req: &[u8]) -> std::borrow::Cow<'_, [u8]> {
+    let line_end = req.iter().position(|&b| b == b'\n').unwrap_or(req.len());
+    let line = &req[..line_end];
+    let trimmed = line.strip_suffix(b"\r").unwrap_or(line);
+    for v in [b"HTTP/2".as_slice(), b"HTTP/2.0".as_slice()] {
+        if trimmed.ends_with(v) && trimmed.len() > v.len() && trimmed[trimmed.len() - v.len() - 1] == b' ' {
+            let mut out = trimmed[..trimmed.len() - v.len()].to_vec();
+            out.extend_from_slice(b"HTTP/1.1");
+            out.extend_from_slice(&req[trimmed.len()..]);
+            return out.into();
+        }
+    }
+    req.into()
 }
 
 /// The request a tool is about to send, with the cookie jar's cookies when
@@ -1437,9 +1552,9 @@ fn log_tool_exchange(shared: &Shared, host: &str, port: u16, https: bool, reques
     });
 }
 
-fn send_from(shared: &Shared, host: &str, port: u16, req: &[u8]) -> Upstream {
+fn send_from(shared: &Shared, host: &str, port: u16, req: &[u8], sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>) -> Upstream {
     let t0 = std::time::Instant::now();
-    let r = send_inner(shared, host, port, req);
+    let r = send_inner(shared, host, port, req, sink);
     // Debug aid: WB_TRACE=1 prints every upstream exchange slower than 2 s.
     if std::env::var_os("WB_TRACE").is_some() && t0.elapsed().as_millis() > 2000 {
         let first = req.split(|b| *b == b'\n').next().map(|l| String::from_utf8_lossy(l).into_owned()).unwrap_or_default();
@@ -1473,18 +1588,24 @@ pub fn resolve(
 }
 
 pub(crate) trait ResponseRead: Read {
-    fn set_open_ended_timeout(&self) -> std::io::Result<()>;
+    /// The read timeout from now on (idle time allowed between reads).
+    fn set_read_timeout_ms(&self, ms: u64) -> std::io::Result<()>;
+    /// A body without length information is bounded by the open-ended
+    /// timeout (ProjectDefaults.json connections.timeouts).
+    fn set_open_ended_timeout(&self) -> std::io::Result<()> {
+        self.set_read_timeout_ms(OPEN_ENDED_RESPONSE_TIMEOUT_MS)
+    }
 }
 
 impl ResponseRead for TcpStream {
-    fn set_open_ended_timeout(&self) -> std::io::Result<()> {
-        self.set_read_timeout(Some(Duration::from_millis(OPEN_ENDED_RESPONSE_TIMEOUT_MS)))
+    fn set_read_timeout_ms(&self, ms: u64) -> std::io::Result<()> {
+        self.set_read_timeout(Some(Duration::from_millis(ms)))
     }
 }
 
 impl ResponseRead for rustls::StreamOwned<rustls::ClientConnection, TcpStream> {
-    fn set_open_ended_timeout(&self) -> std::io::Result<()> {
-        self.get_ref().set_read_timeout(Some(Duration::from_millis(OPEN_ENDED_RESPONSE_TIMEOUT_MS)))
+    fn set_read_timeout_ms(&self, ms: u64) -> std::io::Result<()> {
+        self.get_ref().set_read_timeout(Some(Duration::from_millis(ms)))
     }
 }
 
@@ -1654,7 +1775,7 @@ fn response_allows_reuse(resp: &[u8]) -> bool {
     framed && not_close
 }
 
-fn send_inner(shared: &Shared, host: &str, port: u16, req: &[u8]) -> Result<Vec<u8>, String> {
+fn send_inner(shared: &Shared, host: &str, port: u16, req: &[u8], mut sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>) -> Result<Vec<u8>, String> {
     let config = shared.upstream_for(&host);
     let req = util::origin_form(req);
     let routed = crate::upstream::absolute_form_request(&config, &req, host, port);
@@ -1709,7 +1830,10 @@ fn send_inner(shared: &Shared, host: &str, port: u16, req: &[u8]) -> Result<Vec<
             }
         }
     }
-    let result = match exchange(&mut stream, &routed) {
+    // Cleartext is HTTP/1 here: a request shown as HTTP/2 goes as HTTP/1.1.
+    let routed = as_http1(&routed).into_owned();
+    LAST_PROTOCOL.with(|p| p.set("HTTP/1.1"));
+    let result = match exchange(&mut stream, &routed, sink.as_deref_mut()) {
         Ok((r, reusable)) => Ok((r, reusable, stream)),
         Err(e) => {
             if reused {
@@ -1719,7 +1843,7 @@ fn send_inner(shared: &Shared, host: &str, port: u16, req: &[u8]) -> Result<Vec<
                     tcp
                 });
                 shared.conns_opened.fetch_add(1, Ordering::SeqCst);
-                exchange(&mut fresh, &routed).map(|(r, reusable)| (r, reusable, fresh)).map_err(|e2| format!("{e}; retry: {e2}"))
+                exchange(&mut fresh, &routed, sink.as_deref_mut()).map(|(r, reusable)| (r, reusable, fresh)).map_err(|e2| format!("{e}; retry: {e2}"))
             } else {
                 Err(e)
             }
@@ -1736,9 +1860,20 @@ fn send_inner(shared: &Shared, host: &str, port: u16, req: &[u8]) -> Result<Vec<
 }
 
 pub fn send_tls_raw(shared: &Shared, host: &str, port: u16, request: &[u8]) -> Upstream {
+    send_tls_raw_with(shared, host, port, request, None)
+}
+
+/// [`send_tls_raw`] with a response sink (see [`send_raw_with`]).
+pub fn send_tls_raw_with(shared: &Shared, host: &str, port: u16, request: &[u8], sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>) -> Upstream {
     let request = jar_request(shared, host, true, request);
     let request = session_request(shared, port, true, request);
-    let up = match send_tls_inner(shared, host, port, &request) {
+    let mut tool_sink = tool_sink(shared, host, port, true, &request);
+    let sent = match (sink, tool_sink.as_mut()) {
+        (Some(s), _) => send_tls_inner(shared, host, port, &request, Some(s)),
+        (None, Some(t)) => send_tls_inner(shared, host, port, &request, Some(t)),
+        (None, None) => send_tls_inner(shared, host, port, &request, None),
+    };
+    let up = match sent {
         Ok(resp) => Upstream { resp: Some(resp), error: None },
         Err(e) => Upstream { resp: None, error: Some(e) },
     };
@@ -1748,13 +1883,16 @@ pub fn send_tls_raw(shared: &Shared, host: &str, port: u16, request: &[u8]) -> U
     up
 }
 
-fn send_tls_inner(shared: &Shared, host: &str, port: u16, req: &[u8]) -> Result<Vec<u8>, String> {
+fn send_tls_inner(shared: &Shared, host: &str, port: u16, req: &[u8], mut sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>) -> Result<Vec<u8>, String> {
     let config = shared.upstream_for(&host);
     let req = util::origin_form(req);
     let keep_alive = shared.keep_alive.load(Ordering::SeqCst);
     let req = if keep_alive { set_connection(&req, "keep-alive") } else { set_connection(&req, "close") };
     let key = (host.to_string(), port);
-    let mut pooled = shared.tls_pool.lock().unwrap().remove(&key);
+    let choice = H2_CHOICE.with(|c| c.get());
+    let want_h2 = choice.and_then(|c| c.want_h2);
+    // Pooled connections are HTTP/1.x: HTTP/2 asked for needs a fresh one.
+    let mut pooled = if want_h2 == Some(true) { None } else { shared.tls_pool.lock().unwrap().remove(&key) };
     if let Some(conn) = pooled.as_mut() {
         if !conn.writable() {
             pooled = None;
@@ -1785,11 +1923,22 @@ fn send_tls_inner(shared: &Shared, host: &str, port: u16, req: &[u8]) -> Result<
             }
             _ => false,
         };
+    LAST_PROTOCOL.with(|p| p.set(if use_h2 { "HTTP/2" } else { "HTTP/1.1" }));
+    if want_h2 == Some(true) && !use_h2 {
+        return Err("the server did not agree to HTTP/2 (ALPN); switch the request to HTTP/1".into());
+    }
     if use_h2 {
-        let h2req = crate::h2::request_from_raw(&req, "https")
+        let mut h2req = crate::h2::request_from_raw(&req, "https")
             .ok_or("h2: request without Host header")?;
+        if choice.is_some_and(|c| !c.strip_connection) {
+            // Repeater's "Strip Connection header over HTTP/2" off: send it.
+            let parts = util::parse_http(&req);
+            if let Some(v) = util::get_header(&parts.headers, "Connection") {
+                h2req.headers.push(("connection".into(), v));
+            }
+        }
         let first = match &mut stream {
-            UpstreamConn::Tls(tls) => crate::h2::exchange(tls, &h2req),
+            UpstreamConn::Tls(tls) => crate::h2::exchange(tls, &h2req, sink.as_deref_mut()),
             _ => return Err("h2: not a TLS connection".into()),
         };
         match first {
@@ -1803,7 +1952,7 @@ fn send_tls_inner(shared: &Shared, host: &str, port: u16, req: &[u8]) -> Result<
                     UpstreamConn::Tls(tls) => {
                         let _ = tls.conn.complete_io(&mut tls.sock);
                         if tls.conn.alpn_protocol() == Some(b"h2".as_slice()) {
-                            crate::h2::exchange(tls, &h2req)
+                            crate::h2::exchange(tls, &h2req, sink.as_deref_mut())
                         } else {
                             Err(e.clone())
                         }
@@ -1815,14 +1964,16 @@ fn send_tls_inner(shared: &Shared, host: &str, port: u16, req: &[u8]) -> Result<
             Err(e) => return Err(e),
         }
     }
-    let result = match exchange(&mut stream, &req) {
+    // HTTP/1 on the wire: a request shown as HTTP/2 goes out as HTTP/1.1.
+    let req = as_http1(&req).into_owned();
+    let result = match exchange(&mut stream, &req, sink.as_deref_mut()) {
         Ok((r, reusable)) => Ok((r, reusable, stream)),
         Err(e) => {
             // A reused connection may have been closed by the peer; try once more
             // on a fresh one before reporting the failure.
             if reused {
                 let mut fresh = new_tls_conn(shared, &config, host, port)?;
-                exchange(&mut fresh, &req).map(|(r, reusable)| (r, reusable, fresh)).map_err(|e2| format!("{e}; retry: {e2}"))
+                exchange(&mut fresh, &req, sink.as_deref_mut()).map(|(r, reusable)| (r, reusable, fresh)).map_err(|e2| format!("{e}; retry: {e2}"))
             } else {
                 Err(e)
             }
@@ -1858,12 +2009,12 @@ fn new_tls_conn(
 /// EOF-delimited, malformed or cut short, and not when the peer sent bytes
 /// past it (pipelining stays off, MECHANICS.md A-03; those bytes would
 /// otherwise become the next request's response).
-fn exchange<S: Read + Write + ResponseRead>(stream: &mut S, req: &[u8]) -> Result<(Vec<u8>, bool), String> {
+fn exchange<S: Read + Write + ResponseRead>(stream: &mut S, req: &[u8], sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>) -> Result<(Vec<u8>, bool), String> {
     stream.write_all(req).map_err(|e| format!("write: {e}"))?;
     stream.flush().ok();
     let method = req.split(|&b| b == b' ').next().map(String::from_utf8_lossy).unwrap_or_default();
     let mut buffer = Vec::new();
-    let (resp, reusable) = crate::codec::read_message(stream, &mut buffer, &method).map_err(|e| format!("read: {e}"))?;
+    let (resp, reusable) = crate::codec::read_message(stream, &mut buffer, &method, sink).map_err(|e| format!("read: {e}"))?;
     Ok((resp, reusable && buffer.is_empty()))
 }
 
@@ -2147,9 +2298,28 @@ fn record(shared: &Shared, req: &[u8], resp: Option<Vec<u8>>, note: Option<Strin
     // History shows the decoded message: chunked bodies reassembled and
     // content coding removed (MECHANICS.md A-01/A-02). The bytes forwarded to
     // the server or client are untouched.
+    let resp = resp.map(|r| crate::body::Body::from(crate::codec::normalize_response(&r)));
+    record_entry(shared, req, resp, note, default_port, https, listener_port, edited, ann, true);
+}
+
+/// Record one proxied exchange whose response is already in its history
+/// form. `scan`: run the passive checks (not for a streaming response whose
+/// body was not stored).
+#[allow(clippy::too_many_arguments)]
+fn record_entry(
+    shared: &Shared,
+    req: &[u8],
+    resp: Option<crate::body::Body>,
+    note: Option<String>,
+    default_port: u16,
+    https: bool,
+    listener_port: u16,
+    edited: bool,
+    ann: &crate::ext_host::Annotations,
+    scan: bool,
+) {
     let req = crate::codec::normalize_request(req);
     let req = req.as_slice();
-    let resp = resp.map(|r| crate::codec::normalize_response(&r));
     let parts = util::parse_http(req);
     let (host, port) = host_of(&parts, default_port);
     // Proxied responses feed the session-handling cookie jar (Burp's default).
@@ -2162,7 +2332,7 @@ fn record(shared: &Shared, req: &[u8], resp: Option<Vec<u8>>, note: Option<Strin
     let id = shared.next_id.fetch_add(1, Ordering::SeqCst);
     let status = resp
         .as_ref()
-        .map(|r| util::parse_http(r).status.clone())
+        .map(|r| util::parse_http(&r[..util::find_head_end(r).unwrap_or(r.len())]).status.clone())
         .unwrap_or_default();
     // Burp's history "Length" is the whole response, headers included
     // (live 2026.7.3: example.com shows 917 for a 513-byte body).
@@ -2178,7 +2348,7 @@ fn record(shared: &Shared, req: &[u8], resp: Option<Vec<u8>>, note: Option<Strin
         status,
         resp_len,
         req_raw: req.to_vec().into(),
-        resp_raw: resp.map(Into::into),
+        resp_raw: resp,
         note,
         highlight: None,
         audited: false,
@@ -2225,7 +2395,7 @@ fn record(shared: &Shared, req: &[u8], resp: Option<Vec<u8>>, note: Option<Strin
     }
     // live passive audit (AuditDefaults.json: scan_type_passive enabled),
     // bounded by the crawler's unique-location cap (CrawlDefaults.json: 1500)
-    if shared.scan_enabled.load(Ordering::SeqCst) && e.path != "/favicon.ico" {
+    if scan && shared.scan_enabled.load(Ordering::SeqCst) && e.path != "/favicon.ico" {
         let loc = format!("{}:{}{}", e.host, e.port, e.path.split('?').next().unwrap_or(""));
         // Scope rules match full URLs ("https://host/..."): the location key
         // has no scheme, so with any include rule nothing was ever in scope.
@@ -2445,11 +2615,11 @@ impl WsWatch {
 
     /// Run one data message through every watching extension; the first
     /// drop wins, the last intercept verdict counts.
-    fn message(&self, to_server: bool, binary: bool, payload: &mut Vec<u8>) -> crate::ext_host::WsVerdict {
+    fn message(&self, stage: crate::ext_host::WsStage, to_server: bool, binary: bool, payload: &mut Vec<u8>) -> crate::ext_host::WsVerdict {
         use crate::ext_host::WsVerdict;
         let mut verdict = WsVerdict::Continue;
         for h in &self.hooks {
-            match h.ws_message(self.socket, to_server, binary, payload) {
+            match h.ws_message(self.socket, stage, to_server, binary, payload) {
                 WsVerdict::Drop => return WsVerdict::Drop,
                 WsVerdict::Continue => {}
                 v => verdict = v,
@@ -2512,11 +2682,13 @@ pub(crate) fn intercept_ws_stream(shared: &Shared, host: &str, chunk: &[u8], st:
         let Some((_, _, mut payload, _)) = parse_ws_frame(&raw) else { break };
         let data = opcode == 0x1 || opcode == 0x2;
         let mut hold = data && ws_should_hold(shared, client_to_server);
-        // Extension handlers see the message first (Burp's "received").
-        let mut ext_changed = false;
-        if let (true, Some(w)) = (data, &st.watch) {
+        let watch = if data { st.watch.as_ref() } else { None };
+        // Extension handlers see the message first (Burp's "received"
+        // stage, whose verdict may force or skip interception) ...
+        let mut changed = false;
+        if let Some(w) = watch {
             let before = payload.clone();
-            match w.message(client_to_server, opcode == 0x2, &mut payload) {
+            match w.message(crate::ext_host::WsStage::Received, client_to_server, opcode == 0x2, &mut payload) {
                 crate::ext_host::WsVerdict::Drop => {
                     shared.log(&format!("An extension dropped a WebSocket message ({direction}, {host})"));
                     continue;
@@ -2525,9 +2697,9 @@ pub(crate) fn intercept_ws_stream(shared: &Shared, host: &str, chunk: &[u8], st:
                 crate::ext_host::WsVerdict::DoNotIntercept => hold = false,
                 crate::ext_host::WsVerdict::Continue => {}
             }
-            ext_changed = payload != before;
+            changed = payload != before;
         }
-        let raw = if ext_changed { build_ws_frame(first, &payload, masked) } else { raw };
+        // ... then the user, when it is held ...
         if hold {
             let id = shared.next_id.fetch_add(1, Ordering::SeqCst);
             let (tx, rx) = mpsc::channel::<Option<String>>();
@@ -2543,27 +2715,33 @@ pub(crate) fn intercept_ws_stream(shared: &Shared, host: &str, chunk: &[u8], st:
             shared.log(&format!("Intercepted WebSocket message queued (id {id})"));
             match rx.recv() {
                 Ok(Some(edited)) => {
-                    let edited = edited.into_bytes();
                     // Binary payloads shown lossily are forwarded untouched
                     // unless the user really changed the text.
-                    let changed = edited != String::from_utf8_lossy(&payload).as_bytes();
-                    let hid = push_ws(shared, host, direction, ws_opcode_name(opcode), if changed { &edited } else { &payload });
-                    if changed || ext_changed {
-                        shared.ws_edited.lock().unwrap().insert(hid);
-                    }
-                    if changed {
-                        out.extend_from_slice(&build_ws_frame(first, &edited, masked));
-                    } else {
-                        out.extend_from_slice(&raw);
+                    if edited.as_bytes() != String::from_utf8_lossy(&payload).as_bytes() {
+                        payload = edited.into_bytes();
+                        changed = true;
                     }
                 }
-                _ => shared.log(&format!("Intercepted WebSocket message dropped (id {id})")),
+                _ => {
+                    shared.log(&format!("Intercepted WebSocket message dropped (id {id})"));
+                    continue;
+                }
             }
+        }
+        // ... and the extension's "to be sent" stage last, on what will go.
+        if let Some(w) = watch {
+            let before = payload.clone();
+            if w.message(crate::ext_host::WsStage::ToBeSent, client_to_server, opcode == 0x2, &mut payload) == crate::ext_host::WsVerdict::Drop {
+                shared.log(&format!("An extension dropped a WebSocket message ({direction}, {host})"));
+                continue;
+            }
+            changed |= payload != before;
+        }
+        let hid = push_ws(shared, host, direction, ws_opcode_name(opcode), &payload);
+        if changed {
+            shared.ws_edited.lock().unwrap().insert(hid);
+            out.extend_from_slice(&build_ws_frame(first, &payload, masked));
         } else {
-            let hid = push_ws(shared, host, direction, ws_opcode_name(opcode), &payload);
-            if ext_changed {
-                shared.ws_edited.lock().unwrap().insert(hid);
-            }
             out.extend_from_slice(&raw);
         }
     }
@@ -2815,6 +2993,19 @@ pub fn host_matches(pattern: &str, host: &str) -> bool {
 /// The TLS client config for an upstream host: a per-host client certificate
 /// (mTLS) when one is configured, otherwise the shared upstream config.
 fn tls_client_config(shared: &Shared, host: &str) -> std::sync::Arc<rustls::ClientConfig> {
+    let base = tls_client_config_base(shared, host);
+    // A sender that chose the protocol (Repeater) offers only that one.
+    match H2_CHOICE.with(|c| c.get()).and_then(|c| c.want_h2) {
+        Some(h2) => {
+            let mut c = (*base).clone();
+            c.alpn_protocols = vec![if h2 { b"h2".to_vec() } else { b"http/1.1".to_vec() }];
+            Arc::new(c)
+        }
+        None => base,
+    }
+}
+
+fn tls_client_config_base(shared: &Shared, host: &str) -> std::sync::Arc<rustls::ClientConfig> {
     let rule = shared
         .client_certs
         .lock()
@@ -2978,7 +3169,7 @@ fn handle_connect(shared: Arc<Shared>, mut stream: TcpStream, host: String, port
         relay_tunnel(&stream, &mut upstream);
         return;
     }
-    let config = match shared.mitm.server_config(&host) {
+    let config = match shared.mitm.listener_config(&host, shared.listener_http2.load(Ordering::SeqCst)) {
         Ok(config) => config,
         Err(e) => {
             shared.log(&format!("HTTPS certificate for {host} failed: {e}"));
@@ -2997,6 +3188,12 @@ fn handle_connect(shared: Arc<Shared>, mut stream: TcpStream, host: String, port
         }
     };
     let mut tls = rustls::StreamOwned::new(conn, stream);
+    // The client chose HTTP/2 by ALPN: serve the connection's streams.
+    let _ = tls.conn.complete_io(&mut tls.sock);
+    if tls.conn.alpn_protocol() == Some(b"h2".as_slice()) {
+        serve_h2_client(shared, tls, host, port);
+        return;
+    }
     let req = match read_request(&mut tls) {
         Ok(req) if !req.is_empty() => req,
         Ok(_) => return,
@@ -3018,6 +3215,34 @@ fn handle_connect(shared: Arc<Shared>, mut stream: TcpStream, host: String, port
     upstream_and_deliver(&shared, &mut tls, req, 443, true, req_state);
     tls.conn.send_close_notify();
     let _ = tls.flush();
+}
+
+/// An HTTPS client that negotiated h2: every stream runs the proxy's
+/// per-request pipeline (intercept, match and replace, extensions,
+/// history, streaming) on its own thread; `h2_server` frames the results.
+fn serve_h2_client(shared: Arc<Shared>, mut tls: rustls::StreamOwned<rustls::ServerConnection, TcpStream>, host: String, port: u16) {
+    if tls.get_ref().set_nonblocking(true).is_err() {
+        return;
+    }
+    shared.log(&format!("HTTP/2 client connection for {host}:{port}"));
+    let listener = LISTENER_PORT.with(|p| p.get());
+    let pipeline_shared = Arc::clone(&shared);
+    let handler: crate::h2_server::Handler = Arc::new(move |req: Vec<u8>, mut out: crate::h2_server::ResponseWriter| {
+        LISTENER_PORT.with(|p| p.set(listener));
+        let (req, state) = intercept_request(&pipeline_shared, req, 443);
+        let Some(req) = req else { return };
+        upstream_and_deliver(&pipeline_shared, &mut out, req, 443, true, state);
+    });
+    crate::h2_server::serve(&mut tls, handler);
+    tls.conn.send_close_notify();
+    let _ = tls.get_ref().set_nonblocking(false);
+    let _ = tls.flush();
+}
+
+impl ProxyIo for crate::h2_server::ResponseWriter {
+    fn set_nonblocking_io(&self, _: bool) -> std::io::Result<()> {
+        Ok(())
+    }
 }
 
 /// What Forward sends for a held message: the original bytes when the text
@@ -3099,6 +3324,131 @@ fn intercept_response(shared: &Shared, resp: Vec<u8>, host: &str, port: u16, htt
     }
 }
 
+/// The Proxy's response sink: a streaming response is written to the
+/// client as it arrives, and kept for history in a bounded [`Tee`] when
+/// "Store streaming responses" is on.
+///
+/// [`Tee`]: crate::streaming::Tee
+struct ProxySink<'a, W: Write> {
+    client: &'a mut W,
+    url: String,
+    settings: crate::streaming::StreamSettings,
+    head: Option<Vec<u8>>,
+    tee: Option<crate::streaming::Tee>,
+    wired: usize,
+    complete: bool,
+    client_gone: bool,
+}
+
+/// A streamed response, for history.
+struct Streamed {
+    head: Vec<u8>,
+    message: crate::body::Body,
+    note: String,
+    stored: bool,
+}
+
+impl<'a, W: Write> ProxySink<'a, W> {
+    fn new(shared: &Shared, client: &'a mut W, url: &str) -> Self {
+        ProxySink { client, url: url.to_string(), settings: shared.streaming.lock().unwrap().clone(), head: None, tee: None, wired: 0, complete: false, client_gone: false }
+    }
+
+    /// The streamed response, when this one was streaming.
+    fn finish(self) -> Option<Streamed> {
+        let head = self.head?;
+        let stored = self.tee.is_some();
+        let (message, cut) = match self.tee {
+            Some(t) => {
+                let cut = t.truncated();
+                (t.finish(), cut)
+            }
+            None => (crate::body::Body::from(crate::streaming::unframed_head(&head)), false),
+        };
+        let mut note = String::from("Streaming response");
+        if !stored {
+            note.push_str(" (not stored)");
+        } else if cut {
+            note.push_str(" (stored copy cut at the size limit)");
+        }
+        if self.client_gone {
+            note.push_str("; client closed it");
+        } else if !self.complete {
+            note.push_str("; ended early");
+        }
+        Some(Streamed { head, message, note, stored })
+    }
+}
+
+impl<W: Write> crate::streaming::ResponseSink for ProxySink<'_, W> {
+    fn head(&mut self, head: &[u8]) -> crate::streaming::BodyMode {
+        if crate::streaming::decide(&self.url, head, &self.settings) == crate::streaming::Decision::Buffered {
+            return crate::streaming::BodyMode::Buffer;
+        }
+        self.head = Some(head.to_vec());
+        if self.settings.store {
+            let mut tee = crate::streaming::Tee::new();
+            tee.push(&if self.settings.strip_chunked { crate::streaming::unframed_head(head) } else { head.to_vec() });
+            self.tee = Some(tee);
+        }
+        crate::streaming::BodyMode::Stream
+    }
+
+    fn wire(&mut self, bytes: &[u8]) -> std::io::Result<()> {
+        if bytes.is_empty() {
+            return Ok(());
+        }
+        self.wired += 1;
+        // Without stripping, the stored copy is the body as it was framed.
+        if !self.settings.strip_chunked && self.wired > 1 {
+            if let Some(t) = self.tee.as_mut() {
+                t.push(bytes);
+            }
+        }
+        let sent = self.client.write_all(bytes).and_then(|()| self.client.flush());
+        self.client_gone = sent.is_err();
+        sent
+    }
+
+    fn payload(&mut self, bytes: &[u8]) {
+        if self.settings.strip_chunked {
+            if let Some(t) = self.tee.as_mut() {
+                t.push(bytes);
+            }
+        }
+    }
+
+    fn end(&mut self, complete: bool) {
+        self.complete = complete;
+    }
+}
+
+/// A streaming response passes through unmodified, as in Burp: say once
+/// per host and reason that response interception, response
+/// match-and-replace or extension response handlers did not apply to it.
+fn report_stream_skips(shared: &Shared, host: &str, url: &str, head: &[u8], st: ReqState) {
+    let mut reasons: Vec<&'static str> = Vec::new();
+    if shared.intercept_on.load(Ordering::SeqCst) {
+        let p = util::parse_http(head);
+        let ct = util::get_header(&p.headers, "Content-Type").unwrap_or_default();
+        let status = p.status.split_whitespace().next().unwrap_or("").to_string();
+        let rules = shared.response_rules.lock().unwrap().clone();
+        if rules.matches(&ct, &status, st, rules.in_scope && in_scope(shared, url)) {
+            reasons.push("response interception");
+        }
+    }
+    if shared.mr_response.lock().unwrap().iter().any(|r| r.enabled) {
+        reasons.push("response match and replace rules");
+    }
+    if !shared.ext_host.lock().unwrap().active().is_empty() {
+        reasons.push("extension response handlers");
+    }
+    for reason in reasons {
+        if shared.stream_skips.lock().unwrap().insert((host.to_string(), reason)) {
+            shared.log(&format!("Streaming responses from {host} pass straight through: {reason} did not apply to them"));
+        }
+    }
+}
+
 fn upstream_and_deliver<S: ProxyIo>(
     shared: &Shared,
     stream: &mut S,
@@ -3152,11 +3502,22 @@ fn upstream_and_deliver<S: ProxyIo>(
         return;
     }
     let (up_host, up_port) = upstream_target(shared, &host, port);
+    let url = history_host(&HistEntry { host: host.clone(), port, https: use_tls, ..Default::default() }) + &path_of(&parts);
+    // A streaming response (Burp's rule, `streaming::decide`) goes to the
+    // client as it arrives, straight from the response reader.
+    let mut sink = ProxySink::new(shared, stream, &url);
     let up = if use_tls {
-        send_tls_raw(shared, &up_host, up_port, &req_out)
+        send_tls_raw_with(shared, &up_host, up_port, &req_out, Some(&mut sink))
     } else {
-        send_raw(shared, &up_host, up_port, &req_out)
+        send_raw_with(shared, &up_host, up_port, &req_out, Some(&mut sink))
     };
+    if let Some(done) = sink.finish() {
+        report_stream_skips(shared, &host, &url, &done.head, req_state);
+        let status = util::parse_http(&done.head).first.split_whitespace().nth(1).unwrap_or("").to_string();
+        record_entry(shared, &req_out, Some(done.message), Some(done.note), default_port, use_tls, listener_port(shared), was_edited, &ann, done.stored);
+        shared.log(&format!("Streamed {} {host}:{port}{} -> {status}", parts.method, path_of(&parts)));
+        return;
+    }
     match up.resp {
         Some(resp) => {
             let mut resp = crate::rules::apply_rules(&resp, &shared.mr_response.lock().unwrap());
@@ -3164,7 +3525,6 @@ fn upstream_and_deliver<S: ProxyIo>(
                 shared.log("Response dropped by an extension hook");
                 return;
             }
-            let url = history_host(&HistEntry { host: host.clone(), port, https: use_tls, ..Default::default() }) + &path_of(&parts);
             let Some(resp) = intercept_response(shared, resp, &host, port, use_tls, &url, req_state) else { return };
             let status = util::parse_http(&resp).first.split_whitespace().nth(1).unwrap_or("").to_string();
             let _ = stream.write_all(&resp);
@@ -3496,6 +3856,14 @@ mod tests {
     use rustls::pki_types::ServerName;
     use rustls::{ClientConfig, ClientConnection, RootCertStore, ServerConnection, StreamOwned};
 
+    /// An HTTP/1.1 client of the proxy listener (no ALPN: the listener
+    /// would otherwise negotiate h2, R-05).
+    fn browser_config(ca: rustls::pki_types::CertificateDer<'static>) -> Arc<ClientConfig> {
+        let mut roots = RootCertStore::empty();
+        roots.add(ca).unwrap();
+        Arc::new(ClientConfig::builder().with_root_certificates(roots).with_no_client_auth())
+    }
+
     fn client_config(ca: rustls::pki_types::CertificateDer<'static>) -> Arc<ClientConfig> {
         let mut roots = RootCertStore::empty();
         roots.add(ca).unwrap();
@@ -3553,7 +3921,7 @@ mod tests {
         assert!(connect_response.starts_with(b"HTTP/1.1 200"));
 
         let conn = ClientConnection::new(
-            client_config(shared.mitm.ca_der()),
+            browser_config(shared.mitm.ca_der()),
             ServerName::try_from("localhost").unwrap(),
         )
         .unwrap();
@@ -3963,7 +4331,7 @@ mod tests {
         }
         assert!(connect_response.starts_with(b"HTTP/1.1 200"));
 
-        let conn = ClientConnection::new(client_config(shared.mitm.ca_der()), ServerName::try_from("localhost").unwrap()).unwrap();
+        let conn = ClientConnection::new(browser_config(shared.mitm.ca_der()), ServerName::try_from("localhost").unwrap()).unwrap();
         let mut tls = StreamOwned::new(conn, client);
         write!(tls, "GET /e2e HTTP/1.1\r\nHost: localhost:{upstream_port}\r\nConnection: close\r\n\r\n").unwrap();
         let mut response = Vec::new();
@@ -4616,7 +4984,7 @@ mod tests {
             connect_response.push(byte[0]);
         }
         assert!(connect_response.starts_with(b"HTTP/1.1 200"));
-        let conn = ClientConnection::new(client_config(shared.mitm.ca_der()), ServerName::try_from("localhost").unwrap()).unwrap();
+        let conn = ClientConnection::new(browser_config(shared.mitm.ca_der()), ServerName::try_from("localhost").unwrap()).unwrap();
         let mut tls = StreamOwned::new(conn, client);
         write!(
             tls,

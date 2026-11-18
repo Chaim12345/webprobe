@@ -74,6 +74,19 @@ impl RepeaterRun {
         true
     }
 
+    /// Show progress of the send of `generation` (a streaming response so
+    /// far): `write` runs only while the send is current, under this state's
+    /// lock; the send stays busy. Never call another `RepeaterRun` method
+    /// from `write`.
+    pub fn finish_partial(&self, generation: u64, write: impl FnOnce()) -> bool {
+        let s = self.state.lock().unwrap();
+        if s.generation != generation {
+            return false;
+        }
+        write();
+        true
+    }
+
     /// Abandon the in-flight send: the tab is free at once and the late
     /// response, if any, never lands. Returns the send's tab, None when
     /// nothing was in flight.

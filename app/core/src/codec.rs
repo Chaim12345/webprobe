@@ -254,10 +254,16 @@ pub fn normalize_response(raw: &[u8]) -> Vec<u8> {
 /// final. Returns the response and whether the connection may be reused:
 /// not after an EOF-delimited or malformed body, a truncated read or a
 /// size cap.
+///
+/// With a `sink`, the sink sees the head first and picks how the body is
+/// read ([`crate::streaming::BodyMode`]): buffered as above, streamed to the
+/// sink as it arrives (the returned message is then the head only), or not
+/// read at all (head only, connection closed).
 pub(crate) fn read_message<R: std::io::Read + crate::net::ResponseRead>(
     stream: &mut R,
     buffer: &mut Vec<u8>,
     method: &str,
+    sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
 ) -> std::io::Result<(Vec<u8>, bool)> {
     let read_more = |stream: &mut R, buffer: &mut Vec<u8>| -> std::io::Result<usize> {
         let mut chunk = [0u8; 16384];
@@ -291,6 +297,20 @@ pub(crate) fn read_message<R: std::io::Read + crate::net::ResponseRead>(
         break head_end;
     };
     let body_start = head_end;
+    if let Some(sink) = sink {
+        match sink.head(&buffer[..head_end]) {
+            crate::streaming::BodyMode::Buffer => {}
+            crate::streaming::BodyMode::HeadOnly => {
+                let head = buffer[..head_end].to_vec();
+                buffer.clear();
+                return Ok((head, false));
+            }
+            crate::streaming::BodyMode::Stream => {
+                let kind = response_body_kind(&buffer[..head_end], method);
+                return stream_body(stream, buffer, head_end, kind, sink).map(|head| (head, false));
+            }
+        }
+    }
     match response_body_kind(&buffer[..head_end], method) {
         BodyKind::None => Ok((buffer.drain(..head_end).collect(), true)),
         BodyKind::Length(n) => {
@@ -332,6 +352,83 @@ pub(crate) fn read_message<R: std::io::Read + crate::net::ResponseRead>(
             Ok((std::mem::take(buffer), false))
         }
     }
+}
+
+/// Pass a response body to `sink` as it arrives, framed as the head says
+/// (length, chunked or until the connection closes); bytes go on unchanged.
+/// Only a small read buffer is held. Reads wait at most the sink's idle
+/// limit (else the connection's normal read timeout) between bytes: a slow
+/// event stream lives on, a dead one ends. Returns the head.
+fn stream_body<R: std::io::Read + crate::net::ResponseRead>(
+    stream: &mut R,
+    buffer: &mut Vec<u8>,
+    head_end: usize,
+    kind: BodyKind,
+    sink: &mut (dyn crate::streaming::ResponseSink + '_),
+) -> std::io::Result<Vec<u8>> {
+    use crate::streaming::{Dechunker, Fed};
+    let head = buffer[..head_end].to_vec();
+    if let Some(ms) = sink.idle_timeout_ms() {
+        stream.set_read_timeout_ms(ms)?;
+    }
+    let mut pending: Vec<u8> = buffer.drain(..).collect();
+    let mut sent_head = false;
+    let mut left: Option<u64> = match kind {
+        BodyKind::Length(n) => Some(n as u64),
+        BodyKind::None => Some(0),
+        _ => None,
+    };
+    let mut dechunk = matches!(kind, BodyKind::Chunked).then(Dechunker::default);
+    let mut chunk = vec![0u8; 16384];
+    let complete = loop {
+        // What of `pending` belongs to this body, and whether it ends here.
+        let (take, done) = if !sent_head {
+            (head_end, false)
+        } else if let Some(n) = left {
+            let take = (pending.len() as u64).min(n) as usize;
+            left = Some(n - take as u64);
+            (take, n == take as u64)
+        } else if let Some(d) = dechunk.as_mut() {
+            match d.feed(&pending, |b| sink.payload(b)) {
+                Fed::Done(n) => (n, true),
+                Fed::More => (pending.len(), false),
+                Fed::Malformed => {
+                    let _ = sink.wire(&pending);
+                    break false;
+                }
+            }
+        } else {
+            (pending.len(), false)
+        };
+        if sent_head && dechunk.is_none() {
+            sink.payload(&pending[..take]);
+        }
+        if sink.wire(&pending[..take]).is_err() {
+            break false;
+        }
+        pending.drain(..take);
+        if !sent_head {
+            sent_head = true;
+            if left == Some(0) {
+                break true;
+            }
+            continue;
+        }
+        if done {
+            break true;
+        }
+        if sink.cancelled() {
+            break false;
+        }
+        sink.flush();
+        match stream.read(&mut chunk) {
+            Ok(0) => break left.is_none() && dechunk.is_none(),
+            Ok(n) => pending.extend_from_slice(&chunk[..n]),
+            Err(_) => break false,
+        }
+    };
+    sink.end(complete);
+    Ok(head)
 }
 
 /// The status code of a response head (0 when it has none).
@@ -401,13 +498,13 @@ mod tests {
         }
     }
     impl crate::net::ResponseRead for Script {
-        fn set_open_ended_timeout(&self) -> std::io::Result<()> {
+        fn set_read_timeout_ms(&self, _ms: u64) -> std::io::Result<()> {
             Ok(())
         }
     }
     fn read_all(wire: &[u8], method: &str) -> (Vec<u8>, bool, Vec<u8>) {
         let mut buffer = Vec::new();
-        let (resp, reusable) = read_message(&mut Script(std::io::Cursor::new(wire.to_vec())), &mut buffer, method).unwrap();
+        let (resp, reusable) = read_message(&mut Script(std::io::Cursor::new(wire.to_vec())), &mut buffer, method, None).unwrap();
         (resp, reusable, buffer)
     }
 

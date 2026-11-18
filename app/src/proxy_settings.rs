@@ -358,3 +358,34 @@ pub fn intercept_rules_table(app: &mut App, ui: &mut Ui) {
     }
     ui.data_mut(|d| d.insert_temp(sel_id, selected));
 }
+
+/// Burp's Settings > Network > HTTP > Streaming responses (Zrgt): the URL
+/// prefixes whose responses stream, the text/event-stream rule, and how the
+/// stored copy is kept. Streaming responses pass straight through the Proxy.
+pub fn streaming_responses(app: &mut App, ui: &mut Ui) {
+    ui.label(RichText::new("Streaming responses").color(theme::ink()).size(14.0).strong());
+    ui.add_space(4.0);
+    ui.label(
+        RichText::new("Use these settings to specify which URLs return \"streaming\" responses, which do not terminate. The Proxy passes these responses straight through to the client as data is received (response interception, match and replace and extension response handlers do not apply). Repeater updates the response as data arrives. Other tools ignore streaming responses and close the connection.")
+            .size(12.0)
+            .color(theme::ink_dim()),
+    );
+    let mut s = app.shared.streaming.lock().unwrap().clone();
+    let before = s.clone();
+    let mut text = s.urls.join("\n");
+    ui.label(RichText::new("Streaming URL prefixes (one per line):").size(12.5).color(theme::ink()));
+    if ui.add(egui::TextEdit::multiline(&mut text).desired_rows(3).desired_width(520.0).hint_text("https://example.com/events")).changed() {
+        // Lines as typed (a blank one is ignored by the rule but kept so
+        // Enter starts a new line).
+        s.urls = text.split('\n').map(|l| l.trim_end_matches('\r').to_string()).collect();
+        if s.urls.iter().all(String::is_empty) {
+            s.urls.clear();
+        }
+    }
+    ui.checkbox(&mut s.event_stream, "Treat responses with the text/event-stream MIME type as streaming");
+    ui.checkbox(&mut s.store, "Store streaming responses (may result in large temp files)");
+    ui.add_enabled(s.store, egui::Checkbox::new(&mut s.strip_chunked, "Strip chunked encoding metadata in streaming responses"));
+    if s != before {
+        *app.shared.streaming.lock().unwrap() = s;
+    }
+}

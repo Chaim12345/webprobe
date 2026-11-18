@@ -36,6 +36,10 @@ pub struct IntruderExtra {
     order_at: Option<std::time::Instant>,
     /// Rows were appended unsorted and still need a sort.
     order_dirty: bool,
+    /// An attack whose extension payloads are being made off the UI thread
+    /// (generator / processor calls into the sidecar): its result, and the
+    /// flag Stop sets so it never starts.
+    preparing: Option<(std::sync::mpsc::Receiver<Result<Arc<RunState>, String>>, Arc<std::sync::atomic::AtomicBool>)>,
 }
 
 impl Default for IntruderExtra {
@@ -51,6 +55,7 @@ impl Default for IntruderExtra {
             order: Vec::new(),
             order_at: None,
             order_dirty: false,
+            preparing: None,
         }
     }
 }
@@ -362,10 +367,13 @@ pub fn request_count_text(app: &App) -> String {
 }
 
 pub fn is_running(app: &App) -> bool {
-    app.intr_x.run.as_ref().map_or(false, |r| r.is_running())
+    app.intr_x.preparing.is_some() || app.intr_x.run.as_ref().map_or(false, |r| r.is_running())
 }
 
-pub fn stop(app: &App) {
+pub fn stop(app: &mut App) {
+    if let Some((_, cancel)) = app.intr_x.preparing.take() {
+        cancel.store(true, Ordering::SeqCst);
+    }
     if let Some(r) = &app.intr_x.run {
         r.stop.store(true, Ordering::SeqCst);
         r.paused.store(false, Ordering::SeqCst);
@@ -373,15 +381,66 @@ pub fn stop(app: &App) {
 }
 
 /// Start an attack of `request` (markers in place, Host already updated)
-/// against `app.intr_target`.
+/// against `app.intr_target`. When an extension makes or processes the
+/// payloads, that (and the attack's start) runs on a worker thread: the UI
+/// never waits on the extension's JVM. `poll_preparing` installs it.
 pub fn start_attack(app: &mut App, request: &str) -> Result<(), String> {
     let template = intruder::Template::parse(request)?;
-    let mut sources = effective_sources(app);
-    webprobe_core::ext_calls::fill_extension_payloads(&app.shared, request, &mut sources)?;
-    let mut specs = intruder::resolve_specs(&template, app.intr_attack, &sources)?;
-    webprobe_core::ext_calls::apply_extension_processors(&app.shared, &template, &mut specs, &app.intr_ext_proc)?;
+    let sources = effective_sources(app);
     let target = run::parse_target(&app.intr_target).ok_or_else(|| "Enter a target such as https://example.com".to_string())?;
-    let state = run::start(app.shared.clone(), request, app.intr_attack, specs, target, app.intr_x.settings.clone())?;
+    let (shared, kind, settings, procs) = (app.shared.clone(), app.intr_attack, app.intr_x.settings.clone(), app.intr_ext_proc.clone());
+    let request = request.to_string();
+    let prepare = move || -> Result<Arc<RunState>, String> {
+        let mut sources = sources;
+        webprobe_core::ext_calls::fill_extension_payloads(&shared, &request, &mut sources)?;
+        let mut specs = intruder::resolve_specs(&template, kind, &sources)?;
+        webprobe_core::ext_calls::apply_extension_processors(&shared, &template, &mut specs, &procs)?;
+        run::start(shared, &request, kind, specs, target, settings)
+    };
+    let uses_extension = effective_sources(app).iter().any(|s| matches!(s, PayloadSource::Extension { .. })) || app.intr_ext_proc.iter().any(|p| !p.is_empty());
+    if !uses_extension {
+        install_attack(app, prepare()?);
+        return Ok(());
+    }
+    let (tx, rx) = std::sync::mpsc::channel();
+    let cancel = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let cancelled = Arc::clone(&cancel);
+    let shared = app.shared.clone();
+    std::thread::spawn(move || {
+        // Stop before the payloads arrive: the attack never starts.
+        let result = prepare();
+        if cancelled.load(Ordering::SeqCst) {
+            if let Ok(r) = &result {
+                r.stop.store(true, Ordering::SeqCst);
+            }
+            return;
+        }
+        let _ = tx.send(result);
+        shared.wake();
+    });
+    app.intr_x.preparing = Some((rx, cancel));
+    Ok(())
+}
+
+/// Install an attack whose extension payloads were made off the UI thread
+/// (every frame; a failure is shown as a toast).
+pub fn poll_preparing(app: &mut App) {
+    let Some((rx, _)) = &app.intr_x.preparing else { return };
+    match rx.try_recv() {
+        Ok(Ok(state)) => {
+            app.intr_x.preparing = None;
+            install_attack(app, state);
+        }
+        Ok(Err(e)) => {
+            app.intr_x.preparing = None;
+            crate::feedback::toast(crate::feedback::Level::Error, e);
+        }
+        Err(std::sync::mpsc::TryRecvError::Empty) => {}
+        Err(std::sync::mpsc::TryRecvError::Disconnected) => app.intr_x.preparing = None,
+    }
+}
+
+fn install_attack(app: &mut App, state: Arc<RunState>) {
     // The column set depends on the attack's sets and grep settings: drop
     // dragged widths, hidden columns and the sort when it changes shape.
     let columns = |r: &RunState| run::result_columns(r.sets, &r.settings);
@@ -391,7 +450,6 @@ pub fn start_attack(app: &mut App, request: &str) -> Result<(), String> {
     app.intr_x.run = Some(state);
     app.intr_x.order_key = (usize::MAX, usize::MAX, false);
     app.intr_row_sel = None;
-    Ok(())
 }
 
 /// Resource pool dock (burp.Zhwk labels; defaults from the default pool).

@@ -982,6 +982,8 @@ pub fn inspector_ex(ui: &mut Ui, id: &str, req: Option<&[u8]>, resp: Option<&[u8
     }
     let ec = theme::editor_colours();
     let mut applied: Option<insp::Edit> = None;
+    // Protocol control clicked: the request switched to HTTP/2 (true) or HTTP/1.
+    let mut switched: Option<bool> = None;
     egui::ScrollArea::vertical().id_salt(id).auto_shrink([false, false]).show(ui, |ui| {
         for (section, rows) in insp::sections(req, resp) {
             let name = section.label();
@@ -1014,8 +1016,16 @@ pub fn inspector_ex(ui: &mut Ui, id: &str, req: Option<&[u8]>, resp: Option<&[u8
                     ui.add_space(10.0);
                     ui.label(RichText::new("Protocol").size(12.5).color(theme::ink_dim()));
                     ui.add_space(12.0);
-                    let _ = ui.selectable_label(!h2, "HTTP/1");
-                    let _ = ui.selectable_label(h2, "HTTP/2");
+                    // Burp's Inspector protocol switch: rewrites the request
+                    // line's version, which decides how Repeater sends it.
+                    ui.add_enabled_ui(editable, |ui| {
+                        if ui.selectable_label(!h2, "HTTP/1").clicked() && h2 {
+                            switched = Some(false);
+                        }
+                        if ui.selectable_label(h2, "HTTP/2").clicked() && !h2 {
+                            switched = Some(true);
+                        }
+                    });
                 });
                 ui.add_space(6.0);
             }
@@ -1065,6 +1075,9 @@ pub fn inspector_ex(ui: &mut Ui, id: &str, req: Option<&[u8]>, resp: Option<&[u8
             ui.add_space(8.0);
         }
     });
+    if let Some(http2) = switched {
+        return Some(crate::repeater_ops::with_protocol(&String::from_utf8_lossy(req), http2).into_bytes());
+    }
     let edit = applied?;
     let out = insp::apply(req, &edit);
     if out.is_some() {

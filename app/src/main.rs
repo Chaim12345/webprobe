@@ -547,6 +547,7 @@ impl eframe::App for App {
         }
         tools::drain_save_results(self);
         tools::drain_tool_sends(self);
+        intruder_ui::poll_preparing(self);
         feedback::drain(&mut self.toasts);
         self.toasts.tick(std::time::Instant::now());
         // Mirror new proxy traffic before drawing, so the Logger view and the

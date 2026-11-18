@@ -343,15 +343,28 @@ mod tests {
     }
 
     #[test]
+    fn very_different_inputs_are_capped() {
+        let a: Vec<u8> = (0..20_000u32).map(|i| (i % 7) as u8 + b'a').collect();
+        let b: Vec<u8> = (0..20_000u32).map(|i| (i % 5) as u8 + b'k').collect();
+        let c = compare(&a, &b, Unit::Bytes);
+        // The cap is what keeps this fast (work bounded by the cap, not
+        // by the input sizes); `very_different_inputs_are_capped_quickly`
+        // checks the wall time on its own.
+        assert!(c.capped);
+        assert_eq!(c.left.iter().map(|s| s.text.len()).sum::<usize>(), a.len());
+        assert_eq!(c.right.iter().map(|s| s.text.len()).sum::<usize>(), b.len());
+    }
+
+    /// Wall-clock guard; ignored in the suite, where load makes time
+    /// meaningless (run alone with --ignored).
+    #[test]
+    #[ignore = "wall-clock bound; meaningless under suite load"]
     fn very_different_inputs_are_capped_quickly() {
         let a: Vec<u8> = (0..20_000u32).map(|i| (i % 7) as u8 + b'a').collect();
         let b: Vec<u8> = (0..20_000u32).map(|i| (i % 5) as u8 + b'k').collect();
         let t = std::time::Instant::now();
-        let c = compare(&a, &b, Unit::Bytes);
+        assert!(compare(&a, &b, Unit::Bytes).capped);
         assert!(t.elapsed() < std::time::Duration::from_secs(3), "{:?}", t.elapsed());
-        assert!(c.capped);
-        assert_eq!(c.left.iter().map(|s| s.text.len()).sum::<usize>(), a.len());
-        assert_eq!(c.right.iter().map(|s| s.text.len()).sum::<usize>(), b.len());
     }
 
     #[test]

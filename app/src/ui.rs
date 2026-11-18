@@ -985,7 +985,7 @@ fn proxy_history(app: &mut App, ui: &mut Ui) {
                 messages: vec![crate::ext_menu::message_of(e)],
                 editor: None,
             };
-            crate::ext_menu::submenu(ui, &ext_shared, &ctx);
+            crate::ext_menu::submenu(ui, &ext_shared, &ctx, None);
         });
     });
     if let Some((id, ctrl, shift)) = click {
@@ -1168,6 +1168,11 @@ pub(crate) fn proxy_options(app: &mut App, ui: &mut Ui) {
     });
     ui.add_space(8.0);
     crate::proxy_settings::listeners_table(app, ui);
+    // Burp's per-listener "Support HTTP/2" (default on): one switch here.
+    let mut h2 = app.shared.listener_http2.load(Ordering::SeqCst);
+    if ui.checkbox(&mut h2, "Support HTTP/2 (HTTPS clients may negotiate h2 with the listeners)").changed() {
+        app.shared.listener_http2.store(h2, Ordering::SeqCst);
+    }
     ui.add_space(10.0);
     crate::proxy_settings::ca_buttons(app, ui);
     ui.add_space(10.0);
@@ -1189,6 +1194,8 @@ pub(crate) fn proxy_options(app: &mut App, ui: &mut Ui) {
             app.shared.ws_intercept_server.store(server_flag, Ordering::SeqCst);
         }
     });
+    ui.add_space(10.0);
+    crate::proxy_settings::streaming_responses(app, ui);
     ui.add_space(10.0);
     facts(ui, &[
         ("connect timeout", "120 s (ProjectDefaults.json)"),
@@ -2090,7 +2097,10 @@ fn repeater(app: &mut App, ui: &mut Ui) {
                     let reps = app.shared.repeaters.lock().unwrap();
                     (webprobe_core::ext_host::HttpService::new(&reps[i].host, reps[i].port, reps[i].https), reps[i].request.clone())
                 };
-                let mut ext_edit: Option<Vec<u8>> = None;
+                // Requests extension actions/editors gave back for this tab
+                // (they run off the UI thread and arrive on a later frame).
+                let ext_target = format!("Repeater:{}", app.shared.repeaters.lock().unwrap()[i].id);
+                let ext_edit = crate::ext_menu::take_edit(&ext_target);
                 let mut menu = |ui: &mut Ui, sel: Option<String>| {
                     if let Some(a) = crate::repeater_ops::request_menu(ui, rops, sel.is_some(), sel.as_deref(), has_resp) {
                         rep_action = Some(a);
@@ -2106,12 +2116,8 @@ fn repeater(app: &mut App, ui: &mut Ui) {
                         messages: vec![webprobe_core::ext_host::MenuMessage { request: raw, response: None, service: rep_service.clone() }],
                         editor: Some(("REQUEST".into(), start, end, start)),
                     };
-                    if let Some(o) = crate::ext_menu::submenu(ui, &ext_shared, &ctx) {
-                        ext_edit = o.request;
-                    }
-                    if let Some(r) = crate::ext_menu::editor_items(ui, &ext_shared, &ctx.messages[0], "Repeater") {
-                        ext_edit = Some(r);
-                    }
+                    crate::ext_menu::submenu(ui, &ext_shared, &ctx, Some(&ext_target));
+                    crate::ext_menu::editor_items(ui, &ext_shared, &ctx.messages[0], "Repeater", &ext_target);
                 };
                 if crate::msgpane::editable_pane_ex(ui, "rep_req", "Request", &mut text, &mut app.rep_req_pane, body_h, Some(&mut menu)) {
                     app.shared.repeaters.lock().unwrap()[i].request = text;
@@ -2226,14 +2232,32 @@ pub(crate) fn repeater_send(app: &mut App) {
     let sh = app.shared.clone();
     // E-02: Repeater settings > Follow redirections / Process cookies.
     let (follow, cookies) = (app.rops.follow, app.rops.process_cookies);
+    // HTTP/1 or HTTP/2 as the request says (Burp's protocol control).
+    let h2 = crate::repeater_ops::http2_choice(&request, app.rops.h2_alpn_override, app.rops.h2_strip_connection);
     std::thread::spawn(move || {
         let _tool = net::tool_scope("Repeater");
+        let _h2 = net::http2_scope(h2);
         let t0 = std::time::Instant::now();
         let service = crate::repeater_ops::Service::new(&h, p, https);
         let stale = || !sh.rep.is_current(gen);
-        let fr = crate::repeater_ops::send_following(&sh, &request, &service, follow, cookies, &stale);
+        // A streaming response shows in the tab as it arrives.
+        let progress = |bytes: &[u8], restart: bool| {
+            sh.rep.finish_partial(gen, || {
+                if let Some(r) = sh.repeaters.lock().unwrap().iter_mut().find(|r| r.id == tab_id) {
+                    let shown = r.response.get_or_insert_with(Vec::new);
+                    if restart {
+                        shown.clear();
+                    }
+                    shown.extend_from_slice(bytes);
+                    r.result_line = format!("Streaming...\t{} bytes", shown.len());
+                }
+            });
+            sh.wake();
+        };
+        let fr = crate::repeater_ops::send_following(&sh, &request, &service, follow, cookies, &stale, &progress);
         let up = net::Upstream { resp: fr.response, error: fr.error };
         let followed = fr.followed;
+        let protocol = net::last_protocol();
         // After followed redirections the tab shows the last request sent
         // and its target, as Burp's item does (Zrr5.ZA), so the history
         // entry and "Follow redirection" continue from the last hop.
@@ -2268,9 +2292,9 @@ pub(crate) fn repeater_send(app: &mut App) {
                             grouped.push(ch);
                         }
                         match followed {
-                            0 => format!("Done\t{grouped} bytes | {ms} millis"),
-                            1 => format!("Done (followed 1 redirection)\t{grouped} bytes | {ms} millis"),
-                            n => format!("Done (followed {n} redirections)\t{grouped} bytes | {ms} millis"),
+                            0 => format!("Done\t{grouped} bytes | {ms} millis | {protocol}"),
+                            1 => format!("Done (followed 1 redirection)\t{grouped} bytes | {ms} millis | {protocol}"),
+                            n => format!("Done (followed {n} redirections)\t{grouped} bytes | {ms} millis | {protocol}"),
                         }
                     }
                     None => format!("error: {}", up.error.clone().unwrap_or_default()),

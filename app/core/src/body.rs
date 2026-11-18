@@ -206,6 +206,40 @@ impl Store {
     }
 }
 
+/// A private, already-unlinked file in the body store's directory, for
+/// bytes whose final size is not known yet (a streaming response being
+/// recorded). `None` when there is no store directory.
+pub fn scratch_file() -> Option<std::fs::File> {
+    let dir = store().lock().unwrap_or_else(|p| p.into_inner()).dir.clone()?;
+    std::fs::create_dir_all(&dir).ok()?;
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let path = dir.join(format!("stream-{}-{}", std::process::id(), NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
+    let mut opts = std::fs::OpenOptions::new();
+    opts.read(true).write(true).create_new(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut opts, 0o600);
+    let file = opts.open(&path).ok()?;
+    let _ = std::fs::remove_file(&path);
+    Some(file)
+}
+
+impl Body {
+    /// The first `len` bytes of `file` (written through it), mapped: the
+    /// bytes stay file-backed, not in anonymous memory.
+    pub fn from_file(file: std::fs::File, len: usize) -> std::io::Result<Body> {
+        if len == 0 {
+            return Ok(Body::default());
+        }
+        let map = memmap2::MmapOptions::new().len(len).map_raw_read_only(&file)?;
+        let seg = Arc::new(Segment {
+            map,
+            #[cfg(unix)]
+            file,
+        });
+        Ok(Body(Repr::Stored { seg, off: 0, len }))
+    }
+}
+
 /// `body` moved into the on-disk store (a clone when it is small, already
 /// stored, or the store is unavailable; the first failure is logged and
 /// later bodies stay inline).

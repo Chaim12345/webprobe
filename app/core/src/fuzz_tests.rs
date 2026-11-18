@@ -208,7 +208,7 @@ fn fuzz_rounds(rounds: usize) -> usize {
         if round % 5 == 0 {
             if let Some(req) = crate::h2::request_from_raw(&seeds[0], "https") {
                 let mut s = Hostile { data: h2_frames(&mut rng), pos: 0 };
-                let _ = crate::h2::exchange(&mut s, &req);
+                let _ = crate::h2::exchange(&mut s, &req, None);
             }
             let _ = crate::h2::request_from_raw(&input, "https");
         }
@@ -303,4 +303,59 @@ fn proxy_survives_malformed_connections() {
     let mut resp = Vec::new();
     let _ = s.read_to_end(&mut resp);
     assert!(resp.starts_with(b"HTTP/1.1 200"), "{}", String::from_utf8_lossy(&resp));
+}
+
+/// R-05: the HTTP/2 server role (the browser side of the listener) never
+/// panics on random or mutated client frames, valid header blocks among
+/// them; every run ends when the input does.
+#[test]
+fn h2_server_survives_random_and_mutated_frames() {
+    struct Io(std::io::Cursor<Vec<u8>>, Vec<u8>);
+    impl std::io::Read for Io {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            self.0.read(buf)
+        }
+    }
+    impl std::io::Write for Io {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.1.extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut rng = Rng(0x5eed_4202);
+    let handler: crate::h2_server::Handler = std::sync::Arc::new(|_req, mut out| {
+        let _ = std::io::Write::write_all(&mut out, b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nok\r\n0\r\n\r\n");
+    });
+    let block = hpack::Encoder::new().encode(vec![
+        (b":method".as_ref(), b"POST".as_ref()),
+        (b":scheme".as_ref(), b"https".as_ref()),
+        (b":authority".as_ref(), b"h.test".as_ref()),
+        (b":path".as_ref(), b"/x".as_ref()),
+        (b"cookie".as_ref(), b"a=1".as_ref()),
+    ]);
+    for round in 0..2000 {
+        let mut input = crate::h2::PREFACE.to_vec();
+        input.extend(h2_frames(&mut rng));
+        if round % 2 == 0 {
+            // A plausible request, then mutation of the whole input.
+            let mut hb = block.clone();
+            if round % 4 == 0 {
+                let at = rng.below(hb.len());
+                hb[at] = rng.next() as u8;
+            }
+            let mut f = Vec::new();
+            crate::h2::write_frame(&mut f, 0x1, 0x4, 1, &hb).unwrap();
+            crate::h2::write_frame(&mut f, 0x0, 0x1, 1, &rng.bytes(64)).unwrap();
+            input.extend(f);
+        }
+        if round % 3 == 0 {
+            let at = crate::h2::PREFACE.len() + rng.below(input.len() - crate::h2::PREFACE.len());
+            input[at] = rng.next() as u8;
+        }
+        let mut io = Io(std::io::Cursor::new(input), Vec::new());
+        crate::h2_server::serve(&mut io, handler.clone());
+    }
 }

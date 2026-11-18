@@ -4,15 +4,45 @@
 //! editors" hand-off of a message to extension-provided editors.
 
 use std::cell::RefCell;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use eframe::egui;
 use webprobe_core::ext_host::{MenuContext, MenuItem, MenuMessage, MenuOutcome, ProxyHooks};
 use webprobe_core::net::{HistEntry, Shared};
 
+/// The items of one opened menu: asked for on a worker thread (a call into
+/// the extension's JVM), `None` until they arrive.
+type Found = Vec<(Arc<dyn ProxyHooks>, Vec<MenuItem>)>;
+type Slot = Arc<Mutex<Option<Found>>>;
+
 thread_local! {
-    /// The items of the menu now open: its key and, per extension, the items.
-    static CACHE: RefCell<Option<(String, Vec<(Arc<dyn ProxyHooks>, Vec<MenuItem>)>)>> = const { RefCell::new(None) };
+    /// The menu now open: its key and its items' slot.
+    static CACHE: RefCell<Option<(String, Slot)>> = const { RefCell::new(None) };
+}
+
+/// Requests an extension action or editor gave back, per target editor
+/// (e.g. "Repeater:3"); the editor takes them on a later frame.
+static EDITS: Mutex<Vec<(String, Vec<u8>)>> = Mutex::new(Vec::new());
+
+/// The request an extension produced for `target`, if one arrived.
+pub fn take_edit(target: &str) -> Option<Vec<u8>> {
+    let mut edits = EDITS.lock().unwrap_or_else(|p| p.into_inner());
+    let at = edits.iter().position(|(t, _)| t == target)?;
+    Some(edits.remove(at).1)
+}
+
+fn put_edit(target: &str, request: Vec<u8>) {
+    EDITS.lock().unwrap_or_else(|p| p.into_inner()).push((target.to_string(), request));
+}
+
+/// Run `work` (calls into extension JVMs) off the UI thread and repaint
+/// when it is done: the UI never waits on a sidecar.
+fn off_ui(ctx: &egui::Context, work: impl FnOnce() + Send + 'static) {
+    let ctx = ctx.clone();
+    std::thread::spawn(move || {
+        work();
+        ctx.request_repaint();
+    });
 }
 
 /// A history entry as a menu message.
@@ -34,41 +64,59 @@ fn key(ctx: &MenuContext) -> String {
     format!("{}|{}|{:?}|{}", ctx.tool, ctx.invocation, ctx.editor, h.finish())
 }
 
-/// The extensions' items for this menu (asked once per opened menu).
-fn items(shared: &Shared, ctx: &MenuContext) -> Vec<(Arc<dyn ProxyHooks>, Vec<MenuItem>)> {
+/// The extensions' items for this menu (asked once per opened menu, on a
+/// worker thread); `None` while they are on their way.
+fn items(ui: &egui::Ui, shared: &Shared, ctx: &MenuContext) -> Option<Found> {
     let k = key(ctx);
-    if let Some(hit) = CACHE.with(|c| c.borrow().as_ref().filter(|(ck, _)| *ck == k).map(|(_, v)| v.clone())) {
-        return hit;
+    let slot = CACHE.with(|c| c.borrow().as_ref().filter(|(ck, _)| *ck == k).map(|(_, s)| Arc::clone(s)));
+    if let Some(slot) = slot {
+        return slot.lock().unwrap_or_else(|p| p.into_inner()).clone();
     }
-    let exts = shared.ext_host.lock().unwrap().active();
-    let found: Vec<(Arc<dyn ProxyHooks>, Vec<MenuItem>)> = exts
-        .into_iter()
-        .filter(|e| e.ui().is_some_and(|u| u.menu_providers > 0))
-        .map(|e| {
-            let items = e.menu_items(ctx);
-            (e, items)
-        })
-        .filter(|(_, items)| !items.is_empty())
-        .collect();
-    CACHE.with(|c| *c.borrow_mut() = Some((k, found.clone())));
-    found
+    let exts: Vec<_> = shared.ext_host.lock().unwrap().active().into_iter().filter(|e| e.ui().is_some_and(|u| u.menu_providers > 0)).collect();
+    let slot: Slot = Arc::new(Mutex::new(None));
+    if exts.is_empty() {
+        *slot.lock().unwrap() = Some(Vec::new());
+    } else {
+        let (fill, ctx) = (Arc::clone(&slot), ctx.clone());
+        off_ui(ui.ctx(), move || {
+            let found: Found = exts.into_iter().map(|e| {
+                let items = e.menu_items(&ctx);
+                (e, items)
+            }).filter(|(_, items)| !items.is_empty()).collect();
+            *fill.lock().unwrap_or_else(|p| p.into_inner()) = Some(found);
+        });
+    }
+    CACHE.with(|c| *c.borrow_mut() = Some((k, Arc::clone(&slot))));
+    let ready = slot.lock().unwrap_or_else(|p| p.into_inner()).clone();
+    ready
 }
 
-/// Draw "Extensions > <extension> > items"; returns what a chosen item
-/// did. Nothing is drawn when no extension adds items.
-pub fn submenu(ui: &mut egui::Ui, shared: &Shared, ctx: &MenuContext) -> Option<MenuOutcome> {
-    let found = items(shared, ctx);
+/// Draw "Extensions > <extension> > items". A chosen item runs on a worker
+/// thread; a request it sets arrives through [`take_edit`] for `target`
+/// (None: the menu's messages are read-only). Nothing is drawn when no
+/// extension adds items.
+pub fn submenu(ui: &mut egui::Ui, shared: &Shared, ctx: &MenuContext, target: Option<&str>) {
+    let Some(found) = items(ui, shared, ctx) else {
+        ui.separator();
+        ui.add_enabled(false, egui::Button::new("Extensions (loading...)"));
+        return;
+    };
     if found.is_empty() {
-        return None;
+        return;
     }
-    let mut outcome = None;
     ui.separator();
     ui.menu_button("Extensions", |ui| {
         for (ext, items) in &found {
             ui.menu_button(ext.extension_name(), |ui| {
                 for it in items {
                     if ui.button(&it.label).clicked() {
-                        outcome = Some(ext.invoke_menu_item(&it.id));
+                        let (ext, id, target) = (Arc::clone(ext), it.id.clone(), target.map(str::to_string));
+                        off_ui(ui.ctx(), move || {
+                            let outcome: MenuOutcome = ext.invoke_menu_item(&id);
+                            if let (Some(t), Some(r)) = (target, outcome.request) {
+                                put_edit(&t, r);
+                            }
+                        });
                         CACHE.with(|c| *c.borrow_mut() = None);
                         ui.close();
                     }
@@ -76,32 +124,32 @@ pub fn submenu(ui: &mut egui::Ui, shared: &Shared, ctx: &MenuContext) -> Option<
             });
         }
     });
-    outcome
 }
 
 /// "Extension editors" items of a request editor's menu, when a loaded
 /// extension provides editors: send the message to them (they show in the
-/// extension's window), or take back the request one changed.
-pub fn editor_items(ui: &mut egui::Ui, shared: &Shared, msg: &MenuMessage, tool: &str) -> Option<Vec<u8>> {
+/// extension's window), or take back the request one changed (it arrives
+/// through [`take_edit`] for `target`).
+pub fn editor_items(ui: &mut egui::Ui, shared: &Arc<Shared>, msg: &MenuMessage, tool: &str, target: &str) {
     let any = shared.ext_host.lock().unwrap().active().iter().any(|e| e.ui().is_some_and(|u| u.request_editors + u.response_editors > 0));
     if !any {
-        return None;
+        return;
     }
-    let mut out = None;
     ui.menu_button("Extension editors", |ui| {
         if ui.button("Open this message in extension editors").clicked() {
-            crate::feedback::toast(crate::feedback::Level::Info, open_in_editors(shared, msg, tool));
+            let (shared, msg, tool) = (Arc::clone(shared), msg.clone(), tool.to_string());
+            off_ui(ui.ctx(), move || crate::feedback::toast(crate::feedback::Level::Info, open_in_editors(&shared, &msg, &tool)));
             ui.close();
         }
         if ui.button("Use the request edited in an extension editor").clicked() {
-            match edited_request(shared) {
-                Some(r) => out = Some(r),
+            let (shared, target) = (Arc::clone(shared), target.to_string());
+            off_ui(ui.ctx(), move || match edited_request(&shared) {
+                Some(r) => put_edit(&target, r),
                 None => crate::feedback::toast(crate::feedback::Level::Info, "No extension editor has changed the request."),
-            }
+            });
             ui.close();
         }
     });
-    out
 }
 
 /// Offer a message to every extension editor; a summary for a toast.

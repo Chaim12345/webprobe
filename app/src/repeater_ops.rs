@@ -376,12 +376,23 @@ pub struct FollowResult {
     pub followed: usize,
 }
 
-fn send_once(shared: &net::Shared, service: &Service, req: &str) -> net::Upstream {
-    if service.https {
-        net::send_tls_raw(shared, &service.host, service.port, req.as_bytes())
+/// One send. A streaming response (Settings > Network > HTTP > Streaming
+/// responses) is shown as it arrives through `progress` and comes back
+/// whole when it ends, is cancelled or goes idle for 10 minutes.
+fn send_once(shared: &net::Shared, service: &Service, req: &str, cancelled: &dyn Fn() -> bool, progress: &dyn Fn(&[u8], bool)) -> net::Upstream {
+    let url = format!("{}{}", service.origin(), req.split_whitespace().nth(1).unwrap_or("/"));
+    let settings = shared.streaming.lock().unwrap().clone();
+    let mut sink = webprobe_core::streaming::LiveSink::new(&url, settings, cancelled, progress);
+    let mut up = if service.https {
+        net::send_tls_raw_with(shared, &service.host, service.port, req.as_bytes(), Some(&mut sink))
     } else {
-        net::send_raw(shared, &service.host, service.port, req.as_bytes())
+        net::send_raw_with(shared, &service.host, service.port, req.as_bytes(), Some(&mut sink))
+    };
+    if let Some(whole) = sink.into_response() {
+        up.resp = Some(whole);
+        up.error = None;
     }
+    up
 }
 
 /// Send a Repeater request and follow redirections as `mode` allows.
@@ -393,12 +404,13 @@ pub fn send_following(
     mode: FollowMode,
     process_cookies: bool,
     cancelled: &dyn Fn() -> bool,
+    progress: &dyn Fn(&[u8], bool),
 ) -> FollowResult {
     let mut request = req.to_string();
     let mut current = service.clone();
     let mut followed = 0;
     loop {
-        let up = send_once(shared, &current, &request);
+        let up = send_once(shared, &current, &request, cancelled, progress);
         let Some(resp) = up.resp else {
             return FollowResult { request, service: current, response: None, error: up.error, followed };
         };
@@ -1013,6 +1025,12 @@ pub fn ws_row_visible(f: &WsFilter, e: &net::WsEntry, in_scope: impl Fn(&str) ->
 pub struct State {
     pub follow: FollowMode,
     pub process_cookies: bool,
+    /// Repeater "Allow HTTP/2 ALPN override" (ProjectDefaults.json
+    /// repeater.allow_http2_alpn_override, default off): an HTTP/1 request
+    /// may still go over HTTP/2 when the server offers it.
+    pub h2_alpn_override: bool,
+    /// Repeater "Strip Connection header over HTTP/2" (default on).
+    pub h2_strip_connection: bool,
     /// "URL-encode as you type" in the Repeater request editor.
     pub url_encode_live: bool,
     /// Tab being renamed: (tab id, edit buffer).
@@ -1038,6 +1056,8 @@ impl Default for State {
         Self {
             follow: FollowMode::Never,
             process_cookies: false,
+            h2_alpn_override: false,
+            h2_strip_connection: true,
             url_encode_live: false,
             renaming: None,
             rename_focus: false,
@@ -1948,11 +1968,11 @@ mod tests {
         let shared = net::Shared::new();
         let service = svc("127.0.0.1", port, false);
         let req = format!("POST /start HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: text/plain\r\nContent-Length: 4\r\n\r\nbody");
-        let never = send_following(&shared, &req, &service, FollowMode::Never, true, &|| false);
+        let never = send_following(&shared, &req, &service, FollowMode::Never, true, &|| false, &|_, _| {});
         assert_eq!(never.followed, 0);
         assert!(String::from_utf8_lossy(never.response.as_deref().unwrap()).starts_with("HTTP/1.1 302"));
         seen.lock().unwrap().clear();
-        let r = send_following(&shared, &req, &service, FollowMode::Always, true, &|| false);
+        let r = send_following(&shared, &req, &service, FollowMode::Always, true, &|| false, &|_, _| {});
         assert_eq!(r.followed, 2, "302 then 307");
         assert!(String::from_utf8_lossy(r.response.as_deref().unwrap()).ends_with("done"));
         let log = seen.lock().unwrap().clone();
@@ -1992,10 +2012,10 @@ mod tests {
         let shared = net::Shared::new();
         let service = svc("127.0.0.1", port, false);
         let req = format!("POST /a/start HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 1\r\n\r\nx");
-        let none = send_following(&shared, &req, &service, FollowMode::InScope, false, &|| false);
+        let none = send_following(&shared, &req, &service, FollowMode::InScope, false, &|| false, &|_, _| {});
         assert_eq!(none.followed, 0, "an empty scope holds nothing");
         shared.scope.lock().unwrap().push(net::ScopeRule::include("/b/step", false));
-        let r = send_following(&shared, &req, &service, FollowMode::InScope, false, &|| false);
+        let r = send_following(&shared, &req, &service, FollowMode::InScope, false, &|| false, &|_, _| {});
         assert_eq!(r.followed, 1);
         assert!(r.request.starts_with("GET /b/step HTTP/1.1\r\n"), "{}", r.request);
         let (next, next_req) = next_redirect(&r.request, &r.service, r.response.as_deref().unwrap(), false).unwrap();
@@ -2203,5 +2223,52 @@ mod tests {
         assert!(!ws_row_visible(&f, &e("server -> client", "ping", ""), |_| true));
         f = WsFilter { in_scope_only: true, ..Default::default() };
         assert!(!ws_row_visible(&f, &out, |_| false));
+    }
+}
+
+/// True when a request is written as HTTP/2 (its request line's version).
+pub fn is_http2(req: &str) -> bool {
+    let first = req.lines().next().unwrap_or("");
+    matches!(first.split_whitespace().nth(2), Some(v) if v.eq_ignore_ascii_case("HTTP/2") || v.eq_ignore_ascii_case("HTTP/2.0"))
+}
+
+/// The request with its request line's version switched: HTTP/2 or
+/// HTTP/1.1 (Burp's Inspector "Protocol" control).
+pub fn with_protocol(req: &str, http2: bool) -> String {
+    let (first, rest) = match req.find('\n') {
+        Some(i) => (&req[..i], &req[i..]),
+        None => (req, ""),
+    };
+    let cr = first.ends_with('\r');
+    let words: Vec<&str> = first.trim_end_matches('\r').split_whitespace().collect();
+    if words.len() < 2 {
+        return req.to_string();
+    }
+    let version = if http2 { "HTTP/2" } else { "HTTP/1.1" };
+    format!("{} {} {version}{}{rest}", words[0], words[1], if cr { "\r" } else { "" })
+}
+
+/// How Repeater sends this request (Burp's rules): an HTTP/2 request only
+/// over HTTP/2; an HTTP/1 request only over HTTP/1 unless "Allow HTTP/2
+/// ALPN override" lets the server pick.
+pub fn http2_choice(req: &str, alpn_override: bool, strip_connection: bool) -> net::Http2Choice {
+    let want_h2 = if is_http2(req) { Some(true) } else if alpn_override { None } else { Some(false) };
+    net::Http2Choice { want_h2, strip_connection }
+}
+
+#[cfg(test)]
+mod protocol_tests {
+    use super::*;
+
+    #[test]
+    fn protocol_control_rewrites_the_version_and_picks_the_send_mode() {
+        let r = "GET /a HTTP/1.1\r\nHost: h\r\n\r\n";
+        let h2 = with_protocol(r, true);
+        assert_eq!(h2, "GET /a HTTP/2\r\nHost: h\r\n\r\n");
+        assert!(is_http2(&h2) && !is_http2(r));
+        assert_eq!(with_protocol(&h2, false), r);
+        assert_eq!(http2_choice(&h2, false, true).want_h2, Some(true));
+        assert_eq!(http2_choice(r, false, true).want_h2, Some(false));
+        assert_eq!(http2_choice(r, true, true).want_h2, None);
     }
 }

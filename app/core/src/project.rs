@@ -629,11 +629,28 @@ pub struct ProjectProxy {
     /// TLS pass-through hosts (exact names or *.example.com).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tls_pass_through: Vec<String>,
+    /// Streaming responses (Burp's project_options.http.streaming_responses,
+    /// same key names inside).
+    #[serde(default)]
+    pub streaming_responses: crate::streaming::StreamSettings,
+    /// Listener option "Support HTTP/2" (Burp's request_listeners[].
+    /// enable_http2, default on), one switch for all listeners.
+    #[serde(default = "yes", rename = "enable_http2")]
+    pub listener_http2: bool,
 }
 
 impl Default for ProjectProxy {
     fn default() -> Self {
-        Self { listeners: Vec::new(), ws_intercept_client: true, ws_intercept_server: true, redirects: Vec::new(), response_rules: None, tls_pass_through: Vec::new() }
+        Self {
+            listeners: Vec::new(),
+            ws_intercept_client: true,
+            ws_intercept_server: true,
+            redirects: Vec::new(),
+            response_rules: None,
+            tls_pass_through: Vec::new(),
+            streaming_responses: crate::streaming::StreamSettings::default(),
+            listener_http2: true,
+        }
     }
 }
 
@@ -1701,6 +1718,8 @@ mod tests {
                 redirects: vec![(18_090, "127.0.0.1".into(), 3001)],
                 response_rules: Some(crate::net::ResponseInterceptRules { enabled: true, ..Default::default() }),
                 tls_pass_through: vec!["*.bank.example".into()],
+                streaming_responses: crate::streaming::StreamSettings { urls: vec!["https://api.example/stream".into()], event_stream: false, store: false, strip_chunked: true },
+                listener_http2: false,
             },
             tasks: ProjectTasks { live_passive_crawl: false, live_audit: true, scans: vec![ProjectScanTask { name: "Audit of https://example.com/".into(), entries: Vec::new(), urls: vec!["https://example.com/".into()], audit_only: true, paused: true }] },
             layout: ProjectLayout {

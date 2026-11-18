@@ -184,38 +184,39 @@ final class Engine {
         return "{\"id\":" + id + ",\"handlers\":" + (ph.size() + mh.size()) + "}";
     }
 
-    /** "ws-message": one data message of a watched socket through its
-     *  handlers: proxy "received" handlers (whose verdict may force or skip
-     *  interception), then the "to be sent" ones, then websockets() ones. */
+    /** "ws-message": one data message of a watched socket at one stage.
+     *  "received" (before interception): proxy "received" handlers, whose
+     *  verdict may force or skip interception. "send" (after the user's
+     *  edit): proxy "to be sent" handlers, then websockets() handlers. */
     static String wsMessage(int id, Map<String, Object> m) {
         long socket = (long) Wire.num(m.get("socket"));
         boolean binary = Boolean.TRUE.equals(m.get("binary"));
+        boolean received = "received".equals(Wire.str(m, "stage", "received"));
         burp.api.montoya.websocket.Direction dir = Boolean.TRUE.equals(m.get("toServer"))
                 ? burp.api.montoya.websocket.Direction.CLIENT_TO_SERVER : burp.api.montoya.websocket.Direction.SERVER_TO_CLIENT;
         byte[][] data = { Wire.unb64(Wire.str(m, "payload", "")) };
         String verdict = "CONTINUE";
+        String drop = "{\"id\":" + id + ",\"verdict\":\"DROP\"}";
         for (var h : WS_PROXY_HANDLERS.getOrDefault(socket, List.of())) {
             Object r;
-            try { r = binary ? h.handleBinaryMessageReceived(wsMsg(burp.api.montoya.proxy.websocket.InterceptedBinaryMessage.class, data[0], dir, true))
-                             : h.handleTextMessageReceived(wsMsg(burp.api.montoya.proxy.websocket.InterceptedTextMessage.class, data[0], dir, false)); }
-            catch (Throwable t) { Logs.error("[bridge] WebSocket message handler failed: " + Logs.trace(t)); continue; }
+            try {
+                if (received) r = binary ? h.handleBinaryMessageReceived(wsMsg(burp.api.montoya.proxy.websocket.InterceptedBinaryMessage.class, data[0], dir, true))
+                                         : h.handleTextMessageReceived(wsMsg(burp.api.montoya.proxy.websocket.InterceptedTextMessage.class, data[0], dir, false));
+                else r = binary ? h.handleBinaryMessageToBeSent(wsMsg(burp.api.montoya.proxy.websocket.InterceptedBinaryMessage.class, data[0], dir, true))
+                                : h.handleTextMessageToBeSent(wsMsg(burp.api.montoya.proxy.websocket.InterceptedTextMessage.class, data[0], dir, false));
+            } catch (Throwable t) { Logs.error("[bridge] WebSocket message handler failed: " + Logs.trace(t)); continue; }
             String k = wsApply(r, data);
-            if (k.equals("DROP")) return "{\"id\":" + id + ",\"verdict\":\"DROP\"}";
-            if (!k.equals("CONTINUE")) verdict = k;
+            if (k.equals("DROP")) return drop;
+            if (received && !k.equals("CONTINUE")) verdict = k;
         }
-        for (var h : WS_PROXY_HANDLERS.getOrDefault(socket, List.of())) {
-            Object r;
-            try { r = binary ? h.handleBinaryMessageToBeSent(wsMsg(burp.api.montoya.proxy.websocket.InterceptedBinaryMessage.class, data[0], dir, true))
-                             : h.handleTextMessageToBeSent(wsMsg(burp.api.montoya.proxy.websocket.InterceptedTextMessage.class, data[0], dir, false)); }
-            catch (Throwable t) { Logs.error("[bridge] WebSocket message handler failed: " + Logs.trace(t)); continue; }
-            if (wsApply(r, data).equals("DROP")) return "{\"id\":" + id + ",\"verdict\":\"DROP\"}";
-        }
-        for (var h : WS_HANDLERS.getOrDefault(socket, List.of())) {
-            Object r;
-            try { r = binary ? h.handleBinaryMessage(wsMsg(burp.api.montoya.websocket.BinaryMessage.class, data[0], dir, true))
-                             : h.handleTextMessage(wsMsg(burp.api.montoya.websocket.TextMessage.class, data[0], dir, false)); }
-            catch (Throwable t) { Logs.error("[bridge] WebSocket message handler failed: " + Logs.trace(t)); continue; }
-            if (wsApply(r, data).equals("DROP")) return "{\"id\":" + id + ",\"verdict\":\"DROP\"}";
+        if (!received) {
+            for (var h : WS_HANDLERS.getOrDefault(socket, List.of())) {
+                Object r;
+                try { r = binary ? h.handleBinaryMessage(wsMsg(burp.api.montoya.websocket.BinaryMessage.class, data[0], dir, true))
+                                 : h.handleTextMessage(wsMsg(burp.api.montoya.websocket.TextMessage.class, data[0], dir, false)); }
+                catch (Throwable t) { Logs.error("[bridge] WebSocket message handler failed: " + Logs.trace(t)); continue; }
+                if (wsApply(r, data).equals("DROP")) return drop;
+            }
         }
         return "{\"id\":" + id + ",\"verdict\":\"" + verdict + "\",\"payload\":" + Wire.Json.esc(Wire.b64(data[0])) + "}";
     }

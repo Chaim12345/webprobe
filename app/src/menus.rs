@@ -168,16 +168,11 @@ pub fn repeater_menu(app: &mut App, ui: &mut Ui) {
     });
     ui.checkbox(&mut app.rops.process_cookies, "Process cookies in redirections");
     let mut no = false;
-    for label in [
-        "Enforce protocol choice on cross-domain redirections",
-        "Normalize HTTP/1 line endings",
-        "Enable HTTP/1 connection reuse",
-        "Enable HTTP/2 connection reuse",
-        "Strip Connection header over HTTP/2",
-        "Allow HTTP/2 ALPN override",
-    ] {
+    for label in ["Enforce protocol choice on cross-domain redirections", "Normalize HTTP/1 line endings", "Enable HTTP/1 connection reuse", "Enable HTTP/2 connection reuse"] {
         ui.add_enabled(false, egui::Checkbox::new(&mut no, label));
     }
+    ui.checkbox(&mut app.rops.h2_strip_connection, "Strip Connection header over HTTP/2");
+    ui.checkbox(&mut app.rops.h2_alpn_override, "Allow HTTP/2 ALPN override");
     off(ui, "Streaming response timeout");
     ui.separator();
     ui.menu_button("Action", |ui| {

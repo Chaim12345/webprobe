@@ -13,28 +13,28 @@ use hpack::{Decoder, Encoder};
 /// `PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n` — the connection preface (RFC 9113 §3.4).
 pub const PREFACE: &[u8] = b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
 
-const FRAME_DATA: u8 = 0x0;
-const FRAME_HEADERS: u8 = 0x1;
-const FRAME_PRIORITY: u8 = 0x2;
-const FRAME_RST_STREAM: u8 = 0x3;
-const FRAME_SETTINGS: u8 = 0x4;
-const FRAME_PUSH_PROMISE: u8 = 0x5;
-const FRAME_PING: u8 = 0x6;
-const FRAME_GOAWAY: u8 = 0x7;
-const FRAME_WINDOW_UPDATE: u8 = 0x8;
-const FRAME_CONTINUATION: u8 = 0x9;
+pub(crate) const FRAME_DATA: u8 = 0x0;
+pub(crate) const FRAME_HEADERS: u8 = 0x1;
+pub(crate) const FRAME_PRIORITY: u8 = 0x2;
+pub(crate) const FRAME_RST_STREAM: u8 = 0x3;
+pub(crate) const FRAME_SETTINGS: u8 = 0x4;
+pub(crate) const FRAME_PUSH_PROMISE: u8 = 0x5;
+pub(crate) const FRAME_PING: u8 = 0x6;
+pub(crate) const FRAME_GOAWAY: u8 = 0x7;
+pub(crate) const FRAME_WINDOW_UPDATE: u8 = 0x8;
+pub(crate) const FRAME_CONTINUATION: u8 = 0x9;
 
-const FLAG_END_STREAM: u8 = 0x1;
-const FLAG_ACK: u8 = 0x1;
-const FLAG_END_HEADERS: u8 = 0x4;
-const FLAG_PADDED: u8 = 0x8;
-const FLAG_PRIORITY: u8 = 0x20;
+pub(crate) const FLAG_END_STREAM: u8 = 0x1;
+pub(crate) const FLAG_ACK: u8 = 0x1;
+pub(crate) const FLAG_END_HEADERS: u8 = 0x4;
+pub(crate) const FLAG_PADDED: u8 = 0x8;
+pub(crate) const FLAG_PRIORITY: u8 = 0x20;
 
-const SETTINGS_INITIAL_WINDOW_SIZE: u16 = 0x4;
-const SETTINGS_MAX_FRAME_SIZE: u16 = 0x5;
+pub(crate) const SETTINGS_INITIAL_WINDOW_SIZE: u16 = 0x4;
+pub(crate) const SETTINGS_MAX_FRAME_SIZE: u16 = 0x5;
 
-const DEFAULT_WINDOW: i64 = 65_535;
-const DEFAULT_MAX_FRAME: usize = 16_384;
+pub(crate) const DEFAULT_WINDOW: i64 = 65_535;
+pub(crate) const DEFAULT_MAX_FRAME: usize = 16_384;
 /// Frames larger than this can never be legal (24-bit length field is smaller),
 /// so treat it as a hard ceiling for anything we allocate.
 const MAX_FRAME: usize = 0xFF_FFFF;
@@ -44,7 +44,7 @@ const MAX_BODY: usize = 256 * 1024 * 1024;
 /// (the CVE-2024-27316 class).
 const MAX_HEADER_BLOCK: usize = 256 * 1024;
 
-fn write_frame<W: Write>(w: &mut W, ty: u8, flags: u8, stream: u32, payload: &[u8]) -> std::io::Result<()> {
+pub(crate) fn write_frame<W: Write>(w: &mut W, ty: u8, flags: u8, stream: u32, payload: &[u8]) -> std::io::Result<()> {
     let len = payload.len();
     if len > MAX_FRAME {
         return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "frame too large"));
@@ -61,11 +61,31 @@ fn write_frame<W: Write>(w: &mut W, ty: u8, flags: u8, stream: u32, payload: &[u
     w.flush()
 }
 
-struct Frame {
-    ty: u8,
-    flags: u8,
-    stream: u32,
-    payload: Vec<u8>,
+pub(crate) struct Frame {
+    pub(crate) ty: u8,
+    pub(crate) flags: u8,
+    pub(crate) stream: u32,
+    pub(crate) payload: Vec<u8>,
+}
+
+/// One frame from the front of `buf`, when it is all there: the frame and
+/// the bytes it took. Frames longer than `max` are an error (the peer must
+/// not exceed the SETTINGS_MAX_FRAME_SIZE we advertised; RFC 9113 §4.2).
+/// Shared by the client (blocking reads) and the server role (a buffer
+/// filled by non-blocking reads).
+pub(crate) fn parse_frame(buf: &[u8], max: usize) -> Result<Option<(Frame, usize)>, String> {
+    if buf.len() < 9 {
+        return Ok(None);
+    }
+    let len = ((buf[0] as usize) << 16) | ((buf[1] as usize) << 8) | buf[2] as usize;
+    if len > max {
+        return Err(format!("h2: frame of {len} bytes exceeds SETTINGS_MAX_FRAME_SIZE {max}"));
+    }
+    if buf.len() < 9 + len {
+        return Ok(None);
+    }
+    let stream = u32::from_be_bytes([buf[5], buf[6], buf[7], buf[8]]) & 0x7fff_ffff;
+    Ok(Some((Frame { ty: buf[3], flags: buf[4], stream, payload: buf[9..9 + len].to_vec() }, 9 + len)))
 }
 
 fn read_frame<R: Read>(r: &mut R) -> std::io::Result<Frame> {
@@ -89,7 +109,7 @@ fn read_frame<R: Read>(r: &mut R) -> std::io::Result<Frame> {
 
 /// HEADERS fragment after removing PADDED padding and the PRIORITY fields
 /// (RFC 9113 §6.2: Pad Length, Exclusive/Stream Dependency/Weight, fragment).
-fn header_fragment(flags: u8, payload: &[u8]) -> Result<&[u8], String> {
+pub(crate) fn header_fragment(flags: u8, payload: &[u8]) -> Result<&[u8], String> {
     let mut p = payload;
     if flags & FLAG_PADDED != 0 {
         let (&pad, rest) = p.split_first().ok_or("h2: padded HEADERS without pad length")?;
@@ -109,7 +129,7 @@ fn header_fragment(flags: u8, payload: &[u8]) -> Result<&[u8], String> {
 }
 
 /// DATA payload after removing PADDED padding.
-fn data_payload<'a>(flags: u8, payload: &'a [u8]) -> Result<&'a [u8], String> {
+pub(crate) fn data_payload<'a>(flags: u8, payload: &'a [u8]) -> Result<&'a [u8], String> {
     if flags & FLAG_PADDED == 0 {
         return Ok(payload);
     }
@@ -133,7 +153,7 @@ pub struct H2Request {
 }
 
 /// Hop-by-hop headers that must not appear in HTTP/2 (RFC 9113 §8.2.2).
-fn is_connection_header(name: &str) -> bool {
+pub(crate) fn is_connection_header(name: &str) -> bool {
     matches!(
         name,
         "connection" | "proxy-connection" | "keep-alive" | "transfer-encoding" | "upgrade" | "http2-settings"
@@ -196,6 +216,11 @@ struct Rx {
     stream_window: i64,
     send_window: i64,
     max_frame: usize,
+    /// What the response sink chose once the head was in (None: no sink
+    /// or not asked yet; buffered responses keep `None`).
+    mode: Option<crate::streaming::BodyMode>,
+    /// Streaming: the client went away; the body is drained, not sent.
+    client_gone: bool,
 }
 
 impl Rx {
@@ -215,7 +240,50 @@ impl Rx {
             stream_window: DEFAULT_WINDOW,
             send_window: DEFAULT_WINDOW,
             max_frame: DEFAULT_MAX_FRAME,
+            mode: None,
+            client_gone: false,
         }
+    }
+
+    /// The HTTP/1.1 head of the response so far (no framing headers).
+    fn head_h1(&self, framing: &str) -> Vec<u8> {
+        let mut out = format!("HTTP/1.1 {}\r\n", self.status.as_deref().unwrap_or("502"));
+        for (k, v) in &self.headers {
+            let lower = k.to_ascii_lowercase();
+            if lower == "content-length" || lower == "transfer-encoding" || is_connection_header(&lower) {
+                continue;
+            }
+            out.push_str(&format!("{k}: {v}\r\n"));
+        }
+        out.push_str(framing);
+        out.push_str("\r\n");
+        out.into_bytes()
+    }
+
+    /// The head is in: ask the sink how to read the body. Streamed to an
+    /// HTTP/1.1 client, DATA frames become chunks.
+    fn ask_sink(&mut self, sink: &mut Option<&mut (dyn crate::streaming::ResponseSink + '_)>) {
+        let (Some(s), true, None) = (sink.as_deref_mut(), self.got_headers, self.mode) else { return };
+        let head = self.head_h1("");
+        let mode = s.head(&head);
+        self.mode = Some(mode);
+        match mode {
+            crate::streaming::BodyMode::Stream => {
+                if self.done {
+                    let full = self.head_h1("Content-Length: 0\r\n");
+                    self.client_gone = s.wire(&full).is_err();
+                    s.end(true);
+                } else {
+                    self.client_gone = s.wire(&self.head_h1("Transfer-Encoding: chunked\r\n")).is_err();
+                }
+            }
+            crate::streaming::BodyMode::HeadOnly => self.done = true,
+            crate::streaming::BodyMode::Buffer => {}
+        }
+    }
+
+    fn streaming(&self) -> bool {
+        self.mode == Some(crate::streaming::BodyMode::Stream)
     }
 
     /// Decode one complete header block. The decoder keeps the HPACK dynamic
@@ -267,7 +335,7 @@ impl Rx {
         }
     }
 
-    fn handle<S: Read + Write>(&mut self, stream: &mut S, f: Frame) -> Result<(), String> {
+    fn handle<S: Read + Write>(&mut self, stream: &mut S, f: Frame, sink: &mut Option<&mut (dyn crate::streaming::ResponseSink + '_)>) -> Result<(), String> {
         if self.in_continuation && !(f.ty == FRAME_CONTINUATION && f.stream == 1) {
             return Err("h2: header block interrupted before CONTINUATION".into());
         }
@@ -349,7 +417,9 @@ impl Rx {
                     self.absorb_block()?;
                     if f.flags & FLAG_END_STREAM != 0 {
                         self.done = true;
+                        self.end_stream(sink);
                     }
+                    self.ask_sink(sink);
                 } else {
                     self.in_continuation = true;
                     self.pending_end_stream = f.flags & FLAG_END_STREAM != 0;
@@ -366,16 +436,38 @@ impl Rx {
                     if self.pending_end_stream {
                         self.pending_end_stream = false;
                         self.done = true;
+                        self.end_stream(sink);
                     }
+                    self.ask_sink(sink);
                 }
             }
             FRAME_DATA if f.stream == 1 => {
                 let payload = data_payload(f.flags, &f.payload)?;
-                self.body.extend_from_slice(payload);
+                if self.streaming() {
+                    // Passed on as it arrives (as a chunk), never kept here.
+                    if let Some(s) = sink.as_deref_mut() {
+                        s.payload(payload);
+                        if !self.client_gone && !payload.is_empty() {
+                            let mut chunk = format!("{:x}\r\n", payload.len()).into_bytes();
+                            chunk.extend_from_slice(payload);
+                            chunk.extend_from_slice(b"\r\n");
+                            self.client_gone = s.wire(&chunk).is_err();
+                        }
+                    }
+                    if let Some(s) = sink.as_deref_mut() {
+                        s.flush();
+                    }
+                    if self.client_gone {
+                        return Err("h2: the client closed the streaming response".into());
+                    }
+                } else {
+                    self.body.extend_from_slice(payload);
+                }
                 if self.body.len() > MAX_BODY {
                     return Err("h2: response body too large".into());
                 }
                 if f.flags & FLAG_END_STREAM != 0 {
+                    self.end_stream(sink);
                     // The exchange is over: replenishing now is pointless and
                     // often fails because the peer already closed.
                     self.done = true;
@@ -404,10 +496,27 @@ impl Rx {
         Ok(())
     }
 
+    /// A streamed body ended: close the chunked framing.
+    fn end_stream(&mut self, sink: &mut Option<&mut (dyn crate::streaming::ResponseSink + '_)>) {
+        if !self.streaming() {
+            return;
+        }
+        if let Some(s) = sink.as_deref_mut() {
+            if !self.client_gone {
+                self.client_gone = s.wire(b"0\r\n\r\n").is_err();
+            }
+            s.end(true);
+        }
+    }
+
     /// Normalize to the HTTP/1.1 shape the rest of the app understands. Any
     /// upstream `content-length`/`transfer-encoding` is replaced so the view
     /// never carries two framing headers.
     fn finish(self) -> Result<Vec<u8>, String> {
+        if self.mode.is_some_and(|m| m != crate::streaming::BodyMode::Buffer) {
+            // Streamed or cut after the head: the head is the message.
+            return Ok(self.head_h1(""));
+        }
         let status = self.status.ok_or("h2: response without :status")?;
         if !self.got_headers {
             return Err("h2: response without headers".into());
@@ -434,7 +543,7 @@ impl Rx {
 /// DATA is only written once the server's SETTINGS is known (it is required to
 /// be the first frame, RFC 9113 §3.4), so a small INITIAL_WINDOW_SIZE or
 /// MAX_FRAME_SIZE is honoured before the first byte goes out.
-fn pump<S: Read + Write>(stream: &mut S, mut body: Option<&[u8]>, rx: &mut Rx) -> Result<(), String> {
+fn pump<S: Read + Write>(stream: &mut S, mut body: Option<&[u8]>, rx: &mut Rx, sink: &mut Option<&mut (dyn crate::streaming::ResponseSink + '_)>) -> Result<(), String> {
     let mut sending = body.map(|b| !b.is_empty()).unwrap_or(false);
     loop {
         if sending && rx.settings_seen {
@@ -467,18 +576,29 @@ fn pump<S: Read + Write>(stream: &mut S, mut body: Option<&[u8]>, rx: &mut Rx) -
             return Ok(());
         }
         let f = read_frame(stream).map_err(|e| format!("h2 read: {e}"))?;
-        rx.handle(stream, f)?;
+        rx.handle(stream, f, sink)?;
     }
 }
 
 /// Perform one request over an established stream. The preface and initial
 /// SETTINGS are sent here.
-pub fn exchange<S: Read + Write>(stream: &mut S, req: &H2Request) -> Result<Vec<u8>, String> {
+///
+/// With a `sink`, the sink sees the head first and may take the body as it
+/// arrives (see `codec::read_message`); a streamed body that is cut short
+/// still returns the head, after telling the sink.
+pub fn exchange<S: Read + Write>(stream: &mut S, req: &H2Request, mut sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>) -> Result<Vec<u8>, String> {
     send_preface(stream)?;
     send_request_headers(stream, req)?;
     let mut rx = Rx::new();
     let body = if req.body.is_empty() { None } else { Some(req.body.as_slice()) };
-    pump(stream, body, &mut rx)?;
+    if let Err(e) = pump(stream, body, &mut rx, &mut sink) {
+        if !rx.streaming() {
+            return Err(e);
+        }
+        if let Some(s) = sink.as_deref_mut() {
+            s.end(false);
+        }
+    }
     rx.finish()
 }
 
@@ -488,7 +608,7 @@ pub fn exchange<S: Read + Write>(stream: &mut S, req: &H2Request) -> Result<Vec<
 pub fn exchange_upgraded<S: Read + Write>(stream: &mut S) -> Result<Vec<u8>, String> {
     send_preface(stream)?;
     let mut rx = Rx::new();
-    pump(stream, None, &mut rx)?;
+    pump(stream, None, &mut rx, &mut None)?;
     rx.finish()
 }
 
@@ -641,24 +761,60 @@ mod tests {
         }
     }
 
+    /// R-06: an event-stream response over an h2 upstream goes to the sink
+    /// frame by frame, re-framed as HTTP/1.1 chunks, and is not kept here.
+    #[test]
+    fn streaming_response_passes_data_frames_to_the_sink() {
+        struct Rec(Vec<u8>, Vec<u8>, Option<bool>, usize);
+        impl crate::streaming::ResponseSink for Rec {
+            fn head(&mut self, head: &[u8]) -> crate::streaming::BodyMode {
+                assert!(crate::streaming::is_event_stream(head));
+                crate::streaming::BodyMode::Stream
+            }
+            fn wire(&mut self, b: &[u8]) -> std::io::Result<()> {
+                self.0.extend_from_slice(b);
+                Ok(())
+            }
+            fn payload(&mut self, b: &[u8]) {
+                self.1.extend_from_slice(b);
+            }
+            fn end(&mut self, complete: bool) {
+                self.2 = Some(complete);
+            }
+            fn flush(&mut self) {
+                self.3 += 1;
+            }
+        }
+        let mut enc = Encoder::new();
+        let hb = enc.encode(vec![(b":status".as_ref(), b"200".as_ref()), (b"content-type".as_ref(), b"text/event-stream".as_ref())]);
+        let frames: [(u8, u8, u32, &[u8]); 4] = [(FRAME_SETTINGS, 0, 0, &[]), (FRAME_HEADERS, FLAG_END_HEADERS, 1, &hb), (FRAME_DATA, 0, 1, b"data: 1\n\n"), (FRAME_DATA, FLAG_END_STREAM, 1, b"data: 2\n\n")];
+        let mut rec = Rec(Vec::new(), Vec::new(), None, 0);
+        let head = exchange(&mut scripted(&frames), &get_request(), Some(&mut rec)).unwrap();
+        assert!(String::from_utf8_lossy(&head).starts_with("HTTP/1.1 200") && head.ends_with(b"\r\n\r\n"));
+        let wire = String::from_utf8_lossy(&rec.0).into_owned();
+        assert!(wire.contains("Transfer-Encoding: chunked\r\n\r\n9\r\ndata: 1\n\n\r\n9\r\ndata: 2\n\n\r\n0\r\n\r\n"), "{wire}");
+        assert_eq!(rec.1, b"data: 1\n\ndata: 2\n\n");
+        assert_eq!((rec.2, rec.3 >= 2), (Some(true), true));
+    }
+
     /// Review finding 3: a hostile server cannot panic the HPACK decoder,
     /// grow a header block without bound, or send oversized frames.
     #[test]
     fn hostile_header_blocks_and_frames_are_rejected() {
         // Truncated dynamic table size update: hpack 0.3 panics on it.
         let mut s = scripted(&[(FRAME_SETTINGS, 0, 0, &[]), (FRAME_HEADERS, FLAG_END_HEADERS, 1, &[0x3f])]);
-        assert!(exchange(&mut s, &get_request()).is_err());
+        assert!(exchange(&mut s, &get_request(), None).is_err());
         // Endless CONTINUATION frames: stopped at MAX_HEADER_BLOCK.
         let chunk = vec![0x40u8; 16_000];
         let mut frames: Vec<(u8, u8, u32, &[u8])> = vec![(FRAME_SETTINGS, 0, 0, &[]), (FRAME_HEADERS, 0, 1, &chunk)];
         for _ in 0..40 {
             frames.push((FRAME_CONTINUATION, 0, 1, &chunk));
         }
-        let err = exchange(&mut scripted(&frames), &get_request()).unwrap_err();
+        let err = exchange(&mut scripted(&frames), &get_request(), None).unwrap_err();
         assert!(err.contains("header block too large"), "{err}");
         // A frame over the 16 KiB we allow.
         let big = vec![0u8; 20_000];
-        let err = exchange(&mut scripted(&[(FRAME_SETTINGS, 0, 0, &[]), (FRAME_DATA, 0, 1, &big)]), &get_request()).unwrap_err();
+        let err = exchange(&mut scripted(&[(FRAME_SETTINGS, 0, 0, &[]), (FRAME_DATA, 0, 1, &big)]), &get_request(), None).unwrap_err();
         assert!(err.contains("SETTINGS_MAX_FRAME_SIZE"), "{err}");
     }
 
@@ -667,19 +823,19 @@ mod tests {
     fn malformed_frames_error_instead_of_panicking() {
         // WINDOW_UPDATE with a 2-byte payload.
         let mut s = scripted(&[(FRAME_SETTINGS, 0, 0, &[]), (FRAME_WINDOW_UPDATE, 0, 0, &[0, 1])]);
-        assert!(exchange(&mut s, &get_request()).is_err());
+        assert!(exchange(&mut s, &get_request(), None).is_err());
 
         // PUSH_PROMISE with an empty payload.
         let mut s = scripted(&[(FRAME_SETTINGS, 0, 0, &[]), (FRAME_PUSH_PROMISE, 0, 1, &[])]);
-        assert!(exchange(&mut s, &get_request()).is_err());
+        assert!(exchange(&mut s, &get_request(), None).is_err());
 
         // HEADERS marked PADDED with an empty payload.
         let mut s = scripted(&[(FRAME_SETTINGS, 0, 0, &[]), (FRAME_HEADERS, FLAG_END_HEADERS | FLAG_PADDED, 1, &[])]);
-        assert!(exchange(&mut s, &get_request()).is_err());
+        assert!(exchange(&mut s, &get_request(), None).is_err());
 
         // HEADERS marked PRIORITY but shorter than the 5-byte prefix.
         let mut s = scripted(&[(FRAME_SETTINGS, 0, 0, &[]), (FRAME_HEADERS, FLAG_END_HEADERS | FLAG_PRIORITY, 1, &[0, 0])]);
-        assert!(exchange(&mut s, &get_request()).is_err());
+        assert!(exchange(&mut s, &get_request(), None).is_err());
 
         // DATA marked PADDED whose pad length exceeds the frame.
         let mut s = scripted(&[
@@ -687,11 +843,11 @@ mod tests {
             (FRAME_HEADERS, FLAG_END_HEADERS, 1, &[0x88]),
             (FRAME_DATA, FLAG_END_STREAM | FLAG_PADDED, 1, &[9, b'x']),
         ]);
-        assert!(exchange(&mut s, &get_request()).is_err());
+        assert!(exchange(&mut s, &get_request(), None).is_err());
 
         // GOAWAY with a truncated payload.
         let mut s = scripted(&[(FRAME_SETTINGS, 0, 0, &[]), (FRAME_GOAWAY, 0, 0, &[0, 0])]);
-        assert!(exchange(&mut s, &get_request()).is_err());
+        assert!(exchange(&mut s, &get_request(), None).is_err());
     }
 
     /// A CONTINUATION block split across frames is reassembled, and END_STREAM
@@ -709,7 +865,7 @@ mod tests {
             (FRAME_HEADERS, FLAG_END_STREAM, 1, &first),
             (FRAME_CONTINUATION, FLAG_END_HEADERS, 1, &rest),
         ]);
-        let resp = exchange(&mut s, &get_request()).expect("reassembled response");
+        let resp = exchange(&mut s, &get_request(), None).expect("reassembled response");
         let text = String::from_utf8_lossy(&resp);
         assert!(text.starts_with("HTTP/1.1 200"), "{text}");
         assert!(text.contains("content-type: text/plain"), "{text}");
@@ -779,7 +935,7 @@ mod tests {
             headers: vec![],
             body,
         };
-        let resp = exchange(&mut tcp, &req).expect("flow-controlled upload");
+        let resp = exchange(&mut tcp, &req, None).expect("flow-controlled upload");
         t.join().unwrap();
         assert!(String::from_utf8_lossy(&resp).starts_with("HTTP/1.1 200"));
         assert!(resp.ends_with(b"ok"));

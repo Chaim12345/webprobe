@@ -152,9 +152,10 @@ pub trait ProxyHooks: Send + Sync {
     fn ws_open(&self, _socket: u64, _svc: &HttpService, _upgrade: &[u8]) -> bool {
         false
     }
-    /// One data message of a watched socket: the handlers may edit
-    /// `payload`, drop it, or force or skip interception.
-    fn ws_message(&self, _socket: u64, _to_server: bool, _binary: bool, _payload: &mut Vec<u8>) -> WsVerdict {
+    /// One data message of a watched socket at one stage: the handlers may
+    /// edit `payload`, drop it, or (when received) force or skip
+    /// interception.
+    fn ws_message(&self, _socket: u64, _stage: WsStage, _to_server: bool, _binary: bool, _payload: &mut Vec<u8>) -> WsVerdict {
         WsVerdict::Continue
     }
     /// A watched socket closed.
@@ -170,6 +171,14 @@ pub trait ProxyHooks: Send + Sync {
     }
     /// Replace the extension's saved data (a project was loaded).
     fn restore_data(&self, _data: &serde_json::Value) {}
+}
+
+/// When a proxied WebSocket message meets extension handlers, as in Burp:
+/// `Received` before interception, `ToBeSent` after the user's edit.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WsStage {
+    Received,
+    ToBeSent,
 }
 
 /// What extension WebSocket handlers decided for one message.
@@ -1058,8 +1067,9 @@ impl ProxyHooks for JavaSidecar {
         self.ask(line).is_some_and(|r| r["handlers"].as_u64().unwrap_or(0) > 0)
     }
 
-    fn ws_message(&self, socket: u64, to_server: bool, binary: bool, payload: &mut Vec<u8>) -> WsVerdict {
-        let line = serde_json::json!({"type": "ws-message", "socket": socket, "toServer": to_server, "binary": binary, "payload": crate::util::b64_encode(payload)});
+    fn ws_message(&self, socket: u64, stage: WsStage, to_server: bool, binary: bool, payload: &mut Vec<u8>) -> WsVerdict {
+        let stage = if stage == WsStage::Received { "received" } else { "send" };
+        let line = serde_json::json!({"type": "ws-message", "socket": socket, "stage": stage, "toServer": to_server, "binary": binary, "payload": crate::util::b64_encode(payload)});
         let Some(reply) = self.ask(line) else { return WsVerdict::Continue };
         if let Some(p) = b64_field(&reply, "payload") {
             *payload = p;
@@ -1579,6 +1589,19 @@ mod tests {
         assert!(crate::net::intercept_ws_stream(&shared, "ws.test", &crate::net::build_ws_frame(0x81, b"please drop", false), &mut st, false).is_empty());
         let out = crate::net::intercept_ws_stream(&shared, "ws.test", &crate::net::build_ws_frame(0x82, &[1, 2], false), &mut st, false);
         assert_eq!(crate::net::parse_ws_frame(&out).unwrap().2, [1, 2]);
+        // Held for the user: "received" handlers run before (the user sees
+        // "hi+ext"), "to be sent" handlers after the user's edit.
+        shared.intercept_on.store(true, Ordering::SeqCst);
+        shared.ws_intercept_client.store(true, Ordering::SeqCst);
+        let held = std::thread::scope(|s| {
+            let relay = s.spawn(|| crate::net::intercept_ws_stream(&shared, "ws.test", &crate::net::build_ws_frame(0x81, b"hi", true), &mut st, true));
+            let item = eventually(|| shared.queue.lock().unwrap().pop());
+            assert_eq!(item.edited, "hi+ext");
+            item.tx.send(Some("user edit".into())).unwrap();
+            relay.join().unwrap()
+        });
+        assert_eq!(crate::net::parse_ws_frame(&held).unwrap().2, b"user edit>");
+        shared.intercept_on.store(false, Ordering::SeqCst);
         drop(st);
         eventually(|| sc.errors().iter().any(|l| l == "[out] ws closed").then_some(()));
         assert!(sc.errors().iter().any(|l| l == "[out] ws open /chat"));

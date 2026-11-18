@@ -276,18 +276,27 @@ impl MitmAuthority {
     }
 
     pub fn server_config(&self, host: &str) -> Result<Arc<ServerConfig>, String> {
+        self.listener_config(host, false)
+    }
+
+    /// The MITM config for a client of the proxy listener: with `http2`
+    /// (the listener's "Support HTTP/2" option, Burp default on) ALPN offers
+    /// `h2` before `http/1.1`; without, no ALPN (HTTP/1.1).
+    pub fn listener_config(&self, host: &str, http2: bool) -> Result<Arc<ServerConfig>, String> {
         // Built under the cache lock: with the shared leaf key a build is one
         // signature, and two connections to a new host no longer both build.
+        let key = if http2 { format!("{host}\0h2") } else { host.to_string() };
         let mut hosts = self.hosts.lock().unwrap();
-        if let Some(config) = hosts.get(host) {
+        if let Some(config) = hosts.get(&key) {
             return Ok(config.clone());
         }
-        let config = self.build_config(host, Vec::new())?;
+        let alpn = if http2 { vec![b"h2".to_vec(), b"http/1.1".to_vec()] } else { Vec::new() };
+        let config = self.build_config(host, alpn)?;
         // Bounded: a crawl over many hosts must not grow this forever.
         if hosts.len() >= MAX_CACHED_HOSTS {
             hosts.clear();
         }
-        hosts.insert(host.to_string(), config.clone());
+        hosts.insert(key, config.clone());
         Ok(config)
     }
 

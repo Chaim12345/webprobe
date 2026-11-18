@@ -1859,6 +1859,8 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
         },
         response_rules: Some(app.shared.response_rules.lock().unwrap().clone()),
         tls_pass_through: app.shared.tls_bypass.lock().unwrap().clone(),
+        streaming_responses: app.shared.streaming.lock().unwrap().clone(),
+        listener_http2: app.shared.listener_http2.load(Ordering::SeqCst),
     };
     let locked_tasks = project::ProjectTasks {
         live_passive_crawl: app.shared.crawl_capture.load(Ordering::SeqCst),
@@ -2128,6 +2130,8 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData, content: boo
     app.shared.scan_accuracy.store(s.accuracy.min(2), Ordering::SeqCst);
     app.shared.extra_checks.store(s.extra_checks, Ordering::SeqCst);
     app.shared.ws_intercept_client.store(data.proxy.ws_intercept_client, Ordering::SeqCst);
+    *app.shared.streaming.lock().unwrap() = data.proxy.streaming_responses.clone();
+    app.shared.listener_http2.store(data.proxy.listener_http2, Ordering::SeqCst);
     app.shared.ws_intercept_server.store(data.proxy.ws_intercept_server, Ordering::SeqCst);
     *app.shared.response_rules.lock().unwrap() = data.proxy.response_rules.clone().unwrap_or_default();
     *app.shared.tls_bypass.lock().unwrap() = data.proxy.tls_pass_through.clone();
