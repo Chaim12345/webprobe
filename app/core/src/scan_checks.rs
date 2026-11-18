@@ -233,10 +233,14 @@ pub(crate) trait PointCheck: Sync {
     /// the parameter name to it).
     #[cfg_attr(not(test), allow(dead_code))]
     fn issue(&self) -> &'static str;
-    /// The insertion-point kinds it applies to (all unless overridden).
-    fn applies_to(&self, _kind: &IpKind) -> bool {
-        true
-    }
+    /// The insertion-point kinds it applies to: the point-type rules of the
+    /// Burp check's applicability test (`Zuit.Zh`). Every implementation
+    /// matches every kind explicitly, so a new kind needs a decision.
+    fn applies_to(&self, kind: &IpKind) -> bool;
+    /// Whether the check is a server-side injection check, which Burp skips
+    /// on the skip_server_side_injection_for_parameters list (its `Zh`
+    /// calls `Zgx0.Zr`; [`InsertionPoint::skips_server_side`]).
+    fn server_side(&self) -> bool;
     /// Audit one insertion point. Reports through `cx.report`.
     fn run(&self, cx: &ScanCtx, st: &mut ScanState, pt: &mut PointRun);
 }
@@ -312,6 +316,13 @@ pub(crate) static REQUEST_CHECKS: &[&dyn RequestCheck] = &[
     &CsrfTokenNotEnforced,
 ];
 
+/// Whether `check` audits `ip` under `config`: the point type suits it,
+/// it is switched on, and a server-side check leaves the points on Burp's
+/// skip_server_side_injection_for_parameters list alone.
+pub(crate) fn check_applies(check: &dyn PointCheck, ip: &InsertionPoint, config: &crate::scan_config::ScanConfig) -> bool {
+    check.applies_to(&ip.kind) && config.check_enabled(check.id()) && !(check.server_side() && ip.skips_server_side())
+}
+
 /// The insertion-point phase: every point in order, every applicable check
 /// in registry order. Stops at the next point once the scan is stopped.
 pub(crate) fn run_point_checks(cx: &ScanCtx, points: &[InsertionPoint]) {
@@ -323,7 +334,7 @@ pub(crate) fn run_point_checks(cx: &ScanCtx, points: &[InsertionPoint]) {
         }
         let mut pt = PointRun { idx, ip, sqli_reported: false };
         for check in POINT_CHECKS {
-            if check.applies_to(&ip.kind) && config.check_enabled(check.id()) && cx.runs(check.issue()) {
+            if check_applies(*check, ip, &config) && cx.runs(check.issue()) {
                 check.run(cx, &mut st, &mut pt);
             }
         }
@@ -371,6 +382,29 @@ impl PointCheck for ExternalInteraction {
     fn issue(&self) -> &'static str {
         "External service interaction (DNS)"
     }
+    /// burp.Zxfo.Zh (Collaborator payload in the value: external interaction / out-of-band resource load): via Zibp.ZU not on parameter names; server-side. Burp also skips URL path folders and one header whose name is encrypted in the jar; WebProbe's existing kinds are unchanged.
+    fn applies_to(&self, kind: &IpKind) -> bool {
+        match kind {
+            // Zibp.ZU: not on added parameter names (Zewr.ZY).
+            IpKind::ParamName(_) => false,
+            IpKind::Query
+            | IpKind::Body
+            | IpKind::Json(_)
+            | IpKind::Multipart { .. }
+            | IpKind::Cookie
+            | IpKind::Header
+            | IpKind::PathFolder(_)
+            | IpKind::PathFilename(_)
+            | IpKind::EntireBody
+            | IpKind::XmlParam { .. }
+            | IpKind::XmlTag { .. }
+            | IpKind::XmlAttr { .. }
+            | IpKind::Base64 { .. } => true,
+        }
+    }
+    fn server_side(&self) -> bool {
+        true
+    }
     fn run(&self, cx: &ScanCtx, st: &mut ScanState, pt: &mut PointRun) {
         let (idx, ip) = (pt.idx, pt.ip);
         let Some((_, token, domain)) = oob_slot(&cx.oob, idx, &ip.name, "ext", &mut st.oob_used) else { return };
@@ -404,6 +438,28 @@ impl PointCheck for LightProbes {
     }
     fn issue(&self) -> &'static str {
         "Active probe: DOM-based cross-site scripting (reflected)"
+    }
+    /// WebProbe's own probe (no Burp class): every kind; not a server-side check.
+    fn applies_to(&self, kind: &IpKind) -> bool {
+        match kind {
+            IpKind::Query
+            | IpKind::Body
+            | IpKind::Json(_)
+            | IpKind::Multipart { .. }
+            | IpKind::Cookie
+            | IpKind::Header
+            | IpKind::PathFolder(_)
+            | IpKind::PathFilename(_)
+            | IpKind::EntireBody
+            | IpKind::XmlParam { .. }
+            | IpKind::XmlTag { .. }
+            | IpKind::XmlAttr { .. }
+            | IpKind::ParamName(_)
+            | IpKind::Base64 { .. } => true,
+        }
+    }
+    fn server_side(&self) -> bool {
+        false
     }
     fn run(&self, cx: &ScanCtx, st: &mut ScanState, pt: &mut PointRun) {
         let (idx, ip) = (pt.idx, pt.ip);
@@ -447,6 +503,29 @@ impl PointCheck for OsCommandInjection {
     fn issue(&self) -> &'static str {
         "OS command injection"
     }
+    /// burp.Zx8l.Zh: every kind but the parameter names; server-side.
+    fn applies_to(&self, kind: &IpKind) -> bool {
+        match kind {
+            // burp.Zx8l.Zh: never on added parameter names (Zxt3.ZD).
+            IpKind::ParamName(_) => false,
+            IpKind::Query
+            | IpKind::Body
+            | IpKind::Json(_)
+            | IpKind::Multipart { .. }
+            | IpKind::Cookie
+            | IpKind::Header
+            | IpKind::PathFolder(_)
+            | IpKind::PathFilename(_)
+            | IpKind::EntireBody
+            | IpKind::XmlParam { .. }
+            | IpKind::XmlTag { .. }
+            | IpKind::XmlAttr { .. }
+            | IpKind::Base64 { .. } => true,
+        }
+    }
+    fn server_side(&self) -> bool {
+        true
+    }
     fn run(&self, cx: &ScanCtx, st: &mut ScanState, pt: &mut PointRun) {
         let (idx, ip) = (pt.idx, pt.ip);
         let mut ids = std::collections::HashMap::new();
@@ -465,16 +544,16 @@ impl PointCheck for OsCommandInjection {
             // resource pool, as every other check does.
             let resp = cx.send(new_req.as_bytes());
             let token = ids[slot].clone();
-            let issue = mk_burp(
+            let issue = mk_point(
                 "OS command injection",
                 "high",
                 "Firm",
                 &cx.entry,
-                &ip.name,
+                ip,
                 format!(
-                    "The payload {payload} was {} the value of the {} parameter. The application performed a DNS lookup of type CNAME for the Collaborator id {token}, indicating that the injected command was executed.",
+                    "The payload {payload} was {} the {}. The application performed a DNS lookup of type CNAME for the Collaborator id {token}, indicating that the injected command was executed.",
                     if append { "appended to" } else { "submitted as" },
-                    ip.name
+                    ip.describe()
                 ),
             )
             .with_evidence(vec![ScanEvidence::new(new_req.as_bytes(), resp.as_deref())]);
@@ -495,6 +574,29 @@ impl PointCheck for PathTraversal {
     fn issue(&self) -> &'static str {
         "File path traversal"
     }
+    /// burp.Zp3a.Zh -> Zibp.ZZ: not on parameter names (nor headers in Burp; WebProbe's header points keep the check, unchanged); server-side.
+    fn applies_to(&self, kind: &IpKind) -> bool {
+        match kind {
+            // Zibp.ZZ: not on parameter names (Zewr.ZY cases 1-3).
+            IpKind::ParamName(_) => false,
+            IpKind::Query
+            | IpKind::Body
+            | IpKind::Json(_)
+            | IpKind::Multipart { .. }
+            | IpKind::Cookie
+            | IpKind::Header
+            | IpKind::PathFolder(_)
+            | IpKind::PathFilename(_)
+            | IpKind::EntireBody
+            | IpKind::XmlParam { .. }
+            | IpKind::XmlTag { .. }
+            | IpKind::XmlAttr { .. }
+            | IpKind::Base64 { .. } => true,
+        }
+    }
+    fn server_side(&self) -> bool {
+        true
+    }
     fn run(&self, cx: &ScanCtx, _st: &mut ScanState, pt: &mut PointRun) {
         if cx.stopped() {
             return;
@@ -512,12 +614,12 @@ impl PointCheck for PathTraversal {
         };
         if let Some(hit) = run_traversal_check(&ip.value, &cx.baseline.body, cx.settings.speed, send) {
             let control = traversal_control(&hit.payload);
-            cx.report(vec![mk_burp(
+            cx.report(vec![mk_point(
                 "File path traversal",
                 "high",
                 "Firm",
                 &cx.entry,
-                &ip.name,
+                ip,
                 format!(
                     "Payload {:?} returned {} content (markers: {}); the negative control ({:?}) did not.",
                     encode_query_payload(&hit.payload),
@@ -542,6 +644,28 @@ impl PointCheck for LinkManipulation {
     fn issue(&self) -> &'static str {
         "Link manipulation (reflected)"
     }
+    /// burp.Zb_5 has no applicability test: every kind; not server-side.
+    fn applies_to(&self, kind: &IpKind) -> bool {
+        match kind {
+            IpKind::Query
+            | IpKind::Body
+            | IpKind::Json(_)
+            | IpKind::Multipart { .. }
+            | IpKind::Cookie
+            | IpKind::Header
+            | IpKind::PathFolder(_)
+            | IpKind::PathFilename(_)
+            | IpKind::EntireBody
+            | IpKind::XmlParam { .. }
+            | IpKind::XmlTag { .. }
+            | IpKind::XmlAttr { .. }
+            | IpKind::ParamName(_)
+            | IpKind::Base64 { .. } => true,
+        }
+    }
+    fn server_side(&self) -> bool {
+        false
+    }
     fn run(&self, cx: &ScanCtx, _st: &mut ScanState, pt: &mut PointRun) {
         if cx.stopped() {
             return;
@@ -556,12 +680,12 @@ impl PointCheck for LinkManipulation {
             rec.send(cx, payload, new_req.as_bytes())
         };
         if let Some(hit) = run_link_manip_check(&ip.value, send) {
-            cx.report(vec![mk_burp(
+            cx.report(vec![mk_point(
                 "Link manipulation (reflected)",
                 "info",
                 "Firm",
                 &cx.entry,
-                &ip.name,
+                ip,
                 format!("Injected URL {:?} became a link/redirect target: {:?}.", hit.payload, hit.target),
             )
             .with_evidence(evidence([rec.last(&hit.payload)]))]);
@@ -580,6 +704,29 @@ impl PointCheck for FilePathManipulation {
     fn issue(&self) -> &'static str {
         "File path manipulation"
     }
+    /// Part of burp.Zp3a (Zsl1): Zibp.ZZ rules as PathTraversal; server-side.
+    fn applies_to(&self, kind: &IpKind) -> bool {
+        match kind {
+            // Zibp.ZZ: not on parameter names.
+            IpKind::ParamName(_) => false,
+            IpKind::Query
+            | IpKind::Body
+            | IpKind::Json(_)
+            | IpKind::Multipart { .. }
+            | IpKind::Cookie
+            | IpKind::Header
+            | IpKind::PathFolder(_)
+            | IpKind::PathFilename(_)
+            | IpKind::EntireBody
+            | IpKind::XmlParam { .. }
+            | IpKind::XmlTag { .. }
+            | IpKind::XmlAttr { .. }
+            | IpKind::Base64 { .. } => true,
+        }
+    }
+    fn server_side(&self) -> bool {
+        true
+    }
     fn run(&self, cx: &ScanCtx, _st: &mut ScanState, pt: &mut PointRun) {
         if cx.stopped() || cx.baseline.raw.is_empty() {
             return;
@@ -594,12 +741,12 @@ impl PointCheck for FilePathManipulation {
             rec.send(cx, payload, new_req.as_bytes())
         };
         if let Some(hit) = run_file_path_manip_check(&ip.value, &cx.baseline.raw, cx.settings.accuracy, send) {
-            cx.report(vec![mk_burp(
+            cx.report(vec![mk_point(
                 "File path manipulation",
                 "high",
                 "Firm",
                 &cx.entry,
-                &ip.name,
+                ip,
                 format!("Same-file paths like {:?} and bogus paths like {:?} gave consistently different responses: the parameter selects a file (attributes: {:?}).", hit.valid, hit.invalid, hit.attributes),
             )
             .with_evidence(evidence([rec.last(&hit.valid), rec.last(&hit.invalid)]))]);
@@ -618,6 +765,28 @@ impl PointCheck for SsiInjection {
     fn issue(&self) -> &'static str {
         "SSI injection"
     }
+    /// burp.Zexx.Zh: every new kind (Burp excludes URL path folders and the User-Agent / Referer headers; WebProbe's existing kinds are unchanged); server-side.
+    fn applies_to(&self, kind: &IpKind) -> bool {
+        match kind {
+            IpKind::Query
+            | IpKind::Body
+            | IpKind::Json(_)
+            | IpKind::Multipart { .. }
+            | IpKind::Cookie
+            | IpKind::Header
+            | IpKind::PathFolder(_)
+            | IpKind::PathFilename(_)
+            | IpKind::EntireBody
+            | IpKind::XmlParam { .. }
+            | IpKind::XmlTag { .. }
+            | IpKind::XmlAttr { .. }
+            | IpKind::ParamName(_)
+            | IpKind::Base64 { .. } => true,
+        }
+    }
+    fn server_side(&self) -> bool {
+        true
+    }
     fn run(&self, cx: &ScanCtx, _st: &mut ScanState, pt: &mut PointRun) {
         if cx.stopped() {
             return;
@@ -634,12 +803,12 @@ impl PointCheck for SsiInjection {
             Some(String::from_utf8_lossy(&resp[rp.head_len.min(resp.len())..]).into_owned())
         };
         if let Some(hit) = run_ssi_check(&ip.value, send) {
-            cx.report(vec![mk_burp(
+            cx.report(vec![mk_point(
                 "SSI injection",
                 "high",
                 "Firm",
                 &cx.entry,
-                &ip.name,
+                ip,
                 format!("SSI directives {:?} were processed by the server.", hit.payload),
             )
             .with_evidence(evidence([rec.last(&format!("{}{}", ip.value, hit.payload))]))]);
@@ -658,6 +827,28 @@ impl PointCheck for TemplateInjection {
     fn issue(&self) -> &'static str {
         "Server-side template injection"
     }
+    /// burp.Zi6p.Zh: every kind, server-side (ZA.Zn(Zr)).
+    fn applies_to(&self, kind: &IpKind) -> bool {
+        match kind {
+            IpKind::Query
+            | IpKind::Body
+            | IpKind::Json(_)
+            | IpKind::Multipart { .. }
+            | IpKind::Cookie
+            | IpKind::Header
+            | IpKind::PathFolder(_)
+            | IpKind::PathFilename(_)
+            | IpKind::EntireBody
+            | IpKind::XmlParam { .. }
+            | IpKind::XmlTag { .. }
+            | IpKind::XmlAttr { .. }
+            | IpKind::ParamName(_)
+            | IpKind::Base64 { .. } => true,
+        }
+    }
+    fn server_side(&self) -> bool {
+        true
+    }
     fn run(&self, cx: &ScanCtx, _st: &mut ScanState, pt: &mut PointRun) {
         if cx.stopped() {
             return;
@@ -674,12 +865,12 @@ impl PointCheck for TemplateInjection {
             Some(String::from_utf8_lossy(&resp[rp.head_len.min(resp.len())..]).into_owned())
         };
         if let Some(hit) = run_ssti_check(&ip.value, send) {
-            cx.report(vec![mk_burp(
+            cx.report(vec![mk_point(
                 "Server-side template injection",
                 "high",
                 "Tentative",
                 &cx.entry,
-                &ip.name,
+                ip,
                 format!("Template expression {:?} ({}) was evaluated by the server.", hit.payload, hit.engine),
             )
             .with_evidence(evidence([rec.last(&format!("{}{}", ip.value, hit.payload))]))]);
@@ -698,6 +889,28 @@ impl PointCheck for ReflectedXss {
     fn issue(&self) -> &'static str {
         "Cross-site scripting (reflected)"
     }
+    /// burp.Zi6p.Zh: every kind, server-side: Burp's XSS engine also skips the server-side skip list.
+    fn applies_to(&self, kind: &IpKind) -> bool {
+        match kind {
+            IpKind::Query
+            | IpKind::Body
+            | IpKind::Json(_)
+            | IpKind::Multipart { .. }
+            | IpKind::Cookie
+            | IpKind::Header
+            | IpKind::PathFolder(_)
+            | IpKind::PathFilename(_)
+            | IpKind::EntireBody
+            | IpKind::XmlParam { .. }
+            | IpKind::XmlTag { .. }
+            | IpKind::XmlAttr { .. }
+            | IpKind::ParamName(_)
+            | IpKind::Base64 { .. } => true,
+        }
+    }
+    fn server_side(&self) -> bool {
+        true
+    }
     fn run(&self, cx: &ScanCtx, _st: &mut ScanState, pt: &mut PointRun) {
         if cx.stopped() {
             return;
@@ -712,12 +925,12 @@ impl PointCheck for ReflectedXss {
             rec.send(cx, payload, new_req.as_bytes())
         };
         if let Some(hit) = crate::xss::run_xss_check(&ip.value, send) {
-            cx.report(vec![mk_burp(
+            cx.report(vec![mk_point(
                 "Cross-site scripting (reflected)",
                 reflected_xss_severity(&ip.kind),
                 "Certain",
                 &cx.entry,
-                &ip.name,
+                ip,
                 format!("Payload {:?} broke out of reflection context {} and executed.", hit.payload, hit.context),
             )
             .with_evidence(evidence([rec.last(&hit.payload)]))]);
@@ -736,12 +949,33 @@ impl PointCheck for StoredXss {
     fn issue(&self) -> &'static str {
         "Cross-site scripting (stored)"
     }
+    /// burp.Zi6p.Zh (stored half Zi6p.ZZ): every kind, server-side.
+    fn applies_to(&self, kind: &IpKind) -> bool {
+        match kind {
+            IpKind::Query
+            | IpKind::Body
+            | IpKind::Json(_)
+            | IpKind::Multipart { .. }
+            | IpKind::Cookie
+            | IpKind::Header
+            | IpKind::PathFolder(_)
+            | IpKind::PathFilename(_)
+            | IpKind::EntireBody
+            | IpKind::XmlParam { .. }
+            | IpKind::XmlTag { .. }
+            | IpKind::XmlAttr { .. }
+            | IpKind::ParamName(_)
+            | IpKind::Base64 { .. } => true,
+        }
+    }
+    fn server_side(&self) -> bool {
+        true
+    }
     fn run(&self, cx: &ScanCtx, _st: &mut ScanState, pt: &mut PointRun) {
         if cx.stopped() || cx.retrieval_reqs.is_empty() {
             return;
         }
         let ip = pt.ip;
-        let name = &ip.name;
         let rec = Recorder::default();
         let send = |payload: &str| -> Option<Vec<u8>> {
             if cx.stopped() {
@@ -757,16 +991,16 @@ impl PointCheck for StoredXss {
         };
         if let Some(hit) = active_checks::run_stored_xss_check(&ip.value, cx.retrieval_reqs.len(), send, retrieve) {
             let later = cx.retrieval_reqs[hit.retrieval].lines().next().unwrap_or("").to_string();
-            cx.report(vec![mk_burp(
+            cx.report(vec![mk_point(
                 "Cross-site scripting (stored)",
                 "high",
                 "Certain",
                 &cx.entry,
-                name,
+                ip,
                 format!(
-                    "Payload {:?} submitted in the {name} {} was stored and returned unencoded (context {}) in the response to the later request {later:?}.",
+                    "Payload {:?} submitted in the {} was stored and returned unencoded (context {}) in the response to the later request {later:?}.",
                     hit.payload,
-                    ip.kind.burp_label(),
+                    ip.describe_short(false),
                     hit.context
                 ),
             )
@@ -786,6 +1020,28 @@ impl PointCheck for ClientTemplateInjection {
     fn issue(&self) -> &'static str {
         "Client-side template injection"
     }
+    /// burp.Zrmh has no applicability test: every kind; not server-side.
+    fn applies_to(&self, kind: &IpKind) -> bool {
+        match kind {
+            IpKind::Query
+            | IpKind::Body
+            | IpKind::Json(_)
+            | IpKind::Multipart { .. }
+            | IpKind::Cookie
+            | IpKind::Header
+            | IpKind::PathFolder(_)
+            | IpKind::PathFilename(_)
+            | IpKind::EntireBody
+            | IpKind::XmlParam { .. }
+            | IpKind::XmlTag { .. }
+            | IpKind::XmlAttr { .. }
+            | IpKind::ParamName(_)
+            | IpKind::Base64 { .. } => true,
+        }
+    }
+    fn server_side(&self) -> bool {
+        false
+    }
     fn run(&self, cx: &ScanCtx, _st: &mut ScanState, pt: &mut PointRun) {
         if cx.stopped() {
             return;
@@ -804,12 +1060,12 @@ impl PointCheck for ClientTemplateInjection {
             cx.send(get_request_like(&cx.req, &path).as_bytes())
         };
         if let Some(hit) = active_checks::run_csti_check(&ip.value, send, fetch_script) {
-            cx.report(vec![mk_burp(
+            cx.report(vec![mk_point(
                 "Client-side template injection",
                 "high",
                 hit.confidence(),
                 &cx.entry,
-                &ip.name,
+                ip,
                 format!(
                     "The template expression {} submitted as {:?} was returned unencoded ({:?}) inside an AngularJS ng-app scope.{}",
                     active_checks::CSTI_EXPR,
@@ -836,8 +1092,28 @@ impl PointCheck for PhpCodeInjection {
     fn issue(&self) -> &'static str {
         "PHP code injection"
     }
+    /// burp.Zsn3 (echo half) on file-upload parts only (Zcgg.Zw); server-side
+    /// (Zsn3.Zh: Zg.Zn(ZS)).
     fn applies_to(&self, kind: &IpKind) -> bool {
-        matches!(kind, IpKind::Multipart { filename: Some(_), .. })
+        match kind {
+            IpKind::Multipart { filename, .. } => filename.is_some(),
+            IpKind::Query
+            | IpKind::Body
+            | IpKind::Json(_)
+            | IpKind::Cookie
+            | IpKind::Header
+            | IpKind::PathFolder(_)
+            | IpKind::PathFilename(_)
+            | IpKind::EntireBody
+            | IpKind::XmlParam { .. }
+            | IpKind::XmlTag { .. }
+            | IpKind::XmlAttr { .. }
+            | IpKind::ParamName(_)
+            | IpKind::Base64 { .. } => false,
+        }
+    }
+    fn server_side(&self) -> bool {
+        true
     }
     fn run(&self, cx: &ScanCtx, _st: &mut ScanState, pt: &mut PointRun) {
         let ip = pt.ip;
@@ -857,12 +1133,12 @@ impl PointCheck for PhpCodeInjection {
         if let Some(hit) = active_checks::run_php_echo_check(orig, &token, send, follow) {
             let mut ev = rec.from_last(&hit.filename);
             ev.truncate(hit.hop + 1);
-            cx.report(vec![mk_burp(
+            cx.report(vec![mk_point(
                 "PHP code injection",
                 "high",
                 "Certain",
                 &cx.entry,
-                &ip.name,
+                ip,
                 format!(
                     "A file named {:?} was uploaded with the content {:?}. The response{} contained {}, the result of the evaluated expression, so the server executed the uploaded PHP code.",
                     hit.filename,
@@ -889,12 +1165,34 @@ impl PointCheck for InputReflected {
     fn issue(&self) -> &'static str {
         "Input returned in response (reflected)"
     }
+    /// burp.Zr02 has no applicability test: every kind; not server-side.
+    fn applies_to(&self, kind: &IpKind) -> bool {
+        match kind {
+            IpKind::Query
+            | IpKind::Body
+            | IpKind::Json(_)
+            | IpKind::Multipart { .. }
+            | IpKind::Cookie
+            | IpKind::Header
+            | IpKind::PathFolder(_)
+            | IpKind::PathFilename(_)
+            | IpKind::EntireBody
+            | IpKind::XmlParam { .. }
+            | IpKind::XmlTag { .. }
+            | IpKind::XmlAttr { .. }
+            | IpKind::ParamName(_)
+            | IpKind::Base64 { .. } => true,
+        }
+    }
+    fn server_side(&self) -> bool {
+        false
+    }
     fn run(&self, cx: &ScanCtx, _st: &mut ScanState, pt: &mut PointRun) {
         if cx.stopped() {
             return;
         }
         let ip = pt.ip;
-        let (name, value) = (&ip.name, &ip.value);
+        let value = &ip.value;
         for append in [false, true] {
             let marker: String = {
                 use rand::Rng;
@@ -911,27 +1209,11 @@ impl PointCheck for InputReflected {
             // where the REST API lists only issues new to the project.
             let reflected = resp.as_ref().is_some_and(|r| r.windows(marker.len()).any(|w| w == marker.as_bytes()));
             if reflected {
-                // URL path points keep Burp's own wording (live 52685
-                // on Juice Shop: "The value of the URL path filename
-                // is copied into the application's response.").
-                let issue = if ip.kind.is_path() {
-                    let mut i = mk("info", "Input returned in response (reflected)", &cx.entry, format!("The value of the {name} is copied into the application's response."));
-                    i.confidence = "Certain".into();
-                    i
-                } else {
-                    mk_burp(
-                        "Input returned in response (reflected)",
-                        "info",
-                        "Certain",
-                        &cx.entry,
-                        name,
-                        format!(
-                            "The value of the {name} {} {} the marker {marker} was copied into the response.",
-                            ip.kind.burp_label(),
-                            if append { "with" } else { "replaced by" }
-                        ),
-                    )
-                };
+                // Burp's own sentence with its point wording (burp.Zsg0.ZD;
+                // live 52685 on Juice Shop: "The value of the URL path
+                // filename is copied into the application's response.").
+                let mut issue = mk("info", "Input returned in response (reflected)", &cx.entry, format!("The {} is copied into the application's response.", ip.describe()));
+                issue.confidence = "Certain".into();
                 cx.report(vec![issue.with_evidence(vec![ScanEvidence::new(new_req.as_bytes(), resp.as_deref())])]);
                 break;
             }
@@ -950,6 +1232,28 @@ impl PointCheck for HeaderInjection {
     fn issue(&self) -> &'static str {
         "HTTP response header injection"
     }
+    /// burp.Zwi has no applicability test: every kind; not server-side.
+    fn applies_to(&self, kind: &IpKind) -> bool {
+        match kind {
+            IpKind::Query
+            | IpKind::Body
+            | IpKind::Json(_)
+            | IpKind::Multipart { .. }
+            | IpKind::Cookie
+            | IpKind::Header
+            | IpKind::PathFolder(_)
+            | IpKind::PathFilename(_)
+            | IpKind::EntireBody
+            | IpKind::XmlParam { .. }
+            | IpKind::XmlTag { .. }
+            | IpKind::XmlAttr { .. }
+            | IpKind::ParamName(_)
+            | IpKind::Base64 { .. } => true,
+        }
+    }
+    fn server_side(&self) -> bool {
+        false
+    }
     fn run(&self, cx: &ScanCtx, _st: &mut ScanState, pt: &mut PointRun) {
         if cx.stopped() {
             return;
@@ -964,12 +1268,12 @@ impl PointCheck for HeaderInjection {
             rec.send(cx, payload, new_req.as_bytes())
         };
         if let Some(hit) = run_header_injection_check(&ip.value, send) {
-            cx.report(vec![mk_burp(
+            cx.report(vec![mk_point(
                 "HTTP response header injection",
                 "high",
                 "Certain",
                 &cx.entry,
-                &ip.name,
+                ip,
                 format!("Payload {:?} produced the response header line {:?}.", hit.payload, hit.injected_line),
             )
             .with_evidence(evidence([rec.last(&hit.payload)]))]);
@@ -988,6 +1292,28 @@ impl PointCheck for OpenRedirect {
     fn issue(&self) -> &'static str {
         "Open redirection (reflected)"
     }
+    /// burp.Zuag has no applicability test: every kind; not server-side.
+    fn applies_to(&self, kind: &IpKind) -> bool {
+        match kind {
+            IpKind::Query
+            | IpKind::Body
+            | IpKind::Json(_)
+            | IpKind::Multipart { .. }
+            | IpKind::Cookie
+            | IpKind::Header
+            | IpKind::PathFolder(_)
+            | IpKind::PathFilename(_)
+            | IpKind::EntireBody
+            | IpKind::XmlParam { .. }
+            | IpKind::XmlTag { .. }
+            | IpKind::XmlAttr { .. }
+            | IpKind::ParamName(_)
+            | IpKind::Base64 { .. } => true,
+        }
+    }
+    fn server_side(&self) -> bool {
+        false
+    }
     fn run(&self, cx: &ScanCtx, _st: &mut ScanState, pt: &mut PointRun) {
         if cx.stopped() {
             return;
@@ -1002,12 +1328,12 @@ impl PointCheck for OpenRedirect {
             rec.send(cx, payload, new_req.as_bytes())
         };
         if let Some(hit) = run_open_redirect_check(&ip.value, cx.settings.speed, send) {
-            cx.report(vec![mk_burp(
+            cx.report(vec![mk_point(
                 "Open redirection (reflected)",
                 "low",
                 "Certain",
                 &cx.entry,
-                &ip.name,
+                ip,
                 format!("Payload {:?} made the response redirect to {:?}.", hit.payload, hit.target),
             )
             .with_evidence(evidence([rec.last(&hit.payload)]))]);
@@ -1029,12 +1355,33 @@ impl PointCheck for SqlErrorInjection {
     fn issue(&self) -> &'static str {
         "SQL injection"
     }
+    /// burp.Zg_c / Zppj: no point-type rule; Zppj returns before probing a point on the server-side skip list.
+    fn applies_to(&self, kind: &IpKind) -> bool {
+        match kind {
+            IpKind::Query
+            | IpKind::Body
+            | IpKind::Json(_)
+            | IpKind::Multipart { .. }
+            | IpKind::Cookie
+            | IpKind::Header
+            | IpKind::PathFolder(_)
+            | IpKind::PathFilename(_)
+            | IpKind::EntireBody
+            | IpKind::XmlParam { .. }
+            | IpKind::XmlTag { .. }
+            | IpKind::XmlAttr { .. }
+            | IpKind::ParamName(_)
+            | IpKind::Base64 { .. } => true,
+        }
+    }
+    fn server_side(&self) -> bool {
+        true
+    }
     fn run(&self, cx: &ScanCtx, _st: &mut ScanState, pt: &mut PointRun) {
         if cx.stopped() {
             return;
         }
         let ip = pt.ip;
-        let name = &ip.name;
         let rec = Recorder::default();
         let send = |payload: &str| -> Option<String> {
             let new_req = inject_payload(&cx.req, ip, &payload);
@@ -1045,8 +1392,12 @@ impl PointCheck for SqlErrorInjection {
         if let Some(hit) = run_sql_error_check(&ip.value, &baseline_full, cx.settings.speed, send) {
             // burp.Zh6 issue text: flag 32 (database error) / 64 (general error).
             let general = hit.database == "General";
+            // The point as Burp names it (burp.Zsg0.Zj): "<b>q</b> parameter",
+            // "<b>sid</b> cookie", "request body", ...
             let text = format!(
-                "The <b>{name}</b> parameter appears to be vulnerable to SQL injection attacks. A single quote was submitted in the {name} parameter, and a {} error message was returned.{} You should review the contents of the error message, and the application's handling of other input, to confirm whether a vulnerability is present.",
+                "The {} appears to be vulnerable to SQL injection attacks. A single quote was submitted in the {}, and a {} error message was returned.{} You should review the contents of the error message, and the application's handling of other input, to confirm whether a vulnerability is present.",
+                ip.describe_short(true),
+                ip.describe_short(false),
                 if general { "general" } else { "database" },
                 // Only a confirmed hit saw the balanced probe come back clean.
                 if hit.confirmed { " Two single quotes were then submitted and the error message disappeared." } else { "" }
@@ -1071,6 +1422,28 @@ impl PointCheck for SqlBooleanInjection {
     fn issue(&self) -> &'static str {
         "SQL injection"
     }
+    /// burp.Zg_c / Zppj: as SqlErrorInjection.
+    fn applies_to(&self, kind: &IpKind) -> bool {
+        match kind {
+            IpKind::Query
+            | IpKind::Body
+            | IpKind::Json(_)
+            | IpKind::Multipart { .. }
+            | IpKind::Cookie
+            | IpKind::Header
+            | IpKind::PathFolder(_)
+            | IpKind::PathFilename(_)
+            | IpKind::EntireBody
+            | IpKind::XmlParam { .. }
+            | IpKind::XmlTag { .. }
+            | IpKind::XmlAttr { .. }
+            | IpKind::ParamName(_)
+            | IpKind::Base64 { .. } => true,
+        }
+    }
+    fn server_side(&self) -> bool {
+        true
+    }
     fn run(&self, cx: &ScanCtx, _st: &mut ScanState, pt: &mut PointRun) {
         if pt.sqli_reported {
             cx.progress();
@@ -1090,12 +1463,12 @@ impl PointCheck for SqlBooleanInjection {
             rec.send(cx, payload, new_req.as_bytes())
         };
         if let Some(hit) = run_sql_boolean_check(&ip.value, &cx.baseline.raw, cx.settings.speed, accuracy, send) {
-            cx.report(vec![mk_burp(
+            cx.report(vec![mk_point(
                 "SQL injection",
                 "high",
                 "Tentative",
                 &cx.entry,
-                &ip.name,
+                ip,
                 format!(
                     "True condition {:?} and false condition {:?} produced consistently different responses over {} rounds (attributes: {:?}).",
                     hit.positive,
@@ -1123,6 +1496,29 @@ impl PointCheck for XmlInjectionOob {
     fn issue(&self) -> &'static str {
         "XML injection"
     }
+    /// burp.Zp7s.Zh: not on headers or parameter names; server-side.
+    fn applies_to(&self, kind: &IpKind) -> bool {
+        match kind {
+            // burp.Zp7s.Zh: Zxmw.Zl lists HEADER and the parameter-name kinds.
+            IpKind::Header
+            | IpKind::ParamName(_) => false,
+            IpKind::Query
+            | IpKind::Body
+            | IpKind::Json(_)
+            | IpKind::Multipart { .. }
+            | IpKind::Cookie
+            | IpKind::PathFolder(_)
+            | IpKind::PathFilename(_)
+            | IpKind::EntireBody
+            | IpKind::XmlParam { .. }
+            | IpKind::XmlTag { .. }
+            | IpKind::XmlAttr { .. }
+            | IpKind::Base64 { .. } => true,
+        }
+    }
+    fn server_side(&self) -> bool {
+        true
+    }
     fn run(&self, cx: &ScanCtx, st: &mut ScanState, pt: &mut PointRun) {
         let (idx, ip) = (pt.idx, pt.ip);
         let name = &ip.name;
@@ -1139,12 +1535,12 @@ impl PointCheck for XmlInjectionOob {
                 send,
             );
             for (token, payload) in sent {
-                let issue = mk_burp(
+                let issue = mk_point(
                     "XML injection",
                     "medium",
                     "Certain",
                     &cx.entry,
-                    name,
+                    ip,
                     format!("The payload {payload} replaced the value; an XML parser that resolves it contacts the Collaborator id {token}."),
                 )
                 .with_evidence(evidence([rec.last(&payload)]));
@@ -1166,15 +1562,34 @@ impl PointCheck for XmlInjectionError {
     fn issue(&self) -> &'static str {
         "XML injection"
     }
+    /// burp.Zp7s.Zh: not on headers or parameter names (Zxmw.Zl); server-side.
     fn applies_to(&self, kind: &IpKind) -> bool {
-        *kind != IpKind::Header
+        match kind {
+            // Zxmw.Zl: HEADER and the parameter-name kinds.
+            IpKind::Header
+            | IpKind::ParamName(_) => false,
+            IpKind::Query
+            | IpKind::Body
+            | IpKind::Json(_)
+            | IpKind::Multipart { .. }
+            | IpKind::Cookie
+            | IpKind::PathFolder(_)
+            | IpKind::PathFilename(_)
+            | IpKind::EntireBody
+            | IpKind::XmlParam { .. }
+            | IpKind::XmlTag { .. }
+            | IpKind::XmlAttr { .. }
+            | IpKind::Base64 { .. } => true,
+        }
+    }
+    fn server_side(&self) -> bool {
+        true
     }
     fn run(&self, cx: &ScanCtx, _st: &mut ScanState, pt: &mut PointRun) {
         if cx.stopped() || cx.baseline.raw.is_empty() {
             return;
         }
         let ip = pt.ip;
-        let name = &ip.name;
         let rec = Recorder::default();
         let send_payload = |payload: &str| -> Option<Vec<u8>> {
             if cx.stopped() {
@@ -1185,13 +1600,13 @@ impl PointCheck for XmlInjectionError {
         };
         let send_base = || -> Option<Vec<u8>> { cx.send(cx.req.as_bytes()) };
         if let Some(markers) = run_xml_injection_check(&ip.value, &cx.baseline.raw, xml_injection_rounds(cx.settings.accuracy), send_payload, send_base) {
-            cx.report(vec![mk_burp(
+            cx.report(vec![mk_point(
                 "XML injection",
                 "medium",
                 "Tentative",
                 &cx.entry,
-                name,
-                format!("The {name} parameter appears to be vulnerable to XML injection. The payload {XML_INJECTION_PAYLOAD} was appended to the value and XML/SOAP markers that were not in the original response appeared: {}.", markers.join(", ")),
+                ip,
+                format!("The {} appears to be vulnerable to XML injection. The payload {XML_INJECTION_PAYLOAD} was appended to the value and XML/SOAP markers that were not in the original response appeared: {}.", ip.describe_short(false), markers.join(", ")),
             )
             .with_evidence(evidence([rec.last(&format!("{}{XML_INJECTION_PAYLOAD}", ip.value))]))]);
         }
@@ -1209,6 +1624,28 @@ impl PointCheck for LdapInjection {
     fn issue(&self) -> &'static str {
         "LDAP injection"
     }
+    /// burp.Zwkf.Zh: no point-type rule; server-side.
+    fn applies_to(&self, kind: &IpKind) -> bool {
+        match kind {
+            IpKind::Query
+            | IpKind::Body
+            | IpKind::Json(_)
+            | IpKind::Multipart { .. }
+            | IpKind::Cookie
+            | IpKind::Header
+            | IpKind::PathFolder(_)
+            | IpKind::PathFilename(_)
+            | IpKind::EntireBody
+            | IpKind::XmlParam { .. }
+            | IpKind::XmlTag { .. }
+            | IpKind::XmlAttr { .. }
+            | IpKind::ParamName(_)
+            | IpKind::Base64 { .. } => true,
+        }
+    }
+    fn server_side(&self) -> bool {
+        true
+    }
     fn run(&self, cx: &ScanCtx, _st: &mut ScanState, pt: &mut PointRun) {
         if cx.stopped() || cx.baseline.raw.is_empty() {
             return;
@@ -1224,12 +1661,12 @@ impl PointCheck for LdapInjection {
             rec.send(cx, payload, new_req.as_bytes())
         };
         if let Some(hit) = run_ldap_check(&ip.value, &cx.baseline.raw, cx.settings.speed, accuracy, send) {
-            cx.report(vec![mk_burp(
+            cx.report(vec![mk_point(
                 "LDAP injection",
                 "high",
                 "Firm",
                 &cx.entry,
-                &ip.name,
+                ip,
                 format!(
                     "Always-true filter {:?} and always-false filter {:?} produced consistently different responses over {} rounds (attributes: {:?}).",
                     hit.positive,
@@ -1257,6 +1694,28 @@ impl PointCheck for SmtpHeaderInjection {
     fn issue(&self) -> &'static str {
         "SMTP header injection"
     }
+    /// burp.Zgcg.Zh: every new kind (Burp excludes URL path folders and User-Agent / Referer; existing kinds unchanged); server-side.
+    fn applies_to(&self, kind: &IpKind) -> bool {
+        match kind {
+            IpKind::Query
+            | IpKind::Body
+            | IpKind::Json(_)
+            | IpKind::Multipart { .. }
+            | IpKind::Cookie
+            | IpKind::Header
+            | IpKind::PathFolder(_)
+            | IpKind::PathFilename(_)
+            | IpKind::EntireBody
+            | IpKind::XmlParam { .. }
+            | IpKind::XmlTag { .. }
+            | IpKind::XmlAttr { .. }
+            | IpKind::ParamName(_)
+            | IpKind::Base64 { .. } => true,
+        }
+    }
+    fn server_side(&self) -> bool {
+        true
+    }
     fn run(&self, cx: &ScanCtx, _st: &mut ScanState, pt: &mut PointRun) {
         let ip = pt.ip;
         let (name, value) = (&ip.name, &ip.value);
@@ -1274,12 +1733,12 @@ impl PointCheck for SmtpHeaderInjection {
             let payload = smtp_payload(value, enclosed, collab_host, &r3, &r1);
             let new_req = inject_payload(&cx.req, ip, &payload);
             let resp = cx.send(new_req.as_bytes());
-            let issue = mk_burp(
+            let issue = mk_point(
                 "SMTP header injection",
                 "medium",
                 "Certain",
                 &cx.entry,
-                name,
+                ip,
                 format!("Payload appended a BCC header to user@{collab_host}; awaiting an SMTP interaction for id {token}."),
             )
             .with_evidence(vec![ScanEvidence::new(new_req.as_bytes(), resp.as_deref())]);
@@ -1303,6 +1762,28 @@ impl PointCheck for StoredEcho {
     }
     fn issue(&self) -> &'static str {
         "Active probe: value of parameter appears stored"
+    }
+    /// WebProbe's own pass (no Burp class): every kind; not server-side.
+    fn applies_to(&self, kind: &IpKind) -> bool {
+        match kind {
+            IpKind::Query
+            | IpKind::Body
+            | IpKind::Json(_)
+            | IpKind::Multipart { .. }
+            | IpKind::Cookie
+            | IpKind::Header
+            | IpKind::PathFolder(_)
+            | IpKind::PathFilename(_)
+            | IpKind::EntireBody
+            | IpKind::XmlParam { .. }
+            | IpKind::XmlTag { .. }
+            | IpKind::XmlAttr { .. }
+            | IpKind::ParamName(_)
+            | IpKind::Base64 { .. } => true,
+        }
+    }
+    fn server_side(&self) -> bool {
+        false
     }
     fn run(&self, cx: &ScanCtx, st: &mut ScanState, _pt: &mut PointRun) {
         if st.stored_markers.is_empty() || cx.stopped() {

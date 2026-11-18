@@ -265,6 +265,15 @@ fn scan_configuration(app: &mut App, ui: &mut Ui) {
                 }
             }
         }
+        let key = crate::scan_config::NESTED_KEY;
+        let mut on = config.insertion_enabled(key);
+        if ui.checkbox(&mut on, crate::scan_config::NESTED_LABEL).changed() {
+            if on {
+                config.disabled_insertion.remove(key);
+            } else {
+                config.disabled_insertion.insert(key.to_string());
+            }
+        }
     });
     ui.add_space(8.0);
     ui.horizontal(|ui| {

@@ -18,6 +18,14 @@ pub(crate) mod active_checks;
 #[path = "scan_checks.rs"]
 pub(crate) mod checks;
 
+/// Insertion points: Burp's point types, builder, vetoes, payload placement
+/// and point wording (burp.Zbg8, Zuq, Zwez, Zfw9, Zsg0).
+#[path = "insertion.rs"]
+pub(crate) mod insertion;
+pub(crate) use insertion::{audit_points, inject, inject_payload, InsertionPoint, IpKind};
+#[cfg(test)]
+pub(crate) use insertion::{insertion_points, NameSite, SYNTH_REFERER};
+
 /// AuditDefaults.json misc_insertion_point_options.max_insertion_points_per_base_request
 pub const MAX_INSERTION_POINTS: usize = 30;
 /// CrawlDefaults.json crawl_limits.maximum_unique_locations
@@ -253,6 +261,15 @@ fn mk(sev: &str, name: &str, e: &HistEntry, detail: impl Into<String>) -> ScanIs
 /// Burp scanner reported for the same finding (parity lab, fnd_54).
 fn mk_burp(kb_name: &str, sev: &str, confidence: &str, e: &HistEntry, param: &str, detail: impl Into<String>) -> ScanIssue {
     let mut i = mk(sev, kb_name, e, format!("Parameter {param}: {}", detail.into()));
+    i.confidence = confidence.into();
+    i
+}
+
+/// [`mk_burp`] for an insertion-point check: the detail starts with Burp's
+/// wording for the point (burp.Zsg0.ZD), "The value of the q request
+/// parameter: ...", "The name of an arbitrarily supplied URL parameter: ...".
+fn mk_point(kb_name: &str, sev: &str, confidence: &str, e: &HistEntry, ip: &InsertionPoint, detail: impl Into<String>) -> ScanIssue {
+    let mut i = mk(sev, kb_name, e, format!("The {}: {}", ip.describe(), detail.into()));
     i.confidence = confidence.into();
     i
 }
@@ -1028,8 +1045,9 @@ pub fn query_params(path: &str) -> Vec<(String, String)> {
         .collect()
 }
 
-/// Active scan of a stored request. Builds the insertion points (URL, body,
-/// cookie, header and URL path values, see [`insertion_points`]), then on a
+/// Active scan of a stored request. Builds the insertion points under the
+/// scan configuration (Burp's builder, vetoes and cap, see [`audit_points`]),
+/// then on a
 /// worker thread fetches the baseline and runs the check registries of
 /// [`checks`]: every insertion-point check on every point, in registry
 /// order, then the per-request and per-host checks once.
@@ -1058,7 +1076,7 @@ pub fn start_active_scan(shared: Arc<Shared>, entry: HistEntry, oob: &[(String, 
     }
     let (host, port) = net::split_h_p(&host_header, entry.port);
     let config = shared.scan_config.lock().unwrap().clone();
-    let points: Vec<InsertionPoint> = insertion_points(&req).into_iter().filter(|p| config.insertion_enabled(insertion_type(&p.kind))).collect();
+    let points: Vec<InsertionPoint> = audit_points(&req, &config);
     if points.is_empty() {
         // Burp still runs its per-request and per-host checks (CORS,
         // path-relative style sheets, OpenAPI discovery) on such requests.
@@ -2949,81 +2967,12 @@ pub(crate) fn with_path_segment(path: &str, idx: usize, value: &str) -> String {
 }
 
 
-/// The scan configuration's insertion point type of a point
-/// ([`crate::scan_config::INSERTION_TYPES`]).
-pub(crate) fn insertion_type(kind: &IpKind) -> &'static str {
-    match kind {
-        IpKind::Query => "url",
-        IpKind::Body | IpKind::Json(_) | IpKind::Multipart { .. } => "body",
-        IpKind::Cookie => "cookie",
-        IpKind::Header => "header",
-        IpKind::PathFolder(_) => "folder",
-        IpKind::PathFilename(_) => "filename",
-    }
-}
-
 /// Every audit check as (id, issue it reports, true for per-point checks),
 /// in run order, for the scan configuration's check list.
 pub fn check_catalogue() -> Vec<(&'static str, &'static str, bool)> {
     let mut v: Vec<(&'static str, &'static str, bool)> = checks::POINT_CHECKS.iter().map(|c| (c.id(), c.issue(), true)).collect();
     v.extend(checks::REQUEST_CHECKS.iter().map(|c| (c.id(), c.issue(), false)));
     v
-}
-
-/// Burp's insertion point kinds used by the active scan (burp.Zg6r / Zbg8:
-/// URL parameter, body parameter, JSON value, multipart part, cookie, HTTP
-/// header, URL path folder and filename).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum IpKind {
-    Query,
-    Body,
-    /// JSON value at a path of object keys / array indices.
-    Json(Vec<String>),
-    /// multipart/form-data part `index` (0-based); `filename` is set for a
-    /// file-upload part (burp.Zsdt / Ziqg, the parts with a filename attribute).
-    Multipart { index: usize, filename: Option<String> },
-    /// A cookie in the Cookie header (Zg6r.COOKIE).
-    Cookie,
-    /// A request header value (Zbg8.HEADER); added when absent (Referer).
-    Header,
-    /// '/'-separated path segment index (Zg6r.PATH_FOLDER_PARAM).
-    PathFolder(usize),
-    /// '/'-separated path segment index of the last segment (PATH_FILENAME_PARAM).
-    PathFilename(usize),
-}
-
-impl IpKind {
-    /// burp.Zg6r.Zo: the wording Burp's issue text uses for the point type.
-    pub(crate) fn burp_label(&self) -> &'static str {
-        match self {
-            IpKind::Query => "URL parameter",
-            IpKind::Body | IpKind::Multipart { .. } => "body parameter",
-            IpKind::Json(_) => "JSON parameter",
-            IpKind::Cookie => "cookie",
-            IpKind::Header => "HTTP header",
-            IpKind::PathFolder(_) => "URL path folder element",
-            IpKind::PathFilename(_) => "URL path filename",
-        }
-    }
-
-    fn is_path(&self) -> bool {
-        matches!(self, IpKind::PathFolder(_) | IpKind::PathFilename(_))
-    }
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct InsertionPoint {
-    pub kind: IpKind,
-    pub name: String,
-    pub value: String,
-}
-
-/// AuditDefaults.json scanner.ignored_insertion_points.skip_all_tests_for_parameters,
-/// cookie rows: analytics and load-balancer cookies are never audited
-/// (burp.Zb9c vetoes them before the per-request cap is counted).
-fn skipped_cookie(name: &str) -> bool {
-    let n = name;
-    matches!(n, "_ga" | "_gid" | "_gat") || n.starts_with("_ga_") || n.starts_with("_gac_") || n.starts_with("AWSALB")
 }
 
 /// The multipart boundary of a `multipart/form-data` Content-Type.
@@ -3124,105 +3073,6 @@ pub(crate) fn with_multipart_part(req: &str, index: usize, content: &str, filena
     with_body(req, &new_body)
 }
 
-fn json_leaves(v: &serde_json::Value, path: &mut Vec<String>, out: &mut Vec<InsertionPoint>) {
-    if out.len() >= MAX_INSERTION_POINTS {
-        return;
-    }
-    match v {
-        serde_json::Value::Object(m) => {
-            for (k, x) in m {
-                path.push(k.clone());
-                json_leaves(x, path, out);
-                path.pop();
-            }
-        }
-        serde_json::Value::Array(a) => {
-            for (i, x) in a.iter().enumerate().take(5) {
-                path.push(i.to_string());
-                json_leaves(x, path, out);
-                path.pop();
-            }
-        }
-        serde_json::Value::String(st) => out.push(InsertionPoint { kind: IpKind::Json(path.clone()), name: path.last().cloned().unwrap_or_default(), value: st.clone() }),
-        serde_json::Value::Number(n) => out.push(InsertionPoint { kind: IpKind::Json(path.clone()), name: path.last().cloned().unwrap_or_default(), value: n.to_string() }),
-        serde_json::Value::Bool(b) => out.push(InsertionPoint { kind: IpKind::Json(path.clone()), name: path.last().cloned().unwrap_or_default(), value: b.to_string() }),
-        serde_json::Value::Null => {}
-    }
-}
-
-/// The value Burp synthesises for a Referer insertion point when the request
-/// has none (burp.Zuq.ZE, "addNewReferHeaderInsertionPoint").
-pub(crate) const SYNTH_REFERER: &str = "https://example.com/";
-
-/// Every insertion point of a request, in burp.Zuq.Zs build order:
-/// URL parameters and body parameters (form, multipart part, JSON value) in
-/// request order (Zuq.Ze), cookies (Zuq.Zy: Ze9r maps COOKIE to the case Ze
-/// skips), every `X-*` header present (Zuq.ZP matches "\r\nx-"), User-Agent
-/// when present and Referer, existing or synthesised (Zuq.Zb -> Zi/ZK/ZE),
-/// URL path folders (Zuq.ZX), then the URL path filename (Zuq.ZY).
-/// Skip-listed cookies are dropped first, then the list is capped at
-/// AuditDefaults max_insertion_points_per_base_request = 30 (burp.Zwez: the
-/// limit veto is the last filter and counts only accepted points), so path
-/// points are the first to fall off a busy request.
-/// Not built (yet): entire-body, nested (base64/JSON-in-param), XML
-/// standalone-tag and parameter-name points.
-pub(crate) fn insertion_points(req: &str) -> Vec<InsertionPoint> {
-    let parts = util::parse_http(req.as_bytes());
-    let mut out: Vec<InsertionPoint> = query_params(&parts.path)
-        .into_iter()
-        .map(|(name, value)| InsertionPoint { kind: IpKind::Query, name, value })
-        .collect();
-    let body = req.find("\r\n\r\n").map(|i| &req[i + 4..]).unwrap_or("");
-    if !body.trim().is_empty() {
-        let ct_raw = util::get_header(&parts.headers, "Content-Type").unwrap_or_default();
-        let ct = ct_raw.to_ascii_lowercase();
-        if let Some(boundary) = multipart_boundary(&ct_raw) {
-            for (index, p) in multipart_parts(body, &boundary).into_iter().enumerate() {
-                out.push(InsertionPoint {
-                    kind: IpKind::Multipart { index, filename: p.filename.clone() },
-                    name: p.name.clone(),
-                    value: body[p.content.0..p.content.1].to_string(),
-                });
-            }
-        } else if ct.contains("json") || body.trim_start().starts_with('{') || body.trim_start().starts_with('[') {
-            if let Ok(v) = serde_json::from_str::<serde_json::Value>(body) {
-                json_leaves(&v, &mut Vec::new(), &mut out);
-            }
-        } else if ct.contains("x-www-form-urlencoded") || (!ct.contains("xml") && body.contains('=')) {
-            for kv in body.split('&').filter(|x| !x.is_empty()) {
-                let (k, v) = kv.split_once('=').unwrap_or((kv, ""));
-                out.push(InsertionPoint { kind: IpKind::Body, name: k.to_string(), value: util::url_decode(v) });
-            }
-        }
-    }
-    // Cookies, in header order; skip-listed names never count.
-    for v in parts.headers.iter().filter(|(k, _)| k.eq_ignore_ascii_case("Cookie")).map(|(_, v)| v) {
-        for pair in v.split(';').map(str::trim).filter(|p| !p.is_empty()) {
-            let (n, val) = pair.split_once('=').unwrap_or((pair, ""));
-            if !skipped_cookie(n) {
-                out.push(InsertionPoint { kind: IpKind::Cookie, name: n.to_string(), value: val.to_string() });
-            }
-        }
-    }
-    // X-* headers present in the request.
-    for (k, v) in &parts.headers {
-        if k.len() > 2 && k.get(..2).is_some_and(|p| p.eq_ignore_ascii_case("x-")) {
-            out.push(InsertionPoint { kind: IpKind::Header, name: k.clone(), value: v.clone() });
-        }
-    }
-    if let Some(ua) = util::get_header(&parts.headers, "User-Agent") {
-        out.push(InsertionPoint { kind: IpKind::Header, name: "User-Agent".into(), value: ua });
-    }
-    let referer = util::get_header(&parts.headers, "Referer").unwrap_or_else(|| SYNTH_REFERER.to_string());
-    out.push(InsertionPoint { kind: IpKind::Header, name: "Referer".into(), value: referer });
-    for (label, idx, seg) in path_insertion_points(&parts.path) {
-        let kind = if label == "URL path filename" { IpKind::PathFilename(idx) } else { IpKind::PathFolder(idx) };
-        out.push(InsertionPoint { kind, name: label, value: seg });
-    }
-    out.truncate(MAX_INSERTION_POINTS);
-    out
-}
-
 /// One request to the scan target, plain or TLS.
 fn send_one(shared: &Arc<Shared>, https: bool, host: &str, port: u16, raw: &[u8]) -> Option<Vec<u8>> {
     crate::tasks::wait_while_paused(shared);
@@ -3312,7 +3162,18 @@ pub(crate) fn reflected_xss_severity(kind: &IpKind) -> &'static str {
     match kind {
         IpKind::Header => "low",
         IpKind::Cookie => "medium",
-        _ => "high",
+        IpKind::Query
+        | IpKind::Body
+        | IpKind::Json(_)
+        | IpKind::Multipart { .. }
+        | IpKind::PathFolder(_)
+        | IpKind::PathFilename(_)
+        | IpKind::EntireBody
+        | IpKind::XmlParam { .. }
+        | IpKind::XmlTag { .. }
+        | IpKind::XmlAttr { .. }
+        | IpKind::ParamName(_)
+        | IpKind::Base64 { .. } => "high",
     }
 }
 
@@ -3322,24 +3183,32 @@ pub(crate) fn reflected_xss_severity(kind: &IpKind) -> &'static str {
 /// Zsrh with Ze_f / Zbiw) on the points that check applies to. The UI mints
 /// one Collaborator payload per slot and passes them back as `oob`.
 pub fn oob_slots(shared: &Shared, req_raw: &[u8]) -> Vec<String> {
-    slots_for(req_raw, ScanSpeed::from_u8(shared.scan_speed.load(Ordering::SeqCst)))
+    let config = shared.scan_config.lock().unwrap().clone();
+    slots_for(req_raw, ScanSpeed::from_u8(shared.scan_speed.load(Ordering::SeqCst)), &config)
 }
 
 /// The slots at audit speed `speed`: at Fast, OS command injection runs only
 /// its combined payload (burp.Zc99), so only that slot gets an id.
-pub(crate) fn slots_for(req_raw: &[u8], speed: ScanSpeed) -> Vec<String> {
+/// The points are the scan's own ([`audit_points`] under the same
+/// configuration), so slot `#k` names the scan's point `k`; a point only
+/// gets the slots of the checks that will run on it ([`checks::check_applies`]).
+pub(crate) fn slots_for(req_raw: &[u8], speed: ScanSpeed, config: &crate::scan_config::ScanConfig) -> Vec<String> {
     let req = String::from_utf8_lossy(req_raw);
     let mut out = Vec::new();
-    for (i, ip) in insertion_points(&req).iter().enumerate() {
-        out.push(format!("#{i}:ext"));
-        if active_checks::xml_oob_applies(&ip.kind, &ip.value) {
+    for (i, ip) in audit_points(&req, config).iter().enumerate() {
+        if checks::check_applies(&checks::ExternalInteraction, ip, config) {
+            out.push(format!("#{i}:ext"));
+        }
+        if checks::check_applies(&checks::XmlInjectionOob, ip, config) && active_checks::xml_oob_applies(&ip.kind, &ip.value) {
             out.push(format!("#{i}:xsd"));
             out.push(format!("#{i}:xi"));
         }
         // OS command injection (burp.Zc99): one id per nslookup payload.
-        let first = if speed == ScanSpeed::Fast { 3 } else { 0 };
-        for k in first..4 {
-            out.push(format!("#{i}:cmd{k}"));
+        if checks::check_applies(&checks::OsCommandInjection, ip, config) {
+            let first = if speed == ScanSpeed::Fast { 3 } else { 0 };
+            for k in first..4 {
+                out.push(format!("#{i}:cmd{k}"));
+            }
         }
     }
     out
@@ -3416,74 +3285,6 @@ fn with_body(req: &str, body: &str) -> String {
     let mut out = head.to_string();
     out.push_str(body);
     String::from_utf8_lossy(&net::replace_or_add_header(out.as_bytes(), "Content-Length", &body.len().to_string())).into_owned()
-}
-
-fn json_set(v: &mut serde_json::Value, path: &[String], new: serde_json::Value) {
-    let Some((first, rest)) = path.split_first() else {
-        *v = new;
-        return;
-    };
-    match v {
-        serde_json::Value::Object(m) => {
-            if let Some(x) = m.get_mut(first) {
-                json_set(x, rest, new);
-            }
-        }
-        serde_json::Value::Array(a) => {
-            if let Some(x) = first.parse::<usize>().ok().and_then(|i| a.get_mut(i)) {
-                json_set(x, rest, new);
-            }
-        }
-        _ => {}
-    }
-}
-
-/// The request with `payload` placed at the insertion point, encoded for
-/// that kind of point: URL-encoded in the query, form body, cookie and
-/// header values; as written inside a JSON string, a multipart part and a
-/// path segment, which escape it their own way. A payload that is itself
-/// percent-encoded (a `%2f` traversal variant) therefore reaches a JSON
-/// value as written; it used to be URL-decoded into `/`.
-pub(crate) fn inject_payload(req: &str, ip: &InsertionPoint, payload: &str) -> String {
-    match &ip.kind {
-        IpKind::Json(_) | IpKind::Multipart { .. } | IpKind::PathFolder(_) | IpKind::PathFilename(_) => inject(req, ip, payload),
-        _ => inject(req, ip, &encode_query_payload(payload)),
-    }
-}
-
-/// The request with `value` placed verbatim at the insertion point (already
-/// encoded for it; see [`inject_payload`]).
-pub(crate) fn inject(req: &str, ip: &InsertionPoint, value: &str) -> String {
-    let encoded = value;
-    let parts = util::parse_http(req.as_bytes());
-    match &ip.kind {
-        IpKind::Query => rebuild_with_path(req, &replace_param(&parts.path, &ip.name, encoded)),
-        IpKind::Body => {
-            let body = req.find("\r\n\r\n").map(|i| &req[i + 4..]).unwrap_or("");
-            let new: Vec<String> = body
-                .split('&')
-                .map(|kv| {
-                    let k = kv.split('=').next().unwrap_or("");
-                    if k == ip.name { format!("{k}={encoded}") } else { kv.to_string() }
-                })
-                .collect();
-            with_body(req, &new.join("&"))
-        }
-        IpKind::Json(path) => {
-            let body = req.find("\r\n\r\n").map(|i| &req[i + 4..]).unwrap_or("");
-            let Ok(mut v) = serde_json::from_str::<serde_json::Value>(body) else { return req.to_string() };
-            json_set(&mut v, path, serde_json::Value::String(encoded.to_string()));
-            with_body(req, &v.to_string())
-        }
-        // Multipart content is sent raw, like a browser would.
-        IpKind::Multipart { index, .. } => with_multipart_part(req, *index, encoded, None, None),
-        IpKind::Cookie => with_cookie(req, &ip.name, &cookie_value(encoded)),
-        IpKind::Header => String::from_utf8_lossy(&net::replace_or_add_header(req.as_bytes(), &ip.name, &header_value(encoded))).into_owned(),
-        IpKind::PathFolder(idx) | IpKind::PathFilename(idx) => {
-            // with_path_segment escapes what would leave the segment.
-            rebuild_with_path(req, &with_path_segment(&parts.path, *idx, encoded))
-        }
-    }
 }
 
 fn replace_param(path: &str, name: &str, new_value: &str) -> String {
@@ -4889,10 +4690,11 @@ mod tests {
     fn body_and_json_insertion_points() {
         let form = "POST /login?x=1 HTTP/1.1\r\nHost: h\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 13\r\n\r\nuser=a&pw=b%21";
         let pts = insertion_points(form);
-        // Parameters first; the synthesised Referer and the URL path
-        // filename point follow (burp.Zuq.Zs order).
+        // Parameters first; the body and URL parameter-name points, the
+        // synthesised Referer and the URL path filename point follow
+        // (burp.Zuq.Zs order).
         let names: Vec<_> = pts.iter().map(|p| (p.name.as_str(), p.value.as_str())).collect();
-        assert_eq!(names, vec![("x", "1"), ("user", "a"), ("pw", "b!"), ("Referer", SYNTH_REFERER), ("URL path filename", "login")]);
+        assert_eq!(names, vec![("x", "1"), ("user", "a"), ("pw", "b!"), ("", "1"), ("", "1"), ("Referer", SYNTH_REFERER), ("URL path filename", "login")]);
         let r = inject(form, &pts[1], "a%27");
         assert!(r.ends_with("user=a%27&pw=b%21") && r.contains("Content-Length: 17\r\n"), "{r}");
         let json = "POST /rest/user/login HTTP/1.1\r\nHost: h\r\nContent-Type: application/json\r\nContent-Length: 30\r\n\r\n{\"email\":\"a@b.c\",\"n\":{\"k\":5}}";
@@ -4999,10 +4801,10 @@ mod tests {
         let issues = shared.issues.lock().unwrap();
         let names: Vec<_> = issues.iter().map(|i| (i.name.clone(), i.sev.clone(), i.detail.chars().take(60).collect::<String>())).collect();
         let stored_xss = issues.iter().find(|i| i.name == "Cross-site scripting (stored)").unwrap_or_else(|| panic!("no stored XSS: {names:?}"));
-        assert!(stored_xss.detail.starts_with("Parameter c:") && stored_xss.detail.contains("GET /comments"), "{}", stored_xss.detail);
+        assert!(stored_xss.detail.starts_with("The value of the c request parameter:") && stored_xss.detail.contains("GET /comments"), "{}", stored_xss.detail);
         let cookie_xss = issues
             .iter()
-            .find(|i| i.name == "Cross-site scripting (reflected)" && i.detail.starts_with("Parameter theme:"))
+            .find(|i| i.name == "Cross-site scripting (reflected)" && i.detail.starts_with("The value of the theme cookie:"))
             .unwrap_or_else(|| panic!("no cookie XSS: {names:?}"));
         assert_eq!(cookie_xss.sev, "medium");
         drop(stored);
@@ -5292,6 +5094,10 @@ mod tests {
         ("Active probe: permissive HTTP methods advertised via OPTIONS", "low", "Firm", "/search"),
         ("Active probe: permissive HTTP methods advertised via OPTIONS", "low", "Firm", "/transfer"),
         ("Active probe: permissive HTTP methods advertised via OPTIONS", "low", "Firm", "/xml"),
+        // Once per later point of /board (msg, the URL parameter name,
+        // Referer, filename): the stored-echo pass re-reports surviving
+        // markers after every point.
+        ("Active probe: value of parameter msg appears stored", "medium", "Firm", "/board"),
         ("Active probe: value of parameter msg appears stored", "medium", "Firm", "/board"),
         ("Active probe: value of parameter msg appears stored", "medium", "Firm", "/board"),
         ("Active probe: value of parameter msg appears stored", "medium", "Firm", "/board"),
@@ -5335,7 +5141,7 @@ mod tests {
         let port = characterisation_server();
         let shared = net::Shared::new();
         let req = format!("GET /search?q=hello HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
-        let slots = slots_for(req.as_bytes(), ScanSpeed::Normal);
+        let slots = slots_for(req.as_bytes(), ScanSpeed::Normal, &Default::default());
         assert_eq!(&slots[..3], ["#0:ext", "#0:xsd", "#0:xi"]);
         let oob: Vec<(String, String, String)> = slots.iter().enumerate().map(|(i, s)| (s.clone(), format!("tok{i}"), format!("tok{i}.oob.invalid"))).collect();
         let smtp = vec![SmtpOob { param: "q".into(), simple: ("smtpa".into(), "smtpa.oob.invalid".into()), enclosed: ("smtpb".into(), "smtpb.oob.invalid".into()) }];
@@ -5392,6 +5198,8 @@ mod tests {
             (IpKind::Cookie, "sid"),
             (IpKind::Cookie, "lang"),
             (IpKind::Header, "X-Forwarded-For"),
+            (IpKind::ParamName(NameSite::Body), ""),
+            (IpKind::ParamName(NameSite::Url), ""),
             (IpKind::Header, "User-Agent"),
             (IpKind::Header, "Referer"),
             (IpKind::PathFolder(0), "URL path folder 1"),
@@ -5460,7 +5268,7 @@ mod tests {
             ("User-Agent".to_string(), "UA".to_string()),
             ("Referer".to_string(), "https://h/home".to_string()),
         ]);
-        let ua = InsertionPoint { kind: IpKind::Header, name: "User-Agent".into(), value: "UA".into() };
+        let ua = InsertionPoint::new(IpKind::Header, "User-Agent", "UA");
         // Decoded for the header, but a CR/LF stays encoded: no new header line.
         let r = inject_payload(req, &ua, &"a b\r\nX-Evil: 1");
         assert!(r.contains("\r\nUser-Agent: a b%0D%0AX-Evil: 1\r\n") && !r.contains("\r\nX-Evil:"), "{r}");
@@ -5476,7 +5284,7 @@ mod tests {
     #[test]
     fn url_path_folder_and_filename_insertion_points() {
         let req = "GET /api/v1/users.json?x=1 HTTP/1.1\r\nHost: h\r\n\r\n";
-        let pts: Vec<InsertionPoint> = insertion_points(req).into_iter().filter(|p| p.kind.is_path()).collect();
+        let pts: Vec<InsertionPoint> = insertion_points(req).into_iter().filter(|p| matches!(p.kind, IpKind::PathFolder(_) | IpKind::PathFilename(_))).collect();
         assert_eq!(pts.len(), 3);
         assert_eq!((pts[1].kind.clone(), pts[1].value.as_str()), (IpKind::PathFolder(1), "v1"));
         assert_eq!((pts[2].kind.clone(), pts[2].value.as_str()), (IpKind::PathFilename(2), "users.json"));
@@ -5492,7 +5300,7 @@ mod tests {
     fn pooled_oob_hands_out_one_payload_per_slot_until_the_pool_is_dry() {
         let shared = Shared::new();
         let req = b"GET /a?x=1&y=2 HTTP/1.1\r\nHost: h\r\n\r\n";
-        let slots = slots_for(req, ScanSpeed::Normal);
+        let slots = slots_for(req, ScanSpeed::Normal, &Default::default());
         assert!(slots.len() >= 2, "{slots:?}");
         // No pool (headless): nothing, and no waiting because nobody was asked.
         assert!(pooled_oob(&shared, req).is_empty());
@@ -5511,19 +5319,21 @@ mod tests {
     #[test]
     fn oob_slots_cover_every_point_and_xml_oob_where_it_applies() {
         let req = b"GET /p?q=1 HTTP/1.1\r\nHost: h\r\n\r\n";
-        // q (query), Referer (header), filename "p" (path).
+        // q (query), the URL parameter name (no out-of-band check runs on
+        // it: Zibp.ZU, Zx8l, Zp7s), Referer (header), filename "p" (path).
         let cmd = |i: usize| (0..4).map(move |k| format!("#{i}:cmd{k}"));
         let want: Vec<String> = ["#0:ext", "#0:xsd", "#0:xi"]
             .iter()
             .map(|s| s.to_string())
             .chain(cmd(0))
-            .chain(["#1:ext".to_string()])
-            .chain(cmd(1))
-            .chain(["#2:ext", "#2:xsd", "#2:xi"].iter().map(|s| s.to_string()))
+            .chain(["#2:ext".to_string()])
             .chain(cmd(2))
+            .chain(["#3:ext", "#3:xsd", "#3:xi"].iter().map(|s| s.to_string()))
+            .chain(cmd(3))
             .collect();
-        assert_eq!(slots_for(req, ScanSpeed::Normal), want);
-        assert_eq!(slots_for(req, ScanSpeed::Fast).iter().filter(|s| s.contains(":cmd")).count(), 3, "Fast: the combined payload only, one per point");
+        let default = crate::scan_config::ScanConfig::default();
+        assert_eq!(slots_for(req, ScanSpeed::Normal, &default), want);
+        assert_eq!(slots_for(req, ScanSpeed::Fast, &default).iter().filter(|s| s.contains(":cmd")).count(), 3, "Fast: the combined payload only, one per point");
         let oob = vec![
             ("#0:xi".to_string(), "t1".to_string(), "h1".to_string()),
             ("q".to_string(), "t0".to_string(), "h0".to_string()),

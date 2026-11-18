@@ -4,15 +4,28 @@
 
 use std::collections::BTreeSet;
 
-/// Burp's insertion point types, as (key, label).
-pub const INSERTION_TYPES: [(&str, &str); 6] = [
+/// Burp's insertion point types, as (key, label): AuditDefaults.json
+/// scanner.insertion_point_types (insert_url_params, insert_body_params,
+/// insert_cookies, insert_param_name, insert_http_headers,
+/// insert_entire_body, insert_url_path_folders, insert_url_path_filename).
+/// A key is stored only when switched off, so a configuration saved before
+/// a type existed loads with that type on, as in Burp's defaults.
+pub const INSERTION_TYPES: [(&str, &str); 8] = [
     ("url", "URL parameter values"),
     ("body", "Body parameter values"),
     ("cookie", "Cookie parameter values"),
+    ("param_name", "Parameter name"),
     ("header", "HTTP headers"),
+    ("entire_body", "Entire body"),
     ("folder", "URL path folders"),
     ("filename", "URL path filename"),
 ];
+
+/// "Use nested insertion points" (AuditDefaults.json
+/// scanner.misc_insertion_point_options.use_nested_insertion_points, on by
+/// default), kept with the switched-off insertion types under this key.
+pub const NESTED_KEY: &str = "nested";
+pub const NESTED_LABEL: &str = "Use nested insertion points";
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ScanConfig {

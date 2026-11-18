@@ -1201,7 +1201,6 @@ pub fn tab_menu(ui: &mut Ui, idx: usize, count: usize, can_reopen: bool) -> Opti
 /// Apply a tab command (from the menu of tab `idx`) to the shared tab list;
 /// returns the new selection given the current one.
 pub fn apply_tab_command(shared: &net::Shared, st: &mut State, idx: usize, selected: usize, cmd: TabCommand) -> usize {
-    use std::sync::atomic::Ordering;
     let mut reps = shared.repeaters.lock().unwrap();
     let sel_id = reps.get(selected).map(|t| t.id);
     match cmd {
@@ -1232,7 +1231,6 @@ pub fn apply_tab_command(shared: &net::Shared, st: &mut State, idx: usize, selec
 /// drag reorders, the cross closes, right-click opens Burp's tab menu, "+"
 /// adds a tab.
 pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
-    use std::sync::atomic::Ordering;
     let tabs: Vec<(u64, String)> = app.shared.repeaters.lock().unwrap().iter().map(|r| (r.id, r.name.clone())).collect();
     let n = tabs.len();
     let can_reopen = !app.rops.closed.is_empty();

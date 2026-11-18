@@ -371,7 +371,22 @@ where
 /// and the parameter-name kinds) and values that already hold '<' or '>'
 /// (Zp7s.ZQ).
 pub(crate) fn xml_oob_applies(kind: &IpKind, value: &str) -> bool {
-    *kind != IpKind::Header && !value.contains(['<', '>'])
+    let type_ok = match kind {
+        IpKind::Header | IpKind::ParamName(_) => false,
+        IpKind::Query
+        | IpKind::Body
+        | IpKind::Json(_)
+        | IpKind::Multipart { .. }
+        | IpKind::Cookie
+        | IpKind::PathFolder(_)
+        | IpKind::PathFilename(_)
+        | IpKind::EntireBody
+        | IpKind::XmlParam { .. }
+        | IpKind::XmlTag { .. }
+        | IpKind::XmlAttr { .. }
+        | IpKind::Base64 { .. } => true,
+    };
+    type_ok && !value.contains(['<', '>'])
 }
 
 /// burp.Ze_f.Zr wrapped by Zsdg.Zl for a value without markup: a random
