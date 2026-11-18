@@ -186,6 +186,12 @@ impl InsertionPoint {
         describe_chain(&self.chain(), true, false)
     }
 
+    /// burp.Zsg0.ZD(…, true, true), as Burp's issue texts print it: "value
+    /// of the <b>q</b> request parameter".
+    pub(crate) fn describe_bold(&self) -> String {
+        describe_chain(&self.chain(), true, true)
+    }
+
     /// burp.Zsg0.Zj: "q parameter", "sid cookie", "request body", ...;
     /// `bold` wraps the name in `<b>` as Burp's issue texts do.
     pub(crate) fn describe_short(&self, bold: bool) -> String {
@@ -1637,8 +1643,13 @@ mod tests {
         assert!(php.skips_server_side(), "cookie PHPSESSID, matched ignoring case as Burp's `is` rules do");
         // burp.Zi6p (XSS and template injection), Zppj, Zx8l, Zp3a, Zxfo,
         // Zwkf, Zp7s, Zexx, Zgcg are server-side: none runs on PHPSESSID.
-        for check in [&ck::ReflectedXss as &dyn ck::PointCheck, &ck::StoredXss, &ck::TemplateInjection, &ck::SqlErrorInjection, &ck::SqlBooleanInjection, &ck::OsCommandInjection, &ck::PathTraversal, &ck::FilePathManipulation, &ck::ExternalInteraction, &ck::LdapInjection, &ck::XmlInjectionError, &ck::SsiInjection, &ck::SmtpHeaderInjection] {
+        for check in [&ck::ReflectedXss as &dyn ck::PointCheck, &ck::TemplateInjection, &ck::SqlErrorInjection, &ck::SqlBooleanInjection, &ck::OsCommandInjection, &ck::PathTraversal, &ck::FilePathManipulation, &ck::ExternalInteraction, &ck::LdapInjection, &ck::XmlInjectionError, &ck::SsiInjection, &ck::SmtpHeaderInjection] {
             assert!(!check_applies(check, php, &cfg), "{} runs on PHPSESSID", check.id());
+        }
+        // Stored XSS (stage A4, the same Zi6p.Zh) is server-side too.
+        {
+            use ck::StoredCheck;
+            assert!(ck::StoredXss.server_side());
         }
         // The checks with no Zgx0.Zr test still run (Zr02, Zb_5, Zuag, Zwi, Zrmh).
         for check in [&ck::InputReflected as &dyn ck::PointCheck, &ck::LinkManipulation, &ck::OpenRedirect, &ck::HeaderInjection, &ck::ClientTemplateInjection] {

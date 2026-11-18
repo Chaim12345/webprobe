@@ -1088,6 +1088,12 @@ pub fn start_active_scan(shared: Arc<Shared>, entry: HistEntry, oob: &[(String, 
         shared.log("Scanner: a scan is already running");
         return;
     };
+    // The stored-input store lives for one scan run: this scan, or the
+    // batch (task, crawl) it belongs to.
+    if !shared.stored.in_batch() {
+        shared.stored.clear();
+    }
+    let item = shared.stored.add_item(crate::stored::Item { entry: entry.clone(), req: req.clone(), host: host.clone(), port, https: entry.https });
     shared.scan.total.store(planned_progress(&entry, points.len(), oob.len()), Ordering::SeqCst);
     shared.scan.done.store(0, Ordering::SeqCst);
     shared.scan.stop.store(false, Ordering::SeqCst);
@@ -1106,9 +1112,15 @@ pub fn start_active_scan(shared: Arc<Shared>, entry: HistEntry, oob: &[(String, 
         // refused and the task runner waited forever.
         let _guard = guard;
         let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let cx = checks::ScanCtx::start(shared.clone(), entry, req, parts, host, port, settings, oob, smtp);
+            let cx = checks::ScanCtx::start(shared.clone(), entry, req, parts, host, port, settings, oob, smtp, item);
+            checks::run_stored_seeding(&cx, &points);
             checks::run_point_checks(&cx, &points);
             checks::run_request_checks(&cx);
+            // A scan on its own runs stage A4 now; a batch runs it once its
+            // last item is done (`run_stored_stage_claimed`).
+            if !shared.stored.in_batch() {
+                checks::run_stored_stage(&shared);
+            }
         }));
         if let Err(e) = run {
             let why = e.downcast_ref::<&str>().map(|s| s.to_string()).or_else(|| e.downcast_ref::<String>().cloned()).unwrap_or_default();
@@ -1133,7 +1145,7 @@ pub fn start_active_scan(shared: Arc<Shared>, entry: HistEntry, oob: &[(String, 
 /// paths, plus up to three CSRF variants (remove / empty / static token)
 /// when the request qualifies. An estimate; checks advance it as they go.
 fn planned_progress(entry: &HistEntry, points: usize, oob: usize) -> usize {
-    let total = points * 15 + 1 + oob + 5 + 8 + crate::burp_checks::openapi_paths(false).len();
+    let total = points * 16 + 1 + oob + 5 + 8 + crate::burp_checks::openapi_paths(false).len();
     let csrf_parts = util::parse_http(&entry.req_raw);
     let csrf_ct = util::get_header(&csrf_parts.headers, "Content-Type").unwrap_or_default();
     let csrf_body = String::from_utf8_lossy(&entry.req_raw[csrf_parts.head_len.min(entry.req_raw.len())..]).into_owned();
@@ -1189,7 +1201,50 @@ pub fn pooled_oob(shared: &Shared, req_raw: &[u8]) -> Vec<(String, String, Strin
     slots.into_iter().zip(ids).map(|(slot, (token, dns))| (slot, token, dns)).collect()
 }
 
+/// Stage A4 for a batch whose items are all audited: wait for the last
+/// item's scan, claim the scanner for the stage (stop, pause and progress
+/// work as in any scan) and run the stored checks over the batch's pairs.
+pub fn run_stored_stage_claimed(shared: &Arc<Shared>) {
+    shared.scan.wait_idle(None);
+    if shared.stored.pairs().is_empty() {
+        return;
+    }
+    let Some(guard) = crate::scan_run::try_claim(shared) else { return };
+    shared.scan.done.store(0, Ordering::SeqCst);
+    shared.scan.total.store(shared.stored.pairs().len() * 30, Ordering::SeqCst);
+    let _tool = crate::net::tool_scope("Scanner");
+    let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| checks::run_stored_stage(shared)));
+    if run.is_err() {
+        shared.log("Scanner: the stored input stage stopped on an internal error");
+    }
+    drop(guard);
+}
+
+/// Holds the stored-input store open across a batch's items and runs stage
+/// A4 when the batch ends, however it ends. A batch inside another (a crawl
+/// run as a task) leaves both to the outer one.
+pub struct StoredBatch {
+    shared: Arc<Shared>,
+    opened: bool,
+}
+
+impl StoredBatch {
+    pub fn open(shared: &Arc<Shared>) -> StoredBatch {
+        StoredBatch { shared: shared.clone(), opened: shared.stored.open_batch() }
+    }
+}
+
+impl Drop for StoredBatch {
+    fn drop(&mut self) {
+        if self.opened {
+            run_stored_stage_claimed(&self.shared);
+            self.shared.stored.close_batch();
+        }
+    }
+}
+
 pub fn crawl_and_audit(shared: &Arc<Shared>, start_urls: &[String], audit_only: bool) {
+    let _stored = StoredBatch::open(shared);
     let _tool = crate::net::tool_scope("Scanner");
     // Ask the UI thread for Collaborator payloads for the whole run, so the
     // out-of-band checks work here as they do for a scan started on one item.
@@ -1990,10 +2045,8 @@ fn form_token_value(html: &str, name: &str) -> Option<String> {
 /// and replay). Needs `None` when the reload fails or renders nothing — a
 /// failed reload must not become a finding.
 fn csrf_static_token_hit(
-    shared: &std::sync::Arc<crate::net::Shared>,
-    https: bool,
+    send: &dyn Fn(&[u8]) -> Option<Vec<u8>>,
     host: &str,
-    port: u16,
     parts: &crate::util::HttpParts,
     req_body: &str,
 ) -> Option<StaticTokenHit> {
@@ -2029,12 +2082,7 @@ fn csrf_static_token_hit(
         get_req.push_str(&format!("Host: {host}\r\n"));
     }
     get_req.push_str("Connection: close\r\n\r\n");
-    let up = if https {
-        crate::net::send_tls_raw(shared, host, port, get_req.as_bytes())
-    } else {
-        crate::net::send_raw(shared, host, port, get_req.as_bytes())
-    };
-    let resp = up.resp?;
+    let resp = send(get_req.as_bytes())?;
     let p = crate::util::parse_http(&resp);
     if !(p.status.starts_with('2') || p.status.starts_with('3')) {
         return None;
@@ -2971,7 +3019,9 @@ pub(crate) fn with_path_segment(path: &str, idx: usize, value: &str) -> String {
 /// Every audit check as (id, issue it reports, true for per-point checks),
 /// in run order, for the scan configuration's check list.
 pub fn check_catalogue() -> Vec<(&'static str, &'static str, bool)> {
-    let mut v: Vec<(&'static str, &'static str, bool)> = checks::POINT_CHECKS.iter().map(|c| (c.id(), c.issue(), true)).collect();
+    let mut v: Vec<(&'static str, &'static str, bool)> = vec![(checks::STORED_INPUT_ID, checks::STORED_INPUT_ISSUE, true)];
+    v.extend(checks::POINT_CHECKS.iter().map(|c| (c.id(), c.issue(), true)));
+    v.extend(checks::STORED_CHECKS.iter().map(|c| (c.id(), c.issue(), true)));
     v.extend(checks::REQUEST_CHECKS.iter().map(|c| (c.id(), c.issue(), false)));
     v
 }
@@ -3123,39 +3173,6 @@ pub(crate) fn get_request_like(req: &str, path: &str) -> String {
     out
 }
 
-/// Retrieval requests for the stored XSS check (Burp pairs an injection
-/// request with a later request whose response shows the stored input).
-/// Only safe requests are replayed: the base request when it is a GET, the
-/// same-origin target of a redirecting base response, and up to three other
-/// GET items crawled on the same host. Four at most.
-fn stored_retrieval_requests(shared: &Shared, entry: &HistEntry, req: &str, baseline_raw: &[u8]) -> Vec<String> {
-    let parts = util::parse_http(req.as_bytes());
-    let host_header = util::get_header(&parts.headers, "Host").unwrap_or_default();
-    let mut out: Vec<String> = Vec::new();
-    if parts.method.eq_ignore_ascii_case("GET") {
-        out.push(req.to_string());
-    }
-    if let Some(path) = active_checks::redirect_location(baseline_raw).and_then(|l| same_origin_path(&l, entry.https, &host_header, &parts.path)) {
-        out.push(get_request_like(req, &path));
-    }
-    let base = parts.path.split('?').next().unwrap_or("").to_string();
-    let mut seen: Vec<String> = vec![base];
-    {
-        let items = shared.crawl_items.snapshot();
-        for it in items.iter() {
-            if out.len() >= 4 {
-                break;
-            }
-            let p = it.path.split('?').next().unwrap_or("").to_string();
-            if it.host == entry.host && it.port == entry.port && it.https == entry.https && it.method.eq_ignore_ascii_case("GET") && !seen.contains(&p) {
-                seen.push(p);
-                out.push(get_request_like(req, &it.path));
-            }
-        }
-    }
-    out.truncate(4);
-    out
-}
 
 /// burp.Zwwb.Zv: reflected XSS severity by point type (a header point is
 /// low, a cookie point medium, every other point high).
@@ -4781,7 +4798,12 @@ mod tests {
                     .unwrap_or_default();
                 let resp = if head.starts_with("POST /comment") {
                     if let Some(v) = body.split('&').find_map(|kv| kv.strip_prefix("c=")) {
-                        *store.lock().unwrap() = String::from_utf8_lossy(&pct_decode(&v.replace('+', " "))).to_string();
+                        // A guestbook: comments accumulate (replaying the
+                        // POST, as Burp's retrieval does, keeps earlier ones).
+                        let c = String::from_utf8_lossy(&pct_decode(&v.replace('+', " "))).to_string();
+                        let mut g = store.lock().unwrap();
+                        g.push_str("<br>");
+                        g.push_str(&c);
                     }
                     let b = format!("<p>theme {theme}</p>");
                     format!("HTTP/1.1 303 See Other\r\nLocation: /comments\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{b}", b.len())
@@ -4810,7 +4832,7 @@ mod tests {
         let issues = shared.issues.lock().unwrap();
         let names: Vec<_> = issues.iter().map(|i| (i.name.clone(), i.sev.clone(), i.detail.chars().take(60).collect::<String>())).collect();
         let stored_xss = issues.iter().find(|i| i.name == "Cross-site scripting (stored)").unwrap_or_else(|| panic!("no stored XSS: {names:?}"));
-        assert!(stored_xss.detail.starts_with("The value of the c request parameter:") && stored_xss.detail.contains("GET /comments"), "{}", stored_xss.detail);
+        assert!(stored_xss.detail.starts_with("The value of the c request parameter:") && stored_xss.detail.contains("\"POST /comment HTTP/1.1\""), "{}", stored_xss.detail);
         let cookie_xss = issues
             .iter()
             .find(|i| i.name == "Cross-site scripting (reflected)" && i.detail.starts_with("The value of the theme cookie:"))
@@ -5134,6 +5156,8 @@ mod tests {
         ("Input returned in response (reflected)", "info", "Certain", "/search"),
         ("Input returned in response (reflected)", "info", "Certain", "/search"),
         ("Input returned in response (reflected)", "info", "Certain", "/search"),
+        // D-10: /board keeps msg and shows it again (burp.Zpwn).
+        ("Input returned in response (stored)", "info", "Certain", "/board"),
         ("Link manipulation (reflected)", "info", "Firm", "/go"),
         ("Open redirection (reflected)", "low", "Certain", "/go"),
         ("SQL injection", "high", "Certain", "/item"),
@@ -5473,4 +5497,178 @@ mod tests {
         assert!(is_burp_issue("TLS cookie without secure flag set"));
         assert!(!is_burp_issue("Referrer-Policy header not set"));
     }
+
+    /// A guestbook for the stored-input tests: POST /comment appends `c`
+    /// to the comments (answering only "thanks"); GET /list shows them,
+    /// unless `post_only`, where only POST /search does (beside its own,
+    /// reflected `q`). Every request is counted.
+    fn guestbook(post_only: bool) -> (u16, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let hits = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let h = hits.clone();
+        let comments = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut s) = stream else { continue };
+                h.fetch_add(1, Ordering::SeqCst);
+                let _ = s.set_read_timeout(Some(std::time::Duration::from_secs(2)));
+                let mut raw = Vec::new();
+                let mut buf = [0u8; 8192];
+                loop {
+                    let n = s.read(&mut buf).unwrap_or(0);
+                    raw.extend_from_slice(&buf[..n]);
+                    let text = String::from_utf8_lossy(&raw).to_string();
+                    let done = text.find("\r\n\r\n").is_some_and(|hd| {
+                        let cl = text[..hd].lines().find_map(|l| l.to_ascii_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap_or(0))).unwrap_or(0);
+                        raw.len() >= hd + 4 + cl
+                    });
+                    if n == 0 || done {
+                        break;
+                    }
+                }
+                let text = String::from_utf8_lossy(&raw).to_string();
+                let (head, body) = text.split_once("\r\n\r\n").unwrap_or((&text, ""));
+                let field = |name: &str| body.split('&').find_map(|kv| kv.strip_prefix(name)).map(|v| String::from_utf8_lossy(&pct_decode(&v.replace('+', " "))).to_string());
+                let list = |c: &Vec<String>| c.iter().map(|x| format!("<p>{x}</p>")).collect::<String>();
+                let page = if head.starts_with("POST /comment") {
+                    if let Some(c) = field("c=") {
+                        comments.lock().unwrap().push(c);
+                    }
+                    Some("<html><body>thanks</body></html>".to_string())
+                } else if head.starts_with("GET /list") && !post_only {
+                    Some(format!("<html><body>{}</body></html>", list(&comments.lock().unwrap())))
+                } else if head.starts_with("POST /search") {
+                    let q = field("q=").unwrap_or_default();
+                    let shown = if post_only { list(&comments.lock().unwrap()) } else { String::new() };
+                    Some(format!("<html><body><h1>Results for {q}</h1>{shown}</body></html>"))
+                } else {
+                    None
+                };
+                let resp = match page {
+                    Some(b) => format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{b}", b.len()),
+                    None => "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_string(),
+                };
+                let _ = s.write_all(resp.as_bytes());
+            }
+        });
+        (port, hits)
+    }
+
+    fn guestbook_entry(port: u16, method: &str, path: &str, body: &str) -> HistEntry {
+        let req = if body.is_empty() {
+            format!("{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n")
+        } else {
+            format!("{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {}\r\n\r\n{body}", body.len())
+        };
+        HistEntry { id: 1, method: method.into(), host: "127.0.0.1".into(), port, path: path.into(), req_raw: req.into_bytes().into(), ..Default::default() }
+    }
+
+    /// Run the entries as one task (one stored-input batch) and wait.
+    fn run_task(shared: &std::sync::Arc<Shared>, entries: Vec<HistEntry>) {
+        let id = crate::tasks::enqueue(shared, "stored", crate::tasks::TaskKind::Audit(entries));
+        let t0 = std::time::Instant::now();
+        while t0.elapsed() < std::time::Duration::from_secs(240) {
+            let open = shared.tasks.lock().unwrap().iter().find(|t| t.id == id).is_some_and(|t| t.state.is_open());
+            if !open && !shared.scan.is_busy() {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        panic!("task did not finish");
+    }
+
+    fn issues_named(shared: &Shared, name: &str) -> Vec<ScanIssue> {
+        shared.issues.lock().unwrap().iter().filter(|i| i.name == name).cloned().collect()
+    }
+
+    /// D-10: input stored by POST /comment and shown by GET /list is
+    /// paired across the task's items (burp.Zml_), reported as Input
+    /// returned in response (stored) (burp.Zpwn / Zwfa), and stage A4 finds
+    /// the stored XSS by replaying GET /list after each payload.
+    #[test]
+    fn stored_input_pairs_across_items_and_stage_a4_finds_stored_xss() {
+        let (port, _) = guestbook(false);
+        let shared = Shared::new();
+        run_task(&shared, vec![guestbook_entry(port, "POST", "/comment", "c=hi"), guestbook_entry(port, "GET", "/list", "")]);
+        let pairs = shared.stored.pairs();
+        assert!(pairs.iter().any(|p| p.point.name == "c" && p.item.url().ends_with("/comment") && p.retrieval.url().ends_with("/list")), "pairs: {:?}", pairs.iter().map(|p| (p.item.url(), p.point.name.clone(), p.retrieval.url())).collect::<Vec<_>>());
+        let stored = issues_named(&shared, "Input returned in response (stored)");
+        let s = stored.iter().find(|i| i.path == "/comment").expect("stored input issue");
+        assert_eq!((s.sev.as_str(), s.confidence.as_str()), ("info", "Certain"));
+        assert!(s.detail.starts_with("The value of the <b>c</b> request parameter submitted to the URL http://127.0.0.1:"), "{}", s.detail);
+        assert!(s.detail.contains("/comment is copied into the response for the URL http://127.0.0.1:") && s.detail.contains("/list.<br><br>Burp has captured"), "{}", s.detail);
+        assert_eq!(s.evidence.len(), 2, "injection and retrieval exchanges");
+        let xss = issues_named(&shared, "Cross-site scripting (stored)");
+        let x = xss.iter().find(|i| i.path == "/comment").expect("stored XSS from stage A4");
+        assert!(x.detail.contains("\"GET /list HTTP/1.1\""), "{}", x.detail);
+        // The stage's requests were counted (progress settles at the end).
+        assert_eq!(shared.scan.total.load(Ordering::SeqCst), shared.scan.done.load(Ordering::SeqCst));
+    }
+
+    /// The retrieval item may be a POST: only POST /search shows the stored
+    /// comments, so it is replayed, unmodified, after each payload
+    /// (burp.Zpqv.Z_). Its own `q` reflection is not stored input.
+    #[test]
+    fn a_post_can_be_the_retrieval_request_and_own_reflection_is_not_stored() {
+        let (port, _) = guestbook(true);
+        let shared = Shared::new();
+        run_task(&shared, vec![guestbook_entry(port, "POST", "/comment", "c=hi"), guestbook_entry(port, "POST", "/search", "q=shoes")]);
+        let pairs = shared.stored.pairs();
+        assert!(pairs.iter().any(|p| p.point.name == "c" && p.retrieval.url().ends_with("/search")));
+        // q comes straight back in its own response only: never a pair.
+        assert!(!pairs.iter().any(|p| p.point.name == "q"), "own reflection recorded as stored");
+        let xss = issues_named(&shared, "Cross-site scripting (stored)");
+        let x = xss.iter().find(|i| i.path == "/comment").expect("stored XSS via the POST retrieval");
+        assert!(x.detail.contains("\"POST /search HTTP/1.1\""), "{}", x.detail);
+        assert!(!issues_named(&shared, "Input returned in response (stored)").iter().any(|i| i.path == "/search"));
+    }
+
+    /// No pair when the token never comes back; and the next scan starts
+    /// from an empty store.
+    #[test]
+    fn nothing_is_recorded_without_a_returned_token_and_scans_do_not_share_the_store() {
+        let (port, _) = guestbook(false);
+        let shared = Shared::new();
+        // GET /list?x=1 stores nothing and echoes nothing.
+        run_task(&shared, vec![guestbook_entry(port, "GET", "/list?x=1", "")]);
+        assert!(shared.stored.pairs().is_empty());
+        assert!(issues_named(&shared, "Input returned in response (stored)").is_empty());
+        // A scan that finds a pair, then one that cannot: the second sees
+        // none of the first's pairs (the store is cleared at its start).
+        run_task(&shared, vec![guestbook_entry(port, "POST", "/comment", "c=hi"), guestbook_entry(port, "GET", "/list", "")]);
+        assert!(!shared.stored.pairs().is_empty());
+        let e = guestbook_entry(port, "GET", "/nothing?y=2", "");
+        start_active_scan(shared.clone(), e, &[], &[]);
+        assert!(shared.scan.wait_idle(Some(std::time::Duration::from_secs(120))));
+        assert!(shared.stored.pairs().is_empty(), "a new scan clears the store");
+    }
+
+    /// Stop during stage A4: the stage ends at the next send.
+    #[test]
+    fn stop_ends_the_stored_stage() {
+        let (port, hits) = guestbook(false);
+        let shared = Shared::new();
+        run_task(&shared, vec![guestbook_entry(port, "POST", "/comment", "c=hi"), guestbook_entry(port, "GET", "/list", "")]);
+        assert!(!shared.stored.pairs().is_empty());
+        // Run the stage again with a stop raised after a few of its requests.
+        let before = hits.load(Ordering::SeqCst);
+        let (sh, h) = (shared.clone(), hits.clone());
+        let stopper = std::thread::spawn(move || {
+            let t0 = std::time::Instant::now();
+            while h.load(Ordering::SeqCst) < before + 3 && t0.elapsed() < std::time::Duration::from_secs(20) {
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            sh.scan.stop.store(true, Ordering::SeqCst);
+            // Requests already counted when the stop was raised.
+            h.load(Ordering::SeqCst)
+        });
+        shared.scan.stop.store(false, Ordering::SeqCst);
+        checks::run_stored_stage(&shared);
+        let at_stop = stopper.join().unwrap();
+        let after = hits.load(Ordering::SeqCst) - at_stop;
+        assert!(after <= 1, "the stage kept sending after stop: {after} request(s) after it");
+    }
 }
+

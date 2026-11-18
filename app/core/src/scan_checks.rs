@@ -70,8 +70,10 @@ pub(crate) struct ScanCtx {
     pub oob: Vec<(String, String, String)>,
     /// Collaborator ids for the SMTP header injection check.
     pub smtp: Vec<SmtpOob>,
-    /// Safe requests the stored XSS check replays after injecting.
-    pub retrieval_reqs: Vec<String>,
+    /// This request's index in the stored-input store (`Shared::stored`).
+    pub item: usize,
+    /// "Input returned in response (stored)" is reported (scan config).
+    pub stored_report: bool,
 }
 
 impl ScanCtx {
@@ -87,38 +89,85 @@ impl ScanCtx {
         settings: Settings,
         oob: Vec<(String, String, String)>,
         smtp: Vec<SmtpOob>,
+        item: usize,
     ) -> ScanCtx {
+        let stored_report = shared.scan_config.lock().unwrap().check_enabled(STORED_INPUT_ID);
+        let host_hdr = util::get_header(&parts.headers, "Host").unwrap_or_default();
+        let mut cx = ScanCtx {
+            shared,
+            entry,
+            req,
+            parts,
+            host,
+            port,
+            host_hdr,
+            settings,
+            baseline: Baseline { resp: None, raw: Vec::new(), body: String::new() },
+            oob,
+            smtp,
+            item,
+            stored_report,
+        };
         // The baseline request runs here, not on the caller's (UI) thread: a
         // slow or dead target used to freeze the window for the full read
-        // timeout before the scan even started.
-        let base_up = if entry.https {
-            net::send_tls_raw(&shared, &host, port, req.as_bytes())
-        } else {
-            net::send_raw(&shared, &host, port, req.as_bytes())
-        };
-        let raw = base_up.resp.clone().unwrap_or_default();
-        let body = base_up
-            .resp
+        // timeout before the scan even started. It goes through `send`, so
+        // its response is searched for stored input like every other one
+        // (burp.Zuvm.Zq: the item's base request re-fetched).
+        let resp = cx.send(cx.req.clone().as_bytes());
+        let raw = resp.clone().unwrap_or_default();
+        let body = resp
             .as_ref()
             .map(|r| {
                 let p = util::parse_http(r);
                 String::from_utf8_lossy(&r[p.head_len.min(r.len())..]).into_owned()
             })
             .unwrap_or_default();
-        bump_progress(&shared);
-        let baseline = Baseline { resp: base_up.resp, raw, body };
-        let retrieval_reqs = stored_retrieval_requests(&shared, &entry, &req, &baseline.raw);
-        let host_hdr = util::get_header(&parts.headers, "Host").unwrap_or_default();
-        ScanCtx { shared, entry, req, parts, host, port, host_hdr, settings, baseline, oob, smtp, retrieval_reqs }
+        bump_progress(&cx.shared);
+        cx.baseline = Baseline { resp, raw, body };
+        cx
     }
 
     pub(crate) fn stopped(&self) -> bool {
         self.shared.scan.stop.load(Ordering::SeqCst)
     }
 
-    /// One request to the scan target, plain or TLS.
+    /// One request to the scan target, plain or TLS. The scan's single
+    /// choke point: every response is searched for other points' stored
+    /// input tokens here (burp.Zhqw.detectAndReport), not in the checks.
     pub(crate) fn send(&self, raw: &[u8]) -> Option<Vec<u8>> {
-        send_one(&self.shared, self.entry.https, &self.host, self.port, raw)
+        let resp = send_one(&self.shared, self.entry.https, &self.host, self.port, raw);
+        if let Some(r) = &resp {
+            for pair in self.shared.stored.observe(self.item, raw, r) {
+                if self.stored_report {
+                    self.report(vec![stored_input_issue(&pair, raw, r)]);
+                }
+            }
+        }
+        resp
+    }
+
+    /// [`ScanCtx::send`], then same-origin redirects as Burp's
+    /// Zs31.ZW(true) follows them (at most five): every exchange in order.
+    pub(crate) fn send_following(&self, raw: &str) -> Vec<(String, Option<Vec<u8>>)> {
+        let mut out = Vec::new();
+        let mut req = raw.to_string();
+        for _ in 0..=STORED_MAX_REDIRECTS {
+            if self.stopped() {
+                break;
+            }
+            let resp = self.send(req.as_bytes());
+            let next = resp
+                .as_deref()
+                .and_then(active_checks::redirect_location)
+                .and_then(|l| same_origin_path(&l, self.entry.https, &self.host_hdr, &util::parse_http(req.as_bytes()).path))
+                .map(|p| get_request_like(&self.req, &p));
+            out.push((req, resp));
+            match next {
+                Some(n) => req = n,
+                None => break,
+            }
+        }
+        out
     }
 
     /// Whether a check reporting `issue` runs: Burp's issue types always,
@@ -288,7 +337,6 @@ pub(crate) static POINT_CHECKS: &[&dyn PointCheck] = &[
     &SsiInjection,
     &TemplateInjection,
     &ReflectedXss,
-    &StoredXss,
     &ClientTemplateInjection,
     &PhpCodeInjection,
     &InputReflected,
@@ -517,6 +565,141 @@ pub(crate) fn run_request_checks(cx: &ScanCtx) {
             }
         }
         check.run(cx);
+    }
+}
+
+// ---------------------------------------------------------------- stored input (D-10)
+
+/// Check id of the stored-input probe and its issue (burp.Zwp0 stage A2,
+/// burp.Zpwn), for the scan configuration.
+pub(crate) const STORED_INPUT_ID: &str = "active.input-returned-stored";
+pub(crate) const STORED_INPUT_ISSUE: &str = "Input returned in response (stored)";
+/// Redirects followed by the stored-input probe and the stored stage.
+const STORED_MAX_REDIRECTS: usize = 5;
+
+/// burp.Zwp0 stage A2 / burp.Zuvm.ZO: every point gets its token in place
+/// of the value (STORED_DATA_REPLACE through burp.Zx2y, redirects
+/// followed); the responses go through [`ScanCtx::send`] like all others.
+/// Runs before the point checks, as stage A2 precedes Burp's audit stage.
+pub(crate) fn run_stored_seeding(cx: &ScanCtx, points: &[InsertionPoint]) {
+    if !cx.stored_report || !cx.runs(STORED_INPUT_ISSUE) {
+        return;
+    }
+    for ip in points {
+        if cx.stopped() {
+            break;
+        }
+        let token = cx.shared.stored.token(cx.item, ip);
+        let req = inject_payload(&cx.req, ip, &token);
+        let chain = cx.send_following(&req);
+        if let Some((r, resp)) = chain.first() {
+            cx.shared.stored.note_injection(&token, r.as_bytes(), resp.as_deref());
+        }
+        cx.progress();
+    }
+}
+
+/// burp.Zwfa (INPUT_RETRIEVAL_STORED) with burp.Zmkj's evidence: the
+/// injection exchange, then the retrieval exchange; information, certain.
+pub(crate) fn stored_input_issue(pair: &crate::stored::Pair, retrieval_req: &[u8], retrieval_resp: &[u8]) -> ScanIssue {
+    let mut i = mk(
+        "info",
+        STORED_INPUT_ISSUE,
+        &pair.item.entry,
+        format!(
+            "The {} submitted to the URL {} is copied into the response for the URL {}.<br><br>Burp has captured the first observed location where this stored input is returned. There might be other locations within the application where the same input is returned. To identify all such locations, perform a full crawl of the application and then do a global search for the highlighted value.",
+            pair.point.describe_bold(),
+            util::html_encode(&pair.item.url()),
+            util::html_encode(&pair.retrieval.url())
+        ),
+    );
+    i.confidence = "Certain".into();
+    let injection = ScanEvidence::new(&pair.injection.0, pair.injection.1.as_deref());
+    i.with_evidence(vec![injection, ScanEvidence::new(retrieval_req, Some(retrieval_resp))])
+}
+
+/// A check of stage A4 (burp.Zwp6): it runs once per recorded pair.
+pub(crate) trait StoredCheck: Sync {
+    fn id(&self) -> &'static str;
+    fn issue(&self) -> &'static str;
+    fn applies_to(&self, ip: &InsertionPoint) -> bool;
+    fn server_side(&self) -> bool;
+    fn run(&self, cx: &PairCtx);
+}
+
+/// Stage A4 checks, in run order.
+pub(crate) static STORED_CHECKS: &[&dyn StoredCheck] = &[&StoredXss];
+
+/// One pair being audited in stage A4.
+pub(crate) struct PairCtx {
+    pub shared: Arc<Shared>,
+    pub pair: crate::stored::Pair,
+}
+
+impl PairCtx {
+    pub(crate) fn stopped(&self) -> bool {
+        self.shared.scan.stop.load(Ordering::SeqCst)
+    }
+
+    /// One request to `item`'s service and its same-origin redirects; each
+    /// request counts toward progress. Stage A4 does not look for new
+    /// stored input (burp.Zpqv senders are not detectors).
+    pub(crate) fn send_following(&self, item: &crate::stored::Item, raw: &str) -> Vec<(String, Option<Vec<u8>>)> {
+        let mut out = Vec::new();
+        let mut req = raw.to_string();
+        let host_hdr = util::get_header(&util::parse_http(item.req.as_bytes()).headers, "Host").unwrap_or_default();
+        for _ in 0..=STORED_MAX_REDIRECTS {
+            if self.stopped() {
+                break;
+            }
+            let resp = send_one(&self.shared, item.https, &item.host, item.port, req.as_bytes());
+            bump_progress(&self.shared);
+            let next = resp
+                .as_deref()
+                .and_then(active_checks::redirect_location)
+                .and_then(|l| same_origin_path(&l, item.https, &host_hdr, &util::parse_http(req.as_bytes()).path))
+                .map(|p| get_request_like(&item.req, &p));
+            out.push((req, resp));
+            match next {
+                Some(n) => req = n,
+                None => break,
+            }
+        }
+        out
+    }
+
+    pub(crate) fn report(&self, mut issues: Vec<ScanIssue>) {
+        if !self.shared.extra_checks.load(Ordering::SeqCst) {
+            issues.retain(|i| is_burp_issue(&i.name));
+        }
+        add_issues(&self.shared, issues);
+    }
+
+    pub(crate) fn progress(&self) {
+        bump_progress(&self.shared);
+    }
+}
+
+/// Stage A4 (burp.Zwp6 / Zh7d): every stored check on every recorded pair,
+/// in the order the pairs were found. Stops at the next pair (and inside a
+/// check, at the next send) once the scan is stopped.
+pub(crate) fn run_stored_stage(shared: &Arc<Shared>) {
+    let pairs = shared.stored.pairs();
+    if pairs.is_empty() {
+        return;
+    }
+    let config = shared.scan_config.lock().unwrap().clone();
+    shared.log(&format!("Scanner: stored input stage, {} pair(s)", pairs.len()));
+    for pair in pairs {
+        if shared.scan.stop.load(Ordering::SeqCst) {
+            break;
+        }
+        for check in STORED_CHECKS {
+            let runs = is_burp_issue(check.issue()) || shared.extra_checks.load(Ordering::SeqCst);
+            if runs && check.applies_to(&pair.point) && config.check_enabled(check.id()) && !(check.server_side() && pair.point.skips_server_side()) {
+                check.run(&PairCtx { shared: shared.clone(), pair: pair.clone() });
+            }
+        }
     }
 }
 
@@ -874,23 +1057,25 @@ impl PointCheck for FilePathManipulation {
     fn issue(&self) -> &'static str {
         "File path manipulation"
     }
-    /// Part of burp.Zp3a (Zsl1): Zibp.ZZ type rules as PathTraversal; server-side.
+    /// Part of burp.Zp3a (Zsl1): Zibp.ZZ type rules as PathTraversal, and
+    /// Zp3a.Zw runs it only off URL path points (`!Zibp.ZR(point)`) and on a
+    /// value that is not an http(s) URL (`!Zp3a.ZG()`); server-side.
     fn applies_to(&self, ip: &InsertionPoint) -> bool {
         match &ip.kind {
-            IpKind::ParamName(_)
-            | IpKind::Header => false,
+            IpKind::ParamName(_) | IpKind::Header | IpKind::PathFolder(_) | IpKind::PathFilename(_) => false,
             IpKind::Query
             | IpKind::Body
             | IpKind::Json(_)
             | IpKind::Multipart { .. }
             | IpKind::Cookie
-            | IpKind::PathFolder(_)
-            | IpKind::PathFilename(_)
             | IpKind::EntireBody
             | IpKind::XmlParam { .. }
             | IpKind::XmlTag { .. }
             | IpKind::XmlAttr { .. }
-            | IpKind::Base64 { .. } => true,
+            | IpKind::Base64 { .. } => {
+                let v = ip.decoded_value().to_ascii_lowercase();
+                !v.starts_with("http:") && !v.starts_with("https:")
+            }
         }
     }
     fn server_side(&self) -> bool {
@@ -1111,7 +1296,7 @@ impl PointCheck for ReflectedXss {
 /// Cross-site scripting (stored), burp.Zi6p.ZZ.
 pub(crate) struct StoredXss;
 
-impl PointCheck for StoredXss {
+impl StoredCheck for StoredXss {
     fn id(&self) -> &'static str {
         "active.xss-stored"
     }
@@ -1140,40 +1325,40 @@ impl PointCheck for StoredXss {
     fn server_side(&self) -> bool {
         true
     }
-    fn run(&self, cx: &ScanCtx, _st: &mut ScanState, pt: &mut PointRun) {
-        if cx.stopped() || cx.retrieval_reqs.is_empty() {
-            return;
-        }
-        let ip = pt.ip;
-        let rec = Recorder::default();
-        let send = |payload: &str| -> Option<Vec<u8>> {
-            if cx.stopped() {
-                return None;
-            }
-            rec.send(cx, payload, inject_payload(&cx.req, ip, &payload).as_bytes())
+    /// burp.Zi6p.Zw -> ZZ in stored mode (the Zehl is a burp.Zpqv): the
+    /// breakout engine, each payload sent to the injection item and the
+    /// retrieval item's own request replayed after it (burp.Zpqv.Z_).
+    fn run(&self, cx: &PairCtx) {
+        let pair = &cx.pair;
+        let ip = &pair.point;
+        let log: RefCell<Vec<(String, ScanEvidence)>> = RefCell::new(Vec::new());
+        let last = |chain: Vec<(String, Option<Vec<u8>>)>, key: &str| -> Option<Vec<u8>> {
+            let (req, resp) = chain.into_iter().last()?;
+            log.borrow_mut().push((key.to_string(), ScanEvidence::new(req.as_bytes(), resp.as_deref())));
+            resp
         };
-        let retrieve = |i: usize| -> Option<Vec<u8>> {
-            if cx.stopped() {
-                return None;
-            }
-            rec.send(cx, "", cx.retrieval_reqs.get(i)?.as_bytes())
-        };
-        if let Some(hit) = active_checks::run_stored_xss_check(&ip.value, cx.retrieval_reqs.len(), send, retrieve) {
-            let later = cx.retrieval_reqs[hit.retrieval].lines().next().unwrap_or("").to_string();
+        let send = |payload: &str| -> Option<Vec<u8>> { last(cx.send_following(&pair.item, &inject_payload(&pair.item.req, ip, payload)), payload) };
+        let retrieve = |_: usize| -> Option<Vec<u8>> { last(cx.send_following(&pair.retrieval, &pair.retrieval.req), "") };
+        if let Some(hit) = active_checks::run_stored_xss_check(&ip.value, 1, send, retrieve) {
+            let log = log.borrow();
+            let at = log.iter().rposition(|(k, _)| *k == hit.payload);
+            let ev: Vec<ScanEvidence> = at.map(|i| log[i..(i + 2).min(log.len())].iter().map(|(_, e)| e.clone()).collect()).unwrap_or_default();
+            let retrieval = pair.retrieval.req.lines().next().unwrap_or("").to_string();
             cx.report(vec![mk_point(
                 "Cross-site scripting (stored)",
                 "high",
                 "Certain",
-                &cx.entry,
+                &pair.item.entry,
                 ip,
                 format!(
-                    "Payload {:?} submitted in the {} was stored and returned unencoded (context {}) in the response to the later request {later:?}.",
+                    "Payload {:?} submitted in the {} was stored and returned unencoded (context {}) in the response to the later request {retrieval:?} ({}).",
                     hit.payload,
                     ip.describe_short(false),
-                    hit.context
+                    hit.context,
+                    pair.retrieval.url()
                 ),
             )
-            .with_evidence(evidence([rec.last(&hit.payload), rec.next_after(&hit.payload)]))]);
+            .with_evidence(ev)]);
         }
         cx.progress();
     }
@@ -1403,7 +1588,7 @@ impl PointCheck for InputReflected {
                 // Burp's own sentence with its point wording (burp.Zsg0.ZD;
                 // live 52685 on Juice Shop: "The value of the URL path
                 // filename is copied into the application's response.").
-                let mut issue = mk("info", "Input returned in response (reflected)", &cx.entry, format!("The {} is copied into the application's response.", ip.describe()));
+                let mut issue = mk("info", "Input returned in response (reflected)", &cx.entry, format!("The {} is copied into the application's response.", ip.describe_bold()));
                 issue.confidence = "Certain".into();
                 cx.report(vec![issue.with_evidence(vec![ScanEvidence::new(new_req.as_bytes(), resp.as_deref())])]);
                 break;
@@ -2037,13 +2222,9 @@ fn origin_of(cx: &ScanCtx) -> (String, crate::burp_checks::Origin) {
 
 /// One send of the Burp request group; counts toward progress per request.
 fn burp_send(cx: &ScanCtx, raw: &[u8]) -> Option<Vec<u8>> {
-    let up = if cx.entry.https {
-        net::send_tls_raw(&cx.shared, &cx.host, cx.port, raw)
-    } else {
-        net::send_raw(&cx.shared, &cx.host, cx.port, raw)
-    };
+    let resp = cx.send(raw);
     bump_progress(&cx.shared);
-    up.resp
+    resp
 }
 
 /// CORS (per request), burp_checks::run_cors_check.
@@ -2509,7 +2690,7 @@ impl RequestCheck for CsrfTokenNotEnforced {
         // page with no Cookie header and compare the freshly rendered
         // token values against the ones the original request sent.
         if !csrf_reported && !cx.stopped() {
-            if let Some(static_hit) = csrf_static_token_hit(&cx.shared, cx.entry.https, &cx.host, cx.port, parts, &req_body_str) {
+            if let Some(static_hit) = csrf_static_token_hit(&|raw: &[u8]| cx.send(raw), &cx.host, parts, &req_body_str) {
                 cx.report(vec![mk_burp(
                     "Cross-site request forgery",
                     "medium",
@@ -2741,7 +2922,6 @@ mod tests {
                 "active.ssi-injection",
                 "active.server-side-template-injection",
                 "active.xss-reflected",
-                "active.xss-stored",
                 "active.client-side-template-injection",
                 "active.php-code-injection",
                 "active.input-returned-reflected",
@@ -2756,6 +2936,8 @@ mod tests {
                 "active.stored-echo",
             ]
         );
+        // Stage A4 (burp.Zwp6) runs once per stored-input pair.
+        assert_eq!(STORED_CHECKS.iter().map(|c| c.id()).collect::<Vec<_>>(), ["active.xss-stored"]);
         let requests: Vec<(&str, Scope, Option<&str>)> = REQUEST_CHECKS.iter().map(|c| (c.id(), c.scope(), c.group())).collect();
         assert_eq!(
             requests,
@@ -2830,8 +3012,13 @@ mod tests {
         }
         // burp.Zibp.ZZ (Zp3a): no headers at all.
         for c in [&PathTraversal as &dyn PointCheck, &FilePathManipulation] {
-            assert!(!c.applies_to(&xff) && c.applies_to(&folder), "{}", c.id());
+            assert!(!c.applies_to(&xff), "{}", c.id());
         }
+        assert!(PathTraversal.applies_to(&folder));
+        // burp.Zp3a.Zw: file path manipulation never on URL path points nor
+        // on an http(s) URL value.
+        assert!(!FilePathManipulation.applies_to(&folder) && !FilePathManipulation.applies_to(&pt(IpKind::PathFilename(1), "URL path filename", "styles.css")));
+        assert!(!FilePathManipulation.applies_to(&pt(IpKind::Query, "f", "https://x/a.txt")) && FilePathManipulation.applies_to(&pt(IpKind::Query, "f", "a/b.txt")));
         // burp.Zxfo: no folders, no User-Agent; Zibp.ZU: no true / false values.
         assert!(!ExternalInteraction.applies_to(&ua) && !ExternalInteraction.applies_to(&folder) && ExternalInteraction.applies_to(&referer));
         assert!(!ExternalInteraction.applies_to(&pt(IpKind::Query, "f", "TRUE")) && !ExternalInteraction.applies_to(&pt(IpKind::Query, "f", "a\u{2}b")));

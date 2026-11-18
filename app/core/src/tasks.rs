@@ -186,6 +186,9 @@ fn run(shared: &Arc<Shared>, id: u64, kind: TaskKind) {
     shared.scan.paused.store(false, Ordering::SeqCst);
     set_state(shared, id, TaskState::Running);
     let _tool = crate::net::tool_scope("Scanner");
+    // One stored-input store for the whole task; stage A4 runs as the
+    // task ends (scan::StoredBatch).
+    let stored = crate::scan::StoredBatch::open(shared);
     // One (entry, prepared payloads) item per request; plain audits draw
     // their OOB payloads from the pool when they reach it.
     type Prepared = Option<(Vec<(String, String, String)>, Vec<crate::scan::SmtpOob>)>;
@@ -224,6 +227,7 @@ fn run(shared: &Arc<Shared>, id: u64, kind: TaskKind) {
         }
         shared.oob.want(false);
     }
+    drop(stored);
     shared.scan.running_task.store(0, Ordering::SeqCst);
     shared.scan.paused.store(false, Ordering::SeqCst);
     let found = shared.issues.lock().unwrap().len().saturating_sub(issues_before);

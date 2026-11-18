@@ -40,6 +40,7 @@ pub mod scan;
 pub mod scan_config;
 pub mod scan_run;
 pub mod seq_bits;
+pub mod stored;
 pub mod setup_page;
 pub mod sitemap_compare;
 pub mod sync;

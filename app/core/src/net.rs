@@ -792,6 +792,8 @@ pub struct Shared {
     pub scan: crate::scan_run::ScanRun,
     /// Collaborator ids: the payload pool, registered ids and matching.
     pub oob: crate::oob::OobState,
+    /// Stored input pairing of the current scan run (D-10).
+    pub stored: crate::stored::StoredInputs,
     /// Repeater: send in flight, its generation, status line, tab ids.
     pub rep: crate::repeater_run::RepeaterRun,
     /// Client connections being handled right now (see `MAX_CONNECTIONS`).
@@ -935,6 +937,7 @@ impl Shared {
             issues: Mutex::new(Vec::new()),
             scan: Default::default(),
             oob: Default::default(),
+            stored: Default::default(),
             rep: Default::default(),
             scan_enabled: AtomicBool::new(true),
             active_connections: AtomicUsize::new(0),
