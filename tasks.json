@@ -8,9 +8,9 @@
     "p1": 39,
     "p2": 20,
     "by_status": {
-      "done": 111,
+      "done": 112,
       "rejected": 2,
-      "todo": 14
+      "todo": 13
     }
   },
   "tasks": [
@@ -1338,8 +1338,9 @@
       "title": "Active check pack (non-timing)",
       "acceptance": "Ported with tests: GraphQL (Zula, Zf8g), web cache poisoning/deception (Zp22), XPath injection, HTTP PUT, Backup file, ASP.NET checks, Spoofable client IP, Expression Language injection (regressed: name only in a lookup table). Checks Burp detects only by timing stay excluded and are listed as such.",
       "effort": "L",
-      "status": "todo",
-      "evidence": "scan_checks.rs:1937 (EL name only); ~74 issue types unowned. Depends on Craft unknown about timing-only detection."
+      "status": "done",
+      "completed": "2026-11-18",
+      "evidence": "core/src/scan_checks.rs: GraphQL x3, XPath, EL, HTTP PUT, ASP.NET tracing/debugging, SpoofableClientIp, BackupFile ported; WebCachePoisoning (Zp22 unkeyed-header half) and WebCacheDeception (Zum9) ported in f9a4bba (helpers/issue text not recovered, comments say so). Live-lab tests r10_host/graphql/spoofable_ip_and_backup_file/cache/el_and_xpath in scan_checks.rs. Timing-only checks excluded per c6ff86f. Full suite: 550 passed, 0 failed."
     },
     {
       "id": "R-11",
