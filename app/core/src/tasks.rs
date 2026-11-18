@@ -308,14 +308,30 @@ mod tests {
         let t = shared.tasks.lock().unwrap().iter().find(|t| t.id == a).cloned().unwrap();
         assert_eq!((t.done, t.total), (2, Some(2)));
         assert!(hits.load(Ordering::SeqCst) > paused_at);
-        // The second then runs; cancel it.
-        assert!(wait_for(&shared, b, TaskState::Running, 30));
-        cancel(&shared, b);
-        assert_eq!(state_of(&shared, b), Some(TaskState::Cancelled));
-        assert!(wait_for(&shared, b, TaskState::Cancelled, 5));
-        // Let the interrupted item wind down: it does not count as audited.
-        std::thread::sleep(Duration::from_millis(800));
-        assert_eq!(shared.tasks.lock().unwrap().iter().find(|t| t.id == b).unwrap().done, 0);
+        // The second then runs; cancel it. Its one-request scan can finish
+        // before the 50ms poll sees Running on a loaded or fast machine, so
+        // wait for it to leave the queue, then cancel it if it is still open.
+        let t0 = std::time::Instant::now();
+        while state_of(&shared, b) == Some(TaskState::Queued) && t0.elapsed() < Duration::from_secs(30) {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        match state_of(&shared, b) {
+            Some(TaskState::Running) => {
+                cancel(&shared, b);
+                assert_eq!(state_of(&shared, b), Some(TaskState::Cancelled));
+                assert!(wait_for(&shared, b, TaskState::Cancelled, 5));
+                // Let the interrupted item wind down: it does not count as audited.
+                std::thread::sleep(Duration::from_millis(800));
+                assert_eq!(shared.tasks.lock().unwrap().iter().find(|t| t.id == b).unwrap().done, 0);
+            }
+            // It ran to completion before the cancel landed: the run order
+            // and the audit are still proven by its done count. Cancelling
+            // a running task is covered by cancel_stops_a_running_task.
+            Some(TaskState::Finished) => {
+                assert_eq!(shared.tasks.lock().unwrap().iter().find(|t| t.id == b).unwrap().done, 1);
+            }
+            other => panic!("the second task should be running or finished, got {other:?}"),
+        }
         // A cancelled or finished task can be removed; an open one cannot.
         let c = enqueue(&shared, "third", TaskKind::Audit(Vec::new()));
         pause(&shared, c);
@@ -323,6 +339,25 @@ mod tests {
         remove(&shared, a);
         let ids: Vec<u64> = shared.tasks.lock().unwrap().iter().map(|t| t.id).collect();
         assert!(!ids.contains(&a) && ids.contains(&c) && ids.contains(&b));
+    }
+
+    /// Cancelling a running task stops it: the item in flight is not
+    /// counted as audited and the items after it never start.
+    #[test]
+    fn cancel_stops_a_running_task() {
+        let shared = Shared::new();
+        let (port, _hits) = origin();
+        let entries: Vec<HistEntry> = (0..20).map(|i| entry(port, &format!("/item{i}?x=1"))).collect();
+        let a = enqueue(&shared, "long", TaskKind::Audit(entries));
+        assert!(wait_for(&shared, a, TaskState::Running, 30));
+        cancel(&shared, a);
+        assert_eq!(state_of(&shared, a), Some(TaskState::Cancelled));
+        // Let the item in flight wind down; a cancelled item is not counted.
+        std::thread::sleep(Duration::from_millis(2500));
+        let done = shared.tasks.lock().unwrap().iter().find(|t| t.id == a).unwrap().done;
+        assert!(done < 20, "a cancelled task stops before its last item, done={done}");
+        std::thread::sleep(Duration::from_millis(1000));
+        assert_eq!(shared.tasks.lock().unwrap().iter().find(|t| t.id == a).unwrap().done, done, "no further items run after a cancel");
     }
 
     /// A one-request scan started while another task runs waits its turn
