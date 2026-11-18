@@ -372,6 +372,8 @@ pub(crate) static REQUEST_CHECKS: &[&dyn RequestCheck] = &[
     &GraphqlIntrospection,
     &GraphqlSuggestions,
     &GraphqlContentType,
+    &SpoofableClientIp,
+    &BackupFile,
 ];
 
 /// Whether `check` audits `ip` under `config`: the point type suits it,
@@ -1477,6 +1479,176 @@ impl RequestCheck for GraphqlContentType {
                 cx.report(vec![graphql_issue(cx, self.issue(), format!("The GraphQL endpoint also accepted the query sent {how}, so it does not validate the request's content type; this can make cross-site request forgery possible."), vec![ScanEvidence::new(&req, Some(&resp))])]);
                 return;
             }
+        }
+    }
+}
+
+/// The request without header `name` (any case).
+fn without_header(raw: &[u8], name: &str) -> Vec<u8> {
+    let Some(end) = util::find_head_end(raw) else { return raw.to_vec() };
+    let head = String::from_utf8_lossy(&raw[..end]);
+    let mut out = String::new();
+    for (i, line) in head.split("\r\n").enumerate() {
+        if i > 0 && line.split_once(':').is_some_and(|(k, _)| k.trim().eq_ignore_ascii_case(name)) {
+            continue;
+        }
+        if line.is_empty() {
+            continue;
+        }
+        out.push_str(line);
+        out.push_str("\r\n");
+    }
+    out.push_str("\r\n");
+    let mut v = out.into_bytes();
+    v.extend_from_slice(&raw[end..]);
+    v
+}
+
+/// Spoofable client IP address, response-diffing half of Burp's check
+/// (burp.Zxlc over Zxld / Zmaq, APR_XForwardedDependentResponse, per
+/// request): the request without X-Forwarded-For and the request with
+/// `X-Forwarded-For: 127.0.0.1` are sent alternately for the accuracy's
+/// rounds; reported when their responses stay distinguishable (the base
+/// response counts with the "without" side). Zf9t.ZV: Information;
+/// confidence Firm or Tentative by Zex1.Zg (not established: Tentative
+/// here). Burp's detail text for this variant was not recovered. The
+/// Collaborator half (burp.Zc7h, Zwv9 text) is not ported.
+pub(crate) struct SpoofableClientIp;
+
+impl RequestCheck for SpoofableClientIp {
+    fn id(&self) -> &'static str {
+        "active.spoofable-client-ip"
+    }
+    fn issue(&self) -> &'static str {
+        "Spoofable client IP address"
+    }
+    fn scope(&self) -> Scope {
+        Scope::Request
+    }
+    fn run(&self, cx: &ScanCtx) {
+        if cx.stopped() || !cx.runs(self.issue()) || cx.baseline.raw.is_empty() {
+            return;
+        }
+        let without = without_header(cx.req.as_bytes(), "X-Forwarded-For");
+        let with = crate::net::replace_or_add_header(&without, "X-Forwarded-For", "127.0.0.1");
+        let fp = crate::variations::fingerprint;
+        let (Some(a0), Some(b0)) = (burp_send(cx, &without), burp_send(cx, &with)) else { return };
+        let mut c = crate::variations::Comparator::new(&fp(&a0), &fp(&b0));
+        c.add_a(&fp(&cx.baseline.raw));
+        if !c.distinguishable() {
+            return;
+        }
+        let (mut last_a, mut last_b) = (a0, b0);
+        for _ in 1..cx.settings.accuracy.rounds() {
+            if cx.stopped() {
+                return;
+            }
+            let (Some(a), Some(b)) = (burp_send(cx, &without), burp_send(cx, &with)) else { return };
+            c.add_a(&fp(&a));
+            c.add_b(&fp(&b));
+            if !c.distinguishable() {
+                return;
+            }
+            (last_a, last_b) = (a, b);
+        }
+        let mut i = mk(
+            "info",
+            self.issue(),
+            &cx.entry,
+            format!("It may be possible for clients to spoof their IP address using the X-Forwarded-For HTTP header.<br><br>The response changed consistently when the header <b>X-Forwarded-For: 127.0.0.1</b> was added to the request (attributes: {:?}).", c.attributes()),
+        )
+        .with_evidence(vec![ScanEvidence::new(&without, Some(&last_a)), ScanEvidence::new(&with, Some(&last_b))]);
+        i.confidence = "Tentative".into();
+        cx.report(vec![i]);
+    }
+}
+
+/// The backup-file names Burp tries for a file name (`stem` + `ext`, the
+/// extension with its dot), from the decoded literals of its four
+/// mutation families: burp.Zxc6 (prefixes), Zxfn (suffixes before the
+/// extension), Zsro (JSP extension swaps) and Zem7 / Zu7n ("~" appended).
+/// Spaces are sent as %20, as Burp's literals have them. Burp's generic
+/// extension list (Zebr.ZD) is stripped and not included.
+pub(crate) fn backup_names(stem: &str, ext: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for p in ["bak_", "backup_", "old_", "Copy%20of%20", "Copy%20(2)%20of%20", "Copy%20of%20Copy%20of%20"] {
+        out.push(format!("{p}{stem}{ext}"));
+    }
+    for sfx in ["_bak", "_backup", "_old", "%20(copy)", "%20(2nd%20copy)", "%20(3rd%20copy)", "%20(4th%20copy)", "%20(third%20copy)", "%20(fourth%20copy)", "%20(another%20copy)", "%20-%20Copy", "%20-%20Copy%20(2)", "%20-%20Copy%20-%20Copy"] {
+        out.push(format!("{stem}{sfx}{ext}"));
+    }
+    if ext.eq_ignore_ascii_case(".jsp") {
+        for x in [".jspa", ".jspx", ".jspf"] {
+            out.push(format!("{stem}{x}"));
+        }
+    }
+    out.push(format!("{stem}{ext}~"));
+    out
+}
+
+/// Backup file (burp.Zbdu over Zem7 / Zsro / Zxc6 / Zxfn, per URL): each
+/// backup name of the request's file is requested next to it; a candidate
+/// answered below 400 is compared with the same mutation of a random name
+/// (Burp's control), twice; reported when the two stay distinguishable.
+/// Zebr.ZW: Information, Certain; both exchanges as evidence. Burp's
+/// detail text was not recovered.
+pub(crate) struct BackupFile;
+
+impl RequestCheck for BackupFile {
+    fn id(&self) -> &'static str {
+        "active.backup-file"
+    }
+    fn issue(&self) -> &'static str {
+        "Backup file"
+    }
+    fn scope(&self) -> Scope {
+        Scope::Request
+    }
+    fn run(&self, cx: &ScanCtx) {
+        if cx.stopped() || !cx.runs(self.issue()) {
+            return;
+        }
+        let path = cx.entry.path.split('?').next().unwrap_or("/").to_string();
+        let Some(slash) = path.rfind('/') else { return };
+        let (dir, file) = (&path[..slash + 1], &path[slash + 1..]);
+        if file.is_empty() || !openapi_hosts().lock().unwrap().insert(format!("backup|{}:{}{path}", cx.host, cx.port)) {
+            return;
+        }
+        let (stem, ext) = match file.rfind('.') {
+            Some(d) if d > 0 => (&file[..d], &file[d..]),
+            _ => (file, ""),
+        };
+        let random = rnd_letters(10);
+        let fp = crate::variations::fingerprint;
+        for (k, name) in backup_names(stem, ext).into_iter().enumerate() {
+            if cx.stopped() {
+                return;
+            }
+            let req = host_request(cx, "GET", &format!("{dir}{name}"), &[], b"");
+            let Some(resp) = burp_send(cx, &req) else { continue };
+            if status_body(&resp).0 >= 400 {
+                continue;
+            }
+            let control_name = backup_names(&random, ext).into_iter().nth(k).unwrap_or_default();
+            let control = host_request(cx, "GET", &format!("{dir}{control_name}"), &[], b"");
+            let Some(cresp) = burp_send(cx, &control) else { continue };
+            let mut c = crate::variations::Comparator::new(&fp(&resp), &fp(&cresp));
+            if !c.distinguishable() {
+                continue;
+            }
+            let (Some(again), Some(cagain)) = (burp_send(cx, &req), burp_send(cx, &control)) else { continue };
+            c.add_a(&fp(&again));
+            c.add_b(&fp(&cagain));
+            if !c.distinguishable() {
+                continue;
+            }
+            let mut e = cx.entry.clone();
+            e.path = format!("{dir}{name}");
+            let mut i = mk("info", self.issue(), &e, format!("A backup copy of <b>{}</b> appears to be available at <b>{}</b>: it answered differently from a request for a file that does not exist ({}).", util::html_encode(file), util::html_encode(&format!("{dir}{name}")), util::html_encode(&control_name)))
+                .with_evidence(vec![ScanEvidence::new(&req, Some(&resp)), ScanEvidence::new(&control, Some(&cresp))]);
+            i.confidence = "Certain".into();
+            cx.report(vec![i]);
+            return;
         }
     }
 }
@@ -3669,6 +3841,8 @@ mod tests {
                 ("active.graphql-introspection", Scope::Request, None),
                 ("active.graphql-suggestions", Scope::Request, None),
                 ("active.graphql-content-type", Scope::Request, None),
+                ("active.spoofable-client-ip", Scope::Request, None),
+                ("active.backup-file", Scope::Request, None),
             ]
         );
         let mut ids: Vec<&str> = points.iter().copied().chain(requests.iter().map(|r| r.0)).collect();
