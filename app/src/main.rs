@@ -968,6 +968,8 @@ fn main() {
     let mut project_file: Option<String> = None;
     let mut config_files: Vec<String> = Vec::new();
     let mut user_config_files: Vec<String> = Vec::new();
+    let mut disable_extensions = false;
+    let mut diagnostics = false;
     let args: Vec<String> = std::env::args().collect();
     let mut i = 1;
     while i < args.len() {
@@ -995,16 +997,45 @@ fn main() {
                 i += 2;
             }
             "--unpause-spider-and-scanner" => i += 1,
+            "--disable-extensions" => {
+                disable_extensions = true;
+                i += 1;
+            }
+            "--diagnostics" => {
+                diagnostics = true;
+                i += 1;
+            }
+            "--data-dir" => {
+                // paths::Lookup reads WEBPROBE_DATA_DIR at call time.
+                if let Some(v) = args.get(i + 1) {
+                    // SAFETY: no threads exist yet (gl_env ran, nothing
+                    // else), so setting the environment is race-free here.
+                    unsafe { std::env::set_var("WEBPROBE_DATA_DIR", v) };
+                }
+                i += 2;
+            }
+            "--temporary-project" => {
+                // recovery.rs treats WEBPROBE_TEMP_PROJECT=1 as Burp's
+                // temporary project: nothing is saved or restored.
+                unsafe { std::env::set_var("WEBPROBE_TEMP_PROJECT", "1") };
+                i += 1;
+            }
             "--version" => {
                 println!("webprobe {}", env!("CARGO_PKG_VERSION"));
                 return;
             }
             "--help" => {
-                println!("usage: webprobe [--project-file FILE] [--config-file FILE]... [--user-config-file FILE]... [--unpause-spider-and-scanner] [--screenshot FILE]");
+                println!("usage: webprobe [--project-file FILE] [--config-file FILE]... [--user-config-file FILE]... [--unpause-spider-and-scanner] [--disable-extensions] [--temporary-project] [--data-dir DIR] [--diagnostics] [--screenshot FILE]");
                 return;
             }
             _ => i += 1,
         }
+    }
+    if diagnostics {
+        println!("webprobe {}", env!("CARGO_PKG_VERSION"));
+        println!("os: {} {}", std::env::consts::OS, std::env::consts::ARCH);
+        println!("data dir: {}", webprobe_core::paths::Lookup::process().data_dir().display());
+        return;
     }
     if let Some(f) = &project_file {
         if !std::path::Path::new(f).is_file() {
@@ -1165,8 +1196,9 @@ fn main() {
         }
     }
     // Extensions the user installed earlier (Extensions > Installed), loaded
-    // in the background. WEBPROBE_NO_EXTENSIONS=1 skips them (QA runs).
-    if std::env::var_os("WEBPROBE_NO_EXTENSIONS").is_none() {
+    // in the background. Burp's --disable-extensions skips them, and so does
+    // WEBPROBE_NO_EXTENSIONS=1 (QA runs).
+    if !disable_extensions && std::env::var_os("WEBPROBE_NO_EXTENSIONS").is_none() {
         webprobe_core::ext_store::load_all(&shared);
     }
     // This front end refills the Collaborator payload pool (refill_oob_pool).

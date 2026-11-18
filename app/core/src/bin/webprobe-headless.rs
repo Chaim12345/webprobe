@@ -29,7 +29,7 @@ use std::time::{Duration, Instant};
 
 use webprobe_core::{burp_config, net, project, report, rest_api, scan};
 
-const USAGE: &str = "usage:\n  webprobe-headless [--config-file FILE]... [--user-config-file FILE]... [--unpause-spider-and-scanner] proxy [--port N] [--project FILE | --project-file FILE] [--seconds N]\n  webprobe-headless [--config-file FILE]... [--user-config-file FILE]... scan URL... [--crawl] [--speed fast|normal|thorough] [--report FILE.html|FILE.xml]\n  webprobe-headless --version | --help";
+const USAGE: &str = "usage:\n  webprobe-headless [--config-file FILE]... [--user-config-file FILE]... [--unpause-spider-and-scanner] [--data-dir DIR] [--diagnostics] proxy [--port N] [--project FILE | --project-file FILE] [--seconds N]\n  webprobe-headless [--config-file FILE]... [--user-config-file FILE]... scan URL... [--crawl] [--speed fast|normal|thorough] [--report FILE.html|FILE.xml]\n  webprobe-headless --version | --help";
 
 fn usage() -> ! {
     eprintln!("{USAGE}");
@@ -273,6 +273,21 @@ fn scan_urls(mut args: Vec<String>) {
 
 fn main() {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
+    if args.is_empty() {
+        usage();
+    }
+    // Burp's --data-dir and --diagnostics work before the subcommand.
+    if let Some(dir) = take_opt(&mut args, "--data-dir") {
+        // SAFETY: no threads exist yet, so setting the environment is
+        // race-free here. paths::Lookup reads WEBPROBE_DATA_DIR at call time.
+        unsafe { std::env::set_var("WEBPROBE_DATA_DIR", &dir) };
+    }
+    if take_flag(&mut args, "--diagnostics") {
+        println!("webprobe-headless {}", env!("CARGO_PKG_VERSION"));
+        println!("os: {} {}", std::env::consts::OS, std::env::consts::ARCH);
+        println!("data dir: {}", webprobe_core::paths::Lookup::process().data_dir().display());
+        return;
+    }
     if args.is_empty() {
         usage();
     }
