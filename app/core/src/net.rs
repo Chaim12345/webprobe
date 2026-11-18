@@ -842,6 +842,11 @@ pub struct Shared {
     pub scan_speed: AtomicU8,
     /// Which checks run and which insertion point types are attacked.
     pub scan_config: Mutex<crate::scan_config::ScanConfig>,
+    /// Issue selection of live passive auditing of proxied traffic: its
+    /// own setting, as Burp's live passive tasks have their own
+    /// configuration (None = every issue type). A scan's library
+    /// selection never changes it.
+    pub live_passive_issues: Mutex<Option<crate::scan_library::IssueFilter>>,
     /// Burp scan configuration "Audit accuracy" (burp.Zgnf): 0 minimise false
     /// negatives, 1 normal, 2 minimise false positives.
     pub scan_accuracy: AtomicU8,
@@ -997,6 +1002,7 @@ impl Shared {
             task_runner: AtomicBool::new(false),
             waker: Mutex::new(None),
             scan_config: Mutex::new(crate::scan_config::ScanConfig::default()),
+            live_passive_issues: Mutex::new(None),
             // AuditDefaults.json: scan_speed / scan_accuracy "normal"
             scan_speed: AtomicU8::new(1),
             scan_accuracy: AtomicU8::new(1),
@@ -2480,7 +2486,7 @@ fn record_entry(
             }
         };
         if within_scope && within_cap {
-            let issues = crate::scan::passive_check_for(shared, &e);
+            let issues = crate::scan::passive_check_live(shared, &e);
             crate::scan::add_passive_issues(shared, issues);
         }
     }

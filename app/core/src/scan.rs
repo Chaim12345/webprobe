@@ -819,11 +819,25 @@ pub fn passive_check(e: &HistEntry) -> Vec<ScanIssue> {
 /// [`passive_check`] with the checks switched off in `shared`'s scan
 /// configuration left out (Settings > Scanner > scan configuration).
 pub fn passive_check_for(shared: &Shared, e: &HistEntry) -> Vec<ScanIssue> {
+    let filter = shared.scan_config.lock().unwrap().issues.clone();
+    passive_check_filtered(shared, e, filter.as_ref())
+}
+
+/// Live passive auditing of a proxied exchange: the switched-off checks
+/// apply, but the issue selection is live passive's own
+/// (`Shared::live_passive_issues`), not the scan configuration's.
+pub fn passive_check_live(shared: &Shared, e: &HistEntry) -> Vec<ScanIssue> {
+    let filter = shared.live_passive_issues.lock().unwrap().clone();
+    passive_check_filtered(shared, e, filter.as_ref())
+}
+
+fn passive_check_filtered(shared: &Shared, e: &HistEntry, issues: Option<&crate::scan_library::IssueFilter>) -> Vec<ScanIssue> {
     let config = shared.scan_config.lock().unwrap().clone();
     let mut v = passive_check_with(e, &|id| config.check_enabled(id), Some(&shared.passive));
-    // R-11: the configuration's "Issues reported" (passive scan type,
-    // individual selection).
-    v.retain(|i| config.issue_allowed(&i.name, false));
+    // R-11: "Issues reported" (passive scan type, individual selection).
+    if let Some(f) = issues {
+        v.retain(|i| f.allows(&i.name, false));
+    }
     // Montoya extensions' passive checks (bounded by the hook timeout).
     let exts = shared.ext_host.lock().unwrap().active();
     for x in exts.into_iter().filter(|x| x.ui().is_some_and(|u| u.passive_checks > 0)) {
