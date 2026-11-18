@@ -982,3 +982,21 @@ Open after this wave:
 - D-10 has not found a stored pair on a real application yet (Juice Shop's crawled items are static GETs).
 - Not ported: the `Zi5k` pair filters; D-12.
 
+## Wave 61 (2026-11-18): portable build (R-02), passive registry and first pack (R-04, part)
+
+Commit e96f063. One resolver (`core/src/paths.rs`) finds every external resource and says what is
+missing and how to provide it; no developer-machine paths remain outside tests. Passive checks are
+registered units (`core/src/passive_checks.rs`), listed in the check catalogue and switchable in the
+scan configuration. New from Burp's classes: the 7 CSP issues, Password submitted using GET, Private
+key disclosed, Social security numbers disclosed, Vulnerable JavaScript dependency.
+
+Open after this wave:
+- R-04 remainder: Session token in URL, Duplicate cookies set, Cross-domain script include, Cookie
+  scoped to parent domain, the other password issues, Source code disclosure, Serialized object,
+  Database connection string. In progress.
+- SSN and vulnerable-JS issues are raised one per response, Burp raises one per value / library. In progress.
+- Two retire.js patterns (a jquery one with a back-reference, a lodash one with a look-behind) are skipped.
+- Approximations without source evidence: the CSP MIME gate and report-uri validity test; JavaScript
+  recognised by `.js` or content type instead of Burp's sniffer; forms found by a hand-written parser.
+- R-02 was checked by tests and a source search, not by running a release binary in a clean container.
+

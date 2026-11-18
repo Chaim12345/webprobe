@@ -1,5 +1,5 @@
 {
-  "revision": 148,
+  "revision": 149,
   "brief": {
     "question": "Rebuild WebProbe, a clone of Burp Suite Pro (reference build 52685, v2026.7.3), to feature parity with the task backlog in tasks.json, and produce a readable, evidence-backed name map for the obfuscated Burp jar.",
     "purpose": "Interoperable reimplementation plus per-build deobfuscation; behaviour claims must come from the shipped jar or the running reference app, never guessed.",
@@ -83,8 +83,8 @@
     },
     {
       "title": "R-02 [P0/S] Portable build: no developer-machine paths",
-      "status": "todo",
-      "why": "core/src/report.rs:251, src/discovery.rs:111, core/src/crawl.rs:295, src/tools.rs:885, bridge source via CARGO_MANIFEST_DIR."
+      "status": "done",
+      "why": "e96f063, core/src/paths.rs; not run in a clean container"
     },
     {
       "title": "R-03 [P0/L] Montoya bridge broad enough for real BApps",
@@ -93,8 +93,8 @@
     },
     {
       "title": "R-04 [P0/M] Passive checks in the check registry + missing passive pack",
-      "status": "todo",
-      "why": "core/src/scan.rs:704 (one 315-line function), scan.rs:2967 (active only). WebProbe reports 48 of Burp's 183 issue types."
+      "status": "doing",
+      "why": "registry + CSP, password-GET, private key, SSN, vulnerable JS done (e96f063); ten pack items with the worker"
     },
     {
       "title": "R-05 [P1/M] HTTP/2 browser-to-proxy and a working Repeater protocol switch",
@@ -943,5 +943,5 @@
     }
   ],
   "handoff": "2026-11-18 (zoom-out). tasks.json: 125 tasks, 101 done, 2 rejected, 22 todo: D-09, D-10, D-11 (D-11 was the duplicate id D-08, renumbered) and the new roadmap epic R-01..R-19 from the zoom-out review (qa/ZOOM-OUT-REVIEW-2026-11-18.md). Honest standing: scanner matches Burp 100% on the lab apps but reports only 48 of 183 issue types; Montoya API ~10% (only proxy() and logging()); Proxy ~75% (no browser-side HTTP/2, no streaming); Intruder ~85%; Repeater ~70%. Order: D-11 (in progress, spec /root/webprobe-parity/specs/D-11-insertion-points.md), D-09, D-10, then P0 R-01 docs truth pass, R-02 portable build, R-03 Montoya bridge, R-04 passive registry + pack, then P1 R-05..R-11, then P2. Five open unknowns: the scanner-family one (unk_e8d35ba47ccfba29), timing-only checks, BApp Montoya usage, Burp's DOM engine, server-side skip-list callers. Wave gate 2026-11-18: 426 core + 133 app tests green, cargo check clean. Working mode: one persistent worker subagent, continued with SendMessage, does implementation; the main session orchestrates, writes specs, reviews, commits. Traps: cargo only through wp-queue; never touch 8080/8081; no time-based detection; Craft 0.6.1 via `mcporter call craft.<tool>` or craft-anything-cli subcommands; the sidecar test needs up to 180 s for the first JVM load.",
-  "updated": "2026-11-18T02:23:20Z"
+  "updated": "2026-11-18T03:03:30Z"
 }

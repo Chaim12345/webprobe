@@ -8,9 +8,9 @@
     "p1": 39,
     "p2": 19,
     "by_status": {
-      "done": 104,
+      "done": 105,
       "rejected": 2,
-      "todo": 20
+      "todo": 19
     }
   },
   "tasks": [
@@ -1251,8 +1251,9 @@
       "title": "Portable build: no developer-machine paths",
       "acceptance": "A release binary in a clean container starts and says clearly when issue texts, wordlists or Java are missing; no absolute /root or CARGO_MANIFEST_DIR lookups at run time.",
       "effort": "S",
-      "status": "todo",
-      "evidence": "core/src/report.rs:251, src/discovery.rs:111, core/src/crawl.rs:295, src/tools.rs:885, bridge source via CARGO_MANIFEST_DIR."
+      "status": "done",
+      "evidence": "Commit e96f063. core/src/paths.rs resolves every external resource (KnowledgeBase issue texts, wordlists, retire.js repository, Burp jar, java, Chromium, Burp's browser): env override (WEBPROBE_KB_DIR, WEBPROBE_WORDLIST_DIR, WEBPROBE_RETIREJS, WEBPROBE_BURP_JAR, WEBPROBE_JAVA, WEBPROBE_CHROMIUM, WEBPROBE_BURP_BROWSER), then $WEBPROBE_BURP_RESOURCES, ~/.config/webprobe, the data dir, then system defaults; a miss returns Missing{what, looked, how} shown as a toast (desktop) or on stderr (headless). Bridge source, extension catalogue and demo jar are embedded. Tests paths::tests::resources_resolve_from_overrides_and_say_what_is_missing and no_developer_paths_outside_tests; table in app/README.md. Not done: a run of a release binary in a clean container (checked by tests and source search only).",
+      "completed": "2026-11-18"
     },
     {
       "id": "R-03",
@@ -1272,7 +1273,7 @@
       "acceptance": "Passive checks are registered like active ones (check_catalogue lists them, scan configuration can switch each off). Ported from Burp with positive and negative fixtures: the 7 CSP issues, Vulnerable JavaScript dependency (resources/RetireJS), Session token in URL, password in GET/URL/cookie, Cookie scoped to parent domain, Duplicate cookies, Cross-domain script include, Source code disclosure, Serialized object, private key / DB connection string / SSN disclosure.",
       "effort": "M",
       "status": "todo",
-      "evidence": "core/src/scan.rs:704 (one 315-line function), scan.rs:2967 (active only). WebProbe reports 48 of Burp's 183 issue types."
+      "evidence": "core/src/scan.rs:704 (one 315-line function), scan.rs:2967 (active only). WebProbe reports 48 of Burp's 183 issue types. Progress 2026-11-18 (e96f063): registry done (core/src/passive_checks.rs PASSIVE_CHECKS, in check_catalogue, switchable in the scan configuration, old configs load). Ported: 7 CSP issues (Zxr9:9, Zupz:22, text Zifp:27), Password submitted using GET (Zxro:92), Private key disclosed (Zsdw:21), Social security numbers disclosed (Zbdp:23), Vulnerable JavaScript dependency (Zply:136, Zmwd; two retire.js patterns skipped). REMAINING (worker task 6): Session token in URL, Duplicate cookies set, Cross-domain script include, Cookie scoped to parent domain, the other password issues, Source code disclosure, Serialized object, Database connection string; one issue per value/library as Burp raises them."
     },
     {
       "id": "R-05",

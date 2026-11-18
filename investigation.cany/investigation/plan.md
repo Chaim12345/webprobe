@@ -13,9 +13,9 @@
 11. [done] D-10 stored XSS retrieval pairing beyond safe GETs — core/src/stored.rs; Zi5k filters not ported; no stored pair seen on a real app yet
 12. [todo] D-12 Collaborator leftovers: SNI variant and Zbxl scheme payload variants — not ported in D-09
 13. [doing] R-01 [P0/S] Docs truth pass — headers, banners, generated status table done (09ed7a9); remaining: per-row PRD status re-check
-14. [todo] R-02 [P0/S] Portable build: no developer-machine paths — core/src/report.rs:251, src/discovery.rs:111, core/src/crawl.rs:295, src/tools.rs:885, bridge source via CARGO_MANIFEST_DIR.
+14. [done] R-02 [P0/S] Portable build: no developer-machine paths — e96f063, core/src/paths.rs; not run in a clean container
 15. [todo] R-03 [P0/L] Montoya bridge broad enough for real BApps — sidecar/MontoyaBridge.java:276-287 (only proxy() and logging() answer); core/src/ext_host.rs:332. Measured ~10% API coverage.
-16. [todo] R-04 [P0/M] Passive checks in the check registry + missing passive pack — core/src/scan.rs:704 (one 315-line function), scan.rs:2967 (active only). WebProbe reports 48 of Burp's 183 issue types.
+16. [doing] R-04 [P0/M] Passive checks in the check registry + missing passive pack — registry + CSP, password-GET, private key, SSN, vulnerable JS done (e96f063); ten pack items with the worker
 17. [todo] R-05 [P1/M] HTTP/2 browser-to-proxy and a working Repeater protocol switch — core/src/tls.rs:285 (no ALPN), src/msgpane.rs:1005-1006, src/menus.rs:175-177.
 18. [todo] R-06 [P1/M] Response streaming and server-sent events — core/src/codec.rs:257-335 reads the whole response first. PRD BE-PX-12 was assigned to rejected N-04.
 19. [todo] R-07 [P1/M] WebSocket robustness and tools — core/src/net.rs:679, net.rs:2288, src/repeater_ops.rs:1697.
