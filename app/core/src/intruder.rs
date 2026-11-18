@@ -925,9 +925,6 @@ impl PayloadSource {
             PayloadSource::Dates { from: 1_700_000_000, to: 1_700_000_000 + 6 * 86_400, step_secs: 86_400, format: "%Y-%m-%d".into() },
             PayloadSource::BruteForcer { charset: "abcdefghijklmnopqrstuvwxyz0123456789".into(), min_len: 4, max_len: 4 },
             PayloadSource::NullPayloads { count: 10 },
-            // Burp has no count (it generates indefinitely); 100 matches the
-            // kind of run Collaborator payloads are used for.
-            PayloadSource::CollaboratorPayloads { include_location: false, count: 100 },
             PayloadSource::CharacterFrobber { base: String::new() },
             // burp.Zxnb: base value of the position, literal, all 8 bits.
             PayloadSource::BitFlipper { base: None, hex: false, mask: 0xFF },
@@ -938,6 +935,10 @@ impl PayloadSource {
             // Burp's list: "Extension-generated" sits before "Copy other payload".
             PayloadSource::Extension { provider: String::new(), payloads: Vec::new() },
             PayloadSource::CopyOtherPayload { from_position: 1 },
+            // Last in Burp's dropdown. Burp has no count (it generates
+            // indefinitely); 100 matches the kind of run Collaborator
+            // payloads are used for.
+            PayloadSource::CollaboratorPayloads { include_location: false, count: 100 },
         ]
     }
 
@@ -2430,6 +2431,7 @@ mod tests {
                 "Simple list", "Runtime file", "Custom iterator", "Character substitution", "Case modification",
                 "Recursive grep", "Illegal Unicode", "Character blocks", "Numbers", "Dates", "Brute forcer", "Null payloads",
                 "Character frobber", "Bit flipper", "Username generator", "ECB block shuffler", "Extension-generated", "Copy other payload",
+                "Collaborator payloads",
             ]
         );
     }
