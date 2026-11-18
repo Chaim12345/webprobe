@@ -4183,6 +4183,124 @@ mod tests {
         assert!(got.contains(&("ASP.NET debugging enabled", "medium", "Firm")), "{got:?}");
     }
 
+    /// One lab request/response cycle: read a full request (headers plus
+    /// Content-Length body), answer with the handler's response.
+    fn lab_serve(l: std::net::TcpListener, handler: impl Fn(&str, &str, &str) -> String + Send + Sync + 'static) -> u16 {
+        use std::io::{Read, Write};
+        let port = l.local_addr().unwrap().port();
+        let handler = std::sync::Arc::new(handler);
+        std::thread::spawn(move || {
+            for s in l.incoming().flatten() {
+                let handler = handler.clone();
+                std::thread::spawn(move || {
+                    let mut s = s;
+                    let _ = s.set_read_timeout(Some(std::time::Duration::from_secs(2)));
+                    let mut raw = Vec::new();
+                    let mut buf = [0u8; 8192];
+                    loop {
+                        let n = s.read(&mut buf).unwrap_or(0);
+                        raw.extend_from_slice(&buf[..n]);
+                        let done = String::from_utf8_lossy(&raw).find("\r\n\r\n").is_some_and(|h| {
+                            let cl = String::from_utf8_lossy(&raw[..h]).lines().find_map(|l| l.to_ascii_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap_or(0))).unwrap_or(0);
+                            raw.len() >= h + 4 + cl
+                        });
+                        if n == 0 || done {
+                            break;
+                        }
+                    }
+                    let text = String::from_utf8_lossy(&raw).to_string();
+                    let (head, _) = text.split_once("\r\n\r\n").unwrap_or((&text, ""));
+                    let method = head.split_whitespace().next().unwrap_or("").to_string();
+                    let path = head.split_whitespace().nth(1).unwrap_or("/").to_string();
+                    let _ = s.write_all(handler(&method, &path, &text).as_bytes());
+                });
+            }
+        });
+        port
+    }
+
+    /// Run one scan against the lab with only `keep` checks enabled and
+    /// return the (name, severity, confidence) of every issue it raises.
+    fn lab_scan(port: u16, keep: &[&str], method: &str, path: &str, req_raw: String) -> Vec<(String, String, String)> {
+        let shared = crate::net::Shared::new();
+        let mut cfg = crate::scan_config::ScanConfig::default();
+        for (id, ..) in crate::scan::check_catalogue() {
+            if !keep.contains(&id) {
+                cfg.disabled_checks.insert(id.into());
+            }
+        }
+        *shared.scan_config.lock().unwrap() = cfg;
+        let mut e = crate::net::HistEntry {
+            method: method.into(),
+            host: "127.0.0.1".into(),
+            port,
+            path: path.into(),
+            ..Default::default()
+        };
+        e.req_raw = req_raw.into_bytes().into();
+        crate::scan::start_active_scan(shared.clone(), e, &[], &[]);
+        let t0 = std::time::Instant::now();
+        while shared.scan.is_busy() && t0.elapsed() < std::time::Duration::from_secs(60) {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        assert!(!shared.scan.is_busy(), "scan did not finish");
+        let issues = shared.issues.lock().unwrap();
+        issues.iter().map(|i| (i.name.clone(), i.sev.clone(), i.confidence.clone())).collect()
+    }
+
+    /// R-10 batch 2: the three GraphQL checks against a live endpoint.
+    /// The lab answers the introspection query with a schema, the
+    /// `query{__type}` probe with a suggestion error, and the query in
+    /// every carrying style (JSON body, GET parameter, form body).
+    #[test]
+    fn r10_graphql_checks_against_a_live_lab() {
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = lab_serve(l, |_method, _path, raw| {
+            let (body, ct) = if raw.contains("__schema") {
+                (r#"{"data":{"__schema":{"queryType":{"name":"Query"},"mutationType":null,"types":[]}}}"#.to_string(), "application/json")
+            } else if raw.contains("__typename") {
+                (r#"{"data":{"__typename":"Query"}}"#.to_string(), "application/json")
+            } else if raw.contains("query{__type}") || raw.contains("query%7B__type%7D") {
+                (r#"{"errors":[{"message":"Field '__type' must have a selection of subfields. Did you mean '__type { ... }'?"}]}"#.to_string(), "application/json")
+            } else {
+                (r#"{"data":{"user":{"name":"alice"}}}"#.to_string(), "application/json")
+            };
+            format!("HTTP/1.1 200 OK\r\nContent-Type: {ct}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        });
+        let host = format!("127.0.0.1:{port}");
+        let req = format!("POST /graphql HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 32\r\n\r\n{{\"query\":\"query{{ user {{ name }} }}\"}}");
+        let got = lab_scan(port, &["active.graphql-introspection", "active.graphql-suggestions", "active.graphql-content-type"], "POST", "/graphql", req);
+        let got: Vec<(&str, &str, &str)> = got.iter().map(|(a, b, c)| (a.as_str(), b.as_str(), c.as_str())).collect();
+        assert!(got.contains(&("GraphQL introspection enabled", "low", "Certain")), "{got:?}");
+        assert!(got.contains(&("GraphQL suggestions enabled", "low", "Certain")), "{got:?}");
+        assert!(got.contains(&("GraphQL content type not validated", "low", "Certain")), "{got:?}");
+    }
+
+    /// R-10 batch 3: SpoofableClientIp and BackupFile against a live lab.
+    /// The lab echoes the X-Forwarded-For value in its page and serves a
+    /// copy of /files/index.php at /files/index.php~; everything else
+    /// under /files/ is a 404, so the random-name controls stay flat.
+    #[test]
+    fn r10_spoofable_ip_and_backup_file_against_a_live_lab() {
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = lab_serve(l, |_method, path, raw| {
+            let xff = raw.lines().find_map(|l| l.to_ascii_lowercase().strip_prefix("x-forwarded-for:").map(|v| v.trim().to_string()));
+            let client = xff.unwrap_or_else(|| "direct".into());
+            let (status, body) = match path {
+                "/files/index.php" => ("200 OK", format!("<html><body>files<!-- client {client} --></body></html>")),
+                "/files/index.php~" => ("200 OK", "<?php // backup source ?>".to_string()),
+                _ => ("404 Not Found", String::new()),
+            };
+            format!("HTTP/1.1 {status}\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        });
+        let host = format!("127.0.0.1:{port}");
+        let req = format!("GET /files/index.php HTTP/1.1\r\nHost: {host}\r\n\r\n");
+        let got = lab_scan(port, &["active.spoofable-client-ip", "active.backup-file"], "GET", "/files/index.php", req);
+        let got: Vec<(&str, &str, &str)> = got.iter().map(|(a, b, c)| (a.as_str(), b.as_str(), c.as_str())).collect();
+        assert!(got.contains(&("Spoofable client IP address", "info", "Tentative")), "{got:?}");
+        assert!(got.contains(&("Backup file", "info", "Certain")), "{got:?}");
+    }
+
     #[test]
     fn collaborator_everywhere_builds_burps_request_set() {
         let collab = |slot: &str| Some(format!("{slot}.oast.test"));
