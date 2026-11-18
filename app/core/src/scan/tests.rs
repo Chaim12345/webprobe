@@ -654,6 +654,52 @@ fn traversal_check_requires_negative_control_and_escalates_to_shadow() {
 }
 
 #[test]
+fn known_file_follow_up_retrieves_only_with_a_clean_control() {
+    // A server whose file parameter reads from disk: Web.config exists,
+    // its X-suffixed sibling does not.
+    let serve = |p: &str| -> Option<Vec<u8>> {
+        Some(match p {
+            "files/Web.config" => b"<configuration><system.web><compilation/></system.web></configuration>".to_vec(),
+            _ => Vec::new(),
+        })
+    };
+    let hit = known_file_follow_up("files/page.html", b"<html>home</html>", serve).unwrap();
+    assert_eq!(hit.file, "Web.config");
+    assert_eq!(hit.payload, "files/Web.config");
+    assert_eq!(hit.control, "files/Web.configX");
+    assert_eq!(hit.marker, "<system.web");
+
+    // .htaccess hits on any of its three markers (here AddHandler).
+    let serve = |p: &str| -> Option<Vec<u8>> {
+        Some(match p {
+            "static/.htaccess" => b"AddHandler cgi-script .pl".to_vec(),
+            _ => Vec::new(),
+        })
+    };
+    let hit = known_file_follow_up("static/a.css", b"", serve).unwrap();
+    assert_eq!(hit.file, ".htaccess");
+    assert_eq!(hit.marker, "AddHandler");
+
+    // The marker in the control too: the server shows it regardless of
+    // the filename, so nothing was retrieved.
+    let fixed = |_: &str| -> Option<Vec<u8>> { Some(b"<system.web>always</system.web>".to_vec()) };
+    assert!(known_file_follow_up("a/b.txt", b"", fixed).is_none());
+
+    // The marker already on the baseline page: never reported.
+    let serve = |p: &str| -> Option<Vec<u8>> {
+        Some(if p == "web.config" { b"<system.web>x</system.web>".to_vec() } else { Vec::new() })
+    };
+    assert!(known_file_follow_up("page", b"<system.web>baseline</system.web>", serve).is_none());
+
+    // A value with no directory part probes the known files at the root.
+    let serve = |p: &str| -> Option<Vec<u8>> {
+        Some(if p == "WEB-INF/web.xml" { b"<web-app><servlet/></web-app>".to_vec() } else { Vec::new() })
+    };
+    let hit = known_file_follow_up("page", b"", serve).unwrap();
+    assert_eq!(hit.payload, "WEB-INF/web.xml");
+}
+
+#[test]
 fn link_manip_detects_reflected_url_target() {
     let href =
         |v: &str| Some(format!("HTTP/1.1 200 OK\r\n\r\n<a href=\"{v}\">next</a>").into_bytes());

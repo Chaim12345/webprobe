@@ -241,3 +241,49 @@ pub fn run_file_path_manip_check<F: FnMut(&str) -> Option<Vec<u8>>>(
         attributes: attrs,
     })
 }
+
+pub struct KnownFileHit {
+    pub payload: String,
+    pub control: String,
+    pub file: &'static str,
+    pub marker: &'static str,
+}
+
+/// burp.Zsl1.java:111-128: known files tried in the selected directory once
+/// the parameter is shown to select a file, each with the marker(s) that
+/// prove retrieval (`.htaccess` hits on any of its three).
+const KNOWN_FILES: &[(&str, &[&str])] = &[
+    ("Web.config", &["<system.web"]),
+    ("WEB-INF/web.xml", &["<web-app"]),
+    (".htaccess", &["Options ", "AddHandler", "RewriteRule"]),
+];
+
+/// burp.Zsl1.java:179-203: known-file follow-up to the path-manipulation
+/// differential. A file counts as retrieved when a marker appears that is in
+/// neither the baseline nor the `X`-suffixed negative control (the same
+/// control shape as `traversal_control`).
+pub fn known_file_follow_up<F: FnMut(&str) -> Option<Vec<u8>>>(
+    value: &str,
+    baseline: &[u8],
+    mut send: F,
+) -> Option<KnownFileHit> {
+    let cut = value.rfind(['/', '\\']);
+    let dir = match cut {
+        Some(i) => &value[..i + 1],
+        None => "",
+    };
+    let base = String::from_utf8_lossy(baseline);
+    for (name, markers) in KNOWN_FILES {
+        let payload = format!("{dir}{name}");
+        let raw = send(&payload)?;
+        let body = String::from_utf8_lossy(&raw);
+        let Some(&marker) = markers.iter().find(|m| body.contains(**m) && !base.contains(**m)) else { continue };
+        let control = format!("{payload}X");
+        let cbody = send(&control).unwrap_or_default();
+        if String::from_utf8_lossy(&cbody).contains(marker) {
+            continue; // the marker shows regardless of the filename
+        }
+        return Some(KnownFileHit { payload, control, file: name, marker });
+    }
+    None
+}
