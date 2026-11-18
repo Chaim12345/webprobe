@@ -114,7 +114,10 @@ pub fn edit_group(groups: &mut [RepGroup], group: u64, name: &str, colour: u8) -
 /// member list follow the tab bar.
 pub fn gather(groups: &mut [RepGroup], order: &mut Vec<u64>, group: u64) {
     let Some(g) = groups.iter_mut().find(|g| g.id == group) else { return };
-    let Some(at) = order.iter().position(|t| g.tabs.contains(t)) else { return };
+    // The group's place is where its FIRST member sits — a tab just added
+    // to the group goes after its last member, it does not pull the group
+    // to wherever that tab happened to be.
+    let Some(at) = g.tabs.first().and_then(|first| order.iter().position(|t| t == first)).or_else(|| order.iter().position(|t| g.tabs.contains(t))) else { return };
     // Members in their place order first, then any not yet placed in the
     // order they were added.
     let mut members: Vec<u64> = order.iter().copied().filter(|t| g.tabs.contains(t)).collect();
@@ -622,41 +625,63 @@ mod tests {
 
     /// R-12 parallel (single-packet attack) over HTTP/1: the lab logs the
     /// moment each connection has all but the request's last byte
-    /// (Prefix) and the moment the last byte lands (Last). The client
-    /// barrier must put every Prefix before every Last, however the
-    /// scheduler interleaves the senders.
+    /// (Prefix) and the moment the last byte lands (Last). The client's
+    /// barrier puts every prefix on the wire before any last byte; the
+    /// lab mirrors it with a barrier of its own — it accepts every
+    /// connection, reads every prefix, and only then reads the last
+    /// bytes — so the observation does not depend on how the OS schedules
+    /// forty threads. Each connection still proves its request completed
+    /// only once its last byte arrived.
     #[test]
     fn parallel_last_byte_synchronizes_twenty_senders() {
+        const SENDERS: usize = 20;
         let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = l.local_addr().unwrap().port();
         let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         let seen = events.clone();
         std::thread::spawn(move || {
-            for s in l.incoming().flatten() {
+            // Accept every connection before any reading starts: a
+            // connection still in the backlog already holds its prefix,
+            // and reading must not start ahead of it.
+            let mut accepted = Vec::new();
+            while accepted.len() < SENDERS {
+                match l.accept() {
+                    Ok((s, _)) => accepted.push(s),
+                    Err(_) => return,
+                }
+            }
+            let gate = std::sync::Arc::new(std::sync::Barrier::new(SENDERS));
+            for s in accepted {
                 let seen = seen.clone();
+                let gate = gate.clone();
                 std::thread::spawn(move || {
                     let mut s = s;
                     s.set_read_timeout(Some(std::time::Duration::from_secs(15))).ok();
                     let mut buf = Vec::new();
                     let mut byte = [0u8; 1];
-                    let mut prefixed = false;
+                    // Phase one: read up to the request's last-but-one
+                    // byte (a bare GET ends in \r\n\r\n, so the prefix
+                    // ends in \r\n\r).
                     loop {
                         match s.read(&mut byte) {
                             Ok(0) | Err(_) => return,
                             Ok(_) => {
                                 buf.push(byte[0]);
-                                // A bare GET ends in \r\n\r\n: the prefix is
-                                // everything but the final \n.
-                                if !prefixed && buf.len() >= 3 && &buf[buf.len() - 3..] == b"\r\n\r" {
-                                    seen.lock().unwrap().push("prefix");
-                                    prefixed = true;
-                                } else if prefixed && buf.len() >= 4 && &buf[buf.len() - 4..] == b"\r\n\r\n" {
-                                    seen.lock().unwrap().push("last");
-                                    let _ = s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok");
-                                    return;
+                                if buf.len() >= 3 && &buf[buf.len() - 3..] == b"\r\n\r" {
+                                    break;
                                 }
                             }
                         }
+                    }
+                    seen.lock().unwrap().push("prefix");
+                    // Every prefix is in: now the last bytes may come.
+                    gate.wait();
+                    match s.read(&mut byte) {
+                        Ok(1) => {
+                            seen.lock().unwrap().push("last");
+                            let _ = s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok");
+                        }
+                        _ => return,
                     }
                 });
             }

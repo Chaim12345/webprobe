@@ -5252,7 +5252,9 @@ mod tests {
             .iter()
             .map(|s| s.to_string())
             .chain(cmd(0))
-            .chain(["#2:ext".to_string(), "#2:ext1".to_string()])
+            // The synthesised Referer value is a URL, so its check runs
+            // Thorough (burp.Zxfo, Zibp.ZN): own scheme, http://, Http://.
+            .chain(["#2:ext".to_string(), "#2:ext1".to_string(), "#2:ext2".to_string()])
             .chain(cmd(2))
             .chain(["#3:ext", "#3:ext1", "#3:xsd", "#3:xi"].iter().map(|s| s.to_string()))
             .chain(cmd(3))
