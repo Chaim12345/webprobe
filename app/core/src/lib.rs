@@ -41,6 +41,7 @@ pub mod project_files;
 pub mod repeater_run;
 pub mod report;
 pub mod rules;
+pub mod burp_config;
 pub mod scan;
 pub mod scan_config;
 pub mod scan_library;
