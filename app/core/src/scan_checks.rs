@@ -4097,6 +4097,92 @@ mod tests {
         assert_eq!(r.from_last("b").len(), 3);
     }
 
+    /// R-10 batch 1 host checks against a live lab: PUT store/retrieve,
+    /// trace.axd with the tracecontent span, DEBUG with the 500 marker.
+    #[test]
+    fn r10_host_checks_against_a_live_lab() {
+        use std::io::{Read, Write};
+        use std::sync::{Arc, Mutex};
+        let files: Arc<Mutex<std::collections::HashMap<String, Vec<u8>>>> = Arc::new(Mutex::new(std::collections::HashMap::new()));
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        let files_t = files.clone();
+        std::thread::spawn(move || {
+            for s in l.incoming().flatten() {
+                let files = files_t.clone();
+                std::thread::spawn(move || {
+                    let mut s = s;
+                    let _ = s.set_read_timeout(Some(std::time::Duration::from_secs(2)));
+                    let mut raw = Vec::new();
+                    let mut buf = [0u8; 8192];
+                    loop {
+                        let n = s.read(&mut buf).unwrap_or(0);
+                        raw.extend_from_slice(&buf[..n]);
+                        let done = String::from_utf8_lossy(&raw).find("\r\n\r\n").is_some_and(|h| {
+                            let cl = String::from_utf8_lossy(&raw[..h]).lines().find_map(|l| l.to_ascii_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap_or(0))).unwrap_or(0);
+                            raw.len() >= h + 4 + cl
+                        });
+                        if n == 0 || done {
+                            break;
+                        }
+                    }
+                    let text = String::from_utf8_lossy(&raw).to_string();
+                    let (head, body) = text.split_once("\r\n\r\n").unwrap_or((&text, ""));
+                    let method = head.split_whitespace().next().unwrap_or("").to_string();
+                    let path = head.split_whitespace().nth(1).unwrap_or("/").to_string();
+                    let resp = if method == "PUT" {
+                        files.lock().unwrap().insert(path, body.as_bytes().to_vec());
+                        "HTTP/1.1 201 Created\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_string()
+                    } else if method == "GET" && path == "/trace.axd" {
+                        let b = "<html><body><span class=\"tracecontent\">trace</span></body></html>";
+                        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{b}", b.len())
+                    } else if method == "DEBUG" {
+                        let b = "DebugSessionID corrupted or not provided.";
+                        format!("HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{b}", b.len())
+                    } else if method == "GET" {
+                        match files.lock().unwrap().get(&path) {
+                            Some(b) => format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", b.len(), String::from_utf8_lossy(b)),
+                            None => "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_string(),
+                        }
+                    } else {
+                        "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_string()
+                    };
+                    let _ = s.write_all(resp.as_bytes());
+                });
+            }
+        });
+        let shared = crate::net::Shared::new();
+        let host = format!("127.0.0.1:{port}");
+        // Only the three checks under test run.
+        let mut cfg = crate::scan_config::ScanConfig::default();
+        let keep = ["active.http-put-enabled", "active.aspnet-tracing", "active.aspnet-debugging"];
+        for (id, ..) in crate::scan::check_catalogue() {
+            if !keep.contains(&id) {
+                cfg.disabled_checks.insert(id.into());
+            }
+        }
+        *shared.scan_config.lock().unwrap() = cfg;
+        let mut e = crate::net::HistEntry {
+            method: "GET".into(),
+            host: "127.0.0.1".into(),
+            port,
+            path: "/".into(),
+            ..Default::default()
+        };
+        e.req_raw = format!("GET / HTTP/1.1\r\nHost: {host}\r\n\r\n").into_bytes().into();
+        crate::scan::start_active_scan(shared.clone(), e, &[], &[]);
+        let t0 = std::time::Instant::now();
+        while shared.scan.is_busy() && t0.elapsed() < std::time::Duration::from_secs(60) {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        assert!(!shared.scan.is_busy(), "scan did not finish");
+        let issues = shared.issues.lock().unwrap();
+        let got: Vec<(&str, &str, &str)> = issues.iter().map(|i| (i.name.as_str(), i.sev.as_str(), i.confidence.as_str())).collect();
+        assert!(got.contains(&("HTTP PUT method is enabled", "high", "Certain")), "{got:?}");
+        assert!(got.contains(&("ASP.NET tracing enabled", "high", "Certain")), "{got:?}");
+        assert!(got.contains(&("ASP.NET debugging enabled", "medium", "Firm")), "{got:?}");
+    }
+
     #[test]
     fn collaborator_everywhere_builds_burps_request_set() {
         let collab = |slot: &str| Some(format!("{slot}.oast.test"));
