@@ -291,6 +291,16 @@ impl ProjectRepeater {
     }
 }
 
+/// One Repeater tab group (R-12): its tabs by position in the project's
+/// repeater list.
+#[derive(Clone, Default, Serialize, Deserialize)]
+pub struct ProjectRepeaterGroup {
+    pub name: String,
+    #[serde(default)]
+    pub colour: u8,
+    pub tabs: Vec<usize>,
+}
+
 /// One scanner issue.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ProjectIssue {
@@ -940,6 +950,9 @@ pub struct ProjectData {
     pub macros: Vec<ProjectMacro>,
     #[serde(default)]
     pub repeaters: Vec<ProjectRepeater>,
+    /// Repeater tab groups (R-12); absent in projects from before groups.
+    #[serde(default)]
+    pub repeater_groups: Vec<ProjectRepeaterGroup>,
     #[serde(default)]
     pub issues: Vec<ProjectIssue>,
     #[serde(default)]
@@ -1000,6 +1013,7 @@ impl Default for ProjectData {
             version: PROJECT_VERSION,
             saved_at: 0,
             appearance: Appearance::default(),
+            repeater_groups: Vec::new(),
             history: Vec::new(),
             match_request: Vec::new(),
             match_response: Vec::new(),
@@ -1591,6 +1605,7 @@ mod tests {
         ProjectData {
             extension_data: [("/opt/ext/demo.jar".to_string(), serde_json::json!({"String": {"k": "v"}}))].into_iter().collect(),
             version: PROJECT_VERSION,
+            repeater_groups: Vec::new(),
             saved_at: 1_760_000_002,
             appearance: Appearance { palette: "light".into(), density: "compact".into(), font_scale: 1.1 },
             history: vec![ProjectHistory {

@@ -163,7 +163,7 @@ pub(crate) fn is_connection_header(name: &str) -> bool {
     ) || name.starts_with("proxy-")
 }
 
-fn send_preface<S: Read + Write>(stream: &mut S) -> Result<(), String> {
+pub(crate) fn send_preface<S: Read + Write>(stream: &mut S) -> Result<(), String> {
     stream.write_all(PREFACE).map_err(|e| format!("h2 preface: {e}"))?;
     // Our SETTINGS: ENABLE_PUSH=0 (id 0x2), INITIAL_WINDOW_SIZE default.
     write_frame(stream, FRAME_SETTINGS, 0, 0, &[0, 2, 0, 0, 0, 0]).map_err(|e| format!("h2 settings: {e}"))
@@ -200,14 +200,15 @@ fn encode_headers(req: &H2Request) -> Vec<u8> {
     enc.encode(headers.iter().map(|(k, v)| (k.as_slice(), v.as_slice())))
 }
 
-fn send_request_headers<S: Read + Write>(stream: &mut S, req: &H2Request) -> Result<(), String> {
+fn send_request_headers<S: Read + Write>(stream: &mut S, sid: u32, req: &H2Request) -> Result<(), String> {
     let block = encode_headers(req);
     let flags = FLAG_END_HEADERS | if req.body.is_empty() { FLAG_END_STREAM } else { 0 };
-    write_frame(stream, FRAME_HEADERS, flags, 1, &block).map_err(|e| format!("h2 headers: {e}"))
+    write_frame(stream, FRAME_HEADERS, flags, sid, &block).map_err(|e| format!("h2 headers: {e}"))
 }
 
 /// Response assembly plus outbound flow-control accounting.
 struct Rx {
+    sid: u32,
     dec: Decoder<'static>,
     status: Option<String>,
     headers: Vec<(String, String)>,
@@ -239,8 +240,9 @@ fn grow_window(window: &mut i64, delta: i64, what: &str) -> Result<(), String> {
 }
 
 impl Rx {
-    fn new() -> Self {
+    fn new(sid: u32) -> Self {
         Rx {
+            sid,
             dec: Decoder::new(),
             status: None,
             headers: Vec::new(),
@@ -351,7 +353,7 @@ impl Rx {
     }
 
     fn handle<S: Read + Write>(&mut self, stream: &mut S, f: Frame, sink: &mut Option<&mut (dyn crate::streaming::ResponseSink + '_)>) -> Result<(), String> {
-        if self.in_continuation && !(f.ty == FRAME_CONTINUATION && f.stream == 1) {
+        if self.in_continuation && !(f.ty == FRAME_CONTINUATION && f.stream == self.sid) {
             return Err("h2: header block interrupted before CONTINUATION".into());
         }
         match f.ty {
@@ -395,7 +397,7 @@ impl Rx {
                 }
                 if f.stream == 0 {
                     grow_window(&mut self.send_window, inc, "connection")?;
-                } else if f.stream == 1 {
+                } else if f.stream == self.sid {
                     grow_window(&mut self.stream_window, inc, "stream")?;
                 }
             }
@@ -411,7 +413,7 @@ impl Rx {
                 }
                 return Err(format!("h2: GOAWAY: error={code} last_stream_id={last}"));
             }
-            FRAME_RST_STREAM if f.stream == 1 => {
+            FRAME_RST_STREAM if f.stream == self.sid => {
                 let code = if f.payload.len() >= 4 {
                     u32::from_be_bytes([f.payload[0], f.payload[1], f.payload[2], f.payload[3]])
                 } else {
@@ -422,7 +424,7 @@ impl Rx {
                 }
                 return Err(format!("h2: stream reset by server: error={code}"));
             }
-            FRAME_HEADERS if f.stream == 1 => {
+            FRAME_HEADERS if f.stream == self.sid => {
                 self.block.extend_from_slice(header_fragment(f.flags, &f.payload)?);
                 if self.block.len() > MAX_HEADER_BLOCK {
                     return Err("h2: header block too large".into());
@@ -440,7 +442,7 @@ impl Rx {
                     self.pending_end_stream = f.flags & FLAG_END_STREAM != 0;
                 }
             }
-            FRAME_CONTINUATION if f.stream == 1 => {
+            FRAME_CONTINUATION if f.stream == self.sid => {
                 self.block.extend_from_slice(&f.payload);
                 if self.block.len() > MAX_HEADER_BLOCK {
                     return Err("h2: header block too large".into());
@@ -456,7 +458,7 @@ impl Rx {
                     self.ask_sink(sink);
                 }
             }
-            FRAME_DATA if f.stream == 1 => {
+            FRAME_DATA if f.stream == self.sid => {
                 let payload = data_payload(f.flags, &f.payload)?;
                 if self.streaming() {
                     // Passed on as it arrives (as a chunk), never kept here.
@@ -492,7 +494,7 @@ impl Rx {
                     // the initial window stalls.
                     let inc = (f.payload.len() as u32).to_be_bytes();
                     write_frame(stream, FRAME_WINDOW_UPDATE, 0, 0, &inc).map_err(|e| format!("h2 window update: {e}"))?;
-                    write_frame(stream, FRAME_WINDOW_UPDATE, 0, 1, &inc).map_err(|e| format!("h2 window update: {e}"))?;
+                    write_frame(stream, FRAME_WINDOW_UPDATE, 0, self.sid, &inc).map_err(|e| format!("h2 window update: {e}"))?;
                 }
             }
             FRAME_PUSH_PROMISE => {
@@ -558,7 +560,7 @@ impl Rx {
 /// DATA is only written once the server's SETTINGS is known (it is required to
 /// be the first frame, RFC 9113 §3.4), so a small INITIAL_WINDOW_SIZE or
 /// MAX_FRAME_SIZE is honoured before the first byte goes out.
-fn pump<S: Read + Write>(stream: &mut S, mut body: Option<&[u8]>, rx: &mut Rx, sink: &mut Option<&mut (dyn crate::streaming::ResponseSink + '_)>) -> Result<(), String> {
+fn pump<S: Read + Write>(stream: &mut S, sid: u32, mut body: Option<&[u8]>, rx: &mut Rx, sink: &mut Option<&mut (dyn crate::streaming::ResponseSink + '_)>) -> Result<(), String> {
     let mut sending = body.map(|b| !b.is_empty()).unwrap_or(false);
     loop {
         if sending && rx.settings_seen {
@@ -576,7 +578,7 @@ fn pump<S: Read + Write>(stream: &mut S, mut body: Option<&[u8]>, rx: &mut Rx, s
                 }
                 let n = (allowance as usize).min(rx.max_frame).min(rest.len());
                 let last = n == rest.len();
-                write_frame(stream, FRAME_DATA, if last { FLAG_END_STREAM } else { 0 }, 1, &rest[..n])
+                write_frame(stream, FRAME_DATA, if last { FLAG_END_STREAM } else { 0 }, sid, &rest[..n])
                     .map_err(|e| format!("h2 data: {e}"))?;
                 rx.send_window -= n as i64;
                 rx.stream_window -= n as i64;
@@ -601,12 +603,18 @@ fn pump<S: Read + Write>(stream: &mut S, mut body: Option<&[u8]>, rx: &mut Rx, s
 /// With a `sink`, the sink sees the head first and may take the body as it
 /// arrives (see `codec::read_message`); a streamed body that is cut short
 /// still returns the head, after telling the sink.
-pub fn exchange<S: Read + Write>(stream: &mut S, req: &H2Request, mut sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>) -> Result<Vec<u8>, String> {
+pub fn exchange<S: Read + Write>(stream: &mut S, req: &H2Request, sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>) -> Result<Vec<u8>, String> {
     send_preface(stream)?;
-    send_request_headers(stream, req)?;
-    let mut rx = Rx::new();
+    exchange_on(stream, 1, req, sink)
+}
+
+/// One request on stream `sid` of an already-prefaced connection (Repeater
+/// send-group single-connection mode, R-12).
+pub fn exchange_on<S: Read + Write>(stream: &mut S, sid: u32, req: &H2Request, mut sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>) -> Result<Vec<u8>, String> {
+    send_request_headers(stream, sid, req)?;
+    let mut rx = Rx::new(sid);
     let body = if req.body.is_empty() { None } else { Some(req.body.as_slice()) };
-    if let Err(e) = pump(stream, body, &mut rx, &mut sink) {
+    if let Err(e) = pump(stream, sid, body, &mut rx, &mut sink) {
         if !rx.streaming() {
             return Err(e);
         }
@@ -622,8 +630,8 @@ pub fn exchange<S: Read + Write>(stream: &mut S, req: &H2Request, mut sink: Opti
 /// HEADERS or the body would duplicate the request on a half-closed stream.
 pub fn exchange_upgraded<S: Read + Write>(stream: &mut S) -> Result<Vec<u8>, String> {
     send_preface(stream)?;
-    let mut rx = Rx::new();
-    pump(stream, None, &mut rx, &mut None)?;
+    let mut rx = Rx::new(1);
+    pump(stream, 1, None, &mut rx, &mut None)?;
     rx.finish()
 }
 
@@ -930,7 +938,7 @@ mod tests {
 
     #[test]
     fn window_update_overflow_is_rejected_without_changing_state() {
-        let mut rx = Rx::new();
+        let mut rx = Rx::new(1);
         rx.send_window = 1;
         let mut stream = scripted(&[]);
         let mut sink = None;

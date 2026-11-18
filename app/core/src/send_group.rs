@@ -272,7 +272,7 @@ pub struct GroupResult {
 }
 
 impl GroupResult {
-    fn from_up(sent: Vec<u8>, up: Upstream, protocol: &'static str, elapsed_ms: u128) -> GroupResult {
+    pub(crate) fn from_up(sent: Vec<u8>, up: Upstream, protocol: &'static str, elapsed_ms: u128) -> GroupResult {
         GroupResult { sent, response: up.resp, error: up.error, protocol, elapsed_ms, arrival: None }
     }
 }
@@ -290,13 +290,13 @@ pub enum SequenceEnd {
 }
 
 /// The error of a failed name lookup (net::resolve), Burp's UnknownHostException.
-fn unknown_host(error: &str) -> bool {
+pub(crate) fn unknown_host(error: &str) -> bool {
     error.starts_with("dns ") && !error.contains("timed out")
 }
 
 /// The cookie jar and session rules around one exchange, and the tool log,
 /// as every other sender does (net::send_raw_with).
-fn hooked(shared: &Shared, item: &GroupItem, send: impl FnOnce(&[u8]) -> Result<Vec<u8>, String>) -> (Vec<u8>, Upstream) {
+pub(crate) fn hooked(shared: &Shared, item: &GroupItem, send: impl FnOnce(&[u8]) -> Result<Vec<u8>, String>) -> (Vec<u8>, Upstream) {
     let request = net::jar_request(shared, &item.host, item.https, &item.request);
     let request = net::session_request(shared, item.port, item.https, request).into_owned();
     let up = match send(&request) {
@@ -425,7 +425,8 @@ mod tests {
         assert_eq!(order, vec![1, 2, 4, 3, 5], "members side by side at the first one's place");
         assert_eq!(groups, vec![RepGroup { id: 10, name: "login".into(), colour: 3, tabs: vec![2, 4] }]);
         // A second group takes 5 and 1; 1 comes first in the bar.
-        create_group(&mut groups, &mut order, 11, "race", next_colour(&groups), &[5, 1]);
+        let colour = next_colour(&groups);
+        create_group(&mut groups, &mut order, 11, "race", colour, &[5, 1]);
         assert_eq!(order, vec![1, 5, 2, 4, 3]);
         assert_eq!(groups[1].colour, 0, "first unused colour");
         // Moving tab 3 into "login" puts it after the group's last tab.

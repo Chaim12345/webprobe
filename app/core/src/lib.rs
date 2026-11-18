@@ -69,6 +69,8 @@ pub mod sync;
 pub mod tasks;
 pub mod tls;
 pub mod upstream;
+pub(crate) mod h2_group;
+pub mod send_group;
 pub(crate) mod url_payloads;
 pub mod util;
 pub mod variations;
