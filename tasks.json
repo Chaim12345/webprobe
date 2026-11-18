@@ -3,12 +3,12 @@
   "generated": "2026-11-18",
   "source": "TASKS.md",
   "summary": {
-    "total": 125,
+    "total": 126,
     "p0": 68,
     "p1": 39,
-    "p2": 18,
+    "p2": 19,
     "by_status": {
-      "done": 102,
+      "done": 103,
       "rejected": 2,
       "todo": 21
     }
@@ -1209,8 +1209,9 @@
       "title": "Remaining Collaborator check variants",
       "acceptance": "Ported with tests: Collaborator payloads across the checks that have them (burp.Zc7h), PHP code injection Collaborator half (Zxvv.ZQ fsockopen/gethostbyname), and the in-band 'Out-of-band resource load (HTTP)' path of Zsrh.",
       "effort": "M",
-      "status": "todo",
-      "evidence": "Craft unknown unk_e8d35ba47ccfba29 probes; OS command injection Collaborator (Zc99) done 2026-11-17."
+      "status": "done",
+      "evidence": "Commit e7b5eff. PHP code injection Collaborator half (Zxvv.ZQ, Zuxr.ZJ: gethostbyname in the uploaded file, DNS lookup raises the issue); in-band 'Out-of-band resource load (HTTP)' (Zxfo, Zsrh.ZT, Ze2n.Zt, text Zwu1); per-host Collaborator-everywhere request set (Zc7h, Zs61.Zu, Zcg4, labels Zez7.ZP: Host, X-Forwarded-Host, host:port@id, request line, CONNECT, X-Forwarded-For/True-Client-IP/X-Real-IP/Referer/X-WAP-Profile/X-Scraped). External service interaction text now names the point (Zwfn.Zf, Zez7.Ze, Zuet). Tests collaborator_everywhere_builds_burps_request_set, inband_oob_resource_load_uses_burps_text, external_interaction_text_names_the_point_as_burp_does; suite 447 + 133. Assumed without source: the in-band marker is the reversed token (not checked against a live interactsh server); in-band issues are High/Certain; the PHP echo token stays separate from the Collaborator id. Leftovers moved to D-12.",
+      "completed": "2026-11-18"
     },
     {
       "id": "D-10",
@@ -1221,6 +1222,16 @@
       "effort": "M",
       "status": "todo",
       "evidence": "Craft unknown unk_e8d35ba47ccfba29 probes."
+    },
+    {
+      "id": "D-12",
+      "epic": "D — Scanner parity",
+      "priority": "P2",
+      "title": "Collaborator leftovers: SNI variant and scheme payload variants",
+      "acceptance": "Collaborator-everywhere SNI probe (needs a custom SNI in the TLS sender) and the scheme-dependent external-interaction payload variants of burp.Zbxl (http://, Http://, own scheme; trace Zpgu / ZY first), with tests.",
+      "effort": "S",
+      "status": "todo",
+      "evidence": "Not ported in D-09 (e7b5eff): net sender cannot set a custom SNI; Zpgu/ZY not traced. External interaction still sends only the bare domain."
     },
     {
       "id": "R-01",

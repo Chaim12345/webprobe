@@ -940,3 +940,20 @@ Open after this wave:
 - Lab parity (Juice Shop, lab, scan 7) has not been re-measured; every scan now sends more requests and issue detail texts start with Burp's point wording.
 - Not ported: `MULTIPART_PARAM_ATTR` points, `Zcyy.Zw`, moved-parameter points (off by default), value-based exclusions of single checks.
 - Assumed without source evidence: the URL-parameter "leave unencoded" set is empty; the format of an added multipart part; nested walk capped at 64 points per base point.
+
+## Wave 59 (2026-11-18): Collaborator variants (D-09) and D-11 follow-ups
+
+Commit e7b5eff. Ported: the Collaborator half of PHP code injection (`Zxvv.ZQ`), the in-band
+"Out-of-band resource load (HTTP)" path (`Zxfo` / `Zsrh.ZT`), and the per-host Collaborator-everywhere
+request set (`Zc7h` / `Zs61.Zu`). External service interaction issues name the insertion point with
+Burp's text. JSON points keep request order and injection changes only the target value's bytes.
+SSI, SMTP, traversal, external interaction and OS command checks follow their Burp classes'
+point-type rules (`Zexx.Zh`, `Zgcg.Zh`, `Zibp.ZZ`/`ZU`, `Zxfo`, `Zx8l`).
+
+Open after this wave:
+- D-12: the SNI variant and the `Zbxl` scheme payload variants.
+- D-10: Burp pairs stored input by a token in every payload and a scan-wide search of every response,
+  then a post-audit stage per recorded pair (`Zhqw`, `Zml_` -> `Zwcz`, `Zwp6`/`Zh7d`, `Zpqv.Z_`). Being implemented.
+- Assumed without source evidence: the in-band marker is the reversed token; in-band issues are High/Certain.
+- Lab parity re-measure is running (results go to `/root/webprobe-parity/parity-2026-11-18/`).
+
