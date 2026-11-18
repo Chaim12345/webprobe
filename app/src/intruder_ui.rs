@@ -393,11 +393,20 @@ pub fn start_attack(app: &mut App, request: &str) -> Result<(), String> {
     let prepare = move || -> Result<Arc<RunState>, String> {
         let mut sources = sources;
         webprobe_core::ext_calls::fill_extension_payloads(&shared, &request, &mut sources)?;
+        // Collaborator payloads are minted now, from the same pool the
+        // scanner draws from; a dry pool fails the attack, it never shrinks it.
+        let sources = intruder::expand_runtime(&sources, &|n| {
+            shared.wake();
+            Ok(shared.oob.take(n, std::time::Duration::from_millis(1500)))
+        })?;
         let mut specs = intruder::resolve_specs(&template, kind, &sources)?;
         webprobe_core::ext_calls::apply_extension_processors(&shared, &template, &mut specs, &procs)?;
         run::start(shared, &request, kind, specs, target, settings)
     };
-    let uses_extension = effective_sources(app).iter().any(|s| matches!(s, PayloadSource::Extension { .. })) || app.intr_ext_proc.iter().any(|p| !p.is_empty());
+    // Extension calls and Collaborator minting can both wait on a slow
+    // supplier: those attacks are prepared on a worker thread, never the UI.
+    let uses_extension = effective_sources(app).iter().any(|s| matches!(s, PayloadSource::Extension { .. } | PayloadSource::CollaboratorPayloads { .. }))
+        || app.intr_ext_proc.iter().any(|p| !p.is_empty());
     if !uses_extension {
         install_attack(app, prepare()?);
         return Ok(());

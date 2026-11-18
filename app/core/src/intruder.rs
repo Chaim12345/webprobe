@@ -399,6 +399,14 @@ pub enum PayloadSource {
         percent_prefix: bool,
         lowercase: bool,
     },
+    /// Burp Collaborator payloads: one unique identifier per payload. Burp
+    /// generates these indefinitely while the attack runs; WebProbe mints
+    /// `count` of them from the Collaborator pool when the attack starts
+    /// (the same pool the scanner draws from). With `include_location` the
+    /// full server address is used, otherwise only the identifier. `generate`
+    /// is pure and cannot mint: callers must run `expand_runtime` on their
+    /// sources before `resolve_specs`.
+    CollaboratorPayloads { include_location: bool, count: usize },
 }
 
 /// burp.Zccv's static table: for each byte value, every two-character pair
@@ -917,6 +925,9 @@ impl PayloadSource {
             PayloadSource::Dates { from: 1_700_000_000, to: 1_700_000_000 + 6 * 86_400, step_secs: 86_400, format: "%Y-%m-%d".into() },
             PayloadSource::BruteForcer { charset: "abcdefghijklmnopqrstuvwxyz0123456789".into(), min_len: 4, max_len: 4 },
             PayloadSource::NullPayloads { count: 10 },
+            // Burp has no count (it generates indefinitely); 100 matches the
+            // kind of run Collaborator payloads are used for.
+            PayloadSource::CollaboratorPayloads { include_location: false, count: 100 },
             PayloadSource::CharacterFrobber { base: String::new() },
             // burp.Zxnb: base value of the position, literal, all 8 bits.
             PayloadSource::BitFlipper { base: None, hex: false, mask: 0xFF },
@@ -994,6 +1005,7 @@ impl PayloadSource {
             PayloadSource::EcbBlockShuffler { .. } => "ECB block shuffler",
             PayloadSource::CopyOtherPayload { .. } => "Copy other payload",
             PayloadSource::IllegalUnicode { .. } => "Illegal Unicode",
+            PayloadSource::CollaboratorPayloads { .. } => "Collaborator payloads",
         }
     }
 
@@ -1105,6 +1117,9 @@ impl PayloadSource {
             // the request matrix is built (`SetSpec::Copy`).
             PayloadSource::CopyOtherPayload { .. } => vec![String::new()],
             PayloadSource::IllegalUnicode { .. } => self.illegal_unicode(),
+            // Pure generation cannot mint Collaborator identifiers: callers
+            // expand this source with `expand_runtime` before resolving.
+            PayloadSource::CollaboratorPayloads { .. } => Vec::new(),
         }
     }
 
@@ -1177,6 +1192,8 @@ impl PayloadSource {
             PayloadSource::EcbBlockShuffler { .. } => self.generate().len(),
             PayloadSource::CopyOtherPayload { .. } => 1,
             PayloadSource::IllegalUnicode { .. } => self.generate().len(),
+            // The intended size once expanded; `generate` itself is empty.
+            PayloadSource::CollaboratorPayloads { count, .. } => (*count).min(MAX_PAYLOADS),
         }
     }
 
@@ -1185,6 +1202,7 @@ impl PayloadSource {
     /// index; `sets` the number of payload sets the attack uses.
     pub fn validate(&self, kind: AttackType, position: usize, sources: &[PayloadSource]) -> Result<(), String> {
         match self {
+            PayloadSource::CollaboratorPayloads { count, .. } if *count == 0 => Err("Collaborator payloads need a count of at least 1.".into()),
             PayloadSource::Extension { provider, .. } if provider.is_empty() => Err("No extension payload generator is selected.".into()),
             PayloadSource::BitFlipper { base, mask, hex } => {
                 if kind == AttackType::BatteringRam && base.is_none() {
@@ -1253,6 +1271,40 @@ pub enum SetSpec {
     Copy(usize),
     /// Recursive grep: driven by responses (see `RecursiveWalk`).
     Recursive { initial: String, extract_index: usize, stop_on_duplicate: bool },
+}
+
+/// Expand the runtime-minted sources (Collaborator payloads) in `sources`
+/// into concrete lists: `mint` draws `count` unique `(identifier,
+/// full_address)` pairs from the Collaborator pool (the scanner's
+/// `shared.oob` pool on the desktop). With `include_location` the payload is
+/// the full server address, otherwise only the identifier (Burp's "Include
+/// Collaborator server location" checkbox). Every other source passes
+/// through unchanged.
+pub fn expand_runtime(
+    sources: &[PayloadSource],
+    mint: &dyn Fn(usize) -> Result<Vec<(String, String)>, String>,
+) -> Result<Vec<PayloadSource>, String> {
+    let mut out = Vec::with_capacity(sources.len());
+    for source in sources {
+        out.push(match source {
+            PayloadSource::CollaboratorPayloads { include_location, count } => {
+                let drawn = mint(*count)?;
+                if drawn.len() < *count {
+                    return Err(format!(
+                        "Only {} of {count} Collaborator payloads were available; is the Collaborator running?",
+                        drawn.len()
+                    ));
+                }
+                let items = drawn
+                    .into_iter()
+                    .map(|(id, addr)| if *include_location { addr } else { id })
+                    .collect();
+                PayloadSource::SimpleList { items }
+            }
+            other => other.clone(),
+        });
+    }
+    Ok(out)
 }
 
 /// Turn the payload sources into the sets the attack consumes, applying
@@ -2543,4 +2595,25 @@ mod tests {
         assert_eq!(order_step((5, usize::MAX, true), (8, usize::MAX, true), true, false), OrderStep::Rebuild, "unsorted view numbers rows");
     }
 
+    #[test]
+    fn collaborator_payloads_expand_to_unique_minted_ids() {
+        let mint = |n: usize| Ok((0..n).map(|i| (format!("id{i}"), format!("id{i}.oob.example"))).collect::<Vec<_>>());
+        let src = [PayloadSource::CollaboratorPayloads { include_location: false, count: 3 }];
+        let out = expand_runtime(&src, &mint).unwrap();
+        assert_eq!(out[0], PayloadSource::SimpleList { items: vec!["id0".into(), "id1".into(), "id2".into()] });
+        let src = [PayloadSource::CollaboratorPayloads { include_location: true, count: 2 }];
+        let out = expand_runtime(&src, &mint).unwrap();
+        assert_eq!(out[0], PayloadSource::SimpleList { items: vec!["id0.oob.example".into(), "id1.oob.example".into()] });
+        // A short pool is an error, never a silently shortened attack.
+        let short = |_: usize| Ok(Vec::new());
+        assert!(expand_runtime(&src, &short).is_err());
+        // Every other source passes through unchanged.
+        let plain = [PayloadSource::SimpleList { items: vec!["a".into()] }];
+        assert_eq!(expand_runtime(&plain, &mint).unwrap(), plain);
+        // Zero count is rejected at validation.
+        assert!(PayloadSource::CollaboratorPayloads { include_location: false, count: 0 }
+            .validate(AttackType::Sniper, 0, &[])
+            .is_err());
+    }
 }
+

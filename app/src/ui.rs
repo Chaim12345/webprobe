@@ -2764,6 +2764,11 @@ fn payload_source_config(ui: &mut Ui, src: &mut intruder::PayloadSource) {
             note(ui, "This payload type generates payloads whose value is an empty string. With no payload markers configured, this can be used to repeatedly issue the base request unmodified.");
             row(ui, "Generate:", |ui| { ui.add(egui::DragValue::new(count).range(1..=1_000_000)); ui.label("payloads"); });
         }
+        P::CollaboratorPayloads { include_location, count } => {
+            note(ui, "This payload type generates Collaborator payloads, each with a unique identifier, for out-of-band detection. The identifiers are minted when the attack starts; interactions are matched from the Collaborator.");
+            row(ui, "Generate:", |ui| { ui.add(egui::DragValue::new(count).range(1..=100_000)); ui.label("payloads"); });
+            ui.checkbox(include_location, "Include Collaborator server location");
+        }
         P::CaseModification { items, no_change, lower, upper, propername, proper_name } => {
             note(ui, "This payload type lets you configure a list of strings and apply various case modifications to each item on the list.");
             let mut text = items.join("\n");
