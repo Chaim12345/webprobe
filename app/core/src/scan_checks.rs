@@ -395,26 +395,28 @@ pub(crate) fn check_applies(check: &dyn PointCheck, ip: &InsertionPoint, config:
 /// carries and how Burp names where each went (burp.Zez7.ZP labels).
 pub(crate) struct EverywhereProbe {
     pub request: String,
+    /// The TLS server name to send instead of the host's (the SNI probe).
+    pub sni: Option<String>,
     /// (slot, payload as shown, where it went).
     pub ids: Vec<(&'static str, String, &'static str)>,
 }
 
 /// The slots of burp.Zc7h, in Zs61.Zu order. The request-line variants
 /// (auth fragment, absolute URL, CONNECT) are only built when no upstream
-/// proxy serves the host; the TLS SNI variant is not ported (WebProbe's
-/// sender cannot set an SNI other than the host).
-pub(crate) const EVERYWHERE_SLOTS: [&str; 12] = ["host", "xfh", "hostauth", "authfrag", "absurl", "xff", "tci", "xrip", "referer", "wap", "scraped", "connect"];
+/// proxy serves the host; the SNI variant only for an HTTPS target.
+pub(crate) const EVERYWHERE_SLOTS: [&str; 13] = ["host", "xfh", "hostauth", "authfrag", "absurl", "sni", "xff", "tci", "xrip", "referer", "wap", "scraped", "connect"];
 
 /// burp.Zcg4's requests for the target `host_hdr` (`host`:`port`), each
 /// with the Collaborator name of its slot (`collab(slot)`), and burp.Zcg4.ZP's
-/// default headers. `direct`: no upstream proxy (request-line variants).
-pub(crate) fn everywhere_probes(host_hdr: &str, host: &str, port: u16, direct: bool, collab: &dyn Fn(&str) -> Option<String>) -> Vec<EverywhereProbe> {
+/// default headers. `direct`: no upstream proxy (request-line variants);
+/// `https`: the target speaks TLS (the SNI variant).
+pub(crate) fn everywhere_probes(host_hdr: &str, host: &str, port: u16, direct: bool, https: bool, collab: &dyn Fn(&str) -> Option<String>) -> Vec<EverywhereProbe> {
     const DEFAULTS: &str = "Pragma: no-cache\r\nCache-Control: no-cache, no-transform\r\nConnection: close\r\n";
     let mut out = Vec::new();
     let one = |out: &mut Vec<EverywhereProbe>, slot: &'static str, label: &'static str, build: &dyn Fn(&str) -> (String, String)| {
         if let Some(c) = collab(slot) {
             let (request, shown) = build(&c);
-            out.push(EverywhereProbe { request, ids: vec![(slot, shown, label)] });
+            out.push(EverywhereProbe { request, sni: None, ids: vec![(slot, shown, label)] });
         }
     };
     one(&mut out, "host", "HTTP Host header", &|c| (format!("GET / HTTP/1.1\r\nHost: {c}\r\n{DEFAULTS}\r\n"), c.to_string()));
@@ -423,6 +425,20 @@ pub(crate) fn everywhere_probes(host_hdr: &str, host: &str, port: u16, direct: b
     if direct {
         one(&mut out, "authfrag", "HTTP Request-Line", &|c| (format!("GET @{c}/ HTTP/1.1\r\nHost: {host_hdr}\r\n{DEFAULTS}\r\n"), format!("@{c}/")));
         one(&mut out, "absurl", "HTTP Request-Line", &|c| (format!("GET http://{c}/ HTTP/1.1\r\nHost: {host_hdr}\r\n{DEFAULTS}\r\n"), format!("http://{c}/")));
+    }
+    // Zs61.Zu:47-49, only for a TLS target (Zp42.ZLX): the Host-header
+    // request (Zsbf maps SSL_SNI to Zcg4.ZV case 2, which shares case 1)
+    // sent with the same Collaborator name as the TLS server name
+    // (Ze2j.issueRequest: Zs31.ZG(payload), the payload being the bare
+    // domain, Zs61.Zz default case).
+    if https {
+        if let Some(c) = collab("sni") {
+            out.push(EverywhereProbe {
+                request: format!("GET / HTTP/1.1\r\nHost: {c}\r\n{DEFAULTS}\r\n"),
+                sni: Some(c.clone()),
+                ids: vec![("sni", c, "SSL SNI value and the HTTP Host header")],
+            });
+        }
     }
     // Zs61.ZH(NONE) -> Zcg4.ZZ: one request, six headers, an id each.
     let headers: [(&'static str, &'static str, &'static str, &dyn Fn(&str) -> String); 6] = [
@@ -442,7 +458,7 @@ pub(crate) fn everywhere_probes(host_hdr: &str, host: &str, port: u16, direct: b
         }
     }
     if !ids.is_empty() {
-        out.push(EverywhereProbe { request: format!("GET / HTTP/1.1\r\nHost: {host_hdr}\r\n{lines}{DEFAULTS}\r\n"), ids });
+        out.push(EverywhereProbe { request: format!("GET / HTTP/1.1\r\nHost: {host_hdr}\r\n{lines}{DEFAULTS}\r\n"), sni: None, ids });
     }
     if direct {
         one(&mut out, "connect", "HTTP Request-Line of a CONNECT request", &|c| (format!("CONNECT {c}:443 HTTP/1.1\r\nHost: {host_hdr}\r\n{DEFAULTS}\r\n"), format!("{c}:443")));
@@ -484,10 +500,11 @@ impl RequestCheck for CollaboratorEverywhere {
         let direct = cx.shared.upstream_for(&cx.host).kind == crate::upstream::UpstreamKind::None;
         let find = |slot: &str| cx.oob.iter().find(|(k, _, _)| *k == format!("#host:ce:{slot}")).cloned();
         let collab = |slot: &str| find(slot).map(|(_, _, d)| d);
-        for probe in everywhere_probes(&cx.host_hdr, &cx.host, cx.port, direct, &collab) {
+        for probe in everywhere_probes(&cx.host_hdr, &cx.host, cx.port, direct, cx.entry.https, &collab) {
             if cx.stopped() {
                 break;
             }
+            let _sni = probe.sni.as_deref().map(net::sni_scope);
             let resp = burp_send(cx, probe.request.as_bytes());
             for (slot, shown, label) in &probe.ids {
                 let Some((_, token, _)) = find(slot) else { continue };
@@ -4376,7 +4393,7 @@ mod tests {
     #[test]
     fn collaborator_everywhere_builds_burps_request_set() {
         let collab = |slot: &str| Some(format!("{slot}.oast.test"));
-        let probes = everywhere_probes("shop.test:8080", "shop.test", 8080, true, &collab);
+        let probes = everywhere_probes("shop.test:8080", "shop.test", 8080, true, false, &collab);
         let first_lines: Vec<&str> = probes.iter().map(|p| p.request.split("\r\n").next().unwrap()).collect();
         assert_eq!(first_lines, vec!["GET / HTTP/1.1", "GET / HTTP/1.1", "GET / HTTP/1.1", "GET @authfrag.oast.test/ HTTP/1.1", "GET http://absurl.oast.test/ HTTP/1.1", "GET / HTTP/1.1", "CONNECT connect.oast.test:443 HTTP/1.1"]);
         assert!(probes[0].request.contains("\r\nHost: host.oast.test\r\nPragma: no-cache\r\nCache-Control: no-cache, no-transform\r\nConnection: close\r\n\r\n"));
@@ -4388,10 +4405,66 @@ mod tests {
         assert!(combined.request.contains("\r\nReferer: http://referer.oast.test/\r\nX-WAP-Profile: http://wap.oast.test/wap.xml\r\n"));
         assert_eq!(combined.ids[3].2, "HTTP Referer header");
         // Behind an upstream proxy: no request-line variants (Zs61.Zu).
-        let proxied = everywhere_probes("shop.test", "shop.test", 80, false, &collab);
+        let proxied = everywhere_probes("shop.test", "shop.test", 80, false, false, &collab);
         assert_eq!(proxied.len(), 4);
+        assert!(probes.iter().all(|p| p.sni.is_none()), "no SNI variant over plain HTTP");
         // No Collaborator ids: nothing to send.
-        assert!(everywhere_probes("h", "h", 80, true, &|_| None).is_empty());
+        assert!(everywhere_probes("h", "h", 80, true, true, &|_| None).is_empty());
+    }
+
+    /// D-12: an HTTPS target adds burp.Zs61.Zu's SNI request after the
+    /// request-line variants and before the combined headers (also behind
+    /// an upstream proxy: it sits outside the direct-only branch).
+    #[test]
+    fn collaborator_everywhere_sni_probe_for_https_targets() {
+        let collab = |slot: &str| Some(format!("{slot}.oast.test"));
+        for direct in [true, false] {
+            let probes = everywhere_probes("shop.test", "shop.test", 443, direct, true, &collab);
+            let slots: Vec<&str> = probes.iter().map(|p| p.ids[0].0).collect();
+            let want: &[&str] = if direct { &["host", "xfh", "hostauth", "authfrag", "absurl", "sni", "xff", "connect"] } else { &["host", "xfh", "hostauth", "sni", "xff"] };
+            assert_eq!(slots, want);
+            let sni = probes.iter().find(|p| p.ids[0].0 == "sni").unwrap();
+            assert_eq!(sni.sni.as_deref(), Some("sni.oast.test"));
+            assert_eq!(sni.request, "GET / HTTP/1.1\r\nHost: sni.oast.test\r\nPragma: no-cache\r\nCache-Control: no-cache, no-transform\r\nConnection: close\r\n\r\n");
+            assert_eq!(sni.ids, vec![("sni", "sni.oast.test".to_string(), "SSL SNI value and the HTTP Host header")]);
+            assert_eq!(probes.iter().filter(|p| p.sni.is_some()).count(), 1);
+        }
+    }
+
+    /// D-12 at a loopback HTTPS lab: the scan's Collaborator-everywhere
+    /// check connects to the target and sends the SNI probe with the
+    /// Collaborator name in the ClientHello; every other request carries
+    /// the target's own name.
+    #[test]
+    fn collaborator_everywhere_sends_the_sni_probe_to_a_tls_lab() {
+        let shared = crate::net::Shared::new();
+        let (port, log) = crate::net::tls_sni_lab(&shared);
+        let mut cfg = crate::scan_config::ScanConfig::default();
+        for (id, ..) in crate::scan::check_catalogue() {
+            if id != "active.collaborator-everywhere" {
+                cfg.disabled_checks.insert(id.into());
+            }
+        }
+        *shared.scan_config.lock().unwrap() = cfg;
+        let mut e = crate::net::HistEntry { method: "GET".into(), host: "localhost".into(), port, path: "/".into(), https: true, ..Default::default() };
+        e.req_raw = format!("GET / HTTP/1.1\r\nHost: localhost:{port}\r\n\r\n").into_bytes().into();
+        let oob: Vec<(String, String, String)> = ["host", "sni"].iter().map(|s| (format!("#host:ce:{s}"), format!("tok{s}"), format!("tok{s}.oast.test"))).collect();
+        crate::scan::start_active_scan(shared.clone(), e, &oob, &[]);
+        let t0 = std::time::Instant::now();
+        while shared.scan.is_busy() && t0.elapsed() < std::time::Duration::from_secs(60) {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(!shared.scan.is_busy(), "scan did not finish");
+        let seen: Vec<(Option<String>, Option<String>)> = log
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(_, sni, head)| (sni.clone(), head.lines().find_map(|l| l.strip_prefix("Host: ").map(str::to_string))))
+            .collect();
+        let s = |v: &str| Some(v.to_string());
+        assert!(seen.contains(&(s("toksni.oast.test"), s("toksni.oast.test"))), "{seen:?}");
+        assert!(seen.contains(&(s("localhost"), s("tokhost.oast.test"))), "{seen:?}");
+        assert_eq!(seen.iter().filter(|(sni, _)| sni.as_deref() != Some("localhost")).count(), 1, "{seen:?}");
     }
 
     #[test]
