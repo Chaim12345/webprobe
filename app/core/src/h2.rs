@@ -207,7 +207,7 @@ fn send_request_headers<S: Read + Write>(stream: &mut S, sid: u32, req: &H2Reque
 }
 
 /// Response assembly plus outbound flow-control accounting.
-struct Rx {
+pub(crate) struct Rx {
     sid: u32,
     dec: Decoder<'static>,
     status: Option<String>,
@@ -240,7 +240,7 @@ fn grow_window(window: &mut i64, delta: i64, what: &str) -> Result<(), String> {
 }
 
 impl Rx {
-    fn new(sid: u32) -> Self {
+    pub(crate) fn new(sid: u32) -> Self {
         Rx {
             sid,
             dec: Decoder::new(),
@@ -529,7 +529,11 @@ impl Rx {
     /// Normalize to the HTTP/1.1 shape the rest of the app understands. Any
     /// upstream `content-length`/`transfer-encoding` is replaced so the view
     /// never carries two framing headers.
-    fn finish(self) -> Result<Vec<u8>, String> {
+    pub(crate) fn sid(&self) -> u32 {
+        self.sid
+    }
+
+    pub(crate) fn finish(self) -> Result<Vec<u8>, String> {
         if self.mode.is_some_and(|m| m != crate::streaming::BodyMode::Buffer) {
             // Streamed or cut after the head: the head is the message.
             return Ok(self.head_h1(""));
@@ -594,6 +598,48 @@ fn pump<S: Read + Write>(stream: &mut S, sid: u32, mut body: Option<&[u8]>, rx: 
         }
         let f = read_frame(stream).map_err(|e| format!("h2 read: {e}"))?;
         rx.handle(stream, f, sink)?;
+    }
+}
+
+/// Every frame of `req` on stream `sid` as one buffer: HEADERS, then one
+/// DATA when there is a body. R-12's parallel send writes every stream's
+/// buffer in a single packet (Burp's single-packet attack); bodies must
+/// fit the peer's default flow-control window.
+pub(crate) fn request_frames(sid: u32, req: &H2Request) -> Result<Vec<u8>, String> {
+    let mut out = Vec::new();
+    let block = encode_headers(req);
+    let flags = FLAG_END_HEADERS | if req.body.is_empty() { FLAG_END_STREAM } else { 0 };
+    write_frame(&mut out, FRAME_HEADERS, flags, sid, &block).map_err(|e| format!("h2 headers: {e}"))?;
+    if !req.body.is_empty() {
+        write_frame(&mut out, FRAME_DATA, FLAG_END_STREAM, sid, &req.body).map_err(|e| format!("h2 data: {e}"))?;
+    }
+    Ok(out)
+}
+
+/// Read frames until every stream in `rxs` is done, feeding each frame to
+/// its stream's assembly; connection-level frames go to the first
+/// unfinished stream's handler, which covers them. Returns the streams'
+/// ids in the order their first response frame arrived (burp.Zglm's
+/// "%d/%d" arrival numbering).
+pub(crate) fn pump_all<S: Read + Write>(stream: &mut S, rxs: &mut [Rx]) -> Result<Vec<u32>, String> {
+    let mut arrival = Vec::new();
+    loop {
+        if rxs.iter().all(|rx| rx.done) {
+            return Ok(arrival);
+        }
+        let f = read_frame(stream).map_err(|e| format!("h2 read: {e}"))?;
+        let sid = f.stream;
+        let idx = rxs.iter().position(|rx| rx.sid == sid).or_else(|| rxs.iter().position(|rx| !rx.done));
+        match idx.map(|i| &mut rxs[i]) {
+            Some(rx) => {
+                if rx.sid == sid && !rx.got_headers && !rx.done && !arrival.contains(&sid) && (f.ty == FRAME_HEADERS || f.ty == FRAME_DATA) {
+                    arrival.push(sid);
+                }
+                let mut none = None;
+                rx.handle(stream, f, &mut none)?;
+            }
+            None => return Err("h2: every stream finished but frames keep coming".into()),
+        }
     }
 }
 

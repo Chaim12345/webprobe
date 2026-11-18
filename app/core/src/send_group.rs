@@ -365,6 +365,70 @@ fn h2_on(conn: &mut UpstreamConn, request: &[u8]) -> Result<Vec<u8>, String> {
 /// (burp.Zrp4.Zh returns false); other failures are recorded on the tab
 /// and the sequence goes on. `cancel` is checked before each request.
 /// Validate first ([`validate`]): this sends what it is given.
+/// R-12 "Send group in parallel" — Burp's single-packet attack.
+///
+/// HTTP/1 (burp.Zxnu's parallel sender): every request gets its own
+/// connection; each thread writes all but the request's last byte, waits
+/// on a barrier so EVERY prefix is on the wire, then writes the last
+/// byte — the requests complete within one network round trip of each
+/// other. HTTP/2: one connection; every stream's frames go out in a
+/// single write (burp.Zglm's "single packet"). The barrier, not a sleep,
+/// is what synchronizes the senders.
+pub fn run_parallel(shared: &Shared, items: &[GroupItem], cancel: &AtomicBool, on_result: impl FnMut(usize, GroupResult) + Send) -> SequenceEnd {
+    let Some(first) = items.first() else { return SequenceEnd::Completed };
+    if first.http2 && first.https {
+        return run_parallel_h2(shared, items, cancel, on_result);
+    }
+    if cancel.load(Ordering::SeqCst) {
+        return SequenceEnd::Cancelled(0);
+    }
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(items.len()));
+    let arrival = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let on_result = std::sync::Arc::new(std::sync::Mutex::new(on_result));
+    std::thread::scope(|scope| {
+        for (n, item) in items.iter().enumerate() {
+            let barrier = barrier.clone();
+            let arrival = arrival.clone();
+            let on_result = on_result.clone();
+            scope.spawn(move || {
+                let t0 = std::time::Instant::now();
+                let (sent, up) = hooked(shared, item, |request| {
+                    if request.is_empty() {
+                        return Err("empty request".to_string());
+                    }
+                    let mut conn = open_conn(shared, item)?;
+                    let (prefix, last) = request.split_at(request.len() - 1);
+                    use std::io::Write as _;
+                    conn.write_all(prefix).map_err(|e| format!("write: {e}"))?;
+                    conn.flush().ok();
+                    // Every sender is here: all prefixes are sent. Release
+                    // the last bytes together.
+                    barrier.wait();
+                    conn.write_all(last).map_err(|e| format!("write: {e}"))?;
+                    conn.flush().ok();
+                    let method = request.split(|&b| b == b' ').next().map(String::from_utf8_lossy).unwrap_or_default().into_owned();
+                    let mut buffer = Vec::new();
+                    let (resp, _) = crate::codec::read_message(&mut conn, &mut buffer, &method, None).map_err(|e| format!("read: {e}"))?;
+                    Ok(resp)
+                });
+                arrival.lock().unwrap().push(n);
+                let at = arrival.lock().unwrap().len();
+                let mut r = GroupResult::from_up(sent, up, "HTTP/1.1", t0.elapsed().as_millis());
+                r.arrival = Some((at, items.len()));
+                on_result.lock().unwrap()(n, r);
+            });
+        }
+    });
+    SequenceEnd::Completed
+}
+
+/// The h2 half of parallel sending: one connection, one preface, then
+/// every stream's frames in a single write; responses are pumped per
+/// stream afterwards.
+fn run_parallel_h2(shared: &Shared, items: &[GroupItem], cancel: &AtomicBool, on_result: impl FnMut(usize, GroupResult)) -> SequenceEnd {
+    crate::h2_group::run_parallel_single_packet(shared, items, cancel, on_result)
+}
+
 pub fn run_sequence(shared: &Shared, items: &[GroupItem], single: bool, cancel: &AtomicBool, mut on_result: impl FnMut(usize, GroupResult)) -> SequenceEnd {
     if single && items.first().is_some_and(|i| i.http2 && i.https) {
         return crate::h2_group::run_single_connection(shared, items, cancel, on_result);
@@ -554,6 +618,74 @@ mod tests {
             }
         });
         (port, log)
+    }
+
+    /// R-12 parallel (single-packet attack) over HTTP/1: the lab logs the
+    /// moment each connection has all but the request's last byte
+    /// (Prefix) and the moment the last byte lands (Last). The client
+    /// barrier must put every Prefix before every Last, however the
+    /// scheduler interleaves the senders.
+    #[test]
+    fn parallel_last_byte_synchronizes_twenty_senders() {
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let seen = events.clone();
+        std::thread::spawn(move || {
+            for s in l.incoming().flatten() {
+                let seen = seen.clone();
+                std::thread::spawn(move || {
+                    let mut s = s;
+                    s.set_read_timeout(Some(std::time::Duration::from_secs(15))).ok();
+                    let mut buf = Vec::new();
+                    let mut byte = [0u8; 1];
+                    let mut prefixed = false;
+                    loop {
+                        match s.read(&mut byte) {
+                            Ok(0) | Err(_) => return,
+                            Ok(_) => {
+                                buf.push(byte[0]);
+                                // A bare GET ends in \r\n\r\n: the prefix is
+                                // everything but the final \n.
+                                if !prefixed && buf.len() >= 3 && &buf[buf.len() - 3..] == b"\r\n\r" {
+                                    seen.lock().unwrap().push("prefix");
+                                    prefixed = true;
+                                } else if prefixed && buf.len() >= 4 && &buf[buf.len() - 4..] == b"\r\n\r\n" {
+                                    seen.lock().unwrap().push("last");
+                                    let _ = s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok");
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        });
+        let shared = crate::net::Shared::new();
+        let cancel = AtomicBool::new(false);
+        let items: Vec<GroupItem> = (0..20).map(|i| GroupItem {
+            tab: i as u64,
+            host: "127.0.0.1".into(),
+            port,
+            https: false,
+            request: format!("GET /race/{i} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n").into_bytes(),
+            http2: false,
+            websocket: false,
+        }).collect();
+        let got = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let keep = got.clone();
+        let end = run_parallel(&shared, &items, &cancel, move |n, r| keep.lock().unwrap().push((n, r)));
+        assert_eq!(end, SequenceEnd::Completed);
+        let got = got.lock().unwrap();
+        assert_eq!(got.len(), 20);
+        assert!(got.iter().all(|(_, r)| r.error.is_none() && r.response.is_some()));
+        assert!(got.iter().all(|(_, r)| r.arrival.is_some_and(|(_, total)| total == 20)));
+        let ev = events.lock().unwrap();
+        assert_eq!(ev.iter().filter(|e| **e == "prefix").count(), 20, "{ev:?}");
+        assert_eq!(ev.iter().filter(|e| **e == "last").count(), 20, "{ev:?}");
+        let last_prefix = ev.iter().rposition(|e| *e == "prefix").unwrap();
+        let first_last = ev.iter().position(|e| *e == "last").unwrap();
+        assert!(last_prefix < first_last, "every prefix must land before the first last byte: {ev:?}");
     }
 
     fn get(path: &str, port: u16) -> String {
