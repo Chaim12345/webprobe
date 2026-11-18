@@ -2887,7 +2887,17 @@ pub(crate) fn ws_relay_chunk_alive(shared: &Shared, host: &str, chunk: &[u8], st
         st.buf.clear();
         st.partial = None;
     };
-    while let Some((first, _masked, start, len)) = ws_frame_header(&st.buf) {
+    while let Some((first, masked, start, len)) = ws_frame_header(&st.buf) {
+        let opcode = first & 0x0f;
+        let control = opcode >= 0x8;
+        if first & 0x30 != 0
+            || (control && (first & 0x70 != 0 || first & 0x80 == 0 || len > 125))
+            || matches!(opcode, 0x3..=0x7 | 0xb..=0xf)
+            || masked != client_to_server
+        {
+            fail(st, &mut out, 1002, "invalid WebSocket frame");
+            return out;
+        }
         if len > MAX_WS_MESSAGE {
             fail(st, &mut out, 1009, "frame too big");
             return out;

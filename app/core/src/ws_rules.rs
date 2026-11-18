@@ -44,9 +44,18 @@ impl WsRule {
         self.rule_type == "client_to_server"
     }
 
+    pub fn applies_to(&self, to_server: bool) -> bool {
+        self.rule_type == "both" || self.to_server() == to_server
+    }
+
     /// The label Burp's rule table shows for the type.
     pub fn type_label(&self) -> &'static str {
-        if self.to_server() { "Client to server" } else { "Server to client" }
+        match self.rule_type.as_str() {
+            "client_to_server" => "Client to server",
+            "server_to_client" => "Server to client",
+            "both" => "Both directions",
+            _ => "Unknown",
+        }
     }
 }
 
@@ -55,7 +64,7 @@ impl WsRule {
 /// end, as Burp's HTTP rules add a header.
 pub fn apply(rules: &[WsRule], to_server: bool, binary: bool, payload: &[u8]) -> Option<Vec<u8>> {
     let mut cur = payload.to_vec();
-    for r in rules.iter().filter(|r| r.enabled && r.to_server() == to_server) {
+    for r in rules.iter().filter(|r| r.enabled && r.applies_to(to_server)) {
         cur = if r.string_match.is_empty() {
             let mut v = cur;
             v.extend_from_slice(r.string_replace.as_bytes());
@@ -103,6 +112,9 @@ mod tests {
         let rules = vec![WsRule::new(true, "hello", "HELLO"), WsRule::new(false, "x", "y"), rx];
         assert_eq!(apply(&rules, true, false, b"hello id=1").unwrap(), b"HELLO id=91");
         assert_eq!(apply(&rules, false, false, b"hello"), None, "other direction only");
+        let both = vec![WsRule { rule_type: "both".into(), ..WsRule::new(true, "hello", "HELLO") }];
+        assert_eq!(apply(&both, true, false, b"hello"), Some(b"HELLO".to_vec()));
+        assert_eq!(apply(&both, false, false, b"hello"), Some(b"HELLO".to_vec()));
         // Binary: bytes around the match survive, invalid UTF-8 included.
         let bin = [0xff, b'h', b'e', b'l', b'l', b'o', 0x80, 0x00];
         assert_eq!(apply(&rules, true, true, &bin).unwrap(), [0xff, b'H', b'E', b'L', b'L', b'O', 0x80, 0x00]);

@@ -52,6 +52,9 @@ pub struct WsSession {
     out: Mutex<Option<mpsc::Sender<Vec<u8>>>>,
     /// Tells the own connection's thread to stop.
     stop: Mutex<Option<Arc<AtomicBool>>>,
+    /// Identifies the current owned connection; stale reader threads must
+    /// not close a later reconnect.
+    generation: AtomicU64,
 }
 
 impl WsSession {
@@ -100,6 +103,7 @@ pub fn new_session(shared: &Shared, host: &str, port: u16, tls: bool, handshake:
         stamp: AtomicU64::new(0),
         out: Mutex::new(None),
         stop: Mutex::new(None),
+        generation: AtomicU64::new(0),
     });
     shared.ws_sessions.lock().unwrap().push(Arc::clone(&s));
     s
@@ -109,7 +113,8 @@ pub fn new_session(shared: &Shared, host: &str, port: u16, tls: bool, handshake:
 /// connection while that is live, else ready to open a new one with the
 /// connection's upgrade request.
 pub fn from_history(shared: &Shared, socket: u64, host: &str, tls_hint: bool) -> Arc<WsSession> {
-    if let Some(live) = shared.ws_live.lock().unwrap().get(&socket).cloned() {
+    let live = shared.ws_live.lock().unwrap().get(&socket).cloned();
+    if let Some(live) = live {
         return new_session(shared, &live.host, live.port, live.tls, &String::from_utf8_lossy(&live.handshake), Some(socket));
     }
     let handshake = shared
@@ -135,6 +140,7 @@ pub fn connect(shared: &Arc<Shared>, s: &Arc<WsSession>) -> Result<(), String> {
         return Err("This session uses a proxied connection; clone it to open a new one".into());
     }
     close(s);
+    let generation = s.generation.fetch_add(1, Ordering::SeqCst) + 1;
     s.set_state(WsRepState::Connecting);
     let hs = s.handshake.lock().unwrap_or_else(|p| p.into_inner()).replace("\r\n", "\n").replace('\n', "\r\n");
     let hs = if hs.ends_with("\r\n\r\n") { hs } else { format!("{}\r\n\r\n", hs.trim_end()) };
@@ -154,7 +160,9 @@ pub fn connect(shared: &Arc<Shared>, s: &Arc<WsSession>) -> Result<(), String> {
     let (session, shared) = (Arc::clone(s), Arc::clone(shared));
     std::thread::spawn(move || {
         let reason = run(&mut conn, &session, &rx, &stop);
-        session.set_state(WsRepState::Closed(reason));
+        if session.generation.load(Ordering::SeqCst) == generation {
+            session.set_state(WsRepState::Closed(reason));
+        }
         shared.wake();
     });
     Ok(())
@@ -276,6 +284,9 @@ pub fn close(s: &WsSession) {
 /// Parse "41 42 ff" / "4142ff" hex into bytes (the binary editor).
 pub fn parse_hex(text: &str) -> Result<Vec<u8>, String> {
     let digits: String = text.chars().filter(|c| !c.is_whitespace()).collect();
+    if !digits.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err("not hex".into());
+    }
     if digits.len() % 2 != 0 {
         return Err("odd number of hex digits".into());
     }

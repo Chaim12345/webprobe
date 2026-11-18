@@ -416,12 +416,13 @@ pub fn ws_match_replace(app: &mut App, ui: &mut Ui) {
         ui.end_row();
         for (i, r) in rules.iter_mut().enumerate() {
             ui.checkbox(&mut r.enabled, "");
-            let mut to_server = r.to_server();
+            let mut kind = r.rule_type.clone();
             egui::ComboBox::from_id_salt(("ws_mr_type", i)).selected_text(r.type_label()).show_ui(ui, |ui| {
-                ui.selectable_value(&mut to_server, true, "Client to server");
-                ui.selectable_value(&mut to_server, false, "Server to client");
+                ui.selectable_value(&mut kind, "client_to_server".to_string(), "Client to server");
+                ui.selectable_value(&mut kind, "server_to_client".to_string(), "Server to client");
+                ui.selectable_value(&mut kind, "both".to_string(), "Both directions");
             });
-            r.rule_type = if to_server { "client_to_server" } else { "server_to_client" }.into();
+            r.rule_type = kind;
             ui.add(egui::TextEdit::singleline(&mut r.string_match).desired_width(160.0));
             ui.add(egui::TextEdit::singleline(&mut r.string_replace).desired_width(160.0));
             let mut regex = !r.is_simple_match;
