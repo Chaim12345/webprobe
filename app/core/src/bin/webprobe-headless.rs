@@ -13,6 +13,13 @@
 //!         issue as one JSON object per line. --report also writes Burp's
 //!         HTML report or XML issue export, by the file's extension.
 //!
+//! Burp's command line flags (R-15), accepted before or after the
+//! subcommand: --config-file FILE (project options JSON, repeatable,
+//! last wins), --user-config-file FILE (user options JSON, repeatable),
+//! --project-file FILE (alias of --project), --unpause-spider-and-scanner
+//! (accepted for parity; the headless binary never starts paused),
+//! --version, --help.
+//!
 //! Only point it at hosts you are authorised to test.
 
 use std::io::BufRead;
@@ -20,11 +27,70 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use webprobe_core::{net, project, report, scan};
+use webprobe_core::{burp_config, net, project, report, scan};
+
+const USAGE: &str = "usage:\n  webprobe-headless [--config-file FILE]... [--user-config-file FILE]... [--unpause-spider-and-scanner] proxy [--port N] [--project FILE | --project-file FILE] [--seconds N]\n  webprobe-headless [--config-file FILE]... [--user-config-file FILE]... scan URL... [--crawl] [--speed fast|normal|thorough] [--report FILE.html|FILE.xml]\n  webprobe-headless --version | --help";
 
 fn usage() -> ! {
-    eprintln!("usage:\n  webprobe-headless proxy [--port N] [--project FILE] [--seconds N]\n  webprobe-headless scan URL... [--crawl] [--speed fast|normal|thorough] [--report FILE.html|FILE.xml]");
+    eprintln!("{USAGE}");
     std::process::exit(2)
+}
+
+/// Burp's command line flags (R-15), collected from anywhere in the
+/// argument list. Repeatable flags keep their order (last wins on apply).
+#[derive(Default, Debug, PartialEq)]
+struct BurpFlags {
+    config_files: Vec<String>,
+    user_config_files: Vec<String>,
+    unpause_spider_and_scanner: bool,
+}
+
+fn take_burp_flags(args: &mut Vec<String>) -> BurpFlags {
+    let mut flags = BurpFlags::default();
+    while let Some(f) = take_opt(args, "--config-file") {
+        flags.config_files.push(f);
+    }
+    while let Some(f) = take_opt(args, "--user-config-file") {
+        flags.user_config_files.push(f);
+    }
+    flags.unpause_spider_and_scanner = take_flag(args, "--unpause-spider-and-scanner");
+    flags
+}
+
+/// Read and merge the config JSONs. Scan-configuration sections are R-11's
+/// and skipped by the parser. Notes name files and sections only; API keys
+/// are never logged (pinned by burp_config tests).
+fn load_burp_configs(flags: &BurpFlags) -> (burp_config::ProxyListener, burp_config::ApiConfig) {
+    let mut listener = burp_config::ProxyListener::default();
+    let mut api = burp_config::ApiConfig::default();
+    let read = |path: &str| -> serde_json::Value {
+        let text = std::fs::read_to_string(path).unwrap_or_else(|e| {
+            eprintln!("cannot read {path}: {e}");
+            std::process::exit(1);
+        });
+        serde_json::from_str(&text).unwrap_or_else(|e| {
+            eprintln!("{path}: not a JSON object: {e}");
+            std::process::exit(1);
+        })
+    };
+    for f in &flags.config_files {
+        let mut notes = Vec::new();
+        burp_config::apply_project_options(&read(f), &mut listener, &mut notes);
+        for n in notes {
+            eprintln!("{f}: {n}");
+        }
+    }
+    for f in &flags.user_config_files {
+        let mut notes = Vec::new();
+        burp_config::apply_user_options(&read(f), &mut api, &mut notes);
+        for n in notes {
+            eprintln!("{f}: {n}");
+        }
+    }
+    if api.enabled {
+        eprintln!("note: user_options.misc.api.enabled is set; the /v0.1 REST API arrives in a later R-15 slice and is not started yet");
+    }
+    (listener, api)
 }
 
 /// Value of `--name V` in `args`, removing both.
@@ -72,8 +138,18 @@ fn save_project(shared: &net::Shared, path: &str) -> Result<(), String> {
 }
 
 fn proxy(mut args: Vec<String>) {
-    let port: u16 = take_opt(&mut args, "--port").map(|p| p.parse().unwrap_or_else(|_| usage())).unwrap_or(8090);
-    let project_file = take_opt(&mut args, "--project");
+    let flags = take_burp_flags(&mut args);
+    let (listener, _api) = load_burp_configs(&flags);
+    // Without a --config-file the headless default stays 8090; with one,
+    // the config's listener port applies and an explicit --port beats it.
+    let default_port = if flags.config_files.is_empty() { 8090 } else { listener.port };
+    let port: u16 = take_opt(&mut args, "--port").map(|p| p.parse().unwrap_or_else(|_| usage())).unwrap_or(default_port);
+    if !listener.running {
+        eprintln!("proxy listener disabled by configuration; nothing to do");
+        std::process::exit(0);
+    }
+    // --project-file is Burp's name for --project.
+    let project_file = [take_opt(&mut args, "--project"), take_opt(&mut args, "--project-file")].into_iter().flatten().last();
     let seconds: Option<u64> = take_opt(&mut args, "--seconds").map(|s| s.parse().unwrap_or_else(|_| usage()));
     if !args.is_empty() {
         usage();
@@ -138,6 +214,8 @@ fn proxy(mut args: Vec<String>) {
 }
 
 fn scan_urls(mut args: Vec<String>) {
+    let flags = take_burp_flags(&mut args);
+    let _ = load_burp_configs(&flags);
     let crawl = take_flag(&mut args, "--crawl");
     let report_file = take_opt(&mut args, "--report");
     let speed = match take_opt(&mut args, "--speed").as_deref() {
@@ -188,8 +266,40 @@ fn main() {
         usage();
     }
     match args.remove(0).as_str() {
+        "--version" => println!("webprobe-headless {}", env!("CARGO_PKG_VERSION")),
+        "--help" => println!("{USAGE}"),
         "proxy" => proxy(args),
         "scan" => scan_urls(args),
         _ => usage(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn strings(args: &[&str]) -> Vec<String> {
+        args.iter().map(|s| s.to_string()).collect()
+    }
+
+    /// Burp's repeatable config flags collect in order (last wins on
+    /// apply) and are removed from the remaining arguments.
+    #[test]
+    fn burp_flags_are_repeatable_and_ordered() {
+        let mut args = strings(&["--config-file", "a.json", "--crawl", "--config-file", "b.json", "--user-config-file", "u.json", "--unpause-spider-and-scanner", "http://x/"]);
+        let flags = take_burp_flags(&mut args);
+        assert_eq!(flags.config_files, vec!["a.json".to_string(), "b.json".to_string()]);
+        assert_eq!(flags.user_config_files, vec!["u.json".to_string()]);
+        assert!(flags.unpause_spider_and_scanner);
+        assert_eq!(args, strings(&["--crawl", "http://x/"]));
+    }
+
+    /// --project-file is an alias of --project; the last one given wins.
+    #[test]
+    fn project_file_alias_last_wins() {
+        let mut args = strings(&["--project", "first.burp", "--project-file", "second.burp"]);
+        let project_file = [take_opt(&mut args, "--project"), take_opt(&mut args, "--project-file")].into_iter().flatten().last();
+        assert_eq!(project_file.as_deref(), Some("second.burp"));
+        assert!(args.is_empty());
     }
 }
