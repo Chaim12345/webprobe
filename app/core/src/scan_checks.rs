@@ -4301,6 +4301,49 @@ mod tests {
         assert!(got.contains(&("Backup file", "info", "Certain")), "{got:?}");
     }
 
+    /// R-10 web cache poisoning (Zp22 / Zg1g rule): reported only when a
+    /// clean request with the probe's cache buster gets the poisoned page
+    /// back. The lab reflects X-Forwarded-Host; with `cache` on it caches
+    /// whole responses keyed on the full request target (path + query).
+    fn cache_lab(cache: bool) -> u16 {
+        let store = std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::<String, String>::new()));
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        lab_serve(l, move |_method, target, raw| {
+            if cache {
+                if let Some(hit) = store.lock().unwrap().get(target) {
+                    return hit.clone();
+                }
+            }
+            let xfh = raw
+                .lines()
+                .find_map(|l| {
+                    let (k, v) = l.split_once(':')?;
+                    k.trim().eq_ignore_ascii_case("x-forwarded-host").then(|| v.trim().to_string())
+                })
+                .unwrap_or_else(|| "lab.test".into());
+            let body = format!("<html><head><script src=\"//{xfh}/app.js\"></script></head><body>home</body></html>");
+            let resp = format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nCache-Control: public, max-age=60\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+            if cache {
+                store.lock().unwrap().insert(target.to_string(), resp.clone());
+            }
+            resp
+        })
+    }
+
+    #[test]
+    fn r10_cache_poisoning_needs_a_clean_retrieval() {
+        let keep = ["active.web-cache-poisoning"];
+        let port = cache_lab(true);
+        let req = format!("GET /home HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
+        let got = lab_scan(port, &keep, "GET", "/home", req);
+        assert!(got.iter().any(|(n, s, c)| n == "Web cache poisoning" && s == "high" && c == "Certain"), "cached lab: {got:?}");
+        // Reflection with no cache: never poisoning.
+        let port = cache_lab(false);
+        let req = format!("GET /home HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
+        let got = lab_scan(port, &keep, "GET", "/home", req);
+        assert!(!got.iter().any(|(n, ..)| n == "Web cache poisoning"), "uncached lab: {got:?}");
+    }
+
     /// R-10 point checks: Expression Language and XPath injection against
     /// a live lab. The lab "evaluates" Burp's EL probe (echoing d1 z b z
     /// d2 back) and answers a value with a trailing quote with an XPath
