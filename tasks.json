@@ -3,12 +3,12 @@
   "generated": "2026-11-18",
   "source": "TASKS.md",
   "summary": {
-    "total": 126,
+    "total": 127,
     "p0": 68,
     "p1": 39,
-    "p2": 19,
+    "p2": 20,
     "by_status": {
-      "done": 107,
+      "done": 108,
       "rejected": 2,
       "todo": 17
     }
@@ -1262,8 +1262,9 @@
       "title": "Montoya bridge broad enough for real BApps",
       "acceptance": "extension(), http(), userInterface(), scanner(), persistence() (and what the first target BApp needs) are bridged; the sidecar builds against the published montoya-api artifact instead of /opt/BurpSuite/burpsuite.jar (licence checked); one unmodified BApp-store extension loads and does its job.",
       "effort": "L",
-      "status": "todo",
-      "evidence": "sidecar/MontoyaBridge.java:276-287 (only proxy() and logging() answer); core/src/ext_host.rs:332. Measured ~10% API coverage. Progress 2026-11-18 (a8ed5cb): stages 1-2 done. Bridged: extension() (setName, filename, isBapp, unload, registerUnloadingHandler), burpSuite() (version, commandLineArguments, taskExecutionEngine; engine state only recorded), logging() complete, http() (registerHttpHandler, sendRequest, sendRequests), proxy request/response handlers, value types (HttpRequest, HttpResponse, HttpHeader, HttpService, ByteArray, parameters, Annotations, ToolSource, HttpRequestResponse, object factory). Everything else throws '<Interface>.<method> is not supported by WebProbe', logged once. Wire format is Base64 bytes; one Java source per API area (needs Java 22+). Tests stage1_extension_loads_logs_and_unloads, stage2_http_handler_edits_annotates_and_sends. Manual: the unmodified JWT Monitor BApp loads with no unsupported call and its handler rewrites the Authorization header (field filled by reflection, because its tab is not shown yet). API jar: resolved from ~/.m2 (montoya-api 2026.4) before /opt/BurpSuite; its POM names the Burp Suite Professional Licence Agreement, so it is user-supplied and not vendored. REMAINING: stage 3 userInterface (worker task 8), stage 4 persistence/utilities/proxy rest/collaborator/intruder/scanner, stage 5 siteMap/repeater/organizer/scope. Progress 2026-11-18 (462793f): stage 3 done plus persistence() and utilities(). userInterface(): suite tabs in a Swing window per extension opened from the Extensions tab, context menu items under Extensions > <name> (Proxy history, Repeater) with a real ContextMenuEvent, extension-provided editors as 'Editor: <caption>' tabs with apply-back to Repeater, created editors as text areas, headless path. persistence(): extensionData in the project file, preferences under ~/.config/webprobe/extension-preferences. Tests stage3_ui_headless_menus_editors_and_utilities, stage3_extension_data_round_trips_through_a_project_file; suite 503 + 135. Checked on the QA display with unmodified BApps (qa/r03-2026-11-18/*.png): JWT Monitor replaces the Authorization header of proxied requests in normal use; JWT4B loads, its suite tab, context menu, editor tab and history notes work. Open: apply-back of an edit from JWT4B's editor unconfirmed. REMAINING (worker task 9): proxy rest, scope, collaborator, intruder, scanner, http rest, siteMap, repeater, organizer, comparer, decoder; targets JWT Editor and MCP Server."
+      "status": "done",
+      "evidence": "Commits a8ed5cb, 462793f, a2f0eec. Coverage per MontoyaApi accessor and the unmodified BApps checked: docs/MONTOYA-COVERAGE.md. Full: extension, logging, persistence, collaborator, comparer, decoder, intruder, proxy, repeater, scope, siteMap. Partial: burpSuite, http, organizer, scanner, userInterface, utilities, websockets, ai. Unsupported: bambda, project. Unsupported calls throw '<Interface>.<method> is not supported by WebProbe', logged once. Extension scan checks run inside WebProbe scans; payload generators/processors are Intruder choices; session handling action 'invoke extension'. Tests stage1_extension_loads_logs_and_unloads, stage2_http_handler_edits_annotates_and_sends, stage3_ui_headless_menus_editors_and_utilities, stage3_extension_data_round_trips_through_a_project_file, stage4_scan_checks_and_engine_calls, bridge_classes_are_compiled_once_and_old_ones_pruned; suite 507 + 135. Checked on the QA display, unmodified (qa/r03-2026-11-18/*.png): JWT Monitor, JWT4B, JWT Editor work; MCP Server loads and listens on 127.0.0.1:9876 (tools not exercised). API jar: user-supplied (POM names the Burp Suite Professional Licence Agreement), found in ~/.m2 or a Burp install; needs a JDK 17+. Limits: Swing shows in the extension's own window; the sample is four BApps, three of them JWT tools; leftovers (generation on the UI thread, WebSocket handler order, WebSocket send/close, startAudit/startCrawl/generateReport, hotkeys) are R-20.",
+      "completed": "2026-11-18"
     },
     {
       "id": "R-04",
@@ -1426,6 +1427,16 @@
       "effort": "S",
       "status": "todo",
       "evidence": "qa/parity-scores-2026-11-15.md never redone; no record of Logger/Organizer/WS intercept GUI checks."
+    },
+    {
+      "id": "R-20",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
+      "priority": "P2",
+      "title": "Montoya leftovers and a wider BApp check",
+      "acceptance": "Extension payload generation off the UI thread; WebSocket 'to be sent' handlers run after the user's intercept edit; WebSocket send/close and websockets().createWebSocket; scanner startAudit / startCrawl / generateReport / registerAuditIssueHandler; http response analyzers; organizer status; hotkey handlers; burpSuite export/import of options once WebProbe speaks Burp's settings JSON (R-15). Ten more popular BApps (not JWT tools) loaded unmodified, each result recorded in docs/MONTOYA-COVERAGE.md.",
+      "effort": "M",
+      "status": "todo",
+      "evidence": "docs/MONTOYA-COVERAGE.md 'Missing' column (a2f0eec). First three items are with the worker (task 10)."
     }
   ]
 }

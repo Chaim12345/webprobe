@@ -1,5 +1,5 @@
 {
-  "revision": 153,
+  "revision": 154,
   "brief": {
     "question": "Rebuild WebProbe, a clone of Burp Suite Pro (reference build 52685, v2026.7.3), to feature parity with the task backlog in tasks.json, and produce a readable, evidence-backed name map for the obfuscated Burp jar.",
     "purpose": "Interoperable reimplementation plus per-build deobfuscation; behaviour claims must come from the shipped jar or the running reference app, never guessed.",
@@ -88,8 +88,8 @@
     },
     {
       "title": "R-03 [P0/L] Montoya bridge broad enough for real BApps",
-      "status": "doing",
-      "why": "stages 1-3 + persistence + utilities done (462793f); JWT Monitor and JWT4B work unmodified; stages 4-5 with the worker (task 9), targets JWT Editor and MCP Server"
+      "status": "done",
+      "why": "a8ed5cb, 462793f, a2f0eec; docs/MONTOYA-COVERAGE.md; four unmodified BApps load; leftovers are R-20"
     },
     {
       "title": "R-04 [P0/M] Passive checks in the check registry + missing passive pack",
@@ -98,13 +98,13 @@
     },
     {
       "title": "R-05 [P1/M] HTTP/2 browser-to-proxy and a working Repeater protocol switch",
-      "status": "todo",
-      "why": "core/src/tls.rs:285 (no ALPN), src/msgpane.rs:1005-1006, src/menus.rs:175-177."
+      "status": "doing",
+      "why": "worker task 10 (R-06 first, then R-05)"
     },
     {
       "title": "R-06 [P1/M] Response streaming and server-sent events",
-      "status": "todo",
-      "why": "core/src/codec.rs:257-335 reads the whole response first. PRD BE-PX-12 was assigned to rejected N-04."
+      "status": "doing",
+      "why": "worker task 10 (R-06 first, then R-05)"
     },
     {
       "title": "R-07 [P1/M] WebSocket robustness and tools",
@@ -175,6 +175,11 @@
       "title": "Re-verify URL-level lab parity (Juice Shop 75/75, lab 21/21) for the code after D-09..D-11",
       "status": "blocked",
       "why": "stored Burp lists, paths.txt and lab.py were lost with /tmp; needs a fresh Burp baseline, which the no-Burp-scans rule excludes until the user decides (qa/parity-2026-11-18/SUMMARY.md)"
+    },
+    {
+      "title": "R-20 [P2/M] Montoya leftovers and a wider BApp check",
+      "status": "todo",
+      "why": "docs/MONTOYA-COVERAGE.md 'Missing' column; first three items in worker task 10"
     }
   ],
   "hypotheses": [],
@@ -943,5 +948,5 @@
     }
   ],
   "handoff": "2026-11-18 (late). tasks.json: 126 tasks, 106 done, 2 rejected, 18 todo. Done today from the source: D-11 insertion points (core/src/insertion.rs), D-09 Collaborator variants, D-10 stored input pairing (core/src/stored.rs), R-02 portable build (core/src/paths.rs), R-04 passive registry + pack (passive_checks.rs, passive_pack.rs, csp.rs, retirejs.rs, passive_state.rs). Suite 485 core + 133 app green at 94026e4, branch parity/2026-11-17 pushed. In progress with the persistent worker (task 7): per-cookie identifiers, R-08 tests for untested modules, R-03 Montoya stages 1-2 (target: JWT Monitor loads and works). Then: R-03 stages 3-5, R-05 browser-side HTTP/2, R-06 streaming, R-07 WebSockets, R-09 JWT checks, R-10 active pack, R-11 scan config library, P2 items, D-12, R-01 PRD row re-check. BLOCKED, needs the user: URL-level parity (Juice 75/75, lab 21/21) cannot be re-verified because the stored Burp lists, paths.txt and lab.py were lost with /tmp; a fresh Burp baseline is excluded by the no-Burp-scans rule (qa/parity-2026-11-18/SUMMARY.md). Working mode: one persistent worker continued with SendMessage; the main session specs, reviews the report against the wp-queue log, commits, updates tasks.json / TASKS.md §8 / ledger / Craft. Traps: cargo only through wp-queue; never 8080/8081; no time-based detection; do not copy Burp resources into the repo (resolved at run time via paths.rs); keep evidence out of /tmp.",
-  "updated": "2026-11-18T04:56:34Z"
+  "updated": "2026-11-18T06:37:45Z"
 }

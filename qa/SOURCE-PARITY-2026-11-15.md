@@ -1049,3 +1049,23 @@ Open after this wave:
 - Still Unsupported: menuBar, hotkeys, settings panels, WebSocket editor providers, Brotli, and the API areas of stages 4-5 (scanner, collaborator, intruder, proxy rest, scope, siteMap, repeater, organizer). In progress.
 - Decided without evidence: the theme reports LIGHT; preferences are keyed by extension name; headless is chosen from DISPLAY / WAYLAND_DISPLAY only.
 
+## Wave 65 (2026-11-18): Montoya stages 4-5 (R-03 done)
+
+Commit a2f0eec. The rest of the Montoya API is bridged through WebProbe's own engines: extension scan
+checks inside scans, proxy and WebSocket history and handlers, scope, Collaborator clients, Intruder
+payload generators and processors, session handling action, site map, Repeater, Organizer, Comparer,
+Decoder. Coverage per accessor and the BApp results are in `docs/MONTOYA-COVERAGE.md`. Unmodified JWT
+Monitor, JWT4B and JWT Editor work on the QA display; the MCP Server BApp loads and listens on loopback.
+The earlier "apply-back from JWT4B" doubt was JWT4B's own behaviour (it does not report edits typed in
+its signature area); a payload edit comes back into Repeater.
+
+Suite robustness: the bridge was compiled from source by every sidecar JVM, which exceeded the reply
+limit under load; it is now compiled once into a content-hashed directory (JDK 17+). Two wall-clock
+tests were made deterministic.
+
+Open after this wave (R-20):
+- Extension payload generation runs on the UI thread (bounded by the 15 s hook timeout). In progress.
+- WebSocket "to be sent" handlers run before the user's intercept edit; Burp runs them after. In progress.
+- Unsupported: WebSocket send / close, `startAudit`, `startCrawl`, `generateReport`, hotkeys, options export / import, `bambda`, `project`.
+- Only four BApps were tried, three of them JWT tools; the MCP Server's tools were not exercised.
+

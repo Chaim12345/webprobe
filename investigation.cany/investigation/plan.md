@@ -14,10 +14,10 @@
 12. [todo] D-12 Collaborator leftovers: SNI variant and Zbxl scheme payload variants — not ported in D-09
 13. [doing] R-01 [P0/S] Docs truth pass — headers, banners, generated status table done (09ed7a9); remaining: per-row PRD status re-check
 14. [done] R-02 [P0/S] Portable build: no developer-machine paths — e96f063, core/src/paths.rs; not run in a clean container
-15. [doing] R-03 [P0/L] Montoya bridge broad enough for real BApps — stages 1-3 + persistence + utilities done (462793f); JWT Monitor and JWT4B work unmodified; stages 4-5 with the worker (task 9), targets JWT Editor and MCP Server
+15. [done] R-03 [P0/L] Montoya bridge broad enough for real BApps — a8ed5cb, 462793f, a2f0eec; docs/MONTOYA-COVERAGE.md; four unmodified BApps load; leftovers are R-20
 16. [done] R-04 [P0/M] Passive checks in the check registry + missing passive pack — e96f063 + 94026e4; gaps: 'multiple locations' merge, per-cookie identifiers for HttpOnly/Secure
-17. [todo] R-05 [P1/M] HTTP/2 browser-to-proxy and a working Repeater protocol switch — core/src/tls.rs:285 (no ALPN), src/msgpane.rs:1005-1006, src/menus.rs:175-177.
-18. [todo] R-06 [P1/M] Response streaming and server-sent events — core/src/codec.rs:257-335 reads the whole response first. PRD BE-PX-12 was assigned to rejected N-04.
+17. [doing] R-05 [P1/M] HTTP/2 browser-to-proxy and a working Repeater protocol switch — worker task 10 (R-06 first, then R-05)
+18. [doing] R-06 [P1/M] Response streaming and server-sent events — worker task 10 (R-06 first, then R-05)
 19. [todo] R-07 [P1/M] WebSocket robustness and tools — core/src/net.rs:679, net.rs:2288, src/repeater_ops.rs:1697.
 20. [done] R-08 [P1/S] Tests for untested modules — a8ed5cb; eight product bugs fixed
 21. [todo] R-09 [P1/M] JWT checks — Burp resources/Scanner/jwt_secrets.txt; none in scan_checks.rs.
@@ -32,3 +32,4 @@
 30. [todo] R-18 [P2/M] Decompose App / Shared and split ui.rs — src/ui.rs: 4,606 lines, 10 tests; proxy_history alone 410 lines.
 31. [todo] R-19 [P2/S] UI parity re-score — qa/parity-scores-2026-11-15.md never redone; no record of Logger/Organizer/WS intercept GUI checks.
 32. [blocked] Re-verify URL-level lab parity (Juice Shop 75/75, lab 21/21) for the code after D-09..D-11 — stored Burp lists, paths.txt and lab.py were lost with /tmp; needs a fresh Burp baseline, which the no-Burp-scans rule excludes until the user decides (qa/parity-2026-11-18/SUMMARY.md)
+33. [todo] R-20 [P2/M] Montoya leftovers and a wider BApp check — docs/MONTOYA-COVERAGE.md 'Missing' column; first three items in worker task 10
