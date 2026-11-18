@@ -369,6 +369,9 @@ pub(crate) static REQUEST_CHECKS: &[&dyn RequestCheck] = &[
     &HttpPutEnabled,
     &AspNetTracing,
     &AspNetDebugging,
+    &GraphqlIntrospection,
+    &GraphqlSuggestions,
+    &GraphqlContentType,
 ];
 
 /// Whether `check` audits `ip` under `config`: the point type suits it,
@@ -1290,6 +1293,190 @@ impl RequestCheck for AspNetDebugging {
             let mut i = mk(sev, "ASP.NET debugging enabled", &e, format!("ASP.NET debugging is enabled on the server. {more}")).with_evidence(vec![ScanEvidence::new(&req, Some(&resp))]);
             i.confidence = "Firm".into();
             cx.report(vec![i]);
+        }
+    }
+}
+
+// ---------------------------------------------------------------- GraphQL
+
+/// How a GraphQL request carries its query (burp.Zcsb styles).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum GqlStyle {
+    /// POST, `{"query": ...}`, `application/json; charset=utf-8`.
+    Json,
+    /// GET with a `query` URL parameter, no Content-Type.
+    Get,
+    /// POST, `query=...` as `application/x-www-form-urlencoded`.
+    Form,
+}
+
+/// The GraphQL query of a request (burp.Zeuo.ZH): a JSON body's "query"
+/// string, else a `query` URL or form parameter; with its style.
+pub(crate) fn graphql_query(req: &[u8]) -> Option<(String, GqlStyle)> {
+    let p = util::parse_http(req);
+    let body = &req[p.head_len.min(req.len())..];
+    if let Ok(serde_json::Value::Object(m)) = serde_json::from_slice::<serde_json::Value>(body) {
+        if let Some(q) = m.get("query").and_then(|q| q.as_str()) {
+            return Some((q.to_string(), GqlStyle::Json));
+        }
+    }
+    let param = |text: &str| text.split('&').find_map(|kv| kv.split_once('=').filter(|(k, _)| *k == "query").map(|(_, v)| util::url_decode(&v.replace('+', " "))));
+    if let Some(q) = p.path.split_once('?').and_then(|(_, q)| param(q)) {
+        return Some((q, GqlStyle::Get));
+    }
+    param(&String::from_utf8_lossy(body)).map(|q| (q, GqlStyle::Form))
+}
+
+/// A GraphQL response (burp.Zeuo.Ze): a JSON object with "data" or "errors".
+pub(crate) fn graphql_response(resp: &[u8]) -> Option<serde_json::Map<String, serde_json::Value>> {
+    let (_, body) = status_body(resp);
+    match serde_json::from_slice::<serde_json::Value>(body).ok()? {
+        serde_json::Value::Object(m) if m.contains_key("data") || m.contains_key("errors") => Some(m),
+        _ => None,
+    }
+}
+
+/// burp.Zeuo.Za: `data.__schema` with at least one introspection field.
+pub(crate) fn has_introspection(m: &serde_json::Map<String, serde_json::Value>) -> bool {
+    m.get("data").and_then(|d| d.get("__schema")).and_then(|s| s.as_object()).is_some_and(|s| ["queryType", "mutationType", "subscriptionType", "types", "directives"].iter().any(|k| s.contains_key(*k)))
+}
+
+/// The base request rewritten to send `query` in `style` to the same path.
+fn graphql_request(cx: &ScanCtx, query: &str, style: GqlStyle) -> Vec<u8> {
+    let path = cx.entry.path.split('?').next().unwrap_or("/").to_string();
+    match style {
+        GqlStyle::Json => host_request(cx, "POST", &path, &[("Content-Type", "application/json; charset=utf-8")], serde_json::json!({ "query": query }).to_string().as_bytes()),
+        GqlStyle::Get => host_request(cx, "GET", &format!("{path}?query={}", crate::scan::insertion::encode_url_param(query)), &[], b""),
+        GqlStyle::Form => host_request(cx, "POST", &path, &[("Content-Type", "application/x-www-form-urlencoded")], format!("query={}", crate::scan::insertion::encode_url_param(query)).as_bytes()),
+    }
+}
+
+/// The existing exchange, when it is GraphQL (query in the request and a
+/// GraphQL response), with the query style.
+fn graphql_exchange(cx: &ScanCtx) -> Option<GqlStyle> {
+    let (_, style) = graphql_query(cx.req.as_bytes())?;
+    graphql_response(&cx.baseline.raw)?;
+    Some(style)
+}
+
+fn graphql_issue(cx: &ScanCtx, name: &str, detail: String, ev: Vec<ScanEvidence>) -> ScanIssue {
+    // Zmzr / Zgg2 / Zgck: Low, Certain.
+    let mut i = mk("low", name, &cx.entry, detail).with_evidence(ev);
+    i.confidence = "Certain".into();
+    i
+}
+
+/// GraphQL introspection enabled, burp.Zgd9 (per request): the existing
+/// response already shows the schema, or the introspection query
+/// (burp.Zuj2.ZQ, the standard one) returns `data.__schema`.
+pub(crate) struct GraphqlIntrospection;
+
+/// The standard GraphQL introspection query (Burp sends the same one).
+pub(crate) const INTROSPECTION_QUERY: &str = "query IntrospectionQuery { __schema { queryType { name } mutationType { name } subscriptionType { name } types { ...FullType } directives { name description locations args { ...InputValue } } } } fragment FullType on __Type { kind name description fields(includeDeprecated: true) { name description args { ...InputValue } type { ...TypeRef } isDeprecated deprecationReason } inputFields { ...InputValue } interfaces { ...TypeRef } enumValues(includeDeprecated: true) { name description isDeprecated deprecationReason } possibleTypes { ...TypeRef } } fragment InputValue on __InputValue { name description type { ...TypeRef } defaultValue } fragment TypeRef on __Type { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name } } } } } } } }";
+
+impl RequestCheck for GraphqlIntrospection {
+    fn id(&self) -> &'static str {
+        "active.graphql-introspection"
+    }
+    fn issue(&self) -> &'static str {
+        "GraphQL introspection enabled"
+    }
+    fn scope(&self) -> Scope {
+        Scope::Request
+    }
+    fn run(&self, cx: &ScanCtx) {
+        if cx.stopped() || !cx.runs(self.issue()) {
+            return;
+        }
+        let Some(style) = graphql_exchange(cx) else { return };
+        let detail = "The GraphQL endpoint answers introspection queries, which disclose its whole schema.".to_string();
+        if graphql_response(&cx.baseline.raw).is_some_and(|m| has_introspection(&m)) {
+            cx.report(vec![graphql_issue(cx, self.issue(), detail, vec![ScanEvidence::new(cx.req.as_bytes(), Some(&cx.baseline.raw))])]);
+            return;
+        }
+        let req = graphql_request(cx, INTROSPECTION_QUERY, style);
+        let Some(resp) = burp_send(cx, &req) else { return };
+        if graphql_response(&resp).is_some_and(|m| has_introspection(&m)) {
+            cx.report(vec![graphql_issue(cx, self.issue(), detail, vec![ScanEvidence::new(&req, Some(&resp))])]);
+        }
+    }
+}
+
+/// GraphQL suggestions enabled, burp.Zbop (per request): `query{__type}`
+/// answered by a GraphQL response holding "must have a selection of
+/// subfields. Did you mean".
+pub(crate) struct GraphqlSuggestions;
+
+impl RequestCheck for GraphqlSuggestions {
+    fn id(&self) -> &'static str {
+        "active.graphql-suggestions"
+    }
+    fn issue(&self) -> &'static str {
+        "GraphQL suggestions enabled"
+    }
+    fn scope(&self) -> Scope {
+        Scope::Request
+    }
+    fn run(&self, cx: &ScanCtx) {
+        if cx.stopped() || !cx.runs(self.issue()) {
+            return;
+        }
+        let Some(style) = graphql_exchange(cx) else { return };
+        let req = graphql_request(cx, "query{__type}", style);
+        let Some(resp) = burp_send(cx, &req) else { return };
+        if graphql_response(&resp).is_some() && find_sub(status_body(&resp).1, b"must have a selection of subfields. Did you mean") {
+            cx.report(vec![graphql_issue(cx, self.issue(), "The GraphQL endpoint suggests field names in its error messages, which can disclose its schema even with introspection disabled.".into(), vec![ScanEvidence::new(&req, Some(&resp))])]);
+        }
+    }
+}
+
+/// GraphQL content type not validated, burp.Zx85 (per request): the query
+/// sent as a GET parameter (for a POST request) and as a URL-encoded form
+/// body; a variant that gets a GraphQL response is confirmed with
+/// `query{__typename}` (its answer must carry data.__typename) and the
+/// first variant's exchange is reported.
+pub(crate) struct GraphqlContentType;
+
+impl RequestCheck for GraphqlContentType {
+    fn id(&self) -> &'static str {
+        "active.graphql-content-type"
+    }
+    fn issue(&self) -> &'static str {
+        "GraphQL content type not validated"
+    }
+    fn scope(&self) -> Scope {
+        Scope::Request
+    }
+    fn run(&self, cx: &ScanCtx) {
+        if cx.stopped() || !cx.runs(self.issue()) {
+            return;
+        }
+        let Some(_) = graphql_exchange(cx) else { return };
+        let Some((query, style)) = graphql_query(cx.req.as_bytes()) else { return };
+        let post = util::parse_http(cx.req.as_bytes()).method.eq_ignore_ascii_case("POST");
+        let mut styles = Vec::new();
+        if post && style != GqlStyle::Get {
+            styles.push(GqlStyle::Get);
+        }
+        if style != GqlStyle::Form {
+            styles.push(GqlStyle::Form);
+        }
+        for s in styles {
+            if cx.stopped() {
+                return;
+            }
+            let req = graphql_request(cx, &query, s);
+            let Some(resp) = burp_send(cx, &req) else { continue };
+            if graphql_response(&resp).is_none() {
+                continue;
+            }
+            let confirm = graphql_request(cx, "query{__typename}", s);
+            let Some(cr) = burp_send(cx, &confirm) else { continue };
+            if graphql_response(&cr).is_some_and(|m| m.get("data").and_then(|d| d.get("__typename")).is_some()) {
+                let how = if s == GqlStyle::Get { "as a GET request with the query in the URL" } else { "as a POST request with a URL-encoded body (application/x-www-form-urlencoded)" };
+                cx.report(vec![graphql_issue(cx, self.issue(), format!("The GraphQL endpoint also accepted the query sent {how}, so it does not validate the request's content type; this can make cross-site request forgery possible."), vec![ScanEvidence::new(&req, Some(&resp))])]);
+                return;
+            }
         }
     }
 }
@@ -3479,6 +3666,9 @@ mod tests {
                 ("active.http-put-enabled", Scope::Host, None),
                 ("active.aspnet-tracing", Scope::Host, None),
                 ("active.aspnet-debugging", Scope::Host, None),
+                ("active.graphql-introspection", Scope::Request, None),
+                ("active.graphql-suggestions", Scope::Request, None),
+                ("active.graphql-content-type", Scope::Request, None),
             ]
         );
         let mut ids: Vec<&str> = points.iter().copied().chain(requests.iter().map(|r| r.0)).collect();
