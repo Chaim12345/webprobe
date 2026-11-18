@@ -377,7 +377,7 @@ Method: the reference jar was launched from `/opt/BurpSuite` on its own display,
 
 ## 8. Status as of 2026-11-18 (generated from tasks.json)
 
-127 tasks: 114 done, 2 rejected, 11 todo. Acceptance criteria and evidence are in `tasks.json`.
+137 tasks: 114 done, 2 rejected, 21 todo. Acceptance criteria and evidence are in `tasks.json`.
 
 ### A — HTTP engine correctness
 
@@ -610,3 +610,18 @@ Method: the reference jar was launched from `/opt/BurpSuite` on its own display,
 | R-18 | P2 | todo | Decompose App / Shared and split ui.rs |
 | R-19 | P2 | todo | UI parity re-score |
 | R-20 | P2 | todo | Montoya leftovers and a wider BApp check |
+
+### AR — Architecture (review 2026-11-18, qa/ARCH-REVIEW-2026-11-18.md)
+
+| Id | Pri | Status | Title |
+|---|---|---|---|
+| AR-01 | P1 | todo | Quick architecture fixes: lints, compiled rule sets, intercept liveness, test CA isolation |
+| AR-02 | P1 | todo | Engine duties out of App into core |
+| AR-03 | P1 | todo | Settings snapshot, then the engine split of Shared |
+| AR-04 | P1 | todo | Explicit send context instead of thread-locals |
+| AR-05 | P2 | todo | Scanner worker pool and passive-check queue |
+| AR-06 | P2 | todo | Lifecycle: cancellation, named joinable threads, no sleep-polling |
+| AR-07 | P2 | todo | Event channel and append-only history to the UI |
+| AR-08 | P2 | todo | Java sidecar: route replies by id, no lock across the round trip |
+| AR-09 | P2 | todo | Bytes, not lossy text, in tool state |
+| AR-10 | P2 | todo | One extensibility pattern and a project format plan |
