@@ -1,5 +1,8 @@
 # Burp Suite Pro v2026.7.3 (live, Xvfb) vs WebProbe, gap report
 
+> **Superseded (2026-11-18).** This report is a dated snapshot and is no longer the statement of where the project stands. Current status: `tasks.json` and `qa/ZOOM-OUT-REVIEW-2026-11-18.md`.
+
+
 Compared by hand at the same 1440x900. Burp shots: `/root/webprobe-shots/burp-tour/`, WebProbe shots:
 `/root/webprobe-shots/pair-wp-*.png`. Four vision-agent attempts were rejected by content safety or
 provider limits, so this is a direct read of the screenshots. The Burp HTTP history stayed empty even

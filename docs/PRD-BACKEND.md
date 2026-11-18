@@ -1,5 +1,8 @@
 # WebProbe Backend PRD: the engine behind what Burp Suite Professional's UI can do
 
+> **Status column is from 2026-11-15 and partly stale (noted 2026-11-18).** Many rows marked ❌ or 🚧 were built since; some are still real gaps. Until the per-row re-verification (task R-01) is done, trust `tasks.json` and `qa/ZOOM-OUT-REVIEW-2026-11-18.md` over the status column. The requirement text itself still holds.
+
+
 Status date: 2026-11-15 · Baseline: `app/src/*.rs`, 117 tests green · Reference: Burp Suite Professional v2026.7.3 (build 52685),
 its shipped documentation (364 pages inside the jar), the extracted `UserDefaults.json` / `ProjectDefaults.json`, and live runs.
 
@@ -37,7 +40,7 @@ extension host later. Rules that hold everywhere:
 | BE-PX-09 | Match and replace for request, response, WebSocket (header, body, request line, parameter name/value), regex, testing | Applied in order, previewable | ✅ rules, ❌ WebSocket/test | B-08 |
 | BE-PX-10 | Local virtual hosts `http://burpsuite` and `http://webprobe` serving setup page and the CA (PEM, DER) | Served from the proxy, never forwarded | ✅ | M-07 |
 | BE-PX-11 | Timeouts and limits: connect/read/open-ended response timeouts, response size cap, history cap | Defaults from `ProjectDefaults.json` | 🚧 fixed values | B-08 |
-| BE-PX-12 | Streaming and long responses (SSE, chunked streams) forwarded as they arrive | No buffering stall | ❌ | N-04 |
+| BE-PX-12 | Streaming and long responses (SSE, chunked streams) forwarded as they arrive | No buffering stall | ❌ | R-06 (was N-04, rejected) |
 
 ## 3. History, scope and target model (Burp: HTTP history, Target)
 

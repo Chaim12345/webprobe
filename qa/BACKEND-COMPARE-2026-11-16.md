@@ -1,5 +1,8 @@
 # WebProbe vs Burp Suite Pro — backend capability comparison (2026-11-16)
 
+> **Superseded (2026-11-18).** This report is a dated snapshot and is no longer the statement of where the project stands. Current status: `tasks.json` and `qa/ZOOM-OUT-REVIEW-2026-11-18.md`.
+
+
 Method: Craft Anything Java tools on the shipped jar, the tracked findings (81), the isolated UAT
 (`qa/UAT-2026-11-16.md`), and a read of `app/src`. Craft evidence ids from this session are cited;
 the earlier project ledger did not survive a Craft restart, so old ids (`ev_535bfb…`) are referenced

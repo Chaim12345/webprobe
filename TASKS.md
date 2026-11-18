@@ -1,5 +1,7 @@
 # WebProbe — Burp Suite gap review and task backlog
 
+> **Historical review (2026-11-12, section 7 from 2026-11-15).** The verdict below ("15-20% parity") and the backlog text describe the build as it was then. The live task list is `tasks.json`; section 8 at the end is generated from it. Current standing: `qa/ZOOM-OUT-REVIEW-2026-11-18.md`.
+
 Review date: 2026-11-12
 Baseline: round 6 build (`app/`, 9,610 lines of Rust, 13 top-level tools)
 Reference: `/opt/BurpSuite/burpsuite.jar` (Burp Suite Pro build 52685), `app/MECHANICS.md`, `app/mechanics.json`
@@ -370,3 +372,239 @@ Method: the reference jar was launched from `/opt/BurpSuite` on its own display,
 | P-14 ✅ | Repair UI wiring lost in a bad edit (P0) | Filter bar, Comparer, Target scope, project controls, listener status/editor and appearance options are all reachable again; no dead helpers left | M |
 | P-15 | Interactive Open browser launcher (P1) | 'Open browser' (Intercept bar, empty states, Dashboard) launches the user's Chrome/Chromium or a downloaded Chrome for Testing with a throwaway profile, --proxy-server set to the active listener and the WebProbe CA trusted for that profile only; reports clearly when no browser is found | M |
 | P-16 | Headless engine trait + Obscura sidecar spike (P1) | HeadlessBrowser trait with an Obscura implementation behind it; gate = the 5 acceptance checks in docs/EVAL-OBSCURA.md (JS crawl finds more links, all traffic incl. HTTPS in history via SSL_CERT_FILE, stored response to PNG <2 s and <150 MB, stealth/tracker blocking off, version pinned and digest verified); also compare Lightpanda in the same fixtures | M |
+
+---
+
+## 8. Status as of 2026-11-18 (generated from tasks.json)
+
+125 tasks: 101 done, 2 rejected, 22 todo. Acceptance criteria and evidence are in `tasks.json`.
+
+### A — HTTP engine correctness
+
+| Id | Pri | Status | Title |
+|---|---|---|---|
+| A-01 | P0 | ✅ done | Decode `Transfer-Encoding: chunked` for requests and responses |
+| A-02 | P0 | ✅ done | Decode `Content-Encoding: gzip`, `deflate`, `br` |
+| A-03 | P0 | ✅ done | Keep-alive and connection reuse |
+| A-04 | P0 | ✅ done | Robust HTTP/1.x parsing |
+| A-05 | P0 | ✅ done | HTTP/2 upstream and h2c |
+| A-06 | P0 | ✅ done | TLS pass-through and mTLS |
+| A-07 | P0 | ✅ done | Proxy listener options |
+| A-08 | P0 | ✅ done | Invisible proxying |
+
+### B — Proxy UI and message editing
+
+| Id | Pri | Status | Title |
+|---|---|---|---|
+| B-01 | P0 | ✅ done | History table with filter/sort/columns |
+| B-02 | P0 | ✅ done | Message editor |
+| B-03 | P0 | ✅ done | Response views |
+| B-04 | P0 | ✅ done | Context menus |
+| B-05 | P0 | ✅ done | Resizable layout + status bar |
+| B-06 | P0 | ✅ done | Site map tree |
+| B-07 | P0 | ✅ done | Multi-select and bulk actions |
+| B-08 | P0 | ✅ done | Proxy options UI |
+| B-09 | P0 | ✅ done | WebSocket interception |
+
+### C — Intruder parity
+
+| Id | Pri | Status | Title |
+|---|---|---|---|
+| C-01 | P0 | ✅ done | Four attack types |
+| C-02 | P0 | ✅ done | Payload positions |
+| C-03 | P0 | ✅ done | Payload sets |
+| C-04 | P0 | ✅ done | Payload processing |
+| C-05 | P0 | ✅ done | Result analysis |
+| C-06 | P0 | ✅ done | Attack control |
+| C-07 | P0 | ✅ done | Results I/O |
+
+### D — Scanner parity
+
+| Id | Pri | Status | Title |
+|---|---|---|---|
+| D-01 | P0 | ✅ done | Crawl engine |
+| D-02 | P0 | ✅ done | Audit check library |
+| D-03 | P0 | ✅ done | Insertion points |
+| D-04 | P0 | ✅ done | Scan configuration |
+| D-05 | P0 | ✅ done | Task queue |
+| D-06 | P0 | ✅ done | Issue activity |
+| D-07 | P0 | ✅ done | Reporting |
+| D-08 | P0 | ✅ done | Collaborator integration |
+
+### E — Repeater parity
+
+| Id | Pri | Status | Title |
+|---|---|---|---|
+| E-01 | P0 | ✅ done | Request/response editors |
+| E-02 | P0 | ✅ done | Follow redirects |
+| E-03 | P0 | ✅ done | Send-to and copy |
+| E-04 | P0 | ✅ done | Tab management |
+| E-05 | P0 | ✅ done | Compare |
+| E-06 | P0 | ✅ done | Editing helpers |
+
+### F — Decoder and Comparer
+
+| Id | Pri | Status | Title |
+|---|---|---|---|
+| F-01 | P1 | ✅ done | Decoder operations |
+| F-02 | P1 | ✅ done | Decoder pipeline |
+| F-03 | P1 | ✅ done | Comparer modes |
+
+### G — Sequencer
+
+| Id | Pri | Status | Title |
+|---|---|---|---|
+| G-01 | P1 | ✅ done | Live capture |
+| G-02 | P1 | ✅ done | Analysis depth |
+| G-03 | P1 | ✅ done | Export |
+
+### H — Sessions and macros
+
+| Id | Pri | Status | Title |
+|---|---|---|---|
+| H-01 | P1 | ✅ done | Cookie jar |
+| H-02 | P1 | ✅ done | Macro recorder |
+| H-03 | P1 | ✅ done | Recorded login sequences |
+| H-04 | P1 | ✅ done | Session rule actions |
+
+### I — Collaborator / OAST
+
+| Id | Pri | Status | Title |
+|---|---|---|---|
+| I-01 | P0 | ✅ done | Payload generation |
+| I-02 | P0 | ✅ done | Interaction polling |
+| I-03 | P0 | ✅ done | Scanner integration |
+| I-04 | P0 | ✅ done | Private instance |
+
+### J — Project, settings and state
+
+| Id | Pri | Status | Title |
+|---|---|---|---|
+| J-01 | P1 | ✅ done | Full-state project file |
+| J-02 | P1 | ✅ done | Autosave and recovery |
+| J-03 | P1 | ✅ done | Settings UI |
+| J-04 | P1 | ✅ done | New/open project flow |
+
+### K — Extensions
+
+| Id | Pri | Status | Title |
+|---|---|---|---|
+| K-01 | P2 | ✅ done | Native extension API |
+| K-02 | P2 | ✅ done | JVM/Montoya host |
+| K-03 | P2 | ✅ done | Extension manager |
+
+### L — Engagement and utility features
+
+| Id | Pri | Status | Title |
+|---|---|---|---|
+| L-01 | P1 | ✅ done | CSRF PoC generator |
+| L-02 | P1 | ✅ done | Engagement tools |
+| L-03 | P1 | ✅ done | Content discovery |
+| L-04 | P1 | ✅ done | Logger |
+| L-05 | P1 | ✅ done | Embedded browser |
+
+### M — UI/UX system
+
+| Id | Pri | Status | Title |
+|---|---|---|---|
+| M-01 | P0 | ✅ done | Design tokens |
+| M-02 | P0 | ✅ done | Table component |
+| M-03 | P0 | ✅ done | Editor component |
+| M-04 | P0 | ✅ done | Feedback and errors |
+| M-05 | P0 | ✅ done | Theming and density |
+| M-06 | P0 | ✅ done | Keyboard and accessibility |
+| M-07 | P0 | ✅ done | Onboarding |
+
+### N — Quality, performance and build
+
+| Id | Pri | Status | Title |
+|---|---|---|---|
+| N-01 | P0 | ✅ done | Parser/engine tests |
+| N-02 | P0 | ✅ done | Performance |
+| N-03 | P0 | ✅ done | Fuzzing |
+| N-04 | P0 | ⛔ rejected | Builder reliability |
+| N-05 | P0 | ✅ done | Release build |
+
+### P — Live Burp parity gaps (found 2026-11-15)
+
+| Id | Pri | Status | Title |
+|---|---|---|---|
+| P-01 | P0 | ✅ done | Top menu bar |
+| P-02 | P1 | ✅ done | Tab bar and global controls parity |
+| P-03 | P0 | ✅ done | Settings dialog parity |
+| P-04 | P0 | ✅ done | Repeater layout parity |
+| P-05 | P0 | ✅ done | HTTP history columns and views |
+| P-06 | P1 | ✅ done | Intercept bar parity |
+| P-07 | P1 | ✅ done | Decoder layout and operations |
+| P-08 | P1 | ✅ done | Comparer item tables |
+| P-09 | P1 | ✅ done | Dashboard task model |
+| P-10 | P0 | ✅ done | Wire Intruder UI to intruder.rs |
+| P-11 | P2 | ✅ done | Light theme as the default option |
+| P-12 | P2 | ✅ done | Known small defects |
+| P-13 | P0 | ✅ done | WSL2 rendering fix and live QA driver |
+| P-14 | P0 | ✅ done | Repair UI wiring lost in a bad edit |
+| P-15 | P1 | ✅ done | Interactive Open browser launcher |
+| P-16 | P1 | ✅ done | Headless engine trait + Obscura sidecar spike |
+
+### UAT 2026-11-16 — blocking defects
+
+| Id | Pri | Status | Title |
+|---|---|---|---|
+| UAT-01 | P0 | ✅ done | Intruder attack-results window ignores all input (cannot close, cannot select a row) |
+| UAT-02 | P0 | ✅ done | Repeater Cancel does not abort an in-flight request |
+| UAT-03 | P0 | ⛔ rejected | Comparer uses one shared item collection and Paste is inert |
+| UAT-04 | P1 | ✅ done | Persist proxy history (and site map) in the project file across restarts |
+| UAT-05 | P1 | ✅ done | Window intermittently starts unmapped (process spins, proxy bound, no visible UI) |
+| UAT-06 | P1 | ✅ done | Paste into request/message editors is ignored or delivers stale clipboard |
+
+### UAT 2026-11-16 — polish
+
+| Id | Pri | Status | Title |
+|---|---|---|---|
+| UAT-07 | P2 | ✅ done | History Time column is truncated and the table needs horizontal scrolling at 1440 px |
+| UAT-08 | P2 | ✅ done | Menu bar parity: WebProbe menu only has Search, Settings, Quit |
+
+### Automation / MCP integration
+
+| Id | Pri | Status | Title |
+|---|---|---|---|
+| UAT-09 | P2 | ✅ done | Publish a usable accessibility tree and IPC socket for MCP automation |
+
+### N — Quality, performance and build
+
+| Id | Pri | Status | Title |
+|---|---|---|---|
+| N-06 | P1 | ✅ done | Disk-backed proxy history |
+| N-07 | P2 | ✅ done | Split Shared and App by subsystem |
+
+### D — Scanner parity
+
+| Id | Pri | Status | Title |
+|---|---|---|---|
+| D-11 | P1 | todo | Remaining Burp insertion points |
+| D-09 | P1 | todo | Remaining Collaborator check variants |
+| D-10 | P2 | todo | Stored XSS retrieval pairing as Burp |
+
+### R — Roadmap (zoom-out review 2026-11-18)
+
+| Id | Pri | Status | Title |
+|---|---|---|---|
+| R-01 | P0 | todo | Docs truth pass |
+| R-02 | P0 | todo | Portable build: no developer-machine paths |
+| R-03 | P0 | todo | Montoya bridge broad enough for real BApps |
+| R-04 | P0 | todo | Passive checks in the check registry + missing passive pack |
+| R-05 | P1 | todo | HTTP/2 browser-to-proxy and a working Repeater protocol switch |
+| R-06 | P1 | todo | Response streaming and server-sent events |
+| R-07 | P1 | todo | WebSocket robustness and tools |
+| R-08 | P1 | todo | Tests for untested modules |
+| R-09 | P1 | todo | JWT checks |
+| R-10 | P1 | todo | Active check pack (non-timing) |
+| R-11 | P1 | todo | Scan configuration library |
+| R-12 | P2 | todo | Repeater send groups and single-packet attack |
+| R-13 | P2 | todo | DOM-based / JavaScript analysis |
+| R-14 | P2 | todo | BCheck interpreter |
+| R-15 | P2 | todo | Burp CLI flags, config JSON and REST API |
+| R-16 | P2 | todo | Bambda-style filters and custom columns |
+| R-17 | P2 | todo | Intruder payload completeness |
+| R-18 | P2 | todo | Decompose App / Shared and split ui.rs |
+| R-19 | P2 | todo | UI parity re-score |

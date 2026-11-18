@@ -142,6 +142,8 @@ Burp's exact table-column strings from the column-definition class `Zxwu`
 
 ## Scanner active-check families (runtime-grounded)
 
+> Note 2026-11-18: this section lists what the scanner had in wave 20. The Expression Language (`${7*7}`) check named below was dropped in the later rewrite from Burp's source and is not reported today (only the issue name remains, `app/core/src/scan_checks.rs:1937`); re-porting it is part of task R-10.
+
 Burp's active-check families from `runtime_enums.tsv` (`burp.Zbjf`
 `SCANNER_ACTIVE_CHECKS_*`): CSRF, EXTERNAL_INTERACTION (OOB),
 FILE_PATH_TRAVERSAL, HEADER_INJECTION, HEADER_MANIPULATION, LDAP_INJECTION,

@@ -1,5 +1,8 @@
 # Burp parity scores (MiniMax M3.1 Flash / Nemotron VL), 2026-11-15
 
+> **Superseded (2026-11-18).** This report is a dated snapshot and is no longer the statement of where the project stands. Current status: `tasks.json` and `qa/ZOOM-OUT-REVIEW-2026-11-18.md`.
+
+
 Each WebProbe screen scored against its Burp counterpart, 5 categories x 10, total /50.
 
 | Screen | Layout | Key area | Views/controls | Inspector/target | Clarity | Total |

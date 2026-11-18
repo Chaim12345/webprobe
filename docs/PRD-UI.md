@@ -1,5 +1,8 @@
 # WebProbe UI PRD: matching what Burp Suite Professional's interface can do
 
+> **Status column is from 2026-11-15 and partly stale (noted 2026-11-18).** Many rows marked ❌ or 🚧 were built since; some are still real gaps. Until the per-row re-verification (task R-01) is done, trust `tasks.json` and `qa/ZOOM-OUT-REVIEW-2026-11-18.md` over the status column. The requirement text itself still holds.
+
+
 Status date: 2026-11-15 · Baseline: WebProbe `app/` (117 tests green) · Reference: Burp Suite Professional v2026.7.3
 (build 52685) run live on Xvfb, plus the 364 documentation pages shipped inside `/opt/BurpSuite/burpsuite.jar`.
 
