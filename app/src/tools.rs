@@ -2010,6 +2010,8 @@ pub fn apply_project(app: &mut App, data: &project::ProjectData, content: bool) 
         hist_pos: 0,
         }).collect();
         *app.shared.issues.lock().unwrap() = data.issues.iter().map(project::ProjectIssue::to_issue).collect();
+        // Cross-response passive state belongs to the project it was built in.
+        app.shared.passive.clear();
         *app.shared.ws_history.lock().unwrap() = data.websockets.iter().map(|w| net::WsEntry {
             id: w.id,
             ts: w.timestamp,

@@ -41,6 +41,7 @@ pub mod scan;
 pub mod scan_config;
 pub mod scan_run;
 pub mod seq_bits;
+pub mod passive_state;
 pub mod stored;
 pub mod setup_page;
 pub mod sitemap_compare;

@@ -794,6 +794,9 @@ pub struct Shared {
     pub oob: crate::oob::OobState,
     /// Stored input pairing of the current scan run (D-10).
     pub stored: crate::stored::StoredInputs,
+    /// Passive-scan state across responses (password fields and values
+    /// per host); project-scoped, cleared on project load.
+    pub passive: crate::passive_state::PassiveState,
     /// Repeater: send in flight, its generation, status line, tab ids.
     pub rep: crate::repeater_run::RepeaterRun,
     /// Client connections being handled right now (see `MAX_CONNECTIONS`).
@@ -938,6 +941,7 @@ impl Shared {
             scan: Default::default(),
             oob: Default::default(),
             stored: Default::default(),
+            passive: Default::default(),
             rep: Default::default(),
             scan_enabled: AtomicBool::new(true),
             active_connections: AtomicUsize::new(0),
@@ -1080,6 +1084,7 @@ impl Shared {
                 },
                 ts: util::now_secs(),
                 evidence: Vec::new(),
+                ident: String::new(),
             })
             .collect();
         crate::scan::add_issues(self, issues);

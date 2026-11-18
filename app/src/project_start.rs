@@ -58,6 +58,8 @@ pub fn new_project(app: &mut App, path: Option<&str>) -> Result<(), String> {
         return Err(format!("{target} already exists: open it instead, or choose another name"));
     }
     crate::settings_dialog::install(app, &webprobe_core::project::ProjectData::default())?;
+    // Cross-response passive state (password tracking) is per project.
+    app.shared.passive.clear();
     app.project_path = target.clone();
     if path.is_some() {
         crate::tools::save_project(app, true);

@@ -10,6 +10,7 @@
 // (`scan::add_passive_issues`).
 
 use super::*;
+use super::pack;
 
 /// One response being checked, with what every unit needs computed once.
 pub(crate) struct PassiveCtx<'a> {
@@ -25,10 +26,19 @@ pub(crate) struct PassiveCtx<'a> {
     pub html: bool,
     pub text: String,
     pub low: String,
+    /// Cross-response state (`Shared::passive`); `None` where there is no
+    /// project (single-exchange checks), and the checks needing it skip.
+    pub state: Option<&'a crate::passive_state::PassiveState>,
+    /// Which checks the scan configuration lets run (checks that report
+    /// several issue types, like Burp's password tracking, ask per type).
+    pub enabled: &'a dyn Fn(&str) -> bool,
+    /// Issues of the password-tracking analysis (burp.Zcn0), computed once
+    /// per response and handed out by the three units that report them.
+    pub password: std::cell::OnceCell<Vec<ScanIssue>>,
 }
 
 impl<'a> PassiveCtx<'a> {
-    fn new(e: &'a HistEntry, resp: &'a [u8]) -> Self {
+    fn new(e: &'a HistEntry, resp: &'a [u8], state: Option<&'a crate::passive_state::PassiveState>, enabled: &'a dyn Fn(&str) -> bool) -> Self {
         let p = util::parse_http(resp);
         let req = util::parse_http(&e.req_raw);
         let ok_status = p.status.starts_with('2') || p.status.starts_with('3');
@@ -38,7 +48,7 @@ impl<'a> PassiveCtx<'a> {
         let html = is_document(&ct) && !binary;
         let text = if binary { String::new() } else { String::from_utf8_lossy(body).into_owned() };
         let low = text.to_ascii_lowercase();
-        PassiveCtx { e, resp, p, req, ok_status, ct, body, binary, html, text, low }
+        PassiveCtx { e, resp, p, req, ok_status, ct, body, binary, html, text, low, state, enabled, password: std::cell::OnceCell::new() }
     }
 }
 
@@ -111,13 +121,30 @@ pub(crate) static PASSIVE_CHECKS: &[PassiveCheck] = &[
     unit!(CH_PRIVATE_KEY, private_key),
     unit!(CH_SSN, ssn),
     unit!(crate::scan::retirejs::CH_VULNERABLE_JS, crate::scan::retirejs::run),
+    // R-04 second pass.
+    unit!(pack::CH_SESSION_TOKEN_URL, pack::session_token_in_url),
+    unit!(pack::CH_DUPLICATE_COOKIES, pack::duplicate_cookies),
+    unit!(pack::CH_CROSS_DOMAIN_SCRIPT, pack::cross_domain_script),
+    unit!(pack::CH_COOKIE_PARENT_DOMAIN, pack::cookie_parent_domain),
+    unit!(pack::CH_PASSWORD_URL_QUERY, |cx, v| pack::passwords(cx, v, pack::CH_PASSWORD_URL_QUERY)),
+    unit!(pack::CH_PASSWORD_LATER, |cx, v| pack::passwords(cx, v, pack::CH_PASSWORD_LATER)),
+    unit!(pack::CH_PASSWORD_COOKIE, |cx, v| pack::passwords(cx, v, pack::CH_PASSWORD_COOKIE)),
+    unit!(pack::CH_SOURCE_CODE, pack::source_code),
+    unit!(pack::CH_SERIALIZED, pack::serialized_object),
+    unit!(pack::CH_DB_CONNECTION, pack::db_connection_string),
 ];
 
 /// Run every check `enabled` lets through on one exchange.
+#[cfg(test)]
 pub(crate) fn run_passive(e: &HistEntry, enabled: &dyn Fn(&str) -> bool) -> Vec<ScanIssue> {
+    run_passive_in(e, enabled, None)
+}
+
+/// [`run_passive`] with the project's cross-response state.
+pub(crate) fn run_passive_in(e: &HistEntry, enabled: &dyn Fn(&str) -> bool, state: Option<&crate::passive_state::PassiveState>) -> Vec<ScanIssue> {
     let mut v: Vec<ScanIssue> = Vec::new();
     let Some(resp) = &e.resp_raw else { return v };
-    let cx = PassiveCtx::new(e, resp);
+    let cx = PassiveCtx::new(e, resp, state, enabled);
     for c in PASSIVE_CHECKS {
         if enabled(c.id) {
             (c.run)(&cx, &mut v);
@@ -133,10 +160,10 @@ pub(crate) fn run_passive(e: &HistEntry, enabled: &dyn Fn(&str) -> bool) -> Vec<
 pub(crate) const CH_PASSWORD_GET: CheckDef = CheckDef { id: "passive.password-get", name: "Password submitted using GET method", sev: "low", confidence: "Certain" };
 
 /// One form of an HTML page: method, action, and its named password fields.
-struct Form {
-    method_get: bool,
-    action: String,
-    passwords: Vec<String>,
+pub(crate) struct Form {
+    pub method_get: bool,
+    pub action: String,
+    pub passwords: Vec<String>,
 }
 
 /// The value of attribute `name` in a lowercase start tag `low_tag`, read
@@ -165,7 +192,7 @@ pub(crate) fn attr(low_tag: &str, tag: &str, name: &str) -> Option<String> {
 /// The forms of a page (burp.Zem): a form runs to its `</form>` (or the
 /// next form); its inputs of type password with a name are its password
 /// fields (burp.Zxro.Zt: Zbmj.PASSWORD with a name). No method means GET.
-fn forms(text: &str, low: &str) -> Vec<Form> {
+pub(crate) fn forms(text: &str, low: &str) -> Vec<Form> {
     let mut out = Vec::new();
     let mut i = 0;
     while let Some(off) = low[i..].find("<form") {
@@ -208,10 +235,16 @@ pub(crate) fn page_url(e: &HistEntry) -> String {
     }
 }
 
-fn resolve(base: &str, action: &str) -> String {
+pub(crate) fn resolve(base: &str, action: &str) -> String {
     let a = action.trim();
     if a.is_empty() {
         return base.to_string();
+    }
+    if a.starts_with('#') {
+        return base.split('#').next().unwrap_or(base).to_string();
+    }
+    if a.starts_with('?') {
+        return format!("{}{a}", base.split(['?', '#']).next().unwrap_or(base));
     }
     if a.contains("://") {
         return a.to_string();
@@ -362,22 +395,15 @@ fn find_ssns(b: &[u8]) -> Vec<String> {
     out
 }
 
-/// Social security numbers disclosed (burp.Zbdp, text burp.Zwvk): the
-/// body is searched. Burp raises one issue per number; here one issue per
-/// response lists them all, as the other disclosure checks do.
+/// Social security numbers disclosed (burp.Zbdp.checkForSSNs, text
+/// burp.Zwvk): the body is searched; one issue per number, keyed by it
+/// (Zcuc.Zm sets PERVASIVE_ISSUE_IDENTIFIER to the number).
 fn ssn(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
-    let found = find_ssns(cx.body);
-    if found.is_empty() {
-        return;
+    for s in find_ssns(cx.body) {
+        let mut i = mk_check(CH_SSN, cx.e, format!("The following social security number was disclosed in the response:<ul><li>{}</li></ul>", util::html_encode(&s)));
+        i.ident = s;
+        v.push(i);
     }
-    let mut t = String::from("The following social security ");
-    t.push_str(if found.len() == 1 { "number was" } else { "numbers were" });
-    t.push_str(" disclosed in the response:<ul>");
-    for s in &found {
-        t.push_str(&format!("<li>{}</li>", util::html_encode(s)));
-    }
-    t.push_str("</ul>");
-    v.push(mk_check(CH_SSN, cx.e, t));
 }
 
 /// Password submitted using GET method (burp.Zxro.ZQ, text burp.Zwun): a
@@ -835,7 +861,7 @@ mod tests {
         }
         // The Burp ports report KnowledgeBase names, so they are shown by
         // default.
-        for c in [csp::CSP_NOT_ENFORCED, csp::CSP_UNTRUSTED_SCRIPTS, csp::CSP_UNTRUSTED_STYLES, csp::CSP_ALLOWLISTED_SCRIPTS, csp::CSP_CLICKJACKING, csp::CSP_FORM_HIJACKING, csp::CSP_MALFORMED, CH_PASSWORD_GET, CH_PRIVATE_KEY, CH_SSN, retirejs::CH_VULNERABLE_JS] {
+        for c in [csp::CSP_NOT_ENFORCED, csp::CSP_UNTRUSTED_SCRIPTS, csp::CSP_UNTRUSTED_STYLES, csp::CSP_ALLOWLISTED_SCRIPTS, csp::CSP_CLICKJACKING, csp::CSP_FORM_HIJACKING, csp::CSP_MALFORMED, CH_PASSWORD_GET, CH_PRIVATE_KEY, CH_SSN, retirejs::CH_VULNERABLE_JS, pack::CH_SESSION_TOKEN_URL, pack::CH_DUPLICATE_COOKIES, pack::CH_CROSS_DOMAIN_SCRIPT, pack::CH_COOKIE_PARENT_DOMAIN, pack::CH_PASSWORD_URL_QUERY, pack::CH_PASSWORD_LATER, pack::CH_PASSWORD_COOKIE, pack::CH_SOURCE_CODE, pack::CH_SERIALIZED, pack::CH_DB_CONNECTION] {
             assert!(crate::scan::is_burp_issue(c.name), "{}", c.name);
         }
     }
@@ -946,12 +972,30 @@ mod tests {
 
     #[test]
     fn social_security_numbers_disclosed() {
+        // One issue per number (Zcuc.Zm keys on it), repeats folded.
         let v = only(&ex("/u", true, HTML, "<p>SSN: 123-45-6789, again 123-45-6789; spouse 234 56 7890.</p>"), CH_SSN);
-        assert_eq!(v.len(), 1);
-        assert_eq!(v[0].detail, "The following social security numbers were disclosed in the response:<ul><li>123-45-6789</li><li>234 56 7890</li></ul>");
+        assert_eq!(v.iter().map(|i| i.ident.as_str()).collect::<Vec<_>>(), ["123-45-6789", "234 56 7890"]);
+        assert_eq!(v[0].detail, "The following social security number was disclosed in the response:<ul><li>123-45-6789</li></ul>");
         for neg in ["078-05-1120", "666-12-3456", "900-12-3456", "123-00-4567", "123-45 6789", "x123-45-6789", "123-45-67890", "99-123-45-6789", "123-45-6789-12"] {
             assert!(only(&ex("/u", true, HTML, &format!("<p>{neg} </p>")), CH_SSN).is_empty(), "{neg}");
         }
+    }
+
+    /// The merge key: name, host, path (not for origin-scoped types) and
+    /// the pervasive identifier.
+    #[test]
+    fn merge_key_keeps_values_apart_and_scopes_by_origin() {
+        let shared = crate::net::Shared::new();
+        let a = only(&ex("/a", true, HTML, "<p>123-45-6789 and 234-56-7890 </p>"), CH_SSN);
+        let b = only(&ex("/b", true, HTML, "<p>123-45-6789 </p>"), CH_SSN);
+        crate::scan::add_passive_issues(&shared, a);
+        crate::scan::add_passive_issues(&shared, b);
+        assert_eq!(shared.issues.lock().unwrap().len(), 2, "two numbers; the second path repeats one (SSNs key by origin)");
+        let mut c = only(&ex("/a", true, &format!("{HTML}Set-Cookie: k=1\r\nSet-Cookie: k=2\r\n"), "x"), pack::CH_DUPLICATE_COOKIES);
+        c.extend(only(&ex("/b", true, &format!("{HTML}Set-Cookie: k=1\r\nSet-Cookie: k=2\r\n"), "x"), pack::CH_DUPLICATE_COOKIES));
+        crate::scan::add_passive_issues(&shared, c);
+        assert_eq!(shared.issues.lock().unwrap().iter().filter(|i| i.name == "Duplicate cookies set").count(), 2, "path-scoped");
+        assert_eq!(crate::scan::passive_merge_key(&shared.issues.lock().unwrap()[0]), "Social security numbers disclosed|example.com||123-45-6789");
     }
 
     const REPO: &str = r#"{
@@ -976,7 +1020,7 @@ mod tests {
 
     fn vuln_js(e: &HistEntry) -> Vec<ScanIssue> {
         let resp = e.resp_raw.clone().unwrap();
-        let cx = PassiveCtx::new(e, &resp);
+        let cx = PassiveCtx::new(e, &resp, None, &|_| true);
         let mut v = Vec::new();
         retirejs::run_with(&repo(), &cx, &mut v);
         v
@@ -1051,5 +1095,203 @@ mod tests {
         let r = retirejs::Repository::load(std::path::Path::new(&path)).unwrap();
         eprintln!("{} libraries, skipped: {:?}", r.libs_len(), r.skipped);
         assert!(r.libs_len() > 10);
+        assert!(r.skipped.is_empty(), "jquery's back-reference and lodash's look-behind are rewritten: {:?}", r.skipped);
+    }
+
+    // ------------------------------------------------------------ R-04 second pass
+
+    /// An exchange with a given request (method line from `req_head`).
+    fn ex_req(path: &str, req: &str, headers: &str, body: &str) -> HistEntry {
+        let mut e = ex(path, true, headers, body);
+        e.req_raw = req.as_bytes().to_vec().into();
+        e
+    }
+
+    fn names(v: &[ScanIssue]) -> Vec<(String, String)> {
+        v.iter().map(|i| (i.name.clone(), i.ident.clone())).collect()
+    }
+
+    #[test]
+    fn session_token_in_url() {
+        let v = only(&ex("/app?sessionid=abc123&x=1", true, HTML, "<html></html>"), pack::CH_SESSION_TOKEN_URL);
+        assert_eq!(names(&v), [("Session token in URL".to_string(), "1|sessionid".to_string())]);
+        assert_eq!(v[0].detail, "The URL in the request appears to contain a session token within the query string:<ul><li>https://example.com/app?sessionid=abc123&amp;x=1</li></ul>");
+        assert_eq!((v[0].sev.as_str(), v[0].confidence.as_str()), ("medium", "Firm"));
+        // Links in the response (variant 2).
+        let v = only(&ex("/", true, HTML, "<a href=\"/next?JSESSIONID=XYZ123\">n</a><a href='/b?jsessionid=XYZ123'>b</a>"), pack::CH_SESSION_TOKEN_URL);
+        assert_eq!(names(&v), [("Session token in URL".to_string(), "2|JSESSIONID".to_string()), ("Session token in URL".to_string(), "2|jsessionid".to_string())]);
+        assert_eq!(v[0].detail, "The response contains the following links that appear to contain session tokens:<ul><li>https://example.com/next?JSESSIONID=XYZ123</li></ul>");
+        for neg in ["/app?q=abc123", "/app?token=ab", "/app?org.apache.struts.taglib.html.TOKEN=abcdef"] {
+            assert!(only(&ex(neg, true, HTML, "<a href=/x?id=1>x</a>"), pack::CH_SESSION_TOKEN_URL).is_empty(), "{neg}");
+        }
+    }
+
+    #[test]
+    fn duplicate_cookies_set() {
+        let v = only(&ex("/", true, &format!("{HTML}Set-Cookie: sid=1; Path=/\r\nSet-Cookie: sid=2\r\n"), "x"), pack::CH_DUPLICATE_COOKIES);
+        assert_eq!(names(&v), [("Duplicate cookies set".to_string(), "sid".to_string())]);
+        assert_eq!(v[0].detail, "The application attempted to set the following cookie to multiple values:<ul><li><b>sid</b></li></ul>");
+        for neg in ["Set-Cookie: sid=1\r\nSet-Cookie: sid=1\r\n", "Set-Cookie: a=1\r\nSet-Cookie: b=2\r\n", "Set-Cookie: sid=\r\nSet-Cookie: sid=2\r\n"] {
+            assert!(only(&ex("/", true, &format!("{HTML}{neg}"), "x"), pack::CH_DUPLICATE_COOKIES).is_empty(), "{neg}");
+        }
+    }
+
+    #[test]
+    fn cross_domain_script_include() {
+        let body = "<script src=\"https://cdn.other.net/b.js\"></script><script src=\"//cdn.other.net/a.js\"></script>\
+                    <script src=\"https://static.example.com/y.js\"></script><img src=\"https://img.other.net/p.png\"><!-- <script src=https://c.evil.org/x.js></script> -->";
+        let v = only(&ex("/", true, HTML, body), pack::CH_CROSS_DOMAIN_SCRIPT);
+        assert_eq!(names(&v), [("Cross-domain script include".to_string(), "cdn.other.net".to_string())]);
+        assert_eq!(v[0].detail, "The response dynamically includes the following scripts from other domains:<ul><li>https://cdn.other.net/a.js</li><li>https://cdn.other.net/b.js</li></ul>");
+        assert!(only(&ex("/", true, HTML, "<script src=/local.js></script><script src=https://www.example.com/a.js></script>"), pack::CH_CROSS_DOMAIN_SCRIPT).is_empty());
+        // burp.Zw4k.ZU compares the label left of the public suffix.
+        assert!(!pack::other_domain("www.example.co.uk", "cdn.example.co.uk"));
+        assert!(!pack::other_domain("example.com", "example.org"));
+        assert!(pack::other_domain("example.com", "evil.com"));
+        assert!(pack::other_domain("localhost", "127.0.0.1"));
+    }
+
+    #[test]
+    fn cookie_scoped_to_parent_domain() {
+        let mut e = ex("/", true, &format!("{HTML}Set-Cookie: sessionid=abcdef; Domain=example.com\r\nSet-Cookie: pref=dark-mode; Domain=.example.com\r\n"), "x");
+        e.host = "www.example.com".into();
+        let v = only(&e, pack::CH_COOKIE_PARENT_DOMAIN);
+        assert_eq!(names(&v), [("Cookie scoped to parent domain".to_string(), "Session: sessionid".to_string()), ("Cookie scoped to parent domain".to_string(), "Other: pref".to_string())]);
+        assert_eq!((v[0].sev.as_str(), v[0].confidence.as_str(), v[1].sev.as_str(), v[1].confidence.as_str()), ("low", "Firm", "info", "Certain"));
+        assert_eq!(v[0].detail, "The following cookie was issued by the application and is scoped to a parent of the issuing domain:<ul><li><b>sessionid</b></li></ul>The cookie appears to contain a session token, which may increase the risk associated with this issue. You should review the contents of the cookie to determine its function.");
+        for neg in ["sessionid=abcdef; Domain=www.example.com", "sessionid=ab; Domain=example.com", "sessionid=abcdef; Domain=example.com; Expires=Thu, 01 Jan 1970 00:00:00 GMT", "sessionid=abcdef; Domain=example.com; Max-Age=0", "sessionid=abcdef"] {
+            let mut e = ex("/", true, &format!("{HTML}Set-Cookie: {neg}\r\n"), "x");
+            e.host = "www.example.com".into();
+            assert!(only(&e, pack::CH_COOKIE_PARENT_DOMAIN).is_empty(), "{neg}");
+        }
+    }
+
+    const LOGIN: &str = "<form method=post action=\"/login\"><input name=user><input type=password name=pw></form>";
+
+    fn post_login(pw: &str, headers: &str, body: &str) -> HistEntry {
+        let form = format!("user=bob&pw={pw}");
+        ex_req("/login", &format!("POST /login HTTP/1.1\r\nHost: example.com\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {}\r\n\r\n{form}", form.len()), headers, body)
+    }
+
+    fn with_state(e: &HistEntry, st: &crate::passive_state::PassiveState) -> Vec<ScanIssue> {
+        run_passive_in(e, &|id| id.starts_with("passive.password-"), Some(st))
+    }
+
+    #[test]
+    fn passwords_in_cookie_url_query_and_later_responses() {
+        let st = crate::passive_state::PassiveState::default();
+        assert!(with_state(&ex("/", true, HTML, LOGIN), &st).is_empty());
+        // The response to the login sets the password in a cookie.
+        let v = with_state(&post_login("S3cretPass", &format!("{HTML}Set-Cookie: remember=S3cretPass\r\n"), "ok"), &st);
+        assert_eq!(names(&v), [("Password value set in cookie".to_string(), String::new())]);
+        // ... or in a link's query string.
+        let v = with_state(&post_login("S3cretPass", HTML, "<a href=\"/welcome?pw=S3cretPass\">go</a>"), &st);
+        assert_eq!(names(&v), [("Password returned in URL query string".to_string(), String::new())]);
+        assert_eq!((v[0].sev.as_str(), v[0].confidence.as_str()), ("low", "Firm"));
+        // A plain echo in the login response is not reported (burp.Zcn0.ZO
+        // stops for the submitting response).
+        assert!(with_state(&post_login("S3cretPass", HTML, "<p>S3cretPass</p>"), &st).is_empty());
+        // Later responses on the host: an attribute value (Firm), a
+        // standalone occurrence (Tentative), a glued one (nothing).
+        let later = |body: &str| with_state(&ex("/profile", true, HTML, body), &st);
+        let v = later("<input name=p value=\"S3cretPass\">");
+        assert_eq!((v[0].name.as_str(), v[0].confidence.as_str(), v[0].evidence.len()), ("Password returned in later response", "Firm", 2));
+        assert_eq!(later("<p>your password is S3cretPass.</p>")[0].confidence, "Tentative");
+        assert!(later("<p>xS3cretPassx</p>").is_empty());
+        assert!(later("<p>nothing</p>").is_empty());
+        // Another host knows nothing; no state, no check.
+        let mut other = ex("/profile", true, HTML, "<p> S3cretPass </p>");
+        other.host = "other.com".into();
+        assert!(with_state(&other, &st).is_empty());
+        assert!(only(&ex("/profile", true, HTML, "<p> S3cretPass </p>"), pack::CH_PASSWORD_LATER).is_empty());
+        // A placeholder value is not tracked.
+        let st2 = crate::passive_state::PassiveState::default();
+        with_state(&ex("/", true, HTML, LOGIN), &st2);
+        assert!(with_state(&post_login("password", &format!("{HTML}Set-Cookie: c=password\r\n"), "ok"), &st2).is_empty());
+    }
+
+    #[test]
+    fn source_code_disclosure() {
+        let v = only(&ex("/p", true, HTML, "<p>x</p><?php echo $secret; ?> and <% Response.Write(x) %>"), pack::CH_SOURCE_CODE);
+        assert_eq!(v.len(), 1);
+        assert_eq!(v[0].detail, "The application appears to disclose some server-side source code written in PHP and ASP.");
+        assert_eq!((v[0].sev.as_str(), v[0].confidence.as_str()), ("low", "Tentative"));
+        assert_eq!(pack::code_blocks(b"<jsp:include page=\"x\"/>"), (1, 4));
+        for neg in ["<?xml version='1.0'?><a/>", "<% %>", "<?= 1 ?>", "a < b and c > d"] {
+            assert!(only(&ex("/p", true, HTML, neg), pack::CH_SOURCE_CODE).is_empty(), "{neg}");
+        }
+        // Burp asks whether the stated OR the sniffed type is text
+        // (Zgph.ZX), so a text body under an image type still counts.
+        assert_eq!(only(&ex("/p", true, "Content-Type: image/png\r\n", "<?php echo $a; ?>"), pack::CH_SOURCE_CODE).len(), 1);
+    }
+
+    #[test]
+    fn serialized_object_in_http_message() {
+        // Java (Base64 of AC ED 00 05 ...) in a query parameter.
+        let v = only(&ex("/?data=rO0ABXQAA2FiYw%3D%3D", true, HTML, "x"), pack::CH_SERIALIZED);
+        assert_eq!(names(&v), [("Serialized object in HTTP message".to_string(), "0|data".to_string())]);
+        assert_eq!(v[0].detail, "The parameter <b>data</b> appears to contain a serialized <b>Java object</b>.");
+        assert_eq!((v[0].sev.as_str(), v[0].confidence.as_str()), ("high", "Firm"));
+        // PHP in a cookie, Python 3 pickle in a link.
+        let req = "GET / HTTP/1.1\r\nHost: example.com\r\nCookie: cart=a%3A1%3A%7Bs%3A1%3A%22a%22%3Bi%3A1%3B%7D\r\n\r\n";
+        let v = only(&ex_req("/", req, HTML, "<a href=\"/x?obj=gAN9cQAu\">x</a>"), pack::CH_SERIALIZED);
+        assert_eq!(v.iter().map(|i| i.detail.as_str()).collect::<Vec<_>>(), ["The parameter <b>cart</b> appears to contain a serialized <b>PHP object</b>.", "The parameter <b>obj</b> appears to contain a serialized <b>Python 3 object</b>."]);
+        assert!(only(&ex("/?data=hello&n=12345", true, HTML, "<a href=/x?q=abcd>x</a>"), pack::CH_SERIALIZED).is_empty());
+        // burp.Zb0_ shapes.
+        use pack::php::serialized;
+        for ok in [&b"a:2:{s:1:\"a\";i:1;s:1:\"b\";b:0;}"[..], b"O:8:\"stdClass\":1:{s:1:\"x\";N;}", b"i:12;", b"s:0:\"\";"] {
+            assert!(serialized(ok), "{}", String::from_utf8_lossy(ok));
+        }
+        for bad in [&b"s:3:\"ab\";"[..], b"hello", b"d:1.5;", b"a:1:{i:1;", b"b:2;"] {
+            assert!(!serialized(bad), "{}", String::from_utf8_lossy(bad));
+        }
+        assert_eq!(pack::serialized_kind(b"--- !ruby/object:Gem\nfoo: 1\n..."), Some(5));
+        assert_eq!(pack::serialized_kind(&[4, 8, b'o', b'\n']), Some(4));
+    }
+
+    #[test]
+    fn database_connection_string_disclosed() {
+        let v = only(&ex("/e", true, HTML, "<pre>Server=db01;Database=shop;User Id=sa;Password=hunter2;</pre>"), pack::CH_DB_CONNECTION);
+        assert_eq!(names(&v), [("Database connection string disclosed".to_string(), "server=db01;database=shop;userid=sa;password=hunter2;".to_string())]);
+        assert_eq!(v[0].sev, "medium");
+        assert_eq!(v[0].detail, "The following database connection string was disclosed in the response:<ul><li>server=db01;database=shop;userid=sa;password=hunter2;</li></ul>The connection string appears to contain:<ul><li>Database name or location</li><li>Username</li><li>Password</li></ul>");
+        // Only an unvalued known key: info.
+        let v = only(&ex("/e", true, HTML, "<pre>Data Source=x;Integrated Security=;    </pre>"), pack::CH_DB_CONNECTION);
+        assert_eq!((v.len(), v[0].sev.as_str()), (1, "info"));
+        for neg in ["<p>server=nginx and more text here</p>", "<p>Driver=x;Color=blue;Size=2 padding padding</p>"] {
+            assert!(only(&ex("/e", true, HTML, neg), pack::CH_DB_CONNECTION).is_empty(), "{neg}");
+        }
+        assert_eq!(pack::db_strings(b"provider=sqloledb;data source=srv;initial catalog=x;uid=u;pwd= ;'....................").1, 2 | 4, "the first pair (provider=) is skipped; an empty pwd counts but adds no flag");
+    }
+
+    /// The new pack, each switched off in the scan configuration.
+    #[test]
+    fn switching_off_the_second_pass() {
+        let shared = crate::net::Shared::new();
+        let mut parent = ex("/", true, &format!("{HTML}Set-Cookie: sessionid=abcdef; Domain=example.com\r\n"), "x");
+        parent.host = "www.example.com".into();
+        let cases: Vec<(CheckDef, HistEntry)> = vec![
+            (pack::CH_SESSION_TOKEN_URL, ex("/app?sessionid=abc123", true, HTML, "x")),
+            (pack::CH_DUPLICATE_COOKIES, ex("/", true, &format!("{HTML}Set-Cookie: a=1\r\nSet-Cookie: a=2\r\n"), "x")),
+            (pack::CH_CROSS_DOMAIN_SCRIPT, ex("/", true, HTML, "<script src=https://evil.net/a.js></script>")),
+            (pack::CH_COOKIE_PARENT_DOMAIN, parent),
+            (pack::CH_SOURCE_CODE, ex("/", true, HTML, "<?php echo $a; ?>")),
+            (pack::CH_SERIALIZED, ex("/?d=rO0ABXQAA2FiYw%3D%3D", true, HTML, "x")),
+            (pack::CH_DB_CONNECTION, ex("/", true, HTML, "<p>Server=a;Database=b;Uid=c;Pwd=d;</p>")),
+        ];
+        let check = |c: CheckDef, e: &HistEntry| {
+            *shared.scan_config.lock().unwrap() = Default::default();
+            assert!(crate::scan::passive_check_for(&shared, e).iter().any(|i| i.name == c.name), "{} on", c.id);
+            shared.scan_config.lock().unwrap().disabled_checks.insert(c.id.to_string());
+            assert!(!crate::scan::passive_check_for(&shared, e).iter().any(|i| i.name == c.name), "{} off", c.id);
+        };
+        for (c, e) in &cases {
+            check(*c, e);
+        }
+        // The password trio share project state on `Shared::passive`.
+        crate::scan::passive_check_for(&shared, &ex("/", true, HTML, LOGIN));
+        check(pack::CH_PASSWORD_COOKIE, &post_login("S3cretPass", &format!("{HTML}Set-Cookie: r=S3cretPass\r\n"), "ok"));
+        check(pack::CH_PASSWORD_URL_QUERY, &post_login("S3cretPass", HTML, "<a href=/w?pw=S3cretPass>w</a>"));
+        check(pack::CH_PASSWORD_LATER, &ex("/profile", true, HTML, "<input value=S3cretPass>"));
     }
 }

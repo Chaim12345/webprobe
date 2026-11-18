@@ -24,9 +24,9 @@ pub(crate) struct Vuln {
 /// One library (burp.Zcmc) with its compiled extractors.
 pub(crate) struct Library {
     name: String,
-    uri: Vec<regex::Regex>,
-    filename: Vec<regex::Regex>,
-    filecontent: Vec<regex::Regex>,
+    uri: Vec<Extractor>,
+    filename: Vec<Extractor>,
+    filecontent: Vec<Extractor>,
     vulns: Vec<Vuln>,
 }
 
@@ -77,10 +77,10 @@ impl Repository {
                 })
                 .collect();
             let ex = lib.get("extractors").and_then(|x| x.as_object()).ok_or_else(|| format!("No extractors found in library {name}: each library should have at least one extractor"))?;
-            let mut compiled = |kind: &str| -> Vec<regex::Regex> {
-                ex.get(kind).map(strings).unwrap_or_default().iter().filter_map(|p| match regex::Regex::new(&java_pattern(p)) {
-                    Ok(r) => Some(r),
-                    Err(_) => {
+            let mut compiled = |kind: &str| -> Vec<Extractor> {
+                ex.get(kind).map(strings).unwrap_or_default().iter().filter_map(|p| match Extractor::compile(&java_pattern(p)) {
+                    Some(r) => Some(r),
+                    None => {
                         skipped.push(format!("{name} {kind}: {p}"));
                         None
                     }
@@ -97,6 +97,80 @@ impl Repository {
         let dead = path.parent().map(|d| d.join("deadlinks.txt")).and_then(|f| std::fs::read_to_string(f).ok()).map(|s| s.lines().map(str::to_string).collect()).unwrap_or_default();
         Self::parse(&json, dead).map_err(|e| format!("{}: {e}", path.display()))
     }
+}
+
+/// An extractor: a regex, or one of the two repository patterns Java runs
+/// and the `regex` crate cannot (look-behind, back-reference), rewritten so
+/// they accept exactly the same strings and yield the same version.
+pub(crate) enum Extractor {
+    Re(regex::Regex),
+    /// jquery's `="(V)",.{50,300}(.)\.fn=(\2)\.prototype=\{jquery:`: the
+    /// head `="(V)",` as a regex; the tail (the gap, the one-character name
+    /// repeated by the back-reference) checked in code.
+    JqueryFn(regex::Regex),
+}
+
+/// The two Java patterns (after `java_pattern`) that need a rewrite.
+const JQUERY_BACKREF: &str = r#"="([0-9][0-9.a-z_\\\\-]+)",.{50,300}(.)\.fn=(\2)\.prototype=\{jquery:"#;
+const LODASH_LOOKBEHIND: &str = r#"="([0-9][0-9.a-z_\\\\-]+)(?<=[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,2})"[\s\S]{1,300}__lodash_hash_undefined__"#;
+
+/// Java's `.`: anything but a line terminator.
+fn java_dot(c: char) -> bool {
+    !matches!(c, '\n' | '\r' | '\u{85}' | '\u{2028}' | '\u{2029}')
+}
+
+impl Extractor {
+    fn compile(p: &str) -> Option<Extractor> {
+        if let Ok(r) = regex::Regex::new(p) {
+            return Some(Extractor::Re(r));
+        }
+        if p == LODASH_LOOKBEHIND {
+            // The version runs to the closing quote (its class has no `"`),
+            // so the look-behind only constrains how it ends: a version
+            // ending in d{1,2}.d{1,2}.d{1,2}. As one regex: an optional
+            // version-class run that starts with a digit, then that ending.
+            return regex::Regex::new(r#"="((?:[0-9][0-9.a-z_\\\\-]*)?[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,2})"[\s\S]{1,300}__lodash_hash_undefined__"#).ok().map(Extractor::Re);
+        }
+        if p == JQUERY_BACKREF {
+            return regex::Regex::new(r#"="([0-9][0-9.a-z_\\\\-]+)","#).ok().map(Extractor::JqueryFn);
+        }
+        None
+    }
+
+    /// The version (group 1) of the leftmost match, as Java's `find()`.
+    fn version(&self, s: &str) -> Option<String> {
+        match self {
+            Extractor::Re(r) => r.captures(s).and_then(|c| c.get(1)).map(|m| m.as_str().to_string()),
+            Extractor::JqueryFn(head) => {
+                // Each `="V",` in order (the version cannot contain `"`, so
+                // V is fixed by where the match starts); the first with a
+                // tail 50 to 300 characters on decides.
+                head.captures_iter(s).find(|c| jquery_tail(&s[c.get(0).unwrap().end()..])).map(|c| c[1].to_string())
+            }
+        }
+    }
+}
+
+/// `.{50,300}(.)\.fn=(\2)\.prototype=\{jquery:` at the start of `rest`:
+/// 50 to 300 non-line-terminator characters, then a character c (not a
+/// line terminator), `.fn=`, the same c, `.prototype={jquery:`.
+fn jquery_tail(rest: &str) -> bool {
+    let chars: Vec<(usize, char)> = rest.char_indices().take(301).collect();
+    for (gap, &(at, c)) in chars.iter().enumerate() {
+        // c is the candidate name; if this one fails it joins the gap, so
+        // either way it must not be a line terminator.
+        if !java_dot(c) {
+            return false;
+        }
+        if gap >= 50 {
+            if let Some(t) = rest[at + c.len_utf8()..].strip_prefix(".fn=") {
+                if t.starts_with(c) && t[c.len_utf8()..].starts_with(".prototype={jquery:") {
+                    return true;
+                }
+            }
+        }
+    }
+    false
 }
 
 static REPOSITORY: RwLock<Option<Result<Arc<Repository>, String>>> = RwLock::new(None);
@@ -143,8 +217,8 @@ fn vulnerable<'a>(lib: &'a Library, version: &str) -> Vec<&'a Vuln> {
     lib.vulns.iter().filter(|v| v.below.as_deref().is_none_or(|b| below(version, b)) && v.at_or_above.as_deref().is_none_or(|a| !below(version, a))).collect()
 }
 
-fn version_of(r: &regex::Regex, s: &str) -> Option<String> {
-    r.captures(s).and_then(|c| c.get(1)).map(|m| m.as_str().to_string())
+fn version_of(r: &Extractor, s: &str) -> Option<String> {
+    r.version(s)
 }
 
 /// A library found at a version that has known vulnerabilities.
@@ -156,7 +230,7 @@ struct Hit {
 
 /// burp.Zmwd.ZQ / Zr (uri, filename extractors): per library, the first
 /// pattern that yields a version decides.
-fn by_name(repo: &Repository, s: &str, which: fn(&Library) -> &Vec<regex::Regex>) -> Vec<Hit> {
+fn by_name(repo: &Repository, s: &str, which: fn(&Library) -> &Vec<Extractor>) -> Vec<Hit> {
     let mut out = Vec::new();
     for (i, lib) in repo.libs.iter().enumerate() {
         if let Some(version) = which(lib).iter().find_map(|r| version_of(r, s)) {
@@ -294,18 +368,19 @@ fn scan(repo: &Repository, cx: &PassiveCtx) -> Vec<Hit> {
     hits
 }
 
-/// Vulnerable JavaScript dependency. Burp raises one issue per library and
-/// version; here one issue per response names them all, in Burp's text for
-/// several libraries.
+/// Vulnerable JavaScript dependency: one issue per library and version
+/// (burp.Zujw.ZC, PERVASIVE_ISSUE_IDENTIFIER = Zc2l.ZF), text burp.Zcu3.ZR.
 pub(crate) fn run(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
     let Ok(repo) = repository() else { return };
     run_with(&repo, cx, v);
 }
 
 pub(crate) fn run_with(repo: &Repository, cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
-    let hits = scan(repo, cx);
-    if !hits.is_empty() {
-        v.push(mk_check(CH_VULNERABLE_JS, cx.e, detail(repo, &hits)));
+    for h in scan(repo, cx) {
+        let mut i = mk_check(CH_VULNERABLE_JS, cx.e, detail(repo, std::slice::from_ref(&h)));
+        // burp.Zc2l.ZF: library, the 🧀 separator, version.
+        i.ident = format!("{}\u{1f9c0}{}", repo.libs[h.lib].name, h.version);
+        v.push(i);
     }
 }
 
@@ -330,5 +405,39 @@ mod tests {
         assert!(!below("1.2.3", "1.2.3"));
         assert_eq!(file_name("/a/b/jquery-1.2.js"), "jquery-1.2.js");
         assert_eq!(java_pattern("x-(§§version§§)\\.js{}"), r"x-([0-9][0-9.a-z_\\\\-]+)\.js\{\}");
+    }
+
+    /// The two rewritten extractors give what Java gives for the same
+    /// inputs (Java's results, from `Pattern.compile(...).matcher(s).find()`
+    /// on the original patterns, are the expected values below).
+    #[test]
+    fn rewritten_extractors_match_java() {
+        let jq = Extractor::compile(JQUERY_BACKREF).unwrap();
+        let pad = "x".repeat(60);
+        let cases = [
+            (format!("/*! jQuery v1.8.3 */(function(e,t){{var n=\"1.8.3\",{pad}e.fn=e.prototype={{jquery:n}}"), Some("1.8.3")),
+            (format!("var n=\"1.8.3\",{pad}x.fn=y.prototype={{jquery:n}}"), None),
+            (format!("var n=\"1.8.3\",{}e.fn=e.prototype={{jquery:n}}", "x".repeat(10)), None),
+            (format!("var n=\"1.8.3\",{}e.fn=e.prototype={{jquery:n}}", "x".repeat(400)), None),
+            (format!("var n=\"1.8.3\",{}\n{}e.fn=e.prototype={{jquery:n}}", "x".repeat(30), "x".repeat(30)), None),
+            (format!("a=\"9.9\",b q=\"2.1.4\",{pad}x.fn=y.prototype={{jquery:1}};{pad}Q.fn=Q.prototype={{jquery:2}}"), Some("9.9")),
+            (format!("var n=\"3.6.0\",{}\re.fn=e.prototype={{jquery:n}}", "x".repeat(55)), None),
+        ];
+        for (s, want) in &cases {
+            assert_eq!(jq.version(s).as_deref(), *want, "{s}");
+        }
+        let lo = Extractor::compile(LODASH_LOOKBEHIND).unwrap();
+        let cases = [
+            (";var e=\"4.17.21\",n=\"__lodash_hash_undefined__\"".to_string(), Some("4.17.21")),
+            (";var e=\"4.17.210\",n=\"__lodash_hash_undefined__\"".to_string(), None),
+            (";var e=\"1.2\",n=\"__lodash_hash_undefined__\"".to_string(), None),
+            (";var e=\"3.10.1-rc.1.2.3\",n=\"__lodash_hash_undefined__\"".to_string(), Some("3.10.1-rc.1.2.3")),
+            (format!("x=\"5.0.0\";{}__lodash_hash_undefined__", "y".repeat(400)), None),
+            ("x=\"1.0.0-x\"; z=\"2.4.6\"\n__lodash_hash_undefined__".to_string(), Some("2.4.6")),
+        ];
+        for (s, want) in &cases {
+            assert_eq!(lo.version(s).as_deref(), *want, "{s}");
+        }
+        assert!(Extractor::compile(r"(?<=x)y").is_none(), "other look-around stays unsupported");
     }
 }

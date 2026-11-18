@@ -28,6 +28,8 @@ pub(crate) mod insertion;
 pub(crate) mod passive_checks;
 
 /// Content security policy issues (burp.Zxr9 / Zupz / Zifp).
+#[path = "passive_pack.rs"]
+pub(crate) mod pack;
 #[path = "retirejs.rs"]
 pub(crate) mod retirejs;
 #[path = "csp.rs"]
@@ -232,6 +234,11 @@ pub struct ScanIssue {
     /// for issues loaded from a project file and for checks that do not
     /// attach evidence yet.
     pub evidence: Vec<ScanEvidence>,
+    /// Burp's pervasive issue identifier (Zu4s.PERVASIVE_ISSUE_IDENTIFIER),
+    /// with the variant where Burp keys on it: the value an issue is about
+    /// (an SSN, a cookie name, a library and version). Part of the merge
+    /// key; empty for issues keyed by location only.
+    pub ident: String,
 }
 
 impl ScanIssue {
@@ -262,6 +269,7 @@ fn mk(sev: &str, name: &str, e: &HistEntry, detail: impl Into<String>) -> ScanIs
         ts: util::now_secs(),
         type_id: issue_type_id(name),
         evidence: Vec::new(),
+        ident: String::new(),
     }
 }
 
@@ -337,6 +345,18 @@ pub fn is_burp_issue(name: &str) -> bool {
     KB_ISSUE_NAMES.lines().any(|l| l == name)
 }
 
+/// Issue types Burp keys by origin and identifier only, not by path
+/// (their text class answers `Zpx3.ZT`: Zwvk, Zwur, Zwf2, Zwv5).
+const ORIGIN_SCOPED: [&str; 4] = ["Social security numbers disclosed", "Password returned in later response", "Database connection string disclosed", "Source code disclosure"];
+
+/// The identity under which passive issues merge (burp.Zufk.ZL with the
+/// issue type's Zpx3): name, host, path (left out for the origin-scoped
+/// types) and the pervasive identifier.
+pub(crate) fn passive_merge_key(i: &ScanIssue) -> String {
+    let path = if ORIGIN_SCOPED.contains(&i.name.as_str()) { "" } else { i.path.as_str() };
+    format!("{}|{}|{}|{}", i.name, i.host, path, i.ident)
+}
+
 pub fn add_passive_issues(shared: &Shared, mut issues: Vec<ScanIssue>) {
     // WebProbe-only passive checks (no Burp KnowledgeBase entry) stay off
     // unless Settings > Scanner > "WebProbe extra checks" is on, so the
@@ -348,7 +368,7 @@ pub fn add_passive_issues(shared: &Shared, mut issues: Vec<ScanIssue>) {
         return;
     }
     let mut iss = shared.issues.lock().unwrap();
-    let key = |i: &ScanIssue| format!("{}|{}|{}|{}", i.sev, i.name, i.host, i.path);
+    let key = passive_merge_key;
     let before = issues.len();
     let mut seen = std::collections::BTreeSet::new();
     issues.retain(|i| seen.insert(key(i)));
@@ -718,21 +738,21 @@ fn location_host(loc: &str) -> Option<String> {
 /// Passive audit of one exchange. Every issue carries that exchange as its
 /// evidence (one shared, bounded copy).
 pub fn passive_check(e: &HistEntry) -> Vec<ScanIssue> {
-    passive_check_with(e, &|_| true)
+    passive_check_with(e, &|_| true, None)
 }
 
 /// [`passive_check`] with the checks switched off in `shared`'s scan
 /// configuration left out (Settings > Scanner > scan configuration).
 pub fn passive_check_for(shared: &Shared, e: &HistEntry) -> Vec<ScanIssue> {
     let config = shared.scan_config.lock().unwrap().clone();
-    passive_check_with(e, &|id| config.check_enabled(id))
+    passive_check_with(e, &|id| config.check_enabled(id), Some(&shared.passive))
 }
 
-fn passive_check_with(e: &HistEntry, enabled: &dyn Fn(&str) -> bool) -> Vec<ScanIssue> {
-    let mut v = passive_checks::run_passive(e, enabled);
+fn passive_check_with(e: &HistEntry, enabled: &dyn Fn(&str) -> bool, state: Option<&crate::passive_state::PassiveState>) -> Vec<ScanIssue> {
+    let mut v = passive_checks::run_passive_in(e, enabled, state);
     if !v.is_empty() {
         let ev = ScanEvidence::new(&e.req_raw, e.resp_raw.as_deref());
-        for i in &mut v {
+        for i in v.iter_mut().filter(|i| i.evidence.is_empty()) {
             i.evidence = vec![ev.clone()];
         }
     }

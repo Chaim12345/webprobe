@@ -313,6 +313,10 @@ pub struct ProjectIssue {
     /// The exchanges that confirmed the issue; absent in older files.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub evidence: Vec<ProjectEvidence>,
+    /// Burp's pervasive issue identifier (part of the merge key); absent in
+    /// older files.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub ident: String,
 }
 
 /// One confirming request/response pair of an issue, base64 so binary
@@ -1022,6 +1026,7 @@ impl ProjectIssue {
             timestamp: i.ts,
             type_id: i.type_id,
             evidence: i.evidence.iter().map(|e| ProjectEvidence::encode(&e.request, e.response.as_deref())).collect(),
+            ident: i.ident.clone(),
         }
     }
 
@@ -1038,6 +1043,7 @@ impl ProjectIssue {
             ts: self.timestamp,
             type_id: self.type_id,
             evidence: self.evidence.iter().filter_map(|e| e.decode()).map(|(req, resp)| crate::scan::ScanEvidence::new(&req, resp.as_deref())).collect(),
+            ident: self.ident.clone(),
         }
     }
 }
@@ -1575,6 +1581,7 @@ mod tests {
                 timestamp: 1_760_000_006,
                 type_id: 5_244_416,
                 evidence: vec![ProjectEvidence::encode(b"GET /index.html HTTP/1.1\r\n\r\n", Some(&[b'H', 0xff, 0x00, b'\n']))],
+                ident: "Session: sid".into(),
             }],
             websockets: vec![ProjectWebsocket {
                 id: 13,
@@ -2220,6 +2227,7 @@ mod tests {
             timestamp: 1,
             type_id: 1_049_088,
             evidence: vec![ProjectEvidence::encode(&request, Some(&response)), ProjectEvidence::encode(&request, None)],
+            ident: String::new(),
         };
         let json = serde_json::to_string(&issue).unwrap();
         let back: ProjectIssue = serde_json::from_str(&json).unwrap();

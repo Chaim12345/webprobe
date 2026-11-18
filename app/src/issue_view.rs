@@ -383,7 +383,7 @@ mod tests {
 
     #[test]
     fn issue_actions_edit_the_list() {
-        let mk = |id, sev: &str| ScanIssue { id, sev: sev.into(), name: "X".into(), host: "h".into(), path: "/".into(), detail: String::new(), false_positive: false, confidence: "Firm".into(), ts: 0, type_id: 0, evidence: Vec::new() };
+        let mk = |id, sev: &str| ScanIssue { id, sev: sev.into(), name: "X".into(), host: "h".into(), path: "/".into(), detail: String::new(), false_positive: false, confidence: "Firm".into(), ts: 0, type_id: 0, evidence: Vec::new(), ident: String::new() };
         let mut v = vec![mk(1, "high"), mk(2, "low")];
         apply_issue_action(&mut v, 2, &IssueAction::SetSeverity("medium"));
         apply_issue_action(&mut v, 2, &IssueAction::SetConfidence("Certain"));
