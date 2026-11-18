@@ -14,12 +14,12 @@
 12. [todo] D-12 Collaborator leftovers: SNI variant and Zbxl scheme payload variants — not ported in D-09
 13. [doing] R-01 [P0/S] Docs truth pass — headers, banners, generated status table done (09ed7a9); remaining: per-row PRD status re-check
 14. [done] R-02 [P0/S] Portable build: no developer-machine paths — e96f063, core/src/paths.rs; not run in a clean container
-15. [todo] R-03 [P0/L] Montoya bridge broad enough for real BApps — sidecar/MontoyaBridge.java:276-287 (only proxy() and logging() answer); core/src/ext_host.rs:332. Measured ~10% API coverage.
-16. [doing] R-04 [P0/M] Passive checks in the check registry + missing passive pack — registry + CSP, password-GET, private key, SSN, vulnerable JS done (e96f063); ten pack items with the worker
+15. [doing] R-03 [P0/L] Montoya bridge broad enough for real BApps — stages 1-2 (extension, burpSuite, logging, http; target JWT Monitor) with the worker; spec docs/specs/R-03-montoya-bridge.md
+16. [done] R-04 [P0/M] Passive checks in the check registry + missing passive pack — e96f063 + 94026e4; gaps: 'multiple locations' merge, per-cookie identifiers for HttpOnly/Secure
 17. [todo] R-05 [P1/M] HTTP/2 browser-to-proxy and a working Repeater protocol switch — core/src/tls.rs:285 (no ALPN), src/msgpane.rs:1005-1006, src/menus.rs:175-177.
 18. [todo] R-06 [P1/M] Response streaming and server-sent events — core/src/codec.rs:257-335 reads the whole response first. PRD BE-PX-12 was assigned to rejected N-04.
 19. [todo] R-07 [P1/M] WebSocket robustness and tools — core/src/net.rs:679, net.rs:2288, src/repeater_ops.rs:1697.
-20. [todo] R-08 [P1/S] Tests for untested modules — core/src/rules.rs: 628 lines, no tests, runs on every proxied message (net.rs:2516/2621/3034/3049).
+20. [doing] R-08 [P1/S] Tests for untested modules — worker task 7
 21. [todo] R-09 [P1/M] JWT checks — Burp resources/Scanner/jwt_secrets.txt; none in scan_checks.rs.
 22. [todo] R-10 [P1/L] Active check pack (non-timing) — scan_checks.rs:1937 (EL name only); ~74 issue types unowned. Depends on Craft unknown about timing-only detection.
 23. [todo] R-11 [P1/M] Scan configuration library — src/settings_dialog.rs:172-173 ('not available yet'); /root/burp-re/in/extract/resources/BuiltInConfigs/. Needs R-04.

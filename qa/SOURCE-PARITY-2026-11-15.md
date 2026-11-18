@@ -1000,3 +1000,18 @@ Open after this wave:
   recognised by `.js` or content type instead of Burp's sniffer; forms found by a hand-written parser.
 - R-02 was checked by tests and a source search, not by running a release binary in a clean container.
 
+## Wave 62 (2026-11-18): rest of the passive pack (R-04 done)
+
+Commit 94026e4. Ported from Burp's classes: Session token in URL, Duplicate cookies set, Cross-domain
+script include, Cookie scoped to parent domain, Password returned in URL query string, Password returned
+in later response, Password value set in cookie, Source code disclosure, Serialized object in HTTP
+message, Database connection string disclosed (class references in `tasks.json` R-04). Passive issues
+now merge on Burp's identity (name, host, path, identifier; origin-only for four types), so SSN and
+vulnerable-JS issues are one per value / library. Both retire.js patterns skipped in wave 61 are
+rewritten and checked against Java's `Pattern`.
+
+Open after this wave:
+- The "multiple locations" merge (one issue after 10 locations) is not ported; its group path is not established.
+- HttpOnly / Secure cookie issues merge per path; Burp identifies them per cookie. In progress.
+- Scanner issue-type coverage is now about 66 of 183 (48 before the passive pack, +18); not recounted from the code.
+

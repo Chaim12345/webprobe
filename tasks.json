@@ -8,9 +8,9 @@
     "p1": 39,
     "p2": 19,
     "by_status": {
-      "done": 105,
+      "done": 106,
       "rejected": 2,
-      "todo": 19
+      "todo": 18
     }
   },
   "tasks": [
@@ -1272,8 +1272,9 @@
       "title": "Passive checks in the check registry + missing passive pack",
       "acceptance": "Passive checks are registered like active ones (check_catalogue lists them, scan configuration can switch each off). Ported from Burp with positive and negative fixtures: the 7 CSP issues, Vulnerable JavaScript dependency (resources/RetireJS), Session token in URL, password in GET/URL/cookie, Cookie scoped to parent domain, Duplicate cookies, Cross-domain script include, Source code disclosure, Serialized object, private key / DB connection string / SSN disclosure.",
       "effort": "M",
-      "status": "todo",
-      "evidence": "core/src/scan.rs:704 (one 315-line function), scan.rs:2967 (active only). WebProbe reports 48 of Burp's 183 issue types. Progress 2026-11-18 (e96f063): registry done (core/src/passive_checks.rs PASSIVE_CHECKS, in check_catalogue, switchable in the scan configuration, old configs load). Ported: 7 CSP issues (Zxr9:9, Zupz:22, text Zifp:27), Password submitted using GET (Zxro:92), Private key disclosed (Zsdw:21), Social security numbers disclosed (Zbdp:23), Vulnerable JavaScript dependency (Zply:136, Zmwd; two retire.js patterns skipped). REMAINING (worker task 6): Session token in URL, Duplicate cookies set, Cross-domain script include, Cookie scoped to parent domain, the other password issues, Source code disclosure, Serialized object, Database connection string; one issue per value/library as Burp raises them."
+      "status": "done",
+      "evidence": "Commits e96f063 and 94026e4. Registry: core/src/passive_checks.rs PASSIVE_CHECKS, listed in check_catalogue, each switchable in the scan configuration (test switching_a_check_off_stops_it / switching_off_the_second_pass), old configs load. Ported from Burp (class:line): 7 CSP issues (Zxr9:9, Zupz:22, Zifp:27); Vulnerable JavaScript dependency (Zply:136, Zmwd; Burp's repository loads 69 libraries, none skipped); Session token in URL (Zs8g:84, Zgk4:372); Password submitted using GET (Zxro:92); Password returned in URL query string / in later response / value set in cookie (Zcn0:217); Cookie scoped to parent domain (Zwqj:147); Duplicate cookies set (Zetm:25); Cross-domain script include (Zgk4, Zw4k:56); Source code disclosure (Zgph:23); Serialized object in HTTP message (Zcjj:17, Zpj4:17, Zb0_); Private key disclosed (Zsdw:21); Database connection string disclosed (Zbjg:28); Social security numbers disclosed (Zbdp:23). Passive issues merge on name|host|path|identifier (origin-only for four types, Zpx3:13 / Zufk:12). Suite 485 + 133. Gaps: the 'multiple locations' merge after 10 locations (Zwgx, Zbv8, Zrh8) is not ported; HttpOnly/Secure cookie issues still merge per path, Burp per cookie (worker task 7); Ruby YAML tentative variant left out; approximations without source evidence: CSP MIME gate and report-uri validity, JavaScript recognised by .js or content type, hand-written form/link parser, Java-vs-Rust regex differences in a few retire.js extractors.",
+      "completed": "2026-11-18"
     },
     {
       "id": "R-05",
