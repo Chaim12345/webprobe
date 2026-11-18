@@ -1391,8 +1391,8 @@
       "title": "Burp CLI flags, config JSON and REST API",
       "acceptance": "--project-file, --config-file, --user-config-file, --unpause-spider-and-scanner and friends; project/user options import/export as Burp JSON; /v0.1 REST API (scan start, status, issues) on a local port.",
       "effort": "M",
-      "status": "todo",
-      "evidence": "src/main.rs:949-960 reads only --screenshot; headless has proxy and scan only."
+      "status": "done",
+      "evidence": "--project-file/--config-file/--user-config-file/--unpause-spider-and-scanner plus Burp's headless flags (app/core/src/bin/webprobe-headless.rs) with flags-before-command accepted (0422e01); project/user options import/export as Burp JSON (app/core/src/burp_config.rs) wired into the CLI (a037cdb routes scan keys through R-11's scan_library) and the desktop Suite > Project file page (app/src/tools.rs burp_options_json, b2b1956); /v0.1 REST API scan start/status/issues on loopback 127.0.0.1:1337 with key-in-path auth (app/core/src/rest_api.rs). 658 lib + 4 CLI tests pass; desktop cargo check --tests clean; options UI screenshot-verified."
     },
     {
       "id": "R-16",

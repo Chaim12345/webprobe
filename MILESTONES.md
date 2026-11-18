@@ -89,7 +89,7 @@ Worktree: `.worktrees/r07` after M2 integration.
 
 ## M7 — R-15 CLI, configuration and REST
 
-**Status:** in progress (2026-11-18 evening): claimed by the Instinct task agent (QA/roadmap lane), branch `r15/cli-rest`, not `.worktrees/r15`. Another agent should not start M7 in parallel.
+**Status:** done (2026-11-18 evening) by the Instinct task agent on branch `r15/cli-rest` (PR #5, open, not merged): Burp headless CLI flags, project/user options JSON import/export on the CLI and in the desktop Suite > Project file page (scan keys routed through R-11's scan_library), and the loopback /v0.1 REST API (scan start, status, issues). 658 lib + 4 CLI tests pass; options UI screenshot-verified.
 
 Worktree: `.worktrees/r15`.
 

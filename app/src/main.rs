@@ -1282,6 +1282,7 @@ fn main() {
     // window on that pane (used by the screenshot checks).
     let settings_help = match std::env::var("WEBPROBE_SETTINGS").unwrap_or_default().as_str() {
         "hotkeys" => ui::SettingsPane::Hotkeys,
+        "suite" => ui::SettingsPane::Suite,
         _ => ui::SettingsPane::Appearance,
     };
     let settings_open = std::env::var("WEBPROBE_SETTINGS").is_ok();
