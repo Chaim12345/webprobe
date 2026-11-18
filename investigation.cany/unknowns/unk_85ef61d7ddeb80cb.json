@@ -1,15 +1,18 @@
 {
   "id": "unk_85ef61d7ddeb80cb",
-  "revision": 1,
+  "revision": 2,
   "question": "Which Burp checks count as 'server-side injection' for scanner.ignored_insertion_points.skip_server_side_injection_for_parameters (PHPSESSID, jsessionid, __viewstate, ...)?",
   "severity": "medium",
   "domain": "scanner",
-  "status": "open",
+  "status": "resolved",
   "probes": [
     "Find the callers of burp.Zgx0.Zr(Ze9d) (Ziqf.java:53 is the only caller of Ze9d.Ze) and the check classes that consult it"
   ],
   "evidence_for": [
-    "AuditDefaults.json lists 11 rules; predicate at Zs4k.java:199"
+    "AuditDefaults.json lists 11 rules; predicate at Zs4k.java:199",
+    "Zibp:27-60, Zx8l, Zp7s, Zexx, Zgcg, Zwkf, Zsn3, Zppj, Zxfo, Zeo6: Zh() of each check",
+    "Skip-list matching: Zsc3.java:31-370 and Zx6z (case-insensitive)"
   ],
-  "evidence_against": []
+  "evidence_against": [],
+  "resolution": "Each Burp check decides in its own Zh() by calling the point's Zgx0.Zr(config) (Ziqf.java:53 -> Ze9d.Ze). Checks that consult it, and so skip the listed session parameters: SQL injection (Zppj), OS command injection, path traversal, XML/XXE (Zp7s), SSI (Zexx), LDAP (Zwkf), external service interaction, and the XSS / template-injection engine (Zi6p.java:128, reflected and stored XSS, SSTI). Not gated: input returned, link manipulation, open redirection, header injection, client-side template injection. Ported in app/core/src/insertion.rs (SKIP_SERVER_SIDE) and the server_side() flag of every check in scan_checks.rs, test server_side_skip_list_gates_server_side_checks_only (commit ec380b4)."
 }

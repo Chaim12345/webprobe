@@ -8,10 +8,10 @@
 6. [done] Engine done + verified: Match and Replace (app/src/match_replace.rs) — 
 7. [done] Engine done + verified: Project .burp save/load (app/src/project.rs) — 
 8. [done] Robustness: disk-backed history (N-06), subsystem types (N-07), two code reviews (35 findings fixed) — 2026-11-17/18, branch parity/2026-11-17
-9. [doing] D-11 remaining Burp insertion points (entire body, nested, XML tags, parameter names, server-side skip list) — spec /root/webprobe-parity/specs/D-11-insertion-points.md; persistent worker implementing; unk_e8d35ba47ccfba29
-10. [todo] D-09 remaining Collaborator variants (Zc7h, Zxvv.ZQ, Zsrh) — unk_e8d35ba47ccfba29
-11. [todo] D-10 stored XSS retrieval pairing beyond safe GETs — unk_e8d35ba47ccfba29
-12. [todo] R-01 [P0/S] Docs truth pass — Review: PROGRESS.md:79,84 stale; TASKS.md §7 missing ticks/rows; PRDs carry 36/46 stale ❌; D-02 claims 35+ KB passive issues, 19 of 37 use Burp names.
+9. [done] D-11 remaining Burp insertion points (entire body, nested, XML tags, parameter names, server-side skip list) — commit ec380b4, core/src/insertion.rs; class:line refs in tasks.json D-11; lab parity not re-measured
+10. [doing] D-09 remaining Collaborator variants (Zc7h, Zxvv.ZQ, Zsrh) — persistent worker, task 3 (with D-11 follow-ups); unk_e8d35ba47ccfba29
+11. [doing] D-10 stored XSS retrieval pairing beyond safe GETs — persistent worker, task 3 (with D-11 follow-ups); unk_e8d35ba47ccfba29
+12. [doing] R-01 [P0/S] Docs truth pass — headers, banners, generated status table done (09ed7a9); remaining: per-row PRD status re-check
 13. [todo] R-02 [P0/S] Portable build: no developer-machine paths — core/src/report.rs:251, src/discovery.rs:111, core/src/crawl.rs:295, src/tools.rs:885, bridge source via CARGO_MANIFEST_DIR.
 14. [todo] R-03 [P0/L] Montoya bridge broad enough for real BApps — sidecar/MontoyaBridge.java:276-287 (only proxy() and logging() answer); core/src/ext_host.rs:332. Measured ~10% API coverage.
 15. [todo] R-04 [P0/M] Passive checks in the check registry + missing passive pack — core/src/scan.rs:704 (one 315-line function), scan.rs:2967 (active only). WebProbe reports 48 of Burp's 183 issue types.

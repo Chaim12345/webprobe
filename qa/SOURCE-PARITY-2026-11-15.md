@@ -928,3 +928,15 @@ A second independent review covered the areas the first pass left out and report
 
 Dead code: `editor.rs` (superseded by `msgpane.rs`) and 24 unused helpers were removed, and the workspace builds with no warnings.
 
+## Wave 58 (2026-11-18): remaining insertion points (D-11)
+
+`core/src/insertion.rs` now builds every point type of `burp.Zuq.Zs` that Burp enables by default:
+entire body, XML parameters / attributes / standalone tags, nested points (URL-encoded, JSON, XML,
+Base64, Base64url) and parameter-name points, with the `Zwez` vetoes, the cap of 30 and the
+server-side skip list. Wording follows `Zsg0`. Commit ec380b4; class and line references are in
+`tasks.json` D-11.
+
+Open after this wave:
+- Lab parity (Juice Shop, lab, scan 7) has not been re-measured; every scan now sends more requests and issue detail texts start with Burp's point wording.
+- Not ported: `MULTIPART_PARAM_ATTR` points, `Zcyy.Zw`, moved-parameter points (off by default), value-based exclusions of single checks.
+- Assumed without source evidence: the URL-parameter "leave unencoded" set is empty; the format of an added multipart part; nested walk capped at 64 points per base point.

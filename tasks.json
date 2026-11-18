@@ -8,9 +8,9 @@
     "p1": 39,
     "p2": 18,
     "by_status": {
-      "done": 101,
+      "done": 102,
       "rejected": 2,
-      "todo": 22
+      "todo": 21
     }
   },
   "tasks": [
@@ -1198,8 +1198,9 @@
       "title": "Remaining Burp insertion points",
       "acceptance": "Ported from the decompiled source with tests: entire body (burp.Zuq.ZT), nested data inside a parameter such as base64 or JSON (Zuq.Zq), XML standalone tags (Zuq.Za), parameter names (Zuq.Zp); Burp's skip_server_side_injection_for_parameters tagging (PHPSESSID, jsessionid, ...). Order and the cap of 30 stay as burp.Zuq.Zs / Zwez.",
       "effort": "M",
-      "status": "todo",
-      "evidence": "Craft unknown unk_e8d35ba47ccfba29 probes; not present in scan.rs IpKind (2026-11-18)."
+      "status": "done",
+      "evidence": "core/src/insertion.rs (commit ec380b4): build order burp.Zuq.Zs:70; entire body ZT:444; XML params/attributes (Zhjs) and standalone tags Za:419/:463/ZN:477; nested points ZV:563 (URL-encoded, JSON, XML, Base64 Zq4/Zq0.ZC, Base64url Zan.ZG; payloads compose outward as Ziqv.ZT); parameter-name points Zp:696/:764 and the .php path-info point :773; vetoes and the cap of 30 from Zwez; skip_server_side_injection_for_parameters gates the checks whose Zh() consults it (Ziqf.Zr; the XSS/SSTI engine Zi6p included); issue wording from Zsg0; scan configuration 'Parameter name', 'Entire body', 'Use nested insertion points'. 15 tests (insertion::tests), suite 441 core + 133 app green. Not ported: MULTIPART_PARAM_ATTR points, the Zcyy.Zw XML list, moved-parameter points (off by default in AuditDefaults), value-based exclusions of single checks (Zx8l, Zibp, Zp7s, Zwkf), the encrypted header-name excludes of Zxfo. Assumed without source: empty 'leave unencoded' set for URL parameters, format of the added multipart part, nested walk capped at 64 per base point. Lab parity numbers not re-measured after this change.",
+      "completed": "2026-11-18"
     },
     {
       "id": "D-09",
