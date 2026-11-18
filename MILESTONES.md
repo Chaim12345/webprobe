@@ -48,7 +48,7 @@ Worktree: `.worktrees/scanner`.
 
 ## M4 — R-10 active scanner pack
 
-**Status:** focused verification done (GraphQL, cache, XPath and characterization tests); full core lint/test pass running.
+**Status:** done and integrated; full core 587 passed, 12 ignored, clippy correctness/perf gate passed.
 
 Worktree: `.worktrees/scanner`.
 

@@ -4402,6 +4402,17 @@ mod tests {
     }
 
     #[test]
+    fn title_with_closing_tag_before_opening_tag_does_not_panic() {
+        // Audit H1: two independent find() calls used to give a reversed range.
+        let mut e = HistEntry::default();
+        e.req_raw = b"GET / HTTP/1.1\r\nHost: x\r\n\r\n".to_vec().into();
+        e.resp_raw = Some(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n</title>hello<title>".to_vec().into());
+        assert_eq!(derive_history_fields(&e).2, "");
+        e.resp_raw = Some(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<title>ok</title>".to_vec().into());
+        assert_eq!(derive_history_fields(&e).2, "ok");
+    }
+
+    #[test]
     fn extension_comes_from_the_last_path_segment_of_absolute_form() {
         let mut e = HistEntry::default();
         e.req_raw = b"GET http://127.0.0.1:3001/rest/user/login HTTP/1.1\r\nHost: 127.0.0.1:3001\r\n\r\n".to_vec().into();

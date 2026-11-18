@@ -17,10 +17,10 @@
 15. [done] R-08 [P1/S] Tests for untested modules — a8ed5cb; eight product bugs fixed
 16. [doing] R-06 [P1/M] Response streaming and server-sent events — worker task 10 (R-06 first, then R-05)
 17. [doing] R-05 [P1/M] HTTP/2 browser-to-proxy and a working Repeater protocol switch — worker task 10 (R-06 first, then R-05)
-18. [todo] R-07 [P1/M] WebSocket robustness and tools — core/src/net.rs:679, net.rs:2288, src/repeater_ops.rs:1697.
-19. [todo] R-09 [P1/M] JWT checks — Burp resources/Scanner/jwt_secrets.txt; none in scan_checks.rs.
-20. [todo] R-10 [P1/L] Active check pack (non-timing) — scan_checks.rs:1937 (EL name only); ~74 issue types unowned. Depends on Craft unknown about timing-only detection.
-21. [todo] R-11 [P1/M] Scan configuration library — src/settings_dialog.rs:172-173 ('not available yet'); /root/burp-re/in/extract/resources/BuiltInConfigs/. Needs R-04.
+18. [done] R-07 [P1/M] WebSocket robustness and tools — R-07 part 1 e32e846, part 2 + hardening f7794db (52 focused tests); full suite at the PR #4 merge
+19. [done] R-09 [P1/M] JWT checks — 54d2343: 5 active + 2 passive JWT issue types, 39 tests
+20. [done] R-10 [P1/L] Active check pack (non-timing) — 9804b99, dab9255, c6ff86f, 371ebc5, 54d2343: EL, XPath (error + boolean), PUT, ASP.NET, GraphQL, client IP, backup, cache poisoning/deception; smuggling and desync rejected by the no-timing rule (confirmed); hidden HTTP/2 not ported
+21. [doing] R-11 [P1/M] Scan configuration library — next (MILESTONES.md M5); research note docs/specs/R-11-scan-configs.research.md
 22. [todo] R-12 [P2/M] Repeater send groups and single-packet attack — Not in the code. Needs R-05.
 23. [todo] R-17 [P2/S] Intruder payload completeness — Review: 18 payload sources, ~20 processors present; these three missing.
 24. [todo] R-15 [P2/M] Burp CLI flags, config JSON and REST API — src/main.rs:949-960 reads only --screenshot; headless has proxy and scan only.

@@ -1131,3 +1131,32 @@ pub(crate) fn db_connection_string(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
         v.push(issue(c, cx, sev, c.confidence, s, t));
     }
 }
+
+#[cfg(test)]
+mod php_depth_tests {
+    use super::php;
+
+    fn nested(depth: usize) -> Vec<u8> {
+        // depth arrays, each holding the next one as its single value.
+        let mut s = Vec::new();
+        for _ in 0..depth {
+            s.extend_from_slice(b"a:1:{i:0;");
+        }
+        s.extend_from_slice(b"i:1;");
+        for _ in 0..depth {
+            s.push(b'}');
+        }
+        s
+    }
+
+    #[test]
+    fn nesting_is_limited_and_deep_input_does_not_exhaust_the_stack() {
+        // Audit H4.
+        assert!(php::serialized(b"a:1:{i:0;i:1;}"));
+        assert!(php::serialized(&nested(64)), "64 levels are accepted");
+        assert!(!php::serialized(&nested(65)), "65 levels are not");
+        let mut hostile = b"a:0:{".repeat(100_000);
+        hostile.extend(b"}".repeat(100_000));
+        assert!(!php::serialized(&hostile));
+    }
+}

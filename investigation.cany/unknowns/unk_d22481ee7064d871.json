@@ -1,6 +1,6 @@
 {
   "id": "unk_d22481ee7064d871",
-  "revision": 1,
+  "revision": 2,
   "question": "Which of Burp's remaining active issue types (HTTP request smuggling, client-side desync, Perl/Python/Ruby code injection, and the other ~74 unowned types) are detected only by response timing, and which have a non-timing path WebProbe may port?",
   "severity": "high",
   "domain": "scanner",
@@ -10,7 +10,8 @@
     "Record one finding per family with the class and method"
   ],
   "evidence_for": [
-    "Zoom-out review 2026-11-18: issue types exist in Zc84; check classes not traced"
+    "Zoom-out review 2026-11-18: issue types exist in Zc84; check classes not traced",
+    "2026-11-18: confirmed timing-only in source: HTTP request smuggling (Zg3d: Duration ZP Zg3d.java:24, applied :195-200, Zpm3.TIMEOUT) and client-side desync (Zhao.java:12-13, 209). Perl/Python/Ruby/unidentified code injection (Zsn3 -> Zwj_, measuring in Zplm) still unconfirmed. Non-timing checks ported in R-10 (see tasks.json R-10)."
   ],
   "evidence_against": []
 }

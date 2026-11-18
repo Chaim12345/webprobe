@@ -8,9 +8,9 @@
     "p1": 39,
     "p2": 20,
     "by_status": {
-      "done": 111,
+      "done": 114,
       "rejected": 2,
-      "todo": 14
+      "todo": 11
     }
   },
   "tasks": [
@@ -1307,8 +1307,9 @@
       "title": "WebSocket robustness and tools",
       "acceptance": "Binary frames keep their bytes (no lossy text); WebSocket history is bounded/disk-backed and the view does not copy it every frame (100k frames stay fast); WebSocket Repeater and WebSocket match-and-replace as Burp.",
       "effort": "M",
-      "status": "todo",
-      "evidence": "core/src/net.rs:679, net.rs:2288, src/repeater_ops.rs:1697. Progress 2026-11-18 (e32e846, verified: full suite 544 core + 136 app in an isolated tree at that revision): WebSocket history as an owned type with byte payloads in the disk body store (core/src/ws_history.rs), windowed history view, WebSocket match and replace with Burp's rule keys (core/src/ws_rules.rs), relay robustness (fragments, 1002/1009 closes, byte-exact forwarding, permessage-deflate stripped by default or inflated), interception with 'in scope only'; eight ws_tests. REMAINING: WebSocket Repeater; release of a held message when interception is switched off / the connection closes / shutdown; tests for the TLS relay path and the history and rules UI logic."
+      "status": "done",
+      "evidence": "Commit f7794db integrated the existing byte-exact/disk-backed history and Repeater work with reconnect-generation protection, live-attach deadlock and strict hex fixes, interception release on toggle/close/shutdown, frame mask/RSV/control validation, both-direction match/replace and bounded batch history eviction. Verified in .worktrees/r07: 25 Repeater + 14 interception release + 9 relay + 3 history + 1 rules tests passed (52/52), including TLS relay and UI logic fixtures. Caveat 2026-11-18: full workspace suite at the PR #4 merge (4cd2e2c): app 136/136, core 631/644 passed, 12 ignored, 1 failure in headless::tests::js_crawl_follows_script_written_links_through_the_proxy that passed 3/3 when rerun alone (flaky under load: external Obscura engine); a held HTTP request whose client disconnects still waits (no client socket in the HTTP intercept path).",
+      "completed": "2026-11-18"
     },
     {
       "id": "R-08",
@@ -1328,8 +1329,9 @@
       "title": "JWT checks",
       "acceptance": "Burp's seven JWT issue types ported with tests (alg=none, weak HMAC secret via Scanner/jwt_secrets.txt, ...); a local lab token gets Burp's issue names.",
       "effort": "M",
-      "status": "todo",
-      "evidence": "Burp resources/Scanner/jwt_secrets.txt; none in scan_checks.rs."
+      "status": "done",
+      "evidence": "Commit 54d2343. Five active and two passive JWT issue types use independent HMAC/RSA oracles; jku/x5u now receive Collaborator slots and HTTP interactions raise the registered JWT issue. core/src/jwt_tests.rs: 39/39 passed; full core suite 587 passed, 12 ignored; clippy correctness/perf gate passed.",
+      "completed": "2026-11-18"
     },
     {
       "id": "R-10",
@@ -1338,8 +1340,9 @@
       "title": "Active check pack (non-timing)",
       "acceptance": "Ported with tests: GraphQL (Zula, Zf8g), web cache poisoning/deception (Zp22), XPath injection, HTTP PUT, Backup file, ASP.NET checks, Spoofable client IP, Expression Language injection (regressed: name only in a lookup table). Checks Burp detects only by timing stay excluded and are listed as such.",
       "effort": "L",
-      "status": "todo",
-      "evidence": "scan_checks.rs:1937 (EL name only); ~74 issue types unowned. Depends on Craft unknown about timing-only detection."
+      "status": "done",
+      "evidence": "Commits 371ebc5 and 54d2343. GraphQL active/passive endpoint coverage, boolean XPath with reflection normalization, web cache poisoning/deception, HTTP PUT, Backup file, ASP.NET, Spoofable client IP and Expression Language checks are registered with positive/negative tests. Timing-only families remain excluded by instruction. Focused cache/GraphQL/XPath/characterization tests passed; full core suite 587 passed, 12 ignored; clippy correctness/perf gate passed. Caveats 2026-11-18 (orchestrator review): (1) rejected by the no-timing rule: HTTP request smuggling (Zg3d: Duration ZP, Zg3d.java:24, applied :195-200, Zpm3.TIMEOUT) and client-side desync (Zhao.java:12-13, 209), both confirmed in source; Perl / Python / Ruby / unidentified code injection (Zsn3 -> Zwj_) rejected on the research note's evidence only, the time measurement (in Zplm) not confirmed. (2) Not ported: Hidden HTTP/2 (Zpfw), the Collaborator variant of client IP spoofing (unless covered by D-09's Collaborator-everywhere set), Burp's generic backup extension list (Zebr.ZD stripped), XPath/EL constants listed as not established in the commits. (3) Detail texts of the GraphQL, Spoofable client IP and Backup file issues are WebProbe's wording.",
+      "completed": "2026-11-18"
     },
     {
       "id": "R-11",

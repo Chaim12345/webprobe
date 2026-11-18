@@ -1,5 +1,5 @@
 {
-  "revision": 155,
+  "revision": 157,
   "brief": {
     "question": "Rebuild WebProbe, a clone of Burp Suite Pro (reference build 52685, v2026.7.3), to feature parity with the task backlog in tasks.json, and produce a readable, evidence-backed name map for the obfuscated Burp jar.",
     "purpose": "Interoperable reimplementation plus per-build deobfuscation; behaviour claims must come from the shipped jar or the running reference app, never guessed.",
@@ -103,23 +103,23 @@
     },
     {
       "title": "R-07 [P1/M] WebSocket robustness and tools",
-      "status": "todo",
-      "why": "core/src/net.rs:679, net.rs:2288, src/repeater_ops.rs:1697."
+      "status": "done",
+      "why": "R-07 part 1 e32e846, part 2 + hardening f7794db (52 focused tests); full suite at the PR #4 merge"
     },
     {
       "title": "R-09 [P1/M] JWT checks",
-      "status": "todo",
-      "why": "Burp resources/Scanner/jwt_secrets.txt; none in scan_checks.rs."
+      "status": "done",
+      "why": "54d2343: 5 active + 2 passive JWT issue types, 39 tests"
     },
     {
       "title": "R-10 [P1/L] Active check pack (non-timing)",
-      "status": "todo",
-      "why": "scan_checks.rs:1937 (EL name only); ~74 issue types unowned. Depends on Craft unknown about timing-only detection."
+      "status": "done",
+      "why": "9804b99, dab9255, c6ff86f, 371ebc5, 54d2343: EL, XPath (error + boolean), PUT, ASP.NET, GraphQL, client IP, backup, cache poisoning/deception; smuggling and desync rejected by the no-timing rule (confirmed); hidden HTTP/2 not ported"
     },
     {
       "title": "R-11 [P1/M] Scan configuration library",
-      "status": "todo",
-      "why": "src/settings_dialog.rs:172-173 ('not available yet'); /root/burp-re/in/extract/resources/BuiltInConfigs/. Needs R-04."
+      "status": "doing",
+      "why": "next (MILESTONES.md M5); research note docs/specs/R-11-scan-configs.research.md"
     },
     {
       "title": "R-12 [P2/M] Repeater send groups and single-packet attack",
@@ -947,6 +947,6 @@
       "confidence": "observed"
     }
   ],
-  "handoff": "2026-11-18 (late). tasks.json: 126 tasks, 106 done, 2 rejected, 18 todo. Done today from the source: D-11 insertion points (core/src/insertion.rs), D-09 Collaborator variants, D-10 stored input pairing (core/src/stored.rs), R-02 portable build (core/src/paths.rs), R-04 passive registry + pack (passive_checks.rs, passive_pack.rs, csp.rs, retirejs.rs, passive_state.rs). Suite 485 core + 133 app green at 94026e4, branch parity/2026-11-17 pushed. In progress with the persistent worker (task 7): per-cookie identifiers, R-08 tests for untested modules, R-03 Montoya stages 1-2 (target: JWT Monitor loads and works). Then: R-03 stages 3-5, R-05 browser-side HTTP/2, R-06 streaming, R-07 WebSockets, R-09 JWT checks, R-10 active pack, R-11 scan config library, P2 items, D-12, R-01 PRD row re-check. BLOCKED, needs the user: URL-level parity (Juice 75/75, lab 21/21) cannot be re-verified because the stored Burp lists, paths.txt and lab.py were lost with /tmp; a fresh Burp baseline is excluded by the no-Burp-scans rule (qa/parity-2026-11-18/SUMMARY.md). Working mode: one persistent worker continued with SendMessage; the main session specs, reviews the report against the wp-queue log, commits, updates tasks.json / TASKS.md §8 / ledger / Craft. Traps: cargo only through wp-queue; never 8080/8081; no time-based detection; do not copy Burp resources into the repo (resolved at run time via paths.rs); keep evidence out of /tmp.",
-  "updated": "2026-11-18T06:49:28Z"
+  "handoff": "2026-11-18 evening. tasks.json: 127 tasks, 114 done, 2 rejected, 11 todo (D-12, R-11..R-20 minus done). Since the last handoff a second session worked the roadmap in milestones (MILESTONES.md, worktrees under .worktrees/: fixes, r07, scanner, r11, r15) and finished R-07, R-09 and R-10 with tests (commits 94dbaa7, f7794db, 371ebc5, 54d2343); PR #4 (qa/fixes-2026-11-18: h2 test-lab race, R-10 characterisation rows) merged into parity. Next: R-11 scan configuration library (M5), then D-12/R-12 (M6), R-15 (M7), R-17/R-13 (M8); extension items (R-14, R-16, R-20) last by the user's rule; R-18 decomposition after behaviour work. Open unknowns: timing-only detection for Perl/Python/Ruby code injection; Burp's DOM engine; the scanner-family question. BLOCKED on the user: a fresh Burp baseline for URL-level parity. Traps: cargo only through wp-queue; never 8080/8081; never restart the paseo daemon (it has a zod mismatch that breaks omp/opencode agent creation; fix needs a restart, user's call); NVIDIA NIM free key is heavily throttled; keep evidence out of /tmp; test committed revisions in a .worktrees/ worktree, not in a tree someone is editing.",
+  "updated": "2026-11-18T17:44:59Z"
 }
