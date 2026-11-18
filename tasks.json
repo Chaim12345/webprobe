@@ -8,9 +8,9 @@
     "p1": 39,
     "p2": 20,
     "by_status": {
-      "done": 109,
+      "done": 111,
       "rejected": 2,
-      "todo": 16
+      "todo": 14
     }
   },
   "tasks": [
@@ -1285,8 +1285,9 @@
       "title": "HTTP/2 browser-to-proxy and a working Repeater protocol switch",
       "acceptance": "curl --http2 through the proxy negotiates h2; the HTTP/1 / HTTP/2 control in the message pane and the HTTP/2 menu items work against a local h2 lab server.",
       "effort": "M",
-      "status": "todo",
-      "evidence": "core/src/tls.rs:285 (no ALPN), src/msgpane.rs:1005-1006, src/menus.rs:175-177."
+      "status": "done",
+      "evidence": "Commit 65b19a9. The HTTPS listener offers h2 by ALPN; core/src/h2_server.rs is the server role on the shared framing code, each stream running the normal pipeline (intercept, match and replace, extensions, history, streaming). curl --http2 through the proxy negotiated h2 (qa/r05-2026-11-18/r05-1-proxy-history-h2.png). Hardening tests: oversized frames, SETTINGS and window validation, CONTINUATION flood, rapid reset, HPACK bounds, 100-stream and 64 KB header-list limits (GOAWAY or reset, never a panic; server-role fuzz test). Repeater HTTP/1 / HTTP/2 control and HTTP/2 menu items wired, tested in core against a local h2 server. Suite 533 + 136. Not done: Inspector HTTP/2 view, h2 connection reuse, per-listener HTTP/2 toggle (worker task 11), a click-through of the Repeater control on the QA display.",
+      "completed": "2026-11-18"
     },
     {
       "id": "R-06",
@@ -1295,8 +1296,9 @@
       "title": "Response streaming and server-sent events",
       "acceptance": "The proxy forwards response bytes as they arrive: the first event of a 1-event-per-second local stream reaches the client in under 2 s; history still records the full message.",
       "effort": "M",
-      "status": "todo",
-      "evidence": "core/src/codec.rs:257-335 reads the whole response first. PRD BE-PX-12 was assigned to rejected N-04."
+      "status": "done",
+      "evidence": "Commit 65b19a9. core/src/streaming.rs: a response streams when its URL is under a configured prefix or its type is text/event-stream (Burp ProjectDefaults project_options.http.streaming_responses and its settings text; defaults: no prefixes, event-stream on, store on, strip chunked metadata on). Proxy forwards bytes as they arrive and passes the response side through unmodified (Event log entry per host and reason); stored copy through a 64 KB buffer to the disk body store; other tools stop after the head; Repeater shows the stream live (600 s limit as Burp). 13 tests in streaming_tests.rs, first-event delivery proven by ordering. Decided without source: 120 s gap timeout on the proxy, 256 MB cap on a stored stream, case-insensitive prefixes.",
+      "completed": "2026-11-18"
     },
     {
       "id": "R-07",

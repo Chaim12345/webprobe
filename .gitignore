@@ -6,3 +6,4 @@ capture/
 
 # graphify code graph (local search index)
 app/graphify-out/
+/webprobe-project.json

@@ -377,7 +377,7 @@ Method: the reference jar was launched from `/opt/BurpSuite` on its own display,
 
 ## 8. Status as of 2026-11-18 (generated from tasks.json)
 
-127 tasks: 109 done, 2 rejected, 16 todo. Acceptance criteria and evidence are in `tasks.json`.
+127 tasks: 111 done, 2 rejected, 14 todo. Acceptance criteria and evidence are in `tasks.json`.
 
 ### A — HTTP engine correctness
 
@@ -594,8 +594,8 @@ Method: the reference jar was launched from `/opt/BurpSuite` on its own display,
 | R-02 | P0 | ✅ done | Portable build: no developer-machine paths |
 | R-03 | P0 | ✅ done | Montoya bridge broad enough for real BApps |
 | R-04 | P0 | ✅ done | Passive checks in the check registry + missing passive pack |
-| R-05 | P1 | todo | HTTP/2 browser-to-proxy and a working Repeater protocol switch |
-| R-06 | P1 | todo | Response streaming and server-sent events |
+| R-05 | P1 | ✅ done | HTTP/2 browser-to-proxy and a working Repeater protocol switch |
+| R-06 | P1 | ✅ done | Response streaming and server-sent events |
 | R-07 | P1 | todo | WebSocket robustness and tools |
 | R-08 | P1 | ✅ done | Tests for untested modules |
 | R-09 | P1 | todo | JWT checks |
