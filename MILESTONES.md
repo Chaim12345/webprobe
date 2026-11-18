@@ -78,7 +78,7 @@ Small slices:
 
 ## M6 — D-12 and R-12 network features
 
-**Status:** pending.
+**Status:** in progress (2026-11-18 evening): a Claude subagent in `.worktrees/m6` (branch `wp-m6`). Another agent should not start M6 in parallel.
 
 Worktree: `.worktrees/r07` after M2 integration.
 
