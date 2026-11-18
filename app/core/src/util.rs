@@ -620,6 +620,35 @@ pub fn read_capped<R: std::io::Read + ?Sized>(r: &mut R, cap: usize, what: &str)
     }
 }
 
+/// Default ceiling for local JSON, text resource and request-seed files.
+pub const MAX_TEXT_FILE_BYTES: usize = 64 * 1024 * 1024;
+
+/// Read a UTF-8 file with a hard allocation ceiling. The metadata check
+/// rejects oversized regular files before reading; `read_capped` still
+/// enforces the limit if the file grows or is not a regular file.
+pub fn read_text_file_capped(path: &std::path::Path, cap: usize) -> std::io::Result<String> {
+    let what = path.display().to_string();
+    let mut file = std::fs::File::open(path)?;
+    if file.metadata()?.len() > cap as u64 {
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("{what} exceeded {cap} bytes")));
+    }
+    let bytes = read_capped(&mut file, cap, &what)?;
+    String::from_utf8(bytes).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("{what} is not UTF-8: {e}")))
+}
+
+#[cfg(test)]
+mod bounded_file_tests {
+    #[test]
+    fn text_file_limit_rejects_before_reading_and_allows_exact_limit() {
+        let path = std::env::temp_dir().join(format!("webprobe-bounded-file-{}", std::process::id()));
+        std::fs::write(&path, b"1234").unwrap();
+        assert_eq!(super::read_text_file_capped(&path, 4).unwrap(), "1234");
+        std::fs::write(&path, b"12345").unwrap();
+        assert_eq!(super::read_text_file_capped(&path, 4).unwrap_err().kind(), std::io::ErrorKind::InvalidData);
+        let _ = std::fs::remove_file(path);
+    }
+}
+
 /// Lines from a reader (LF-terminated, CR dropped), each cut at `cap`
 /// bytes: the rest of an over-long line is skipped up to its newline, so a
 /// process writing without newlines cannot grow memory. Ends at EOF or on

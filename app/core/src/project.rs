@@ -32,6 +32,9 @@ pub const PROJECT_VERSION: u32 = 2;
 /// JSON without a header.
 const MIN_PROJECT_VERSION: u32 = 1;
 
+/// Refuse maliciously large documents before mapping and deserializing them.
+pub const MAX_PROJECT_FILE_BYTES: u64 = 1024 * 1024 * 1024;
+
 /// One proxy history entry as stored in a project file. The messages are
 /// shared handles ([`crate::body::Body`]), written as text (plus base64 when
 /// not UTF-8) only while the file is being written, one entry at a time.
@@ -1405,7 +1408,10 @@ pub fn wait_for_saves() {
 /// Read and validate a project file.
 pub fn load(path: &Path) -> Result<ProjectData, String> {
     let file = std::fs::File::open(path).map_err(|err| format!("cannot read project {}: {err}", path.display()))?;
-    let len = file.metadata().map(|m| m.len()).unwrap_or(0);
+    let len = file.metadata().map_err(|err| format!("cannot read project {}: {err}", path.display()))?.len();
+    if len > MAX_PROJECT_FILE_BYTES {
+        return Err(format!("cannot read project {}: file exceeds {MAX_PROJECT_FILE_BYTES} bytes", path.display()));
+    }
     if len == 0 {
         return decode(b"", &path.display().to_string());
     }
@@ -2382,6 +2388,19 @@ mod tests {
         let legacy = import_json("{\"version\":1,\"scope\":[]}").unwrap();
         assert!(legacy.scope.is_empty());
         assert_eq!(legacy.version, PROJECT_VERSION);
+    }
+
+    #[test]
+    fn load_rejects_oversized_project_before_mapping() {
+        let path = temporary_project("oversized");
+        let file = std::fs::File::create(&path).unwrap();
+        file.set_len(MAX_PROJECT_FILE_BYTES + 1).unwrap();
+        let err = match load(&path) {
+            Ok(_) => panic!("oversized project was accepted"),
+            Err(err) => err,
+        };
+        assert!(err.contains("exceeds"), "{err}");
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]

@@ -217,5 +217,5 @@ pub fn tokens_in_request(req: &crate::util::HttpParts, raw: &[u8]) -> Vec<Jwt> {
 /// Burp's secret list (the user's install, `paths::jwt_secrets`), read once.
 pub fn secrets() -> &'static [String] {
     static LIST: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
-    LIST.get_or_init(|| crate::paths::jwt_secrets().ok().and_then(|p| std::fs::read_to_string(p).ok()).map(|t| t.lines().map(str::to_string).collect()).unwrap_or_default())
+    LIST.get_or_init(|| crate::paths::jwt_secrets().ok().and_then(|p| crate::util::read_text_file_capped(&p, crate::util::MAX_TEXT_FILE_BYTES).ok()).map(|t| t.lines().map(str::to_string).collect()).unwrap_or_default())
 }

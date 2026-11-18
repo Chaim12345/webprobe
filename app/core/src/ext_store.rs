@@ -62,7 +62,7 @@ pub fn save(list: &[Installed]) -> Result<(), String> {
 }
 
 pub fn load_from(f: &std::path::Path) -> Vec<Installed> {
-    std::fs::read(f).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+    crate::util::read_text_file_capped(f, crate::util::MAX_TEXT_FILE_BYTES).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
 }
 
 pub fn save_to(f: &std::path::Path, list: &[Installed]) -> Result<(), String> {
@@ -246,7 +246,7 @@ pub fn catalogue_dir() -> Option<PathBuf> {
 }
 
 pub fn load_catalogue(dir: &std::path::Path) -> Result<Vec<CatalogueEntry>, String> {
-    let text = std::fs::read_to_string(dir.join("catalogue.json")).map_err(|e| e.to_string())?;
+    let text = crate::util::read_text_file_capped(&dir.join("catalogue.json"), crate::util::MAX_TEXT_FILE_BYTES).map_err(|e| e.to_string())?;
     serde_json::from_str(&text).map_err(|e| format!("catalogue.json: {e}"))
 }
 

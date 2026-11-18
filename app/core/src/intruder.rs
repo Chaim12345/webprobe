@@ -1002,7 +1002,7 @@ impl PayloadSource {
     pub fn generate(&self) -> Vec<String> {
         match self {
             PayloadSource::SimpleList { items } => items.clone(),
-            PayloadSource::RuntimeFile { path } => match std::fs::read_to_string(path) {
+            PayloadSource::RuntimeFile { path } => match crate::util::read_text_file_capped(std::path::Path::new(path), crate::util::MAX_TEXT_FILE_BYTES) {
                 Ok(text) => read_payload_lines(&text),
                 Err(_) => Vec::new(),
             },
@@ -1113,7 +1113,7 @@ impl PayloadSource {
     pub fn len(&self) -> usize {
         match self {
             PayloadSource::SimpleList { items } => items.len(),
-            PayloadSource::RuntimeFile { path } => std::fs::read_to_string(path)
+            PayloadSource::RuntimeFile { path } => crate::util::read_text_file_capped(std::path::Path::new(path), crate::util::MAX_TEXT_FILE_BYTES)
                 .map(|text| read_payload_lines(&text).len())
                 .unwrap_or(0),
             PayloadSource::Numbers { from, to, step, .. } => {
@@ -1523,6 +1523,7 @@ fn read_payload_lines(text: &str) -> Vec<String> {
     text.lines()
         .map(|line| line.trim_end_matches('\r'))
         .filter(|line| !line.is_empty())
+        .take(MAX_PAYLOADS)
         .map(str::to_string)
         .collect()
 }

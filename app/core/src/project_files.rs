@@ -25,7 +25,7 @@ pub fn remember(list: &[String], path: &str) -> Vec<String> {
 }
 
 pub fn load_recent(file: &Path) -> Vec<String> {
-    std::fs::read_to_string(file).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+    crate::util::read_text_file_capped(file, crate::util::MAX_TEXT_FILE_BYTES).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
 }
 
 pub fn save_recent(file: &Path, list: &[String]) -> Result<(), String> {

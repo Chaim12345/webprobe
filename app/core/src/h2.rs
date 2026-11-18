@@ -229,6 +229,15 @@ struct Rx {
     client_gone: bool,
 }
 
+fn grow_window(window: &mut i64, delta: i64, what: &str) -> Result<(), String> {
+    let next = window
+        .checked_add(delta)
+        .filter(|value| *value <= 0x7fff_ffff)
+        .ok_or_else(|| format!("h2: {what} flow-control window overflow"))?;
+    *window = next;
+    Ok(())
+}
+
 impl Rx {
     fn new() -> Self {
         Rx {
@@ -355,7 +364,7 @@ impl Rx {
                             SETTINGS_INITIAL_WINDOW_SIZE => {
                                 let new = val as i64;
                                 // Applies as a delta to every open stream (RFC 9113 §6.5.2).
-                                self.stream_window += new - self.peer_initial_window;
+                                grow_window(&mut self.stream_window, new - self.peer_initial_window, "stream")?;
                                 self.peer_initial_window = new;
                             }
                             SETTINGS_MAX_FRAME_SIZE => {
@@ -385,9 +394,9 @@ impl Rx {
                     return Err("h2: zero WINDOW_UPDATE".into());
                 }
                 if f.stream == 0 {
-                    self.send_window += inc;
+                    grow_window(&mut self.send_window, inc, "connection")?;
                 } else if f.stream == 1 {
-                    self.stream_window += inc;
+                    grow_window(&mut self.stream_window, inc, "stream")?;
                 }
             }
             FRAME_GOAWAY => {
@@ -917,6 +926,22 @@ mod tests {
         let hb = enc.encode(vec![(b":status".as_ref(), b"200".as_ref())]);
         write_frame(s, FRAME_HEADERS, FLAG_END_HEADERS, 1, &hb).unwrap();
         write_frame(s, FRAME_DATA, FLAG_END_STREAM, 1, b"ok").unwrap();
+    }
+
+    #[test]
+    fn window_update_overflow_is_rejected_without_changing_state() {
+        let mut rx = Rx::new();
+        rx.send_window = 1;
+        let mut stream = scripted(&[]);
+        let mut sink = None;
+        let err = rx.handle(&mut stream, Frame {
+            ty: FRAME_WINDOW_UPDATE,
+            flags: 0,
+            stream: 0,
+            payload: 0x7fff_ffffu32.to_be_bytes().to_vec(),
+        }, &mut sink).unwrap_err();
+        assert!(err.contains("overflow"), "{err}");
+        assert_eq!(rx.send_window, 1);
     }
 
     /// A body larger than the initial 65 535-byte window must be split into
