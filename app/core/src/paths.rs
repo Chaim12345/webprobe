@@ -572,9 +572,6 @@ mod tests {
         d
     }
 
-    /// Every resource resolves from an override directory, and with
-    /// nothing anywhere the message names what, where and how.
-    #[test]
     #[test]
     fn predefined_payload_lists_are_the_pay_stems() {
         let dir = scratch("paylists");
@@ -590,6 +587,8 @@ mod tests {
         assert!(payload_list(&dir, "").is_err());
     }
 
+    /// Every resource resolves from an override directory, and with
+    /// nothing anywhere the message names what, where and how.
     #[test]
     fn resources_resolve_from_overrides_and_say_what_is_missing() {
         let empty = scratch("empty");
