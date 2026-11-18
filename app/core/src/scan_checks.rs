@@ -374,6 +374,8 @@ pub(crate) static REQUEST_CHECKS: &[&dyn RequestCheck] = &[
     &GraphqlContentType,
     &SpoofableClientIp,
     &BackupFile,
+    &WebCachePoisoning,
+    &WebCacheDeception,
 ];
 
 /// Whether `check` audits `ip` under `config`: the point type suits it,
@@ -1650,6 +1652,114 @@ impl RequestCheck for BackupFile {
             cx.report(vec![i]);
             return;
         }
+    }
+}
+
+/// Web cache poisoning, the unkeyed-header half of burp.Zp22
+/// (WebCachePoisoningCheck, per request): the base request goes out once
+/// per common unkeyed host header with a random canary value; a response
+/// that echoes the canary varies on input a shared cache's key omits, so
+/// the cache can be poisoned with it. Zp22's parameter-cloaking, fat-GET
+/// and port probes, its helpers (burp.Zg0y / Zg_f) and the Zg1g / Zusn
+/// issue texts were not recovered; severity and detail are WebProbe's.
+pub(crate) struct WebCachePoisoning;
+
+impl RequestCheck for WebCachePoisoning {
+    fn id(&self) -> &'static str {
+        "active.web-cache-poisoning"
+    }
+    fn issue(&self) -> &'static str {
+        "Web cache poisoning"
+    }
+    fn scope(&self) -> Scope {
+        Scope::Request
+    }
+    fn run(&self, cx: &ScanCtx) {
+        if cx.stopped() || !cx.runs(self.issue()) || cx.baseline.raw.is_empty() {
+            return;
+        }
+        for header in ["X-Forwarded-Host", "X-Host", "X-Forwarded-Server"] {
+            if cx.stopped() {
+                return;
+            }
+            let canary = format!("{}.webprobe-cache.test", rnd_letters(10));
+            let req = net::replace_or_add_header(cx.req.as_bytes(), header, &canary);
+            let Some(resp) = burp_send(cx, &req) else { continue };
+            if find_sub(&resp, canary.as_bytes()) {
+                let mut i = mk(
+                    "high",
+                    self.issue(),
+                    &cx.entry,
+                    format!("The response reflects the value of the <b>{header}</b> header, which is not part of the cache key used by many caching servers.<br><br>The header <b>{header}: {canary}</b> was submitted, and the canary <b>{canary}</b> was returned in the response. An attacker could supply a poisoned value that a shared cache then serves to other users."),
+                )
+                .with_evidence(vec![ScanEvidence::new(&req, Some(&resp))]);
+                i.confidence = "Firm".into();
+                cx.report(vec![i]);
+                return;
+            }
+        }
+    }
+}
+
+/// Web cache deception (burp.Zum9, WebCacheDeceptionCheck; the R-10 pack
+/// bundles it with the Zp22 family, per request): a GET page is asked for
+/// again with a static-looking segment appended (<path>/<random>.css);
+/// when the origin keeps answering with the same page, a cache can store
+/// a victim's personalized page at that public URL. The Zgq3 / Zpz6 /
+/// Zr2x / Zs3 helpers and Zm90's issue text were not recovered; severity
+/// and detail are WebProbe's.
+pub(crate) struct WebCacheDeception;
+
+impl RequestCheck for WebCacheDeception {
+    fn id(&self) -> &'static str {
+        "active.web-cache-deception"
+    }
+    fn issue(&self) -> &'static str {
+        "Web cache deception"
+    }
+    fn scope(&self) -> Scope {
+        Scope::Request
+    }
+    fn run(&self, cx: &ScanCtx) {
+        if cx.stopped() || !cx.runs(self.issue()) || cx.baseline.raw.is_empty() {
+            return;
+        }
+        // A GET page with no static extension of its own, answered 200.
+        if !util::parse_http(cx.req.as_bytes()).method.eq_ignore_ascii_case("GET") {
+            return;
+        }
+        let path = cx.entry.path.split('?').next().unwrap_or("/");
+        if path.rsplit('/').next().unwrap_or("").contains('.') {
+            return;
+        }
+        if status_body(&cx.baseline.raw).0 != 200 {
+            return;
+        }
+        let probe_path = format!("{path}/{}.css", rnd_letters(10));
+        let req = host_request(cx, "GET", &probe_path, &[], b"");
+        let Some(resp) = burp_send(cx, &req) else { return };
+        if status_body(&resp).0 != 200 {
+            return;
+        }
+        // The same page both times on each side, so a jittery page is not
+        // mistaken for a match.
+        let fp = crate::variations::fingerprint;
+        let mut c = crate::variations::Comparator::new(&fp(&cx.baseline.raw), &fp(&resp));
+        let (Some(again), Some(resp2)) = (burp_send(cx, cx.req.as_bytes()), burp_send(cx, &req)) else { return };
+        c.add_a(&fp(&again));
+        c.add_b(&fp(&resp2));
+        if c.distinguishable() {
+            return;
+        }
+        let mut i = mk(
+            "medium",
+            self.issue(),
+            &cx.entry,
+            format!("The page at <b>{}</b> is also served under the static-looking URL <b>{}</b>.<br><br>A caching server may store a victim's personalized page at that URL, where anyone who learns the URL can read it.", util::html_encode(path), util::html_encode(&probe_path)),
+        )
+        .with_evidence(vec![ScanEvidence::new(&req, Some(&resp2))]);
+        i.confidence = "Firm".into();
+        cx.report(vec![i]);
     }
 }
 
@@ -3843,6 +3953,8 @@ mod tests {
                 ("active.graphql-content-type", Scope::Request, None),
                 ("active.spoofable-client-ip", Scope::Request, None),
                 ("active.backup-file", Scope::Request, None),
+                ("active.web-cache-poisoning", Scope::Request, None),
+                ("active.web-cache-deception", Scope::Request, None),
             ]
         );
         let mut ids: Vec<&str> = points.iter().copied().chain(requests.iter().map(|r| r.0)).collect();
@@ -4133,6 +4245,35 @@ mod tests {
         let got: Vec<(&str, &str, &str)> = got.iter().map(|(a, b, c)| (a.as_str(), b.as_str(), c.as_str())).collect();
         assert!(got.contains(&("Spoofable client IP address", "info", "Tentative")), "{got:?}");
         assert!(got.contains(&("Backup file", "info", "Certain")), "{got:?}");
+    }
+
+    /// R-10 Zp22 family: cache poisoning and deception against a live
+    /// lab. The lab reflects X-Forwarded-Host into its page and serves
+    /// /account unchanged under any extra .css path segment.
+    #[test]
+    fn r10_cache_checks_against_a_live_lab() {
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = lab_serve(l, |_method, path, raw| {
+            let xfh = raw
+                .lines()
+                .find_map(|l| {
+                    let (k, v) = l.split_once(':')?;
+                    k.trim().eq_ignore_ascii_case("x-forwarded-host").then(|| v.trim().to_string())
+                })
+                .unwrap_or_default();
+            let (status, body) = if path == "/account" || (path.starts_with("/account/") && path.ends_with(".css")) {
+                ("200 OK", format!("<html><head><link rel=\"stylesheet\" href=\"http://{xfh}/s.css\"></head><body>account balance</body></html>"))
+            } else {
+                ("404 Not Found", String::new())
+            };
+            format!("HTTP/1.1 {status}\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        });
+        let host = format!("127.0.0.1:{port}");
+        let req = format!("GET /account HTTP/1.1\r\nHost: {host}\r\n\r\n");
+        let got = lab_scan(port, &["active.web-cache-poisoning", "active.web-cache-deception"], "GET", "/account", req);
+        let got: Vec<(&str, &str, &str)> = got.iter().map(|(a, b, c)| (a.as_str(), b.as_str(), c.as_str())).collect();
+        assert!(got.contains(&("Web cache poisoning", "high", "Firm")), "{got:?}");
+        assert!(got.contains(&("Web cache deception", "medium", "Firm")), "{got:?}");
     }
 
     #[test]
