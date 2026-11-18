@@ -4305,6 +4305,41 @@ mod tests {
         assert!(got.contains(&("XPath injection", "high", "Firm")), "{got:?}");
     }
 
+    /// R-09: the active JWT attacks against a live lab. The lab trusts
+    /// any bearer token whose payload still parses as a JSON object
+    /// (whatever its header or signature) and rejects anything else, so
+    /// the garbled control token is told apart while every attack variant
+    /// is accepted. The token travels in a cookie: Authorization is not
+    /// an insertion point (only X-* headers are).
+    #[test]
+    fn r09_jwt_attacks_against_a_live_lab() {
+        use base64::Engine;
+        let token = crate::jwt::test_hs256("a-strong-secret-not-in-any-wordlist", "{\"sub\":\"123\",\"role\":\"user\"}");
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = lab_serve(l, |_method, _path, raw| {
+            let tok = raw
+                .lines()
+                .find_map(|l| l.split_once(':').filter(|(k, _)| k.trim().eq_ignore_ascii_case("cookie")).map(|(_, v)| v.trim().to_string()))
+                .and_then(|c| c.split(';').find_map(|kv| kv.trim().strip_prefix("session=").map(|v| v.to_string())))
+                .unwrap_or_default();
+            let payload = tok.split('.').nth(1).unwrap_or("").to_string();
+            let trusted = base64::engine::general_purpose::URL_SAFE_NO_PAD
+                .decode(payload.as_bytes())
+                .ok()
+                .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+                .is_some_and(|v| v.as_object().is_some_and(|o| o.contains_key("sub")));
+            let (status, body) = if trusted { ("200 OK", "<html><body>private api</body></html>") } else { ("401 Unauthorized", "unauthorized") };
+            format!("HTTP/1.1 {status}\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        });
+        let host = format!("127.0.0.1:{port}");
+        let req = format!("GET /api HTTP/1.1\r\nHost: {host}\r\nCookie: session={token}\r\n\r\n");
+        let got = lab_scan(port, &["active.jwt"], "GET", "/api", req);
+        let got: Vec<(&str, &str, &str)> = got.iter().map(|(a, b, c)| (a.as_str(), b.as_str(), c.as_str())).collect();
+        assert!(got.contains(&("JWT signature not verified", "high", "Tentative")), "{got:?}");
+        assert!(got.contains(&("JWT none algorithm supported", "high", "Tentative")), "{got:?}");
+        assert!(got.contains(&("JWT self-signed JWK header supported", "high", "Tentative")), "{got:?}");
+    }
+
     #[test]
     fn collaborator_everywhere_builds_burps_request_set() {
         let collab = |slot: &str| Some(format!("{slot}.oast.test"));

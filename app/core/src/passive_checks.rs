@@ -908,6 +908,43 @@ mod tests {
 
     const STRICT: &str = "default-src 'none'; script-src 'nonce-abcdefghijklmnopqrstuv'; style-src 'self'; frame-ancestors 'none'; form-action 'self'";
 
+    /// R-09: an HS256 token signed with a wordlist secret gets Burp's
+    /// issue name and names the key; a strong secret is left alone.
+    #[test]
+    fn jwt_weak_hmac_secret_passive() {
+        let weak = crate::jwt::test_hs256("secret", "{\"sub\":\"1\"}");
+        let mut e = ex("/", true, HTML, "<html><body>hi</body></html>");
+        e.req_raw = format!("GET / HTTP/1.1\r\nHost: example.com\r\nAuthorization: Bearer {weak}\r\n\r\n").into_bytes().into();
+        let resp = e.resp_raw.clone().unwrap();
+        let cx = PassiveCtx::new(&e, &resp, None, &|_| true);
+        let mut v = Vec::new();
+        jwt_weak_secret_with(&cx, &mut v, ["wrong", "secret"].into_iter(), false);
+        assert_eq!(v.len(), 1);
+        assert_eq!((v[0].name.as_str(), v[0].sev.as_str(), v[0].confidence.as_str()), ("JWT weak HMAC secret", "high", "Certain"));
+        assert!(v[0].detail.contains("<b>secret</b>"), "{}", v[0].detail);
+        let strong = crate::jwt::test_hs256("not-in-any-wordlist-9f8e7d", "{\"sub\":\"1\"}");
+        e.req_raw = format!("GET / HTTP/1.1\r\nHost: example.com\r\nAuthorization: Bearer {strong}\r\n\r\n").into_bytes().into();
+        let cx = PassiveCtx::new(&e, &resp, None, &|_| true);
+        let mut v = Vec::new();
+        jwt_weak_secret_with(&cx, &mut v, ["wrong", "secret"].into_iter(), false);
+        assert!(v.is_empty());
+    }
+
+    /// R-09: a JWT whose jwk header holds private key material, echoed in
+    /// the response, gets Burp's issue name.
+    #[test]
+    fn jwt_private_key_disclosed_passive() {
+        use base64::Engine;
+        let h = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(br#"{"alg":"RS256","jwk":{"kty":"RSA","e":"AQAB","n":"x","d":"y"}}"#);
+        let token = format!("{h}.e30.e30");
+        let body = format!("<html><body>echo {token}</body></html>");
+        let mut e = ex("/", true, HTML, &body);
+        e.req_raw = format!("GET / HTTP/1.1\r\nHost: example.com\r\nAuthorization: Bearer {token}\r\n\r\n").into_bytes().into();
+        let v = only(&e, CH_JWT_PRIVATE_KEY);
+        assert_eq!(v.len(), 1);
+        assert_eq!((v[0].name.as_str(), v[0].sev.as_str(), v[0].confidence.as_str()), ("JWT private key disclosed", "high", "Certain"));
+    }
+
     #[test]
     fn registry_lists_every_passive_unit_once() {
         let cat = crate::scan::check_catalogue();

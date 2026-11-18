@@ -219,3 +219,107 @@ pub fn secrets() -> &'static [String] {
     static LIST: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
     LIST.get_or_init(|| crate::paths::jwt_secrets().ok().and_then(|p| std::fs::read_to_string(p).ok()).map(|t| t.lines().map(str::to_string).collect()).unwrap_or_default())
 }
+
+/// A test token signed HS256 with `secret` (the lab and unit tests).
+#[cfg(test)]
+pub(crate) fn test_hs256(secret: &str, payload: &str) -> String {
+    let h = B64.encode(br#"{"alg":"HS256","typ":"JWT"}"#);
+    let p = B64.encode(payload.as_bytes());
+    let sig = B64.encode(hmac_for("HS256", secret.as_bytes(), format!("{h}.{p}").as_bytes()).unwrap());
+    format!("{h}.{p}.{sig}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Burp's recognition (Zs_w.ZT): "e"…, at least 23 characters, three
+    /// parts, a JSON-object header.
+    #[test]
+    fn parse_follows_burps_recognition() {
+        let t = test_hs256("k", "{\"sub\":\"1\"}");
+        let j = Jwt::parse(&t).unwrap();
+        assert_eq!(j.alg(), "HS256");
+        assert_eq!(j.payload(), b"{\"sub\":\"1\"}");
+        assert_eq!(j.signature().len(), 32);
+        assert!(Jwt::parse("eyJhYj0").is_none(), "under 23 characters");
+        assert!(Jwt::parse(&format!("x{}", &t[1..])).is_none(), "must start with e");
+        assert!(Jwt::parse(&format!("{t}.e30")).is_none(), "four parts");
+        let not_obj = format!("{}.e30.e30", B64.encode(b"[1]"));
+        assert!(Jwt::parse(&not_obj).is_none(), "header not an object");
+    }
+
+    /// The attack variants are Burp's Zi8s cases and the Zu4y control.
+    #[test]
+    fn attack_variants_match_burps_cases() {
+        let t = Jwt::parse(&test_hs256("k", "{\"sub\":\"1\"}")).unwrap();
+        // Case 1: the signature is as many "A" characters, nothing else moves.
+        let c = corrupt_signature(&t);
+        assert_eq!(c, format!("{}.{}.{}", t.header_b64, t.payload_b64, "A".repeat(t.signature_b64.len())));
+        // Case 2: three casings of "none", empty signature, payload kept.
+        let nones = none_variants(&t);
+        assert_eq!(nones.len(), 3);
+        for (v, alg) in nones.iter().zip(["nonE", "None", "none"]) {
+            let j = Jwt::parse(v).unwrap();
+            assert_eq!(j.alg(), alg);
+            assert_eq!(j.payload_b64, t.payload_b64);
+            assert!(j.signature_b64.is_empty());
+        }
+        // Case 3: RS256 with the attacker's jwk; kid filled when absent.
+        let j = Jwt::parse(&jwk_variant(&t).unwrap()).unwrap();
+        assert_eq!(j.alg(), "RS256");
+        let jwk = j.header.get("jwk").unwrap();
+        assert_eq!(jwk.get("kty").unwrap(), "RSA");
+        assert_eq!(j.header.get("kid").unwrap(), JWK_KID);
+        assert!(!j.signature_b64.is_empty());
+        // The control: payload becomes "{  }" of the same length, signature kept.
+        let ctrl = control_token(&t);
+        let parts: Vec<&str> = ctrl.split('.').collect();
+        assert_eq!(parts[0], t.header_b64);
+        assert_eq!(parts[2], t.signature_b64);
+        let p = B64.decode(parts[1]).unwrap();
+        assert_eq!(p.len(), t.payload().len());
+        assert!(p.starts_with(b"{") && p.ends_with(b"}"));
+        // jku / x5u: the header holds the URL, payload and signature kept.
+        let u = header_url_variant(&t, "jku", "https://example.test/");
+        let j = Jwt::parse(&u).unwrap();
+        assert_eq!(j.header.get("jku").unwrap(), "https://example.test/");
+        assert_eq!((j.payload_b64.as_str(), j.signature_b64.as_str()), (t.payload_b64.as_str(), t.signature_b64.as_str()));
+    }
+
+    /// Zbpi: the HMAC candidate that verifies is the weak secret; the empty
+    /// candidate is the one-byte key [0].
+    #[test]
+    fn weak_secret_finds_the_signing_candidate() {
+        let t = Jwt::parse(&test_hs256("secret", "{\"sub\":\"1\"}")).unwrap();
+        assert_eq!(weak_secret(&t, ["wrong", "secret"]), Some("secret".to_string()));
+        assert_eq!(weak_secret(&t, ["wrong", "other"]), None);
+        let zero = {
+            let h = B64.encode(br#"{"alg":"HS256"}"#);
+            let p = B64.encode(b"{}");
+            let sig = B64.encode(hmac_for("HS256", &[0], format!("{h}.{p}").as_bytes()).unwrap());
+            Jwt::parse(&format!("{h}.{p}.{sig}")).unwrap()
+        };
+        assert_eq!(weak_secret(&zero, ["secret", ""]), Some(String::new()));
+        // A non-HMAC alg is never a weak-HMAC finding.
+        let mut h = t.header.clone();
+        h.insert("alg".into(), "RS256".into());
+        let rs = Jwt::parse(&t.with_header(&h, &t.payload_b64, &t.signature_b64)).unwrap();
+        assert_eq!(weak_secret(&rs, ["secret"]), None);
+    }
+
+    /// Zb2r: tokens come from header values, cookie values and parameter
+    /// values, once each.
+    #[test]
+    fn tokens_in_request_sources() {
+        let t1 = test_hs256("a", "{\"a\":1}");
+        let t2 = test_hs256("b", "{\"b\":2}");
+        let t3 = test_hs256("c", "{\"c\":3}");
+        let raw = format!("GET /p?tok={t3}&tok2={t3} HTTP/1.1\r\nHost: h\r\nAuthorization: Bearer {t1}\r\nCookie: session={t2}\r\n\r\n");
+        let p = crate::util::parse_http(raw.as_bytes());
+        let found = tokens_in_request(&p, raw.as_bytes());
+        let raws: Vec<&str> = found.iter().map(|t| t.raw.as_str()).collect();
+        assert_eq!(raws.iter().filter(|r| **r == t3).count(), 1, "deduped: {raws:?}");
+        assert!(raws.contains(&t1.as_str()) && raws.contains(&t2.as_str()) && raws.contains(&t3.as_str()), "{raws:?}");
+    }
+}

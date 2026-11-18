@@ -8,9 +8,9 @@
     "p1": 39,
     "p2": 20,
     "by_status": {
-      "done": 112,
+      "done": 113,
       "rejected": 2,
-      "todo": 13
+      "todo": 12
     }
   },
   "tasks": [
@@ -1328,8 +1328,9 @@
       "title": "JWT checks",
       "acceptance": "Burp's seven JWT issue types ported with tests (alg=none, weak HMAC secret via Scanner/jwt_secrets.txt, ...); a local lab token gets Burp's issue names.",
       "effort": "M",
-      "status": "todo",
-      "evidence": "Burp resources/Scanner/jwt_secrets.txt; none in scan_checks.rs."
+      "status": "done",
+      "completed": "2026-11-18",
+      "evidence": "All seven issue types were already ported (active JwtAttacks: signature-not-verified, none-alg, self-signed-jwk, jku, x5u; passive: weak HMAC secret, private key disclosed). Tests added: jwt.rs unit tests (recognition, Zi8s attack cases, Zu4y control, Zbpi weak-secret round-trip, Zb2r token sources), passive tests (weak secret names the key; jwk private key echoed), live-lab active test r09_jwt_attacks_against_a_live_lab (lab token gets Burp's issue names). jku/x5u fire only on a Collaborator interaction, so their variant building is unit-tested but the delivery path has no local lab. Full suite: 557 passed, 0 failed."
     },
     {
       "id": "R-10",
