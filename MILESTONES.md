@@ -97,9 +97,11 @@ Small slices: Burp CLI flags; project/user JSON import/export; local scan start 
 
 ## M8 — R-17 and remaining core behavior
 
-**Status:** pending.
+**Status:** pending (R-17 done 2026-11-19 on branch r17/payloads: predefined lists via runtime resolution,
+Collaborator payloads minted from the shared.oob pool, extension generator/processor wiring confirmed by the
+ext_host stage-4 test; webprobe-core 647/647, webprobe 136/136).
 
-- Add predefined Intruder lists, Collaborator payloads and extension-generated payload/processor wiring.
+- ~~Add predefined Intruder lists, Collaborator payloads and extension-generated payload/processor wiring.~~ (R-17)
 - Complete remaining non-timing scanner families from `docs/specs/R-10-active-pack.research.md` in separate check-sized milestones.
 - R-13: implement browser source-to-sink DOM analysis in independently verifiable source/sink families, starting with `location.hash -> innerHTML`; do not claim all 48 types from one fixture.
 

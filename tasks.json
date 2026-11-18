@@ -1411,8 +1411,9 @@
       "title": "Intruder payload completeness",
       "acceptance": "Burp's predefined payload lists, Collaborator payloads and extension-generated payloads/processors (the last via R-03).",
       "effort": "S",
-      "status": "todo",
-      "evidence": "Review: 18 payload sources, ~20 processors present; these three missing."
+      "status": "done",
+      "evidence": "Branch r17/payloads (commits 110feef, 9e68d7d, 8a8e11e). Predefined lists: paths::payload_list_names/payload_list resolve Burp's PayloadStrings/*.pay at runtime (WEBPROBE_BURP_RESOURCES etc.; PortSwigger's files never bundled) and the Intruder simple-list panel has Burp's 'Add from list...' menu (burp.Zckm). Collaborator payloads: PayloadSource::CollaboratorPayloads { include_location, count } minted at attack start from the shared.oob pool (demand-signalled; dry pool fails loudly); documented divergence: Burp generates indefinitely, WebProbe mints an explicit count up front (NullPayloads precedent). Extension-generated payloads/processors: wiring already covered end to end by the ext_host stage-4 test (generator fill + processor modify/skip drive an attack). webprobe-core 647/647 and webprobe 136/136 green (no WEBPROBE_BURP_* env).",
+      "completed": "2026-11-19"
     },
     {
       "id": "R-18",
