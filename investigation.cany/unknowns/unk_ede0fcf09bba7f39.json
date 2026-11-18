@@ -1,6 +1,6 @@
 {
   "id": "unk_ede0fcf09bba7f39",
-  "revision": 2,
+  "revision": 3,
   "question": "Which Montoya API interfaces and methods do the most-installed BApps actually call (at load and at run time), so the bridge can be built in the order that makes real extensions work?",
   "severity": "high",
   "domain": "extensions",
@@ -11,7 +11,8 @@
   ],
   "evidence_for": [
     "sidecar/MontoyaBridge.java:276-287: only proxy() and logging() answer; most BApps call api.extension().setName() first",
-    "2026-11-18 static survey of the 4 locally installed BApps (JWT Monitor, JWT4B, JWT Editor, MCP Server; /root/webprobe-parity/tools/bapp_montoya_survey.py): MontoyaApi accessors used, of 4: extension 4, logging 4, userInterface 4, http 3, burpSuite 3, persistence 2, proxy 2, collaborator 2, intruder 2, utilities 2, scanner 1, organizer 1, repeater 1, siteMap 1. Smallest target: JWT Monitor (3 classes, 21 Montoya methods). Build order in /root/webprobe-parity/specs/R-03-montoya-bridge.md."
+    "2026-11-18 static survey of the 4 locally installed BApps (JWT Monitor, JWT4B, JWT Editor, MCP Server; /root/webprobe-parity/tools/bapp_montoya_survey.py): MontoyaApi accessors used, of 4: extension 4, logging 4, userInterface 4, http 3, burpSuite 3, persistence 2, proxy 2, collaborator 2, intruder 2, utilities 2, scanner 1, organizer 1, repeater 1, siteMap 1. Smallest target: JWT Monitor (3 classes, 21 Montoya methods). Build order in /root/webprobe-parity/specs/R-03-montoya-bridge.md.",
+    "2026-11-18 (a8ed5cb): JWT Monitor loaded unmodified in the sidecar with no unsupported call after stages 1-2 (extension, burpSuite, logging, http). It needs its suite tab shown to be usable (stage 3)."
   ],
   "evidence_against": []
 }

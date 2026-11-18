@@ -8,9 +8,9 @@
     "p1": 39,
     "p2": 19,
     "by_status": {
-      "done": 106,
+      "done": 107,
       "rejected": 2,
-      "todo": 18
+      "todo": 17
     }
   },
   "tasks": [
@@ -1263,7 +1263,7 @@
       "acceptance": "extension(), http(), userInterface(), scanner(), persistence() (and what the first target BApp needs) are bridged; the sidecar builds against the published montoya-api artifact instead of /opt/BurpSuite/burpsuite.jar (licence checked); one unmodified BApp-store extension loads and does its job.",
       "effort": "L",
       "status": "todo",
-      "evidence": "sidecar/MontoyaBridge.java:276-287 (only proxy() and logging() answer); core/src/ext_host.rs:332. Measured ~10% API coverage."
+      "evidence": "sidecar/MontoyaBridge.java:276-287 (only proxy() and logging() answer); core/src/ext_host.rs:332. Measured ~10% API coverage. Progress 2026-11-18 (a8ed5cb): stages 1-2 done. Bridged: extension() (setName, filename, isBapp, unload, registerUnloadingHandler), burpSuite() (version, commandLineArguments, taskExecutionEngine; engine state only recorded), logging() complete, http() (registerHttpHandler, sendRequest, sendRequests), proxy request/response handlers, value types (HttpRequest, HttpResponse, HttpHeader, HttpService, ByteArray, parameters, Annotations, ToolSource, HttpRequestResponse, object factory). Everything else throws '<Interface>.<method> is not supported by WebProbe', logged once. Wire format is Base64 bytes; one Java source per API area (needs Java 22+). Tests stage1_extension_loads_logs_and_unloads, stage2_http_handler_edits_annotates_and_sends. Manual: the unmodified JWT Monitor BApp loads with no unsupported call and its handler rewrites the Authorization header (field filled by reflection, because its tab is not shown yet). API jar: resolved from ~/.m2 (montoya-api 2026.4) before /opt/BurpSuite; its POM names the Burp Suite Professional Licence Agreement, so it is user-supplied and not vendored. REMAINING: stage 3 userInterface (worker task 8), stage 4 persistence/utilities/proxy rest/collaborator/intruder/scanner, stage 5 siteMap/repeater/organizer/scope."
     },
     {
       "id": "R-04",
@@ -1313,8 +1313,9 @@
       "title": "Tests for untested modules",
       "acceptance": "rules.rs (match and replace: every scope, regex, binary bodies), report, scan_config, and logic tests behind intruder_ui, collaborator_ui, sitemap_compare_ui, rules_ui.",
       "effort": "S",
-      "status": "todo",
-      "evidence": "core/src/rules.rs: 628 lines, no tests, runs on every proxied message (net.rs:2516/2621/3034/3049)."
+      "status": "done",
+      "evidence": "Commit a8ed5cb. rules.rs: each_scope_edits_only_its_part, body_edits_restamp_content_length, regex_groups_and_java_replacement_syntax, binary_bodies_survive_and_match_bytewise, rules_run_in_order_and_disabled_or_empty_ones_are_skipped, empty_match_on_a_header_scope_adds_the_header, rule_table_edits_and_side_scopes. scan_config: round_trips_through_a_project_file, old_and_odd_files_load_with_defaults_and_clamps. Report dialog: format_switch_renames_only_report_extensions, message_limit_parses_positive_numbers_only. Intruder logic (moved to core): effective_sources_take_simple_lists_from_the_set_text, request_count_matches_each_attack_type, results_order_appends_while_sorted_rows_stream_in. Collaborator: interaction_rows_show_burp_time_payload_and_description. Site-map compare: branch_membership_and_option_lists. Eight product bugs found and fixed (stale Content-Length after a rule edit, $1abc replacement, header-add on an empty match, byte-wise regex on binary bodies, rule scopes offered on the wrong side, /api matching /apiv2, untyped Intruder payload sets dropped, Collaborator time format). Suite 501 + 135. Not covered: core report generation beyond the dialog logic; there is no WebSocket match-and-replace scope to test (R-07).",
+      "completed": "2026-11-18"
     },
     {
       "id": "R-09",

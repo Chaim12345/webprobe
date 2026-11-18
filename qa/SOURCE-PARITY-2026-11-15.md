@@ -1015,3 +1015,24 @@ Open after this wave:
 - HttpOnly / Secure cookie issues merge per path; Burp identifies them per cookie. In progress.
 - Scanner issue-type coverage is now about 66 of 183 (48 before the passive pack, +18); not recounted from the code.
 
+## Wave 63 (2026-11-18): Montoya stages 1-2 (R-03, part), module tests (R-08), passive merge
+
+Commit a8ed5cb.
+- **Montoya bridge:** `extension()`, `burpSuite()`, `logging()`, `http()` and the proxy handlers work with
+  the message value types; every other call throws a named Unsupported error. The unmodified JWT Monitor
+  BApp loads and its HTTP handler rewrites requests. The bridge now needs Java 22 or later (multi-file
+  source mode). The montoya-api jar is under the Burp Suite Professional Licence Agreement (per its POM),
+  so the user supplies it; it is found in `~/.m2` or a Burp install.
+- **R-08:** tests for match and replace, scan configuration, the report dialog and the logic behind the
+  Intruder, Collaborator and site-map compare screens; eight product bugs found and fixed (listed in
+  `tasks.json` R-08).
+- **Passive:** HttpOnly / Secure issues are per cookie (`Zwqj`, `Zico`, `Zhcw`), and HttpOnly is now
+  checked on every cookie as Burp does; the "multiple locations" merge at the 10th location is ported
+  (`Zeb6`, `Zs45.ZIL`, `Zbv8`, `Zrh8`).
+
+Open after this wave:
+- Extension tabs are accepted but not shown (stage 3, in progress), so JWT Monitor does nothing in normal use yet.
+- Setting the task execution engine state from an extension is recorded only; WebProbe's tasks do not pause.
+- Not ported in the passive merge: the catch-all after 19 identifiers on a host (`Zwlr.Zh:104`), the `Zbvp`
+  same-type merge, and any merging for active issues.
+
