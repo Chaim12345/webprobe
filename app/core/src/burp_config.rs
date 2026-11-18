@@ -85,8 +85,9 @@ pub fn export_project_options(listener: &ProxyListener) -> Value {
 /// Read a project options JSON into `listener`. Unknown sections and keys
 /// are ignored with a note in `notes` (like Burp's "not all settings could
 /// be restored" note). Scan-configuration sections (`scanner`, `crawler`)
-/// are skipped silently here: R-11's scan configuration model owns them
-/// and `--config-file` applies them through it once R-11 lands.
+/// are skipped silently here: R-11's scan configuration model owns them,
+/// and the binaries route each --config-file through `scan_library` for
+/// those keys.
 pub fn apply_project_options(json: &Value, listener: &mut ProxyListener, notes: &mut Vec<String>) {
     let Some(root) = json.as_object() else {
         notes.push("config file is not a JSON object; ignored".to_string());

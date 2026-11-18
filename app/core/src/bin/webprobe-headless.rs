@@ -27,7 +27,7 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use webprobe_core::{burp_config, net, project, report, rest_api, scan};
+use webprobe_core::{burp_config, net, project, report, rest_api, scan, scan_library};
 
 const USAGE: &str = "usage:\n  webprobe-headless [--config-file FILE]... [--user-config-file FILE]... [--unpause-spider-and-scanner] [--data-dir DIR] [--diagnostics] proxy [--port N] [--project FILE | --project-file FILE] [--seconds N]\n  webprobe-headless [--config-file FILE]... [--user-config-file FILE]... scan URL... [--crawl] [--speed fast|normal|thorough] [--report FILE.html|FILE.xml]\n  webprobe-headless --version | --help";
 
@@ -57,37 +57,71 @@ fn take_burp_flags(args: &mut Vec<String>) -> BurpFlags {
     flags
 }
 
-/// Read and merge the config JSONs. Scan-configuration sections are R-11's
-/// and skipped by the parser. Notes name files and sections only; API keys
-/// are never logged (pinned by burp_config tests).
-fn load_burp_configs(flags: &BurpFlags) -> (burp_config::ProxyListener, burp_config::ApiConfig) {
+/// Read and merge the config JSONs. The scan-configuration keys go through
+/// R-11's model (`scan_library`): each --config-file is one library entry,
+/// overlaid in order (Burp: last wins per key). Notes name files and
+/// sections only; API keys are never logged (pinned by burp_config tests).
+fn load_burp_configs(flags: &BurpFlags) -> (burp_config::ProxyListener, burp_config::ApiConfig, Vec<scan_library::LibraryConfig>) {
     let mut listener = burp_config::ProxyListener::default();
     let mut api = burp_config::ApiConfig::default();
-    let read = |path: &str| -> serde_json::Value {
-        let text = std::fs::read_to_string(path).unwrap_or_else(|e| {
+    let mut configs = Vec::new();
+    let read = |path: &str| -> String {
+        std::fs::read_to_string(path).unwrap_or_else(|e| {
             eprintln!("cannot read {path}: {e}");
-            std::process::exit(1);
-        });
-        serde_json::from_str(&text).unwrap_or_else(|e| {
-            eprintln!("{path}: not a JSON object: {e}");
             std::process::exit(1);
         })
     };
     for f in &flags.config_files {
+        let text = read(f);
+        let json: serde_json::Value = serde_json::from_str(&text).unwrap_or_else(|e| {
+            eprintln!("{f}: not a JSON object: {e}");
+            std::process::exit(1);
+        });
         let mut notes = Vec::new();
-        burp_config::apply_project_options(&read(f), &mut listener, &mut notes);
+        burp_config::apply_project_options(&json, &mut listener, &mut notes);
         for n in notes {
             eprintln!("{f}: {n}");
+        }
+        match scan_library::parse_config(f, text.as_bytes(), false) {
+            Ok(mut c) => {
+                // The proxy listener is applied above; keep it out of the
+                // scan-configuration overlay so not_applied stays honest.
+                c.tree.as_object_mut().map(|m| m.remove("proxy"));
+                configs.push(c);
+            }
+            Err(e) => eprintln!("{f}: {e}"),
         }
     }
     for f in &flags.user_config_files {
+        let json: serde_json::Value = serde_json::from_str(&read(f)).unwrap_or_else(|e| {
+            eprintln!("{f}: not a JSON object: {e}");
+            std::process::exit(1);
+        });
         let mut notes = Vec::new();
-        burp_config::apply_user_options(&read(f), &mut api, &mut notes);
+        burp_config::apply_user_options(&json, &mut api, &mut notes);
         for n in notes {
             eprintln!("{f}: {n}");
         }
     }
-    (listener, api)
+    (listener, api, configs)
+}
+
+/// Overlay the loaded scan configurations on the shared scan settings
+/// (Burp applies --config-file before the run starts) and note the keys
+/// WebProbe does not apply.
+fn apply_scan_configs(shared: &net::Shared, configs: &[scan_library::LibraryConfig]) {
+    if configs.is_empty() {
+        return;
+    }
+    let refs: Vec<&scan_library::LibraryConfig> = configs.iter().collect();
+    for line in scan_library::not_applied(&refs) {
+        eprintln!("not applied by WebProbe: {line}");
+    }
+    let base = shared.scan_config.lock().unwrap().clone();
+    let applied = scan_library::apply(&refs, &base, shared.scan_speed.load(Ordering::SeqCst), shared.scan_accuracy.load(Ordering::SeqCst));
+    *shared.scan_config.lock().unwrap() = applied.config;
+    shared.scan_speed.store(applied.speed, Ordering::SeqCst);
+    shared.scan_accuracy.store(applied.accuracy, Ordering::SeqCst);
 }
 
 /// Value of `--name V` in `args`, removing both.
@@ -136,7 +170,7 @@ fn save_project(shared: &net::Shared, path: &str) -> Result<(), String> {
 
 fn proxy(mut args: Vec<String>) {
     let flags = take_burp_flags(&mut args);
-    let (listener, api) = load_burp_configs(&flags);
+    let (listener, api, scan_configs) = load_burp_configs(&flags);
     // Without a --config-file the headless default stays 8090; with one,
     // the config's listener port applies and an explicit --port beats it.
     let default_port = if flags.config_files.is_empty() { 8090 } else { listener.port };
@@ -152,6 +186,7 @@ fn proxy(mut args: Vec<String>) {
         usage();
     }
     let shared = net::Shared::new();
+    apply_scan_configs(&shared, &scan_configs);
     if api.enabled {
         // Burp serves the REST API from the running app; for the headless
         // binary that is the long-lived proxy mode. The key is never
@@ -226,7 +261,7 @@ fn proxy(mut args: Vec<String>) {
 
 fn scan_urls(mut args: Vec<String>) {
     let flags = take_burp_flags(&mut args);
-    let _ = load_burp_configs(&flags);
+    let (_listener, _api, scan_configs) = load_burp_configs(&flags);
     let crawl = take_flag(&mut args, "--crawl");
     let report_file = take_opt(&mut args, "--report");
     let speed = match take_opt(&mut args, "--speed").as_deref() {
@@ -240,6 +275,7 @@ fn scan_urls(mut args: Vec<String>) {
     }
     let shared = net::Shared::new();
     shared.scan_speed.store(speed, Ordering::SeqCst);
+    apply_scan_configs(&shared, &scan_configs);
     let started = Instant::now();
     scan::crawl_and_audit(&shared, &args, !crawl);
     // crawl_and_audit returns once the last item's audit has finished.
@@ -318,6 +354,25 @@ mod tests {
         assert_eq!(flags.user_config_files, vec!["u.json".to_string()]);
         assert!(flags.unpause_spider_and_scanner);
         assert_eq!(args, strings(&["--crawl", "http://x/"]));
+    }
+
+    /// --config-file feeds both the proxy listener and R-11's scan
+    /// configuration model; the proxy section is applied to the listener
+    /// and kept out of the scan overlay.
+    #[test]
+    fn config_file_feeds_listener_and_scan_library() {
+        let dir = std::env::temp_dir().join(format!("webprobe-r15-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let f = dir.join("config.json");
+        std::fs::write(&f, r#"{"proxy": {"request_listeners": [{"listener_port": 9091}]}, "scanner": {"insertion_point_types": {"insert_cookies": false}}}"#).unwrap();
+        let mut args = strings(&["--config-file", f.to_str().unwrap()]);
+        let flags = take_burp_flags(&mut args);
+        let (listener, _api, configs) = load_burp_configs(&flags);
+        assert_eq!(listener.port, 9091);
+        assert_eq!(configs.len(), 1);
+        assert!(configs[0].tree.get("proxy").is_none());
+        assert!(configs[0].tree.get("scanner").is_some());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// --project-file is an alias of --project; the last one given wins.

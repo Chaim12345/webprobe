@@ -1044,29 +1044,45 @@ fn main() {
         }
     }
     // Read and merge the config JSONs (notes name files and sections only;
-    // API keys are never logged).
+    // API keys are never logged). Scan-configuration keys go through R-11's
+    // model: each --config-file is one library entry, overlaid in order.
     let mut listener = burp_config::ProxyListener::default();
     let mut api = burp_config::ApiConfig::default();
-    let read_config = |path: &str| -> serde_json::Value {
-        let text = std::fs::read_to_string(path).unwrap_or_else(|e| {
+    let mut scan_configs: Vec<webprobe_core::scan_library::LibraryConfig> = Vec::new();
+    let read_config = |path: &str| -> String {
+        std::fs::read_to_string(path).unwrap_or_else(|e| {
             eprintln!("cannot read {path}: {e}");
-            std::process::exit(1);
-        });
-        serde_json::from_str(&text).unwrap_or_else(|e| {
-            eprintln!("{path}: not a JSON object: {e}");
             std::process::exit(1);
         })
     };
     for f in &config_files {
+        let text = read_config(f);
+        let json: serde_json::Value = serde_json::from_str(&text).unwrap_or_else(|e| {
+            eprintln!("{f}: not a JSON object: {e}");
+            std::process::exit(1);
+        });
         let mut notes = Vec::new();
-        burp_config::apply_project_options(&read_config(f), &mut listener, &mut notes);
+        burp_config::apply_project_options(&json, &mut listener, &mut notes);
         for n in notes {
             eprintln!("{f}: {n}");
         }
+        match webprobe_core::scan_library::parse_config(f, text.as_bytes(), false) {
+            Ok(mut c) => {
+                // The proxy listener is applied above; keep it out of the
+                // scan-configuration overlay so not_applied stays honest.
+                c.tree.as_object_mut().map(|m| m.remove("proxy"));
+                scan_configs.push(c);
+            }
+            Err(e) => eprintln!("{f}: {e}"),
+        }
     }
     for f in &user_config_files {
+        let json: serde_json::Value = serde_json::from_str(&read_config(f)).unwrap_or_else(|e| {
+            eprintln!("{f}: not a JSON object: {e}");
+            std::process::exit(1);
+        });
         let mut notes = Vec::new();
-        burp_config::apply_user_options(&read_config(f), &mut api, &mut notes);
+        burp_config::apply_user_options(&json, &mut api, &mut notes);
         for n in notes {
             eprintln!("{f}: {n}");
         }
@@ -1090,6 +1106,17 @@ fn main() {
         if !listener.running {
             eprintln!("note: proxy listener disabled by configuration");
         }
+    }
+    if !scan_configs.is_empty() {
+        let refs: Vec<&webprobe_core::scan_library::LibraryConfig> = scan_configs.iter().collect();
+        for line in webprobe_core::scan_library::not_applied(&refs) {
+            eprintln!("not applied by WebProbe: {line}");
+        }
+        let base = shared.scan_config.lock().unwrap().clone();
+        let applied = webprobe_core::scan_library::apply(&refs, &base, shared.scan_speed.load(Ordering::SeqCst), shared.scan_accuracy.load(Ordering::SeqCst));
+        *shared.scan_config.lock().unwrap() = applied.config;
+        shared.scan_speed.store(applied.speed, Ordering::SeqCst);
+        shared.scan_accuracy.store(applied.accuracy, Ordering::SeqCst);
     }
     if api.enabled {
         let kb = std::sync::Arc::new(core_report::KnowledgeBase::discover());
