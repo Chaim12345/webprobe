@@ -374,6 +374,7 @@ pub(crate) static REQUEST_CHECKS: &[&dyn RequestCheck] = &[
     &GraphqlContentType,
     &SpoofableClientIp,
     &BackupFile,
+    &GraphqlEndpointDiscovered,
 ];
 
 /// Whether `check` audits `ip` under `config`: the point type suits it,
@@ -1346,6 +1347,11 @@ pub(crate) fn has_introspection(m: &serde_json::Map<String, serde_json::Value>) 
 /// The base request rewritten to send `query` in `style` to the same path.
 fn graphql_request(cx: &ScanCtx, query: &str, style: GqlStyle) -> Vec<u8> {
     let path = cx.entry.path.split('?').next().unwrap_or("/").to_string();
+    graphql_request_to(cx, &path, query, style)
+}
+
+/// A request sending `query` in `style` to `path` on the scanned host.
+fn graphql_request_to(cx: &ScanCtx, path: &str, query: &str, style: GqlStyle) -> Vec<u8> {
     match style {
         GqlStyle::Json => host_request(cx, "POST", &path, &[("Content-Type", "application/json; charset=utf-8")], serde_json::json!({ "query": query }).to_string().as_bytes()),
         GqlStyle::Get => host_request(cx, "GET", &format!("{path}?query={}", crate::scan::insertion::encode_url_param(query)), &[], b""),
@@ -1366,6 +1372,57 @@ fn graphql_issue(cx: &ScanCtx, name: &str, detail: String, ev: Vec<ScanEvidence>
     let mut i = mk("low", name, &cx.entry, detail).with_evidence(ev);
     i.confidence = "Certain".into();
     i
+}
+
+/// The paths Burp probes for a GraphQL endpoint (burp.Zeuo.Zc, decoded).
+pub(crate) const GRAPHQL_PATHS: [&str; 13] = [
+    "/graphql", "/api", "/api/graphql", "/graphql/api", "/graphql/graphql", "/v1/api", "/v1/api/graphql", "/api/v1", "/api/graphql/v1", "/v1/graphql/api", "/graphql/api/v1", "/v1/graphql", "/graphql/v1",
+];
+
+/// GraphQL endpoint discovered, burp.Zmzj (per host): `query{__typename}`
+/// sent to each path of Zeuo.Zc as GET, JSON POST and form POST; every
+/// path with a GraphQL answer is reported with its successful exchanges
+/// (Zb9m.ZA: Information, Certain). Burp's exact variant list (Zmzj.Za)
+/// is only known from its decoded literals (GET, POST, the JSON
+/// content type).
+pub(crate) struct GraphqlEndpointDiscovered;
+
+impl RequestCheck for GraphqlEndpointDiscovered {
+    fn id(&self) -> &'static str {
+        "active.graphql-endpoint-discovered"
+    }
+    fn issue(&self) -> &'static str {
+        "GraphQL endpoint discovered"
+    }
+    fn scope(&self) -> Scope {
+        Scope::Host
+    }
+    fn run(&self, cx: &ScanCtx) {
+        let (scheme, _) = origin_of(cx);
+        if cx.stopped() || !cx.runs(self.issue()) || !openapi_hosts().lock().unwrap().insert(format!("graphql|{scheme}://{}:{}", cx.host, cx.port)) {
+            return;
+        }
+        for path in GRAPHQL_PATHS {
+            let mut ok = Vec::new();
+            for style in [GqlStyle::Get, GqlStyle::Json, GqlStyle::Form] {
+                if cx.stopped() {
+                    return;
+                }
+                let req = graphql_request_to(cx, path, "query{__typename}", style);
+                let Some(resp) = burp_send(cx, &req) else { continue };
+                if graphql_response(&resp).is_some() {
+                    ok.push(ScanEvidence::new(&req, Some(&resp)));
+                }
+            }
+            if !ok.is_empty() {
+                let mut e = cx.entry.clone();
+                e.path = path.to_string();
+                let mut i = mk("info", self.issue(), &e, format!("A GraphQL endpoint was found at <b>{}</b>: it answered a GraphQL query.", util::html_encode(path))).with_evidence(ok);
+                i.confidence = "Certain".into();
+                cx.report(vec![i]);
+            }
+        }
+    }
 }
 
 /// GraphQL introspection enabled, burp.Zgd9 (per request): the existing
@@ -3843,6 +3900,7 @@ mod tests {
                 ("active.graphql-content-type", Scope::Request, None),
                 ("active.spoofable-client-ip", Scope::Request, None),
                 ("active.backup-file", Scope::Request, None),
+                ("active.graphql-endpoint-discovered", Scope::Host, None),
             ]
         );
         let mut ids: Vec<&str> = points.iter().copied().chain(requests.iter().map(|r| r.0)).collect();
