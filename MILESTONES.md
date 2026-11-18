@@ -63,7 +63,7 @@ Small slices:
 
 ## M5 — R-11 scan configuration library
 
-**Status:** pending.
+**Status:** in progress (2026-11-18 evening): the persistent Claude worker in the main checkout, not `.worktrees/r11`. Another agent should not start M5 in parallel.
 
 Worktree: `.worktrees/r11`.
 
