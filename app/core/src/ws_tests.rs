@@ -82,6 +82,27 @@ fn out_of_place_fragments_and_oversize_frames_close_cleanly() {
 }
 
 #[test]
+fn malformed_mask_reserved_and_control_frames_close_with_1002() {
+    let shared = Shared::new();
+    let cases = [
+        (0x81u8, false, true, 4usize),
+        (0x81, true, false, 4),
+        (0x83, true, true, 4),
+        (0xc1, true, true, 4),
+        (0x21, true, true, 4),
+        (0x09, true, true, 4),
+        (0x89, true, true, 126),
+    ];
+    for (first, masked, to_server, len) in cases {
+        let mut st = WsStream::new(&None, 1, None);
+        let out = ws_relay_chunk(&shared, "h", &build_ws_frame(first, &vec![0; len], masked), &mut st, to_server);
+        assert!(out.closed, "first={first:#x} masked={masked} len={len}");
+        let close = frames(&out.forward);
+        assert_eq!(u16::from_be_bytes([close[0].1[0], close[0].1[1]]), 1002);
+    }
+}
+
+#[test]
 fn close_and_ping_pong_pass_through_and_are_recorded() {
     let shared = Shared::new();
     let mut st = WsStream::new(&None, 1, None);

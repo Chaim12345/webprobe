@@ -39,6 +39,11 @@ impl WsEntry {
     }
 }
 
+/// Keep at most this many rows after each batch eviction. Evicting 1024 at
+/// once avoids an O(n) front removal for every message.
+pub const MAX_WS_HISTORY_ROWS: usize = 100_000;
+const EVICT_BATCH: usize = 1024;
+
 #[derive(Default)]
 pub struct WsHistory {
     rows: RwLock<Vec<WsEntry>>,
@@ -55,6 +60,18 @@ fn inline_len(b: &Body) -> u64 {
     }
 }
 
+/// Drop the oldest batch when the bound is exceeded, returning their inline
+/// byte count so the memory accounting stays exact.
+fn bound_rows(rows: &mut Vec<WsEntry>) -> u64 {
+    if rows.len() <= MAX_WS_HISTORY_ROWS + EVICT_BATCH {
+        return 0;
+    }
+    let excess = rows.len() - MAX_WS_HISTORY_ROWS;
+    let released = rows.iter().take(excess).map(|e| inline_len(&e.payload)).sum();
+    rows.drain(..excess);
+    released
+}
+
 impl WsHistory {
     pub fn new() -> Self {
         Self::default()
@@ -64,7 +81,11 @@ impl WsHistory {
     pub fn push(&self, mut e: WsEntry) {
         e.payload = crate::body::spill(&e.payload);
         self.inline_bytes.fetch_add(inline_len(&e.payload), Ordering::Relaxed);
-        self.rows.write().unwrap_or_else(|p| p.into_inner()).push(e);
+        let mut rows = self.rows.write().unwrap_or_else(|p| p.into_inner());
+        rows.push(e);
+        let released = bound_rows(&mut rows);
+        drop(rows);
+        self.inline_bytes.fetch_sub(released, Ordering::Relaxed);
         self.stamp.fetch_add(1, Ordering::SeqCst);
     }
 
@@ -74,6 +95,8 @@ impl WsHistory {
             e.payload = crate::body::spill(&e.payload);
             e
         }).collect();
+        let mut rows = rows;
+        bound_rows(&mut rows);
         self.inline_bytes.store(rows.iter().map(|e| inline_len(&e.payload)).sum(), Ordering::Relaxed);
         *self.rows.write().unwrap_or_else(|p| p.into_inner()) = rows;
         self.stamp.fetch_add(1, Ordering::SeqCst);
@@ -151,6 +174,17 @@ mod tests {
         let window = h.rows_at(&even[100..140]);
         assert_eq!(window.len(), 40);
         assert_eq!(window[0].id, 200);
+    }
+
+    #[test]
+    fn old_rows_are_evicted_in_batches_with_exact_inline_accounting() {
+        let h = WsHistory::new();
+        for i in 0..(MAX_WS_HISTORY_ROWS + EVICT_BATCH + 1) as u64 {
+            h.push(entry(i, vec![b'x'; 40]));
+        }
+        assert_eq!(h.len(), MAX_WS_HISTORY_ROWS);
+        assert_eq!(h.inline_bytes(), (MAX_WS_HISTORY_ROWS * 40) as u64);
+        assert_eq!(h.with_rows(|rows| rows[0].id), (EVICT_BATCH + 1) as u64);
     }
 
     #[test]
