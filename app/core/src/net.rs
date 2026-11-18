@@ -683,14 +683,20 @@ pub fn run_post_request_rules(shared: &Shared, tool: &str, host: &str) {
 }
 
 pub fn push_ws(shared: &Shared, host: &str, direction: &str, opcode: &str, payload: &[u8]) -> u64 {
+    push_ws_in(shared, 0, host, direction, opcode, payload)
+}
+
+/// Record one WebSocket message of connection `socket` (bytes kept exactly).
+pub fn push_ws_in(shared: &Shared, socket: u64, host: &str, direction: &str, opcode: &str, payload: &[u8]) -> u64 {
     let id = shared.next_id.fetch_add(1, Ordering::SeqCst);
-    shared.ws_history.lock().unwrap().push(WsEntry {
+    shared.ws_history.push(WsEntry {
         id,
         ts: util::now_secs(),
         host: host.to_string(),
         direction: direction.to_string(),
         opcode: opcode.to_string(),
-        payload: String::from_utf8_lossy(payload).into_owned(),
+        payload: payload.into(),
+        socket,
     });
     shared.wake();
     id
@@ -759,15 +765,7 @@ pub struct Macro {
 }
 
 /// One captured WebSocket frame or handshake record.
-#[derive(Clone)]
-pub struct WsEntry {
-    pub id: u64,
-    pub ts: u64,
-    pub host: String,
-    pub direction: String,
-    pub opcode: String,
-    pub payload: String,
-}
+pub use crate::ws_history::WsEntry;
 
 pub struct Shared {
     pub mitm: crate::tls::MitmAuthority,
@@ -801,9 +799,9 @@ pub struct Shared {
     /// Browsers opened from WebProbe (main pid, profile dir), closed on exit.
     pub browsers: Mutex<Vec<(u32, String)>>,
     pub issues: Mutex<Vec<crate::scan::ScanIssue>>,
-    /// Proxy listener option "Support HTTP/2" (ProjectDefaults.json
+    /// The primary listener's "Support HTTP/2" (ProjectDefaults.json
     /// request_listeners[].enable_http2, default on): ALPN offers h2 to
-    /// HTTPS clients. One switch for every listener.
+    /// HTTPS clients. Extra listeners have their own (`ListenerState`).
     pub listener_http2: AtomicBool,
     /// Streaming responses (Settings > Network > HTTP; R-06).
     pub streaming: Mutex<crate::streaming::StreamSettings>,
@@ -857,7 +855,15 @@ pub struct Shared {
     pub browser_recovery: BrowserRecovery,
     pub macros: Mutex<Vec<Macro>>,
     /// Captured WebSocket handshakes and frames.
-    pub ws_history: Mutex<Vec<WsEntry>>,
+    pub ws_history: crate::ws_history::WsHistory,
+    /// WebSocket match and replace rules (Proxy settings) and their "Only
+    /// apply to in-scope items" (proxy.ws_match_replace_disable_out_of_scope).
+    pub ws_rules: Mutex<Vec<crate::ws_rules::WsRule>>,
+    pub ws_rules_in_scope_only: AtomicBool,
+    /// proxy.intercept_web_sockets_messages.intercept_in_scope_only (off).
+    pub ws_intercept_in_scope: AtomicBool,
+    /// proxy.miscellaneous.strip_sec_websocket_extensions_headers_in_incoming_requests (on).
+    pub ws_strip_extensions: AtomicBool,
     /// Diff-count state for the history table ("Diff count", burp.Zxwu.java:56).
     pub diff_tracker: Mutex<DiffTracker>,
     /// Extension host (Montoya-shaped, Path A): hooks run in the proxy pipeline.
@@ -993,7 +999,11 @@ impl Shared {
             session_rules: Mutex::new(Vec::new()),
             browser_recovery: BrowserRecovery::default(),
             macros: Mutex::new(Vec::new()),
-            ws_history: Mutex::new(Vec::new()),
+            ws_history: crate::ws_history::WsHistory::new(),
+            ws_rules: Mutex::new(Vec::new()),
+            ws_rules_in_scope_only: AtomicBool::new(false),
+            ws_intercept_in_scope: AtomicBool::new(false),
+            ws_strip_extensions: AtomicBool::new(true),
             diff_tracker: Mutex::new(DiffTracker::default()),
             ext_host: Mutex::new(crate::ext_host::ExtensionHost::default()),
             ws_intercept_client: AtomicBool::new(true),
@@ -1273,11 +1283,20 @@ pub struct Upstream {
     pub error: Option<String>,
 }
 
-/// One proxy listener: a bind address and port.
+/// One proxy listener: a bind address and port, and Burp's listener option
+/// "Support HTTP/2" (request_listeners[].enable_http2, default on).
 #[derive(Clone, Debug, PartialEq)]
 pub struct ListenerSpec {
     pub bind: String,
     pub port: u16,
+    pub http2: bool,
+}
+
+impl ListenerSpec {
+    /// A listener with Burp's defaults (HTTP/2 supported).
+    pub fn new(bind: &str, port: u16) -> Self {
+        ListenerSpec { bind: bind.to_string(), port, http2: true }
+    }
 }
 
 /// Runtime state of one listener (for the status display).
@@ -1285,11 +1304,14 @@ pub struct ListenerState {
     pub spec: ListenerSpec,
     pub running: std::sync::atomic::AtomicBool,
     pub error: Mutex<Option<String>>,
+    /// "Support HTTP/2", changeable without restarting the listener.
+    pub http2: AtomicBool,
 }
 
 impl ListenerState {
     fn new(spec: ListenerSpec) -> Self {
-        Self { spec, running: AtomicBool::new(false), error: Mutex::new(None) }
+        let http2 = AtomicBool::new(spec.http2);
+        Self { spec, running: AtomicBool::new(false), error: Mutex::new(None), http2 }
     }
 }
 
@@ -1933,9 +1955,7 @@ fn send_tls_inner(shared: &Shared, host: &str, port: u16, req: &[u8], mut sink: 
         if choice.is_some_and(|c| !c.strip_connection) {
             // Repeater's "Strip Connection header over HTTP/2" off: send it.
             let parts = util::parse_http(&req);
-            if let Some(v) = util::get_header(&parts.headers, "Connection") {
-                h2req.headers.push(("connection".into(), v));
-            }
+            h2req.connection = util::get_header(&parts.headers, "Connection");
         }
         let first = match &mut stream {
             UpstreamConn::Tls(tls) => crate::h2::exchange(tls, &h2req, sink.as_deref_mut()),
@@ -2127,7 +2147,24 @@ pub fn set_listeners(shared: &Arc<Shared>, specs: Vec<ListenerSpec>) -> Result<(
 /// The extra listeners' configuration, for editing and re-applying with
 /// `set_listeners`.
 pub fn listener_specs(shared: &Arc<Shared>) -> Vec<ListenerSpec> {
-    shared.listeners.lock().unwrap().iter().map(|l| l.spec.clone()).collect()
+    shared.listeners.lock().unwrap().iter().map(|l| ListenerSpec { http2: l.http2.load(Ordering::SeqCst), ..l.spec.clone() }).collect()
+}
+
+/// "Support HTTP/2" of the listener on `port`: an extra listener's own
+/// option, else the primary listener's (also the embedded browser's).
+pub fn listener_supports_http2(shared: &Shared, port: Option<u16>) -> bool {
+    let extra = port.and_then(|p| shared.listeners.lock().unwrap().iter().find(|l| l.spec.port == p).map(|l| l.http2.load(Ordering::SeqCst)));
+    extra.unwrap_or_else(|| shared.listener_http2.load(Ordering::SeqCst))
+}
+
+/// Set "Support HTTP/2" of the listener shown at `row` of the listener
+/// table (0 = primary, 1.. = extra listeners).
+pub fn set_listener_http2(shared: &Shared, row: usize, on: bool) {
+    if row == 0 {
+        shared.listener_http2.store(on, Ordering::SeqCst);
+    } else if let Some(l) = shared.listeners.lock().unwrap().get(row - 1) {
+        l.http2.store(on, Ordering::SeqCst);
+    }
 }
 
 /// Listener status for the UI: primary listener plus extras, each as
@@ -2577,19 +2614,130 @@ pub(crate) fn build_ws_frame(first: u8, payload: &[u8], masked: bool) -> Vec<u8>
     out
 }
 
-/// One direction of a relayed WebSocket: bytes of an incomplete frame, and
-/// how many bytes of an oversized frame still pass through raw.
+/// Largest WebSocket message (all its fragments) the relay assembles;
+/// a bigger one closes the connection with 1009 (Message Too Big).
+pub(crate) const MAX_WS_MESSAGE: usize = MAX_WS_FRAME;
+
+/// A message being assembled from its fragments.
+struct WsPartial {
+    /// First frame's first byte (opcode, RSV1 for permessage-deflate).
+    first: u8,
+    payload: Vec<u8>,
+    /// The frames as received, forwarded unchanged when nothing changed.
+    raw: Vec<u8>,
+}
+
+/// One direction of a relayed WebSocket: bytes of an incomplete frame, the
+/// message being assembled, and the connection's extensions.
 #[derive(Default)]
 pub(crate) struct WsStream {
     buf: Vec<u8>,
-    raw_left: usize,
     /// Extensions whose handlers watch this socket.
     watch: Option<Arc<WsWatch>>,
+    /// The connection (for history rows).
+    socket: u64,
+    partial: Option<WsPartial>,
+    /// permessage-deflate negotiated: this direction's inflater, and
+    /// whether the sender resets its context per message.
+    inflate: Option<(flate2::Decompress, bool)>,
+    /// A close (1009 or protocol error) was sent: drop everything after.
+    closed: bool,
 }
 
 impl WsStream {
+    #[cfg(test)]
     pub(crate) fn watched(watch: &Option<Arc<WsWatch>>) -> Self {
         WsStream { watch: watch.clone(), ..Default::default() }
+    }
+
+    /// One direction of connection `socket`; `deflate` = Some(no context
+    /// takeover for this sender) when permessage-deflate was negotiated.
+    pub(crate) fn new(watch: &Option<Arc<WsWatch>>, socket: u64, deflate: Option<bool>) -> Self {
+        WsStream { watch: watch.clone(), socket, inflate: deflate.map(|nct| (flate2::Decompress::new(false), nct)), ..Default::default() }
+    }
+}
+
+/// What a chunk of WebSocket bytes produced: bytes for the destination,
+/// bytes back to the sender (a close the proxy sends), and whether the
+/// connection is over.
+#[derive(Default, Debug)]
+pub(crate) struct WsOut {
+    pub(crate) forward: Vec<u8>,
+    pub(crate) back: Vec<u8>,
+    pub(crate) closed: bool,
+}
+
+/// A close frame with `code` and `reason`, masked when a client sends it.
+pub(crate) fn ws_close_frame(code: u16, reason: &str, masked: bool) -> Vec<u8> {
+    let mut p = code.to_be_bytes().to_vec();
+    p.extend_from_slice(reason.as_bytes());
+    build_ws_frame(0x88, &p, masked)
+}
+
+/// The permessage-deflate parameters a 101 response agreed to:
+/// (client no context takeover, server no context takeover).
+pub(crate) fn ws_deflate_agreed(response: &[u8]) -> Option<(bool, bool)> {
+    let parts = util::parse_http(response);
+    let ext = parts.headers.iter().filter(|(k, _)| k.eq_ignore_ascii_case("Sec-WebSocket-Extensions")).map(|(_, v)| v.clone()).collect::<Vec<_>>().join(",");
+    ext.split(',').find_map(|e| {
+        let mut params = e.split(';').map(|p| p.trim().to_ascii_lowercase());
+        (params.next()? == "permessage-deflate").then(|| {
+            let rest: Vec<String> = params.collect();
+            (rest.iter().any(|p| p == "client_no_context_takeover"), rest.iter().any(|p| p == "server_no_context_takeover"))
+        })
+    })
+}
+
+/// Burp's "Strip Sec-WebSocket-Extensions headers in incoming requests"
+/// (proxy.miscellaneous, default on): with the header gone no extension
+/// (permessage-deflate) is negotiated, so both peers see plain frames.
+pub(crate) fn ws_strip_extensions(req: &[u8]) -> Vec<u8> {
+    let Some(end) = util::find_head_end(req) else { return req.to_vec() };
+    let head = String::from_utf8_lossy(&req[..end]);
+    let mut out = String::new();
+    for line in head.split("\r\n") {
+        if line.to_ascii_lowercase().starts_with("sec-websocket-extensions:") {
+            continue;
+        }
+        out.push_str(line);
+        out.push_str("\r\n");
+    }
+    // `head` ended with its blank line: one CRLF pair too many now.
+    while out.ends_with("\r\n\r\n\r\n") {
+        out.pop();
+        out.pop();
+    }
+    let mut v = out.into_bytes();
+    v.extend_from_slice(&req[end..]);
+    v
+}
+
+/// Inflate one permessage-deflate message (RFC 7692 §7.2.2), bounded by
+/// [`MAX_WS_MESSAGE`]. None when the data is not valid or too big.
+fn ws_inflate(z: &mut flate2::Decompress, reset: bool, data: &[u8]) -> Option<Vec<u8>> {
+    if reset {
+        z.reset(false);
+    }
+    let mut input = data.to_vec();
+    input.extend_from_slice(&[0, 0, 0xff, 0xff]);
+    let mut out: Vec<u8> = Vec::new();
+    let mut at = 0;
+    loop {
+        if out.capacity() - out.len() < 32 * 1024 {
+            out.reserve(64 * 1024);
+        }
+        let (in0, out0) = (z.total_in(), z.total_out());
+        let status = z.decompress_vec(&input[at..], &mut out, flate2::FlushDecompress::Sync).ok()?;
+        at += (z.total_in() - in0) as usize;
+        if out.len() > MAX_WS_MESSAGE {
+            return None;
+        }
+        if at >= input.len() || status == flate2::Status::StreamEnd {
+            return Some(out);
+        }
+        if z.total_in() == in0 && z.total_out() == out0 && out.capacity() > out.len() {
+            return None;
+        }
     }
 }
 
@@ -2648,123 +2796,237 @@ fn ws_should_hold(shared: &Shared, client_to_server: bool) -> bool {
         }
 }
 
-/// Relay one chunk of a WebSocket stream in one direction. Every complete
-/// frame is recorded in WebSockets history; text/binary frames are held for
-/// the user while interception applies (Forward sends the edited payload,
-/// Drop skips the frame). Untouched frames are forwarded byte-identical;
-/// incomplete frames wait in `st` for the next chunk. Returns the bytes to
-/// send on.
+/// Relay one chunk of a WebSocket stream in one direction (bytes for the
+/// destination only; see [`ws_relay_chunk`]).
+#[cfg(test)]
 pub(crate) fn intercept_ws_stream(shared: &Shared, host: &str, chunk: &[u8], st: &mut WsStream, client_to_server: bool) -> Vec<u8> {
-    let direction = if client_to_server { "client -> server" } else { "server -> client" };
-    let mut out = Vec::with_capacity(chunk.len());
-    let mut chunk = chunk;
-    if st.raw_left > 0 {
-        let n = st.raw_left.min(chunk.len());
-        out.extend_from_slice(&chunk[..n]);
-        st.raw_left -= n;
-        chunk = &chunk[n..];
+    ws_relay_chunk(shared, host, chunk, st, client_to_server).forward
+}
+
+/// Relay one chunk of a WebSocket stream in one direction. Frames are
+/// parsed as they complete; data messages are assembled from their
+/// fragments (control frames in between pass at once), inflated when
+/// permessage-deflate is on, and then go through extension handlers,
+/// WebSocket match and replace, interception and history as one message.
+/// An unchanged message is forwarded as its original frames, byte for
+/// byte; a changed one as a single frame. A frame or message over
+/// [`MAX_WS_MESSAGE`] closes both sides with 1009; a fragment out of place
+/// with 1002.
+pub(crate) fn ws_relay_chunk(shared: &Shared, host: &str, chunk: &[u8], st: &mut WsStream, client_to_server: bool) -> WsOut {
+    let mut out = WsOut::default();
+    if st.closed {
+        out.closed = true;
+        return out;
     }
+    let direction = if client_to_server { "client -> server" } else { "server -> client" };
     st.buf.extend_from_slice(chunk);
-    while let Some((first, masked, start, len)) = ws_frame_header(&st.buf) {
-        let opcode = first & 0x0f;
-        if len > MAX_WS_FRAME {
-            // Too big to hold: relay what we have and the rest raw.
-            let have = st.buf.len();
-            out.extend(st.buf.drain(..));
-            st.raw_left = start.saturating_add(len).saturating_sub(have);
-            push_ws(shared, host, direction, ws_opcode_name(opcode), format!("({len}-byte frame relayed without capture)").as_bytes());
-            break;
+    let fail = |st: &mut WsStream, out: &mut WsOut, code: u16, why: &str| {
+        shared.log(&format!("WebSocket to {host} closed by the proxy ({code}): {why}"));
+        // Destination and sender both get a close; masking follows the
+        // direction each frame travels.
+        out.forward.extend(ws_close_frame(code, why, client_to_server));
+        out.back.extend(ws_close_frame(code, why, !client_to_server));
+        out.closed = true;
+        st.closed = true;
+        st.buf.clear();
+        st.partial = None;
+    };
+    while let Some((first, _masked, start, len)) = ws_frame_header(&st.buf) {
+        if len > MAX_WS_MESSAGE {
+            fail(st, &mut out, 1009, "frame too big");
+            return out;
         }
         if st.buf.len() < start + len {
             break;
         }
         let raw: Vec<u8> = st.buf.drain(..start + len).collect();
-        let Some((_, _, mut payload, _)) = parse_ws_frame(&raw) else { break };
-        let data = opcode == 0x1 || opcode == 0x2;
-        let mut hold = data && ws_should_hold(shared, client_to_server);
-        let watch = if data { st.watch.as_ref() } else { None };
-        // Extension handlers see the message first (Burp's "received"
-        // stage, whose verdict may force or skip interception) ...
-        let mut changed = false;
-        if let Some(w) = watch {
-            let before = payload.clone();
-            match w.message(crate::ext_host::WsStage::Received, client_to_server, opcode == 0x2, &mut payload) {
-                crate::ext_host::WsVerdict::Drop => {
-                    shared.log(&format!("An extension dropped a WebSocket message ({direction}, {host})"));
-                    continue;
-                }
-                crate::ext_host::WsVerdict::Intercept => hold = true,
-                crate::ext_host::WsVerdict::DoNotIntercept => hold = false,
-                crate::ext_host::WsVerdict::Continue => {}
-            }
-            changed = payload != before;
+        let Some((_, _, payload, _)) = parse_ws_frame(&raw) else { break };
+        let opcode = first & 0x0f;
+        let fin = first & 0x80 != 0;
+        if opcode >= 0x8 {
+            // Control frames (close, ping, pong) pass at once, also between
+            // the fragments of a message, and are recorded.
+            ws_record(shared, host, st.socket, direction, ws_opcode_name(opcode), &payload);
+            out.forward.extend_from_slice(&raw);
+            continue;
         }
-        // ... then the user, when it is held ...
-        if hold {
-            let id = shared.next_id.fetch_add(1, Ordering::SeqCst);
-            let (tx, rx) = mpsc::channel::<Option<String>>();
-            shared.queue.lock().unwrap().push(InterceptItem::new(
-                id,
-                host,
-                0,
-                String::from_utf8_lossy(&payload).into_owned(),
-                tx,
-                InterceptKind::WebSocket { to_server: client_to_server },
-            ));
-            shared.wake();
-            shared.log(&format!("Intercepted WebSocket message queued (id {id})"));
-            match rx.recv() {
-                Ok(Some(edited)) => {
-                    // Binary payloads shown lossily are forwarded untouched
-                    // unless the user really changed the text.
-                    if edited.as_bytes() != String::from_utf8_lossy(&payload).as_bytes() {
-                        payload = edited.into_bytes();
-                        changed = true;
-                    }
+        match (opcode, st.partial.as_mut()) {
+            (0, Some(p)) => {
+                if p.payload.len() + payload.len() > MAX_WS_MESSAGE {
+                    fail(st, &mut out, 1009, "message too big");
+                    return out;
                 }
-                _ => {
-                    shared.log(&format!("Intercepted WebSocket message dropped (id {id})"));
-                    continue;
-                }
+                p.payload.extend_from_slice(&payload);
+                p.raw.extend_from_slice(&raw);
             }
-        }
-        // ... and the extension's "to be sent" stage last, on what will go.
-        if let Some(w) = watch {
-            let before = payload.clone();
-            if w.message(crate::ext_host::WsStage::ToBeSent, client_to_server, opcode == 0x2, &mut payload) == crate::ext_host::WsVerdict::Drop {
-                shared.log(&format!("An extension dropped a WebSocket message ({direction}, {host})"));
+            (1 | 2, None) => st.partial = Some(WsPartial { first, payload, raw }),
+            (0, None) => {
+                fail(st, &mut out, 1002, "continuation frame without a message");
+                return out;
+            }
+            (1 | 2, Some(_)) => {
+                fail(st, &mut out, 1002, "new message before the last one ended");
+                return out;
+            }
+            _ => {
+                // Reserved opcodes: relayed untouched, as received.
+                ws_record(shared, host, st.socket, direction, ws_opcode_name(opcode), &payload);
+                out.forward.extend_from_slice(&raw);
                 continue;
             }
-            changed |= payload != before;
         }
-        let hid = push_ws(shared, host, direction, ws_opcode_name(opcode), &payload);
-        if changed {
-            shared.ws_edited.lock().unwrap().insert(hid);
-            out.extend_from_slice(&build_ws_frame(first, &payload, masked));
-        } else {
-            out.extend_from_slice(&raw);
+        if !fin {
+            continue;
+        }
+        let Some(msg) = st.partial.take() else { continue };
+        match ws_message(shared, host, st, msg, client_to_server) {
+            Ok(bytes) => out.forward.extend(bytes),
+            Err((code, why)) => {
+                fail(st, &mut out, code, &why);
+                return out;
+            }
         }
     }
     out
 }
 
-fn relay_ws(shared: Arc<Shared>, client: TcpStream, upstream: TcpStream, host: String, watch: Option<Arc<WsWatch>>) {
+fn ws_record(shared: &Shared, host: &str, socket: u64, direction: &str, opcode: &str, payload: &[u8]) -> u64 {
+    push_ws_in(shared, socket, host, direction, opcode, payload)
+}
+
+/// One complete data message: inflate, extension handlers, match and
+/// replace, interception, history; the bytes to forward (empty when it was
+/// dropped).
+fn ws_message(shared: &Shared, host: &str, st: &mut WsStream, msg: WsPartial, client_to_server: bool) -> Result<Vec<u8>, (u16, String)> {
+    let direction = if client_to_server { "client -> server" } else { "server -> client" };
+    let opcode = msg.first & 0x0f;
+    let binary = opcode == 0x2;
+    let compressed = msg.first & 0x40 != 0;
+    let mut payload = msg.payload;
+    // permessage-deflate: shown and edited inflated, forwarded plain (RSV1
+    // clear), so the receiver's inflate context is never involved.
+    let mut changed = false;
+    if compressed {
+        let Some((z, reset)) = st.inflate.as_mut() else {
+            return Err((1002, "compressed message without permessage-deflate".into()));
+        };
+        payload = ws_inflate(z, *reset, &payload).ok_or((1009, "compressed message invalid or too big".to_string()))?;
+        changed = true;
+    }
+    let mut hold = ws_should_hold(shared, client_to_server) && (!shared.ws_intercept_in_scope.load(Ordering::SeqCst) || ws_in_scope(shared, host));
+    let watch = st.watch.clone();
+    if let Some(w) = &watch {
+        let before = payload.clone();
+        match w.message(crate::ext_host::WsStage::Received, client_to_server, binary, &mut payload) {
+            crate::ext_host::WsVerdict::Drop => {
+                shared.log(&format!("An extension dropped a WebSocket message ({direction}, {host})"));
+                return Ok(Vec::new());
+            }
+            crate::ext_host::WsVerdict::Intercept => hold = true,
+            crate::ext_host::WsVerdict::DoNotIntercept => hold = false,
+            crate::ext_host::WsVerdict::Continue => {}
+        }
+        changed |= payload != before;
+    }
+    // WebSocket match and replace (Proxy settings), before interception as
+    // for HTTP messages.
+    if !shared.ws_rules_in_scope_only.load(Ordering::SeqCst) || ws_in_scope(shared, host) {
+        if let Some(new) = crate::ws_rules::apply(&shared.ws_rules.lock().unwrap(), client_to_server, binary, &payload) {
+            payload = new;
+            changed = true;
+        }
+    }
+    if hold {
+        let id = shared.next_id.fetch_add(1, Ordering::SeqCst);
+        let (tx, rx) = mpsc::channel::<Option<String>>();
+        shared.queue.lock().unwrap().push(InterceptItem::new(id, host, 0, String::from_utf8_lossy(&payload).into_owned(), tx, InterceptKind::WebSocket { to_server: client_to_server }));
+        shared.wake();
+        shared.log(&format!("Intercepted WebSocket message queued (id {id})"));
+        match rx.recv() {
+            // Binary payloads shown lossily stay untouched unless the user
+            // really changed the text.
+            Ok(Some(edited)) if edited.as_bytes() != String::from_utf8_lossy(&payload).as_bytes() => {
+                payload = edited.into_bytes();
+                changed = true;
+            }
+            Ok(Some(_)) => {}
+            _ => {
+                shared.log(&format!("Intercepted WebSocket message dropped (id {id})"));
+                return Ok(Vec::new());
+            }
+        }
+    }
+    if let Some(w) = &watch {
+        let before = payload.clone();
+        if w.message(crate::ext_host::WsStage::ToBeSent, client_to_server, binary, &mut payload) == crate::ext_host::WsVerdict::Drop {
+            shared.log(&format!("An extension dropped a WebSocket message ({direction}, {host})"));
+            return Ok(Vec::new());
+        }
+        changed |= payload != before;
+    }
+    let hid = ws_record(shared, host, st.socket, direction, ws_opcode_name(opcode), &payload);
+    if !changed {
+        return Ok(msg.raw);
+    }
+    shared.ws_edited.lock().unwrap().insert(hid);
+    // One final frame, RSV bits clear, masked when it goes to the server.
+    Ok(build_ws_frame(0x80 | opcode, &payload, client_to_server))
+}
+
+/// Whether a WebSocket host is in the Target scope (either scheme).
+fn ws_in_scope(shared: &Shared, host: &str) -> bool {
+    in_scope(shared, &format!("http://{host}/")) || in_scope(shared, &format!("https://{host}/"))
+}
+
+/// One upgraded WebSocket connection: its id (history rows), the
+/// extensions watching it, and permessage-deflate if it was agreed
+/// (client no context takeover, server no context takeover).
+pub(crate) struct WsSetup {
+    pub(crate) watch: Option<Arc<WsWatch>>,
+    pub(crate) socket: u64,
+    pub(crate) deflate: Option<(bool, bool)>,
+}
+
+impl WsSetup {
+    fn streams(&self) -> (WsStream, WsStream) {
+        (WsStream::new(&self.watch, self.socket, self.deflate.map(|d| d.0)), WsStream::new(&self.watch, self.socket, self.deflate.map(|d| d.1)))
+    }
+}
+
+/// The handshake is done: what the relay needs. Extension headers were
+/// stripped from the request unless the user turned that off.
+fn ws_setup(shared: &Shared, host: &str, port: u16, secure: bool, req_out: &[u8], response: &[u8]) -> WsSetup {
+    let socket = shared.next_id.fetch_add(1, Ordering::SeqCst);
+    WsSetup { watch: WsWatch::open(shared, host, port, secure, req_out), socket, deflate: ws_deflate_agreed(response) }
+}
+
+fn relay_ws(shared: Arc<Shared>, client: TcpStream, upstream: TcpStream, host: String, setup: WsSetup) {
     client.set_read_timeout(None).ok();
     upstream.set_read_timeout(None).ok();
+    // A peer that stops reading must not hold the relay forever.
+    let _ = client.set_write_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)));
+    let _ = upstream.set_write_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)));
+    let (mut to_server, mut to_client) = setup.streams();
+    drop(setup);
     let mut client_read = match client.try_clone() { Ok(s) => s, Err(_) => return };
+    let mut client_back = match client.try_clone() { Ok(s) => s, Err(_) => return };
     let mut upstream_write = match upstream.try_clone() { Ok(s) => s, Err(_) => return };
     let client_host = host.clone();
     let client_shared = shared.clone();
-    let client_watch = watch.clone();
     let client_thread = std::thread::spawn(move || {
-        let mut st = WsStream::watched(&client_watch);
         let mut chunk = [0u8; 16384];
         loop {
             match client_read.read(&mut chunk) {
                 Ok(0) | Err(_) => break,
                 Ok(n) => {
-                    let out = intercept_ws_stream(&client_shared, &client_host, &chunk[..n], &mut st, true);
-                    if !out.is_empty() && upstream_write.write_all(&out).is_err() {
+                    let out = ws_relay_chunk(&client_shared, &client_host, &chunk[..n], &mut to_server, true);
+                    if !out.forward.is_empty() && upstream_write.write_all(&out.forward).is_err() {
+                        break;
+                    }
+                    if !out.back.is_empty() {
+                        let _ = client_back.write_all(&out.back);
+                    }
+                    if out.closed {
                         break;
                     }
                 }
@@ -2773,18 +3035,23 @@ fn relay_ws(shared: Arc<Shared>, client: TcpStream, upstream: TcpStream, host: S
         let _ = upstream_write.shutdown(std::net::Shutdown::Write);
     });
     let mut upstream_read = match upstream.try_clone() { Ok(s) => s, Err(_) => return };
+    let mut upstream_back = match upstream.try_clone() { Ok(s) => s, Err(_) => return };
     let mut client_write = match client.try_clone() { Ok(s) => s, Err(_) => return };
-    let upstream_host = host;
-    let upstream_shared = shared;
-    let mut st = WsStream::watched(&watch);
-    drop(watch);
     let mut chunk = [0u8; 16384];
     loop {
         match upstream_read.read(&mut chunk) {
             Ok(0) | Err(_) => break,
             Ok(n) => {
-                let out = intercept_ws_stream(&upstream_shared, &upstream_host, &chunk[..n], &mut st, false);
-                if !out.is_empty() && client_write.write_all(&out).is_err() {
+                let out = ws_relay_chunk(&shared, &host, &chunk[..n], &mut to_client, false);
+                if !out.forward.is_empty() && client_write.write_all(&out.forward).is_err() {
+                    break;
+                }
+                if !out.back.is_empty() {
+                    let _ = upstream_back.write_all(&out.back);
+                }
+                if out.closed {
+                    let _ = upstream.shutdown(std::net::Shutdown::Both);
+                    let _ = client.shutdown(std::net::Shutdown::Both);
                     break;
                 }
             }
@@ -2801,6 +3068,9 @@ fn handle_websocket(shared: Arc<Shared>, mut client: TcpStream, req: Vec<u8>) {
     let (host, port) = host_of(&parts, 80);
     let req_session = apply_session_rules(&shared, &req, 80);
     let mut req_out = crate::rules::apply_rules(&req_session, &shared.mr_request.lock().unwrap());
+    if shared.ws_strip_extensions.load(Ordering::SeqCst) {
+        req_out = ws_strip_extensions(&req_out);
+    }
     if !shared.ext_handle_request(&crate::ext_host::HttpService::new(&host, port, false), &parts.method, &path_of(&parts), &mut req_out, &mut Default::default()) {
         shared.log("WebSocket handshake dropped by an extension hook");
         return;
@@ -2837,30 +3107,36 @@ fn handle_websocket(shared: Arc<Shared>, mut client: TcpStream, req: Vec<u8>) {
         return;
     }
     shared.log(&format!("WebSocket upgraded for {host}:{port}; capturing frames"));
-    let watch = WsWatch::open(&shared, &host, port, false, &req_out);
-    relay_ws(shared, client, upstream, host, watch);
+    let setup = ws_setup(&shared, &host, port, false, &req_out, &response);
+    relay_ws(shared, client, upstream, host, setup);
 }
 
 fn write_nonblocking<W: Write>(stream: &mut W, mut bytes: &[u8]) -> std::io::Result<()> {
+    // A peer that stops reading ends the relay after the normal timeout.
+    let deadline = std::time::Instant::now() + Duration::from_millis(READ_TIMEOUT_MS);
     while !bytes.is_empty() {
         match stream.write(bytes) {
             Ok(0) => return Err(std::io::Error::new(std::io::ErrorKind::WriteZero, "socket write returned zero")),
             Ok(n) => bytes = &bytes[n..],
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => std::thread::sleep(Duration::from_millis(2)),
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                if std::time::Instant::now() > deadline {
+                    return Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "the peer stopped reading"));
+                }
+                std::thread::sleep(Duration::from_millis(2))
+            }
             Err(e) => return Err(e),
         }
     }
     Ok(())
 }
 
-fn relay_ws_tls<C: ProxyIo, U: ProxyIo>(shared: &Shared, client: &mut C, upstream: &mut U, host: String, watch: Option<Arc<WsWatch>>) {
+fn relay_ws_tls<C: ProxyIo, U: ProxyIo>(shared: &Shared, client: &mut C, upstream: &mut U, host: String, setup: WsSetup) {
     let _ = client.set_nonblocking_io(true);
     let _ = upstream.set_nonblocking_io(true);
     let mut client_open = true;
     let mut upstream_open = true;
-    let mut client_pending = WsStream::watched(&watch);
-    let mut upstream_pending = WsStream::watched(&watch);
-    drop(watch);
+    let (mut client_pending, mut upstream_pending) = setup.streams();
+    drop(setup);
     let mut chunk = [0u8; 16384];
     while client_open || upstream_open {
         let mut progressed = false;
@@ -2869,8 +3145,14 @@ fn relay_ws_tls<C: ProxyIo, U: ProxyIo>(shared: &Shared, client: &mut C, upstrea
                 Ok(0) => client_open = false,
                 Ok(n) => {
                     progressed = true;
-                    let out = intercept_ws_stream(shared, &host, &chunk[..n], &mut client_pending, true);
-                    if !out.is_empty() && write_nonblocking(upstream, &out).is_err() {
+                    let out = ws_relay_chunk(shared, &host, &chunk[..n], &mut client_pending, true);
+                    if !out.forward.is_empty() && write_nonblocking(upstream, &out.forward).is_err() {
+                        break;
+                    }
+                    if !out.back.is_empty() {
+                        let _ = write_nonblocking(client, &out.back);
+                    }
+                    if out.closed {
                         break;
                     }
                 }
@@ -2883,8 +3165,14 @@ fn relay_ws_tls<C: ProxyIo, U: ProxyIo>(shared: &Shared, client: &mut C, upstrea
                 Ok(0) => upstream_open = false,
                 Ok(n) => {
                     progressed = true;
-                    let out = intercept_ws_stream(shared, &host, &chunk[..n], &mut upstream_pending, false);
-                    if !out.is_empty() && write_nonblocking(client, &out).is_err() {
+                    let out = ws_relay_chunk(shared, &host, &chunk[..n], &mut upstream_pending, false);
+                    if !out.forward.is_empty() && write_nonblocking(client, &out.forward).is_err() {
+                        break;
+                    }
+                    if !out.back.is_empty() {
+                        let _ = write_nonblocking(upstream, &out.back);
+                    }
+                    if out.closed {
                         break;
                     }
                 }
@@ -2908,6 +3196,9 @@ fn handle_tls_websocket(
     let parts = util::parse_http(&req);
     let req_session = apply_session_rules(&shared, &req, 443);
     let mut req_out = crate::rules::apply_rules(&req_session, &shared.mr_request.lock().unwrap());
+    if shared.ws_strip_extensions.load(Ordering::SeqCst) {
+        req_out = ws_strip_extensions(&req_out);
+    }
     if !shared.ext_handle_request(&crate::ext_host::HttpService::new(&host, port, true), &parts.method, &path_of(&parts), &mut req_out, &mut Default::default()) {
         shared.log("TLS WebSocket handshake dropped by an extension hook");
         return;
@@ -2957,8 +3248,8 @@ fn handle_tls_websocket(
         return;
     }
     shared.log(&format!("TLS WebSocket upgraded for {host}:{port}; capturing frames"));
-    let watch = WsWatch::open(&shared, &host, port, true, &req_out);
-    relay_ws_tls(&shared, &mut client, &mut upstream, host, watch);
+    let setup = ws_setup(&shared, &host, port, true, &req_out, &response);
+    relay_ws_tls(&shared, &mut client, &mut upstream, host, setup);
     client.conn.send_close_notify();
     upstream.conn.send_close_notify();
     let _ = client.flush();
@@ -3169,7 +3460,7 @@ fn handle_connect(shared: Arc<Shared>, mut stream: TcpStream, host: String, port
         relay_tunnel(&stream, &mut upstream);
         return;
     }
-    let config = match shared.mitm.listener_config(&host, shared.listener_http2.load(Ordering::SeqCst)) {
+    let config = match shared.mitm.listener_config(&host, listener_supports_http2(&shared, LISTENER_PORT.with(|p| p.get()))) {
         Ok(config) => config,
         Err(e) => {
             shared.log(&format!("HTTPS certificate for {host} failed: {e}"));
@@ -4528,7 +4819,7 @@ mod tests {
                 let _ = s.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes());
             }
         });
-        let spec = ListenerSpec { bind: "127.0.0.1".into(), port: free_port() };
+        let spec = ListenerSpec::new("127.0.0.1", free_port());
         let state = Arc::new(ListenerState::new(spec.clone()));
         let gen = shared.listener_generation.load(Ordering::SeqCst);
         let (sh, st) = (shared.clone(), state.clone());
@@ -4581,7 +4872,7 @@ mod tests {
             let _ = read_request_head(&mut s);
             s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\nresp").unwrap();
         });
-        let spec = ListenerSpec { bind: "127.0.0.1".into(), port: free_port() };
+        let spec = ListenerSpec::new("127.0.0.1", free_port());
         let state = Arc::new(ListenerState::new(spec.clone()));
         let gen = shared.listener_generation.load(Ordering::SeqCst);
         let sh = shared.clone();
@@ -4616,24 +4907,24 @@ mod tests {
     #[test]
     fn listener_validation() {
         let shared = Shared::new();
-        assert!(set_listeners(&shared, vec![ListenerSpec { bind: "".into(), port: 8081 }]).is_err());
-        assert!(set_listeners(&shared, vec![ListenerSpec { bind: "127.0.0.1".into(), port: 0 }]).is_err());
+        assert!(set_listeners(&shared, vec![ListenerSpec::new("", 8081)]).is_err());
+        assert!(set_listeners(&shared, vec![ListenerSpec::new("127.0.0.1", 0)]).is_err());
         assert!(set_listeners(
             &shared,
             vec![
-                ListenerSpec { bind: "127.0.0.1".into(), port: 8081 },
-                ListenerSpec { bind: "127.0.0.1".into(), port: 8081 },
+                ListenerSpec::new("127.0.0.1", 8081),
+                ListenerSpec::new("127.0.0.1", 8081),
             ]
         )
         .is_err());
-        assert!(set_listeners(&shared, vec![ListenerSpec { bind: "127.0.0.1".into(), port: 8081 }]).is_ok());
+        assert!(set_listeners(&shared, vec![ListenerSpec::new("127.0.0.1", 8081)]).is_ok());
         let status = listener_status(&shared);
         // primary + one extra
         assert_eq!(status.len(), 2);
         assert!(status[1].0.ends_with(":8081"));
         assert_eq!(
             listener_specs(&shared),
-            vec![ListenerSpec { bind: "127.0.0.1".into(), port: 8081 }]
+            vec![ListenerSpec::new("127.0.0.1", 8081)]
         );
     }
 
@@ -4753,7 +5044,7 @@ mod tests {
         assert_eq!(out, ping, "control frames are never queued");
         assert!(st.buf.is_empty());
         assert!(shared.queue.lock().unwrap().is_empty());
-        let h = shared.ws_history.lock().unwrap();
+        let h = shared.ws_history.with_rows(|r| r.to_vec());
         let rows: Vec<(String, String, usize)> = h.iter().map(|e| (e.direction.clone(), e.opcode.clone(), e.payload.len())).collect();
         assert_eq!(
             rows,
@@ -4810,7 +5101,7 @@ mod tests {
         assert_eq!(out[0], 0x81, "the edited frame is still final");
         assert!(st.buf.is_empty());
         answerer.join().unwrap();
-        let h = shared.ws_history.lock().unwrap();
+        let h = shared.ws_history.with_rows(|r| r.to_vec());
         assert_eq!(h.len(), 1, "the dropped frame is not recorded");
         assert_eq!(h[0].payload, "HELLO");
         assert!(shared.ws_edited.lock().unwrap().contains(&h[0].id));
@@ -4908,9 +5199,9 @@ mod tests {
                 InterceptKind::WebSocket { to_server: false },
             ]
         );
-        let h = shared.ws_history.lock().unwrap();
-        let frames: Vec<(&str, &str)> = h.iter().filter(|e| e.direction != "handshake").map(|e| (e.direction.as_str(), e.payload.as_str())).collect();
-        assert_eq!(frames, vec![("client -> server", "HELLO"), ("server -> client", "echo:HELLO")]);
+        let h = shared.ws_history.with_rows(|r| r.to_vec());
+        let frames: Vec<(String, String)> = h.iter().filter(|e| e.direction != "handshake").map(|e| (e.direction.clone(), e.text().into_owned())).collect();
+        assert_eq!(frames, vec![("client -> server".to_string(), "HELLO".to_string()), ("server -> client".to_string(), "echo:HELLO".to_string())]);
         let edited = shared.ws_edited.lock().unwrap();
         assert_eq!(h.iter().filter(|e| edited.contains(&e.id)).count(), 1, "only the edited message is marked");
     }
@@ -5017,8 +5308,8 @@ mod tests {
                 InterceptKind::WebSocket { to_server: false },
             ]
         );
-        let h = shared.ws_history.lock().unwrap();
-        let frames: Vec<&str> = h.iter().filter(|e| e.direction != "handshake").map(|e| e.payload.as_str()).collect();
+        let h = shared.ws_history.with_rows(|r| r.to_vec());
+        let frames: Vec<String> = h.iter().filter(|e| e.direction != "handshake").map(|e| e.text().into_owned()).collect();
         assert_eq!(frames, vec!["ping!", "pong"]);
     }
 
@@ -5050,9 +5341,9 @@ mod tests {
             ip: String::new(),
             diffs: 0,
         });
-        assert!(set_listeners(&shared, vec![ListenerSpec { bind: "127.0.0.1".into(), port: free_port() }]).is_ok());
+        assert!(set_listeners(&shared, vec![ListenerSpec::new("127.0.0.1", free_port())]).is_ok());
         std::thread::sleep(Duration::from_millis(600));
-        assert!(set_listeners(&shared, vec![ListenerSpec { bind: "127.0.0.1".into(), port: free_port() }]).is_ok());
+        assert!(set_listeners(&shared, vec![ListenerSpec::new("127.0.0.1", free_port())]).is_ok());
         std::thread::sleep(Duration::from_millis(600));
         assert_eq!(shared.history.len(), 1, "history survives listener changes");
     }

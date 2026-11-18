@@ -30,9 +30,9 @@ pub fn listeners_table(app: &mut App, ui: &mut Ui) {
     let mut selected: Option<usize> = ui.data_mut(|d| d.get_temp(sel_id)).unwrap_or(None);
     let (mut bind, mut port): (String, String) = ui.data_mut(|d| d.get_temp(draft_id)).unwrap_or_else(|| ("127.0.0.1".to_string(), String::new()));
     let status = net::listener_status(&app.shared);
-    const W: [f32; 6] = [62.0, 170.0, 70.0, 150.0, 90.0, 110.0];
-    egui::Grid::new("proxy_listeners").striped(true).num_columns(6).spacing([10.0, 3.0]).show(ui, |ui| {
-        for (head, w) in ["Running", "Interface", "Invisible", "Redirect", "Certificate", "TLS protocols"].iter().zip(W) {
+    const W: [f32; 7] = [62.0, 170.0, 70.0, 150.0, 90.0, 110.0, 60.0];
+    egui::Grid::new("proxy_listeners").striped(true).num_columns(7).spacing([10.0, 3.0]).show(ui, |ui| {
+        for (head, w) in ["Running", "Interface", "Invisible", "Redirect", "Certificate", "TLS protocols", "HTTP/2"].iter().zip(W) {
             cell(ui, w, head, theme::ink_faint());
         }
         ui.end_row();
@@ -55,6 +55,11 @@ pub fn listeners_table(app: &mut App, ui: &mut Ui) {
             cell(ui, W[3], &redirect.map(|(h, p)| format!("{h}:{p}")).unwrap_or_default(), theme::ink());
             cell(ui, W[4], "Per-host", theme::ink_dim());
             cell(ui, W[5], "Default", theme::ink_dim());
+            // Burp's per-listener "Support HTTP/2".
+            let mut h2 = net::listener_supports_http2(&app.shared, if i == 0 { None } else { listener_port });
+            if ui.checkbox(&mut h2, "").on_hover_text("Support HTTP/2: HTTPS clients may negotiate h2 with this listener").changed() {
+                net::set_listener_http2(&app.shared, i, h2);
+            }
             ui.end_row();
             if let Some(err) = error {
                 ui.label("");
@@ -77,7 +82,7 @@ pub fn listeners_table(app: &mut App, ui: &mut Ui) {
             match parsed {
                 Some(p) => {
                     let mut specs = net::listener_specs(&app.shared);
-                    specs.push(net::ListenerSpec { bind: bind.trim().to_string(), port: p });
+                    specs.push(net::ListenerSpec::new(bind.trim(), p));
                     apply(app, specs, format!("Listener added on {}:{p}", bind.trim()));
                 }
                 None => feedback::toast(Level::Error, "Port must be 1-65535"),
@@ -90,7 +95,7 @@ pub fn listeners_table(app: &mut App, ui: &mut Ui) {
             if let (Some(index), Some(p)) = (extra, parsed) {
                 let mut specs = net::listener_specs(&app.shared);
                 if index < specs.len() {
-                    specs[index] = net::ListenerSpec { bind: bind.trim().to_string(), port: p };
+                    specs[index] = net::ListenerSpec { bind: bind.trim().to_string(), port: p, http2: specs[index].http2 };
                     apply(app, specs, format!("Listener changed to {}:{p}", bind.trim()));
                 }
             } else {
@@ -387,5 +392,70 @@ pub fn streaming_responses(app: &mut App, ui: &mut Ui) {
     ui.add_enabled(s.store, egui::Checkbox::new(&mut s.strip_chunked, "Strip chunked encoding metadata in streaming responses"));
     if s != before {
         *app.shared.streaming.lock().unwrap() = s;
+    }
+}
+
+/// Burp's "WebSocket match and replace rules" (Zcgm): enabled, type
+/// (client to server / server to client), match, replace, regex, comment;
+/// Add / Remove / Up / Down; "Only apply to in-scope items".
+pub fn ws_match_replace(app: &mut App, ui: &mut Ui) {
+    use webprobe_core::ws_rules::WsRule;
+    heading(ui, "WebSocket match and replace rules");
+    ui.label(RichText::new("Use these settings to automatically replace parts of WebSocket messages passing through the Proxy.").size(12.0).color(theme::ink_dim()));
+    let mut in_scope = app.shared.ws_rules_in_scope_only.load(std::sync::atomic::Ordering::SeqCst);
+    if ui.checkbox(&mut in_scope, "Only apply to in-scope items").changed() {
+        app.shared.ws_rules_in_scope_only.store(in_scope, std::sync::atomic::Ordering::SeqCst);
+    }
+    let mut rules = app.shared.ws_rules.lock().unwrap().clone();
+    let before = rules.clone();
+    let mut action: Option<(usize, i32)> = None;
+    egui::Grid::new("ws_mr_rules").striped(true).num_columns(7).spacing([8.0, 3.0]).show(ui, |ui| {
+        for h in ["Enabled", "Type", "Match", "Replace", "Regex", "Comment", ""] {
+            ui.label(RichText::new(h).size(12.0).color(theme::ink_faint()));
+        }
+        ui.end_row();
+        for (i, r) in rules.iter_mut().enumerate() {
+            ui.checkbox(&mut r.enabled, "");
+            let mut to_server = r.to_server();
+            egui::ComboBox::from_id_salt(("ws_mr_type", i)).selected_text(r.type_label()).show_ui(ui, |ui| {
+                ui.selectable_value(&mut to_server, true, "Client to server");
+                ui.selectable_value(&mut to_server, false, "Server to client");
+            });
+            r.rule_type = if to_server { "client_to_server" } else { "server_to_client" }.into();
+            ui.add(egui::TextEdit::singleline(&mut r.string_match).desired_width(160.0));
+            ui.add(egui::TextEdit::singleline(&mut r.string_replace).desired_width(160.0));
+            let mut regex = !r.is_simple_match;
+            ui.checkbox(&mut regex, "");
+            r.is_simple_match = !regex;
+            ui.add(egui::TextEdit::singleline(&mut r.comment).desired_width(140.0));
+            ui.horizontal(|ui| {
+                if ui.small_button("Up").clicked() {
+                    action = Some((i, -1));
+                }
+                if ui.small_button("Down").clicked() {
+                    action = Some((i, 1));
+                }
+                if ui.small_button("Remove").clicked() {
+                    action = Some((i, 0));
+                }
+            });
+            ui.end_row();
+        }
+    });
+    if ui.button("Add").on_hover_text("Add a new match/replace rule").clicked() {
+        rules.push(WsRule::new(true, "", ""));
+    }
+    if let Some((i, d)) = action {
+        match d {
+            0 => {
+                rules.remove(i);
+            }
+            -1 if i > 0 => rules.swap(i, i - 1),
+            1 if i + 1 < rules.len() => rules.swap(i, i + 1),
+            _ => {}
+        }
+    }
+    if rules != before {
+        *app.shared.ws_rules.lock().unwrap() = rules;
     }
 }

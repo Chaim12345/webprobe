@@ -150,6 +150,9 @@ pub struct H2Request {
     pub path: String,
     pub headers: Vec<(String, String)>,
     pub body: Vec<u8>,
+    /// A Connection header to send anyway (Repeater with "Strip Connection
+    /// header over HTTP/2" off); otherwise connection headers are dropped.
+    pub connection: Option<String>,
 }
 
 /// Hop-by-hop headers that must not appear in HTTP/2 (RFC 9113 §8.2.2).
@@ -187,6 +190,9 @@ fn encode_headers(req: &H2Request) -> Vec<u8> {
             continue;
         }
         headers.push((lower.into_bytes(), v.as_bytes().to_vec()));
+    }
+    if let Some(c) = &req.connection {
+        headers.push((b"connection".to_vec(), c.as_bytes().to_vec()));
     }
     if !req.body.is_empty() {
         headers.push((b"content-length".to_vec(), req.body.len().to_string().into_bytes()));
@@ -677,6 +683,7 @@ pub fn request_from_raw(raw: &[u8], scheme: &str) -> Option<H2Request> {
         path: if parts.path.is_empty() { "/".into() } else { parts.path.clone() },
         headers,
         body,
+        connection: None,
     })
 }
 
@@ -758,6 +765,7 @@ mod tests {
             path: "/".into(),
             headers: vec![("User-Agent".into(), "probe".into())],
             body: Vec::new(),
+            connection: None,
         }
     }
 
@@ -934,6 +942,7 @@ mod tests {
             path: "/upload".into(),
             headers: vec![],
             body,
+            connection: None,
         };
         let resp = exchange(&mut tcp, &req, None).expect("flow-controlled upload");
         t.join().unwrap();

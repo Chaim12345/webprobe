@@ -855,14 +855,16 @@ pub fn search(app: &mut App, ui: &mut Ui) {
                     body: format!("{} {}\n{}", i.host, i.path, i.detail),
                 });
             }
-            for w in app.shared.ws_history.lock().unwrap().iter() {
-                records.push(analysis::SearchRecord {
-                    id: w.id.to_string(),
-                    tool: "WebSocket".into(),
-                    title: format!("{} {}", w.direction, w.opcode),
-                    body: w.payload.clone(),
-                });
-            }
+            app.shared.ws_history.with_rows(|rows| {
+                for w in rows {
+                    records.push(analysis::SearchRecord {
+                        id: w.id.to_string(),
+                        tool: "WebSocket".into(),
+                        title: format!("{} {}", w.direction, w.opcode),
+                        body: w.text().into_owned(),
+                    });
+                }
+            });
             app.search_results = analysis::search_records(app.search_case, &app.search_query, &records);
         }
     });
@@ -1829,14 +1831,7 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
         result_line: r.result_line.clone(),
     }).collect();
     let locked_issues = app.shared.issues.lock().unwrap().iter().map(project::ProjectIssue::from_issue).collect();
-    let locked_websockets = app.shared.ws_history.lock().unwrap().iter().map(|w| project::ProjectWebsocket {
-        id: w.id,
-        timestamp: w.ts,
-        host: w.host.clone(),
-        direction: w.direction.clone(),
-        opcode: w.opcode.clone(),
-        payload: w.payload.clone(),
-    }).collect();
+    let locked_websockets = app.shared.ws_history.with_rows(|rows| rows.iter().map(project::ProjectWebsocket::from_entry).collect());
     let locked_upstream = app.shared.upstream.lock().unwrap().clone();
     let locked_upstream_rules = app.shared.upstream_rules.lock().unwrap().clone();
     let locked_site_links = app.shared.site_links.lock().unwrap().iter().cloned().collect();
@@ -1849,7 +1844,7 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
     };
     scan_cfg.save_into(&mut locked_scanner);
     let locked_proxy = project::ProjectProxy {
-        listeners: net::listener_specs(&app.shared).into_iter().map(|l| project::ProjectListener { bind: l.bind, port: l.port }).collect(),
+        listeners: net::listener_specs(&app.shared).into_iter().map(|l| project::ProjectListener { bind: l.bind, port: l.port, http2: l.http2 }).collect(),
         ws_intercept_client: app.shared.ws_intercept_client.load(Ordering::SeqCst),
         ws_intercept_server: app.shared.ws_intercept_server.load(Ordering::SeqCst),
         redirects: {
@@ -1861,6 +1856,10 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
         tls_pass_through: app.shared.tls_bypass.lock().unwrap().clone(),
         streaming_responses: app.shared.streaming.lock().unwrap().clone(),
         listener_http2: app.shared.listener_http2.load(Ordering::SeqCst),
+        ws_match_replace_rules: app.shared.ws_rules.lock().unwrap().clone(),
+        ws_match_replace_disable_out_of_scope: app.shared.ws_rules_in_scope_only.load(Ordering::SeqCst),
+        ws_intercept_in_scope_only: app.shared.ws_intercept_in_scope.load(Ordering::SeqCst),
+        strip_sec_websocket_extensions: app.shared.ws_strip_extensions.load(Ordering::SeqCst),
     };
     let locked_tasks = project::ProjectTasks {
         live_passive_crawl: app.shared.crawl_capture.load(Ordering::SeqCst),
@@ -2047,14 +2046,7 @@ pub fn apply_project(app: &mut App, data: &project::ProjectData, content: bool) 
         app.shared.passive.clear();
         // Montoya extensions get this project's extensionData().
         app.shared.ext_host.lock().unwrap().restore_data(data.extension_data.clone());
-        *app.shared.ws_history.lock().unwrap() = data.websockets.iter().map(|w| net::WsEntry {
-            id: w.id,
-            ts: w.timestamp,
-            host: w.host.clone(),
-            direction: w.direction.clone(),
-            opcode: w.opcode.clone(),
-            payload: w.payload.clone(),
-        }).collect();
+        app.shared.ws_history.set_all(data.websockets.iter().map(project::ProjectWebsocket::to_entry).collect());
     }
     *app.shared.upstream.lock().unwrap() = data.upstream.clone();
     *app.shared.upstream_rules.lock().unwrap() = data.upstream_rules.clone();
@@ -2084,7 +2076,7 @@ pub fn apply_project(app: &mut App, data: &project::ProjectData, content: bool) 
         let max_id = app.shared.history.with_rows(|h| h.iter().map(|e| e.id).max()).into_iter()
             .chain(app.shared.crawl_items.with_rows(|h| h.iter().map(|e| e.id).max()))
             .chain(app.shared.issues.lock().unwrap().iter().map(|i| i.id))
-            .chain(app.shared.ws_history.lock().unwrap().iter().map(|w| w.id))
+            .chain(app.shared.ws_history.with_rows(|rows| rows.iter().map(|w| w.id).collect::<Vec<_>>()))
             .max()
             .unwrap_or(0);
         app.shared.next_id.fetch_max(max_id + 1, Ordering::SeqCst);
@@ -2132,11 +2124,15 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData, content: boo
     app.shared.ws_intercept_client.store(data.proxy.ws_intercept_client, Ordering::SeqCst);
     *app.shared.streaming.lock().unwrap() = data.proxy.streaming_responses.clone();
     app.shared.listener_http2.store(data.proxy.listener_http2, Ordering::SeqCst);
+    *app.shared.ws_rules.lock().unwrap() = data.proxy.ws_match_replace_rules.clone();
+    app.shared.ws_rules_in_scope_only.store(data.proxy.ws_match_replace_disable_out_of_scope, Ordering::SeqCst);
+    app.shared.ws_intercept_in_scope.store(data.proxy.ws_intercept_in_scope_only, Ordering::SeqCst);
+    app.shared.ws_strip_extensions.store(data.proxy.strip_sec_websocket_extensions, Ordering::SeqCst);
     app.shared.ws_intercept_server.store(data.proxy.ws_intercept_server, Ordering::SeqCst);
     *app.shared.response_rules.lock().unwrap() = data.proxy.response_rules.clone().unwrap_or_default();
     *app.shared.tls_bypass.lock().unwrap() = data.proxy.tls_pass_through.clone();
     *app.shared.listener_redirects.lock().unwrap() = data.proxy.redirects.iter().map(|(lp, h, p)| (*lp, (h.clone(), *p))).collect();
-    let specs: Vec<net::ListenerSpec> = data.proxy.listeners.iter().map(|l| net::ListenerSpec { bind: l.bind.clone(), port: l.port }).collect();
+    let specs: Vec<net::ListenerSpec> = data.proxy.listeners.iter().map(|l| net::ListenerSpec { bind: l.bind.clone(), port: l.port, http2: l.http2 }).collect();
     if specs != net::listener_specs(&app.shared) {
         if let Err(e) = net::set_listeners(&app.shared, specs) {
             app.shared.log(&format!("Project listeners not restored: {e}"));

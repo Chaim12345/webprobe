@@ -48,6 +48,10 @@ pub mod ext_calls;
 pub mod passive_state;
 pub mod stored;
 pub mod streaming;
+pub mod ws_history;
+pub mod ws_rules;
+#[cfg(test)]
+mod ws_tests;
 #[cfg(test)]
 mod streaming_tests;
 pub mod setup_page;

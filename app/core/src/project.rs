@@ -359,7 +359,32 @@ pub struct ProjectWebsocket {
     pub host: String,
     pub direction: String,
     pub opcode: String,
+    /// The payload as text when it is valid UTF-8 (older projects: always).
     pub payload: String,
+    /// The exact bytes, base64, when they are not valid UTF-8.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub payload_base64: Option<String>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub socket: u64,
+}
+
+fn is_zero(v: &u64) -> bool {
+    *v == 0
+}
+
+impl ProjectWebsocket {
+    pub fn from_entry(w: &crate::ws_history::WsEntry) -> Self {
+        let (payload, payload_base64) = match std::str::from_utf8(&w.payload) {
+            Ok(t) => (t.to_string(), None),
+            Err(_) => (String::new(), Some(crate::util::b64_encode(&w.payload))),
+        };
+        ProjectWebsocket { id: w.id, timestamp: w.ts, host: w.host.clone(), direction: w.direction.clone(), opcode: w.opcode.clone(), payload, payload_base64, socket: w.socket }
+    }
+
+    pub fn to_entry(&self) -> crate::ws_history::WsEntry {
+        let bytes = self.payload_base64.as_deref().and_then(|b| crate::util::b64_decode(b).ok()).unwrap_or_else(|| self.payload.clone().into_bytes());
+        crate::ws_history::WsEntry { id: self.id, ts: self.timestamp, host: self.host.clone(), direction: self.direction.clone(), opcode: self.opcode.clone(), payload: bytes.into(), socket: self.socket }
+    }
 }
 
 /// One Logger entry (Burp keeps these separate from proxy history).
@@ -607,6 +632,9 @@ impl Default for ProjectScanner {
 pub struct ProjectListener {
     pub bind: String,
     pub port: u16,
+    /// Burp's request_listeners[].enable_http2 (default on).
+    #[serde(default = "yes", rename = "enable_http2")]
+    pub http2: bool,
 }
 
 /// Proxy configuration beyond listeners and rules (J-01).
@@ -633,10 +661,22 @@ pub struct ProjectProxy {
     /// same key names inside).
     #[serde(default)]
     pub streaming_responses: crate::streaming::StreamSettings,
-    /// Listener option "Support HTTP/2" (Burp's request_listeners[].
-    /// enable_http2, default on), one switch for all listeners.
+    /// The primary listener's "Support HTTP/2" (Burp's
+    /// request_listeners[].enable_http2, default on); extra listeners carry
+    /// their own in `listeners`.
     #[serde(default = "yes", rename = "enable_http2")]
     pub listener_http2: bool,
+    /// WebSocket match and replace (Burp's proxy.ws_match_replace_rules).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ws_match_replace_rules: Vec<crate::ws_rules::WsRule>,
+    #[serde(default)]
+    pub ws_match_replace_disable_out_of_scope: bool,
+    /// proxy.intercept_web_sockets_messages.intercept_in_scope_only.
+    #[serde(default)]
+    pub ws_intercept_in_scope_only: bool,
+    /// proxy.miscellaneous.strip_sec_websocket_extensions_headers_in_incoming_requests.
+    #[serde(default = "yes")]
+    pub strip_sec_websocket_extensions: bool,
 }
 
 impl Default for ProjectProxy {
@@ -650,6 +690,10 @@ impl Default for ProjectProxy {
             tls_pass_through: Vec::new(),
             streaming_responses: crate::streaming::StreamSettings::default(),
             listener_http2: true,
+            ws_match_replace_rules: Vec::new(),
+            ws_match_replace_disable_out_of_scope: false,
+            ws_intercept_in_scope_only: false,
+            strip_sec_websocket_extensions: true,
         }
     }
 }
@@ -1613,7 +1657,9 @@ mod tests {
                 direction: "out".into(),
                 opcode: "text".into(),
                 payload: "hello".into(),
-            }],
+                payload_base64: None,
+                socket: 0,
+            }, ProjectWebsocket::from_entry(&crate::ws_history::WsEntry { id: 14, ts: 1, host: "example.com".into(), direction: "server -> client".into(), opcode: "binary".into(), payload: vec![0xff, 0x00, 0xc3, 0x28].into(), socket: 7 })],
             logger: vec![ProjectLoggerEntry {
                 id: 17,
                 timestamp: 1_760_000_003,
@@ -1712,7 +1758,7 @@ mod tests {
             site_links: vec![("https://example.com".into(), "/unvisited".into())],
             scanner: ProjectScanner { speed: 2, accuracy: 0, extra_checks: true, disabled_checks: vec!["active.csrf".into()], disabled_insertion_points: vec!["header".into()], crawl_max_depth: Some(2), crawl_max_locations: Some(100), crawl_robots: Some(false), crawl_sitemap: Some(true), crawl_engine: Some("Lightpanda".into()) },
             proxy: ProjectProxy {
-                listeners: vec![ProjectListener { bind: "127.0.0.1".into(), port: 18_090 }],
+                listeners: vec![ProjectListener { bind: "127.0.0.1".into(), port: 18_090, http2: false }],
                 ws_intercept_client: false,
                 ws_intercept_server: true,
                 redirects: vec![(18_090, "127.0.0.1".into(), 3001)],
@@ -1720,6 +1766,10 @@ mod tests {
                 tls_pass_through: vec!["*.bank.example".into()],
                 streaming_responses: crate::streaming::StreamSettings { urls: vec!["https://api.example/stream".into()], event_stream: false, store: false, strip_chunked: true },
                 listener_http2: false,
+                ws_match_replace_rules: vec![crate::ws_rules::WsRule::new(true, "a", "b")],
+                ws_match_replace_disable_out_of_scope: true,
+                ws_intercept_in_scope_only: true,
+                strip_sec_websocket_extensions: false,
             },
             tasks: ProjectTasks { live_passive_crawl: false, live_audit: true, scans: vec![ProjectScanTask { name: "Audit of https://example.com/".into(), entries: Vec::new(), urls: vec!["https://example.com/".into()], audit_only: true, paused: true }] },
             layout: ProjectLayout {

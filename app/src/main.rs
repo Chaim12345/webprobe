@@ -1115,9 +1115,9 @@ fn main() {
         "discover" => ui::Tab::Discover,
         _ => ui::Tab::Dashboard,
     };
-    let project_path = std::env::current_dir()
-        .map(|d| d.join("webprobe-project.json").display().to_string())
-        .unwrap_or_else(|_| "webprobe-project.json".to_string());
+    // The default project lives in WebProbe's data directory, not in the
+    // directory WebProbe was started from (a checkout must not collect one).
+    let project_path = webprobe_core::paths::Lookup::process().data_dir().join("webprobe-project.json").display().to_string();
     // Debug hook: WEBPROBE_SETTINGS=hotkeys|appearance opens Burp's Settings
     // window on that pane (used by the screenshot checks).
     let settings_help = match std::env::var("WEBPROBE_SETTINGS").unwrap_or_default().as_str() {

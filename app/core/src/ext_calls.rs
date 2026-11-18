@@ -179,7 +179,7 @@ pub fn dispatch(shared: &Shared, extension: &str, op: &str, args: &Value) -> Res
     match op {
         "proxy.history" => Ok(Value::Array(shared.history.with_rows(|rows| rows.iter().map(entry_json).collect()))),
         "proxy.ws-history" => Ok(Value::Array(
-            shared.ws_history.lock().unwrap().iter().map(|w| json!({"id": w.id, "time": w.ts, "host": w.host, "direction": w.direction, "opcode": w.opcode, "payload": w.payload})).collect(),
+            shared.ws_history.with_rows(|rows| rows.iter().map(|w| json!({"id": w.id, "time": w.ts, "host": w.host, "direction": w.direction, "opcode": w.opcode, "payload": w.text(), "bytes": util::b64_encode(&w.payload)})).collect()),
         )),
         "proxy.intercept" => {
             shared.intercept_on.store(args["on"].as_bool().unwrap_or(false), Ordering::SeqCst);

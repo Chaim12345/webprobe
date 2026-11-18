@@ -191,7 +191,11 @@ impl<S: Read + Write> Client<S> {
 
 /// CONNECT through the listener, then TLS offering `alpn`.
 fn connect(shared: &Shared, up_port: u16, alpn: &[&[u8]]) -> rustls::StreamOwned<rustls::ClientConnection, TcpStream> {
-    let mut s = TcpStream::connect(("127.0.0.1", shared.proxy_port.load(Ordering::SeqCst))).unwrap();
+    connect_via(shared, shared.proxy_port.load(Ordering::SeqCst), up_port, alpn)
+}
+
+fn connect_via(shared: &Shared, proxy_port: u16, up_port: u16, alpn: &[&[u8]]) -> rustls::StreamOwned<rustls::ClientConnection, TcpStream> {
+    let mut s = TcpStream::connect(("127.0.0.1", proxy_port)).unwrap();
     s.set_read_timeout(Some(Duration::from_secs(30))).unwrap();
     write!(s, "CONNECT localhost:{up_port} HTTP/1.1\r\nHost: localhost:{up_port}\r\n\r\n").unwrap();
     let mut head = Vec::new();
@@ -239,10 +243,23 @@ fn alpn_negotiates_h2_and_streams_are_multiplexed() {
 #[test]
 fn the_listener_option_off_keeps_https_clients_on_http1() {
     let shared = proxy();
-    shared.listener_http2.store(false, Ordering::SeqCst);
     let port = upstream(&shared, Arc::new(Mutex::new(None)));
-    let tls = connect(&shared, port, &[b"h2", b"http/1.1"]);
-    assert_eq!(tls.conn.alpn_protocol(), None);
+    // An extra listener with "Support HTTP/2" off; the primary keeps it on.
+    let extra = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    crate::net::set_listeners(&shared, vec![crate::net::ListenerSpec { bind: "127.0.0.1".into(), port: extra, http2: false }]).unwrap();
+    for _ in 0..500 {
+        if TcpStream::connect(("127.0.0.1", extra)).is_ok() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(connect_via(&shared, extra, port, &[b"h2", b"http/1.1"]).conn.alpn_protocol(), None);
+    assert_eq!(connect(&shared, port, &[b"h2", b"http/1.1"]).conn.alpn_protocol(), Some(b"h2".as_slice()));
+    // Switched per listener without a restart.
+    crate::net::set_listener_http2(&shared, 1, true);
+    assert_eq!(connect_via(&shared, extra, port, &[b"h2", b"http/1.1"]).conn.alpn_protocol(), Some(b"h2".as_slice()));
+    crate::net::set_listener_http2(&shared, 0, false);
+    assert_eq!(connect(&shared, port, &[b"h2", b"http/1.1"]).conn.alpn_protocol(), None);
 }
 
 #[test]

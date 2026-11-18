@@ -1168,11 +1168,6 @@ pub(crate) fn proxy_options(app: &mut App, ui: &mut Ui) {
     });
     ui.add_space(8.0);
     crate::proxy_settings::listeners_table(app, ui);
-    // Burp's per-listener "Support HTTP/2" (default on): one switch here.
-    let mut h2 = app.shared.listener_http2.load(Ordering::SeqCst);
-    if ui.checkbox(&mut h2, "Support HTTP/2 (HTTPS clients may negotiate h2 with the listeners)").changed() {
-        app.shared.listener_http2.store(h2, Ordering::SeqCst);
-    }
     ui.add_space(10.0);
     crate::proxy_settings::ca_buttons(app, ui);
     ui.add_space(10.0);
@@ -1194,6 +1189,18 @@ pub(crate) fn proxy_options(app: &mut App, ui: &mut Ui) {
             app.shared.ws_intercept_server.store(server_flag, Ordering::SeqCst);
         }
     });
+    ui.horizontal(|ui| {
+        let mut f = app.shared.ws_intercept_in_scope.load(Ordering::SeqCst);
+        if ui.checkbox(&mut f, "Only intercept in-scope messages").changed() {
+            app.shared.ws_intercept_in_scope.store(f, Ordering::SeqCst);
+        }
+        let mut f = app.shared.ws_strip_extensions.load(Ordering::SeqCst);
+        if ui.checkbox(&mut f, "Strip Sec-WebSocket-Extensions headers in incoming requests").changed() {
+            app.shared.ws_strip_extensions.store(f, Ordering::SeqCst);
+        }
+    });
+    ui.add_space(10.0);
+    crate::proxy_settings::ws_match_replace(app, ui);
     ui.add_space(10.0);
     crate::proxy_settings::streaming_responses(app, ui);
     ui.add_space(10.0);

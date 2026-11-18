@@ -1011,7 +1011,7 @@ pub fn inspector_ex(ui: &mut Ui, id: &str, req: Option<&[u8]>, resp: Option<&[u8
                 continue;
             }
             if section == Section::Attributes {
-                let h2 = req.windows(8).take(64).any(|w| w == b"HTTP/2\r\n" || w == b"HTTP/2.0");
+                let h2 = crate::repeater_ops::is_http2(&String::from_utf8_lossy(&req[..req.len().min(512)]));
                 ui.horizontal(|ui| {
                     ui.add_space(10.0);
                     ui.label(RichText::new("Protocol").size(12.5).color(theme::ink_dim()));

@@ -973,6 +973,7 @@ pub const INTERCEPT_COLUMNS: [(&str, bool); 9] = [
 /// WebSockets history display filter (ProjectDefaults.json
 /// web_sockets_history_display_filter).
 #[derive(Clone, Debug, Default)]
+#[derive(Hash)]
 pub struct WsFilter {
     pub hide_incoming: bool,
     pub hide_outgoing: bool,
@@ -1010,7 +1011,7 @@ pub fn ws_row_visible(f: &WsFilter, e: &net::WsEntry, in_scope: impl Fn(&str) ->
     if f.term.is_empty() {
         return true;
     }
-    let hay = format!("{}\n{}", e.host, e.payload);
+    let hay = format!("{}\n{}", e.host, e.text());
     let hit = if f.regex {
         regex::RegexBuilder::new(&f.term).case_insensitive(!f.case_sensitive).build().map(|re| re.is_match(&hay)).unwrap_or(false)
     } else if f.case_sensitive {
@@ -1049,6 +1050,9 @@ pub struct State {
     pub ws_filter_open: bool,
     pub ws_sel: Option<u64>,
     pub ws_hex: bool,
+    /// WebSockets history rows passing the filter: (history stamp, filter
+    /// hash, positions). Redone only when either changes.
+    pub ws_rows: (u64, u64, Vec<usize>),
 }
 
 impl Default for State {
@@ -1070,6 +1074,7 @@ impl Default for State {
             ws_filter_open: false,
             ws_sel: None,
             ws_hex: false,
+            ws_rows: (u64::MAX, 0, Vec::new()),
         }
     }
 }
@@ -1712,9 +1717,8 @@ pub fn intercept_table(ui: &mut Ui, st: &mut State, rows: &[HeldRow], height: f3
 /// Proxy > WebSockets history: filter bar, table (#, URL, Direction,
 /// Edited, Length, Opcode, Time) and the selected message below.
 pub fn ws_history_view(app: &mut crate::App, ui: &mut Ui) {
-    let entries = app.shared.ws_history.lock().unwrap().clone();
-    let edited = app.shared.ws_edited.lock().unwrap().clone();
     let shared = app.shared.clone();
+    let history = &shared.ws_history;
     let scope = |host: &str| burp_in_scope(&shared, &format!("http://{host}/")) || burp_in_scope(&shared, &format!("https://{host}/"));
     let st = &mut app.rops;
     // Filter bar, as Burp's "Filter settings: ..." strip.
@@ -1758,7 +1762,19 @@ pub fn ws_history_view(app: &mut crate::App, ui: &mut Ui) {
         });
     }
     ui.add_space(2.0);
-    let rows: Vec<&net::WsEntry> = entries.iter().filter(|e| e.direction != "handshake").filter(|e| ws_row_visible(&st.ws_filter, e, scope)).collect();
+    // The rows passing the filter, redone only when history or filter changed.
+    let filter_key = {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        st.ws_filter.hash(&mut h);
+        h.finish()
+    };
+    let stamp = history.stamp();
+    if st.ws_rows.0 != stamp || st.ws_rows.1 != filter_key {
+        let f = st.ws_filter.clone();
+        st.ws_rows = (stamp, filter_key, history.positions(|e| e.direction != "handshake" && ws_row_visible(&f, e, scope)));
+    }
+    let total = st.ws_rows.2.len();
     let table_h = (ui.available_height() * 0.5).max(120.0);
     let header = ["#", "URL", "Direction", "Edited", "Length", "Opcode", "Time"];
     let widths = [56.0, 260.0, 110.0, 60.0, 70.0, 70.0, 80.0];
@@ -1770,12 +1786,15 @@ pub fn ws_history_view(app: &mut crate::App, ui: &mut Ui) {
             ui.painter().text(egui::pos2(r.left() + 6.0, r.center().y), egui::Align2::LEFT_CENTER, *h, egui::FontId::proportional(12.5), theme::ink());
         }
     });
-    egui::ScrollArea::vertical().id_salt("ws_hist_rows").max_height(table_h).auto_shrink([false, false]).show(ui, |ui| {
+    if total == 0 {
+        ui.label(RichText::new(if history.is_empty() { "No WebSocket messages yet." } else { "No messages match the filter." }).size(12.5).color(theme::ink_hint()));
+    }
+    // Only the visible rows are fetched and drawn.
+    egui::ScrollArea::vertical().id_salt("ws_hist_rows").max_height(table_h).auto_shrink([false, false]).show_rows(ui, 20.0, total, |ui, range| {
         ui.spacing_mut().item_spacing.y = 0.0;
-        if rows.is_empty() {
-            ui.label(RichText::new(if entries.is_empty() { "No WebSocket messages yet." } else { "No messages match the filter." }).size(12.5).color(theme::ink_hint()));
-        }
-        for (k, e) in rows.iter().enumerate() {
+        let window = history.rows_at(&st.ws_rows.2[range.clone()]);
+        let edited = shared.ws_edited.lock().unwrap();
+        for (k, e) in range.zip(window.iter()) {
             let sel = st.ws_sel == Some(e.id);
             let cells = [
                 e.id.to_string(),
@@ -1809,16 +1828,17 @@ pub fn ws_history_view(app: &mut crate::App, ui: &mut Ui) {
         }
     });
     ui.add_space(4.0);
-    if let Some(e) = st.ws_sel.and_then(|id| entries.iter().find(|e| e.id == id)) {
+    if let Some(e) = st.ws_sel.and_then(|id| history.get(id)) {
         ui.horizontal(|ui| {
             ui.add_space(6.0);
-            ui.label(RichText::new(format!("Message #{} \u{2014} {} \u{2014} {} ({} bytes)", e.id, ws_direction_label(&e.direction), e.host, e.payload.len())).strong().size(13.0));
+            ui.label(RichText::new(format!("Message #{} \u{2014} {} \u{2014} {} ({} bytes, {})", e.id, ws_direction_label(&e.direction), e.host, e.payload.len(), e.opcode)).strong().size(13.0));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(6.0);
                 ui.toggle_value(&mut st.ws_hex, "Hex");
             });
         });
-        let text = if st.ws_hex { util::hex_view(e.payload.as_bytes(), 65536) } else { e.payload.clone() };
+        // Binary messages show as hex unless asked otherwise; never lossy-edited.
+        let text = if st.ws_hex || (e.is_binary() && std::str::from_utf8(&e.payload).is_err()) { util::hex_view(&e.payload, 65536) } else { e.text().into_owned() };
         egui::ScrollArea::both().id_salt("ws_hist_payload").auto_shrink([false, false]).show(ui, |ui| {
             ui.add(egui::Label::new(RichText::new(text).monospace().size(theme::FONT_MONO).color(theme::editor_colours().text)).selectable(true));
         });
@@ -2206,7 +2226,7 @@ mod tests {
 
     #[test]
     fn ws_filter_by_direction_and_search() {
-        let e = |dir: &str, op: &str, p: &str| net::WsEntry { id: 1, ts: 0, host: "h".into(), direction: dir.into(), opcode: op.into(), payload: p.into() };
+        let e = |dir: &str, op: &str, p: &str| net::WsEntry { id: 1, ts: 0, host: "h".into(), direction: dir.into(), opcode: op.into(), payload: p.as_bytes().into(), socket: 0 };
         let mut f = WsFilter::default();
         let out = e("client -> server", "text", "Hello");
         let inc = e("server -> client", "text", "world");
