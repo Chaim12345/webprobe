@@ -8,9 +8,9 @@
     "p1": 39,
     "p2": 20,
     "by_status": {
-      "done": 108,
+      "done": 109,
       "rejected": 2,
-      "todo": 17
+      "todo": 16
     }
   },
   "tasks": [
@@ -1241,8 +1241,9 @@
       "title": "Docs truth pass",
       "acceptance": "PROGRESS.md, TASKS.md §7, PRD-BACKEND, PRD-UI and tasks.json P-02/D-02 evidence agree with the code and tasks.json; superseded QA reports (BACKEND-COMPARE, GAP-REPORT, parity-scores) carry a 'superseded' banner; BE-PX-12 streaming points at R-06.",
       "effort": "S",
-      "status": "todo",
-      "evidence": "Review: PROGRESS.md:79,84 stale; TASKS.md §7 missing ticks/rows; PRDs carry 36/46 stale ❌; D-02 claims 35+ KB passive issues, 19 of 37 use Burp names. Progress 2026-11-18: PROGRESS.md status header and corrections, TASKS.md banner + generated §8 status table, superseded banners on GAP-REPORT / parity-scores / BACKEND-COMPARE, PRD stale-status banners, BE-PX-12 owner -> R-06, P-02 and D-02 evidence corrected, SOURCE-PARITY Expression Language note. REMAINING: re-verify every ❌/🚧 row of PRD-BACKEND (36) and PRD-UI (46) against the code and set the status column."
+      "status": "done",
+      "evidence": "Review: PROGRESS.md:79,84 stale; TASKS.md §7 missing ticks/rows; PRDs carry 36/46 stale ❌; D-02 claims 35+ KB passive issues, 19 of 37 use Burp names. Progress 2026-11-18: PROGRESS.md status header and corrections, TASKS.md banner + generated §8 status table, superseded banners on GAP-REPORT / parity-scores / BACKEND-COMPARE, PRD stale-status banners, BE-PX-12 owner -> R-06, P-02 and D-02 evidence corrected, SOURCE-PARITY Expression Language note. REMAINING: re-verify every ❌/🚧 row of PRD-BACKEND (36) and PRD-UI (46) against the code and set the status column. Done 2026-11-18: all 129 PRD rows that were ❌ or 🚧 (50 backend, 79 UI) re-checked against the code: 51 are now ✅ (31 with file:line evidence, 20 marked 'per task evidence'), 68 stay 🚧 with the missing part named, 10 stay ❌. Per-row evidence: qa/PRD-RECHECK-2026-11-18.md. The re-check was delegated to a free GLM 5.3 flash agent and spot-checked (all 94 file:line references resolve; five sampled claims confirmed), not fully reviewed.",
+      "completed": "2026-11-18"
     },
     {
       "id": "R-02",
