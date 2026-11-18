@@ -1,16 +1,16 @@
 {
   "project": "webprobe",
-  "generated": "2026-11-15",
+  "generated": "2026-11-18",
   "source": "TASKS.md",
   "summary": {
-    "total": 106,
-    "p0": 64,
-    "p1": 32,
-    "p2": 10,
+    "total": 125,
+    "p0": 68,
+    "p1": 39,
+    "p2": 18,
     "by_status": {
       "done": 101,
       "rejected": 2,
-      "todo": 3
+      "todo": 22
     }
   },
   "tasks": [
@@ -1192,7 +1192,7 @@
       "completed": "2026-11-18"
     },
     {
-      "id": "D-08",
+      "id": "D-11",
       "epic": "D — Scanner parity",
       "priority": "P1",
       "title": "Remaining Burp insertion points",
@@ -1220,6 +1220,196 @@
       "effort": "M",
       "status": "todo",
       "evidence": "Craft unknown unk_e8d35ba47ccfba29 probes."
+    },
+    {
+      "id": "R-01",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
+      "priority": "P0",
+      "title": "Docs truth pass",
+      "acceptance": "PROGRESS.md, TASKS.md §7, PRD-BACKEND, PRD-UI and tasks.json P-02/D-02 evidence agree with the code and tasks.json; superseded QA reports (BACKEND-COMPARE, GAP-REPORT, parity-scores) carry a 'superseded' banner; BE-PX-12 streaming points at R-06.",
+      "effort": "S",
+      "status": "todo",
+      "evidence": "Review: PROGRESS.md:79,84 stale; TASKS.md §7 missing ticks/rows; PRDs carry 36/46 stale ❌; D-02 claims 35+ KB passive issues, 19 of 37 use Burp names."
+    },
+    {
+      "id": "R-02",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
+      "priority": "P0",
+      "title": "Portable build: no developer-machine paths",
+      "acceptance": "A release binary in a clean container starts and says clearly when issue texts, wordlists or Java are missing; no absolute /root or CARGO_MANIFEST_DIR lookups at run time.",
+      "effort": "S",
+      "status": "todo",
+      "evidence": "core/src/report.rs:251, src/discovery.rs:111, core/src/crawl.rs:295, src/tools.rs:885, bridge source via CARGO_MANIFEST_DIR."
+    },
+    {
+      "id": "R-03",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
+      "priority": "P0",
+      "title": "Montoya bridge broad enough for real BApps",
+      "acceptance": "extension(), http(), userInterface(), scanner(), persistence() (and what the first target BApp needs) are bridged; the sidecar builds against the published montoya-api artifact instead of /opt/BurpSuite/burpsuite.jar (licence checked); one unmodified BApp-store extension loads and does its job.",
+      "effort": "L",
+      "status": "todo",
+      "evidence": "sidecar/MontoyaBridge.java:276-287 (only proxy() and logging() answer); core/src/ext_host.rs:332. Measured ~10% API coverage."
+    },
+    {
+      "id": "R-04",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
+      "priority": "P0",
+      "title": "Passive checks in the check registry + missing passive pack",
+      "acceptance": "Passive checks are registered like active ones (check_catalogue lists them, scan configuration can switch each off). Ported from Burp with positive and negative fixtures: the 7 CSP issues, Vulnerable JavaScript dependency (resources/RetireJS), Session token in URL, password in GET/URL/cookie, Cookie scoped to parent domain, Duplicate cookies, Cross-domain script include, Source code disclosure, Serialized object, private key / DB connection string / SSN disclosure.",
+      "effort": "M",
+      "status": "todo",
+      "evidence": "core/src/scan.rs:704 (one 315-line function), scan.rs:2967 (active only). WebProbe reports 48 of Burp's 183 issue types."
+    },
+    {
+      "id": "R-05",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
+      "priority": "P1",
+      "title": "HTTP/2 browser-to-proxy and a working Repeater protocol switch",
+      "acceptance": "curl --http2 through the proxy negotiates h2; the HTTP/1 / HTTP/2 control in the message pane and the HTTP/2 menu items work against a local h2 lab server.",
+      "effort": "M",
+      "status": "todo",
+      "evidence": "core/src/tls.rs:285 (no ALPN), src/msgpane.rs:1005-1006, src/menus.rs:175-177."
+    },
+    {
+      "id": "R-06",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
+      "priority": "P1",
+      "title": "Response streaming and server-sent events",
+      "acceptance": "The proxy forwards response bytes as they arrive: the first event of a 1-event-per-second local stream reaches the client in under 2 s; history still records the full message.",
+      "effort": "M",
+      "status": "todo",
+      "evidence": "core/src/codec.rs:257-335 reads the whole response first. PRD BE-PX-12 was assigned to rejected N-04."
+    },
+    {
+      "id": "R-07",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
+      "priority": "P1",
+      "title": "WebSocket robustness and tools",
+      "acceptance": "Binary frames keep their bytes (no lossy text); WebSocket history is bounded/disk-backed and the view does not copy it every frame (100k frames stay fast); WebSocket Repeater and WebSocket match-and-replace as Burp.",
+      "effort": "M",
+      "status": "todo",
+      "evidence": "core/src/net.rs:679, net.rs:2288, src/repeater_ops.rs:1697."
+    },
+    {
+      "id": "R-08",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
+      "priority": "P1",
+      "title": "Tests for untested modules",
+      "acceptance": "rules.rs (match and replace: every scope, regex, binary bodies), report, scan_config, and logic tests behind intruder_ui, collaborator_ui, sitemap_compare_ui, rules_ui.",
+      "effort": "S",
+      "status": "todo",
+      "evidence": "core/src/rules.rs: 628 lines, no tests, runs on every proxied message (net.rs:2516/2621/3034/3049)."
+    },
+    {
+      "id": "R-09",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
+      "priority": "P1",
+      "title": "JWT checks",
+      "acceptance": "Burp's seven JWT issue types ported with tests (alg=none, weak HMAC secret via Scanner/jwt_secrets.txt, ...); a local lab token gets Burp's issue names.",
+      "effort": "M",
+      "status": "todo",
+      "evidence": "Burp resources/Scanner/jwt_secrets.txt; none in scan_checks.rs."
+    },
+    {
+      "id": "R-10",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
+      "priority": "P1",
+      "title": "Active check pack (non-timing)",
+      "acceptance": "Ported with tests: GraphQL (Zula, Zf8g), web cache poisoning/deception (Zp22), XPath injection, HTTP PUT, Backup file, ASP.NET checks, Spoofable client IP, Expression Language injection (regressed: name only in a lookup table). Checks Burp detects only by timing stay excluded and are listed as such.",
+      "effort": "L",
+      "status": "todo",
+      "evidence": "scan_checks.rs:1937 (EL name only); ~74 issue types unowned. Depends on Craft unknown about timing-only detection."
+    },
+    {
+      "id": "R-11",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
+      "priority": "P1",
+      "title": "Scan configuration library",
+      "acceptance": "Burp's 29 BuiltInConfigs load and can be selected/combined for a scan; 'Audit checks - passive' runs only passive checks; custom configs can be saved and imported from Burp JSON.",
+      "effort": "M",
+      "status": "todo",
+      "evidence": "src/settings_dialog.rs:172-173 ('not available yet'); /root/burp-re/in/extract/resources/BuiltInConfigs/. Needs R-04."
+    },
+    {
+      "id": "R-12",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
+      "priority": "P2",
+      "title": "Repeater send groups and single-packet attack",
+      "acceptance": "Tab groups send in sequence (single connection / separate) and in parallel (single-packet over h2, last-byte sync over h1); 20 grouped requests reach a local lab within 5 ms.",
+      "effort": "M",
+      "status": "todo",
+      "evidence": "Not in the code. Needs R-05."
+    },
+    {
+      "id": "R-13",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
+      "priority": "P2",
+      "title": "DOM-based / JavaScript analysis",
+      "acceptance": "The 48 DOM-based issue types and client-side prototype pollution: source-to-sink tracking in the embedded Chromium crawl; a location.hash -> innerHTML fixture is reported as 'Cross-site scripting (DOM-based)'.",
+      "effort": "L",
+      "status": "todo",
+      "evidence": "48 of Burp's 183 issue types; none reported today. Method depends on Craft unknown about Burp's DOM engine."
+    },
+    {
+      "id": "R-14",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
+      "priority": "P2",
+      "title": "BCheck interpreter",
+      "acceptance": "BCheck files load, validate and run (passive and active, per request/host/insertion point); Burp's example BChecks produce the same issues on a local fixture.",
+      "effort": "L",
+      "status": "todo",
+      "evidence": "src/tools.rs:1216 ('BCheck files are not supported')."
+    },
+    {
+      "id": "R-15",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
+      "priority": "P2",
+      "title": "Burp CLI flags, config JSON and REST API",
+      "acceptance": "--project-file, --config-file, --user-config-file, --unpause-spider-and-scanner and friends; project/user options import/export as Burp JSON; /v0.1 REST API (scan start, status, issues) on a local port.",
+      "effort": "M",
+      "status": "todo",
+      "evidence": "src/main.rs:949-960 reads only --screenshot; headless has proxy and scan only."
+    },
+    {
+      "id": "R-16",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
+      "priority": "P2",
+      "title": "Bambda-style filters and custom columns",
+      "acceptance": "History/Logger/WebSocket filters and custom columns by script, as Burp's Bambda mode (scripting language decided in the task).",
+      "effort": "M",
+      "status": "todo",
+      "evidence": "src/tools.rs:1220 (stated unsupported)."
+    },
+    {
+      "id": "R-17",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
+      "priority": "P2",
+      "title": "Intruder payload completeness",
+      "acceptance": "Burp's predefined payload lists, Collaborator payloads and extension-generated payloads/processors (the last via R-03).",
+      "effort": "S",
+      "status": "todo",
+      "evidence": "Review: 18 payload sources, ~20 processors present; these three missing."
+    },
+    {
+      "id": "R-18",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
+      "priority": "P2",
+      "title": "Decompose App / Shared and split ui.rs",
+      "acceptance": "App (197 fields) and Shared (62) are grouped into owned subsystem types like N-07 did for history/scan/oob/repeater; ui.rs (4,606 lines) is split by tool; no behaviour change, suite green.",
+      "effort": "M",
+      "status": "todo",
+      "evidence": "src/ui.rs: 4,606 lines, 10 tests; proxy_history alone 410 lines."
+    },
+    {
+      "id": "R-19",
+      "epic": "R — Roadmap (zoom-out review 2026-11-18)",
+      "priority": "P2",
+      "title": "UI parity re-score",
+      "acceptance": "Visual and behavioural re-score of all 13 tabs against live Burp after the rewrites, incl. Logger, Organizer and WebSocket intercept driven over the egui MCP; parity-scores replaced with dated results.",
+      "effort": "S",
+      "status": "todo",
+      "evidence": "qa/parity-scores-2026-11-15.md never redone; no record of Logger/Organizer/WS intercept GUI checks."
     }
   ]
 }

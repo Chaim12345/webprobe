@@ -1,0 +1,17 @@
+{
+  "id": "unk_4964d846b50b2b19",
+  "revision": 1,
+  "question": "How does Burp find its 48 DOM-based issue types: static JavaScript analysis in the JVM, dynamic taint tracking in Burp's browser, or both; and which classes and resources implement it?",
+  "severity": "medium",
+  "domain": "scanner",
+  "status": "open",
+  "probes": [
+    "string-evidence.tsv and resources/ for DOM source/sink tables",
+    "Trace the 'DOM-based' issue ids in Zc84 to their reporter classes",
+    "Check the embedded browser extension/resources for an instrumentation script"
+  ],
+  "evidence_for": [
+    "Review: none of the 48 DOM-based types are reported by WebProbe"
+  ],
+  "evidence_against": []
+}

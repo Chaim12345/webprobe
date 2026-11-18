@@ -1,0 +1,15 @@
+{
+  "id": "unk_85ef61d7ddeb80cb",
+  "revision": 1,
+  "question": "Which Burp checks count as 'server-side injection' for scanner.ignored_insertion_points.skip_server_side_injection_for_parameters (PHPSESSID, jsessionid, __viewstate, ...)?",
+  "severity": "medium",
+  "domain": "scanner",
+  "status": "open",
+  "probes": [
+    "Find the callers of burp.Zgx0.Zr(Ze9d) (Ziqf.java:53 is the only caller of Ze9d.Ze) and the check classes that consult it"
+  ],
+  "evidence_for": [
+    "AuditDefaults.json lists 11 rules; predicate at Zs4k.java:199"
+  ],
+  "evidence_against": []
+}

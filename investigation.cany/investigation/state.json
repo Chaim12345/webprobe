@@ -1,7 +1,7 @@
 {
-  "revision": 139,
+  "revision": 145,
   "brief": {
-    "question": "Rebuild WebProbe, a clone of Burp Suite Pro (reference build 52685, v2026.7.3), to feature parity with the 76-task backlog in tasks.json, and produce a readable, evidence-backed name map for the obfuscated Burp jar.",
+    "question": "Rebuild WebProbe, a clone of Burp Suite Pro (reference build 52685, v2026.7.3), to feature parity with the task backlog in tasks.json, and produce a readable, evidence-backed name map for the obfuscated Burp jar.",
     "purpose": "Interoperable reimplementation plus per-build deobfuscation; behaviour claims must come from the shipped jar or the running reference app, never guessed.",
     "targets": [
       "/opt/BurpSuite/burpsuite.jar",
@@ -13,43 +13,158 @@
       "No rebuild or cargo test while a QA agent is mid-run, so the binary stays stable",
       "Free models only for the builder; all work git-tracked; never touch ~/.zshrc or the user's real Burp config"
     ],
-    "done_when": "All 76 tasks in tasks.json have status+evidence+date, mechanics.json claims updated, full test suite green, and re/mapping covers every class that has evidence in the current build."
+    "done_when": "Every task in tasks.json (125 on 2026-11-18: 101 done, 2 rejected, 22 todo = D-09..D-11 and roadmap R-01..R-19) is done or explicitly rejected with status+evidence+date, no open unknowns, mechanics.json claims updated, full test suite and scripts/ci.sh green, and re/mapping covers every class that has evidence in the current build."
   },
   "plan": [
     {
       "title": "Visual bridge pass: horizontal Repeater/Intruder panes, menu bar, Proxy sub-tab names",
       "status": "done",
-      "why": "Editor zero-width bug came from inherited horizontal layout; fixed at root and verified in v8-repeater.png / v8-intruder.png."
+      "why": "Wave 39"
     },
     {
       "title": "Light-palette token pass + remaining chrome",
-      "status": "todo",
-      "why": "Panel fills are hardcoded MONO1/MONO1X, so View > Light theme is mixed; menu items and right-side globals still differ from Burp."
+      "status": "done",
+      "why": "Wave 39 light theme (LightTheme.json colours); verified on :97"
     },
     {
       "title": "Structural tool gaps: Logger/Organizer/Discover, Proxy Match and replace, Dashboard and Intruder sub-tabs",
-      "status": "todo",
-      "why": "Largest remaining parity gap after chrome; WebProbe currently substitutes Scanner/Sessions/Search."
+      "status": "done",
+      "why": "All 13 tabs match live Burp v2026.7.3 (burp-real-01.png); parity ledger 2026-11-17"
     },
     {
       "title": "Engine done + verified: Logger (app/src/logger.rs)",
       "status": "done",
-      "why": "fnd_8; logger.rs L12/16-29/114-158 + 8 tests L167-293; engine only, no Logger UI tab."
+      "why": ""
     },
     {
       "title": "Engine done + verified: Organizer (app/src/organizer.rs)",
       "status": "done",
-      "why": "fnd_9; organizer.rs L8-15/24-99 + 6 tests L110-188; engine only, no Organizer UI panel."
+      "why": ""
     },
     {
       "title": "Engine done + verified: Match and Replace (app/src/match_replace.rs)",
       "status": "done",
-      "why": "fnd_10; match_replace.rs L16-48/71-121 + 10 tests L123-250; net.rs still uses legacy rules.rs::apply_rules."
+      "why": ""
     },
     {
       "title": "Engine done + verified: Project .burp save/load (app/src/project.rs)",
       "status": "done",
-      "why": "fnd_11; project.rs L25/29/33/383-386/401-447/450-535 + 15 tests; round_trip_preserves_every_field L749-763; Burp byte-format parity unverified."
+      "why": ""
+    },
+    {
+      "title": "Robustness: disk-backed history (N-06), subsystem types (N-07), two code reviews (35 findings fixed)",
+      "status": "done",
+      "why": "2026-11-17/18, branch parity/2026-11-17"
+    },
+    {
+      "title": "D-11 remaining Burp insertion points (entire body, nested, XML tags, parameter names, server-side skip list)",
+      "status": "doing",
+      "why": "spec /root/webprobe-parity/specs/D-11-insertion-points.md; persistent worker implementing; unk_e8d35ba47ccfba29"
+    },
+    {
+      "title": "D-09 remaining Collaborator variants (Zc7h, Zxvv.ZQ, Zsrh)",
+      "status": "todo",
+      "why": "unk_e8d35ba47ccfba29"
+    },
+    {
+      "title": "D-10 stored XSS retrieval pairing beyond safe GETs",
+      "status": "todo",
+      "why": "unk_e8d35ba47ccfba29"
+    },
+    {
+      "title": "R-01 [P0/S] Docs truth pass",
+      "status": "todo",
+      "why": "Review: PROGRESS.md:79,84 stale; TASKS.md §7 missing ticks/rows; PRDs carry 36/46 stale ❌; D-02 claims 35+ KB passive issues, 19 of 37 use Burp names."
+    },
+    {
+      "title": "R-02 [P0/S] Portable build: no developer-machine paths",
+      "status": "todo",
+      "why": "core/src/report.rs:251, src/discovery.rs:111, core/src/crawl.rs:295, src/tools.rs:885, bridge source via CARGO_MANIFEST_DIR."
+    },
+    {
+      "title": "R-03 [P0/L] Montoya bridge broad enough for real BApps",
+      "status": "todo",
+      "why": "sidecar/MontoyaBridge.java:276-287 (only proxy() and logging() answer); core/src/ext_host.rs:332. Measured ~10% API coverage."
+    },
+    {
+      "title": "R-04 [P0/M] Passive checks in the check registry + missing passive pack",
+      "status": "todo",
+      "why": "core/src/scan.rs:704 (one 315-line function), scan.rs:2967 (active only). WebProbe reports 48 of Burp's 183 issue types."
+    },
+    {
+      "title": "R-05 [P1/M] HTTP/2 browser-to-proxy and a working Repeater protocol switch",
+      "status": "todo",
+      "why": "core/src/tls.rs:285 (no ALPN), src/msgpane.rs:1005-1006, src/menus.rs:175-177."
+    },
+    {
+      "title": "R-06 [P1/M] Response streaming and server-sent events",
+      "status": "todo",
+      "why": "core/src/codec.rs:257-335 reads the whole response first. PRD BE-PX-12 was assigned to rejected N-04."
+    },
+    {
+      "title": "R-07 [P1/M] WebSocket robustness and tools",
+      "status": "todo",
+      "why": "core/src/net.rs:679, net.rs:2288, src/repeater_ops.rs:1697."
+    },
+    {
+      "title": "R-08 [P1/S] Tests for untested modules",
+      "status": "todo",
+      "why": "core/src/rules.rs: 628 lines, no tests, runs on every proxied message (net.rs:2516/2621/3034/3049)."
+    },
+    {
+      "title": "R-09 [P1/M] JWT checks",
+      "status": "todo",
+      "why": "Burp resources/Scanner/jwt_secrets.txt; none in scan_checks.rs."
+    },
+    {
+      "title": "R-10 [P1/L] Active check pack (non-timing)",
+      "status": "todo",
+      "why": "scan_checks.rs:1937 (EL name only); ~74 issue types unowned. Depends on Craft unknown about timing-only detection."
+    },
+    {
+      "title": "R-11 [P1/M] Scan configuration library",
+      "status": "todo",
+      "why": "src/settings_dialog.rs:172-173 ('not available yet'); /root/burp-re/in/extract/resources/BuiltInConfigs/. Needs R-04."
+    },
+    {
+      "title": "R-12 [P2/M] Repeater send groups and single-packet attack",
+      "status": "todo",
+      "why": "Not in the code. Needs R-05."
+    },
+    {
+      "title": "R-13 [P2/L] DOM-based / JavaScript analysis",
+      "status": "todo",
+      "why": "48 of Burp's 183 issue types; none reported today. Method depends on Craft unknown about Burp's DOM engine."
+    },
+    {
+      "title": "R-14 [P2/L] BCheck interpreter",
+      "status": "todo",
+      "why": "src/tools.rs:1216 ('BCheck files are not supported')."
+    },
+    {
+      "title": "R-15 [P2/M] Burp CLI flags, config JSON and REST API",
+      "status": "todo",
+      "why": "src/main.rs:949-960 reads only --screenshot; headless has proxy and scan only."
+    },
+    {
+      "title": "R-16 [P2/M] Bambda-style filters and custom columns",
+      "status": "todo",
+      "why": "src/tools.rs:1220 (stated unsupported)."
+    },
+    {
+      "title": "R-17 [P2/S] Intruder payload completeness",
+      "status": "todo",
+      "why": "Review: 18 payload sources, ~20 processors present; these three missing."
+    },
+    {
+      "title": "R-18 [P2/M] Decompose App / Shared and split ui.rs",
+      "status": "todo",
+      "why": "src/ui.rs: 4,606 lines, 10 tests; proxy_history alone 410 lines."
+    },
+    {
+      "title": "R-19 [P2/S] UI parity re-score",
+      "status": "todo",
+      "why": "qa/parity-scores-2026-11-15.md never redone; no record of Logger/Organizer/WS intercept GUI checks."
     }
   ],
   "hypotheses": [],
@@ -817,6 +932,6 @@
       "confidence": "observed"
     }
   ],
-  "handoff": "Wave 39 complete (2026-11-16). Scanner: Juice Shop 75/75 exact vs Burp oracle given Burp's audited URLs; lab 18=18. UI: all 13 tools plus chrome rebuilt to Burp's light layouts with working dynamic behaviour (intercept hold/forward, Repeater history, Intruder attacks + results window, Sequencer live capture, Comparer windows, Decoder chain, site map + live passive crawl, Logger toggle, Collaborator loopback/public). Open: active crawler (coverage parity), live passive audit diff through both proxies, Burp AI tab is a placeholder, some context-menu items visibly disabled (browser open, save item, engagement tools). Time-based injection family intentionally not pursued (safety stop). Evidence /tmp/parity-evidence-w39; doc qa/SOURCE-PARITY-2026-11-15.md wave 39.",
-  "updated": "2026-11-16T20:01:58Z"
+  "handoff": "2026-11-18 (zoom-out). tasks.json: 125 tasks, 101 done, 2 rejected, 22 todo: D-09, D-10, D-11 (D-11 was the duplicate id D-08, renumbered) and the new roadmap epic R-01..R-19 from the zoom-out review (qa/ZOOM-OUT-REVIEW-2026-11-18.md). Honest standing: scanner matches Burp 100% on the lab apps but reports only 48 of 183 issue types; Montoya API ~10% (only proxy() and logging()); Proxy ~75% (no browser-side HTTP/2, no streaming); Intruder ~85%; Repeater ~70%. Order: D-11 (in progress, spec /root/webprobe-parity/specs/D-11-insertion-points.md), D-09, D-10, then P0 R-01 docs truth pass, R-02 portable build, R-03 Montoya bridge, R-04 passive registry + pack, then P1 R-05..R-11, then P2. Five open unknowns: the scanner-family one (unk_e8d35ba47ccfba29), timing-only checks, BApp Montoya usage, Burp's DOM engine, server-side skip-list callers. Wave gate 2026-11-18: 426 core + 133 app tests green, cargo check clean. Working mode: one persistent worker subagent, continued with SendMessage, does implementation; the main session orchestrates, writes specs, reviews, commits. Traps: cargo only through wp-queue; never touch 8080/8081; no time-based detection; Craft 0.6.1 via `mcporter call craft.<tool>` or craft-anything-cli subcommands; the sidecar test needs up to 180 s for the first JVM load.",
+  "updated": "2026-11-18T00:13:00Z"
 }

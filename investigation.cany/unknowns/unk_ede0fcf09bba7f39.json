@@ -1,0 +1,16 @@
+{
+  "id": "unk_ede0fcf09bba7f39",
+  "revision": 1,
+  "question": "Which Montoya API interfaces and methods do the most-installed BApps actually call (at load and at run time), so the bridge can be built in the order that makes real extensions work?",
+  "severity": "high",
+  "domain": "extensions",
+  "status": "open",
+  "probes": [
+    "Static call survey over the BApp jars available locally (javap -c, count Montoya interface calls)",
+    "Load one unmodified BApp in the sidecar and log the first unsupported call"
+  ],
+  "evidence_for": [
+    "sidecar/MontoyaBridge.java:276-287: only proxy() and logging() answer; most BApps call api.extension().setName() first"
+  ],
+  "evidence_against": []
+}

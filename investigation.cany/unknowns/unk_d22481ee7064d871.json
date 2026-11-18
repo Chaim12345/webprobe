@@ -1,0 +1,16 @@
+{
+  "id": "unk_d22481ee7064d871",
+  "revision": 1,
+  "question": "Which of Burp's remaining active issue types (HTTP request smuggling, client-side desync, Perl/Python/Ruby code injection, and the other ~74 unowned types) are detected only by response timing, and which have a non-timing path WebProbe may port?",
+  "severity": "high",
+  "domain": "scanner",
+  "status": "open",
+  "probes": [
+    "Trace each issue id from the issue list (burp.Zc84) to its check class in /root/burp-re/out/readable_strict/root and classify the detection method",
+    "Record one finding per family with the class and method"
+  ],
+  "evidence_for": [
+    "Zoom-out review 2026-11-18: issue types exist in Zc84; check classes not traced"
+  ],
+  "evidence_against": []
+}
