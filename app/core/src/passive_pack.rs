@@ -954,29 +954,47 @@ pub(crate) mod php {
         find(s, b';', n).map(|x| x + 1)
     }
 
+    /// Deepest nesting of arrays/objects accepted: deeper input is not
+    /// taken for serialized data (and cannot exhaust the stack).
+    const MAX_DEPTH: usize = 64;
+
     /// Zb0_.ZK: a sequence of serialized values.
     pub(crate) fn serialized(s: &[u8]) -> bool {
+        serialized_at(s, 0)
+    }
+
+    fn serialized_at(s: &[u8], depth: usize) -> bool {
+        if depth > MAX_DEPTH {
+            return false;
+        }
         let mut n = 0;
         while n < s.len() {
-            let (end, ok): (Option<usize>, fn(&[u8]) -> bool) = match s[n] {
-                b'i' => (semicolon_end(s, n), |t| t.len() > 3 && int_of(&t[2..t.len() - 1]).is_some()),
-                b'N' => (semicolon_end(s, n), |t| t == b"N;"),
-                b'b' => (semicolon_end(s, n), |t| t.len() == 4 && (&t[2..3] == b"1" || &t[2..3] == b"0")),
-                b's' => (string_end(s, n), valid_string),
-                b'a' => (block_end(s, n), array),
-                b'O' => (block_end(s, n), object),
+            let end = match s[n] {
+                b'i' | b'N' | b'b' => semicolon_end(s, n),
+                b's' => string_end(s, n),
+                b'a' | b'O' => block_end(s, n),
                 _ => return false,
             };
-            match end {
-                Some(e) if e > n && ok(&s[n..e]) => n = e,
-                _ => return false,
+            let Some(e) = end.filter(|&e| e > n) else { return false };
+            let t = &s[n..e];
+            let ok = match s[n] {
+                b'i' => t.len() > 3 && int_of(&t[2..t.len() - 1]).is_some(),
+                b'N' => t == b"N;",
+                b'b' => t.len() == 4 && (&t[2..3] == b"1" || &t[2..3] == b"0"),
+                b's' => valid_string(t),
+                b'a' => array(t, depth + 1),
+                _ => object(t, depth + 1),
+            };
+            if !ok {
+                return false;
             }
+            n = e;
         }
         true
     }
 
     /// Zb0_.Zs: `a:N:{…}` with valid contents.
-    fn array(t: &[u8]) -> bool {
+    fn array(t: &[u8], depth: usize) -> bool {
         if t.len() < 5 || !t.starts_with(b"a:") || !no_newline(t) {
             return false;
         }
@@ -989,12 +1007,12 @@ pub(crate) mod php {
             return false;
         }
         let Some(open) = find(t, b'{', 0) else { return false };
-        serialized(&t[open + 1..t.len() - 1])
+        serialized_at(&t[open + 1..t.len() - 1], depth)
     }
 
     /// Zb0_.ZY: `O:N:"Class":M:{…}`, the class name checked like a string,
     /// the rest like an array.
-    fn object(t: &[u8]) -> bool {
+    fn object(t: &[u8], depth: usize) -> bool {
         if t.len() < 11 || !t.starts_with(b"O:") || !no_newline(t) {
             return false;
         }
@@ -1016,7 +1034,7 @@ pub(crate) mod php {
         }
         let mut rest = b"a:".to_vec();
         rest.extend_from_slice(&t[n..]);
-        serialized(&rest)
+        serialized_at(&rest, depth)
     }
 }
 

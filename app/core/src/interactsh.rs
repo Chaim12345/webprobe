@@ -18,7 +18,7 @@
 //!   first block, which both modes share)
 //! * deregister: `POST /deregister` with `{"correlation-id","secret-key"}`
 
-use std::io::{Read, Write};
+use std::io::Write;
 use std::net::TcpStream;
 use std::sync::Arc;
 use std::time::Duration;
@@ -110,6 +110,9 @@ pub fn decrypt_messages(key: &rsa::RsaPrivateKey, aes_key_b64: &str, data: &[Str
 /// Minimal HTTPS/1.1 request to the interactsh server (Connection: close).
 /// `auth` is a private server's token, sent as interactsh's `Authorization`
 /// header (`interactsh-server -auth` / `-token`).
+/// Largest interactsh response read (polls carry interaction batches).
+const MAX_RESPONSE: usize = 16 * 1024 * 1024;
+
 fn https_request(host: &str, port: u16, auth: Option<&str>, method: &str, path: &str, body: Option<&str>) -> Result<(u16, Vec<u8>), String> {
     let mut cfg = (*crate::tls::verified_client_config()).clone();
     cfg.alpn_protocols = vec![b"http/1.1".to_vec()];
@@ -131,13 +134,9 @@ fn https_request(host: &str, port: u16, auth: Option<&str>, method: &str, path: 
         body.len()
     );
     tls.write_all(req.as_bytes()).map_err(|e| format!("write: {e}"))?;
-    let mut resp = Vec::new();
-    match tls.read_to_end(&mut resp) {
-        Ok(_) => {}
-        // Servers that close without close_notify still sent a full response.
-        Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof && !resp.is_empty() => {}
-        Err(e) => return Err(format!("read: {e}")),
-    }
+    // Bounded: a server streaming without end cannot exhaust memory.
+    // (Servers that close without close_notify still sent a full response.)
+    let resp = crate::util::read_capped(&mut tls, MAX_RESPONSE, "the interactsh response").map_err(|e| format!("read: {e}"))?;
     let p = crate::util::parse_http(&resp);
     let status: u16 = p.status.split_whitespace().next().and_then(|s| s.parse().ok()).unwrap_or(0);
     let mut payload = resp[p.head_len.min(resp.len())..].to_vec();
@@ -264,6 +263,7 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Read;
 
     #[test]
     fn server_settings_parse_host_and_port() {

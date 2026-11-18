@@ -77,17 +77,20 @@ fn on_path(names: &[&str]) -> Option<String> {
     std::env::split_paths(&path).chain(extra).find_map(|d| names.iter().map(|n| d.join(n)).find(|p| p.is_file())).map(|p| p.to_string_lossy().into_owned())
 }
 
+/// Most bytes of an engine's stdout (a rendered DOM) read.
+const MAX_STDOUT: usize = 64 * 1024 * 1024;
+
 /// Run an engine command with a deadline; stdout on success.
 fn run(mut cmd: Command, deadline: Duration) -> Result<String, String> {
-    use std::io::Read;
     crate::util::own_process_group(&mut cmd);
     let mut child = cmd.stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::null()).spawn().map_err(|e| e.to_string())?;
     let mut out = child.stdout.take().ok_or("no stdout")?;
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        let mut s = String::new();
-        let _ = out.read_to_string(&mut s);
-        let _ = tx.send(s);
+        // Bounded: a page that makes the engine print without end cannot
+        // exhaust memory; over the cap the run fails (and is killed below).
+        let r = crate::util::read_capped(&mut out, MAX_STDOUT, "the browser engine's output").map(|b| String::from_utf8_lossy(&b).into_owned());
+        let _ = tx.send(r);
     });
     let t0 = std::time::Instant::now();
     let pgid = child.id();
@@ -99,9 +102,19 @@ fn run(mut cmd: Command, deadline: Duration) -> Result<String, String> {
             // stdout open: stop the whole group, then take what was read,
             // without waiting forever on a pipe a stray helper still holds.
             crate::util::kill_process_tree(pgid, None, Duration::from_millis(500));
-            let text = rx.recv_timeout(Duration::from_secs(2)).unwrap_or_default();
+            let text = match rx.recv_timeout(Duration::from_secs(2)) {
+                Ok(Err(e)) => return Err(e.to_string()),
+                Ok(Ok(t)) => t,
+                Err(_) => String::new(),
+            };
             LAST_RUN.with(|c| c.set(RunStats { elapsed: t0.elapsed(), peak_rss_kb: peak }));
             return if status.success() || !text.trim().is_empty() { Ok(text) } else { Err(format!("exited with {status}")) };
+        }
+        // Output over the cap: stop the engine now.
+        if let Ok(Err(e)) = rx.try_recv() {
+            crate::util::kill_process_tree(pgid, None, Duration::from_millis(500));
+            let _ = child.wait();
+            return Err(e.to_string());
         }
         if t0.elapsed() > deadline {
             crate::util::kill_process_tree(child.id(), None, Duration::from_millis(500));

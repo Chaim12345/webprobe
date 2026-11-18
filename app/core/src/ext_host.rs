@@ -461,7 +461,7 @@ impl ProxyHooks for ExampleHeaderExtension {
 
 // ---------- Path B: sidecar JVM for real Montoya .jar extensions ----------
 
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufReader, Write};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
@@ -542,6 +542,12 @@ fn push_line(errors: &Mutex<std::collections::VecDeque<String>>, line: String) {
     e.push_back(line);
 }
 
+/// Longest stderr line kept from an extension's JVM.
+const MAX_STDERR_LINE: usize = 64 * 1024;
+/// Longest protocol line from the bridge: a message carries base64 bodies
+/// up to `codec::MAX_BODY`.
+const MAX_BRIDGE_LINE: usize = crate::codec::MAX_BODY / 3 * 4 + 1024 * 1024;
+
 impl JavaSidecar {
     /// Launch without a host link (sendRequest fails, events go only to
     /// the Errors pane).
@@ -593,7 +599,9 @@ impl JavaSidecar {
         if let Some(stderr) = child.stderr.take() {
             let errors = Arc::clone(&errors);
             std::thread::spawn(move || {
-                for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+                // Bounded lines: an extension printing without newlines
+                // cannot grow memory.
+                for line in crate::util::capped_lines(BufReader::new(stderr), MAX_STDERR_LINE) {
                     push_line(&errors, line);
                 }
             });
@@ -615,7 +623,7 @@ impl JavaSidecar {
         {
             let (errors, back, ui, data, label) = (Arc::clone(&errors), to_bridge.clone(), Arc::clone(&ui), Arc::clone(&data), file_label.clone());
             std::thread::spawn(move || {
-                for line in stdout.lines().map_while(Result::ok) {
+                for line in crate::util::capped_lines(stdout, MAX_BRIDGE_LINE) {
                     let msg: serde_json::Value = serde_json::from_str(&line).unwrap_or_default();
                     match msg.get("type").and_then(|t| t.as_str()) {
                         Some("send") => serve_send(&msg, link.clone(), back.clone()),

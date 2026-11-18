@@ -86,12 +86,21 @@ pub fn parse_http_date(text: &str) -> Option<u64> {
     let mut time = None;
     for tok in text.split(|c: char| c == ' ' || c == ',' || c == '-').filter(|t| !t.is_empty()) {
         if tok.contains(':') {
+            // Clock fields in range only: no overflow from a hostile header.
             let mut it = tok.split(':').map(|n| n.parse::<u64>().ok());
-            time = Some((it.next()??, it.next()??, it.next().flatten().unwrap_or(0)));
+            let (hh, mm, ss) = (it.next()??, it.next()??, it.next().flatten().unwrap_or(0));
+            if hh > 23 || mm > 59 || ss > 60 {
+                return None;
+            }
+            time = Some((hh, mm, ss));
         } else if let Ok(n) = tok.parse::<i64>() {
             if day.is_none() && (1..=31).contains(&n) && tok.len() <= 2 {
                 day = Some(n);
             } else if year.is_none() {
+                // Years outside 0..=9999 are not dates (and would overflow).
+                if !(0..=9999).contains(&n) {
+                    return None;
+                }
                 year = Some(match n {
                     0..=69 => n + 2000,
                     70..=99 => n + 1900,

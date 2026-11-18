@@ -139,8 +139,8 @@ impl ProcessExtension {
         std::thread::Builder::new()
             .name("ext-stderr".into())
             .spawn(move || {
-                for line in BufReader::new(stderr).lines() {
-                    let Ok(line) = line else { break };
+                // Bounded like stdout (MAX_LINE): no unbounded partial line.
+                for line in crate::util::capped_lines(BufReader::new(stderr), MAX_LINE) {
                     push_error(&err2, format!("stderr: {line}"));
                 }
             })

@@ -1269,15 +1269,18 @@ pub(crate) fn js_redirect_at(body: &str, pos: usize) -> bool {
 /// The redirect target in `resp` that contains `needle`, as (target, offset
 /// of the needle). Script sinks yield the body from the reflection onwards.
 pub(crate) fn redirect_target_with(resp: &[u8], needle: &str) -> Option<(String, usize)> {
-    let nl = needle.to_lowercase();
+    // ASCII case folding keeps every byte where it was, so an offset found
+    // in the folded copy is an offset (and a char boundary) in the original;
+    // Unicode lower-casing changes lengths ("İ" -> "i̇") and broke that.
+    let nl = needle.to_ascii_lowercase();
     for t in redirect_targets(resp) {
-        if let Some(i) = t.to_lowercase().find(&nl) {
+        if let Some(i) = t.to_ascii_lowercase().find(&nl) {
             return Some((t, i));
         }
     }
     let p = util::parse_http(resp);
     let body = String::from_utf8_lossy(&resp[p.head_len.min(resp.len())..]).into_owned();
-    let low = body.to_lowercase();
+    let low = body.to_ascii_lowercase();
     let mut from = 0;
     while let Some(i) = low.get(from..).and_then(|s| s.find(&nl)).map(|x| x + from) {
         if js_redirect_at(&body, i) {

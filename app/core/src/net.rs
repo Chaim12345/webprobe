@@ -1803,14 +1803,9 @@ fn try_h2c_upgrade<S: Read + Write + ResponseRead>(stream: &mut S, routed: &[u8]
         }
         crate::codec::BodyKind::UntilEof => {
             stream.set_open_ended_timeout().map_err(|e| format!("h2c open-ended timeout: {e}"))?;
-            let mut chunk = [0u8; 16384];
-            loop {
-                match stream.read(&mut chunk) {
-                    Ok(0) => break,
-                    Ok(k) => msg.extend_from_slice(&chunk[..k]),
-                    Err(_) => break,
-                }
-            }
+            // Bounded like every response body (codec::MAX_BODY).
+            let mut rest = util::read_capped(stream, crate::codec::MAX_BODY, "the response body").map_err(|e| format!("h2c fallback: {e}"))?;
+            msg.append(&mut rest);
         }
     }
     Ok(Some((msg, false)))
@@ -2348,10 +2343,14 @@ pub fn derive_history_fields(e: &HistEntry) -> (bool, String, String, String) {
         let ct = util::get_header(&rp.headers, "Content-Type").unwrap_or_default().to_ascii_lowercase();
         if ct.contains("html") {
             let body = String::from_utf8_lossy(resp.get(rp.head_len..).unwrap_or(&[]));
-            if let (Some(a), Some(b)) = (body.find("<title"), body.find("</title>")) {
-                let inner = &body[a..b];
-                if let Some(gt) = inner.find('>') {
-                    title = inner[gt + 1..].trim().to_string();
+            // The closing tag is searched after the opening one, so the
+            // range is never reversed ("</title>x<title>" has no title).
+            if let Some(a) = body.find("<title") {
+                if let Some(b) = body[a..].find("</title>").map(|b| a + b) {
+                    let inner = &body[a..b];
+                    if let Some(gt) = inner.find('>') {
+                        title = inner[gt + 1..].trim().to_string();
+                    }
                 }
             }
         }

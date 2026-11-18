@@ -595,3 +595,81 @@ pub fn update_content_length(raw: &[u8]) -> Vec<u8> {
     }
     crate::net::replace_or_add_header(raw, "Content-Length", &body_len.to_string())
 }
+
+/// Read until EOF, at most `cap` bytes: more is an error naming `what`
+/// ("<what> exceeded N bytes"), so a peer, child process or file that
+/// keeps sending cannot grow memory without bound. Bytes read before an
+/// error other than the cap come back as Ok when there are any and the
+/// error is an unexpected EOF (servers closing without TLS close_notify).
+pub fn read_capped<R: std::io::Read + ?Sized>(r: &mut R, cap: usize, what: &str) -> std::io::Result<Vec<u8>> {
+    let mut out = Vec::new();
+    let mut chunk = [0u8; 16384];
+    loop {
+        match r.read(&mut chunk) {
+            Ok(0) => return Ok(out),
+            Ok(n) => {
+                if out.len() + n > cap {
+                    return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("{what} exceeded {cap} bytes")));
+                }
+                out.extend_from_slice(&chunk[..n]);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof && !out.is_empty() => return Ok(out),
+            Err(e) => return Err(e),
+        }
+    }
+}
+
+/// Lines from a reader (LF-terminated, CR dropped), each cut at `cap`
+/// bytes: the rest of an over-long line is skipped up to its newline, so a
+/// process writing without newlines cannot grow memory. Ends at EOF or on
+/// an error.
+pub fn capped_lines<R: std::io::BufRead>(r: R, cap: usize) -> CappedLines<R> {
+    CappedLines { r, cap, done: false }
+}
+
+pub struct CappedLines<R> {
+    r: R,
+    cap: usize,
+    done: bool,
+}
+
+impl<R: std::io::BufRead> Iterator for CappedLines<R> {
+    type Item = String;
+
+    fn next(&mut self) -> Option<String> {
+        if self.done {
+            return None;
+        }
+        let mut line: Vec<u8> = Vec::new();
+        loop {
+            let (used, end) = match self.r.fill_buf() {
+                Ok([]) => {
+                    self.done = true;
+                    return (!line.is_empty()).then(|| String::from_utf8_lossy(&line).into_owned());
+                }
+                Ok(buf) => {
+                    let (take, end) = match buf.iter().position(|&b| b == b'\n') {
+                        Some(i) => (i, Some(i + 1)),
+                        None => (buf.len(), None),
+                    };
+                    let room = self.cap.saturating_sub(line.len());
+                    line.extend_from_slice(&buf[..take.min(room)]);
+                    (end.unwrap_or(buf.len()), end.is_some())
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(_) => {
+                    self.done = true;
+                    return (!line.is_empty()).then(|| String::from_utf8_lossy(&line).into_owned());
+                }
+            };
+            self.r.consume(used);
+            if end {
+                if line.last() == Some(&b'\r') {
+                    line.pop();
+                }
+                return Some(String::from_utf8_lossy(&line).into_owned());
+            }
+        }
+    }
+}

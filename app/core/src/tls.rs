@@ -32,7 +32,8 @@ fn der_of(input: &[u8]) -> Vec<u8> {
     let text = String::from_utf8_lossy(input);
     if let (Some(a), Some(b)) = (text.find("-----BEGIN "), text.find("-----END ")) {
         let body_start = text[a..].find('\n').map(|i| a + i + 1).unwrap_or(a);
-        let b64: String = text[body_start..b].chars().filter(|c| !c.is_whitespace()).collect();
+        // END before the line after BEGIN: not a PEM block (no reversed range).
+        let b64: String = text.get(body_start..b).unwrap_or("").chars().filter(|c| !c.is_whitespace()).collect();
         if let Ok(d) = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, b64) {
             return d;
         }
