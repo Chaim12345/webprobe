@@ -1014,9 +1014,19 @@ mod tests {
 
     /// Smoke check against the local Burp install (skipped when none):
     /// all 29 built-ins parse from the jar, and from an extracted tree.
+    /// WEBPROBE_BURP_JAR / WEBPROBE_BURP_BUILTINS point at a jar or an
+    /// extracted BuiltInConfigs tree elsewhere (CI, a downloaded
+    /// community jar).
     #[test]
     fn builtins_load_from_the_local_burp_install() {
-        for src in [BurpResources::Jar("/opt/BurpSuite/burpsuite.jar".into()), BurpResources::Dir("/root/burp-re/in/extract/resources/BuiltInConfigs".into())] {
+        let mut srcs = vec![BurpResources::Jar("/opt/BurpSuite/burpsuite.jar".into()), BurpResources::Dir("/root/burp-re/in/extract/resources/BuiltInConfigs".into())];
+        if let Some(j) = std::env::var_os("WEBPROBE_BURP_JAR") {
+            srcs.push(BurpResources::Jar(j.into()));
+        }
+        if let Some(d) = std::env::var_os("WEBPROBE_BURP_BUILTINS") {
+            srcs.push(BurpResources::Dir(d.into()));
+        }
+        for src in srcs {
             let present = match &src {
                 BurpResources::Jar(p) | BurpResources::Dir(p) => p.exists(),
             };
