@@ -1,5 +1,5 @@
 {
-  "revision": 154,
+  "revision": 155,
   "brief": {
     "question": "Rebuild WebProbe, a clone of Burp Suite Pro (reference build 52685, v2026.7.3), to feature parity with the task backlog in tasks.json, and produce a readable, evidence-backed name map for the obfuscated Burp jar.",
     "purpose": "Interoperable reimplementation plus per-build deobfuscation; behaviour claims must come from the shipped jar or the running reference app, never guessed.",
@@ -72,16 +72,6 @@
       "why": "core/src/stored.rs; Zi5k filters not ported; no stored pair seen on a real app yet"
     },
     {
-      "title": "D-12 Collaborator leftovers: SNI variant and Zbxl scheme payload variants",
-      "status": "todo",
-      "why": "not ported in D-09"
-    },
-    {
-      "title": "R-01 [P0/S] Docs truth pass",
-      "status": "doing",
-      "why": "headers, banners, generated status table done (09ed7a9); remaining: per-row PRD status re-check"
-    },
-    {
       "title": "R-02 [P0/S] Portable build: no developer-machine paths",
       "status": "done",
       "why": "e96f063, core/src/paths.rs; not run in a clean container"
@@ -97,9 +87,9 @@
       "why": "e96f063 + 94026e4; gaps: 'multiple locations' merge, per-cookie identifiers for HttpOnly/Secure"
     },
     {
-      "title": "R-05 [P1/M] HTTP/2 browser-to-proxy and a working Repeater protocol switch",
-      "status": "doing",
-      "why": "worker task 10 (R-06 first, then R-05)"
+      "title": "R-08 [P1/S] Tests for untested modules",
+      "status": "done",
+      "why": "a8ed5cb; eight product bugs fixed"
     },
     {
       "title": "R-06 [P1/M] Response streaming and server-sent events",
@@ -107,14 +97,14 @@
       "why": "worker task 10 (R-06 first, then R-05)"
     },
     {
+      "title": "R-05 [P1/M] HTTP/2 browser-to-proxy and a working Repeater protocol switch",
+      "status": "doing",
+      "why": "worker task 10 (R-06 first, then R-05)"
+    },
+    {
       "title": "R-07 [P1/M] WebSocket robustness and tools",
       "status": "todo",
       "why": "core/src/net.rs:679, net.rs:2288, src/repeater_ops.rs:1697."
-    },
-    {
-      "title": "R-08 [P1/S] Tests for untested modules",
-      "status": "done",
-      "why": "a8ed5cb; eight product bugs fixed"
     },
     {
       "title": "R-09 [P1/M] JWT checks",
@@ -137,14 +127,9 @@
       "why": "Not in the code. Needs R-05."
     },
     {
-      "title": "R-13 [P2/L] DOM-based / JavaScript analysis",
+      "title": "R-17 [P2/S] Intruder payload completeness",
       "status": "todo",
-      "why": "48 of Burp's 183 issue types; none reported today. Method depends on Craft unknown about Burp's DOM engine."
-    },
-    {
-      "title": "R-14 [P2/L] BCheck interpreter",
-      "status": "todo",
-      "why": "src/tools.rs:1216 ('BCheck files are not supported')."
+      "why": "Review: 18 payload sources, ~20 processors present; these three missing."
     },
     {
       "title": "R-15 [P2/M] Burp CLI flags, config JSON and REST API",
@@ -152,14 +137,9 @@
       "why": "src/main.rs:949-960 reads only --screenshot; headless has proxy and scan only."
     },
     {
-      "title": "R-16 [P2/M] Bambda-style filters and custom columns",
+      "title": "R-13 [P2/L] DOM-based / JavaScript analysis",
       "status": "todo",
-      "why": "src/tools.rs:1220 (stated unsupported)."
-    },
-    {
-      "title": "R-17 [P2/S] Intruder payload completeness",
-      "status": "todo",
-      "why": "Review: 18 payload sources, ~20 processors present; these three missing."
+      "why": "48 of Burp's 183 issue types; none reported today. Method depends on Craft unknown about Burp's DOM engine."
     },
     {
       "title": "R-18 [P2/M] Decompose App / Shared and split ui.rs",
@@ -172,14 +152,34 @@
       "why": "qa/parity-scores-2026-11-15.md never redone; no record of Logger/Organizer/WS intercept GUI checks."
     },
     {
-      "title": "Re-verify URL-level lab parity (Juice Shop 75/75, lab 21/21) for the code after D-09..D-11",
-      "status": "blocked",
-      "why": "stored Burp lists, paths.txt and lab.py were lost with /tmp; needs a fresh Burp baseline, which the no-Burp-scans rule excludes until the user decides (qa/parity-2026-11-18/SUMMARY.md)"
+      "title": "D-12 Collaborator leftovers: SNI variant and Zbxl scheme payload variants",
+      "status": "todo",
+      "why": "not ported in D-09"
+    },
+    {
+      "title": "R-01 [P0/S] Docs truth pass",
+      "status": "doing",
+      "why": "headers, banners, generated status table done (09ed7a9); remaining: per-row PRD status re-check"
+    },
+    {
+      "title": "R-14 [P2/L] BCheck interpreter",
+      "status": "todo",
+      "why": "deferred 2026-11-18 (user: core features before extension work that can wait); src/tools.rs:1216 ('BCheck files are not supported')."
+    },
+    {
+      "title": "R-16 [P2/M] Bambda-style filters and custom columns",
+      "status": "todo",
+      "why": "deferred 2026-11-18 (user: core features before extension work that can wait); src/tools.rs:1220 (stated unsupported)."
     },
     {
       "title": "R-20 [P2/M] Montoya leftovers and a wider BApp check",
       "status": "todo",
-      "why": "docs/MONTOYA-COVERAGE.md 'Missing' column; first three items in worker task 10"
+      "why": "deferred 2026-11-18 (user: core features before extension work that can wait); docs/MONTOYA-COVERAGE.md 'Missing' column; first three items in worker task 10"
+    },
+    {
+      "title": "Re-verify URL-level lab parity (Juice Shop 75/75, lab 21/21) for the code after D-09..D-11",
+      "status": "blocked",
+      "why": "stored Burp lists, paths.txt and lab.py were lost with /tmp; needs a fresh Burp baseline, which the no-Burp-scans rule excludes until the user decides (qa/parity-2026-11-18/SUMMARY.md)"
     }
   ],
   "hypotheses": [],
@@ -948,5 +948,5 @@
     }
   ],
   "handoff": "2026-11-18 (late). tasks.json: 126 tasks, 106 done, 2 rejected, 18 todo. Done today from the source: D-11 insertion points (core/src/insertion.rs), D-09 Collaborator variants, D-10 stored input pairing (core/src/stored.rs), R-02 portable build (core/src/paths.rs), R-04 passive registry + pack (passive_checks.rs, passive_pack.rs, csp.rs, retirejs.rs, passive_state.rs). Suite 485 core + 133 app green at 94026e4, branch parity/2026-11-17 pushed. In progress with the persistent worker (task 7): per-cookie identifiers, R-08 tests for untested modules, R-03 Montoya stages 1-2 (target: JWT Monitor loads and works). Then: R-03 stages 3-5, R-05 browser-side HTTP/2, R-06 streaming, R-07 WebSockets, R-09 JWT checks, R-10 active pack, R-11 scan config library, P2 items, D-12, R-01 PRD row re-check. BLOCKED, needs the user: URL-level parity (Juice 75/75, lab 21/21) cannot be re-verified because the stored Burp lists, paths.txt and lab.py were lost with /tmp; a fresh Burp baseline is excluded by the no-Burp-scans rule (qa/parity-2026-11-18/SUMMARY.md). Working mode: one persistent worker continued with SendMessage; the main session specs, reviews the report against the wp-queue log, commits, updates tasks.json / TASKS.md §8 / ledger / Craft. Traps: cargo only through wp-queue; never 8080/8081; no time-based detection; do not copy Burp resources into the repo (resolved at run time via paths.rs); keep evidence out of /tmp.",
-  "updated": "2026-11-18T06:37:45Z"
+  "updated": "2026-11-18T06:49:28Z"
 }

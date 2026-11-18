@@ -1376,7 +1376,7 @@
       "acceptance": "BCheck files load, validate and run (passive and active, per request/host/insertion point); Burp's example BChecks produce the same issues on a local fixture.",
       "effort": "L",
       "status": "todo",
-      "evidence": "src/tools.rs:1216 ('BCheck files are not supported')."
+      "evidence": "src/tools.rs:1216 ('BCheck files are not supported'). Deferred 2026-11-18 by the user's instruction: core features come before extension work that can wait."
     },
     {
       "id": "R-15",
@@ -1396,7 +1396,7 @@
       "acceptance": "History/Logger/WebSocket filters and custom columns by script, as Burp's Bambda mode (scripting language decided in the task).",
       "effort": "M",
       "status": "todo",
-      "evidence": "src/tools.rs:1220 (stated unsupported)."
+      "evidence": "src/tools.rs:1220 (stated unsupported). Deferred 2026-11-18 by the user's instruction: core features come before extension work that can wait."
     },
     {
       "id": "R-17",
@@ -1436,7 +1436,8 @@
       "acceptance": "Extension payload generation off the UI thread; WebSocket 'to be sent' handlers run after the user's intercept edit; WebSocket send/close and websockets().createWebSocket; scanner startAudit / startCrawl / generateReport / registerAuditIssueHandler; http response analyzers; organizer status; hotkey handlers; burpSuite export/import of options once WebProbe speaks Burp's settings JSON (R-15). Ten more popular BApps (not JWT tools) loaded unmodified, each result recorded in docs/MONTOYA-COVERAGE.md.",
       "effort": "M",
       "status": "todo",
-      "evidence": "docs/MONTOYA-COVERAGE.md 'Missing' column (a2f0eec). First three items are with the worker (task 10)."
+      "evidence": "docs/MONTOYA-COVERAGE.md 'Missing' column (a2f0eec). First three items are with the worker (task 10). Deferred 2026-11-18 by the user's instruction: core features come before extension work that can wait."
     }
-  ]
+  ],
+  "order_note": "2026-11-18 (user): core features before deferrable extension work. Order after R-05/R-06: R-07, R-09, R-10, R-11, R-12, R-17, R-15, R-13, R-18, R-19, D-12, R-01 remainder; then the deferred extension items R-20, R-14, R-16."
 }
