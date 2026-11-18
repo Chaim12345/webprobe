@@ -3,14 +3,14 @@
   "generated": "2026-11-18",
   "source": "TASKS.md",
   "summary": {
-    "total": 137,
+    "total": 127,
     "p0": 68,
-    "p1": 43,
-    "p2": 26,
+    "p1": 39,
+    "p2": 20,
     "by_status": {
       "done": 114,
       "rejected": 2,
-      "todo": 21
+      "todo": 11
     }
   },
   "tasks": [
@@ -1231,8 +1231,8 @@
       "title": "Collaborator leftovers: SNI variant and scheme payload variants",
       "acceptance": "Collaborator-everywhere SNI probe (needs a custom SNI in the TLS sender) and the scheme-dependent external-interaction payload variants of burp.Zbxl (http://, Http://, own scheme; trace Zpgu / ZY first), with tests.",
       "effort": "S",
-      "status": "todo",
-      "evidence": "Not ported in D-09 (e7b5eff): net sender cannot set a custom SNI; Zpgu/ZY not traced. External interaction still sends only the bare domain. Progress 2026-11-18: branch wp-m6 (pushed): 97b41bd D-12a Collaborator-everywhere SNI probe with a custom-SNI TLS sender; 9d7de42 WIP D-12b scheme payload variants (partial, compiles, untested)."
+      "status": "done",
+      "evidence": "Done on m6/d12-r12 (PR pending): 97b41bd custom-SNI TLS sender (net::sni_override, collaborator-everywhere SNI probe) with loopback rustls tests; 9d7de42 + 6d48fb6 url_payloads.rs tracing burp.Zpgu/Zbxl (bare domain, own scheme, http://, Http://, https://) wired into scan_checks::ext_variants, one Collaborator slot per variant; url_payloads unit tests + scan slot tests green (654/654 core)."
     },
     {
       "id": "R-01",
@@ -1352,7 +1352,7 @@
       "acceptance": "Burp's 29 BuiltInConfigs load and can be selected/combined for a scan; 'Audit checks - passive' runs only passive checks; custom configs can be saved and imported from Burp JSON.",
       "effort": "M",
       "status": "todo",
-      "evidence": "src/settings_dialog.rs:172-173 ('not available yet'); /root/burp-re/in/extract/resources/BuiltInConfigs/. Needs R-04. Progress 2026-11-18 (aa490e8, 09e87f8): library implemented (core/src/scan_library.rs, src/scan_library_ui.rs): 29 built-ins load from the user's Burp jar, per-key overlay in load order as Burp, issue selection enforced at dispatch and report, crawl time/request limits, 'not applied by WebProbe' list, Settings > Configuration library, ordered 'Select from library'; live passive auditing keeps its own issue selection. Compiled, 18 smoke tests; full suite and UI NOT yet run. Known gap: one global scan config (per-scan config with AR-02)."
+      "evidence": "src/settings_dialog.rs:172-173 ('not available yet'); /root/burp-re/in/extract/resources/BuiltInConfigs/. Needs R-04."
     },
     {
       "id": "R-12",
@@ -1361,8 +1361,8 @@
       "title": "Repeater send groups and single-packet attack",
       "acceptance": "Tab groups send in sequence (single connection / separate) and in parallel (single-packet over h2, last-byte sync over h1); 20 grouped requests reach a local lab within 5 ms.",
       "effort": "M",
-      "status": "todo",
-      "evidence": "Not in the code. Needs R-05. Progress 2026-11-18: WIP on branch wp-m6 (9d7de42, core/src/send_group.rs partial, compiles, untested). Design note: use an explicit send context, not thread-locals (AR-04 / review F6)."
+      "status": "done",
+      "evidence": "Done on m6/d12-r12 (PR pending): group model + project persistence (a3188de: RepGroup, ProjectRepeaterGroup), sequence single/separate connection (a3188de), HTTP/1 last-byte barrier sync + HTTP/2 single-packet coalesced write with arrival numbering (e9d93f3). Deterministic labs, not timing-only: 20-sender H1 lab with server-mirrored barrier (6d48fb6), h2 one-connection barrier-gated lab (30b7e3d). Desktop UI: tab groups menu, create/edit dialog, colour chips, background send worker, project save/restore (fe1d078), screenshot-verified. 654/654 core + 136/136 desktop."
     },
     {
       "id": "R-13",
@@ -1422,7 +1422,7 @@
       "acceptance": "App (197 fields) and Shared (62) are grouped into owned subsystem types like N-07 did for history/scan/oob/repeater; ui.rs (4,606 lines) is split by tool; no behaviour change, suite green.",
       "effort": "M",
       "status": "todo",
-      "evidence": "src/ui.rs: 4,606 lines, 10 tests; proxy_history alone 410 lines. Order 2026-11-18 (architecture review): do after AR-02 and AR-03 so fewer fields move; the UI split of App/ui.rs is the second half."
+      "evidence": "src/ui.rs: 4,606 lines, 10 tests; proxy_history alone 410 lines."
     },
     {
       "id": "R-19",
@@ -1443,106 +1443,6 @@
       "effort": "M",
       "status": "todo",
       "evidence": "docs/MONTOYA-COVERAGE.md 'Missing' column (a2f0eec). First three items are with the worker (task 10). Deferred 2026-11-18 by the user's instruction: core features come before extension work that can wait."
-    },
-    {
-      "id": "AR-01",
-      "epic": "AR — Architecture (review 2026-11-18, qa/ARCH-REVIEW-2026-11-18.md)",
-      "priority": "P1",
-      "title": "Quick architecture fixes: lints, compiled rule sets, intercept liveness, test CA isolation",
-      "acceptance": "F12: warn-level lints and clippy in scripts/ci.sh, guard-returning lock API everywhere (no std poisonable locks), dead code removed (net::start_attack). F3: scope / match-and-replace / intercept / WebSocket / grep rules compiled once when edited, history filtering outside the history lock. F9 (first half): a held HTTP intercept is released when its client disconnects. F13: tests never read or write the real ~/.config/webprobe/ca.json (WEBPROBE_CA_DIR in tests).",
-      "effort": "S",
-      "status": "todo",
-      "evidence": "qa/ARCH-REVIEW-2026-11-18.md (read-only review by a Claude subagent, 2026-11-18); sequence in its 'Proposed sequence' section."
-    },
-    {
-      "id": "AR-02",
-      "epic": "AR — Architecture (review 2026-11-18, qa/ARCH-REVIEW-2026-11-18.md)",
-      "priority": "P1",
-      "title": "Engine duties out of App into core",
-      "acceptance": "F1: Collaborator pool and matching, project capture/restore mapping, Logger feed and extension tool sends live in webprobe-core; headless scans get Collaborator ids and headless project saves are complete. Unlocks R-15.",
-      "effort": "M",
-      "status": "todo",
-      "evidence": "qa/ARCH-REVIEW-2026-11-18.md (read-only review by a Claude subagent, 2026-11-18); sequence in its 'Proposed sequence' section."
-    },
-    {
-      "id": "AR-03",
-      "epic": "AR — Architecture (review 2026-11-18, qa/ARCH-REVIEW-2026-11-18.md)",
-      "priority": "P1",
-      "title": "Settings snapshot, then the engine split of Shared",
-      "acceptance": "F5: the ~25 setting fields of Shared become one versioned settings snapshot value; Shared is split into owned subsystem types (pattern of ProxyHistory / ScanRun); the UI no longer reaches 60+ Shared fields directly. F7 typed errors (thiserror) at the project and send boundaries touched.",
-      "effort": "M",
-      "status": "todo",
-      "evidence": "qa/ARCH-REVIEW-2026-11-18.md (read-only review by a Claude subagent, 2026-11-18); sequence in its 'Proposed sequence' section."
-    },
-    {
-      "id": "AR-04",
-      "epic": "AR — Architecture (review 2026-11-18, qa/ARCH-REVIEW-2026-11-18.md)",
-      "priority": "P1",
-      "title": "Explicit send context instead of thread-locals",
-      "acceptance": "F6: the five thread-locals carrying tool name, HTTP/2 choice, listener port and so on are replaced by an explicit SendCtx passed to the sender. Needed by R-12 parallel sends and before any worker pool.",
-      "effort": "M",
-      "status": "todo",
-      "evidence": "qa/ARCH-REVIEW-2026-11-18.md (read-only review by a Claude subagent, 2026-11-18); sequence in its 'Proposed sequence' section."
-    },
-    {
-      "id": "AR-05",
-      "epic": "AR — Architecture (review 2026-11-18, qa/ARCH-REVIEW-2026-11-18.md)",
-      "priority": "P2",
-      "title": "Scanner worker pool and passive-check queue",
-      "acceptance": "F8: bounded worker pool for active checks (respecting resource pools, stop/pause, progress), passive checks moved off the proxy connection thread onto a bounded queue. Needed by R-13.",
-      "effort": "L",
-      "status": "todo",
-      "evidence": "qa/ARCH-REVIEW-2026-11-18.md (read-only review by a Claude subagent, 2026-11-18); sequence in its 'Proposed sequence' section."
-    },
-    {
-      "id": "AR-06",
-      "epic": "AR — Architecture (review 2026-11-18, qa/ARCH-REVIEW-2026-11-18.md)",
-      "priority": "P2",
-      "title": "Lifecycle: cancellation, named joinable threads, no sleep-polling",
-      "acceptance": "F4: a cancel token and a registry of named, joinable threads; app exit, project close and scan stop end every worker; accept/task-runner/relay loops block on events instead of polling every 2-200 ms.",
-      "effort": "M",
-      "status": "todo",
-      "evidence": "qa/ARCH-REVIEW-2026-11-18.md (read-only review by a Claude subagent, 2026-11-18); sequence in its 'Proposed sequence' section."
-    },
-    {
-      "id": "AR-07",
-      "epic": "AR — Architecture (review 2026-11-18, qa/ARCH-REVIEW-2026-11-18.md)",
-      "priority": "P2",
-      "title": "Event channel and append-only history to the UI",
-      "acceptance": "F11: one engine-to-UI event channel instead of five polled/diffed channels; append-only history view before histories grow past ~50k rows.",
-      "effort": "M",
-      "status": "todo",
-      "evidence": "qa/ARCH-REVIEW-2026-11-18.md (read-only review by a Claude subagent, 2026-11-18); sequence in its 'Proposed sequence' section."
-    },
-    {
-      "id": "AR-08",
-      "epic": "AR — Architecture (review 2026-11-18, qa/ARCH-REVIEW-2026-11-18.md)",
-      "priority": "P2",
-      "title": "Java sidecar: route replies by id, no lock across the round trip",
-      "acceptance": "F2: exchange_with no longer holds io_lock for a whole round trip; one extension's active check cannot serialise proxied messages. Before R-20.",
-      "effort": "M",
-      "status": "todo",
-      "evidence": "qa/ARCH-REVIEW-2026-11-18.md (read-only review by a Claude subagent, 2026-11-18); sequence in its 'Proposed sequence' section."
-    },
-    {
-      "id": "AR-09",
-      "epic": "AR — Architecture (review 2026-11-18, qa/ARCH-REVIEW-2026-11-18.md)",
-      "priority": "P2",
-      "title": "Bytes, not lossy text, in tool state",
-      "acceptance": "F10: Repeater, Intruder and intercept keep requests as bytes; editing a binary body does not corrupt it.",
-      "effort": "M",
-      "status": "todo",
-      "evidence": "qa/ARCH-REVIEW-2026-11-18.md (read-only review by a Claude subagent, 2026-11-18); sequence in its 'Proposed sequence' section."
-    },
-    {
-      "id": "AR-10",
-      "epic": "AR — Architecture (review 2026-11-18, qa/ARCH-REVIEW-2026-11-18.md)",
-      "priority": "P2",
-      "title": "One extensibility pattern and a project format plan",
-      "acceptance": "F14: check registries, insertion points and extension seams follow one registration pattern (alongside R-13/R-14). F15: project persistence plan for when one JSON document stops scaling (trigger documented).",
-      "effort": "S",
-      "status": "todo",
-      "evidence": "qa/ARCH-REVIEW-2026-11-18.md (read-only review by a Claude subagent, 2026-11-18); sequence in its 'Proposed sequence' section."
     }
   ],
   "order_note": "2026-11-18 (user): core features before deferrable extension work. Order after R-05/R-06: R-07, R-09, R-10, R-11, R-12, R-17, R-15, R-13, R-18, R-19, D-12, R-01 remainder; then the deferred extension items R-20, R-14, R-16."
