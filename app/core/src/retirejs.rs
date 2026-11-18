@@ -93,8 +93,8 @@ impl Repository {
     }
 
     pub(crate) fn load(path: &std::path::Path) -> Result<Self, String> {
-        let json = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-        let dead = path.parent().map(|d| d.join("deadlinks.txt")).and_then(|f| std::fs::read_to_string(f).ok()).map(|s| s.lines().map(str::to_string).collect()).unwrap_or_default();
+        let json = crate::util::read_text_file_capped(path, crate::util::MAX_TEXT_FILE_BYTES).map_err(|e| format!("{}: {e}", path.display()))?;
+        let dead = path.parent().map(|d| d.join("deadlinks.txt")).and_then(|f| crate::util::read_text_file_capped(&f, crate::util::MAX_TEXT_FILE_BYTES).ok()).map(|s| s.lines().map(str::to_string).collect()).unwrap_or_default();
         Self::parse(&json, dead).map_err(|e| format!("{}: {e}", path.display()))
     }
 }
@@ -244,11 +244,7 @@ fn by_name(repo: &Repository, s: &str, which: fn(&Library) -> &Vec<Extractor>) -
 
 /// burp.Zply.Zy: the part after the last `/`.
 fn file_name(url: &str) -> &str {
-    match url.rfind('/') {
-        Some(i) => &url[i + 1..],
-        None if url.is_empty() => "",
-        None => &url[1..],
-    }
+    url.rsplit_once('/').map_or(url, |(_, name)| name)
 }
 
 /// burp.Zply.Zf / ZX: the URL extractors, else the file-name ones.
@@ -404,6 +400,9 @@ mod tests {
         assert!(below("1.5", "1.*.9"));
         assert!(!below("1.2.3", "1.2.3"));
         assert_eq!(file_name("/a/b/jquery-1.2.js"), "jquery-1.2.js");
+        assert_eq!(file_name("jquery-1.2.js"), "jquery-1.2.js");
+        assert_eq!(file_name("é"), "é");
+        assert_eq!(file_name(""), "");
         assert_eq!(java_pattern("x-(§§version§§)\\.js{}"), r"x-([0-9][0-9.a-z_\\\\-]+)\.js\{\}");
     }
 

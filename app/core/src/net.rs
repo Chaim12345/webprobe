@@ -966,7 +966,7 @@ impl Shared {
                 // editor (line numbers, hex, find, font size) can be inspected.
                 request: std::env::var("WEBPROBE_SEED_REPEATER")
                     .ok()
-                    .and_then(|p| std::fs::read_to_string(p).ok())
+                    .and_then(|p| crate::util::read_text_file_capped(std::path::Path::new(&p), crate::util::MAX_TEXT_FILE_BYTES).ok())
                     .unwrap_or_default(),
                 response: None,
                 result_line: String::new(),

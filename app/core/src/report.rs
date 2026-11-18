@@ -228,7 +228,7 @@ impl KnowledgeBase {
             if p.extension().and_then(|x| x.to_str()) != Some("json") {
                 continue;
             }
-            if let Some(entry) = std::fs::read_to_string(&p).ok().and_then(|t| Self::parse_entry(&t)) {
+            if let Some(entry) = crate::util::read_text_file_capped(&p, crate::util::MAX_TEXT_FILE_BYTES).ok().and_then(|t| Self::parse_entry(&t)) {
                 kb.entries.insert(entry.name.to_lowercase(), entry);
             }
         }
