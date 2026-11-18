@@ -25,6 +25,9 @@ use std::sync::Arc;
 
 use super::*;
 
+#[path = "cache_checks.rs"]
+pub(crate) mod cache;
+
 // ---------------------------------------------------------------- context
 
 /// The scan settings a check may read (Settings > Scanner).
@@ -375,6 +378,8 @@ pub(crate) static REQUEST_CHECKS: &[&dyn RequestCheck] = &[
     &SpoofableClientIp,
     &BackupFile,
     &GraphqlEndpointDiscovered,
+    &cache::WebCachePoisoning,
+    &cache::WebCacheDeception,
 ];
 
 /// Whether `check` audits `ip` under `config`: the point type suits it,
@@ -962,7 +967,7 @@ impl PointCheck for JwtAttacks {
             .with_evidence(vec![ScanEvidence::new(new_req.as_bytes(), resp.as_deref())]);
             issue.name = name.into();
             let delivery = crate::oob::delivery_sentence("The JWT", domain, &place, ".");
-            cx.shared.oob.register_delivered(oob_token.clone(), None, issue, delivery);
+            cx.shared.oob.register_delivered(oob_token.clone(), Some("HTTP"), issue, delivery);
         }
         cx.progress();
     }
@@ -1082,6 +1087,66 @@ pub(crate) fn el_probe(d1: &str, d2: &str, a: &str, b: &str) -> (String, String)
     (format!("{d1}${{\"z{a}z\".toString().replace(\"{a}\", \"{b}\")}}{d2}"), format!("{d1}z{b}z{d2}"))
 }
 
+pub(crate) fn xpath_boolean_pairs(value: &str) -> Vec<(String, String)> {
+    vec![
+        (format!("{value} and true()"), format!("{value} and false()")),
+        (format!("{value} and not(false())"), format!("{value} and not(true())")),
+        (format!("{value}' and true() and 'x'='x"), format!("{value}' and false() and 'x'='y")),
+        (format!("{value}\" and true() and \"x\"=\"x"), format!("{value}\" and false() and \"x\"=\"y")),
+    ]
+}
+
+fn strip_reflection(response: &[u8], payload: &str) -> Vec<u8> {
+    fn strip(response: &[u8], needle: &[u8]) -> Vec<u8> {
+        if needle.is_empty() {
+            return response.to_vec();
+        }
+        let mut out = Vec::with_capacity(response.len());
+        let mut rest = response;
+        while let Some(index) = rest.windows(needle.len()).position(|w| w == needle) {
+            out.extend_from_slice(&rest[..index]);
+            rest = &rest[index + needle.len()..];
+        }
+        out.extend_from_slice(rest);
+        out
+    }
+    let plain = strip(response, payload.as_bytes());
+    let stripped = strip(&plain, util::html_encode(payload).as_bytes());
+    let parts = util::parse_http(&stripped);
+    if util::get_header(&parts.headers, "Content-Length").is_none() {
+        return stripped;
+    }
+    let body = &stripped[parts.head_len..];
+    let mut out = format!("{}\r\n", parts.first).into_bytes();
+    for (name, value) in &parts.headers {
+        if name.eq_ignore_ascii_case("Content-Length") {
+            out.extend_from_slice(format!("{name}: {}\r\n", body.len()).as_bytes());
+        } else {
+            out.extend_from_slice(format!("{name}: {value}\r\n").as_bytes());
+        }
+    }
+    out.extend_from_slice(b"\r\n");
+    out.extend_from_slice(body);
+    out
+}
+
+fn xpath_boolean_detection(
+    baseline: &[u8],
+    accuracy: crate::variations::Accuracy,
+    value: &str,
+    send: impl Fn(&str) -> Option<Vec<u8>>,
+) -> Option<(String, String, Vec<crate::variations::Attr>)> {
+    let clean_baseline = strip_reflection(baseline, value);
+    for (positive, negative) in xpath_boolean_pairs(value) {
+        let mut positive_send = || send(&positive).map(|response| strip_reflection(&response, &positive));
+        let mut negative_send = || send(&negative).map(|response| strip_reflection(&response, &negative));
+        if let Some(attributes) = crate::variations::differential(Some(&clean_baseline), accuracy, &mut positive_send, &mut negative_send) {
+            return Some((positive, negative, attributes));
+        }
+    }
+    None
+}
+
 fn find_sub(hay: &[u8], needle: &[u8]) -> bool {
     !needle.is_empty() && hay.len() >= needle.len() && hay.windows(needle.len()).any(|w| w == needle)
 }
@@ -1112,7 +1177,7 @@ pub(crate) fn xpath_error_in(body: &[u8], baseline: &[u8]) -> Option<(&'static s
 /// Zg_c with SQL injection): a quote appended to the value, then a double
 /// quote; reported when an XPath error message appears that the base
 /// response lacks. Zs76.Zs: High, Firm; detail burp.Zwvf. The boolean half
-/// (Zuuv true()/false() pairs) is not ported.
+/// uses Zuuv-style true()/false() pairs with the response-variation engine.
 pub(crate) struct XPathInjection;
 
 impl PointCheck for XPathInjection {
@@ -1136,6 +1201,7 @@ impl PointCheck for XPathInjection {
         }
         let ip = pt.ip;
         let (_, base_body) = status_body(&cx.baseline.raw);
+        let mut reported = false;
         for quote in ["'", "\""] {
             if cx.stopped() {
                 break;
@@ -1153,7 +1219,29 @@ impl PointCheck for XPathInjection {
                 );
                 detail.push_str(if api == 1 { "<br><br>The application appears to be using the ASP.NET XPath APIs." } else { "<br><br>The application appears to be using the Java XPath APIs." });
                 cx.report(vec![mk_point("XPath injection", "high", "Firm", &cx.entry, ip, detail).with_evidence(vec![ScanEvidence::new(new_req.as_bytes(), Some(&resp))])]);
+                reported = true;
                 break;
+            }
+        }
+        if !reported && !cx.stopped() {
+            let accuracy = cx.settings.accuracy;
+            let rec = Recorder::default();
+            let send = |payload: &str| {
+                if cx.stopped() {
+                    return None;
+                }
+                let req = inject_payload(&cx.req, ip, payload);
+                rec.send(cx, payload, req.as_bytes())
+            };
+            if let Some((positive, negative, attributes)) = xpath_boolean_detection(&cx.baseline.raw, accuracy, &ip.value, send) {
+                cx.report(vec![mk_point(
+                    "XPath injection",
+                    "high",
+                    "Tentative",
+                    &cx.entry,
+                    ip,
+                    format!("True condition {positive:?} and false condition {negative:?} produced consistently different responses (attributes: {attributes:?})."),
+                ).with_evidence(evidence([rec.last(&positive), rec.last(&negative)]))]);
             }
         }
         cx.progress();
@@ -3842,6 +3930,24 @@ pub(crate) const KB_ISSUE_TYPES: &[(&str, u64)] = &[
 mod tests {
     use super::*;
 
+    fn xpath_response(body: &str) -> Vec<u8> {
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{body}", body.len()).into_bytes()
+    }
+
+    #[test]
+    fn xpath_boolean_detection_requires_a_repeated_true_false_difference() {
+        let baseline = xpath_response("baseline");
+        let found = xpath_boolean_detection(&baseline, crate::variations::Accuracy::Normal, "1", |payload| {
+            let body = if payload.contains("true()") && !payload.contains("not(true())") { "allowed" } else { "denied" };
+            Some(xpath_response(body))
+        });
+        assert!(found.is_some());
+        let absent = xpath_boolean_detection(&baseline, crate::variations::Accuracy::Normal, "1", |_| Some(xpath_response("same")));
+        assert!(absent.is_none());
+        let reflected = xpath_boolean_detection(&baseline, crate::variations::Accuracy::Normal, "1", |payload| Some(xpath_response(&format!("echo {payload}"))));
+        assert!(reflected.is_none(), "payload reflection alone is not an XPath vulnerability: {reflected:?}");
+    }
+
     /// The registries are the run order; reordering changes which duplicate
     /// is reported first and must be deliberate.
     #[test]
@@ -3901,6 +4007,8 @@ mod tests {
                 ("active.spoofable-client-ip", Scope::Request, None),
                 ("active.backup-file", Scope::Request, None),
                 ("active.graphql-endpoint-discovered", Scope::Host, None),
+                ("active.web-cache-poisoning", Scope::Request, None),
+                ("active.web-cache-deception", Scope::Request, None),
             ]
         );
         let mut ids: Vec<&str> = points.iter().copied().chain(requests.iter().map(|r| r.0)).collect();

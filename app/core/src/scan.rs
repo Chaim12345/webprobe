@@ -3054,6 +3054,10 @@ pub(crate) fn slots_for(req_raw: &[u8], speed: ScanSpeed, config: &crate::scan_c
         if checks::check_applies(&checks::ExternalInteraction, ip, config) {
             out.push(format!("#{i}:ext"));
         }
+        if checks::check_applies(&checks::JwtAttacks, ip, config) {
+            out.push(format!("#{i}:jku"));
+            out.push(format!("#{i}:x5u"));
+        }
         if checks::check_applies(&checks::XmlInjectionOob, ip, config) && active_checks::xml_oob_applies(&ip.kind, &ip.value) {
             out.push(format!("#{i}:xsd"));
             out.push(format!("#{i}:xi"));
@@ -5000,6 +5004,8 @@ mod tests {
         ("SQL injection", "high", "Certain", "/item"),
         ("SQL injection", "high", "Certain", "/search"),
         ("Server-side template injection", "high", "Tentative", "/search"),
+        ("Spoofable client IP address", "info", "Tentative", "/search"),
+        ("Spoofable client IP address", "info", "Tentative", "/search"),
         ("XML external entity injection", "high", "Firm", "/xml"),
     ];
 
