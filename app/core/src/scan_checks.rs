@@ -2128,15 +2128,25 @@ impl PointCheck for FilePathManipulation {
             rec.send(cx, payload, new_req.as_bytes())
         };
         if let Some(hit) = run_file_path_manip_check(&ip.value, &cx.baseline.raw, cx.settings.accuracy, send) {
-            cx.report(vec![mk_point(
-                "File path manipulation",
-                "high",
-                "Firm",
-                &cx.entry,
-                ip,
-                format!("Same-file paths like {:?} and bogus paths like {:?} gave consistently different responses: the parameter selects a file (attributes: {:?}).", hit.valid, hit.invalid, hit.attributes),
-            )
-            .with_evidence(evidence([rec.last(&hit.valid), rec.last(&hit.invalid)]))]);
+            // burp.Zsl1.java:111-128,179-203: demonstrate impact by pulling
+            // one of Burp's known files from the selected directory.
+            let known = known_file_follow_up(&ip.value, &cx.baseline.raw, send);
+            let detail = match &known {
+                Some(k) => format!(
+                    "Same-file paths like {:?} and bogus paths like {:?} gave consistently different responses: the parameter selects a file (attributes: {:?}). The known file {} was retrieved with {:?} (marker {:?}, absent from the {:?} control).",
+                    hit.valid, hit.invalid, hit.attributes, k.file, k.payload, k.marker, k.control
+                ),
+                None => format!(
+                    "Same-file paths like {:?} and bogus paths like {:?} gave consistently different responses: the parameter selects a file (attributes: {:?}).",
+                    hit.valid, hit.invalid, hit.attributes
+                ),
+            };
+            let mut ev = vec![rec.last(&hit.valid), rec.last(&hit.invalid)];
+            if let Some(k) = &known {
+                ev.push(rec.last(&k.payload));
+                ev.push(rec.last(&k.control));
+            }
+            cx.report(vec![mk_point("File path manipulation", "high", "Firm", &cx.entry, ip, detail).with_evidence(evidence(ev))]);
         }
         cx.progress();
     }

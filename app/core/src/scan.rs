@@ -2167,6 +2167,52 @@ pub(crate) fn run_file_path_manip_check<F: FnMut(&str) -> Option<Vec<u8>>>(
     )?;
     Some(FilePathManipHit { valid: valid[0].clone(), invalid: invalid[0].clone(), attributes: attrs })
 }
+pub(crate) struct KnownFileHit {
+    pub payload: String,
+    pub control: String,
+    pub file: &'static str,
+    pub marker: &'static str,
+}
+
+/// burp.Zsl1.java:111-128: known files tried in the selected directory once
+/// the parameter is shown to select a file, each with the marker(s) that
+/// prove retrieval (`.htaccess` hits on any of its three).
+const KNOWN_FILES: &[(&str, &[&str])] = &[
+    ("Web.config", &["<system.web"]),
+    ("WEB-INF/web.xml", &["<web-app"]),
+    (".htaccess", &["Options ", "AddHandler", "RewriteRule"]),
+];
+
+/// burp.Zsl1.java:179-203: known-file follow-up to the path-manipulation
+/// differential. A file counts as retrieved when a marker appears that is in
+/// neither the baseline nor the `X`-suffixed negative control (the same
+/// control shape as `traversal_control`).
+pub(crate) fn known_file_follow_up<F: FnMut(&str) -> Option<Vec<u8>>>(
+    value: &str,
+    baseline: &[u8],
+    mut send: F,
+) -> Option<KnownFileHit> {
+    let cut = value.rfind(['/', '\\']);
+    let dir = match cut {
+        Some(i) => &value[..i + 1],
+        None => "",
+    };
+    let base = String::from_utf8_lossy(baseline);
+    for (name, markers) in KNOWN_FILES {
+        let payload = format!("{dir}{name}");
+        let raw = send(&payload)?;
+        let body = String::from_utf8_lossy(&raw);
+        let Some(&marker) = markers.iter().find(|m| body.contains(**m) && !base.contains(**m)) else { continue };
+        let control = format!("{payload}X");
+        let cbody = send(&control).unwrap_or_default();
+        if String::from_utf8_lossy(&cbody).contains(marker) {
+            continue; // the marker shows regardless of the filename
+        }
+        return Some(KnownFileHit { payload, control, file: name, marker });
+    }
+    None
+}
+
 // ================= Server-side includes injection (burp.Zexx) =================
 
 const SSI_ALPHABET: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
@@ -3643,6 +3689,52 @@ mod tests {
             Some(if p.contains("passwdX") { String::new() } else { PASSWD.into() })
         })
         .is_none());
+    }
+
+    #[test]
+    fn known_file_follow_up_retrieves_only_with_a_clean_control() {
+        // A server whose file parameter reads from disk: Web.config exists,
+        // its X-suffixed sibling does not.
+        let serve = |p: &str| -> Option<Vec<u8>> {
+            Some(match p {
+                "files/Web.config" => b"<configuration><system.web><compilation/></system.web></configuration>".to_vec(),
+                _ => Vec::new(),
+            })
+        };
+        let hit = known_file_follow_up("files/page.html", b"<html>home</html>", serve).unwrap();
+        assert_eq!(hit.file, "Web.config");
+        assert_eq!(hit.payload, "files/Web.config");
+        assert_eq!(hit.control, "files/Web.configX");
+        assert_eq!(hit.marker, "<system.web");
+
+        // .htaccess hits on any of its three markers (here AddHandler).
+        let serve = |p: &str| -> Option<Vec<u8>> {
+            Some(match p {
+                "static/.htaccess" => b"AddHandler cgi-script .pl".to_vec(),
+                _ => Vec::new(),
+            })
+        };
+        let hit = known_file_follow_up("static/a.css", b"", serve).unwrap();
+        assert_eq!(hit.file, ".htaccess");
+        assert_eq!(hit.marker, "AddHandler");
+
+        // The marker in the control too: the server shows it regardless of
+        // the filename, so nothing was retrieved.
+        let fixed = |_: &str| -> Option<Vec<u8>> { Some(b"<system.web>always</system.web>".to_vec()) };
+        assert!(known_file_follow_up("a/b.txt", b"", fixed).is_none());
+
+        // The marker already on the baseline page: never reported.
+        let serve = |p: &str| -> Option<Vec<u8>> {
+            Some(if p == "web.config" { b"<system.web>x</system.web>".to_vec() } else { Vec::new() })
+        };
+        assert!(known_file_follow_up("page", b"<system.web>baseline</system.web>", serve).is_none());
+
+        // A value with no directory part probes the known files at the root.
+        let serve = |p: &str| -> Option<Vec<u8>> {
+            Some(if p == "WEB-INF/web.xml" { b"<web-app><servlet/></web-app>".to_vec() } else { Vec::new() })
+        };
+        let hit = known_file_follow_up("page", b"", serve).unwrap();
+        assert_eq!(hit.payload, "WEB-INF/web.xml");
     }
 
     #[test]
