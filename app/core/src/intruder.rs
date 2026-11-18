@@ -321,6 +321,10 @@ impl NumberBase {
 /// always yields the same list, in the same order.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PayloadSource {
+    /// Payloads from a Montoya extension's generator (registered with
+    /// `intruder().registerPayloadGeneratorProvider`): `payloads` are
+    /// fetched from the extension when the attack starts.
+    Extension { provider: String, payloads: Vec<String> },
     /// The list as typed, one payload per entry.
     SimpleList { items: Vec<String> },
     /// Lines of a file, read when the set is generated (not when it is edited).
@@ -920,6 +924,8 @@ impl PayloadSource {
             PayloadSource::UsernameGenerator { items: Vec::new(), max_per_item: 50 },
             // burp.Zhcf: ASCII hex, block size 8, base value of the position.
             PayloadSource::EcbBlockShuffler { base: None, hex: true, block_size: 8, extra: Vec::new() },
+            // Burp's list: "Extension-generated" sits before "Copy other payload".
+            PayloadSource::Extension { provider: String::new(), payloads: Vec::new() },
             PayloadSource::CopyOtherPayload { from_position: 1 },
         ]
     }
@@ -977,6 +983,7 @@ impl PayloadSource {
             PayloadSource::Dates { .. } => "Dates",
             PayloadSource::CharacterBlocks { .. } => "Character blocks",
             PayloadSource::NullPayloads { .. } => "Null payloads",
+            PayloadSource::Extension { .. } => "Extension-generated",
             PayloadSource::CaseModification { .. } => "Case modification",
             PayloadSource::CharacterFrobber { .. } => "Character frobber",
             PayloadSource::CustomIterator { .. } => "Custom iterator",
@@ -1054,6 +1061,7 @@ impl PayloadSource {
                     .collect()
             }
             PayloadSource::NullPayloads { count } => vec![String::new(); (*count).min(MAX_PAYLOADS)],
+            PayloadSource::Extension { payloads, .. } => payloads.iter().take(MAX_PAYLOADS).cloned().collect(),
             PayloadSource::CaseModification { items, no_change, lower, upper, propername, proper_name } => items
                 .iter()
                 .filter(|i| !i.is_empty())
@@ -1133,6 +1141,7 @@ impl PayloadSource {
                 }
             }
             PayloadSource::NullPayloads { count } => (*count).min(MAX_PAYLOADS),
+            PayloadSource::Extension { payloads, .. } => payloads.len().min(MAX_PAYLOADS),
             PayloadSource::CaseModification { .. } | PayloadSource::CharacterFrobber { .. } => self.generate().len(),
             PayloadSource::CustomIterator { lists, .. } => {
                 let mut total = 1usize;
@@ -1176,6 +1185,7 @@ impl PayloadSource {
     /// index; `sets` the number of payload sets the attack uses.
     pub fn validate(&self, kind: AttackType, position: usize, sources: &[PayloadSource]) -> Result<(), String> {
         match self {
+            PayloadSource::Extension { provider, .. } if provider.is_empty() => Err("No extension payload generator is selected.".into()),
             PayloadSource::BitFlipper { base, mask, hex } => {
                 if kind == AttackType::BatteringRam && base.is_none() {
                     return Err("Bit flipper payload source cannot operate on the base payload position value when using the battering ram attack type.".into());
@@ -1777,6 +1787,10 @@ pub fn request_count_fast(request: &str, kind: AttackType, sources: &[PayloadSou
     if used.iter().enumerate().any(|(i, s)| s.validate(kind, i, used).is_err()) {
         return Some("-".into());
     }
+    // Extension payloads are fetched when the attack starts.
+    if used.iter().any(|s| matches!(s, PayloadSource::Extension { .. })) {
+        return Some("unknown".into());
+    }
     let lens: Vec<usize> = used.iter().map(PayloadSource::len).collect();
     Some(count(kind, template.positions(), &lens).map(|n| n.to_string()).unwrap_or_else(|| "too many".into()))
 }
@@ -2362,7 +2376,7 @@ mod tests {
             [
                 "Simple list", "Runtime file", "Custom iterator", "Character substitution", "Case modification",
                 "Recursive grep", "Illegal Unicode", "Character blocks", "Numbers", "Dates", "Brute forcer", "Null payloads",
-                "Character frobber", "Bit flipper", "Username generator", "ECB block shuffler", "Copy other payload",
+                "Character frobber", "Bit flipper", "Username generator", "ECB block shuffler", "Extension-generated", "Copy other payload",
             ]
         );
     }

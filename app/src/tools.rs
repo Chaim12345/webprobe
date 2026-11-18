@@ -669,6 +669,17 @@ pub fn sessions(app: &mut App, ui: &mut Ui) {
                             ui.selectable_value(&mut rule.value, crate::net::BROWSER_RECOVERY.to_string(), "Prompt for in-browser session recovery");
                         }
                     });
+                } else if rule.action == "invoke extension" {
+                    let names: Vec<String> = app.shared.ext_host.lock().unwrap().active().iter().filter_map(|e| e.ui()).flat_map(|u| u.session_actions).collect();
+                    let shown = if rule.value.is_empty() { "choose an extension action".to_string() } else { rule.value.clone() };
+                    egui::ComboBox::from_id_salt("ext_action").selected_text(shown).width(190.0).show_ui(ui, |ui| {
+                        for name in &names {
+                            ui.selectable_value(&mut rule.value, name.clone(), name);
+                        }
+                        if names.is_empty() {
+                            ui.label("No loaded extension registered a session handling action");
+                        }
+                    });
                 } else if rule.action != "use cookie jar" {
                     let hint_text = match rule.action.as_str() {
                         "set header" => "Name: value",
@@ -1735,6 +1746,27 @@ fn save_results() -> &'static std::sync::Mutex<Vec<SaveResult>> {
 }
 
 /// Report finished saves (status line, toasts). Called every frame.
+/// Apply what extensions sent to Intruder, Comparer and Decoder (Montoya
+/// `sendToIntruder` / `sendToComparer` / `sendToDecoder`). As in Burp, the
+/// current tab does not change.
+pub fn drain_tool_sends(app: &mut App) {
+    let sends = std::mem::take(&mut *app.shared.tool_sends.lock().unwrap());
+    for send in sends {
+        match send {
+            webprobe_core::ext_calls::ToolSend::Intruder { request, target, https } => {
+                app.intr_req = crate::ui::request_for_tools(request.as_bytes());
+                app.intr_https = https;
+                if !target.is_empty() {
+                    app.intr_target = target;
+                }
+                crate::feedback::toast(crate::feedback::Level::Success, "An extension sent a request to Intruder");
+            }
+            webprobe_core::ext_calls::ToolSend::Comparer(item) => app.cmp_items.push(item),
+            webprobe_core::ext_calls::ToolSend::Decoder(data) => app.dec_input = data,
+        }
+    }
+}
+
 pub fn drain_save_results(app: &mut App) {
     let done = std::mem::take(&mut *save_results().lock().unwrap());
     for (target, quiet, result) in done {
@@ -1875,7 +1907,7 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
             resp_len: e.resp_len,
             mime: e.mime.clone(),
         }).collect(),
-        organizer: app.organizer.items.iter().map(|o| project::ProjectOrganizerItem {
+        organizer: app.shared.organizer.lock().unwrap().items.iter().map(|o| project::ProjectOrganizerItem {
             id: o.id,
             timestamp: o.created,
             title: o.name.clone(),
@@ -2158,7 +2190,8 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData, content: boo
     app.dec_input = data.decoder.input.clone();
     app.dec_output = data.decoder.output.clone();
     // Organizer.
-    app.organizer.items = data.organizer.iter().map(|o| crate::organizer::OrganizerItem {
+    let mut org = app.shared.organizer.lock().unwrap();
+    org.items = data.organizer.iter().map(|o| crate::organizer::OrganizerItem {
         id: o.id,
         name: o.title.clone(),
         note: o.comment.clone(),
@@ -2166,7 +2199,8 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData, content: boo
         response: o.response.clone().unwrap_or_default(),
         created: o.timestamp,
     }).collect();
-    app.organizer.next_id = app.organizer.items.iter().map(|i| i.id).max().unwrap_or(0) + 1;
+    org.next_id = org.items.iter().map(|i| i.id).max().unwrap_or(0) + 1;
+    drop(org);
     app.org_sel = None;
     // Logger: restore the rows and mark the restored history as mirrored,
     // so the per-frame mirror does not add every row a second time.
@@ -2339,7 +2373,8 @@ mod save_restore_tests {
 /// The Montoya extension's own UI in the Extensions tab: its registered
 /// tabs with "Open", or why they cannot be shown.
 fn ext_ui_section(ui: &mut egui::Ui, hooks: &dyn webprobe_core::ext_host::ProxyHooks, u: &webprobe_core::ext_host::ExtUi) {
-    if u.tabs.is_empty() && u.menu_providers == 0 && u.request_editors + u.response_editors == 0 {
+    let engine = u.active_checks + u.passive_checks + u.generators.len() + u.processors.len() > 0;
+    if u.tabs.is_empty() && u.menu_providers == 0 && u.request_editors + u.response_editors == 0 && !engine {
         return;
     }
     ui.add_space(8.0);
@@ -2368,6 +2403,15 @@ fn ext_ui_section(ui: &mut egui::Ui, hooks: &dyn webprobe_core::ext_host::ProxyH
     }
     if u.request_editors + u.response_editors > 0 {
         also.push(format!("{} message editor(s) (Repeater request menu > Extension editors)", u.request_editors + u.response_editors));
+    }
+    if u.active_checks + u.passive_checks > 0 {
+        also.push(format!("{} active and {} passive scan check(s) (run in every scan)", u.active_checks, u.passive_checks));
+    }
+    if !u.generators.is_empty() {
+        also.push(format!("Intruder payload generators {} (payload type Extension-generated)", u.generators.join(", ")));
+    }
+    if !u.processors.is_empty() {
+        also.push(format!("Intruder payload processors {} (Intruder > Payloads > Extension processor)", u.processors.join(", ")));
     }
     if !also.is_empty() {
         ui.label(RichText::new(format!("Also registered: {}.", also.join("; "))).size(12.0).color(theme::ink_dim()));

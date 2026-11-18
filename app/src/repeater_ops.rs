@@ -1444,7 +1444,7 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
         }
         RepAction::ToOrganizer => {
             let first = req.lines().next().unwrap_or("").to_string();
-            app.organizer.add(&first, "", &req, &resp_text, util::now_secs());
+            app.shared.organizer.lock().unwrap().add(&first, "", &req, &resp_text, util::now_secs());
             toast(Level::Success, "Sent to Organizer");
         }
         RepAction::ChangeMethod => {

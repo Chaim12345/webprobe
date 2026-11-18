@@ -81,6 +81,24 @@ final class Wire {
         }
     }
 
+    /** Ask WebProbe's engine for something (`op` with JSON `args`); the
+     *  result value, or IllegalStateException with WebProbe's message. */
+    static Object call(String op, String args) {
+        int sid = NEXT_SID.getAndIncrement();
+        CompletableFuture<Map<String, Object>> f = new CompletableFuture<>();
+        PENDING.put(sid, f);
+        send("{\"type\":\"call\",\"sid\":" + sid + ",\"op\":" + Json.esc(op) + ",\"args\":" + (args == null ? "{}" : args) + "}");
+        Map<String, Object> r;
+        try {
+            r = f.get(120, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            PENDING.remove(sid);
+            throw new IllegalStateException("WebProbe did not answer " + op + ": " + e);
+        }
+        if (r.get("error") != null) throw new IllegalStateException(String.valueOf(r.get("error")));
+        return r.get("result");
+    }
+
     static void event(String level, String message) {
         send("{\"type\":\"event\",\"level\":" + Json.esc(level) + ",\"message\":" + Json.esc(message) + "}");
     }

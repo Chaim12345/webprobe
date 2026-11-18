@@ -543,6 +543,53 @@ pub(crate) fn run_point_checks(cx: &ScanCtx, points: &[InsertionPoint]) {
     }
 }
 
+/// Montoya extensions' active scan checks (R-03 stage 4), after the
+/// built-in ones: each extension gets the base request, its response and
+/// the scan's insertion points; the requests its checks make go through
+/// `cx.send`, so stop, pause, progress and stored-input detection apply,
+/// and a stopped scan refuses them.
+pub(crate) fn run_extension_checks(cx: &ScanCtx, points: &[InsertionPoint]) {
+    let exts = cx.shared.ext_host.lock().unwrap().active();
+    let exts: Vec<_> = exts.into_iter().filter(|e| e.ui().is_some_and(|u| u.active_checks > 0)).collect();
+    if exts.is_empty() || cx.stopped() {
+        return;
+    }
+    struct Helper<'a> {
+        cx: &'a ScanCtx,
+        points: &'a [InsertionPoint],
+    }
+    impl crate::ext_host::ScanHelper for Helper<'_> {
+        fn send(&self, req: &[u8]) -> Option<Vec<u8>> {
+            let r = self.cx.send(req);
+            bump_progress(&self.cx.shared);
+            r
+        }
+        fn build(&self, point: usize, payload: &[u8]) -> Option<Vec<u8>> {
+            let ip = self.points.get(point)?;
+            Some(crate::scan::insertion::inject_payload(&self.cx.req, ip, &String::from_utf8_lossy(payload)).into_bytes())
+        }
+        fn stopped(&self) -> bool {
+            self.cx.stopped()
+        }
+    }
+    let msg = crate::ext_host::ScanMessage {
+        request: cx.req.clone().into_bytes(),
+        response: cx.baseline.resp.clone(),
+        service: crate::ext_host::HttpService::new(&cx.entry.host, cx.entry.port, cx.entry.https),
+        points: points.iter().map(|p| (p.name.clone(), p.decoded_value())).collect(),
+    };
+    let helper = Helper { cx, points };
+    for e in exts {
+        if cx.stopped() {
+            break;
+        }
+        let issues = e.scan_active(&msg, &helper);
+        if !issues.is_empty() {
+            crate::scan::add_issues(&cx.shared, issues);
+        }
+    }
+}
+
 /// The request phase: every request-level check once, honouring groups.
 pub(crate) fn run_request_checks(cx: &ScanCtx) {
     let mut open: Vec<(&'static str, bool)> = Vec::new();

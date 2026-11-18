@@ -22,7 +22,7 @@ public class Stage1Extension implements BurpExtension {
         api.logging().logToOutput("state=" + engine.getState() + " args=" + api.burpSuite().commandLineArguments().size());
         for (int i = 0; i < 2; i++) {
             try {
-                api.scanner();
+                api.bambda();
             } catch (UnsupportedOperationException e) {
                 api.logging().logToOutput("caught: " + e.getMessage());
             }

@@ -642,7 +642,7 @@ fn bulk_history_command(app: &mut App, entries: &[net::HistEntry], cmd: &str) {
             for e in entries {
                 let req_text = String::from_utf8_lossy(&e.req_raw).into_owned();
                 let resp_text = e.resp_raw.as_ref().map(|r| String::from_utf8_lossy(r).into_owned()).unwrap_or_default();
-                app.organizer.add(&format!("{} {}", e.method, e.path), "", &req_text, &resp_text, util::now_secs());
+                app.shared.organizer.lock().unwrap().add(&format!("{} {}", e.method, e.path), "", &req_text, &resp_text, util::now_secs());
             }
             feedback::toast(feedback::Level::Success, format!("Sent {n} item(s) to Organizer"));
         }
@@ -1026,7 +1026,7 @@ fn proxy_history(app: &mut App, ui: &mut Ui) {
             "organizer" => {
                 let req_text = String::from_utf8_lossy(&e.req_raw).into_owned();
                 let resp_text = e.resp_raw.as_ref().map(|r| String::from_utf8_lossy(r).into_owned()).unwrap_or_default();
-                app.organizer.add(&format!("{} {}", e.method, e.path), "", &req_text, &resp_text, util::now_secs());
+                app.shared.organizer.lock().unwrap().add(&format!("{} {}", e.method, e.path), "", &req_text, &resp_text, util::now_secs());
                 app.shared.log(&format!("Sent {} {} to Organizer", e.method, e.path));
                 feedback::toast(feedback::Level::Success, "Sent to Organizer");
             }
@@ -1799,10 +1799,31 @@ fn intruder(app: &mut App, ui: &mut Ui) {
                                 ui.label(RichText::new("Request count:").size(12.5).color(theme::ink()));
                                 ui.label(RichText::new(reqs).size(12.5).color(theme::ink_dim()));
                                 ui.end_row();
+                                let procs: Vec<String> = app.shared.ext_host.lock().unwrap().active().iter().filter_map(|e| e.ui()).flat_map(|u| u.processors).collect();
+                                if app.intr_ext_proc.len() <= set_n {
+                                    app.intr_ext_proc.resize(set_n + 1, String::new());
+                                }
+                                if !procs.is_empty() || !app.intr_ext_proc[set_n].is_empty() {
+                                    ui.label(RichText::new("Extension processor:").size(12.5).color(theme::ink()));
+                                    let chosen = &mut app.intr_ext_proc[set_n];
+                                    let shown = if chosen.is_empty() { "(none)".to_string() } else { chosen.clone() };
+                                    egui::ComboBox::from_id_salt("intr_ext_proc").selected_text(shown).show_ui(ui, |ui| {
+                                        ui.selectable_value(chosen, String::new(), "(none)");
+                                        for n in &procs {
+                                            ui.selectable_value(chosen, n.clone(), n);
+                                        }
+                                    });
+                                    ui.end_row();
+                                }
                             });
                             ui.add_space(10.0);
                             ui.label(RichText::new("Payload configuration").strong().size(13.0).color(theme::ink()));
-                            if !matches!(app.intr_sources[set_n], intruder::PayloadSource::SimpleList { .. }) {
+                            if matches!(app.intr_sources[set_n], intruder::PayloadSource::Extension { .. }) {
+                                let names = webprobe_core::ext_calls::payload_generators(&app.shared);
+                                if let intruder::PayloadSource::Extension { provider, .. } = &mut app.intr_sources[set_n] {
+                                    crate::intruder_ui::extension_source_config(ui, provider, &names);
+                                }
+                            } else if !matches!(app.intr_sources[set_n], intruder::PayloadSource::SimpleList { .. }) {
                                 payload_source_config(ui, &mut app.intr_sources[set_n]);
                             } else {
                             ui.label(RichText::new("This payload type lets you configure a simple list of strings that are used as payloads.").size(12.0).color(theme::ink_dim()));
@@ -4368,7 +4389,7 @@ fn organizer_view(app: &mut App, ui: &mut Ui) {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.add_space(8.0);
                         if ui.button(format!("{} New", theme::icon::PLUS)).on_hover_text("New item in the Inbox").clicked() {
-                            let id = app.organizer.add("New item", "", "", "", util::now_secs());
+                            let id = app.shared.organizer.lock().unwrap().add("New item", "", "", "", util::now_secs());
                             app.org_sel = Some(id);
                         }
                     });
@@ -4379,7 +4400,7 @@ fn organizer_view(app: &mut App, ui: &mut Ui) {
                     ui.add(egui::TextEdit::singleline(&mut app.org_search).hint_text("Search").desired_width(250.0));
                 });
                 ui.add_space(6.0);
-                let _ = ui.selectable_label(true, RichText::new(format!("{}  Inbox ({})", theme::icon::TRAY, app.organizer.len())).size(12.5));
+                let _ = ui.selectable_label(true, RichText::new(format!("{}  Inbox ({})", theme::icon::TRAY, app.shared.organizer.lock().unwrap().len())).size(12.5));
             });
             strip.cell(|ui| {
                 ui.horizontal(|ui| {
@@ -4389,7 +4410,7 @@ fn organizer_view(app: &mut App, ui: &mut Ui) {
                         ui.add_space(8.0);
                         if ui.add_enabled(app.org_sel.is_some(), egui::Button::new("Delete")).clicked() {
                             if let Some(id) = app.org_sel.take() {
-                                app.organizer.remove(id);
+                                app.shared.organizer.lock().unwrap().remove(id);
                             }
                         }
                     });
@@ -4403,7 +4424,10 @@ fn organizer_view(app: &mut App, ui: &mut Ui) {
                 ui.add_space(6.0);
                 let q = app.org_search.to_ascii_lowercase();
                 let items: Vec<crate::organizer::OrganizerItem> = app
+                    .shared
                     .organizer
+                    .lock()
+                    .unwrap()
                     .list()
                     .into_iter()
                     .filter(|i| q.is_empty() || i.name.to_ascii_lowercase().contains(&q) || i.note.to_ascii_lowercase().contains(&q))
@@ -4460,11 +4484,11 @@ fn organizer_view(app: &mut App, ui: &mut Ui) {
                         });
                         col.cell(|ui| {
                             let Some(id) = app.org_sel else { return };
-                            let Some(mut item) = app.organizer.get(id).cloned() else { return };
+                            let Some(mut item) = app.shared.organizer.lock().unwrap().get(id).cloned() else { return };
                             ui.horizontal(|ui| {
                                 ui.label(RichText::new("Notes").size(12.5).color(theme::ink()));
                                 if ui.add(egui::TextEdit::singleline(&mut item.note).desired_width(ui.available_width() - 10.0)).changed() {
-                                    app.organizer.set_note(id, &item.note);
+                                    app.shared.organizer.lock().unwrap().set_note(id, &item.note);
                                 }
                             });
                             let h = ui.available_height().max(full * 0.5);

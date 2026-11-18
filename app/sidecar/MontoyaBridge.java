@@ -1,11 +1,14 @@
 // MontoyaBridge.java: the sidecar JVM that runs a Burp Montoya extension
 // (.jar) for WebProbe. The Montoya API classes come from the jar WebProbe's
 // resource resolver finds (montoya-api or burpsuite.jar); the bridge itself
-// is several source files in one directory, run with Java's multi-file
-// source launcher (Java 22 or later, no build step):
+// is several source files in one directory. WebProbe compiles them once per
+// version (the JDK's javac) and runs the classes:
 //
-//   java -cp montoya-api.jar MontoyaBridge.java [--startup] [--data FILE]
+//   java -cp montoya-api.jar:CLASSES MontoyaBridge [--startup] [--data FILE]
 //        [--prefs DIR] <ext.jar>
+//
+// (Java's multi-file source launcher, `java -cp montoya-api.jar
+// MontoyaBridge.java ...`, runs them too, compiling on every start.)
 //
 // --startup: loaded with WebProbe (its window opens on demand only);
 // --data: the extension's saved extensionData() (JSON) from the project;
@@ -121,6 +124,7 @@ public class MontoyaBridge {
             String type = Wire.str(msg, "type", "");
             if (type.equals("shutdown")) break;
             if (type.equals("show")) { Ui.show(); continue; }
+            if (type.equals("ws-close")) { Engine.wsClose(msg); continue; }
             if (type.equals("restore")) {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> data = (Map<String, Object>) msg.get("data");
@@ -134,6 +138,13 @@ public class MontoyaBridge {
                     case "menu-invoke": Wire.send(Ui.invoke(mid, Wire.str(msg, "item", ""))); continue;
                     case "editors": Wire.send(Ui.editors(mid, msg)); continue;
                     case "editor-get": Wire.send(Ui.edited(mid)); continue;
+                    case "scan-active": Wire.send(Engine.scanActive(mid, msg)); continue;
+                    case "scan-passive": Wire.send(Engine.scanPassive(mid, msg)); continue;
+                    case "intruder-generate": Wire.send(Engine.generate(mid, msg)); continue;
+                    case "intruder-process": Wire.send(Engine.process(mid, msg)); continue;
+                    case "ws-open": Wire.send(Engine.wsOpen(mid, msg)); continue;
+                    case "session-action": Wire.send(Engine.sessionAction(mid, msg)); continue;
+                    case "ws-message": Wire.send(Engine.wsMessage(mid, msg)); continue;
                     default: break;
                 }
             } catch (Throwable t) {

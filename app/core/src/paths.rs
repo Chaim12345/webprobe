@@ -230,7 +230,7 @@ impl Lookup {
             looked.extend(std::env::split_paths(&path).map(|d| d.join("java")));
         }
         looked.iter().find(|p| p.is_file()).cloned().ok_or(Missing {
-            what: "a Java runtime (java 22 or later: the Montoya bridge uses the multi-file source launcher)",
+            what: "a JDK, Java 17 or later (the Montoya API jar targets Java 17; the bridge is compiled with the JDK's compiler on first use)",
             looked,
             how: "Java (Montoya) extensions cannot load. Install a JDK, or set WEBPROBE_JAVA (or JAVA_HOME) to it.",
         })
@@ -244,6 +244,56 @@ impl Lookup {
             write_out(&dir.join(name), text.as_bytes())?;
         }
         Ok(dir.join("MontoyaBridge.java"))
+    }
+
+    /// The bridge compiled once into a class directory keyed by the
+    /// sources, the API jar and the JVM (`classes-<key>` beside the
+    /// sources), so a sidecar starts without compiling ~200 KB of Java
+    /// in the source launcher each time. Compiled with the same `java`
+    /// (its in-JDK javac), in a private directory renamed into place;
+    /// launches in this process wait for one compile instead of racing.
+    pub fn montoya_bridge_classes(&self, java: &Path, api_jar: &Path) -> Result<PathBuf, String> {
+        use std::hash::{Hash, Hasher};
+        static COMPILING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let main = self.montoya_bridge_source().map_err(|e| format!("could not write the Montoya bridge source: {e}"))?;
+        let dir = main.parent().map(Path::to_path_buf).unwrap_or_default();
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        (MONTOYA_BRIDGE_SOURCES, java, api_jar, std::fs::metadata(java).and_then(|m| m.modified()).ok()).hash(&mut h);
+        let out = dir.join(format!("classes-{:016x}", h.finish()));
+        let _one = COMPILING.lock().unwrap_or_else(|p| p.into_inner());
+        if out.join("MontoyaBridge.class").is_file() {
+            return Ok(out);
+        }
+        // A key directory without the classes is not trusted: rebuilt.
+        if out.exists() {
+            let _ = std::fs::remove_dir_all(&out);
+        }
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let tmp = dir.join(format!("classes-tmp{}-{}", std::process::id(), NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let result = std::process::Command::new(java)
+            .args(["-m", "jdk.compiler/com.sun.tools.javac.Main", "-nowarn", "-proc:none", "-encoding", "UTF-8", "-cp"])
+            .arg(api_jar)
+            .arg("-d")
+            .arg(&tmp)
+            .args(MONTOYA_BRIDGE_SOURCES.iter().map(|(name, _)| dir.join(name)))
+            .output()
+            .map_err(|e| format!("could not run the Java compiler: {e}"))?;
+        if !result.status.success() {
+            let _ = std::fs::remove_dir_all(&tmp);
+            return Err(format!("the Montoya bridge did not compile: {}", String::from_utf8_lossy(&result.stderr).trim()));
+        }
+        // Only a complete directory is renamed into place, so a compile
+        // killed half-way never leaves a `classes-<key>` that looks usable.
+        // Another WebProbe may have put the same classes in place first.
+        if std::fs::rename(&tmp, &out).is_err() {
+            let _ = std::fs::remove_dir_all(&tmp);
+            if !out.join("MontoyaBridge.class").is_file() {
+                return Err("could not store the compiled Montoya bridge".into());
+            }
+        }
+        prune_bridge_classes(&dir, &out);
+        Ok(out)
     }
 
     /// The extension catalogue directory: `$WEBPROBE_EXTENSIONS_DIR`, an
@@ -315,6 +365,30 @@ pub fn montoya_bridge_source() -> std::io::Result<PathBuf> {
     Lookup::process().montoya_bridge_source()
 }
 
+/// After a new bridge build is installed: drop the class directories of
+/// older bridge sources, and temporary ones a killed compile left behind
+/// (older than an hour, so a compile running in another process is kept).
+fn prune_bridge_classes(dir: &Path, keep: &Path) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    let hour_ago = std::time::SystemTime::now() - std::time::Duration::from_secs(3600);
+    for e in entries.flatten() {
+        let path = e.path();
+        let name = e.file_name().to_string_lossy().into_owned();
+        if path == keep || !name.starts_with("classes-") {
+            continue;
+        }
+        let stale_tmp = name.starts_with("classes-tmp") && e.metadata().and_then(|m| m.modified()).is_ok_and(|t| t < hour_ago);
+        if !name.starts_with("classes-tmp") || stale_tmp {
+            let _ = std::fs::remove_dir_all(&path);
+        }
+    }
+}
+
+/// [`Lookup::montoya_bridge_classes`] in the process environment.
+pub fn montoya_bridge_classes(java: &Path, api_jar: &Path) -> Result<PathBuf, String> {
+    Lookup::process().montoya_bridge_classes(java, api_jar)
+}
+
 /// [`Lookup::extensions_dir`] in the process environment.
 pub fn extensions_dir() -> std::io::Result<PathBuf> {
     Lookup::process().extensions_dir()
@@ -333,7 +407,7 @@ fn first_dir_with(cands: &[PathBuf], ok: impl Fn(&Path) -> bool) -> Option<PathB
 /// The Montoya bridge's source (WebProbe's own), compiled into the binary.
 /// The Montoya bridge sources (one per API area; Java's multi-file source
 /// launcher compiles them together from `MontoyaBridge.java`).
-pub const MONTOYA_BRIDGE_SOURCES: [(&str, &str); 10] = [
+pub const MONTOYA_BRIDGE_SOURCES: [(&str, &str); 11] = [
     ("MontoyaBridge.java", include_str!("../../sidecar/MontoyaBridge.java")),
     ("Api.java", include_str!("../../sidecar/Api.java")),
     ("Wire.java", include_str!("../../sidecar/Wire.java")),
@@ -344,6 +418,7 @@ pub const MONTOYA_BRIDGE_SOURCES: [(&str, &str); 10] = [
     ("Ui.java", include_str!("../../sidecar/Ui.java")),
     ("Persist.java", include_str!("../../sidecar/Persist.java")),
     ("Utils.java", include_str!("../../sidecar/Utils.java")),
+    ("Engine.java", include_str!("../../sidecar/Engine.java")),
 ];
 const DEMO_EXT_JAR: &[u8] = include_bytes!("../../sidecar/demo-ext/demo-ext.jar");
 const CATALOGUE_JSON: &str = include_str!("../../extensions/catalogue.json");
@@ -359,8 +434,12 @@ fn write_out(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
         std::fs::create_dir_all(parent)?;
     }
     // Write beside and rename: a JVM starting at the same moment never
-    // compiles a half-written file.
-    let tmp = path.with_extension(format!("tmp{}", std::process::id()));
+    // compiles a half-written file. The temporary name is unique per call,
+    // so threads writing the same file at once (several sidecars starting
+    // together) never rename each other's half-written temporary.
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let tmp = path.with_extension(format!("tmp{}-{n}", std::process::id()));
     std::fs::write(&tmp, bytes)?;
     std::fs::rename(&tmp, path)
 }
@@ -423,6 +502,59 @@ mod tests {
         assert!(bridge.starts_with(empty.join("data")) && std::fs::read_to_string(&bridge).unwrap().contains("class MontoyaBridge"));
         let ext = lk.extensions_dir().unwrap();
         assert!(ext.join("catalogue.json").is_file() && ext.join("../sidecar/demo-ext/demo-ext.jar").is_file(), "{}", ext.display());
+    }
+
+    /// The bridge is compiled once into `classes-<key>`; a partial
+    /// directory is never used, and an older build is pruned when a new one
+    /// is installed.
+    #[test]
+    fn bridge_classes_are_compiled_once_and_old_ones_pruned() {
+        let (Ok(java), Ok(api)) = (super::java(), super::montoya_jar()) else {
+            eprintln!("skipping: no JDK or Montoya API jar");
+            return;
+        };
+        let data = std::env::temp_dir().join(format!("wp-bridge-classes-{}", std::process::id()));
+        let lk = Lookup::with_vars(vec![("WEBPROBE_DATA_DIR", data.clone())]);
+        let sidecar = data.join("sidecar");
+        // A half-written temp dir from a killed compile and an old build.
+        std::fs::create_dir_all(sidecar.join("classes-0000000000000000")).unwrap();
+        std::fs::create_dir_all(sidecar.join("classes-tmp1-0")).unwrap();
+        let out = lk.montoya_bridge_classes(&java, &api).unwrap();
+        assert!(out.join("MontoyaBridge.class").is_file() && out.join("Engine.class").is_file());
+        assert!(!sidecar.join("classes-0000000000000000").exists(), "an older build is pruned");
+        assert!(sidecar.join("classes-tmp1-0").exists(), "a recent temp dir may be another process compiling");
+        // Cached: the same directory, not compiled again.
+        let stamp = std::fs::metadata(out.join("MontoyaBridge.class")).unwrap().modified().unwrap();
+        assert_eq!(lk.montoya_bridge_classes(&java, &api).unwrap(), out);
+        assert_eq!(std::fs::metadata(out.join("MontoyaBridge.class")).unwrap().modified().unwrap(), stamp);
+        // A key directory without its classes (not ours to trust) is rebuilt.
+        std::fs::remove_file(out.join("MontoyaBridge.class")).unwrap();
+        let _ = std::fs::remove_dir_all(&out);
+        std::fs::create_dir_all(&out).unwrap();
+        assert!(lk.montoya_bridge_classes(&java, &api).unwrap().join("MontoyaBridge.class").is_file());
+        let _ = std::fs::remove_dir_all(data);
+    }
+
+    /// Threads writing the same file at once (sidecars starting together)
+    /// never leave a half-written file behind.
+    #[test]
+    fn concurrent_write_out_never_leaves_a_partial_file() {
+        let dir = std::env::temp_dir().join(format!("wp-writeout-{}", std::process::id()));
+        let path = dir.join("Big.java");
+        let texts: Vec<Vec<u8>> = (0..8u8).map(|k| vec![b'a' + k; 400_000]).collect();
+        std::thread::scope(|s| {
+            for t in &texts {
+                let path = &path;
+                s.spawn(move || {
+                    for _ in 0..5 {
+                        write_out(path, t).unwrap();
+                    }
+                });
+            }
+        });
+        let got = std::fs::read(&path).unwrap();
+        assert!(texts.contains(&got), "a mixed or partial file of {} bytes", got.len());
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     /// No absolute developer path or build-tree lookup remains in the

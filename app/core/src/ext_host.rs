@@ -4,8 +4,9 @@
 // ProxyResponseHandler). WebProbe is a self-contained Rust binary, so the
 // same hook surface is expressed as Rust traits and runs in-process.
 // Path B: real Burp Montoya .jar extensions load through a sidecar JVM
-// bridge (sidecar/MontoyaBridge.java and the files beside it, Java's
-// multi-file source launcher) that runs the extension against the Montoya
+// bridge (sidecar/MontoyaBridge.java and the files beside it, compiled
+// once per version into a cached class directory) that runs the extension
+// against the Montoya
 // API jar the resource resolver finds and speaks JSON lines over
 // stdin/stdout.
 
@@ -127,12 +128,59 @@ pub trait ProxyHooks: Send + Sync {
     fn edited_request(&self) -> Option<Vec<u8>> {
         None
     }
+    /// Run the extension's active scan checks on one request of a scan; its
+    /// requests go through `helper` (the scan's own send path).
+    fn scan_active(&self, _msg: &ScanMessage, _helper: &dyn ScanHelper) -> Vec<crate::scan::ScanIssue> {
+        Vec::new()
+    }
+    /// Run the extension's passive scan checks on one exchange.
+    fn scan_passive(&self, _msg: &ScanMessage) -> Vec<crate::scan::ScanIssue> {
+        Vec::new()
+    }
+    /// Payloads from the extension's Intruder payload generator `provider`
+    /// for a request template (the base value of its first position).
+    fn generate_payloads(&self, provider: &str, _template: &[u8], _base: &str) -> Result<Vec<String>, String> {
+        Err(format!("{} has no Intruder payload generator named {provider}", self.extension_name()))
+    }
+    /// Run payloads through the extension's Intruder payload processor
+    /// `processor`; skipped payloads are left out.
+    fn process_payloads(&self, processor: &str, _payloads: &[String], _base: &str) -> Result<Vec<String>, String> {
+        Err(format!("{} has no Intruder payload processor named {processor}", self.extension_name()))
+    }
+    /// A proxied WebSocket was upgraded: true when the extension's handlers
+    /// watch it (its messages then go through `ws_message`).
+    fn ws_open(&self, _socket: u64, _svc: &HttpService, _upgrade: &[u8]) -> bool {
+        false
+    }
+    /// One data message of a watched socket: the handlers may edit
+    /// `payload`, drop it, or force or skip interception.
+    fn ws_message(&self, _socket: u64, _to_server: bool, _binary: bool, _payload: &mut Vec<u8>) -> WsVerdict {
+        WsVerdict::Continue
+    }
+    /// A watched socket closed.
+    fn ws_close(&self, _socket: u64) {}
+    /// Run the extension's session handling action `name` on a request
+    /// (session rule "invoke extension"); the request it returns is sent.
+    fn session_action(&self, name: &str, _svc: &HttpService, _req: &[u8]) -> Result<Vec<u8>, String> {
+        Err(format!("{} has no session handling action named {name}", self.extension_name()))
+    }
     /// The extension's saved data (Montoya `extensionData()`), as JSON.
     fn extension_data(&self) -> Option<serde_json::Value> {
         None
     }
     /// Replace the extension's saved data (a project was loaded).
     fn restore_data(&self, _data: &serde_json::Value) {}
+}
+
+/// What extension WebSocket handlers decided for one message.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WsVerdict {
+    Continue,
+    /// Hold it in Intercept whatever the interception rules say.
+    Intercept,
+    /// Do not hold it, whatever the rules say.
+    DoNotIntercept,
+    Drop,
 }
 
 /// What an extension registered in Montoya's `userInterface()`.
@@ -146,6 +194,34 @@ pub struct ExtUi {
     pub menu_providers: usize,
     pub request_editors: usize,
     pub response_editors: usize,
+    pub active_checks: usize,
+    pub passive_checks: usize,
+    /// Intruder payload generators and processors, by display name.
+    pub generators: Vec<String>,
+    pub processors: Vec<String>,
+    /// Proxy WebSocket creation handlers and `websockets()` created handlers.
+    pub ws_handlers: usize,
+    /// Session handling actions (`http().registerSessionHandlingAction`).
+    pub session_actions: Vec<String>,
+}
+
+/// One exchange handed to extension scan checks, with WebProbe's
+/// insertion points (name, base value) for active checks.
+#[derive(Clone, Debug, Default)]
+pub struct ScanMessage {
+    pub request: Vec<u8>,
+    pub response: Option<Vec<u8>>,
+    pub service: HttpService,
+    pub points: Vec<(String, String)>,
+}
+
+/// What an extension's active check may use while it runs inside a scan.
+pub trait ScanHelper {
+    /// Send through the scan (stop, pause, progress, stored input).
+    fn send(&self, req: &[u8]) -> Option<Vec<u8>>;
+    /// The base request with `payload` at insertion point `point`.
+    fn build(&self, point: usize, payload: &[u8]) -> Option<Vec<u8>>;
+    fn stopped(&self) -> bool;
 }
 
 /// One message of a context menu: request, optional response, service.
@@ -392,6 +468,8 @@ const HOOK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
 pub struct HostLink {
     pub send: Box<dyn Fn(&HttpService, &[u8]) -> Result<Vec<u8>, String> + Send + Sync>,
     pub event: Box<dyn Fn(&str, &str) + Send + Sync>,
+    /// Engine calls (`crate::ext_calls`): (extension, op, args).
+    pub call: Box<dyn Fn(&str, &str, &serde_json::Value) -> Result<serde_json::Value, String> + Send + Sync>,
 }
 
 impl HostLink {
@@ -399,7 +477,7 @@ impl HostLink {
     /// `send_tls_raw`, events to the event log. Holds the engine weakly (the
     /// engine owns its extensions).
     pub fn to_shared(shared: &Arc<crate::net::Shared>) -> Arc<HostLink> {
-        let (a, b) = (Arc::downgrade(shared), Arc::downgrade(shared));
+        let (a, b, c) = (Arc::downgrade(shared), Arc::downgrade(shared), Arc::downgrade(shared));
         Arc::new(HostLink {
             send: Box::new(move |svc, req| {
                 let shared = a.upgrade().ok_or("WebProbe is shutting down")?;
@@ -410,6 +488,10 @@ impl HostLink {
                 if let Some(shared) = b.upgrade() {
                     shared.log(&format!("Extension event ({level}): {msg}"));
                 }
+            }),
+            call: Box::new(move |ext, op, args| {
+                let shared = c.upgrade().ok_or("WebProbe is shutting down")?;
+                crate::ext_calls::dispatch(&shared, ext, op, args)
             }),
         })
     }
@@ -470,15 +552,16 @@ impl JavaSidecar {
         // bridge is WebProbe's own source, embedded and written out.
         let java = crate::paths::java().map_err(|m| m.to_string())?;
         let api_jar = crate::paths::montoya_jar().map_err(|m| m.to_string())?;
-        let bridge = crate::paths::montoya_bridge_source().map_err(|e| format!("could not write the Montoya bridge source: {e}"))?;
         if !std::path::Path::new(ext_jar).exists() {
             return Err(format!("Extension jar not found: {ext_jar}"));
         }
-        let mut cmd = Command::new(java);
+        let classes = crate::paths::montoya_bridge_classes(&java, &api_jar)?;
+        let mut cmd = Command::new(&java);
         if opts.headless {
             cmd.arg("-Djava.awt.headless=true");
         }
-        cmd.arg("-cp").arg(&api_jar).arg(bridge);
+        let cp = std::env::join_paths([api_jar.as_path(), classes.as_path()]).map_err(|e| format!("bad class path: {e}"))?;
+        cmd.arg("-cp").arg(cp).arg("MontoyaBridge");
         if opts.startup {
             cmd.arg("--startup");
         }
@@ -519,13 +602,17 @@ impl JavaSidecar {
         let (reader_tx, from_bridge) = std::sync::mpsc::channel::<String>();
         let ui = Arc::new(Mutex::new(ExtUi { headless: opts.headless, ..Default::default() }));
         let data = Arc::new(Mutex::new(opts.data.clone()));
+        let file_label = std::path::Path::new(ext_jar).file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
         {
-            let (errors, back, ui, data) = (Arc::clone(&errors), to_bridge.clone(), Arc::clone(&ui), Arc::clone(&data));
+            let (errors, back, ui, data, label) = (Arc::clone(&errors), to_bridge.clone(), Arc::clone(&ui), Arc::clone(&data), file_label.clone());
             std::thread::spawn(move || {
                 for line in stdout.lines().map_while(Result::ok) {
                     let msg: serde_json::Value = serde_json::from_str(&line).unwrap_or_default();
                     match msg.get("type").and_then(|t| t.as_str()) {
                         Some("send") => serve_send(&msg, link.clone(), back.clone()),
+                        // Calls a scan check makes are answered on the scan's
+                        // thread (`exchange_with`); the rest here.
+                        Some("call") if !msg["op"].as_str().unwrap_or("").starts_with("scan-") => serve_call(&msg, link.clone(), back.clone(), label.clone()),
                         Some("ui") => {
                             let names = |k: &str| msg[k].as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect()).unwrap_or_default();
                             let n = |k: &str| msg[k].as_u64().unwrap_or(0) as usize;
@@ -536,6 +623,12 @@ impl JavaSidecar {
                                 menu_providers: n("menus"),
                                 request_editors: n("requestEditors"),
                                 response_editors: n("responseEditors"),
+                                active_checks: n("activeChecks"),
+                                passive_checks: n("passiveChecks"),
+                                generators: names("generators"),
+                                processors: names("processors"),
+                                ws_handlers: n("wsHandlers"),
+                                session_actions: names("sessionActions"),
                             };
                         }
                         Some("persist") => *data.lock().unwrap() = Some(msg["data"].clone()),
@@ -555,10 +648,6 @@ impl JavaSidecar {
                 }
             });
         }
-        let file_label = std::path::Path::new(ext_jar)
-            .file_name()
-            .map(|s| s.to_string_lossy().into_owned())
-            .unwrap_or_default();
         let mut sidecar = JavaSidecar {
             name: format!("Montoya bridge ({file_label})"),
             child: Mutex::new(Some(child)),
@@ -623,6 +712,14 @@ impl JavaSidecar {
     /// must carry `id` (pings have none and answer `{"type":"pong"}`); other
     /// lines are logged and skipped. No reply within `wait` stops the bridge.
     fn exchange(&self, line: &str, id: Option<u64>, wait: std::time::Duration) -> Result<serde_json::Value, String> {
+        self.exchange_with(line, id, wait, &mut |_, _| Err("no scan is running".into()))
+    }
+
+    /// [`JavaSidecar::exchange`] that also answers the bridge's "scan-"
+    /// calls with `on_call` on this thread, each answered call restarting
+    /// the deadline (a check that keeps working is not cut off; one that
+    /// hangs is, after `wait` of silence).
+    fn exchange_with(&self, line: &str, id: Option<u64>, wait: std::time::Duration, on_call: &mut dyn FnMut(&str, &serde_json::Value) -> Result<serde_json::Value, String>) -> Result<serde_json::Value, String> {
         let _guard = self.io_lock.lock().unwrap();
         if self.dead.load(Ordering::Relaxed) {
             return Err("sidecar is dead".into());
@@ -637,7 +734,7 @@ impl JavaSidecar {
             mark_dead(self, "stdin closed");
             return Err("sidecar stdin closed".into());
         }
-        let deadline = std::time::Instant::now() + wait;
+        let mut deadline = std::time::Instant::now() + wait;
         let rx = self.from_bridge.lock().unwrap();
         loop {
             let left = deadline.saturating_duration_since(std::time::Instant::now());
@@ -647,6 +744,18 @@ impl JavaSidecar {
                         push_line(&self.errors, format!("stdout: {buf}"));
                         continue;
                     };
+                    if reply.get("type").and_then(|t| t.as_str()) == Some("call") {
+                        let sid = reply["sid"].as_u64().unwrap_or(0);
+                        let answer = match on_call(reply["op"].as_str().unwrap_or(""), &reply["args"]) {
+                            Ok(v) => serde_json::json!({"type": "sent", "sid": sid, "result": v}),
+                            Err(e) => serde_json::json!({"type": "sent", "sid": sid, "error": e}),
+                        };
+                        if let Some(tx) = self.to_bridge.lock().unwrap().as_ref() {
+                            let _ = tx.send(answer.to_string());
+                        }
+                        deadline = std::time::Instant::now() + wait;
+                        continue;
+                    }
                     let matches = match id {
                         Some(id) => reply.get("id").and_then(|v| v.as_u64()) == Some(id),
                         None => reply.get("type").is_some(),
@@ -746,8 +855,29 @@ fn message_json(m: &MenuMessage) -> serde_json::Value {
     v
 }
 
+fn issues_of(reply: &serde_json::Value, ext: &str) -> Vec<crate::scan::ScanIssue> {
+    reply["issues"].as_array().map(|a| a.iter().map(|i| crate::ext_calls::issue_of(i, ext)).collect()).unwrap_or_default()
+}
+
 fn b64_field(v: &serde_json::Value, k: &str) -> Option<Vec<u8>> {
     v.get(k).and_then(|x| x.as_str()).and_then(|x| crate::util::b64_decode(x).ok())
+}
+
+/// Answer one engine call from the bridge on its own thread.
+fn serve_call(msg: &serde_json::Value, link: Option<Arc<HostLink>>, back: std::sync::mpsc::Sender<String>, ext: String) {
+    let sid = msg.get("sid").and_then(|v| v.as_u64()).unwrap_or(0);
+    let (op, args) = (msg["op"].as_str().unwrap_or("").to_string(), msg["args"].clone());
+    std::thread::spawn(move || {
+        let result = match &link {
+            Some(l) => (l.call)(&ext, &op, &args),
+            None => Err(format!("{op}: this extension host is not linked to WebProbe's engine")),
+        };
+        let reply = match result {
+            Ok(v) => serde_json::json!({"type": "sent", "sid": sid, "result": v}),
+            Err(e) => serde_json::json!({"type": "sent", "sid": sid, "error": e}),
+        };
+        let _ = back.send(reply.to_string());
+    });
 }
 
 /// Answer one `Http.sendRequest` from the bridge on its own thread (the
@@ -857,6 +987,104 @@ impl ProxyHooks for JavaSidecar {
 
     fn extension_data(&self) -> Option<serde_json::Value> {
         self.data.lock().unwrap().clone()
+    }
+
+    fn scan_active(&self, msg: &ScanMessage, helper: &dyn ScanHelper) -> Vec<crate::scan::ScanIssue> {
+        if self.ui.lock().unwrap().active_checks == 0 || self.dead.load(Ordering::Relaxed) {
+            return Vec::new();
+        }
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        let mut line = message_json(&MenuMessage { request: msg.request.clone(), response: msg.response.clone(), service: msg.service.clone() });
+        line["type"] = "scan-active".into();
+        line["id"] = id.into();
+        line["points"] = msg.points.iter().map(|(n, b)| serde_json::json!({"name": n, "base": b})).collect::<Vec<_>>().into();
+        let mut on_call = |op: &str, args: &serde_json::Value| -> Result<serde_json::Value, String> {
+            if helper.stopped() {
+                return Err("the scan was stopped".into());
+            }
+            match op {
+                "scan-send" => {
+                    let raw = b64_field(args, "request").ok_or("no request")?;
+                    Ok(helper.send(&raw).map(|r| crate::util::b64_encode(&r)).unwrap_or_default().into())
+                }
+                "scan-build" => {
+                    let payload = b64_field(args, "payload").unwrap_or_default();
+                    let point = args["point"].as_u64().unwrap_or(0) as usize;
+                    helper.build(point, &payload).map(|r| crate::util::b64_encode(&r).into()).ok_or_else(|| format!("no insertion point {point}"))
+                }
+                _ => Err(format!("{op} is not supported by WebProbe")),
+            }
+        };
+        match self.exchange_with(&line.to_string(), Some(id), HOOK_TIMEOUT, &mut on_call) {
+            Ok(reply) => issues_of(&reply, &self.name),
+            Err(_) => Vec::new(),
+        }
+    }
+
+    fn scan_passive(&self, msg: &ScanMessage) -> Vec<crate::scan::ScanIssue> {
+        if self.ui.lock().unwrap().passive_checks == 0 {
+            return Vec::new();
+        }
+        let mut line = message_json(&MenuMessage { request: msg.request.clone(), response: msg.response.clone(), service: msg.service.clone() });
+        line["type"] = "scan-passive".into();
+        self.ask(line).map(|r| issues_of(&r, &self.name)).unwrap_or_default()
+    }
+
+    fn generate_payloads(&self, provider: &str, template: &[u8], base: &str) -> Result<Vec<String>, String> {
+        let line = serde_json::json!({"type": "intruder-generate", "provider": provider, "request": crate::util::b64_encode(template), "base": base});
+        let reply = self.ask(line).ok_or_else(|| format!("{} did not answer", self.name))?;
+        if let Some(e) = reply["error"].as_str() {
+            return Err(e.to_string());
+        }
+        Ok(reply["payloads"].as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect()).unwrap_or_default())
+    }
+
+    fn process_payloads(&self, processor: &str, payloads: &[String], base: &str) -> Result<Vec<String>, String> {
+        let line = serde_json::json!({"type": "intruder-process", "processor": processor, "payloads": payloads, "base": base});
+        let reply = self.ask(line).ok_or_else(|| format!("{} did not answer", self.name))?;
+        if let Some(e) = reply["error"].as_str() {
+            return Err(e.to_string());
+        }
+        Ok(reply["payloads"].as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect()).unwrap_or_default())
+    }
+
+    fn ws_open(&self, socket: u64, svc: &HttpService, upgrade: &[u8]) -> bool {
+        if self.ui.lock().unwrap().ws_handlers == 0 {
+            return false;
+        }
+        let mut line = message_json(&MenuMessage { request: upgrade.to_vec(), response: None, service: svc.clone() });
+        line["type"] = "ws-open".into();
+        line["socket"] = socket.into();
+        self.ask(line).is_some_and(|r| r["handlers"].as_u64().unwrap_or(0) > 0)
+    }
+
+    fn ws_message(&self, socket: u64, to_server: bool, binary: bool, payload: &mut Vec<u8>) -> WsVerdict {
+        let line = serde_json::json!({"type": "ws-message", "socket": socket, "toServer": to_server, "binary": binary, "payload": crate::util::b64_encode(payload)});
+        let Some(reply) = self.ask(line) else { return WsVerdict::Continue };
+        if let Some(p) = b64_field(&reply, "payload") {
+            *payload = p;
+        }
+        match reply["verdict"].as_str().unwrap_or("") {
+            "DROP" => WsVerdict::Drop,
+            "INTERCEPT" => WsVerdict::Intercept,
+            "DO_NOT_INTERCEPT" => WsVerdict::DoNotIntercept,
+            _ => WsVerdict::Continue,
+        }
+    }
+
+    fn session_action(&self, name: &str, svc: &HttpService, req: &[u8]) -> Result<Vec<u8>, String> {
+        let mut line = message_json(&MenuMessage { request: req.to_vec(), response: None, service: svc.clone() });
+        line["type"] = "session-action".into();
+        line["name"] = name.into();
+        let reply = self.ask(line).ok_or_else(|| format!("{} did not answer", self.name))?;
+        if let Some(e) = reply["error"].as_str() {
+            return Err(e.to_string());
+        }
+        b64_field(&reply, "request").ok_or_else(|| "the action returned no request".to_string())
+    }
+
+    fn ws_close(&self, socket: u64) {
+        self.tell(serde_json::json!({"type": "ws-close", "socket": socket}).to_string());
     }
 
     fn restore_data(&self, data: &serde_json::Value) {
@@ -1037,7 +1265,7 @@ mod tests {
         };
         let events = Arc::new(Mutex::new(Vec::<String>::new()));
         let seen = Arc::clone(&events);
-        let link = Arc::new(HostLink { send: Box::new(|_, _| Err("unused".into())), event: Box::new(move |l, m| seen.lock().unwrap().push(format!("{l}: {m}"))) });
+        let link = Arc::new(HostLink { send: Box::new(|_, _| Err("unused".into())), event: Box::new(move |l, m| seen.lock().unwrap().push(format!("{l}: {m}"))), call: Box::new(|_, op, _| Err(format!("{op} unused"))) });
         let sc = JavaSidecar::spawn_with(dir.to_str().unwrap(), Some(link)).expect("stage 1 loads");
         let dir_name = dir.file_name().unwrap().to_string_lossy().into_owned();
         assert_eq!(sc.extension_name(), format!("Stage One ({dir_name})"));
@@ -1049,14 +1277,14 @@ mod tests {
             "[out] via output stream".into(),
             "[out] version=WebProbe edition=COMMUNITY_EDITION".into(),
             "[out] state=PAUSED args=0".into(),
-            "[out] caught: MontoyaApi.scanner is not supported by WebProbe".into(),
+            "[out] caught: MontoyaApi.bambda is not supported by WebProbe".into(),
             "[out] caught: BurpSuite.exportProjectOptionsAsJson is not supported by WebProbe".into(),
             "[event info] stage1 event".into(),
             "[out] stage1 unloaded".into(),
         ] {
             assert!(log.contains(&want), "missing {want:?} in {log:#?}");
         }
-        assert_eq!(log.iter().filter(|l| *l == "[error] MontoyaApi.scanner is not supported by WebProbe").count(), 1, "reported once");
+        assert_eq!(log.iter().filter(|l| *l == "[error] MontoyaApi.bambda is not supported by WebProbe").count(), 1, "reported once");
         assert!(events.lock().unwrap().contains(&"info: stage1 event".to_string()));
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -1217,6 +1445,157 @@ mod tests {
         let _ = std::fs::remove_file(file);
         let _ = std::fs::remove_dir_all(dir);
         let _ = std::fs::remove_dir_all(prefs);
+    }
+
+
+    /// A loopback responder that echoes each request's first line (URL
+    /// decoded) in its body: a reflection target for scan checks.
+    fn echo_responder() -> u16 {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for mut s in listener.incoming().flatten() {
+                let mut buf = [0u8; 8192];
+                let n = std::io::Read::read(&mut s, &mut buf).unwrap_or(0);
+                let first = String::from_utf8_lossy(&buf[..n]).lines().next().unwrap_or("").to_string();
+                let body = crate::util::url_decode(&first);
+                let _ = s.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes());
+            }
+        });
+        port
+    }
+
+    /// R-03 stages 4-5 in one JVM: the extension's active check runs inside
+    /// a WebProbe active scan (payload placed by WebProbe, request through
+    /// the scan) and raises an issue; a stopped scan refuses its requests;
+    /// its passive check runs in the passive scan; a menu action tours
+    /// proxy(), scope(), siteMap(), repeater(), organizer(), intruder(),
+    /// comparer(), decoder(), cookieJar() and collaborator() against the
+    /// engine; a session rule invokes its session handling action; its
+    /// proxy WebSocket handlers edit and drop frames; and its Intruder
+    /// generator and processor feed a real attack.
+    #[test]
+    fn stage4_scan_checks_and_engine_calls() {
+        let Some(dir) = stage_extension("Stage4Extension") else {
+            eprintln!("skipping: no JDK or Montoya API jar");
+            return;
+        };
+        let shared = crate::net::Shared::new();
+        let port = echo_responder();
+        let entry = |path: &str, resp: Option<&[u8]>| crate::net::HistEntry {
+            id: 1, method: "GET".into(), host: "127.0.0.1".into(), port, path: path.into(), status: "200".into(),
+            req_raw: format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n").into_bytes().into(),
+            resp_raw: resp.map(|r| r.to_vec().into()), ..Default::default()
+        };
+        shared.history.push(entry("/hist", Some(b"HTTP/1.1 200 OK\r\n\r\nx")));
+        let opts = SidecarOptions { headless: true, startup: true, data: None, prefs_dir: Some(std::env::temp_dir().join("wp-prefs-stage4")) };
+        let sc = Arc::new(JavaSidecar::spawn_opts(dir.to_str().unwrap(), Some(HostLink::to_shared(&shared)), opts).expect("stage 4 loads"));
+        let u = eventually(|| sc.ui().filter(|u| u.active_checks == 1 && u.passive_checks == 1 && u.menu_providers == 1));
+        assert_eq!((u.active_checks, u.passive_checks), (1, 1));
+        shared.ext_host.lock().unwrap().extensions.push(LoadedExtension { enabled: true, hooks: sc.clone(), source: None });
+        // A stopped scan: the check's request is refused, nothing is sent.
+        struct Stopped(std::sync::atomic::AtomicUsize);
+        impl ScanHelper for Stopped {
+            fn send(&self, _: &[u8]) -> Option<Vec<u8>> { self.0.fetch_add(1, Ordering::SeqCst); None }
+            fn build(&self, _: usize, _: &[u8]) -> Option<Vec<u8>> { Some(b"GET / HTTP/1.1\r\n\r\n".to_vec()) }
+            fn stopped(&self) -> bool { true }
+        }
+        let stopped = Stopped(Default::default());
+        let msg = ScanMessage { request: b"GET /s?q=a HTTP/1.1\r\nHost: h\r\n\r\n".to_vec(), response: None, service: HttpService::new("h", 80, false), points: vec![("q".into(), "a".into())] };
+        assert!(sc.scan_active(&msg, &stopped).is_empty());
+        assert_eq!(stopped.0.load(Ordering::SeqCst), 0, "a stopped scan sends nothing for the extension");
+        // A real active scan of a reflecting page.
+        crate::scan::start_active_scan(shared.clone(), entry("/s?q=abc", None), &[], &[]);
+        let issue = eventually_for(240, || shared.issues.lock().unwrap().iter().find(|i| i.name == "Stage4 reflection").cloned());
+        assert_eq!((issue.sev.as_str(), issue.confidence.as_str(), issue.path.as_str()), ("high", "Certain", "/s"));
+        assert!(issue.detail.contains("Reported by the extension Stage Four") && !issue.evidence.is_empty(), "{}", issue.detail);
+        assert!(sc.errors().iter().any(|l| l.starts_with("[out] active sent /s?q=st4%3cprobe%3e got 200") || l.starts_with("[out] active sent /s?q=st4<probe> got 200")), "{:#?}", sc.errors());
+        // The passive check in the passive scan.
+        let v = crate::scan::passive_check_for(&shared, &entry("/p", Some(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\nthe secret")));
+        assert!(v.iter().any(|i| i.name == "Stage4 passive" && i.sev == "info"));
+        // Engine calls.
+        let ctx = MenuContext { tool: "Proxy".into(), invocation: "PROXY_HISTORY".into(), messages: vec![MenuMessage { request: b"GET / HTTP/1.1\r\n\r\n".to_vec(), response: None, service: HttpService::new("h", 80, false) }], editor: None };
+        shared.oob.stock([("st4one".to_string(), "st4one.oast.test".to_string()), ("st4two".to_string(), "st4two.oast.test".to_string()), ("st4three".to_string(), "st4three.oast.test".to_string())]);
+        let items = sc.menu_items(&ctx);
+        assert!(sc.invoke_menu_item(&items[0].id).ok, "{:#?}", sc.errors());
+        let log = sc.errors();
+        assert!(log.iter().any(|l| l.starts_with("[out] sitemap=2 issues=")), "{log:#?}");
+        for want in ["[out] history=1 first=/hist filtered=1", "[out] intercept=true", "[out] scope=true,false", "[out] cookies=sid", "[out] organizer=1 /added NEW", "[out] menu registered true ai=false"] {
+            assert!(log.iter().any(|l| l == want), "missing {want:?} in {log:#?}");
+        }
+        assert!(!shared.intercept_on.load(Ordering::SeqCst));
+        // Collaborator: payloads from WebProbe's pool, interactions it saw.
+        let pay = log.iter().find(|l| l.starts_with("[out] payload=")).expect("payload line").clone();
+        assert!(pay.contains(".oast.test bare=") && pay.ends_with("server=oast.test"), "{pay}");
+        let token = pay.trim_start_matches("[out] payload=").split('.').next().unwrap().to_string();
+        shared.oob.observe(&[crate::collaborator::Interaction {
+            id: 1, at: 0, source: "10.0.0.9".into(), token: Some(token.clone()),
+            detail: crate::collaborator::InteractionDetail::Dns(crate::collaborator::DnsInteraction { qname: format!("{token}.oast.test"), qtype: 1, raw_query: Vec::new() }),
+        }]);
+        let items = sc.menu_items(&ctx);
+        assert!(sc.invoke_menu_item(&items[1].id).ok);
+        assert!(sc.errors().iter().any(|l| l == &format!("[out] interactions=1 type=DNS client=10.0.0.9 id={token}")), "{:#?}", sc.errors());
+        assert!(shared.repeaters.lock().unwrap().iter().any(|t| t.name == "From Stage4" && t.request.starts_with("GET /added HTTP/1.1")));
+        assert!(shared.issues.lock().unwrap().iter().any(|i| i.name == "Stage4 sitemap issue" && i.sev == "low"));
+        use crate::ext_calls::ToolSend;
+        assert_eq!(
+            *shared.tool_sends.lock().unwrap(),
+            vec![
+                ToolSend::Intruder { request: "GET /?a=\u{a7}1\u{a7} HTTP/1.1\r\n\r\n".into(), target: "https://site.test:8443".into(), https: true },
+                ToolSend::Comparer("left".into()),
+                ToolSend::Comparer("right".into()),
+                ToolSend::Decoder("to decode".into()),
+            ]
+        );
+        // Intruder: the generator's payloads, through the processor (which
+        // changes one and skips another), drive an attack.
+        let u = sc.ui().unwrap();
+        assert_eq!((u.generators, u.processors), (vec!["Stage4 generator".to_string()], vec!["Stage4 processor".to_string()]));
+        assert_eq!(crate::ext_calls::payload_generators(&shared), ["Stage4 generator"]);
+        let request = format!("GET /i?q=\u{a7}base\u{a7} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
+        let mut sources = vec![crate::intruder::PayloadSource::Extension { provider: "Stage4 generator".into(), payloads: Vec::new() }];
+        crate::ext_calls::fill_extension_payloads(&shared, &request, &mut sources).unwrap();
+        let template = crate::intruder::Template::parse(&request).unwrap();
+        let mut specs = crate::intruder::resolve_specs(&template, crate::intruder::AttackType::Sniper, &sources).unwrap();
+        crate::ext_calls::apply_extension_processors(&shared, &template, &mut specs, &["Stage4 processor".to_string()]).unwrap();
+        let run = crate::intruder_run::start(shared.clone(), &request, crate::intruder::AttackType::Sniper, specs, ("127.0.0.1".into(), port, false), Default::default()).unwrap();
+        eventually(|| (!run.is_running()).then_some(()));
+        let mut got: Vec<String> = run.rows.lock().unwrap().iter().map(|r| String::from_utf8_lossy(r.response.as_deref().unwrap_or_default()).rsplit("\r\n\r\n").next().unwrap_or("").to_string()).collect();
+        got.sort();
+        assert_eq!(got, ["GET /i?q=base-1-1-pbase HTTP/1.1", "GET /i?q=base-3-1-pbase HTTP/1.1"], "processor appends, and skips the second");
+        // A session rule invokes the extension's session handling action.
+        let mut rule = crate::net::SessionRule::new();
+        (rule.action, rule.value, rule.tools) = ("invoke extension".into(), "Stage4 session".into(), vec!["Proxy".into()]);
+        *shared.session_rules.lock().unwrap() = vec![rule];
+        let out = crate::net::apply_session_rules(&shared, b"GET /sess HTTP/1.1\r\nHost: s.test\r\n\r\n", 80);
+        assert!(String::from_utf8_lossy(&out).contains("X-Stage4: token-0\r\n"), "{}", String::from_utf8_lossy(&out));
+        shared.session_rules.lock().unwrap().clear();
+        // Proxy WebSocket handlers edit and drop messages; close is heard.
+        let watch = crate::net::WsWatch::open(&shared, "ws.test", 80, false, b"GET /chat HTTP/1.1\r\nHost: ws.test\r\nUpgrade: websocket\r\n\r\n");
+        let mut st = crate::net::WsStream::watched(&watch);
+        drop(watch);
+        let out = crate::net::intercept_ws_stream(&shared, "ws.test", &crate::net::build_ws_frame(0x81, b"hello", true), &mut st, true);
+        assert_eq!(crate::net::parse_ws_frame(&out).unwrap().2, b"hello+ext>");
+        assert!(crate::net::intercept_ws_stream(&shared, "ws.test", &crate::net::build_ws_frame(0x81, b"please drop", false), &mut st, false).is_empty());
+        let out = crate::net::intercept_ws_stream(&shared, "ws.test", &crate::net::build_ws_frame(0x82, &[1, 2], false), &mut st, false);
+        assert_eq!(crate::net::parse_ws_frame(&out).unwrap().2, [1, 2]);
+        drop(st);
+        eventually(|| sc.errors().iter().any(|l| l == "[out] ws closed").then_some(()));
+        assert!(sc.errors().iter().any(|l| l == "[out] ws open /chat"));
+        let mut missing = vec![crate::intruder::PayloadSource::Extension { provider: "Gone".into(), payloads: Vec::new() }];
+        assert!(crate::ext_calls::fill_extension_payloads(&shared, &request, &mut missing).unwrap_err().contains("Gone"));
+        shared.ext_host.lock().unwrap().extensions.clear();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    fn eventually_for<T>(secs: u64, mut f: impl FnMut() -> Option<T>) -> T {
+        for _ in 0..secs * 10 {
+            if let Some(v) = f() {
+                return v;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        panic!("not reached within {secs} s");
     }
 
 }

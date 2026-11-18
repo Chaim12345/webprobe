@@ -379,7 +379,7 @@ fn latest_cookie(shared: &Shared, name: &str) -> Option<String> {
 /// header, set a cookie value, use the cookie jar, run a macro, check the
 /// session is valid, run a post-request macro). "use cookie" is WebProbe's
 /// older "reuse the newest Set-Cookie value from history".
-pub const SESSION_ACTIONS: [&str; 7] = ["set header", "set cookie", "use cookie", "use cookie jar", "run macro", "check session", "post-request macro"];
+pub const SESSION_ACTIONS: [&str; 8] = ["set header", "set cookie", "use cookie", "use cookie jar", "run macro", "check session", "post-request macro", "invoke extension"];
 
 /// "check session" recovery choice, offered next to the macros: instead of
 /// running a login macro, ask the user to log in again in the browser
@@ -624,6 +624,20 @@ pub fn apply_session_rules_for(shared: &Shared, tool: &str, req: &[u8], default_
                 }
             }
             "use cookie jar" => out = from_jar(&out),
+            "invoke extension" => {
+                let exts = shared.ext_host.lock().unwrap().active();
+                let svc = crate::ext_host::HttpService::new(&host, port, https);
+                match exts.iter().find(|e| e.ui().is_some_and(|u| u.session_actions.iter().any(|a| *a == rule.value))) {
+                    Some(e) => match e.session_action(&rule.value, &svc, &out) {
+                        Ok(r) => {
+                            out = r;
+                            shared.log(&format!("Session rule '{}' invoked the extension action {}", rule.name, rule.value));
+                        }
+                        Err(why) => shared.log(&format!("Session rule '{}': the extension action {} failed: {why}", rule.name, rule.value)),
+                    },
+                    None => shared.log(&format!("Session rule '{}': no loaded extension provides the action {}", rule.name, rule.value)),
+                }
+            }
             "run macro" => {
                 let ok = run_macro(shared, &rule.value).is_some();
                 out = from_jar(&out);
@@ -706,8 +720,8 @@ pub struct SessionRule {
     /// One of [`SESSION_ACTIONS`].
     pub action: String,
     pub host_match: String,
-    /// The action's argument: `Name: value`, `name=value`, a cookie name, or
-    /// a macro name.
+    /// The action's argument: `Name: value`, `name=value`, a cookie name, a
+    /// macro name, or an extension's session handling action.
     pub value: String,
     /// Tools the rule applies to (Burp's "Tools scope").
     pub tools: Vec<String>,
@@ -787,6 +801,11 @@ pub struct Shared {
     /// Browsers opened from WebProbe (main pid, profile dir), closed on exit.
     pub browsers: Mutex<Vec<(u32, String)>>,
     pub issues: Mutex<Vec<crate::scan::ScanIssue>>,
+    /// The Organizer's items (shared, so extensions can add and read them).
+    pub organizer: Mutex<crate::organizer::Organizer>,
+    /// What extensions sent to tools whose state is the desktop app's
+    /// (Intruder, Comparer, Decoder); the app takes them every frame.
+    pub tool_sends: Mutex<Vec<crate::ext_calls::ToolSend>>,
     pub scan_enabled: AtomicBool,
     /// The active scanner's run state (claim, stop, pause, progress).
     pub scan: crate::scan_run::ScanRun,
@@ -938,6 +957,8 @@ impl Shared {
             browser_port: std::sync::atomic::AtomicU16::new(0),
             browsers: Mutex::new(Vec::new()),
             issues: Mutex::new(Vec::new()),
+            organizer: Mutex::new(crate::organizer::Organizer::new()),
+            tool_sends: Mutex::new(Vec::new()),
             scan: Default::default(),
             oob: Default::default(),
             stored: Default::default(),
@@ -2354,7 +2375,7 @@ pub(crate) fn parse_ws_frame(buf: &[u8]) -> Option<(u8, bool, Vec<u8>, usize)> {
 /// the original first byte (FIN, RSV bits and opcode), so a final frame stays
 /// final. Client frames must stay masked (the server requires it); server
 /// frames are unmasked.
-fn build_ws_frame(first: u8, payload: &[u8], masked: bool) -> Vec<u8> {
+pub(crate) fn build_ws_frame(first: u8, payload: &[u8], masked: bool) -> Vec<u8> {
     let mask_bit = if masked { 0x80u8 } else { 0 };
     let len = payload.len();
     let mut out = vec![first];
@@ -2392,6 +2413,58 @@ fn build_ws_frame(first: u8, payload: &[u8], masked: bool) -> Vec<u8> {
 pub(crate) struct WsStream {
     buf: Vec<u8>,
     raw_left: usize,
+    /// Extensions whose handlers watch this socket.
+    watch: Option<Arc<WsWatch>>,
+}
+
+impl WsStream {
+    pub(crate) fn watched(watch: &Option<Arc<WsWatch>>) -> Self {
+        WsStream { watch: watch.clone(), ..Default::default() }
+    }
+}
+
+/// The extensions watching one proxied WebSocket (Montoya proxy WebSocket
+/// creation and message handlers). Dropping the last reference (both
+/// directions closed) tells them the socket closed.
+pub(crate) struct WsWatch {
+    socket: u64,
+    hooks: Vec<Arc<dyn crate::ext_host::ProxyHooks>>,
+}
+
+impl WsWatch {
+    pub(crate) fn open(shared: &Shared, host: &str, port: u16, secure: bool, upgrade: &[u8]) -> Option<Arc<WsWatch>> {
+        let exts = shared.ext_host.lock().unwrap().active();
+        if exts.is_empty() {
+            return None;
+        }
+        let socket = shared.next_id.fetch_add(1, Ordering::SeqCst);
+        let svc = crate::ext_host::HttpService::new(host, port, secure);
+        let hooks: Vec<_> = exts.into_iter().filter(|e| e.ws_open(socket, &svc, upgrade)).collect();
+        (!hooks.is_empty()).then(|| Arc::new(WsWatch { socket, hooks }))
+    }
+
+    /// Run one data message through every watching extension; the first
+    /// drop wins, the last intercept verdict counts.
+    fn message(&self, to_server: bool, binary: bool, payload: &mut Vec<u8>) -> crate::ext_host::WsVerdict {
+        use crate::ext_host::WsVerdict;
+        let mut verdict = WsVerdict::Continue;
+        for h in &self.hooks {
+            match h.ws_message(self.socket, to_server, binary, payload) {
+                WsVerdict::Drop => return WsVerdict::Drop,
+                WsVerdict::Continue => {}
+                v => verdict = v,
+            }
+        }
+        verdict
+    }
+}
+
+impl Drop for WsWatch {
+    fn drop(&mut self) {
+        for h in &self.hooks {
+            h.ws_close(self.socket);
+        }
+    }
 }
 
 /// Burp holds a WebSocket message when Intercept is on and the direction is
@@ -2411,7 +2484,7 @@ fn ws_should_hold(shared: &Shared, client_to_server: bool) -> bool {
 /// Drop skips the frame). Untouched frames are forwarded byte-identical;
 /// incomplete frames wait in `st` for the next chunk. Returns the bytes to
 /// send on.
-fn intercept_ws_stream(shared: &Shared, host: &str, chunk: &[u8], st: &mut WsStream, client_to_server: bool) -> Vec<u8> {
+pub(crate) fn intercept_ws_stream(shared: &Shared, host: &str, chunk: &[u8], st: &mut WsStream, client_to_server: bool) -> Vec<u8> {
     let direction = if client_to_server { "client -> server" } else { "server -> client" };
     let mut out = Vec::with_capacity(chunk.len());
     let mut chunk = chunk;
@@ -2436,9 +2509,26 @@ fn intercept_ws_stream(shared: &Shared, host: &str, chunk: &[u8], st: &mut WsStr
             break;
         }
         let raw: Vec<u8> = st.buf.drain(..start + len).collect();
-        let Some((_, _, payload, _)) = parse_ws_frame(&raw) else { break };
+        let Some((_, _, mut payload, _)) = parse_ws_frame(&raw) else { break };
         let data = opcode == 0x1 || opcode == 0x2;
-        if data && ws_should_hold(shared, client_to_server) {
+        let mut hold = data && ws_should_hold(shared, client_to_server);
+        // Extension handlers see the message first (Burp's "received").
+        let mut ext_changed = false;
+        if let (true, Some(w)) = (data, &st.watch) {
+            let before = payload.clone();
+            match w.message(client_to_server, opcode == 0x2, &mut payload) {
+                crate::ext_host::WsVerdict::Drop => {
+                    shared.log(&format!("An extension dropped a WebSocket message ({direction}, {host})"));
+                    continue;
+                }
+                crate::ext_host::WsVerdict::Intercept => hold = true,
+                crate::ext_host::WsVerdict::DoNotIntercept => hold = false,
+                crate::ext_host::WsVerdict::Continue => {}
+            }
+            ext_changed = payload != before;
+        }
+        let raw = if ext_changed { build_ws_frame(first, &payload, masked) } else { raw };
+        if hold {
             let id = shared.next_id.fetch_add(1, Ordering::SeqCst);
             let (tx, rx) = mpsc::channel::<Option<String>>();
             shared.queue.lock().unwrap().push(InterceptItem::new(
@@ -2458,8 +2548,10 @@ fn intercept_ws_stream(shared: &Shared, host: &str, chunk: &[u8], st: &mut WsStr
                     // unless the user really changed the text.
                     let changed = edited != String::from_utf8_lossy(&payload).as_bytes();
                     let hid = push_ws(shared, host, direction, ws_opcode_name(opcode), if changed { &edited } else { &payload });
-                    if changed {
+                    if changed || ext_changed {
                         shared.ws_edited.lock().unwrap().insert(hid);
+                    }
+                    if changed {
                         out.extend_from_slice(&build_ws_frame(first, &edited, masked));
                     } else {
                         out.extend_from_slice(&raw);
@@ -2468,22 +2560,26 @@ fn intercept_ws_stream(shared: &Shared, host: &str, chunk: &[u8], st: &mut WsStr
                 _ => shared.log(&format!("Intercepted WebSocket message dropped (id {id})")),
             }
         } else {
-            push_ws(shared, host, direction, ws_opcode_name(opcode), &payload);
+            let hid = push_ws(shared, host, direction, ws_opcode_name(opcode), &payload);
+            if ext_changed {
+                shared.ws_edited.lock().unwrap().insert(hid);
+            }
             out.extend_from_slice(&raw);
         }
     }
     out
 }
 
-fn relay_ws(shared: Arc<Shared>, client: TcpStream, upstream: TcpStream, host: String) {
+fn relay_ws(shared: Arc<Shared>, client: TcpStream, upstream: TcpStream, host: String, watch: Option<Arc<WsWatch>>) {
     client.set_read_timeout(None).ok();
     upstream.set_read_timeout(None).ok();
     let mut client_read = match client.try_clone() { Ok(s) => s, Err(_) => return };
     let mut upstream_write = match upstream.try_clone() { Ok(s) => s, Err(_) => return };
     let client_host = host.clone();
     let client_shared = shared.clone();
+    let client_watch = watch.clone();
     let client_thread = std::thread::spawn(move || {
-        let mut st = WsStream::default();
+        let mut st = WsStream::watched(&client_watch);
         let mut chunk = [0u8; 16384];
         loop {
             match client_read.read(&mut chunk) {
@@ -2502,7 +2598,8 @@ fn relay_ws(shared: Arc<Shared>, client: TcpStream, upstream: TcpStream, host: S
     let mut client_write = match client.try_clone() { Ok(s) => s, Err(_) => return };
     let upstream_host = host;
     let upstream_shared = shared;
-    let mut st = WsStream::default();
+    let mut st = WsStream::watched(&watch);
+    drop(watch);
     let mut chunk = [0u8; 16384];
     loop {
         match upstream_read.read(&mut chunk) {
@@ -2562,7 +2659,8 @@ fn handle_websocket(shared: Arc<Shared>, mut client: TcpStream, req: Vec<u8>) {
         return;
     }
     shared.log(&format!("WebSocket upgraded for {host}:{port}; capturing frames"));
-    relay_ws(shared, client, upstream, host);
+    let watch = WsWatch::open(&shared, &host, port, false, &req_out);
+    relay_ws(shared, client, upstream, host, watch);
 }
 
 fn write_nonblocking<W: Write>(stream: &mut W, mut bytes: &[u8]) -> std::io::Result<()> {
@@ -2577,13 +2675,14 @@ fn write_nonblocking<W: Write>(stream: &mut W, mut bytes: &[u8]) -> std::io::Res
     Ok(())
 }
 
-fn relay_ws_tls<C: ProxyIo, U: ProxyIo>(shared: &Shared, client: &mut C, upstream: &mut U, host: String) {
+fn relay_ws_tls<C: ProxyIo, U: ProxyIo>(shared: &Shared, client: &mut C, upstream: &mut U, host: String, watch: Option<Arc<WsWatch>>) {
     let _ = client.set_nonblocking_io(true);
     let _ = upstream.set_nonblocking_io(true);
     let mut client_open = true;
     let mut upstream_open = true;
-    let mut client_pending = WsStream::default();
-    let mut upstream_pending = WsStream::default();
+    let mut client_pending = WsStream::watched(&watch);
+    let mut upstream_pending = WsStream::watched(&watch);
+    drop(watch);
     let mut chunk = [0u8; 16384];
     while client_open || upstream_open {
         let mut progressed = false;
@@ -2680,7 +2779,8 @@ fn handle_tls_websocket(
         return;
     }
     shared.log(&format!("TLS WebSocket upgraded for {host}:{port}; capturing frames"));
-    relay_ws_tls(&shared, &mut client, &mut upstream, host);
+    let watch = WsWatch::open(&shared, &host, port, true, &req_out);
+    relay_ws_tls(&shared, &mut client, &mut upstream, host, watch);
     client.conn.send_close_notify();
     upstream.conn.send_close_notify();
     let _ = client.flush();

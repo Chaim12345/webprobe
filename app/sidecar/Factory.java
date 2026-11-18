@@ -16,6 +16,8 @@ import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 final class Factory {
@@ -97,11 +99,42 @@ final class Factory {
                 return Ui.selection((ByteArray) a[0], ((Number) a[1]).intValue(), ((Number) a[2]).intValue());
             case "parameter":
                 return Messages.parameter(String.valueOf(a[0]), String.valueOf(a[1]), (burp.api.montoya.http.message.params.HttpParameterType) a[2]);
+            case "auditIssue": return Engine.issueFromFactory(a);
+            case "secretKey": return Api.obj().text(String.valueOf(a[0])).as(burp.api.montoya.collaborator.SecretKey.class);
+            case "interactionIdFilter": case "interactionPayloadFilter": {
+                String want = String.valueOf(a[0]);
+                return Api.obj().on("matches", x -> {
+                    String id = ((burp.api.montoya.collaborator.Interaction) x[1]).id().toString();
+                    return want.equals(id) || want.startsWith(id + ".");
+                }).as(burp.api.montoya.collaborator.InteractionFilter.class);
+            }
+            case "auditResult": {
+                List<Object> issues = new ArrayList<>(Messages.many(a.length == 0 ? new Object[0] : new Object[] { a[0] }));
+                return Api.obj().on("auditIssues", x -> issues).as(burp.api.montoya.scanner.AuditResult.class);
+            }
+            case "auditInsertionPoint": return Engine.rangePoint((String) a[0], (HttpRequest) a[1], ((Number) a[2]).intValue(), ((Number) a[3]).intValue());
             case "persistedObject": return Persist.object(new Persist.Store());
+            case "payload":
+                return Engine.generated(a[0] instanceof ByteArray b ? b : Messages.bytes(String.valueOf(a[0]).getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            case "payloadEnd": return Engine.generated(null);
+            case "menu": return Ui.menu(String.valueOf(a[0]), List.of());
+            case "basicMenuItem": return Ui.basicMenuItem(String.valueOf(a[0]), null);
+            case "actionResult": {
+                Object req = a[0];
+                Object ann = a.length > 1 ? a[1] : Messages.annotations("", HighlightColor.NONE);
+                return Api.obj().on("request", x -> req).on("annotations", x -> ann).as(burp.api.montoya.http.sessions.ActionResult.class);
+            }
+            case "usePayload": return Engine.processed((ByteArray) a[0], burp.api.montoya.intruder.PayloadProcessingAction.USE_PAYLOAD);
+            case "skipPayload": return Engine.processed(null, burp.api.montoya.intruder.PayloadProcessingAction.SKIP_PAYLOAD);
+            case "payloadProcessingResult": return Engine.processed((ByteArray) a[0], (burp.api.montoya.intruder.PayloadProcessingAction) a[1]);
+            case "httpRequestTemplate":
+                if (a[1] instanceof List<?> offsets) return Engine.template(a[0], offsets);
+                break;
             default:
                 break;
         }
         if (n.startsWith("persisted") && n.endsWith("List")) return Persist.list();
+        if (n.contains("TextMessage") || n.contains("BinaryMessage")) return wsAction(n, ret, a);
         if (ret.getSimpleName().endsWith("Action")) return action(n, ret, a);
         throw Api.unsupported("MontoyaObjectFactory", n);
     }
@@ -123,6 +156,17 @@ final class Factory {
     }
 
     /** A handler result: verdict, message and annotations. */
+    /** WebSocket message actions (continueWithTextMessage, dropInitial..,
+     *  interceptInitialProxyTextMessage, textMessageAction(p, action) ..). */
+    static Object wsAction(String method, Class<?> iface, Object[] a) {
+        String kind = method.startsWith("drop") ? "DROP" : method.startsWith("doNotIntercept") ? "DO_NOT_INTERCEPT"
+                : method.startsWith("intercept") ? "INTERCEPT" : "CONTINUE";
+        for (Object o : a) if (o instanceof Enum<?> e) kind = e.name();
+        Object payload = a.length == 0 || a[0] instanceof Enum<?> ? null : a[0];
+        String k = kind;
+        return Api.obj().on("action", x -> verdict(iface, k)).on("payload", x -> payload).text(kind + "(" + iface.getSimpleName() + ")").as(iface);
+    }
+
     static Object action(String method, Class<?> iface, Object[] a) {
         String kind = kind(method, a);
         Object msg = null;

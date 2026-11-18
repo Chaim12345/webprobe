@@ -363,7 +363,8 @@ pub fn add_passive_issues(shared: &Shared, mut issues: Vec<ScanIssue>) {
     // unless Settings > Scanner > "WebProbe extra checks" is on, so the
     // default issue list is the one Burp would produce.
     if !shared.extra_checks.load(Ordering::SeqCst) {
-        issues.retain(|i| is_burp_issue(&i.name));
+        // Issues extensions report are theirs to name.
+        issues.retain(|i| is_burp_issue(&i.name) || i.detail.contains("<p>Reported by the extension "));
     }
     if issues.is_empty() {
         return;
@@ -819,7 +820,19 @@ pub fn passive_check(e: &HistEntry) -> Vec<ScanIssue> {
 /// configuration left out (Settings > Scanner > scan configuration).
 pub fn passive_check_for(shared: &Shared, e: &HistEntry) -> Vec<ScanIssue> {
     let config = shared.scan_config.lock().unwrap().clone();
-    passive_check_with(e, &|id| config.check_enabled(id), Some(&shared.passive))
+    let mut v = passive_check_with(e, &|id| config.check_enabled(id), Some(&shared.passive));
+    // Montoya extensions' passive checks (bounded by the hook timeout).
+    let exts = shared.ext_host.lock().unwrap().active();
+    for x in exts.into_iter().filter(|x| x.ui().is_some_and(|u| u.passive_checks > 0)) {
+        let msg = crate::ext_host::ScanMessage {
+            request: e.req_raw.to_vec(),
+            response: e.resp_raw.as_ref().map(|r| r.to_vec()),
+            service: crate::ext_host::HttpService::new(&e.host, e.port, e.https),
+            points: Vec::new(),
+        };
+        v.extend(x.scan_passive(&msg));
+    }
+    v
 }
 
 fn passive_check_with(e: &HistEntry, enabled: &dyn Fn(&str) -> bool, state: Option<&crate::passive_state::PassiveState>) -> Vec<ScanIssue> {
@@ -916,6 +929,7 @@ pub fn start_active_scan(shared: Arc<Shared>, entry: HistEntry, oob: &[(String, 
             checks::run_stored_seeding(&cx, &points);
             checks::run_point_checks(&cx, &points);
             checks::run_request_checks(&cx);
+            checks::run_extension_checks(&cx, &points);
             // A scan on its own runs stage A4 now; a batch runs it once its
             // last item is done (`run_stored_stage_claimed`).
             if !shared.stored.in_batch() {

@@ -76,6 +76,18 @@ final class Bridge {
                 .on("userInterface", a -> ui)
                 .on("proxy", a -> proxy)
                 .on("persistence", a -> Persist.persistence())
+                .on("scope", a -> Engine.scope())
+                .on("collaborator", a -> Engine.collaborator())
+                .on("siteMap", a -> Engine.siteMap())
+                .on("repeater", a -> Engine.repeater())
+                .on("intruder", a -> Engine.intruder())
+                .on("organizer", a -> Engine.organizer())
+                .on("comparer", a -> Engine.comparer())
+                .on("decoder", a -> Engine.decoder())
+                .on("websockets", a -> Engine.websockets())
+                // WebProbe has no Burp AI: extensions see it switched off.
+                .on("ai", a -> Api.obj().on("isEnabled", x -> false).as(burp.api.montoya.ai.Ai.class))
+                .on("scanner", a -> { Api.Obj o = Api.obj(); Engine.scannerApi(o); return o.as(burp.api.montoya.scanner.Scanner.class); })
                 .on("utilities", a -> Utils.utilities())
                 .text("WebProbe MontoyaApi")
                 .as(MontoyaApi.class);
@@ -129,19 +141,18 @@ final class Bridge {
     }
 
     static burp.api.montoya.proxy.Proxy proxy() {
-        boolean[] intercept = { false };
-        return Api.obj()
+        Api.Obj o = Api.obj()
                 .on("registerRequestHandler", a -> register(PROXY_REQUEST, (ProxyRequestHandler) a[0]))
-                .on("registerResponseHandler", a -> register(PROXY_RESPONSE, (ProxyResponseHandler) a[0]))
-                .on("enableIntercept", a -> { intercept[0] = true; return null; })
-                .on("disableIntercept", a -> { intercept[0] = false; return null; })
-                .on("isInterceptEnabled", a -> intercept[0])
-                .as(burp.api.montoya.proxy.Proxy.class);
+                .on("registerResponseHandler", a -> register(PROXY_RESPONSE, (ProxyResponseHandler) a[0]));
+        Engine.proxyApi(o);
+        return o.as(burp.api.montoya.proxy.Proxy.class);
     }
 
     static Http http() {
         return Api.obj()
                 .on("registerHttpHandler", a -> register(HTTP_HANDLERS, (HttpHandler) a[0]))
+                .on("cookieJar", a -> Engine.cookieJar())
+                .on("registerSessionHandlingAction", a -> Engine.reg(Engine.SESSION_ACTIONS, (burp.api.montoya.http.sessions.SessionHandlingAction) a[0]))
                 .on("sendRequest", a -> send((HttpRequest) a[0]))
                 .on("sendRequests", a -> {
                     List<HttpRequestResponse> out = new ArrayList<>();

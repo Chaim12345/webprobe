@@ -46,6 +46,9 @@ pub struct OobState {
     supplier: AtomicBool,
     /// Ids a waiting `take` needs: `refill` stocks at least this many.
     demand: std::sync::atomic::AtomicUsize,
+    /// Interactions seen by `match_new` (last 2000), for extensions'
+    /// Collaborator clients (Montoya `getAllInteractions`).
+    observed: Mutex<Vec<Interaction>>,
 }
 
 impl OobState {
@@ -144,7 +147,21 @@ impl OobState {
         let fresh = collab.interactions_since(self.seen.load(Ordering::SeqCst));
         let Some(last) = fresh.last().map(|i| i.id) else { return Vec::new() };
         self.seen.store(last, Ordering::SeqCst);
+        self.observe(&fresh);
         self.match_interactions(&fresh)
+    }
+
+    /// Keep interactions for extensions' Collaborator clients.
+    pub fn observe(&self, fresh: &[Interaction]) {
+        let mut o = self.observed.lock().unwrap();
+        o.extend(fresh.iter().cloned());
+        let excess = o.len().saturating_sub(2000);
+        o.drain(..excess);
+    }
+
+    /// The interactions whose payload id is one of `ids`.
+    pub fn observed_for(&self, ids: &[String]) -> Vec<Interaction> {
+        self.observed.lock().unwrap().iter().filter(|i| i.token.as_ref().is_some_and(|t| ids.contains(t))).cloned().collect()
     }
 
     /// Match interactions against the pending ids. A check that names its

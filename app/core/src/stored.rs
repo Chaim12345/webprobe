@@ -210,20 +210,34 @@ impl StoredInputs {
 /// Every distinct token in `bytes`: the prefix, then exactly TOKEN_BODY
 /// lowercase letters or digits.
 pub fn find_tokens(bytes: &[u8]) -> Vec<String> {
+    find_tokens_counted(bytes, &mut 0)
+}
+
+/// [`find_tokens`], adding the bytes it examined to `work` (one pass: the
+/// count stays within a small constant times the body length).
+fn find_tokens_counted(bytes: &[u8], work: &mut usize) -> Vec<String> {
     let p = TOKEN_PREFIX.as_bytes();
     let mut out: Vec<String> = Vec::new();
     let mut i = 0;
     while i + p.len() + TOKEN_BODY <= bytes.len() {
         // Skip to the next prefix start byte.
         match bytes[i..].iter().position(|&b| b == p[0]) {
-            Some(off) => i += off,
-            None => break,
+            Some(off) => {
+                *work += off + 1;
+                i += off;
+            }
+            None => {
+                *work += bytes.len() - i;
+                break;
+            }
         }
         if i + p.len() + TOKEN_BODY > bytes.len() {
             break;
         }
+        *work += p.len();
         if &bytes[i..i + p.len()] == p {
             let body = &bytes[i + p.len()..i + p.len() + TOKEN_BODY];
+            *work += TOKEN_BODY;
             if body.iter().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit()) {
                 let t = String::from_utf8_lossy(&bytes[i..i + p.len() + TOKEN_BODY]).into_owned();
                 if !out.contains(&t) {
@@ -272,11 +286,21 @@ mod tests {
 
     #[test]
     fn find_tokens_is_one_pass_over_large_bodies() {
-        let mut body = vec![b'z'; 4 << 20];
-        body.extend_from_slice(b"zwq7abc123def456!");
-        let t0 = std::time::Instant::now();
-        assert_eq!(find_tokens(&body), vec!["zwq7abc123def456".to_string()]);
-        assert!(t0.elapsed() < std::time::Duration::from_secs(2), "{:?}", t0.elapsed());
+        // Worst case: every byte starts the prefix. The bytes examined stay
+        // linear in the body (a small constant per byte) and double when
+        // the body doubles.
+        let work = |n: usize| {
+            let mut body = vec![b'z'; n];
+            body.extend_from_slice(b"zwq7abc123def456!");
+            let mut w = 0;
+            assert_eq!(find_tokens_counted(&body, &mut w), vec!["zwq7abc123def456".to_string()]);
+            (w, body.len())
+        };
+        let (small, n) = work(1 << 20);
+        let (big, m) = work(4 << 20);
+        assert!(small <= 8 * n && big <= 8 * m, "{small} for {n} bytes, {big} for {m}");
+        let ratio = big as f64 / small as f64;
+        assert!((3.5..4.5).contains(&ratio), "work grew {ratio}x for 4x the body");
     }
 
     #[test]

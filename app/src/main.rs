@@ -75,8 +75,6 @@ pub struct App {
     pub shared: Arc<net::Shared>,
     /// Cross-tool HTTP Logger, mirrored from proxy history every frame.
     pub logger: logger::Logger,
-    /// Saved request/response collection (Organizer tab).
-    pub organizer: organizer::Organizer,
     /// Filter driving the Logger view.
     pub log_filter: logger::LogQuery,
     /// Highest proxy history id already mirrored into `logger`.
@@ -303,6 +301,9 @@ pub struct App {
     /// Payload type per set (Burp's "Payload type" dropdown). For "Simple
     /// list" the text in `intr_sets` is the list; the others generate.
     pub intr_sources: Vec<intruder::PayloadSource>,
+    /// Per payload set: the extension payload processor its payloads go
+    /// through (Montoya `registerPayloadProcessor`), "" for none.
+    pub intr_ext_proc: Vec<String>,
     pub dec_input: String,
     pub dec_results: Vec<(String, String)>,
     /// Latest Decoder output (P-07).
@@ -545,6 +546,7 @@ impl eframe::App for App {
             }
         }
         tools::drain_save_results(self);
+        tools::drain_tool_sends(self);
         feedback::drain(&mut self.toasts);
         self.toasts.tick(std::time::Instant::now());
         // Mirror new proxy traffic before drawing, so the Logger view and the
@@ -727,7 +729,6 @@ impl App {
         App {
             shared,
             logger: logger::Logger::new(5000),
-            organizer: organizer::Organizer::new(),
             log_filter: logger::LogQuery::default(),
             log_seen: 0,
             log_sel: None,
@@ -888,6 +889,7 @@ impl App {
             intr_attack: intruder::AttackType::Sniper,
             intr_sets: vec![String::new()],
             intr_sources: Vec::new(),
+            intr_ext_proc: Vec::new(),
             dec_input: String::new(),
             dec_results: Vec::new(),
             dec_output: String::new(),

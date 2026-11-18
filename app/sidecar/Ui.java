@@ -62,6 +62,7 @@ final class Ui {
     static final List<ContextMenuItemsProvider> MENUS = new CopyOnWriteArrayList<>();
     static final List<HttpRequestEditorProvider> REQUEST_EDITORS = new CopyOnWriteArrayList<>();
     static final List<HttpResponseEditorProvider> RESPONSE_EDITORS = new CopyOnWriteArrayList<>();
+    static final List<Object> WS_EDITORS = new CopyOnWriteArrayList<>();
     static JFrame frame;
     static JTabbedPane pane;
 
@@ -84,7 +85,17 @@ final class Ui {
          .append(",\"menus\":").append(MENUS.size())
          .append(",\"requestEditors\":").append(REQUEST_EDITORS.size())
          .append(",\"responseEditors\":").append(RESPONSE_EDITORS.size())
-         .append('}');
+         .append(",\"activeChecks\":").append(Engine.activeCount())
+         .append(",\"passiveChecks\":").append(Engine.passiveCount())
+         .append(",\"wsHandlers\":").append(Engine.wsCount());
+        for (String key : new String[] { "generators", "processors", "sessionActions" }) {
+            s.append(",\"").append(key).append("\":[");
+            int j = 0;
+            List<?> l = key.equals("generators") ? Engine.GENERATORS : key.equals("processors") ? Engine.PROCESSORS : Engine.SESSION_ACTIONS;
+            for (String n : Engine.names(l)) s.append(j++ > 0 ? "," : "").append(Wire.Json.esc(n));
+            s.append(']');
+        }
+        s.append('}');
         Wire.send(s.toString());
     }
 
@@ -99,20 +110,7 @@ final class Ui {
         TABS.put(title, c);
         if (!HEADLESS) {
             onEdt(() -> {
-                if (frame == null) {
-                    frame = new JFrame(title());
-                    frame.setDefaultCloseOperation(WindowConstants.HIDE_ON_CLOSE);
-                    frame.setSize(1100, 760);
-                    pane = new JTabbedPane() {
-                        // An extension selecting its tab (even the one already
-                        // selected) brings the window up.
-                        @Override public void setSelectedIndex(int index) {
-                            super.setSelectedIndex(index);
-                            if (!rebuilding && !frame.isShowing()) SwingUtilities.invokeLater(Ui::show);
-                        }
-                    };
-                    frame.getContentPane().add(pane);
-                }
+                ensureFrame();
                 rebuilding = true;
                 try {
                     pane.removeAll();
@@ -125,6 +123,26 @@ final class Ui {
                 frame.repaint();
             });
         }
+    }
+
+    /** The extension's window (Burp's suite frame), made on first use. */
+    static void ensureFrame() {
+        onEdt(() -> {
+            if (frame != null) return;
+            frame = new JFrame(title());
+            frame.setDefaultCloseOperation(WindowConstants.HIDE_ON_CLOSE);
+            frame.setSize(1100, 760);
+            pane = new JTabbedPane() {
+                // An extension selecting its tab (even the one already
+                // selected) brings the window up.
+                @Override public void setSelectedIndex(int index) {
+                    super.setSelectedIndex(index);
+                    if (!rebuilding && !frame.isShowing()) SwingUtilities.invokeLater(Ui::show);
+                }
+            };
+            frame.getContentPane().add(pane);
+            refreshBar();
+        });
     }
 
     static void show() {
@@ -168,6 +186,13 @@ final class Ui {
                     pushState();
                     return Api.registration(() -> { RESPONSE_EDITORS.remove(a[0]); pushState(); });
                 })
+                // WebProbe has no WebSocket message editor slot: the provider
+                // is kept but never asked for an editor.
+                .on("registerWebSocketMessageEditorProvider", a -> {
+                    WS_EDITORS.add(a[0]);
+                    Logs.output("[bridge] WebSocket message editor tabs are not shown by WebProbe; the provider is registered but not used");
+                    return Api.registration(() -> WS_EDITORS.remove(a[0]));
+                })
                 .on("createRawEditor", a -> TextEditor.create(burp.api.montoya.ui.editor.RawEditor.class, a))
                 .on("createHttpRequestEditor", a -> TextEditor.create(burp.api.montoya.ui.editor.HttpRequestEditor.class, a))
                 .on("createHttpResponseEditor", a -> TextEditor.create(burp.api.montoya.ui.editor.HttpResponseEditor.class, a))
@@ -177,14 +202,78 @@ final class Ui {
                 .on("currentEditorFont", a -> new Font(Font.MONOSPACED, Font.PLAIN, 13))
                 .on("currentDisplayFont", a -> new Font(Font.SANS_SERIF, Font.PLAIN, 13))
                 .on("swingUtils", a -> swingUtils())
+                .on("menuBar", a -> menuBar())
+                // Burp's Settings dialog: the panel is a tab of the extension's window.
+                .on("registerSettingsPanel", a -> {
+                    String title = "Settings";
+                    addTab(title, ((burp.api.montoya.ui.settings.SettingsPanel) a[0]).uiComponent());
+                    pushState();
+                    return Api.registration(() -> { TABS.remove(title); pushState(); });
+                })
+                .on("openSettingsWindow", a -> { show(); return null; })
                 .as(UserInterface.class);
+    }
+
+    // ------------------------------------------------------------ menu bar
+
+    /** Menus the extension added to "Burp's" menu bar: shown on its window. */
+    static final List<javax.swing.JMenu> BAR_MENUS = new CopyOnWriteArrayList<>();
+
+    static burp.api.montoya.ui.menu.MenuBar menuBar() {
+        return Api.obj().on("registerMenu", a -> {
+            javax.swing.JMenu m = a[0] instanceof javax.swing.JMenu j ? j : swingMenu((burp.api.montoya.ui.menu.Menu) a[0]);
+            BAR_MENUS.add(m);
+            refreshBar();
+            return Api.registration(() -> { BAR_MENUS.remove(m); refreshBar(); });
+        }).as(burp.api.montoya.ui.menu.MenuBar.class);
+    }
+
+    static javax.swing.JMenu swingMenu(burp.api.montoya.ui.menu.Menu menu) {
+        javax.swing.JMenu m = new javax.swing.JMenu(menu.caption());
+        for (burp.api.montoya.ui.menu.MenuItem it : menu.menuItems()) {
+            javax.swing.JMenuItem j = new javax.swing.JMenuItem(it.caption());
+            if (it instanceof burp.api.montoya.ui.menu.BasicMenuItem b) j.addActionListener(e -> b.action());
+            m.add(j);
+        }
+        return m;
+    }
+
+    static void refreshBar() {
+        if (HEADLESS || frame == null) return;
+        onEdt(() -> {
+            javax.swing.JMenuBar bar = new javax.swing.JMenuBar();
+            for (javax.swing.JMenu m : BAR_MENUS) bar.add(m);
+            frame.setJMenuBar(BAR_MENUS.isEmpty() ? null : bar);
+            frame.revalidate();
+        });
+    }
+
+    /** Menu.menu(caption) and BasicMenuItem.basicMenuItem(caption). */
+    static burp.api.montoya.ui.menu.Menu menu(String caption, List<burp.api.montoya.ui.menu.MenuItem> items) {
+        Api.Obj o = Api.obj();
+        o.on("caption", a -> caption).on("menuItems", a -> items)
+         .on("withCaption", a -> menu(String.valueOf(a[0]), items))
+         .on("withMenuItems", a -> {
+             List<burp.api.montoya.ui.menu.MenuItem> l = new ArrayList<>();
+             for (Object x : Messages.many(a)) l.add((burp.api.montoya.ui.menu.MenuItem) x);
+             return menu(caption, l);
+         });
+        return o.as(burp.api.montoya.ui.menu.Menu.class);
+    }
+
+    static burp.api.montoya.ui.menu.BasicMenuItem basicMenuItem(String caption, Runnable action) {
+        return Api.obj().on("caption", a -> caption)
+                .on("action", a -> { if (action != null) action.run(); return null; })
+                .on("withAction", a -> basicMenuItem(caption, (Runnable) a[0]))
+                .on("withCaption", a -> basicMenuItem(String.valueOf(a[0]), action))
+                .as(burp.api.montoya.ui.menu.BasicMenuItem.class);
     }
 
     static burp.api.montoya.ui.swing.SwingUtils swingUtils() {
         return Api.obj()
                 .on("suiteFrame", a -> {
                     if (HEADLESS) throw new java.awt.HeadlessException("no display: WebProbe runs this extension headless");
-                    if (frame == null) addTab("(extension)", new javax.swing.JPanel());
+                    ensureFrame();
                     return frame;
                 })
                 .on("windowForComponent", a -> SwingUtilities.getWindowAncestor((Component) a[0]))
