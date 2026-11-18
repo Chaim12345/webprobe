@@ -27,7 +27,7 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use webprobe_core::{burp_config, net, project, report, scan};
+use webprobe_core::{burp_config, net, project, report, rest_api, scan};
 
 const USAGE: &str = "usage:\n  webprobe-headless [--config-file FILE]... [--user-config-file FILE]... [--unpause-spider-and-scanner] proxy [--port N] [--project FILE | --project-file FILE] [--seconds N]\n  webprobe-headless [--config-file FILE]... [--user-config-file FILE]... scan URL... [--crawl] [--speed fast|normal|thorough] [--report FILE.html|FILE.xml]\n  webprobe-headless --version | --help";
 
@@ -87,9 +87,6 @@ fn load_burp_configs(flags: &BurpFlags) -> (burp_config::ProxyListener, burp_con
             eprintln!("{f}: {n}");
         }
     }
-    if api.enabled {
-        eprintln!("note: user_options.misc.api.enabled is set; the /v0.1 REST API arrives in a later R-15 slice and is not started yet");
-    }
     (listener, api)
 }
 
@@ -139,7 +136,7 @@ fn save_project(shared: &net::Shared, path: &str) -> Result<(), String> {
 
 fn proxy(mut args: Vec<String>) {
     let flags = take_burp_flags(&mut args);
-    let (listener, _api) = load_burp_configs(&flags);
+    let (listener, api) = load_burp_configs(&flags);
     // Without a --config-file the headless default stays 8090; with one,
     // the config's listener port applies and an explicit --port beats it.
     let default_port = if flags.config_files.is_empty() { 8090 } else { listener.port };
@@ -155,6 +152,20 @@ fn proxy(mut args: Vec<String>) {
         usage();
     }
     let shared = net::Shared::new();
+    if api.enabled {
+        // Burp serves the REST API from the running app; for the headless
+        // binary that is the long-lived proxy mode. The key is never
+        // printed (Burp shows it in its UI; a headless process refuses to
+        // start without one instead).
+        let kb = std::sync::Arc::new(report::KnowledgeBase::discover());
+        match rest_api::start(&shared, &api, kb) {
+            Ok(api_port) => eprintln!("REST API listening on {}:{api_port}", if api.listen_mode == "all_interfaces" { "0.0.0.0" } else { "127.0.0.1" }),
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
+    }
     shared.proxy_port.store(port, Ordering::SeqCst);
     net::start_proxy(shared.clone());
     let started = Instant::now();

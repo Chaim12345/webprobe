@@ -40,6 +40,7 @@ pub mod project;
 pub mod project_files;
 pub mod repeater_run;
 pub mod report;
+pub mod rest_api;
 pub mod rules;
 pub mod burp_config;
 pub mod scan;
