@@ -1135,6 +1135,17 @@ fn read_http_request(
     }
 }
 
+/// What a Collaborator returns in the body of an HTTP interaction for
+/// `token`, so the scanner can tell a target that fetched the URL and put
+/// the content into its own response (burp.Ze2n.Zt: Burp's Collaborator
+/// serves a per-id value, Zwl.Zy, and the scanner searches the response
+/// for it). The local Collaborator serves the token reversed, the value an
+/// interactsh server reflects for its ids (assumed from interactsh's
+/// default HTTP response, not verified against a live server here).
+pub fn inband_marker(token: &str) -> String {
+    token.chars().rev().collect()
+}
+
 fn write_http_response(stream: &mut TcpStream, status: &str, body: &str) -> io::Result<()> {
     let head = format!(
         "HTTP/1.1 {status}\r\n\
@@ -1164,7 +1175,7 @@ fn http_loop(listener: TcpListener, shared: Arc<CaptureShared>) {
                         shared.log.record(
                             unix_secs(),
                             peer.to_string(),
-                            token,
+                            token.clone(),
                             InteractionDetail::Http(HttpInteraction {
                                 method: request.method,
                                 target: request.target,
@@ -1173,8 +1184,15 @@ fn http_loop(listener: TcpListener, shared: Arc<CaptureShared>) {
                                 body: request.body,
                             }),
                         );
+                        // A known id gets its in-band marker back, so a target
+                        // that fetches the URL and returns the content is
+                        // seen in-band (Out-of-band resource load, burp.Zsrh).
+                        let body = match &token {
+                            Some(t) => format!("<html><body>{}</body></html>\n", inband_marker(t)),
+                            None => HTTP_OK_BODY.to_string(),
+                        };
                         if let Err(error) =
-                            write_http_response(&mut stream, "200 OK", HTTP_OK_BODY)
+                            write_http_response(&mut stream, "200 OK", &body)
                         {
                             shared.set_error(format!(
                                 "HTTP response to {peer} failed: {error}"

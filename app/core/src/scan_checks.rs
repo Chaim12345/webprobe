@@ -236,7 +236,7 @@ pub(crate) trait PointCheck: Sync {
     /// The insertion-point kinds it applies to: the point-type rules of the
     /// Burp check's applicability test (`Zuit.Zh`). Every implementation
     /// matches every kind explicitly, so a new kind needs a decision.
-    fn applies_to(&self, kind: &IpKind) -> bool;
+    fn applies_to(&self, ip: &InsertionPoint) -> bool;
     /// Whether the check is a server-side injection check, which Burp skips
     /// on the skip_server_side_injection_for_parameters list (its `Zh`
     /// calls `Zgx0.Zr`; [`InsertionPoint::skips_server_side`]).
@@ -309,6 +309,7 @@ pub(crate) static REQUEST_CHECKS: &[&dyn RequestCheck] = &[
     &PathRelativeStyleSheet,
     &TraceEnabled,
     &OpenApiDefinition,
+    &CollaboratorEverywhere,
     &ServerTrace,
     &ServerOptions,
     &HeaderManipulation,
@@ -320,7 +321,160 @@ pub(crate) static REQUEST_CHECKS: &[&dyn RequestCheck] = &[
 /// it is switched on, and a server-side check leaves the points on Burp's
 /// skip_server_side_injection_for_parameters list alone.
 pub(crate) fn check_applies(check: &dyn PointCheck, ip: &InsertionPoint, config: &crate::scan_config::ScanConfig) -> bool {
-    check.applies_to(&ip.kind) && config.check_enabled(check.id()) && !(check.server_side() && ip.skips_server_side())
+    check.applies_to(ip) && config.check_enabled(check.id()) && !(check.server_side() && ip.skips_server_side())
+}
+
+// ---------------------------------------------------------------- Collaborator everywhere
+
+/// One request of burp.Zc7h's set (burp.Zs61.Zu built by Zcg4): which ids it
+/// carries and how Burp names where each went (burp.Zez7.ZP labels).
+pub(crate) struct EverywhereProbe {
+    pub request: String,
+    /// (slot, payload as shown, where it went).
+    pub ids: Vec<(&'static str, String, &'static str)>,
+}
+
+/// The slots of burp.Zc7h, in Zs61.Zu order. The request-line variants
+/// (auth fragment, absolute URL, CONNECT) are only built when no upstream
+/// proxy serves the host; the TLS SNI variant is not ported (WebProbe's
+/// sender cannot set an SNI other than the host).
+pub(crate) const EVERYWHERE_SLOTS: [&str; 12] = ["host", "xfh", "hostauth", "authfrag", "absurl", "xff", "tci", "xrip", "referer", "wap", "scraped", "connect"];
+
+/// burp.Zcg4's requests for the target `host_hdr` (`host`:`port`), each
+/// with the Collaborator name of its slot (`collab(slot)`), and burp.Zcg4.ZP's
+/// default headers. `direct`: no upstream proxy (request-line variants).
+pub(crate) fn everywhere_probes(host_hdr: &str, host: &str, port: u16, direct: bool, collab: &dyn Fn(&str) -> Option<String>) -> Vec<EverywhereProbe> {
+    const DEFAULTS: &str = "Pragma: no-cache\r\nCache-Control: no-cache, no-transform\r\nConnection: close\r\n";
+    let mut out = Vec::new();
+    let one = |out: &mut Vec<EverywhereProbe>, slot: &'static str, label: &'static str, build: &dyn Fn(&str) -> (String, String)| {
+        if let Some(c) = collab(slot) {
+            let (request, shown) = build(&c);
+            out.push(EverywhereProbe { request, ids: vec![(slot, shown, label)] });
+        }
+    };
+    one(&mut out, "host", "HTTP Host header", &|c| (format!("GET / HTTP/1.1\r\nHost: {c}\r\n{DEFAULTS}\r\n"), c.to_string()));
+    one(&mut out, "xfh", "HTTP X-Forwarded-Host header", &|c| (format!("GET / HTTP/1.1\r\nHost: {host_hdr}\r\nX-Forwarded-Host: {c}\r\n{DEFAULTS}\r\n"), c.to_string()));
+    one(&mut out, "hostauth", "HTTP Host header", &|c| (format!("GET / HTTP/1.1\r\nHost: {host}:{port}@{c}\r\n{DEFAULTS}\r\n"), c.to_string()));
+    if direct {
+        one(&mut out, "authfrag", "HTTP Request-Line", &|c| (format!("GET @{c}/ HTTP/1.1\r\nHost: {host_hdr}\r\n{DEFAULTS}\r\n"), format!("@{c}/")));
+        one(&mut out, "absurl", "HTTP Request-Line", &|c| (format!("GET http://{c}/ HTTP/1.1\r\nHost: {host_hdr}\r\n{DEFAULTS}\r\n"), format!("http://{c}/")));
+    }
+    // Zs61.ZH(NONE) -> Zcg4.ZZ: one request, six headers, an id each.
+    let headers: [(&'static str, &'static str, &'static str, &dyn Fn(&str) -> String); 6] = [
+        ("xff", "X-Forwarded-For", "HTTP X-Forwarded-For header", &|c| c.to_string()),
+        ("tci", "True-Client-IP", "HTTP True-Client-IP header", &|c| c.to_string()),
+        ("xrip", "X-Real-IP", "HTTP X-Real-IP header", &|c| c.to_string()),
+        ("referer", "Referer", "HTTP Referer header", &|c| format!("http://{c}/")),
+        ("wap", "X-WAP-Profile", "HTTP X-WAP-Profile header", &|c| format!("http://{c}/wap.xml")),
+        ("scraped", "X-Scraped", "HTTP X-Scraped header", &|c| c.to_string()),
+    ];
+    let mut lines = String::new();
+    let mut ids = Vec::new();
+    for (slot, name, label, value) in headers {
+        if let Some(c) = collab(slot) {
+            lines.push_str(&format!("{name}: {}\r\n", value(&c)));
+            ids.push((slot, c, label));
+        }
+    }
+    if !ids.is_empty() {
+        out.push(EverywhereProbe { request: format!("GET / HTTP/1.1\r\nHost: {host_hdr}\r\n{lines}{DEFAULTS}\r\n"), ids });
+    }
+    if direct {
+        one(&mut out, "connect", "HTTP Request-Line of a CONNECT request", &|c| (format!("CONNECT {c}:443 HTTP/1.1\r\nHost: {host_hdr}\r\n{DEFAULTS}\r\n"), format!("{c}:443")));
+    }
+    out
+}
+
+pub(crate) fn everywhere_hosts() -> &'static std::sync::Mutex<std::collections::HashSet<String>> {
+    static H: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
+    H.get_or_init(|| std::sync::Mutex::new(std::collections::HashSet::new()))
+}
+
+/// burp.Zc7h (APH_CollaboratorEverywhere), once per host: Collaborator
+/// names in the Host header, X-Forwarded-Host, the request line and the
+/// client-IP / Referer headers (burp.Zs61, Zcg4). Each id raises External
+/// service interaction when the Collaborator sees it; a response that
+/// already holds the Collaborator's content raises Out-of-band resource
+/// load (HTTP) at once (burp.Zsrh.ZT).
+pub(crate) struct CollaboratorEverywhere;
+
+impl RequestCheck for CollaboratorEverywhere {
+    fn id(&self) -> &'static str {
+        "active.collaborator-everywhere"
+    }
+    fn issue(&self) -> &'static str {
+        "External service interaction (DNS)"
+    }
+    fn scope(&self) -> Scope {
+        Scope::Host
+    }
+    fn run(&self, cx: &ScanCtx) {
+        if cx.stopped() || !cx.oob.iter().any(|(k, _, _)| k.starts_with("#host:ce:")) {
+            return;
+        }
+        let (scheme, _) = origin_of(cx);
+        if !everywhere_hosts().lock().unwrap().insert(format!("{scheme}://{}:{}", cx.host, cx.port)) {
+            return;
+        }
+        let direct = cx.shared.upstream_for(&cx.host).kind == crate::upstream::UpstreamKind::None;
+        let find = |slot: &str| cx.oob.iter().find(|(k, _, _)| *k == format!("#host:ce:{slot}")).cloned();
+        let collab = |slot: &str| find(slot).map(|(_, _, d)| d);
+        for probe in everywhere_probes(&cx.host_hdr, &cx.host, cx.port, direct, &collab) {
+            if cx.stopped() {
+                break;
+            }
+            let resp = burp_send(cx, probe.request.as_bytes());
+            for (slot, shown, label) in &probe.ids {
+                let Some((_, token, _)) = find(slot) else { continue };
+                let mut issue = mk("medium", &format!("Out-of-band payload embedded via the {label}"), &cx.entry, String::new())
+                    .with_evidence(vec![ScanEvidence::new(probe.request.as_bytes(), resp.as_deref())]);
+                issue.path = "/".into();
+                let delivery = crate::oob::delivery_sentence("The payload", shown, label, ".");
+                cx.shared.oob.register_delivered(token.clone(), None, issue, delivery);
+                if let Some(r) = resp.as_deref() {
+                    if inband_hit(r, &token) {
+                        let mut i = oob_resource_load_issue(&cx.entry, &crate::oob::delivery_sentence("The payload", shown, label, ""), &probe.request, r);
+                        i.path = "/".into();
+                        cx.report(vec![i]);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// burp.Ze2n.Zt: the response holds the value the Collaborator served for
+/// `token` (searched ignoring case, net.portswigger.Zkk.ZT(…, true)).
+pub(crate) fn inband_hit(resp: &[u8], token: &str) -> bool {
+    let marker = crate::collaborator::inband_marker(token).to_ascii_lowercase();
+    !marker.is_empty() && resp.to_ascii_lowercase().windows(marker.len()).any(|w| w == marker.as_bytes())
+}
+
+/// "Out-of-band resource load (HTTP)" found in-band, in burp.Zwu1's words:
+/// the fixed lead, the delivery sentence (burp.Zez7.Ze), then what the
+/// application did with the URL. High and certain: the content came back.
+pub(crate) fn oob_resource_load_issue(entry: &HistEntry, delivery: &str, req: &str, resp: &[u8]) -> ScanIssue {
+    let mut i = mk(
+        "high",
+        "Out-of-band resource load (HTTP)",
+        entry,
+        format!(
+            "It is possible to induce the application to retrieve the contents of an arbitrary external URL and return those contents in its own response.{delivery}.<br><br>The application performed an HTTP request to the specified domain. The response from that request was then included in the application's own response."
+        ),
+    );
+    i.confidence = "Certain".into();
+    i.with_evidence(vec![ScanEvidence::new(req.as_bytes(), Some(resp))])
+}
+
+/// burp.Zx8l / Zibp: a value Burp leaves alone because it reads as a
+/// boolean ("true" / "false", compared ignoring case).
+fn is_bool_word(v: &str) -> bool {
+    v.eq_ignore_ascii_case("true") || v.eq_ignore_ascii_case("false")
+}
+
+/// burp.Zibp.ZU's value test: not a boolean word and no \u0002 byte.
+fn zibp_zu_value_ok(v: &str) -> bool {
+    !is_bool_word(v) && !v.contains('\u{2}')
 }
 
 /// The insertion-point phase: every point in order, every applicable check
@@ -382,24 +536,23 @@ impl PointCheck for ExternalInteraction {
     fn issue(&self) -> &'static str {
         "External service interaction (DNS)"
     }
-    /// burp.Zxfo.Zh (Collaborator payload in the value: external interaction / out-of-band resource load): via Zibp.ZU not on parameter names; server-side. Burp also skips URL path folders and one header whose name is encrypted in the jar; WebProbe's existing kinds are unchanged.
-    fn applies_to(&self, kind: &IpKind) -> bool {
-        match kind {
-            // Zibp.ZU: not on added parameter names (Zewr.ZY).
-            IpKind::ParamName(_) => false,
+    /// burp.Zxfo.Zh (a Collaborator URL in the value: External service interaction / Out-of-band resource load): not on URL path folders nor the User-Agent header; then Zibp.ZU: not on parameter names, nor on a value `true` / `false` (any case) or holding U+0002. Server-side.
+    fn applies_to(&self, ip: &InsertionPoint) -> bool {
+        match &ip.kind {
+            IpKind::PathFolder(_)
+            | IpKind::ParamName(_) => false,
+            IpKind::Header => !ip.name.eq_ignore_ascii_case("user-agent") && zibp_zu_value_ok(&ip.decoded_value()),
             IpKind::Query
             | IpKind::Body
             | IpKind::Json(_)
             | IpKind::Multipart { .. }
             | IpKind::Cookie
-            | IpKind::Header
-            | IpKind::PathFolder(_)
             | IpKind::PathFilename(_)
             | IpKind::EntireBody
             | IpKind::XmlParam { .. }
             | IpKind::XmlTag { .. }
             | IpKind::XmlAttr { .. }
-            | IpKind::Base64 { .. } => true,
+            | IpKind::Base64 { .. } => zibp_zu_value_ok(&ip.decoded_value()),
         }
     }
     fn server_side(&self) -> bool {
@@ -420,7 +573,18 @@ impl PointCheck for ExternalInteraction {
             format!("Collaborator token {token} replaced the value; confirmed when an interaction is observed."),
         )
         .with_evidence(vec![ScanEvidence::new(new_req.as_bytes(), resp.as_deref())]);
-        cx.shared.oob.register(token.clone(), None, issue);
+        // burp.Zez7.Ze (URL payload) wording for the issue the interaction raises.
+        let point = ip.describe_short(true);
+        let delivery = crate::oob::delivery_sentence("The payload", domain, &point, ".");
+        cx.shared.oob.register_delivered(token.clone(), None, issue, delivery);
+        // burp.Zxfo.lambda$doCheck$0: the response itself may carry what the
+        // Collaborator served for this id (Ze2n.Zt): the server fetched the
+        // URL and returned its content in-band.
+        if let Some(r) = resp.as_deref() {
+            if inband_hit(r, token) {
+                cx.report(vec![oob_resource_load_issue(&cx.entry, &crate::oob::delivery_sentence("The payload", domain, &point, ""), &new_req, r)]);
+            }
+        }
         cx.progress();
         cx.pace(50);
     }
@@ -440,8 +604,8 @@ impl PointCheck for LightProbes {
         "Active probe: DOM-based cross-site scripting (reflected)"
     }
     /// WebProbe's own probe (no Burp class): every kind; not a server-side check.
-    fn applies_to(&self, kind: &IpKind) -> bool {
-        match kind {
+    fn applies_to(&self, ip: &InsertionPoint) -> bool {
+        match &ip.kind {
             IpKind::Query
             | IpKind::Body
             | IpKind::Json(_)
@@ -503,10 +667,9 @@ impl PointCheck for OsCommandInjection {
     fn issue(&self) -> &'static str {
         "OS command injection"
     }
-    /// burp.Zx8l.Zh: every kind but the parameter names; server-side.
-    fn applies_to(&self, kind: &IpKind) -> bool {
-        match kind {
-            // burp.Zx8l.Zh: never on added parameter names (Zxt3.ZD).
+    /// burp.Zx8l.Zh: never on added parameter names (Zxt3.ZD), nor on a value `true` / `false` (any case). Server-side.
+    fn applies_to(&self, ip: &InsertionPoint) -> bool {
+        match &ip.kind {
             IpKind::ParamName(_) => false,
             IpKind::Query
             | IpKind::Body
@@ -520,7 +683,7 @@ impl PointCheck for OsCommandInjection {
             | IpKind::XmlParam { .. }
             | IpKind::XmlTag { .. }
             | IpKind::XmlAttr { .. }
-            | IpKind::Base64 { .. } => true,
+            | IpKind::Base64 { .. } => !is_bool_word(&ip.decoded_value()),
         }
     }
     fn server_side(&self) -> bool {
@@ -557,7 +720,15 @@ impl PointCheck for OsCommandInjection {
                 ),
             )
             .with_evidence(vec![ScanEvidence::new(new_req.as_bytes(), resp.as_deref())]);
-            cx.shared.oob.register(token, Some("CNAME"), issue);
+            // burp.Zez7.Ze (NSLOOKUP_PAYLOAD) wording for an External service
+            // interaction this id may raise instead (burp.Zfw7.Zr).
+            let delivery = crate::oob::delivery_sentence(
+                "The nslookup shell command",
+                &payload,
+                &ip.describe_short(true),
+                ". This payload is designed to trigger a CNAME DNS lookup if the application is vulnerable to OS command injection.",
+            );
+            cx.shared.oob.register_delivered(token, Some("CNAME"), issue, delivery);
             cx.progress();
             cx.pace(50);
         }
@@ -574,17 +745,16 @@ impl PointCheck for PathTraversal {
     fn issue(&self) -> &'static str {
         "File path traversal"
     }
-    /// burp.Zp3a.Zh -> Zibp.ZZ: not on parameter names (nor headers in Burp; WebProbe's header points keep the check, unchanged); server-side.
-    fn applies_to(&self, kind: &IpKind) -> bool {
-        match kind {
-            // Zibp.ZZ: not on parameter names (Zewr.ZY cases 1-3).
-            IpKind::ParamName(_) => false,
+    /// burp.Zp3a.Zh -> Zibp.ZZ: not on parameter names or HTTP headers (Zewr.ZY cases 1-4); server-side. Zibp.Zo's value rules are not ported (it depends on Zp3a's own flag and the point's ZO(), not established).
+    fn applies_to(&self, ip: &InsertionPoint) -> bool {
+        match &ip.kind {
+            IpKind::ParamName(_)
+            | IpKind::Header => false,
             IpKind::Query
             | IpKind::Body
             | IpKind::Json(_)
             | IpKind::Multipart { .. }
             | IpKind::Cookie
-            | IpKind::Header
             | IpKind::PathFolder(_)
             | IpKind::PathFilename(_)
             | IpKind::EntireBody
@@ -645,8 +815,8 @@ impl PointCheck for LinkManipulation {
         "Link manipulation (reflected)"
     }
     /// burp.Zb_5 has no applicability test: every kind; not server-side.
-    fn applies_to(&self, kind: &IpKind) -> bool {
-        match kind {
+    fn applies_to(&self, ip: &InsertionPoint) -> bool {
+        match &ip.kind {
             IpKind::Query
             | IpKind::Body
             | IpKind::Json(_)
@@ -704,17 +874,16 @@ impl PointCheck for FilePathManipulation {
     fn issue(&self) -> &'static str {
         "File path manipulation"
     }
-    /// Part of burp.Zp3a (Zsl1): Zibp.ZZ rules as PathTraversal; server-side.
-    fn applies_to(&self, kind: &IpKind) -> bool {
-        match kind {
-            // Zibp.ZZ: not on parameter names.
-            IpKind::ParamName(_) => false,
+    /// Part of burp.Zp3a (Zsl1): Zibp.ZZ type rules as PathTraversal; server-side.
+    fn applies_to(&self, ip: &InsertionPoint) -> bool {
+        match &ip.kind {
+            IpKind::ParamName(_)
+            | IpKind::Header => false,
             IpKind::Query
             | IpKind::Body
             | IpKind::Json(_)
             | IpKind::Multipart { .. }
             | IpKind::Cookie
-            | IpKind::Header
             | IpKind::PathFolder(_)
             | IpKind::PathFilename(_)
             | IpKind::EntireBody
@@ -765,16 +934,16 @@ impl PointCheck for SsiInjection {
     fn issue(&self) -> &'static str {
         "SSI injection"
     }
-    /// burp.Zexx.Zh: every new kind (Burp excludes URL path folders and the User-Agent / Referer headers; WebProbe's existing kinds are unchanged); server-side.
-    fn applies_to(&self, kind: &IpKind) -> bool {
-        match kind {
+    /// burp.Zexx.Zh (Zmw7.Zk): not on URL path folders, nor on the User-Agent and Referer headers (names compared lower-cased); server-side.
+    fn applies_to(&self, ip: &InsertionPoint) -> bool {
+        match &ip.kind {
+            IpKind::PathFolder(_) => false,
+            IpKind::Header => !ip.name.eq_ignore_ascii_case("user-agent") && !ip.name.eq_ignore_ascii_case("referer"),
             IpKind::Query
             | IpKind::Body
             | IpKind::Json(_)
             | IpKind::Multipart { .. }
             | IpKind::Cookie
-            | IpKind::Header
-            | IpKind::PathFolder(_)
             | IpKind::PathFilename(_)
             | IpKind::EntireBody
             | IpKind::XmlParam { .. }
@@ -828,8 +997,8 @@ impl PointCheck for TemplateInjection {
         "Server-side template injection"
     }
     /// burp.Zi6p.Zh: every kind, server-side (ZA.Zn(Zr)).
-    fn applies_to(&self, kind: &IpKind) -> bool {
-        match kind {
+    fn applies_to(&self, ip: &InsertionPoint) -> bool {
+        match &ip.kind {
             IpKind::Query
             | IpKind::Body
             | IpKind::Json(_)
@@ -890,8 +1059,8 @@ impl PointCheck for ReflectedXss {
         "Cross-site scripting (reflected)"
     }
     /// burp.Zi6p.Zh: every kind, server-side: Burp's XSS engine also skips the server-side skip list.
-    fn applies_to(&self, kind: &IpKind) -> bool {
-        match kind {
+    fn applies_to(&self, ip: &InsertionPoint) -> bool {
+        match &ip.kind {
             IpKind::Query
             | IpKind::Body
             | IpKind::Json(_)
@@ -950,8 +1119,8 @@ impl PointCheck for StoredXss {
         "Cross-site scripting (stored)"
     }
     /// burp.Zi6p.Zh (stored half Zi6p.ZZ): every kind, server-side.
-    fn applies_to(&self, kind: &IpKind) -> bool {
-        match kind {
+    fn applies_to(&self, ip: &InsertionPoint) -> bool {
+        match &ip.kind {
             IpKind::Query
             | IpKind::Body
             | IpKind::Json(_)
@@ -1021,8 +1190,8 @@ impl PointCheck for ClientTemplateInjection {
         "Client-side template injection"
     }
     /// burp.Zrmh has no applicability test: every kind; not server-side.
-    fn applies_to(&self, kind: &IpKind) -> bool {
-        match kind {
+    fn applies_to(&self, ip: &InsertionPoint) -> bool {
+        match &ip.kind {
             IpKind::Query
             | IpKind::Body
             | IpKind::Json(_)
@@ -1094,8 +1263,8 @@ impl PointCheck for PhpCodeInjection {
     }
     /// burp.Zsn3 (echo half) on file-upload parts only (Zcgg.Zw); server-side
     /// (Zsn3.Zh: Zg.Zn(ZS)).
-    fn applies_to(&self, kind: &IpKind) -> bool {
-        match kind {
+    fn applies_to(&self, ip: &InsertionPoint) -> bool {
+        match &ip.kind {
             IpKind::Multipart { filename, .. } => filename.is_some(),
             IpKind::Query
             | IpKind::Body
@@ -1115,13 +1284,16 @@ impl PointCheck for PhpCodeInjection {
     fn server_side(&self) -> bool {
         true
     }
-    fn run(&self, cx: &ScanCtx, _st: &mut ScanState, pt: &mut PointRun) {
-        let ip = pt.ip;
+    fn run(&self, cx: &ScanCtx, st: &mut ScanState, pt: &mut PointRun) {
+        let (idx, ip) = (pt.idx, pt.ip);
         let IpKind::Multipart { index, filename: Some(orig) } = &ip.kind else { return };
         if cx.stopped() {
             return;
         }
         let token = active_checks::rnd_id(20);
+        // The Collaborator half (burp.Zxvv.ZQ): the same uploaded file also
+        // resolves a Collaborator name, when the scan has an id for it.
+        let collab = oob_slot(&cx.oob, idx, &ip.name, "php", &mut st.oob_used).map(|(_, t, d)| (t.clone(), active_checks::php_collaborator_host(t, d)));
         let rec = Recorder::default();
         let send = |fname: &str, ct: &str, content: &str| -> Option<Vec<u8>> {
             rec.send(cx, fname, with_multipart_part(&cx.req, *index, content, Some(fname), Some(ct)).as_bytes())
@@ -1130,7 +1302,26 @@ impl PointCheck for PhpCodeInjection {
             let path = same_origin_path(loc, cx.entry.https, &cx.host_hdr, &cx.parts.path)?;
             rec.send(cx, "", get_request_like(&cx.req, &path).as_bytes())
         };
-        if let Some(hit) = active_checks::run_php_echo_check(orig, &token, send, follow) {
+        let hit = active_checks::run_php_echo_check(orig, &token, collab.as_ref().map(|(_, h)| h.as_str()), send, follow);
+        if hit.is_none() {
+            if let Some((id, host)) = &collab {
+                // Raised when the id sees a DNS lookup (burp.Zxvv.ZR).
+                let filename = active_checks::php_upload_filename(orig, &token);
+                let issue = mk_point(
+                    "PHP code injection",
+                    "high",
+                    "Certain",
+                    &cx.entry,
+                    ip,
+                    format!(
+                        "A file named {filename:?} was uploaded with PHP code that calls gethostbyname(\"{host}\"). The application performed a DNS lookup of the Collaborator id {id}, so the server executed the uploaded PHP code."
+                    ),
+                )
+                .with_evidence(rec.from_last(&filename).into_iter().take(1).collect());
+                cx.shared.oob.register(id.clone(), Some("DNS"), issue);
+            }
+        }
+        if let Some(hit) = hit {
             let mut ev = rec.from_last(&hit.filename);
             ev.truncate(hit.hop + 1);
             cx.report(vec![mk_point(
@@ -1166,8 +1357,8 @@ impl PointCheck for InputReflected {
         "Input returned in response (reflected)"
     }
     /// burp.Zr02 has no applicability test: every kind; not server-side.
-    fn applies_to(&self, kind: &IpKind) -> bool {
-        match kind {
+    fn applies_to(&self, ip: &InsertionPoint) -> bool {
+        match &ip.kind {
             IpKind::Query
             | IpKind::Body
             | IpKind::Json(_)
@@ -1233,8 +1424,8 @@ impl PointCheck for HeaderInjection {
         "HTTP response header injection"
     }
     /// burp.Zwi has no applicability test: every kind; not server-side.
-    fn applies_to(&self, kind: &IpKind) -> bool {
-        match kind {
+    fn applies_to(&self, ip: &InsertionPoint) -> bool {
+        match &ip.kind {
             IpKind::Query
             | IpKind::Body
             | IpKind::Json(_)
@@ -1293,8 +1484,8 @@ impl PointCheck for OpenRedirect {
         "Open redirection (reflected)"
     }
     /// burp.Zuag has no applicability test: every kind; not server-side.
-    fn applies_to(&self, kind: &IpKind) -> bool {
-        match kind {
+    fn applies_to(&self, ip: &InsertionPoint) -> bool {
+        match &ip.kind {
             IpKind::Query
             | IpKind::Body
             | IpKind::Json(_)
@@ -1356,8 +1547,8 @@ impl PointCheck for SqlErrorInjection {
         "SQL injection"
     }
     /// burp.Zg_c / Zppj: no point-type rule; Zppj returns before probing a point on the server-side skip list.
-    fn applies_to(&self, kind: &IpKind) -> bool {
-        match kind {
+    fn applies_to(&self, ip: &InsertionPoint) -> bool {
+        match &ip.kind {
             IpKind::Query
             | IpKind::Body
             | IpKind::Json(_)
@@ -1423,8 +1614,8 @@ impl PointCheck for SqlBooleanInjection {
         "SQL injection"
     }
     /// burp.Zg_c / Zppj: as SqlErrorInjection.
-    fn applies_to(&self, kind: &IpKind) -> bool {
-        match kind {
+    fn applies_to(&self, ip: &InsertionPoint) -> bool {
+        match &ip.kind {
             IpKind::Query
             | IpKind::Body
             | IpKind::Json(_)
@@ -1497,8 +1688,8 @@ impl PointCheck for XmlInjectionOob {
         "XML injection"
     }
     /// burp.Zp7s.Zh: not on headers or parameter names; server-side.
-    fn applies_to(&self, kind: &IpKind) -> bool {
-        match kind {
+    fn applies_to(&self, ip: &InsertionPoint) -> bool {
+        match &ip.kind {
             // burp.Zp7s.Zh: Zxmw.Zl lists HEADER and the parameter-name kinds.
             IpKind::Header
             | IpKind::ParamName(_) => false,
@@ -1563,8 +1754,8 @@ impl PointCheck for XmlInjectionError {
         "XML injection"
     }
     /// burp.Zp7s.Zh: not on headers or parameter names (Zxmw.Zl); server-side.
-    fn applies_to(&self, kind: &IpKind) -> bool {
-        match kind {
+    fn applies_to(&self, ip: &InsertionPoint) -> bool {
+        match &ip.kind {
             // Zxmw.Zl: HEADER and the parameter-name kinds.
             IpKind::Header
             | IpKind::ParamName(_) => false,
@@ -1625,8 +1816,8 @@ impl PointCheck for LdapInjection {
         "LDAP injection"
     }
     /// burp.Zwkf.Zh: no point-type rule; server-side.
-    fn applies_to(&self, kind: &IpKind) -> bool {
-        match kind {
+    fn applies_to(&self, ip: &InsertionPoint) -> bool {
+        match &ip.kind {
             IpKind::Query
             | IpKind::Body
             | IpKind::Json(_)
@@ -1694,16 +1885,16 @@ impl PointCheck for SmtpHeaderInjection {
     fn issue(&self) -> &'static str {
         "SMTP header injection"
     }
-    /// burp.Zgcg.Zh: every new kind (Burp excludes URL path folders and User-Agent / Referer; existing kinds unchanged); server-side.
-    fn applies_to(&self, kind: &IpKind) -> bool {
-        match kind {
+    /// burp.Zgcg.Zh (Zw5k.Zy): not on URL path folders, nor on the User-Agent and Referer headers (names compared lower-cased); server-side.
+    fn applies_to(&self, ip: &InsertionPoint) -> bool {
+        match &ip.kind {
+            IpKind::PathFolder(_) => false,
+            IpKind::Header => !ip.name.eq_ignore_ascii_case("user-agent") && !ip.name.eq_ignore_ascii_case("referer"),
             IpKind::Query
             | IpKind::Body
             | IpKind::Json(_)
             | IpKind::Multipart { .. }
             | IpKind::Cookie
-            | IpKind::Header
-            | IpKind::PathFolder(_)
             | IpKind::PathFilename(_)
             | IpKind::EntireBody
             | IpKind::XmlParam { .. }
@@ -1764,8 +1955,8 @@ impl PointCheck for StoredEcho {
         "Active probe: value of parameter appears stored"
     }
     /// WebProbe's own pass (no Burp class): every kind; not server-side.
-    fn applies_to(&self, kind: &IpKind) -> bool {
-        match kind {
+    fn applies_to(&self, ip: &InsertionPoint) -> bool {
+        match &ip.kind {
             IpKind::Query
             | IpKind::Body
             | IpKind::Json(_)
@@ -2573,6 +2764,7 @@ mod tests {
                 ("active.path-relative-style-sheet-import", Scope::Request, Some(BURP_GROUP)),
                 ("active.http-trace-enabled", Scope::Host, Some(BURP_GROUP)),
                 ("active.openapi-definition", Scope::Host, Some(BURP_GROUP)),
+                ("active.collaborator-everywhere", Scope::Host, None),
                 ("active.server-trace-echo", Scope::Request, Some(SERVER_GROUP)),
                 ("active.server-options-methods", Scope::Request, Some(SERVER_GROUP)),
                 ("active.header-manipulation", Scope::Request, None),
@@ -2614,13 +2806,37 @@ mod tests {
 
     #[test]
     fn kind_applicability() {
-        let multipart_file = IpKind::Multipart { index: 0, filename: Some("a.txt".into()) };
-        let multipart_plain = IpKind::Multipart { index: 0, filename: None };
+        let pt = |kind: IpKind| InsertionPoint::new(kind, "x", "v");
+        let multipart_file = pt(IpKind::Multipart { index: 0, filename: Some("a.txt".into()) });
+        let multipart_plain = pt(IpKind::Multipart { index: 0, filename: None });
         assert!(PhpCodeInjection.applies_to(&multipart_file));
         assert!(!PhpCodeInjection.applies_to(&multipart_plain));
-        assert!(!PhpCodeInjection.applies_to(&IpKind::Query));
-        assert!(!XmlInjectionError.applies_to(&IpKind::Header));
-        assert!(XmlInjectionError.applies_to(&IpKind::Cookie));
+        assert!(!PhpCodeInjection.applies_to(&pt(IpKind::Query)));
+        assert!(!XmlInjectionError.applies_to(&pt(IpKind::Header)));
+        assert!(XmlInjectionError.applies_to(&pt(IpKind::Cookie)));
+    }
+
+    #[test]
+    fn point_rules_follow_the_burp_check_classes() {
+        let pt = |kind: IpKind, name: &str, value: &str| InsertionPoint::new(kind, name, value);
+        let ua = pt(IpKind::Header, "User-Agent", "Mozilla");
+        let referer = pt(IpKind::Header, "Referer", "https://h/");
+        let xff = pt(IpKind::Header, "X-Forwarded-For", "1.2.3.4");
+        let folder = pt(IpKind::PathFolder(0), "URL path folder 1", "api");
+        // burp.Zexx / Zgcg: no URL path folders, no User-Agent or Referer.
+        for c in [&SsiInjection as &dyn PointCheck, &SmtpHeaderInjection] {
+            assert!(!c.applies_to(&ua) && !c.applies_to(&referer) && !c.applies_to(&folder), "{}", c.id());
+            assert!(c.applies_to(&xff), "{}", c.id());
+        }
+        // burp.Zibp.ZZ (Zp3a): no headers at all.
+        for c in [&PathTraversal as &dyn PointCheck, &FilePathManipulation] {
+            assert!(!c.applies_to(&xff) && c.applies_to(&folder), "{}", c.id());
+        }
+        // burp.Zxfo: no folders, no User-Agent; Zibp.ZU: no true / false values.
+        assert!(!ExternalInteraction.applies_to(&ua) && !ExternalInteraction.applies_to(&folder) && ExternalInteraction.applies_to(&referer));
+        assert!(!ExternalInteraction.applies_to(&pt(IpKind::Query, "f", "TRUE")) && !ExternalInteraction.applies_to(&pt(IpKind::Query, "f", "a\u{2}b")));
+        // burp.Zx8l: no true / false values (the query value is decoded first).
+        assert!(!OsCommandInjection.applies_to(&pt(IpKind::Query, "f", "%66alse")) && OsCommandInjection.applies_to(&pt(IpKind::Query, "f", "1")));
     }
 
     #[test]
@@ -2636,4 +2852,45 @@ mod tests {
         assert!(r.last("zz").is_none());
         assert_eq!(r.from_last("b").len(), 3);
     }
+
+    #[test]
+    fn collaborator_everywhere_builds_burps_request_set() {
+        let collab = |slot: &str| Some(format!("{slot}.oast.test"));
+        let probes = everywhere_probes("shop.test:8080", "shop.test", 8080, true, &collab);
+        let first_lines: Vec<&str> = probes.iter().map(|p| p.request.split("\r\n").next().unwrap()).collect();
+        assert_eq!(first_lines, vec!["GET / HTTP/1.1", "GET / HTTP/1.1", "GET / HTTP/1.1", "GET @authfrag.oast.test/ HTTP/1.1", "GET http://absurl.oast.test/ HTTP/1.1", "GET / HTTP/1.1", "CONNECT connect.oast.test:443 HTTP/1.1"]);
+        assert!(probes[0].request.contains("\r\nHost: host.oast.test\r\nPragma: no-cache\r\nCache-Control: no-cache, no-transform\r\nConnection: close\r\n\r\n"));
+        assert!(probes[1].request.contains("\r\nHost: shop.test:8080\r\nX-Forwarded-Host: xfh.oast.test\r\n"));
+        assert!(probes[2].request.contains("\r\nHost: shop.test:8080@hostauth.oast.test\r\n"));
+        // One request carries the six client-IP / Referer headers, an id each.
+        let combined = &probes[5];
+        assert_eq!(combined.ids.iter().map(|(s, _, _)| *s).collect::<Vec<_>>(), vec!["xff", "tci", "xrip", "referer", "wap", "scraped"]);
+        assert!(combined.request.contains("\r\nReferer: http://referer.oast.test/\r\nX-WAP-Profile: http://wap.oast.test/wap.xml\r\n"));
+        assert_eq!(combined.ids[3].2, "HTTP Referer header");
+        // Behind an upstream proxy: no request-line variants (Zs61.Zu).
+        let proxied = everywhere_probes("shop.test", "shop.test", 80, false, &collab);
+        assert_eq!(proxied.len(), 4);
+        // No Collaborator ids: nothing to send.
+        assert!(everywhere_probes("h", "h", 80, true, &|_| None).is_empty());
+    }
+
+    #[test]
+    fn inband_oob_resource_load_uses_burps_text() {
+        let token = "abc123xyz";
+        let marker = crate::collaborator::inband_marker(token);
+        assert_eq!(marker, "zyx321cba");
+        let resp = format!("HTTP/1.1 200 OK\r\n\r\n<p>Preview: <html><body>{}</body></html></p>", marker.to_uppercase());
+        assert!(inband_hit(resp.as_bytes(), token), "searched ignoring case");
+        assert!(!inband_hit(b"HTTP/1.1 200 OK\r\n\r\nabc123xyz", token), "the id echoed as sent is not the served content");
+        let e = HistEntry { host: "h".into(), path: "/p?u=1".into(), ..Default::default() };
+        let delivery = crate::oob::delivery_sentence("The payload", "abc123xyz.oast.test", "<b>u</b> parameter", "");
+        let i = oob_resource_load_issue(&e, &delivery, "GET /p?u=x HTTP/1.1\r\n\r\n", resp.as_bytes());
+        assert_eq!((i.name.as_str(), i.sev.as_str(), i.confidence.as_str()), ("Out-of-band resource load (HTTP)", "high", "Certain"));
+        assert_eq!(
+            i.detail,
+            "It is possible to induce the application to retrieve the contents of an arbitrary external URL and return those contents in its own response.<br><br>The payload <b>abc123xyz.oast.test</b> was submitted in the <b>u</b> parameter.<br><br>The application performed an HTTP request to the specified domain. The response from that request was then included in the application's own response."
+        );
+        assert_eq!(i.evidence.len(), 1);
+    }
 }
+

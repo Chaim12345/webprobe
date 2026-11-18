@@ -16,11 +16,24 @@ use crate::sync::Mutex;
 /// never sees its interaction must not be kept forever).
 const MAX_PENDING: usize = 100_000;
 
+/// One id a check embedded.
+#[derive(Clone)]
+struct Pending {
+    id: String,
+    /// The interaction that proves the check's own issue ("SMTP", "CNAME",
+    /// "DNS"), or None: any interaction, raised per type as External
+    /// service interaction.
+    kind: Option<&'static str>,
+    issue: ScanIssue,
+    /// How the payload was delivered, in Burp's words (burp.Zez7.Ze: "<br><br>The
+    /// payload <b>…</b> was submitted in the <b>q</b> parameter."), for the
+    /// External service interaction text (burp.Zwfn.Zf).
+    delivery: String,
+}
+
 #[derive(Default)]
 pub struct OobState {
-    /// (id, required interaction kind such as "SMTP" or "CNAME", or None for
-    /// any; the issue to raise).
-    pending: Mutex<Vec<(String, Option<&'static str>, ScanIssue)>>,
+    pending: Mutex<Vec<Pending>>,
     /// "id|kind" pairs already raised as External service interaction.
     reported: Mutex<HashSet<String>>,
     /// Highest interaction id already matched.
@@ -39,22 +52,29 @@ impl OobState {
     /// Register an id a check embedded; `kind` is the interaction that
     /// proves it (None: any, raised per interaction type).
     pub fn register(&self, id: String, kind: Option<&'static str>, issue: ScanIssue) {
+        self.register_delivered(id, kind, issue, String::new());
+    }
+
+    /// [`OobState::register`] with Burp's delivery sentence for the
+    /// External service interaction issue an interaction of another kind
+    /// raises (see [`delivery_sentence`]).
+    pub fn register_delivered(&self, id: String, kind: Option<&'static str>, issue: ScanIssue, delivery: String) {
         let mut pending = self.pending.lock().unwrap();
-        pending.push((id, kind, issue));
+        pending.push(Pending { id, kind, issue, delivery });
         let excess = pending.len().saturating_sub(MAX_PENDING);
         pending.drain(..excess);
     }
 
     /// Replace the evidence of a pending id once its probe's response is in.
     pub fn set_evidence(&self, id: &str, evidence: Vec<crate::scan::ScanEvidence>) {
-        if let Some(p) = self.pending.lock().unwrap().iter_mut().find(|(t, k, _)| t == id && k.is_none()) {
-            p.2.evidence = evidence;
+        if let Some(p) = self.pending.lock().unwrap().iter_mut().find(|p| p.id == id && p.kind.is_none()) {
+            p.issue.evidence = evidence;
         }
     }
 
     /// (id, kind, issue) of every pending id, for tests and the Dashboard.
     pub fn pending(&self) -> Vec<(String, Option<&'static str>, ScanIssue)> {
-        self.pending.lock().unwrap().clone()
+        self.pending.lock().unwrap().iter().map(|p| (p.id.clone(), p.kind, p.issue.clone())).collect()
     }
 
     pub fn is_pending_empty(&self) -> bool {
@@ -147,46 +167,38 @@ impl OobState {
             // `nslookup -q=cname` makes (burp.Zing.ZR: DNS and type 5).
             let cname = it.dns().is_some_and(|d| d.qtype == 5);
             let fits = |k: &str| k == kind || (k == "CNAME" && cname);
-            let Some(pos) = pending.iter().position(|(t, k, _)| t == token && k.is_none_or(fits)) else {
+            let Some(pos) = pending.iter().position(|p| &p.id == token && p.kind.is_none_or(fits)) else {
                 // An OS-command id that saw some other interaction (an A
                 // lookup, an HTTP fetch): Burp reports External service
                 // interaction for it (burp.Zfw7.Zr: not Zing.ZR -> Zuet.ZJ)
                 // and keeps waiting for the CNAME.
-                if let Some(p) = pending.iter().find(|(t, k, _)| t == token && *k == Some("CNAME")) {
+                if let Some(p) = pending.iter().find(|p| &p.id == token && p.kind == Some("CNAME")) {
                     if (kind == "DNS" || kind == "HTTP") && reported.insert(format!("{token}|{kind}")) {
-                        let mut issue = p.2.clone();
+                        let mut issue = p.issue.clone();
                         issue.name = format!("External service interaction ({kind})");
                         issue.sev = "high".into();
                         issue.confidence = "Certain".into();
                         issue.type_id = 0;
-                        issue.detail = format!(
-                            "The nslookup payload's Collaborator id {token} received a {kind} interaction: {} (source {}).",
-                            it.headline(),
-                            it.source
-                        );
+                        issue.detail = interaction_detail(kind, &p.delivery, it);
                         issues.push(issue);
                     }
                 }
                 continue;
             };
-            if pending[pos].1.is_some() {
-                let (_, _, mut issue) = pending.remove(pos);
-                issue.detail = format!("Collaborator interaction observed: {} (source {})", it.headline(), it.source);
+            if pending[pos].kind.is_some() {
+                let mut issue = pending.remove(pos).issue;
+                issue.detail = format!("{}<br><br>Collaborator interaction observed: {} (source {}).", issue.detail, it.headline(), it.source);
                 issues.push(issue);
                 continue;
             }
             if !reported.insert(format!("{token}|{kind}")) {
                 continue;
             }
-            let mut issue = pending[pos].2.clone();
+            let mut issue = pending[pos].issue.clone();
             issue.name = format!("External service interaction ({kind})");
             issue.sev = "high".into();
             issue.confidence = "Certain".into();
-            issue.detail = format!(
-                "It is possible to induce the application to perform server-side {kind} interactions with an arbitrary domain. The payload {token} was submitted and a {kind} interaction was received: {} (source {}).",
-                it.headline(),
-                it.source
-            );
+            issue.detail = interaction_detail(kind, &pending[pos].delivery, it);
             issues.push(issue);
             if reported.contains(&format!("{token}|DNS")) && reported.contains(&format!("{token}|HTTP")) {
                 pending.remove(pos);
@@ -194,6 +206,34 @@ impl OobState {
         }
         issues
     }
+}
+
+/// burp.Zez7.Ze, the delivery sentence for a payload: "<br><br>The payload
+/// <b>x.oast</b> was submitted in the <b>q</b> parameter." (the point in
+/// Zsg0.Zj wording, `point`); `lead` names the payload ("The payload",
+/// "The nslookup shell command", ...), `tail` is the payload type's own
+/// ending (burp.Zez7.ZC; "." for a plain URL payload).
+pub fn delivery_sentence(lead: &str, payload: &str, point: &str, tail: &str) -> String {
+    format!("<br><br>{lead} <b>{}</b> was submitted in the {point}{tail}", crate::util::html_encode(payload))
+}
+
+/// burp.Zwfn.Zf: "It is possible to induce the application to perform
+/// server-side DNS lookups of arbitrary domain names." + the delivery +
+/// "<br><br>The application performed a DNS lookup of the specified
+/// domain." (strings decoded from Zwfn.b / Zuet). WebProbe adds the
+/// interaction it saw.
+fn interaction_detail(kind: &str, delivery: &str, it: &Interaction) -> String {
+    let (can, did) = match kind {
+        "DNS" => ("perform server-side DNS lookups of arbitrary domain names.", "performed a DNS lookup of the specified domain"),
+        "HTTP" => ("perform server-side HTTP requests to arbitrary domains.", "performed an HTTP request to the specified domain"),
+        "SMTP" => ("send emails via SMTP to arbitrary addresses.", "sent an email via SMTP to the specified address"),
+        _ => ("perform server-side interactions with arbitrary domains.", "performed an interaction with the specified domain"),
+    };
+    format!(
+        "It is possible to induce the application to {can}{delivery}<br><br>The application {did}.<br><br>Collaborator interaction: {} (source {}).",
+        it.headline(),
+        it.source
+    )
 }
 
 #[cfg(test)]
@@ -236,5 +276,29 @@ mod tests {
             (format!("r{k}"), String::new())
         });
         assert_eq!(taker.join().unwrap(), 30, "the demand was stocked");
+    }
+
+    #[test]
+    fn external_interaction_text_names_the_point_as_burp_does() {
+        use crate::collaborator::{DnsInteraction, InteractionDetail};
+        let oob = OobState::default();
+        let issue = ScanIssue { name: "pending".into(), ..Default::default() };
+        let delivery = delivery_sentence("The payload", "abc.oast.test", "<b>q</b> parameter", ".");
+        oob.register_delivered("abc".into(), None, issue.clone(), delivery);
+        let kept = ScanIssue { detail: "The value of the q request parameter: x".into(), ..issue };
+        oob.register_delivered("cmd".into(), Some("CNAME"), kept, delivery_sentence("The nslookup shell command", "nslookup -q=cname cmd.oast", "<b>q</b> parameter", ". This payload is designed to trigger a CNAME DNS lookup if the application is vulnerable to OS command injection."));
+        let dns = |token: &str, qtype| Interaction { id: 1, at: 0, source: "192.0.2.1".into(), token: Some(token.into()), detail: InteractionDetail::Dns(DnsInteraction { qname: format!("{token}.oast.test"), qtype, raw_query: Vec::new() }) };
+        let got = oob.match_interactions(&[dns("abc", 1)]);
+        assert!(
+            got[0].detail.starts_with("It is possible to induce the application to perform server-side DNS lookups of arbitrary domain names.<br><br>The payload <b>abc.oast.test</b> was submitted in the <b>q</b> parameter.<br><br>The application performed a DNS lookup of the specified domain."),
+            "{}",
+            got[0].detail
+        );
+        // The nslookup id's A lookup (burp.Zfw7.Zr) uses the nslookup wording.
+        let got = oob.match_interactions(&[dns("cmd", 1)]);
+        assert!(got[0].detail.contains("The nslookup shell command <b>nslookup -q=cname cmd.oast</b> was submitted in the <b>q</b> parameter. This payload is designed"), "{}", got[0].detail);
+        // Its CNAME keeps the check's own text and adds the interaction.
+        let got = oob.match_interactions(&[dns("cmd", 5)]);
+        assert!(got[0].detail.starts_with("The value of the q request parameter: x<br><br>Collaborator interaction observed:"), "{}", got[0].detail);
     }
 }

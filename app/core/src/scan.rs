@@ -1278,6 +1278,7 @@ pub fn crawl_and_audit(shared: &Arc<Shared>, start_urls: &[String], audit_only: 
 /// APH_ checks once per host).
 pub(crate) fn reset_openapi_hosts() {
     openapi_hosts().lock().unwrap().clear();
+    checks::everywhere_hosts().lock().unwrap().clear();
 }
 
 fn openapi_hosts() -> &'static std::sync::Mutex<std::collections::HashSet<String>> {
@@ -3203,6 +3204,10 @@ pub(crate) fn slots_for(req_raw: &[u8], speed: ScanSpeed, config: &crate::scan_c
             out.push(format!("#{i}:xsd"));
             out.push(format!("#{i}:xi"));
         }
+        // PHP code injection, Collaborator half (burp.Zxvv.ZQ).
+        if checks::check_applies(&checks::PhpCodeInjection, ip, config) {
+            out.push(format!("#{i}:php"));
+        }
         // OS command injection (burp.Zc99): one id per nslookup payload.
         if checks::check_applies(&checks::OsCommandInjection, ip, config) {
             let first = if speed == ScanSpeed::Fast { 3 } else { 0 };
@@ -3210,6 +3215,10 @@ pub(crate) fn slots_for(req_raw: &[u8], speed: ScanSpeed, config: &crate::scan_c
                 out.push(format!("#{i}:cmd{k}"));
             }
         }
+    }
+    // Collaborator everywhere (burp.Zc7h), host-level: one id per slot.
+    if config.check_enabled("active.collaborator-everywhere") {
+        out.extend(checks::EVERYWHERE_SLOTS.iter().map(|s| format!("#host:ce:{s}")));
     }
     out
 }
@@ -5330,6 +5339,8 @@ mod tests {
             .chain(cmd(2))
             .chain(["#3:ext", "#3:xsd", "#3:xi"].iter().map(|s| s.to_string()))
             .chain(cmd(3))
+            // Collaborator everywhere (burp.Zc7h), once per request.
+            .chain(checks::EVERYWHERE_SLOTS.iter().map(|s| format!("#host:ce:{s}")))
             .collect();
         let default = crate::scan_config::ScanConfig::default();
         assert_eq!(slots_for(req, ScanSpeed::Normal, &default), want);
