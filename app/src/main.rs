@@ -1050,7 +1050,7 @@ fn main() {
     // Path B: load a real Montoya .jar extension through the sidecar JVM,
     // e.g. WEBPROBE_EXT_JAR=app/sidecar/demo-ext/demo-ext.jar
     if let Ok(ext_jar) = std::env::var("WEBPROBE_EXT_JAR") {
-        match ext_host::JavaSidecar::spawn(&ext_jar) {
+        match ext_host::JavaSidecar::spawn_with(&ext_jar, Some(ext_host::HostLink::to_shared(&shared))) {
             Ok(sidecar) => {
                 shared.log(&format!(
                     "Sidecar JVM loaded Montoya extension: {} ({})",

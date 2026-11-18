@@ -95,7 +95,8 @@ const CH_SERVER: CheckDef = CheckDef { id: "passive.server-version", name: "Serv
 const CH_XPB: CheckDef = CheckDef { id: "passive.x-powered-by", name: "X-Powered-By header discloses technology", sev: "info", confidence: "Firm" };
 const CH_ASPNET: CheckDef = CheckDef { id: "passive.aspnet-version", name: "ASP.NET version disclosure", sev: "info", confidence: "Certain" };
 const CH_COOKIE_HTTPONLY: CheckDef = CheckDef { id: "passive.cookie-httponly-missing", name: "Cookie without HttpOnly flag set", sev: "low", confidence: "Firm" };
-const CH_COOKIE_SECURE: CheckDef = CheckDef { id: "passive.cookie-secure-missing", name: "TLS cookie without secure flag set", sev: "low", confidence: "Firm" };
+// Session-like cookie: Firm / medium (burp.Zhcw.ZI); others Certain / info.
+const CH_COOKIE_SECURE: CheckDef = CheckDef { id: "passive.cookie-secure-missing", name: "TLS cookie without secure flag set", sev: "medium", confidence: "Firm" };
 const CH_COOKIE_SAMESITE: CheckDef = CheckDef { id: "passive.cookie-samesite-missing", name: "Cookie without SameSite attribute", sev: "low", confidence: "Firm" };
 const CH_COOKIE_SAMESITE_NONE: CheckDef = CheckDef { id: "passive.cookie-samesite-none-insecure", name: "SameSite=None cookie without Secure attribute", sev: "low", confidence: "Firm" };
 const CH_CORS_WILDCARD: CheckDef = CheckDef { id: "passive.cors-wildcard-origin", name: "CORS misconfiguration: wildcard origin", sev: "low", confidence: "Firm" };
@@ -375,14 +376,87 @@ pub fn add_passive_issues(shared: &Shared, mut issues: Vec<ScanIssue>) {
     let mut known: std::collections::BTreeSet<String> =
         iss.iter().map(&key).collect();
     issues.retain(|i| known.insert(key(i)));
-    let incoming = issues.len();
-    for issue in issues.iter_mut() {
+    let mut incoming = 0;
+    for mut issue in issues {
+        if pervasive_merge(&mut iss, &issue) {
+            continue;
+        }
         issue.id = shared.next_id.fetch_add(1, Ordering::SeqCst);
-        iss.push(issue.clone());
+        iss.push(issue);
+        incoming += 1;
     }
     if incoming > 0 {
         shared.log(&format!("Scanner reported {} new issue(s) ({} consolidated)", incoming, before - incoming));
     }
+}
+
+/// Burp's sentence on a pervasive issue merged across locations
+/// (burp.Zcro.ZZ for MERGE_SINGLE_IDENTIFIER).
+pub(crate) const MULTIPLE_LOCATIONS: &str = "This issue was found in multiple locations under the reported path.";
+
+/// Locations after which an issue becomes pervasive (burp.Zwgx.ZN7:
+/// `ZND() >= 10`).
+const PERVASIVE_AT: usize = 10;
+
+/// burp.Zsgz.ZC: the common leading path segments of two paths ("/" when
+/// either is "/" or the first segments differ).
+pub(crate) fn common_path(a: &str, b: &str) -> String {
+    if a == "/" || b == "/" {
+        return "/".into();
+    }
+    // Java's split drops trailing empty strings.
+    fn split(p: &str) -> Vec<&str> {
+        let mut v: Vec<&str> = p.split('/').collect();
+        while v.len() > 1 && v.last() == Some(&"") {
+            v.pop();
+        }
+        v
+    }
+    let (x, y) = (split(a), split(b));
+    let mut out = String::new();
+    for i in 1..x.len().min(y.len()) {
+        if x[i] != y[i] {
+            return if out.is_empty() { "/".into() } else { out };
+        }
+        out.push('/');
+        out.push_str(x[i]);
+    }
+    out
+}
+
+/// Burp's pervasive-issue handling (burp.Zeb6.Zb when an issue is raised,
+/// burp.Zbv8 / Zrh8.ZG when the task's issues are merged): issues of one
+/// type on one host with the same pervasive identifier (or none) form a
+/// group whose path is the common prefix of their locations (Zs45.ZIL).
+/// At the 10th location the group's issues become one issue at the group
+/// path, its text ending in [`MULTIPLE_LOCATIONS`]; later locations add
+/// nothing. Returns true when `new` was absorbed (not to be added).
+fn pervasive_merge(iss: &mut Vec<ScanIssue>, new: &ScanIssue) -> bool {
+    let same = |i: &ScanIssue| i.name == new.name && i.host == new.host && i.ident == new.ident;
+    if iss.iter().any(|i| same(i) && i.detail.ends_with(MULTIPLE_LOCATIONS)) {
+        return true;
+    }
+    let members: Vec<usize> = (0..iss.len()).filter(|&k| same(&iss[k])).collect();
+    if members.len() + 1 < PERVASIVE_AT {
+        return false;
+    }
+    let first = members[0];
+    let mut rep = iss[first].clone();
+    for &k in &members[1..] {
+        rep.path = common_path(&rep.path, &iss[k].path);
+        for ev in &iss[k].evidence {
+            if rep.evidence.len() < PERVASIVE_AT {
+                rep.evidence.push(ev.clone());
+            }
+        }
+    }
+    rep.path = common_path(&rep.path, &new.path);
+    rep.detail.push_str(MULTIPLE_LOCATIONS);
+    for &k in members[1..].iter().rev() {
+        iss.remove(k);
+    }
+    iss[first] = rep;
+    true
 }
 
 fn mk_check(c: CheckDef, e: &HistEntry, detail: impl Into<String>) -> ScanIssue {

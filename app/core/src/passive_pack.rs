@@ -338,6 +338,8 @@ struct SetCookie {
     value: String,
     domain: Option<String>,
     expired: bool,
+    secure: bool,
+    httponly: bool,
 }
 
 fn set_cookies(cx: &PassiveCtx) -> Vec<SetCookie> {
@@ -348,10 +350,14 @@ fn set_cookies(cx: &PassiveCtx) -> Vec<SetCookie> {
         .map(|(_, raw)| {
             let mut it = raw.split(';');
             let (name, value) = it.next().unwrap_or("").split_once('=').map(|(n, v)| (n.trim().to_string(), v.trim().to_string())).unwrap_or_default();
-            let mut c = SetCookie { name, value, domain: None, expired: false };
+            let mut c = SetCookie { name, value, domain: None, expired: false, secure: false, httponly: false };
             for a in it {
                 let (k, val) = a.split_once('=').map(|(k, v)| (k.trim(), v.trim())).unwrap_or((a.trim(), ""));
-                if k.eq_ignore_ascii_case("domain") {
+                if k.eq_ignore_ascii_case("secure") {
+                    c.secure = true;
+                } else if k.eq_ignore_ascii_case("httponly") {
+                    c.httponly = true;
+                } else if k.eq_ignore_ascii_case("domain") {
                     c.domain = Some(val.to_string());
                 } else if k.eq_ignore_ascii_case("expires") {
                     if let Some(t) = crate::cookie_jar::parse_http_date(val) {
@@ -388,29 +394,66 @@ pub(crate) fn duplicate_cookies(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
     }
 }
 
+/// The cookies burp.Zwqj looks at: live, with a value of 5 characters or
+/// more (Zwqj.Zl / ZL).
+fn audited_cookies(cx: &PassiveCtx) -> Vec<SetCookie> {
+    set_cookies(cx).into_iter().filter(|ck| !ck.expired && ck.value.chars().count() >= 5).collect()
+}
+
+/// burp.Zwfw / Zwv8 / Zwf5 for one cookie: the session-like one bold with
+/// the "increase" sentence, any other plain with the "reduce" sentence.
+fn cookie_text(head: &str, name: &str, session: bool) -> String {
+    let name = util::html_encode(name);
+    let tail = "You should review the contents of the cookie to determine its function.";
+    if session {
+        format!("{head}<li><b>{name}</b></li></ul>The cookie appears to contain a session token, which may increase the risk associated with this issue. {tail}")
+    } else {
+        format!("{head}<li>{name}</li></ul>The cookie does not appear to contain a session token, which may reduce the risk associated with this issue. {tail}")
+    }
+}
+
 /// Cookie scoped to parent domain (burp.Zwqj.highlightCookies, factories
-/// burp.Zem3.ZV / Zd, text burp.Zwfw): a live cookie with a value of 5
-/// characters or more whose Domain is a proper suffix of the host. A
-/// session-like cookie (burp.Zw4k.ZI) is Firm / low, any other Certain /
-/// information. One issue per cookie name.
+/// burp.Zem3.ZV / Zd, text burp.Zwfw): a cookie whose Domain is a proper
+/// suffix of the host. A session-like cookie (burp.Zw4k.ZI) is Firm / low,
+/// any other Certain / information. One issue per cookie name.
 pub(crate) fn cookie_parent_domain(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
     let c = CH_COOKIE_PARENT_DOMAIN;
     let host = cx.e.host.to_lowercase();
-    for ck in set_cookies(cx).into_iter().filter(|ck| !ck.expired && ck.value.chars().count() >= 5) {
+    for ck in audited_cookies(cx) {
         let Some(d) = ck.domain.as_deref().map(str::to_lowercase) else { continue };
         if !(d.len() < host.len() && host.ends_with(&d)) {
             continue;
         }
-        let name = util::html_encode(&ck.name);
         let head = "The following cookie was issued by the application and is scoped to a parent of the issuing domain:<ul>";
-        let tail = "You should review the contents of the cookie to determine its function.";
-        if session_like(&ck.name, &ck.value) {
-            let t = format!("{head}<li><b>{name}</b></li></ul>The cookie appears to contain a session token, which may increase the risk associated with this issue. {tail}");
-            v.push(issue(c, cx, "low", "Firm", format!("Session: {}", ck.name), t));
-        } else {
-            let t = format!("{head}<li>{name}</li></ul>The cookie does not appear to contain a session token, which may reduce the risk associated with this issue. {tail}");
-            v.push(issue(c, cx, "info", "Certain", format!("Other: {}", ck.name), t));
-        }
+        let session = session_like(&ck.name, &ck.value);
+        let (sev, conf, kind) = if session { ("low", "Firm", "Session") } else { ("info", "Certain", "Other") };
+        v.push(issue(c, cx, sev, conf, format!("{kind}: {}", ck.name), cookie_text(head, &ck.name, session)));
+    }
+}
+
+/// TLS cookie without secure flag set (burp.Zwqj.ZA on HTTPS, factories
+/// burp.Zhcw.ZI / ZN: session-like Firm / medium, other Certain / info;
+/// text burp.Zwv8) and Cookie without HttpOnly flag set (burp.Zwqj.ZC,
+/// factories burp.Zico.ZI / ZN: Firm / low, Certain / info; text
+/// burp.Zwf5). One issue per cookie name ("Session: " / "Other: ").
+pub(crate) fn cookie_flag(cx: &PassiveCtx, v: &mut Vec<ScanIssue>, secure: bool) {
+    if secure && !cx.e.https {
+        return;
+    }
+    let name = if secure { "TLS cookie without secure flag set" } else { "Cookie without HttpOnly flag set" };
+    let what = if secure { "the secure flag" } else { "the HttpOnly flag" };
+    let head = format!("The following cookie was issued by the application and does not have {what} set:<ul>");
+    for ck in audited_cookies(cx).into_iter().filter(|ck| if secure { !ck.secure } else { !ck.httponly }) {
+        let session = session_like(&ck.name, &ck.value);
+        let (sev, conf, kind) = match (session, secure) {
+            (true, true) => ("medium", "Firm", "Session"),
+            (true, false) => ("low", "Firm", "Session"),
+            (false, _) => ("info", "Certain", "Other"),
+        };
+        let mut i = mk(sev, name, cx.e, cookie_text(&head, &ck.name, session));
+        i.confidence = conf.into();
+        i.ident = format!("{kind}: {}", ck.name);
+        v.push(i);
     }
 }
 

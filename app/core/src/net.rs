@@ -1040,24 +1040,26 @@ impl Shared {
     /// Extension request hooks (Montoya-shaped, Path A): run every enabled
     /// extension in registration order; false means one dropped the message.
     /// The registry is only locked to take the list, not while hooks run.
-    pub fn ext_handle_request(&self, svc: &crate::ext_host::HttpService, method: &str, path: &str, req: &mut Vec<u8>) -> bool {
+    /// `ann` collects the exchange's Montoya annotations (comment and
+    /// highlight for Proxy history).
+    pub fn ext_handle_request(&self, svc: &crate::ext_host::HttpService, method: &str, path: &str, req: &mut Vec<u8>, ann: &mut crate::ext_host::Annotations) -> bool {
         let exts = self.ext_host.lock().unwrap().active();
         if exts.is_empty() {
             return true;
         }
-        let pass = crate::ext_host::run_request_hooks(&exts, svc, method, path, req);
+        let pass = crate::ext_host::run_request_hooks_annotated(&exts, svc, method, path, req, ann);
         self.collect_ext_issues(&exts, &svc.host, path);
         pass
     }
 
     /// Extension response hooks: false means one dropped the message. Issues
     /// the extensions reported are added for `host` + `path`.
-    pub fn ext_handle_response(&self, svc: &crate::ext_host::HttpService, method: &str, path: &str, resp: &mut Vec<u8>) -> bool {
+    pub fn ext_handle_response(&self, svc: &crate::ext_host::HttpService, method: &str, path: &str, req: &[u8], resp: &mut Vec<u8>, ann: &mut crate::ext_host::Annotations) -> bool {
         let exts = self.ext_host.lock().unwrap().active();
         if exts.is_empty() {
             return true;
         }
-        let pass = crate::ext_host::run_response_hooks(&exts, svc, method, path, resp);
+        let pass = crate::ext_host::run_response_hooks_annotated(&exts, svc, method, path, req, resp, ann);
         self.collect_ext_issues(&exts, &svc.host, path);
         pass
     }
@@ -2119,7 +2121,8 @@ pub fn derive_history_fields(e: &HistEntry) -> (bool, String, String, String) {
     (params, extension, title, cookies)
 }
 
-fn record(shared: &Shared, req: &[u8], resp: Option<Vec<u8>>, note: Option<String>, default_port: u16, https: bool, listener_port: u16, edited: bool) {
+#[allow(clippy::too_many_arguments)]
+fn record(shared: &Shared, req: &[u8], resp: Option<Vec<u8>>, note: Option<String>, default_port: u16, https: bool, listener_port: u16, edited: bool, ann: &crate::ext_host::Annotations) {
     // History shows the decoded message: chunked bodies reassembled and
     // content coding removed (MECHANICS.md A-01/A-02). The bytes forwarded to
     // the server or client are untouched.
@@ -2168,6 +2171,7 @@ fn record(shared: &Shared, req: &[u8], resp: Option<Vec<u8>>, note: Option<Strin
         diffs: 0,
     };
     let mut e = e;
+    annotate(&mut e, ann);
     let derived = derive_history_fields(&e);
     e.params = derived.0;
     e.extension = derived.1;
@@ -2522,7 +2526,7 @@ fn handle_websocket(shared: Arc<Shared>, mut client: TcpStream, req: Vec<u8>) {
     let (host, port) = host_of(&parts, 80);
     let req_session = apply_session_rules(&shared, &req, 80);
     let mut req_out = crate::rules::apply_rules(&req_session, &shared.mr_request.lock().unwrap());
-    if !shared.ext_handle_request(&crate::ext_host::HttpService::new(&host, port, false), &parts.method, &path_of(&parts), &mut req_out) {
+    if !shared.ext_handle_request(&crate::ext_host::HttpService::new(&host, port, false), &parts.method, &path_of(&parts), &mut req_out, &mut Default::default()) {
         shared.log("WebSocket handshake dropped by an extension hook");
         return;
     }
@@ -2552,7 +2556,7 @@ fn handle_websocket(shared: Arc<Shared>, mut client: TcpStream, req: Vec<u8>) {
     }
     push_ws(&shared, &host, "handshake", "request", &req_out);
     push_ws(&shared, &host, "handshake", "response", &response);
-    record(&shared, &req_out, Some(response.clone()), None, 80, false, listener_port(&shared), false);
+    record(&shared, &req_out, Some(response.clone()), None, 80, false, listener_port(&shared), false, &Default::default());
     if util::parse_http(&response).status != "101" {
         shared.log(&format!("WebSocket upgrade for {host}:{port} was not accepted"));
         return;
@@ -2627,7 +2631,7 @@ fn handle_tls_websocket(
     let parts = util::parse_http(&req);
     let req_session = apply_session_rules(&shared, &req, 443);
     let mut req_out = crate::rules::apply_rules(&req_session, &shared.mr_request.lock().unwrap());
-    if !shared.ext_handle_request(&crate::ext_host::HttpService::new(&host, port, true), &parts.method, &path_of(&parts), &mut req_out) {
+    if !shared.ext_handle_request(&crate::ext_host::HttpService::new(&host, port, true), &parts.method, &path_of(&parts), &mut req_out, &mut Default::default()) {
         shared.log("TLS WebSocket handshake dropped by an extension hook");
         return;
     }
@@ -2671,7 +2675,7 @@ fn handle_tls_websocket(
     }
     push_ws(&shared, &host, "handshake", "request", &req_out);
     push_ws(&shared, &host, "handshake", "response", &response);
-    record(&shared, &req_out, Some(response.clone()), None, 443, true, listener_port(&shared), false);
+    record(&shared, &req_out, Some(response.clone()), None, 443, true, listener_port(&shared), false, &Default::default());
     if util::parse_http(&response).status != "101" {
         return;
     }
@@ -3042,7 +3046,8 @@ fn upstream_and_deliver<S: ProxyIo>(
     let mut req_out = crate::rules::apply_rules(&req_session, &shared.mr_request.lock().unwrap());
     // Extension hooks run after the built-in chain (session rules, M&R);
     // a Drop verdict closes the client connection without a response.
-    if !shared.ext_handle_request(&crate::ext_host::HttpService::new(&host, port, use_tls), &parts.method, &path_of(&parts), &mut req_out) {
+    let mut ann = crate::ext_host::Annotations::default();
+    if !shared.ext_handle_request(&crate::ext_host::HttpService::new(&host, port, use_tls), &parts.method, &path_of(&parts), &mut req_out, &mut ann) {
         shared.log("Request dropped by an extension hook");
         return;
     }
@@ -3055,7 +3060,7 @@ fn upstream_and_deliver<S: ProxyIo>(
     match up.resp {
         Some(resp) => {
             let mut resp = crate::rules::apply_rules(&resp, &shared.mr_response.lock().unwrap());
-            if !shared.ext_handle_response(&crate::ext_host::HttpService::new(&host, port, use_tls), &parts.method, &path_of(&parts), &mut resp) {
+            if !shared.ext_handle_response(&crate::ext_host::HttpService::new(&host, port, use_tls), &parts.method, &path_of(&parts), &req_out, &mut resp, &mut ann) {
                 shared.log("Response dropped by an extension hook");
                 return;
             }
@@ -3064,7 +3069,7 @@ fn upstream_and_deliver<S: ProxyIo>(
             let status = util::parse_http(&resp).first.split_whitespace().nth(1).unwrap_or("").to_string();
             let _ = stream.write_all(&resp);
             let _ = stream.flush();
-            record(shared, &req_out, Some(resp), None, default_port, use_tls, listener_port(shared), was_edited);
+            record(shared, &req_out, Some(resp), None, default_port, use_tls, listener_port(shared), was_edited, &ann);
             shared.log(&format!(
                 "Proxied {} {host}:{port}{} -> {}{}",
                 parts.method,
@@ -3078,9 +3083,24 @@ fn upstream_and_deliver<S: ProxyIo>(
             let msg = format!("HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nWebProbe: upstream failed: {err}");
             let _ = stream.write_all(msg.as_bytes());
             let note = up.error.clone().unwrap_or_else(|| "failed".into());
-            record(shared, &req_out, None, Some(note), default_port, use_tls, listener_port(shared), was_edited);
+            record(shared, &req_out, None, Some(note), default_port, use_tls, listener_port(shared), was_edited, &ann);
             shared.log(&format!("Proxy error for {host}:{port}: {err}"));
         }
+    }
+}
+
+/// Extension annotations on a history entry: the notes become (or join)
+/// its comment, the highlight its row colour (Burp shows Montoya
+/// annotations the same way).
+pub(crate) fn annotate(e: &mut HistEntry, ann: &crate::ext_host::Annotations) {
+    if !ann.notes.is_empty() {
+        e.note = Some(match e.note.take() {
+            Some(n) if !n.is_empty() => format!("{n}; {}", ann.notes),
+            _ => ann.notes.clone(),
+        });
+    }
+    if ann.highlight.is_some() {
+        e.highlight = ann.highlight;
     }
 }
 
@@ -3265,10 +3285,10 @@ mod intercept_all_tests {
         shared.scan_enabled.store(true, Ordering::SeqCst);
         shared.scope.lock().unwrap().push(ScopeRule { enabled: true, include: true, pattern: "http://app.test".into(), is_regex: false });
         let resp = b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nSet-Cookie: sid=abc; Path=/\r\n\r\n<html></html>".to_vec();
-        record(&shared, b"GET http://app.test/login HTTP/1.1\r\nHost: app.test\r\n\r\n", Some(resp.clone()), None, 80, false, 8080, false);
+        record(&shared, b"GET http://app.test/login HTTP/1.1\r\nHost: app.test\r\n\r\n", Some(resp.clone()), None, 80, false, 8080, false, &Default::default());
         let n = shared.issues.lock().unwrap().len();
         assert!(n > 0, "in-scope response audited");
-        record(&shared, b"GET http://other.test/login HTTP/1.1\r\nHost: other.test\r\n\r\n", Some(resp), None, 80, false, 8080, false);
+        record(&shared, b"GET http://other.test/login HTTP/1.1\r\nHost: other.test\r\n\r\n", Some(resp), None, 80, false, 8080, false, &Default::default());
         assert!(shared.issues.lock().unwrap().iter().all(|i| !i.host.contains("other.test")), "out-of-scope response not audited");
     }
 
@@ -4217,9 +4237,9 @@ mod tests {
         let shared = Shared::new();
         let req = b"GET /diff HTTP/1.1\r\nHost: example.com\r\n\r\n".to_vec();
         let r1 = b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nok".to_vec();
-        record(&shared, &req, Some(r1), None, 80, false, 8080, false);
+        record(&shared, &req, Some(r1), None, 80, false, 8080, false, &Default::default());
         let r2 = b"HTTP/1.1 304 Not Modified\r\nContent-Type: text/plain\r\n\r\n".to_vec();
-        record(&shared, &req, Some(r2), None, 80, false, 8080, false);
+        record(&shared, &req, Some(r2), None, 80, false, 8080, false, &Default::default());
         let h = shared.history.snapshot();
         assert_eq!(h[0].diffs, 0);
         // The 304 changes the status, the length and the recomputed
@@ -4789,7 +4809,7 @@ mod cookie_jar_tests {
         let shared = Shared::new();
         let req = b"GET /account/home HTTP/1.1\r\nHost: shop.test\r\n\r\n";
         let resp = b"HTTP/1.1 200 OK\r\nSet-Cookie: sid=abc; Path=/; HttpOnly\r\nSet-Cookie: pref=1\r\nContent-Length: 0\r\n\r\n".to_vec();
-        record(&shared, req, Some(resp.clone()), None, 80, false, 8080, false);
+        record(&shared, req, Some(resp.clone()), None, 80, false, 8080, false, &Default::default());
         {
             let jar = shared.cookie_jar.lock().unwrap();
             let mut got: Vec<(String, String, String)> = jar.cookies.iter().map(|c| (c.name.clone(), c.domain.clone(), c.path.clone())).collect();
@@ -4802,7 +4822,7 @@ mod cookie_jar_tests {
             jar.cookies.clear();
             jar.update_from.clear();
         }
-        record(&shared, req, Some(resp), None, 80, false, 8080, false);
+        record(&shared, req, Some(resp), None, 80, false, 8080, false, &Default::default());
         assert!(shared.cookie_jar.lock().unwrap().cookies.is_empty());
     }
 

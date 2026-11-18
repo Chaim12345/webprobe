@@ -1741,6 +1741,86 @@ fn substring(input: &str, start: i64, end: i64) -> String {
     }
 }
 
+/// The payload sources an attack uses (the Payloads panel): a "Simple
+/// list" takes its items from the set's text, one per line, trimmed, blank
+/// lines dropped; every other type is used as configured. A set without a
+/// configured type is a simple list (the panel's default).
+pub fn effective_sources(set_texts: &[String], sources: &[PayloadSource]) -> Vec<PayloadSource> {
+    set_texts
+        .iter()
+        .enumerate()
+        .map(|(i, text)| match sources.get(i) {
+            None | Some(PayloadSource::SimpleList { .. }) => PayloadSource::SimpleList {
+                items: text.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect(),
+            },
+            Some(other) => other.clone(),
+        })
+        .collect()
+}
+
+/// Whether counting needs the sets resolved (copy, recursive grep and
+/// base-value sets); plain sets count from their length.
+fn needs_resolving(s: &PayloadSource) -> bool {
+    matches!(s, PayloadSource::CopyOtherPayload { .. } | PayloadSource::RecursiveGrep { .. }) || s.uses_position_base()
+}
+
+/// "Request count:" as Burp's Payloads panel shows it, when it can be told
+/// from the set lengths alone: the count, "too many" on overflow, "-" for
+/// an invalid set or request, `None` when the sets must be resolved first
+/// ([`request_count_resolved`]).
+pub fn request_count_fast(request: &str, kind: AttackType, sources: &[PayloadSource]) -> Option<String> {
+    let Ok(template) = Template::parse(request) else { return Some("0".into()) };
+    let used = &sources[..kind.sets_needed(template.positions()).min(sources.len())];
+    if used.iter().any(needs_resolving) {
+        return None;
+    }
+    if used.iter().enumerate().any(|(i, s)| s.validate(kind, i, used).is_err()) {
+        return Some("-".into());
+    }
+    let lens: Vec<usize> = used.iter().map(PayloadSource::len).collect();
+    Some(count(kind, template.positions(), &lens).map(|n| n.to_string()).unwrap_or_else(|| "too many".into()))
+}
+
+/// The count after resolving every set: "unknown" with a recursive-grep
+/// set (its payloads come from responses), "-" when a set is invalid.
+pub fn request_count_resolved(request: &str, kind: AttackType, sources: &[PayloadSource]) -> String {
+    let Ok(template) = Template::parse(request) else { return "0".into() };
+    match resolve_specs(&template, kind, sources) {
+        Ok(specs) if specs.iter().any(|s| matches!(s, SetSpec::Recursive { .. })) => "unknown".into(),
+        Ok(specs) => count_specs(kind, template.positions(), &specs).map(|n| n.to_string()).unwrap_or_else(|| "too many".into()),
+        Err(_) => "-".into(),
+    }
+}
+
+/// What the results table does with its row order when it is drawn
+/// (`key` = row count, sort column, ascending).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum OrderStep {
+    /// Nothing changed.
+    Keep,
+    /// Rows arrived in a sorted view less than half a second after the last
+    /// sort: append them unsorted, sort again soon.
+    Append(std::ops::Range<usize>),
+    /// Sort (or number-order) all rows now.
+    Rebuild,
+}
+
+/// Decide the [`OrderStep`] for the results table: an unchanged view keeps
+/// its order unless appended rows still wait for a sort; a sorted view that
+/// only grew within `recent` appends; anything else rebuilds.
+pub fn order_step(old: (usize, usize, bool), new: (usize, usize, bool), recent: bool, dirty: bool) -> OrderStep {
+    if new == old && !(dirty && !recent) {
+        return OrderStep::Keep;
+    }
+    let (old_len, old_col, old_asc) = old;
+    let only_grew = old_col == new.1 && old_asc == new.2 && new.0 > old_len && old_len != usize::MAX;
+    if new.1 != usize::MAX && only_grew && recent {
+        OrderStep::Append(old_len..new.0)
+    } else {
+        OrderStep::Rebuild
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2405,4 +2485,47 @@ mod tests {
         assert_eq!(capped.illegal_encodings().len(), 4);
         assert_eq!(capped.len(), 4);
     }
+
+    #[test]
+    fn effective_sources_take_simple_lists_from_the_set_text() {
+        let texts = vec![" a \n\n b\r\n".to_string(), "ignored".to_string(), "x\ny".to_string()];
+        let srcs = vec![PayloadSource::SimpleList { items: vec!["stale".into()] }, PayloadSource::NullPayloads { count: 3 }];
+        let v = effective_sources(&texts, &srcs);
+        assert_eq!(v[0], PayloadSource::SimpleList { items: vec!["a".into(), "b".into()] });
+        assert_eq!(v[1], PayloadSource::NullPayloads { count: 3 });
+        // A set the panel never configured is a simple list, not dropped.
+        assert_eq!(v[2], PayloadSource::SimpleList { items: vec!["x".into(), "y".into()] });
+    }
+
+    #[test]
+    fn request_count_matches_each_attack_type() {
+        let req = "GET /?a=§1§&b=§2§ HTTP/1.1\r\nHost: h\r\n\r\n";
+        let list = |n: usize| PayloadSource::SimpleList { items: (0..n).map(|i| i.to_string()).collect() };
+        let two = [list(3), list(4)];
+        assert_eq!(request_count_fast(req, AttackType::Sniper, &two).as_deref(), Some("6"), "3 payloads x 2 positions");
+        assert_eq!(request_count_fast(req, AttackType::BatteringRam, &two).as_deref(), Some("3"));
+        assert_eq!(request_count_fast(req, AttackType::Pitchfork, &two).as_deref(), Some("3"), "shortest set");
+        assert_eq!(request_count_fast(req, AttackType::ClusterBomb, &two).as_deref(), Some("12"));
+        assert_eq!(request_count_fast("GET /§x HTTP/1.1\r\n\r\n", AttackType::Sniper, &two).as_deref(), Some("0"), "unbalanced markers");
+        // Copy and recursive sets need resolving.
+        let copy = [list(3), PayloadSource::CopyOtherPayload { from_position: 1 }];
+        assert_eq!(request_count_fast(req, AttackType::Pitchfork, &copy), None);
+        assert_eq!(request_count_resolved(req, AttackType::Pitchfork, &copy), "3");
+        let rec = [PayloadSource::RecursiveGrep { initial: "x".into(), extract_index: 0, stop_on_duplicate: false }];
+        assert_eq!(request_count_resolved(req, AttackType::Sniper, &rec), "unknown");
+    }
+
+    #[test]
+    fn results_order_appends_while_sorted_rows_stream_in() {
+        let none = (usize::MAX, usize::MAX, false);
+        assert_eq!(order_step(none, (5, usize::MAX, true), false, false), OrderStep::Rebuild, "first draw");
+        assert_eq!(order_step((5, 2, true), (5, 2, true), true, false), OrderStep::Keep);
+        assert_eq!(order_step((5, 2, true), (8, 2, true), true, false), OrderStep::Append(5..8), "sorted view, just sorted");
+        assert_eq!(order_step((5, 2, true), (8, 2, true), false, false), OrderStep::Rebuild, "sort again after half a second");
+        assert_eq!(order_step((8, 2, true), (8, 2, true), false, true), OrderStep::Rebuild, "appended rows still to sort");
+        assert_eq!(order_step((8, 2, true), (8, 2, true), true, true), OrderStep::Keep);
+        assert_eq!(order_step((5, 2, true), (5, 3, true), true, false), OrderStep::Rebuild, "another column");
+        assert_eq!(order_step((5, usize::MAX, true), (8, usize::MAX, true), true, false), OrderStep::Rebuild, "unsorted view numbers rows");
+    }
+
 }

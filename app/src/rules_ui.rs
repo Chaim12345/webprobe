@@ -2,11 +2,11 @@
 //!
 //! Widget labels and tooltips follow the Burp Suite 51467 rule editor
 //! (`Zg5h`): "Direction", "Match:", "Replace:", "Comment:", and "Regex match"
-//! tooltip. The scope list is the seven HTTP scopes from `MrScope::ALL`.
+//! tooltip. Each list offers the scopes of its own side (`MrScope::for_side`).
 
 use eframe::egui;
 
-use crate::rules::{MrRule, MrScope};
+use crate::rules::{edit_rules, MrRule, MrScope, RuleEdit};
 use crate::theme;
 
 /// Edit one list of match-and-replace rules. `request_side` controls the
@@ -47,8 +47,7 @@ pub fn rules_editor(ui: &mut egui::Ui, rules: &mut Vec<MrRule>, request_side: bo
                 }
                 grid_ui.end_row();
 
-                let mut remove: Option<usize> = None;
-                let mut swap: Option<(usize, usize)> = None;
+                let mut edit: Option<RuleEdit> = None;
 
                 for (index, rule) in rules.iter_mut().enumerate() {
                     grid_ui.push_id(("mr_rule", index), |row_ui| {
@@ -60,7 +59,7 @@ pub fn rules_editor(ui: &mut egui::Ui, rules: &mut Vec<MrRule>, request_side: bo
                             .width(145.0)
                             .selected_text(rule.scope.label())
                             .show_ui(row_ui, |combo_ui| {
-                                for scope in MrScope::ALL {
+                                for scope in MrScope::for_side(request_side) {
                                     combo_ui.selectable_value(
                                         &mut rule.scope,
                                         scope,
@@ -83,7 +82,7 @@ pub fn rules_editor(ui: &mut egui::Ui, rules: &mut Vec<MrRule>, request_side: bo
                         row_ui.add(
                             egui::TextEdit::singleline(&mut rule.replacement)
                                 .desired_width(160.0)
-                                .hint_text("Literal string to replace")
+                                .hint_text("Replacement (empty match on a header scope adds it as a header)")
                                 .font(egui::TextStyle::Monospace),
                         );
 
@@ -123,36 +122,29 @@ pub fn rules_editor(ui: &mut egui::Ui, rules: &mut Vec<MrRule>, request_side: bo
                                 .on_hover_text("Move this rule up")
                                 .clicked()
                             {
-                                swap = Some((index, index - 1));
+                                edit = Some(RuleEdit::MoveUp(index));
                             }
                             if actions_ui
                                 .add_enabled(index + 1 < count, egui::Button::new("↓"))
                                 .on_hover_text("Move this rule down")
                                 .clicked()
                             {
-                                swap = Some((index, index + 1));
+                                edit = Some(RuleEdit::MoveDown(index));
                             }
                             if actions_ui
                                 .button("Remove")
                                 .on_hover_text("Delete this rule")
                                 .clicked()
                             {
-                                remove = Some(index);
+                                edit = Some(RuleEdit::Remove(index));
                             }
                         });
                     });
                     grid_ui.end_row();
                 }
 
-                if let Some((from, to)) = swap {
-                    if from < count && to < count {
-                        rules.swap(from, to);
-                    }
-                }
-                if let Some(index) = remove {
-                    if index < count {
-                        rules.remove(index);
-                    }
+                if let Some(e) = edit {
+                    edit_rules(rules, e, request_side);
                 }
             });
     });
@@ -162,7 +154,7 @@ pub fn rules_editor(ui: &mut egui::Ui, rules: &mut Vec<MrRule>, request_side: bo
     if ui.button(add_label).on_hover_text(
         "Add an enabled rule with an empty match, replacement, and comment.",
     ).clicked() {
-        rules.push(MrRule::new(MrScope::default_for(request_side)));
+        edit_rules(rules, RuleEdit::Add, request_side);
     }
 }
 

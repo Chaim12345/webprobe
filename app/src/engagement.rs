@@ -69,7 +69,7 @@ pub fn in_branch<'a>(entries: &'a [HistEntry], origin: &str, prefix: &str) -> Ve
 pub fn urls_in_branch(entries: &[HistEntry], links: &[(String, String)], origin: &str, prefix: &str) -> Vec<String> {
     let mut set: BTreeSet<String> = in_branch(entries, origin, prefix).into_iter().map(url_of).collect();
     for (o, p) in links {
-        if o == origin && p.starts_with(prefix) {
+        if o == origin && webprobe_core::sitemap_compare::path_in_branch(p, prefix) {
             set.insert(format!("{o}{p}"));
         }
     }
@@ -310,7 +310,7 @@ pub fn issues_in_branch(issues: &[crate::scan::ScanIssue], origin: &str, prefix:
 
 /// Whether `e` lies in the branch `prefix` of `origin`.
 pub fn is_in_branch(e: &HistEntry, origin: &str, prefix: &str) -> bool {
-    origin_of(e) == origin && e.path.starts_with(prefix)
+    origin_of(e) == origin && webprobe_core::sitemap_compare::path_in_branch(&e.path, prefix)
 }
 
 /// Site map node menu. Item names follow Burp: scan items from burp.Zeem

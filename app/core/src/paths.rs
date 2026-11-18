@@ -151,12 +151,26 @@ impl Lookup {
     }
 
     /// A jar with the Montoya API classes for the Java extension sidecar:
-    /// `$WEBPROBE_BURP_JAR`, `~/.config/webprobe/montoya-api.jar` (the
-    /// Apache-licensed API jar from Maven Central), then a Burp installation.
+    /// `$WEBPROBE_BURP_JAR`, `~/.config/webprobe/montoya-api.jar`, the
+    /// newest `net.portswigger.burp.extensions:montoya-api` in the local
+    /// Maven repository (`~/.m2`), then a Burp installation. WebProbe does
+    /// not ship the API: its POM names the Burp Suite Professional Licence
+    /// Agreement, not an open licence.
     pub fn montoya_jar(&self) -> Result<PathBuf, Missing> {
         let mut looked: Vec<PathBuf> = self.var("WEBPROBE_BURP_JAR").into_iter().collect();
         if let Some(c) = self.config_dir() {
             looked.push(c.join("montoya-api.jar"));
+        }
+        if let Some(h) = self.home() {
+            let repo = h.join(".m2/repository/net/portswigger/burp/extensions/montoya-api");
+            let mut versions: Vec<PathBuf> = std::fs::read_dir(&repo).map(|rd| rd.flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect()).unwrap_or_default();
+            // Newest first ("2026.4" after "2025.12": compare numerically).
+            let key = |p: &PathBuf| p.file_name().map(|n| n.to_string_lossy().split('.').map(|x| x.parse::<u64>().unwrap_or(0)).collect::<Vec<_>>()).unwrap_or_default();
+            versions.sort_by_key(|p| std::cmp::Reverse(key(p)));
+            for v in versions {
+                let name = v.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                looked.push(v.join(format!("montoya-api-{name}.jar")));
+            }
         }
         for d in self.burp_install_dirs() {
             looked.push(d.join("burpsuite.jar"));
@@ -216,7 +230,7 @@ impl Lookup {
             looked.extend(std::env::split_paths(&path).map(|d| d.join("java")));
         }
         looked.iter().find(|p| p.is_file()).cloned().ok_or(Missing {
-            what: "a Java runtime (java 11 or later)",
+            what: "a Java runtime (java 22 or later: the Montoya bridge uses the multi-file source launcher)",
             looked,
             how: "Java (Montoya) extensions cannot load. Install a JDK, or set WEBPROBE_JAVA (or JAVA_HOME) to it.",
         })
@@ -225,9 +239,11 @@ impl Lookup {
     /// The bridge source written out under the data directory (the JVM runs
     /// a source file, so it needs one on disk).
     pub fn montoya_bridge_source(&self) -> std::io::Result<PathBuf> {
-        let p = self.data_dir().join("sidecar/MontoyaBridge.java");
-        write_out(&p, MONTOYA_BRIDGE_SOURCE.as_bytes())?;
-        Ok(p)
+        let dir = self.data_dir().join("sidecar");
+        for (name, text) in MONTOYA_BRIDGE_SOURCES {
+            write_out(&dir.join(name), text.as_bytes())?;
+        }
+        Ok(dir.join("MontoyaBridge.java"))
     }
 
     /// The extension catalogue directory: `$WEBPROBE_EXTENSIONS_DIR`, an
@@ -315,7 +331,17 @@ fn first_dir_with(cands: &[PathBuf], ok: impl Fn(&Path) -> bool) -> Option<PathB
 // ---------------------------------------------------------------- embedded files
 
 /// The Montoya bridge's source (WebProbe's own), compiled into the binary.
-pub const MONTOYA_BRIDGE_SOURCE: &str = include_str!("../../sidecar/MontoyaBridge.java");
+/// The Montoya bridge sources (one per API area; Java's multi-file source
+/// launcher compiles them together from `MontoyaBridge.java`).
+pub const MONTOYA_BRIDGE_SOURCES: [(&str, &str); 7] = [
+    ("MontoyaBridge.java", include_str!("../../sidecar/MontoyaBridge.java")),
+    ("Api.java", include_str!("../../sidecar/Api.java")),
+    ("Wire.java", include_str!("../../sidecar/Wire.java")),
+    ("Logs.java", include_str!("../../sidecar/Logs.java")),
+    ("Messages.java", include_str!("../../sidecar/Messages.java")),
+    ("Factory.java", include_str!("../../sidecar/Factory.java")),
+    ("Bridge.java", include_str!("../../sidecar/Bridge.java")),
+];
 const DEMO_EXT_JAR: &[u8] = include_bytes!("../../sidecar/demo-ext/demo-ext.jar");
 const CATALOGUE_JSON: &str = include_str!("../../extensions/catalogue.json");
 const EXAMPLE_MARKER: &str = include_str!("../../extensions/examples/marker_reflection.py");

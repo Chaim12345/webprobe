@@ -309,45 +309,25 @@ pub fn generated_note(src: &PayloadSource) -> String {
     }
 }
 
-/// The payload sources the attack uses: "Simple list" takes its items from
-/// the set's text (`intr_sets`), every other type from `intr_sources`.
+/// The payload sources the attack uses (`intruder::effective_sources`).
 pub fn effective_sources(app: &App) -> Vec<PayloadSource> {
-    app.intr_sets
-        .iter()
-        .zip(app.intr_sources.iter())
-        .map(|(text, source)| match source {
-            PayloadSource::SimpleList { .. } => PayloadSource::SimpleList {
-                items: text.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect(),
-            },
-            other => other.clone(),
-        })
-        .collect()
+    intruder::effective_sources(&app.intr_sets, &app.intr_sources)
 }
 
-/// "Request count:" for the Payloads dock: Burp's count with copy and
-/// base-value sets, or why it cannot be counted.
+/// "Request count:" for the Payloads dock (`intruder::request_count_fast`
+/// / `request_count_resolved`).
 pub fn request_count_text(app: &App) -> String {
-    let Ok(template) = intruder::Template::parse(&app.intr_req) else { return "0".into() };
     let sources = effective_sources(app);
-    let kind = app.intr_attack;
-    let used = &sources[..kind.sets_needed(template.positions()).min(sources.len())];
-    let special = |s: &PayloadSource| {
-        matches!(s, PayloadSource::CopyOtherPayload { .. } | PayloadSource::RecursiveGrep { .. }) || s.uses_position_base()
-    };
-    // Fast path (runs every frame): plain lists count from `len()` without
-    // generating; only copy / recursive / base-value sets need resolving.
-    if !used.iter().any(special) {
-        if used.iter().enumerate().any(|(i, s)| s.validate(kind, i, used).is_err()) {
-            return "-".into();
-        }
-        let lens: Vec<usize> = used.iter().map(PayloadSource::len).collect();
-        return intruder::count(kind, template.positions(), &lens).map(|n| n.to_string()).unwrap_or_else(|| "too many".into());
+    // Fast path (runs every frame): plain lists count from `len()`.
+    if let Some(text) = intruder::request_count_fast(&app.intr_req, app.intr_attack, &sources) {
+        return text;
     }
     // Slow path: resolving regenerates every set (a brute forcer can be
     // millions of payloads), so the answer is kept until the inputs change.
     thread_local! {
         static LAST: std::cell::RefCell<Option<(u64, String)>> = const { std::cell::RefCell::new(None) };
     }
+    let kind = app.intr_attack;
     let key = {
         use std::hash::{Hash, Hasher};
         let mut h = std::collections::hash_map::DefaultHasher::new();
@@ -358,13 +338,7 @@ pub fn request_count_text(app: &App) -> String {
     if let Some(hit) = LAST.with(|l| l.borrow().as_ref().filter(|(k, _)| *k == key).map(|(_, v)| v.clone())) {
         return hit;
     }
-    let text: String = match intruder::resolve_specs(&template, kind, &sources) {
-        Ok(specs) if specs.iter().any(|s| matches!(s, intruder::SetSpec::Recursive { .. })) => "unknown".into(),
-        Ok(specs) => intruder::count_specs(app.intr_attack, template.positions(), &specs)
-            .map(|n| n.to_string())
-            .unwrap_or_else(|| "too many".into()),
-        Err(_) => "-".into(),
-    };
+    let text = intruder::request_count_resolved(&app.intr_req, kind, &sources);
     LAST.with(|l| *l.borrow_mut() = Some((key, text.clone())));
     text
 }
@@ -715,15 +689,16 @@ pub fn results_window(app: &mut App, ctx: &egui::Context) {
             let mut st = app.intr_table.clone();
             let key = (rows.len(), st.sort_col, st.sort_asc);
             let recent = app.intr_x.order_at.is_some_and(|t| t.elapsed() < std::time::Duration::from_millis(500));
-            if key != app.intr_x.order_key || (app.intr_x.order_dirty && !recent) {
-                let (old_len, old_col, old_asc) = app.intr_x.order_key;
-                let only_grew = old_col == st.sort_col && old_asc == st.sort_asc && rows.len() > old_len && old_len != usize::MAX;
-                if st.sort_col != usize::MAX && only_grew && recent {
+            match intruder::order_step(app.intr_x.order_key, key, recent, app.intr_x.order_dirty) {
+                intruder::OrderStep::Keep => {}
+                intruder::OrderStep::Append(range) => {
                     // Sorted view while rows arrive: append now, sort soon.
-                    app.intr_x.order.extend(old_len..rows.len());
+                    app.intr_x.order.extend(range);
                     app.intr_x.order_dirty = true;
+                    app.intr_x.order_key = key;
                     ui.ctx().request_repaint_after(std::time::Duration::from_millis(500));
-                } else {
+                }
+                intruder::OrderStep::Rebuild => {
                     app.intr_x.order_dirty = false;
                     app.intr_x.order = if st.sort_col == usize::MAX {
                         let mut o: Vec<usize> = (0..rows.len()).collect();
@@ -733,8 +708,8 @@ pub fn results_window(app: &mut App, ctx: &egui::Context) {
                         run::sort_order(&rows, state.sets, &state.settings, st.sort_col, st.sort_asc)
                     };
                     app.intr_x.order_at = Some(std::time::Instant::now());
+                    app.intr_x.order_key = key;
                 }
-                app.intr_x.order_key = key;
             }
             let order = app.intr_x.order.clone();
             let sel = app.intr_row_sel;

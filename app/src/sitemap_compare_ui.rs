@@ -103,7 +103,7 @@ impl Default for CompareUi {
 }
 
 fn list(s: &str) -> Vec<String> {
-    s.split([',', '\n']).map(str::trim).filter(|x| !x.is_empty()).map(str::to_string).collect()
+    smc::parse_list(s)
 }
 
 fn project_site_map(path: &str) -> Result<Vec<HistEntry>, String> {
@@ -146,7 +146,7 @@ impl CompareUi {
     fn restrict(&self, shared: &webprobe_core::net::Shared, v: Vec<HistEntry>) -> Vec<HistEntry> {
         match self.items {
             Items::All => v,
-            Items::Branch => v.into_iter().filter(|e| crate::engagement::origin_of(e) == self.origin && e.path.starts_with(&self.branch)).collect(),
+            Items::Branch => v.into_iter().filter(|e| crate::engagement::origin_of(e) == self.origin && smc::path_in_branch(&e.path, &self.branch)).collect(),
             Items::InScope => v.into_iter().filter(|e| webprobe_core::net::in_scope(shared, &crate::engagement::url_of(e))).collect(),
         }
     }
@@ -371,7 +371,7 @@ fn results(ui: &mut egui::Ui, st: &mut CompareUi) {
             st.step = 0;
         }
     });
-    let shown: Vec<usize> = (0..rows.len()).filter(|&i| !(st.hide_unmodified && matches!(rows[i].status, Status::Unmodified | Status::NotCompared))).collect();
+    let shown: Vec<usize> = smc::visible_rows(rows, st.hide_unmodified);
     let font = egui::FontId::proportional(12.5);
     egui::ScrollArea::vertical().id_salt("smc_rows").max_height(ui.available_height() * 0.45).auto_shrink([false, false]).show(ui, |ui| {
         egui::Grid::new("smc_grid").striped(true).num_columns(9).spacing([14.0, 3.0]).show(ui, |ui| {

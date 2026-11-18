@@ -128,9 +128,10 @@ pub fn absolutize(words: Vec<String>) -> Vec<String> {
 }
 
 /// Start one extension (blocking: JVM start-up or the process's register).
-pub fn start(item: &Installed) -> Result<LoadedExtension, String> {
+/// A Java extension is linked to `shared` for `Http.sendRequest` and events.
+pub fn start(item: &Installed, shared: &Arc<Shared>) -> Result<LoadedExtension, String> {
     let mut loaded = match item.kind {
-        Kind::Java => LoadedExtension::new(crate::ext_host::JavaSidecar::spawn(item.source.trim())?),
+        Kind::Java => LoadedExtension::new(crate::ext_host::JavaSidecar::spawn_with(item.source.trim(), Some(crate::ext_host::HostLink::to_shared(shared)))?),
         Kind::Process => {
             let words = absolutize(split_command(&item.source));
             let (program, args) = words.split_first().ok_or("empty command")?;
@@ -147,7 +148,7 @@ pub fn start(item: &Installed) -> Result<LoadedExtension, String> {
 pub fn start_in_background(shared: &Arc<Shared>, item: Installed, done: impl FnOnce(Result<String, String>) + Send + 'static) {
     let shared = Arc::clone(shared);
     std::thread::spawn(move || {
-        let result = start(&item).map(|ext| {
+        let result = start(&item, &shared).map(|ext| {
             let name = ext.hooks.extension_name().to_string();
             let mut host = shared.ext_host.lock().unwrap();
             host.not_loaded.retain(|i| i.source != item.source);
@@ -185,7 +186,7 @@ pub fn load_all(shared: &Arc<Shared>) {
     let shared = Arc::clone(shared);
     std::thread::spawn(move || {
         for item in list {
-            match start(&item) {
+            match start(&item, &shared) {
                 Ok(ext) => {
                     shared.log(&format!("Extension loaded: {} ({} {})", ext.hooks.extension_name(), item.kind.label(), item.source));
                     shared.ext_host.lock().unwrap().extensions.push(ext);

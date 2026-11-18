@@ -223,3 +223,30 @@ pub fn report_window(app: &mut crate::App, ctx: &egui::Context) {
     }
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Switching the format renames the chosen file's extension, but only
+    /// an extension the dialog itself put there.
+    #[test]
+    fn format_switch_renames_only_report_extensions() {
+        assert_eq!(swap_extension("/tmp/r.html", ReportFormat::Xml), "/tmp/r.xml");
+        assert_eq!(swap_extension("/tmp/r.htm", ReportFormat::Xml), "/tmp/r.xml");
+        assert_eq!(swap_extension("/tmp/r.xml", ReportFormat::Html), "/tmp/r.html");
+        assert_eq!(swap_extension("/tmp/r.txt", ReportFormat::Xml), "/tmp/r.txt");
+        assert_eq!(swap_extension("/tmp/report", ReportFormat::Html), "/tmp/report");
+        assert!(default_report_path(ReportFormat::Xml).ends_with("webprobe-report.xml"));
+    }
+
+    /// "Limit to N bytes": a positive whole number, else no limit.
+    #[test]
+    fn message_limit_parses_positive_numbers_only() {
+        assert_eq!(parse_limit(" 4096 "), Some(4096));
+        assert_eq!(parse_limit("0"), None);
+        assert_eq!(parse_limit("-5"), None);
+        assert_eq!(parse_limit("lots"), None);
+        assert_eq!(parse_limit(""), None);
+    }
+}

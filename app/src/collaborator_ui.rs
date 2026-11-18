@@ -9,7 +9,7 @@
 use eframe::egui::{self, RichText, Ui};
 
 use crate::collaborator::{
-    CollaboratorState, InteractionDetail, InteractionKind, Interaction,
+    CollaboratorState, InteractionDetail, Interaction,
     MAX_PAYLOADS,
 };
 use crate::theme::{self, c};
@@ -98,7 +98,7 @@ pub fn show(state: &mut CollaboratorState, ui: &mut egui::Ui) {
         let copy = egui::Button::new(RichText::new("Copy to clipboard").strong().color(egui::Color32::WHITE)).fill(c(theme::ORANGE_1)).min_size(egui::vec2(140.0, 24.0));
         if ui.add(copy).on_hover_text("Generate a new payload and copy it").clicked() {
             let p = state.generate_payload();
-            let text = if state.include_server { p.dns_name.clone() } else { p.dns_name.split('.').next().unwrap_or("").to_string() };
+            let text = crate::collaborator::payload_text(&p.dns_name, state.include_server);
             ui.ctx().copy_text(text.clone());
             crate::feedback::toast(crate::feedback::Level::Success, format!("Copied {text}"));
         }
@@ -111,9 +111,7 @@ pub fn show(state: &mut CollaboratorState, ui: &mut egui::Ui) {
             if ui.add(egui::Button::new(RichText::new(theme::icon::GEAR).size(16.0)).frame(false)).on_hover_text("Collaborator server and listeners").clicked() {
                 state.ui_settings = !state.ui_settings;
             }
-            let server = state.remote_server().map(|d| format!("*.{d}")).unwrap_or_else(|| {
-                if state.http.is_running() || state.dns.is_running() { "loopback listeners (127.0.0.1)".to_string() } else { "not configured".to_string() }
-            });
+            let server = crate::collaborator::server_label(state.remote_server().as_deref(), state.http.is_running() || state.dns.is_running());
             ui.label(RichText::new(format!("Collaborator server: {server}")).size(12.5).color(theme::ink_dim()));
         });
     });
@@ -153,7 +151,7 @@ pub fn show(state: &mut CollaboratorState, ui: &mut egui::Ui) {
                     let row = ui.horizontal(|ui| {
                         crate::table::cells(ui, &cols, &crate::table::TableState::default(), 19.0, &[
                             (0, i.id.to_string(), None),
-                            (1, format_clock(i.at), None),
+                            (1, crate::collaborator::interaction_time(i.at), None),
                             (2, i.kind().label().to_string(), None),
                             (3, i.token.clone().unwrap_or_default(), None),
                             (4, i.source.clone(), None),
@@ -181,15 +179,7 @@ pub fn show(state: &mut CollaboratorState, ui: &mut egui::Ui) {
                 let _ = full;
                 egui::ScrollArea::vertical().id_salt("collab_detail").auto_shrink([false, false]).show(ui, |ui| match state.detail_tab {
                     0 => {
-                        let what = match i.kind() {
-                            InteractionKind::Http => "an HTTP request",
-                            InteractionKind::Dns => "a DNS lookup",
-                            InteractionKind::Smtp => "an SMTP connection",
-                        };
-                        ui.label(RichText::new(format!(
-                            "The Collaborator server received {what} for the payload {}. The request was received from IP address {} at {}.",
-                            i.token.clone().unwrap_or_default(), i.source, format_clock(i.at)
-                        )).size(12.5).color(theme::ink_dim()));
+                        ui.label(RichText::new(crate::collaborator::describe(i)).size(12.5).color(theme::ink_dim()));
                     }
                     1 => match &i.detail {
                         InteractionDetail::Http(http) => http_details(ui, http),
@@ -523,14 +513,4 @@ fn dns_details(ui: &mut Ui, dns: &crate::collaborator::DnsInteraction) {
             .size(12.0)
             .color(c(theme::GOOD)),
     );
-}
-
-fn format_clock(unix_secs: u64) -> String {
-    let day_secs = unix_secs % 86_400;
-    format!(
-        "{:02}:{:02}:{:02}Z",
-        day_secs / 3600,
-        (day_secs / 60) % 60,
-        day_secs % 60
-    )
 }

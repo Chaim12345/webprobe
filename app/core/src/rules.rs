@@ -10,7 +10,64 @@
 use std::borrow::Cow;
 use std::ops::Range;
 
-use regex::bytes::Regex;
+use regex::bytes::{Regex, RegexBuilder};
+
+/// A rule's regex as Burp's Java engine reads it against an ISO-8859-1
+/// view of the message: `.` and classes work on bytes, so binary bodies
+/// match (`(?-u)`); a non-ASCII literal in the pattern still matches its
+/// UTF-8 bytes.
+fn compile(pattern: &str) -> Option<Regex> {
+    RegexBuilder::new(pattern).unicode(false).build().ok()
+}
+
+/// Java's `Matcher.replaceAll` replacement syntax in the `regex` crate's:
+/// `$n` takes as many digits as name an existing group (`$1abc` is group 1
+/// then "abc", where the crate would read a group named "1abc"), `\x` is a
+/// literal x, `${name}` stays.
+fn java_replacement(rep: &str, groups: usize) -> String {
+    let b: Vec<char> = rep.chars().collect();
+    let mut out = String::new();
+    let mut i = 0;
+    while i < b.len() {
+        match b[i] {
+            '\\' if i + 1 < b.len() => {
+                if b[i + 1] == '$' {
+                    out.push_str("$$");
+                } else {
+                    out.push(b[i + 1]);
+                }
+                i += 2;
+            }
+            '$' if i + 1 < b.len() && b[i + 1].is_ascii_digit() => {
+                let mut n = b[i + 1].to_digit(10).unwrap_or(0) as usize;
+                let mut j = i + 2;
+                while j < b.len() && b[j].is_ascii_digit() {
+                    let next = n * 10 + b[j].to_digit(10).unwrap_or(0) as usize;
+                    if next >= groups {
+                        break;
+                    }
+                    n = next;
+                    j += 1;
+                }
+                out.push_str(&format!("${{{n}}}"));
+                i = j;
+            }
+            '$' if i + 1 < b.len() && b[i + 1] == '{' => {
+                out.push('$');
+                i += 1;
+            }
+            '$' => {
+                out.push_str("$$");
+                i += 1;
+            }
+            c => {
+                out.push(c);
+                i += 1;
+            }
+        }
+    }
+    out
+}
 
 /// The part of an HTTP message a rule edits.
 ///
@@ -65,6 +122,13 @@ impl MrScope {
         }
     }
 
+    /// The scopes a request-rule (or response-rule) list can use: the
+    /// lists are applied to one side only, so a scope of the other side
+    /// would never apply.
+    pub fn for_side(request_side: bool) -> Vec<MrScope> {
+        Self::ALL.into_iter().filter(|s| s.is_request() == request_side).collect()
+    }
+
     /// Default scope for a newly added request or response rule.
     pub const fn default_for(request_side: bool) -> Self {
         if request_side {
@@ -104,14 +168,22 @@ impl MrRule {
         Self::new(MrScope::default_for(request_side))
     }
 
-    /// True when the rule will be considered by [`apply_rules`].
+    /// True when the rule will be considered by [`apply_rules`]: a match
+    /// expression, or (header scopes) an empty match with a replacement,
+    /// which adds that header as Burp does.
     pub fn is_active(&self) -> bool {
-        self.enabled && !self.match_.is_empty() && self.pattern_is_valid()
+        self.enabled && (!self.match_.is_empty() || self.adds_header()) && self.pattern_is_valid()
     }
 
-    /// Empty patterns are valid but inactive. Invalid regexes are rejected.
+    /// An empty match on a header scope with a replacement: Burp adds the
+    /// replacement as a new header line.
+    pub fn adds_header(&self) -> bool {
+        self.match_.is_empty() && !self.replacement.is_empty() && matches!(self.scope, MrScope::RequestHeader | MrScope::ResponseHeader)
+    }
+
+    /// Empty patterns are valid. Invalid regexes are rejected.
     pub fn pattern_is_valid(&self) -> bool {
-        !self.is_regex || Regex::new(&self.match_).is_ok()
+        !self.is_regex || self.match_.is_empty() || compile(&self.match_).is_some()
     }
 }
 
@@ -124,15 +196,48 @@ impl Default for MrRule {
 /// Apply every enabled rule to `bytes`, in order, each rule seeing the result
 /// of the previous one. Empty patterns, invalid regexes, and rules whose scope
 /// belongs to the other side of the message are skipped.
+///
+/// When a body or parameter rule changed the message, Content-Length is
+/// restamped to the new body length (as Burp does), unless the message is
+/// chunked or never had a body.
 pub fn apply_rules(bytes: &[u8], rules: &[MrRule]) -> Vec<u8> {
     let mut current: Option<Vec<u8>> = None;
+    let mut body_edited = false;
     for rule in rules {
         let input = current.as_deref().unwrap_or(bytes);
         if let Some(next) = apply_rule(input, rule) {
+            body_edited |= matches!(rule.scope, MrScope::RequestBody | MrScope::ResponseBody | MrScope::RequestParamName | MrScope::RequestParamValue);
             current = Some(next);
         }
     }
-    current.unwrap_or_else(|| bytes.to_vec())
+    match current {
+        Some(out) if body_edited => crate::util::update_content_length(&out),
+        Some(out) => out,
+        None => bytes.to_vec(),
+    }
+}
+
+/// An edit of a rule list from the rules table.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RuleEdit {
+    Add,
+    Remove(usize),
+    MoveUp(usize),
+    MoveDown(usize),
+}
+
+/// Apply one table edit. A new rule gets the side's default scope; moves
+/// at the ends and out-of-range indexes do nothing.
+pub fn edit_rules(rules: &mut Vec<MrRule>, edit: RuleEdit, request_side: bool) {
+    match edit {
+        RuleEdit::Add => rules.push(MrRule::default_for(request_side)),
+        RuleEdit::Remove(i) if i < rules.len() => {
+            rules.remove(i);
+        }
+        RuleEdit::MoveUp(i) if i > 0 && i < rules.len() => rules.swap(i, i - 1),
+        RuleEdit::MoveDown(i) if i + 1 < rules.len() => rules.swap(i, i + 1),
+        _ => {}
+    }
 }
 
 struct HttpParts {
@@ -160,9 +265,7 @@ impl<'a> MatchEngine<'a> {
             return None;
         }
         if rule.is_regex {
-            Regex::new(&rule.match_)
-                .ok()
-                .map(MatchEngine::Regex)
+            compile(&rule.match_).map(MatchEngine::Regex)
         } else {
             Some(MatchEngine::Literal(rule.match_.as_bytes()))
         }
@@ -170,14 +273,17 @@ impl<'a> MatchEngine<'a> {
 }
 
 fn apply_rule(bytes: &[u8], rule: &MrRule) -> Option<Vec<u8>> {
-    if !rule.enabled || rule.match_.is_empty() {
+    if !rule.enabled {
         return None;
     }
-    let engine = MatchEngine::new(rule)?;
     let parts = parse_http(bytes);
     if rule.scope.is_request() == parts.is_response {
         return None;
     }
+    if rule.adds_header() {
+        return Some(add_header(bytes, &parts, rule.replacement.as_bytes()));
+    }
+    let engine = MatchEngine::new(rule)?;
 
     match rule.scope {
         MrScope::RequestFirstLine => {
@@ -233,10 +339,13 @@ fn replace_target(
         MatchEngine::Literal(needle) => {
             replace_literal_all(target, needle, replacement)
         }
-        MatchEngine::Regex(regex) => match regex.replace_all(target, replacement) {
-            Cow::Owned(bytes) => Some(bytes),
-            Cow::Borrowed(_) => None,
-        },
+        MatchEngine::Regex(regex) => {
+            let rep = java_replacement(&String::from_utf8_lossy(replacement), regex.captures_len());
+            match regex.replace_all(target, rep.as_bytes()) {
+                Cow::Owned(bytes) => Some(bytes),
+                Cow::Borrowed(_) => None,
+            }
+        }
     }
 }
 
@@ -316,6 +425,32 @@ fn apply_header(
     } else {
         None
     }
+}
+
+/// Append `line` as the last header line, with the message's line ending.
+fn add_header(bytes: &[u8], parts: &HttpParts, line: &[u8]) -> Vec<u8> {
+    let crlf = bytes[..parts.header_start].ends_with(b"\r\n") || parts.header_start == parts.first_line_end;
+    let eol: &[u8] = if crlf { b"\r\n" } else { b"\n" };
+    let mut out = Vec::with_capacity(bytes.len() + line.len() + 2);
+    if parts.header_start == parts.first_line_end && parts.header_end == bytes.len() {
+        // A bare first line: end it, add the header and the blank line.
+        out.extend_from_slice(&bytes[..parts.first_line_end]);
+        out.extend_from_slice(eol);
+        out.extend_from_slice(line);
+        out.extend_from_slice(eol);
+        out.extend_from_slice(eol);
+        return out;
+    }
+    out.extend_from_slice(&bytes[..parts.header_end]);
+    if parts.header_end > parts.header_start {
+        out.extend_from_slice(eol);
+    }
+    out.extend_from_slice(line);
+    if parts.header_end == parts.header_start {
+        out.extend_from_slice(eol);
+    }
+    out.extend_from_slice(&bytes[parts.header_end..]);
+    out
 }
 
 fn apply_params(
@@ -625,4 +760,131 @@ fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
         at += 1;
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rule(scope: MrScope, m: &str, r: &str, regex: bool) -> MrRule {
+        MrRule { match_: m.into(), replacement: r.into(), is_regex: regex, ..MrRule::new(scope) }
+    }
+
+    fn apply(msg: &[u8], rules: &[MrRule]) -> String {
+        String::from_utf8_lossy(&apply_rules(msg, rules)).into_owned()
+    }
+
+    const REQ: &[u8] = b"POST /p?a=1&token=old HTTP/1.1\r\nHost: example.com\r\nUser-Agent: Mozilla/5.0\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 13\r\n\r\nuser=a&pw=old";
+    const RESP: &[u8] = b"HTTP/1.1 200 OK\r\nServer: nginx\r\nContent-Length: 11\r\n\r\nhello world";
+
+    #[test]
+    fn each_scope_edits_only_its_part() {
+        // Headers, not the body or first line.
+        let out = apply(REQ, &[rule(MrScope::RequestHeader, "Mozilla/5.0", "WebProbe", false)]);
+        assert!(out.contains("User-Agent: WebProbe\r\n") && out.ends_with("pw=old"));
+        assert_eq!(apply(REQ, &[rule(MrScope::RequestHeader, "POST", "GET", false)]), String::from_utf8_lossy(REQ), "first line is not a header");
+        // First line only.
+        assert!(apply(REQ, &[rule(MrScope::RequestFirstLine, "HTTP/1.1", "HTTP/1.0", false)]).starts_with("POST /p?a=1&token=old HTTP/1.0\r\n"));
+        // Parameter names and values: query and form body, not headers.
+        let out = apply(REQ, &[rule(MrScope::RequestParamValue, "old", "new", false)]);
+        assert!(out.starts_with("POST /p?a=1&token=new ") && out.ends_with("user=a&pw=new"), "{out}");
+        let out = apply(REQ, &[rule(MrScope::RequestParamName, "pw", "password", false)]);
+        assert!(out.ends_with("user=a&password=old"), "{out}");
+        // Response scopes leave requests alone, and the other way round.
+        assert_eq!(apply(REQ, &[rule(MrScope::ResponseBody, "old", "x", false)]), String::from_utf8_lossy(REQ));
+        assert_eq!(apply(RESP, &[rule(MrScope::RequestHeader, "nginx", "x", false)]), String::from_utf8_lossy(RESP));
+        assert!(apply(RESP, &[rule(MrScope::ResponseHeader, "nginx", "hidden", false)]).contains("Server: hidden\r\n"));
+        // A header replaced by nothing is removed with its line ending.
+        let out = apply(RESP, &[rule(MrScope::ResponseHeader, "^Server: .*$", "", true)]);
+        assert_eq!(out, "HTTP/1.1 200 OK\r\nContent-Length: 11\r\n\r\nhello world");
+    }
+
+    #[test]
+    fn body_edits_restamp_content_length() {
+        let out = apply(RESP, &[rule(MrScope::ResponseBody, "world", "there, everyone", false)]);
+        assert_eq!(out, "HTTP/1.1 200 OK\r\nServer: nginx\r\nContent-Length: 21\r\n\r\nhello there, everyone");
+        let out = apply(REQ, &[rule(MrScope::RequestParamValue, "old", "longer", false)]);
+        assert!(out.contains("Content-Length: 16\r\n") && out.ends_with("pw=longer"), "{out}");
+        // A header-only edit leaves a deliberately set length alone.
+        let out = apply(RESP, &[rule(MrScope::ResponseHeader, "Content-Length: 11", "Content-Length: 5", false)]);
+        assert!(out.contains("Content-Length: 5\r\n"));
+        // Chunked bodies keep their framing.
+        let chunked = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n";
+        assert!(!apply(chunked, &[rule(MrScope::ResponseBody, "hello", "HELLO", false)]).contains("Content-Length"));
+    }
+
+    #[test]
+    fn regex_groups_and_java_replacement_syntax() {
+        let r = rule(MrScope::ResponseBody, "(hel)lo", "$1p me", true);
+        assert!(apply(RESP, &[r]).ends_with("help me world"));
+        // `$1abc` is group 1 then "abc" (Java), not a group named "1abc".
+        let r = rule(MrScope::ResponseBody, "(w)orld", "$1ide", true);
+        assert!(apply(RESP, &[r]).ends_with("hello wide"));
+        // `\$` is a literal dollar.
+        let r = rule(MrScope::ResponseBody, "world", "\\$5", true);
+        assert!(apply(RESP, &[r]).ends_with("hello $5"));
+        assert_eq!(java_replacement("$12", 2), "${1}2");
+        assert_eq!(java_replacement("$12", 13), "${12}");
+        // Literal rules take the replacement as is.
+        let r = rule(MrScope::ResponseBody, "world", "$1", false);
+        assert!(apply(RESP, &[r]).ends_with("hello $1"));
+        assert!(!rule(MrScope::ResponseBody, "(", "x", true).is_active(), "invalid regex is inactive");
+    }
+
+    #[test]
+    fn binary_bodies_survive_and_match_bytewise() {
+        let mut msg = b"HTTP/1.1 200 OK\r\nContent-Length: 6\r\n\r\n".to_vec();
+        msg.extend_from_slice(&[0x00, 0xff, b'a', 0xfe, b'b', 0x80]);
+        // Literal: bytes outside the match are kept.
+        let out = apply_rules(&msg, &[rule(MrScope::ResponseBody, "a", "AA", false)]);
+        assert!(out.ends_with(&[0x00, 0xff, b'A', b'A', 0xfe, b'b', 0x80]));
+        assert!(out.windows(19).any(|w| w == b"Content-Length: 7\r\n"));
+        // Regex `.` matches any byte, as in Burp's ISO-8859-1 view.
+        let out = apply_rules(&msg, &[rule(MrScope::ResponseBody, "a.b", "X", true)]);
+        assert!(out.ends_with(&[0x00, 0xff, b'X', 0x80]), "{out:?}");
+        // A non-ASCII literal in a regex still matches its UTF-8 bytes.
+        let utf = "HTTP/1.1 200 OK\r\n\r\ncafé".as_bytes();
+        assert!(apply(utf, &[rule(MrScope::ResponseBody, "é", "e", true)]).ends_with("cafe"));
+    }
+
+    #[test]
+    fn rules_run_in_order_and_disabled_or_empty_ones_are_skipped() {
+        let a = rule(MrScope::ResponseBody, "hello", "goodbye", false);
+        let b = rule(MrScope::ResponseBody, "goodbye", "ciao", false);
+        assert!(apply(RESP, &[a.clone(), b.clone()]).ends_with("ciao world"), "each rule sees the previous result");
+        assert!(apply(RESP, &[b.clone(), a.clone()]).ends_with("goodbye world"));
+        let off = MrRule { enabled: false, ..a.clone() };
+        assert_eq!(apply(RESP, &[off]), String::from_utf8_lossy(RESP));
+        assert_eq!(apply(RESP, &[rule(MrScope::ResponseBody, "", "x", false)]), String::from_utf8_lossy(RESP), "empty match on a body does nothing");
+    }
+
+    #[test]
+    fn empty_match_on_a_header_scope_adds_the_header() {
+        let r = rule(MrScope::RequestHeader, "", "X-Test: 1", false);
+        assert!(r.is_active());
+        let out = apply(REQ, &[r.clone()]);
+        assert!(out.contains("Content-Length: 13\r\nX-Test: 1\r\n\r\nuser=a"), "{out}");
+        assert_eq!(apply(b"GET / HTTP/1.1\r\n\r\n", &[r.clone()]), "GET / HTTP/1.1\r\nX-Test: 1\r\n\r\n");
+        assert_eq!(apply(b"GET / HTTP/1.1\nHost: h\n\n", &[r]), "GET / HTTP/1.1\nHost: h\nX-Test: 1\n\n");
+        let resp = apply(RESP, &[rule(MrScope::ResponseHeader, "", "Cache-Control: no-store", false)]);
+        assert!(resp.contains("Content-Length: 11\r\nCache-Control: no-store\r\n\r\nhello"));
+    }
+
+    #[test]
+    fn rule_table_edits_and_side_scopes() {
+        assert_eq!(MrScope::for_side(true).len(), 5);
+        assert_eq!(MrScope::for_side(false), vec![MrScope::ResponseHeader, MrScope::ResponseBody]);
+        let mut v = Vec::new();
+        edit_rules(&mut v, RuleEdit::Add, false);
+        assert_eq!(v[0].scope, MrScope::ResponseHeader);
+        v.push(rule(MrScope::ResponseBody, "b", "", false));
+        edit_rules(&mut v, RuleEdit::MoveUp(1), false);
+        assert_eq!(v[0].match_, "b");
+        edit_rules(&mut v, RuleEdit::MoveUp(0), false);
+        edit_rules(&mut v, RuleEdit::MoveDown(1), false);
+        edit_rules(&mut v, RuleEdit::Remove(5), false);
+        assert_eq!(v.len(), 2);
+        edit_rules(&mut v, RuleEdit::Remove(0), false);
+        assert_eq!(v[0].match_, "");
+    }
 }

@@ -12,7 +12,7 @@ Extensions.
 | `core/src/bin/webprobe-headless.rs` | `webprobe-headless`: `proxy` (records traffic, live passive audit, saves a project) and `scan` (audits URLs, prints JSON issues, writes HTML/XML reports) |
 | `src/` | the desktop app (egui 0.37) on top of the engine |
 | `extensions/` | extension catalogue and example extensions (see `docs/extensions.md`) |
-| `sidecar/` | JVM bridge that runs Burp Montoya `.jar` extensions |
+| `sidecar/` | JVM bridge that runs Burp Montoya `.jar` extensions (one source per API area, run with Java's multi-file source launcher) |
 | `docs/` | `extensions.md` (extension API v1), `collaborator-private-server.md` |
 
 ## Build and run
@@ -51,8 +51,8 @@ feature that needs it says what is missing, where it looked and how to provide i
 | `WEBPROBE_KB_DIR` | issue texts for reports | `$WEBPROBE_BURP_RESOURCES/KnowledgeBase/Issues`, `~/.config/webprobe/KnowledgeBase/Issues`, `<data>/KnowledgeBase/Issues` |
 | `WEBPROBE_WORDLIST_DIR` | content discovery wordlists (`*.pay`) | `…/PayloadStrings` in the same places |
 | `WEBPROBE_RETIREJS` | a retire.js `jsrepository.json` | `…/RetireJS/retirejs_repository.json` or `jsrepository.json` in the same places |
-| `WEBPROBE_BURP_JAR` | Montoya API classes for Java extensions (burpsuite.jar or montoya-api.jar) | `~/.config/webprobe/montoya-api.jar`, `$WEBPROBE_BURP_HOME`, `/opt/BurpSuite*`, `~/BurpSuite*` |
-| `WEBPROBE_JAVA` | `java` for Java (Montoya) extensions | `$JAVA_HOME/bin/java`, `java` on `$PATH` |
+| `WEBPROBE_BURP_JAR` | Montoya API classes for Java extensions (burpsuite.jar or montoya-api.jar; not shipped, its licence is PortSwigger's) | `~/.config/webprobe/montoya-api.jar`, `~/.m2/.../montoya-api/<newest>/`, `$WEBPROBE_BURP_HOME`, `/opt/BurpSuite*`, `~/BurpSuite*` |
+| `WEBPROBE_JAVA` | `java` 22+ for Java (Montoya) extensions | `$JAVA_HOME/bin/java`, `java` on `$PATH` |
 | `WEBPROBE_CHROMIUM`, `WEBPROBE_BURP_BROWSER` | browser for the crawler / Open browser | `/usr/bin/chromium` etc., Burp's `burpbrowser/` |
 | `WEBPROBE_DATA_DIR` | where WebProbe writes out its own embedded files (Montoya bridge, extension catalogue) | `$XDG_DATA_HOME/webprobe`, `~/.local/share/webprobe` |
 

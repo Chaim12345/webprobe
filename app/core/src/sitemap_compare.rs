@@ -322,6 +322,32 @@ pub fn summary(rows: &[Row]) -> (usize, usize, usize, usize) {
     s
 }
 
+/// The rows the results table shows: all, or with "Hide unmodified
+/// items" only the deleted, added and modified ones.
+pub fn visible_rows(rows: &[Row], hide_unmodified: bool) -> Vec<usize> {
+    (0..rows.len()).filter(|&i| !(hide_unmodified && matches!(rows[i].status, Status::Unmodified | Status::NotCompared))).collect()
+}
+
+/// A comma- or line-separated list from a wizard text field (ignored
+/// parameters, headers, form fields), trimmed, blanks dropped.
+pub fn parse_list(s: &str) -> Vec<String> {
+    s.split([',', '\n']).map(str::trim).filter(|x| !x.is_empty()).map(str::to_string).collect()
+}
+
+/// Whether a request path belongs to the site map branch `branch`: a
+/// folder (ending in `/`, or the root) holds everything under it; an item
+/// holds itself and its query-string variants and sub-paths, not siblings
+/// that merely share a prefix (`/api` is not the branch of `/apiv2`).
+pub fn path_in_branch(path: &str, branch: &str) -> bool {
+    if branch.is_empty() || branch.ends_with('/') {
+        return path.starts_with(branch) || (branch.is_empty() && path.is_empty());
+    }
+    match path.strip_prefix(branch) {
+        Some(rest) => rest.is_empty() || rest.starts_with(['?', '/', '#']),
+        None => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -402,4 +428,22 @@ mod tests {
         assert!(matches!(by("/profile"), Status::Modified { .. }));
         assert_eq!(summary(&rows), (1, 1, 1, 1));
     }
+
+    #[test]
+    fn branch_membership_and_option_lists() {
+        assert!(path_in_branch("/api/users?id=1", "/api/"));
+        assert!(path_in_branch("/anything", "/"));
+        assert!(path_in_branch("/api", "/api"));
+        assert!(path_in_branch("/api?x=1", "/api"));
+        assert!(path_in_branch("/api/v1", "/api"));
+        assert!(!path_in_branch("/apiv2/x", "/api"), "a sibling with the same prefix is not in the branch");
+        assert!(!path_in_branch("/other", "/api/"));
+        assert_eq!(parse_list(" a, b\n\n c ,"), vec!["a", "b", "c"]);
+        assert!(parse_list(" , \n").is_empty());
+        let row = |status| Row { key: String::new(), left: None, right: None, status };
+        let rows = [row(Status::Deleted), row(Status::Unmodified), row(Status::Modified { differences: 2 }), row(Status::NotCompared), row(Status::Added)];
+        assert_eq!(visible_rows(&rows, true), [0, 2, 4]);
+        assert_eq!(visible_rows(&rows, false).len(), 5);
+    }
+
 }

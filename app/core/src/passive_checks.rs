@@ -86,8 +86,8 @@ pub(crate) static PASSIVE_CHECKS: &[PassiveCheck] = &[
     unit!(CH_SERVER, server_version),
     unit!(CH_XPB, x_powered_by),
     unit!(CH_ASPNET, aspnet_version),
-    unit!(CH_COOKIE_SECURE, |cx, v| cookie_flags(cx, v, CH_COOKIE_SECURE)),
-    unit!(CH_COOKIE_HTTPONLY, |cx, v| cookie_flags(cx, v, CH_COOKIE_HTTPONLY)),
+    unit!(CH_COOKIE_SECURE, |cx, v| pack::cookie_flag(cx, v, true)),
+    unit!(CH_COOKIE_HTTPONLY, |cx, v| pack::cookie_flag(cx, v, false)),
     unit!(CH_COOKIE_SAMESITE, |cx, v| cookie_flags(cx, v, CH_COOKIE_SAMESITE)),
     unit!(CH_COOKIE_SAMESITE_NONE, |cx, v| cookie_flags(cx, v, CH_COOKIE_SAMESITE_NONE)),
     unit!(CH_CORS_WILDCARD_CREDS, |cx, v| cors(cx, v, CH_CORS_WILDCARD_CREDS)),
@@ -561,8 +561,8 @@ fn aspnet_version(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
     }
 }
 
-/// Cookies lacking flags (all Set-Cookie values; repeated headers included);
-/// one unit per flag.
+/// Cookies lacking SameSite (WebProbe-only; all Set-Cookie values). The
+/// secure and HttpOnly units are Burp ports in `pack::cookie_flag`.
 fn cookie_flags(cx: &PassiveCtx, v: &mut Vec<ScanIssue>, which: CheckDef) {
     if !cx.ok_status {
         return;
@@ -575,8 +575,6 @@ fn cookie_flags(cx: &PassiveCtx, v: &mut Vec<ScanIssue>, which: CheckDef) {
         let c = parse_cookie(val);
         let secure = has_flag(&c.attrs, "secure");
         let hit = match which.id {
-            "passive.cookie-secure-missing" => e.https && !secure,
-            "passive.cookie-httponly-missing" => looks_session_cookie(c.name, c.value) && !has_flag(&c.attrs, "httponly"),
             "passive.cookie-samesite-missing" => attr_value(&c.attrs, "samesite").is_none(),
             _ => attr_value(&c.attrs, "samesite") == Some("none") && !secure,
         };
@@ -1096,6 +1094,46 @@ mod tests {
         eprintln!("{} libraries, skipped: {:?}", r.libs_len(), r.skipped);
         assert!(r.libs_len() > 10);
         assert!(r.skipped.is_empty(), "jquery's back-reference and lodash's look-behind are rewritten: {:?}", r.skipped);
+    }
+
+    #[test]
+    fn cookie_flags_one_issue_per_cookie() {
+        let h = format!("{HTML}Set-Cookie: sessionid=abcdef; Path=/\r\nSet-Cookie: theme=darkmode\r\nSet-Cookie: x=ab\r\n");
+        let sec = only(&ex("/", true, &h, "x"), CH_COOKIE_SECURE);
+        assert_eq!(names(&sec), [("TLS cookie without secure flag set".to_string(), "Session: sessionid".to_string()), ("TLS cookie without secure flag set".to_string(), "Other: theme".to_string())]);
+        assert_eq!((sec[0].sev.as_str(), sec[0].confidence.as_str(), sec[1].sev.as_str(), sec[1].confidence.as_str()), ("medium", "Firm", "info", "Certain"));
+        assert_eq!(sec[1].detail, "The following cookie was issued by the application and does not have the secure flag set:<ul><li>theme</li></ul>The cookie does not appear to contain a session token, which may reduce the risk associated with this issue. You should review the contents of the cookie to determine its function.");
+        let ho = only(&ex("/", true, &h, "x"), CH_COOKIE_HTTPONLY);
+        assert_eq!((ho.len(), ho[0].sev.as_str(), ho[0].confidence.as_str()), (2, "low", "Firm"));
+        assert!(only(&ex("/", false, &h, "x"), CH_COOKIE_SECURE).is_empty(), "plain HTTP");
+        // Two cookies on one path stay two issues after merging.
+        let shared = crate::net::Shared::new();
+        crate::scan::add_passive_issues(&shared, ho);
+        assert_eq!(shared.issues.lock().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn pervasive_issue_merges_at_the_tenth_location() {
+        assert_eq!(crate::scan::common_path("/a/b/c", "/a/b/d"), "/a/b");
+        assert_eq!(crate::scan::common_path("/a/b", "/a/b/c"), "/a/b");
+        assert_eq!(crate::scan::common_path("/x", "/y"), "/");
+        assert_eq!(crate::scan::common_path("/", "/a"), "/");
+        let shared = crate::net::Shared::new();
+        let dup = format!("{HTML}Set-Cookie: k=1\r\nSet-Cookie: k=2\r\n");
+        for n in 0..9 {
+            crate::scan::add_passive_issues(&shared, only(&ex(&format!("/shop/item{n}"), true, &dup, "x"), pack::CH_DUPLICATE_COOKIES));
+        }
+        assert_eq!(shared.issues.lock().unwrap().len(), 9, "nine locations stay apart");
+        crate::scan::add_passive_issues(&shared, only(&ex("/shop/cart/view", true, &dup, "x"), pack::CH_DUPLICATE_COOKIES));
+        let iss = shared.issues.lock().unwrap().clone();
+        assert_eq!(iss.len(), 1);
+        assert_eq!(iss[0].path, "/shop");
+        assert!(iss[0].detail.ends_with("</ul>This issue was found in multiple locations under the reported path."), "{}", iss[0].detail);
+        crate::scan::add_passive_issues(&shared, only(&ex("/other", true, &dup, "x"), pack::CH_DUPLICATE_COOKIES));
+        assert_eq!(shared.issues.lock().unwrap().len(), 1, "later locations add nothing");
+        // A different identifier is its own group.
+        crate::scan::add_passive_issues(&shared, only(&ex("/other", true, &format!("{HTML}Set-Cookie: j=1\r\nSet-Cookie: j=2\r\n"), "x"), pack::CH_DUPLICATE_COOKIES));
+        assert_eq!(shared.issues.lock().unwrap().len(), 2);
     }
 
     // ------------------------------------------------------------ R-04 second pass

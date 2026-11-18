@@ -1554,6 +1554,57 @@ fn preview_text(text: &str, limit: usize) -> String {
 // Tests: parser and token determinism.
 // ---------------------------------------------------------------------------
 
+/// Burp's interaction time (burp.Zukx.ZL, used by the interaction record
+/// burp.Zem2): `yyyy-MMM-dd HH:mm:ss.SSS z` in UTC. Interactions are kept
+/// to the second, so the milliseconds are `.000`.
+pub fn interaction_time(unix_secs: u64) -> String {
+    const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    let days = (unix_secs / 86_400) as i64;
+    let rem = unix_secs % 86_400;
+    // Civil date from days since 1970-01-01 (H. Hinnant's algorithm).
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + if m <= 2 { 1 } else { 0 };
+    format!("{y}-{}-{d:02} {:02}:{:02}:{:02}.000 UTC", MONTHS[(m - 1) as usize], rem / 3600, (rem / 60) % 60, rem % 60)
+}
+
+/// What "Copy to clipboard" copies: the full payload host, or only its
+/// first label when the server location is left out.
+pub fn payload_text(dns_name: &str, include_server: bool) -> String {
+    if include_server { dns_name.to_string() } else { dns_name.split('.').next().unwrap_or("").to_string() }
+}
+
+/// The "Collaborator server:" label: the polled domain, the loopback
+/// listeners, or nothing configured.
+pub fn server_label(remote: Option<&str>, listeners_running: bool) -> String {
+    match remote {
+        Some(d) => format!("*.{d}"),
+        None if listeners_running => "loopback listeners (127.0.0.1)".into(),
+        None => "not configured".into(),
+    }
+}
+
+/// The Description tab of one interaction.
+pub fn describe(i: &Interaction) -> String {
+    let what = match i.kind() {
+        InteractionKind::Http => "an HTTP request",
+        InteractionKind::Dns => "a DNS lookup",
+        InteractionKind::Smtp => "an SMTP connection",
+    };
+    format!(
+        "The Collaborator server received {what} for the payload {}. The request was received from IP address {} at {}.",
+        i.token.clone().unwrap_or_default(),
+        i.source,
+        interaction_time(i.at)
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1738,4 +1789,19 @@ mod tests {
             assert!(seen.insert(token));
         }
     }
+
+    #[test]
+    fn interaction_rows_show_burp_time_payload_and_description() {
+        assert_eq!(interaction_time(0), "1970-Jan-01 00:00:00.000 UTC");
+        assert_eq!(interaction_time(1_795_000_000), "2026-Nov-18 11:06:40.000 UTC");
+        assert_eq!(interaction_time(951_782_400), "2000-Feb-29 00:00:00.000 UTC", "leap day");
+        assert_eq!(payload_text("abc123.oast.fun", true), "abc123.oast.fun");
+        assert_eq!(payload_text("abc123.oast.fun", false), "abc123");
+        assert_eq!(server_label(Some("oast.fun"), true), "*.oast.fun");
+        assert_eq!(server_label(None, true), "loopback listeners (127.0.0.1)");
+        assert_eq!(server_label(None, false), "not configured");
+        let i = Interaction { id: 1, at: 0, source: "10.0.0.5".into(), token: Some("abc123".into()), detail: InteractionDetail::Dns(DnsInteraction { qname: "abc123.oast.fun".into(), qtype: 1, raw_query: Vec::new() }) };
+        assert_eq!(describe(&i), "The Collaborator server received a DNS lookup for the payload abc123. The request was received from IP address 10.0.0.5 at 1970-Jan-01 00:00:00.000 UTC.");
+    }
+
 }
