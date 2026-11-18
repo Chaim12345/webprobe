@@ -264,6 +264,7 @@ pub fn pick(name: Option<&str>) -> Option<Box<dyn HeadlessBrowser>> {
 /// the URLs rendered, in order.
 pub fn js_crawl(engine: &dyn HeadlessBrowser, shared: &Arc<Shared>, start_url: &str) -> Result<Vec<String>, String> {
     let limits = shared.scan_config.lock().unwrap().crawl.clone();
+    let started = std::time::Instant::now();
     let proxy_port = shared.proxy_port.load(std::sync::atomic::Ordering::SeqCst);
     let ca_file = std::env::temp_dir().join(format!("webprobe-ca-{}.pem", std::process::id()));
     std::fs::write(&ca_file, shared.mitm.ca_pem()).map_err(|e| e.to_string())?;
@@ -274,7 +275,7 @@ pub fn js_crawl(engine: &dyn HeadlessBrowser, shared: &Arc<Shared>, start_url: &
     let mut queue = VecDeque::from([(start_url.to_string(), 0usize)]);
     let mut out = Vec::new();
     while let Some((url, depth)) = queue.pop_front() {
-        if shared.scan.stop.load(std::sync::atomic::Ordering::SeqCst) || out.len() >= limits.max_locations {
+        if shared.scan.stop.load(std::sync::atomic::Ordering::SeqCst) || out.len() >= limits.max_locations || limits.exhausted(started, out.len()) {
             break;
         }
         if !seen.insert(url.clone()) {

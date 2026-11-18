@@ -821,6 +821,9 @@ pub fn passive_check(e: &HistEntry) -> Vec<ScanIssue> {
 pub fn passive_check_for(shared: &Shared, e: &HistEntry) -> Vec<ScanIssue> {
     let config = shared.scan_config.lock().unwrap().clone();
     let mut v = passive_check_with(e, &|id| config.check_enabled(id), Some(&shared.passive));
+    // R-11: the configuration's "Issues reported" (passive scan type,
+    // individual selection).
+    v.retain(|i| config.issue_allowed(&i.name, false));
     // Montoya extensions' passive checks (bounded by the hook timeout).
     let exts = shared.ext_host.lock().unwrap().active();
     for x in exts.into_iter().filter(|x| x.ui().is_some_and(|u| u.passive_checks > 0)) {
@@ -2847,6 +2850,21 @@ pub fn check_catalogue() -> Vec<(&'static str, &'static str, &'static str)> {
     v.extend(checks::STORED_CHECKS.iter().map(|c| (c.id(), c.issue(), SCOPE_POINT)));
     v.extend(checks::REQUEST_CHECKS.iter().map(|c| (c.id(), c.issue(), SCOPE_REQUEST)));
     v.extend(passive_checks::PASSIVE_CHECKS.iter().map(|c| (c.id, c.issue, SCOPE_PASSIVE)));
+    v
+}
+
+/// Issues a check reports besides its own `issue()` (one check, several
+/// Burp issue types).
+const SECONDARY_ISSUES: &[(&str, &str)] = &[("active.web-cache-poisoning", "Request URL override")];
+
+/// R-11's issue table: the WebProbe check ids that report Burp issue type
+/// `type_id` (from [`check_catalogue`] and [`SECONDARY_ISSUES`]). Empty
+/// when WebProbe has no check for it.
+pub fn checks_for_issue_type(type_id: u32) -> Vec<&'static str> {
+    let mut v: Vec<&'static str> = check_catalogue().into_iter().filter(|(_, issue, _)| issue_type_id(issue) as u32 == type_id).map(|(id, _, _)| id).collect();
+    v.extend(SECONDARY_ISSUES.iter().filter(|(_, issue)| issue_type_id(issue) as u32 == type_id).map(|(id, _)| *id));
+    v.sort_unstable();
+    v.dedup();
     v
 }
 

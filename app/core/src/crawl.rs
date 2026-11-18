@@ -162,6 +162,7 @@ pub fn crawl(shared: &Arc<Shared>, start_url: &str) -> Vec<HistEntry> {
     let origin = if port == default_port { format!("{scheme}://{host}") } else { format!("{scheme}://{host}:{port}") };
 
     let limits = shared.scan_config.lock().unwrap().crawl.clone();
+    let started = std::time::Instant::now();
     let mut seen: BTreeSet<String> = BTreeSet::new();
     let mut queue: VecDeque<(String, usize)> = VecDeque::new();
     let push = |p: String, d: usize, seen: &mut BTreeSet<String>, queue: &mut VecDeque<(String, usize)>| {
@@ -197,7 +198,8 @@ pub fn crawl(shared: &Arc<Shared>, start_url: &str) -> Vec<HistEntry> {
         }
     }
     while let Some((path, depth)) = queue.pop_front() {
-        if shared.scan.stop.load(Ordering::SeqCst) {
+        // Maximum crawl time / request count (R-11).
+        if shared.scan.stop.load(Ordering::SeqCst) || limits.exhausted(started, out.len()) {
             break;
         }
         let e = fetch(shared, https, &host, port, authority, &path, shared.next_id.fetch_add(1, Ordering::SeqCst));
@@ -259,7 +261,7 @@ mod tests {
         let shared = Shared::new();
         {
             let mut c = shared.scan_config.lock().unwrap();
-            c.crawl = crate::scan_config::CrawlLimits { max_depth: 1, max_locations: 100, robots: false, sitemap: false, engine: String::new() };
+            c.crawl = crate::scan_config::CrawlLimits { max_depth: 1, max_locations: 100, robots: false, sitemap: false, ..Default::default() };
         }
         let _ = crawl(&shared, &format!("http://127.0.0.1:{port}/"));
         let paths = seen.lock().unwrap().clone();
@@ -656,6 +658,7 @@ fn eval_json<T: serde::de::DeserializeOwned>(cdp: &mut Cdp, js: &str) -> Option<
 pub fn browser_crawl(shared: &Arc<Shared>, start_url: &str) -> Result<Vec<SeenRequest>, String> {
     let bin = crate::paths::chromium().map_err(|m| m.to_string())?.display().to_string();
     let limits = shared.scan_config.lock().unwrap().crawl.clone();
+    let started = std::time::Instant::now();
     let (scheme, rest) = start_url.split_once("://").unwrap_or(("http", start_url));
     let authority = rest.split('/').next().unwrap_or("").to_string();
     let origin = format!("{scheme}://{authority}");
@@ -713,7 +716,7 @@ pub fn browser_crawl(shared: &Arc<Shared>, start_url: &str) -> Result<Vec<SeenRe
         let mut form_keys: BTreeSet<String> = BTreeSet::new();
         let mut clicked: BTreeSet<String> = BTreeSet::new();
         while let Some((url, depth)) = queue.pop_front() {
-            if shared.scan.stop.load(Ordering::SeqCst) || pages >= limits.max_locations {
+            if shared.scan.stop.load(Ordering::SeqCst) || pages >= limits.max_locations || limits.exhausted(started, pages) {
                 break;
             }
             if cdp.call("Page.navigate", serde_json::json!({"url": url})).is_err() {

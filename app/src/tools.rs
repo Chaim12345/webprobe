@@ -1843,6 +1843,8 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
         ..Default::default()
     };
     scan_cfg.save_into(&mut locked_scanner);
+    locked_scanner.library = crate::scan_library_ui::project_entries(app);
+    locked_scanner.library_selection = app.scan_lib.launch.clone();
     let locked_proxy = project::ProjectProxy {
         listeners: net::listener_specs(&app.shared).into_iter().map(|l| project::ProjectListener { bind: l.bind, port: l.port, http2: l.http2 }).collect(),
         ws_intercept_client: app.shared.ws_intercept_client.load(Ordering::SeqCst),
@@ -2126,6 +2128,8 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData, content: boo
     app.shared.scan_speed.store(s.speed.min(2), Ordering::SeqCst);
     app.shared.scan_accuracy.store(s.accuracy.min(2), Ordering::SeqCst);
     app.shared.extra_checks.store(s.extra_checks, Ordering::SeqCst);
+    let (library, selection) = (s.library.clone(), s.library_selection.clone());
+    crate::scan_library_ui::load_project_entries(app, &library, &selection);
     app.shared.ws_intercept_client.store(data.proxy.ws_intercept_client, Ordering::SeqCst);
     *app.shared.streaming.lock().unwrap() = data.proxy.streaming_responses.clone();
     app.shared.listener_http2.store(data.proxy.listener_http2, Ordering::SeqCst);

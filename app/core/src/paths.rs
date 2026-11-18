@@ -39,6 +39,15 @@ impl fmt::Display for Missing {
 impl std::error::Error for Missing {}
 
 
+/// Where a set of Burp resource files is read from: an extracted
+/// directory (for scan configurations, the `BuiltInConfigs` directory; its
+/// sibling `Preferences` holds Burp's defaults) or the burpsuite.jar itself.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum BurpResources {
+    Dir(PathBuf),
+    Jar(PathBuf),
+}
+
 /// Where lookups read their settings from: the process environment, or a
 /// fixed map in tests (so tests never touch the process-wide environment).
 pub struct Lookup {
@@ -145,6 +154,34 @@ impl Lookup {
             what: "Burp's JWT secret list (Scanner/jwt_secrets.txt)",
             looked,
             how: "\"JWT weak HMAC secret\" is not checked. Extract resources/ from your burpsuite.jar and set WEBPROBE_BURP_RESOURCES, or set WEBPROBE_JWT_SECRETS to the file.",
+        })
+    }
+
+    /// Burp's built-in scan configurations (R-11): a `BuiltInConfigs`
+    /// directory (`$WEBPROBE_SCAN_CONFIGS_DIR`, then the resource
+    /// directories), else read straight from the user's burpsuite.jar
+    /// (`$WEBPROBE_BURP_JAR`, then the Burp install directories). The files
+    /// are PortSwigger's and are never copied into WebProbe.
+    pub fn burp_scan_configs(&self) -> Result<BurpResources, Missing> {
+        let dirs = self.burp_resource_candidates("WEBPROBE_SCAN_CONFIGS_DIR", "BuiltInConfigs");
+        if let Some(d) = first_dir_with(&dirs, |d| has_ext(d, "json")) {
+            return Ok(BurpResources::Dir(d));
+        }
+        let mut looked = dirs;
+        let mut jars: Vec<PathBuf> = self.var("WEBPROBE_BURP_JAR").into_iter().filter(|p| !p.to_string_lossy().contains("montoya-api")).collect();
+        for d in self.burp_install_dirs() {
+            jars.push(d.join("burpsuite.jar"));
+            jars.push(d.join("burpsuite_pro.jar"));
+            jars.push(d.join("burpsuite_community.jar"));
+        }
+        if let Some(j) = jars.iter().find(|p| p.is_file()) {
+            return Ok(BurpResources::Jar(j.clone()));
+        }
+        looked.extend(jars);
+        Err(Missing {
+            what: "Burp's built-in scan configurations (BuiltInConfigs/*.json or burpsuite.jar)",
+            looked,
+            how: "Only WebProbe's own library entries are listed. Set WEBPROBE_BURP_JAR to your burpsuite.jar, or extract resources/ from it and set WEBPROBE_BURP_RESOURCES.",
         })
     }
 

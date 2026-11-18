@@ -614,6 +614,29 @@ pub struct ProjectScanner {
     pub crawl_sitemap: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub crawl_engine: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crawl_max_minutes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crawl_max_requests: Option<usize>,
+    /// R-11: Burp's scanner.issues_reported object when the issue
+    /// selection is not "everything" (absent in older projects).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub issues_reported: Option<serde_json::Value>,
+    /// R-11: the project's scan configuration library entries (Burp JSON,
+    /// unknown keys kept).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub library: Vec<ProjectLibraryConfig>,
+    /// R-11: the library configurations last chosen at scan launch, in
+    /// order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub library_selection: Vec<String>,
+}
+
+/// One project library entry: its name and Burp's JSON for it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ProjectLibraryConfig {
+    pub name: String,
+    pub config: serde_json::Value,
 }
 
 fn one_u8() -> u8 {
@@ -626,7 +649,7 @@ fn yes() -> bool {
 
 impl Default for ProjectScanner {
     fn default() -> Self {
-        Self { speed: 1, accuracy: 1, extra_checks: false, disabled_checks: Vec::new(), disabled_insertion_points: Vec::new(), crawl_max_depth: None, crawl_max_locations: None, crawl_robots: None, crawl_sitemap: None, crawl_engine: None }
+        Self { speed: 1, accuracy: 1, extra_checks: false, disabled_checks: Vec::new(), disabled_insertion_points: Vec::new(), crawl_max_depth: None, crawl_max_locations: None, crawl_robots: None, crawl_sitemap: None, crawl_engine: None, crawl_max_minutes: None, crawl_max_requests: None, issues_reported: None, library: Vec::new(), library_selection: Vec::new() }
     }
 }
 
@@ -1762,7 +1785,7 @@ mod tests {
                 listener_port: 0,
             }],
             site_links: vec![("https://example.com".into(), "/unvisited".into())],
-            scanner: ProjectScanner { speed: 2, accuracy: 0, extra_checks: true, disabled_checks: vec!["active.csrf".into()], disabled_insertion_points: vec!["header".into()], crawl_max_depth: Some(2), crawl_max_locations: Some(100), crawl_robots: Some(false), crawl_sitemap: Some(true), crawl_engine: Some("Lightpanda".into()) },
+            scanner: ProjectScanner { speed: 2, accuracy: 0, extra_checks: true, disabled_checks: vec!["active.csrf".into()], disabled_insertion_points: vec!["header".into()], crawl_max_depth: Some(2), crawl_max_locations: Some(100), crawl_robots: Some(false), crawl_sitemap: Some(true), crawl_engine: Some("Lightpanda".into()), ..Default::default() },
             proxy: ProjectProxy {
                 listeners: vec![ProjectListener { bind: "127.0.0.1".into(), port: 18_090, http2: false }],
                 ws_intercept_client: false,

@@ -134,7 +134,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                         app.settings_open = true;
                         ui.close();
                     }
-                    off(ui, "Configuration library");
+                    if ui.button("Configuration library").clicked() {
+                        app.settings_open = true;
+                        app.settings_help = SettingsPane::ConfigurationLibrary;
+                        ui.close();
+                    }
                     ui.separator();
                     off(ui, "WebProbe Infiltrator");
                     off(ui, "WebProbe Clickbandit");
@@ -3480,12 +3484,18 @@ fn dashboard(app: &mut App, ui: &mut Ui) {
                 ui.label(RichText::new("URLs to scan").size(12.5).color(theme::ink_dim()));
                 ui.add(egui::TextEdit::multiline(&mut app.new_scan_urls).desired_rows(4).desired_width(520.0).hint_text("https://example.com/"));
                 ui.add_space(6.0);
-                ui.label(RichText::new("Crawl and audit follows links, robots.txt and sitemap.xml from each URL on the same origin (link depth 4, 1500 locations), then audits every item found. Audit selected items audits only the URLs listed.").size(12.0).color(theme::ink_hint()));
+                ui.label(RichText::new("Crawl and audit follows links, robots.txt and sitemap.xml from each URL on the same origin within the scan configuration's crawl limits, then audits every item found. Audit selected items audits only the URLs listed.").size(12.0).color(theme::ink_hint()));
+                ui.add_space(8.0);
+                crate::scan_library_ui::launch_picker(app, ui);
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
                     let ok = egui::Button::new(RichText::new("OK").strong().color(egui::Color32::WHITE)).fill(c(theme::ORANGE_1)).min_size(egui::vec2(70.0, 24.0));
                     if ui.add(ok).clicked() {
                         let urls: Vec<String> = app.new_scan_urls.lines().map(str::trim).filter(|l| !l.is_empty()).map(str::to_string).collect();
+                        let applied = crate::scan_library_ui::apply_launch(app);
+                        if !applied.is_empty() {
+                            app.shared.log(&format!("Scan configuration from library: {}", applied.join(", ")));
+                        }
                         start_url_scan(app, urls);
                         app.new_scan_open = false;
                         app.dash_task = 2;

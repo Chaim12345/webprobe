@@ -47,6 +47,7 @@ mod rules_ui;
 use webprobe_core::scan;
 use webprobe_core::scan_config;
 use webprobe_core::seq_bits;
+mod scan_library_ui;
 mod settings_dialog;
 mod shortcuts;
 mod site_map;
@@ -277,6 +278,8 @@ pub struct App {
     pub new_scan_urls: String,
     /// New scan type: 0 Crawl and audit (Burp's default), 1 Audit selected items.
     pub new_scan_type: usize,
+    /// R-11: the scan configuration library and the New scan selection.
+    pub scan_lib: scan_library_ui::LibraryState,
     /// Repeater: message panes and the Configure-target dialog.
     pub rep_req_pane: msgpane::PaneState,
     pub rep_resp_pane: msgpane::PaneState,
@@ -875,6 +878,7 @@ impl App {
             new_scan_open: false,
             new_scan_urls: String::new(),
             new_scan_type: 0,
+            scan_lib: Default::default(),
             rep_req_pane: msgpane::PaneState { view: 1, ..Default::default() },
             rep_resp_pane: msgpane::PaneState::default(),
             rep_target_edit: false,

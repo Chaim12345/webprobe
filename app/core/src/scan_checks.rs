@@ -177,7 +177,7 @@ impl ScanCtx {
     /// WebProbe's own probes only with "WebProbe extra checks" on, so a
     /// default scan sends only the traffic Burp's scan would.
     pub(crate) fn runs(&self, issue: &str) -> bool {
-        is_burp_issue(issue) || self.shared.extra_checks.load(Ordering::SeqCst)
+        (is_burp_issue(issue) || self.shared.extra_checks.load(Ordering::SeqCst)) && self.shared.scan_config.lock().unwrap().issue_allowed(issue, true)
     }
 
     /// Report what a check proved (ids are assigned by the Issues list). Issue types Burp does not have (the
@@ -187,6 +187,10 @@ impl ScanCtx {
     pub(crate) fn report(&self, mut issues: Vec<ScanIssue>) {
         if !self.shared.extra_checks.load(Ordering::SeqCst) {
             issues.retain(|i| is_burp_issue(&i.name));
+        }
+        {
+            let config = self.shared.scan_config.lock().unwrap();
+            issues.retain(|i| config.issue_allowed(&i.name, true));
         }
         add_issues(&self.shared, issues);
     }
@@ -736,6 +740,10 @@ impl PairCtx {
         if !self.shared.extra_checks.load(Ordering::SeqCst) {
             issues.retain(|i| is_burp_issue(&i.name));
         }
+        {
+            let config = self.shared.scan_config.lock().unwrap();
+            issues.retain(|i| config.issue_allowed(&i.name, true));
+        }
         add_issues(&self.shared, issues);
     }
 
@@ -759,7 +767,7 @@ pub(crate) fn run_stored_stage(shared: &Arc<Shared>) {
             break;
         }
         for check in STORED_CHECKS {
-            let runs = is_burp_issue(check.issue()) || shared.extra_checks.load(Ordering::SeqCst);
+            let runs = (is_burp_issue(check.issue()) || shared.extra_checks.load(Ordering::SeqCst)) && config.issue_allowed(check.issue(), true);
             if runs && check.applies_to(&pair.point) && config.check_enabled(check.id()) && !(check.server_side() && pair.point.skips_server_side()) {
                 check.run(&PairCtx { shared: shared.clone(), pair: pair.clone() });
             }
