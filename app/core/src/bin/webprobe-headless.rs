@@ -36,6 +36,17 @@ fn usage() -> ! {
     std::process::exit(2)
 }
 
+/// Burp puts its flags before the command word; accept that order too by
+/// rotating `proxy` / `scan` to the front.
+fn burp_command_first(args: &mut Vec<String>) {
+    if !matches!(args.first().map(String::as_str), Some("proxy" | "scan" | "--version" | "--help")) {
+        if let Some(i) = args.iter().position(|a| a == "proxy" || a == "scan") {
+            let cmd = args.remove(i);
+            args.insert(0, cmd);
+        }
+    }
+}
+
 /// Burp's command line flags (R-15), collected from anywhere in the
 /// argument list. Repeatable flags keep their order (last wins on apply).
 #[derive(Default, Debug, PartialEq)]
@@ -327,6 +338,7 @@ fn main() {
     if args.is_empty() {
         usage();
     }
+    burp_command_first(&mut args);
     match args.remove(0).as_str() {
         "--version" => println!("webprobe-headless {}", env!("CARGO_PKG_VERSION")),
         "--help" => println!("{USAGE}"),
@@ -373,6 +385,17 @@ mod tests {
         assert!(configs[0].tree.get("proxy").is_none());
         assert!(configs[0].tree.get("scanner").is_some());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Burp's flag-before-command order is accepted.
+    #[test]
+    fn burp_flags_may_precede_the_command() {
+        let mut args = strings(&["--config-file", "a.json", "proxy", "--seconds", "1"]);
+        burp_command_first(&mut args);
+        assert_eq!(args[0], "proxy");
+        let mut args = strings(&["scan", "http://x/"]);
+        burp_command_first(&mut args);
+        assert_eq!(args[0], "scan");
     }
 
     /// --project-file is an alias of --project; the last one given wins.
