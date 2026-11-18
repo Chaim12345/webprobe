@@ -18,6 +18,7 @@ pub mod ext_process;
 pub mod ext_store;
 pub mod h2;
 pub mod h2_server;
+pub mod jwt;
 #[cfg(test)]
 mod h2_server_tests;
 pub mod history;
@@ -50,6 +51,7 @@ pub mod stored;
 pub mod streaming;
 pub mod ws_history;
 pub mod ws_rules;
+pub mod ws_repeater;
 #[cfg(test)]
 mod ws_tests;
 #[cfg(test)]

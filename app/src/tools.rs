@@ -2001,6 +2001,10 @@ fn save_project_with(app: &mut App, quiet: bool, background: bool) {
 /// history, issues, Repeater tabs, scan tasks and editors are left as they
 /// are, so traffic that arrived meanwhile is never rolled back.
 pub fn apply_project(app: &mut App, data: &project::ProjectData, content: bool) {
+    // Another project's messages must not stay held for this one.
+    if content {
+        net::intercept_release_all(&app.shared, false);
+    }
     if content {
         app.shared.history.replace_all(data.history.iter().map(|h| h.to_entry()));
     }
@@ -2040,6 +2044,7 @@ pub fn apply_project(app: &mut App, data: &project::ProjectData, content: bool) 
             result_line: r.result_line.clone(),
         history: Vec::new(),
         hist_pos: 0,
+        ws: None,
         }).collect();
         *app.shared.issues.lock().unwrap() = data.issues.iter().map(project::ProjectIssue::to_issue).collect();
         // Cross-response passive state belongs to the project it was built in.

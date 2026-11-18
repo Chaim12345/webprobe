@@ -134,6 +134,20 @@ impl Lookup {
         })
     }
 
+    /// Burp's JWT secret list (`Scanner/jwt_secrets.txt`) for "JWT weak
+    /// HMAC secret": `$WEBPROBE_JWT_SECRETS`, then the resource directories.
+    pub fn jwt_secrets(&self) -> Result<PathBuf, Missing> {
+        let mut looked: Vec<PathBuf> = self.var("WEBPROBE_JWT_SECRETS").into_iter().collect();
+        for dir in self.burp_resource_candidates("WEBPROBE_JWT_SECRETS_DIR", "Scanner") {
+            looked.push(dir.join("jwt_secrets.txt"));
+        }
+        looked.iter().find(|p| p.is_file()).cloned().ok_or(Missing {
+            what: "Burp's JWT secret list (Scanner/jwt_secrets.txt)",
+            looked,
+            how: "\"JWT weak HMAC secret\" is not checked. Extract resources/ from your burpsuite.jar and set WEBPROBE_BURP_RESOURCES, or set WEBPROBE_JWT_SECRETS to the file.",
+        })
+    }
+
     /// A retire.js vulnerability repository: `$WEBPROBE_RETIREJS`, then
     /// Burp's `RetireJS/retirejs_repository.json` or retire.js's own
     /// `jsrepository.json` in the resource directories.
@@ -402,6 +416,11 @@ fn prune_bridge_classes(dir: &Path, keep: &Path) {
             let _ = std::fs::remove_dir_all(&path);
         }
     }
+}
+
+/// [`Lookup::jwt_secrets`] in the process environment.
+pub fn jwt_secrets() -> Result<PathBuf, Missing> {
+    Lookup::process().jwt_secrets()
 }
 
 /// [`Lookup::montoya_bridge_classes`] in the process environment.

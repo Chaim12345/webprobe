@@ -349,6 +349,7 @@ pub(crate) static POINT_CHECKS: &[&dyn PointCheck] = &[
     &LdapInjection,
     &SmtpHeaderInjection,
     &StoredEcho,
+    &JwtAttacks,
 ];
 
 /// Request-level and host-level checks, in run order.
@@ -818,6 +819,147 @@ impl PointCheck for ExternalInteraction {
         cx.progress();
         cx.pace(50);
     }
+}
+
+/// Burp's active JWT check (burp.Zu4y over Zs_2 / Zi8s / Zs83, registered
+/// for five issues at Zcug.java:210-216): on an insertion point whose value
+/// is a JWT, first make sure the application checks the token at all (a
+/// control token with a blanked payload must answer differently from the
+/// original, Zu4y.Zx), then try each attack: a corrupted signature, the
+/// "none" algorithm, a self-signed key in "jwk". An attack is reported when,
+/// over the accuracy's rounds, its responses (and the original's, sent
+/// alternately) stay on the original's side of the original-vs-control
+/// difference (Zs_2.Zk with Zsnr.Zt). "jku" and "x5u" pointing at a
+/// Collaborator URL are reported when the server fetches them.
+pub(crate) struct JwtAttacks;
+
+impl PointCheck for JwtAttacks {
+    fn id(&self) -> &'static str {
+        "active.jwt"
+    }
+    fn issue(&self) -> &'static str {
+        "JWT signature not verified"
+    }
+    /// Zu4y.Zh: any insertion point whose value parses as a JWT.
+    fn applies_to(&self, ip: &InsertionPoint) -> bool {
+        match &ip.kind {
+            IpKind::ParamName(_) | IpKind::PathFolder(_) => false,
+            IpKind::Query
+            | IpKind::Body
+            | IpKind::Json(_)
+            | IpKind::Multipart { .. }
+            | IpKind::Cookie
+            | IpKind::Header
+            | IpKind::PathFilename(_)
+            | IpKind::EntireBody
+            | IpKind::XmlParam { .. }
+            | IpKind::XmlTag { .. }
+            | IpKind::XmlAttr { .. }
+            | IpKind::Base64 { .. } => {
+                let v = ip.decoded_value();
+                let v = v.trim();
+                crate::jwt::Jwt::parse(v.strip_prefix("Bearer ").unwrap_or(v)).is_some()
+            }
+        }
+    }
+    fn server_side(&self) -> bool {
+        false
+    }
+    fn run(&self, cx: &ScanCtx, st: &mut ScanState, pt: &mut PointRun) {
+        let ip = pt.ip;
+        let value = ip.decoded_value();
+        let bearer = value.trim().starts_with("Bearer ");
+        let Some(token) = crate::jwt::Jwt::parse(value.trim().strip_prefix("Bearer ").unwrap_or(value.trim())) else {
+            cx.progress();
+            return;
+        };
+        if cx.stopped() || cx.baseline.raw.is_empty() {
+            cx.progress();
+            return;
+        }
+        let rec = Recorder::default();
+        let send = |t: &str| -> Option<Vec<u8>> {
+            if cx.stopped() {
+                return None;
+            }
+            let v = if bearer { format!("Bearer {t}") } else { t.to_string() };
+            rec.send(cx, t, inject_payload(&cx.req, ip, &v).as_bytes())
+        };
+        let base = crate::variations::fingerprint(&cx.baseline.raw);
+        // Zu4y.Zx: the control token must be told apart from the original.
+        let control = crate::jwt::control_token(&token);
+        let Some(control_resp) = send(&control) else {
+            cx.progress();
+            return;
+        };
+        let control_fp = crate::variations::fingerprint(&control_resp);
+        if !crate::variations::Comparator::new(&base, &control_fp).distinguishable() {
+            cx.progress();
+            return;
+        }
+        let rounds = cx.settings.accuracy.rounds();
+        let accepted = |attack: &str| -> bool {
+            let mut c = crate::variations::Comparator::new(&base, &control_fp);
+            for _ in 0..rounds {
+                let Some(a) = send(attack) else { return false };
+                c.add_a(&crate::variations::fingerprint(&a));
+                if !c.distinguishable() {
+                    return false;
+                }
+                let Some(o) = send(&token.raw) else { return false };
+                c.add_a(&crate::variations::fingerprint(&o));
+                if !c.distinguishable() {
+                    return false;
+                }
+            }
+            true
+        };
+        let place = ip.describe_short(true);
+        // Zwfx.Zf detail texts; Zmir.ZL: High, Tentative (Zs_2.java:48).
+        let attacks: Vec<(&str, Vec<String>, String)> = vec![
+            ("JWT signature not verified", vec![crate::jwt::corrupt_signature(&token)], format!("The signature of the JWT within the {place} does not appear to be verified correctly by the application.")),
+            ("JWT none algorithm supported", crate::jwt::none_variants(&token), format!("The JWT within the {place} appears to be trusted by the application even when using the \"none\" algorithm with an empty signature.")),
+            ("JWT self-signed JWK header supported", crate::jwt::jwk_variant(&token).into_iter().collect(), format!("The JWT within the {place} appears to use an arbitrary key embedded in the \"jwk\" header to validate the token.")),
+        ];
+        for (name, variants, detail) in attacks {
+            if !cx.runs(name) || !cx.shared.scan_config.lock().unwrap().check_enabled(&jwt_issue_id(name)) {
+                continue;
+            }
+            if let Some(v) = variants.iter().find(|v| accepted(v)) {
+                cx.report(vec![mk_point(name, "high", "Tentative", &cx.entry, ip, detail).with_evidence(evidence([rec.last(v), rec.last(&token.raw), rec.last(&control)]))]);
+            }
+        }
+        // Zs83: jku / x5u at a Collaborator URL; Zmir.Zl: High, Certain,
+        // raised when the interaction arrives.
+        for (header, name, what) in [("jku", "JWT arbitrary jku header supported", "a public key"), ("x5u", "JWT arbitrary x5u header supported", "a public key certificate")] {
+            if cx.stopped() || !cx.runs(name) || !cx.shared.scan_config.lock().unwrap().check_enabled(&jwt_issue_id(name)) {
+                continue;
+            }
+            let Some((_, oob_token, domain)) = oob_slot(&cx.oob, pt.idx, &ip.name, header, &mut st.oob_used) else { continue };
+            let attack = crate::jwt::header_url_variant(&token, header, &format!("https://{domain}/"));
+            let v = if bearer { format!("Bearer {attack}") } else { attack.clone() };
+            let new_req = inject_payload(&cx.req, ip, &v);
+            let resp = cx.send(new_req.as_bytes());
+            let mut issue = mk_point(
+                name,
+                "high",
+                "Certain",
+                &cx.entry,
+                ip,
+                format!("The application appears to trust the \"{header}\" header of the JWT found in the {place}. It fetched {what} from an arbitrary URL provided in this header and attempted to use it to verify the signature."),
+            )
+            .with_evidence(vec![ScanEvidence::new(new_req.as_bytes(), resp.as_deref())]);
+            issue.name = name.into();
+            let delivery = crate::oob::delivery_sentence("The JWT", domain, &place, ".");
+            cx.shared.oob.register_delivered(oob_token.clone(), None, issue, delivery);
+        }
+        cx.progress();
+    }
+}
+
+/// Each JWT issue can be switched off on its own in the scan configuration.
+fn jwt_issue_id(name: &str) -> String {
+    format!("active.jwt.{}", name.to_ascii_lowercase().replace(' ', "-"))
 }
 
 /// WebProbe's own reflected-DOM canary (Burp finds DOM issues by analysing

@@ -4,6 +4,7 @@
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, AtomicUsize, Ordering};
+use std::collections::HashMap;
 use std::sync::mpsc;
 use std::sync::Arc;
 
@@ -286,6 +287,8 @@ pub struct RepTab {
     pub history: Vec<(String, Option<Vec<u8>>, String)>,
     /// Position in `history` being shown (len = the live, editable item).
     pub hist_pos: usize,
+    /// A WebSocket Repeater tab: its session (`Shared::ws_sessions`).
+    pub ws: Option<u64>,
 }
 
 /// Literal or regex scope/session pattern match. Invalid regexes never match.
@@ -864,6 +867,10 @@ pub struct Shared {
     pub ws_intercept_in_scope: AtomicBool,
     /// proxy.miscellaneous.strip_sec_websocket_extensions_headers_in_incoming_requests (on).
     pub ws_strip_extensions: AtomicBool,
+    /// Live proxied WebSockets by connection id (WebSocket Repeater attaches).
+    pub ws_live: Mutex<HashMap<u64, LiveWs>>,
+    /// WebSocket Repeater connections.
+    pub ws_sessions: Mutex<Vec<Arc<crate::ws_repeater::WsSession>>>,
     /// Diff-count state for the history table ("Diff count", burp.Zxwu.java:56).
     pub diff_tracker: Mutex<DiffTracker>,
     /// Extension host (Montoya-shaped, Path A): hooks run in the proxy pipeline.
@@ -965,6 +972,7 @@ impl Shared {
                 result_line: String::new(),
             history: Vec::new(),
             hist_pos: 0,
+            ws: None,
             }]),
             messages: std::sync::atomic::AtomicUsize::new(0),
             next_id: AtomicU64::new(1),
@@ -1004,6 +1012,8 @@ impl Shared {
             ws_rules_in_scope_only: AtomicBool::new(false),
             ws_intercept_in_scope: AtomicBool::new(false),
             ws_strip_extensions: AtomicBool::new(true),
+            ws_live: Mutex::new(HashMap::new()),
+            ws_sessions: Mutex::new(Vec::new()),
             diff_tracker: Mutex::new(DiffTracker::default()),
             ext_host: Mutex::new(crate::ext_host::ExtensionHost::default()),
             ws_intercept_client: AtomicBool::new(true),
@@ -1633,11 +1643,29 @@ impl ResponseRead for rustls::StreamOwned<rustls::ClientConnection, TcpStream> {
 
 trait ProxyIo: Read + Write {
     fn set_nonblocking_io(&self, nonblocking: bool) -> std::io::Result<()>;
+    /// The peer closed the connection (checked without consuming data).
+    fn peer_closed(&self) -> bool {
+        false
+    }
+}
+
+/// EOF or a hard error on a (non-blocking) socket, seen with a peek that
+/// consumes nothing.
+fn tcp_closed(s: &TcpStream) -> bool {
+    let mut b = [0u8; 1];
+    match s.peek(&mut b) {
+        Ok(0) => true,
+        Ok(_) => false,
+        Err(e) => !matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::Interrupted | std::io::ErrorKind::TimedOut),
+    }
 }
 
 impl ProxyIo for TcpStream {
     fn set_nonblocking_io(&self, nonblocking: bool) -> std::io::Result<()> {
         self.set_nonblocking(nonblocking)
+    }
+    fn peer_closed(&self) -> bool {
+        tcp_closed(self)
     }
 }
 
@@ -1645,11 +1673,17 @@ impl ProxyIo for rustls::StreamOwned<rustls::ServerConnection, TcpStream> {
     fn set_nonblocking_io(&self, nonblocking: bool) -> std::io::Result<()> {
         self.get_ref().set_nonblocking(nonblocking)
     }
+    fn peer_closed(&self) -> bool {
+        tcp_closed(self.get_ref())
+    }
 }
 
 impl ProxyIo for rustls::StreamOwned<rustls::ClientConnection, TcpStream> {
     fn set_nonblocking_io(&self, nonblocking: bool) -> std::io::Result<()> {
         self.get_ref().set_nonblocking(nonblocking)
+    }
+    fn peer_closed(&self) -> bool {
+        tcp_closed(self.get_ref())
     }
 }
 
@@ -2667,8 +2701,24 @@ pub(crate) struct WsOut {
     pub(crate) closed: bool,
 }
 
+/// The largest WebSocket message the proxy and Repeater assemble.
+pub const WS_MAX_MESSAGE: usize = MAX_WS_MESSAGE;
+
+/// One WebSocket frame around `payload` (`first`: FIN, RSV and opcode).
+pub fn ws_frame(first: u8, payload: &[u8], masked: bool) -> Vec<u8> {
+    build_ws_frame(first, payload, masked)
+}
+
+/// The first complete frame of `buf`: (first byte, unmasked payload, bytes
+/// used). None while incomplete; a frame over the limit comes back with an
+/// empty payload.
+pub fn ws_parse_frame(buf: &[u8]) -> Option<(u8, Vec<u8>, usize)> {
+    let (_, _, payload, used) = parse_ws_frame(buf)?;
+    Some((buf[0], payload, used))
+}
+
 /// A close frame with `code` and `reason`, masked when a client sends it.
-pub(crate) fn ws_close_frame(code: u16, reason: &str, masked: bool) -> Vec<u8> {
+pub fn ws_close_frame(code: u16, reason: &str, masked: bool) -> Vec<u8> {
     let mut p = code.to_be_bytes().to_vec();
     p.extend_from_slice(reason.as_bytes());
     build_ws_frame(0x88, &p, masked)
@@ -2812,7 +2862,14 @@ pub(crate) fn intercept_ws_stream(shared: &Shared, host: &str, chunk: &[u8], st:
 /// byte; a changed one as a single frame. A frame or message over
 /// [`MAX_WS_MESSAGE`] closes both sides with 1009; a fragment out of place
 /// with 1002.
+#[cfg(test)]
 pub(crate) fn ws_relay_chunk(shared: &Shared, host: &str, chunk: &[u8], st: &mut WsStream, client_to_server: bool) -> WsOut {
+    ws_relay_chunk_alive(shared, host, chunk, st, client_to_server, &|| true)
+}
+
+/// [`ws_relay_chunk`] where a held message is let go when `alive` says
+/// either side of the connection closed.
+pub(crate) fn ws_relay_chunk_alive(shared: &Shared, host: &str, chunk: &[u8], st: &mut WsStream, client_to_server: bool, alive: &dyn Fn() -> bool) -> WsOut {
     let mut out = WsOut::default();
     if st.closed {
         out.closed = true;
@@ -2879,7 +2936,7 @@ pub(crate) fn ws_relay_chunk(shared: &Shared, host: &str, chunk: &[u8], st: &mut
             continue;
         }
         let Some(msg) = st.partial.take() else { continue };
-        match ws_message(shared, host, st, msg, client_to_server) {
+        match ws_message(shared, host, st, msg, client_to_server, alive) {
             Ok(bytes) => out.forward.extend(bytes),
             Err((code, why)) => {
                 fail(st, &mut out, code, &why);
@@ -2897,7 +2954,7 @@ fn ws_record(shared: &Shared, host: &str, socket: u64, direction: &str, opcode: 
 /// One complete data message: inflate, extension handlers, match and
 /// replace, interception, history; the bytes to forward (empty when it was
 /// dropped).
-fn ws_message(shared: &Shared, host: &str, st: &mut WsStream, msg: WsPartial, client_to_server: bool) -> Result<Vec<u8>, (u16, String)> {
+fn ws_message(shared: &Shared, host: &str, st: &mut WsStream, msg: WsPartial, client_to_server: bool, alive: &dyn Fn() -> bool) -> Result<Vec<u8>, (u16, String)> {
     let direction = if client_to_server { "client -> server" } else { "server -> client" };
     let opcode = msg.first & 0x0f;
     let binary = opcode == 0x2;
@@ -2942,14 +2999,14 @@ fn ws_message(shared: &Shared, host: &str, st: &mut WsStream, msg: WsPartial, cl
         shared.queue.lock().unwrap().push(InterceptItem::new(id, host, 0, String::from_utf8_lossy(&payload).into_owned(), tx, InterceptKind::WebSocket { to_server: client_to_server }));
         shared.wake();
         shared.log(&format!("Intercepted WebSocket message queued (id {id})"));
-        match rx.recv() {
+        match intercept_wait(shared, id, &rx, alive) {
             // Binary payloads shown lossily stay untouched unless the user
             // really changed the text.
-            Ok(Some(edited)) if edited.as_bytes() != String::from_utf8_lossy(&payload).as_bytes() => {
+            Some(edited) if edited.as_bytes() != String::from_utf8_lossy(&payload).as_bytes() => {
                 payload = edited.into_bytes();
                 changed = true;
             }
-            Ok(Some(_)) => {}
+            Some(_) => {}
             _ => {
                 shared.log(&format!("Intercepted WebSocket message dropped (id {id})"));
                 return Ok(Vec::new());
@@ -2979,12 +3036,14 @@ fn ws_in_scope(shared: &Shared, host: &str) -> bool {
 }
 
 /// One upgraded WebSocket connection: its id (history rows), the
-/// extensions watching it, and permessage-deflate if it was agreed
-/// (client no context takeover, server no context takeover).
+/// extensions watching it, permessage-deflate if it was agreed (client no
+/// context takeover, server no context takeover), and the frames Repeater
+/// injects into it (to the server: true).
 pub(crate) struct WsSetup {
     pub(crate) watch: Option<Arc<WsWatch>>,
     pub(crate) socket: u64,
     pub(crate) deflate: Option<(bool, bool)>,
+    pub(crate) inject: Option<mpsc::Receiver<(bool, Vec<u8>)>>,
 }
 
 impl WsSetup {
@@ -2993,72 +3052,24 @@ impl WsSetup {
     }
 }
 
-/// The handshake is done: what the relay needs. Extension headers were
-/// stripped from the request unless the user turned that off.
-fn ws_setup(shared: &Shared, host: &str, port: u16, secure: bool, req_out: &[u8], response: &[u8]) -> WsSetup {
-    let socket = shared.next_id.fetch_add(1, Ordering::SeqCst);
-    WsSetup { watch: WsWatch::open(shared, host, port, secure, req_out), socket, deflate: ws_deflate_agreed(response) }
+/// A live proxied WebSocket that WebSocket Repeater can attach to.
+#[derive(Clone)]
+pub struct LiveWs {
+    pub host: String,
+    pub port: u16,
+    pub tls: bool,
+    /// The upgrade request as sent upstream.
+    pub handshake: Vec<u8>,
+    /// Frames to write: (to the server, the whole frame).
+    pub inject: mpsc::Sender<(bool, Vec<u8>)>,
 }
 
-fn relay_ws(shared: Arc<Shared>, client: TcpStream, upstream: TcpStream, host: String, setup: WsSetup) {
-    client.set_read_timeout(None).ok();
-    upstream.set_read_timeout(None).ok();
-    // A peer that stops reading must not hold the relay forever.
-    let _ = client.set_write_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)));
-    let _ = upstream.set_write_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)));
-    let (mut to_server, mut to_client) = setup.streams();
-    drop(setup);
-    let mut client_read = match client.try_clone() { Ok(s) => s, Err(_) => return };
-    let mut client_back = match client.try_clone() { Ok(s) => s, Err(_) => return };
-    let mut upstream_write = match upstream.try_clone() { Ok(s) => s, Err(_) => return };
-    let client_host = host.clone();
-    let client_shared = shared.clone();
-    let client_thread = std::thread::spawn(move || {
-        let mut chunk = [0u8; 16384];
-        loop {
-            match client_read.read(&mut chunk) {
-                Ok(0) | Err(_) => break,
-                Ok(n) => {
-                    let out = ws_relay_chunk(&client_shared, &client_host, &chunk[..n], &mut to_server, true);
-                    if !out.forward.is_empty() && upstream_write.write_all(&out.forward).is_err() {
-                        break;
-                    }
-                    if !out.back.is_empty() {
-                        let _ = client_back.write_all(&out.back);
-                    }
-                    if out.closed {
-                        break;
-                    }
-                }
-            }
-        }
-        let _ = upstream_write.shutdown(std::net::Shutdown::Write);
-    });
-    let mut upstream_read = match upstream.try_clone() { Ok(s) => s, Err(_) => return };
-    let mut upstream_back = match upstream.try_clone() { Ok(s) => s, Err(_) => return };
-    let mut client_write = match client.try_clone() { Ok(s) => s, Err(_) => return };
-    let mut chunk = [0u8; 16384];
-    loop {
-        match upstream_read.read(&mut chunk) {
-            Ok(0) | Err(_) => break,
-            Ok(n) => {
-                let out = ws_relay_chunk(&shared, &host, &chunk[..n], &mut to_client, false);
-                if !out.forward.is_empty() && client_write.write_all(&out.forward).is_err() {
-                    break;
-                }
-                if !out.back.is_empty() {
-                    let _ = upstream_back.write_all(&out.back);
-                }
-                if out.closed {
-                    let _ = upstream.shutdown(std::net::Shutdown::Both);
-                    let _ = client.shutdown(std::net::Shutdown::Both);
-                    break;
-                }
-            }
-        }
-    }
-    let _ = client_write.shutdown(std::net::Shutdown::Write);
-    client_thread.join().ok();
+/// The handshake is done: what the relay needs. The connection is listed
+/// in `Shared::ws_live` until the relay ends.
+fn ws_setup(shared: &Shared, socket: u64, host: &str, port: u16, secure: bool, req_out: &[u8], response: &[u8]) -> WsSetup {
+    let (tx, rx) = mpsc::channel();
+    shared.ws_live.lock().unwrap().insert(socket, LiveWs { host: host.to_string(), port, tls: secure, handshake: req_out.to_vec(), inject: tx });
+    WsSetup { watch: WsWatch::open(shared, host, port, secure, req_out), socket, deflate: ws_deflate_agreed(response), inject: Some(rx) }
 }
 
 /// Capture and relay a plain-HTTP WebSocket upgrade; frames are recorded and
@@ -3099,16 +3110,18 @@ fn handle_websocket(shared: Arc<Shared>, mut client: TcpStream, req: Vec<u8>) {
     if client.write_all(&response).is_err() {
         return;
     }
-    push_ws(&shared, &host, "handshake", "request", &req_out);
-    push_ws(&shared, &host, "handshake", "response", &response);
+    let socket = shared.next_id.fetch_add(1, Ordering::SeqCst);
+    push_ws_in(&shared, socket, &host, "handshake", "request", &req_out);
+    push_ws_in(&shared, socket, &host, "handshake", "response", &response);
     record(&shared, &req_out, Some(response.clone()), None, 80, false, listener_port(&shared), false, &Default::default());
     if util::parse_http(&response).status != "101" {
         shared.log(&format!("WebSocket upgrade for {host}:{port} was not accepted"));
         return;
     }
     shared.log(&format!("WebSocket upgraded for {host}:{port}; capturing frames"));
-    let setup = ws_setup(&shared, &host, port, false, &req_out, &response);
-    relay_ws(shared, client, upstream, host, setup);
+    let setup = ws_setup(&shared, socket, &host, port, false, &req_out, &response);
+    let (mut client, mut upstream) = (client, upstream);
+    relay_ws_tls(&shared, &mut client, &mut upstream, host, setup);
 }
 
 fn write_nonblocking<W: Write>(stream: &mut W, mut bytes: &[u8]) -> std::io::Result<()> {
@@ -3136,16 +3149,28 @@ fn relay_ws_tls<C: ProxyIo, U: ProxyIo>(shared: &Shared, client: &mut C, upstrea
     let mut client_open = true;
     let mut upstream_open = true;
     let (mut client_pending, mut upstream_pending) = setup.streams();
-    drop(setup);
+    let (socket, inject) = (setup.socket, setup.inject);
+    drop(setup.watch);
     let mut chunk = [0u8; 16384];
     while client_open || upstream_open {
         let mut progressed = false;
+        // Messages WebSocket Repeater sends over this connection.
+        if let Some(rx) = &inject {
+            while let Ok((to_server, frame)) = rx.try_recv() {
+                progressed = true;
+                let sent = if to_server { write_nonblocking(upstream, &frame) } else { write_nonblocking(client, &frame) };
+                if sent.is_err() {
+                    break;
+                }
+            }
+        }
         if client_open {
             match client.read(&mut chunk) {
                 Ok(0) => client_open = false,
                 Ok(n) => {
                     progressed = true;
-                    let out = ws_relay_chunk(shared, &host, &chunk[..n], &mut client_pending, true);
+                    let alive = || !client.peer_closed() && !upstream.peer_closed();
+                    let out = ws_relay_chunk_alive(shared, &host, &chunk[..n], &mut client_pending, true, &alive);
                     if !out.forward.is_empty() && write_nonblocking(upstream, &out.forward).is_err() {
                         break;
                     }
@@ -3165,7 +3190,8 @@ fn relay_ws_tls<C: ProxyIo, U: ProxyIo>(shared: &Shared, client: &mut C, upstrea
                 Ok(0) => upstream_open = false,
                 Ok(n) => {
                     progressed = true;
-                    let out = ws_relay_chunk(shared, &host, &chunk[..n], &mut upstream_pending, false);
+                    let alive = || !client.peer_closed() && !upstream.peer_closed();
+                    let out = ws_relay_chunk_alive(shared, &host, &chunk[..n], &mut upstream_pending, false, &alive);
                     if !out.forward.is_empty() && write_nonblocking(client, &out.forward).is_err() {
                         break;
                     }
@@ -3184,6 +3210,7 @@ fn relay_ws_tls<C: ProxyIo, U: ProxyIo>(shared: &Shared, client: &mut C, upstrea
             std::thread::sleep(Duration::from_millis(2));
         }
     }
+    shared.ws_live.lock().unwrap().remove(&socket);
 }
 
 fn handle_tls_websocket(
@@ -3241,14 +3268,15 @@ fn handle_tls_websocket(
     if client.write_all(&response).is_err() {
         return;
     }
-    push_ws(&shared, &host, "handshake", "request", &req_out);
-    push_ws(&shared, &host, "handshake", "response", &response);
+    let socket = shared.next_id.fetch_add(1, Ordering::SeqCst);
+    push_ws_in(&shared, socket, &host, "handshake", "request", &req_out);
+    push_ws_in(&shared, socket, &host, "handshake", "response", &response);
     record(&shared, &req_out, Some(response.clone()), None, 443, true, listener_port(&shared), false, &Default::default());
     if util::parse_http(&response).status != "101" {
         return;
     }
     shared.log(&format!("TLS WebSocket upgraded for {host}:{port}; capturing frames"));
-    let setup = ws_setup(&shared, &host, port, true, &req_out, &response);
+    let setup = ws_setup(&shared, socket, &host, port, true, &req_out, &response);
     relay_ws_tls(&shared, &mut client, &mut upstream, host, setup);
     client.conn.send_close_notify();
     upstream.conn.send_close_notify();
@@ -3312,6 +3340,80 @@ fn tls_client_config_base(shared: &Shared, host: &str) -> std::sync::Arc<rustls:
         }
     }
     shared.tls_upstream.clone()
+}
+
+/// A WebSocket Repeater connection of its own (plain or TLS).
+pub enum WsClientConn {
+    Plain(TcpStream),
+    Tls(Box<rustls::StreamOwned<rustls::ClientConnection, TcpStream>>),
+}
+
+impl Read for WsClientConn {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self {
+            WsClientConn::Plain(s) => s.read(buf),
+            WsClientConn::Tls(s) => s.read(buf),
+        }
+    }
+}
+
+impl Write for WsClientConn {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        match self {
+            WsClientConn::Plain(s) => s.write(buf),
+            WsClientConn::Tls(s) => s.write(buf),
+        }
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        match self {
+            WsClientConn::Plain(s) => s.flush(),
+            WsClientConn::Tls(s) => s.flush(),
+        }
+    }
+}
+
+impl WsClientConn {
+    pub fn set_nonblocking(&self, on: bool) -> std::io::Result<()> {
+        match self {
+            WsClientConn::Plain(s) => s.set_nonblocking(on),
+            WsClientConn::Tls(s) => s.get_ref().set_nonblocking(on),
+        }
+    }
+
+    /// Write all of `bytes` on a non-blocking connection (bounded wait).
+    pub fn write_frame(&mut self, bytes: &[u8]) -> std::io::Result<()> {
+        write_nonblocking(self, bytes)
+    }
+}
+
+/// Open a WebSocket for WebSocket Repeater: connect (through the upstream
+/// proxy settings, TLS offering HTTP/1.1 only), send the upgrade request as
+/// written, and read the response head. Ok only for 101; the connection is
+/// returned blocking.
+pub fn ws_client_connect(shared: &Shared, host: &str, port: u16, tls: bool, handshake: &[u8]) -> Result<(WsClientConn, Vec<u8>), String> {
+    let config = shared.upstream_for(host);
+    let mut conn = if tls {
+        let tcp = crate::upstream::connect_tls_target(&config, host, port)?;
+        tcp.set_read_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS))).ok();
+        let name = rustls::pki_types::ServerName::try_from(host.to_string()).map_err(|e| format!("invalid TLS name {host}: {e}"))?;
+        let mut cfg = (*tls_client_config_base(shared, host)).clone();
+        cfg.alpn_protocols = vec![b"http/1.1".to_vec()];
+        let c = rustls::ClientConnection::new(Arc::new(cfg), name).map_err(|e| format!("configure TLS: {e}"))?;
+        WsClientConn::Tls(Box::new(rustls::StreamOwned::new(c, tcp)))
+    } else {
+        let tcp = crate::upstream::connect_target(&config, host, port)?;
+        tcp.set_read_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS))).ok();
+        WsClientConn::Plain(tcp)
+    };
+    let req = if tls { util::origin_form(handshake) } else { crate::upstream::absolute_form_request(&config, &util::origin_form(handshake), host, port) };
+    conn.write_all(&req).map_err(|e| format!("write: {e}"))?;
+    conn.flush().ok();
+    let resp = read_response_head(&mut conn).map_err(|e| format!("read: {e}"))?;
+    let status = util::parse_http(&resp).status;
+    if status != "101" {
+        return Err(format!("the server answered {status}, not 101 Switching Protocols"));
+    }
+    Ok((conn, resp))
 }
 
 /// Most client connections handled at once, across all listeners. Each one
@@ -3965,9 +4067,44 @@ pub fn parse_markers(text: &str) -> Vec<MarkerSeg> {
     segs
 }
 
+/// Turn interception on or off. Off releases every held message unchanged
+/// (forwarded with its current content), as Burp does when the toggle goes
+/// off. The one place the toggle changes (UI, extensions).
+pub fn set_intercept(shared: &Shared, on: bool) -> usize {
+    shared.intercept_on.store(on, Ordering::SeqCst);
+    if on {
+        return 0;
+    }
+    let n = intercept_release_all(shared, false);
+    if n > 0 {
+        shared.log(&format!("Interception turned off: forwarded {n} held message(s)"));
+    }
+    n
+}
+
+/// Wait for the user's verdict on held message `id`. Returns early (None,
+/// and the item leaves the queue) when `alive` says the connection is gone;
+/// the toggle going off and shutdown answer through the queue
+/// ([`set_intercept`], [`intercept_release_all`]).
+pub(crate) fn intercept_wait(shared: &Shared, id: u64, rx: &mpsc::Receiver<Option<String>>, alive: &dyn Fn() -> bool) -> Option<String> {
+    loop {
+        match rx.recv_timeout(Duration::from_millis(200)) {
+            Ok(v) => return v,
+            Err(mpsc::RecvTimeoutError::Disconnected) => return None,
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                if !alive() {
+                    shared.queue.lock().unwrap().retain(|i| i.id != id);
+                    shared.wake();
+                    return None;
+                }
+            }
+        }
+    }
+}
+
 /// Burp's "Forward all" / "Drop all" (burp.Zub8 / Zubj): release every held
 /// message at once, each with its current (possibly edited) content.
-pub fn intercept_release_all(shared: &Arc<Shared>, drop: bool) -> usize {
+pub fn intercept_release_all(shared: &Shared, drop: bool) -> usize {
     let items: Vec<_> = shared.queue.lock().unwrap().drain(..).collect();
     let n = items.len();
     for item in items {

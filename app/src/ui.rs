@@ -1950,6 +1950,15 @@ fn repeater(app: &mut App, ui: &mut Ui) {
     // strip (rename, close, duplicate, reorder) lives in repeater_ops.
     crate::repeater_ops::tab_strip(app, ui);
     ui.add_space(4.0);
+    // A WebSocket Repeater tab has its own view.
+    let ws_session = {
+        let reps = app.shared.repeaters.lock().unwrap();
+        reps.get(app.rep_sel.min(reps.len().saturating_sub(1))).and_then(|r| r.ws)
+    };
+    if let Some(id) = ws_session {
+        crate::repeater_ops::ws_repeater_view(app, ui, id);
+        return;
+    }
 
     let busy = app.shared.rep.is_busy();
     let (target, result_line, https) = {
@@ -2618,6 +2627,7 @@ pub fn send_history_to_repeater(app: &mut App) {
             result_line: String::new(),
             history: Vec::new(),
             hist_pos: 0,
+        ws: None,
         });
         app.rep_sel = reps.len() - 1;
         app.tab = Tab::Repeater;
@@ -2657,6 +2667,7 @@ fn repeater_tab_to_new_tab(app: &mut App) {
         result_line: String::new(),
         history: Vec::new(),
         hist_pos: 0,
+    ws: None,
     });
     app.rep_sel = reps.len() - 1;
 }
@@ -2984,18 +2995,14 @@ fn proxy_intercept(app: &mut App, ui: &mut Ui) {
 /// Intercept on/off. Turning it off releases every held message unchanged
 /// except for edits already made, as Burp forwards automatically while off.
 fn set_intercept(app: &mut App, on: bool) {
-    app.shared.intercept_on.store(on, Ordering::SeqCst);
     if !on {
         if let Some(id) = app.intercept_cur.take() {
             if let Some(item) = app.shared.queue.lock().unwrap().iter_mut().find(|i| i.id == id) {
                 item.edited = app.intercept_text.clone();
             }
         }
-        let n = net::intercept_release_all(&app.shared, false);
-        if n > 0 {
-            app.shared.log(&format!("Interception turned off: forwarded {n} held message(s)"));
-        }
     }
+    net::set_intercept(&app.shared, on);
 }
 
 // ================= Listeners (A-07) =================

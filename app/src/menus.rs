@@ -131,7 +131,7 @@ pub fn intruder_request_to_repeater(app: &mut App) {
     let (host, port, https) = target_parts(&app.intr_target, app.intr_https);
     let mut reps = app.shared.repeaters.lock().unwrap();
     let id = app.shared.rep.new_tab_id();
-    reps.push(net::RepTab { id, name: id.to_string(), host, port, https, request, response: None, result_line: String::new(), history: Vec::new(), hist_pos: 0 });
+    reps.push(net::RepTab { id, name: id.to_string(), host, port, https, request, response: None, result_line: String::new(), history: Vec::new(), hist_pos: 0, ws: None });
     app.rep_sel = reps.len() - 1;
     drop(reps);
     app.tab = Tab::Repeater;

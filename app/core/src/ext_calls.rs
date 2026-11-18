@@ -182,7 +182,7 @@ pub fn dispatch(shared: &Shared, extension: &str, op: &str, args: &Value) -> Res
             shared.ws_history.with_rows(|rows| rows.iter().map(|w| json!({"id": w.id, "time": w.ts, "host": w.host, "direction": w.direction, "opcode": w.opcode, "payload": w.text(), "bytes": util::b64_encode(&w.payload)})).collect()),
         )),
         "proxy.intercept" => {
-            shared.intercept_on.store(args["on"].as_bool().unwrap_or(false), Ordering::SeqCst);
+            crate::net::set_intercept(shared, args["on"].as_bool().unwrap_or(false));
             shared.wake();
             Ok(Value::Null)
         }
@@ -237,6 +237,7 @@ pub fn dispatch(shared: &Shared, extension: &str, op: &str, args: &Value) -> Res
                 result_line: String::new(),
                 history: Vec::new(),
                 hist_pos: 0,
+            ws: None,
             });
             shared.wake();
             Ok(Value::Null)

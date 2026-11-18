@@ -826,6 +826,7 @@ pub fn new_tab(id: u64, host: &str, port: u16, https: bool, request: String) -> 
         result_line: String::new(),
         history: Vec::new(),
         hist_pos: 0,
+    ws: None,
     }
 }
 
@@ -859,6 +860,7 @@ impl ClosedTab {
             result_line: self.result_line,
             history: self.history,
             hist_pos,
+            ws: None,
         }
     }
 }
@@ -1835,6 +1837,9 @@ pub fn ws_history_view(app: &mut crate::App, ui: &mut Ui) {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(6.0);
                 ui.toggle_value(&mut st.ws_hex, "Hex");
+                if ui.button("Send to Repeater").clicked() {
+                    send_ws_to_repeater(&shared, &e);
+                }
             });
         });
         // Binary messages show as hex unless asked otherwise; never lossy-edited.
@@ -1842,6 +1847,134 @@ pub fn ws_history_view(app: &mut crate::App, ui: &mut Ui) {
         egui::ScrollArea::both().id_salt("ws_hist_payload").auto_shrink([false, false]).show(ui, |ui| {
             ui.add(egui::Label::new(RichText::new(text).monospace().size(theme::FONT_MONO).color(theme::editor_colours().text)).selectable(true));
         });
+    }
+}
+
+/// Proxy > WebSockets history > "Send to Repeater": a WebSocket Repeater
+/// tab for the message's connection, with the message in its editor.
+pub fn send_ws_to_repeater(shared: &std::sync::Arc<net::Shared>, e: &net::WsEntry) {
+    let tls = shared.ws_live.lock().unwrap().get(&e.socket).map(|l| l.tls).unwrap_or(false);
+    let session = webprobe_core::ws_repeater::from_history(shared, e.socket, &e.host, tls);
+    let id = shared.rep.new_tab_id();
+    shared.repeaters.lock().unwrap().push(net::RepTab {
+        id,
+        name: format!("WS {id}"),
+        host: session.host.clone(),
+        port: session.port,
+        https: session.tls,
+        request: if std::str::from_utf8(&e.payload).is_ok() { e.text().into_owned() } else { util::hex_encode(&e.payload) },
+        response: None,
+        result_line: String::new(),
+        history: Vec::new(),
+        hist_pos: 0,
+        ws: Some(session.id),
+    });
+    shared.wake();
+    crate::feedback::toast(crate::feedback::Level::Success, "Sent to Repeater (WebSocket)");
+}
+
+/// A WebSocket Repeater tab (Burp's Repeater for WebSocket messages):
+/// connection bar (state, Connect / Reconnect, Clone, Close), the upgrade
+/// request for a connection of its own, the message editor with direction
+/// (to server / to client on a proxied connection) and text / binary (hex),
+/// and the session's message history.
+pub fn ws_repeater_view(app: &mut crate::App, ui: &mut Ui, session_id: u64) {
+    use webprobe_core::ws_repeater::{self as wsr, WsRepState};
+    let shared = app.shared.clone();
+    let Some(session) = shared.ws_sessions.lock().unwrap().iter().find(|s| s.id == session_id).cloned() else {
+        ui.label("This WebSocket session is gone.");
+        return;
+    };
+    let i = app.rep_sel.min(shared.repeaters.lock().unwrap().len().saturating_sub(1));
+    let ui_state_id = ui.scope_id().with(("ws_rep_ui", session_id));
+    // (to_server, binary)
+    let (mut to_server, mut binary): (bool, bool) = ui.data_mut(|d| d.get_temp(ui_state_id)).unwrap_or((true, false));
+    let state = session.state();
+    ui.horizontal(|ui| {
+        ui.add_space(6.0);
+        let (label, colour) = match &state {
+            WsRepState::Connected => ("Connected".to_string(), c(theme::GOOD)),
+            WsRepState::Connecting => ("Connecting...".to_string(), theme::ink_dim()),
+            WsRepState::Disconnected => ("Not connected".to_string(), theme::ink_dim()),
+            WsRepState::Closed(why) => (format!("Closed: {why}"), c(theme::BAD)),
+        };
+        let scheme = if session.tls { "wss" } else { "ws" };
+        ui.label(RichText::new(format!("{scheme}://{}:{}", session.host, session.port)).strong().size(13.0));
+        ui.label(RichText::new(label).size(12.5).color(colour));
+        if session.attached.is_some() {
+            ui.label(RichText::new("(proxied connection)").size(12.0).color(theme::ink_dim()));
+        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.add_space(6.0);
+            if ui.add_enabled(session.attached.is_none() && state == WsRepState::Connected, egui::Button::new("Close")).clicked() {
+                wsr::close(&session);
+            }
+            if ui.button("Clone").on_hover_text("A new tab with this upgrade request, on a connection of its own").clicked() {
+                let copy = wsr::clone_session(&shared, &session);
+                let id = shared.rep.new_tab_id();
+                let request = shared.repeaters.lock().unwrap()[i].request.clone();
+                shared.repeaters.lock().unwrap().push(net::RepTab { id, name: format!("WS {id}"), host: copy.host.clone(), port: copy.port, https: copy.tls, request, response: None, result_line: String::new(), history: Vec::new(), hist_pos: 0, ws: Some(copy.id) });
+            }
+            let connect_label = if matches!(state, WsRepState::Disconnected) { "Connect" } else { "Reconnect" };
+            if ui.add_enabled(session.attached.is_none() && state != WsRepState::Connecting, egui::Button::new(connect_label)).clicked() {
+                let (sh, s) = (shared.clone(), session.clone());
+                std::thread::spawn(move || {
+                    if let Err(e) = wsr::connect(&sh, &s) {
+                        crate::feedback::toast(crate::feedback::Level::Error, format!("WebSocket connect failed: {e}"));
+                    }
+                    sh.wake();
+                });
+            }
+        });
+    });
+    if session.attached.is_none() {
+        egui::CollapsingHeader::new(RichText::new("Upgrade request").size(12.5)).id_salt(("ws_hs", session_id)).show(ui, |ui| {
+            let mut hs = session.handshake.lock().unwrap().clone();
+            if ui.add(egui::TextEdit::multiline(&mut hs).code_editor().desired_rows(6).desired_width(f32::INFINITY)).changed() {
+                *session.handshake.lock().unwrap() = hs;
+            }
+        });
+    }
+    ui.add_space(4.0);
+    ui.columns(2, |cols| {
+        let ui = &mut cols[0];
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("Message").strong().size(13.0));
+            ui.add_space(12.0);
+            ui.selectable_value(&mut to_server, true, "To server");
+            ui.add_enabled_ui(session.can_send_to_client(), |ui| {
+                ui.selectable_value(&mut to_server, false, "To client");
+            });
+            ui.add_space(12.0);
+            ui.selectable_value(&mut binary, false, "Text");
+            ui.selectable_value(&mut binary, true, "Binary (hex)");
+        });
+        let mut text = shared.repeaters.lock().unwrap()[i].request.clone();
+        if ui.add(egui::TextEdit::multiline(&mut text).code_editor().desired_rows(12).desired_width(f32::INFINITY)).changed() {
+            shared.repeaters.lock().unwrap()[i].request = text.clone();
+        }
+        if ui.add(egui::Button::new(RichText::new("Send").color(egui::Color32::WHITE)).fill(c(theme::ORANGE))).clicked() {
+            let payload = if binary { wsr::parse_hex(&text) } else { Ok(text.into_bytes()) };
+            let sent = payload.and_then(|p| wsr::send(&shared, &session, to_server || !session.can_send_to_client(), binary, &p));
+            if let Err(e) = sent {
+                crate::feedback::toast(crate::feedback::Level::Error, e);
+            }
+        }
+        let ui = &mut cols[1];
+        ui.label(RichText::new("History").strong().size(13.0));
+        let msgs = session.messages();
+        egui::ScrollArea::vertical().id_salt(("ws_rep_hist", session_id)).auto_shrink([false, false]).show_rows(ui, 18.0, msgs.len(), |ui, range| {
+            for m in &msgs[range] {
+                let arrow = if m.to_server { "\u{2192} server" } else if m.sent { "\u{2192} client" } else { "\u{2190} server" };
+                let preview = if m.opcode == "binary" { util::hex_encode(&m.payload[..m.payload.len().min(48)]) } else { String::from_utf8_lossy(&m.payload[..m.payload.len().min(200)]).replace('\n', " ") };
+                ui.label(RichText::new(format!("{arrow}  {}  {} B  {preview}", m.opcode, m.payload.len())).monospace().size(12.0).color(if m.sent { c(theme::ORANGE) } else { theme::ink() }));
+            }
+        });
+    });
+    ui.data_mut(|d| d.insert_temp(ui_state_id, (to_server, binary)));
+    // A live connection may change state or receive messages any moment.
+    if state == WsRepState::Connected || state == WsRepState::Connecting {
+        ui.ctx().request_repaint_after(std::time::Duration::from_millis(250));
     }
 }
 

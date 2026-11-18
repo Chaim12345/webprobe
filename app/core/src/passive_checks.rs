@@ -119,6 +119,9 @@ pub(crate) static PASSIVE_CHECKS: &[PassiveCheck] = &[
     unit!(crate::scan::csp::CSP_MALFORMED, crate::scan::csp::run_malformed),
     unit!(CH_PASSWORD_GET, password_get),
     unit!(CH_PRIVATE_KEY, private_key),
+    // R-09: Burp's passive JWT checks.
+    unit!(CH_JWT_WEAK_SECRET, jwt_weak_secret),
+    unit!(CH_JWT_PRIVATE_KEY, jwt_private_key),
     unit!(CH_SSN, ssn),
     unit!(crate::scan::retirejs::CH_VULNERABLE_JS, crate::scan::retirejs::run),
     // R-04 second pass.
@@ -340,6 +343,63 @@ fn private_key(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
     if found {
         v.push(mk_check(CH_PRIVATE_KEY, cx.e, "The response appears to contain a cryptographic private key."));
     }
+}
+
+/// burp.Zblw (PPR_JwtWeakHmacSecret; Zmir.Zn: Certain, High): an HS256/384/
+/// 512 JWT in the request signed with a key from Burp's secret list.
+pub(crate) const CH_JWT_WEAK_SECRET: CheckDef = CheckDef { id: "passive.jwt-weak-hmac-secret", name: "JWT weak HMAC secret", sev: "high", confidence: "Certain" };
+/// burp.Zs73 (PPR_JwtPrivateKeyDisclosure; Zmir.ZK: Certain, High): a request
+/// JWT whose "jwk" header holds a private key, echoed in the response.
+pub(crate) const CH_JWT_PRIVATE_KEY: CheckDef = CheckDef { id: "passive.jwt-private-key-disclosed", name: "JWT private key disclosed", sev: "high", confidence: "Certain" };
+
+/// Tokens already tried against the secret list (Burp's Zbpi dedupe), so
+/// one token seen in many requests is brute-forced once.
+fn jwt_tried(raw: &str) -> bool {
+    static TRIED: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+    let mut t = TRIED.lock().unwrap_or_else(|p| p.into_inner());
+    if t.iter().any(|x| x == raw) {
+        return true;
+    }
+    if t.len() >= 4096 {
+        t.drain(..2048);
+    }
+    t.push(raw.to_string());
+    false
+}
+
+fn jwt_weak_secret(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
+    let secrets = crate::jwt::secrets();
+    jwt_weak_secret_with(cx, v, secrets.iter().map(String::as_str), true);
+}
+
+/// The weak-secret check with a given candidate list (the seam tests use).
+pub(crate) fn jwt_weak_secret_with<'a>(cx: &PassiveCtx, v: &mut Vec<ScanIssue>, candidates: impl Iterator<Item = &'a str> + Clone, dedupe: bool) {
+    for t in crate::jwt::tokens_in_request(&cx.req, &cx.e.req_raw) {
+        if !matches!(t.alg().as_str(), "HS256" | "HS384" | "HS512") || (dedupe && jwt_tried(&t.raw)) {
+            continue;
+        }
+        if let Some(secret) = crate::jwt::weak_secret(&t, candidates.clone()) {
+            // Zwfx.Zf (JWT_WEAK_HMAC_SECRET).
+            v.push(mk_check(CH_JWT_WEAK_SECRET, cx.e, format!("<p>Detected a JWT signed using a well-known HMAC secret key. The key used was <b>{}</b>.</p>", util::html_encode(&secret))));
+        }
+    }
+}
+
+fn jwt_private_key(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
+    for t in crate::jwt::tokens_in_request(&cx.req, &cx.e.req_raw) {
+        if t.jwk_has_private_key() && find_bytes(cx.resp, t.raw.as_bytes()).is_some() {
+            // Burp's text (Zwf7.c) was not recovered: WebProbe's wording.
+            v.push(mk_check(CH_JWT_PRIVATE_KEY, cx.e, "The request contains a JWT whose \"jwk\" header holds a private key, and the token appears in the response."));
+            return;
+        }
+    }
+}
+
+fn find_bytes(hay: &[u8], needle: &[u8]) -> Option<usize> {
+    if needle.is_empty() || hay.len() < needle.len() {
+        return None;
+    }
+    hay.windows(needle.len()).position(|w| w == needle)
 }
 
 /// burp.Zi9q.Zx: social security numbers `ddd-dd-dddd` (or with spaces),
