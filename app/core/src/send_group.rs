@@ -398,6 +398,10 @@ pub fn run_parallel(shared: &Shared, items: &[GroupItem], cancel: &AtomicBool, o
                 let t0 = std::time::Instant::now();
                 let (sent, up) = hooked(shared, item, |request| {
                     if request.is_empty() {
+                        // Like the connect/write failures below: arrive at
+                        // the barrier before bailing, or the other senders
+                        // wait on a barrier that can never release.
+                        barrier.wait();
                         return Err("empty request".to_string());
                     }
                     // The same wire form the sequence sender uses:
