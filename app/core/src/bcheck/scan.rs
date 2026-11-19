@@ -150,25 +150,35 @@ impl Collaborator for ScanCollab {
     }
 
     fn has_interaction(&mut self, kind: super::InteractionKind) -> bool {
-        let observed = self.shared.oob.observed_for(&self.tokens);
-        let mut found = false;
-        for i in observed {
-            if self.counted.contains(&i.id) {
-                continue;
+        // Interactions land after the response that triggered them: poll
+        // briefly instead of judging on the first, likely-empty, read.
+        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        loop {
+            let observed = self.shared.oob.observed_for(&self.tokens);
+            let mut found = false;
+            for i in observed {
+                if self.counted.contains(&i.id) {
+                    continue;
+                }
+                let k = i.kind();
+                let matches = match kind {
+                    super::InteractionKind::Any => true,
+                    super::InteractionKind::Dns => k == crate::collaborator::InteractionKind::Dns,
+                    super::InteractionKind::Http => k == crate::collaborator::InteractionKind::Http,
+                    super::InteractionKind::Smtp => k == crate::collaborator::InteractionKind::Smtp,
+                };
+                if matches {
+                    self.counted.insert(i.id);
+                    found = true;
+                }
             }
-            let k = i.kind();
-            let matches = match kind {
-                super::InteractionKind::Any => true,
-                super::InteractionKind::Dns => k == crate::collaborator::InteractionKind::Dns,
-                super::InteractionKind::Http => k == crate::collaborator::InteractionKind::Http,
-                super::InteractionKind::Smtp => k == crate::collaborator::InteractionKind::Smtp,
-            };
-            if matches {
-                self.counted.insert(i.id);
-                found = true;
+            // No wait when nothing was minted or the scan is stopping:
+            // there is nothing to arrive.
+            if found || self.tokens.is_empty() || std::time::Instant::now() >= deadline {
+                return found;
             }
+            std::thread::sleep(Duration::from_millis(250));
         }
-        found
     }
 }
 
