@@ -349,15 +349,8 @@ fn g11_body_context(body: &str, pos: usize) -> G11Context {
         let mut gt = b.len();
         // A tag's '>' can hide inside a quoted attribute value.
         let mut q: Option<u8> = None;
-        let mut esc = false;
         for (off, ch) in gt_scan.bytes().enumerate().skip(1) {
-            if esc {
-                esc = false;
-                continue;
-            }
             match (q, ch) {
-                // Inside quotes a backslash escapes the next byte.
-                (Some(_), b'\\') => esc = true,
                 (None, b'"') => q = Some(b'"'),
                 (None, b'\'') => q = Some(b'\''),
                 (Some(qc), c) if c == qc => q = None,
@@ -401,10 +394,11 @@ fn g11_body_context(body: &str, pos: usize) -> G11Context {
                     let qc = b[j];
                     let vs = j + 1;
                     let mut ve = vs;
+                    // HTML attribute values have no escape mechanism: the
+                    // next matching quote closes the value, backslash or
+                    // not.
                     while ve < gt && b[ve] != qc {
-                        // A backslash escapes the next byte (common inside
-                        // values holding JavaScript), so it cannot close.
-                        ve += if b[ve] == b'\\' { 2 } else { 1 };
+                        ve += 1;
                     }
                     j = (ve + 1).min(gt);
                     (vs, ve)
@@ -449,7 +443,13 @@ pub(crate) fn g11_contexts(resp: &[u8], probe: &str) -> Vec<G11Context> {
     let text = String::from_utf8_lossy(resp);
     // Locate the head/body split in the lossy string, not the raw bytes:
     // invalid UTF-8 before it would otherwise shift every body offset.
-    let head_end = text.find("\r\n\r\n").map(|x| x + 4).unwrap_or(0);
+    // Both the CRLF and the LF-only form split the head, as
+    // util::find_head_end does.
+    let head_end = text
+        .find("\r\n\r\n")
+        .map(|x| x + 4)
+        .or_else(|| text.find("\n\n").map(|x| x + 2))
+        .unwrap_or(0);
     let mut out = Vec::new();
     let mut start = 0;
     while start + probe.len() <= text.len() {
@@ -565,9 +565,14 @@ mod g11_tests {
         // a header reflection still classifies as Head.
         let raw = b"HTTP/1.1 302 Found\r\nX-Loc: \xff\xfe/PROBEBODY\r\nContent-Length: 2\r\n\r\nok".to_vec();
         assert_eq!(g11_contexts(&raw, "PROBEBODY"), vec![G11Context::Head]);
-        // An escaped quote does not end the attribute value.
+        // HTML attribute values have no escape mechanism: a backslash
+        // does not keep the value open, so the probe after the closing
+        // quote is plain text.
         let r = resp("<a title=\"x \\\" PROBEBODY\">y</a>");
-        assert!(matches!(g11_contexts(&r, "PROBEBODY").as_slice(), [G11Context::Attr { attr, .. }] if attr == "title"), "{:?}", g11_contexts(&r, "PROBEBODY"));
+        assert_eq!(g11_contexts(&r, "PROBEBODY"), vec![G11Context::Other]);
+        // An LF-only head/body split still classifies header reflections.
+        let raw = b"HTTP/1.1 302 Found\nLocation: https://x/PROBEBODY\n\nok".to_vec();
+        assert_eq!(g11_contexts(&raw, "PROBEBODY"), vec![G11Context::Head]);
     }
 
     #[test]
