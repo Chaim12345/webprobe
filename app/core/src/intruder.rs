@@ -1315,6 +1315,12 @@ pub fn resolve_specs(template: &Template, kind: AttackType, sources: &[PayloadSo
     let n = template.positions();
     let needed = kind.sets_needed(n).min(sources.len());
     let used = &sources[..needed];
+    // An unexpanded Collaborator source would resolve to an empty set and
+    // the attack would silently send nothing: refuse instead of relying on
+    // every caller remembering `expand_runtime` first.
+    if used.iter().any(|s| matches!(s, PayloadSource::CollaboratorPayloads { .. })) {
+        return Err("Collaborator payloads must be minted with expand_runtime before resolving.".into());
+    }
     let mut out = Vec::with_capacity(needed);
     for (i, source) in used.iter().enumerate() {
         source.validate(kind, i, used)?;
@@ -2609,6 +2615,11 @@ mod tests {
         // A short pool is an error, never a silently shortened attack.
         let short = |_: usize| Ok(Vec::new());
         assert!(expand_runtime(&src, &short).is_err());
+        // resolving an unexpanded Collaborator source is an error, not an
+        // empty attack
+        let t = Template::parse("GET /?a=§x§ HTTP/1.1\r\nHost: h\r\n\r\n").unwrap();
+        let r = resolve_specs(&t, AttackType::Sniper, &[PayloadSource::CollaboratorPayloads { include_location: false, count: 3 }]);
+        assert!(r.unwrap_err().contains("expand_runtime"));
         // Every other source passes through unchanged.
         let plain = [PayloadSource::SimpleList { items: vec!["a".into()] }];
         assert_eq!(expand_runtime(&plain, &mint).unwrap(), plain);
