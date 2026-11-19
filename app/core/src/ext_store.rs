@@ -128,7 +128,7 @@ pub fn start(
             };
             LoadedExtension::new(crate::ext_host::JavaSidecar::spawn_opts(
                 item.source.trim(),
-                Some(crate::ext_host::HostLink::to_shared(shared)),
+                Some(crate::ext_calls::host_link(shared)),
                 opts,
             )?)
         }

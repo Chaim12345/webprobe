@@ -186,49 +186,15 @@ const HOOK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
 pub type HostSend = Box<dyn Fn(&HttpService, &[u8]) -> Result<Vec<u8>, String> + Send + Sync>;
 /// `Logging.raise*Event` (the event log).
 pub type HostEvent = Box<dyn Fn(&str, &str) + Send + Sync>;
-/// Engine calls (`crate::ext_calls`): (extension, op, args).
+/// Engine calls (the ext_calls module): (extension, op, args).
 pub type HostCall =
     Box<dyn Fn(&str, &str, &serde_json::Value) -> Result<serde_json::Value, String> + Send + Sync>;
 
 pub struct HostLink {
     pub send: HostSend,
     pub event: HostEvent,
-    /// Engine calls (`crate::ext_calls`): (extension, op, args).
+    /// Engine calls (the ext_calls module): (extension, op, args).
     pub call: HostCall,
-}
-
-impl HostLink {
-    /// The link to a running WebProbe: sends with [`crate::net::send_raw`] /
-    /// `send_tls_raw`, events to the event log. Holds the engine weakly (the
-    /// engine owns its extensions).
-    pub fn to_shared(shared: &Arc<crate::net::Shared>) -> Arc<HostLink> {
-        let (a, b, c) = (
-            Arc::downgrade(shared),
-            Arc::downgrade(shared),
-            Arc::downgrade(shared),
-        );
-        Arc::new(HostLink {
-            send: Box::new(move |svc, req| {
-                let shared = a.upgrade().ok_or("WebProbe is shutting down")?;
-                let up = if svc.secure {
-                    crate::net::send_tls_raw(&shared, &svc.host, svc.port, req)
-                } else {
-                    crate::net::send_raw(&shared, &svc.host, svc.port, req)
-                };
-                up.resp
-                    .ok_or_else(|| up.error.unwrap_or_else(|| "no response".into()))
-            }),
-            event: Box::new(move |level, msg| {
-                if let Some(shared) = b.upgrade() {
-                    shared.log(&format!("Extension event ({level}): {msg}"));
-                }
-            }),
-            call: Box::new(move |ext, op, args| {
-                let shared = c.upgrade().ok_or("WebProbe is shutting down")?;
-                crate::ext_calls::dispatch(&shared, ext, op, args)
-            }),
-        })
-    }
 }
 
 /// A Burp Montoya .jar extension running in a sidecar JVM
@@ -702,14 +668,77 @@ fn message_json(m: &MenuMessage) -> serde_json::Value {
     v
 }
 
-fn issues_of(reply: &serde_json::Value, ext: &str) -> Vec<crate::scan::ScanIssue> {
-    reply["issues"]
+fn ext_b64(v: &serde_json::Value, k: &str) -> Option<Vec<u8>> {
+    v.get(k)
+        .and_then(|x| x.as_str())
+        .and_then(|x| crate::util::b64_decode(x).ok())
+}
+
+/// The issue an extension reported (Montoya AuditIssue), as WebProbe's.
+pub fn issue_of(v: &serde_json::Value, extension: &str) -> crate::scan::ScanIssue {
+    let url = v["baseUrl"].as_str().unwrap_or_default();
+    let rest = url.split_once("://").map(|x| x.1).unwrap_or(url);
+    let (auth, path) = rest
+        .find('/')
+        .map(|i| (&rest[..i], &rest[i..]))
+        .unwrap_or((rest, "/"));
+    let host = auth
+        .rsplit_once(':')
+        .filter(|(_, p)| p.chars().all(|c| c.is_ascii_digit()))
+        .map(|x| x.0)
+        .unwrap_or(auth);
+    let sev = v["severity"].as_str().unwrap_or("INFORMATION");
+    let mut detail = v["detail"].as_str().unwrap_or_default().to_string();
+    if let Some(r) = v["remediation"].as_str().filter(|r| !r.is_empty()) {
+        detail.push_str(&format!("<p><b>Remediation:</b> {r}</p>"));
+    }
+    detail.push_str(&format!(
+        "<p>Reported by the extension {}.</p>",
+        crate::util::html_encode(extension)
+    ));
+    let confidence = match v["confidence"].as_str().unwrap_or("FIRM") {
+        "CERTAIN" => "Certain",
+        "TENTATIVE" => "Tentative",
+        _ => "Firm",
+    };
+    let evidence = v["evidence"]
         .as_array()
         .map(|a| {
             a.iter()
-                .map(|i| crate::ext_calls::issue_of(i, ext))
+                .filter_map(|m| {
+                    Some(crate::scan::ScanEvidence::new(
+                        &ext_b64(m, "request")?,
+                        ext_b64(m, "response").as_deref(),
+                    ))
+                })
                 .collect()
         })
+        .unwrap_or_default();
+    crate::scan::ScanIssue {
+        sev: match sev {
+            "HIGH" => "high",
+            "MEDIUM" => "medium",
+            "LOW" => "low",
+            _ => "info",
+        }
+        .into(),
+        name: v["name"].as_str().unwrap_or_default().to_string(),
+        host: host.to_string(),
+        path: path.split('?').next().unwrap_or("/").to_string(),
+        detail,
+        false_positive: sev == "FALSE_POSITIVE",
+        confidence: confidence.into(),
+        ts: crate::util::now_secs(),
+        type_id: crate::scan::issue_type_id(v["name"].as_str().unwrap_or_default()),
+        evidence,
+        ..Default::default()
+    }
+}
+
+fn issues_of(reply: &serde_json::Value, ext: &str) -> Vec<crate::scan::ScanIssue> {
+    reply["issues"]
+        .as_array()
+        .map(|a| a.iter().map(|i| issue_of(i, ext)).collect())
         .unwrap_or_default()
 }
 
@@ -1463,8 +1492,11 @@ mod tests {
             }
         });
         let shared = crate::net::Shared::new();
-        let sc = JavaSidecar::spawn_with(dir.to_str().unwrap(), Some(HostLink::to_shared(&shared)))
-            .expect("stage 2 loads");
+        let sc = JavaSidecar::spawn_with(
+            dir.to_str().unwrap(),
+            Some(crate::ext_calls::host_link(&shared)),
+        )
+        .expect("stage 2 loads");
         let exts: Vec<Arc<dyn ProxyHooks>> = vec![Arc::new(sc)];
         let svc = HttpService::new("qa.test", 80, false);
         let mut ann = Annotations::default();
@@ -1800,7 +1832,7 @@ mod tests {
         let sc = Arc::new(
             JavaSidecar::spawn_opts(
                 dir.to_str().unwrap(),
-                Some(HostLink::to_shared(&shared)),
+                Some(crate::ext_calls::host_link(&shared)),
                 opts,
             )
             .expect("stage 4 loads"),

@@ -1176,7 +1176,7 @@ fn main() {
         };
         match ext_host::JavaSidecar::spawn_opts(
             &ext_jar,
-            Some(ext_host::HostLink::to_shared(&shared)),
+            Some(webprobe_core::ext_calls::host_link(&shared)),
             opts,
         ) {
             Ok(sidecar) => {
