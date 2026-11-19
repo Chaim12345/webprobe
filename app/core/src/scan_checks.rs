@@ -2090,10 +2090,16 @@ fn dom_analysis_hits(cx: &ScanCtx) -> (Vec<crate::crawl::DomHit>, Option<String>
     let stored_canary = format!("s{canary}");
     let sep0 = if path.contains('?') { "&" } else { "?" };
     let submit = authed_get(cx, &format!("{path}{sep0}wpdom={stored_canary}"));
-    if cx.send(&submit).is_none() {
-        // No stored variant is detectable without the submission landing.
+    // No stored variant is detectable when the submission never landed:
+    // drop the stored canary so a later sink hit cannot be blamed on a
+    // value the application was never asked to store (the empty canary is
+    // cached with the hits, so the URL is not re-submitted this session).
+    let stored_canary = if cx.send(&submit).is_some() {
+        stored_canary
+    } else {
         cx.shared.log(&format!("DOM stored-canary submission failed for {url}"));
-    }
+        String::new()
+    };
     let probe = crate::crawl::dom_analysis_probe(&cx.shared, &url, &canary);
     if let Err(e) = &probe {
         // A crashed/timed-out probe is not a clean bill of health: say so
