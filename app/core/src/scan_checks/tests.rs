@@ -164,7 +164,7 @@ fn recorder_picks_probe_and_control() {
     assert_eq!(&*r.next_after("a").unwrap().request, b"GET /c");
     assert!(r.next_after("c").is_none());
     assert!(r.last("zz").is_none());
-    assert_eq!(r.from_last("b").len(), 3);
+    assert_eq!(r.since_last("b").len(), 3);
 }
 
 /// R-10 batch 1 host checks against a live lab: PUT store/retrieve,

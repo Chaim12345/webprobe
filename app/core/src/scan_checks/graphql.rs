@@ -55,9 +55,9 @@ pub fn graphql_request(cx: &ScanCtx, query: &str, style: GqlStyle) -> Vec<u8> {
 /// A request sending `query` in `style` to `path` on the scanned host.
 pub fn graphql_request_to(cx: &ScanCtx, path: &str, query: &str, style: GqlStyle) -> Vec<u8> {
     match style {
-        GqlStyle::Json => host_request(cx, "POST", &path, &[("Content-Type", "application/json; charset=utf-8")], serde_json::json!({ "query": query }).to_string().as_bytes()),
+        GqlStyle::Json => host_request(cx, "POST", path, &[("Content-Type", "application/json; charset=utf-8")], serde_json::json!({ "query": query }).to_string().as_bytes()),
         GqlStyle::Get => host_request(cx, "GET", &format!("{path}?query={}", crate::scan::insertion::encode_url_param(query)), &[], b""),
-        GqlStyle::Form => host_request(cx, "POST", &path, &[("Content-Type", "application/x-www-form-urlencoded")], format!("query={}", crate::scan::insertion::encode_url_param(query)).as_bytes()),
+        GqlStyle::Form => host_request(cx, "POST", path, &[("Content-Type", "application/x-www-form-urlencoded")], format!("query={}", crate::scan::insertion::encode_url_param(query)).as_bytes()),
     }
 }
 
@@ -599,7 +599,7 @@ impl PointCheck for PathTraversal {
             if cx.stopped() {
                 return None;
             }
-            let new_req = inject_payload(&cx.req, ip, &payload);
+            let new_req = inject_payload(&cx.req, ip, payload);
             let resp = rec.send(cx, payload, new_req.as_bytes())?;
             let rp = util::parse_http(&resp);
             Some(String::from_utf8_lossy(&resp[rp.head_len.min(resp.len())..]).into_owned())
@@ -668,7 +668,7 @@ impl PointCheck for LinkManipulation {
             if cx.stopped() {
                 return None;
             }
-            let new_req = inject_payload(&cx.req, ip, &payload);
+            let new_req = inject_payload(&cx.req, ip, payload);
             rec.send(cx, payload, new_req.as_bytes())
         };
         if let Some(hit) = run_link_manip_check(&ip.value, send) {
@@ -730,7 +730,7 @@ impl PointCheck for FilePathManipulation {
             if cx.stopped() {
                 return None;
             }
-            let new_req = inject_payload(&cx.req, ip, &payload);
+            let new_req = inject_payload(&cx.req, ip, payload);
             rec.send(cx, payload, new_req.as_bytes())
         };
         if let Some(hit) = run_file_path_manip_check(&ip.value, &cx.baseline.raw, cx.settings.accuracy, send) {
@@ -790,7 +790,7 @@ impl PointCheck for SsiInjection {
             if cx.stopped() {
                 return None;
             }
-            let new_req = inject_payload(&cx.req, ip, &payload);
+            let new_req = inject_payload(&cx.req, ip, payload);
             let resp = rec.send(cx, payload, new_req.as_bytes())?;
             let rp = util::parse_http(&resp);
             Some(String::from_utf8_lossy(&resp[rp.head_len.min(resp.len())..]).into_owned())
@@ -852,7 +852,7 @@ impl PointCheck for TemplateInjection {
             if cx.stopped() {
                 return None;
             }
-            let new_req = inject_payload(&cx.req, ip, &payload);
+            let new_req = inject_payload(&cx.req, ip, payload);
             let resp = rec.send(cx, payload, new_req.as_bytes())?;
             let rp = util::parse_http(&resp);
             Some(String::from_utf8_lossy(&resp[rp.head_len.min(resp.len())..]).into_owned())
@@ -914,7 +914,7 @@ impl PointCheck for ReflectedXss {
             if cx.stopped() {
                 return None;
             }
-            let new_req = inject_payload(&cx.req, ip, &payload);
+            let new_req = inject_payload(&cx.req, ip, payload);
             rec.send(cx, payload, new_req.as_bytes())
         };
         if let Some(hit) = crate::xss::run_xss_check(&ip.value, send) {
@@ -1045,7 +1045,7 @@ impl PointCheck for ClientTemplateInjection {
             if cx.stopped() {
                 return None;
             }
-            rec.send(cx, payload, inject_payload(&cx.req, ip, &payload).as_bytes())
+            rec.send(cx, payload, inject_payload(&cx.req, ip, payload).as_bytes())
         };
         // Version banner lookup (burp.Zr54.ZK): same-origin scripts only.
         let fetch_script = |src: &str| -> Option<Vec<u8>> {
@@ -1141,12 +1141,12 @@ impl PointCheck for PhpCodeInjection {
                         "A file named {filename:?} was uploaded with PHP code that calls gethostbyname(\"{host}\"). The application performed a DNS lookup of the Collaborator id {id}, so the server executed the uploaded PHP code."
                     ),
                 )
-                .with_evidence(rec.from_last(&filename).into_iter().take(1).collect());
+                .with_evidence(rec.since_last(&filename).into_iter().take(1).collect());
                 cx.shared.oob.register(id.clone(), Some("DNS"), issue);
             }
         }
         if let Some(hit) = hit {
-            let mut ev = rec.from_last(&hit.filename);
+            let mut ev = rec.since_last(&hit.filename);
             ev.truncate(hit.hop + 1);
             cx.report(vec![mk_point(
                 "PHP code injection",
@@ -1279,7 +1279,7 @@ impl PointCheck for HeaderInjection {
             if cx.stopped() {
                 return None;
             }
-            let new_req = inject_payload(&cx.req, ip, &payload);
+            let new_req = inject_payload(&cx.req, ip, payload);
             rec.send(cx, payload, new_req.as_bytes())
         };
         if let Some(hit) = run_header_injection_check(&ip.value, send) {
@@ -1339,7 +1339,7 @@ impl PointCheck for OpenRedirect {
             if cx.stopped() {
                 return None;
             }
-            let new_req = inject_payload(&cx.req, ip, &payload);
+            let new_req = inject_payload(&cx.req, ip, payload);
             rec.send(cx, payload, new_req.as_bytes())
         };
         if let Some(hit) = run_open_redirect_check(&ip.value, cx.settings.speed, send) {
@@ -1399,7 +1399,7 @@ impl PointCheck for SqlErrorInjection {
         let ip = pt.ip;
         let rec = Recorder::default();
         let send = |payload: &str| -> Option<String> {
-            let new_req = inject_payload(&cx.req, ip, &payload);
+            let new_req = inject_payload(&cx.req, ip, payload);
             let resp = rec.send(cx, payload, new_req.as_bytes())?;
             Some(String::from_utf8_lossy(&resp).into_owned())
         };
@@ -1474,7 +1474,7 @@ impl PointCheck for SqlBooleanInjection {
             if cx.stopped() {
                 return None;
             }
-            let new_req = inject_payload(&cx.req, ip, &payload);
+            let new_req = inject_payload(&cx.req, ip, payload);
             rec.send(cx, payload, new_req.as_bytes())
         };
         if let Some(hit) = run_sql_boolean_check(&ip.value, &cx.baseline.raw, cx.settings.speed, accuracy, send) {
@@ -1541,7 +1541,7 @@ impl PointCheck for XmlInjectionOob {
         let xi = oob_slot(&cx.oob, idx, name, "xi", &mut st.oob_used).map(|(_, t, h)| (t.clone(), h.clone()));
         if (xsd.is_some() || xi.is_some()) && !cx.stopped() {
             let rec = Recorder::default();
-            let send = |payload: &str| -> Option<Vec<u8>> { rec.send(cx, payload, inject_payload(&cx.req, ip, &payload).as_bytes()) };
+            let send = |payload: &str| -> Option<Vec<u8>> { rec.send(cx, payload, inject_payload(&cx.req, ip, payload).as_bytes()) };
             let sent = active_checks::run_xml_oob_check(
                 &ip.kind,
                 &ip.value,
@@ -1610,7 +1610,7 @@ impl PointCheck for XmlInjectionError {
             if cx.stopped() {
                 return None;
             }
-            let new_req = inject_payload(&cx.req, ip, &payload);
+            let new_req = inject_payload(&cx.req, ip, payload);
             rec.send(cx, payload, new_req.as_bytes())
         };
         let send_base = || -> Option<Vec<u8>> { cx.send(cx.req.as_bytes()) };
@@ -1672,7 +1672,7 @@ impl PointCheck for LdapInjection {
             if cx.stopped() {
                 return None;
             }
-            let new_req = inject_payload(&cx.req, ip, &payload);
+            let new_req = inject_payload(&cx.req, ip, payload);
             rec.send(cx, payload, new_req.as_bytes())
         };
         if let Some(hit) = run_ldap_check(&ip.value, &cx.baseline.raw, cx.settings.speed, accuracy, send) {

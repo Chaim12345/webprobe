@@ -862,9 +862,9 @@ mod tests {
     fn empty_match_on_a_header_scope_adds_the_header() {
         let r = rule(MrScope::RequestHeader, "", "X-Test: 1", false);
         assert!(r.is_active());
-        let out = apply(REQ, &[r.clone()]);
+        let out = apply(REQ, std::slice::from_ref(&r));
         assert!(out.contains("Content-Length: 13\r\nX-Test: 1\r\n\r\nuser=a"), "{out}");
-        assert_eq!(apply(b"GET / HTTP/1.1\r\n\r\n", &[r.clone()]), "GET / HTTP/1.1\r\nX-Test: 1\r\n\r\n");
+        assert_eq!(apply(b"GET / HTTP/1.1\r\n\r\n", std::slice::from_ref(&r)), "GET / HTTP/1.1\r\nX-Test: 1\r\n\r\n");
         assert_eq!(apply(b"GET / HTTP/1.1\nHost: h\n\n", &[r]), "GET / HTTP/1.1\nHost: h\nX-Test: 1\n\n");
         let resp = apply(RESP, &[rule(MrScope::ResponseHeader, "", "Cache-Control: no-store", false)]);
         assert!(resp.contains("Content-Length: 11\r\nCache-Control: no-store\r\n\r\nhello"));

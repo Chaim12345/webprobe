@@ -20,6 +20,9 @@ use crate::util;
 /// Most lines a pane lays out per frame; the rest is summarised.
 const MAX_LINES: usize = 4000;
 
+/// (fingerprint, view, rendered lines) of the message pane cache.
+pub(crate) type LinesCache = (u64, bool, std::sync::Arc<Vec<(LineKind, String)>>);
+
 #[derive(Clone, Debug)]
 pub struct PaneState {
     /// 0 Pretty, 1 Raw, 2 Hex, 3 Render (responses only).
@@ -43,7 +46,7 @@ pub struct PaneState {
     pub crlf_paste: bool,
     /// The lines last shown, keyed by message fingerprint and view: a large
     /// JSON/XML body used to be pretty-printed again on every frame.
-    pub(crate) lines_cache: Option<(u64, bool, std::sync::Arc<Vec<(LineKind, String)>>)>,
+    pub(crate) lines_cache: Option<LinesCache>,
 }
 
 impl Default for PaneState {

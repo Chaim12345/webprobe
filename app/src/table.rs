@@ -99,7 +99,7 @@ pub fn column_chooser(ui: &mut Ui, columns: &[Column], state: &mut TableState) {
 }
 
 /// Sort rows by `col` (already filtered). Ascending/descending per `asc`.
-pub fn sort_rows<R>(rows: &mut Vec<R>, state: &TableState, key: impl Fn(&R, usize) -> String) {
+pub fn sort_rows<R>(rows: &mut [R], state: &TableState, key: impl Fn(&R, usize) -> String) {
     if state.sort_col == usize::MAX || rows.len() < 2 {
         return;
     }
@@ -154,6 +154,9 @@ pub fn data_table<R, F>(
 
 /// Draw only the header + virtualized body (no filter box). Callers that own
 /// their filter UI use this.
+// The argument list is the egui surface being drawn on; bundling it would
+// only move the noise to the call sites.
+#[allow(clippy::too_many_arguments)]
 pub fn table_body<R, F>(
     ui: &mut Ui,
     id: &str,
@@ -193,6 +196,7 @@ pub fn table_body<R, F>(
     });
 }
 
+#[allow(clippy::too_many_arguments)]
 fn table_body_inner<R, F>(
     ui: &mut Ui,
     id: &str,
@@ -319,13 +323,13 @@ fn table_body_inner<R, F>(
             if first > 0 {
                 ui.add_space(stride * first as f32);
             }
-            for i in first..last {
+            for row in &rows[first..last] {
                 let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), row_height), egui::Sense::hover());
                 let mut row_ui = ui.new_child(
                     egui::UiBuilder::new().max_rect(rect).layout(egui::Layout::left_to_right(egui::Align::Center)),
                 );
                 row_ui.set_clip_rect(rect.intersect(ui.clip_rect()));
-                render(&rows[i], &mut row_ui);
+                render(row, &mut row_ui);
             }
             if last < rows.len() {
                 ui.add_space(stride * (rows.len() - last) as f32);
@@ -363,7 +367,7 @@ pub fn cell_w(
 ) {
     let rich = RichText::new(text.into())
         .size(12.5)
-        .color(color.unwrap_or_else(|| theme::ink_dim()));
+        .color(color.unwrap_or_else(theme::ink_dim));
     // Not selectable: a selectable label senses clicks and drags itself, so a
     // click on a cell's text never reached the row (only clicks on the empty
     // part of a row selected it). Burp's table cells are not text-selectable.

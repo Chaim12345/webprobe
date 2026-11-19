@@ -55,7 +55,7 @@ pub fn project_window(app: &mut App, ctx: &egui::Context) {
     if !open {
         return;
     }
-    egui::Window::new("Project file").default_pos(crate::theme::window_pos(&ctx)).open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {
+    egui::Window::new("Project file").default_pos(crate::theme::window_pos(ctx)).open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {
         ui.label(RichText::new("Save the project to a file, or load (import) a project file into this session.").size(12.5).color(theme::ink_dim()));
         ui.add_space(4.0);
         crate::tools::project_controls(app, ui);

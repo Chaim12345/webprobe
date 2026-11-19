@@ -288,7 +288,7 @@ pub fn parse_hex(text: &str) -> Result<Vec<u8>, String> {
     if !digits.bytes().all(|b| b.is_ascii_hexdigit()) {
         return Err("not hex".into());
     }
-    if digits.len() % 2 != 0 {
+    if !digits.len().is_multiple_of(2) {
         return Err("odd number of hex digits".into());
     }
     (0..digits.len()).step_by(2).map(|i| u8::from_str_radix(&digits[i..i + 2], 16).map_err(|_| format!("not hex: {}", &digits[i..i + 2]))).collect()

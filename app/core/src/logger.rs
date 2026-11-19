@@ -12,6 +12,7 @@ pub const DEFAULT_CAP: usize = 5000;
 
 /// One captured request/response pair.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Default)]
 pub struct LogEntry {
     pub id: u64,
     pub ts: u64,
@@ -38,27 +39,6 @@ pub struct LogEntry {
 /// in the table but show no message (a scan sends thousands of requests).
 pub const BODIES_KEPT: usize = 500;
 
-impl Default for LogEntry {
-    fn default() -> Self {
-        Self {
-            id: 0,
-            ts: 0,
-            tool: String::new(),
-            method: String::new(),
-            host: String::new(),
-            port: 0,
-            path: String::new(),
-            status: String::new(),
-            req_len: 0,
-            resp_len: 0,
-            mime: String::new(),
-            source: String::new(),
-            hist_id: None,
-            request: None,
-            response: None,
-        }
-    }
-}
 
 /// Filter applied to the log view. All set fields must match.
 #[derive(Clone, Debug, Default)]
@@ -77,7 +57,7 @@ impl LogQuery {
     /// True when the query accepts every entry.
     pub fn is_empty(&self) -> bool {
         self.text.trim().is_empty()
-            && self.tool.as_deref().map_or(true, |t| t.trim().is_empty())
+            && self.tool.as_deref().is_none_or(|t| t.trim().is_empty())
             && self.status_class.is_none()
             && self.mime.trim().is_empty()
     }
@@ -109,10 +89,7 @@ impl LogQuery {
             }
         }
         let mime = self.mime.trim();
-        if !mime.is_empty() && !e.mime.to_lowercase().contains(&mime.to_lowercase()) {
-            return false;
-        }
-        true
+        !(!mime.is_empty() && !e.mime.to_lowercase().contains(&mime.to_lowercase()))
     }
 }
 

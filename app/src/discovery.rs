@@ -238,6 +238,9 @@ pub fn build_request(host_header: &str, path: &str) -> Vec<u8> {
     format!("GET {path} HTTP/1.1\r\nHost: {host_header}\r\nUser-Agent: Mozilla/5.0 (WebProbe content discovery)\r\nAccept: */*\r\nConnection: close\r\n\r\n").into_bytes()
 }
 
+/// (path, checked, signature, request, response) of one probe hit.
+type ProbeHit = (String, bool, Sig, Vec<u8>, Vec<u8>);
+
 struct Run {
     cfg: DiscoveryConfig,
     host_header: String,
@@ -266,7 +269,7 @@ impl Run {
     }
 
     /// Probe `paths` with the configured thread count.
-    fn probe_all(&self, paths: &[(String, bool)]) -> Vec<(String, bool, Sig, Vec<u8>, Vec<u8>)> {
+    fn probe_all(&self, paths: &[(String, bool)]) -> Vec<ProbeHit> {
         let next = AtomicUsize::new(0);
         let out = Mutex::new(Vec::new());
         std::thread::scope(|s| {
@@ -594,7 +597,7 @@ pub fn discovery_window(app: &mut crate::App, ctx: &egui::Context) {
     // burp.Zrf3 asks before discovering outside the target scope.
     let target_url = format!("{}{}", app.eng.discovery.origin, app.eng.discovery.cfg.start_dir);
     let out_of_scope = !crate::net::in_scope(&app.shared, &target_url);
-    egui::Window::new(title).default_pos(crate::theme::window_pos(&ctx))
+    egui::Window::new(title).default_pos(crate::theme::window_pos(ctx))
         .id(egui::Id::unique("discover_content"))
         .open(&mut open)
         .resizable(true)

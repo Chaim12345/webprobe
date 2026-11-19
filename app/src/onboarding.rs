@@ -122,10 +122,7 @@ pub fn panel(app: &mut App, ui: &mut Ui) -> bool {
                 .color(c(if done == checks.len() { theme::GOOD } else { theme::MONO6 })),
         );
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.small_button("Hide").clicked() {
-                return true;
-            }
-            false
+            ui.small_button("Hide").clicked()
         })
         .inner
     })

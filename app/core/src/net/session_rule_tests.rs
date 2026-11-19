@@ -75,7 +75,7 @@
             std::thread::sleep(Duration::from_millis(20));
         };
         assert_eq!(p.host, "127.0.0.1");
-        let login = format!("HTTP/1.1 302 Found\r\nSet-Cookie: session=fresh; Path=/\r\n\r\n").into_bytes();
+        let login = "HTTP/1.1 302 Found\r\nSet-Cookie: session=fresh; Path=/\r\n\r\n".to_string().into_bytes();
         shared.cookie_jar.lock().unwrap().update_from_response("127.0.0.1", "/login", &login, crate::util::now_secs());
         shared.browser_recovery.answer(true);
         let out = String::from_utf8(worker.join().unwrap()).unwrap();

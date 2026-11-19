@@ -64,7 +64,7 @@ pub struct Template {
 impl Template {
     pub fn parse(text: &str) -> Result<Self, String> {
         let segments = parse_markers(text);
-        if segments.last().map_or(false, |s| s.is_marker) {
+        if segments.last().is_some_and(|s| s.is_marker) {
             return Err("unbalanced § marker: a position is never closed".into());
         }
         let mut literals = Vec::new();
@@ -175,8 +175,8 @@ pub fn requests(
             }
         }
         AttackType::Pitchfork => {
-            for i in 0..total {
-                let values: Vec<Option<&str>> = (0..n).map(|j| Some(sets[j][i].as_str())).collect();
+            for (i, _lead) in sets[0].iter().enumerate().take(total) {
+                let values: Vec<Option<&str>> = sets.iter().map(|s| Some(s[i].as_str())).collect();
                 out.push(attack(template, &values));
             }
         }
@@ -267,14 +267,14 @@ pub fn auto_mark(request: &str) -> String {
                 }
                 _ => out.push_str(line),
             }
-        } else if content.get(..7).map_or(false, |p| p.eq_ignore_ascii_case("cookie:")) {
+        } else if content.get(..7).is_some_and(|p| p.eq_ignore_ascii_case("cookie:")) {
             out.push_str(&format!("{}{}{eol}", &content[..7], mark_pairs(&content[7..], ';')));
         } else {
             out.push_str(line);
         }
     }
 
-    let trimmed = body.trim_end_matches(|c| c == '\r' || c == '\n');
+    let trimmed = body.trim_end_matches(['\r', '\n']);
     let tail = &body[trimmed.len()..];
     if head_lower.contains("application/x-www-form-urlencoded") {
         out.push_str(&mark_pairs(trimmed, '&'));
@@ -434,9 +434,9 @@ fn illegal_unicode_encodings(
     // last continuation byte carrying the low six bits.
     const LEADS: [u8; 7] = [0, 0, 0xC0, 0xE0, 0xF0, 0xF8, 0xFC];
     let mut enc: Vec<Vec<u8>> = vec![vec![c]];
-    for n in 2..=(max_bytes.min(6) as usize) {
-        let mut v = vec![LEADS[n]];
-        v.extend(std::iter::repeat(0x80).take(n - 2));
+    for (n, &lead) in LEADS.iter().enumerate().take(max_bytes.min(6) as usize + 1).skip(2) {
+        let mut v = vec![lead];
+        v.extend(std::iter::repeat_n(0x80, n - 2));
         v.push(0x80 ^ (c & 63));
         enc.push(v);
     }
@@ -625,8 +625,8 @@ fn custom_iterations(lists: &[Vec<String>], separators: &[String]) -> Vec<String
             return out;
         }
         let mut s = String::new();
-        for p in 0..slots {
-            if let Some(item) = lists.get(p).and_then(|l| l.get(index[p])) {
+        for (p, &idx) in index.iter().enumerate().take(slots) {
+            if let Some(item) = lists.get(p).and_then(|l| l.get(idx)) {
                 s.push_str(item);
             }
             if let Some(sep) = separators.get(p) {
@@ -1180,6 +1180,11 @@ impl PayloadSource {
         }
     }
 
+    /// Whether `generate` would return no payloads.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     /// Burp's per-type validation before an attack starts (the `Zir2`
     /// messages of Zeu8, Zi17, Zsza, Zxfq). `position` is this set's 0-based
     /// index; `sets` the number of payload sets the attack uses.
@@ -1322,7 +1327,7 @@ pub fn count_specs(kind: AttackType, positions: usize, specs: &[SetSpec]) -> Opt
 }
 
 /// Fill copy positions from their source position.
-fn apply_copies<'a>(values: &mut [Option<&'a str>], specs: &[SetSpec]) {
+fn apply_copies(values: &mut [Option<&str>], specs: &[SetSpec]) {
     for (i, spec) in specs.iter().enumerate() {
         if let SetSpec::Copy(src) = spec {
             if i < values.len() {
@@ -1555,7 +1560,7 @@ fn format_number(value: i64, base: NumberBase, min_digits: usize, fraction_digit
     out.push_str(&padded);
     if fraction_digits > 0 {
         out.push('.');
-        out.extend(std::iter::repeat('0').take(fraction_digits));
+        out.extend(std::iter::repeat_n('0', fraction_digits));
     }
     out
 }
@@ -1686,7 +1691,7 @@ pub fn process(payload: &str, rules: &[Processor]) -> Option<String> {
             Processor::Sha1 => current = digest(Op::Sha1, &current),
             Processor::Sha256 => current = digest(Op::Sha256, &current),
             Processor::SkipIfMatches { regex } => {
-                if regex::Regex::new(regex).map_or(false, |re| re.is_match(&current)) {
+                if regex::Regex::new(regex).is_ok_and(|re| re.is_match(&current)) {
                     return None;
                 }
             }
@@ -2327,9 +2332,9 @@ mod tests {
         // Base value of the payload position.
         let pos = PayloadSource::BitFlipper { base: None, hex: false, mask: 1 };
         assert_eq!(pos.generate_for_base("ab"), ["`b", "ac"]);
-        assert!(pos.validate(AttackType::BatteringRam, 0, &[pos.clone()]).unwrap_err().contains("battering ram"));
+        assert!(pos.validate(AttackType::BatteringRam, 0, std::slice::from_ref(&pos)).unwrap_err().contains("battering ram"));
         let none = PayloadSource::BitFlipper { base: None, hex: false, mask: 0 };
-        assert_eq!(none.validate(AttackType::Sniper, 0, &[none.clone()]), Err("No bits are selected.".into()));
+        assert_eq!(none.validate(AttackType::Sniper, 0, std::slice::from_ref(&none)), Err("No bits are selected.".into()));
     }
 
     #[test]

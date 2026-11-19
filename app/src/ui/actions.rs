@@ -119,7 +119,7 @@ pub(crate) fn run_active_scan_on(app: &mut App, e: &net::HistEntry) {
         Vec::new()
     };
     let name = format!("Active scan of {}", history_url(e));
-    crate::tasks::enqueue(&app.shared, name, crate::tasks::TaskKind::Single { entry: e.clone(), oob, smtp });
+    crate::tasks::enqueue(&app.shared, name, crate::tasks::TaskKind::Single { entry: Box::new(e.clone()), oob, smtp });
     feedback::toast(feedback::Level::Info, "Active scan queued");
 }
 

@@ -204,10 +204,10 @@ fn tokenize(html: &str) -> Vec<Tok> {
             out.push(Tok::Text(html[i..lt].to_string()));
         }
         let rest = &html[lt..];
-        if rest.starts_with("<!--") {
-            let end = rest[4..].find("-->").map(|x| x + 4).unwrap_or(rest.len());
-            out.push(Tok::Comment(rest[4..end].to_string()));
-            i = (lt + end + 3).min(n);
+        if let Some(body) = rest.strip_prefix("<!--") {
+            let end = body.find("-->").unwrap_or(body.len());
+            out.push(Tok::Comment(body[..end].to_string()));
+            i = (lt + end + 7).min(n);
             continue;
         }
         let Some(gt) = rest.find('>') else {
@@ -776,7 +776,7 @@ mod tests {
             n += 1;
             Some(resp(200, &format!("<p>{}</p>", "x ".repeat(n))))
         };
-        assert!(differential(None, Accuracy::Normal, noisy.clone(), noisy).is_none());
+        assert!(differential(None, Accuracy::Normal, noisy, noisy).is_none());
         // a request failure aborts
         assert!(differential(None, Accuracy::Normal, || None, f).is_none());
     }

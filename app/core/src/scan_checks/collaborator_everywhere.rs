@@ -37,7 +37,8 @@ pub(crate) fn everywhere_probes(host_hdr: &str, host: &str, port: u16, direct: b
         one(&mut out, "absurl", "HTTP Request-Line", &|c| (format!("GET http://{c}/ HTTP/1.1\r\nHost: {host_hdr}\r\n{DEFAULTS}\r\n"), format!("http://{c}/")));
     }
     // Zs61.ZH(NONE) -> Zcg4.ZZ: one request, six headers, an id each.
-    let headers: [(&'static str, &'static str, &'static str, &dyn Fn(&str) -> String); 6] = [
+    type HeaderProbe = (&'static str, &'static str, &'static str, &'static dyn Fn(&str) -> String);
+    let headers: [HeaderProbe; 6] = [
         ("xff", "X-Forwarded-For", "HTTP X-Forwarded-For header", &|c| c.to_string()),
         ("tci", "True-Client-IP", "HTTP True-Client-IP header", &|c| c.to_string()),
         ("xrip", "X-Real-IP", "HTTP X-Real-IP header", &|c| c.to_string()),

@@ -35,6 +35,5 @@ jobs:
       # webprobe-core has no UI dependency, so no system libraries are needed.
       - run: cargo check -p webprobe-core --locked
       - run: cargo test -p webprobe-core --locked --no-run
-      # 82 warnings today (docs/adr/0001); blocking once they are fixed.
-      - run: cargo clippy -p webprobe-core --locked
-        continue-on-error: true
+      # Zero-warning policy (issue #33): clippy is blocking.
+      - run: cargo clippy -p webprobe-core --locked --all-targets -- -D warnings

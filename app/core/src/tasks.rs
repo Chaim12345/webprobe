@@ -18,7 +18,7 @@ pub enum TaskKind {
     /// injection pairs), as the "Do active scan" action does. Saved with a
     /// project as a plain `Audit`: payloads belong to the session.
     Single {
-        entry: HistEntry,
+        entry: Box<HistEntry>,
         oob: Vec<(String, String, String)>,
         smtp: Vec<crate::scan::SmtpOob>,
     },
@@ -194,7 +194,7 @@ fn run(shared: &Arc<Shared>, id: u64, kind: TaskKind) {
     type Prepared = Option<(Vec<(String, String, String)>, Vec<crate::scan::SmtpOob>)>;
     let items: Vec<(HistEntry, Prepared)> = match kind {
         TaskKind::Audit(entries) => entries.into_iter().map(|e| (e, None)).collect(),
-        TaskKind::Single { entry, oob, smtp } => vec![(entry, Some((oob, smtp)))],
+        TaskKind::Single { entry, oob, smtp } => vec![(*entry, Some((oob, smtp)))],
         TaskKind::CrawlAudit { urls, audit_only } => {
             crate::scan::crawl_and_audit(shared, &urls, audit_only);
             wait_idle(shared);
@@ -369,7 +369,7 @@ mod tests {
         let (port, hits) = origin();
         let a = enqueue(&shared, "first", TaskKind::Audit(vec![entry(port, "/a?x=1")]));
         assert!(wait_for(&shared, a, TaskState::Running, 10));
-        let s = enqueue(&shared, "single", TaskKind::Single { entry: entry(port, "/only?q=1"), oob: Vec::new(), smtp: Vec::new() });
+        let s = enqueue(&shared, "single", TaskKind::Single { entry: Box::new(entry(port, "/only?q=1")), oob: Vec::new(), smtp: Vec::new() });
         let saved = crate::project::ProjectScanTask::save_all(&shared.tasks.lock().unwrap());
         let single = saved.iter().find(|t| t.name == "single").expect("open single task saved");
         assert_eq!((single.entries.len(), single.urls.len()), (1, 0));

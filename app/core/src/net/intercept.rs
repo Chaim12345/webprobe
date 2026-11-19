@@ -32,8 +32,9 @@ pub fn intercept_request(shared: &Shared, req: Vec<u8>, default_port: u16) -> (O
     shared.queue.lock().unwrap().push(InterceptItem::new(id, &host, port, shown.clone(), tx, InterceptKind::Request { https: default_port == 443 }));
     shared.wake();
     match rx.recv() {
-        Ok(Some(edited)) => match forwarded(req, &shown, edited) {
-            (bytes, changed) => (Some(bytes), ReqState { edited: changed, held: true }),
+        Ok(Some(edited)) => {
+            let (bytes, changed) = forwarded(req, &shown, edited);
+            (Some(bytes), ReqState { edited: changed, held: true })
         },
         Ok(None) => {
             shared.log("Intercepted request dropped");

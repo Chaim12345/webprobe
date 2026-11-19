@@ -249,7 +249,7 @@ pub fn apply_session_rules_for(shared: &Shared, tool: &str, req: &[u8], default_
             "invoke extension" => {
                 let exts = shared.ext_host.lock().unwrap().active();
                 let svc = crate::ext_host::HttpService::new(&host, port, https);
-                match exts.iter().find(|e| e.ui().is_some_and(|u| u.session_actions.iter().any(|a| *a == rule.value))) {
+                match exts.iter().find(|e| e.ui().is_some_and(|u| u.session_actions.contains(&rule.value))) {
                     Some(e) => match e.session_action(&rule.value, &svc, &out) {
                         Ok(r) => {
                             out = r;

@@ -129,7 +129,7 @@ pub(crate) fn header_fragment(flags: u8, payload: &[u8]) -> Result<&[u8], String
 }
 
 /// DATA payload after removing PADDED padding.
-pub(crate) fn data_payload<'a>(flags: u8, payload: &'a [u8]) -> Result<&'a [u8], String> {
+pub(crate) fn data_payload(flags: u8, payload: &[u8]) -> Result<&[u8], String> {
     if flags & FLAG_PADDED == 0 {
         return Ok(payload);
     }
@@ -357,7 +357,7 @@ impl Rx {
         match f.ty {
             FRAME_SETTINGS => {
                 if f.flags & FLAG_ACK == 0 {
-                    for chunk in f.payload.chunks_exact(6) {
+                    for chunk in f.payload.as_chunks::<6>().0 {
                         let id = u16::from_be_bytes([chunk[0], chunk[1]]);
                         let val = u32::from_be_bytes([chunk[2], chunk[3], chunk[4], chunk[5]]);
                         match id {
@@ -610,7 +610,7 @@ pub fn exchange<S: Read + Write>(stream: &mut S, req: &H2Request, mut sink: Opti
         if !rx.streaming() {
             return Err(e);
         }
-        if let Some(s) = sink.as_deref_mut() {
+        if let Some(s) = sink {
             s.end(false);
         }
     }

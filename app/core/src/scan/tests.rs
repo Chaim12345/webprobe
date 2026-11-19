@@ -1885,7 +1885,7 @@
         let req = "GET /s?q=shoes&page=2 HTTP/1.1\r\nHost: h\r\n\r\n";
         let ip = &insertion_points(req)[0];
         assert_eq!((ip.kind.clone(), ip.name.as_str(), ip.value.as_str()), (IpKind::Query, "q", "shoes"));
-        let r = inject_payload(req, ip, &"a b&c");
+        let r = inject_payload(req, ip, "a b&c");
         assert!(r.starts_with("GET /s?q=a%20b%26c&page=2 HTTP/1.1\r\n"), "{r}");
     }
 
@@ -1916,7 +1916,7 @@
         let req = "GET / HTTP/1.1\r\nHost: h\r\nCookie: _gat=1; sid=abc; theme=dark\r\n\r\n";
         let pts: Vec<InsertionPoint> = insertion_points(req).into_iter().filter(|p| p.kind == IpKind::Cookie).collect();
         assert_eq!(pts.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), vec!["sid", "theme"], "_gat is skip-listed");
-        let r = inject_payload(req, &pts[0], &"x';y");
+        let r = inject_payload(req, &pts[0], "x';y");
         assert!(r.contains("\r\nCookie: _gat=1; sid=x'%3By; theme=dark\r\n"), "{r}");
     }
 
@@ -1933,7 +1933,7 @@
         ]);
         let ua = InsertionPoint::new(IpKind::Header, "User-Agent", "UA");
         // Decoded for the header, but a CR/LF stays encoded: no new header line.
-        let r = inject_payload(req, &ua, &"a b\r\nX-Evil: 1");
+        let r = inject_payload(req, &ua, "a b\r\nX-Evil: 1");
         assert!(r.contains("\r\nUser-Agent: a b%0D%0AX-Evil: 1\r\n") && !r.contains("\r\nX-Evil:"), "{r}");
         // Without a Referer, Burp synthesises one (Zuq.ZE) and the probe adds it.
         let bare = "GET /p HTTP/1.1\r\nHost: h\r\n\r\n";
@@ -1951,7 +1951,7 @@
         assert_eq!(pts.len(), 3);
         assert_eq!((pts[1].kind.clone(), pts[1].value.as_str()), (IpKind::PathFolder(1), "v1"));
         assert_eq!((pts[2].kind.clone(), pts[2].value.as_str()), (IpKind::PathFilename(2), "users.json"));
-        let r = inject_payload(req, &pts[1], &"../x");
+        let r = inject_payload(req, &pts[1], "../x");
         assert!(r.starts_with("GET /api/..%2Fx/users.json?x=1 HTTP/1.1\r\n"), "{r}");
         let r = inject(req, &pts[2], "users.jsonzz");
         assert!(r.starts_with("GET /api/v1/users.jsonzz?x=1 HTTP/1.1\r\n"), "{r}");

@@ -144,7 +144,7 @@ impl SqlBoolGen {
     /// fourth (starting with the first) compares with "0n" (still equal).
     pub(crate) fn positive_with(&mut self, r: u32, n: u32) -> String {
         let quoted = !self.quote.is_empty();
-        let v = if !quoted && self.pos % 4 == 0 { format!("0{n}") } else { n.to_string() };
+        let v = if !quoted && self.pos.is_multiple_of(4) { format!("0{n}") } else { n.to_string() };
         self.pos += 1;
         self.render(r, n, &v)
     }

@@ -34,7 +34,7 @@ pub fn plan(has_render_node: bool, env: impl Fn(&str) -> Option<String>) -> Plan
     if env("WEBPROBE_GL").as_deref() == Some("native") {
         return plan;
     }
-    let is_set = |name: &str| env(name).map_or(false, |value| !value.is_empty());
+    let is_set = |name: &str| env(name).is_some_and(|value| !value.is_empty());
 
     // glutin only ever asks for direct contexts, so this can never help.
     if env("LIBGL_ALWAYS_INDIRECT").is_some() {
@@ -85,7 +85,7 @@ pub fn apply() {
 pub fn software_retry(env: impl Fn(&str) -> Option<String>) -> Option<Plan> {
     if env("WEBPROBE_GL").as_deref() == Some("native")
         || env("WEBPROBE_GL_RETRY").is_some()
-        || env("LIBGL_ALWAYS_SOFTWARE").map_or(false, |v| !v.is_empty())
+        || env("LIBGL_ALWAYS_SOFTWARE").is_some_and(|v| !v.is_empty())
     {
         return None;
     }

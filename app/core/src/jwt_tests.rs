@@ -264,7 +264,8 @@ fn jwk_variant_keeps_an_existing_kid() {
 fn hmac_matches_rfc_4231_vectors() {
     // (key, data, SHA-256, SHA-384, SHA-512): RFC 4231 test cases 1, 2 and 6
     // (case 6: a 131-byte key, longer than both block sizes).
-    let cases: Vec<(Vec<u8>, &[u8], &str, &str, &str)> = vec![
+    type HmacCase = (Vec<u8>, &'static [u8], &'static str, &'static str, &'static str);
+    let cases: Vec<HmacCase> = vec![
         (
             vec![0x0b; 20],
             b"Hi There",
@@ -386,16 +387,16 @@ fn tok(n: u32) -> String {
 fn tokens_are_found_in_headers_cookies_query_and_form() {
     let (a, b, c, d, e) = (tok(1), tok(2), tok(3), tok(4), tok(5));
     let found = tokens_of(&format!("GET /x HTTP/1.1\r\nHost: h\r\nAuthorization: Bearer {a}\r\n\r\n"));
-    assert_eq!(found, [a.clone()], "Authorization: Bearer");
+    assert_eq!(found, std::slice::from_ref(&a), "Authorization: Bearer");
     let found = tokens_of(&format!("GET /x HTTP/1.1\r\nHost: h\r\nAuthorization: {a}\r\n\r\n"));
-    assert_eq!(found, [a.clone()], "Authorization without the scheme");
+    assert_eq!(found, std::slice::from_ref(&a), "Authorization without the scheme");
     let found = tokens_of(&format!("GET /x HTTP/1.1\r\nHost: h\r\nCookie: theme=dark; session={b}; lang=en\r\n\r\n"));
-    assert_eq!(found, [b.clone()], "cookie");
+    assert_eq!(found, std::slice::from_ref(&b), "cookie");
     let found = tokens_of(&format!("GET /x?lang=en&jwt={c}&z=1 HTTP/1.1\r\nHost: h\r\n\r\n"));
-    assert_eq!(found, [c.clone()], "query parameter");
+    assert_eq!(found, std::slice::from_ref(&c), "query parameter");
     let body = format!("user=bob&t={d}");
     let found = tokens_of(&format!("POST /x HTTP/1.1\r\nHost: h\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {}\r\n\r\n{body}", body.len()));
-    assert_eq!(found, [d.clone()], "form body");
+    assert_eq!(found, std::slice::from_ref(&d), "form body");
     let found = tokens_of(&format!("GET /x?a={c} HTTP/1.1\r\nHost: h\r\nX-Custom: {e}\r\nCookie: s={b}\r\nAuthorization: Bearer {a}\r\n\r\n"));
     assert_eq!(found.len(), 4);
     for t in [&a, &b, &c, &e] {

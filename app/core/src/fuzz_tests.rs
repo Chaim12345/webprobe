@@ -268,7 +268,7 @@ fn proxy_survives_malformed_connections() {
         let _ = s.set_write_timeout(Some(Duration::from_millis(500)));
         let payload: Vec<u8> = match round % 6 {
             0 => rng.bytes(2048),
-            1 => b"GET http://127.0.0.1/ HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Long: ".iter().copied().chain(std::iter::repeat(b'a').take(70_000)).collect(),
+            1 => b"GET http://127.0.0.1/ HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Long: ".iter().copied().chain(std::iter::repeat_n(b'a', 70_000)).collect(),
             2 => {
                 let mut v = b"CONNECT example.test:443 HTTP/1.1\r\nHost: example.test:443\r\n\r\n".to_vec();
                 // A TLS record header claiming a huge handshake, then noise.

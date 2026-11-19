@@ -438,7 +438,7 @@ pub fn site_map_menu(ui: &mut egui::Ui, app: &mut crate::App, origin: &str, bran
 fn find_window(app: &mut crate::App, ctx: &egui::Context) {
     let Some(f) = app.eng.find.as_mut() else { return };
     let mut open = true;
-    egui::Window::new(f.title.clone()).default_pos(crate::theme::window_pos(&ctx))
+    egui::Window::new(f.title.clone()).default_pos(crate::theme::window_pos(ctx))
         .id(egui::Id::unique("engagement_find"))
         .open(&mut open)
         .resizable(true)

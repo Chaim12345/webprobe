@@ -278,7 +278,7 @@ pub fn luhn_ok(digits: &[u8]) -> bool {
         }
         sum += v;
     }
-    sum % 10 == 0
+    sum.is_multiple_of(10)
 }
 
 /// First Luhn-valid 13-19 digit run with a card-like prefix.

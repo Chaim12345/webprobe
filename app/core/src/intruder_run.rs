@@ -315,7 +315,7 @@ pub fn grep_match_flags(cfg: &GrepMatch, response: &[u8]) -> Vec<bool> {
             }
             if cfg.regex {
                 let pattern = if cfg.case_sensitive { item.clone() } else { format!("(?i){item}") };
-                regex::Regex::new(&pattern).map_or(false, |re| re.is_match(hay))
+                regex::Regex::new(&pattern).is_ok_and(|re| re.is_match(hay))
             } else if cfg.case_sensitive {
                 hay.contains(item.as_str())
             } else {
@@ -1106,9 +1106,8 @@ mod tests {
         let parsed = Template::parse(&template).unwrap();
         let sources = [intruder::PayloadSource::RecursiveGrep { initial: "start".into(), extract_index: 0, stop_on_duplicate: true }];
         let specs = intruder::resolve_specs(&parsed, AttackType::Sniper, &sources).unwrap();
-        let mut settings = AttackSettings::default();
         // No 3 x 2 s retries: a transient failure should fail fast, not time out.
-        settings.retry = RetryConfig { retries: 0, pause_ms: 0 };
+        let mut settings = AttackSettings { retry: RetryConfig { retries: 0, pause_ms: 0 }, ..Default::default() };
         assert!(start(shared.clone(), &template, AttackType::Sniper, specs.clone(), ("127.0.0.1".into(), port, false), settings.clone()).is_err(), "needs an extract item");
         settings.grep_extract.enabled = true;
         settings.grep_extract.items = vec![ExtractItem { start: ExtractStart::After("value=\"".into()), end: ExtractEnd::Delimiter("\"".into()), ..Default::default() }];

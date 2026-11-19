@@ -34,11 +34,14 @@ pub enum Items {
     InScope,
 }
 
+/// The compare run's outcome once the worker finishes.
+type CompareOutcome = Option<Result<Vec<Row>, String>>;
+
 struct Job {
     total: usize,
     done: Arc<AtomicUsize>,
     stop: Arc<AtomicBool>,
-    result: Arc<Mutex<Option<Result<Vec<Row>, String>>>>,
+    result: Arc<Mutex<CompareOutcome>>,
 }
 
 pub struct CompareUi {

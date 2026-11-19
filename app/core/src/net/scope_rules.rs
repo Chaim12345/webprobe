@@ -57,6 +57,12 @@ impl SessionRule {
     }
 }
 
+impl Default for SessionRule {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// A reusable raw request executed by session rules and from the Sessions tab.
 #[derive(Clone)]
 pub struct Macro {

@@ -46,7 +46,7 @@ mod repeater_fix_tests {
 }
 
 #[cfg(test)]
-mod tests {
+mod suite {
     use super::{history_new_rows, history_view};
     use crate::net::HistEntry;
     use crate::table::TableState;
@@ -118,12 +118,14 @@ mod tests {
 
     #[test]
     fn csrf_poc_replays_the_body() {
-        let mut e = crate::net::HistEntry::default();
-        e.method = "POST".into();
-        e.host = "h".into();
-        e.port = 80;
-        e.path = "/change".into();
-        e.req_raw = b"POST /change HTTP/1.1\r\nHost: h\r\n\r\nemail=a%40b.c&x=1".to_vec().into();
+        let e = crate::net::HistEntry {
+            method: "POST".into(),
+            host: "h".into(),
+            port: 80,
+            path: "/change".into(),
+            req_raw: b"POST /change HTTP/1.1\r\nHost: h\r\n\r\nemail=a%40b.c&x=1".to_vec().into(),
+            ..Default::default()
+        };
         let html = crate::ui::csrf_poc_html(&e);
         assert!(html.contains("action=\"http://h/change\"") && html.contains("name=\"email\" value=\"a@b.c\""), "{html}");
     }

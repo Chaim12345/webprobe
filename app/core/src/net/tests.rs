@@ -97,13 +97,15 @@
     #[test]
     fn browser_item_routes_show_and_repeat() {
         let shared = Shared::new();
-        let mut e = HistEntry::default();
-        e.id = 7;
-        e.method = "GET".into();
-        e.host = "h".into();
-        e.port = 80;
-        e.req_raw = b"GET http://h/a?b=1 HTTP/1.1\r\nHost: h\r\n\r\n".to_vec().into();
-        e.resp_raw = Some(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok".to_vec().into());
+        let e = HistEntry {
+            id: 7,
+            method: "GET".into(),
+            host: "h".into(),
+            port: 80,
+            req_raw: b"GET http://h/a?b=1 HTTP/1.1\r\nHost: h\r\n\r\n".to_vec().into(),
+            resp_raw: Some(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok".to_vec().into()),
+            ..Default::default()
+        };
         shared.history.push(e);
         let show = String::from_utf8(browser_item_response(&shared, "/show/7").unwrap()).unwrap();
         assert!(show.ends_with("ok") && show.contains("200 OK"));
@@ -115,9 +117,11 @@
     #[test]
     fn title_with_closing_tag_before_opening_tag_does_not_panic() {
         // Audit H1: two independent find() calls used to give a reversed range.
-        let mut e = HistEntry::default();
-        e.req_raw = b"GET / HTTP/1.1\r\nHost: x\r\n\r\n".to_vec().into();
-        e.resp_raw = Some(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n</title>hello<title>".to_vec().into());
+        let mut e = HistEntry {
+            req_raw: b"GET / HTTP/1.1\r\nHost: x\r\n\r\n".to_vec().into(),
+            resp_raw: Some(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n</title>hello<title>".to_vec().into()),
+            ..Default::default()
+        };
         assert_eq!(derive_history_fields(&e).2, "");
         e.resp_raw = Some(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<title>ok</title>".to_vec().into());
         assert_eq!(derive_history_fields(&e).2, "ok");
@@ -125,8 +129,10 @@
 
     #[test]
     fn extension_comes_from_the_last_path_segment_of_absolute_form() {
-        let mut e = HistEntry::default();
-        e.req_raw = b"GET http://127.0.0.1:3001/rest/user/login HTTP/1.1\r\nHost: 127.0.0.1:3001\r\n\r\n".to_vec().into();
+        let mut e = HistEntry {
+            req_raw: b"GET http://127.0.0.1:3001/rest/user/login HTTP/1.1\r\nHost: 127.0.0.1:3001\r\n\r\n".to_vec().into(),
+            ..Default::default()
+        };
         assert_eq!(derive_history_fields(&e).1, "");
         e.req_raw = b"GET http://127.0.0.1:3001/main.js?v=1 HTTP/1.1\r\nHost: x\r\n\r\n".to_vec().into();
         assert_eq!(derive_history_fields(&e).1, "js");
@@ -135,8 +141,8 @@
     }
 
     fn read_request_head<R: Read>(s: &mut R) -> Vec<u8> {
-        let req = read_request(s).unwrap();
-        req
+        
+        read_request(s).unwrap()
     }
 
     /// A-01/A-02: a chunked, gzip-encoded response is forwarded byte-for-byte
@@ -231,7 +237,7 @@
         eprintln!("one error: {:?}", one.error);
         eprintln!("two error: {:?}", two.error);
         t.join().unwrap();
-        assert_eq!(one.resp.as_deref().map(|r| r.to_vec()).unwrap_or_default().ends_with(b"ok0"), true);
+        assert!(one.resp.as_deref().map(|r| r.to_vec()).unwrap_or_default().ends_with(b"ok0"));
         assert!(two.resp.as_ref().unwrap().ends_with(b"ok1"));
         assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 1, "one upstream connection for two requests");
         assert_eq!(shared.pool_hits.load(Ordering::SeqCst), 1);

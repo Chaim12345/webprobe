@@ -234,7 +234,7 @@ impl HistoryFilter {
             let needle = self.mime.trim().to_lowercase();
             let mime = Self::mime_of(entry);
             let hit = if self.regex {
-                regex::RegexBuilder::new(&self.mime.trim())
+                regex::RegexBuilder::new(self.mime.trim())
                     .case_insensitive(true)
                     .build()
                     .map(|re| re.is_match(&mime))
