@@ -951,6 +951,36 @@ dom_family_check!(
     "Open redirection (DOM-based), KB 00500110, Low: window.open, the only wrappable navigation sink of burp.Zcwh's family - the Location members (href, assign, replace, host, hostname, protocol) are LegacyUnforgeable in Chromium. Confidence Tentative (burp.Zwf8.Zd: every open-redirection variant is Tentative)."
 );
 dom_family_check!(
+    DomWebSocketPoisoning,
+    "active.dom-websocket-poisoning",
+    "WebSocket URL poisoning (DOM-based)",
+    "high",
+    "Firm",
+    "DOM-based WebSocket URL poisoning",
+    &["websocket"][..],
+    "WebSocket URL poisoning (DOM-based), KB 00200340, High: the WebSocket constructor (burp.Zcwh's websocket sink). Confidence Firm (burp.Zwf8.Zd)."
+);
+dom_family_check!(
+    DomDos,
+    "active.dom-dos",
+    "Denial of service (DOM-based)",
+    "info",
+    "Firm",
+    "DOM-based denial of service",
+    &["RegExp"][..],
+    "Denial of service (DOM-based), KB 00500d00, Information: the RegExp constructor (burp.Zcwh's literal dynamic mapping for the family). Confidence Firm (burp.Zwf8.Zd)."
+);
+dom_family_check!(
+    DomAjaxHeader,
+    "active.dom-ajax-header-manipulation",
+    "Ajax request header manipulation (DOM-based)",
+    "low",
+    "Firm",
+    "DOM-based Ajax request header manipulation",
+    &["xhr.setRequestHeader.name", "xhr.setRequestHeader.value"][..],
+    "Ajax request header manipulation (DOM-based), KB 00500c00, Low: XMLHttpRequest.setRequestHeader name and value. Confidence Firm (burp.Zwf8.Zd's Tentative rule covers a document.cookie source, not location.hash)."
+);
+dom_family_check!(
     DomStorageManipulation,
     "active.dom-storage-manipulation",
     "HTML5 storage manipulation (DOM-based)",
