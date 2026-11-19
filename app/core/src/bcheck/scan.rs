@@ -15,11 +15,19 @@ use crate::scan::checks::ScanCtx;
 use crate::scan::insertion::{InsertionPoint, IpKind};
 use crate::util;
 
-/// Parse and validate the configured definitions, logging failures once per
-/// scan (Burp refuses invalid BChecks at import time; the UI validates at
-/// load, so a failure here means the config was edited by hand).
-fn configured_defs(shared: &Shared) -> Vec<Definition> {
+/// Parse and validate the configured definitions, cached against the
+/// configured sources: parsing ran on every passive entry and every
+/// active request, and an invalid definition logged on every call.
+/// Failures now genuinely log once per scan (Burp refuses invalid
+/// BChecks at import time; the UI validates at load, so a failure here
+/// means the config was edited by hand).
+fn configured_defs(shared: &Shared) -> Arc<Vec<Definition>> {
     let sources = shared.scan_config.lock().unwrap().bchecks.clone();
+    if let Some((srcs, defs)) = &*shared.bcheck_defs.lock().unwrap() {
+        if *srcs == sources {
+            return defs.clone();
+        }
+    }
     let mut defs = Vec::new();
     for src in &sources {
         match parse(src) {
@@ -34,6 +42,8 @@ fn configured_defs(shared: &Shared) -> Vec<Definition> {
             }
         }
     }
+    let defs = Arc::new(defs);
+    *shared.bcheck_defs.lock().unwrap() = Some((sources, defs.clone()));
     defs
 }
 
@@ -258,7 +268,7 @@ pub(crate) fn run_bcheck_checks(cx: &ScanCtx, points: &[InsertionPoint]) {
     }
     let base = ctx_exchange(cx);
     let transport = CxTransport { cx };
-    for def in &defs {
+    for def in defs.iter() {
         if cx.stopped() {
             break;
         }
@@ -269,8 +279,11 @@ pub(crate) fn run_bcheck_checks(cx: &ScanCtx, points: &[InsertionPoint]) {
             }
             GivenMode::Host => {
                 let key = format!("H|{}|{}", cx.host, cx.port);
-                if claim_once(&cx.shared, &def.metadata.name, &key) {
-                    run_active_def(cx, def, &base, None, &transport);
+                if claim_once(&cx.shared, &def.metadata.name, &key) && !run_active_def(cx, def, &base, None, &transport) {
+                    // A transient failure (no Collaborator payload, send
+                    // error) must not consume the one attempt: a later
+                    // audited request retries the check for this host.
+                    unclaim(&cx.shared, &def.metadata.name, &key);
                 }
             }
             GivenMode::Path => {
@@ -280,8 +293,8 @@ pub(crate) fn run_bcheck_checks(cx: &ScanCtx, points: &[InsertionPoint]) {
                     cx.port,
                     cx.parts.path.split('?').next().unwrap_or("")
                 );
-                if claim_once(&cx.shared, &def.metadata.name, &key) {
-                    run_active_def(cx, def, &base, None, &transport);
+                if claim_once(&cx.shared, &def.metadata.name, &key) && !run_active_def(cx, def, &base, None, &transport) {
+                    unclaim(&cx.shared, &def.metadata.name, &key);
                 }
             }
             GivenMode::InsertionPoints(want) => {
@@ -300,13 +313,15 @@ pub(crate) fn run_bcheck_checks(cx: &ScanCtx, points: &[InsertionPoint]) {
     }
 }
 
+/// Returns false when the definition failed to run (a completed run
+/// with no findings is a success and keeps its claim).
 fn run_active_def(
     cx: &ScanCtx,
     def: &Definition,
     base: &Exchange,
     ip: Option<&BcheckIp>,
     transport: &dyn Transport,
-) {
+) -> bool {
     let collab = ScanCollab { shared: Arc::clone(&cx.shared), tokens: Vec::new(), counted: std::collections::HashSet::new() };
     match run_definition(def, base, ip, transport, Some(Box::new(collab))) {
         Ok(issues) => {
@@ -323,18 +338,29 @@ fn run_active_def(
                 // they bypass the built-in name gate the way extensions do.
                 crate::scan::add_issues(&cx.shared, converted);
             }
+            true
         }
         Err(e) => {
             cx.shared.log(&format!(
                 "Scanner: BCheck `{}` failed: {e}",
                 def.metadata.name
             ));
+            false
         }
     }
 }
 
 /// Host and path checks run once per scan, not once per audited request
 /// (Burp's per-host / per-path semantics); the scan claim resets the set.
+/// Retract a claim after a failed run so a later request retries.
+fn unclaim(shared: &Shared, check: &str, key: &str) {
+    shared
+        .bcheck_ran
+        .lock()
+        .unwrap()
+        .remove(&format!("{check}|{key}"));
+}
+
 fn claim_once(shared: &Shared, check: &str, key: &str) -> bool {
     shared
         .bcheck_ran
@@ -352,7 +378,7 @@ pub(crate) fn bcheck_passive_issues(shared: &Shared, e: &HistEntry) -> Vec<ScanI
     }
     let Some(exchange) = entry_exchange(e) else { return Vec::new() };
     let mut out = Vec::new();
-    for def in &defs {
+    for def in defs.iter() {
         if !matches!(def.given, GivenMode::Response) {
             continue;
         }
@@ -385,6 +411,7 @@ pub(crate) fn bcheck_passive_issues(shared: &Shared, e: &HistEntry) -> Vec<ScanI
 /// scanner).
 pub(crate) fn reset_scan_state(shared: &Shared) {
     shared.bcheck_ran.lock().unwrap().clear();
+    *shared.bcheck_defs.lock().unwrap() = None;
 }
 
 #[cfg(test)]
@@ -404,6 +431,32 @@ mod tests {
     }
 
     #[test]
+    fn configured_defs_parse_and_log_once_per_scan() {
+        let shared = Shared::new();
+        shared.scan_config.lock().unwrap().bchecks = vec!["this is not a bcheck".to_string()];
+        let a = configured_defs(&shared);
+        let b = configured_defs(&shared);
+        assert!(a.is_empty() && b.is_empty());
+        assert!(std::sync::Arc::ptr_eq(&a, &b), "second call must hit the cache");
+        let logs = shared.events.lock().unwrap();
+        let n = logs.iter().filter(|l| l.contains("BCheck skipped")).count();
+        drop(logs);
+        assert_eq!(n, 1, "an invalid definition must log once, not per call");
+        // A config change re-parses.
+        shared.scan_config.lock().unwrap().bchecks = vec!["still not a bcheck".to_string()];
+        let c = configured_defs(&shared);
+        assert!(!std::sync::Arc::ptr_eq(&a, &c), "changed sources must re-parse");
+        let logs = shared.events.lock().unwrap();
+        let n = logs.iter().filter(|l| l.contains("BCheck skipped")).count();
+        drop(logs);
+        assert_eq!(n, 2, "a config change logs again");
+        // A new scan re-parses and re-logs.
+        reset_scan_state(&shared);
+        let d = configured_defs(&shared);
+        assert!(!std::sync::Arc::ptr_eq(&c, &d), "a new scan re-parses");
+    }
+
+    #[test]
     fn claim_once_dedups_per_check_and_key() {
         let shared = Shared::new();
         assert!(claim_once(&shared, "c", "k"));
@@ -411,6 +464,9 @@ mod tests {
         assert!(claim_once(&shared, "c", "k2"));
         assert!(claim_once(&shared, "c2", "k"));
         reset_scan_state(&shared);
+        assert!(claim_once(&shared, "c", "k"));
+        // A failed run retracts the claim and the next request retries.
+        unclaim(&shared, "c", "k");
         assert!(claim_once(&shared, "c", "k"));
     }
 
