@@ -1516,7 +1516,9 @@ pub fn prototype_pollution_probe(shared: &Arc<Shared>, url: &str, canary: &str) 
     let base = url.split('#').next().unwrap_or(url);
     let sep = if base.contains('?') { "&" } else { "?" };
     let nav = format!("{base}{sep}__proto__[{canary}]={canary}#__proto__[{canary}]={canary}");
-    let check = format!("JSON.stringify(Object.prototype[{canary:?}] === undefined ? '' : String(Object.prototype[{canary:?}]))");
+    // JSON quoting is a valid JS string literal for any canary content
+    let c = serde_json::to_string(&canary).unwrap_or_else(|_| "\"\"".to_string());
+    let check = format!("JSON.stringify(Object.prototype[{c}] === undefined ? '' : String(Object.prototype[{c}]))");
     let got: Option<String> = browser_run(shared, url, &nav, None, &check)?;
     Ok(got.filter(|v| !v.is_empty()).map(|_| nav))
 }
