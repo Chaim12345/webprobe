@@ -13,6 +13,7 @@
 use std::fmt;
 
 pub mod exec;
+pub mod runner;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Metadata {

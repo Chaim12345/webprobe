@@ -230,11 +230,16 @@ pub fn eval_expr(cx: &mut Context, e: &Expr) -> Result<String, ExecError> {
                 .insertion_point_base_value
                 .clone()
                 .ok_or_else(|| ExecError("insertion_point_base_value outside an insertion-point check".into())),
-            other => cx
-                .vars
-                .get(other)
-                .cloned()
-                .ok_or_else(|| ExecError(format!("undefined variable `{other}`"))),
+            other => {
+                if let Some(v) = cx.vars.get(other) {
+                    Ok(v.clone())
+                } else if let Some(ex) = cx.exchanges.get(other) {
+                    // a bare request name stringifies to its raw response
+                    Ok(ex.response.raw())
+                } else {
+                    err(format!("undefined variable `{other}`"))
+                }
+            }
         },
         Expr::Path(segs) => eval_path(cx, segs),
         Expr::Call { name, args } => eval_call(cx, name, args),
@@ -291,10 +296,12 @@ fn response_property(ex: &Exchange, rest: &[String]) -> Result<String, ExecError
                 .join("\r\n")),
             "body" => Ok(r.body.clone()),
             "http_version" => Ok(r.http_version.clone()),
-            // Burp's run-for-each example uses {base.response.url}
+            // Burp's examples use both {base.response.url} and
+            // {base.response.url.path}; a response's url is its request's.
             "url" => Ok(ex.request.url.clone()),
             other => err(format!("unknown response property `{other}`")),
         },
+        [p, sub] if p == "url" => request_property(ex, &["url".to_string(), sub.clone()]),
         [p, more @ ..] => err(format!("unknown response path `{p}.{}`", more.join("."))),
     }
 }
