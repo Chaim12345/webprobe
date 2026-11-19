@@ -115,6 +115,7 @@ pub(crate) static REQUEST_CHECKS: &[&dyn RequestCheck] = &[
     &GraphqlEndpointDiscovered,
     &cache::WebCachePoisoning,
     &cache::WebCacheDeception,
+    &DomXss,
 ];
 
 /// Whether `check` audits `ip` under `config`: the point type suits it,

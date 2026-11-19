@@ -750,6 +750,87 @@ impl RequestCheck for BackupFile {
     }
 }
 
+/// Cross-site scripting (DOM-based), R-13 option (b) vertical slice
+/// (burp.Zel5's dynamic-analysis shape, first family only): the page is
+/// opened in a headless browser with a canary in location.hash and the
+/// first-slice sinks wrapped (document.write/writeln, the innerHTML
+/// setter); a canary reaching a sink is the issue (KB 00200310, High).
+/// Source/sink tables per docs/specs/R-13 (burp.Zcwh's dynamic decoder
+/// mappings); the injected script's shape follows Zel5/Zp7 but its body
+/// is not established, so WebProbe's instrumentation is its own.
+/// Confidence Firm: burp.Zwf8.Zd's Tentative rules (open redirection,
+/// jQuery, input.value/textarea.value, Ajax cookie) do not cover a
+/// location.hash source, and no dynamic-to-Certain upgrade is
+/// established. Skipped when no Chromium is available.
+pub(crate) struct DomXss;
+
+/// One browser run per URL (fragment dropped): the probe's only source is
+/// location.hash, so a repeated run on the same page repeats the probe.
+fn dom_analysis_seen() -> &'static std::sync::Mutex<std::collections::HashSet<String>> {
+    static SEEN: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
+    SEEN.get_or_init(Default::default)
+}
+
+impl RequestCheck for DomXss {
+    fn id(&self) -> &'static str {
+        "active.dom-xss"
+    }
+    fn issue(&self) -> &'static str {
+        "Cross-site scripting (DOM-based)"
+    }
+    fn scope(&self) -> Scope {
+        Scope::Request
+    }
+    fn group(&self) -> Option<&'static str> {
+        Some(BURP_GROUP)
+    }
+    fn run(&self, cx: &ScanCtx) {
+        if cx.stopped() || !cx.runs(self.issue()) {
+            return;
+        }
+        // Dynamic analysis runs on pages: the baseline must be HTML.
+        let rp = util::parse_http(&cx.baseline.raw);
+        let ct = util::get_header(&rp.headers, "Content-Type").unwrap_or_default();
+        if !ct.to_ascii_lowercase().contains("html") {
+            return;
+        }
+        let scheme = if cx.entry.https { "https" } else { "http" };
+        let default = if cx.entry.https { 443 } else { 80 };
+        let port = if cx.entry.port == default { String::new() } else { format!(":{}", cx.entry.port) };
+        let path = cx.entry.path.split('#').next().unwrap_or("/");
+        let url = format!("{scheme}://{}{port}{path}", cx.entry.host);
+        if !dom_analysis_seen().lock().unwrap().insert(url.clone()) {
+            return;
+        }
+        let canary = format!("wp{}", rnd_letters(10));
+        let Ok(hits) = crate::crawl::dom_analysis_probe(&cx.shared, &url, &canary) else { return };
+        // Only hits on the probed origin (the browser's own error pages run
+        // wrapped sinks too), one report per sink (burp.Zwf8.identityOf
+        // merges same issue + same source/sink captions).
+        let origin = crate::crawl::origin_of(&url).unwrap_or_default();
+        let mut sinks: std::collections::HashSet<&str> = std::collections::HashSet::new();
+        for hit in hits.iter().filter(|h| h.page_url.starts_with(&origin)) {
+            if !sinks.insert(hit.sink.as_str()) {
+                continue;
+            }
+            let mut i = mk(
+                "high",
+                self.issue(),
+                &cx.entry,
+                format!(
+                    "The application may be vulnerable to DOM-based cross-site scripting. Data is read from <b>{}</b> and passed to <b>{}</b>.<br><br>The source value <b>{}</b> reached the sink as <b>{}</b>.",
+                    util::html_encode(&hit.source),
+                    util::html_encode(&hit.sink),
+                    util::html_encode(&hit.source_value),
+                    util::html_encode(&hit.sink_value)
+                ),
+            );
+            i.confidence = "Firm".into();
+            cx.report(vec![i]);
+        }
+    }
+}
+
 /// WebProbe's own reflected-DOM canary (Burp finds DOM issues by analysing
 /// JavaScript, which is not this): a plain canary reflected unencoded into
 /// script data or an attribute value of an HTML response. Also seeds the
