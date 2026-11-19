@@ -799,7 +799,8 @@ pub(crate) struct DomXss;
 /// One browser run per URL (fragment dropped): the probe's only source is
 /// location.hash, so a repeated run on the same page repeats the probe.
 fn dom_analysis_seen() -> &'static std::sync::Mutex<std::collections::HashSet<String>> {
-    static SEEN: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
+    static SEEN: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> =
+        std::sync::OnceLock::new();
     SEEN.get_or_init(Default::default)
 }
 
@@ -828,14 +829,20 @@ impl RequestCheck for DomXss {
         }
         let scheme = if cx.entry.https { "https" } else { "http" };
         let default = if cx.entry.https { 443 } else { 80 };
-        let port = if cx.entry.port == default { String::new() } else { format!(":{}", cx.entry.port) };
+        let port = if cx.entry.port == default {
+            String::new()
+        } else {
+            format!(":{}", cx.entry.port)
+        };
         let path = cx.entry.path.split('#').next().unwrap_or("/");
         let url = format!("{scheme}://{}{port}{path}", cx.entry.host);
         if !dom_analysis_seen().lock().unwrap().insert(url.clone()) {
             return;
         }
         let canary = format!("wp{}", rnd_letters(10));
-        let Ok(hits) = crate::crawl::dom_analysis_probe(&cx.shared, &url, &canary) else { return };
+        let Ok(hits) = crate::crawl::dom_analysis_probe(&cx.shared, &url, &canary) else {
+            return;
+        };
         // Only hits on the probed origin (the browser's own error pages run
         // wrapped sinks too), one report per sink (burp.Zwf8.identityOf
         // merges same issue + same source/sink captions).
