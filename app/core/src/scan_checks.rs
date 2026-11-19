@@ -2074,7 +2074,15 @@ fn dom_analysis_hits(cx: &ScanCtx) -> (Vec<crate::crawl::DomHit>, Option<String>
     // value "submitted to the URL ... is copied into a JavaScript string
     // literal" of a later response): submit a distinct stored canary with
     // the request first; a sink hit holding it was embedded by the app,
-    // not read from this navigation's URL.
+    // not read from this navigation's URL. Each URL gets its own canary
+    // (the probe cache is keyed by URL), so a stored hit is attributed to
+    // THIS page's submission.
+    //
+    // Side effect, inherent to stored-variant detection: this GET with
+    // ?wpdom=s<canary> reaches every scanned HTML page in the audited
+    // request's session, and an application may persist the value (logs,
+    // search history, comments). The canary is a random inert string and
+    // the check runs only as part of the active scan.
     let stored_canary = format!("s{canary}");
     let sep0 = if path.contains('?') { "&" } else { "?" };
     let submit = authed_get(cx, &format!("{path}{sep0}wpdom={stored_canary}"));
