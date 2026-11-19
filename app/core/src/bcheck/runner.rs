@@ -268,15 +268,19 @@ fn parse_raw_request(text: &str, base: &RequestData) -> Result<RequestData, Exec
 /// wiring maps `Any` onto the audited point's real kind); anything else is
 /// a wiring bug, not a reason to guess a placement.
 fn apply_payload(req: &mut RequestData, ip: &InsertionPoint, combined: &str) -> Result<(), ExecError> {
+    // The combined value is decoded; it goes back through the insertion
+    // framework's URL encoding so a payload containing `&` or `=` stays
+    // inside its own parameter instead of corrupting the siblings
+    // (headers and whole-body replacements are not parameter-encoded).
     match ip.kind {
         InsertionPointKind::Query => {
-            set_query_param(req, &ip.name, combined);
+            set_query_param(req, &ip.name, &crate::scan::insertion::encode_url_param(combined));
         }
         InsertionPointKind::Header => {
-            set_header(req, &ip.name, &combined);
+            set_header(req, &ip.name, combined);
         }
         InsertionPointKind::Cookie => {
-            set_cookie(req, &ip.name, &combined);
+            set_cookie(req, &ip.name, &crate::scan::insertion::encode_url_param(combined));
         }
         InsertionPointKind::Body => {
             if ip.name.is_empty() {
@@ -284,6 +288,7 @@ fn apply_payload(req: &mut RequestData, ip: &InsertionPoint, combined: &str) -> 
                 req.body = combined.to_string();
             } else {
                 // a named body (form) parameter
+                let combined = crate::scan::insertion::encode_url_param(combined);
                 let mut pairs: Vec<(String, String)> = req
                     .body
                     .split('&')
@@ -574,9 +579,30 @@ mod tests {
         assert_eq!(issues.len(), 1);
         assert_eq!(issues[0].severity, "high");
         assert_eq!(issues[0].confidence, "tentative");
-        // payload was appended to the base value
+        // payload was appended to the base value, URL-encoded for the wire
+        // as Burp does; the receiving application decodes it
         let sent = lab.sent.lock().unwrap();
-        assert!(sent[0].url.contains("n=1{{1337*1337}}"), "url: {}", sent[0].url);
+        assert!(sent[0].url.contains("n=1%7B%7B1337*1337%7D%7D"), "url: {}", sent[0].url);
+    }
+
+    #[test]
+    fn send_payload_with_specials_stays_inside_its_own_parameter() {
+        let src = "metadata:\n language: v2-beta\n name: \"t\"\ngiven insertion point then\n send payload:\n  appending: \"&z=9\"\n report issue and continue:\n  severity: low\n  confidence: firm\n";
+        let def = match parse(src) { Ok(d) => d, Err(e) => panic!("{e:?}") };
+        let lab = Lab {
+            sent: Mutex::new(Vec::new()),
+            responder: Box::new(|req| ok200(req)),
+        };
+        let mut b = base("http://lab.local/f", "", 200);
+        b.request.body = "q=base&keep=1".into();
+        let ip = InsertionPoint {
+            kind: InsertionPointKind::Body,
+            name: "q".into(),
+            base_value: "base".into(),
+        };
+        let _ = run_definition(&def, &b, Some(&ip), &lab, None).unwrap();
+        let sent = lab.sent.lock().unwrap();
+        assert_eq!(sent[0].body, "q=base%26z%3D9&keep=1", "siblings must survive");
     }
 
     #[test]
