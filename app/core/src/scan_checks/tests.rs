@@ -1090,19 +1090,39 @@ fn dom_xss_reflected_variant_against_a_live_lab() {
         format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
     });
     let host = format!("127.0.0.1:{port}");
-    let got = lab_scan(port, &["active.dom-xss"], "GET", "/reflxss", format!("GET /reflxss HTTP/1.1\r\nHost: {host}\r\n\r\n"));
+    let got = lab_scan(
+        port,
+        &["active.dom-xss"],
+        "GET",
+        "/reflxss",
+        format!("GET /reflxss HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
     assert!(
-        got.iter().any(|(n, s, c)| n == "Cross-site scripting (reflected DOM-based)" && s == "high" && c == "Firm"),
+        got.iter().any(
+            |(n, s, c)| n == "Cross-site scripting (reflected DOM-based)"
+                && s == "high"
+                && c == "Firm"
+        ),
         "reflected variant: {got:?}"
     );
-    assert!(!got.iter().any(|(n, ..)| n == "Cross-site scripting (DOM-based)"), "not the plain variant: {got:?}");
-    let got = lab_scan(port, &["active.dom-xss"], "GET", "/xss", format!("GET /xss HTTP/1.1\r\nHost: {host}\r\n\r\n"));
     assert!(
-        got.iter().any(|(n, s, c)| n == "Cross-site scripting (DOM-based)" && s == "high" && c == "Firm"),
+        !got.iter()
+            .any(|(n, ..)| n == "Cross-site scripting (DOM-based)"),
+        "not the plain variant: {got:?}"
+    );
+    let got = lab_scan(
+        port,
+        &["active.dom-xss"],
+        "GET",
+        "/xss",
+        format!("GET /xss HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(
+        got.iter()
+            .any(|(n, s, c)| n == "Cross-site scripting (DOM-based)" && s == "high" && c == "Firm"),
         "plain variant: {got:?}"
     );
 }
-
 
 /// R-10 batch 2: the three GraphQL checks against a live endpoint.
 /// The lab answers the introspection query with a schema, the
