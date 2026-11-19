@@ -5435,7 +5435,9 @@ setTimeout(function () { jQuery('<p>x</p>').html(location.hash.slice(1)); }, 50)
         }
         let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = lab_serve(l, |_method, path, _raw| {
-            let body = if path.starts_with("/webmsg") {
+            let body = if path.starts_with("/webmsg-url") {
+                "<html><body><script>window.postMessage(location.href, '*');</script></body></html>"
+            } else if path.starts_with("/webmsg") {
                 "<html><body><script>window.postMessage(location.hash.slice(1), '*');</script></body></html>"
             } else {
                 "<html><body><p>hello</p></body></html>"
@@ -5450,6 +5452,11 @@ setTimeout(function () { jQuery('<p>x</p>').html(location.hash.slice(1)); }, 50)
         );
         let got = lab_scan(port, &["active.dom-web-message-manipulation"], "GET", "/benign", format!("GET /benign HTTP/1.1\r\nHost: {host}\r\n\r\n"));
         assert!(!got.iter().any(|(n, ..)| n == "HTML5 web message manipulation (DOM-based)"), "{got:?}");
+        // posting the page URL itself (iframe resize, analytics) is not
+        // web message manipulation even though the probe URL carries the
+        // canary
+        let got = lab_scan(port, &["active.dom-web-message-manipulation"], "GET", "/webmsg-url", format!("GET /webmsg-url HTTP/1.1\r\nHost: {host}\r\n\r\n"));
+        assert!(!got.iter().any(|(n, ..)| n == "HTML5 web message manipulation (DOM-based)"), "whole-URL post must not report: {got:?}");
     }
 
     /// R-10 batch 2: the three GraphQL checks against a live endpoint.
