@@ -529,6 +529,101 @@ fn status_2xx(resp: &[u8]) -> bool {
     p.first.split_whitespace().nth(1).map(|s| s.starts_with('2')).unwrap_or(false)
 }
 
+fn status_code_of(resp: &[u8]) -> Option<u16> {
+    util::parse_http(resp).first.split_whitespace().nth(1)?.parse().ok()
+}
+
+/// Which cross-domain policy file is being analysed: Flash's
+/// `crossdomain.xml` (burp.Zudv) or Silverlight's `clientaccesspolicy.xml`
+/// (burp.Zebv). The two differ only in the element and attribute that carry
+/// the allowed domain.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CrossDomainKind {
+    Flash,
+    Silverlight,
+}
+
+/// burp.Zudv.java:26-42 / Zebv.java:26-42: the policy must be served with
+/// status 200 and as XML (Burp's analyzed content-type 262). A declared XML
+/// content type or the document's own root element both count; a 404 page or
+/// an HTML login screen never does.
+fn is_xml_policy(resp: &[u8], root: &str) -> bool {
+    if status_code_of(resp) != Some(200) {
+        return false;
+    }
+    let parsed = util::parse_http(resp);
+    let ctype = util::get_header(&parsed.headers, "Content-Type").unwrap_or_default().to_ascii_lowercase();
+    if ctype.contains("xml") {
+        return true;
+    }
+    let body = String::from_utf8_lossy(&resp[parsed.head_len.min(resp.len())..]);
+    let t = body.trim_start();
+    t.starts_with("<?xml") || t.starts_with(root)
+}
+
+/// The domains a policy allows: `allow-access-from domain="..."` for Flash
+/// (burp.Zudv.java:45-66), `domain uri="..."` for Silverlight
+/// (burp.Zebv.java:45-67). Attribute order and quoting follow what servers
+/// actually ship; single and double quotes both parse.
+fn policy_domains(body: &str, kind: CrossDomainKind) -> Vec<String> {
+    let (elem, attr) = match kind {
+        CrossDomainKind::Flash => ("<allow-access-from", "domain"),
+        CrossDomainKind::Silverlight => ("<domain", "uri"),
+    };
+    let mut out = Vec::new();
+    let mut rest = body;
+    while let Some(i) = rest.find(elem) {
+        let tag_end = rest[i..].find('>').map(|e| i + e).unwrap_or(rest.len());
+        let tag = &rest[i..tag_end];
+        if let Some(a) = tag.find(&format!("{attr}=")) {
+            let after = &tag[a + attr.len() + 1..];
+            let q = after.chars().next();
+            if let Some(q) = q.filter(|q| *q == '"' || *q == '\'') {
+                if let Some(end) = after[1..].find(q) {
+                    out.push(after[1..1 + end].to_string());
+                }
+            }
+        }
+        rest = &rest[tag_end..];
+    }
+    out
+}
+
+/// burp.Zudv.java:68-121 / Zebv.java:69-139: the domains a policy allows
+/// that are worth reporting: `*`, any wildcard, the target itself, or a
+/// parent domain of the target (`www.example.com` is exposed by a policy
+/// allowing `example.com`). Silverlight strips an optional http(s) prefix
+/// first (Zebv.java:69-83). Returns the offending domains, deduplicated.
+pub fn crossdomain_findings(resp: &[u8], own_host: &str, kind: CrossDomainKind) -> Vec<String> {
+    let root = match kind {
+        CrossDomainKind::Flash => "<cross-domain-policy",
+        CrossDomainKind::Silverlight => "<access-policy",
+    };
+    if !is_xml_policy(resp, root) {
+        return Vec::new();
+    }
+    let parsed = util::parse_http(resp);
+    let body = String::from_utf8_lossy(&resp[parsed.head_len.min(resp.len())..]);
+    let host = own_host.to_ascii_lowercase();
+    let mut out: Vec<String> = Vec::new();
+    for raw in policy_domains(&body, kind) {
+        let dom = raw
+            .trim()
+            .trim_start_matches("http://")
+            .trim_start_matches("https://")
+            .trim_end_matches('/')
+            .to_ascii_lowercase();
+        let report = dom == "*"
+            || dom.contains('*')
+            || dom == host
+            || (!dom.is_empty() && host.ends_with(&format!(".{dom}")));
+        if report && !out.contains(&dom) {
+            out.push(dom);
+        }
+    }
+    out
+}
+
 fn body_of(resp: &[u8]) -> String {
     let p = util::parse_http(resp);
     String::from_utf8_lossy(&resp[p.head_len.min(resp.len())..]).into_owned()
@@ -702,6 +797,54 @@ fn attr(tag: &str, name: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn crossdomain_findings_follow_burps_gates() {
+        // Flash: wildcard and parent domains are reported; an unrelated
+        // explicit domain is not (Burp reports *, wildcards, the target and
+        // its parents - Zudv.java:68-121).
+        let policy = br#"HTTP/1.1 200 OK
+Content-Type: text/xml
+
+<?xml version="1.0"?>
+<cross-domain-policy><allow-access-from domain="*.example.com"/><allow-access-from domain="example.com"/><allow-access-from domain="unrelated.io"/></cross-domain-policy>"#;
+        let found = crossdomain_findings(policy, "www.example.com", CrossDomainKind::Flash);
+        assert_eq!(found, ["*.example.com", "example.com"]);
+
+        // The bare wildcard and the target itself.
+        let policy = br#"HTTP/1.1 200 OK
+Content-Type: text/x-cross-domain-policy
+
+<cross-domain-policy><allow-access-from domain="*"/></cross-domain-policy>"#;
+        assert_eq!(crossdomain_findings(policy, "a.b.co", CrossDomainKind::Flash), ["*"]);
+        let policy = br#"HTTP/1.1 200 OK
+
+<cross-domain-policy><allow-access-from domain='www.example.com'/></cross-domain-policy>"#;
+        assert_eq!(crossdomain_findings(policy, "www.example.com", CrossDomainKind::Flash), ["www.example.com"]);
+
+        // Not 200, or not XML: nothing. An unrelated-only policy: nothing.
+        assert!(crossdomain_findings(br#"HTTP/1.1 404 Not Found
+Content-Type: text/xml
+
+<cross-domain-policy><allow-access-from domain="*"/></cross-domain-policy>"#, "h", CrossDomainKind::Flash).is_empty());
+        assert!(crossdomain_findings(br#"HTTP/1.1 200 OK
+Content-Type: text/html
+
+<html>login</html>"#, "h", CrossDomainKind::Flash).is_empty());
+        assert!(crossdomain_findings(br#"HTTP/1.1 200 OK
+Content-Type: text/xml
+
+<cross-domain-policy><allow-access-from domain="unrelated.io"/></cross-domain-policy>"#, "www.example.com", CrossDomainKind::Flash).is_empty());
+
+        // Silverlight: domain uri, with an http:// prefix stripped before the
+        // comparison (Zebv.java:69-83).
+        let policy = br#"HTTP/1.1 200 OK
+Content-Type: application/xml
+
+<access-policy><cross-domain-access><policy><allow-from http-request-headers="*"><domain uri="http://example.com"/><domain uri="*"/></allow-from></policy></cross-domain-access></access-policy>"#;
+        let found = crossdomain_findings(policy, "www.example.com", CrossDomainKind::Silverlight);
+        assert_eq!(found, ["example.com", "*"]);
+    }
 
     /// Second review, finding 18: Zrbl.Zh sets 64 for non-sensitive types.
     #[test]
