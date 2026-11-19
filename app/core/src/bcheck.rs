@@ -90,6 +90,8 @@ pub enum Value {
 pub struct VarDecl {
     pub name: String,
     pub values: Vec<Value>,
+    /// Source line of the declaration, for validation messages.
+    pub line: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -120,6 +122,8 @@ pub enum RequestMod {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct IssueFields {
+    /// Source line of the `report issue` statement, for validation messages.
+    pub line: usize,
     pub name: Option<Value>,
     pub severity: Value,
     pub confidence: Value,
@@ -135,9 +139,16 @@ pub enum Stmt {
         name: Option<String>,
         raw: Option<Value>,
         mods: Vec<RequestMod>,
+        /// Source line of the statement, for validation messages.
+        line: usize,
     },
     /// `send payload [called x]:` with appending/replacing entries.
-    SendPayload { name: Option<String>, ops: Vec<(ModMode, Value)> },
+    SendPayload {
+        name: Option<String>,
+        ops: Vec<(ModMode, Value)>,
+        /// Source line of the statement, for validation messages.
+        line: usize,
+    },
     ReportIssue { and_continue: bool, fields: IssueFields },
     /// If/else-if/else chain. The condition is `None` for the final `else`.
     If {
@@ -365,20 +376,10 @@ fn parse_interpol(raw: &str, interpolatable: bool, line: usize) -> Result<Interp
         if c == '\\' {
             match chars.next() {
                 Some(next) => {
-                    let decoded = if interpolatable {
-                        match next {
-                            'n' => "\n".to_string(),
-                            'r' => "\r".to_string(),
-                            's' => " ".to_string(),
-                            't' => "\t".to_string(),
-                            'b' => "\u{8}".to_string(),
-                            'f' => "\u{c}".to_string(),
-                            other => other.to_string(),
-                        }
-                    } else {
-                        next.to_string()
-                    };
-                    text.push_str(&decoded);
+                    // The reference's only escape rule ("use \ to escape
+                    // characters", e.g. `\{`) takes the escaped character
+                    // verbatim; both string kinds do the same.
+                    text.push(next);
                 }
                 None => text.push('\\'),
             }
@@ -414,14 +415,11 @@ fn parse_hole(
     while let Some(c) = chars.next() {
         match c {
             '\\' => {
-                // keep escapes verbatim for the sub-lexer
-                depth_toks.push(Lexed { tok: Tok::Ident("\\".to_string()), line });
-                if let Some(n) = chars.next() {
-                    depth_toks.push(Lexed {
-                        tok: Tok::Ident(n.to_string()),
-                        line,
-                    });
-                }
+                // An escape outside a nested string is not valid expression
+                // syntax; keep it as ONE token so it surfaces as a single
+                // unknown variable at evaluation instead of two bogus refs.
+                let escaped = chars.next().map(|n| format!("\\{n}")).unwrap_or_else(|| "\\".to_string());
+                depth_toks.push(Lexed { tok: Tok::Ident(escaped), line });
             }
             '{' => {
                 depth += 1;
@@ -528,7 +526,9 @@ impl<'a> HoleParser<'a> {
                 if name == "null" {
                     return Ok(Expr::Null);
                 }
-                if let Some(n) = name.parse::<i64>().ok().filter(|_| name.chars().next().unwrap().is_ascii_digit()) {
+                let is_int_literal = name.chars().next().unwrap().is_ascii_digit()
+                    || (name.len() > 1 && name.starts_with('-') && name[1..].chars().next().unwrap().is_ascii_digit());
+                if let Some(n) = name.parse::<i64>().ok().filter(|_| is_int_literal) {
                     return Ok(Expr::Int(n));
                 }
                 match self.peek() {
@@ -754,6 +754,7 @@ impl Parser {
             if !is_decl {
                 break;
             }
+            let decl_line = self.line();
             let name = self.ident()?;
             self.expect(Tok::Eq)?;
             self.skip_newlines();
@@ -782,7 +783,7 @@ impl Parser {
                     values.push(self.value()?);
                 }
             }
-            decls.push(VarDecl { name, values });
+            decls.push(VarDecl { name, values, line: decl_line });
         }
         Ok(decls)
     }
@@ -923,6 +924,7 @@ impl Parser {
     }
 
     fn send_stmt(&mut self) -> Result<Stmt, BcheckError> {
+        let stmt_line = self.line();
         self.expect_ident("send")?;
         let kind = self.ident()?;
         let mut name = None;
@@ -943,10 +945,10 @@ impl Parser {
                 // followed by `:` is a headers pair, i.e. modifications.
                 if matches!(self.peek(), Some(Tok::Str { .. })) && !self.str_is_pair_key() {
                     let raw = self.value()?;
-                    return Ok(Stmt::SendRequest { name, raw: Some(raw), mods: Vec::new() });
+                    return Ok(Stmt::SendRequest { name, raw: Some(raw), mods: Vec::new(), line: stmt_line });
                 }
                 let mods = self.request_mods()?;
-                Ok(Stmt::SendRequest { name, raw: None, mods })
+                Ok(Stmt::SendRequest { name, raw: None, mods, line: stmt_line })
             }
             "payload" => {
                 let mut ops = Vec::new();
@@ -964,7 +966,7 @@ impl Parser {
                 if ops.is_empty() {
                     return self.err("`send payload` needs an `appending:` or `replacing:` entry");
                 }
-                Ok(Stmt::SendPayload { name, ops })
+                Ok(Stmt::SendPayload { name, ops, line: stmt_line })
             }
             other => self.err(format!("expected `request` or `payload` after `send`, got `{other}`")),
         }
@@ -1127,6 +1129,7 @@ impl Parser {
     }
 
     fn report_stmt(&mut self) -> Result<Stmt, BcheckError> {
+        let stmt_line = self.line();
         self.expect_ident("report")?;
         self.expect_ident("issue")?;
         let mut and_continue = false;
@@ -1176,7 +1179,7 @@ impl Parser {
         })?;
         Ok(Stmt::ReportIssue {
             and_continue,
-            fields: IssueFields { name, severity, confidence, remediation, detail },
+            fields: IssueFields { line: stmt_line, name, severity, confidence, remediation, detail },
         })
     }
 
@@ -1397,11 +1400,25 @@ const FUNCTIONS: &[&str] = &[
 const SEVERITIES: &[&str] = &["info", "low", "medium", "high"];
 const CONFIDENCES: &[&str] = &["certain", "firm", "tentative"];
 
+/// The text of a Value written as one literal: a bare ident or a quoted
+/// string with no holes (interpolated values are resolved at run time and
+/// cannot be validated here).
+fn literal_text(v: &Value) -> Option<String> {
+    match v {
+        Value::Ident(s) => Some(s.clone()),
+        Value::Str(i) if i.parts.len() == 1 => match &i.parts[0] {
+            Part::Text(t) => Some(t.clone()),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 pub fn validate(d: &Definition) -> Result<(), Vec<BcheckError>> {
     let mut errs = Vec::new();
     if d.metadata.language != "v2-beta" {
         errs.push(BcheckError {
-            line: 0,
+            line: 1,
             message: format!(
                 "metadata language must be `v2-beta`, got `{}`",
                 d.metadata.language
@@ -1409,12 +1426,12 @@ pub fn validate(d: &Definition) -> Result<(), Vec<BcheckError>> {
         });
     }
     if d.metadata.name.is_empty() {
-        errs.push(BcheckError { line: 0, message: "metadata requires a name".into() });
+        errs.push(BcheckError { line: 1, message: "metadata requires a name".into() });
     }
     for decl in d.run_for_each.iter().chain(d.define.iter()) {
         if RESERVED_VARS.contains(&decl.name.as_str()) || FUNCTIONS.contains(&decl.name.as_str()) {
             errs.push(BcheckError {
-                line: 0,
+                line: decl.line,
                 message: format!("variable name `{}` is reserved", decl.name),
             });
         }
@@ -1423,35 +1440,36 @@ pub fn validate(d: &Definition) -> Result<(), Vec<BcheckError>> {
     fn check_stmts(stmts: &[Stmt], given: &GivenMode, errs: &mut Vec<BcheckError>) {
         for s in stmts {
             match s {
-                Stmt::SendRequest { .. } => {
+                Stmt::SendRequest { line, .. } => {
                     if matches!(given, GivenMode::Response) {
                         errs.push(BcheckError {
-                            line: 0,
+                            line: *line,
                             message: "`send request` is not allowed under `given response`".into(),
                         });
                     }
                 }
-                Stmt::SendPayload { .. } => {
+                Stmt::SendPayload { line, .. } => {
                     if !given.is_insertion_point() {
                         errs.push(BcheckError {
-                            line: 0,
+                            line: *line,
                             message: "`send payload` requires an insertion-point check".into(),
                         });
                     }
                 }
                 Stmt::ReportIssue { fields, .. } => {
-                    if let Value::Ident(sev) = &fields.severity {
+                    // bare and single-literal quoted spellings both checked
+                    if let Some(sev) = literal_text(&fields.severity) {
                         if !SEVERITIES.contains(&sev.as_str()) {
                             errs.push(BcheckError {
-                                line: 0,
+                                line: fields.line,
                                 message: format!("bad severity `{sev}`"),
                             });
                         }
                     }
-                    if let Value::Ident(cf) = &fields.confidence {
+                    if let Some(cf) = literal_text(&fields.confidence) {
                         if !CONFIDENCES.contains(&cf.as_str()) {
                             errs.push(BcheckError {
-                                line: 0,
+                                line: fields.line,
                                 message: format!("bad confidence `{cf}`"),
                             });
                         }
@@ -1508,7 +1526,7 @@ mod tests {
         // body: send request called check + if
         assert_eq!(d.body.len(), 2);
         match &d.body[0] {
-            Stmt::SendRequest { name, mods, raw } => {
+            Stmt::SendRequest { name, mods, raw, .. } => {
                 assert_eq!(name.as_deref(), Some("check"));
                 assert!(raw.is_none());
                 assert_eq!(mods.len(), 2);
@@ -1693,6 +1711,38 @@ mod tests {
     }
 
     #[test]
+    fn validation_reports_real_lines_and_quoted_enums() {
+        // quoted severity/confidence spellings are validated like bare ones
+        let src = "metadata:\n language: v2-beta\n name: \"x\"\ngiven host then\n report issue:\n  severity: \"hihg\"\n  confidence: certain\n";
+        let errs = parse(src).unwrap_err();
+        assert!(errs.iter().any(|e| e.message.contains("bad severity") && e.line == 5), "{errs:?}");
+        // a bad confidence on its own line reports that line
+        let src = "metadata:\n language: v2-beta\n name: \"x\"\ngiven host then\n report issue:\n  severity: low\n  confidence: \"sure\"\n";
+        let errs = parse(src).unwrap_err();
+        assert!(errs.iter().any(|e| e.message.contains("bad confidence") && e.line == 5), "{errs:?}");
+        // send payload under the wrong given reports the statement's line
+        let src = "metadata:\n language: v2-beta\n name: \"x\"\ngiven host then\n send payload:\n  appending: \"x\"\n";
+        let errs = parse(src).unwrap_err();
+        assert!(errs.iter().any(|e| e.message.contains("insertion-point") && e.line == 5), "{errs:?}");
+        // reserved variable names report the declaration's line
+        let src = "metadata:\n language: v2-beta\n name: \"x\"\ndefine:\n base64_encode = \"x\"\ngiven host then\n report issue:\n  severity: low\n  confidence: firm\n";
+        let errs = parse(src).unwrap_err();
+        assert!(errs.iter().any(|e| e.message.contains("reserved") && e.line == 5), "{errs:?}");
+    }
+
+    fn negative_integers_and_verbatim_escapes() {
+        // a negative integer in a hole is an Int, not a variable reference
+        let i = parse_interpol("{random_str(-10)}", true, 1).unwrap();
+        match &i.parts[0] {
+            Part::Hole(Expr::Call { args, .. }) => assert_eq!(args[0], Expr::Int(-10)),
+            other => panic!("expected a call, got {other:?}"),
+        }
+        // escapes take the escaped character verbatim in both string kinds:
+        // `\n` stays backslash-n's tail `n`, as the reference's `\{` rule reads
+        let i = parse_interpol("a\\nb", true, 1).unwrap();
+        assert!(matches!(&i.parts[0], Part::Text(t) if t == "anb"));
+    }
+
     fn validation_rejects_bad_definitions() {
         // wrong language
         let src = "metadata:\n language: v1\n name: \"x\"\ngiven host then\n report issue:\n  severity: info\n  confidence: certain\n";
