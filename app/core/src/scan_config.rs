@@ -2,6 +2,88 @@
 //! types they attack (Burp's scan configuration "Issues reported" and
 //! "Insertion point types" sections). Everything is on by default.
 
+/// Scanner configuration (J-01). Defaults are Shared's startup values
+/// (AuditDefaults.json scan_speed / scan_accuracy "normal").
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ProjectScanner {
+    /// 0 fast, 1 normal, 2 thorough.
+    #[serde(default = "one_u8")]
+    pub speed: u8,
+    /// 0 minimise false negatives, 1 normal, 2 minimise false positives.
+    #[serde(default = "one_u8")]
+    pub accuracy: u8,
+    #[serde(default)]
+    pub extra_checks: bool,
+    /// Check ids switched off in the scan configuration.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub disabled_checks: Vec<String>,
+    /// Insertion point types switched off.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub disabled_insertion_points: Vec<String>,
+    /// Crawl limits (absent: Burp's defaults).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crawl_max_depth: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crawl_max_locations: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crawl_robots: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crawl_sitemap: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crawl_engine: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crawl_max_minutes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crawl_max_requests: Option<usize>,
+    /// R-11: Burp's scanner.issues_reported object when the issue
+    /// selection is not "everything" (absent in older projects).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub issues_reported: Option<serde_json::Value>,
+    /// R-11: the project's scan configuration library entries (Burp JSON,
+    /// unknown keys kept).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub library: Vec<ProjectLibraryConfig>,
+    /// R-11: the library configurations last chosen at scan launch, in
+    /// order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub library_selection: Vec<String>,
+}
+
+/// One project library entry: its name and Burp's JSON for it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ProjectLibraryConfig {
+    pub name: String,
+    pub config: serde_json::Value,
+}
+
+fn one_u8() -> u8 {
+    1
+}
+
+impl Default for ProjectScanner {
+    fn default() -> Self {
+        Self {
+            speed: 1,
+            accuracy: 1,
+            extra_checks: false,
+            disabled_checks: Vec::new(),
+            disabled_insertion_points: Vec::new(),
+            crawl_max_depth: None,
+            crawl_max_locations: None,
+            crawl_robots: None,
+            crawl_sitemap: None,
+            crawl_engine: None,
+            crawl_max_minutes: None,
+            crawl_max_requests: None,
+            issues_reported: None,
+            library: Vec::new(),
+            library_selection: Vec::new(),
+        }
+    }
+}
+
 /// The live scan configuration a `Shared` carries (stored in
 /// `Shared::tool_state` so net does not name this type). The returned guard
 /// shares one mutex across all callers, as the old `Shared::scan_config`
@@ -119,7 +201,7 @@ impl ScanConfig {
     /// or insertion type added later loads switched on; crawl limits out of
     /// range are clamped (depth 1..=50, locations 1..=100000) and missing
     /// ones take Burp's defaults.
-    pub fn from_saved(s: &crate::project::ProjectScanner) -> Self {
+    pub fn from_saved(s: &ProjectScanner) -> Self {
         let d = CrawlLimits::default();
         ScanConfig {
             disabled_checks: s.disabled_checks.iter().cloned().collect(),
@@ -145,7 +227,7 @@ impl ScanConfig {
     }
 
     /// Write this configuration into a project's scanner section.
-    pub fn save_into(&self, s: &mut crate::project::ProjectScanner) {
+    pub fn save_into(&self, s: &mut ProjectScanner) {
         s.disabled_checks = self.disabled_checks.iter().cloned().collect();
         s.disabled_insertion_points = self.disabled_insertion.iter().cloned().collect();
         s.crawl_max_depth = Some(self.crawl.max_depth);
@@ -168,7 +250,7 @@ impl ScanConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::project::ProjectScanner;
+    use ProjectScanner;
 
     #[test]
     fn round_trips_through_a_project_file() {

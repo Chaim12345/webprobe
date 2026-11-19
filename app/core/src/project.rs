@@ -12,6 +12,7 @@
 //! file in the same directory. A serialization or write failure therefore
 //! never truncates an existing project file.
 
+pub use crate::scan_config::{ProjectLibraryConfig, ProjectScanner};
 use std::io::Write;
 
 /// Errors from project save/load, one enum for the project area (issue #34).
@@ -708,88 +709,8 @@ impl Default for Appearance {
     }
 }
 
-/// Scanner configuration (J-01). Defaults are Shared's startup values
-/// (AuditDefaults.json scan_speed / scan_accuracy "normal").
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct ProjectScanner {
-    /// 0 fast, 1 normal, 2 thorough.
-    #[serde(default = "one_u8")]
-    pub speed: u8,
-    /// 0 minimise false negatives, 1 normal, 2 minimise false positives.
-    #[serde(default = "one_u8")]
-    pub accuracy: u8,
-    #[serde(default)]
-    pub extra_checks: bool,
-    /// Check ids switched off in the scan configuration.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub disabled_checks: Vec<String>,
-    /// Insertion point types switched off.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub disabled_insertion_points: Vec<String>,
-    /// Crawl limits (absent: Burp's defaults).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub crawl_max_depth: Option<usize>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub crawl_max_locations: Option<usize>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub crawl_robots: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub crawl_sitemap: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub crawl_engine: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub crawl_max_minutes: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub crawl_max_requests: Option<usize>,
-    /// R-11: Burp's scanner.issues_reported object when the issue
-    /// selection is not "everything" (absent in older projects).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub issues_reported: Option<serde_json::Value>,
-    /// R-11: the project's scan configuration library entries (Burp JSON,
-    /// unknown keys kept).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub library: Vec<ProjectLibraryConfig>,
-    /// R-11: the library configurations last chosen at scan launch, in
-    /// order.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub library_selection: Vec<String>,
-}
-
-/// One project library entry: its name and Burp's JSON for it.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct ProjectLibraryConfig {
-    pub name: String,
-    pub config: serde_json::Value,
-}
-
-fn one_u8() -> u8 {
-    1
-}
-
 fn yes() -> bool {
     true
-}
-
-impl Default for ProjectScanner {
-    fn default() -> Self {
-        Self {
-            speed: 1,
-            accuracy: 1,
-            extra_checks: false,
-            disabled_checks: Vec::new(),
-            disabled_insertion_points: Vec::new(),
-            crawl_max_depth: None,
-            crawl_max_locations: None,
-            crawl_robots: None,
-            crawl_sitemap: None,
-            crawl_engine: None,
-            crawl_max_minutes: None,
-            crawl_max_requests: None,
-            issues_reported: None,
-            library: Vec::new(),
-            library_selection: Vec::new(),
-        }
-    }
 }
 
 /// One extra proxy listener (the primary one is `listener_port`).
@@ -1307,7 +1228,9 @@ impl ProjectIssue {
                 .evidence
                 .iter()
                 .filter_map(|e| e.decode())
-                .map(|(req, resp)| webprobe_support::issues::ScanEvidence::new(&req, resp.as_deref()))
+                .map(|(req, resp)| {
+                    webprobe_support::issues::ScanEvidence::new(&req, resp.as_deref())
+                })
                 .collect(),
             ident: self.ident.clone(),
         }
