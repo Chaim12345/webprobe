@@ -15,7 +15,7 @@ pub(crate) mod active_checks;
 
 /// The active-scan check interface (`PointCheck`, `RequestCheck`), the check
 /// registries and the scan context `start_active_scan` drives them with.
-#[path = "scan_checks.rs"]
+#[path = "scan_checks/mod.rs"]
 pub(crate) mod checks;
 
 /// Insertion points: Burp's point types, builder, vetoes, payload placement
