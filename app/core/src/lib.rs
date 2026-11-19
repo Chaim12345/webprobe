@@ -51,6 +51,8 @@ pub mod stored;
 #[cfg(test)]
 mod streaming_tests;
 pub mod tasks;
+pub mod tls;
+pub mod tls_cert;
 pub mod upstream;
 mod util_tests;
 pub mod ws_history;

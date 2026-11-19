@@ -677,3 +677,62 @@ impl RequestCheck for React2Shell {
     }
 }
 
+/// TLS certificate (per host), burp.Zut6's TLS half (G.13, KB 01000100):
+/// the chain captured on the host's TLS handshake is analyzed for
+/// hostname mismatch, validity dates and trust. Registered alongside
+/// Robots (Zcug.java:96-116); Burp reports through the shared
+/// Robots/TLS exchange, WebProbe captures with a recording verifier.
+pub(crate) struct TlsCertificate;
+
+impl RequestCheck for TlsCertificate {
+    fn id(&self) -> &'static str {
+        "active.tls-certificate"
+    }
+    fn issue(&self) -> &'static str {
+        "TLS certificate"
+    }
+    fn scope(&self) -> Scope {
+        Scope::Host
+    }
+    fn group(&self) -> Option<&'static str> {
+        Some(BURP_GROUP)
+    }
+    fn run(&self, cx: &ScanCtx) {
+        let (scheme, _) = origin_of(cx);
+        if scheme != "https" {
+            return;
+        }
+        let key = format!("https://{}:{}|tls-cert", cx.host, cx.port);
+        if !openapi_hosts().lock().unwrap().insert(key) || cx.stopped() {
+            return;
+        }
+        let roots = cx.shared.tls_roots.lock().unwrap().clone();
+        let Some(cap) = crate::tls_cert::capture(&cx.host, cx.port, &roots, std::time::Duration::from_secs(10)) else { return };
+        let flags = crate::tls_cert::analyze(&cap, &cx.host, std::time::SystemTime::now());
+        if flags.is_empty() {
+            return;
+        }
+        use crate::tls_cert::CertFlag as F;
+        let mut problems = Vec::new();
+        if flags.contains(&F::HostnameMismatch) {
+            problems.push("is not valid for this hostname");
+        }
+        if flags.contains(&F::Untrusted) {
+            problems.push("is not issued by a trusted authority");
+        }
+        if flags.contains(&F::NotYetValid) {
+            problems.push("is not yet valid");
+        }
+        if flags.contains(&F::Expired) {
+            problems.push("has expired");
+        }
+        let summary = crate::tls_cert::leaf_summary(&cap);
+        let error = cap.verify_error.as_deref().map(|e| format!(" Verification failed: {e}.")).unwrap_or_default();
+        let desc = format!("{} The certificate {}.{error} Clients cannot rely on the server's identity or on the protection of data in transit.", summary, problems.join(" and "));
+        let e = cx.entry.clone();
+        let mut i = mk(crate::tls_cert::severity(&flags), self.issue(), &e, desc);
+        i.confidence = "Certain".into();
+        cx.report(vec![i]);
+    }
+}
+
