@@ -23,9 +23,11 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::client::WebPkiServerVerifier;
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
-use rustls::{ClientConfig, ClientConnection, DigitallySignedStruct, RootCertStore, SignatureScheme};
-use x509_parser::prelude::X509Certificate;
+use rustls::{
+    ClientConfig, ClientConnection, DigitallySignedStruct, RootCertStore, SignatureScheme,
+};
 use x509_parser::parse_x509_certificate;
+use x509_parser::prelude::X509Certificate;
 
 /// How the delegated verification of a captured chain ended.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -63,10 +65,21 @@ enum InnerVerifier {
 }
 
 impl InnerVerifier {
-    fn verify(&self, end_entity: &CertificateDer<'_>, intermediates: &[CertificateDer<'_>], server_name: &ServerName<'_>, ocsp_response: &[u8], now: UnixTime) -> Result<ServerCertVerified, rustls::Error> {
+    fn verify(
+        &self,
+        end_entity: &CertificateDer<'_>,
+        intermediates: &[CertificateDer<'_>],
+        server_name: &ServerName<'_>,
+        ocsp_response: &[u8],
+        now: UnixTime,
+    ) -> Result<ServerCertVerified, rustls::Error> {
         match self {
-            InnerVerifier::Webpki(v) => v.verify_server_cert(end_entity, intermediates, server_name, ocsp_response, now),
-            InnerVerifier::RejectAll => Err(rustls::Error::InvalidCertificate(rustls::CertificateError::UnknownIssuer)),
+            InnerVerifier::Webpki(v) => {
+                v.verify_server_cert(end_entity, intermediates, server_name, ocsp_response, now)
+            }
+            InnerVerifier::RejectAll => Err(rustls::Error::InvalidCertificate(
+                rustls::CertificateError::UnknownIssuer,
+            )),
         }
     }
 }
@@ -80,8 +93,12 @@ struct RecordingVerifier {
 fn classify(error: &rustls::Error) -> VerifyKind {
     use rustls::CertificateError as Ce;
     match error {
-        rustls::Error::InvalidCertificate(Ce::NotValidForName) | rustls::Error::InvalidCertificate(Ce::NotValidForNameContext { .. }) => VerifyKind::Hostname,
-        rustls::Error::InvalidCertificate(Ce::Expired) | rustls::Error::InvalidCertificate(Ce::NotValidYet) => VerifyKind::Validity,
+        rustls::Error::InvalidCertificate(Ce::NotValidForName)
+        | rustls::Error::InvalidCertificate(Ce::NotValidForNameContext { .. }) => {
+            VerifyKind::Hostname
+        }
+        rustls::Error::InvalidCertificate(Ce::Expired)
+        | rustls::Error::InvalidCertificate(Ce::NotValidYet) => VerifyKind::Validity,
         _ => VerifyKind::Trust,
     }
 }
@@ -97,7 +114,9 @@ impl ServerCertVerifier for RecordingVerifier {
     ) -> Result<ServerCertVerified, rustls::Error> {
         let mut chain = vec![end_entity.as_ref().to_vec()];
         chain.extend(intermediates.iter().map(|c| c.as_ref().to_vec()));
-        let result = self.inner.verify(end_entity, intermediates, server_name, ocsp_response, now);
+        let result = self
+            .inner
+            .verify(end_entity, intermediates, server_name, ocsp_response, now);
         let mut seen = self.seen.lock().unwrap();
         seen.chain = chain;
         if let Err(e) = &result {
@@ -107,17 +126,31 @@ impl ServerCertVerifier for RecordingVerifier {
         result
     }
 
-    fn verify_tls12_signature(&self, message: &[u8], cert: &CertificateDer<'_>, dss: &DigitallySignedStruct) -> Result<HandshakeSignatureValid, rustls::Error> {
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
         match &self.inner {
             InnerVerifier::Webpki(v) => v.verify_tls12_signature(message, cert, dss),
-            InnerVerifier::RejectAll => Err(rustls::Error::General("no trust anchors configured".into())),
+            InnerVerifier::RejectAll => {
+                Err(rustls::Error::General("no trust anchors configured".into()))
+            }
         }
     }
 
-    fn verify_tls13_signature(&self, message: &[u8], cert: &CertificateDer<'_>, dss: &DigitallySignedStruct) -> Result<HandshakeSignatureValid, rustls::Error> {
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
         match &self.inner {
             InnerVerifier::Webpki(v) => v.verify_tls13_signature(message, cert, dss),
-            InnerVerifier::RejectAll => Err(rustls::Error::General("no trust anchors configured".into())),
+            InnerVerifier::RejectAll => {
+                Err(rustls::Error::General("no trust anchors configured".into()))
+            }
         }
     }
 
@@ -145,14 +178,30 @@ impl ServerCertVerifier for RecordingVerifier {
 /// The handshake's own outcome is discarded: a failed verification is the
 /// interesting case, and the chain is captured either way. Returns None
 /// when no TLS handshake happened at all (connection refused, reset).
-pub fn capture(host: &str, port: u16, roots: &RootCertStore, timeout: Duration) -> Option<TlsCapture> {
+pub fn capture(
+    host: &str,
+    port: u16,
+    roots: &RootCertStore,
+    timeout: Duration,
+) -> Option<TlsCapture> {
     let seen: Arc<Mutex<TlsCapture>> = Arc::new(Mutex::new(TlsCapture::default()));
-    let inner = match WebPkiServerVerifier::builder_with_provider(Arc::new(roots.clone()), rustls::crypto::ring::default_provider().into()).build() {
+    let inner = match WebPkiServerVerifier::builder_with_provider(
+        Arc::new(roots.clone()),
+        rustls::crypto::ring::default_provider().into(),
+    )
+    .build()
+    {
         Ok(v) => InnerVerifier::Webpki(v),
         Err(_) => InnerVerifier::RejectAll,
     };
-    let verifier = RecordingVerifier { inner, seen: seen.clone() };
-    let config = ClientConfig::builder().dangerous().with_custom_certificate_verifier(Arc::new(verifier)).with_no_client_auth();
+    let verifier = RecordingVerifier {
+        inner,
+        seen: seen.clone(),
+    };
+    let config = ClientConfig::builder()
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(verifier))
+        .with_no_client_auth();
     let name = ServerName::try_from(host.to_string()).ok()?;
     let mut conn = ClientConnection::new(Arc::new(config), name).ok()?;
     // Try each resolved address: a name can map to families the server
@@ -184,7 +233,12 @@ fn pattern_matches(pattern: &str, host: &str) -> bool {
     let host = host.to_ascii_lowercase();
     if let Some(suffix) = pattern.strip_prefix("*.") {
         // The host must be exactly one label longer than the suffix.
-        return host.len() > suffix.len() + 1 && host.ends_with(&suffix) && host[..host.len() - suffix.len() - 1].bytes().all(|b| b != b'.') && host.as_bytes()[host.len() - suffix.len() - 1] == b'.';
+        return host.len() > suffix.len() + 1
+            && host.ends_with(&suffix)
+            && host[..host.len() - suffix.len() - 1]
+                .bytes()
+                .all(|b| b != b'.')
+            && host.as_bytes()[host.len() - suffix.len() - 1] == b'.';
     }
     pattern == host
 }
@@ -237,7 +291,10 @@ pub fn analyze(capture: &TlsCapture, host: &str, now: SystemTime) -> Vec<CertFla
     if let Some(leaf) = capture.chain.first() {
         if let Ok((_, cert)) = parse_x509_certificate(leaf) {
             parsed = true;
-            let ts = now.duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
+            let ts = now
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(0);
             let validity = cert.validity();
             if validity.not_before.timestamp() > ts {
                 push(CertFlag::NotYetValid);
@@ -265,7 +322,10 @@ pub fn analyze(capture: &TlsCapture, host: &str, now: SystemTime) -> Vec<CertFla
 /// The report's severity: High for hostname/trust failures, Medium for
 /// validity dates (Zp64's 3 and 2; the KB's typical severity is Medium).
 pub fn severity(flags: &[CertFlag]) -> &'static str {
-    if flags.iter().any(|f| matches!(f, CertFlag::HostnameMismatch | CertFlag::Untrusted)) {
+    if flags
+        .iter()
+        .any(|f| matches!(f, CertFlag::HostnameMismatch | CertFlag::Untrusted))
+    {
         "high"
     } else {
         "medium"
@@ -274,8 +334,12 @@ pub fn severity(flags: &[CertFlag]) -> &'static str {
 
 /// A short human summary of the leaf certificate for the issue detail.
 pub fn leaf_summary(capture: &TlsCapture) -> String {
-    let Some(leaf) = capture.chain.first() else { return String::new() };
-    let Ok((_, cert)) = parse_x509_certificate(leaf) else { return String::new() };
+    let Some(leaf) = capture.chain.first() else {
+        return String::new();
+    };
+    let Ok((_, cert)) = parse_x509_certificate(leaf) else {
+        return String::new();
+    };
     format!(
         "The certificate presented for this site is issued to {}, signed by {}, valid from {} to {}.",
         cert.subject(),
@@ -294,7 +358,9 @@ mod tests {
     use std::net::TcpListener;
 
     fn leaf_der(sans: &[&str], not_before: (i32, u8, u8), not_after: (i32, u8, u8)) -> Vec<u8> {
-        let mut params = CertificateParams::new(sans.iter().map(|s| s.to_string()).collect::<Vec<String>>()).unwrap();
+        let mut params =
+            CertificateParams::new(sans.iter().map(|s| s.to_string()).collect::<Vec<String>>())
+                .unwrap();
         params.not_before = rcgen::date_time_ymd(not_before.0, not_before.1, not_before.2);
         params.not_after = rcgen::date_time_ymd(not_after.0, not_after.1, not_after.2);
         let key = KeyPair::generate().unwrap();
@@ -305,7 +371,10 @@ mod tests {
     fn ip_literal_host_matches_ip_san() {
         // a cert carrying the target as an IP SAN (plus unrelated DNS names)
         // is not a hostname mismatch for that IP target
-        let cap = cap_for(leaf_der(&["example.com", "10.0.0.9"], (2020, 1, 1), (2030, 1, 1)), None);
+        let cap = cap_for(
+            leaf_der(&["example.com", "10.0.0.9"], (2020, 1, 1), (2030, 1, 1)),
+            None,
+        );
         assert!(analyze(&cap, "10.0.0.9", SystemTime::now()).is_empty());
         // ...but a different IP still mismatches
         let flags = analyze(&cap, "10.0.0.10", SystemTime::now());
@@ -313,7 +382,11 @@ mod tests {
     }
 
     fn cap_for(der: Vec<u8>, kind: Option<VerifyKind>) -> TlsCapture {
-        TlsCapture { chain: vec![der], verify_error: kind.map(|k| format!("{k:?}")), error_kind: kind }
+        TlsCapture {
+            chain: vec![der],
+            verify_error: kind.map(|k| format!("{k:?}")),
+            error_kind: kind,
+        }
     }
 
     #[test]
@@ -325,29 +398,56 @@ mod tests {
     #[test]
     fn expired_and_not_yet_valid_are_flagged() {
         let cap = cap_for(leaf_der(&["example.com"], (2020, 1, 1), (2021, 1, 1)), None);
-        assert_eq!(analyze(&cap, "example.com", SystemTime::now()), vec![CertFlag::Expired]);
+        assert_eq!(
+            analyze(&cap, "example.com", SystemTime::now()),
+            vec![CertFlag::Expired]
+        );
         let cap = cap_for(leaf_der(&["example.com"], (2030, 1, 1), (2031, 1, 1)), None);
-        assert_eq!(analyze(&cap, "example.com", SystemTime::now()), vec![CertFlag::NotYetValid]);
+        assert_eq!(
+            analyze(&cap, "example.com", SystemTime::now()),
+            vec![CertFlag::NotYetValid]
+        );
     }
 
     #[test]
     fn hostname_matching_covers_wildcards_and_cn_fallback() {
         // Wildcard covers exactly one label, not the apex and not two.
-        let cap = cap_for(leaf_der(&["*.example.com"], (2020, 1, 1), (2030, 1, 1)), None);
+        let cap = cap_for(
+            leaf_der(&["*.example.com"], (2020, 1, 1), (2030, 1, 1)),
+            None,
+        );
         assert!(analyze(&cap, "www.example.com", SystemTime::now()).is_empty());
-        assert!(analyze(&cap, "example.com", SystemTime::now()).contains(&CertFlag::HostnameMismatch));
-        assert!(analyze(&cap, "a.b.example.com", SystemTime::now()).contains(&CertFlag::HostnameMismatch));
+        assert!(
+            analyze(&cap, "example.com", SystemTime::now()).contains(&CertFlag::HostnameMismatch)
+        );
+        assert!(analyze(&cap, "a.b.example.com", SystemTime::now())
+            .contains(&CertFlag::HostnameMismatch));
         // A plain mismatch, case-insensitive both ways.
         let cap = cap_for(leaf_der(&["Other.COM"], (2020, 1, 1), (2030, 1, 1)), None);
-        assert_eq!(analyze(&cap, "example.com", SystemTime::now()), vec![CertFlag::HostnameMismatch]);
+        assert_eq!(
+            analyze(&cap, "example.com", SystemTime::now()),
+            vec![CertFlag::HostnameMismatch]
+        );
     }
 
     #[test]
     fn verifier_kinds_fill_in_and_dedup() {
-        let cap = cap_for(leaf_der(&["other.com"], (2020, 1, 1), (2030, 1, 1)), Some(VerifyKind::Hostname));
-        assert_eq!(analyze(&cap, "example.com", SystemTime::now()), vec![CertFlag::HostnameMismatch]);
-        let cap = cap_for(leaf_der(&["example.com"], (2020, 1, 1), (2030, 1, 1)), Some(VerifyKind::Trust));
-        assert_eq!(analyze(&cap, "example.com", SystemTime::now()), vec![CertFlag::Untrusted]);
+        let cap = cap_for(
+            leaf_der(&["other.com"], (2020, 1, 1), (2030, 1, 1)),
+            Some(VerifyKind::Hostname),
+        );
+        assert_eq!(
+            analyze(&cap, "example.com", SystemTime::now()),
+            vec![CertFlag::HostnameMismatch]
+        );
+        let cap = cap_for(
+            leaf_der(&["example.com"], (2020, 1, 1), (2030, 1, 1)),
+            Some(VerifyKind::Trust),
+        );
+        assert_eq!(
+            analyze(&cap, "example.com", SystemTime::now()),
+            vec![CertFlag::Untrusted]
+        );
     }
 
     /// A capture against a local TLS server with a self-signed
@@ -355,11 +455,15 @@ mod tests {
     /// certificate untrusted.
     #[test]
     fn capture_records_the_chain_through_a_failing_handshake() {
-        let CertifiedKey { cert, key_pair } = rcgen::generate_simple_self_signed(["localhost".to_string()]).unwrap();
+        let CertifiedKey { cert, key_pair } =
+            rcgen::generate_simple_self_signed(["localhost".to_string()]).unwrap();
         let server_config = Arc::new(
             ServerConfig::builder()
                 .with_no_client_auth()
-                .with_single_cert(vec![cert.der().clone()], rustls::pki_types::PrivateKeyDer::Pkcs8(key_pair.serialize_der().into()))
+                .with_single_cert(
+                    vec![cert.der().clone()],
+                    rustls::pki_types::PrivateKeyDer::Pkcs8(key_pair.serialize_der().into()),
+                )
                 .unwrap(),
         );
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -370,14 +474,21 @@ mod tests {
                 let Ok(stream) = stream else { return };
                 let config = server_config.clone();
                 std::thread::spawn(move || {
-                    let mut server = StreamOwned::new(ServerConnection::new(config).unwrap(), stream);
+                    let mut server =
+                        StreamOwned::new(ServerConnection::new(config).unwrap(), stream);
                     let mut buf = [0u8; 64];
                     let _ = server.read(&mut buf);
                     let _ = server.flush();
                 });
             }
         });
-        let cap = capture("localhost", port, &RootCertStore::empty(), Duration::from_secs(10)).unwrap();
+        let cap = capture(
+            "localhost",
+            port,
+            &RootCertStore::empty(),
+            Duration::from_secs(10),
+        )
+        .unwrap();
         assert_eq!(cap.chain.len(), 1);
         assert_eq!(cap.error_kind, Some(VerifyKind::Trust));
         assert!(analyze(&cap, "localhost", SystemTime::now()).contains(&CertFlag::Untrusted));
