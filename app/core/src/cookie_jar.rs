@@ -289,7 +289,7 @@ impl CookieJar {
             .map(|(n, v)| format!("{n}={v}"))
             .collect::<Vec<_>>()
             .join("; ");
-        crate::net::replace_or_add_header(request, "Cookie", &value)
+        crate::util::replace_or_add_header(request, "Cookie", &value)
     }
 
     /// Drop cookies whose time has passed.

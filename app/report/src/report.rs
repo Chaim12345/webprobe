@@ -28,8 +28,8 @@
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 
-use crate::scan::ScanIssue;
-use crate::util::html_encode;
+use webprobe_core::scan::ScanIssue;
+use webprobe_core::util::html_encode;
 
 /// Report file type (burp.Zwiu HTML / XML).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -246,7 +246,7 @@ impl KnowledgeBase {
                 continue;
             }
             if let Some(entry) =
-                crate::util::read_text_file_capped(&p, crate::util::MAX_TEXT_FILE_BYTES)
+                webprobe_core::util::read_text_file_capped(&p, webprobe_core::util::MAX_TEXT_FILE_BYTES)
                     .ok()
                     .and_then(|t| Self::parse_entry(&t))
             {
@@ -261,8 +261,8 @@ impl KnowledgeBase {
     /// `~/.config/webprobe/KnowledgeBase/Issues`). Nothing is bundled: the
     /// texts are PortSwigger's. Without one, reports omit those sections
     /// (as Burp does for an issue with none) and the caller shows why.
-    pub fn discover_checked() -> Result<Self, crate::paths::Missing> {
-        let dir = crate::paths::knowledge_base()?;
+    pub fn discover_checked() -> Result<Self, webprobe_core::paths::Missing> {
+        let dir = webprobe_core::paths::knowledge_base()?;
         Ok(Self::load_dir(&dir))
     }
 
@@ -344,7 +344,7 @@ impl ReportIssue {
 /// Origin and IP still come from that history entry.
 pub fn build_report_issues(
     issues: &[ScanIssue],
-    history: &[crate::net::HistEntry],
+    history: &[webprobe_core::net::HistEntry],
     kb: &KnowledgeBase,
 ) -> Vec<ReportIssue> {
     issues
@@ -355,7 +355,7 @@ pub fn build_report_issues(
                 .filter(|e| e.host == i.host && e.path.split('?').next().unwrap_or("") == i.path)
                 .max_by_key(|e| e.id);
             let origin = ev
-                .map(crate::net::history_host)
+                .map(webprobe_core::net::history_host)
                 .unwrap_or_else(|| format!("http://{}", i.host));
             let k = kb.lookup(&i.name);
             ReportIssue {
@@ -667,7 +667,7 @@ pub fn xml_report(issues: &[ReportIssue], o: &ReportOptions, export_time: &str) 
                 let r = limited(r, o.request_limit);
                 let method = xml_text(&ev.method);
                 if o.base64 {
-                    let b = crate::util::b64_encode(r);
+                    let b = webprobe_core::util::b64_encode(r);
                     xml_cdata_element(
                         &mut out,
                         i3,
@@ -688,7 +688,7 @@ pub fn xml_report(issues: &[ReportIssue], o: &ReportOptions, export_time: &str) 
             if let Some(r) = resp {
                 let r = limited(r, o.response_limit);
                 if o.base64 {
-                    let b = crate::util::b64_encode(r);
+                    let b = webprobe_core::util::b64_encode(r);
                     xml_cdata_element(
                         &mut out,
                         i3,
@@ -881,7 +881,7 @@ fn message_text(data: &[u8], mode: MessageMode, limit: Option<usize>) -> Option<
         MessageMode::Omit => None,
         MessageMode::Full => Some(String::from_utf8_lossy(data).into_owned()),
         MessageMode::Extract => {
-            let head = crate::util::find_head_end(data)
+            let head = webprobe_core::util::find_head_end(data)
                 .unwrap_or(data.len())
                 .min(data.len());
             let body = &data[head..];
@@ -1173,8 +1173,8 @@ mod tests {
 
     #[test]
     fn stored_evidence_is_preferred_over_the_history_lookup() {
-        use crate::scan::{ScanEvidence, ScanIssue};
-        let e = crate::net::HistEntry {
+        use webprobe_core::scan::{ScanEvidence, ScanIssue};
+        let e = webprobe_core::net::HistEntry {
             id: 1,
             host: "example.com".into(),
             port: 80,
@@ -1332,7 +1332,7 @@ mod tests {
         assert!(!x.contains("<references>"));
         assert!(!x.contains("<remediationDetail>"));
         let req_b64 =
-            crate::util::b64_encode(b"GET /search?q=1 HTTP/1.1\r\nHost: 127.0.0.1:3000\r\n\r\n");
+            webprobe_core::util::b64_encode(b"GET /search?q=1 HTTP/1.1\r\nHost: 127.0.0.1:3000\r\n\r\n");
         assert!(x.contains(&format!("    <requestresponse>\r\n      <request method=\"GET\" base64=\"true\"><![CDATA[{req_b64}]]></request>\r\n      <response base64=\"true\"><![CDATA[")));
         assert!(x.contains("      <responseRedirected>false</responseRedirected>\r\n    </requestresponse>\r\n  </issue>\r\n</issues>\r\n"));
         // Element order follows the DTD.
@@ -1465,7 +1465,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!(
             "wp-kb-{}-{}",
             std::process::id(),
-            crate::util::now_secs()
+            webprobe_core::util::now_secs()
         ));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(
@@ -1492,7 +1492,7 @@ mod tests {
 
     #[test]
     fn build_attaches_latest_matching_history_entry() {
-        let a = crate::net::HistEntry {
+        let a = webprobe_core::net::HistEntry {
             id: 5,
             host: "shop.local".into(),
             port: 8443,

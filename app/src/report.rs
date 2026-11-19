@@ -1,9 +1,9 @@
 //! The "Report issues" options window. The report generators are engine
-//! code (`webprobe_core::report`).
+//! code (`webprobe_report::report`).
 
 use eframe::egui;
 
-pub use webprobe_core::report::*;
+pub use webprobe_report::report::*;
 
 use std::path::Path;
 

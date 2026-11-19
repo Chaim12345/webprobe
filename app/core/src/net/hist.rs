@@ -310,3 +310,14 @@ pub(crate) fn annotate(e: &mut HistEntry, ann: &crate::ext_host::Annotations) {
 pub fn split_h_p(authority: &str, fallback: u16) -> (String, u16) {
     split_host_port(authority.trim(), fallback)
 }
+
+/// Burp's MIME family of a history entry's response ("" without one).
+/// (Moved from `mime` in the Stage A split: it is keyed on HistEntry.)
+pub fn burp_mime_of(entry: &HistEntry) -> &'static str {
+    let Some(resp) = &entry.resp_raw else {
+        return "";
+    };
+    let parts = crate::util::parse_http(resp);
+    let value = crate::util::get_header(&parts.headers, "Content-Type").unwrap_or_default();
+    crate::mime::burp_mime(&value, &resp[parts.head_len.min(resp.len())..])
+}

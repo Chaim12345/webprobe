@@ -193,7 +193,7 @@ fn headers_text(headers: &[(&str, String)]) -> String {
 fn busted(base: &[u8], buster: &str, headers: &[(&str, String)]) -> Vec<u8> {
     let mut raw = with_query_param(base, buster, "1");
     for (n, v) in headers {
-        raw = net::replace_or_add_header(&raw, n, v);
+        raw = crate::util::replace_or_add_header(&raw, n, v);
     }
     raw
 }

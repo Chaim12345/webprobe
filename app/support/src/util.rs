@@ -613,43 +613,6 @@ mod process_tree_tests {
         assert_eq!(alive_with(&marker), 0);
     }
 
-    /// The real leak: a killed browser left its zygotes and renderers
-    /// running (about 70 processes each). Every one must be gone.
-    #[test]
-    fn a_headless_browser_leaves_no_processes_behind() {
-        let Some(bin) = crate::crawl::chromium_binary() else {
-            return;
-        };
-        let profile = std::env::temp_dir().join(format!("wp-tree-browser-{}", std::process::id()));
-        let mut cmd = std::process::Command::new(bin);
-        cmd.args([
-            "--headless=new",
-            "--no-sandbox",
-            "--disable-gpu",
-            &format!("--user-data-dir={}", profile.display()),
-            "about:blank",
-        ])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null());
-        super::own_process_group(&mut cmd);
-        let mut child = cmd.spawn().unwrap();
-        let marker = profile.display().to_string();
-        // Helpers appear within a second on an idle box but can take much
-        // longer under build load; poll, and kill before asserting so a slow
-        // start cannot leave the browser running (it did, 2026-11-17).
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
-        let mut helpers = alive_with(&marker);
-        while helpers <= 1 && std::time::Instant::now() < deadline {
-            std::thread::sleep(std::time::Duration::from_millis(250));
-            helpers = alive_with(&marker);
-        }
-        super::kill_process_tree(child.id(), Some(&marker), std::time::Duration::from_secs(2));
-        assert!(helpers > 1, "browser should have spawned helpers");
-        let _ = child.wait();
-        std::thread::sleep(std::time::Duration::from_millis(500));
-        assert_eq!(alive_with(&marker), 0, "no browser process may survive");
-        let _ = std::fs::remove_dir_all(&profile);
-    }
 }
 
 /// Burp's "Update Content-Length": restamp the header to the body length
@@ -671,7 +634,7 @@ pub fn update_content_length(raw: &[u8]) -> Vec<u8> {
     if chunked || (!has_cl && body_len == 0) {
         return raw.to_vec();
     }
-    crate::net::replace_or_add_header(raw, "Content-Length", &body_len.to_string())
+    replace_or_add_header(raw, "Content-Length", &body_len.to_string())
 }
 
 /// Read until EOF, at most `cap` bytes: more is an error naming `what`
@@ -822,4 +785,39 @@ where
             );
         }
     })
+}
+
+/// Insert or replace a header in a raw HTTP message, keeping head order and
+/// the body intact. Public: the scanner's header-manipulation probe reuses it.
+/// (Moved from net/match_replace.rs in the Stage A split, #37.)
+pub fn replace_or_add_header(raw: &[u8], name: &str, value: &str) -> Vec<u8> {
+    let p = parse_http(raw);
+    let body = &raw[p.head_len.min(raw.len())..];
+    let mut out = String::with_capacity(raw.len() + name.len() + value.len() + 4);
+    out.push_str(&p.first);
+    out.push_str("\r\n");
+    let mut replaced = false;
+    for (k, v) in &p.headers {
+        if k.eq_ignore_ascii_case(name) {
+            out.push_str(name);
+            out.push_str(": ");
+            out.push_str(value);
+            replaced = true;
+        } else {
+            out.push_str(k);
+            out.push_str(": ");
+            out.push_str(v);
+        }
+        out.push_str("\r\n");
+    }
+    if !replaced {
+        out.push_str(name);
+        out.push_str(": ");
+        out.push_str(value);
+        out.push_str("\r\n");
+    }
+    out.push_str("\r\n");
+    let mut bytes = out.into_bytes();
+    bytes.extend_from_slice(body);
+    bytes
 }

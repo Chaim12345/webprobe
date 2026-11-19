@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+webprobe-support = { path = "../support" }
 thiserror = "2"
 brotli = "7"
 flate2.workspace = true
@@ -18,8 +19,6 @@ serde.workspace = true
 serde_json.workspace = true
 # N-06: history bodies in mapped, unlinked segment files (core/src/body.rs).
 memmap2 = "0.9"
-# webprobe-headless proxy: Ctrl+C / SIGTERM end the run and save the project.
-signal-hook.workspace = true
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 time.workspace = true
 webpki-roots = "0.26"

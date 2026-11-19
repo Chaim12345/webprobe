@@ -251,7 +251,7 @@ pub fn with_body(req: &str, body: &str) -> String {
     let head = req.find("\r\n\r\n").map(|i| &req[..i + 4]).unwrap_or(req);
     let mut out = head.to_string();
     out.push_str(body);
-    String::from_utf8_lossy(&net::replace_or_add_header(
+    String::from_utf8_lossy(&crate::util::replace_or_add_header(
         out.as_bytes(),
         "Content-Length",
         &body.len().to_string(),
