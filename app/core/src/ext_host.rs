@@ -20,7 +20,7 @@ pub struct LoadedExtension {
     pub hooks: Arc<dyn ProxyHooks>,
     /// Where it was installed from, for extensions the user added (saved
     /// in the extension list); None for built-in / test-hook extensions.
-    pub source: Option<crate::ext_store::Installed>,
+    pub source: Option<webprobe_support::ext::Installed>,
 }
 
 impl LoadedExtension {
@@ -69,7 +69,7 @@ pub struct ExtensionHost {
     pub extensions: Vec<LoadedExtension>,
     /// Remembered extensions that failed to load this session (no `java`,
     /// a moved jar): kept so saving the list does not forget them.
-    pub not_loaded: Vec<crate::ext_store::Installed>,
+    pub not_loaded: Vec<webprobe_support::ext::Installed>,
     /// The project's saved extension data (Montoya `extensionData()`), by
     /// extension key ([`extension_key`]): handed to an extension when it
     /// starts and kept for extensions not running now.
@@ -1666,8 +1666,8 @@ mod tests {
             eprintln!("skipping: no JDK or Montoya API jar");
             return;
         };
-        let source = crate::ext_store::Installed {
-            kind: crate::ext_store::Kind::Java,
+        let source = webprobe_support::ext::Installed {
+            kind: webprobe_support::ext::Kind::Java,
             source: dir.to_string_lossy().into_owned(),
             enabled: true,
         };
@@ -1976,7 +1976,7 @@ mod tests {
             .unwrap()
             .iter()
             .any(|i| i.name == "Stage4 sitemap issue" && i.sev == "low"));
-        use crate::ext_calls::ToolSend;
+        use webprobe_support::ext::ToolSend;
         assert_eq!(
             *shared.tool_sends.lock().unwrap(),
             vec![
