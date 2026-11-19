@@ -3474,9 +3474,9 @@ impl RequestCheck for RobotsTxt {
 /// to / with random Next-Action and X-Nextjs-Request-Id values,
 /// Next-Router-State-Tree: [""] and a multipart body (part 1 `{}`, part 0
 /// `["$1:a:a"]`; Zgn0.java:53-80). A report needs status 500 and the flight
-/// error digest marker, or both generic error markers (Zgn0.java:83-98; the
-/// stripped field-to-literal assignments read as `E{"digest"` for the
-/// specific marker, `Error` and `digest` for the generic pair).
+/// error digest marker (Zgn0.java:83-98; the stripped field-to-literal
+/// assignments read as `E{"digest"`). Burp's generic `Error`+`digest` pair
+/// is deliberately not used: it fires on ordinary error pages.
 pub(crate) struct React2Shell;
 
 impl RequestCheck for React2Shell {
@@ -3517,8 +3517,7 @@ impl RequestCheck for React2Shell {
         let parsed = util::parse_http(&resp);
         let status = parsed.first.split_whitespace().nth(1).unwrap_or("");
         let text = String::from_utf8_lossy(&resp[parsed.head_len.min(resp.len())..]);
-        let hit = status == "500" && (text.contains("E{\"digest\"") || (text.contains("Error") && text.contains("digest")));
-        if !hit {
+        if !react2shell_hit(status, &text) {
             return;
         }
         let mut i = mk(
@@ -3530,6 +3529,13 @@ impl RequestCheck for React2Shell {
         i.confidence = "Firm".into();
         cx.report(vec![i.with_evidence(vec![ScanEvidence::new(probe.as_bytes(), Some(&resp[..]))])]);
     }
+}
+
+/// The React2Shell signature: status 500 plus the specific flight-protocol
+/// marker. Burp's generic `Error`+`digest` word pair is deliberately not
+/// used here: it fires on ordinary error pages.
+fn react2shell_hit(status: &str, body: &str) -> bool {
+    status == "500" && body.contains("E{\"digest\"")
 }
 
 fn server_host_hdr(cx: &ScanCtx) -> String {
@@ -4044,6 +4050,13 @@ pub(crate) const KB_ISSUE_TYPES: &[(&str, u64)] = &[
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn react2shell_requires_the_specific_marker() {
+        assert!(react2shell_hit("500", r#"...E{"digest":"abc"}..."#));
+        // generic error words alone are just an error page, not React2Shell
+        assert!(!react2shell_hit("500", "Error: invalid digest supplied"));
+        assert!(!react2shell_hit("200", r#"E{"digest":"abc"}"#));
+    }
     use super::*;
 
     fn xpath_response(body: &str) -> Vec<u8> {
