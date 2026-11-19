@@ -277,13 +277,26 @@ pub fn known_file_follow_up<F: FnMut(&str) -> Option<Vec<u8>>>(
         let payload = format!("{dir}{name}");
         let raw = send(&payload)?;
         let body = String::from_utf8_lossy(&raw);
-        let Some(&marker) = markers.iter().find(|m| body.contains(**m) && !base.contains(**m)) else { continue };
+        let Some(&marker) = markers
+            .iter()
+            .find(|m| body.contains(**m) && !base.contains(**m))
+        else {
+            continue;
+        };
         let control = format!("{payload}X");
-        let cbody = send(&control).unwrap_or_default();
+        // A failed control aborts the follow-up like a failed probe:
+        // without the control there is no evidence the marker is specific
+        // to the filename, so an empty answer must not confirm.
+        let cbody = send(&control)?;
         if String::from_utf8_lossy(&cbody).contains(marker) {
             continue; // the marker shows regardless of the filename
         }
-        return Some(KnownFileHit { payload, control, file: name, marker });
+        return Some(KnownFileHit {
+            payload,
+            control,
+            file: name,
+            marker,
+        });
     }
     None
 }

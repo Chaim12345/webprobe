@@ -926,7 +926,15 @@ impl PointCheck for FilePathManipulation {
                 ev.push(rec.last(&k.payload));
                 ev.push(rec.last(&k.control));
             }
-            cx.report(vec![mk_point("File path manipulation", "high", "Firm", &cx.entry, ip, detail).with_evidence(evidence(ev))]);
+            cx.report(vec![mk_point(
+                "File path manipulation",
+                "high",
+                "Firm",
+                &cx.entry,
+                ip,
+                detail,
+            )
+            .with_evidence(evidence(ev))]);
         }
         cx.progress();
     }
