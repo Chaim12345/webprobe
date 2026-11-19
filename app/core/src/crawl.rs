@@ -1251,6 +1251,8 @@ const DOM_INSTRUMENT_JS: &str = r#"
     var OrigWs = window.WebSocket;
     window.WebSocket = function (u) { record("websocket", u); return Reflect.construct(OrigWs, arguments); };
     window.WebSocket.prototype = OrigWs.prototype;
+    // pages read the readyState constants off the constructor
+    ["CONNECTING", "OPEN", "CLOSING", "CLOSED"].forEach(function (k) { window.WebSocket[k] = OrigWs[k]; });
   }
   if (typeof RegExp === "function") {
     var OrigRe = window.RegExp;
