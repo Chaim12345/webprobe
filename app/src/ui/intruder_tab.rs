@@ -315,6 +315,35 @@ pub(crate) fn intruder(app: &mut App, ui: &mut Ui) {
                                         let kept: Vec<&str> = set.lines().filter(|l| seen.insert(*l)).collect();
                                         *set = kept.join("\n");
                                     }
+                                    // Burp's "Add from list...": the *.pay files
+                                    // of the resolved PayloadStrings directory
+                                    // (burp.Zckm); the lists are PortSwigger's,
+                                    // resolved at runtime, never bundled.
+                                    egui::menu::MenuButton::new("Add from list ...")
+                                        .config(egui::menu::MenuConfig::new().close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside))
+                                        .ui(ui, |ui| {
+                                            ui.set_min_width(220.0);
+                                            let names = webprobe_core::paths::predefined_payload_lists();
+                                            if names.is_empty() {
+                                                ui.label(RichText::new("No payload lists found").size(12.5).color(theme::ink_dim()));
+                                                ui.label(RichText::new("Extract resources/ from burpsuite.jar and set WEBPROBE_BURP_RESOURCES").size(11.5).color(theme::ink_faint()));
+                                            }
+                                            for name in names {
+                                                if ui.add(egui::Button::new(RichText::new(&name).size(12.5)).wrap_mode(egui::TextWrapMode::Extend)).clicked() {
+                                                    ui.close();
+                                                    match webprobe_core::paths::predefined_payload_list(&name) {
+                                                        Ok(items) => {
+                                                            let set = &mut app.intr_sets[set_n];
+                                                            if !set.is_empty() && !set.ends_with('\n') { set.push('\n'); }
+                                                            set.push_str(&items.join("\n"));
+                                                        }
+                                                        Err(e) => feedback::toast(feedback::Level::Error, e),
+                                                    }
+                                                }
+                                            }
+                                        })
+                                        .0
+                                        .on_hover_text("Add every entry of a predefined list");
                                 });
                                 let set = &mut app.intr_sets[set_n];
                                 egui::Frame::NONE.stroke(egui::Stroke::new(1.0, theme::line())).fill(theme::surface()).show(ui, |ui| {
@@ -481,6 +510,17 @@ pub(crate) fn payload_source_config(ui: &mut Ui, src: &mut intruder::PayloadSour
                 ui.add(egui::DragValue::new(count).range(1..=1_000_000));
                 ui.label("payloads");
             });
+        }
+        P::CollaboratorPayloads {
+            include_location,
+            count,
+        } => {
+            note(ui, "This payload type generates Collaborator payloads, each with a unique identifier, for out-of-band detection. The identifiers are minted when the attack starts; interactions are matched from the Collaborator.");
+            row(ui, "Generate:", |ui| {
+                ui.add(egui::DragValue::new(count).range(1..=100_000));
+                ui.label("payloads");
+            });
+            ui.checkbox(include_location, "Include Collaborator server location");
         }
         P::CaseModification {
             items,
