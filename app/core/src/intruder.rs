@@ -61,11 +61,59 @@ pub struct Template {
     defaults: Vec<String>,
 }
 
+/// Errors from Intruder template/marker handling and payload validation
+/// (issue #34). Display text matches the previous `String` messages byte for
+/// byte; `From<IntruderError> for String` keeps `?` working in String-typed
+/// callers during the gradual conversion.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum IntruderError {
+    #[error("unbalanced § marker: a position is never closed")]
+    UnbalancedMarker,
+    #[error("the selection is outside the request")]
+    SelectionOutsideRequest,
+    #[error("the selection already contains a position marker")]
+    SelectionHasMarker,
+    #[error("the selection is inside an existing position")]
+    SelectionInsidePosition,
+    #[error("No extension payload generator is selected.")]
+    NoExtensionGenerator,
+    #[error("Bit flipper payload source cannot operate on the base payload position value when using the battering ram attack type.")]
+    BitFlipperBaseUnsupported,
+    #[error("No bits are selected.")]
+    NoBitsSelected,
+    #[error("Invalid base string.")]
+    InvalidBaseString,
+    #[error("Invalid base string")]
+    InvalidBase,
+    #[error("Base string contains some non-hex characters.")]
+    NonHexBase,
+    #[error("Invalid block size")]
+    InvalidBlockSize,
+    #[error("This payload type cannot be used in battering ram attacks")]
+    BatteringRamUnsupported,
+    #[error("No list items specified.")]
+    NoListItems,
+    #[error("Cannot copy payload from another position using this attack type.")]
+    CopyPayloadWrongAttack,
+    #[error("Cannot copy payload from invalid position.")]
+    CopyPayloadInvalidPosition,
+    #[error("Cannot copy payload from same position.")]
+    CopyPayloadSamePosition,
+    #[error("Cannot copy payload from another dependent position.")]
+    CopyPayloadDependent,
+}
+
+impl From<IntruderError> for String {
+    fn from(err: IntruderError) -> Self {
+        err.to_string()
+    }
+}
+
 impl Template {
-    pub fn parse(text: &str) -> Result<Self, String> {
+    pub fn parse(text: &str) -> Result<Self, IntruderError> {
         let segments = parse_markers(text);
         if segments.last().is_some_and(|s| s.is_marker) {
-            return Err("unbalanced § marker: a position is never closed".into());
+            return Err(IntruderError::UnbalancedMarker);
         }
         let mut literals = Vec::new();
         let mut defaults = Vec::new();
@@ -213,20 +261,20 @@ pub fn clear_markers(text: &str) -> String {
 }
 
 /// Wrap the byte range `start..end` in a position (the editor's selection).
-pub fn add_marker(text: &str, start: usize, end: usize) -> Result<String, String> {
+pub fn add_marker(text: &str, start: usize, end: usize) -> Result<String, IntruderError> {
     if start > end
         || end > text.len()
         || !text.is_char_boundary(start)
         || !text.is_char_boundary(end)
     {
-        return Err("the selection is outside the request".into());
+        return Err(IntruderError::SelectionOutsideRequest);
     }
     let selected = &text[start..end];
     if selected.contains(MARK) {
-        return Err("the selection already contains a position marker".into());
+        return Err(IntruderError::SelectionHasMarker);
     }
     if text[..start].chars().filter(|&c| c == MARK).count() % 2 == 1 {
-        return Err("the selection is inside an existing position".into());
+        return Err(IntruderError::SelectionInsidePosition);
     }
     Ok(format!(
         "{}{MARK}{selected}{MARK}{}",
@@ -1498,25 +1546,25 @@ impl PayloadSource {
         kind: AttackType,
         position: usize,
         sources: &[PayloadSource],
-    ) -> Result<(), String> {
+    ) -> Result<(), IntruderError> {
         match self {
             PayloadSource::Extension { provider, .. } if provider.is_empty() => {
-                Err("No extension payload generator is selected.".into())
+                Err(IntruderError::NoExtensionGenerator)
             }
             PayloadSource::BitFlipper { base, mask, hex } => {
                 if kind == AttackType::BatteringRam && base.is_none() {
-                    return Err("Bit flipper payload source cannot operate on the base payload position value when using the battering ram attack type.".into());
+                    return Err(IntruderError::BitFlipperBaseUnsupported);
                 }
                 if *mask == 0 {
-                    return Err("No bits are selected.".into());
+                    return Err(IntruderError::NoBitsSelected);
                 }
                 if let Some(b) = base {
                     let n = latin1_bytes(b).len();
                     if (if *hex { n / 2 } else { n }) == 0 {
-                        return Err("Invalid base string.".into());
+                        return Err(IntruderError::InvalidBaseString);
                     }
                     if *hex && !b.chars().all(|c| c.is_ascii_hexdigit()) {
-                        return Err("Base string contains some non-hex characters.".into());
+                        return Err(IntruderError::NonHexBase);
                     }
                 }
                 Ok(())
@@ -1525,38 +1573,36 @@ impl PayloadSource {
                 base, block_size, ..
             } => {
                 if *block_size == 0 {
-                    return Err("Invalid block size".into());
+                    return Err(IntruderError::InvalidBlockSize);
                 }
                 if base.as_deref() == Some("") {
-                    return Err("Invalid base string".into());
+                    return Err(IntruderError::InvalidBase);
                 }
                 if kind == AttackType::BatteringRam {
-                    return Err("This payload type cannot be used in battering ram attacks".into());
+                    return Err(IntruderError::BatteringRamUnsupported);
                 }
                 Ok(())
             }
             PayloadSource::UsernameGenerator { items, .. }
                 if items.iter().all(|i| i.trim().is_empty()) =>
             {
-                Err("No list items specified.".into())
+                Err(IntruderError::NoListItems)
             }
             PayloadSource::CopyOtherPayload { from_position } => {
                 if !matches!(kind, AttackType::Pitchfork | AttackType::ClusterBomb) {
-                    return Err(
-                        "Cannot copy payload from another position using this attack type.".into(),
-                    );
+                    return Err(IntruderError::CopyPayloadWrongAttack);
                 }
                 if *from_position < 1 || *from_position > sources.len() {
-                    return Err("Cannot copy payload from invalid position.".into());
+                    return Err(IntruderError::CopyPayloadInvalidPosition);
                 }
                 if from_position - 1 == position {
-                    return Err("Cannot copy payload from same position.".into());
+                    return Err(IntruderError::CopyPayloadSamePosition);
                 }
                 if matches!(
                     sources[from_position - 1],
                     PayloadSource::CopyOtherPayload { .. }
                 ) {
-                    return Err("Cannot copy payload from another dependent position.".into());
+                    return Err(IntruderError::CopyPayloadDependent);
                 }
                 Ok(())
             }
@@ -2976,10 +3022,11 @@ mod tests {
             mask: 1,
         };
         assert_eq!(pos.generate_for_base("ab"), ["`b", "ac"]);
-        assert!(pos
-            .validate(AttackType::BatteringRam, 0, std::slice::from_ref(&pos))
-            .unwrap_err()
-            .contains("battering ram"));
+        assert_eq!(
+            pos.validate(AttackType::BatteringRam, 0, std::slice::from_ref(&pos))
+                .unwrap_err(),
+            IntruderError::BitFlipperBaseUnsupported
+        );
         let none = PayloadSource::BitFlipper {
             base: None,
             hex: false,
@@ -2987,7 +3034,7 @@ mod tests {
         };
         assert_eq!(
             none.validate(AttackType::Sniper, 0, std::slice::from_ref(&none)),
-            Err("No bits are selected.".into())
+            Err(IntruderError::NoBitsSelected)
         );
     }
 
@@ -3041,7 +3088,7 @@ mod tests {
         };
         assert_eq!(
             empty.validate(AttackType::Sniper, 0, &[]),
-            Err("No list items specified.".into())
+            Err(IntruderError::NoListItems)
         );
     }
 
@@ -3082,7 +3129,7 @@ mod tests {
         };
         assert_eq!(
             src.validate(AttackType::BatteringRam, 0, &[]),
-            Err("This payload type cannot be used in battering ram attacks".into())
+            Err(IntruderError::BatteringRamUnsupported)
         );
         let zero = PayloadSource::EcbBlockShuffler {
             base: None,
@@ -3092,7 +3139,7 @@ mod tests {
         };
         assert_eq!(
             zero.validate(AttackType::Sniper, 0, &[]),
-            Err("Invalid block size".into())
+            Err(IntruderError::InvalidBlockSize)
         );
     }
 
