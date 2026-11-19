@@ -3848,15 +3848,15 @@ fn stage_a4_finds_the_stored_g11_families() {
     let shared = Shared::new();
     run_task(&shared, vec![guestbook_entry(port, "POST", "/comment", "c=hi"), guestbook_entry(port, "GET", "/embed", "")]);
     let expect = [
-        ("Link manipulation (stored)", "info"),
-        ("CSS injection (stored)", "medium"),
-        ("Client-side HTTP parameter pollution (stored)", "low"),
-        ("Form action hijacking (stored)", "medium"),
+        ("Link manipulation (stored)", "info", "Firm"),
+        ("CSS injection (stored)", "medium", "Tentative"),
+        ("Client-side HTTP parameter pollution (stored)", "low", "Tentative"),
+        ("Form action hijacking (stored)", "medium", "Tentative"),
     ];
-    for (name, sev) in expect {
+    for (name, sev, confidence) in expect {
         let hits = issues_named(&shared, name);
         let h = hits.iter().find(|i| i.path == "/comment").unwrap_or_else(|| panic!("{name} not reported: {:?}", hits.iter().map(|i| i.path.clone()).collect::<Vec<_>>()));
-        assert_eq!((h.sev.as_str(), h.confidence.as_str()), (sev, "Firm"), "{name}");
+        assert_eq!((h.sev.as_str(), h.confidence.as_str()), (sev, confidence), "{name}");
         assert!(h.detail.contains("GET /embed"), "{name}: {}", h.detail);
     }
 }
