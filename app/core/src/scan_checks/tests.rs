@@ -103,9 +103,9 @@ fn registry_order_is_pinned() {
                 Some(BURP_GROUP)
             ),
             ("active.http-trace-enabled", Scope::Host, Some(BURP_GROUP)),
-                ("active.robots-txt", Scope::Host, Some(BURP_GROUP)),
-                ("active.react2shell", Scope::Host, Some(BURP_GROUP)),
-                ("active.tls-certificate", Scope::Host, Some(BURP_GROUP)),
+            ("active.robots-txt", Scope::Host, Some(BURP_GROUP)),
+            ("active.react2shell", Scope::Host, Some(BURP_GROUP)),
+            ("active.tls-certificate", Scope::Host, Some(BURP_GROUP)),
             ("active.openapi-definition", Scope::Host, Some(BURP_GROUP)),
             ("active.collaborator-everywhere", Scope::Host, None),
             (
@@ -594,22 +594,41 @@ fn r10_broken_access_control_against_a_live_lab() {
     let port = lab_serve(l, |_method, target, raw| {
         let authed = raw.to_ascii_lowercase().contains("\r\ncookie:");
         let (status, body) = match (target.split('?').next().unwrap_or(""), authed) {
-            ("/open", _) => ("200 OK", "<html><head><title>account</title></head><body>same</body></html>".to_string()),
-            ("/guarded", true) => ("200 OK", "<html><head><title>account</title></head><body>same</body></html>".to_string()),
-            ("/guarded", false) => ("403 Forbidden", "<html><head><title>denied</title></head></html>".to_string()),
+            ("/open", _) => (
+                "200 OK",
+                "<html><head><title>account</title></head><body>same</body></html>".to_string(),
+            ),
+            ("/guarded", true) => (
+                "200 OK",
+                "<html><head><title>account</title></head><body>same</body></html>".to_string(),
+            ),
+            ("/guarded", false) => (
+                "403 Forbidden",
+                "<html><head><title>denied</title></head></html>".to_string(),
+            ),
             _ => ("404 Not Found", String::new()),
-    };
+        };
         format!("HTTP/1.1 {status}\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
-});
+    });
     let host = format!("127.0.0.1:{port}");
     // Session material removed (cookie + x-*) and the page unchanged:
     // reported.
     let req = format!("GET /open HTTP/1.1\r\nHost: {host}\r\nCookie: sid=abc\r\nX-Csrf: t\r\n\r\n");
     let got = lab_scan(port, &["active.broken-access-control"], "GET", "/open", req);
-    assert!(got.iter().any(|(i, s, c)| i == "Broken access control" && s == "info" && c == "Tentative"), "{got:?}");
+    assert!(
+        got.iter()
+            .any(|(i, s, c)| i == "Broken access control" && s == "info" && c == "Tentative"),
+        "{got:?}"
+    );
     // The response changes without the session: not reported.
     let req = format!("GET /guarded HTTP/1.1\r\nHost: {host}\r\nCookie: sid=abc\r\n\r\n");
-    let got = lab_scan(port, &["active.broken-access-control"], "GET", "/guarded", req);
+    let got = lab_scan(
+        port,
+        &["active.broken-access-control"],
+        "GET",
+        "/guarded",
+        req,
+    );
     assert!(got.is_empty(), "{got:?}");
     // Nothing to remove: not reported.
     let req = format!("GET /open HTTP/1.1\r\nHost: {host}\r\n\r\n");
@@ -618,9 +637,15 @@ fn r10_broken_access_control_against_a_live_lab() {
     // A non-GET/POST audit is skipped: the replay models GET/POST
     // semantics only.
     let req = format!("HEAD /open HTTP/1.1\r\nHost: {host}\r\nCookie: sid=abc\r\n\r\n");
-    let got = lab_scan(port, &["active.broken-access-control"], "HEAD", "/open", req);
+    let got = lab_scan(
+        port,
+        &["active.broken-access-control"],
+        "HEAD",
+        "/open",
+        req,
+    );
     assert!(got.is_empty(), "HEAD audit must be skipped: {got:?}");
-    }
+}
 
 /// R-10 web cache poisoning (Zp22 / Zg1g rule): reported only when a
 /// clean request with the probe's cache buster gets the poisoned page
