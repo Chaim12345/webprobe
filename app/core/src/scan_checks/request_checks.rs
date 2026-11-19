@@ -221,6 +221,71 @@ impl RequestCheck for OpenApiDefinition {
     }
 }
 
+/// Flash / Silverlight cross-domain policy (per host), burp.Zm24 + burp.Zbtu:
+/// the policy file is fetched once per host and the allowed domains analysed
+/// (burp.Zudv / burp.Zebv). One code path; the kind picks the path, the
+/// element and the issue name.
+pub(crate) struct CrossDomainPolicy {
+    pub kind: crate::burp_checks::CrossDomainKind,
+}
+
+impl CrossDomainPolicy {
+    fn path(&self) -> &'static str {
+        match self.kind {
+            crate::burp_checks::CrossDomainKind::Flash => "/crossdomain.xml",
+            crate::burp_checks::CrossDomainKind::Silverlight => "/clientaccesspolicy.xml",
+        }
+    }
+}
+
+impl RequestCheck for CrossDomainPolicy {
+    fn id(&self) -> &'static str {
+        match self.kind {
+            crate::burp_checks::CrossDomainKind::Flash => "active.flash-cross-domain-policy",
+            crate::burp_checks::CrossDomainKind::Silverlight => "active.silverlight-cross-domain-policy",
+        }
+    }
+    fn issue(&self) -> &'static str {
+        match self.kind {
+            crate::burp_checks::CrossDomainKind::Flash => "Flash cross-domain policy",
+            crate::burp_checks::CrossDomainKind::Silverlight => "Silverlight cross-domain policy",
+        }
+    }
+    fn scope(&self) -> Scope {
+        Scope::Host
+    }
+    fn group(&self) -> Option<&'static str> {
+        Some(BURP_GROUP)
+    }
+    fn run(&self, cx: &ScanCtx) {
+        let (scheme, _) = origin_of(cx);
+        let key = format!("{scheme}://{}:{}|xdp|{}", cx.host, cx.port, self.path());
+        if !openapi_hosts().lock().unwrap().insert(key) || cx.stopped() {
+            return;
+        }
+        let probe = format!("GET {} HTTP/1.1\r\nHost: {}\r\nAccept: */*\r\nConnection: close\r\n\r\n", self.path(), server_host_hdr(cx));
+        let Some(resp) = burp_send(cx, probe.as_bytes()) else { return };
+        let found = crate::burp_checks::crossdomain_findings(&resp, &cx.host, self.kind);
+        if found.is_empty() {
+            return;
+        }
+        let mut e = cx.entry.clone();
+        e.path = self.path().to_string();
+        let mut i = mk(
+            "high",
+            self.issue(),
+            &e,
+            format!(
+                "The cross-domain policy at {} allows access from {}: the policy trusts content served from outside this application's control.",
+                self.path(),
+                found.join(", ")
+            ),
+        );
+        i.confidence = "Certain".into();
+        cx.report(vec![i.with_evidence(vec![ScanEvidence::new(probe.as_bytes(), Some(&resp[..]))])]);
+    }
+}
+
 pub fn server_host_hdr(cx: &ScanCtx) -> String {
     util::get_header(&cx.parts.headers, "Host")
         .unwrap_or_else(|| format!("{}:{}", cx.host, cx.port))

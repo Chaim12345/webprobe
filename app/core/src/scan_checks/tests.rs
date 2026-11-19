@@ -96,6 +96,8 @@ fn registry_order_is_pinned() {
             ),
             ("active.http-trace-enabled", Scope::Host, Some(BURP_GROUP)),
             ("active.openapi-definition", Scope::Host, Some(BURP_GROUP)),
+            ("active.flash-cross-domain-policy", Scope::Host, Some(BURP_GROUP)),
+            ("active.silverlight-cross-domain-policy", Scope::Host, Some(BURP_GROUP)),
             ("active.collaborator-everywhere", Scope::Host, None),
             (
                 "active.server-trace-echo",
