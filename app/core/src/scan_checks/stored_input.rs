@@ -72,7 +72,8 @@ pub(crate) trait StoredCheck: Sync {
 }
 
 /// Stage A4 checks, in run order.
-pub(crate) static STORED_CHECKS: &[&dyn StoredCheck] = &[&StoredXss];
+pub(crate) static STORED_CHECKS: &[&dyn StoredCheck] =
+    &[&StoredXss, &LinkManipulationStored, &CssInjectionStored, &HppStored, &FormActionHijackingStored];
 
 /// One pair being audited in stage A4.
 pub(crate) struct PairCtx {

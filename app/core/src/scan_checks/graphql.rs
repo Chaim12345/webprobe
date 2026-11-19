@@ -1518,6 +1518,133 @@ impl StoredCheck for StoredXss {
     }
 }
 
+/// The G.11 stored families share burp.Zb_5's stored half (the Ze20 /
+/// Zw0x / Zi4q / Zc51 selectors through the stored registry): every
+/// insertion-point kind, and not server-side, matching their reflected
+/// halves. Each probe is sent to the pair's injection item and the
+/// retrieval item's own request is replayed after it (burp.Zpqv.Z_).
+macro_rules! g11_stored_check {
+    ($name:ident, $id:literal, $issue:literal, $severity:literal, $probes:expr, $hit:expr, $doc:literal) => {
+        #[doc = $doc]
+        pub(crate) struct $name;
+
+        impl StoredCheck for $name {
+            fn id(&self) -> &'static str {
+                $id
+            }
+            fn issue(&self) -> &'static str {
+                $issue
+            }
+            /// burp.Zb_5's stored half has no applicability test: every kind.
+            fn applies_to(&self, ip: &InsertionPoint) -> bool {
+                match &ip.kind {
+                    IpKind::Query
+                    | IpKind::Body
+                    | IpKind::Json(_)
+                    | IpKind::Multipart { .. }
+                    | IpKind::Cookie
+                    | IpKind::Header
+                    | IpKind::PathFolder(_)
+                    | IpKind::PathFilename(_)
+                    | IpKind::EntireBody
+                    | IpKind::XmlParam { .. }
+                    | IpKind::XmlTag { .. }
+                    | IpKind::XmlAttr { .. }
+                    | IpKind::ParamName(_)
+                    | IpKind::Base64 { .. } => true,
+                }
+            }
+            fn server_side(&self) -> bool {
+                false
+            }
+            fn run(&self, cx: &PairCtx) {
+                if cx.stopped() {
+                    return;
+                }
+                let pair = &cx.pair;
+                let ip = &pair.point;
+                let log: RefCell<Vec<ScanEvidence>> = RefCell::new(Vec::new());
+                let send = |payload: &str| -> Option<Vec<u8>> {
+                    if cx.stopped() {
+                        return None;
+                    }
+                    let chain = cx.send_following(&pair.item, &inject_payload(&pair.item.req, ip, payload));
+                    let (req, resp) = chain.into_iter().last()?;
+                    log.borrow_mut().push(ScanEvidence::new(req.as_bytes(), resp.as_deref()));
+                    resp
+                };
+                let retrieve = || -> Option<Vec<u8>> {
+                    if cx.stopped() {
+                        return None;
+                    }
+                    let chain = cx.send_following(&pair.retrieval, &pair.retrieval.req);
+                    let (req, resp) = chain.into_iter().last()?;
+                    log.borrow_mut().push(ScanEvidence::new(req.as_bytes(), resp.as_deref()));
+                    resp
+                };
+                if let Some((probe, what)) = crate::scan::run_g11_stored(&$probes, send, retrieve, $hit) {
+                    let log = log.borrow();
+                    let ev: Vec<ScanEvidence> = log.iter().rev().take(2).rev().cloned().collect();
+                    cx.report(vec![mk_point(
+                        $issue,
+                        $severity,
+                        "Firm",
+                        &pair.item.entry,
+                        ip,
+                        format!(
+                            "The value <b>{}</b>, submitted in the {} in a previous request, was stored and returned in {} in the response to the later request {:?} ({}).",
+                            util::html_encode(&probe),
+                            ip.describe_short(false),
+                            what,
+                            pair.retrieval.req.lines().next().unwrap_or(""),
+                            pair.retrieval.url()
+                        ),
+                    )
+                    .with_evidence(ev)]);
+                }
+                cx.progress();
+            }
+        }
+    };
+}
+
+g11_stored_check!(
+    LinkManipulationStored,
+    "active.link-manipulation-stored",
+    "Link manipulation (stored)",
+    "info",
+    crate::scan::g11_link_probes(),
+    crate::scan::g11_link_stored_hit,
+    "Link manipulation (stored), burp.Zb_5 -> Ze20, KB 00501004: the Zpyp probes (random host/path under http://, https://, //, \\/ - established literals) must come back as a link or redirect target of the retrieval response. Severity Information (KB); confidence not established: Firm."
+);
+g11_stored_check!(
+    CssInjectionStored,
+    "active.css-injection-stored",
+    "CSS injection (stored)",
+    "medium",
+    crate::scan::g11_css_probes(),
+    |resp: &[u8], probe: &str| crate::scan::g11_stored_context_hit(resp, probe, crate::scan::g11_css_match),
+    "CSS injection (stored), burp.Zb_5 -> Zw0x, KB 00501301: the token probe must be returned in a CSS position (<style> text, a style attribute, a <link rel=stylesheet> href) of the retrieval response. Severity Medium (KB); confidence not established: Firm."
+);
+g11_stored_check!(
+    HppStored,
+    "active.client-side-hpp-stored",
+    "Client-side HTTP parameter pollution (stored)",
+    "low",
+    crate::scan::g11_hpp_probes(),
+    |resp: &[u8], probe: &str| crate::scan::g11_stored_context_hit(resp, probe, crate::scan::g11_hpp_match),
+    "Client-side HTTP parameter pollution (stored), burp.Zb_5 -> Zi4q, KB 00501401: the `<random3>&<random3>` probe (the stripped suffix is omitted, not established) must be returned in an attribute value, JavaScript string or response header of the retrieval response. Severity Low (KB); confidence not established: Firm."
+);
+g11_stored_check!(
+    FormActionHijackingStored,
+    "active.form-action-hijacking-stored",
+    "Form action hijacking (stored)",
+    "medium",
+    crate::scan::g11_form_action_probes(),
+    |resp: &[u8], probe: &str| crate::scan::g11_stored_context_hit(resp, probe, crate::scan::g11_form_action_match),
+    "Form action hijacking (stored), burp.Zb_5 -> Zc51, KB 00501501: the injected URL must be returned as a form's action or an element's formaction in the retrieval response. Severity Medium (KB); confidence not established: Firm."
+);
+
 /// Client-side template injection, burp.Zrmh.
 pub(crate) struct ClientTemplateInjection;
 
