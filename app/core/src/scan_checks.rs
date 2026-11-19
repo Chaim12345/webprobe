@@ -1855,6 +1855,13 @@ impl RequestCheck for BrokenAccessControl {
         if cx.stopped() || !cx.runs(self.issue()) || cx.baseline.raw.is_empty() {
             return;
         }
+        // The replay only models GET/POST semantics (query marker, header
+        // strip). HEAD/PUT/DELETE change response semantics the
+        // equivalence test does not capture, so skip them.
+        let method = cx.req.split_whitespace().next().unwrap_or("");
+        if !method.eq_ignore_ascii_case("GET") && !method.eq_ignore_ascii_case("POST") {
+            return;
+        }
         let base = util::parse_http(&cx.baseline.raw);
         let status: u16 = base.first.split_whitespace().nth(1).and_then(|s| s.parse().ok()).unwrap_or(0);
         if !(200..300).contains(&status) {
@@ -4699,6 +4706,11 @@ mod tests {
         let req = format!("GET /open HTTP/1.1\r\nHost: {host}\r\n\r\n");
         let got = lab_scan(port, &["active.broken-access-control"], "GET", "/open", req);
         assert!(got.is_empty(), "{got:?}");
+        // A non-GET/POST audit is skipped: the replay models GET/POST
+        // semantics only.
+        let req = format!("HEAD /open HTTP/1.1\r\nHost: {host}\r\nCookie: sid=abc\r\n\r\n");
+        let got = lab_scan(port, &["active.broken-access-control"], "HEAD", "/open", req);
+        assert!(got.is_empty(), "HEAD audit must be skipped: {got:?}");
     }
 
     /// R-10 web cache poisoning (Zp22 / Zg1g rule): reported only when a
