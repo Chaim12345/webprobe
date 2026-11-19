@@ -1121,7 +1121,7 @@ macro_rules! g11_reflected_check {
                     cx.report(vec![mk_point(
                         $issue,
                         $severity,
-                        "Firm",
+                        "Tentative",
                         &cx.entry,
                         ip,
                         format!("The injected value <b>{}</b> was reflected in {}.", util::html_encode(&payload), context),
@@ -1140,7 +1140,7 @@ g11_reflected_check!(
     "CSS injection (reflected)",
     "medium",
     crate::scan::run_css_reflected,
-    "CSS injection (reflected), burp.Zb_5 -> Zw0x, KB 00501300: the probe must reflect in a CSS position (<style> text, a style attribute, a <link rel=stylesheet> href). Burp's payload literal and applicable-tag map are stripped (not established): plain token, contextual detection, REPLACE only. Severity Medium (KB); confidence not established: Firm."
+    "CSS injection (reflected), burp.Zb_5 -> Zw0x, KB 00501300: the probe must reflect in a CSS position (<style> text, a style attribute, a <link rel=stylesheet> href). Burp's payload literal and applicable-tag map are stripped (not established): plain token, contextual detection, REPLACE only. Severity Medium (KB); confidence not established: Tentative (a single contextual reflection, no breakout confirmation)."
 );
 g11_reflected_check!(
     HppReflected,
@@ -1148,7 +1148,7 @@ g11_reflected_check!(
     "Client-side HTTP parameter pollution (reflected)",
     "low",
     crate::scan::run_hpp_reflected,
-    "Client-side HTTP parameter pollution (reflected), burp.Zb_5 -> Zi4q, KB 00501400: a `<random3>&<random3>` pair (the stripped suffix is omitted, not established) must reflect in an attribute value, JavaScript string or response header. Severity Low (KB); confidence not established: Firm."
+    "Client-side HTTP parameter pollution (reflected), burp.Zb_5 -> Zi4q, KB 00501400: a `<random3>&<random3>` pair (the stripped suffix is omitted, not established) must reflect in a URL-bearing attribute (href/src/action/formaction), JavaScript string or response header. Severity Low (KB); confidence not established: Tentative (a single contextual reflection, no confirmation probe)."
 );
 g11_reflected_check!(
     FormActionHijacking,
@@ -1156,7 +1156,7 @@ g11_reflected_check!(
     "Form action hijacking (reflected)",
     "medium",
     crate::scan::run_form_action_reflected,
-    "Form action hijacking (reflected), burp.Zb_5 -> Zc51, KB 00501500: an injected URL must reflect as a form's action or an element's formaction. Severity Medium (KB); confidence not established: Firm."
+    "Form action hijacking (reflected), burp.Zb_5 -> Zc51, KB 00501500: an injected URL must reflect as a form's action or an element's formaction. Severity Medium (KB); confidence not established: Tentative (single request, no confirmation)."
 );
 
 /// File path manipulation (burp.Zsl1).
