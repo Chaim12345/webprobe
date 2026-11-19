@@ -272,6 +272,274 @@ impl StoredBatch {
     }
 }
 
+
+// ================= G.11 reflected manipulation contexts (burp.Zb_5 / Zcpt) =================
+
+/// Where in a response a probe reflection landed: the subset of burp.Zcpt's
+/// context identification the G.11 families select on (Zbf4.java:25-35
+/// preserves the same contexts in the report).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum G11Context {
+    /// Inside the value of `attr` on `tag`; `attrs` carries every
+    /// attribute of that tag (names lowercased).
+    Attr { tag: String, attr: String, attrs: Vec<(String, String)> },
+    /// Text inside a <style> element.
+    StyleText,
+    /// Text inside a <script> element.
+    JsText,
+    /// In the response head (a header value).
+    Head,
+    /// Anything else (HTML text, comments, tag names).
+    Other,
+}
+
+impl G11Context {
+    /// The report's context wording (burp.Zbf4).
+    pub(crate) fn describe(&self) -> String {
+        match self {
+            G11Context::Attr { tag, attr, .. } => format!("the {attr} attribute of a <{tag}> element"),
+            G11Context::StyleText => "a <style> element".to_string(),
+            G11Context::JsText => "a JavaScript string".to_string(),
+            G11Context::Head => "a response header".to_string(),
+            G11Context::Other => "the response body".to_string(),
+        }
+    }
+}
+
+/// The context of one body position: the open-tag stack at `pos`, and an
+/// attribute match when `pos` is inside a quoted or unquoted value.
+fn g11_body_context(body: &str, pos: usize) -> G11Context {
+    let b = body.as_bytes();
+    let mut open: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i < pos && i < b.len() {
+        if b[i] != b'<' {
+            i += 1;
+            continue;
+        }
+        if body[i..].starts_with("<!--") {
+            i = body[i + 4..].find("-->").map(|x| x + i + 7).unwrap_or(b.len());
+            continue;
+        }
+        let gt_scan = &body[i..];
+        let mut gt = b.len();
+        // A tag's '>' can hide inside a quoted attribute value.
+        let mut q: Option<u8> = None;
+        for (off, ch) in gt_scan.bytes().enumerate().skip(1) {
+            match (q, ch) {
+                (None, b'"') => q = Some(b'"'),
+                (None, b'\'') => q = Some(b'\''),
+                (Some(qc), c) if c == qc => q = None,
+                (None, b'>') => {
+                    gt = i + off;
+                    break;
+                }
+                _ => {}
+            }
+        }
+        if gt == b.len() {
+            break;
+        }
+        let closing = body.get(i + 1..i + 2) == Some("/");
+        let name_start = i + 1 + usize::from(closing);
+        let name_len = body[name_start..gt].find(|c: char| c.is_ascii_whitespace() || c == '/' || c == '>').unwrap_or(gt - name_start);
+        let tag = body[name_start..name_start + name_len].to_ascii_lowercase();
+        // Walk the attributes in one pass, then match the position: the
+        // Attr result must carry the tag's full attribute list whichever
+        // order they appear in.
+        let mut j = name_start + name_len;
+        let mut spans: Vec<(String, usize, usize)> = Vec::new();
+        while j < gt {
+            while j < gt && (b[j].is_ascii_whitespace() || b[j] == b'/') {
+                j += 1;
+            }
+            let ns = j;
+            while j < gt && !b[j].is_ascii_whitespace() && b[j] != b'=' && b[j] != b'/' {
+                j += 1;
+            }
+            let name = body[ns..j].to_ascii_lowercase();
+            while j < gt && b[j].is_ascii_whitespace() {
+                j += 1;
+            }
+            if j < gt && b[j] == b'=' {
+                j += 1;
+                while j < gt && b[j].is_ascii_whitespace() {
+                    j += 1;
+                }
+                let (vs, ve) = if j < gt && (b[j] == b'"' || b[j] == b'\'') {
+                    let qc = b[j];
+                    let vs = j + 1;
+                    let mut ve = vs;
+                    while ve < gt && b[ve] != qc {
+                        ve += 1;
+                    }
+                    j = (ve + 1).min(gt);
+                    (vs, ve)
+                } else {
+                    let vs = j;
+                    while j < gt && !b[j].is_ascii_whitespace() {
+                        j += 1;
+                    }
+                    (vs, j)
+                };
+                if !name.is_empty() {
+                    spans.push((name, vs, ve));
+                }
+            } else if !name.is_empty() {
+                spans.push((name, 0, 0));
+            }
+        }
+        if let Some((name, vs, ve)) = spans.iter().find(|(_, vs, ve)| pos >= *vs && pos < *ve) {
+            let attrs = spans.iter().map(|(k, vs, ve)| (k.clone(), body[*vs..*ve].to_string())).collect();
+            return G11Context::Attr { tag, attr: name.clone(), attrs };
+        }
+        if closing {
+            if let Some(k) = open.iter().rposition(|t| *t == tag) {
+                open.truncate(k);
+            }
+        } else if !tag.is_empty() && !body[i..gt].trim_end().ends_with('/') {
+            open.push(tag);
+        }
+        i = gt + 1;
+    }
+    if open.iter().any(|t| t == "style") {
+        G11Context::StyleText
+    } else if open.iter().any(|t| t == "script") {
+        G11Context::JsText
+    } else {
+        G11Context::Other
+    }
+}
+
+/// Every occurrence of `probe` in `resp`, classified (burp.Zcpt).
+pub(crate) fn g11_contexts(resp: &[u8], probe: &str) -> Vec<G11Context> {
+    let head_end = util::find_head_end(resp).unwrap_or(0);
+    let text = String::from_utf8_lossy(resp);
+    let mut out = Vec::new();
+    let mut start = 0;
+    while start + probe.len() <= text.len() {
+        let Some(at) = text[start..].find(probe).map(|p| p + start) else { break };
+        out.push(if at < head_end { G11Context::Head } else { g11_body_context(&text[head_end..], at - head_end) });
+        start = at + probe.len();
+    }
+    out
+}
+
+fn g11_token(n: usize) -> String {
+    use rand::Rng;
+    let mut g = rand::thread_rng();
+    (0..n).map(|_| (b'a' + g.gen_range(0..26)) as char).collect()
+}
+
+/// CSS injection (reflected), burp.Zb_5's selector -> Zw0x (KB 00501300):
+/// a token injected at the point must reflect in a CSS position: <style>
+/// text, a style attribute, or the href of a <link rel=stylesheet>. The
+/// CSS-specific payload literal (Zi9s initializer) and the full
+/// applicable-tag map are stripped from the jar (not established), so the
+/// probe is a plain token and detection is purely contextual; REPLACE
+/// mode only (Burp also tries APPEND).
+/// Returns (payload, context description, response).
+pub(crate) fn run_css_reflected<F: FnMut(&str) -> Option<Vec<u8>>>(mut send: F) -> Option<(String, String, Vec<u8>)> {
+    let token = g11_token(8);
+    let resp = send(&token)?;
+    let cx = g11_contexts(&resp, &token).into_iter().find(|c| match c {
+        G11Context::StyleText => true,
+        G11Context::Attr { attr, .. } if attr == "style" => true,
+        G11Context::Attr { tag, attr, attrs } if tag == "link" && attr == "href" => attrs.iter().any(|(k, v)| k == "rel" && v.to_ascii_lowercase().contains("stylesheet")),
+        _ => false,
+    })?;
+    Some((token, cx.describe(), resp))
+}
+
+/// Client-side HTTP parameter pollution (reflected), burp.Zb_5 -> Zi4q
+/// (KB 00501400): burp.Zpy1 builds `<random3>&<random3><suffix>`,
+/// optionally prefixed by '?'; the static suffix is stripped from the jar
+/// (not established), so WebProbe's probe is `<random3>&<random3>` with
+/// no suffix and no '?' prefix. Reported when the pair reflects in an
+/// HTML attribute value, a JavaScript string or a response header — the
+/// contexts client-side code reads query parameters from (Zpy2's
+/// transformed-reflection match is verbatim here; transformations are
+/// not established). REPLACE mode only.
+pub(crate) fn run_hpp_reflected<F: FnMut(&str) -> Option<Vec<u8>>>(mut send: F) -> Option<(String, String, Vec<u8>)> {
+    let probe = format!("{}&{}", g11_token(3), g11_token(3));
+    let resp = send(&probe)?;
+    let cx = g11_contexts(&resp, &probe).into_iter().find(|c| matches!(c, G11Context::Attr { .. } | G11Context::JsText | G11Context::Head))?;
+    Some((probe, cx.describe(), resp))
+}
+
+/// Form action hijacking (reflected), burp.Zb_5 -> Zc51 (KB 00501500):
+/// an injected URL must reflect as a form submission target — the action
+/// of a <form> or any element's formaction attribute (the Zi9s map's
+/// decoded form/action/input entries; the full map is not established).
+/// REPLACE mode only.
+pub(crate) fn run_form_action_reflected<F: FnMut(&str) -> Option<Vec<u8>>>(mut send: F) -> Option<(String, String, Vec<u8>)> {
+    let probe = format!("https://{}.example/{}", g11_token(8), g11_token(6));
+    let resp = send(&probe)?;
+    let cx = g11_contexts(&resp, &probe).into_iter().find(|c| match c {
+        G11Context::Attr { tag, attr, .. } => (tag == "form" && attr == "action") || attr == "formaction",
+        _ => false,
+    })?;
+    Some((probe, cx.describe(), resp))
+}
+
+#[cfg(test)]
+mod g11_tests {
+    use super::*;
+
+    fn resp(body: &str) -> Vec<u8> {
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{body}", body.len()).into_bytes()
+    }
+
+    #[test]
+    fn contexts_cover_style_attr_script_and_head() {
+        let r = resp("<html><style>body{color:PROBEBODY}</style></html>");
+        assert_eq!(g11_contexts(&r, "PROBEBODY"), vec![G11Context::StyleText]);
+        let r = resp("<div style=\"background:PROBEBODY\">x</div>");
+        assert!(matches!(g11_contexts(&r, "PROBEBODY").as_slice(), [G11Context::Attr { tag, attr, .. }] if tag == "div" && attr == "style"));
+        let r = resp("<script>var x = 'PROBEBODY';</script>");
+        assert_eq!(g11_contexts(&r, "PROBEBODY"), vec![G11Context::JsText]);
+        // A reflection in the response head.
+        let r = b"HTTP/1.1 302 Found\r\nLocation: https://x/PROBEBODY\r\nContent-Length: 2\r\n\r\nok".to_vec();
+        assert_eq!(g11_contexts(&r, "PROBEBODY"), vec![G11Context::Head]);
+        // Plain body text is Other; rel before href and href before rel both match.
+        let r = resp("<p>PROBEBODY</p>");
+        assert_eq!(g11_contexts(&r, "PROBEBODY"), vec![G11Context::Other]);
+        let r = resp("<link href=\"/x?c=PROBEBODY\" rel=\"stylesheet\">");
+        assert!(matches!(g11_contexts(&r, "PROBEBODY").as_slice(), [G11Context::Attr { tag, attr, attrs }] if tag == "link" && attr == "href" && attrs.iter().any(|(k, _)| k == "rel")));
+    }
+
+    #[test]
+    fn css_reflected_only_in_css_positions() {
+        let hit = run_css_reflected(|p| Some(resp(&format!("<style>body{{color:{p}}}</style>"))));
+        assert!(hit.is_some());
+        let hit = run_css_reflected(|p| Some(resp(&format!("<p>{p}</p>"))));
+        assert!(hit.is_none());
+        let hit = run_css_reflected(|p| Some(resp(&format!("<div style=\"x:{p}\">y</div>"))));
+        assert!(hit.is_some());
+        let hit = run_css_reflected(|p| Some(resp(&format!("<link rel=\"stylesheet\" href=\"/x?c={p}\">"))));
+        assert!(hit.is_some());
+    }
+
+    #[test]
+    fn hpp_reflected_in_attr_js_and_header_only() {
+        let hit = run_hpp_reflected(|p| Some(resp(&format!("<a href=\"/go?next={p}\">x</a>"))));
+        assert!(hit.is_some());
+        let hit = run_hpp_reflected(|p| Some(resp(&format!("<p>{p}</p>"))));
+        assert!(hit.is_none());
+        let hit = run_hpp_reflected(|p| Some(format!("HTTP/1.1 302 Found\r\nLocation: /next?{p}\r\nContent-Length: 2\r\n\r\nok").into_bytes()));
+        assert!(hit.is_some());
+    }
+
+    #[test]
+    fn form_action_reflected_on_submission_targets() {
+        let hit = run_form_action_reflected(|p| Some(resp(&format!("<form action=\"{p}\"><input type=\"text\"></form>"))));
+        assert!(hit.is_some());
+        let hit = run_form_action_reflected(|p| Some(resp(&format!("<button formaction=\"{p}\">go</button>"))));
+        assert!(hit.is_some());
+        let hit = run_form_action_reflected(|p| Some(resp(&format!("<a href=\"{p}\">x</a>"))));
+        assert!(hit.is_none());
+    }
+}
 impl Drop for StoredBatch {
     fn drop(&mut self) {
         if self.opened {
