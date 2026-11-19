@@ -404,7 +404,7 @@ fn g11_body_context(body: &str, pos: usize) -> G11Context {
                 spans.push((name, 0, 0));
             }
         }
-        if let Some((name, vs, ve)) = spans.iter().find(|(_, vs, ve)| pos >= *vs && pos < *ve) {
+        if let Some((name, _, _)) = spans.iter().find(|(_, vs, ve)| pos >= *vs && pos < *ve) {
             let attrs = spans.iter().map(|(k, vs, ve)| (k.clone(), body[*vs..*ve].to_string())).collect();
             return G11Context::Attr { tag, attr: name.clone(), attrs };
         }
@@ -454,6 +454,89 @@ fn g11_token(n: usize) -> String {
     (0..n).map(|_| (b'a' + g.gen_range(0..26)) as char).collect()
 }
 
+/// The CSS injection probe: one plain token (burp.Zw0x; the CSS-specific
+/// payload literal is stripped, not established).
+pub(crate) fn g11_css_probes() -> Vec<String> {
+    vec![g11_token(8)]
+}
+
+/// The HPP probe pair (burp.Zpy1): `<random3>&<random3>`; the stripped
+/// static suffix and the '?' prefix are not established and omitted.
+pub(crate) fn g11_hpp_probes() -> Vec<String> {
+    vec![format!("{}&{}", g11_token(3), g11_token(3))]
+}
+
+/// The form action probe: a random URL (burp.Zc51).
+pub(crate) fn g11_form_action_probes() -> Vec<String> {
+    vec![format!("https://{}.example/{}", g11_token(8), g11_token(6))]
+}
+
+/// The link manipulation probes (burp.Zpyp.java:13-33, established
+/// literals): one random host/path under each of the four scheme prefixes.
+pub(crate) fn g11_link_probes() -> Vec<String> {
+    let url = format!("{}.example/{}", g11_token(8), g11_token(6));
+    ["http://", "https://", "//", "\\/"].iter().map(|p| format!("{p}{url}")).collect()
+}
+
+/// The CSS family's reflection-context selector (burp.Zw0x; the decoded
+/// applicable map's link/rel/stylesheet entries).
+pub(crate) fn g11_css_match(c: &G11Context) -> bool {
+    match c {
+        G11Context::StyleText => true,
+        G11Context::Attr { attr, .. } if attr == "style" => true,
+        G11Context::Attr { tag, attr, attrs } if tag == "link" && attr == "href" => {
+            attrs.iter().any(|(k, v)| k == "rel" && v.to_ascii_lowercase().contains("stylesheet"))
+        }
+        _ => false,
+    }
+}
+
+/// The HPP family's selector (burp.Zpy2's transformed-reflection match):
+/// an attribute value, a JavaScript string or a response header.
+pub(crate) fn g11_hpp_match(c: &G11Context) -> bool {
+    matches!(c, G11Context::Attr { .. } | G11Context::JsText | G11Context::Head)
+}
+
+/// The form action family's selector (burp.Zc51): a <form>'s action or
+/// any element's formaction attribute.
+pub(crate) fn g11_form_action_match(c: &G11Context) -> bool {
+    matches!(c, G11Context::Attr { tag, attr, .. } if (tag == "form" && attr == "action") || attr == "formaction")
+}
+
+/// Stored G.11 rounds (burp.Zpqv): each probe goes to the pair's
+/// injection item, the retrieval item's own request is replayed after it,
+/// and `hit` classifies the retrieval response. Returns the first
+/// matching (probe, description).
+pub(crate) fn run_g11_stored<S, R, H>(probes: &[String], mut send: S, mut retrieve: R, hit: H) -> Option<(String, String)>
+where
+    S: FnMut(&str) -> Option<Vec<u8>>,
+    R: FnMut() -> Option<Vec<u8>>,
+    H: Fn(&[u8], &str) -> Option<String>,
+{
+    for p in probes {
+        send(p)?;
+        let resp = retrieve()?;
+        if let Some(what) = hit(&resp, p) {
+            return Some((p.clone(), what));
+        }
+    }
+    None
+}
+
+/// Stored link manipulation's hit (burp.Ze20 with Zpy2's transformed
+/// reflection): the injected URL must come back as a link or redirect
+/// target of the retrieval response.
+pub(crate) fn g11_link_stored_hit(resp: &[u8], probe: &str) -> Option<String> {
+    let target = link_targets(resp).into_iter().find(|t| t.contains(probe))?;
+    Some(format!("the link/redirect target {target:?}"))
+}
+
+/// The stored CSS/HPP/form-action hit: the probe's reflection context in
+/// the retrieval response, per the family's selector.
+pub(crate) fn g11_stored_context_hit(resp: &[u8], probe: &str, matches: impl Fn(&G11Context) -> bool) -> Option<String> {
+    g11_contexts(resp, probe).into_iter().find(|c| matches(c)).map(|c| c.describe())
+}
+
 /// CSS injection (reflected), burp.Zb_5's selector -> Zw0x (KB 00501300):
 /// a token injected at the point must reflect in a CSS position: <style>
 /// text, a style attribute, or the href of a <link rel=stylesheet>. The
@@ -463,14 +546,9 @@ fn g11_token(n: usize) -> String {
 /// mode only (Burp also tries APPEND).
 /// Returns (payload, context description, response).
 pub(crate) fn run_css_reflected<F: FnMut(&str) -> Option<Vec<u8>>>(mut send: F) -> Option<(String, String, Vec<u8>)> {
-    let token = g11_token(8);
+    let token = g11_css_probes().remove(0);
     let resp = send(&token)?;
-    let cx = g11_contexts(&resp, &token).into_iter().find(|c| match c {
-        G11Context::StyleText => true,
-        G11Context::Attr { attr, .. } if attr == "style" => true,
-        G11Context::Attr { tag, attr, attrs } if tag == "link" && attr == "href" => attrs.iter().any(|(k, v)| k == "rel" && v.to_ascii_lowercase().contains("stylesheet")),
-        _ => false,
-    })?;
+    let cx = g11_contexts(&resp, &token).into_iter().find(g11_css_match)?;
     Some((token, cx.describe(), resp))
 }
 
@@ -484,15 +562,9 @@ pub(crate) fn run_css_reflected<F: FnMut(&str) -> Option<Vec<u8>>>(mut send: F) 
 /// transformed-reflection match is verbatim here; transformations are
 /// not established). REPLACE mode only.
 pub(crate) fn run_hpp_reflected<F: FnMut(&str) -> Option<Vec<u8>>>(mut send: F) -> Option<(String, String, Vec<u8>)> {
-    let probe = format!("{}&{}", g11_token(3), g11_token(3));
+    let probe = g11_hpp_probes().remove(0);
     let resp = send(&probe)?;
-    // Attribute hits only count on URL-bearing attributes: a parameter
-    // pair reflected into a URL is what client-side navigation reads.
-    let cx = g11_contexts(&resp, &probe).into_iter().find(|c| match c {
-        G11Context::Attr { attr, .. } => matches!(attr.as_str(), "href" | "src" | "action" | "formaction"),
-        G11Context::JsText | G11Context::Head => true,
-        _ => false,
-    })?;
+    let cx = g11_contexts(&resp, &probe).into_iter().find(g11_hpp_match)?;
     Some((probe, cx.describe(), resp))
 }
 
@@ -502,12 +574,9 @@ pub(crate) fn run_hpp_reflected<F: FnMut(&str) -> Option<Vec<u8>>>(mut send: F) 
 /// decoded form/action/input entries; the full map is not established).
 /// REPLACE mode only.
 pub(crate) fn run_form_action_reflected<F: FnMut(&str) -> Option<Vec<u8>>>(mut send: F) -> Option<(String, String, Vec<u8>)> {
-    let probe = format!("https://{}.example/{}", g11_token(8), g11_token(6));
+    let probe = g11_form_action_probes().remove(0);
     let resp = send(&probe)?;
-    let cx = g11_contexts(&resp, &probe).into_iter().find(|c| match c {
-        G11Context::Attr { tag, attr, .. } => (tag == "form" && attr == "action") || attr == "formaction",
-        _ => false,
-    })?;
+    let cx = g11_contexts(&resp, &probe).into_iter().find(g11_form_action_match)?;
     Some((probe, cx.describe(), resp))
 }
 
@@ -517,6 +586,78 @@ mod g11_tests {
 
     fn resp(body: &str) -> Vec<u8> {
         format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{body}", body.len()).into_bytes()
+    }
+
+    #[test]
+    fn link_probes_cover_the_four_zpyp_prefixes() {
+        let probes = g11_link_probes();
+        assert_eq!(probes.len(), 4);
+        assert!(probes[0].starts_with("http://"), "{}", probes[0]);
+        assert!(probes[1].starts_with("https://"), "{}", probes[1]);
+        assert!(probes[2].starts_with("//") && !probes[2].starts_with("///"), "{}", probes[2]);
+        assert!(probes[3].starts_with('\\'), "{}", probes[3]);
+        // The same random host/path under each prefix.
+        let tail = probes[0].trim_start_matches("http://").to_string();
+        for p in &probes[1..] {
+            assert!(p.ends_with(&tail), "{p}");
+        }
+    }
+
+    #[test]
+    fn stored_rounds_inject_then_retrieve_and_classify() {
+        // A probe returned in <style> text is a stored CSS hit; the
+        // injection went out first.
+        let mut sent = Vec::new();
+        let hit = run_g11_stored(
+            &["tokaaaaa".to_string()],
+            |p: &str| {
+                sent.push(p.to_string());
+                Some(b"HTTP/1.1 200 OK
+Content-Length: 2
+
+ok".to_vec())
+            },
+            || Some(resp("<style>body{color:tokaaaaa}</style>")),
+            |r: &[u8], p: &str| g11_stored_context_hit(r, p, g11_css_match),
+        );
+        assert_eq!(sent, ["tokaaaaa"]);
+        let (p, what) = hit.expect("stored css hit");
+        assert_eq!((p.as_str(), what.as_str()), ("tokaaaaa", "a <style> element"));
+        // Plain body text is not a CSS position.
+        let none = run_g11_stored(
+            &["tokbbbbb".to_string()],
+            |_: &str| Some(vec![]),
+            || Some(resp("<p>tokbbbbb</p>")),
+            |r: &[u8], p: &str| g11_stored_context_hit(r, p, g11_css_match),
+        );
+        assert!(none.is_none());
+        // The stored HPP probe in an attribute value.
+        let hit = run_g11_stored(
+            &["abc&def".to_string()],
+            |_: &str| Some(vec![]),
+            || Some(resp("<div data-x=\"abc&def\">y</div>")),
+            |r: &[u8], p: &str| g11_stored_context_hit(r, p, g11_hpp_match),
+        );
+        assert!(hit.is_some());
+        // Stored link manipulation: the injected URL as a link target.
+        let hit = run_g11_stored(
+            &["http://tokcccc.example/dddddd".to_string()],
+            |_: &str| Some(vec![]),
+            || Some(resp("<a href=\"http://tokcccc.example/dddddd\">x</a>")),
+            g11_link_stored_hit,
+        );
+        assert!(hit.unwrap().1.contains("link/redirect target"));
+        // Form action: formaction on a button.
+        let hit = run_g11_stored(
+            &["https://tokeeee.example/ffffff".to_string()],
+            |_: &str| Some(vec![]),
+            || Some(resp("<button formaction=\"https://tokeeee.example/ffffff\">go</button>")),
+            |r: &[u8], p: &str| g11_stored_context_hit(r, p, g11_form_action_match),
+        );
+        assert!(hit.is_some());
+        // A retrieval failure abandons the family.
+        let none = run_g11_stored(&["t".to_string()], |_: &str| Some(vec![]), || None, g11_link_stored_hit);
+        assert!(none.is_none());
     }
 
     #[test]

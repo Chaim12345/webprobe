@@ -3688,6 +3688,16 @@ fn guestbook(post_only: bool) -> (u16, std::sync::Arc<std::sync::atomic::AtomicU
                     "<html><body>{}</body></html>",
                     list(&comments.lock().unwrap())
                 ))
+            } else if head.starts_with("GET /embed") {
+                // Every stored comment in CSS, attribute, form-target and
+                // link-target positions (the G.11 stored lab).
+                let shown = comments
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .map(|x| format!("<style>{x}</style><div data-x=\"{x}\"></div><form action=\"{x}\"></form><a href=\"{x}\">l</a>"))
+                    .collect::<String>();
+                Some(format!("<html><body>{shown}</body></html>"))
             } else if head.starts_with("POST /search") {
                 let q = field("q=").unwrap_or_default();
                 let shown = if post_only {
@@ -3817,6 +3827,28 @@ fn stored_input_pairs_across_items_and_stage_a4_finds_stored_xss() {
         shared.scan.total.load(Ordering::SeqCst),
         shared.scan.done.load(Ordering::SeqCst)
     );
+}
+
+/// The G.11 stored families: input stored by POST /comment and embedded
+/// by GET /embed in style/attribute/form/link positions is found by
+/// stage A4's stored CSS, HPP, form-action and link-manipulation checks.
+#[test]
+fn stage_a4_finds_the_stored_g11_families() {
+    let (port, _) = guestbook(false);
+    let shared = Shared::new();
+    run_task(&shared, vec![guestbook_entry(port, "POST", "/comment", "c=hi"), guestbook_entry(port, "GET", "/embed", "")]);
+    let expect = [
+        ("Link manipulation (stored)", "info"),
+        ("CSS injection (stored)", "medium"),
+        ("Client-side HTTP parameter pollution (stored)", "low"),
+        ("Form action hijacking (stored)", "medium"),
+    ];
+    for (name, sev) in expect {
+        let hits = issues_named(&shared, name);
+        let h = hits.iter().find(|i| i.path == "/comment").unwrap_or_else(|| panic!("{name} not reported: {:?}", hits.iter().map(|i| i.path.clone()).collect::<Vec<_>>()));
+        assert_eq!((h.sev.as_str(), h.confidence.as_str()), (sev, "Firm"), "{name}");
+        assert!(h.detail.contains("GET /embed"), "{name}: {}", h.detail);
+    }
 }
 
 /// The retrieval item may be a POST: only POST /search shows the stored
