@@ -1544,12 +1544,12 @@ struct Saver {
     busy: bool,
 }
 
-fn saver() -> &'static (std::sync::Mutex<Saver>, std::sync::Condvar) {
-    static S: std::sync::OnceLock<(std::sync::Mutex<Saver>, std::sync::Condvar)> =
+fn saver() -> &'static (crate::sync::Mutex<Saver>, std::sync::Condvar) {
+    static S: std::sync::OnceLock<(crate::sync::Mutex<Saver>, std::sync::Condvar)> =
         std::sync::OnceLock::new();
     S.get_or_init(|| {
         (
-            std::sync::Mutex::new(Saver {
+            crate::sync::Mutex::new(Saver {
                 pending: Default::default(),
                 busy: false,
             }),
@@ -1575,7 +1575,7 @@ fn run_save(path: &std::path::Path, data: &ProjectData, done: SaveDone) {
 /// `done` is dropped).
 pub fn save_in_background(path: std::path::PathBuf, data: ProjectData, done: SaveDone) {
     let (lock, cv) = saver();
-    let mut s = lock.lock().unwrap_or_else(|p| p.into_inner());
+    let mut s = lock.lock().unwrap();
     if let Some(slot) = s.pending.iter_mut().find(|(p, _, _)| *p == path) {
         *slot = (path, data, done);
     } else {
@@ -1595,7 +1595,7 @@ pub fn save_in_background(path: std::path::PathBuf, data: ProjectData, done: Sav
             fn drop(&mut self) {
                 if std::thread::panicking() {
                     let (lock, cv) = saver();
-                    let mut s = lock.lock().unwrap_or_else(|p| p.into_inner());
+                    let mut s = lock.lock().unwrap();
                     s.busy = false;
                     cv.notify_all();
                 }
@@ -1604,7 +1604,7 @@ pub fn save_in_background(path: std::path::PathBuf, data: ProjectData, done: Sav
         let _guard = OnPanic;
         loop {
             let job = {
-                let mut s = lock.lock().unwrap_or_else(|p| p.into_inner());
+                let mut s = lock.lock().unwrap();
                 match s.pending.pop_front() {
                     Some(job) => job,
                     None => {
@@ -1625,17 +1625,13 @@ pub fn save_in_background(path: std::path::PathBuf, data: ProjectData, done: Sav
         // No thread: save on this one rather than lose the snapshot.
         eprintln!("webprobe: project-save thread unavailable ({e}); saving inline");
         loop {
-            let job = lock
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
-                .pending
-                .pop_front();
+            let job = lock.lock().unwrap().pending.pop_front();
             match job {
                 Some((path, data, done)) => run_save(&path, &data, done),
                 None => break,
             }
         }
-        let mut s = lock.lock().unwrap_or_else(|p| p.into_inner());
+        let mut s = lock.lock().unwrap();
         s.busy = false;
         cv.notify_all();
     }
@@ -1644,7 +1640,7 @@ pub fn save_in_background(path: std::path::PathBuf, data: ProjectData, done: Sav
 /// Block until no save is queued or running.
 pub fn wait_for_saves() {
     let (lock, cv) = saver();
-    let mut s = lock.lock().unwrap_or_else(|p| p.into_inner());
+    let mut s = lock.lock().unwrap();
     while s.busy {
         s = cv.wait(s).unwrap_or_else(|p| p.into_inner());
     }
