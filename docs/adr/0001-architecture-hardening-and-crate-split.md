@@ -64,12 +64,13 @@ Extract the independent leaf modules now, break the cycle, then extract the rest
    `collaborator`, `intruder`, ...) can only be split by first inverting the dependencies that point back
    at `net`, for example by passing `&Shared` sub-structs or small traits instead of reaching into `net`.
    Until then, any crate split would either fail to compile or just move modules into one large crate.
-2. The Microsoft guideline justifies a split by independence ("if a submodule can be used independently,
-   its contents should be moved into a separate crate"), not by build speed. Build speed is a secondary
-   benefit and the one we can measure. No edit-rebuild timing has been taken yet (a no-op
-   `cargo check -p webprobe-core` is 1.6 s; a first check was 36 s including dependencies). Record
-   `cargo build --timings` for a typical edit in `scan_checks.rs` and `net.rs` before and after each
-   extraction; a slow result is a reason to look at the boundary, not to stop splitting.
+2. M-SMALLER-CRATES gives two reasons: "dramatic compile time improvements, especially during the
+   development of these crates" and preventing cyclic component dependencies; its test is whether "a
+   submodule can be used independently". The compile-time claim is the guideline's, not measured here:
+   no edit-rebuild timing has been taken yet (a no-op `cargo check -p webprobe-core` is 1.6 s; a first
+   check was 36 s including dependencies). Record `cargo build --timings` for a typical edit in
+   `scan_checks.rs` and `net.rs` before and after each extraction, so the claim is checked on this code.
+   The cycle itself is already the second problem the guideline names.
 3. **Stage A (no cycle work needed).** These modules are already acyclic and mostly leaf-like; they can
    become `crates/webprobe-support` (mime, body, streaming, tls, paths, variations, csp, xss, jwt,
    decoder_ops, rules, seq_bits, compare, retirejs, intercept_rules, logger) and
@@ -104,20 +105,20 @@ Item 9 scores low only because of effort; it gates the larger split.
 
 ## Revision 1: alignment with the Microsoft Pragmatic Rust Guidelines
 
-Source: [Microsoft Pragmatic Rust Guidelines](https://microsoft.github.io/rust-guidelines/) (version 2026.6),
-read via the Universal, Project, Correctness, Libraries (interop, UX, resilience, building), Applications and
-FFI pages. The Macros, Performance, Documentation, AI, Checklist, FAQ and Changelog pages were not read. The
-guidelines say to follow their spirit over the letter, and they point to the
-[Rust API Guidelines](https://rust-lang.github.io/api-guidelines/checklist.html) (checklist not read in full).
+Source: [Microsoft Pragmatic Rust Guidelines](https://microsoft.github.io/rust-guidelines/) (version 2026.6).
+The full text of all 90 rules (the site's `agents/all.txt`) was read; it is saved unmodified in
+`.claude/skills/rust-guidelines/references/` and indexed by the `rust-guidelines` skill there. The Checklist,
+FAQ and Changelog pages were not read. The guidelines say to follow their spirit over the letter, and they point
+to the [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/checklist.html) (not read in full).
 They are written for libraries and Microsoft's practice; WebProbe is a desktop application plus a core library.
 
 What changed in this ADR after reading them:
 
 | Guideline | Finding for WebProbe | Change |
 |---|---|---|
-| [M-PANIC-IS-STOP](https://microsoft.github.io/rust-guidelines/guidelines/correctness/#M-PANIC-IS-STOP) | The guideline lists `unwrap` on a poisoned lock as a valid panic, and has no blanket ban on `unwrap`. It also says a panic means the program should stop, not continue. WebProbe runs work on ~139 spawned threads and catches panics in places (9 `catch_unwind` uses), so a panicking thread poisons a mutex and the process keeps going. | The original "replace ~650 `lock().unwrap()`" item was too broad. The real defect is the *mixed* policy. Decide one: (a) panics are fatal (`panic = "abort"` or a panic hook that saves the project and exits; remove the `catch_unwind` recovery), or (b) keep going and make locks poison-tolerant. Issue #32 is reworded. |
+| [M-PANIC-IS-STOP](https://microsoft.github.io/rust-guidelines/guidelines/correctness/#M-PANIC-IS-STOP) | The guideline lists `unwrap` on a poisoned lock as a valid panic, and has no blanket ban on `unwrap`. It also says a panic means the program should stop, not continue. WebProbe runs work on ~139 spawned threads and catches panics in places (9 `catch_unwind` uses), so a panicking thread poisons a mutex and the process keeps going. | The original "replace ~650 `lock().unwrap()`" item was too broad. The real defect is the *mixed* policy. Decide one: (a) panics are fatal (`panic = "abort"` or a panic hook that saves the project and exits; remove the `catch_unwind` recovery), or (b) keep going and make locks poison-tolerant. M-PANIC-CONTINUATION allows `catch_unwind` per request so other requests can finish, but then expects a controlled restart, so (b) must not mean "continue indefinitely". Issue #32 is reworded. |
 | [M-SMALLER-CRATES](https://microsoft.github.io/rust-guidelines/guidelines/universal/#M-SMALLER-CRATES), [M-CARGO-WORKSPACE](https://microsoft.github.io/rust-guidelines/guidelines/project/#M-CARGO-WORKSPACE), [M-CRATES-IN-WORKSPACE](https://microsoft.github.io/rust-guidelines/guidelines/project/#M-CRATES-IN-WORKSPACE), [M-CRATES-FLAT-FOLDER](https://microsoft.github.io/rust-guidelines/guidelines/project/#M-CRATES-FLAT-FOLDER) | Prefers many crates, one workspace `Cargo.toml`, crates flat under `crates/`, versions in `[workspace.dependencies]`, shared lints inherited. WebProbe's workspace lives in `app/` and also holds the root package. | Split direction reworded above. Issue #36 extended: root workspace manifest, `crates/` layout, inherited `[workspace.lints]`. |
-| [M-ERRORS-CANONICAL-STRUCTS](https://microsoft.github.io/rust-guidelines/guidelines/libs/ux/#M-ERRORS-CANONICAL-STRUCTS), [M-FROM-ERROR](https://microsoft.github.io/rust-guidelines/guidelines/libs/ux/#M-FROM-ERROR), [M-APP-ERROR](https://microsoft.github.io/rust-guidelines/guidelines/apps/#M-APP-ERROR) | Library errors are situation-specific structs (backtrace, optional cause, helper methods), with `From` conversions. Applications may use `anyhow`/`eyre` but should not mix several. `webprobe-core` is a library used by the app and the headless binary. | Issue #34: use situation-specific error structs, not one large enum or `String`; `anyhow` is acceptable only in the two binaries. |
+| [M-ERRORS-CANONICAL-STRUCTS](https://microsoft.github.io/rust-guidelines/guidelines/libs/ux/#M-ERRORS-CANONICAL-STRUCTS), [M-FROM-ERROR](https://microsoft.github.io/rust-guidelines/guidelines/libs/ux/#M-FROM-ERROR), [M-APP-ERROR](https://microsoft.github.io/rust-guidelines/guidelines/apps/#M-APP-ERROR) | Library errors are situation-specific structs (backtrace, optional cause, helper methods), with `From` conversions. Applications may use `anyhow`/`eyre` but should not mix several. `webprobe-core` is a library used by the app and the headless binary. | Issue #34: use situation-specific error structs, not one large enum or `String`. A private `ErrorKind` is fine; expose `is_xxx()` methods rather than the enum. `anyhow` is acceptable only in the two binaries. |
 | [M-STATIC-VERIFICATION](https://microsoft.github.io/rust-guidelines/guidelines/universal/#M-STATIC-VERIFICATION), [M-LINT-OVERRIDE-EXPECT](https://microsoft.github.io/rust-guidelines/guidelines/universal/#M-LINT-OVERRIDE-EXPECT) | Compiler lints, clippy (categories at `warn`, priority -1, plus selected restriction lints), rustfmt, cargo-audit, cargo-hack, cargo-udeps, miri as gates; overrides use `#[expect(.., reason)]`. WebProbe has 6 `#[allow]` and 0 `#[expect]`, and none of these gates. | Issues #31 and #33 extended: `[workspace.lints]`, `cargo audit`, `#[expect]` migration. Relevant here because the app handles untrusted network input. |
 | [M-LATEST-EDITION](https://microsoft.github.io/rust-guidelines/guidelines/project/#M-LATEST-EDITION), [M-MSRV](https://microsoft.github.io/rust-guidelines/guidelines/project/#M-MSRV) | New crates use the latest stable edition; set an MSRV. Both crates are edition 2021 with no `rust-version`. | New issue. |
 | [M-LOG-STRUCTURED](https://microsoft.github.io/rust-guidelines/guidelines/universal/#M-LOG-STRUCTURED), [M-LOG-NOT-PRINT](https://microsoft.github.io/rust-guidelines/guidelines/libs/resilience/#M-LOG-NOT-PRINT) | Production code logs through structured telemetry, not `println!`/`dbg!`. WebProbe has up to 56 `println!`/`eprintln!`/`dbg!` hits (includes inline tests; not separated) and a free-text `shared.log(..)`. | New issue. Low priority; headless CLI output is allowed to print. |
