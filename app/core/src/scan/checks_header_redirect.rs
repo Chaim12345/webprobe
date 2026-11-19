@@ -11,14 +11,22 @@ pub fn reset_openapi_hosts() {
 }
 
 pub fn openapi_hosts() -> &'static crate::sync::Mutex<std::collections::HashSet<String>> {
-    static H: std::sync::OnceLock<crate::sync::Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
+    static H: std::sync::OnceLock<crate::sync::Mutex<std::collections::HashSet<String>>> =
+        std::sync::OnceLock::new();
     H.get_or_init(|| crate::sync::Mutex::new(std::collections::HashSet::new()))
 }
 
 pub fn raw_header_lines(resp: &[u8]) -> Vec<String> {
-    let end = resp.windows(4).position(|w| w == b"\r\n\r\n").unwrap_or(resp.len());
+    let end = resp
+        .windows(4)
+        .position(|w| w == b"\r\n\r\n")
+        .unwrap_or(resp.len());
     let head = String::from_utf8_lossy(&resp[..end]).into_owned();
-    head.split(['\r', '\n']).skip(1).filter(|l| !l.is_empty()).map(str::to_string).collect()
+    head.split(['\r', '\n'])
+        .skip(1)
+        .filter(|l| !l.is_empty())
+        .map(str::to_string)
+        .collect()
 }
 
 /// burp.Zwi.ZL precondition: the value is reflected into a response header.
@@ -37,15 +45,24 @@ pub struct HeaderInjectionHit {
 /// NUL-prefixed (Zw9s.Ze mode 2). The payload is a 10-char random string
 /// split 5+5 around the separator. A hit is a response header line that
 /// begins with the second half (burp.Zfpy).
-pub fn run_header_injection_check<F: FnMut(&str) -> Option<Vec<u8>>>(value: &str, mut send: F) -> Option<HeaderInjectionHit> {
+pub fn run_header_injection_check<F: FnMut(&str) -> Option<Vec<u8>>>(
+    value: &str,
+    mut send: F,
+) -> Option<HeaderInjectionHit> {
     let rnd = || {
         use rand::Rng;
         let mut g = rand::thread_rng();
-        (0..10).map(|_| (b'a' + g.gen_range(0..26)) as char).collect::<String>()
+        (0..10)
+            .map(|_| (b'a' + g.gen_range(0..26)) as char)
+            .collect::<String>()
     };
     for append in [false, true] {
         let marker = rnd();
-        let probe = if append { format!("{value}{marker}") } else { marker.clone() };
+        let probe = if append {
+            format!("{value}{marker}")
+        } else {
+            marker.clone()
+        };
         if !send(&probe).is_some_and(|r| reflected_in_headers(&r, &marker)) {
             continue;
         }
@@ -60,8 +77,14 @@ pub fn run_header_injection_check<F: FnMut(&str) -> Option<Vec<u8>>>(value: &str
                 let inj = format!("{}{s}{}", &r[..5], &r[5..]);
                 let payload = if append { format!("{value}{inj}") } else { inj };
                 let Some(resp) = send(&payload) else { continue };
-                if let Some(line) = raw_header_lines(&resp).into_iter().find(|l| l.starts_with(&r[5..])) {
-                    return Some(HeaderInjectionHit { payload, injected_line: line });
+                if let Some(line) = raw_header_lines(&resp)
+                    .into_iter()
+                    .find(|l| l.starts_with(&r[5..]))
+                {
+                    return Some(HeaderInjectionHit {
+                        payload,
+                        injected_line: line,
+                    });
                 }
             }
         }
@@ -84,7 +107,12 @@ pub fn redirect_targets(resp: &[u8]) -> Vec<String> {
     }
     let after_url = |s: &str| -> Option<String> {
         let low = s.to_ascii_lowercase();
-        low.find("url=").map(|i| s[i + 4..].trim().trim_matches(|c| c == '"' || c == '\'').to_string())
+        low.find("url=").map(|i| {
+            s[i + 4..]
+                .trim()
+                .trim_matches(|c| c == '"' || c == '\'')
+                .to_string()
+        })
     };
     if let Some(r) = util::get_header(&p.headers, "refresh").and_then(|r| after_url(&r)) {
         out.push(r);
@@ -119,9 +147,15 @@ pub fn js_redirect_at(body: &str, pos: usize) -> bool {
         .filter(|c| c.is_alphabetic())
         .collect::<String>()
         .to_lowercase();
-    ["documentlocation", "documenturl", "windowopen", "windownavigate", "locationhref"]
-        .iter()
-        .any(|s| letters.ends_with(s))
+    [
+        "documentlocation",
+        "documenturl",
+        "windowopen",
+        "windownavigate",
+        "locationhref",
+    ]
+    .iter()
+    .any(|s| letters.ends_with(s))
 }
 
 /// The redirect target in `resp` that contains `needle`, as (target, offset
@@ -152,13 +186,20 @@ pub fn redirect_target_with(resp: &[u8], needle: &str) -> Option<(String, usize)
 /// burp.Zuag.Zq: the probe hits when some redirect target starts with the
 /// expected prefix (case-insensitive).
 pub fn redirects_to(resp: &[u8], expected: &str) -> bool {
-    redirect_target_with(resp, expected).is_some_and(|(t, i)| i == 0 && t.to_lowercase().starts_with(&expected.to_lowercase()))
+    redirect_target_with(resp, expected)
+        .is_some_and(|(t, i)| i == 0 && t.to_lowercase().starts_with(&expected.to_lowercase()))
 }
 
 /// burp.Zw9s.Zi: letters and digits kept, every other char as %xx.
 pub fn zw9s_encode(s: &str) -> String {
     s.chars()
-        .map(|c| if c.is_alphanumeric() { c.to_string() } else { format!("%{:02x}", (c as u32) & 0xff) })
+        .map(|c| {
+            if c.is_alphanumeric() {
+                c.to_string()
+            } else {
+                format!("%{:02x}", (c as u32) & 0xff)
+            }
+        })
         .collect()
 }
 
@@ -182,18 +223,26 @@ pub fn run_open_redirect_check<F: FnMut(&str) -> Option<Vec<u8>>>(
     let rnd = || {
         use rand::Rng;
         let mut g = rand::thread_rng();
-        (0..10).map(|_| (b'a' + g.gen_range(0..26)) as char).collect::<String>()
+        (0..10)
+            .map(|_| (b'a' + g.gen_range(0..26)) as char)
+            .collect::<String>()
     };
     // reflection into a redirect sink (Zw7s APPEND, then REPLACE)
     let marker = rnd();
-    let appended = send(&format!("{value}{marker}")).and_then(|r| redirect_target_with(&r, &marker));
+    let appended =
+        send(&format!("{value}{marker}")).and_then(|r| redirect_target_with(&r, &marker));
     let replaced = send(&marker).and_then(|r| redirect_target_with(&r, &marker));
     if appended.is_none() && replaced.is_none() {
         return None;
     }
     let mut attempt = |payload: String, expected: String| -> Option<RedirectHit> {
         let r = send(&payload)?;
-        redirects_to(&r, &expected).then(|| RedirectHit { target: redirect_target_with(&r, &expected).map(|t| t.0).unwrap_or_default(), payload })
+        redirects_to(&r, &expected).then(|| RedirectHit {
+            target: redirect_target_with(&r, &expected)
+                .map(|t| t.0)
+                .unwrap_or_default(),
+            payload,
+        })
     };
     // ZG: value reflected right after a scheme/host
     if let Some((target, at)) = &replaced {
@@ -229,7 +278,10 @@ pub fn run_open_redirect_check<F: FnMut(&str) -> Option<Vec<u8>>>(
     let lv = value.to_lowercase();
     if lv.starts_with("http:") || lv.starts_with("https://") {
         if let Some((proto, rest)) = value.split_once("://") {
-            let (host, file) = rest.find('/').map(|i| (&rest[..i], &rest[i..])).unwrap_or((rest, ""));
+            let (host, file) = rest
+                .find('/')
+                .map(|i| (&rest[..i], &rest[i..]))
+                .unwrap_or((rest, ""));
             let host = host.split(':').next().unwrap_or(host);
             let base = format!("{proto}://{host}.a{}", rnd());
             if let Some(h) = attempt(format!("{base}{file}"), base) {

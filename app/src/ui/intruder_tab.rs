@@ -19,7 +19,12 @@ pub(crate) fn with_target_host(req: &str, target: &str) -> String {
                 .filter(|_| target.starts_with("https://"))
         })
         .unwrap_or(auth);
-    String::from_utf8_lossy(&webprobe_core::util::replace_or_add_header(req.as_bytes(), "Host", auth)).into_owned()
+    String::from_utf8_lossy(&webprobe_core::util::replace_or_add_header(
+        req.as_bytes(),
+        "Host",
+        auth,
+    ))
+    .into_owned()
 }
 
 pub(crate) fn intruder(app: &mut App, ui: &mut Ui) {

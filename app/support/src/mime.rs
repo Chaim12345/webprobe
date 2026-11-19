@@ -1,7 +1,6 @@
 // Burp's MIME families (the history "MIME type" column), shared by the
 // history filter, the crawler and the scanner.
 
-
 /// Burp's MIME-type column value (stated/inferred type families as Burp names
 /// them: HTML, script, CSS, XML, JSON, text, image formats, app).
 pub fn burp_mime(content_type: &str, body: &[u8]) -> &'static str {

@@ -14,7 +14,8 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
     // A WebSocket Repeater tab has its own view.
     let ws_session = {
         let reps = app.shared.repeaters.lock().unwrap();
-        reps.get(app.rep_sel.min(reps.len().saturating_sub(1))).and_then(|r| r.ws)
+        reps.get(app.rep_sel.min(reps.len().saturating_sub(1)))
+            .and_then(|r| r.ws)
     };
     if let Some(id) = ws_session {
         crate::repeater_ops::ws_repeater_view(app, ui, id);
@@ -26,11 +27,16 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
         let reps = app.shared.repeaters.lock().unwrap();
         let i = app.rep_sel.min(reps.len().saturating_sub(1));
         let r = &reps[i];
-        let host = util::get_header(&util::parse_http(r.request.as_bytes()).headers, "Host").unwrap_or_default();
+        let host = util::get_header(&util::parse_http(r.request.as_bytes()).headers, "Host")
+            .unwrap_or_default();
         let t = if !r.host.is_empty() {
             let scheme = if r.https { "https" } else { "http" };
             let default = if r.https { 443 } else { 80 };
-            if r.port == default { format!("{scheme}://{}", r.host) } else { format!("{scheme}://{}:{}", r.host, r.port) }
+            if r.port == default {
+                format!("{scheme}://{}", r.host)
+            } else {
+                format!("{scheme}://{}:{}", r.host, r.port)
+            }
         } else if !host.is_empty() {
             format!("{}://{host}", if r.https { "https" } else { "http" })
         } else {
@@ -43,22 +49,40 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
         let send = egui::Button::new(RichText::new("Send").strong().color(egui::Color32::WHITE))
             .fill(c(theme::ORANGE_1))
             .min_size(egui::vec2(64.0, 24.0));
-        if ui.add_enabled(!busy, send).on_hover_text("Send (Ctrl+Space)").clicked() {
+        if ui
+            .add_enabled(!busy, send)
+            .on_hover_text("Send (Ctrl+Space)")
+            .clicked()
+        {
             repeater_send(app);
         }
-        egui::menu::MenuButton::new(RichText::new(theme::icon::GEAR).size(15.0)).config(egui::menu::MenuConfig::new().close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)).ui(ui, |ui| {
-            // Burp's Repeater settings menu (the options WebProbe implements).
-            crate::repeater_ops::settings_menu(ui, app);
-        })
-        .0
-        .on_hover_text("Repeater settings");
-        if ui.add_enabled(busy, egui::Button::new("Cancel").min_size(egui::vec2(64.0, 24.0))).clicked() {
+        egui::menu::MenuButton::new(RichText::new(theme::icon::GEAR).size(15.0))
+            .config(
+                egui::menu::MenuConfig::new()
+                    .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside),
+            )
+            .ui(ui, |ui| {
+                // Burp's Repeater settings menu (the options WebProbe implements).
+                crate::repeater_ops::settings_menu(ui, app);
+            })
+            .0
+            .on_hover_text("Repeater settings");
+        if ui
+            .add_enabled(
+                busy,
+                egui::Button::new("Cancel").min_size(egui::vec2(64.0, 24.0)),
+            )
+            .clicked()
+        {
             cancel_repeater_send(&app.shared);
         }
         // E-02: Burp's "Follow redirection" button, shown for a 3xx response.
         if crate::repeater_ops::can_follow(app)
             && ui
-                .add_enabled(!busy, egui::Button::new("Follow redirection").min_size(egui::vec2(64.0, 24.0)))
+                .add_enabled(
+                    !busy,
+                    egui::Button::new("Follow redirection").min_size(egui::vec2(64.0, 24.0)),
+                )
                 .on_hover_text("Follow the redirection in the current response")
                 .clicked()
             && crate::repeater_ops::load_redirect(app)
@@ -71,13 +95,21 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
             let i = app.rep_sel.min(reps.len().saturating_sub(1));
             (reps[i].hist_pos, reps[i].history.len())
         };
-        let back = ui.add_enabled(!busy && pos > 0 && len > 0, egui::Button::new("<")).on_hover_text("Previous request");
-        let fwd = ui.add_enabled(!busy && pos + 1 < len, egui::Button::new(">")).on_hover_text("Next request");
+        let back = ui
+            .add_enabled(!busy && pos > 0 && len > 0, egui::Button::new("<"))
+            .on_hover_text("Previous request");
+        let fwd = ui
+            .add_enabled(!busy && pos + 1 < len, egui::Button::new(">"))
+            .on_hover_text("Next request");
         if back.clicked() || fwd.clicked() {
             let mut reps = app.shared.repeaters.lock().unwrap();
             let i = app.rep_sel.min(reps.len().saturating_sub(1));
             let r = &mut reps[i];
-            r.hist_pos = if back.clicked() { r.hist_pos - 1 } else { r.hist_pos + 1 };
+            r.hist_pos = if back.clicked() {
+                r.hist_pos - 1
+            } else {
+                r.hist_pos + 1
+            };
             let (req, resp, line) = r.history[r.hist_pos].clone();
             r.request = req;
             r.response = resp;
@@ -85,22 +117,39 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.add_space(6.0);
-            let _ = ui.add(egui::Button::new(RichText::new(theme::icon::QUESTION).size(15.0)).frame(false)).on_hover_text("Help");
-            let edit = ui.add(egui::Button::new(RichText::new(theme::icon::PENCIL_SIMPLE).size(15.0)).frame(false)).on_hover_text("Configure target details");
+            let _ = ui
+                .add(
+                    egui::Button::new(RichText::new(theme::icon::QUESTION).size(15.0)).frame(false),
+                )
+                .on_hover_text("Help");
+            let edit = ui
+                .add(
+                    egui::Button::new(RichText::new(theme::icon::PENCIL_SIMPLE).size(15.0))
+                        .frame(false),
+                )
+                .on_hover_text("Configure target details");
             if edit.clicked() {
                 app.rep_target_edit = !app.rep_target_edit;
             }
-            ui.label(RichText::new(format!("Target: {target}")).strong().size(12.5).color(theme::ink()));
+            ui.label(
+                RichText::new(format!("Target: {target}"))
+                    .strong()
+                    .size(12.5)
+                    .color(theme::ink()),
+            );
         });
     });
     if app.rep_target_edit {
         let mut open = true;
-        egui::Window::new("Configure target details").default_pos(crate::theme::window_pos(ui.ctx()))
+        egui::Window::new("Configure target details")
+            .default_pos(crate::theme::window_pos(ui.ctx()))
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
             .show(ui.ctx(), |ui| {
-                let i = app.rep_sel.min(app.shared.repeaters.lock().unwrap().len().saturating_sub(1));
+                let i = app
+                    .rep_sel
+                    .min(app.shared.repeaters.lock().unwrap().len().saturating_sub(1));
                 let mut reps = app.shared.repeaters.lock().unwrap();
                 let r = &mut reps[i];
                 egui::Grid::new("rep_target").num_columns(2).show(ui, |ui| {
@@ -132,7 +181,11 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
     }
     let _ = https;
     let r = ui.cursor();
-    ui.painter().hline(ui.max_rect().x_range(), r.top(), egui::Stroke::new(1.0, theme::line()));
+    ui.painter().hline(
+        ui.max_rect().x_range(),
+        r.top(),
+        egui::Stroke::new(1.0, theme::line()),
+    );
 
     let resp = {
         let reps = app.shared.repeaters.lock().unwrap();
@@ -156,88 +209,165 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
         if side_w > 0.0 {
             sb = sb.size(egui_extras::Size::exact(side_w));
         }
-        sb.size(egui_extras::Size::exact(dock_w)).horizontal(|mut strip| {
-            strip.cell(|ui| {
-                // E-06 "Paste URL as request" lands here before the editor
-                // could take the paste.
-                crate::repeater_ops::poll_paste_url(app, ui);
-                let i = app.rep_sel.min(app.shared.repeaters.lock().unwrap().len().saturating_sub(1));
-                let (mut text, has_resp) = {
-                    let reps = app.shared.repeaters.lock().unwrap();
-                    (reps[i].request.clone(), reps[i].response.is_some())
-                };
-                app.rep_req_pane.live_url_encode = app.rops.url_encode_live;
-                // E-03: Burp's request-editor context menu.
-                let rops = &mut app.rops;
-                let ext_shared = app.shared.clone();
-                let (rep_service, rep_text) = {
-                    let reps = app.shared.repeaters.lock().unwrap();
-                    (webprobe_core::ext_host::HttpService::new(&reps[i].host, reps[i].port, reps[i].https), reps[i].request.clone())
-                };
-                // Requests extension actions/editors gave back for this tab
-                // (they run off the UI thread and arrive on a later frame).
-                let ext_target = format!("Repeater:{}", app.shared.repeaters.lock().unwrap()[i].id);
-                let ext_edit = crate::ext_menu::take_edit(&ext_target);
-                let mut menu = |ui: &mut Ui, sel: Option<String>| {
-                    if let Some(a) = crate::repeater_ops::request_menu(ui, rops, sel.is_some(), sel.as_deref(), has_resp) {
-                        rep_action = Some(a);
-                    }
-                    // Montoya extensions' items, with the editor's selection
-                    // (located by its first occurrence in the request).
-                    let raw = rep_text.replace("\r\n", "\n").replace('\n', "\r\n").into_bytes();
-                    let at = sel.as_deref().and_then(|s| String::from_utf8_lossy(&raw).find(&s.replace("\r\n", "\n").replace('\n', "\r\n")).map(|a| (a, a + s.len())));
-                    let (start, end) = at.unwrap_or((0, 0));
-                    let ctx = webprobe_core::ext_host::MenuContext {
-                        tool: "Repeater".into(),
-                        invocation: "MESSAGE_EDITOR_REQUEST".into(),
-                        messages: vec![webprobe_core::ext_host::MenuMessage { request: raw, response: None, service: rep_service.clone() }],
-                        editor: Some(("REQUEST".into(), start, end, start)),
+        sb.size(egui_extras::Size::exact(dock_w))
+            .horizontal(|mut strip| {
+                strip.cell(|ui| {
+                    // E-06 "Paste URL as request" lands here before the editor
+                    // could take the paste.
+                    crate::repeater_ops::poll_paste_url(app, ui);
+                    let i = app
+                        .rep_sel
+                        .min(app.shared.repeaters.lock().unwrap().len().saturating_sub(1));
+                    let (mut text, has_resp) = {
+                        let reps = app.shared.repeaters.lock().unwrap();
+                        (reps[i].request.clone(), reps[i].response.is_some())
                     };
-                    crate::ext_menu::submenu(ui, &ext_shared, &ctx, Some(&ext_target));
-                    crate::ext_menu::editor_items(ui, &ext_shared, &ctx.messages[0], "Repeater", &ext_target);
-                };
-                if crate::msgpane::editable_pane_ex(ui, "rep_req", "Request", &mut text, &mut app.rep_req_pane, body_h, Some(&mut menu)) {
-                    app.shared.repeaters.lock().unwrap()[i].request = text;
+                    app.rep_req_pane.live_url_encode = app.rops.url_encode_live;
+                    // E-03: Burp's request-editor context menu.
+                    let rops = &mut app.rops;
+                    let ext_shared = app.shared.clone();
+                    let (rep_service, rep_text) = {
+                        let reps = app.shared.repeaters.lock().unwrap();
+                        (
+                            webprobe_core::ext_host::HttpService::new(
+                                &reps[i].host,
+                                reps[i].port,
+                                reps[i].https,
+                            ),
+                            reps[i].request.clone(),
+                        )
+                    };
+                    // Requests extension actions/editors gave back for this tab
+                    // (they run off the UI thread and arrive on a later frame).
+                    let ext_target =
+                        format!("Repeater:{}", app.shared.repeaters.lock().unwrap()[i].id);
+                    let ext_edit = crate::ext_menu::take_edit(&ext_target);
+                    let mut menu = |ui: &mut Ui, sel: Option<String>| {
+                        if let Some(a) = crate::repeater_ops::request_menu(
+                            ui,
+                            rops,
+                            sel.is_some(),
+                            sel.as_deref(),
+                            has_resp,
+                        ) {
+                            rep_action = Some(a);
+                        }
+                        // Montoya extensions' items, with the editor's selection
+                        // (located by its first occurrence in the request).
+                        let raw = rep_text
+                            .replace("\r\n", "\n")
+                            .replace('\n', "\r\n")
+                            .into_bytes();
+                        let at = sel.as_deref().and_then(|s| {
+                            String::from_utf8_lossy(&raw)
+                                .find(&s.replace("\r\n", "\n").replace('\n', "\r\n"))
+                                .map(|a| (a, a + s.len()))
+                        });
+                        let (start, end) = at.unwrap_or((0, 0));
+                        let ctx = webprobe_core::ext_host::MenuContext {
+                            tool: "Repeater".into(),
+                            invocation: "MESSAGE_EDITOR_REQUEST".into(),
+                            messages: vec![webprobe_core::ext_host::MenuMessage {
+                                request: raw,
+                                response: None,
+                                service: rep_service.clone(),
+                            }],
+                            editor: Some(("REQUEST".into(), start, end, start)),
+                        };
+                        crate::ext_menu::submenu(ui, &ext_shared, &ctx, Some(&ext_target));
+                        crate::ext_menu::editor_items(
+                            ui,
+                            &ext_shared,
+                            &ctx.messages[0],
+                            "Repeater",
+                            &ext_target,
+                        );
+                    };
+                    if crate::msgpane::editable_pane_ex(
+                        ui,
+                        "rep_req",
+                        "Request",
+                        &mut text,
+                        &mut app.rep_req_pane,
+                        body_h,
+                        Some(&mut menu),
+                    ) {
+                        app.shared.repeaters.lock().unwrap()[i].request = text;
+                    }
+                    // An extension action that set the editor's request.
+                    if let Some(raw) = ext_edit {
+                        app.shared.repeaters.lock().unwrap()[i].request =
+                            String::from_utf8_lossy(&raw).into_owned();
+                    }
+                });
+                strip.cell(|ui| {
+                    let r = ui.max_rect();
+                    ui.painter().vline(
+                        r.left(),
+                        r.y_range(),
+                        egui::Stroke::new(1.0, theme::line()),
+                    );
+                    crate::msgpane::message_pane(
+                        ui,
+                        "rep_resp",
+                        "Response",
+                        resp.as_deref(),
+                        &mut app.rep_resp_pane,
+                        true,
+                        body_h,
+                    );
+                });
+                if side_w > 0.0 {
+                    strip.cell(|ui| {
+                        let r = ui.max_rect();
+                        ui.painter().rect_filled(r, 0.0, theme::chrome());
+                        ui.painter().vline(
+                            r.left(),
+                            r.y_range(),
+                            egui::Stroke::new(1.0, theme::line()),
+                        );
+                        let req = {
+                            let reps = app.shared.repeaters.lock().unwrap();
+                            let i = app.rep_sel.min(reps.len().saturating_sub(1));
+                            reps[i].request.clone()
+                        };
+                        let reqb = (!req.trim().is_empty()).then(|| req.into_bytes());
+                        if let Some(new) = crate::msgpane::inspector_ex(
+                            ui,
+                            "rep_insp",
+                            reqb.as_deref(),
+                            resp.as_deref(),
+                            &mut app.insp_state,
+                            true,
+                        ) {
+                            let mut reps = app.shared.repeaters.lock().unwrap();
+                            let i = app.rep_sel.min(reps.len().saturating_sub(1));
+                            reps[i].request = String::from_utf8_lossy(&new).into_owned();
+                        }
+                    });
                 }
-                // An extension action that set the editor's request.
-                if let Some(raw) = ext_edit {
-                    app.shared.repeaters.lock().unwrap()[i].request = String::from_utf8_lossy(&raw).into_owned();
-                }
-            });
-            strip.cell(|ui| {
-                let r = ui.max_rect();
-                ui.painter().vline(r.left(), r.y_range(), egui::Stroke::new(1.0, theme::line()));
-                crate::msgpane::message_pane(ui, "rep_resp", "Response", resp.as_deref(), &mut app.rep_resp_pane, true, body_h);
-            });
-            if side_w > 0.0 {
                 strip.cell(|ui| {
                     let r = ui.max_rect();
                     ui.painter().rect_filled(r, 0.0, theme::chrome());
-                    ui.painter().vline(r.left(), r.y_range(), egui::Stroke::new(1.0, theme::line()));
-                    let req = {
-                        let reps = app.shared.repeaters.lock().unwrap();
-                        let i = app.rep_sel.min(reps.len().saturating_sub(1));
-                        reps[i].request.clone()
-                    };
-                    let reqb = (!req.trim().is_empty()).then(|| req.into_bytes());
-                    if let Some(new) = crate::msgpane::inspector_ex(ui, "rep_insp", reqb.as_deref(), resp.as_deref(), &mut app.insp_state, true) {
-                        let mut reps = app.shared.repeaters.lock().unwrap();
-                        let i = app.rep_sel.min(reps.len().saturating_sub(1));
-                        reps[i].request = String::from_utf8_lossy(&new).into_owned();
+                    ui.painter().vline(
+                        r.left(),
+                        r.y_range(),
+                        egui::Stroke::new(1.0, theme::line()),
+                    );
+                    if let Some(i) = crate::msgpane::side_dock(ui, app.dock_sel) {
+                        app.dock_sel = if app.dock_sel == i { 2 } else { i };
                     }
                 });
-            }
-            strip.cell(|ui| {
-                let r = ui.max_rect();
-                ui.painter().rect_filled(r, 0.0, theme::chrome());
-                ui.painter().vline(r.left(), r.y_range(), egui::Stroke::new(1.0, theme::line()));
-                if let Some(i) = crate::msgpane::side_dock(ui, app.dock_sel) {
-                    app.dock_sel = if app.dock_sel == i { 2 } else { i };
-                }
             });
-        });
     });
-    vsplit_handle(ui, "rep_split", panes_top.x + req_w, panes_top.y..=panes_top.y + body_h, &mut app.rep_split, panes_w);
+    vsplit_handle(
+        ui,
+        "rep_split",
+        panes_top.x + req_w,
+        panes_top.y..=panes_top.y + body_h,
+        &mut app.rep_split,
+        panes_w,
+    );
     if let Some(action) = rep_action {
         use crate::repeater_ops::RepAction;
         match action {
@@ -255,10 +385,20 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
         }
     }
     let r = ui.cursor();
-    ui.painter().hline(ui.max_rect().x_range(), r.top(), egui::Stroke::new(1.0, theme::line()));
+    ui.painter().hline(
+        ui.max_rect().x_range(),
+        r.top(),
+        egui::Stroke::new(1.0, theme::line()),
+    );
     ui.horizontal(|ui| {
         ui.add_space(4.0);
-        let line = if busy { "Waiting for response...".to_string() } else if result_line.is_empty() { "Ready".to_string() } else { result_line };
+        let line = if busy {
+            "Waiting for response...".to_string()
+        } else if result_line.is_empty() {
+            "Ready".to_string()
+        } else {
+            result_line
+        };
         let (left, right) = line.split_once('\t').unwrap_or((line.as_str(), ""));
         ui.label(RichText::new(left).size(12.0).color(theme::ink_dim()));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -295,10 +435,21 @@ pub(crate) fn repeater_send(app: &mut App) {
                 // Shown where the user looks: the tab's status line.
                 r.result_line = "error: no target and no Host header in request".into();
                 drop(reps);
-                crate::feedback::toast(crate::feedback::Level::Error, "Repeater: set a target or a Host header first");
+                crate::feedback::toast(
+                    crate::feedback::Level::Error,
+                    "Repeater: set a target or a Host header first",
+                );
                 return;
             }
-            let default_port = if r.port == 0 { if r.https { 443 } else { 80 } } else { r.port };
+            let default_port = if r.port == 0 {
+                if r.https {
+                    443
+                } else {
+                    80
+                }
+            } else {
+                r.port
+            };
             let (h, p) = net::split_h_p(&host, default_port);
             r.host = h;
             r.port = p;
@@ -310,7 +461,11 @@ pub(crate) fn repeater_send(app: &mut App) {
     // E-02: Repeater settings > Follow redirections / Process cookies.
     let (follow, cookies) = (app.rops.follow, app.rops.process_cookies);
     // HTTP/1 or HTTP/2 as the request says (Burp's protocol control).
-    let h2 = crate::repeater_ops::http2_choice(&request, app.rops.h2_alpn_override, app.rops.h2_strip_connection);
+    let h2 = crate::repeater_ops::http2_choice(
+        &request,
+        app.rops.h2_alpn_override,
+        app.rops.h2_strip_connection,
+    );
     webprobe_core::util::spawn_contained("ui", move || {
         let _tool = net::tool_scope("Repeater");
         let _h2 = net::http2_scope(h2);
@@ -320,7 +475,13 @@ pub(crate) fn repeater_send(app: &mut App) {
         // A streaming response shows in the tab as it arrives.
         let progress = |bytes: &[u8], restart: bool| {
             sh.rep.finish_partial(gen, || {
-                if let Some(r) = sh.repeaters.lock().unwrap().iter_mut().find(|r| r.id == tab_id) {
+                if let Some(r) = sh
+                    .repeaters
+                    .lock()
+                    .unwrap()
+                    .iter_mut()
+                    .find(|r| r.id == tab_id)
+                {
                     let shown = r.response.get_or_insert_with(Vec::new);
                     if restart {
                         shown.clear();
@@ -331,8 +492,13 @@ pub(crate) fn repeater_send(app: &mut App) {
             });
             sh.wake();
         };
-        let fr = crate::repeater_ops::send_following(&sh, &request, &service, follow, cookies, &stale, &progress);
-        let up = net::Upstream { resp: fr.response, error: fr.error };
+        let fr = crate::repeater_ops::send_following(
+            &sh, &request, &service, follow, cookies, &stale, &progress,
+        );
+        let up = net::Upstream {
+            resp: fr.response,
+            error: fr.error,
+        };
         let followed = fr.followed;
         let protocol = net::last_protocol();
         // After followed redirections the tab shows the last request sent
@@ -384,7 +550,10 @@ pub(crate) fn repeater_send(app: &mut App) {
         });
         // Burp reports the outcome in the status line only; errors still toast.
         if let Some(err) = line.strip_prefix("error: ").filter(|_| finished) {
-            crate::feedback::toast(crate::feedback::Level::Error, format!("Repeater failed: {err}"));
+            crate::feedback::toast(
+                crate::feedback::Level::Error,
+                format!("Repeater failed: {err}"),
+            );
         }
     });
 }
@@ -394,7 +563,13 @@ pub(crate) fn repeater_send(app: &mut App) {
 pub(crate) fn cancel_repeater_send(shared: &net::Shared) {
     if let Some(tab) = shared.rep.cancel() {
         // The status line the user sees is the tab's.
-        if let Some(r) = shared.repeaters.lock().unwrap().iter_mut().find(|r| r.id == tab) {
+        if let Some(r) = shared
+            .repeaters
+            .lock()
+            .unwrap()
+            .iter_mut()
+            .find(|r| r.id == tab)
+        {
             r.result_line = "Request cancelled".into();
         }
     }

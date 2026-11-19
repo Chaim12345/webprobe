@@ -274,9 +274,9 @@ fn manage_menu(app: &mut App, ui: &mut Ui) {
         let result = crate::project::load(std::path::Path::new(path.trim()))
             .map_err(|e| e.to_string())
             .and_then(|settings| {
-            let current = snapshot(app)?;
-            install(app, &crate::project::apply_settings(&current, &settings))
-        });
+                let current = snapshot(app)?;
+                install(app, &crate::project::apply_settings(&current, &settings))
+            });
         match result {
             Ok(()) => toast(
                 Level::Success,

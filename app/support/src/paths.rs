@@ -31,13 +31,26 @@ pub struct Missing {
 
 impl fmt::Display for Missing {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let looked: Vec<String> = self.looked.iter().map(|p| p.display().to_string()).collect();
-        write!(f, "{} not found (looked in: {}). {}", self.what, if looked.is_empty() { "nowhere".into() } else { looked.join(", ") }, self.how)
+        let looked: Vec<String> = self
+            .looked
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect();
+        write!(
+            f,
+            "{} not found (looked in: {}). {}",
+            self.what,
+            if looked.is_empty() {
+                "nowhere".into()
+            } else {
+                looked.join(", ")
+            },
+            self.how
+        )
     }
 }
 
 impl std::error::Error for Missing {}
-
 
 /// Where a set of Burp resource files is read from: an extracted
 /// directory (for scan configurations, the `BuiltInConfigs` directory; its
@@ -60,12 +73,22 @@ pub struct Lookup {
 impl Lookup {
     /// The real environment and system locations.
     pub fn process() -> Lookup {
-        Lookup { vars: None, system: true }
+        Lookup {
+            vars: None,
+            system: true,
+        }
     }
 
     /// Only these variables, no system locations.
     pub fn with_vars<'a>(vars: impl IntoIterator<Item = (&'a str, PathBuf)>) -> Lookup {
-        Lookup { vars: Some(vars.into_iter().map(|(k, v)| (k.to_string(), v.into_os_string())).collect()), system: false }
+        Lookup {
+            vars: Some(
+                vars.into_iter()
+                    .map(|(k, v)| (k.to_string(), v.into_os_string()))
+                    .collect(),
+            ),
+            system: false,
+        }
     }
 
     fn var(&self, name: &str) -> Option<PathBuf> {
@@ -82,7 +105,9 @@ impl Lookup {
 
     /// `~/.config/webprobe` (or `$XDG_CONFIG_HOME/webprobe`).
     pub fn config_dir(&self) -> Option<PathBuf> {
-        self.var("XDG_CONFIG_HOME").or_else(|| self.home().map(|h| h.join(".config"))).map(|d| d.join("webprobe"))
+        self.var("XDG_CONFIG_HOME")
+            .or_else(|| self.home().map(|h| h.join(".config")))
+            .map(|d| d.join("webprobe"))
     }
 
     /// Where WebProbe writes out its own embedded files: `$WEBPROBE_DATA_DIR`,
@@ -99,9 +124,21 @@ impl Lookup {
     fn burp_install_dirs(&self) -> Vec<PathBuf> {
         let mut v: Vec<PathBuf> = self.var("WEBPROBE_BURP_HOME").into_iter().collect();
         if self.system {
-            v.extend(["/opt/BurpSuite", "/opt/BurpSuitePro", "/opt/BurpSuiteCommunity"].iter().map(PathBuf::from));
+            v.extend(
+                [
+                    "/opt/BurpSuite",
+                    "/opt/BurpSuitePro",
+                    "/opt/BurpSuiteCommunity",
+                ]
+                .iter()
+                .map(PathBuf::from),
+            );
             if let Some(h) = self.home() {
-                v.extend(["BurpSuitePro", "BurpSuiteCommunity", "BurpSuite"].iter().map(|d| h.join(d)));
+                v.extend(
+                    ["BurpSuitePro", "BurpSuiteCommunity", "BurpSuite"]
+                        .iter()
+                        .map(|d| h.join(d)),
+                );
             }
         }
         v
@@ -168,7 +205,11 @@ impl Lookup {
             return Ok(BurpResources::Dir(d));
         }
         let mut looked = dirs;
-        let mut jars: Vec<PathBuf> = self.var("WEBPROBE_BURP_JAR").into_iter().filter(|p| !p.to_string_lossy().contains("montoya-api")).collect();
+        let mut jars: Vec<PathBuf> = self
+            .var("WEBPROBE_BURP_JAR")
+            .into_iter()
+            .filter(|p| !p.to_string_lossy().contains("montoya-api"))
+            .collect();
         for d in self.burp_install_dirs() {
             jars.push(d.join("burpsuite.jar"));
             jars.push(d.join("burpsuite_pro.jar"));
@@ -214,12 +255,31 @@ impl Lookup {
         }
         if let Some(h) = self.home() {
             let repo = h.join(".m2/repository/net/portswigger/burp/extensions/montoya-api");
-            let mut versions: Vec<PathBuf> = std::fs::read_dir(&repo).map(|rd| rd.flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect()).unwrap_or_default();
+            let mut versions: Vec<PathBuf> = std::fs::read_dir(&repo)
+                .map(|rd| {
+                    rd.flatten()
+                        .map(|e| e.path())
+                        .filter(|p| p.is_dir())
+                        .collect()
+                })
+                .unwrap_or_default();
             // Newest first ("2026.4" after "2025.12": compare numerically).
-            let key = |p: &PathBuf| p.file_name().map(|n| n.to_string_lossy().split('.').map(|x| x.parse::<u64>().unwrap_or(0)).collect::<Vec<_>>()).unwrap_or_default();
+            let key = |p: &PathBuf| {
+                p.file_name()
+                    .map(|n| {
+                        n.to_string_lossy()
+                            .split('.')
+                            .map(|x| x.parse::<u64>().unwrap_or(0))
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default()
+            };
             versions.sort_by_key(|p| std::cmp::Reverse(key(p)));
             for v in versions {
-                let name = v.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                let name = v
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
                 looked.push(v.join(format!("montoya-api-{name}.jar")));
             }
         }
@@ -240,7 +300,11 @@ impl Lookup {
     /// when none exists, so this is a list, not an error.
     pub fn burp_browser_roots(&self) -> Vec<PathBuf> {
         let mut v: Vec<PathBuf> = self.var("WEBPROBE_BURP_BROWSER").into_iter().collect();
-        v.extend(self.burp_install_dirs().into_iter().map(|d| d.join("burpbrowser")));
+        v.extend(
+            self.burp_install_dirs()
+                .into_iter()
+                .map(|d| d.join("burpbrowser")),
+        );
         if self.system {
             v.push(PathBuf::from("/usr/lib/burpbrowser"));
         }
@@ -252,7 +316,15 @@ impl Lookup {
     pub fn chromium_candidates(&self) -> Vec<PathBuf> {
         let mut v: Vec<PathBuf> = self.var("WEBPROBE_CHROMIUM").into_iter().collect();
         if self.system {
-            v.extend(["/usr/bin/chromium", "/usr/bin/google-chrome", "/usr/bin/chromium-browser"].iter().map(PathBuf::from));
+            v.extend(
+                [
+                    "/usr/bin/chromium",
+                    "/usr/bin/google-chrome",
+                    "/usr/bin/chromium-browser",
+                ]
+                .iter()
+                .map(PathBuf::from),
+            );
         }
         for root in self.burp_browser_roots() {
             if let Ok(rd) = std::fs::read_dir(&root) {
@@ -306,10 +378,18 @@ impl Lookup {
     pub fn montoya_bridge_classes(&self, java: &Path, api_jar: &Path) -> Result<PathBuf, String> {
         use std::hash::{Hash, Hasher};
         static COMPILING: crate::sync::Mutex<()> = crate::sync::Mutex::new(());
-        let main = self.montoya_bridge_source().map_err(|e| format!("could not write the Montoya bridge source: {e}"))?;
+        let main = self
+            .montoya_bridge_source()
+            .map_err(|e| format!("could not write the Montoya bridge source: {e}"))?;
         let dir = main.parent().map(Path::to_path_buf).unwrap_or_default();
         let mut h = std::collections::hash_map::DefaultHasher::new();
-        (MONTOYA_BRIDGE_SOURCES, java, api_jar, std::fs::metadata(java).and_then(|m| m.modified()).ok()).hash(&mut h);
+        (
+            MONTOYA_BRIDGE_SOURCES,
+            java,
+            api_jar,
+            std::fs::metadata(java).and_then(|m| m.modified()).ok(),
+        )
+            .hash(&mut h);
         let out = dir.join(format!("classes-{:016x}", h.finish()));
         let _one = COMPILING.lock().unwrap();
         if out.join("MontoyaBridge.class").is_file() {
@@ -322,19 +402,38 @@ impl Lookup {
             let _ = std::fs::remove_dir_all(&out);
         }
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let tmp = dir.join(format!("classes-tmp{}-{}", std::process::id(), NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
+        let tmp = dir.join(format!(
+            "classes-tmp{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
         let _ = std::fs::remove_dir_all(&tmp);
         let result = std::process::Command::new(java)
-            .args(["-m", "jdk.compiler/com.sun.tools.javac.Main", "-nowarn", "-proc:none", "-encoding", "UTF-8", "-cp"])
+            .args([
+                "-m",
+                "jdk.compiler/com.sun.tools.javac.Main",
+                "-nowarn",
+                "-proc:none",
+                "-encoding",
+                "UTF-8",
+                "-cp",
+            ])
             .arg(api_jar)
             .arg("-d")
             .arg(&tmp)
-            .args(MONTOYA_BRIDGE_SOURCES.iter().map(|(name, _)| dir.join(name)))
+            .args(
+                MONTOYA_BRIDGE_SOURCES
+                    .iter()
+                    .map(|(name, _)| dir.join(name)),
+            )
             .output()
             .map_err(|e| format!("could not run the Java compiler: {e}"))?;
         if !result.status.success() {
             let _ = std::fs::remove_dir_all(&tmp);
-            return Err(format!("the Montoya bridge did not compile: {}", String::from_utf8_lossy(&result.stderr).trim()));
+            return Err(format!(
+                "the Montoya bridge did not compile: {}",
+                String::from_utf8_lossy(&result.stderr).trim()
+            ));
         }
         // Only a complete directory is renamed into place, so a compile
         // killed half-way never leaves a `classes-<key>` that looks usable.
@@ -360,14 +459,23 @@ impl Lookup {
                 cands.extend(exe.parent().map(|d| d.join("extensions")));
             }
         }
-        if let Some(d) = cands.into_iter().find(|d| d.join("catalogue.json").is_file()) {
+        if let Some(d) = cands
+            .into_iter()
+            .find(|d| d.join("catalogue.json").is_file())
+        {
             return Ok(d);
         }
         let root = self.data_dir();
         let dir = root.join("extensions");
         write_out(&dir.join("catalogue.json"), CATALOGUE_JSON.as_bytes())?;
-        write_out(&dir.join("examples/marker_reflection.py"), EXAMPLE_MARKER.as_bytes())?;
-        write_out(&dir.join("examples/security_headers.py"), EXAMPLE_HEADERS.as_bytes())?;
+        write_out(
+            &dir.join("examples/marker_reflection.py"),
+            EXAMPLE_MARKER.as_bytes(),
+        )?;
+        write_out(
+            &dir.join("examples/security_headers.py"),
+            EXAMPLE_HEADERS.as_bytes(),
+        )?;
         // The catalogue names the demo jar as {dir}/../sidecar/demo-ext/demo-ext.jar.
         write_out(&root.join("sidecar/demo-ext/demo-ext.jar"), DEMO_EXT_JAR)?;
         Ok(dir)
@@ -425,7 +533,10 @@ const USED_STAMP: &str = "last-used";
 const BRIDGE_CLASSES_TTL: std::time::Duration = std::time::Duration::from_secs(7 * 86_400);
 
 fn mark_used(classes: &Path) {
-    let _ = std::fs::write(classes.join(USED_STAMP), crate::util::now_secs().to_string());
+    let _ = std::fs::write(
+        classes.join(USED_STAMP),
+        crate::util::now_secs().to_string(),
+    );
 }
 
 /// Drop bridge builds no WebProbe has launched for a week (another
@@ -434,9 +545,15 @@ fn mark_used(classes: &Path) {
 /// directories a killed compile left behind (older than an hour, so a
 /// compile running in another process is kept).
 fn prune_bridge_classes(dir: &Path, keep: &Path) {
-    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
     let now = std::time::SystemTime::now();
-    let older = |p: &Path, age: std::time::Duration| std::fs::metadata(p).and_then(|m| m.modified()).is_ok_and(|t| now.duration_since(t).is_ok_and(|d| d > age));
+    let older = |p: &Path, age: std::time::Duration| {
+        std::fs::metadata(p)
+            .and_then(|m| m.modified())
+            .is_ok_and(|t| now.duration_since(t).is_ok_and(|d| d > age))
+    };
     for e in entries.flatten() {
         let path = e.path();
         let name = e.file_name().to_string_lossy().into_owned();
@@ -447,7 +564,10 @@ fn prune_bridge_classes(dir: &Path, keep: &Path) {
             older(&path, std::time::Duration::from_secs(3600))
         } else {
             let stamp = path.join(USED_STAMP);
-            older(if stamp.exists() { &stamp } else { &path }, BRIDGE_CLASSES_TTL)
+            older(
+                if stamp.exists() { &stamp } else { &path },
+                BRIDGE_CLASSES_TTL,
+            )
         };
         if stale {
             let _ = std::fs::remove_dir_all(&path);
@@ -471,7 +591,12 @@ pub fn extensions_dir() -> std::io::Result<PathBuf> {
 }
 
 fn has_ext(dir: &Path, ext: &str) -> bool {
-    std::fs::read_dir(dir).map(|rd| rd.flatten().any(|e| e.path().extension().is_some_and(|x| x == ext))).unwrap_or(false)
+    std::fs::read_dir(dir)
+        .map(|rd| {
+            rd.flatten()
+                .any(|e| e.path().extension().is_some_and(|x| x == ext))
+        })
+        .unwrap_or(false)
 }
 
 fn first_dir_with(cands: &[PathBuf], ok: impl Fn(&Path) -> bool) -> Option<PathBuf> {
@@ -484,7 +609,10 @@ fn first_dir_with(cands: &[PathBuf], ok: impl Fn(&Path) -> bool) -> Option<PathB
 /// The Montoya bridge sources (one per API area; Java's multi-file source
 /// launcher compiles them together from `MontoyaBridge.java`).
 pub const MONTOYA_BRIDGE_SOURCES: [(&str, &str); 11] = [
-    ("MontoyaBridge.java", include_str!("../../sidecar/MontoyaBridge.java")),
+    (
+        "MontoyaBridge.java",
+        include_str!("../../sidecar/MontoyaBridge.java"),
+    ),
     ("Api.java", include_str!("../../sidecar/Api.java")),
     ("Wire.java", include_str!("../../sidecar/Wire.java")),
     ("Logs.java", include_str!("../../sidecar/Logs.java")),
@@ -538,16 +666,45 @@ mod tests {
         let empty = scratch("empty");
         let res = scratch("res");
         let own = scratch("own");
-        let base = || vec![("HOME", empty.clone()), ("WEBPROBE_DATA_DIR", empty.join("data")), ("WEBPROBE_BURP_RESOURCES", res.clone())];
+        let base = || {
+            vec![
+                ("HOME", empty.clone()),
+                ("WEBPROBE_DATA_DIR", empty.join("data")),
+                ("WEBPROBE_BURP_RESOURCES", res.clone()),
+            ]
+        };
         let lk = Lookup::with_vars(base());
         // Nothing yet.
         let kb = lk.knowledge_base().unwrap_err();
-        assert!(kb.looked.contains(&res.join("KnowledgeBase/Issues")), "{kb}");
-        assert!(kb.to_string().contains("not found (looked in: ") && kb.to_string().contains("WEBPROBE_BURP_RESOURCES"), "{kb}");
-        assert!(lk.payload_strings().unwrap_err().to_string().contains("PayloadStrings"));
-        assert!(lk.retirejs_repository().unwrap_err().to_string().contains("WEBPROBE_RETIREJS"));
-        assert!(lk.montoya_jar().unwrap_err().to_string().contains("montoya-api"));
-        assert!(lk.chromium().unwrap_err().to_string().contains("WEBPROBE_CHROMIUM"));
+        assert!(
+            kb.looked.contains(&res.join("KnowledgeBase/Issues")),
+            "{kb}"
+        );
+        assert!(
+            kb.to_string().contains("not found (looked in: ")
+                && kb.to_string().contains("WEBPROBE_BURP_RESOURCES"),
+            "{kb}"
+        );
+        assert!(lk
+            .payload_strings()
+            .unwrap_err()
+            .to_string()
+            .contains("PayloadStrings"));
+        assert!(lk
+            .retirejs_repository()
+            .unwrap_err()
+            .to_string()
+            .contains("WEBPROBE_RETIREJS"));
+        assert!(lk
+            .montoya_jar()
+            .unwrap_err()
+            .to_string()
+            .contains("montoya-api"));
+        assert!(lk
+            .chromium()
+            .unwrap_err()
+            .to_string()
+            .contains("WEBPROBE_CHROMIUM"));
         assert!(lk.java().unwrap_err().to_string().contains("WEBPROBE_JAVA"));
         // From the extracted resources directory.
         std::fs::create_dir_all(res.join("KnowledgeBase/Issues")).unwrap();
@@ -556,9 +713,15 @@ mod tests {
         std::fs::write(res.join("PayloadStrings/a.pay"), "x").unwrap();
         std::fs::create_dir_all(res.join("RetireJS")).unwrap();
         std::fs::write(res.join("RetireJS/retirejs_repository.json"), "{}").unwrap();
-        assert_eq!(lk.knowledge_base().unwrap(), res.join("KnowledgeBase/Issues"));
+        assert_eq!(
+            lk.knowledge_base().unwrap(),
+            res.join("KnowledgeBase/Issues")
+        );
         assert_eq!(lk.payload_strings().unwrap(), res.join("PayloadStrings"));
-        assert_eq!(lk.retirejs_repository().unwrap(), res.join("RetireJS/retirejs_repository.json"));
+        assert_eq!(
+            lk.retirejs_repository().unwrap(),
+            res.join("RetireJS/retirejs_repository.json")
+        );
         // Explicit overrides win.
         std::fs::write(own.join("jsrepository.json"), "{}").unwrap();
         std::fs::write(own.join("montoya-api.jar"), "PK").unwrap();
@@ -567,17 +730,34 @@ mod tests {
         std::fs::write(own.join("jdk/bin/java"), "").unwrap();
         let mut vars = base();
         vars.push(("JAVA_HOME", own.join("jdk")));
-        vars.extend([("WEBPROBE_RETIREJS", own.join("jsrepository.json")), ("WEBPROBE_BURP_JAR", own.join("montoya-api.jar")), ("WEBPROBE_CHROMIUM", own.join("chrome"))]);
+        vars.extend([
+            ("WEBPROBE_RETIREJS", own.join("jsrepository.json")),
+            ("WEBPROBE_BURP_JAR", own.join("montoya-api.jar")),
+            ("WEBPROBE_CHROMIUM", own.join("chrome")),
+        ]);
         let lk = Lookup::with_vars(vars);
-        assert_eq!(lk.retirejs_repository().unwrap(), own.join("jsrepository.json"));
+        assert_eq!(
+            lk.retirejs_repository().unwrap(),
+            own.join("jsrepository.json")
+        );
         assert_eq!(lk.montoya_jar().unwrap(), own.join("montoya-api.jar"));
         assert_eq!(lk.chromium().unwrap(), own.join("chrome"));
         assert_eq!(lk.java().unwrap(), own.join("jdk/bin/java"));
         // WebProbe's own files are written out on demand.
         let bridge = lk.montoya_bridge_source().unwrap();
-        assert!(bridge.starts_with(empty.join("data")) && std::fs::read_to_string(&bridge).unwrap().contains("class MontoyaBridge"));
+        assert!(
+            bridge.starts_with(empty.join("data"))
+                && std::fs::read_to_string(&bridge)
+                    .unwrap()
+                    .contains("class MontoyaBridge")
+        );
         let ext = lk.extensions_dir().unwrap();
-        assert!(ext.join("catalogue.json").is_file() && ext.join("../sidecar/demo-ext/demo-ext.jar").is_file(), "{}", ext.display());
+        assert!(
+            ext.join("catalogue.json").is_file()
+                && ext.join("../sidecar/demo-ext/demo-ext.jar").is_file(),
+            "{}",
+            ext.display()
+        );
     }
 
     /// The bridge is compiled once into `classes-<key>`; a partial
@@ -595,26 +775,55 @@ mod tests {
         // WebProbe used yesterday, and one unused for eight days.
         let week_ago = std::time::SystemTime::now() - std::time::Duration::from_secs(8 * 86_400);
         let day_ago = std::time::SystemTime::now() - std::time::Duration::from_secs(86_400);
-        for (name, used) in [("classes-0000000000000001", day_ago), ("classes-0000000000000002", week_ago)] {
+        for (name, used) in [
+            ("classes-0000000000000001", day_ago),
+            ("classes-0000000000000002", week_ago),
+        ] {
             std::fs::create_dir_all(sidecar.join(name)).unwrap();
             let f = std::fs::File::create(sidecar.join(name).join(USED_STAMP)).unwrap();
             f.set_modified(used).unwrap();
         }
         std::fs::create_dir_all(sidecar.join("classes-tmp1-0")).unwrap();
         let out = lk.montoya_bridge_classes(&java, &api).unwrap();
-        assert!(out.join("MontoyaBridge.class").is_file() && out.join("Engine.class").is_file() && out.join(USED_STAMP).is_file());
-        assert!(sidecar.join("classes-0000000000000001").exists(), "a build used recently may belong to a running WebProbe");
-        assert!(!sidecar.join("classes-0000000000000002").exists(), "a build unused for a week is pruned");
-        assert!(sidecar.join("classes-tmp1-0").exists(), "a recent temp dir may be another process compiling");
+        assert!(
+            out.join("MontoyaBridge.class").is_file()
+                && out.join("Engine.class").is_file()
+                && out.join(USED_STAMP).is_file()
+        );
+        assert!(
+            sidecar.join("classes-0000000000000001").exists(),
+            "a build used recently may belong to a running WebProbe"
+        );
+        assert!(
+            !sidecar.join("classes-0000000000000002").exists(),
+            "a build unused for a week is pruned"
+        );
+        assert!(
+            sidecar.join("classes-tmp1-0").exists(),
+            "a recent temp dir may be another process compiling"
+        );
         // Cached: the same directory, not compiled again.
-        let stamp = std::fs::metadata(out.join("MontoyaBridge.class")).unwrap().modified().unwrap();
+        let stamp = std::fs::metadata(out.join("MontoyaBridge.class"))
+            .unwrap()
+            .modified()
+            .unwrap();
         assert_eq!(lk.montoya_bridge_classes(&java, &api).unwrap(), out);
-        assert_eq!(std::fs::metadata(out.join("MontoyaBridge.class")).unwrap().modified().unwrap(), stamp);
+        assert_eq!(
+            std::fs::metadata(out.join("MontoyaBridge.class"))
+                .unwrap()
+                .modified()
+                .unwrap(),
+            stamp
+        );
         // A key directory without its classes (not ours to trust) is rebuilt.
         std::fs::remove_file(out.join("MontoyaBridge.class")).unwrap();
         let _ = std::fs::remove_dir_all(&out);
         std::fs::create_dir_all(&out).unwrap();
-        assert!(lk.montoya_bridge_classes(&java, &api).unwrap().join("MontoyaBridge.class").is_file());
+        assert!(lk
+            .montoya_bridge_classes(&java, &api)
+            .unwrap()
+            .join("MontoyaBridge.class")
+            .is_file());
         let _ = std::fs::remove_dir_all(data);
     }
 
@@ -636,7 +845,11 @@ mod tests {
             }
         });
         let got = std::fs::read(&path).unwrap();
-        assert!(texts.contains(&got), "a mixed or partial file of {} bytes", got.len());
+        assert!(
+            texts.contains(&got),
+            "a mixed or partial file of {} bytes",
+            got.len()
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -666,13 +879,21 @@ mod tests {
                         if l.starts_with("//") {
                             continue;
                         }
-                        if l.contains("\"/root/") || l.contains("/opt/BurpSuite") || l.contains("CARGO_MANIFEST_DIR") || l.contains("\"/tmp/") {
+                        if l.contains("\"/root/")
+                            || l.contains("/opt/BurpSuite")
+                            || l.contains("CARGO_MANIFEST_DIR")
+                            || l.contains("\"/tmp/")
+                        {
                             offenders.push(format!("{}:{}: {}", p.display(), n + 1, l));
                         }
                     }
                 }
             }
         }
-        assert!(offenders.is_empty(), "developer paths at run time:\n{}", offenders.join("\n"));
+        assert!(
+            offenders.is_empty(),
+            "developer paths at run time:\n{}",
+            offenders.join("\n")
+        );
     }
 }

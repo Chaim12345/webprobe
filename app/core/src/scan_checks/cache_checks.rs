@@ -113,7 +113,10 @@ fn cache_buster() -> String {
 
 /// `raw` with `name=value` appended to the request-target query string.
 fn with_query_param(raw: &[u8], name: &str, value: &str) -> Vec<u8> {
-    let end = raw.windows(2).position(|w| w == b"\r\n").unwrap_or(raw.len());
+    let end = raw
+        .windows(2)
+        .position(|w| w == b"\r\n")
+        .unwrap_or(raw.len());
     let line = String::from_utf8_lossy(&raw[..end]).into_owned();
     let mut it = line.splitn(3, ' ');
     let (Some(method), Some(target), Some(version)) = (it.next(), it.next(), it.next()) else {
@@ -132,12 +135,25 @@ fn with_query_param(raw: &[u8], name: &str, value: &str) -> Vec<u8> {
 /// The response headers Burp takes as a sign of a cache in front of the
 /// application (burp.Zg1g.Zo; Zw6o.Zc matches `name:` prefixes, Zw6o.ZT a
 /// header value equal to hit/miss).
-const CACHE_HEADERS: [&str; 9] = ["Age", "X-Cache", "Cache", "X-Cache-Hits", "X-Varnish-Cache", "X-Drupal-Cache", "X-Varnish", "CF-Cache-Status", "CF-RAY"];
+const CACHE_HEADERS: [&str; 9] = [
+    "Age",
+    "X-Cache",
+    "Cache",
+    "X-Cache-Hits",
+    "X-Varnish-Cache",
+    "X-Drupal-Cache",
+    "X-Varnish",
+    "CF-Cache-Status",
+    "CF-RAY",
+];
 
 fn shows_cache(resp: &[u8]) -> bool {
     let parts = util::parse_http(resp);
     parts.headers.iter().any(|(n, v)| {
-        CACHE_HEADERS.iter().any(|h| n.eq_ignore_ascii_case(h)) || ["hit", "miss"].iter().any(|t| v.trim().eq_ignore_ascii_case(t))
+        CACHE_HEADERS.iter().any(|h| n.eq_ignore_ascii_case(h))
+            || ["hit", "miss"]
+                .iter()
+                .any(|t| v.trim().eq_ignore_ascii_case(t))
     })
 }
 
@@ -177,7 +193,11 @@ impl Override {
         let v = match self {
             Override::Url => cx.entry.path.clone(),
             Override::Host if cx.settings.accuracy == crate::variations::Accuracy::Normal => {
-                if cx.host_hdr.is_empty() { cx.host.clone() } else { cx.host_hdr.clone() }
+                if cx.host_hdr.is_empty() {
+                    cx.host.clone()
+                } else {
+                    cx.host_hdr.clone()
+                }
             }
             Override::Host => return Vec::new(),
         };
@@ -186,7 +206,11 @@ impl Override {
 }
 
 fn headers_text(headers: &[(&str, String)]) -> String {
-    headers.iter().map(|(n, v)| format!("{n}: {v}")).collect::<Vec<_>>().join("\n")
+    headers
+        .iter()
+        .map(|(n, v)| format!("{n}: {v}"))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Base request + cache buster + headers (burp.Zhuw.Zs).
@@ -210,28 +234,55 @@ struct OverrideProbe {
     reflected: bool,
 }
 
-fn send_override_probe(kind: Override, base: &[u8], base_status: u16, send: &mut impl FnMut(&[u8]) -> Option<Vec<u8>>) -> Option<OverrideProbe> {
+fn send_override_probe(
+    kind: Override,
+    base: &[u8],
+    base_status: u16,
+    send: &mut impl FnMut(&[u8]) -> Option<Vec<u8>>,
+) -> Option<OverrideProbe> {
     let canary = rnd_letters(10).to_ascii_lowercase();
     let buster = cache_buster();
     let headers = kind.probe(&canary, base_status);
     let req = busted(base, &buster, &headers);
     let resp = send(&req)?;
     let lower = String::from_utf8_lossy(&resp).to_ascii_lowercase();
-    let reflected = contains(&resp, &canary) && !kind.names().iter().any(|n| lower.contains(&n.to_ascii_lowercase()));
-    Some(OverrideProbe { kind, canary, buster, headers, req, resp, reflected })
+    let reflected = contains(&resp, &canary)
+        && !kind
+            .names()
+            .iter()
+            .any(|n| lower.contains(&n.to_ascii_lowercase()));
+    Some(OverrideProbe {
+        kind,
+        canary,
+        buster,
+        headers,
+        req,
+        resp,
+        reflected,
+    })
 }
 
 /// burp.Zg1g.Zf: prime the probe's cache key, retrieve it without the
 /// headers, and confirm with a fresh-buster control. `primes` is Zg1g.Zo.
 /// Returns the clean retrieval when the cache served the poisoned answer.
-fn confirm_poisoning(probe: &OverrideProbe, base: &[u8], base_status: u16, primes: usize, send: &mut impl FnMut(&[u8]) -> Option<Vec<u8>>) -> Option<(Vec<u8>, Vec<u8>)> {
+fn confirm_poisoning(
+    probe: &OverrideProbe,
+    base: &[u8],
+    base_status: u16,
+    primes: usize,
+    send: &mut impl FnMut(&[u8]) -> Option<Vec<u8>>,
+) -> Option<(Vec<u8>, Vec<u8>)> {
     for _ in 0..primes {
         send(&probe.req)?;
     }
     let clean_req = busted(base, &probe.buster, &[]);
     let clean = send(&clean_req)?;
     let (clean_status, _) = status_body(&clean);
-    let served = if probe.reflected { contains(&clean, &probe.canary) } else { clean_status != base_status };
+    let served = if probe.reflected {
+        contains(&clean, &probe.canary)
+    } else {
+        clean_status != base_status
+    };
     if !served {
         return None;
     }
@@ -250,7 +301,11 @@ fn prime_count(speed: ScanSpeed, resp: &[u8]) -> usize {
         ScanSpeed::Normal => 3,
         ScanSpeed::Thorough => 5,
     };
-    if shows_cache(resp) { n * 2 - 1 } else { n - 1 }
+    if shows_cache(resp) {
+        n * 2 - 1
+    } else {
+        n - 1
+    }
 }
 
 /// Web cache poisoning through override headers, burp.Zp22 -> Zg0y.ZN
@@ -268,12 +323,19 @@ pub(crate) struct WebCachePoisoning;
 const URL_OVERRIDE: &str = "Request URL override";
 
 fn known_overrides() -> &'static crate::sync::Mutex<std::collections::HashSet<String>> {
-    static S: std::sync::OnceLock<crate::sync::Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
+    static S: std::sync::OnceLock<crate::sync::Mutex<std::collections::HashSet<String>>> =
+        std::sync::OnceLock::new();
     S.get_or_init(Default::default)
 }
 
 impl WebCachePoisoning {
-    fn report_override(&self, cx: &ScanCtx, probe: &OverrideProbe, base_status: u16, control: Option<(&[u8], &[u8])>) {
+    fn report_override(
+        &self,
+        cx: &ScanCtx,
+        probe: &OverrideProbe,
+        base_status: u16,
+        control: Option<(&[u8], &[u8])>,
+    ) {
         if !cx.runs(URL_OVERRIDE) {
             return;
         }
@@ -302,13 +364,21 @@ impl WebCachePoisoning {
         }
         let primes = prime_count(cx.settings.speed, &probe.resp);
         let mut send = |raw: &[u8]| burp_send(cx, raw);
-        let Some((clean_req, clean)) = confirm_poisoning(probe, cx.req.as_bytes(), base_status, primes, &mut send) else {
+        let Some((clean_req, clean)) =
+            confirm_poisoning(probe, cx.req.as_bytes(), base_status, primes, &mut send)
+        else {
             return false;
         };
         let result = if probe.reflected {
-            format!("This resulted in a response containing {}", util::html_encode(&probe.canary))
+            format!(
+                "This resulted in a response containing {}",
+                util::html_encode(&probe.canary)
+            )
         } else {
-            format!("This resulted in a response with a status code of {}", status_body(&probe.resp).0)
+            format!(
+                "This resulted in a response with a status code of {}",
+                status_body(&probe.resp).0
+            )
         };
         let detail = format!(
             "The application supports the use of a custom HTTP header to override the {}, and uses a cache that can be manipulated into saving responses that have been influenced by this header.<br><br>Burp added the following headers to the request:<br><br>{}<br><br>{result}. Burp then resent the request without these headers and got the same response, indicating that it had been cached.",
@@ -322,7 +392,12 @@ impl WebCachePoisoning {
         ev.push(ScanEvidence::new(&probe.req, Some(&probe.resp)));
         ev.push(ScanEvidence::new(&clean_req, Some(&clean)));
         let mut i = mk("high", self.issue(), &cx.entry, detail).with_evidence(ev);
-        i.confidence = if probe.reflected { "Certain" } else { "Tentative" }.into();
+        i.confidence = if probe.reflected {
+            "Certain"
+        } else {
+            "Tentative"
+        }
+        .into();
         cx.report(vec![i]);
         true
     }
@@ -352,7 +427,9 @@ impl WebCachePoisoning {
                 return;
             }
             let mut send = |raw: &[u8]| burp_send(cx, raw);
-            let Some(probe) = send_override_probe(kind, base, base_status, &mut send) else { return };
+            let Some(probe) = send_override_probe(kind, base, base_status, &mut send) else {
+                return;
+            };
             if probe.reflected {
                 known_overrides().lock().unwrap().insert(key);
                 self.report_override(cx, &probe, base_status, None);
@@ -362,7 +439,9 @@ impl WebCachePoisoning {
             // Zfkb.Ze / Zfki.Ze: the status changed (Zfki: not when
             // minimising false positives); Zg0y then checks that the
             // headers pointing at the real target keep the base status.
-            let changed = status_body(&probe.resp).0 != base_status && !(kind == Override::Host && cx.settings.accuracy == Accuracy::MinimizeFalsePositives);
+            let changed = status_body(&probe.resp).0 != base_status
+                && !(kind == Override::Host
+                    && cx.settings.accuracy == Accuracy::MinimizeFalsePositives);
             if !changed {
                 consistent = false;
                 break;
@@ -395,14 +474,22 @@ impl RequestCheck for WebCachePoisoning {
         Scope::Request
     }
     fn run(&self, cx: &ScanCtx) {
-        if cx.stopped() || cx.baseline.raw.is_empty() || !(cx.runs(self.issue()) || cx.runs(URL_OVERRIDE)) {
+        if cx.stopped()
+            || cx.baseline.raw.is_empty()
+            || !(cx.runs(self.issue()) || cx.runs(URL_OVERRIDE))
+        {
             return;
         }
         // Zp22.Zt: skip a POST whose body is not form-encoded, multipart
         // or empty (the method constant is not decoded; POST assumed).
         if cx.entry.method.eq_ignore_ascii_case("POST") {
-            let ct = util::get_header(&cx.parts.headers, "Content-Type").unwrap_or_default().to_ascii_lowercase();
-            if !(ct.is_empty() || ct.contains("application/x-www-form-urlencoded") || ct.contains("multipart/")) {
+            let ct = util::get_header(&cx.parts.headers, "Content-Type")
+                .unwrap_or_default()
+                .to_ascii_lowercase();
+            if !(ct.is_empty()
+                || ct.contains("application/x-www-form-urlencoded")
+                || ct.contains("multipart/"))
+            {
                 return;
             }
         }
@@ -505,7 +592,11 @@ mod tests {
             if let Some(hit) = cache.get(&line) {
                 return Some(hit.clone());
             }
-            let body = text.lines().find_map(|l| l.strip_prefix("X-Forwarded-Host: ")).map(|h| format!("<a href=//{h}/>")).unwrap_or_else(|| "ordinary".into());
+            let body = text
+                .lines()
+                .find_map(|l| l.strip_prefix("X-Forwarded-Host: "))
+                .map(|h| format!("<a href=//{h}/>"))
+                .unwrap_or_else(|| "ordinary".into());
             let r = resp(&body, false);
             cache.insert(line, r.clone());
             Some(r)
@@ -516,7 +607,11 @@ mod tests {
         // Reflection without a cache: no poisoning.
         let mut uncached = |req: &[u8]| {
             let text = String::from_utf8_lossy(req).to_string();
-            let body = text.lines().find_map(|l| l.strip_prefix("X-Forwarded-Host: ")).map(|h| format!("<a href=//{h}/>")).unwrap_or_else(|| "ordinary".into());
+            let body = text
+                .lines()
+                .find_map(|l| l.strip_prefix("X-Forwarded-Host: "))
+                .map(|h| format!("<a href=//{h}/>"))
+                .unwrap_or_else(|| "ordinary".into());
             Some(resp(&body, false))
         };
         let probe = send_override_probe(Override::Host, base, 200, &mut uncached).unwrap();
@@ -542,15 +637,13 @@ mod tests {
                 .is_none()
         );
         let already_cached = resp("private account", true);
-        assert!(
-            deception_attempt(
-                base,
-                &already_cached,
-                "GET",
-                "/account/abcdef.css",
-                &mut dynamic
-            )
-            .is_none()
-        );
+        assert!(deception_attempt(
+            base,
+            &already_cached,
+            "GET",
+            "/account/abcdef.css",
+            &mut dynamic
+        )
+        .is_none());
     }
 }

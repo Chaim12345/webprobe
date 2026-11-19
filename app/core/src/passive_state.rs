@@ -7,8 +7,8 @@
 //! to, the names of those fields, and the last password submitted to each
 //! (burp.Zcn0.ZG / Zc / ZW).
 
-use std::collections::BTreeMap;
 use crate::sync::Mutex;
+use std::collections::BTreeMap;
 
 /// A password value submitted to a known password field.
 #[derive(Clone, Debug, PartialEq)]

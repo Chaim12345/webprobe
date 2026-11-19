@@ -14,7 +14,8 @@ pub fn browser_listener(shared: &Arc<Shared>) -> Result<u16, NetError> {
     if p != 0 {
         return Ok(p);
     }
-    let l = TcpListener::bind("127.0.0.1:0").map_err(|source| NetError::BrowserListenerBind { source })?;
+    let l = TcpListener::bind("127.0.0.1:0")
+        .map_err(|source| NetError::BrowserListenerBind { source })?;
     let port = l
         .local_addr()
         .map_err(|source| NetError::BrowserListenerAddr { source })?

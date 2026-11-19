@@ -30,8 +30,8 @@ mod jwt_tests;
 // Stage A (#37): acyclic leaf modules extracted to the webprobe-support crate.
 // Re-exported so `webprobe_core::<module>` paths are unchanged.
 pub use webprobe_support::{
-    analysis, body, compare, decoder_ops, intercept_rules, jwt, logger, mime, organizer, paths,
-    notice, rules, seq_bits, streaming, sync, tls, util, variations, xss,
+    analysis, body, compare, decoder_ops, intercept_rules, jwt, logger, mime, notice, organizer,
+    paths, rules, seq_bits, streaming, sync, tls, util, variations, xss,
 };
 
 pub mod macros;
@@ -50,9 +50,9 @@ pub mod sitemap_compare;
 pub mod stored;
 #[cfg(test)]
 mod streaming_tests;
-mod util_tests;
 pub mod tasks;
 pub mod upstream;
+mod util_tests;
 pub mod ws_history;
 pub mod ws_repeater;
 #[cfg(test)]

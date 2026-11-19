@@ -14,10 +14,10 @@
 //! Measured before this change (debug build): 20k items with 4 KB bodies held
 //! 95 MB, and a save took 4.3 s on the UI thread.
 
+use crate::sync::Mutex;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
-use crate::sync::Mutex;
 
 /// Bytes of one message. Derefs to `[u8]`.
 #[derive(Clone)]
@@ -26,7 +26,11 @@ pub struct Body(Repr);
 #[derive(Clone)]
 enum Repr {
     Inline(Arc<[u8]>),
-    Stored { seg: Arc<Segment>, off: usize, len: usize },
+    Stored {
+        seg: Arc<Segment>,
+        off: usize,
+        len: usize,
+    },
 }
 
 impl Body {
@@ -44,7 +48,9 @@ impl Deref for Body {
             // SAFETY: [off, off + len) was written before this Body was
             // created and is never written again (segments are append-only);
             // the Arc keeps the mapping alive.
-            Repr::Stored { seg, off, len } => unsafe { std::slice::from_raw_parts(seg.map.as_ptr().add(*off), *len) },
+            Repr::Stored { seg, off, len } => unsafe {
+                std::slice::from_raw_parts(seg.map.as_ptr().add(*off), *len)
+            },
         }
     }
 }
@@ -63,7 +69,12 @@ impl Default for Body {
 
 impl std::fmt::Debug for Body {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Body({} bytes{})", self.len(), if self.is_stored() { ", stored" } else { "" })
+        write!(
+            f,
+            "Body({} bytes{})",
+            self.len(),
+            if self.is_stored() { ", stored" } else { "" }
+        )
     }
 }
 
@@ -160,7 +171,14 @@ struct Store {
 
 fn store() -> &'static Mutex<Store> {
     static S: OnceLock<Mutex<Store>> = OnceLock::new();
-    S.get_or_init(|| Mutex::new(Store { dir: store_dir(), current: None, next: 0, retry_at: None }))
+    S.get_or_init(|| {
+        Mutex::new(Store {
+            dir: store_dir(),
+            current: None,
+            next: 0,
+            retry_at: None,
+        })
+    })
 }
 
 /// `WEBPROBE_BODY_DIR`, else `$XDG_CACHE_HOME/webprobe`, else
@@ -169,7 +187,11 @@ fn store_dir() -> Option<PathBuf> {
     if !cfg!(unix) {
         return None;
     }
-    let env = |k: &str| std::env::var_os(k).filter(|v| !v.is_empty()).map(PathBuf::from);
+    let env = |k: &str| {
+        std::env::var_os(k)
+            .filter(|v| !v.is_empty())
+            .map(PathBuf::from)
+    };
     env("WEBPROBE_BODY_DIR")
         .or_else(|| env("XDG_CACHE_HOME").map(|d| d.join("webprobe")))
         .or_else(|| env("HOME").map(|d| d.join(".cache").join("webprobe")))
@@ -182,7 +204,10 @@ impl Store {
                 return Ok((seg.clone(), *used));
             }
         }
-        let dir = self.dir.clone().ok_or_else(|| std::io::Error::other("no body store directory"))?;
+        let dir = self
+            .dir
+            .clone()
+            .ok_or_else(|| std::io::Error::other("no body store directory"))?;
         std::fs::create_dir_all(&dir)?;
         let cap = need.max(SEGMENT);
         let path = dir.join(format!("bodies-{}-{}", std::process::id(), self.next));
@@ -193,7 +218,11 @@ impl Store {
         #[cfg(unix)]
         std::os::unix::fs::OpenOptionsExt::mode(&mut opts, 0o600);
         let file = opts.open(&path)?;
-        let mapped = file.set_len(cap as u64).and_then(|()| memmap2::MmapOptions::new().len(cap).map_raw_read_only(&file));
+        let mapped = file.set_len(cap as u64).and_then(|()| {
+            memmap2::MmapOptions::new()
+                .len(cap)
+                .map_raw_read_only(&file)
+        });
         // Unlinked at once: the mapping and the handle keep the data for this
         // process and nothing outlives it.
         let _ = std::fs::remove_file(&path);
@@ -214,7 +243,11 @@ pub fn scratch_file() -> Option<std::fs::File> {
     let dir = store().lock().unwrap().dir.clone()?;
     std::fs::create_dir_all(&dir).ok()?;
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-    let path = dir.join(format!("stream-{}-{}", std::process::id(), NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
+    let path = dir.join(format!(
+        "stream-{}-{}",
+        std::process::id(),
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
     let mut opts = std::fs::OpenOptions::new();
     opts.read(true).write(true).create_new(true);
     #[cfg(unix)]
@@ -231,7 +264,9 @@ impl Body {
         if len == 0 {
             return Ok(Body::default());
         }
-        let map = memmap2::MmapOptions::new().len(len).map_raw_read_only(&file)?;
+        let map = memmap2::MmapOptions::new()
+            .len(len)
+            .map_raw_read_only(&file)?;
         let seg = Arc::new(Segment {
             map,
             #[cfg(unix)]
@@ -252,17 +287,26 @@ pub fn spill(body: &Body) -> Body {
     if st.retry_at.is_some_and(|t| std::time::Instant::now() < t) {
         return body.clone();
     }
-    match st.segment(body.len()).and_then(|(seg, off)| write_at(&seg, off, body).map(|()| (seg, off))) {
+    match st
+        .segment(body.len())
+        .and_then(|(seg, off)| write_at(&seg, off, body).map(|()| (seg, off)))
+    {
         Ok((seg, off)) => {
             st.retry_at = None;
             if let Some((_, used, _)) = &mut st.current {
                 *used = off + body.len();
             }
-            Body(Repr::Stored { seg, off, len: body.len() })
+            Body(Repr::Stored {
+                seg,
+                off,
+                len: body.len(),
+            })
         }
         Err(e) => {
             if st.retry_at.is_none() {
-                eprintln!("webprobe: history bodies stay in memory for now, the body store failed: {e}");
+                eprintln!(
+                    "webprobe: history bodies stay in memory for now, the body store failed: {e}"
+                );
             }
             // Start a fresh segment next time and back off for a minute.
             st.current = None;
@@ -305,13 +349,23 @@ mod tests {
         // A body larger than a segment gets a segment of its own.
         let huge = vec![7u8; SEGMENT + 1];
         assert_eq!(&spill(&Body::from(huge.clone()))[..], &huge[..]);
-        assert_eq!(&b[..], &big[..], "earlier bodies are unaffected by new segments");
+        assert_eq!(
+            &b[..],
+            &big[..],
+            "earlier bodies are unaffected by new segments"
+        );
     }
 
     #[test]
     fn concurrent_spills_do_not_overlap() {
         let handles: Vec<_> = (0..8u8)
-            .map(|t| std::thread::spawn(move || (0..200).map(|i| (t, i, spill(&Body::from(vec![t ^ (i as u8); 300 + i])))).collect::<Vec<_>>()))
+            .map(|t| {
+                std::thread::spawn(move || {
+                    (0..200)
+                        .map(|i| (t, i, spill(&Body::from(vec![t ^ (i as u8); 300 + i]))))
+                        .collect::<Vec<_>>()
+                })
+            })
             .collect();
         for h in handles {
             for (t, i, b) in h.join().unwrap() {

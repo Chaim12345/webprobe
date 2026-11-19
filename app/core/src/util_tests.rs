@@ -47,7 +47,11 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(250));
             helpers = alive_with(&marker);
         }
-        crate::util::kill_process_tree(child.id(), Some(&marker), std::time::Duration::from_secs(2));
+        crate::util::kill_process_tree(
+            child.id(),
+            Some(&marker),
+            std::time::Duration::from_secs(2),
+        );
         assert!(helpers > 1, "browser should have spawned helpers");
         let _ = child.wait();
         std::thread::sleep(std::time::Duration::from_millis(500));

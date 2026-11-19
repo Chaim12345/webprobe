@@ -17,12 +17,12 @@
 //! queries with 127.0.0.1. Both workers share state through `Arc`, `Mutex`, and
 //! `AtomicBool`, so stopping a listener is explicit and prompt.
 
+use crate::sync::Mutex;
 use std::collections::VecDeque;
 use std::io::{self, Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream, UdpSocket};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, MutexGuard};
-use crate::sync::Mutex;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -46,8 +46,7 @@ const DNS_READ_TIMEOUT: Duration = Duration::from_millis(150);
 const DNS_TTL_SECS: u32 = 30;
 const MAX_DNS_PACKET: usize = 4096;
 const DNS_HEADER_LEN: usize = 12;
-const HTTP_OK_BODY: &str =
-    "Local Collaborator capture: the request was recorded.\n\
+const HTTP_OK_BODY: &str = "Local Collaborator capture: the request was recorded.\n\
      This listener is loopback-only; no public callback service is involved.\n";
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -238,7 +237,11 @@ impl InteractionLog {
     fn since(&self, after: u64) -> Vec<Interaction> {
         let entries = lock(&self.entries);
         let fresh = entries.iter().rev().take_while(|i| i.id > after).count();
-        entries.iter().skip(entries.len() - fresh).cloned().collect()
+        entries
+            .iter()
+            .skip(entries.len() - fresh)
+            .cloned()
+            .collect()
     }
 
     fn snapshot(&self) -> Vec<Interaction> {
@@ -556,7 +559,9 @@ impl Drop for RemoteCollaborator {
 }
 
 /// Map one interactsh report onto the local interaction model.
-pub(crate) fn remote_detail(it: &crate::interactsh::RemoteInteraction) -> Option<InteractionDetail> {
+pub(crate) fn remote_detail(
+    it: &crate::interactsh::RemoteInteraction,
+) -> Option<InteractionDetail> {
     match it.protocol.as_str() {
         "http" | "https" => {
             let raw = it.raw_request.as_bytes();
@@ -568,7 +573,10 @@ pub(crate) fn remote_detail(it: &crate::interactsh::RemoteInteraction) -> Option
                     headers: req.headers,
                     body: req.body,
                 },
-                Err(_) => HttpInteraction { body: raw.to_vec(), ..Default::default() },
+                Err(_) => HttpInteraction {
+                    body: raw.to_vec(),
+                    ..Default::default()
+                },
             };
             Some(InteractionDetail::Http(detail))
         }
@@ -682,7 +690,10 @@ impl CollaboratorState {
         let (tx, rx) = std::sync::mpsc::channel();
         let (server, token) = (server.to_string(), self.remote_token.clone());
         crate::util::spawn_contained("collaborator", move || {
-            let _ = tx.send(crate::interactsh::Session::register_with(&server, Some(&token)));
+            let _ = tx.send(crate::interactsh::Session::register_with(
+                &server,
+                Some(&token),
+            ));
         });
         self.registering = Some(rx);
     }
@@ -697,7 +708,9 @@ impl CollaboratorState {
         let outcome = match self.registering.as_ref()?.try_recv() {
             Ok(r) => r,
             Err(std::sync::mpsc::TryRecvError::Empty) => return None,
-            Err(std::sync::mpsc::TryRecvError::Disconnected) => Err("registration thread ended without a result".into()),
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                Err("registration thread ended without a result".into())
+            }
         };
         self.registering = None;
         Some(outcome.map(|s| self.attach_session(s)))
@@ -709,7 +722,12 @@ impl CollaboratorState {
         let poll_secs = Arc::clone(&self.poll_secs);
         let stop = Arc::new(AtomicBool::new(false));
         let error = Arc::new(Mutex::new(None));
-        let (s2, stop2, err2, log) = (Arc::clone(&session), Arc::clone(&stop), Arc::clone(&error), Arc::clone(&self.log));
+        let (s2, stop2, err2, log) = (
+            Arc::clone(&session),
+            Arc::clone(&stop),
+            Arc::clone(&error),
+            Arc::clone(&self.log),
+        );
         let handle = crate::util::spawn_contained("collaborator", move || {
             while !stop2.load(Ordering::SeqCst) {
                 match s2.poll() {
@@ -717,7 +735,8 @@ impl CollaboratorState {
                         *lock(&err2) = None;
                         for it in items {
                             if let Some(detail) = remote_detail(&it) {
-                                let token = (!it.unique_id.is_empty()).then(|| it.unique_id.clone());
+                                let token =
+                                    (!it.unique_id.is_empty()).then(|| it.unique_id.clone());
                                 log.record(unix_secs(), it.remote_address.clone(), token, detail);
                             }
                         }
@@ -733,7 +752,12 @@ impl CollaboratorState {
             }
         });
         let domain = session.server.clone();
-        self.remote = Some(RemoteCollaborator { session, stop, error, handle: Some(handle) });
+        self.remote = Some(RemoteCollaborator {
+            session,
+            stop,
+            error,
+            handle: Some(handle),
+        });
         domain
     }
 
@@ -850,7 +874,11 @@ impl CollaboratorState {
     /// Keep stored URLs aligned with the currently configured HTTP port.
     pub fn refresh_payload_urls(&mut self) {
         let port = self.http.port;
-        for payload in self.payloads.iter_mut().filter(|p| p.http_url.starts_with("http://127.0.0.1:")) {
+        for payload in self
+            .payloads
+            .iter_mut()
+            .filter(|p| p.http_url.starts_with("http://127.0.0.1:"))
+        {
             payload.http_url = format!("http://127.0.0.1:{port}/{}", payload.token);
         }
     }
@@ -973,9 +1001,10 @@ fn parse_http_request(buf: &[u8]) -> Result<ParsedHttpRequest, HttpParseError> {
         if line.is_empty() {
             continue;
         }
-        let colon = line.iter().position(|byte| *byte == b':').ok_or_else(|| {
-            HttpParseError::Malformed("HTTP header without a colon".to_string())
-        })?;
+        let colon = line
+            .iter()
+            .position(|byte| *byte == b':')
+            .ok_or_else(|| HttpParseError::Malformed("HTTP header without a colon".to_string()))?;
         let (name, value) = line.split_at(colon);
         if name.is_empty() || !name.iter().all(|byte| is_http_token_byte(*byte)) {
             return Err(HttpParseError::Malformed(
@@ -1048,20 +1077,14 @@ fn decode_chunked_body(data: &[u8]) -> Result<Vec<u8>, HttpParseError> {
     let mut rest = data;
     let mut body = Vec::new();
     loop {
-        let line_end =
-            find_crlf(rest).ok_or(HttpParseError::Incomplete("chunk size line"))?;
+        let line_end = find_crlf(rest).ok_or(HttpParseError::Incomplete("chunk size line"))?;
         let size_line = &rest[..line_end];
-        let size_hex = size_line
-            .split(|byte| *byte == b';')
-            .next()
-            .unwrap_or(&[]);
+        let size_hex = size_line.split(|byte| *byte == b';').next().unwrap_or(&[]);
         let size_text = std::str::from_utf8(size_hex)
             .map_err(|_| HttpParseError::Malformed("chunk size is not ASCII".to_string()))?
             .trim();
         if size_text.is_empty() {
-            return Err(HttpParseError::Malformed(
-                "empty chunk size".to_string(),
-            ));
+            return Err(HttpParseError::Malformed("empty chunk size".to_string()));
         }
         let size = usize::from_str_radix(size_text, 16)
             .map_err(|_| HttpParseError::Malformed("invalid chunk size".to_string()))?;
@@ -1107,9 +1130,7 @@ fn read_http_request(
             Ok(read) => {
                 buf.extend_from_slice(&chunk[..read]);
                 if buf.len() > MAX_HTTP_REQUEST {
-                    return Err(format!(
-                        "HTTP request exceeds {MAX_HTTP_REQUEST} bytes"
-                    ));
+                    return Err(format!("HTTP request exceeds {MAX_HTTP_REQUEST} bytes"));
                 }
                 match parse_http_request(&buf) {
                     Ok(request) => return Ok(request),
@@ -1192,12 +1213,8 @@ fn http_loop(listener: TcpListener, shared: Arc<CaptureShared>) {
                             Some(t) => format!("<html><body>{}</body></html>\n", inband_marker(t)),
                             None => HTTP_OK_BODY.to_string(),
                         };
-                        if let Err(error) =
-                            write_http_response(&mut stream, "200 OK", &body)
-                        {
-                            shared.set_error(format!(
-                                "HTTP response to {peer} failed: {error}"
-                            ));
+                        if let Err(error) = write_http_response(&mut stream, "200 OK", &body) {
+                            shared.set_error(format!("HTTP response to {peer} failed: {error}"));
                         }
                     }
                     Err(error) => {
@@ -1496,9 +1513,7 @@ fn make_token() -> String {
         .unwrap_or(0);
     let sequence = TOKEN_SEQUENCE.fetch_add(1, Ordering::Relaxed);
     let pid = u64::from(std::process::id());
-    let seed = nanos
-        ^ sequence.wrapping_mul(0x9E37_79B9_7F4A_7C15)
-        ^ pid.rotate_left(17);
+    let seed = nanos ^ sequence.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ pid.rotate_left(17);
     let high = splitmix64(seed);
     let low = splitmix64(seed ^ 0xD6E8_FEB8_6659_FD93);
     format!("{high:016x}{:08x}", (low >> 32) as u32)
@@ -1509,10 +1524,7 @@ fn looks_like_token(text: &str) -> bool {
 }
 
 fn token_from_path(target: &str) -> Option<String> {
-    let target = target
-        .split(['?', '#'])
-        .next()
-        .unwrap_or(target);
+    let target = target.split(['?', '#']).next().unwrap_or(target);
     let path = if let Some(rest) = target.strip_prefix("http://") {
         rest.find('/').map(|index| &rest[index..]).unwrap_or("/")
     } else if let Some(rest) = target.strip_prefix("https://") {
@@ -1559,7 +1571,9 @@ fn preview_text(text: &str, limit: usize) -> String {
 /// burp.Zem2): `yyyy-MMM-dd HH:mm:ss.SSS z` in UTC. Interactions are kept
 /// to the second, so the milliseconds are `.000`.
 pub fn interaction_time(unix_secs: u64) -> String {
-    const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const MONTHS: [&str; 12] = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
     let days = (unix_secs / 86_400) as i64;
     let rem = unix_secs % 86_400;
     // Civil date from days since 1970-01-01 (H. Hinnant's algorithm).
@@ -1572,13 +1586,23 @@ pub fn interaction_time(unix_secs: u64) -> String {
     let d = doy - (153 * mp + 2) / 5 + 1;
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
     let y = yoe + era * 400 + if m <= 2 { 1 } else { 0 };
-    format!("{y}-{}-{d:02} {:02}:{:02}:{:02}.000 UTC", MONTHS[(m - 1) as usize], rem / 3600, (rem / 60) % 60, rem % 60)
+    format!(
+        "{y}-{}-{d:02} {:02}:{:02}:{:02}.000 UTC",
+        MONTHS[(m - 1) as usize],
+        rem / 3600,
+        (rem / 60) % 60,
+        rem % 60
+    )
 }
 
 /// What "Copy to clipboard" copies: the full payload host, or only its
 /// first label when the server location is left out.
 pub fn payload_text(dns_name: &str, include_server: bool) -> String {
-    if include_server { dns_name.to_string() } else { dns_name.split('.').next().unwrap_or("").to_string() }
+    if include_server {
+        dns_name.to_string()
+    } else {
+        dns_name.split('.').next().unwrap_or("").to_string()
+    }
 }
 
 /// The "Collaborator server:" label: the polled domain, the loopback
@@ -1616,9 +1640,14 @@ mod tests {
     fn interactions_since_returns_only_the_new_tail() {
         let log = InteractionLog::new();
         let smtp = || InteractionDetail::Smtp(SmtpInteraction::default());
-        let ids: Vec<u64> = (0..5).map(|i| log.record(unix_secs(), format!("s{i}"), None, smtp())).collect();
+        let ids: Vec<u64> = (0..5)
+            .map(|i| log.record(unix_secs(), format!("s{i}"), None, smtp()))
+            .collect();
         assert_eq!(log.since(0).iter().map(|i| i.id).collect::<Vec<_>>(), ids);
-        assert_eq!(log.since(ids[2]).iter().map(|i| i.id).collect::<Vec<_>>(), ids[3..].to_vec());
+        assert_eq!(
+            log.since(ids[2]).iter().map(|i| i.id).collect::<Vec<_>>(),
+            ids[3..].to_vec()
+        );
         assert!(log.since(ids[4]).is_empty());
     }
     use std::collections::HashSet;
@@ -1637,7 +1666,10 @@ mod tests {
             assert!(t0.elapsed() < Duration::from_secs(30), "no outcome");
             std::thread::sleep(Duration::from_millis(20));
         };
-        assert!(outcome.unwrap_err().contains("connect"), "a refused port is reported");
+        assert!(
+            outcome.unwrap_err().contains("connect"),
+            "a refused port is reported"
+        );
         assert!(!st.is_registering() && st.remote_server().is_none());
     }
 
@@ -1645,7 +1677,13 @@ mod tests {
     fn retention_drops_old_interactions_and_poll_interval_is_clamped() {
         let st = CollaboratorState::new();
         let now = unix_secs();
-        let dns = || InteractionDetail::Dns(DnsInteraction { qname: "x".into(), qtype: 1, raw_query: Vec::new() });
+        let dns = || {
+            InteractionDetail::Dns(DnsInteraction {
+                qname: "x".into(),
+                qtype: 1,
+                raw_query: Vec::new(),
+            })
+        };
         st.log.record(now - 600, "1.1.1.1".into(), None, dns());
         st.log.record(now, "2.2.2.2".into(), None, dns());
         assert_eq!(st.interactions().len(), 2, "kept with no retention");
@@ -1724,7 +1762,9 @@ mod tests {
     }
 
     fn dns_query(name: &str, qtype: u16) -> Vec<u8> {
-        let mut packet = vec![0x12, 0x34, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        let mut packet = vec![
+            0x12, 0x34, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ];
         for label in name.split('.').filter(|label| !label.is_empty()) {
             packet.push(label.len() as u8);
             packet.extend_from_slice(label.as_bytes());
@@ -1771,7 +1811,9 @@ mod tests {
             Err(DnsParseError::Incomplete(_))
         ));
 
-        let mut packet = vec![0x12, 0x34, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        let mut packet = vec![
+            0x12, 0x34, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ];
         packet.extend_from_slice(&[0xC0, 0x0C]); // points at itself
         packet.extend_from_slice(&[0x00, 0x01, 0x00, 0x01]);
         assert!(matches!(
@@ -1794,15 +1836,31 @@ mod tests {
     #[test]
     fn interaction_rows_show_burp_time_payload_and_description() {
         assert_eq!(interaction_time(0), "1970-Jan-01 00:00:00.000 UTC");
-        assert_eq!(interaction_time(1_795_000_000), "2026-Nov-18 11:06:40.000 UTC");
-        assert_eq!(interaction_time(951_782_400), "2000-Feb-29 00:00:00.000 UTC", "leap day");
+        assert_eq!(
+            interaction_time(1_795_000_000),
+            "2026-Nov-18 11:06:40.000 UTC"
+        );
+        assert_eq!(
+            interaction_time(951_782_400),
+            "2000-Feb-29 00:00:00.000 UTC",
+            "leap day"
+        );
         assert_eq!(payload_text("abc123.oast.fun", true), "abc123.oast.fun");
         assert_eq!(payload_text("abc123.oast.fun", false), "abc123");
         assert_eq!(server_label(Some("oast.fun"), true), "*.oast.fun");
         assert_eq!(server_label(None, true), "loopback listeners (127.0.0.1)");
         assert_eq!(server_label(None, false), "not configured");
-        let i = Interaction { id: 1, at: 0, source: "10.0.0.5".into(), token: Some("abc123".into()), detail: InteractionDetail::Dns(DnsInteraction { qname: "abc123.oast.fun".into(), qtype: 1, raw_query: Vec::new() }) };
+        let i = Interaction {
+            id: 1,
+            at: 0,
+            source: "10.0.0.5".into(),
+            token: Some("abc123".into()),
+            detail: InteractionDetail::Dns(DnsInteraction {
+                qname: "abc123.oast.fun".into(),
+                qtype: 1,
+                raw_query: Vec::new(),
+            }),
+        };
         assert_eq!(describe(&i), "The Collaborator server received a DNS lookup for the payload abc123. The request was received from IP address 10.0.0.5 at 1970-Jan-01 00:00:00.000 UTC.");
     }
-
 }

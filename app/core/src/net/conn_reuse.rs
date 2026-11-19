@@ -425,8 +425,8 @@ pub fn new_tls_conn(
     host: &str,
     port: u16,
 ) -> Result<UpstreamConn, NetError> {
-    let tcp = crate::upstream::connect_tls_target(config, host, port)
-        .map_err(NetError::Upstream)?;
+    let tcp =
+        crate::upstream::connect_tls_target(config, host, port).map_err(NetError::Upstream)?;
     tcp.set_read_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)))
         .ok();
     let name = rustls::pki_types::ServerName::try_from(host.to_string()).map_err(|source| {

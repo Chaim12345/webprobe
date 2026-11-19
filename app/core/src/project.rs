@@ -48,9 +48,7 @@ pub enum ProjectError {
     #[error("saving {} failed with an internal error", .path.display())]
     SavePanicked { path: PathBuf },
     #[error("project document is not UTF-8: {source}")]
-    DocumentNotUtf8 {
-        source: std::string::FromUtf8Error,
-    },
+    DocumentNotUtf8 { source: std::string::FromUtf8Error },
     #[error("cannot parse project {label}: not UTF-8 ({source})")]
     ParseNotUtf8 {
         label: String,
@@ -62,17 +60,18 @@ pub enum ProjectError {
         source: serde_json::Error,
     },
     #[error("not a WebProbe project file {label}: missing \"{magic} <version>\" header")]
-    MissingHeader {
-        label: String,
-        magic: &'static str,
-    },
-    #[error("not a WebProbe project file {label}: wrong magic header {header:?} (expected {magic:?})")]
+    MissingHeader { label: String, magic: &'static str },
+    #[error(
+        "not a WebProbe project file {label}: wrong magic header {header:?} (expected {magic:?})"
+    )]
     WrongMagic {
         label: String,
         header: String,
         magic: &'static str,
     },
-    #[error("invalid project header {header:?} in {label}: version {version_text:?} is not a number")]
+    #[error(
+        "invalid project header {header:?} in {label}: version {version_text:?} is not a number"
+    )]
     InvalidVersionHeader {
         header: String,
         label: String,
@@ -1653,11 +1652,10 @@ pub fn wait_for_saves() {
 
 /// Read and validate a project file.
 pub fn load(path: &Path) -> Result<ProjectData, ProjectError> {
-    let file = std::fs::File::open(path)
-        .map_err(|source| ProjectError::Read {
-            path: path.to_path_buf(),
-            source,
-        })?;
+    let file = std::fs::File::open(path).map_err(|source| ProjectError::Read {
+        path: path.to_path_buf(),
+        source,
+    })?;
     let len = file
         .metadata()
         .map_err(|source| ProjectError::Read {
@@ -1679,11 +1677,10 @@ pub fn load(path: &Path) -> Result<ProjectData, ProjectError> {
     // (ProjectHistory's Deserialize), so a large project is not held twice.
     // SAFETY: saves replace the file by rename, so this inode is not
     // modified while it is mapped.
-    let map = unsafe { memmap2::Mmap::map(&file) }
-        .map_err(|source| ProjectError::Read {
-            path: path.to_path_buf(),
-            source,
-        })?;
+    let map = unsafe { memmap2::Mmap::map(&file) }.map_err(|source| ProjectError::Read {
+        path: path.to_path_buf(),
+        source,
+    })?;
     decode(&map, &path.display().to_string())
 }
 
@@ -1709,10 +1706,12 @@ fn split_document<'a>(text: &'a str, label: &str) -> Result<(Option<u32>, &'a st
         return Ok((None, trimmed));
     }
 
-    let (header, body) = trimmed.split_once('\n').ok_or_else(|| ProjectError::MissingHeader {
-        label: label.to_string(),
-        magic: PROJECT_MAGIC,
-    })?;
+    let (header, body) = trimmed
+        .split_once('\n')
+        .ok_or_else(|| ProjectError::MissingHeader {
+            label: label.to_string(),
+            magic: PROJECT_MAGIC,
+        })?;
     let header = header.trim_end_matches('\r');
 
     let rest = match header.strip_prefix(PROJECT_MAGIC) {
@@ -1727,11 +1726,13 @@ fn split_document<'a>(text: &'a str, label: &str) -> Result<(Option<u32>, &'a st
     };
 
     let version_text = rest.trim();
-    let version = version_text.parse::<u32>().map_err(|_| ProjectError::InvalidVersionHeader {
-        header: header.to_string(),
-        label: label.to_string(),
-        version_text: version_text.to_string(),
-    })?;
+    let version = version_text
+        .parse::<u32>()
+        .map_err(|_| ProjectError::InvalidVersionHeader {
+            header: header.to_string(),
+            label: label.to_string(),
+            version_text: version_text.to_string(),
+        })?;
     Ok((Some(version), body))
 }
 

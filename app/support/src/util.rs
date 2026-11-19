@@ -612,7 +612,6 @@ mod process_tree_tests {
         assert!(!pgid_left, "the background sleeps must be gone too");
         assert_eq!(alive_with(&marker), 0);
     }
-
 }
 
 /// Burp's "Update Content-Length": restamp the header to the body length

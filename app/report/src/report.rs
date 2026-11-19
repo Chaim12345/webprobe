@@ -245,10 +245,12 @@ impl KnowledgeBase {
             if p.extension().and_then(|x| x.to_str()) != Some("json") {
                 continue;
             }
-            if let Some(entry) =
-                webprobe_core::util::read_text_file_capped(&p, webprobe_core::util::MAX_TEXT_FILE_BYTES)
-                    .ok()
-                    .and_then(|t| Self::parse_entry(&t))
+            if let Some(entry) = webprobe_core::util::read_text_file_capped(
+                &p,
+                webprobe_core::util::MAX_TEXT_FILE_BYTES,
+            )
+            .ok()
+            .and_then(|t| Self::parse_entry(&t))
             {
                 kb.entries.insert(entry.name.to_lowercase(), entry);
             }
@@ -1331,8 +1333,9 @@ mod tests {
         // Absent sections are omitted, not written empty.
         assert!(!x.contains("<references>"));
         assert!(!x.contains("<remediationDetail>"));
-        let req_b64 =
-            webprobe_core::util::b64_encode(b"GET /search?q=1 HTTP/1.1\r\nHost: 127.0.0.1:3000\r\n\r\n");
+        let req_b64 = webprobe_core::util::b64_encode(
+            b"GET /search?q=1 HTTP/1.1\r\nHost: 127.0.0.1:3000\r\n\r\n",
+        );
         assert!(x.contains(&format!("    <requestresponse>\r\n      <request method=\"GET\" base64=\"true\"><![CDATA[{req_b64}]]></request>\r\n      <response base64=\"true\"><![CDATA[")));
         assert!(x.contains("      <responseRedirected>false</responseRedirected>\r\n    </requestresponse>\r\n  </issue>\r\n</issues>\r\n"));
         // Element order follows the DTD.

@@ -331,7 +331,8 @@ impl RequestCheck for HeaderManipulation {
         if cx.stopped() {
             return;
         }
-        let manip = crate::util::replace_or_add_header(cx.req.as_bytes(), "X-Forwarded-For", FIP_MARKER);
+        let manip =
+            crate::util::replace_or_add_header(cx.req.as_bytes(), "X-Forwarded-For", FIP_MARKER);
         if let Some(resp) = &cx.send(&manip) {
             let rp = util::parse_http(resp);
             let rbody = String::from_utf8_lossy(&resp[rp.head_len.min(resp.len())..]);
@@ -397,8 +398,11 @@ impl RequestCheck for XxeFileRead {
             let mut xxe_req = cx.req.as_bytes().to_vec();
             xxe_req.truncate(cx.parts.head_len.min(cx.req.len()));
             xxe_req.extend_from_slice(body.as_bytes());
-            let xxe_req =
-                crate::util::replace_or_add_header(&xxe_req, "Content-Length", &body.len().to_string());
+            let xxe_req = crate::util::replace_or_add_header(
+                &xxe_req,
+                "Content-Length",
+                &body.len().to_string(),
+            );
             let resp = rec.send(cx, body, &xxe_req)?;
             let rp = util::parse_http(&resp);
             Some(String::from_utf8_lossy(&resp[rp.head_len.min(resp.len())..]).into_owned())
