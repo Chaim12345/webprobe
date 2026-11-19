@@ -413,10 +413,7 @@ mod tests {
             vec!["/ftp", "/pub/"]
         );
         // no User-agent stanza needed: Disallow-only bodies still yield paths
-        assert_eq!(
-            robots_paths("Disallow: /admin\nDisallow: /tmp"),
-            vec!["/admin", "/tmp"]
-        );
+        assert_eq!(robots_paths("Disallow: /admin\nDisallow: /tmp"), vec!["/admin", "/tmp"]);
         assert_eq!(sitemap_locs("<urlset><url><loc> http://a/x </loc></url><url><loc>http://a/y</loc></url></urlset>"), vec!["http://a/x", "http://a/y"]);
     }
 
@@ -1421,27 +1418,18 @@ const DOM_INSTRUMENT_JS: &str = r#"
 /// the target host, like the crawl, and return the source-to-sink hits
 /// the instrumentation recorded. The
 /// browser tree is killed and its profile removed on every path.
-pub fn dom_analysis_probe(
-    shared: &Arc<Shared>,
-    url: &str,
-    canary: &str,
-) -> Result<Vec<DomHit>, String> {
-    let bin = crate::paths::chromium()
-        .map_err(|m| m.to_string())?
-        .display()
-        .to_string();
+/// The shared headless-browser run of the R-13 probes: launch Chromium
+/// locked to `url`'s host, connect CDP, optionally install an
+/// evaluate-on-new-document script, navigate to `navigate_url`, pump,
+/// then evaluate `final_js` (which must produce a JSON string) and return
+/// its decoded value - Ok(None) when the evaluation itself fails. The
+/// browser tree is killed and its profile removed on every path.
+fn browser_run<T: serde::de::DeserializeOwned>(shared: &Arc<Shared>, url: &str, navigate_url: &str, inject: Option<String>, final_js: &str) -> Result<Option<T>, String> {
+    let bin = crate::paths::chromium().map_err(|m| m.to_string())?.display().to_string();
     let rest = url.split_once("://").map(|x| x.1).unwrap_or(url);
     let authority = rest.split('/').next().unwrap_or("");
-    let target_host = authority
-        .rsplit_once(':')
-        .map(|x| x.0)
-        .unwrap_or(authority)
-        .to_string();
-    let dport = std::net::TcpListener::bind("127.0.0.1:0")
-        .map_err(|e| e.to_string())?
-        .local_addr()
-        .map_err(|e| e.to_string())?
-        .port();
+    let target_host = authority.rsplit_once(':').map(|x| x.0).unwrap_or(authority).to_string();
+    let dport = std::net::TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?.local_addr().map_err(|e| e.to_string())?.port();
     let profile = std::env::temp_dir().join(format!("webprobe-dom-{}-{dport}", std::process::id()));
     let mut cmd = std::process::Command::new(&bin);
     crate::util::own_process_group(&mut cmd);
@@ -1479,10 +1467,7 @@ pub fn dom_analysis_probe(
             }
             if let Some(list) = http_get_local(dport, "/json/list") {
                 let v: serde_json::Value = serde_json::from_str(&list).unwrap_or_default();
-                ws_url = v
-                    .as_array()
-                    .and_then(|a| a.iter().find(|t| t["type"] == "page"))
-                    .and_then(|t| t["webSocketDebuggerUrl"].as_str().map(str::to_string));
+                ws_url = v.as_array().and_then(|a| a.iter().find(|t| t["type"] == "page")).and_then(|t| t["webSocketDebuggerUrl"].as_str().map(str::to_string));
                 if ws_url.is_some() {
                     break;
                 }
@@ -1491,34 +1476,49 @@ pub fn dom_analysis_probe(
         }
         let mut cdp = Cdp::connect(&ws_url.ok_or("browser DevTools endpoint did not come up")?)?;
         cdp.call("Page.enable", serde_json::json!({}))?;
-        cdp.call("Page.addScriptToEvaluateOnNewDocument", serde_json::json!({"source": DOM_INSTRUMENT_JS.replace("%CANARY%", canary).replace("%HCANARY%", &format!("h{canary}")).replace("%QCANARY%", &format!("q{canary}"))}))?;
-        let base = url.split('#').next().unwrap_or(url);
-        // Distinct canary variants ride the fragment and the query
-        // parameter, so one navigation covers the location.hash and
-        // location.search sources and the hit value attributes the source.
-        let sep = if base.contains('?') { "&" } else { "?" };
-        cdp.call(
-            "Page.navigate",
-            serde_json::json!({"url": format!("{base}{sep}wpdom=q{canary}#h{canary}")}),
-        )?;
+        if let Some(src) = inject {
+            cdp.call("Page.addScriptToEvaluateOnNewDocument", serde_json::json!({"source": src}))?;
+        }
+        cdp.call("Page.navigate", serde_json::json!({"url": navigate_url}))?;
         for _ in 0..25 {
             if shared.scan.stop.load(Ordering::SeqCst) {
                 break;
             }
             cdp.pump(100);
         }
-        let hits: Vec<DomHit> =
-            eval_json(&mut cdp, "JSON.stringify(window.__wpDomHits || [])").unwrap_or_default();
-        Ok(hits)
+        Ok(eval_json(&mut cdp, final_js))
     })();
-    crate::util::kill_process_tree(
-        child.id(),
-        Some(&profile.display().to_string()),
-        std::time::Duration::from_secs(2),
-    );
+    crate::util::kill_process_tree(child.id(), Some(&profile.display().to_string()), std::time::Duration::from_secs(2));
     let _ = child.wait();
     let _ = std::fs::remove_dir_all(&profile);
     result
+}
+
+pub fn dom_analysis_probe(shared: &Arc<Shared>, url: &str, canary: &str) -> Result<Vec<DomHit>, String> {
+    let base = url.split('#').next().unwrap_or(url);
+    // Distinct canary variants ride the fragment and the query
+    // parameter, so one navigation covers the location.hash and
+    // location.search sources and the hit value attributes the source.
+    let sep = if base.contains('?') { "&" } else { "?" };
+    let nav = format!("{base}{sep}wpdom=q{canary}#h{canary}");
+    let inject = DOM_INSTRUMENT_JS.replace("%CANARY%", canary).replace("%HCANARY%", &format!("h{canary}")).replace("%QCANARY%", &format!("q{canary}"));
+    let hits: Option<Vec<DomHit>> = browser_run(shared, url, &nav, Some(inject), "JSON.stringify(window.__wpDomHits || [])")?;
+    Ok(hits.unwrap_or_default())
+}
+
+/// R-13 client-side prototype pollution (KB 00200316, issue 2097942;
+/// burp.Zcwm's separate decoder, scheduled by burp.Zfk8): navigate with a
+/// qs-style `__proto__[canary]` payload in both the query string and the
+/// fragment (the URL parts the KB names as sources) and report the PoC
+/// URL when the canary lands on Object.prototype - a vulnerable
+/// deep-merge walks `obj["__proto__"]` into it.
+pub fn prototype_pollution_probe(shared: &Arc<Shared>, url: &str, canary: &str) -> Result<Option<String>, String> {
+    let base = url.split('#').next().unwrap_or(url);
+    let sep = if base.contains('?') { "&" } else { "?" };
+    let nav = format!("{base}{sep}__proto__[{canary}]={canary}#__proto__[{canary}]={canary}");
+    let check = format!("JSON.stringify(Object.prototype[{canary:?}] === undefined ? '' : String(Object.prototype[{canary:?}]))");
+    let got: Option<String> = browser_run(shared, url, &nav, None, &check)?;
+    Ok(got.filter(|v| !v.is_empty()).map(|_| nav))
 }
 
 /// The origin (`scheme://host[:port]`) of a URL, as written.

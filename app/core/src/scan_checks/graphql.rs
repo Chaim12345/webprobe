@@ -1221,6 +1221,68 @@ dom_family_check!(
     "HTML5 web message manipulation (DOM-based), KB 00500e00, Information: controllable data sent as a web message to another document (window.postMessage; no literal Zcwh sink mapping - the family is established by the KB resource). Confidence Firm (burp.Zwf8.Zd)."
 );
 
+/// Client-side prototype pollution, KB 00200316 (issue 2097942),
+/// Information: a query-string or fragment parameter converted to an
+/// object and merged, landing `__proto__` keys on Object.prototype
+/// (burp.Zcwm's decoder, scheduled by burp.Zfk8). Confidence Firm is
+/// WebProbe's choice for a dynamically observed pollution - the
+/// Zcwm/Zwf8 confidence mapping is not established.
+pub(crate) struct DomPrototypePollution;
+
+impl RequestCheck for DomPrototypePollution {
+    fn id(&self) -> &'static str {
+        "active.dom-prototype-pollution"
+    }
+    fn issue(&self) -> &'static str {
+        "Client-side prototype pollution"
+    }
+    fn scope(&self) -> Scope {
+        Scope::Request
+    }
+    fn group(&self) -> Option<&'static str> {
+        Some(BURP_GROUP)
+    }
+    fn run(&self, cx: &ScanCtx) {
+        if cx.stopped() || !cx.runs(self.issue()) {
+            return;
+        }
+        // Dynamic analysis runs on pages: the baseline must be HTML.
+        let rp = util::parse_http(&cx.baseline.raw);
+        let ct = util::get_header(&rp.headers, "Content-Type").unwrap_or_default();
+        if !ct.to_ascii_lowercase().contains("html") {
+            return;
+        }
+        let scheme = if cx.entry.https { "https" } else { "http" };
+        let default = if cx.entry.https { 443 } else { 80 };
+        let port = if cx.entry.port == default { String::new() } else { format!(":{}", cx.entry.port) };
+        let path = cx.entry.path.split('#').next().unwrap_or("/");
+        let url = format!("{scheme}://{}{port}{path}", cx.entry.host);
+        let canary = format!("wpp{}", rnd_letters(8));
+        match crate::crawl::prototype_pollution_probe(&cx.shared, &url, &canary) {
+            Ok(Some(poc)) => {
+                // burp.Zwud's template: the source was found, the payload
+                // was injected into a named URL part and later detected in
+                // Object.prototype; print the PoC URL; recommend DOM
+                // Invader to confirm and scan for gadgets.
+                let mut i = mk(
+                    "info",
+                    self.issue(),
+                    &cx.entry,
+                    format!(
+                        "The application may be vulnerable to client-side prototype pollution. A controllable query string or fragment parameter is converted to a JavaScript object and merged, and the payload <b>{}</b> was later detected in <b>Object.prototype</b>.<br><br>PoC URL: {}<br><br>Client-side prototype pollution is not a vulnerability in its own right; paired with a gadget it may lead to issues such as DOM XSS. Burp's DOM Invader can confirm the issue and scan for gadgets.",
+                        util::html_encode(&canary),
+                        util::html_encode(&poc)
+                    ),
+                );
+                i.confidence = "Firm".into();
+                cx.report(vec![i]);
+            }
+            Ok(None) => {}
+            Err(e) => cx.shared.log(&format!("prototype pollution probe failed for {url}: {e}")),
+        }
+    }
+}
+
 /// WebProbe's own reflected-DOM canary (Burp finds DOM issues by analysing
 /// JavaScript, which is not this): a plain canary reflected unencoded into
 /// script data or an attribute value of an HTML response. Also seeds the
