@@ -2513,9 +2513,7 @@ mod tests {
         .unwrap();
         eventually(|| (!run.is_running()).then_some(()));
         let mut got: Vec<String> = run
-            .rows
-            .lock()
-            .unwrap()
+            .snapshot_rows()
             .iter()
             .map(|r| {
                 String::from_utf8_lossy(r.response.as_deref().unwrap_or_default())
