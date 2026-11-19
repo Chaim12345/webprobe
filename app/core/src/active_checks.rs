@@ -215,7 +215,9 @@ const VOID_ELEMENTS: [&str; 14] = ["area", "base", "br", "col", "embed", "hr", "
 /// start/end stack (names are not matched) and a scope that never closes is
 /// not recorded. Comments, void elements and `/>` tags do not count, and
 /// script/style contents are skipped.
-pub(crate) fn angular_scopes(body: &str) -> (Vec<(usize, usize)>, Vec<(usize, usize)>) {
+type ScopeSpans = (Vec<(usize, usize)>, Vec<(usize, usize)>);
+
+pub(crate) fn angular_scopes(body: &str) -> ScopeSpans {
     let lower = body.to_ascii_lowercase();
     let b = body.as_bytes();
     let mut scopes = Vec::new();

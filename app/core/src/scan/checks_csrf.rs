@@ -83,7 +83,7 @@ pub fn strip_csrf_params(body: &str) -> (String, Vec<String>) {
             continue;
         }
         let name = kv.split('=').next().unwrap_or("");
-        let value = kv.splitn(2, '=').nth(1).unwrap_or("");
+        let value = kv.split_once('=').map(|x| x.1).unwrap_or("");
         if is_csrf_token_param(name, value) {
             removed.push(name.to_string());
         } else {
@@ -105,7 +105,7 @@ pub fn blank_csrf_params(body: &str) -> (String, Vec<String>) {
             continue;
         }
         let name = kv.split('=').next().unwrap_or("");
-        let value = kv.splitn(2, '=').nth(1).unwrap_or("");
+        let value = kv.split_once('=').map(|x| x.1).unwrap_or("");
         if is_csrf_token_param(name, value) {
             blanked.push(name.to_string());
             kept.push(format!("{name}="));
@@ -163,7 +163,7 @@ pub fn csrf_static_token_hit(
         .split('&')
         .filter_map(|kv| {
             let name = kv.split('=').next()?.to_string();
-            let value = kv.splitn(2, '=').nth(1).unwrap_or("");
+            let value = kv.split_once('=').map(|x| x.1).unwrap_or("");
             if is_csrf_token_param(&name, value) {
                 Some((name, value.to_string()))
             } else {

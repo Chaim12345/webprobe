@@ -84,7 +84,7 @@ pub fn parse_http_date(text: &str) -> Option<u64> {
     let mut month = None;
     let mut year = None;
     let mut time = None;
-    for tok in text.split(|c: char| c == ' ' || c == ',' || c == '-').filter(|t| !t.is_empty()) {
+    for tok in text.split([' ', ',', '-']).filter(|t| !t.is_empty()) {
         if tok.contains(':') {
             // Clock fields in range only: no overflow from a hostile header.
             let mut it = tok.split(':').map(|n| n.parse::<u64>().ok());
@@ -190,7 +190,7 @@ impl CookieJar {
             .filter(|c| https || !c.secure)
             .filter(|c| c.expires.is_none_or(|e| e > now))
             .collect();
-        out.sort_by(|a, b| b.path.len().cmp(&a.path.len()));
+        out.sort_by_key(|c| std::cmp::Reverse(c.path.len()));
         out
     }
 

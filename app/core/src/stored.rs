@@ -71,12 +71,15 @@ pub(crate) struct Pair {
     pub injection: (Vec<u8>, Option<Vec<u8>>),
 }
 
+/// (item, point, request bytes, injected value) of one stored token.
+type StoredPoint = (usize, InsertionPoint, Vec<u8>, Option<Vec<u8>>);
+
 #[derive(Default)]
 struct Inner {
     items: Vec<Item>,
     /// (item, point) of each injected token.
     tokens: HashMap<String, usize>,
-    points: Vec<(usize, InsertionPoint, Vec<u8>, Option<Vec<u8>>)>,
+    points: Vec<StoredPoint>,
     /// token per (item, point identity), so a point keeps its token.
     by_point: HashMap<(usize, String), String>,
     /// (point index, retrieval item) pairs, in the order found.

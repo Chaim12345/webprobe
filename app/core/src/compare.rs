@@ -263,7 +263,7 @@ pub fn hex_spans(spans: &[Span]) -> Vec<Span> {
     let mut off = 0usize;
     for sp in spans {
         for &b in sp.text.as_bytes() {
-            if off % 16 == 0 {
+            if off.is_multiple_of(16) {
                 push(format!("{}{:08x}  ", if off == 0 { "" } else { "\n" }, off), Kind::Same);
             } else {
                 push(" ".into(), Kind::Same);

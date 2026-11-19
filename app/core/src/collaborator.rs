@@ -1154,7 +1154,7 @@ fn write_http_response(stream: &mut TcpStream, status: &str, body: &str) -> io::
          Cache-Control: no-store\r\n\
          Connection: close\r\n\
          \r\n",
-        body.as_bytes().len()
+        body.len()
     );
     stream.write_all(head.as_bytes())?;
     stream.write_all(body.as_bytes())?;
@@ -1509,7 +1509,7 @@ fn looks_like_token(text: &str) -> bool {
 
 fn token_from_path(target: &str) -> Option<String> {
     let target = target
-        .split(|character| character == '?' || character == '#')
+        .split(['?', '#'])
         .next()
         .unwrap_or(target);
     let path = if let Some(rest) = target.strip_prefix("http://") {

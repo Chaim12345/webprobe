@@ -766,7 +766,7 @@ impl ProjectScanTask {
                 let paused = t.state == crate::tasks::TaskState::Paused;
                 match &t.kind {
                     crate::tasks::TaskKind::Audit(e) => ProjectScanTask { name: t.name.clone(), entries: e.iter().map(ProjectHistory::from_entry).collect(), urls: Vec::new(), audit_only: true, paused },
-                    crate::tasks::TaskKind::Single { entry, .. } => ProjectScanTask { name: t.name.clone(), entries: vec![ProjectHistory::from_entry(entry)], urls: Vec::new(), audit_only: true, paused },
+                    crate::tasks::TaskKind::Single { entry, .. } => ProjectScanTask { name: t.name.clone(), entries: vec![ProjectHistory::from_entry(entry.as_ref())], urls: Vec::new(), audit_only: true, paused },
                     crate::tasks::TaskKind::CrawlAudit { urls, audit_only } => ProjectScanTask { name: t.name.clone(), entries: Vec::new(), urls: urls.clone(), audit_only: *audit_only, paused },
                 }
             })
@@ -1572,11 +1572,13 @@ mod tests {
 
     #[test]
     fn one_settings_page_resets_and_the_rest_stays() {
-        let mut cur = ProjectData::default();
-        cur.scope = vec![ProjectScope { enabled: true, include: true, pattern: "https://a/".into(), is_regex: false }];
+        let mut cur = ProjectData {
+            scope: vec![ProjectScope { enabled: true, include: true, pattern: "https://a/".into(), is_regex: false }],
+            listener_port: 6566,
+            ..Default::default()
+        };
         cur.collaborator.poll_secs = Some(30);
         cur.collaborator.payloads = vec!["p".into()];
-        cur.listener_port = 6566;
         let out = with_section_defaults(&cur, SettingsSection::Collaborator);
         assert_eq!(out.collaborator.poll_secs, None);
         assert_eq!(out.collaborator.payloads, vec!["p".to_string()], "data stays");
@@ -2079,9 +2081,11 @@ mod tests {
 
         // Import those settings into another project: its traffic and its
         // stored cookies survive, its rules are replaced.
-        let mut other = ProjectData::default();
-        other.history = full.history.clone();
-        other.cookie_jar = Some(ProjectCookieJar { cookies: full.cookie_jar.as_ref().unwrap().cookies.clone(), update_from: vec!["Proxy".into()], apply_to: Vec::new() });
+        let other = ProjectData {
+            history: full.history.clone(),
+            cookie_jar: Some(ProjectCookieJar { cookies: full.cookie_jar.as_ref().unwrap().cookies.clone(), update_from: vec!["Proxy".into()], apply_to: Vec::new() }),
+            ..Default::default()
+        };
         let merged = apply_settings(&other, &exported);
         assert_eq!(merged.history.len(), full.history.len());
         assert_eq!(merged.session_rules.len(), full.session_rules.len());
@@ -2134,8 +2138,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         for i in 0..5u64 {
             for name in ["a.json", "b.json"] {
-                let mut data = ProjectData::default();
-                data.saved_at = i;
+                let data = ProjectData { saved_at: i, ..Default::default() };
                 save_in_background(dir.join(name), data, Box::new(|r| r.unwrap()));
             }
         }
@@ -2159,9 +2162,11 @@ mod tests {
         let path = dir.join("p.json");
         let done = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
         for i in 0..20u64 {
-            let mut data = ProjectData::default();
-            data.saved_at = i;
-            data.history = (0..200).map(|k| ProjectHistory::from_entry(&crate::net::HistEntry { id: k, req_raw: vec![b'x'; 2000].into(), ..Default::default() })).collect();
+            let data = ProjectData {
+                saved_at: i,
+                history: (0..200).map(|k| ProjectHistory::from_entry(&crate::net::HistEntry { id: k, req_raw: vec![b'x'; 2000].into(), ..Default::default() })).collect(),
+                ..Default::default()
+            };
             let d = done.clone();
             save_in_background(path.clone(), data, Box::new(move |r| {
                 r.unwrap();
@@ -2191,8 +2196,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("wp-spill-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("p.json");
-        let mut data = ProjectData::default();
-        data.history = vec![ProjectHistory::from_entry(&e)];
+        let data = ProjectData { history: vec![ProjectHistory::from_entry(&e)], ..Default::default() };
         save(&path, &data).unwrap();
         let back = load(&path).unwrap().history[0].to_entry();
         assert_eq!(back.resp_raw.unwrap(), body);
@@ -2240,8 +2244,10 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("p.json");
         let t0 = std::time::Instant::now();
-        let mut data = ProjectData::default();
-        data.history = shared.history.snapshot().iter().map(ProjectHistory::from_entry).collect();
+        let data = ProjectData {
+            history: shared.history.snapshot().iter().map(ProjectHistory::from_entry).collect(),
+            ..Default::default()
+        };
         save(&path, &data).unwrap();
         let save_ms = t0.elapsed().as_millis();
         let peak = rss();

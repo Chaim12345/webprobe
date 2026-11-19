@@ -719,7 +719,7 @@ mod tests {
     impl Rand for Fixed {
         fn letters(&mut self, n: usize) -> String {
             self.0 = self.0.wrapping_add(1);
-            std::iter::repeat((b'a' + self.0 % 26) as char).take(n).collect()
+            std::iter::repeat_n((b'a' + self.0 % 26) as char, n).collect()
         }
     }
 
@@ -802,8 +802,8 @@ mod tests {
         let base_req = b"GET / HTTP/1.1\r\nHost: app.test\r\nOrigin: https://app.test\r\n\r\n";
         let base_resp = resp("Access-Control-Allow-Origin: https://app.test\r\nVary: Origin\r\n");
         let own = Origin::parse("https://app.test");
-        let found = run_cors_check(base_req, &base_resp, true, own, &mut Fixed(0), |o| {
-            let allow = if o == "https://app.test" { "https://app.test" } else { "https://app.test" };
+        let found = run_cors_check(base_req, &base_resp, true, own, &mut Fixed(0), |_o| {
+            let allow = "https://app.test";
             Some((Vec::new(), resp(&format!("Access-Control-Allow-Origin: {allow}\r\nVary: Origin\r\n"))))
         });
         let kinds: Vec<_> = found.iter().map(|f| f.kind).collect();

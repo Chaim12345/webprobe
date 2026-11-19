@@ -109,7 +109,7 @@ fn url_decode(input: &str) -> String {
 /// short decode.  Validate the shape first, then decode.
 fn base64_decode(input: &str) -> Result<String, String> {
     let cleaned: String = input.chars().filter(|c| !c.is_ascii_whitespace()).collect();
-    if cleaned.is_empty() || cleaned.len() % 4 != 0 {
+    if cleaned.is_empty() || !cleaned.len().is_multiple_of(4) {
         return Err(format!("base64 input must be non-empty and a multiple of 4 bytes long (got {})", cleaned.len()));
     }
     let body = cleaned.trim_end_matches('=');
@@ -193,7 +193,7 @@ fn md5_hex(input: &str) -> String {
     // One shift table per round: round `i / 16` uses entries `(i / 16) * 4 ..+ 4`.
     const S: [u32; 16] = [7, 12, 17, 22, 5, 9, 14, 20, 4, 11, 16, 23, 6, 10, 15, 21];
     let mut h: [u32; 4] = [0x6745_2301, 0xefcd_ab89, 0x98ba_dcfe, 0x1032_5476];
-    for block in data.chunks_exact(64) {
+    for block in data.as_chunks::<64>().0 {
         let m: Vec<u32> = (0..16).map(|i| u32::from_le_bytes(block[i * 4..i * 4 + 4].try_into().unwrap())).collect();
         let (mut a, mut b, mut c, mut d) = (h[0], h[1], h[2], h[3]);
         for i in 0..64 {
@@ -219,21 +219,21 @@ fn md5_hex(input: &str) -> String {
 fn sha1_hex(input: &str) -> String {
     let data = pad_be(input.as_bytes(), 64, 8);
     let mut h: [u32; 5] = [0x6745_2301, 0xefcd_ab89, 0x98ba_dcfe, 0x1032_5476, 0xc3d2_e1f0];
-    for block in data.chunks_exact(64) {
+    for block in data.as_chunks::<64>().0 {
         let mut w = [0u32; 80];
-        for i in 0..16 { w[i] = u32::from_be_bytes(block[i * 4..i * 4 + 4].try_into().unwrap()); }
+        for (i, chunk) in block.as_chunks::<4>().0.iter().take(16).enumerate() { w[i] = u32::from_be_bytes(*chunk); }
         for i in 16..80 {
             w[i] = (w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16]).rotate_left(1);
         }
         let (mut a, mut b, mut c, mut d, mut e) = (h[0], h[1], h[2], h[3], h[4]);
-        for i in 0..80 {
+        for (i, &wi) in w.iter().enumerate() {
             let (f, k) = match i / 20 {
                 0 => ((b & c) | (!b & d), 0x5a82_7999),
                 1 => (b ^ c ^ d, 0x6ed9_eba1),
                 2 => ((b & c) | (b & d) | (c & d), 0x8f1b_bcdc),
                 _ => (b ^ c ^ d, 0xca62_c1d6),
             };
-            let t = a.rotate_left(5).wrapping_add(f).wrapping_add(e).wrapping_add(k).wrapping_add(w[i]);
+            let t = a.rotate_left(5).wrapping_add(f).wrapping_add(e).wrapping_add(k).wrapping_add(wi);
             e = d; d = c; c = b.rotate_left(30); b = a; a = t;
         }
         h = [
@@ -260,9 +260,9 @@ fn sha256_hex(input: &str) -> String {
     let mut h: [u32; 8] = [
         0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
     ];
-    for block in data.chunks_exact(64) {
+    for block in data.as_chunks::<64>().0 {
         let mut w = [0u32; 64];
-        for i in 0..16 { w[i] = u32::from_be_bytes(block[i * 4..i * 4 + 4].try_into().unwrap()); }
+        for (i, chunk) in block.as_chunks::<4>().0.iter().take(16).enumerate() { w[i] = u32::from_be_bytes(*chunk); }
         for i in 16..64 {
             let s0 = w[i - 15].rotate_right(7) ^ w[i - 15].rotate_right(18) ^ (w[i - 15] >> 3);
             let s1 = w[i - 2].rotate_right(17) ^ w[i - 2].rotate_right(19) ^ (w[i - 2] >> 10);
@@ -310,7 +310,7 @@ fn sha512_hex(input: &str) -> String {
         0x6a09e667f3bcc908, 0xbb67ae8584caa73b, 0x3c6ef372fe94f82b, 0xa54ff53a5f1d36f1,
         0x510e527fade682d1, 0x9b05688c2b3e6c1f, 0x1f83d9abfb41bd6b, 0x5be0cd19137e2179,
     ];
-    for block in data.chunks_exact(128) {
+    for block in data.as_chunks::<128>().0 {
         let mut w = [0u64; 80];
         for i in 0..16 { w[i] = u64::from_be_bytes(block[i * 8..i * 8 + 8].try_into().unwrap()); }
         for i in 16..80 {
@@ -362,7 +362,7 @@ fn smart_decode(input: &str) -> Result<String, String> {
 
     let cleaned: String = input.chars().filter(|c| !c.is_ascii_whitespace()).collect();
     let b64_shaped = !cleaned.is_empty()
-        && cleaned.len() % 4 == 0
+        && cleaned.len().is_multiple_of(4)
         && cleaned.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'/' | b'='));
     if b64_shaped {
         if let Ok(bytes) = util::b64_decode(&cleaned) {
@@ -374,7 +374,7 @@ fn smart_decode(input: &str) -> Result<String, String> {
         }
     }
 
-    if input.len() >= 2 && input.len() % 2 == 0 && input.bytes().all(|b| b.is_ascii_hexdigit()) {
+    if input.len() >= 2 && input.len().is_multiple_of(2) && input.bytes().all(|b| b.is_ascii_hexdigit()) {
         if let Ok(bytes) = util::hex_decode(input) {
             if let Ok(text) = String::from_utf8(bytes.clone()) {
                 if !text.is_empty() && text != input && util::hex_encode(&bytes) == input.to_ascii_lowercase() {

@@ -375,10 +375,10 @@ impl Conn {
                 if f.flags & FLAG_ACK != 0 {
                     return if f.payload.is_empty() { Ok(()) } else { err(FRAME_SIZE_ERROR, "SETTINGS ACK with a payload") };
                 }
-                if f.payload.len() % 6 != 0 {
+                if !f.payload.len().is_multiple_of(6) {
                     return err(FRAME_SIZE_ERROR, "SETTINGS length");
                 }
-                for p in f.payload.chunks_exact(6) {
+                for p in f.payload.as_chunks::<6>().0 {
                     let id = u16::from_be_bytes([p[0], p[1]]);
                     let v = u32::from_be_bytes([p[2], p[3], p[4], p[5]]);
                     match id {
@@ -483,7 +483,7 @@ impl Conn {
             }
             FRAME_PUSH_PROMISE => err(PROTOCOL_ERROR, "a client cannot push"),
             FRAME_HEADERS => {
-                if f.stream == 0 || f.stream % 2 == 0 {
+                if f.stream == 0 || f.stream.is_multiple_of(2) {
                     return err(PROTOCOL_ERROR, "HEADERS on stream 0 or an even stream");
                 }
                 let frag = header_fragment(f.flags, &f.payload).map_err(|e| ConnError(PROTOCOL_ERROR, e))?.to_vec();

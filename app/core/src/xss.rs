@@ -256,7 +256,7 @@ pub fn xss_templates(context: u8) -> Vec<XssTemplate> {
             xt("{M}` a=b{M2}", "` a=b"),
         ],
         7 => vec![xt("{M}><script>{P}</script>{M2}", "><script>")],
-        8 | 9 | 10 | 11 => vec![xt("javascript:{P}//{M}", "javascript:")],
+        8..=11 => vec![xt("javascript:{P}//{M}", "javascript:")],
         12 => vec![xt("{M}\" onclick={P} x=\"{M2}", "\" onclick=")],
         13 => vec![xt("{M}' onclick={P} x='{M2}", "' onclick=")],
         14 => vec![xt("{M}` onclick={P} x=`{M2}", "` onclick=")],

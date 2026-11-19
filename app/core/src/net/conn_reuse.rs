@@ -143,7 +143,7 @@ pub fn response_allows_reuse(resp: &[u8]) -> bool {
 }
 
 pub fn send_inner(shared: &Shared, host: &str, port: u16, req: &[u8], mut sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>) -> Result<Vec<u8>, String> {
-    let config = shared.upstream_for(&host);
+    let config = shared.upstream_for(host);
     let req = util::origin_form(req);
     let routed = crate::upstream::absolute_form_request(&config, &req, host, port);
     let keep_alive = shared.keep_alive.load(Ordering::SeqCst);
@@ -210,7 +210,7 @@ pub fn send_inner(shared: &Shared, host: &str, port: u16, req: &[u8], mut sink: 
                     tcp
                 });
                 shared.conns_opened.fetch_add(1, Ordering::SeqCst);
-                exchange(&mut fresh, &routed, sink.as_deref_mut()).map(|(r, reusable)| (r, reusable, fresh)).map_err(|e2| format!("{e}; retry: {e2}"))
+                exchange(&mut fresh, &routed, sink).map(|(r, reusable)| (r, reusable, fresh)).map_err(|e2| format!("{e}; retry: {e2}"))
             } else {
                 Err(e)
             }
@@ -251,7 +251,7 @@ pub fn send_tls_raw_with(shared: &Shared, host: &str, port: u16, request: &[u8],
 }
 
 pub fn send_tls_inner(shared: &Shared, host: &str, port: u16, req: &[u8], mut sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>) -> Result<Vec<u8>, String> {
-    let config = shared.upstream_for(&host);
+    let config = shared.upstream_for(host);
     let req = util::origin_form(req);
     let keep_alive = shared.keep_alive.load(Ordering::SeqCst);
     let req = if keep_alive { set_connection(&req, "keep-alive") } else { set_connection(&req, "close") };
@@ -338,7 +338,7 @@ pub fn send_tls_inner(shared: &Shared, host: &str, port: u16, req: &[u8], mut si
             // on a fresh one before reporting the failure.
             if reused {
                 let mut fresh = new_tls_conn(shared, &config, host, port)?;
-                exchange(&mut fresh, &req, sink.as_deref_mut()).map(|(r, reusable)| (r, reusable, fresh)).map_err(|e2| format!("{e}; retry: {e2}"))
+                exchange(&mut fresh, &req, sink).map(|(r, reusable)| (r, reusable, fresh)).map_err(|e2| format!("{e}; retry: {e2}"))
             } else {
                 Err(e)
             }

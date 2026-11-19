@@ -52,7 +52,7 @@ pub(crate) struct Csp {
 }
 
 /// Java's String.split: trailing empty strings dropped.
-fn java_split<'a>(s: &'a str, sep: char) -> Vec<&'a str> {
+fn java_split(s: &str, sep: char) -> Vec<&str> {
     let mut v: Vec<&str> = s.split(sep).collect();
     while v.len() > 1 && v.last() == Some(&"") {
         v.pop();

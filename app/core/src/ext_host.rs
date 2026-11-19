@@ -474,11 +474,18 @@ const HOOK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
 /// What a bridged extension may ask of WebProbe: `Http.sendRequest`
 /// (through WebProbe's sender, so upstream proxy and session settings
 /// apply) and `Logging.raise*Event` (the event log).
+/// `Http.sendRequest` through WebProbe's sender.
+pub type HostSend = Box<dyn Fn(&HttpService, &[u8]) -> Result<Vec<u8>, String> + Send + Sync>;
+/// `Logging.raise*Event` (the event log).
+pub type HostEvent = Box<dyn Fn(&str, &str) + Send + Sync>;
+/// Engine calls (`crate::ext_calls`): (extension, op, args).
+pub type HostCall = Box<dyn Fn(&str, &str, &serde_json::Value) -> Result<serde_json::Value, String> + Send + Sync>;
+
 pub struct HostLink {
-    pub send: Box<dyn Fn(&HttpService, &[u8]) -> Result<Vec<u8>, String> + Send + Sync>,
-    pub event: Box<dyn Fn(&str, &str) + Send + Sync>,
+    pub send: HostSend,
+    pub event: HostEvent,
     /// Engine calls (`crate::ext_calls`): (extension, op, args).
-    pub call: Box<dyn Fn(&str, &str, &serde_json::Value) -> Result<serde_json::Value, String> + Send + Sync>,
+    pub call: HostCall,
 }
 
 impl HostLink {

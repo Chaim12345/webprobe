@@ -1157,7 +1157,7 @@ mod tests {
     fn html_extract_truncates_long_bodies_and_omit_hides_messages() {
         let mut is = rissue(1, 0, 0, "A", "/");
         let mut resp = b"HTTP/1.1 200 OK\r\n\r\n".to_vec();
-        resp.extend(std::iter::repeat(b'x').take(3000));
+        resp.extend(std::iter::repeat_n(b'x', 3000));
         is.evidence[0].response = Some(resp);
         let h = html_report(&[is.clone()], &ReportOptions::default(), "now");
         assert!(h.contains("...[1976 more bytes]..."));
@@ -1190,15 +1190,17 @@ mod tests {
 
     #[test]
     fn build_attaches_latest_matching_history_entry() {
-        let mut a = crate::net::HistEntry::default();
-        a.id = 5;
-        a.host = "shop.local".into();
-        a.port = 8443;
-        a.https = true;
-        a.path = "/login?x=1".into();
-        a.method = "POST".into();
-        a.req_raw = b"POST /login?x=1 HTTP/1.1\r\n\r\n".to_vec().into();
-        a.ip = "10.0.0.2".into();
+        let a = crate::net::HistEntry {
+            id: 5,
+            host: "shop.local".into(),
+            port: 8443,
+            https: true,
+            path: "/login?x=1".into(),
+            method: "POST".into(),
+            req_raw: b"POST /login?x=1 HTTP/1.1\r\n\r\n".to_vec().into(),
+            ip: "10.0.0.2".into(),
+            ..Default::default()
+        };
         let mut b = a.clone();
         b.id = 3;
         b.method = "GET".into();

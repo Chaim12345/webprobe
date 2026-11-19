@@ -507,7 +507,7 @@ fn occurrences(hay: &[u8], needle: &[u8]) -> Vec<(usize, usize)> {
 /// but the issue type is off (which also stops the weaker issue), or no
 /// match.
 enum Step {
-    Issue(ScanIssue),
+    Issue(Box<ScanIssue>),
     Suppressed,
     No,
 }
@@ -573,13 +573,13 @@ fn password_steps(cx: &PassiveCtx, s: &crate::passive_state::Submitted, current:
             Step::Suppressed
         } else {
             let i = issue(CH_PASSWORD_COOKIE, cx, CH_PASSWORD_COOKIE.sev, CH_PASSWORD_COOKIE.confidence, String::new(), String::new());
-            Step::Issue(if current { i } else { later_evidence(i) })
+            Step::Issue(Box::new(if current { i } else { later_evidence(i) }))
         }
     } else {
         Step::No
     };
     match cookie {
-        Step::Issue(i) => return Some(i),
+        Step::Issue(i) => return Some(*i),
         Step::Suppressed => suppressed = true,
         Step::No => {}
     }
@@ -611,7 +611,7 @@ fn password_steps(cx: &PassiveCtx, s: &crate::passive_state::Submitted, current:
         while let Some(o) = low[i..].find('<') {
             let st = i + o;
             let e = tag_end(low, st);
-            if low[st..e].contains(&low_pw) && tag_attr_values(&text[st..e]).iter().any(|v| *v == s.value) {
+            if low[st..e].contains(&low_pw) && tag_attr_values(&text[st..e]).contains(&s.value) {
                 if !enabled(CH_PASSWORD_LATER) {
                     return None;
                 }
@@ -786,7 +786,7 @@ fn is_base64(b: &[u8]) -> bool {
     if n == 0 || n % 4 == 1 {
         return false;
     }
-    let bad_padding = if b[n - 1] == b'=' { n % 4 != 0 } else { b[n - 2] == b'=' };
+    let bad_padding = if b[n - 1] == b'=' { !n.is_multiple_of(4) } else { b[n - 2] == b'=' };
     !bad_padding && b.iter().enumerate().all(|(i, &c)| !(c == b'=' && i + 2 < n) && (c.is_ascii_alphanumeric() || c == b'+' || c == b'/' || c == b'='))
 }
 
@@ -1143,9 +1143,7 @@ mod php_depth_tests {
             s.extend_from_slice(b"a:1:{i:0;");
         }
         s.extend_from_slice(b"i:1;");
-        for _ in 0..depth {
-            s.push(b'}');
-        }
+        s.extend(std::iter::repeat_n(b'}', depth));
         s
     }
 

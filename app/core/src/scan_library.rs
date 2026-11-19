@@ -210,7 +210,7 @@ pub fn load_builtin(src: &BurpResources) -> Result<LoadReport, String> {
             Err(e) => rep.errors.push(e),
         }
     }
-    rep.configs.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    rep.configs.sort_by_key(|a| a.name.to_lowercase());
     Ok(rep)
 }
 
@@ -385,7 +385,7 @@ fn jar_files(jar: &Path, prefix: &str) -> Result<Vec<(String, Vec<u8>)>, String>
         };
         match read(&mut f) {
             Ok(b) => out.push((stem, b)),
-            Err(e) => out.push((stem.clone(), format!("{e}").into_bytes())),
+            Err(e) => out.push((stem.clone(), e.to_string().into_bytes())),
         }
     }
     Ok(out)
@@ -906,7 +906,7 @@ pub fn load_dir(dir: &Path) -> LoadReport {
         }
         Err(e) => rep.errors.push(e),
     }
-    rep.configs.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    rep.configs.sort_by_key(|a| a.name.to_lowercase());
     rep
 }
 

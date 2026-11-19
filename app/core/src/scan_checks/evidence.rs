@@ -42,7 +42,7 @@ impl Recorder {
     }
 
     /// The latest exchange for `key` and every exchange after it.
-    pub(crate) fn from_last(&self, key: &str) -> Vec<ScanEvidence> {
+    pub(crate) fn since_last(&self, key: &str) -> Vec<ScanEvidence> {
         let Some(i) = self.last_index(key) else { return Vec::new() };
         self.log.borrow()[i..].iter().map(|(_, e)| e.clone()).collect()
     }

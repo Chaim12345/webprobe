@@ -238,7 +238,7 @@ fn text_and_binary_echo_byte_exact() {
     assert_eq!(p, bin);
     eventually("both echoes", || received(&s, "text").len() == 1 && received(&s, "binary").len() == 1);
     assert_eq!(received(&s, "text"), ["h\u{e9}llo \u{1F600}".as_bytes().to_vec()]);
-    assert_eq!(received(&s, "binary"), [bin.clone()]);
+    assert_eq!(received(&s, "binary"), std::slice::from_ref(&bin));
     // The history holds what was sent and what came back, to_server flags set.
     let all = s.messages();
     let sent: Vec<_> = all.iter().filter(|m| m.sent).collect();

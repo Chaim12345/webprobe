@@ -715,19 +715,17 @@ fn xml_points_each(content: &str, parent: Option<&InsertionPoint>, f: &mut dyn F
                 }
             }
             TokKind::End => {
-                if prev == Some(TokKind::Start) {
-                    if !f(mk(IpKind::XmlParam { start: t.start, end: t.start }, last.clone().unwrap_or_default(), String::new())) {
+                if prev == Some(TokKind::Start)
+                    && !f(mk(IpKind::XmlParam { start: t.start, end: t.start }, last.clone().unwrap_or_default(), String::new())) {
                         return false;
                     }
-                }
             }
             TokKind::Text => {
                 let raw = &content[t.start..t.end];
-                if !raw.trim().is_empty() {
-                    if !f(mk(IpKind::XmlParam { start: t.start, end: t.end }, last.clone().unwrap_or_default(), util::html_decode(raw))) {
+                if !raw.trim().is_empty()
+                    && !f(mk(IpKind::XmlParam { start: t.start, end: t.end }, last.clone().unwrap_or_default(), util::html_decode(raw))) {
                         return false;
                     }
-                }
             }
             TokKind::Other => {}
         }
@@ -937,7 +935,7 @@ fn base64_shape(b: &[u8], alphabet: fn(u8) -> bool) -> bool {
         return false;
     }
     let last = b[b.len() - 1];
-    if if last == b'=' { b.len() % 4 != 0 } else { b[b.len() - 2] == b'=' } {
+    if if last == b'=' { !b.len().is_multiple_of(4) } else { b[b.len() - 2] == b'=' } {
         return false;
     }
     let n = b.len() - 2;
@@ -1494,7 +1492,8 @@ mod tests {
         let json = format!("{{\"t\":\"{v}\"}}");
         let xml = format!("<r><t>{v}</t></r>");
         let mp = format!("--B\r\nContent-Disposition: form-data; name=\"t\"\r\n\r\n{v}\r\n--B--\r\n");
-        let cases: Vec<(String, Box<dyn Fn(&str) -> String>)> = vec![
+        type PlacementCase = (String, Box<dyn Fn(&str) -> String>);
+        let cases: Vec<PlacementCase> = vec![
             (format!("GET / HTTP/1.1\r\nHost: h\r\nCookie: t={v}\r\n\r\n"), Box::new(|r: &str| util::url_decode(r.split("Cookie: t=").nth(1).unwrap().split("\r\n").next().unwrap()))),
             (format!("GET / HTTP/1.1\r\nHost: h\r\nX-T: {v}\r\n\r\n"), Box::new(|r: &str| r.split("X-T: ").nth(1).unwrap().split("\r\n").next().unwrap().to_string())),
             (format!("POST / HTTP/1.1\r\nHost: h\r\nContent-Type: application/json\r\n\r\n{json}"), Box::new(|r: &str| serde_json::from_str::<serde_json::Value>(body_of(r)).unwrap()["t"].as_str().unwrap().to_string())),

@@ -371,7 +371,7 @@ fn stream_body<R: std::io::Read + crate::net::ResponseRead>(
     if let Some(ms) = sink.idle_timeout_ms() {
         stream.set_read_timeout_ms(ms)?;
     }
-    let mut pending: Vec<u8> = buffer.drain(..).collect();
+    let mut pending: Vec<u8> = std::mem::take(buffer);
     let mut sent_head = false;
     let mut left: Option<u64> = match kind {
         BodyKind::Length(n) => Some(n as u64),
@@ -536,7 +536,7 @@ mod tests {
         // EOF-delimited bodies are never reusable; a huge Content-Length does not overflow.
         assert!(!read_all(b"HTTP/1.1 200 OK\r\n\r\nbody", "GET").1);
         assert!(!read_all(b"HTTP/1.1 200 OK\r\nContent-Length: 18446744073709551615\r\n\r\nx", "GET").1);
-        assert!(body_complete(b"HTTP/1.1 200 OK\r\nContent-Length: 18446744073709551615\r\n\r\nx", "GET") == false);
+        assert!(!body_complete(b"HTTP/1.1 200 OK\r\nContent-Length: 18446744073709551615\r\n\r\nx", "GET"));
     }
 
     /// Review finding 7: a large chunked body is scanned once, not once per read.
@@ -606,8 +606,7 @@ mod tests {
         let mut enc = Vec::new();
         {
             use std::io::Write;
-            let mut params = brotli::enc::BrotliEncoderParams::default();
-            params.quality = 5;
+            let params = brotli::enc::BrotliEncoderParams { quality: 5, ..Default::default() };
             let mut e = brotli::CompressorWriter::new(&mut enc, 4096, 5, 22);
             e.write_all(raw).unwrap();
             let _ = params;

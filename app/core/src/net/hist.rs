@@ -191,10 +191,9 @@ pub fn browser_item_response(shared: &Shared, path: &str) -> Option<Vec<u8>> {
     let p = path.split('?').next().unwrap_or(path);
     let (kind, id) = if let Some(n) = p.strip_prefix("/show/") {
         ("show", n)
-    } else if let Some(n) = p.strip_prefix("/repeat/") {
-        ("repeat", n)
     } else {
-        return None;
+        let n = p.strip_prefix("/repeat/")?;
+        ("repeat", n)
     };
     let id: u64 = id.trim_end_matches('/').parse().ok()?;
     let e = shared.history.get(id)?;

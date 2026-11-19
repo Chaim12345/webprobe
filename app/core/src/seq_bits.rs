@@ -133,7 +133,7 @@ pub fn poker(bits: &[bool]) -> Option<f64> {
         return None;
     }
     let mut counts = [0f64; 16];
-    for block in bits.chunks_exact(4) {
+    for block in bits.as_chunks::<4>().0 {
         let v = block.iter().fold(0usize, |acc, b| acc << 1 | usize::from(*b));
         counts[v] += 1.0;
     }
