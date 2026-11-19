@@ -1064,6 +1064,46 @@ fn dom_web_message_against_a_live_lab() {
     );
 }
 
+/// R-13 reflected-DOM variant: a page whose response copies the wpdom
+/// canary into a JavaScript string literal and passes it to a sink is
+/// the reflected variant; the plain location.hash page stays the DOM
+/// variant. Skipped when no Chromium is available.
+#[test]
+fn dom_xss_reflected_variant_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, raw| {
+        let body = if path.starts_with("/reflxss") {
+            let c = raw
+                .split("wpdom=")
+                .nth(1)
+                .and_then(|r| r.split(['&', ' ']).next())
+                .unwrap_or("");
+            format!("<html><body><script>var t = '{c}'; document.write('<p>' + t + '</p>');</script></body></html>")
+        } else if path.starts_with("/xss") {
+            "<html><body><script>document.write('<p>' + location.hash.slice(1) + '</p>');</script></body></html>".to_string()
+        } else {
+            "<html><body><p>hello</p></body></html>".to_string()
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    let got = lab_scan(port, &["active.dom-xss"], "GET", "/reflxss", format!("GET /reflxss HTTP/1.1\r\nHost: {host}\r\n\r\n"));
+    assert!(
+        got.iter().any(|(n, s, c)| n == "Cross-site scripting (reflected DOM-based)" && s == "high" && c == "Firm"),
+        "reflected variant: {got:?}"
+    );
+    assert!(!got.iter().any(|(n, ..)| n == "Cross-site scripting (DOM-based)"), "not the plain variant: {got:?}");
+    let got = lab_scan(port, &["active.dom-xss"], "GET", "/xss", format!("GET /xss HTTP/1.1\r\nHost: {host}\r\n\r\n"));
+    assert!(
+        got.iter().any(|(n, s, c)| n == "Cross-site scripting (DOM-based)" && s == "high" && c == "Firm"),
+        "plain variant: {got:?}"
+    );
+}
+
+
 /// R-10 batch 2: the three GraphQL checks against a live endpoint.
 /// The lab answers the introspection query with a schema, the
 /// `query{__type}` probe with a suggestion error, and the query in
