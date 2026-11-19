@@ -383,6 +383,7 @@ pub(crate) static REQUEST_CHECKS: &[&dyn RequestCheck] = &[
     &GraphqlSuggestions,
     &GraphqlContentType,
     &SpoofableClientIp,
+    &BrokenAccessControl,
     &BackupFile,
     &GraphqlEndpointDiscovered,
     &cache::WebCachePoisoning,
@@ -1714,6 +1715,180 @@ impl RequestCheck for SpoofableClientIp {
             format!("It may be possible for clients to spoof their IP address using the X-Forwarded-For HTTP header.<br><br>The response changed consistently when the header <b>X-Forwarded-For: 127.0.0.1</b> was added to the request (attributes: {:?}).", c.attributes()),
         )
         .with_evidence(vec![ScanEvidence::new(&without, Some(&last_a)), ScanEvidence::new(&with, Some(&last_b))]);
+        i.confidence = "Tentative".into();
+        cx.report(vec![i]);
+    }
+}
+
+/// Add a query parameter to a raw request's target (before any fragment
+/// would be — HTTP request targets do not carry one).
+fn with_query_param(raw: &[u8], name: &str, value: &str) -> Vec<u8> {
+    let Some(end) = util::find_head_end(raw) else { return raw.to_vec() };
+    let head = String::from_utf8_lossy(&raw[..end]);
+    let mut lines = head.split("\r\n");
+    let Some(first) = lines.next() else { return raw.to_vec() };
+    let mut parts = first.split_whitespace();
+    let (Some(method), Some(target), Some(version)) = (parts.next(), parts.next(), parts.next()) else { return raw.to_vec() };
+    let sep = if target.contains('?') { "&" } else { "?" };
+    let mut out = format!("{method} {target}{sep}{name}={value} {version}\r\n");
+    for line in lines {
+        if line.is_empty() {
+            continue;
+        }
+        out.push_str(line);
+        out.push_str("\r\n");
+    }
+    out.push_str("\r\n");
+    let mut v = out.into_bytes();
+    v.extend_from_slice(&raw[end..]);
+    v
+}
+
+/// Remove `authorization`, `cookie` and `x-*` headers — except
+/// `x-requested-with` — from a raw request (burp.Zii_.java:25-64),
+/// returning the rewritten request and the names removed.
+fn strip_auth_headers(raw: &[u8]) -> (Vec<u8>, Vec<String>) {
+    let Some(end) = util::find_head_end(raw) else { return (raw.to_vec(), Vec::new()) };
+    let head = String::from_utf8_lossy(&raw[..end]);
+    let mut out = String::new();
+    let mut removed = Vec::new();
+    for (i, line) in head.split("\r\n").enumerate() {
+        if line.is_empty() {
+            continue;
+        }
+        if i > 0 {
+            if let Some((k, _)) = line.split_once(':') {
+                let k = k.trim();
+                let drop = k.eq_ignore_ascii_case("authorization")
+                    || k.eq_ignore_ascii_case("cookie")
+                    || (k.len() > 2 && k[..2].eq_ignore_ascii_case("x-") && !k.eq_ignore_ascii_case("x-requested-with"));
+                if drop {
+                    removed.push(k.to_string());
+                    continue;
+                }
+            }
+        }
+        out.push_str(line);
+        out.push_str("\r\n");
+    }
+    out.push_str("\r\n");
+    let mut v = out.into_bytes();
+    v.extend_from_slice(&raw[end..]);
+    (v, removed)
+}
+
+/// Total JSON nodes in a body (0 when the body is not JSON): Burp's
+/// equivalence metric counts parsed nodes either way (Zcxn.java:74-92).
+fn json_node_count(body: &[u8]) -> i64 {
+    fn count(v: &serde_json::Value) -> i64 {
+        1 + match v {
+            serde_json::Value::Array(a) => a.iter().map(count).sum(),
+            serde_json::Value::Object(m) => m.values().map(count).sum(),
+            _ => 0,
+        }
+    }
+    serde_json::from_slice::<serde_json::Value>(body).map(|v| count(&v)).unwrap_or(0)
+}
+
+/// The text of the first <title> element, trimmed ("" when none).
+fn page_title(body: &[u8]) -> String {
+    let text = String::from_utf8_lossy(body);
+    let lower = text.to_lowercase();
+    let Some(s) = lower.find("<title") else { return String::new() };
+    let Some(gt) = lower[s..].find('>') else { return String::new() };
+    let start = s + gt + 1;
+    let Some(e) = lower[start..].find("</title") else { return String::new() };
+    text[start..start + e].trim().to_string()
+}
+
+/// Burp's broken-access-control equivalence (Zcxn.java:74-92,117-123):
+/// same status, same JSON node count, and — for an HTML reference — the
+/// same page title, otherwise the same line count.
+fn bac_equivalent(reference: &[u8], candidate: &[u8]) -> bool {
+    let pa = util::parse_http(reference);
+    let pb = util::parse_http(candidate);
+    let status_a = pa.first.split_whitespace().nth(1).unwrap_or("");
+    let status_b = pb.first.split_whitespace().nth(1).unwrap_or("");
+    if status_a != status_b {
+        return false;
+    }
+    let body_a = &reference[pa.head_len.min(reference.len())..];
+    let body_b = &candidate[pb.head_len.min(candidate.len())..];
+    if json_node_count(body_a) != json_node_count(body_b) {
+        return false;
+    }
+    let html = util::get_header(&pa.headers, "Content-Type").unwrap_or_default().to_ascii_lowercase().contains("html");
+    if html {
+        page_title(body_a) == page_title(body_b)
+    } else {
+        body_a.iter().filter(|b| **b == b'\n').count() == body_b.iter().filter(|b| **b == b'\n').count()
+    }
+}
+
+/// Broken access control, the established core of burp.Zcxn
+/// (APR_BrokenAccessControl, in-session per request, KB 00100850):
+/// the request with a fresh random URL parameter, and the same request
+/// with authorization/cookie/x-* headers removed (x-requested-with kept,
+/// Zii_.java:25-64), are sent for eight rounds; reported when every
+/// round's responses stay equivalent — removing the session changed
+/// nothing. Zr0k.java:20-59 builds the issue with both exchanges.
+/// Information (KB); confidence not established: Tentative here.
+/// Guards WebProbe adds because Burp's own preconditions are stripped:
+/// the base response must be 2xx (a request the session already fails
+/// proves nothing) and some header must actually be removed.
+/// Not established and omitted: the accepted content-type set ZP, the
+/// minimize-false-negatives / false-positive-reduction configuration
+/// gating, and the Zbwz browser/session verdicts.
+pub(crate) struct BrokenAccessControl;
+
+impl RequestCheck for BrokenAccessControl {
+    fn id(&self) -> &'static str {
+        "active.broken-access-control"
+    }
+    fn issue(&self) -> &'static str {
+        "Broken access control"
+    }
+    fn scope(&self) -> Scope {
+        Scope::Request
+    }
+    fn run(&self, cx: &ScanCtx) {
+        if cx.stopped() || !cx.runs(self.issue()) || cx.baseline.raw.is_empty() {
+            return;
+        }
+        let base = util::parse_http(&cx.baseline.raw);
+        let status: u16 = base.first.split_whitespace().nth(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+        if !(200..300).contains(&status) {
+            return;
+        }
+        let mut pair = None;
+        let mut removed_names = Vec::new();
+        for round in 0..8 {
+            if cx.stopped() {
+                return;
+            }
+            let marker = rnd_letters(8);
+            let full = with_query_param(cx.req.as_bytes(), &marker, &marker);
+            let (stripped, removed) = strip_auth_headers(&full);
+            if removed.is_empty() {
+                return;
+            }
+            let (Some(a), Some(b)) = (burp_send(cx, &full), burp_send(cx, &stripped)) else { return };
+            if !bac_equivalent(&a, &b) {
+                return;
+            }
+            if round == 0 {
+                pair = Some((full, stripped, a, b));
+                removed_names = removed;
+            }
+        }
+        let Some((full, stripped, a, b)) = pair else { return };
+        let mut i = mk(
+            "info",
+            self.issue(),
+            &cx.entry,
+            format!("The application appears not to enforce access control on this request.<br><br>Removing the session material (<b>{}</b>) left the response equivalent to the authenticated response over eight rounds (status, page title / line count and JSON structure), so the resource appears to be reachable without authentication.", removed_names.join(", ")),
+        )
+        .with_evidence(vec![ScanEvidence::new(&full, Some(&a)), ScanEvidence::new(&stripped, Some(&b))]);
         i.confidence = "Tentative".into();
         cx.report(vec![i]);
     }
@@ -4197,6 +4372,7 @@ mod tests {
                 ("active.graphql-suggestions", Scope::Request, None),
                 ("active.graphql-content-type", Scope::Request, None),
                 ("active.spoofable-client-ip", Scope::Request, None),
+                ("active.broken-access-control", Scope::Request, None),
                 ("active.backup-file", Scope::Request, None),
                 ("active.graphql-endpoint-discovered", Scope::Host, None),
                 ("active.web-cache-poisoning", Scope::Request, None),
@@ -4491,6 +4667,38 @@ mod tests {
         let got: Vec<(&str, &str, &str)> = got.iter().map(|(a, b, c)| (a.as_str(), b.as_str(), c.as_str())).collect();
         assert!(got.contains(&("Spoofable client IP address", "info", "Tentative")), "{got:?}");
         assert!(got.contains(&("Backup file", "info", "Certain")), "{got:?}");
+    }
+
+    /// R-10 G.15: the lab serves the same page with or without the
+    /// session cookie on /open (broken access control) and 403s without
+    /// it on /guarded (enforced). The check must report /open only.
+    #[test]
+    fn r10_broken_access_control_against_a_live_lab() {
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = lab_serve(l, |_method, target, raw| {
+            let authed = raw.to_ascii_lowercase().contains("\r\ncookie:");
+            let (status, body) = match (target.split('?').next().unwrap_or(""), authed) {
+                ("/open", _) => ("200 OK", "<html><head><title>account</title></head><body>same</body></html>".to_string()),
+                ("/guarded", true) => ("200 OK", "<html><head><title>account</title></head><body>same</body></html>".to_string()),
+                ("/guarded", false) => ("403 Forbidden", "<html><head><title>denied</title></head></html>".to_string()),
+                _ => ("404 Not Found", String::new()),
+            };
+            format!("HTTP/1.1 {status}\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        });
+        let host = format!("127.0.0.1:{port}");
+        // Session material removed (cookie + x-*) and the page unchanged:
+        // reported.
+        let req = format!("GET /open HTTP/1.1\r\nHost: {host}\r\nCookie: sid=abc\r\nX-Csrf: t\r\n\r\n");
+        let got = lab_scan(port, &["active.broken-access-control"], "GET", "/open", req);
+        assert!(got.iter().any(|(i, s, c)| i == "Broken access control" && s == "info" && c == "Tentative"), "{got:?}");
+        // The response changes without the session: not reported.
+        let req = format!("GET /guarded HTTP/1.1\r\nHost: {host}\r\nCookie: sid=abc\r\n\r\n");
+        let got = lab_scan(port, &["active.broken-access-control"], "GET", "/guarded", req);
+        assert!(got.is_empty(), "{got:?}");
+        // Nothing to remove: not reported.
+        let req = format!("GET /open HTTP/1.1\r\nHost: {host}\r\n\r\n");
+        let got = lab_scan(port, &["active.broken-access-control"], "GET", "/open", req);
+        assert!(got.is_empty(), "{got:?}");
     }
 
     /// R-10 web cache poisoning (Zp22 / Zg1g rule): reported only when a
