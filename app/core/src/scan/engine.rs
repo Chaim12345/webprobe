@@ -654,6 +654,140 @@ pub(crate) fn run_form_action_reflected<F: FnMut(&str) -> Option<Vec<u8>>>(
     Some((probe, cx.describe(), resp))
 }
 
+impl Drop for StoredBatch {
+    fn drop(&mut self) {
+        if self.opened {
+            run_stored_stage_claimed(&self.shared);
+            self.shared.stored.close_batch();
+        }
+    }
+}
+
+pub fn crawl_and_audit(shared: &Arc<Shared>, start_urls: &[String], audit_only: bool) {
+    let _stored = StoredBatch::open(shared);
+    let _tool = crate::net::tool_scope("Scanner");
+    // Ask the UI thread for Collaborator payloads for the whole run, so the
+    // out-of-band checks work here as they do for a scan started on one item.
+    struct Wanted<'a>(&'a Shared);
+    impl Drop for Wanted<'_> {
+        fn drop(&mut self) {
+            self.0.oob.want(false);
+        }
+    }
+    shared.oob.want(true);
+    let _wanted = Wanted(shared);
+    reset_openapi_hosts();
+    checks::reset_dom_analysis_cache();
+    for url in start_urls {
+        let mut items = if audit_only {
+            crate::crawl::crawl_single(shared, url)
+        } else {
+            crate::crawl::crawl(shared, url)
+        };
+        // Browser-driven crawl (Burp's crawler drives Chromium): picks up
+        // client-side routes and the API calls pages make; each observed
+        // same-origin request is re-issued as a crawl item.
+        let engine = shared.scan_config.lock().unwrap().crawl.engine.clone();
+        if !audit_only && !engine.is_empty() && !engine.eq_ignore_ascii_case("chromium") {
+            // Another headless engine (headless.rs): render through the
+            // proxy, then fetch each page it found as a crawl item.
+            match crate::headless::pick(Some(&engine)) {
+                Some(eng) => match crate::headless::js_crawl(eng.as_ref(), shared, url) {
+                    Ok(urls) => {
+                        shared.log(&format!(
+                            "{} crawl of {url}: {} page(s)",
+                            eng.name(),
+                            urls.len()
+                        ));
+                        let mut keys: std::collections::BTreeSet<String> = items
+                            .iter()
+                            .map(|e| {
+                                format!("{} {}", e.method, crate::crawl::location_key(&e.path))
+                            })
+                            .collect();
+                        for u in urls {
+                            for it in crate::crawl::crawl_single(shared, &u) {
+                                if keys.insert(format!(
+                                    "{} {}",
+                                    it.method,
+                                    crate::crawl::location_key(&it.path)
+                                )) {
+                                    items.push(it);
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => shared.log(&format!(
+                        "{} crawl unavailable ({e}); static crawl only",
+                        eng.name()
+                    )),
+                },
+                None => shared.log(&format!(
+                    "Headless engine {engine} is not installed; static crawl only"
+                )),
+            }
+        } else if !audit_only {
+            match crate::crawl::browser_crawl(shared, url) {
+                Ok(mut seen) => {
+                    shared.log(&format!(
+                        "Browser crawl of {url}: {} request(s) observed",
+                        seen.len()
+                    ));
+                    // Per location, prefer an exchange whose response the
+                    // browser itself received (what Burp audits passively): a
+                    // replay of a stateful request, such as a socket.io poll
+                    // with a stale sid, gets a different answer.
+                    seen.sort_by_key(|r| r.resp_head.is_none() || r.resp_body.is_none());
+                    let mut keys: std::collections::BTreeSet<String> = items
+                        .iter()
+                        .map(|e| format!("{} {}", e.method, crate::crawl::location_key(&e.path)))
+                        .collect();
+                    // Only the start origin is crawled and audited, whatever
+                    // the browser was led to request.
+                    let start = crate::crawl::origin_of(url).unwrap_or_default();
+                    for r in seen
+                        .into_iter()
+                        .filter(|r| crate::crawl::same_origin(&r.url, &start))
+                    {
+                        let path = r
+                            .url
+                            .split_once("://")
+                            .and_then(|(_, x)| x.find('/').map(|i| x[i..].to_string()))
+                            .unwrap_or_else(|| "/".into());
+                        let path = path.split('#').next().unwrap_or("/").to_string();
+                        if keys.insert(format!(
+                            "{} {}",
+                            r.method,
+                            crate::crawl::location_key(&path)
+                        )) {
+                            items.push(crate::crawl::replay_seen(shared, &r));
+                        }
+                    }
+                }
+                Err(e) => shared.log(&format!(
+                    "Browser crawl unavailable ({e}); static crawl only"
+                )),
+            }
+        }
+        shared.log(&format!("Crawl of {url}: {} item(s)", items.len()));
+        shared.add_crawl_items(items.iter().cloned());
+        let static_refs = crate::crawl::static_reference_corpus(&items);
+        for e in items.into_iter().filter(|e| {
+            crate::crawl::auditable(e) || crate::crawl::referenced_static(e, &static_refs)
+        }) {
+            if shared.scan.stop.load(Ordering::SeqCst) {
+                return;
+            }
+            add_passive_issues(shared, passive_check_for(shared, &e));
+            let oob = pooled_oob(shared, &e.req_raw);
+            start_active_scan(shared.clone(), e, &oob, &[]);
+            // start_active_scan claims the scanner before it returns.
+            shared.scan.wait_idle(None);
+        }
+    }
+    shared.log("Crawl and audit finished");
+}
+
 #[cfg(test)]
 mod g11_tests {
     use super::*;
@@ -859,137 +993,4 @@ mod g11_tests {
         let hit = run_form_action_reflected(|p| Some(resp(&format!("<a href=\"{p}\">x</a>"))));
         assert!(hit.is_none());
     }
-}
-impl Drop for StoredBatch {
-    fn drop(&mut self) {
-        if self.opened {
-            run_stored_stage_claimed(&self.shared);
-            self.shared.stored.close_batch();
-        }
-    }
-}
-
-pub fn crawl_and_audit(shared: &Arc<Shared>, start_urls: &[String], audit_only: bool) {
-    let _stored = StoredBatch::open(shared);
-    let _tool = crate::net::tool_scope("Scanner");
-    // Ask the UI thread for Collaborator payloads for the whole run, so the
-    // out-of-band checks work here as they do for a scan started on one item.
-    struct Wanted<'a>(&'a Shared);
-    impl Drop for Wanted<'_> {
-        fn drop(&mut self) {
-            self.0.oob.want(false);
-        }
-    }
-    shared.oob.want(true);
-    let _wanted = Wanted(shared);
-    reset_openapi_hosts();
-    checks::reset_dom_analysis_cache();
-    for url in start_urls {
-        let mut items = if audit_only {
-            crate::crawl::crawl_single(shared, url)
-        } else {
-            crate::crawl::crawl(shared, url)
-        };
-        // Browser-driven crawl (Burp's crawler drives Chromium): picks up
-        // client-side routes and the API calls pages make; each observed
-        // same-origin request is re-issued as a crawl item.
-        let engine = shared.scan_config.lock().unwrap().crawl.engine.clone();
-        if !audit_only && !engine.is_empty() && !engine.eq_ignore_ascii_case("chromium") {
-            // Another headless engine (headless.rs): render through the
-            // proxy, then fetch each page it found as a crawl item.
-            match crate::headless::pick(Some(&engine)) {
-                Some(eng) => match crate::headless::js_crawl(eng.as_ref(), shared, url) {
-                    Ok(urls) => {
-                        shared.log(&format!(
-                            "{} crawl of {url}: {} page(s)",
-                            eng.name(),
-                            urls.len()
-                        ));
-                        let mut keys: std::collections::BTreeSet<String> = items
-                            .iter()
-                            .map(|e| {
-                                format!("{} {}", e.method, crate::crawl::location_key(&e.path))
-                            })
-                            .collect();
-                        for u in urls {
-                            for it in crate::crawl::crawl_single(shared, &u) {
-                                if keys.insert(format!(
-                                    "{} {}",
-                                    it.method,
-                                    crate::crawl::location_key(&it.path)
-                                )) {
-                                    items.push(it);
-                                }
-                            }
-                        }
-                    }
-                    Err(e) => shared.log(&format!(
-                        "{} crawl unavailable ({e}); static crawl only",
-                        eng.name()
-                    )),
-                },
-                None => shared.log(&format!(
-                    "Headless engine {engine} is not installed; static crawl only"
-                )),
-            }
-        } else if !audit_only {
-            match crate::crawl::browser_crawl(shared, url) {
-                Ok(mut seen) => {
-                    shared.log(&format!(
-                        "Browser crawl of {url}: {} request(s) observed",
-                        seen.len()
-                    ));
-                    // Per location, prefer an exchange whose response the
-                    // browser itself received (what Burp audits passively): a
-                    // replay of a stateful request, such as a socket.io poll
-                    // with a stale sid, gets a different answer.
-                    seen.sort_by_key(|r| r.resp_head.is_none() || r.resp_body.is_none());
-                    let mut keys: std::collections::BTreeSet<String> = items
-                        .iter()
-                        .map(|e| format!("{} {}", e.method, crate::crawl::location_key(&e.path)))
-                        .collect();
-                    // Only the start origin is crawled and audited, whatever
-                    // the browser was led to request.
-                    let start = crate::crawl::origin_of(url).unwrap_or_default();
-                    for r in seen
-                        .into_iter()
-                        .filter(|r| crate::crawl::same_origin(&r.url, &start))
-                    {
-                        let path = r
-                            .url
-                            .split_once("://")
-                            .and_then(|(_, x)| x.find('/').map(|i| x[i..].to_string()))
-                            .unwrap_or_else(|| "/".into());
-                        let path = path.split('#').next().unwrap_or("/").to_string();
-                        if keys.insert(format!(
-                            "{} {}",
-                            r.method,
-                            crate::crawl::location_key(&path)
-                        )) {
-                            items.push(crate::crawl::replay_seen(shared, &r));
-                        }
-                    }
-                }
-                Err(e) => shared.log(&format!(
-                    "Browser crawl unavailable ({e}); static crawl only"
-                )),
-            }
-        }
-        shared.log(&format!("Crawl of {url}: {} item(s)", items.len()));
-        shared.add_crawl_items(items.iter().cloned());
-        let static_refs = crate::crawl::static_reference_corpus(&items);
-        for e in items.into_iter().filter(|e| {
-            crate::crawl::auditable(e) || crate::crawl::referenced_static(e, &static_refs)
-        }) {
-            if shared.scan.stop.load(Ordering::SeqCst) {
-                return;
-            }
-            add_passive_issues(shared, passive_check_for(shared, &e));
-            let oob = pooled_oob(shared, &e.req_raw);
-            start_active_scan(shared.clone(), e, &oob, &[]);
-            // start_active_scan claims the scanner before it returns.
-            shared.scan.wait_idle(None);
-        }
-    }
-    shared.log("Crawl and audit finished");
 }
