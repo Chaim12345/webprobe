@@ -1585,7 +1585,6 @@ g11_stored_check!(
     crate::scan::g11_link_probes(),
     crate::scan::g11_link_stored_hit,
     "Link manipulation (stored), burp.Zb_5 -> Ze20, KB 00501004: the Zpyp probes (random host/path under http://, https://, //, \\/ - established literals) must come back as a link or redirect target of the retrieval response. Severity Information (KB); confidence not established: Firm."
-    "Firm",
 );
 g11_stored_check!(
     CssInjectionStored,
