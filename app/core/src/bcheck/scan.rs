@@ -580,7 +580,9 @@ mod tests {
     #[test]
     fn burp_insertion_point_example_flags_input_transformation() {
         let port = lab_serve(|_m, path, _raw| {
-            if path.contains("{{1337*1337}}") {
+            if path.contains("{{1337*1337}}") || path.contains("%7B%7B1337*1337%7D%7D") {
+                // the second form is the URL-encoded payload Burp sends;
+                // a real application decodes the parameter value
                 http("result: 1787569")
             } else {
                 http("result: ")
