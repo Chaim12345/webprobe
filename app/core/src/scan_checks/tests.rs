@@ -627,7 +627,10 @@ fn dom_families_batch3_against_a_live_lab() {
     }
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let port = lab_serve(l, |_method, path, _raw| {
-        let body = if path.starts_with("/ws") {
+        let body = if path.starts_with("/ws-statics") {
+            // the sink only runs when the constructor kept its constants
+            "<html><body><script>if (WebSocket.OPEN === 1) { new WebSocket(location.hash.slice(1)); }</script></body></html>"
+        } else if path.starts_with("/ws") {
             "<html><body><script>new WebSocket(location.hash.slice(1));</script></body></html>"
         } else if path.starts_with("/dos") {
             "<html><body><script>new RegExp(location.hash.slice(1));</script></body></html>"
@@ -641,6 +644,7 @@ fn dom_families_batch3_against_a_live_lab() {
     let host = format!("127.0.0.1:{port}");
     let expect = [
         ("/ws", "active.dom-websocket-poisoning", "WebSocket URL poisoning (DOM-based)", "high", "Firm"),
+        ("/ws-statics", "active.dom-websocket-poisoning", "WebSocket URL poisoning (DOM-based)", "high", "Firm"),
         ("/dos", "active.dom-dos", "Denial of service (DOM-based)", "info", "Firm"),
         ("/ajax", "active.dom-ajax-header-manipulation", "Ajax request header manipulation (DOM-based)", "low", "Firm"),
     ];
