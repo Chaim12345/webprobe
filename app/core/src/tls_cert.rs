@@ -51,6 +51,9 @@ pub struct TlsCapture {
 pub enum CertFlag {
     NotYetValid,
     Expired,
+    /// The delegated verifier reported a validity problem but the leaf
+    /// could not be parsed, so expired vs not-yet-valid is unknown.
+    ValidityUnknown,
     HostnameMismatch,
     Untrusted,
 }
@@ -312,7 +315,7 @@ pub fn analyze(capture: &TlsCapture, host: &str, now: SystemTime) -> Vec<CertFla
     // could not parse, replaces) our own reading of the leaf.
     match capture.error_kind {
         Some(VerifyKind::Hostname) => push(CertFlag::HostnameMismatch),
-        Some(VerifyKind::Validity) if !parsed => push(CertFlag::Expired),
+        Some(VerifyKind::Validity) if !parsed => push(CertFlag::ValidityUnknown),
         Some(VerifyKind::Trust) => push(CertFlag::Untrusted),
         _ => {}
     }
