@@ -2101,12 +2101,16 @@ fn dom_analysis_hits(cx: &ScanCtx) -> (Vec<crate::crawl::DomHit>, Option<String>
         String::new()
     };
     let probe = crate::crawl::dom_analysis_probe(&cx.shared, &url, &canary);
+    // A crashed/timed-out probe is not a clean bill of health: say so in
+    // the scan log, and drop the stored canary with it - without hits the
+    // canary can match nothing, and the cache must not pair an empty hit
+    // set with a live canary (the cached empty hit set only avoids
+    // re-probing this URL for every family check in this session).
+    let probe_failed = probe.is_err();
     if let Err(e) = &probe {
-        // A crashed/timed-out probe is not a clean bill of health: say so
-        // in the scan log (the cached empty hit set only avoids re-probing
-        // this URL for every family check in this session).
         cx.shared.log(&format!("DOM analysis probe failed for {url}: {e}"));
     }
+    let stored_canary = if probe_failed { String::new() } else { stored_canary };
     let hits: Vec<crate::crawl::DomHit> = probe
         .unwrap_or_default()
         .into_iter()
