@@ -103,8 +103,9 @@ pub(crate) fn reflected_xss_severity(kind: &IpKind) -> &'static str {
     }
 }
 
-/// Collaborator slots the scanner wants for a request: `#<point>:ext` for the
-/// external-interaction probe of every insertion point, plus `#<point>:xsd`
+/// Collaborator slots the scanner wants for a request: `#<point>:ext`,
+/// `ext1`.. for the external-interaction probes of every insertion point
+/// (one per burp.Zbxl URL variant), plus `#<point>:xsd`
 /// and `#<point>:xi` for the out-of-band half of XML injection (burp.Zp7s ->
 /// Zsrh with Ze_f / Zbiw) on the points that check applies to. The UI mints
 /// one Collaborator payload per slot and passes them back as `oob`.
@@ -131,7 +132,9 @@ pub fn slots_for(
     let mut out = Vec::new();
     for (i, ip) in audit_points(&req, config).iter().enumerate() {
         if checks::check_applies(&checks::ExternalInteraction, ip, config) {
-            out.push(format!("#{i}:ext"));
+            for k in 0..checks::ext_variants(ip, speed).len() {
+                out.push(format!("#{i}:{}", checks::ext_slot(k)));
+            }
         }
         if checks::check_applies(&checks::JwtAttacks, ip, config) {
             out.push(format!("#{i}:jku"));

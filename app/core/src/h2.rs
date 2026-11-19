@@ -194,7 +194,7 @@ pub(crate) fn is_connection_header(name: &str) -> bool {
     ) || name.starts_with("proxy-")
 }
 
-fn send_preface<S: Read + Write>(stream: &mut S) -> Result<(), String> {
+pub(crate) fn send_preface<S: Read + Write>(stream: &mut S) -> Result<(), String> {
     stream
         .write_all(PREFACE)
         .map_err(|e| format!("h2 preface: {e}"))?;
@@ -241,19 +241,25 @@ fn encode_headers(req: &H2Request) -> Vec<u8> {
     enc.encode(headers.iter().map(|(k, v)| (k.as_slice(), v.as_slice())))
 }
 
-fn send_request_headers<S: Read + Write>(stream: &mut S, req: &H2Request) -> Result<(), String> {
+fn send_request_headers<S: Read + Write>(
+    stream: &mut S,
+    sid: u32,
+    req: &H2Request,
+) -> Result<(), String> {
     let block = encode_headers(req);
+
     let flags = FLAG_END_HEADERS
         | if req.body.is_empty() {
             FLAG_END_STREAM
         } else {
             0
         };
-    write_frame(stream, FRAME_HEADERS, flags, 1, &block).map_err(|e| format!("h2 headers: {e}"))
+    write_frame(stream, FRAME_HEADERS, flags, sid, &block).map_err(|e| format!("h2 headers: {e}"))
 }
 
 /// Response assembly plus outbound flow-control accounting.
-struct Rx {
+pub(crate) struct Rx {
+    sid: u32,
     dec: Decoder<'static>,
     status: Option<String>,
     headers: Vec<(String, String)>,
@@ -285,8 +291,9 @@ fn grow_window(window: &mut i64, delta: i64, what: &str) -> Result<(), String> {
 }
 
 impl Rx {
-    fn new() -> Self {
+    pub(crate) fn new(sid: u32) -> Self {
         Rx {
+            sid,
             dec: Decoder::new(),
             status: None,
             headers: Vec::new(),
@@ -410,7 +417,7 @@ impl Rx {
         f: Frame,
         sink: &mut Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
     ) -> Result<(), String> {
-        if self.in_continuation && !(f.ty == FRAME_CONTINUATION && f.stream == 1) {
+        if self.in_continuation && !(f.ty == FRAME_CONTINUATION && f.stream == self.sid) {
             return Err("h2: header block interrupted before CONTINUATION".into());
         }
         match f.ty {
@@ -462,7 +469,7 @@ impl Rx {
                 }
                 if f.stream == 0 {
                     grow_window(&mut self.send_window, inc, "connection")?;
-                } else if f.stream == 1 {
+                } else if f.stream == self.sid {
                     grow_window(&mut self.stream_window, inc, "stream")?;
                 }
             }
@@ -483,7 +490,7 @@ impl Rx {
                 }
                 return Err(format!("h2: GOAWAY: error={code} last_stream_id={last}"));
             }
-            FRAME_RST_STREAM if f.stream == 1 => {
+            FRAME_RST_STREAM if f.stream == self.sid => {
                 let code = if f.payload.len() >= 4 {
                     u32::from_be_bytes([f.payload[0], f.payload[1], f.payload[2], f.payload[3]])
                 } else {
@@ -494,7 +501,8 @@ impl Rx {
                 }
                 return Err(format!("h2: stream reset by server: error={code}"));
             }
-            FRAME_HEADERS if f.stream == 1 => {
+
+            FRAME_HEADERS if f.stream == self.sid => {
                 self.block
                     .extend_from_slice(header_fragment(f.flags, &f.payload)?);
                 if self.block.len() > MAX_HEADER_BLOCK {
@@ -513,7 +521,7 @@ impl Rx {
                     self.pending_end_stream = f.flags & FLAG_END_STREAM != 0;
                 }
             }
-            FRAME_CONTINUATION if f.stream == 1 => {
+            FRAME_CONTINUATION if f.stream == self.sid => {
                 self.block.extend_from_slice(&f.payload);
                 if self.block.len() > MAX_HEADER_BLOCK {
                     return Err("h2: header block too large".into());
@@ -529,7 +537,7 @@ impl Rx {
                     self.ask_sink(sink);
                 }
             }
-            FRAME_DATA if f.stream == 1 => {
+            FRAME_DATA if f.stream == self.sid => {
                 let payload = data_payload(f.flags, &f.payload)?;
                 if self.streaming() {
                     // Passed on as it arrives (as a chunk), never kept here.
@@ -564,9 +572,10 @@ impl Rx {
                     // included, and must be replenished or a body larger than
                     // the initial window stalls.
                     let inc = (f.payload.len() as u32).to_be_bytes();
+
                     write_frame(stream, FRAME_WINDOW_UPDATE, 0, 0, &inc)
                         .map_err(|e| format!("h2 window update: {e}"))?;
-                    write_frame(stream, FRAME_WINDOW_UPDATE, 0, 1, &inc)
+                    write_frame(stream, FRAME_WINDOW_UPDATE, 0, self.sid, &inc)
                         .map_err(|e| format!("h2 window update: {e}"))?;
                 }
             }
@@ -608,7 +617,11 @@ impl Rx {
     /// Normalize to the HTTP/1.1 shape the rest of the app understands. Any
     /// upstream `content-length`/`transfer-encoding` is replaced so the view
     /// never carries two framing headers.
-    fn finish(self) -> Result<Vec<u8>, String> {
+    pub(crate) fn sid(&self) -> u32 {
+        self.sid
+    }
+
+    pub(crate) fn finish(self) -> Result<Vec<u8>, String> {
         if self
             .mode
             .is_some_and(|m| m != crate::streaming::BodyMode::Buffer)
@@ -647,6 +660,7 @@ impl Rx {
 /// MAX_FRAME_SIZE is honoured before the first byte goes out.
 fn pump<S: Read + Write>(
     stream: &mut S,
+    sid: u32,
     mut body: Option<&[u8]>,
     rx: &mut Rx,
     sink: &mut Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
@@ -668,11 +682,12 @@ fn pump<S: Read + Write>(
                 }
                 let n = (allowance as usize).min(rx.max_frame).min(rest.len());
                 let last = n == rest.len();
+
                 write_frame(
                     stream,
                     FRAME_DATA,
                     if last { FLAG_END_STREAM } else { 0 },
-                    1,
+                    sid,
                     &rest[..n],
                 )
                 .map_err(|e| format!("h2 data: {e}"))?;
@@ -693,6 +708,95 @@ fn pump<S: Read + Write>(
     }
 }
 
+/// The peer's initial flow-control window (RFC 7540 6.9.2): the most
+/// DATA a connection accepts before the first WINDOW_UPDATE. The
+/// single-packet burst writes every stream before a WINDOW_UPDATE can
+/// arrive, so the group's total DATA must fit in it.
+pub(crate) const INITIAL_WINDOW_SIZE: usize = 65_535;
+
+/// Fail fast when a single-packet group's request bodies would overrun
+/// the initial connection window: the server would reset every stream
+/// with FLOW_CONTROL_ERROR otherwise.
+pub(crate) fn check_burst_window(body_lens: impl IntoIterator<Item = usize>) -> Result<(), String> {
+    let total: usize = body_lens.into_iter().sum();
+    if total > INITIAL_WINDOW_SIZE {
+        return Err(format!(
+            "the group's request bodies total {total} bytes, past the HTTP/2 initial flow-control window ({INITIAL_WINDOW_SIZE}): the server would reset every stream with FLOW_CONTROL_ERROR. Send the group in sequence or shrink the bodies"
+        ));
+    }
+    Ok(())
+}
+
+/// Every frame of `req` on stream `sid` as one buffer: HEADERS, then the
+/// body as DATA frames. R-12's parallel send writes every stream's buffer
+/// in a single packet (Burp's single-packet attack). DATA is chunked to
+/// 16,384 bytes: the peer's initial SETTINGS_MAX_FRAME_SIZE is 16,384
+/// (RFC 7540 6.5.2) and the burst is written before its SETTINGS arrive,
+/// so one oversized DATA frame earns a PROTOCOL_ERROR. Bodies whose
+/// group total passes the peer's initial window are rejected up front by
+/// check_burst_window.
+pub(crate) fn request_frames(sid: u32, req: &H2Request) -> Result<Vec<u8>, String> {
+    let mut out = Vec::new();
+    let block = encode_headers(req);
+    let flags = FLAG_END_HEADERS
+        | if req.body.is_empty() {
+            FLAG_END_STREAM
+        } else {
+            0
+        };
+    write_frame(&mut out, FRAME_HEADERS, flags, sid, &block)
+        .map_err(|e| format!("h2 headers: {e}"))?;
+    let mut chunks = req.body.chunks(16_384).peekable();
+    while let Some(chunk) = chunks.next() {
+        let flags = if chunks.peek().is_none() {
+            FLAG_END_STREAM
+        } else {
+            0
+        };
+        write_frame(&mut out, FRAME_DATA, flags, sid, chunk)
+            .map_err(|e| format!("h2 data: {e}"))?;
+    }
+    Ok(out)
+}
+
+/// Read frames until every stream in `rxs` is done, feeding each frame to
+/// its stream's assembly; connection-level frames go to the first
+/// unfinished stream's handler, which covers them. Returns the streams'
+/// ids in the order their first response frame arrived (burp.Zglm's
+/// "%d/%d" arrival numbering).
+pub(crate) fn pump_all<S: Read + Write>(
+    stream: &mut S,
+    rxs: &mut [Rx],
+) -> Result<Vec<u32>, String> {
+    let mut arrival = Vec::new();
+    loop {
+        if rxs.iter().all(|rx| rx.done) {
+            return Ok(arrival);
+        }
+        let f = read_frame(stream).map_err(|e| format!("h2 read: {e}"))?;
+        let sid = f.stream;
+        let idx = rxs
+            .iter()
+            .position(|rx| rx.sid == sid)
+            .or_else(|| rxs.iter().position(|rx| !rx.done));
+        match idx.map(|i| &mut rxs[i]) {
+            Some(rx) => {
+                if rx.sid == sid
+                    && !rx.got_headers
+                    && !rx.done
+                    && !arrival.contains(&sid)
+                    && (f.ty == FRAME_HEADERS || f.ty == FRAME_DATA)
+                {
+                    arrival.push(sid);
+                }
+                let mut none = None;
+                rx.handle(stream, f, &mut none)?;
+            }
+            None => return Err("h2: every stream finished but frames keep coming".into()),
+        }
+    }
+}
+
 /// Perform one request over an established stream. The preface and initial
 /// SETTINGS are sent here.
 ///
@@ -702,17 +806,28 @@ fn pump<S: Read + Write>(
 pub fn exchange<S: Read + Write>(
     stream: &mut S,
     req: &H2Request,
-    mut sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
+    sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
 ) -> Result<Vec<u8>, String> {
     send_preface(stream)?;
-    send_request_headers(stream, req)?;
-    let mut rx = Rx::new();
+    exchange_on(stream, 1, req, sink)
+}
+
+/// One request on stream `sid` of an already-prefaced connection (Repeater
+/// send-group single-connection mode, R-12).
+pub fn exchange_on<S: Read + Write>(
+    stream: &mut S,
+    sid: u32,
+    req: &H2Request,
+    mut sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
+) -> Result<Vec<u8>, String> {
+    send_request_headers(stream, sid, req)?;
+    let mut rx = Rx::new(sid);
     let body = if req.body.is_empty() {
         None
     } else {
         Some(req.body.as_slice())
     };
-    if let Err(e) = pump(stream, body, &mut rx, &mut sink) {
+    if let Err(e) = pump(stream, sid, body, &mut rx, &mut sink) {
         if !rx.streaming() {
             return Err(e);
         }
@@ -728,8 +843,8 @@ pub fn exchange<S: Read + Write>(
 /// HEADERS or the body would duplicate the request on a half-closed stream.
 pub fn exchange_upgraded<S: Read + Write>(stream: &mut S) -> Result<Vec<u8>, String> {
     send_preface(stream)?;
-    let mut rx = Rx::new();
-    pump(stream, None, &mut rx, &mut None)?;
+    let mut rx = Rx::new(1);
+    pump(stream, 1, None, &mut rx, &mut None)?;
     rx.finish()
 }
 
@@ -814,6 +929,58 @@ pub fn request_from_raw(raw: &[u8], scheme: &str) -> Option<H2Request> {
 mod tests {
     use super::*;
     use std::io::Cursor;
+
+    /// A body bigger than the peer's default SETTINGS_MAX_FRAME_SIZE
+    /// (16,384) must go out as several DATA frames, END_STREAM on the
+    /// last, or the burst earns a PROTOCOL_ERROR.
+    #[test]
+    fn burst_window_rejects_groups_past_the_initial_window() {
+        // Two 40 KB bodies fit their own stream windows but overrun the
+        // shared connection window.
+        assert!(check_burst_window([40 * 1024, 40 * 1024]).is_err());
+        // The same total in one body is rejected too.
+        assert!(check_burst_window([80 * 1024]).is_err());
+        // At and under the window is fine.
+        assert!(check_burst_window([65_535]).is_ok());
+        assert!(check_burst_window([1024, 2048]).is_ok());
+        assert!(check_burst_window([]).is_ok());
+    }
+
+    #[test]
+    fn request_frames_chunks_large_bodies() {
+        let req = H2Request {
+            method: "POST".into(),
+            scheme: "https".into(),
+            authority: "example.com".into(),
+            path: "/".into(),
+            headers: Vec::new(),
+            body: vec![7u8; 40_000],
+            connection: None,
+        };
+        let burst = request_frames(1, &req).unwrap();
+        let mut cursor = Cursor::new(burst.as_slice());
+        let mut data_lengths = Vec::new();
+        let mut end_stream = false;
+        while let Ok(f) = read_frame(&mut cursor) {
+            if f.ty == FRAME_DATA {
+                data_lengths.push(f.payload.len());
+                end_stream = f.flags & FLAG_END_STREAM != 0;
+            }
+        }
+        assert_eq!(data_lengths, vec![16_384, 16_384, 7_232]);
+        assert!(end_stream);
+        // An empty body keeps END_STREAM on HEADERS and adds no DATA.
+        let req = H2Request {
+            body: Vec::new(),
+            ..req
+        };
+        let burst = request_frames(1, &req).unwrap();
+        let mut cursor = Cursor::new(burst.as_slice());
+        let f = read_frame(&mut cursor).unwrap();
+        assert_eq!(f.ty, FRAME_HEADERS);
+        assert!(f.flags & FLAG_END_STREAM != 0);
+        assert!(read_frame(&mut cursor).is_err());
+    }
 
     #[test]
     fn base64url_matches_rfc7540_example() {
@@ -1095,7 +1262,7 @@ mod tests {
 
     #[test]
     fn window_update_overflow_is_rejected_without_changing_state() {
-        let mut rx = Rx::new();
+        let mut rx = Rx::new(1);
         rx.send_window = 1;
         let mut stream = scripted(&[]);
         let mut sink = None;

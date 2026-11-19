@@ -693,7 +693,7 @@ fn r10_el_and_xpath_against_a_live_lab() {
 #[test]
 fn collaborator_everywhere_builds_burps_request_set() {
     let collab = |slot: &str| Some(format!("{slot}.oast.test"));
-    let probes = everywhere_probes("shop.test:8080", "shop.test", 8080, true, &collab);
+    let probes = everywhere_probes("shop.test:8080", "shop.test", 8080, true, false, &collab);
     let first_lines: Vec<&str> = probes
         .iter()
         .map(|p| p.request.split("\r\n").next().unwrap())
@@ -728,10 +728,118 @@ fn collaborator_everywhere_builds_burps_request_set() {
     ));
     assert_eq!(combined.ids[3].2, "HTTP Referer header");
     // Behind an upstream proxy: no request-line variants (Zs61.Zu).
-    let proxied = everywhere_probes("shop.test", "shop.test", 80, false, &collab);
+    let proxied = everywhere_probes("shop.test", "shop.test", 80, false, false, &collab);
     assert_eq!(proxied.len(), 4);
+    assert!(
+        probes.iter().all(|p| p.sni.is_none()),
+        "no SNI variant over plain HTTP"
+    );
     // No Collaborator ids: nothing to send.
-    assert!(everywhere_probes("h", "h", 80, true, &|_| None).is_empty());
+    assert!(everywhere_probes("h", "h", 80, true, true, &|_| None).is_empty());
+}
+
+/// D-12: an HTTPS target adds burp.Zs61.Zu's SNI request after the
+/// request-line variants and before the combined headers (also behind
+/// an upstream proxy: it sits outside the direct-only branch).
+#[test]
+fn collaborator_everywhere_sni_probe_for_https_targets() {
+    let collab = |slot: &str| Some(format!("{slot}.oast.test"));
+    for direct in [true, false] {
+        let probes = everywhere_probes("shop.test", "shop.test", 443, direct, true, &collab);
+        let slots: Vec<&str> = probes.iter().map(|p| p.ids[0].0).collect();
+        let want: &[&str] = if direct {
+            &[
+                "host", "xfh", "hostauth", "authfrag", "absurl", "sni", "xff", "connect",
+            ]
+        } else {
+            &["host", "xfh", "hostauth", "sni", "xff"]
+        };
+        assert_eq!(slots, want);
+        let sni = probes.iter().find(|p| p.ids[0].0 == "sni").unwrap();
+        assert_eq!(sni.sni.as_deref(), Some("sni.oast.test"));
+        assert_eq!(sni.request, "GET / HTTP/1.1\r\nHost: sni.oast.test\r\nPragma: no-cache\r\nCache-Control: no-cache, no-transform\r\nConnection: close\r\n\r\n");
+        assert_eq!(
+            sni.ids,
+            vec![(
+                "sni",
+                "sni.oast.test".to_string(),
+                "SSL SNI value and the HTTP Host header"
+            )]
+        );
+        assert_eq!(probes.iter().filter(|p| p.sni.is_some()).count(), 1);
+    }
+}
+
+/// D-12 at a loopback HTTPS lab: the scan's Collaborator-everywhere
+/// check connects to the target and sends the SNI probe with the
+/// Collaborator name in the ClientHello; every other request carries
+/// the target's own name.
+#[test]
+fn collaborator_everywhere_sends_the_sni_probe_to_a_tls_lab() {
+    let shared = crate::net::Shared::new();
+    let (port, log) = crate::net::tls_sni_lab(&shared);
+    let mut cfg = crate::scan_config::ScanConfig::default();
+    for (id, ..) in crate::scan::check_catalogue() {
+        if id != "active.collaborator-everywhere" {
+            cfg.disabled_checks.insert(id.into());
+        }
+    }
+    *shared.scan_config.lock().unwrap() = cfg;
+    let mut e = crate::net::HistEntry {
+        method: "GET".into(),
+        host: "localhost".into(),
+        port,
+        path: "/".into(),
+        https: true,
+        ..Default::default()
+    };
+    e.req_raw = format!("GET / HTTP/1.1\r\nHost: localhost:{port}\r\n\r\n")
+        .into_bytes()
+        .into();
+    let oob: Vec<(String, String, String)> = ["host", "sni"]
+        .iter()
+        .map(|s| {
+            (
+                format!("#host:ce:{s}"),
+                format!("tok{s}"),
+                format!("tok{s}.oast.test"),
+            )
+        })
+        .collect();
+    crate::scan::start_active_scan(shared.clone(), e, &oob, &[]);
+    let t0 = std::time::Instant::now();
+    while shared.scan.is_busy() && t0.elapsed() < std::time::Duration::from_secs(60) {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert!(!shared.scan.is_busy(), "scan did not finish");
+    let seen: Vec<(Option<String>, Option<String>)> = log
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|(_, sni, head)| {
+            (
+                sni.clone(),
+                head.lines()
+                    .find_map(|l| l.strip_prefix("Host: ").map(str::to_string)),
+            )
+        })
+        .collect();
+    let s = |v: &str| Some(v.to_string());
+    assert!(
+        seen.contains(&(s("toksni.oast.test"), s("toksni.oast.test"))),
+        "{seen:?}"
+    );
+    assert!(
+        seen.contains(&(s("localhost"), s("tokhost.oast.test"))),
+        "{seen:?}"
+    );
+    assert_eq!(
+        seen.iter()
+            .filter(|(sni, _)| sni.as_deref() != Some("localhost"))
+            .count(),
+        1,
+        "{seen:?}"
+    );
 }
 
 #[test]

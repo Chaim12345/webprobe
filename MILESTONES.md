@@ -63,7 +63,7 @@ Small slices:
 
 ## M5 — R-11 scan configuration library
 
-**Status:** implemented 2026-11-18 (aa490e8, 09e87f8), compiled with 18 smoke tests; full suite and UI not yet run. Work stopped by the user; unclaimed.
+**Status:** in progress (2026-11-18 evening): the persistent Claude worker in the main checkout, not `.worktrees/r11`. Another agent should not start M5 in parallel.
 
 Worktree: `.worktrees/r11`.
 
@@ -78,14 +78,12 @@ Small slices:
 
 ## M6 — D-12 and R-12 network features
 
-**Status:** paused 2026-11-18 by the user. Branch `wp-m6` (pushed): D-12a SNI probe done (97b41bd); D-12b and R-12 send groups partial (9d7de42, compiles, untested). Unclaimed; resume from that branch.
+**Status:** done (2026-11-19, branch `m6/d12-r12`, PR open). Built on the paused `wp-m6` work (97b41bd, 9d7de42), completed and verified by the Instinct lane.
 
-Worktree: `.worktrees/r07` after M2 integration.
-
-- D-12: custom-SNI sender and traced scheme payload variants with loopback TLS tests.
-- R-12: Repeater group model and sequential single/separate-connection sending.
-- R-12: HTTP/1 last-byte and HTTP/2 single-packet synchronization with deterministic barriers, not timing-only assertions.
-- Verify UI persistence and 20-request synchronization at a local lab.
+- D-12: custom-SNI sender (97b41bd) and traced scheme payload variants (9d7de42, slot/test fix 6d48fb6) with loopback TLS tests.
+- R-12: Repeater group model, project persistence and sequential single/separate-connection sending (a3188de).
+- R-12: HTTP/1 last-byte and HTTP/2 single-packet synchronization with deterministic barriers, not timing-only assertions (e9d93f3).
+- Verified: 20-sender H1 lab with a server-mirrored barrier and a one-connection barrier-gated h2 lab (6d48fb6, 30b7e3d); desktop group UI + project save/restore (fe1d078), screenshot-checked; 654/654 core, 136/136 desktop.
 
 ## M7 — R-15 CLI, configuration and REST
 

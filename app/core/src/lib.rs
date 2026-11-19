@@ -34,6 +34,7 @@ pub use webprobe_support::{
     paths, rules, seq_bits, streaming, sync, tls, util, variations, xss,
 };
 
+pub(crate) mod h2_group;
 pub mod macros;
 pub mod net;
 pub mod oob;
@@ -45,6 +46,7 @@ pub mod scan;
 pub mod scan_config;
 pub mod scan_library;
 pub mod scan_run;
+pub mod send_group;
 pub mod setup_page;
 pub mod sitemap_compare;
 pub mod stored;
@@ -52,6 +54,7 @@ pub mod stored;
 mod streaming_tests;
 pub mod tasks;
 pub mod upstream;
+pub(crate) mod url_payloads;
 mod util_tests;
 pub mod ws_history;
 pub mod ws_repeater;
