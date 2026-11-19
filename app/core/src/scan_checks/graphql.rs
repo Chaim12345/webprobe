@@ -772,8 +772,7 @@ fn dom_analysis_hits(cx: &ScanCtx) -> Vec<crate::crawl::DomHit> {
     let port = if cx.entry.port == default { String::new() } else { format!(":{}", cx.entry.port) };
     let path = cx.entry.path.split('#').next().unwrap_or("/");
     let url = format!("{scheme}://{}{port}{path}", cx.entry.host);
-    static CACHE: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, Vec<crate::crawl::DomHit>>>> = std::sync::OnceLock::new();
-    let cache = CACHE.get_or_init(Default::default);
+    let cache = DOM_HITS_CACHE.get_or_init(Default::default);
     if let Some(hits) = cache.lock().unwrap().get(&url) {
         return hits.clone();
     }

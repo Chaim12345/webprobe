@@ -261,6 +261,19 @@ impl StoredBatch {
 }
 
 
+/// R-13 DOM analysis hits per URL, cached for the scan session and
+/// cleared between sessions by `reset_dom_analysis_cache` (the same
+/// contract as `reset_openapi_hosts`): a long-lived process running more
+/// than one scan must not serve a previous scan's hits.
+static DOM_HITS_CACHE: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, Vec<crate::crawl::DomHit>>>> = std::sync::OnceLock::new();
+
+/// Clear the per-URL DOM analysis cache between scan sessions.
+pub(crate) fn reset_dom_analysis_cache() {
+    if let Some(c) = DOM_HITS_CACHE.get() {
+        c.lock().unwrap().clear();
+    }
+}
+
 // ================= G.11 reflected manipulation contexts (burp.Zb_5 / Zcpt) =================
 
 /// Where in a response a probe reflection landed: the subset of burp.Zcpt's
@@ -779,6 +792,7 @@ pub fn crawl_and_audit(shared: &Arc<Shared>, start_urls: &[String], audit_only: 
     shared.oob.want(true);
     let _wanted = Wanted(shared);
     reset_openapi_hosts();
+    checks::reset_dom_analysis_cache();
     for url in start_urls {
         let mut items = if audit_only {
             crate::crawl::crawl_single(shared, url)
