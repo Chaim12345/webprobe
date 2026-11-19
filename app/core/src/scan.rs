@@ -1684,6 +1684,62 @@ pub(crate) fn xxe_points(body: &str) -> (String, usize, Vec<(usize, usize)>) {
     (base, doc, vec![(doc + 6, doc + 6)])
 }
 
+/// burp.Zgij.java:108-150: the DOCTYPE whose first entity is the seed and
+/// whose following `depth` entities each reference the preceding one twice,
+/// so the top reference expands to the seed repeated 2^depth times.
+pub(crate) fn entity_expansion_doctype(name: &str, seed: &str, depth: usize) -> String {
+    let mut decl = format!("<!DOCTYPE foo [<!ENTITY {name}0 \"{seed}\">");
+    for d in 1..=depth {
+        decl.push_str(&format!("<!ENTITY {name}{d} \"&{name}{prev};&{name}{prev};\">", prev = d - 1));
+    }
+    format!("{decl} ]>")
+}
+
+/// The response marker for a successful expansion at `depth`.
+pub(crate) fn entity_expansion_marker(seed: &str, depth: usize) -> String {
+    seed.repeat(1 << depth)
+}
+
+/// The Zgij probe: DOCTYPE at the document position and the original value
+/// followed by the top entity reference, the xxe_probe_at shape
+/// (burp.Zgij.java:66-71: "the insertion also contains &<entity>;").
+pub(crate) fn expansion_probe_at(base: &str, doc: usize, point: (usize, usize), name: &str, seed: &str, depth: usize) -> String {
+    let (vs, ve) = point;
+    format!(
+        "{}{}{}{}&{name}{depth};{}",
+        &base[..doc],
+        entity_expansion_doctype(name, seed, depth),
+        &base[doc..vs],
+        &base[vs..ve],
+        &base[ve..]
+    )
+}
+
+/// burp.Zgij.java:38-47,77-105: over the element-value points, depth 2 then
+/// the depth-3 confirmation; report the confirming exchange.
+pub(crate) fn run_entity_expansion_check<F: FnMut(&str) -> Option<String>>(
+    body: &str,
+    name: &str,
+    seed: &str,
+    mut send: F,
+) -> Option<(String, String)> {
+    let (base, doc, points) = xxe_points(body);
+    for point in points {
+        let probe = expansion_probe_at(&base, doc, point, name, seed, 2);
+        let Some(resp) = send(&probe) else { continue };
+        if !resp.contains(&entity_expansion_marker(seed, 2)) {
+            continue;
+        }
+        let confirm = expansion_probe_at(&base, doc, point, name, seed, 3);
+        let Some(resp3) = send(&confirm) else { continue };
+        if !resp3.contains(&entity_expansion_marker(seed, 3)) {
+            continue;
+        }
+        return Some((confirm, resp3));
+    }
+    None
+}
+
 /// burp.Zge7.Ze: DOCTYPE at the document position, then the original value
 /// (Zsif.ZT0) followed by the entity reference in place of the value range.
 pub(crate) fn xxe_probe_at(base: &str, doc: usize, point: (usize, usize), entity: &str, variant: u8) -> String {
@@ -3643,6 +3699,43 @@ mod tests {
             Some(if p.contains("passwdX") { String::new() } else { PASSWD.into() })
         })
         .is_none());
+    }
+
+    #[test]
+    fn entity_expansion_depth2_confirmed_by_depth3() {
+        // The doctype: seed entity plus `depth` doublers (burp.Zgij.java:108-150).
+        let d2 = entity_expansion_doctype("ab", "SEEDSEED", 2);
+        assert_eq!(d2, "<!DOCTYPE foo [<!ENTITY ab0 \"SEEDSEED\"><!ENTITY ab1 \"&ab0;&ab0;\"><!ENTITY ab2 \"&ab1;&ab1;\"> ]>");
+        assert_eq!(entity_expansion_marker("SEEDSEED", 2), "SEEDSEED".repeat(4), "depth 2 is 2^2 copies");
+        assert_eq!(entity_expansion_marker("SEEDSEED", 3).len(), 8 * 8);
+
+        // A lab parser that expands the entities of any probe it gets.
+        let expanding = |body: &str| -> Option<String> {
+            if body.contains("<!ENTITY ab3") {
+                Some(format!("OK {}", entity_expansion_marker("SEEDSEED", 3)))
+            } else if body.contains("<!ENTITY ab2") {
+                Some(format!("OK {}", entity_expansion_marker("SEEDSEED", 2)))
+            } else {
+                Some("OK".into())
+            }
+        };
+        let body = "<?xml version=\"1.0\"?><order><id>7</id></order>";
+        let hit = run_entity_expansion_check(body, "ab", "SEEDSEED", expanding).unwrap();
+        assert!(hit.0.contains("<!ENTITY ab3"), "the confirmation is at depth 3");
+        assert!(hit.0.contains("&ab3;"), "the insertion carries the top reference");
+
+        // A non-expanding parser never reports.
+        assert!(run_entity_expansion_check(body, "ab", "SEEDSEED", |_| Some("OK".into())).is_none());
+
+        // Depth 2 alone is not enough: without the depth-3 marker there is no report.
+        let half = |body: &str| -> Option<String> {
+            if body.contains("<!ENTITY ab2") && !body.contains("<!ENTITY ab3") {
+                Some(format!("OK {}", entity_expansion_marker("SEEDSEED", 2)))
+            } else {
+                Some("OK".into())
+            }
+        };
+        assert!(run_entity_expansion_check(body, "ab", "SEEDSEED", half).is_none());
     }
 
     #[test]
