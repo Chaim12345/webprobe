@@ -1124,7 +1124,11 @@ macro_rules! g11_reflected_check {
                         "Tentative",
                         &cx.entry,
                         ip,
-                        format!("The injected value <b>{}</b> was reflected in {}.", util::html_encode(&payload), context),
+                        format!(
+                            "The injected value <b>{}</b> was reflected in {}.",
+                            util::html_encode(&payload),
+                            context
+                        ),
                     )
                     .with_evidence(evidence([rec.last(&payload)]))]);
                 }
