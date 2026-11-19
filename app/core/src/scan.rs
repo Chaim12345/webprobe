@@ -2204,7 +2204,10 @@ pub(crate) fn known_file_follow_up<F: FnMut(&str) -> Option<Vec<u8>>>(
         let body = String::from_utf8_lossy(&raw);
         let Some(&marker) = markers.iter().find(|m| body.contains(**m) && !base.contains(**m)) else { continue };
         let control = format!("{payload}X");
-        let cbody = send(&control).unwrap_or_default();
+        // A failed control aborts the follow-up like a failed probe:
+        // without the control there is no evidence the marker is specific
+        // to the filename, so an empty answer must not confirm.
+        let cbody = send(&control)?;
         if String::from_utf8_lossy(&cbody).contains(marker) {
             continue; // the marker shows regardless of the filename
         }
@@ -3722,6 +3725,19 @@ mod tests {
         // the filename, so nothing was retrieved.
         let fixed = |_: &str| -> Option<Vec<u8>> { Some(b"<system.web>always</system.web>".to_vec()) };
         assert!(known_file_follow_up("a/b.txt", b"", fixed).is_none());
+
+        // A control that errors out aborts the follow-up: no hit, not a
+        // false confirm on an empty body.
+        let flaky = |p: &str| -> Option<Vec<u8>> {
+            if p.ends_with('X') {
+                None
+            } else if p == "web.config" {
+                Some(b"<system.web>x</system.web>".to_vec())
+            } else {
+                Some(Vec::new())
+            }
+        };
+        assert!(known_file_follow_up("page", b"", flaky).is_none());
 
         // The marker already on the baseline page: never reported.
         let serve = |p: &str| -> Option<Vec<u8>> {
