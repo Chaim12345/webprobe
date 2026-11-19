@@ -765,12 +765,12 @@ impl RequestCheck for BackupFile {
 /// cleared between sessions by `reset_dom_analysis_cache` (the same
 /// contract as `reset_openapi_hosts`): a long-lived process running more
 /// than one scan must not serve a previous scan's hits.
-/// One browser probe per URL: Done caches the hits and the reflected
-/// query canary; InFlight marks a probe another thread is running (see
-/// dom_analysis_hits).
+/// One browser probe per URL: Done caches the hits, the reflected query
+/// canary and the stored canary; InFlight marks a probe another thread
+/// is running (see dom_analysis_hits).
 enum DomHitsState {
     InFlight,
-    Done((Vec<crate::crawl::DomHit>, Option<String>)),
+    Done((Vec<crate::crawl::DomHit>, Option<String>, String)),
 }
 
 #[derive(Default)]
@@ -807,12 +807,12 @@ fn authed_get(cx: &ScanCtx, path_query: &str) -> Vec<u8> {
     raw.into_bytes()
 }
 
-fn dom_analysis_hits(cx: &ScanCtx) -> (Vec<crate::crawl::DomHit>, Option<String>) {
+fn dom_analysis_hits(cx: &ScanCtx) -> (Vec<crate::crawl::DomHit>, Option<String>, String) {
     // Dynamic analysis runs on pages: the baseline must be HTML.
     let rp = util::parse_http(&cx.baseline.raw);
     let ct = util::get_header(&rp.headers, "Content-Type").unwrap_or_default();
     if !ct.to_ascii_lowercase().contains("html") {
-        return (Vec::new(), None);
+        return (Vec::new(), None, String::new());
     }
     let scheme = if cx.entry.https { "https" } else { "http" };
     let default = if cx.entry.https { 443 } else { 80 };
@@ -839,7 +839,23 @@ fn dom_analysis_hits(cx: &ScanCtx) -> (Vec<crate::crawl::DomHit>, Option<String>
     drop(guard);
     let canary = format!("wp{}", rnd_letters(10));
     let origin = crate::crawl::origin_of(&url).unwrap_or_default();
-    let hits: Vec<crate::crawl::DomHit> = crate::crawl::dom_analysis_probe(&cx.shared, &url, &canary)
+    // The stored-DOM variant (burp.Zf24's STORED; Zhp's template: the
+    // value "submitted to the URL ... is copied into a JavaScript string
+    // literal" of a later response): submit a distinct stored canary with
+    // the request first; a sink hit holding it was embedded by the app,
+    // not read from this navigation's URL.
+    let stored_canary = format!("s{canary}");
+    let sep0 = if path.contains('?') { "&" } else { "?" };
+    let submit = format!("GET {path}{sep0}wpdom={stored_canary} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", cx.host_hdr);
+    let _ = cx.send(submit.as_bytes());
+    let probe = crate::crawl::dom_analysis_probe(&cx.shared, &url, &canary);
+    if let Err(e) = &probe {
+        // A crashed/timed-out probe is not a clean bill of health: say so
+        // in the scan log (the cached empty hit set only avoids re-probing
+        // this URL for every family check in this session).
+        cx.shared.log(&format!("DOM analysis probe failed for {url}: {e}"));
+    }
+    let hits: Vec<crate::crawl::DomHit> = probe
         .unwrap_or_default()
         .into_iter()
         .filter(|h| h.page_url.starts_with(&origin))
@@ -862,7 +878,7 @@ fn dom_analysis_hits(cx: &ScanCtx) -> (Vec<crate::crawl::DomHit>, Option<String>
         .map(|r| crate::scan::g11_contexts(&r, &canary).iter().any(|c| matches!(c, crate::scan::G11Context::JsText)))
         .unwrap_or(false)
         .then_some(qcanary);
-    let v = (hits, reflected);
+    let v = (hits, reflected, stored_canary);
     cache.map.lock().unwrap().insert(url, DomHitsState::Done(v.clone()));
     cache.ready.notify_all();
     v
@@ -871,7 +887,7 @@ fn dom_analysis_hits(cx: &ScanCtx) -> (Vec<crate::crawl::DomHit>, Option<String>
 /// One DOM family check: the sinks of one burp.Zcwh family, the issue it
 /// maps to, and burp.Zwf8's severity/confidence for it.
 macro_rules! dom_family_check {
-    ($name:ident, $id:literal, $issue:literal, $reflected_issue:literal, $severity:literal, $confidence:literal, $family:literal, $sinks:expr, $doc:literal) => {
+    ($name:ident, $id:literal, $issue:literal, $reflected_issue:literal, $stored_issue:literal, $severity:literal, $confidence:literal, $family:literal, $sinks:expr, $doc:literal) => {
         #[doc = $doc]
         pub(crate) struct $name;
 
@@ -892,16 +908,30 @@ macro_rules! dom_family_check {
                 if cx.stopped() || !cx.runs(self.issue()) {
                     return;
                 }
-                let (hits, reflected_qcanary) = dom_analysis_hits(cx);
+                let (hits, reflected_qcanary, stored_canary) = dom_analysis_hits(cx);
                 let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
                 for hit in hits.iter().filter(|h| $sinks.contains(&h.sink.as_str())) {
                     if !seen.insert(hit.sink.as_str()) {
                         continue;
                     }
-                    // burp.Zf24.Zw: the value arriving with the request and
-                    // copied into the response's JavaScript makes the
-                    // reflected variant of the family's issue.
-                    let (issue, detail) = if reflected_qcanary.as_deref().is_some_and(|qc| hit.sink_value.contains(qc)) {
+                    // burp.Zf24.Zw: a hit holding the stored canary was
+                    // embedded by the application from an earlier request
+                    // (the stored variant); otherwise a hit whose sink
+                    // value carries the query canary the server echoed
+                    // into this response's script text makes the
+                    // reflected variant (per hit, not per page).
+                    let (issue, detail) = if !stored_canary.is_empty() && hit.sink_value.contains(&stored_canary) {
+                        (
+                            $stored_issue,
+                            format!(
+                                "The application may be vulnerable to stored {}. The source value was submitted in an earlier request, stored by the application, and is copied into a JavaScript string literal of this response, then passed to <b>{}</b>.<br><br>The stored value <b>{}</b> reached the sink as <b>{}</b>.",
+                                $family,
+                                util::html_encode(&hit.sink),
+                                util::html_encode(&hit.source_value),
+                                util::html_encode(&hit.sink_value)
+                            ),
+                        )
+                    } else if reflected_qcanary.as_deref().is_some_and(|qc| hit.sink_value.contains(qc)) {
                         (
                             $reflected_issue,
                             format!(
@@ -940,6 +970,7 @@ dom_family_check!(
     "active.dom-xss",
     "Cross-site scripting (DOM-based)",
     "Cross-site scripting (reflected DOM-based)",
+    "Cross-site scripting (stored DOM-based)",
     "high",
     "Firm",
     "DOM-based cross-site scripting",
@@ -966,6 +997,7 @@ dom_family_check!(
     "active.dom-javascript-injection",
     "JavaScript injection (DOM-based)",
     "JavaScript injection (reflected DOM-based)",
+    "JavaScript injection (stored DOM-based)",
     "high",
     "Firm",
     "DOM-based JavaScript injection",
@@ -977,6 +1009,7 @@ dom_family_check!(
     "active.dom-open-redirection",
     "Open redirection (DOM-based)",
     "Open redirection (reflected DOM-based)",
+    "Open redirection (stored DOM-based)",
     "low",
     "Tentative",
     "DOM-based open redirection",
@@ -988,6 +1021,7 @@ dom_family_check!(
     "active.dom-data-manipulation",
     "DOM data manipulation (DOM-based)",
     "DOM data manipulation (reflected DOM-based)",
+    "DOM data manipulation (stored DOM-based)",
     "info",
     "Firm",
     "DOM-based data manipulation",
@@ -1013,6 +1047,7 @@ dom_family_check!(
     "active.dom-link-manipulation",
     "Link manipulation (DOM-based)",
     "Link manipulation (reflected DOM-based)",
+    "Link manipulation (stored DOM-based)",
     "low",
     "Firm",
     "DOM-based link manipulation",
@@ -1024,6 +1059,7 @@ dom_family_check!(
     "active.dom-websocket-poisoning",
     "WebSocket URL poisoning (DOM-based)",
     "WebSocket URL poisoning (reflected DOM-based)",
+    "WebSocket URL poisoning (stored DOM-based)",
     "high",
     "Firm",
     "DOM-based WebSocket URL poisoning",
@@ -1035,6 +1071,7 @@ dom_family_check!(
     "active.dom-dos",
     "Denial of service (DOM-based)",
     "Denial of service (reflected DOM-based)",
+    "Denial of service (stored DOM-based)",
     "info",
     "Firm",
     "DOM-based denial of service",
@@ -1046,6 +1083,7 @@ dom_family_check!(
     "active.dom-ajax-header-manipulation",
     "Ajax request header manipulation (DOM-based)",
     "Ajax request header manipulation (reflected DOM-based)",
+    "Ajax request header manipulation (stored DOM-based)",
     "low",
     "Firm",
     "DOM-based Ajax request header manipulation",
@@ -1057,6 +1095,7 @@ dom_family_check!(
     "active.dom-storage-manipulation",
     "HTML5 storage manipulation (DOM-based)",
     "HTML5 storage manipulation (reflected DOM-based)",
+    "HTML5 storage manipulation (stored DOM-based)",
     "info",
     "Firm",
     "DOM-based HTML5 storage manipulation",
@@ -1068,6 +1107,7 @@ dom_family_check!(
     "active.dom-json-injection",
     "Client-side JSON injection (DOM-based)",
     "Client-side JSON injection (reflected DOM-based)",
+    "Client-side JSON injection (stored DOM-based)",
     "low",
     "Firm",
     "DOM-based client-side JSON injection",
@@ -1079,6 +1119,7 @@ dom_family_check!(
     "active.dom-xpath-injection",
     "Client-side XPath injection (DOM-based)",
     "Client-side XPath injection (reflected DOM-based)",
+    "Client-side XPath injection (stored DOM-based)",
     "low",
     "Firm",
     "DOM-based client-side XPath injection",
@@ -1090,6 +1131,7 @@ dom_family_check!(
     "active.dom-document-domain",
     "Document domain manipulation (DOM-based)",
     "Document domain manipulation (reflected DOM-based)",
+    "Document domain manipulation (stored DOM-based)",
     "medium",
     "Firm",
     "DOM-based document domain manipulation",
@@ -1102,6 +1144,7 @@ dom_family_check!(
     "active.dom-cookie-manipulation",
     "Cookie manipulation (DOM-based)",
     "Cookie manipulation (reflected DOM-based)",
+    "Cookie manipulation (stored DOM-based)",
     "low",
     "Firm",
     "DOM-based cookie manipulation",
@@ -1114,6 +1157,7 @@ dom_family_check!(
     "active.dom-web-message-manipulation",
     "HTML5 web message manipulation (DOM-based)",
     "HTML5 web message manipulation (reflected DOM-based)",
+    "HTML5 web message manipulation (stored DOM-based)",
     "info",
     "Firm",
     "DOM-based HTML5 web message manipulation",

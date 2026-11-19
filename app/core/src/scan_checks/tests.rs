@@ -830,6 +830,47 @@ fn dom_xss_reflected_variant_against_a_live_lab() {
 }
 
 
+/// R-13 stored-DOM variant: the lab stores wpdom values beginning
+/// with 's' (the stored canary) and embeds the last one in a
+/// JavaScript string literal of every page, which the page passes to
+/// document.write: the stored variant, not the plain or reflected
+/// ones. Skipped when no Chromium is available.
+#[test]
+fn dom_xss_stored_variant_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let stored = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+    let stored2 = stored.clone();
+    let port = lab_serve(l, move |_method, path, raw| {
+        if let Some(v) = raw.split("wpdom=").nth(1).and_then(|r| r.split(['&', ' ']).next()) {
+            if v.starts_with('s') {
+                *stored2.lock().unwrap() = v.to_string();
+            }
+        }
+        let body = if path.starts_with("/storexss") {
+            let s = stored2.lock().unwrap().clone();
+            format!("<html><body><script>var t = '{s}'; document.write('<p>' + t + '</p>');</script></body></html>")
+        } else {
+            "<html><body><p>hello</p></body></html>".to_string()
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    let got = lab_scan(port, &["active.dom-xss"], "GET", "/storexss", format!("GET /storexss HTTP/1.1\r\nHost: {host}\r\n\r\n"));
+    assert!(
+        got.iter().any(|(n, s, c)| n == "Cross-site scripting (stored DOM-based)" && s == "high" && c == "Firm"),
+        "stored variant: {got:?}"
+    );
+    assert!(!got.iter().any(|(n, ..)| n == "Cross-site scripting (DOM-based)" || n == "Cross-site scripting (reflected DOM-based)"), "not the other variants: {got:?}");
+}
+
+/// One browser probe per URL: Done caches the hits, the reflected query
+/// canary and the stored canary; InFlight marks a probe another thread
+/// is running (see dom_analysis_hits).
+Done((Vec<crate::crawl::DomHit>, Option<String>, String)),
+
 /// R-10 batch 2: the three GraphQL checks against a live endpoint.
 /// The lab answers the introspection query with a schema, the
 /// `query{__type}` probe with a suggestion error, and the query in
