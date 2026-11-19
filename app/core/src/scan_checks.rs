@@ -2021,8 +2021,7 @@ fn dom_analysis_hits(cx: &ScanCtx) -> Vec<crate::crawl::DomHit> {
     let port = if cx.entry.port == default { String::new() } else { format!(":{}", cx.entry.port) };
     let path = cx.entry.path.split('#').next().unwrap_or("/");
     let url = format!("{scheme}://{}{port}{path}", cx.entry.host);
-    static CACHE: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, Vec<crate::crawl::DomHit>>>> = std::sync::OnceLock::new();
-    let cache = CACHE.get_or_init(Default::default);
+    let cache = DOM_HITS_CACHE.get_or_init(Default::default);
     if let Some(hits) = cache.lock().unwrap().get(&url) {
         return hits.clone();
     }
@@ -5274,3 +5273,16 @@ mod tests {
     }
 }
 
+
+/// R-13 DOM analysis hits per URL, cached for the scan session and
+/// cleared between sessions by `reset_dom_analysis_cache` (the same
+/// contract as `reset_openapi_hosts`): a long-lived process running more
+/// than one scan must not serve a previous scan's hits.
+static DOM_HITS_CACHE: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, Vec<crate::crawl::DomHit>>>> = std::sync::OnceLock::new();
+
+/// Clear the per-URL DOM analysis cache between scan sessions.
+pub(crate) fn reset_dom_analysis_cache() {
+    if let Some(c) = DOM_HITS_CACHE.get() {
+        c.lock().unwrap().clear();
+    }
+}
