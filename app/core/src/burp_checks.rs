@@ -613,15 +613,41 @@ pub fn crossdomain_findings(resp: &[u8], own_host: &str, kind: CrossDomainKind) 
             .trim_start_matches("https://")
             .trim_end_matches('/')
             .to_ascii_lowercase();
+        // A wildcard counts only when it covers the scanned host:
+        // `*.unrelated.io` trusts nobody here (Burp: *, covering
+        // wildcards, the target and its parents - Zudv.java:68-121).
         let report = dom == "*"
-            || dom.contains('*')
             || dom == host
-            || (!dom.is_empty() && host.ends_with(&format!(".{dom}")));
+            || (!dom.is_empty() && host.ends_with(&format!(".{dom}")))
+            || (dom.contains('*') && glob_covers(&dom, &host));
         if report && !out.contains(&dom) {
             out.push(dom);
         }
     }
     out
+}
+
+/// `*` matches any run of characters; every other byte must match
+/// literally, anchored at both ends.
+fn glob_covers(pattern: &str, host: &str) -> bool {
+    let mut segs = pattern.split('*').peekable();
+    let mut rest = host;
+    if let Some(first) = segs.next() {
+        if !rest.starts_with(first) {
+            return false;
+        }
+        rest = &rest[first.len()..];
+    }
+    while let Some(seg) = segs.next() {
+        if segs.peek().is_none() && !seg.is_empty() {
+            return rest.ends_with(seg);
+        }
+        match rest.find(seg) {
+            Some(i) => rest = &rest[i + seg.len()..],
+            None => return false,
+        }
+    }
+    true
 }
 
 fn body_of(resp: &[u8]) -> String {
@@ -810,6 +836,13 @@ Content-Type: text/xml
 <cross-domain-policy><allow-access-from domain="*.example.com"/><allow-access-from domain="example.com"/><allow-access-from domain="unrelated.io"/></cross-domain-policy>"#;
         let found = crossdomain_findings(policy, "www.example.com", CrossDomainKind::Flash);
         assert_eq!(found, ["*.example.com", "example.com"]);
+
+        // an unrelated wildcard does not cover the host: not reported
+        let policy = br#"HTTP/1.1 200 OK
+Content-Type: text/xml
+
+<cross-domain-policy><allow-access-from domain="*.unrelated.io"/></cross-domain-policy>"#;
+        assert!(crossdomain_findings(policy, "www.example.com", CrossDomainKind::Flash).is_empty());
 
         // The bare wildcard and the target itself.
         let policy = br#"HTTP/1.1 200 OK
