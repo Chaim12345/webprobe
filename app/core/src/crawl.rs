@@ -413,7 +413,10 @@ mod tests {
             vec!["/ftp", "/pub/"]
         );
         // no User-agent stanza needed: Disallow-only bodies still yield paths
-        assert_eq!(robots_paths("Disallow: /admin\nDisallow: /tmp"), vec!["/admin", "/tmp"]);
+        assert_eq!(
+            robots_paths("Disallow: /admin\nDisallow: /tmp"),
+            vec!["/admin", "/tmp"]
+        );
         assert_eq!(sitemap_locs("<urlset><url><loc> http://a/x </loc></url><url><loc>http://a/y</loc></url></urlset>"), vec!["http://a/x", "http://a/y"]);
     }
 
@@ -1392,12 +1395,27 @@ const DOM_INSTRUMENT_JS: &str = r#"
 /// the target host, like the crawl, and return the source-to-sink hits
 /// the instrumentation recorded. The
 /// browser tree is killed and its profile removed on every path.
-pub fn dom_analysis_probe(shared: &Arc<Shared>, url: &str, canary: &str) -> Result<Vec<DomHit>, String> {
-    let bin = crate::paths::chromium().map_err(|m| m.to_string())?.display().to_string();
+pub fn dom_analysis_probe(
+    shared: &Arc<Shared>,
+    url: &str,
+    canary: &str,
+) -> Result<Vec<DomHit>, String> {
+    let bin = crate::paths::chromium()
+        .map_err(|m| m.to_string())?
+        .display()
+        .to_string();
     let rest = url.split_once("://").map(|x| x.1).unwrap_or(url);
     let authority = rest.split('/').next().unwrap_or("");
-    let target_host = authority.rsplit_once(':').map(|x| x.0).unwrap_or(authority).to_string();
-    let dport = std::net::TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?.local_addr().map_err(|e| e.to_string())?.port();
+    let target_host = authority
+        .rsplit_once(':')
+        .map(|x| x.0)
+        .unwrap_or(authority)
+        .to_string();
+    let dport = std::net::TcpListener::bind("127.0.0.1:0")
+        .map_err(|e| e.to_string())?
+        .local_addr()
+        .map_err(|e| e.to_string())?
+        .port();
     let profile = std::env::temp_dir().join(format!("webprobe-dom-{}-{dport}", std::process::id()));
     let mut cmd = std::process::Command::new(&bin);
     crate::util::own_process_group(&mut cmd);
@@ -1435,7 +1453,10 @@ pub fn dom_analysis_probe(shared: &Arc<Shared>, url: &str, canary: &str) -> Resu
             }
             if let Some(list) = http_get_local(dport, "/json/list") {
                 let v: serde_json::Value = serde_json::from_str(&list).unwrap_or_default();
-                ws_url = v.as_array().and_then(|a| a.iter().find(|t| t["type"] == "page")).and_then(|t| t["webSocketDebuggerUrl"].as_str().map(str::to_string));
+                ws_url = v
+                    .as_array()
+                    .and_then(|a| a.iter().find(|t| t["type"] == "page"))
+                    .and_then(|t| t["webSocketDebuggerUrl"].as_str().map(str::to_string));
                 if ws_url.is_some() {
                     break;
                 }
@@ -1450,17 +1471,25 @@ pub fn dom_analysis_probe(shared: &Arc<Shared>, url: &str, canary: &str) -> Resu
         // parameter, so one navigation covers the location.hash and
         // location.search sources and the hit value attributes the source.
         let sep = if base.contains('?') { "&" } else { "?" };
-        cdp.call("Page.navigate", serde_json::json!({"url": format!("{base}{sep}wpdom=q{canary}#h{canary}")}))?;
+        cdp.call(
+            "Page.navigate",
+            serde_json::json!({"url": format!("{base}{sep}wpdom=q{canary}#h{canary}")}),
+        )?;
         for _ in 0..25 {
             if shared.scan.stop.load(Ordering::SeqCst) {
                 break;
             }
             cdp.pump(100);
         }
-        let hits: Vec<DomHit> = eval_json(&mut cdp, "JSON.stringify(window.__wpDomHits || [])").unwrap_or_default();
+        let hits: Vec<DomHit> =
+            eval_json(&mut cdp, "JSON.stringify(window.__wpDomHits || [])").unwrap_or_default();
         Ok(hits)
     })();
-    crate::util::kill_process_tree(child.id(), Some(&profile.display().to_string()), std::time::Duration::from_secs(2));
+    crate::util::kill_process_tree(
+        child.id(),
+        Some(&profile.display().to_string()),
+        std::time::Duration::from_secs(2),
+    );
     let _ = child.wait();
     let _ = std::fs::remove_dir_all(&profile);
     result
