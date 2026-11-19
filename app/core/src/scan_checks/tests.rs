@@ -85,6 +85,9 @@ fn registry_order_is_pinned() {
             "active.jwt",
             "active.expression-language-injection",
             "active.xpath-injection",
+            ("active.dom-javascript-injection", Scope::Request, Some(BURP_GROUP)),
+            ("active.dom-open-redirection", Scope::Request, Some(BURP_GROUP)),
+            ("active.dom-cookie-manipulation", Scope::Request, Some(BURP_GROUP)),
         ]
     );
     // Stage A4 (burp.Zwp6) runs once per stored-input pair.
@@ -538,6 +541,49 @@ fn dom_xss_hash_slice_against_a_live_lab() {
         "{got:?}"
     );
 }
+
+/// R-13 batch 1: the JavaScript-injection, open-redirection and
+/// cookie-manipulation DOM families against live lab pages driven by a
+/// real browser. Skipped when no Chromium is available.
+#[test]
+fn dom_families_batch1_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, _raw| {
+        let body = if path.starts_with("/js-inj") {
+            "<html><body><script>eval(location.hash.slice(1));</script></body></html>"
+        } else if path.starts_with("/openredir") {
+            "<html><body><script>window.open(location.hash.slice(1));</script></body></html>"
+        } else if path.starts_with("/cookie") {
+            "<html><body><script>document.cookie = 'x=' + location.hash.slice(1);</script></body></html>"
+        } else {
+            "<html><body><p>hello</p></body></html>"
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    let expect = [
+        ("/js-inj", "active.dom-javascript-injection", "JavaScript injection (DOM-based)", "high", "Firm"),
+        ("/openredir", "active.dom-open-redirection", "Open redirection (DOM-based)", "low", "Tentative"),
+        ("/cookie", "active.dom-cookie-manipulation", "Cookie manipulation (DOM-based)", "low", "Firm"),
+    ];
+    for (page, id, name, sev, conf) in expect {
+        let got = lab_scan(port, &[id], "GET", page, format!("GET {page} HTTP/1.1\r\nHost: {host}\r\n\r\n"));
+        assert!(got.iter().any(|(n, s, c)| n == name && s == sev && c == conf), "{name}: {got:?}");
+    }
+    // A benign page reports none of the three.
+    let got = lab_scan(
+        port,
+        &["active.dom-javascript-injection", "active.dom-open-redirection", "active.dom-cookie-manipulation"],
+        "GET",
+        "/benign2",
+        format!("GET /benign2 HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(got.is_empty(), "{got:?}");
+}
+
 
 /// R-10 batch 2: the three GraphQL checks against a live endpoint.
 /// The lab answers the introspection query with a schema, the
