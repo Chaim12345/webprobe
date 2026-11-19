@@ -80,5 +80,5 @@ pub fn send_from(
     }
 }
 
-/// Resolve a host with the suite's DNS timeout (ProjectDefaults.json: domain_name_resolution_timeout).
+// Resolve a host with the suite's DNS timeout (ProjectDefaults.json: domain_name_resolution_timeout).
 pub use webprobe_support::dns::resolve;

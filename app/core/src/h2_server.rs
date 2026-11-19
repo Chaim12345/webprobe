@@ -937,7 +937,6 @@ fn request_head(fields: &[(Vec<u8>, Vec<u8>)]) -> Option<(String, Vec<u8>)> {
 }
 
 // Local-type impl of the support-crate trait (moved with io_traits in L8, #38).
-
 impl webprobe_support::io_traits::ProxyIo for ResponseWriter {
     fn set_nonblocking_io(&self, _: bool) -> std::io::Result<()> {
         Ok(())

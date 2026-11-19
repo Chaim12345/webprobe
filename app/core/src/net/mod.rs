@@ -4,6 +4,9 @@ use crate::sync::Mutex;
 use crate::util;
 /// One captured WebSocket frame or handshake record.
 pub use crate::ws_history::WsEntry;
+
+// Marker parsing moved to intruder (L8, #38); keep the old net path working.
+pub use crate::intruder::{parse_markers, MarkerSeg};
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
