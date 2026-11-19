@@ -133,6 +133,13 @@ fn exec_block(
                         req
                     }
                 };
+                cx.requests_sent += 1;
+                if cx.requests_sent > super::exec::MAX_REQUESTS_PER_RUN {
+                    return Err(ExecError(format!(
+                        "definition sent more than {} requests in one run",
+                        super::exec::MAX_REQUESTS_PER_RUN
+                    )));
+                }
                 let resp = transport.send(&req).map_err(ExecError)?;
                 cx.record(name.as_deref(), Exchange { request: req, response: resp });
             }
@@ -157,6 +164,13 @@ fn exec_block(
                 }
                 let mut req = base.request.clone();
                 apply_payload(&mut req, ip, &cur)?;
+                cx.requests_sent += 1;
+                if cx.requests_sent > super::exec::MAX_REQUESTS_PER_RUN {
+                    return Err(ExecError(format!(
+                        "definition sent more than {} requests in one run",
+                        super::exec::MAX_REQUESTS_PER_RUN
+                    )));
+                }
                 let resp = transport.send(&req).map_err(ExecError)?;
                 cx.record(name.as_deref(), Exchange { request: req, response: resp });
             }
