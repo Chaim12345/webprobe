@@ -625,7 +625,12 @@ fn status_2xx(resp: &[u8]) -> bool {
 }
 
 fn status_code_of(resp: &[u8]) -> Option<u16> {
-    util::parse_http(resp).first.split_whitespace().nth(1)?.parse().ok()
+    util::parse_http(resp)
+        .first
+        .split_whitespace()
+        .nth(1)?
+        .parse()
+        .ok()
 }
 
 /// Which cross-domain policy file is being analysed: Flash's
@@ -647,7 +652,9 @@ fn is_xml_policy(resp: &[u8], root: &str) -> bool {
         return false;
     }
     let parsed = util::parse_http(resp);
-    let ctype = util::get_header(&parsed.headers, "Content-Type").unwrap_or_default().to_ascii_lowercase();
+    let ctype = util::get_header(&parsed.headers, "Content-Type")
+        .unwrap_or_default()
+        .to_ascii_lowercase();
     if ctype.contains("xml") {
         return true;
     }
@@ -708,15 +715,41 @@ pub fn crossdomain_findings(resp: &[u8], own_host: &str, kind: CrossDomainKind) 
             .trim_start_matches("https://")
             .trim_end_matches('/')
             .to_ascii_lowercase();
+        // A wildcard counts only when it covers the scanned host:
+        // `*.unrelated.io` trusts nobody here (Burp: *, covering
+        // wildcards, the target and its parents - Zudv.java:68-121).
         let report = dom == "*"
-            || dom.contains('*')
             || dom == host
-            || (!dom.is_empty() && host.ends_with(&format!(".{dom}")));
+            || (!dom.is_empty() && host.ends_with(&format!(".{dom}")))
+            || (dom.contains('*') && glob_covers(&dom, &host));
         if report && !out.contains(&dom) {
             out.push(dom);
         }
     }
     out
+}
+
+/// `*` matches any run of characters; every other byte must match
+/// literally, anchored at both ends.
+fn glob_covers(pattern: &str, host: &str) -> bool {
+    let mut segs = pattern.split('*').peekable();
+    let mut rest = host;
+    if let Some(first) = segs.next() {
+        if !rest.starts_with(first) {
+            return false;
+        }
+        rest = &rest[first.len()..];
+    }
+    while let Some(seg) = segs.next() {
+        if segs.peek().is_none() && !seg.is_empty() {
+            return rest.ends_with(seg);
+        }
+        match rest.find(seg) {
+            Some(i) => rest = &rest[i + seg.len()..],
+            None => return false,
+        }
+    }
+    true
 }
 
 fn body_of(resp: &[u8]) -> String {
@@ -936,30 +969,58 @@ Content-Type: text/xml
         let found = crossdomain_findings(policy, "www.example.com", CrossDomainKind::Flash);
         assert_eq!(found, ["*.example.com", "example.com"]);
 
+        // an unrelated wildcard does not cover the host: not reported
+        let policy = br#"HTTP/1.1 200 OK
+Content-Type: text/xml
+
+<cross-domain-policy><allow-access-from domain="*.unrelated.io"/></cross-domain-policy>"#;
+        assert!(crossdomain_findings(policy, "www.example.com", CrossDomainKind::Flash).is_empty());
+
         // The bare wildcard and the target itself.
         let policy = br#"HTTP/1.1 200 OK
 Content-Type: text/x-cross-domain-policy
 
 <cross-domain-policy><allow-access-from domain="*"/></cross-domain-policy>"#;
-        assert_eq!(crossdomain_findings(policy, "a.b.co", CrossDomainKind::Flash), ["*"]);
+        assert_eq!(
+            crossdomain_findings(policy, "a.b.co", CrossDomainKind::Flash),
+            ["*"]
+        );
         let policy = br#"HTTP/1.1 200 OK
 
 <cross-domain-policy><allow-access-from domain='www.example.com'/></cross-domain-policy>"#;
-        assert_eq!(crossdomain_findings(policy, "www.example.com", CrossDomainKind::Flash), ["www.example.com"]);
+        assert_eq!(
+            crossdomain_findings(policy, "www.example.com", CrossDomainKind::Flash),
+            ["www.example.com"]
+        );
 
         // Not 200, or not XML: nothing. An unrelated-only policy: nothing.
-        assert!(crossdomain_findings(br#"HTTP/1.1 404 Not Found
+        assert!(crossdomain_findings(
+            br#"HTTP/1.1 404 Not Found
 Content-Type: text/xml
 
-<cross-domain-policy><allow-access-from domain="*"/></cross-domain-policy>"#, "h", CrossDomainKind::Flash).is_empty());
-        assert!(crossdomain_findings(br#"HTTP/1.1 200 OK
+<cross-domain-policy><allow-access-from domain="*"/></cross-domain-policy>"#,
+            "h",
+            CrossDomainKind::Flash
+        )
+        .is_empty());
+        assert!(crossdomain_findings(
+            br#"HTTP/1.1 200 OK
 Content-Type: text/html
 
-<html>login</html>"#, "h", CrossDomainKind::Flash).is_empty());
-        assert!(crossdomain_findings(br#"HTTP/1.1 200 OK
+<html>login</html>"#,
+            "h",
+            CrossDomainKind::Flash
+        )
+        .is_empty());
+        assert!(crossdomain_findings(
+            br#"HTTP/1.1 200 OK
 Content-Type: text/xml
 
-<cross-domain-policy><allow-access-from domain="unrelated.io"/></cross-domain-policy>"#, "www.example.com", CrossDomainKind::Flash).is_empty());
+<cross-domain-policy><allow-access-from domain="unrelated.io"/></cross-domain-policy>"#,
+            "www.example.com",
+            CrossDomainKind::Flash
+        )
+        .is_empty());
 
         // Silverlight: domain uri, with an http:// prefix stripped before the
         // comparison (Zebv.java:69-83).

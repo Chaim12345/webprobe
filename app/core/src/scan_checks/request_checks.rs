@@ -242,7 +242,9 @@ impl RequestCheck for CrossDomainPolicy {
     fn id(&self) -> &'static str {
         match self.kind {
             crate::burp_checks::CrossDomainKind::Flash => "active.flash-cross-domain-policy",
-            crate::burp_checks::CrossDomainKind::Silverlight => "active.silverlight-cross-domain-policy",
+            crate::burp_checks::CrossDomainKind::Silverlight => {
+                "active.silverlight-cross-domain-policy"
+            }
         }
     }
     fn issue(&self) -> &'static str {
@@ -263,8 +265,14 @@ impl RequestCheck for CrossDomainPolicy {
         if !openapi_hosts().lock().unwrap().insert(key) || cx.stopped() {
             return;
         }
-        let probe = format!("GET {} HTTP/1.1\r\nHost: {}\r\nAccept: */*\r\nConnection: close\r\n\r\n", self.path(), server_host_hdr(cx));
-        let Some(resp) = burp_send(cx, probe.as_bytes()) else { return };
+        let probe = format!(
+            "GET {} HTTP/1.1\r\nHost: {}\r\nAccept: */*\r\nConnection: close\r\n\r\n",
+            self.path(),
+            server_host_hdr(cx)
+        );
+        let Some(resp) = burp_send(cx, probe.as_bytes()) else {
+            return;
+        };
         let found = crate::burp_checks::crossdomain_findings(&resp, &cx.host, self.kind);
         if found.is_empty() {
             return;
@@ -282,7 +290,10 @@ impl RequestCheck for CrossDomainPolicy {
             ),
         );
         i.confidence = "Certain".into();
-        cx.report(vec![i.with_evidence(vec![ScanEvidence::new(probe.as_bytes(), Some(&resp[..]))])]);
+        cx.report(vec![i.with_evidence(vec![ScanEvidence::new(
+            probe.as_bytes(),
+            Some(&resp[..]),
+        )])]);
     }
 }
 

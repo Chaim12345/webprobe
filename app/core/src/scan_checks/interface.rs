@@ -91,8 +91,12 @@ pub(crate) static REQUEST_CHECKS: &[&dyn RequestCheck] = &[
     &PathRelativeStyleSheet,
     &TraceEnabled,
     &OpenApiDefinition,
-    &CrossDomainPolicy { kind: crate::burp_checks::CrossDomainKind::Flash },
-    &CrossDomainPolicy { kind: crate::burp_checks::CrossDomainKind::Silverlight },
+    &CrossDomainPolicy {
+        kind: crate::burp_checks::CrossDomainKind::Flash,
+    },
+    &CrossDomainPolicy {
+        kind: crate::burp_checks::CrossDomainKind::Silverlight,
+    },
     &CollaboratorEverywhere,
     &ServerTrace,
     &ServerOptions,
