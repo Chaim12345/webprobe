@@ -260,6 +260,34 @@ impl StoredBatch {
     }
 }
 
+
+/// R-13 DOM analysis hits per URL, cached for the scan session and
+/// cleared between sessions by `reset_dom_analysis_cache` (the same
+/// contract as `reset_openapi_hosts`): a long-lived process running more
+/// than one scan must not serve a previous scan's hits.
+/// One browser probe per URL: Done caches the hits; InFlight marks a
+/// probe another thread is running (see dom_analysis_hits).
+enum DomHitsState {
+    InFlight,
+    Done(Vec<crate::crawl::DomHit>),
+}
+
+#[derive(Default)]
+struct DomHitsCache {
+    map: std::sync::Mutex<std::collections::HashMap<String, DomHitsState>>,
+    ready: std::sync::Condvar,
+}
+
+static DOM_HITS_CACHE: std::sync::OnceLock<DomHitsCache> = std::sync::OnceLock::new();
+
+/// Clear the per-URL DOM analysis cache between scan sessions.
+pub(crate) fn reset_dom_analysis_cache() {
+    if let Some(c) = DOM_HITS_CACHE.get() {
+        c.map.lock().unwrap().clear();
+        c.ready.notify_all();
+    }
+}
+
 // ================= G.11 reflected manipulation contexts (burp.Zb_5 / Zcpt) =================
 
 /// Where in a response a probe reflection landed: the subset of burp.Zcpt's
@@ -269,11 +297,7 @@ impl StoredBatch {
 pub(crate) enum G11Context {
     /// Inside the value of `attr` on `tag`; `attrs` carries every
     /// attribute of that tag (names lowercased).
-    Attr {
-        tag: String,
-        attr: String,
-        attrs: Vec<(String, String)>,
-    },
+    Attr { tag: String, attr: String, attrs: Vec<(String, String)> },
     /// Text inside a <style> element.
     StyleText,
     /// Text inside a <script> element.
@@ -288,9 +312,7 @@ impl G11Context {
     /// The report's context wording (burp.Zbf4).
     pub(crate) fn describe(&self) -> String {
         match self {
-            G11Context::Attr { tag, attr, .. } => {
-                format!("the {attr} attribute of a <{tag}> element")
-            }
+            G11Context::Attr { tag, attr, .. } => format!("the {attr} attribute of a <{tag}> element"),
             G11Context::StyleText => "a <style> element".to_string(),
             G11Context::JsText => "a JavaScript string".to_string(),
             G11Context::Head => "a response header".to_string(),
@@ -302,8 +324,8 @@ impl G11Context {
 /// HTML elements with no end tag; they are never pushed onto the
 /// open-tag stack.
 const VOID_TAGS: [&str; 14] = [
-    "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source",
-    "track", "wbr",
+    "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param",
+    "source", "track", "wbr",
 ];
 
 /// The context of one body position: the open-tag stack at `pos`, and an
@@ -335,10 +357,7 @@ fn g11_body_context(body: &str, pos: usize) -> G11Context {
             continue;
         }
         if body[i..].starts_with("<!--") {
-            i = body[i + 4..]
-                .find("-->")
-                .map(|x| x + i + 7)
-                .unwrap_or(b.len());
+            i = body[i + 4..].find("-->").map(|x| x + i + 7).unwrap_or(b.len());
             continue;
         }
         let gt_scan = &body[i..];
@@ -362,9 +381,7 @@ fn g11_body_context(body: &str, pos: usize) -> G11Context {
         }
         let closing = body.get(i + 1..i + 2) == Some("/");
         let name_start = i + 1 + usize::from(closing);
-        let name_len = body[name_start..gt]
-            .find(|c: char| c.is_ascii_whitespace() || c == '/' || c == '>')
-            .unwrap_or(gt - name_start);
+        let name_len = body[name_start..gt].find(|c: char| c.is_ascii_whitespace() || c == '/' || c == '>').unwrap_or(gt - name_start);
         let tag = body[name_start..name_start + name_len].to_ascii_lowercase();
         // Walk the attributes in one pass, then match the position: the
         // Attr result must carry the tag's full attribute list whichever
@@ -415,24 +432,14 @@ fn g11_body_context(body: &str, pos: usize) -> G11Context {
             }
         }
         if let Some((name, _, _)) = spans.iter().find(|(_, vs, ve)| pos >= *vs && pos < *ve) {
-            let attrs = spans
-                .iter()
-                .map(|(k, vs, ve)| (k.clone(), body[*vs..*ve].to_string()))
-                .collect();
-            return G11Context::Attr {
-                tag,
-                attr: name.clone(),
-                attrs,
-            };
+            let attrs = spans.iter().map(|(k, vs, ve)| (k.clone(), body[*vs..*ve].to_string())).collect();
+            return G11Context::Attr { tag, attr: name.clone(), attrs };
         }
         if closing {
             if let Some(k) = open.iter().rposition(|t| *t == tag) {
                 open.truncate(k);
             }
-        } else if !tag.is_empty()
-            && !VOID_TAGS.contains(&tag.as_str())
-            && !body[i..gt].trim_end().ends_with('/')
-        {
+        } else if !tag.is_empty() && !VOID_TAGS.contains(&tag.as_str()) && !body[i..gt].trim_end().ends_with('/') {
             open.push(tag);
         }
         i = gt + 1;
@@ -461,14 +468,8 @@ pub(crate) fn g11_contexts(resp: &[u8], probe: &str) -> Vec<G11Context> {
     let mut out = Vec::new();
     let mut start = 0;
     while start + probe.len() <= text.len() {
-        let Some(at) = text[start..].find(probe).map(|p| p + start) else {
-            break;
-        };
-        out.push(if at < head_end {
-            G11Context::Head
-        } else {
-            g11_body_context(&text[head_end..], at - head_end)
-        });
+        let Some(at) = text[start..].find(probe).map(|p| p + start) else { break };
+        out.push(if at < head_end { G11Context::Head } else { g11_body_context(&text[head_end..], at - head_end) });
         start = at + probe.len();
     }
     out
@@ -477,9 +478,7 @@ pub(crate) fn g11_contexts(resp: &[u8], probe: &str) -> Vec<G11Context> {
 fn g11_token(n: usize) -> String {
     use rand::Rng;
     let mut g = rand::thread_rng();
-    (0..n)
-        .map(|_| (b'a' + g.gen_range(0..26)) as char)
-        .collect()
+    (0..n).map(|_| (b'a' + g.gen_range(0..26)) as char).collect()
 }
 
 /// The CSS injection probe: one plain token (burp.Zw0x; the CSS-specific
@@ -503,10 +502,7 @@ pub(crate) fn g11_form_action_probes() -> Vec<String> {
 /// literals): one random host/path under each of the four scheme prefixes.
 pub(crate) fn g11_link_probes() -> Vec<String> {
     let url = format!("{}.example/{}", g11_token(8), g11_token(6));
-    ["http://", "https://", "//", "\\/"]
-        .iter()
-        .map(|p| format!("{p}{url}"))
-        .collect()
+    ["http://", "https://", "//", "\\/"].iter().map(|p| format!("{p}{url}")).collect()
 }
 
 /// The CSS family's reflection-context selector (burp.Zw0x; the decoded
@@ -518,12 +514,7 @@ pub(crate) fn g11_css_match(c: &G11Context) -> bool {
         G11Context::Attr { tag, attr, attrs } if tag == "link" && attr == "href" => {
             // rel is a space-separated token list: an exact token match,
             // not a substring ("preload-stylesheet" is not a stylesheet).
-            attrs.iter().any(|(k, v)| {
-                k == "rel"
-                    && v.to_ascii_lowercase()
-                        .split_whitespace()
-                        .any(|t| t == "stylesheet")
-            })
+            attrs.iter().any(|(k, v)| k == "rel" && v.to_ascii_lowercase().split_whitespace().any(|t| t == "stylesheet"))
         }
         _ => false,
     }
@@ -535,9 +526,7 @@ pub(crate) fn g11_hpp_match(c: &G11Context) -> bool {
     // Attribute hits only count on URL-bearing attributes: a parameter
     // pair in a URL is what client-side navigation reads.
     match c {
-        G11Context::Attr { attr, .. } => {
-            matches!(attr.as_str(), "href" | "src" | "action" | "formaction")
-        }
+        G11Context::Attr { attr, .. } => matches!(attr.as_str(), "href" | "src" | "action" | "formaction"),
         G11Context::JsText | G11Context::Head => true,
         _ => false,
     }
@@ -553,12 +542,7 @@ pub(crate) fn g11_form_action_match(c: &G11Context) -> bool {
 /// injection item, the retrieval item's own request is replayed after it,
 /// and `hit` classifies the retrieval response. Returns the first
 /// matching (probe, description).
-pub(crate) fn run_g11_stored<S, R, H>(
-    probes: &[String],
-    mut send: S,
-    mut retrieve: R,
-    hit: H,
-) -> Option<(String, String)>
+pub(crate) fn run_g11_stored<S, R, H>(probes: &[String], mut send: S, mut retrieve: R, hit: H) -> Option<(String, String)>
 where
     S: FnMut(&str) -> Option<Vec<u8>>,
     R: FnMut() -> Option<Vec<u8>>,
@@ -588,15 +572,8 @@ pub(crate) fn g11_link_stored_hit(resp: &[u8], probe: &str) -> Option<String> {
 
 /// The stored CSS/HPP/form-action hit: the probe's reflection context in
 /// the retrieval response, per the family's selector.
-pub(crate) fn g11_stored_context_hit(
-    resp: &[u8],
-    probe: &str,
-    matches: impl Fn(&G11Context) -> bool,
-) -> Option<String> {
-    g11_contexts(resp, probe)
-        .into_iter()
-        .find(|c| matches(c))
-        .map(|c| c.describe())
+pub(crate) fn g11_stored_context_hit(resp: &[u8], probe: &str, matches: impl Fn(&G11Context) -> bool) -> Option<String> {
+    g11_contexts(resp, probe).into_iter().find(|c| matches(c)).map(|c| c.describe())
 }
 
 /// CSS injection (reflected), burp.Zb_5's selector -> Zw0x (KB 00501300):
@@ -607,14 +584,10 @@ pub(crate) fn g11_stored_context_hit(
 /// probe is a plain token and detection is purely contextual; REPLACE
 /// mode only (Burp also tries APPEND).
 /// Returns (payload, context description, response).
-pub(crate) fn run_css_reflected<F: FnMut(&str) -> Option<Vec<u8>>>(
-    mut send: F,
-) -> Option<(String, String, Vec<u8>)> {
+pub(crate) fn run_css_reflected<F: FnMut(&str) -> Option<Vec<u8>>>(mut send: F) -> Option<(String, String, Vec<u8>)> {
     let token = g11_css_probes().remove(0);
     let resp = send(&token)?;
-    let cx = g11_contexts(&resp, &token)
-        .into_iter()
-        .find(g11_css_match)?;
+    let cx = g11_contexts(&resp, &token).into_iter().find(g11_css_match)?;
     Some((token, cx.describe(), resp))
 }
 
@@ -627,14 +600,10 @@ pub(crate) fn run_css_reflected<F: FnMut(&str) -> Option<Vec<u8>>>(
 /// contexts client-side code reads query parameters from (Zpy2's
 /// transformed-reflection match is verbatim here; transformations are
 /// not established). REPLACE mode only.
-pub(crate) fn run_hpp_reflected<F: FnMut(&str) -> Option<Vec<u8>>>(
-    mut send: F,
-) -> Option<(String, String, Vec<u8>)> {
+pub(crate) fn run_hpp_reflected<F: FnMut(&str) -> Option<Vec<u8>>>(mut send: F) -> Option<(String, String, Vec<u8>)> {
     let probe = g11_hpp_probes().remove(0);
     let resp = send(&probe)?;
-    let cx = g11_contexts(&resp, &probe)
-        .into_iter()
-        .find(g11_hpp_match)?;
+    let cx = g11_contexts(&resp, &probe).into_iter().find(g11_hpp_match)?;
     Some((probe, cx.describe(), resp))
 }
 
@@ -643,14 +612,10 @@ pub(crate) fn run_hpp_reflected<F: FnMut(&str) -> Option<Vec<u8>>>(
 /// of a <form> or any element's formaction attribute (the Zi9s map's
 /// decoded form/action/input entries; the full map is not established).
 /// REPLACE mode only.
-pub(crate) fn run_form_action_reflected<F: FnMut(&str) -> Option<Vec<u8>>>(
-    mut send: F,
-) -> Option<(String, String, Vec<u8>)> {
+pub(crate) fn run_form_action_reflected<F: FnMut(&str) -> Option<Vec<u8>>>(mut send: F) -> Option<(String, String, Vec<u8>)> {
     let probe = g11_form_action_probes().remove(0);
     let resp = send(&probe)?;
-    let cx = g11_contexts(&resp, &probe)
-        .into_iter()
-        .find(g11_form_action_match)?;
+    let cx = g11_contexts(&resp, &probe).into_iter().find(g11_form_action_match)?;
     Some((probe, cx.describe(), resp))
 }
 
@@ -659,11 +624,7 @@ mod g11_tests {
     use super::*;
 
     fn resp(body: &str) -> Vec<u8> {
-        format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{body}",
-            body.len()
-        )
-        .into_bytes()
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{body}", body.len()).into_bytes()
     }
 
     #[test]
@@ -672,11 +633,7 @@ mod g11_tests {
         assert_eq!(probes.len(), 4);
         assert!(probes[0].starts_with("http://"), "{}", probes[0]);
         assert!(probes[1].starts_with("https://"), "{}", probes[1]);
-        assert!(
-            probes[2].starts_with("//") && !probes[2].starts_with("///"),
-            "{}",
-            probes[2]
-        );
+        assert!(probes[2].starts_with("//") && !probes[2].starts_with("///"), "{}", probes[2]);
         assert!(probes[3].starts_with('\\'), "{}", probes[3]);
         // The same random host/path under each prefix.
         let tail = probes[0].trim_start_matches("http://").to_string();
@@ -701,10 +658,7 @@ mod g11_tests {
         );
         assert_eq!(sent, ["tokaaaaa"]);
         let (p, what) = hit.expect("stored css hit");
-        assert_eq!(
-            (p.as_str(), what.as_str()),
-            ("tokaaaaa", "a <style> element")
-        );
+        assert_eq!((p.as_str(), what.as_str()), ("tokaaaaa", "a <style> element"));
         // Plain body text is not a CSS position.
         let none = run_g11_stored(
             &["tokbbbbb".to_string()],
@@ -741,21 +695,12 @@ mod g11_tests {
         let hit = run_g11_stored(
             &["https://tokeeee.example/ffffff".to_string()],
             |_: &str| Some(vec![]),
-            || {
-                Some(resp(
-                    "<button formaction=\"https://tokeeee.example/ffffff\">go</button>",
-                ))
-            },
+            || Some(resp("<button formaction=\"https://tokeeee.example/ffffff\">go</button>")),
             |r: &[u8], p: &str| g11_stored_context_hit(r, p, g11_form_action_match),
         );
         assert!(hit.is_some());
         // A retrieval failure abandons the family.
-        let none = run_g11_stored(
-            &["t".to_string()],
-            |_: &str| Some(vec![]),
-            || None,
-            g11_link_stored_hit,
-        );
+        let none = run_g11_stored(&["t".to_string()], |_: &str| Some(vec![]), || None, g11_link_stored_hit);
         assert!(none.is_none());
     }
 
@@ -764,23 +709,17 @@ mod g11_tests {
         let r = resp("<html><style>body{color:PROBEBODY}</style></html>");
         assert_eq!(g11_contexts(&r, "PROBEBODY"), vec![G11Context::StyleText]);
         let r = resp("<div style=\"background:PROBEBODY\">x</div>");
-        assert!(
-            matches!(g11_contexts(&r, "PROBEBODY").as_slice(), [G11Context::Attr { tag, attr, .. }] if tag == "div" && attr == "style")
-        );
+        assert!(matches!(g11_contexts(&r, "PROBEBODY").as_slice(), [G11Context::Attr { tag, attr, .. }] if tag == "div" && attr == "style"));
         let r = resp("<script>var x = 'PROBEBODY';</script>");
         assert_eq!(g11_contexts(&r, "PROBEBODY"), vec![G11Context::JsText]);
         // A reflection in the response head.
-        let r =
-            b"HTTP/1.1 302 Found\r\nLocation: https://x/PROBEBODY\r\nContent-Length: 2\r\n\r\nok"
-                .to_vec();
+        let r = b"HTTP/1.1 302 Found\r\nLocation: https://x/PROBEBODY\r\nContent-Length: 2\r\n\r\nok".to_vec();
         assert_eq!(g11_contexts(&r, "PROBEBODY"), vec![G11Context::Head]);
         // Plain body text is Other; rel before href and href before rel both match.
         let r = resp("<p>PROBEBODY</p>");
         assert_eq!(g11_contexts(&r, "PROBEBODY"), vec![G11Context::Other]);
         let r = resp("<link href=\"/x?c=PROBEBODY\" rel=\"stylesheet\">");
-        assert!(
-            matches!(g11_contexts(&r, "PROBEBODY").as_slice(), [G11Context::Attr { tag, attr, attrs }] if tag == "link" && attr == "href" && attrs.iter().any(|(k, _)| k == "rel"))
-        );
+        assert!(matches!(g11_contexts(&r, "PROBEBODY").as_slice(), [G11Context::Attr { tag, attr, attrs }] if tag == "link" && attr == "href" && attrs.iter().any(|(k, _)| k == "rel")));
     }
 
     #[test]
@@ -797,8 +736,7 @@ mod g11_tests {
         assert_eq!(g11_contexts(&r, "PROBEBODY"), vec![G11Context::Other]);
         // Invalid UTF-8 in a header must not shift the head/body split:
         // a header reflection still classifies as Head.
-        let raw = b"HTTP/1.1 302 Found\r\nX-Loc: \xff\xfe/PROBEBODY\r\nContent-Length: 2\r\n\r\nok"
-            .to_vec();
+        let raw = b"HTTP/1.1 302 Found\r\nX-Loc: \xff\xfe/PROBEBODY\r\nContent-Length: 2\r\n\r\nok".to_vec();
         assert_eq!(g11_contexts(&raw, "PROBEBODY"), vec![G11Context::Head]);
         // HTML attribute values have no escape mechanism: a backslash
         // does not keep the value open, so the probe after the closing
@@ -818,11 +756,7 @@ mod g11_tests {
         assert!(hit.is_none());
         let hit = run_css_reflected(|p| Some(resp(&format!("<div style=\"x:{p}\">y</div>"))));
         assert!(hit.is_some());
-        let hit = run_css_reflected(|p| {
-            Some(resp(&format!(
-                "<link rel=\"stylesheet\" href=\"/x?c={p}\">"
-            )))
-        });
+        let hit = run_css_reflected(|p| Some(resp(&format!("<link rel=\"stylesheet\" href=\"/x?c={p}\">"))));
         assert!(hit.is_some());
     }
 
@@ -835,26 +769,15 @@ mod g11_tests {
         assert!(hit.is_none(), "non-URL attribute must not flag: {hit:?}");
         let hit = run_hpp_reflected(|p| Some(resp(&format!("<p>{p}</p>"))));
         assert!(hit.is_none());
-        let hit = run_hpp_reflected(|p| {
-            Some(
-                format!("HTTP/1.1 302 Found\r\nLocation: /next?{p}\r\nContent-Length: 2\r\n\r\nok")
-                    .into_bytes(),
-            )
-        });
+        let hit = run_hpp_reflected(|p| Some(format!("HTTP/1.1 302 Found\r\nLocation: /next?{p}\r\nContent-Length: 2\r\n\r\nok").into_bytes()));
         assert!(hit.is_some());
     }
 
     #[test]
     fn form_action_reflected_on_submission_targets() {
-        let hit = run_form_action_reflected(|p| {
-            Some(resp(&format!(
-                "<form action=\"{p}\"><input type=\"text\"></form>"
-            )))
-        });
+        let hit = run_form_action_reflected(|p| Some(resp(&format!("<form action=\"{p}\"><input type=\"text\"></form>"))));
         assert!(hit.is_some());
-        let hit = run_form_action_reflected(|p| {
-            Some(resp(&format!("<button formaction=\"{p}\">go</button>")))
-        });
+        let hit = run_form_action_reflected(|p| Some(resp(&format!("<button formaction=\"{p}\">go</button>"))));
         assert!(hit.is_some());
         let hit = run_form_action_reflected(|p| Some(resp(&format!("<a href=\"{p}\">x</a>"))));
         assert!(hit.is_none());
@@ -883,6 +806,7 @@ pub fn crawl_and_audit(shared: &Arc<Shared>, start_urls: &[String], audit_only: 
     shared.oob.want(true);
     let _wanted = Wanted(shared);
     reset_openapi_hosts();
+    checks::reset_dom_analysis_cache();
     for url in start_urls {
         let mut items = if audit_only {
             crate::crawl::crawl_single(shared, url)

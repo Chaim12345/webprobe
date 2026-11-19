@@ -1208,7 +1208,13 @@ const DOM_INSTRUMENT_JS: &str = r#"
   // navigated-away document's hits are unreachable.
   if (typeof window.open === "function") {
     var origOpen = window.open;
-    window.open = function (u) { record("window.open", u); return null; };
+    // The swallowed popup must still look like a Window handle: a page
+    // that uses the return value would throw on null before reaching a
+    // later sink.
+    window.open = function (u) {
+      record("window.open", u);
+      return { closed: true, close: function () {}, focus: function () {}, blur: function () {}, postMessage: function () {} };
+    };
   }
   var cookieDesc = Object.getOwnPropertyDescriptor(Document.prototype, "cookie");
   if (cookieDesc && cookieDesc.set) {
