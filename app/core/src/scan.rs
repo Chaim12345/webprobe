@@ -5505,15 +5505,15 @@ mod tests {
         let shared = Shared::new();
         run_task(&shared, vec![guestbook_entry(port, "POST", "/comment", "c=hi"), guestbook_entry(port, "GET", "/embed", "")]);
         let expect = [
-            ("Link manipulation (stored)", "info"),
-            ("CSS injection (stored)", "medium"),
-            ("Client-side HTTP parameter pollution (stored)", "low"),
-            ("Form action hijacking (stored)", "medium"),
+            ("Link manipulation (stored)", "info", "Firm"),
+            ("CSS injection (stored)", "medium", "Tentative"),
+            ("Client-side HTTP parameter pollution (stored)", "low", "Tentative"),
+            ("Form action hijacking (stored)", "medium", "Tentative"),
         ];
-        for (name, sev) in expect {
+        for (name, sev, confidence) in expect {
             let hits = issues_named(&shared, name);
             let h = hits.iter().find(|i| i.path == "/comment").unwrap_or_else(|| panic!("{name} not reported: {:?}", hits.iter().map(|i| i.path.clone()).collect::<Vec<_>>()));
-            assert_eq!((h.sev.as_str(), h.confidence.as_str()), (sev, "Firm"), "{name}");
+            assert_eq!((h.sev.as_str(), h.confidence.as_str()), (sev, confidence), "{name}");
             assert!(h.detail.contains("GET /embed"), "{name}: {}", h.detail);
         }
     }
@@ -5819,7 +5819,13 @@ pub(crate) fn g11_css_match(c: &G11Context) -> bool {
 /// The HPP family's selector (burp.Zpy2's transformed-reflection match):
 /// an attribute value, a JavaScript string or a response header.
 pub(crate) fn g11_hpp_match(c: &G11Context) -> bool {
-    matches!(c, G11Context::Attr { .. } | G11Context::JsText | G11Context::Head)
+    // Attribute hits only count on URL-bearing attributes: a parameter
+    // pair in a URL is what client-side navigation reads.
+    match c {
+        G11Context::Attr { attr, .. } => matches!(attr.as_str(), "href" | "src" | "action" | "formaction"),
+        G11Context::JsText | G11Context::Head => true,
+        _ => false,
+    }
 }
 
 /// The form action family's selector (burp.Zc51): a <form>'s action or
@@ -5957,14 +5963,22 @@ mod g11_tests {
             |r: &[u8], p: &str| g11_stored_context_hit(r, p, g11_css_match),
         );
         assert!(none.is_none());
-        // The stored HPP probe in an attribute value.
+        // The stored HPP probe in a URL-bearing attribute value.
+        let hit = run_g11_stored(
+            &["abc&def".to_string()],
+            |_: &str| Some(vec![]),
+            || Some(resp("<a href=\"/go?next=abc&def\">y</a>")),
+            |r: &[u8], p: &str| g11_stored_context_hit(r, p, g11_hpp_match),
+        );
+        assert!(hit.is_some());
+        // A non-URL attribute is not a client-side navigation context.
         let hit = run_g11_stored(
             &["abc&def".to_string()],
             |_: &str| Some(vec![]),
             || Some(resp("<div data-x=\"abc&def\">y</div>")),
             |r: &[u8], p: &str| g11_stored_context_hit(r, p, g11_hpp_match),
         );
-        assert!(hit.is_some());
+        assert!(hit.is_none(), "non-URL attribute must not flag: {hit:?}");
         // Stored link manipulation: the injected URL as a link target.
         let hit = run_g11_stored(
             &["http://tokcccc.example/dddddd".to_string()],
