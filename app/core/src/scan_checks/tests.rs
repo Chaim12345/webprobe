@@ -143,6 +143,21 @@ fn registry_order_is_pinned() {
             ("active.web-cache-poisoning", Scope::Request, None),
             ("active.web-cache-deception", Scope::Request, None),
             ("active.dom-xss", Scope::Request, Some(BURP_GROUP)),
+            (
+                "active.dom-javascript-injection",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-open-redirection",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-cookie-manipulation",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
         ]
     );
     let mut ids: Vec<&str> = points
