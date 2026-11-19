@@ -406,7 +406,7 @@ pub fn start_attack(app: &mut App, request: &str) -> Result<(), String> {
     let cancel = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let cancelled = Arc::clone(&cancel);
     let shared = app.shared.clone();
-    std::thread::spawn(move || {
+    webprobe_core::util::spawn_contained("intruder_ui", move || {
         // Stop before the payloads arrive: the attack never starts.
         let result = prepare();
         if cancelled.load(Ordering::SeqCst) {

@@ -40,7 +40,7 @@ fn put_edit(target: &str, request: Vec<u8>) {
 /// when it is done: the UI never waits on a sidecar.
 fn off_ui(ctx: &egui::Context, work: impl FnOnce() + Send + 'static) {
     let ctx = ctx.clone();
-    std::thread::spawn(move || {
+    webprobe_core::util::spawn_contained("ext_menu", move || {
         work();
         ctx.request_repaint();
     });

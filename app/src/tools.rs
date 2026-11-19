@@ -503,7 +503,7 @@ fn start_live_capture(app: &mut App, e: net::HistEntry) {
     let shared = app.shared.clone();
     // Burp captures at most 20,000 tokens; fewer when the user asks.
     let limit = app.seq_capture_limit.clamp(100, 20_000);
-    std::thread::spawn(move || {
+    webprobe_core::util::spawn_contained("tools", move || {
         let _tool = net::tool_scope("Sequencer");
         let mut n = 0;
         let mut misses = 0;

@@ -628,7 +628,7 @@ impl JavaSidecar {
         let errors = Arc::new(Mutex::new(std::collections::VecDeque::new()));
         if let Some(stderr) = child.stderr.take() {
             let errors = Arc::clone(&errors);
-            std::thread::spawn(move || {
+            crate::util::spawn_contained("ext_host", move || {
                 // Bounded lines: an extension printing without newlines
                 // cannot grow memory.
                 for line in crate::util::capped_lines(BufReader::new(stderr), MAX_STDERR_LINE) {
@@ -639,7 +639,7 @@ impl JavaSidecar {
         let mut stdin = child.stdin.take().ok_or("sidecar stdin unavailable")?;
         let stdout = BufReader::new(child.stdout.take().ok_or("sidecar stdout unavailable")?);
         let (to_bridge, writer_rx) = std::sync::mpsc::channel::<String>();
-        std::thread::spawn(move || {
+        crate::util::spawn_contained("ext_host", move || {
             for line in writer_rx {
                 if writeln!(stdin, "{line}").and_then(|_| stdin.flush()).is_err() {
                     break;
@@ -652,7 +652,7 @@ impl JavaSidecar {
         let file_label = std::path::Path::new(ext_jar).file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
         {
             let (errors, back, ui, data, label) = (Arc::clone(&errors), to_bridge.clone(), Arc::clone(&ui), Arc::clone(&data), file_label.clone());
-            std::thread::spawn(move || {
+            crate::util::spawn_contained("ext_host", move || {
                 for line in crate::util::capped_lines(stdout, MAX_BRIDGE_LINE) {
                     let msg: serde_json::Value = serde_json::from_str(&line).unwrap_or_default();
                     match msg.get("type").and_then(|t| t.as_str()) {
@@ -914,7 +914,7 @@ fn b64_field(v: &serde_json::Value, k: &str) -> Option<Vec<u8>> {
 fn serve_call(msg: &serde_json::Value, link: Option<Arc<HostLink>>, back: std::sync::mpsc::Sender<String>, ext: String) {
     let sid = msg.get("sid").and_then(|v| v.as_u64()).unwrap_or(0);
     let (op, args) = (msg["op"].as_str().unwrap_or("").to_string(), msg["args"].clone());
-    std::thread::spawn(move || {
+    crate::util::spawn_contained("ext_host", move || {
         let result = match &link {
             Some(l) => (l.call)(&ext, &op, &args),
             None => Err(format!("{op}: this extension host is not linked to WebProbe's engine")),
@@ -933,7 +933,7 @@ fn serve_send(msg: &serde_json::Value, link: Option<Arc<HostLink>>, back: std::s
     let sid = msg.get("sid").and_then(|v| v.as_u64()).unwrap_or(0);
     let svc = HttpService::new(msg["host"].as_str().unwrap_or(""), msg["port"].as_u64().unwrap_or(80) as u16, msg["secure"].as_bool().unwrap_or(false));
     let raw = msg["raw"].as_str().and_then(|r| crate::util::b64_decode(r).ok()).unwrap_or_default();
-    std::thread::spawn(move || {
+    crate::util::spawn_contained("ext_host", move || {
         let result = match &link {
             Some(l) => (l.send)(&svc, &raw),
             None => Err("this extension host has no HTTP sender".into()),

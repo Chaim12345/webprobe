@@ -727,7 +727,7 @@ pub fn start(
     let alive = Arc::new(AtomicUsize::new(workers));
     for _ in 0..workers {
         let (shared, state, source, gate, alive) = (shared.clone(), state.clone(), source.clone(), gate.clone(), alive.clone());
-        std::thread::spawn(move || {
+        crate::util::spawn_contained("intruder_run", move || {
             let _tool = net::tool_scope("Intruder");
             worker(&shared, &state, &source, &gate);
             if alive.fetch_sub(1, Ordering::SeqCst) == 1 {

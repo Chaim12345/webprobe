@@ -90,7 +90,7 @@ impl AiChat {
         let (endpoint, model, key) = (self.endpoint.clone(), self.model.clone(), self.api_key.clone());
         let (msgs, busy) = (Arc::clone(&self.messages), Arc::clone(&self.busy));
         busy.store(true, Ordering::SeqCst);
-        std::thread::spawn(move || {
+        crate::util::spawn_contained("ai", move || {
             let reply = complete(&shared, &endpoint, &model, &key, &history);
             let text = match reply {
                 Ok(t) => t,

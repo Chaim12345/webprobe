@@ -630,7 +630,7 @@ impl Conn {
         s.rx = Some(rx);
         let writer = ResponseWriter { tx, closed: Arc::clone(&s.closed) };
         let handler = Arc::clone(&self.handler);
-        std::thread::spawn(move || handler(raw, writer));
+        crate::util::spawn_contained("h2_server", move || handler(raw, writer));
     }
 
     /// Move handler output into frames: HEADERS as soon as the head is in,

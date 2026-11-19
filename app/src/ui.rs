@@ -2254,7 +2254,7 @@ pub(crate) fn repeater_send(app: &mut App) {
     let (follow, cookies) = (app.rops.follow, app.rops.process_cookies);
     // HTTP/1 or HTTP/2 as the request says (Burp's protocol control).
     let h2 = crate::repeater_ops::http2_choice(&request, app.rops.h2_alpn_override, app.rops.h2_strip_connection);
-    std::thread::spawn(move || {
+    webprobe_core::util::spawn_contained("ui", move || {
         let _tool = net::tool_scope("Repeater");
         let _h2 = net::http2_scope(h2);
         let t0 = std::time::Instant::now();

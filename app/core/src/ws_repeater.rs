@@ -159,7 +159,7 @@ pub fn connect(shared: &Arc<Shared>, s: &Arc<WsSession>) -> Result<(), String> {
     *s.stop.lock().unwrap() = Some(Arc::clone(&stop));
     s.set_state(WsRepState::Connected);
     let (session, shared) = (Arc::clone(s), Arc::clone(shared));
-    std::thread::spawn(move || {
+    crate::util::spawn_contained("ws_repeater", move || {
         let reason = run(&mut conn, &session, &rx, &stop);
         if session.generation.load(Ordering::SeqCst) == generation {
             session.set_state(WsRepState::Closed(reason));

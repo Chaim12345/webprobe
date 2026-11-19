@@ -595,7 +595,7 @@ impl eframe::App for App {
             if let Ok(url) = std::env::var("WEBPROBE_SELFTEST") {
                 let port = self.shared.proxy_port.load(Ordering::SeqCst);
                 let sh = self.shared.clone();
-                std::thread::spawn(move || {
+                webprobe_core::util::spawn_contained("main", move || {
                     // absolute-form request through the proxy; the Host header carries the authority
                     if let Some(rest) = url.strip_prefix("http://") {
                         let auth = rest.split('/').next().unwrap_or_default();
@@ -950,6 +950,24 @@ impl App {
 static TERMINATE: std::sync::LazyLock<Arc<std::sync::atomic::AtomicBool>> = std::sync::LazyLock::new(Default::default);
 
 fn main() {
+    // Panic policy "contain and continue" (issue #32): worker panics are
+    // contained per thread (catch_unwind at spawn boundaries, poison-tolerant
+    // locks). This hook makes every panic loud - stderr plus a UI notice.
+    // State safety comes from the 60 s autosave and the crash-recovery
+    // marker; a hook cannot snapshot App state (eframe owns it), so it never
+    // tries to lock or save here.
+    std::panic::set_hook(Box::new(|info| {
+        let loc = info
+            .location()
+            .map(|l| format!("{}:{}", l.file(), l.line()))
+            .unwrap_or_else(|| "unknown".to_string());
+        let payload = info.payload_as_str().unwrap_or("panic");
+        eprintln!("webprobe: panic at {loc}: {payload}");
+        webprobe_core::notice::toast(
+            webprobe_core::notice::Level::Error,
+            format!("a worker thread panicked at {loc}: {payload}"),
+        );
+    }));
     for sig in [signal_hook::consts::SIGTERM, signal_hook::consts::SIGINT] {
         let _ = signal_hook::flag::register(sig, Arc::clone(&TERMINATE));
     }

@@ -1918,7 +1918,7 @@ pub fn ws_repeater_view(app: &mut crate::App, ui: &mut Ui, session_id: u64) {
             let connect_label = if matches!(state, WsRepState::Disconnected) { "Connect" } else { "Reconnect" };
             if ui.add_enabled(session.attached.is_none() && state != WsRepState::Connecting, egui::Button::new(connect_label)).clicked() {
                 let (sh, s) = (shared.clone(), session.clone());
-                std::thread::spawn(move || {
+                webprobe_core::util::spawn_contained("repeater_ops", move || {
                     if let Err(e) = wsr::connect(&sh, &s) {
                         crate::feedback::toast(crate::feedback::Level::Error, format!("WebSocket connect failed: {e}"));
                     }
