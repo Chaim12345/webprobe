@@ -5,22 +5,22 @@ edition = "2021"
 
 [dependencies]
 brotli = "7"
-flate2 = "1"
+flate2.workspace = true
 hpack = "0.3"
-regex = "1"
+regex.workspace = true
 # x509-parser: read an imported CA certificate (Proxy settings > Import).
 rcgen = { version = "0.13", features = ["x509-parser"] }
 x509-parser = { version = "0.16", features = ["verify"] }
-rand = "0.8"
+rand.workspace = true
 rsa = "0.9"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde.workspace = true
+serde_json.workspace = true
 # N-06: history bodies in mapped, unlinked segment files (core/src/body.rs).
 memmap2 = "0.9"
 # webprobe-headless proxy: Ctrl+C / SIGTERM end the run and save the project.
-signal-hook = "0.3"
+signal-hook.workspace = true
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
-time = "0.3"
+time.workspace = true
 webpki-roots = "0.26"
 # interactsh client (Collaborator on a public OAST host): RSA-OAEP-SHA256
 # key unwrap + AES-CTR message decryption (verified live against oast.pro:

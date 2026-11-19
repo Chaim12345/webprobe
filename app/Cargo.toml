@@ -5,19 +5,19 @@ edition = "2021"
 
 [dependencies]
 # SIGTERM / SIGINT close the window cleanly (project saved, no crash prompt).
-signal-hook = "0.3"
+signal-hook.workspace = true
 webprobe-core = { path = "core" }
 eframe = { version = "0.37", default-features = false, features = ["glow", "default_fonts", "x11", "clipboard", "links", "accesskit"] }
 egui_glow = "0.37"
 # egui 0.37 only bundles its emoji fonts (NotoEmoji, emoji-icon-font) behind
 # this feature; 0.29 always did, and glyphs such as U+2699 come from them.
 egui = { version = "0.37", default-features = false, features = ["monochrome_emoji_fonts", "experimental"] }
-flate2 = "1"
-regex = "1"
-rand = "0.8"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-time = "0.3"
+flate2.workspace = true
+regex.workspace = true
+rand.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+time.workspace = true
 # Burp-clone UI helpers: Render tab text, status-bar memory gauge.
 egui-pop-phosphor = "0.15"
 egui_extras = { version = "0.37", default-features = false }
@@ -59,3 +59,15 @@ debug = "line-tables-only"
 [workspace]
 members = ["core"]
 default-members = [".", "core"]
+
+# Versions shared by webprobe and webprobe-core live here once; members
+# reference them with `workspace = true`. Member-only versions stay in the
+# member manifests.
+[workspace.dependencies]
+signal-hook = "0.3"
+flate2 = "1"
+regex = "1"
+rand = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+time = "0.3"
