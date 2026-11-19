@@ -200,6 +200,17 @@ fn cert_names(cert: &X509Certificate<'_>) -> Vec<String> {
             .iter()
             .filter_map(|n| match n {
                 x509_parser::extensions::GeneralName::DNSName(d) => Some(d.to_string()),
+                // IP SANs count too: for an IP-literal target rustls accepts
+                // on an IP SAN, and dropping them flags a false mismatch
+                x509_parser::extensions::GeneralName::IPAddress(b) => match b.len() {
+                    4 => Some(std::net::Ipv4Addr::new(b[0], b[1], b[2], b[3]).to_string()),
+                    16 => {
+                        let mut o = [0u8; 16];
+                        o.copy_from_slice(b);
+                        Some(std::net::Ipv6Addr::from(o).to_string())
+                    }
+                    _ => None,
+                },
                 _ => None,
             })
             .collect();
@@ -288,6 +299,17 @@ mod tests {
         params.not_after = rcgen::date_time_ymd(not_after.0, not_after.1, not_after.2);
         let key = KeyPair::generate().unwrap();
         params.self_signed(&key).unwrap().der().to_vec()
+    }
+
+    #[test]
+    fn ip_literal_host_matches_ip_san() {
+        // a cert carrying the target as an IP SAN (plus unrelated DNS names)
+        // is not a hostname mismatch for that IP target
+        let cap = cap_for(leaf_der(&["example.com", "10.0.0.9"], (2020, 1, 1), (2030, 1, 1)), None);
+        assert!(analyze(&cap, "10.0.0.9", SystemTime::now()).is_empty());
+        // ...but a different IP still mismatches
+        let flags = analyze(&cap, "10.0.0.10", SystemTime::now());
+        assert!(flags.contains(&CertFlag::HostnameMismatch));
     }
 
     fn cap_for(der: Vec<u8>, kind: Option<VerifyKind>) -> TlsCapture {
