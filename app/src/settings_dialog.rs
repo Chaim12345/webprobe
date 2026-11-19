@@ -263,6 +263,7 @@ fn manage_menu(app: &mut App, ui: &mut Ui) {
                 std::path::Path::new(path.trim()),
                 &crate::project::settings_only(&d),
             )
+            .map_err(|e| e.to_string())
         }) {
             Ok(()) => toast(Level::Success, format!("Settings saved to {}", path.trim())),
             Err(e) => toast(Level::Error, format!("Could not save settings: {e}")),
@@ -270,7 +271,9 @@ fn manage_menu(app: &mut App, ui: &mut Ui) {
         ui.close();
     }
     if ui.button("Load settings").clicked() {
-        let result = crate::project::load(std::path::Path::new(path.trim())).and_then(|settings| {
+        let result = crate::project::load(std::path::Path::new(path.trim()))
+            .map_err(|e| e.to_string())
+            .and_then(|settings| {
             let current = snapshot(app)?;
             install(app, &crate::project::apply_settings(&current, &settings))
         });

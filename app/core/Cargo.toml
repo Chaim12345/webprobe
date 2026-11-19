@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+thiserror = "2"
 brotli = "7"
 flate2.workspace = true
 hpack = "0.3"

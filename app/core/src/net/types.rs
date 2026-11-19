@@ -3,6 +3,45 @@
 
 use super::*;
 
+/// Errors from the net area's module-boundary functions (issue #34). Display
+/// text matches the previous `String` messages byte for byte;
+/// `From<NetError> for String` keeps `?` working in String-typed callers
+/// during the gradual conversion. The `Requests` and `Upstream` variants
+/// carry still-untyped `String` errors from `intruder::requests` and
+/// `upstream.rs`; they become typed `#[from]` wraps when those areas convert.
+#[derive(Debug, thiserror::Error)]
+pub enum NetError {
+    #[error(transparent)]
+    IntruderTemplate(#[from] crate::intruder::IntruderError),
+    #[error("{0}")]
+    Requests(String),
+    #[error("{0}")]
+    Upstream(String),
+    #[error("invalid upstream TLS name {host}: {source}")]
+    InvalidTlsName {
+        host: String,
+        source: rustls::pki_types::InvalidDnsNameError,
+    },
+    #[error("configure upstream TLS: {source}")]
+    TlsConfig { source: rustls::Error },
+    #[error("browser listener: {source}")]
+    BrowserListenerBind { source: std::io::Error },
+    #[error("{source}")]
+    BrowserListenerAddr { source: std::io::Error },
+    #[error("bind address is empty")]
+    EmptyBind,
+    #[error("port must be 1-65535")]
+    InvalidPort,
+    #[error("duplicate listener {bind}:{port}")]
+    DuplicateListener { bind: String, port: u16 },
+}
+
+impl From<NetError> for String {
+    fn from(err: NetError) -> Self {
+        err.to_string()
+    }
+}
+
 pub const CONNECT_TIMEOUT_MS: u64 = 120000;
 
 pub const READ_TIMEOUT_MS: u64 = 120000;

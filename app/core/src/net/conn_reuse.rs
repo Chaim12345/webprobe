@@ -424,14 +424,19 @@ pub fn new_tls_conn(
     config: &crate::upstream::UpstreamConfig,
     host: &str,
     port: u16,
-) -> Result<UpstreamConn, String> {
-    let tcp = crate::upstream::connect_tls_target(config, host, port)?;
+) -> Result<UpstreamConn, NetError> {
+    let tcp = crate::upstream::connect_tls_target(config, host, port)
+        .map_err(NetError::Upstream)?;
     tcp.set_read_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)))
         .ok();
-    let name = rustls::pki_types::ServerName::try_from(host.to_string())
-        .map_err(|e| format!("invalid upstream TLS name {host}: {e}"))?;
+    let name = rustls::pki_types::ServerName::try_from(host.to_string()).map_err(|source| {
+        NetError::InvalidTlsName {
+            host: host.to_string(),
+            source,
+        }
+    })?;
     let conn = rustls::ClientConnection::new(tls_client_config(shared, host), name)
-        .map_err(|e| format!("configure upstream TLS: {e}"))?;
+        .map_err(|source| NetError::TlsConfig { source })?;
     Ok(UpstreamConn::Tls(Box::new(rustls::StreamOwned::new(
         conn, tcp,
     ))))
