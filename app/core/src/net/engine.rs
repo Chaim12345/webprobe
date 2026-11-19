@@ -9,13 +9,16 @@ use super::*;
 /// even when the configured port (8080) is taken by another tool and could
 /// otherwise reach that tool instead. Traffic takes the same path as the main
 /// listener (history, interception, scanner).
-pub fn browser_listener(shared: &Arc<Shared>) -> Result<u16, String> {
+pub fn browser_listener(shared: &Arc<Shared>) -> Result<u16, NetError> {
     let p = shared.browser_port.load(Ordering::SeqCst);
     if p != 0 {
         return Ok(p);
     }
-    let l = TcpListener::bind("127.0.0.1:0").map_err(|e| format!("browser listener: {e}"))?;
-    let port = l.local_addr().map_err(|e| e.to_string())?.port();
+    let l = TcpListener::bind("127.0.0.1:0").map_err(|source| NetError::BrowserListenerBind { source })?;
+    let port = l
+        .local_addr()
+        .map_err(|source| NetError::BrowserListenerAddr { source })?
+        .port();
     if let Err(existing) =
         shared
             .browser_port
@@ -102,17 +105,20 @@ pub fn start_proxy(shared: Arc<Shared>) {
 
 /// Replace the extra listener set. Validates entries (non-empty bind, port
 /// 1..=65535, no duplicate bind:port). Returns an error message on rejection.
-pub fn set_listeners(shared: &Arc<Shared>, specs: Vec<ListenerSpec>) -> Result<(), String> {
+pub fn set_listeners(shared: &Arc<Shared>, specs: Vec<ListenerSpec>) -> Result<(), NetError> {
     let mut seen = std::collections::HashSet::new();
     for s in &specs {
         if s.bind.trim().is_empty() {
-            return Err("bind address is empty".into());
+            return Err(NetError::EmptyBind);
         }
         if s.port == 0 {
-            return Err("port must be 1-65535".into());
+            return Err(NetError::InvalidPort);
         }
         if !seen.insert((s.bind.clone(), s.port)) {
-            return Err(format!("duplicate listener {}:{}", s.bind, s.port));
+            return Err(NetError::DuplicateListener {
+                bind: s.bind.clone(),
+                port: s.port,
+            });
         }
     }
     *shared.listeners.lock().unwrap() = specs

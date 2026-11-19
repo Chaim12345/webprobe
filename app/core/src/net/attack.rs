@@ -17,9 +17,10 @@ pub fn start_attack(
     kind: crate::intruder::AttackType,
     sets: Vec<Vec<String>>,
     https: bool,
-) -> Result<(), String> {
+) -> Result<(), NetError> {
     let parsed = crate::intruder::Template::parse(&template)?;
-    let rows = crate::intruder::requests(&parsed, kind, &sets, INTRUDER_REQUEST_LIMIT)?;
+    let rows = crate::intruder::requests(&parsed, kind, &sets, INTRUDER_REQUEST_LIMIT)
+        .map_err(NetError::Requests)?;
 
     let cur = shared.attack.lock().unwrap().clone();
     cur.rows.lock().unwrap().clear();
