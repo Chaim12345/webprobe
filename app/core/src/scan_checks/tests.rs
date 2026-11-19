@@ -868,11 +868,6 @@ fn dom_xss_stored_variant_against_a_live_lab() {
     assert!(!got.iter().any(|(n, ..)| n == "Cross-site scripting (DOM-based)" || n == "Cross-site scripting (reflected DOM-based)"), "not the other variants: {got:?}");
 }
 
-/// One browser probe per URL: Done caches the hits, the reflected query
-/// canary and the stored canary; InFlight marks a probe another thread
-/// is running (see dom_analysis_hits).
-Done((Vec<crate::crawl::DomHit>, Option<String>, String)),
-
 /// R-13 prototype pollution: a page deep-merging the query string
 /// with a qs-style bracket parser pollutes Object.prototype from
 /// __proto__[key]; a page filtering those keys does not. Skipped when
