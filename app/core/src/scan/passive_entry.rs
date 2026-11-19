@@ -50,6 +50,8 @@ pub fn passive_check_filtered(
         };
         v.extend(x.scan_passive(&msg));
     }
+    // BCheck `given response` definitions (R-14).
+    v.extend(crate::bcheck::scan::bcheck_passive_issues(shared, e));
     v
 }
 

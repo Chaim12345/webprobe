@@ -753,6 +753,9 @@ pub struct ProjectScanner {
     /// order.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub library_selection: Vec<String>,
+    /// R-14: BCheck definition sources loaded in the Extensions tab.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bchecks: Vec<String>,
 }
 
 /// One project library entry: its name and Burp's JSON for it.
@@ -788,6 +791,7 @@ impl Default for ProjectScanner {
             issues_reported: None,
             library: Vec::new(),
             library_selection: Vec::new(),
+            bchecks: Vec::new(),
         }
     }
 }

@@ -1921,15 +1921,7 @@ pub fn extensions(app: &mut App, ui: &mut Ui) {
             );
             ui.label(RichText::new("WebProbe extension API v1: any program speaking JSON lines on stdin/stdout can edit or drop requests and responses, report issues of its own declared types and show a tab (docs/extensions.md; example: extensions/examples/marker_reflection.py). Montoya API: Java extensions run against Burp's own Montoya classes through the sidecar JVM (initialize, logging, request/response continue-or-drop). Rust extensions implement ProxyHooks in-process.").size(12.5).color(theme::ink_dim()));
         }
-        3 => {
-            ui.label(
-                RichText::new("Custom scan checks")
-                    .strong()
-                    .size(14.0)
-                    .color(theme::ink()),
-            );
-            ui.label(RichText::new("WebProbe's scan checks are built in (Dashboard > New scan, context menu > Scan). BCheck files are not supported.").size(12.5).color(theme::ink_dim()));
-        }
+        3 => bcheck_checks(app, ui),
         4 => {
             ui.label(
                 RichText::new("Bambda library")
@@ -3898,4 +3890,73 @@ fn ext_ui_section(
                 .color(theme::ink_dim()),
         );
     }
+}
+
+/// Extensions > Custom scan checks: the loaded BChecks (R-14), each with
+/// its validation state, a file picker by path (the same pattern as
+/// Sequencer's load), and Remove. Loaded checks run in every audit.
+fn bcheck_checks(app: &mut App, ui: &mut Ui) {
+    ui.horizontal(|ui| {
+        ui.add_space(8.0);
+        ui.label(RichText::new("Custom scan checks (BChecks)").strong().size(14.0).color(theme::ink()));
+    });
+    ui.horizontal(|ui| {
+        ui.add_space(8.0);
+        ui.label(RichText::new("BChecks are PortSwigger's definition language for custom scan checks (v2-beta). Loaded checks run in every audit: passive checks on the traffic, active checks per request, host, path and insertion point.").size(12.5).color(theme::ink_dim()));
+    });
+    ui.add_space(6.0);
+    let mut remove: Option<usize> = None;
+    {
+        let cfg = app.shared.scan_config.lock().unwrap();
+        if cfg.bchecks.is_empty() {
+            ui.horizontal(|ui| {
+                ui.add_space(8.0);
+                ui.label(RichText::new("No BChecks loaded.").size(12.5).color(theme::ink_dim()));
+            });
+        }
+        for (i, src) in cfg.bchecks.iter().enumerate() {
+            ui.horizontal(|ui| {
+                ui.add_space(8.0);
+                match webprobe_core::bcheck::parse(src) {
+                    Ok(def) => {
+                        ui.label(RichText::new(&def.metadata.name).strong().size(12.5).color(theme::ink()));
+                        if let Some(d) = &def.metadata.description {
+                            ui.label(RichText::new(d).size(12.5).color(theme::ink_dim()));
+                        }
+                    }
+                    Err(errs) => {
+                        let msg = errs.iter().map(|e| format!("line {}: {}", e.line, e.message)).collect::<Vec<_>>().join("; ");
+                        ui.label(RichText::new(format!("Invalid BCheck ({msg}); it does not run.")).size(12.5).color(c(theme::BAD)));
+                    }
+                }
+                if ui.small_button("Remove").clicked() {
+                    remove = Some(i);
+                }
+            });
+        }
+    }
+    if let Some(i) = remove {
+        app.shared.scan_config.lock().unwrap().bchecks.remove(i);
+    }
+    ui.add_space(6.0);
+    ui.horizontal(|ui| {
+        ui.add_space(8.0);
+        ui.label(RichText::new("File:").size(12.5).color(theme::ink()));
+        ui.add(egui::TextEdit::singleline(&mut app.bcheck_load_path).desired_width(360.0).font(egui::TextStyle::Monospace));
+        if ui.button("Load").clicked() {
+            match std::fs::read_to_string(app.bcheck_load_path.trim()) {
+                Err(e) => app.shared.log(&format!("Could not read the BCheck file: {e}")),
+                Ok(src) => match webprobe_core::bcheck::parse(&src) {
+                    Ok(def) => {
+                        app.shared.log(&format!("Loaded BCheck \"{}\"", def.metadata.name));
+                        app.shared.scan_config.lock().unwrap().bchecks.push(src);
+                    }
+                    Err(errs) => {
+                        let msg = errs.iter().map(|e| format!("line {}: {}", e.line, e.message)).collect::<Vec<_>>().join("; ");
+                        app.shared.log(&format!("BCheck not loaded: {msg}"));
+                    }
+                },
+            }
+        }
+    });
 }

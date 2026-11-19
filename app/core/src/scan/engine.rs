@@ -112,6 +112,7 @@ pub fn start_active_scan(
             checks::run_point_checks(&cx, &points);
             checks::run_request_checks(&cx);
             checks::run_extension_checks(&cx, &points);
+            checks::run_bcheck_checks(&cx, &points);
             // A scan on its own runs stage A4 now; a batch runs it once its
             // last item is done (`run_stored_stage_claimed`).
             if !shared.stored.in_batch() {

@@ -87,9 +87,14 @@ impl Drop for ScanGuard {
 
 /// Claim the scanner, or `None` when a scan is already running.
 pub fn try_claim(shared: &Arc<Shared>) -> Option<ScanGuard> {
-    shared.scan.claim().then(|| ScanGuard {
-        shared: Arc::clone(shared),
-    })
+    if shared.scan.claim() {
+        crate::bcheck::scan::reset_scan_state(shared);
+        Some(ScanGuard {
+            shared: Arc::clone(shared),
+        })
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]

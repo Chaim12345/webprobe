@@ -279,7 +279,27 @@ fn apply_payload(req: &mut RequestData, ip: &InsertionPoint, combined: &str) -> 
             set_cookie(req, &ip.name, &combined);
         }
         InsertionPointKind::Body => {
-            req.body = combined.to_string();
+            if ip.name.is_empty() {
+                // whole-body point (Burp's ENTIRE_BODY)
+                req.body = combined.to_string();
+            } else {
+                // a named body (form) parameter
+                let mut pairs: Vec<(String, String)> = req
+                    .body
+                    .split('&')
+                    .filter(|p| !p.is_empty())
+                    .map(|p| match p.split_once('=') {
+                        Some((k, v)) => (k.to_string(), v.to_string()),
+                        None => (p.to_string(), String::new()),
+                    })
+                    .collect();
+                if let Some(pair) = pairs.iter_mut().find(|(k, _)| k == &ip.name) {
+                    pair.1 = combined.to_string();
+                } else {
+                    pairs.push((ip.name.clone(), combined.to_string()));
+                }
+                req.body = pairs.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join("&");
+            }
         }
         InsertionPointKind::Any => {
             return Err(ExecError("`send payload` needs a concrete insertion-point kind".into()));
@@ -471,7 +491,7 @@ mod tests {
         fn generate_address(&mut self) -> Result<String, String> {
             Ok("xyz.oast.test".into())
         }
-        fn has_interaction(&self, kind: InteractionKind) -> bool {
+        fn has_interaction(&mut self, kind: InteractionKind) -> bool {
             match kind {
                 InteractionKind::Any => !self.kinds.is_empty(),
                 other => self.kinds.contains(&other),
