@@ -9,8 +9,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use crate::collaborator::{CollaboratorState, Interaction};
-use crate::scan::ScanIssue;
 use crate::sync::Mutex;
+use webprobe_support::issues::ScanIssue;
 
 /// Pending ids kept at most; the oldest are dropped beyond it (an id that
 /// never sees its interaction must not be kept forever).
@@ -80,7 +80,7 @@ impl OobState {
     }
 
     /// Replace the evidence of a pending id once its probe's response is in.
-    pub fn set_evidence(&self, id: &str, evidence: Vec<crate::scan::ScanEvidence>) {
+    pub fn set_evidence(&self, id: &str, evidence: Vec<webprobe_support::issues::ScanEvidence>) {
         if let Some(p) = self
             .pending
             .lock()

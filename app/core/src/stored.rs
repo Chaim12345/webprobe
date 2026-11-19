@@ -19,9 +19,9 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use webprobe_support::hist::HistEntry;
 use crate::scan::InsertionPoint;
 use crate::sync::Mutex;
+use webprobe_support::hist::HistEntry;
 
 /// The token prefix: fixed, so one pass over a response finds every token.
 /// Burp's tokens are Collaborator ids (net.portswigger.Zwl, found with

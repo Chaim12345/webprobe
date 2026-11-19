@@ -6,8 +6,8 @@
 //! (`with_rows`, `get`, `snapshot`) and never hold the lock while doing UI or
 //! network work.
 
-use webprobe_support::hist::HistEntry;
 use crate::sync::Mutex;
+use webprobe_support::hist::HistEntry;
 
 #[derive(Default)]
 pub struct ProxyHistory {

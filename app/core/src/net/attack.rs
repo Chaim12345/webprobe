@@ -108,4 +108,3 @@ pub fn start_attack(
     });
     Ok(())
 }
-

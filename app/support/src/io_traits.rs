@@ -84,4 +84,3 @@ impl ProxyIo for rustls::StreamOwned<rustls::ClientConnection, TcpStream> {
         tcp_closed(self.get_ref())
     }
 }
-
