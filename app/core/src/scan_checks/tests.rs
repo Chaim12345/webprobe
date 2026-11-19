@@ -607,6 +607,11 @@ fn r10_broken_access_control_against_a_live_lab() {
     let req = format!("GET /open HTTP/1.1\r\nHost: {host}\r\n\r\n");
     let got = lab_scan(port, &["active.broken-access-control"], "GET", "/open", req);
     assert!(got.is_empty(), "{got:?}");
+    // A non-GET/POST audit is skipped: the replay models GET/POST
+    // semantics only.
+    let req = format!("HEAD /open HTTP/1.1\r\nHost: {host}\r\nCookie: sid=abc\r\n\r\n");
+    let got = lab_scan(port, &["active.broken-access-control"], "HEAD", "/open", req);
+    assert!(got.is_empty(), "HEAD audit must be skipped: {got:?}");
     }
 
 /// R-10 web cache poisoning (Zp22 / Zg1g rule): reported only when a
