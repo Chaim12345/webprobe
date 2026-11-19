@@ -1270,7 +1270,7 @@ impl ProjectHistory {
 }
 
 impl ProjectIssue {
-    pub fn from_issue(i: &crate::scan::ScanIssue) -> Self {
+    pub fn from_issue(i: &webprobe_support::issues::ScanIssue) -> Self {
         ProjectIssue {
             id: i.id,
             severity: i.sev.clone(),
@@ -1291,8 +1291,8 @@ impl ProjectIssue {
         }
     }
 
-    pub fn to_issue(&self) -> crate::scan::ScanIssue {
-        crate::scan::ScanIssue {
+    pub fn to_issue(&self) -> webprobe_support::issues::ScanIssue {
+        webprobe_support::issues::ScanIssue {
             id: self.id,
             sev: self.severity.clone(),
             name: self.name.clone(),
@@ -1307,7 +1307,7 @@ impl ProjectIssue {
                 .evidence
                 .iter()
                 .filter_map(|e| e.decode())
-                .map(|(req, resp)| crate::scan::ScanEvidence::new(&req, resp.as_deref()))
+                .map(|(req, resp)| webprobe_support::issues::ScanEvidence::new(&req, resp.as_deref()))
                 .collect(),
             ident: self.ident.clone(),
         }
@@ -2757,13 +2757,13 @@ mod tests {
         assert_eq!(back.resp_len, 4);
         assert!(back.params, "derived columns are recomputed");
         assert_eq!(back.extension, "php");
-        let issue = crate::scan::ScanIssue {
+        let issue = webprobe_support::issues::ScanIssue {
             id: 9,
             sev: "high".into(),
             name: "SQL injection".into(),
             confidence: "Firm".into(),
             type_id: 1_049_088,
-            evidence: vec![crate::scan::ScanEvidence::new(
+            evidence: vec![webprobe_support::issues::ScanEvidence::new(
                 b"GET /?q=' HTTP/1.1\r\n\r\n",
                 Some(&b"HTTP/1.1 500\r\n\r\n"[..]),
             )],
