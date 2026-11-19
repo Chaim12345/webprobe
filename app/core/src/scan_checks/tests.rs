@@ -617,6 +617,48 @@ fn dom_families_batch2_against_a_live_lab() {
 }
 
 
+/// R-13 batch 3: the WebSocket-poisoning, denial-of-service and
+/// Ajax-header DOM families against live lab pages driven by a real
+/// browser. Skipped when no Chromium is available.
+#[test]
+fn dom_families_batch3_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, _raw| {
+        let body = if path.starts_with("/ws") {
+            "<html><body><script>new WebSocket(location.hash.slice(1));</script></body></html>"
+        } else if path.starts_with("/dos") {
+            "<html><body><script>new RegExp(location.hash.slice(1));</script></body></html>"
+        } else if path.starts_with("/ajax") {
+            "<html><body><script>new XMLHttpRequest().setRequestHeader('X-T', location.hash.slice(1));</script></body></html>"
+        } else {
+            "<html><body><p>hello</p></body></html>"
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    let expect = [
+        ("/ws", "active.dom-websocket-poisoning", "WebSocket URL poisoning (DOM-based)", "high", "Firm"),
+        ("/dos", "active.dom-dos", "Denial of service (DOM-based)", "info", "Firm"),
+        ("/ajax", "active.dom-ajax-header-manipulation", "Ajax request header manipulation (DOM-based)", "low", "Firm"),
+    ];
+    for (page, id, name, sev, conf) in expect {
+        let got = lab_scan(port, &[id], "GET", page, format!("GET {page} HTTP/1.1\r\nHost: {host}\r\n\r\n"));
+        assert!(got.iter().any(|(n, s, c)| n == name && s == sev && c == conf), "{name}: {got:?}");
+    }
+    let got = lab_scan(
+        port,
+        &["active.dom-websocket-poisoning", "active.dom-dos", "active.dom-ajax-header-manipulation"],
+        "GET",
+        "/benign4",
+        format!("GET /benign4 HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(got.is_empty(), "{got:?}");
+}
+
+
 /// R-10 batch 2: the three GraphQL checks against a live endpoint.
 /// The lab answers the introspection query with a schema, the
 /// `query{__type}` probe with a suggestion error, and the query in
