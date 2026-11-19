@@ -221,6 +221,13 @@ impl RequestCheck for OpenApiDefinition {
     }
 }
 
+/// The React2Shell signature: status 500 plus the specific flight-protocol
+/// marker. Burp's generic `Error`+`digest` word pair is deliberately not
+/// used here: it fires on ordinary error pages.
+pub(crate) fn react2shell_hit(status: &str, body: &str) -> bool {
+    status == "500" && body.contains("E{\"digest\"")
+}
+
 pub fn server_host_hdr(cx: &ScanCtx) -> String {
     util::get_header(&cx.parts.headers, "Host")
         .unwrap_or_else(|| format!("{}:{}", cx.host, cx.port))
@@ -613,9 +620,9 @@ impl RequestCheck for RobotsTxt {
 /// to / with random Next-Action and X-Nextjs-Request-Id values,
 /// Next-Router-State-Tree: [""] and a multipart body (part 1 `{}`, part 0
 /// `["$1:a:a"]`; Zgn0.java:53-80). A report needs status 500 and the flight
-/// error digest marker, or both generic error markers (Zgn0.java:83-98; the
-/// stripped field-to-literal assignments read as `E{"digest"` for the
-/// specific marker, `Error` and `digest` for the generic pair).
+/// error digest marker (Zgn0.java:83-98; the stripped field-to-literal
+/// assignments read as `E{"digest"`). Burp's generic `Error`+`digest` pair
+/// is deliberately not used: it fires on ordinary error pages.
 pub(crate) struct React2Shell;
 
 impl RequestCheck for React2Shell {
@@ -656,8 +663,7 @@ impl RequestCheck for React2Shell {
         let parsed = util::parse_http(&resp);
         let status = parsed.first.split_whitespace().nth(1).unwrap_or("");
         let text = String::from_utf8_lossy(&resp[parsed.head_len.min(resp.len())..]);
-        let hit = status == "500" && (text.contains("E{\"digest\"") || (text.contains("Error") && text.contains("digest")));
-        if !hit {
+        if !react2shell_hit(status, &text) {
             return;
         }
         let mut i = mk(

@@ -417,6 +417,8 @@ mod tests {
             robots_paths("User-agent: *\nDisallow: /ftp\nAllow: /pub/*.css\n# x\nDisallow:"),
             vec!["/ftp", "/pub/"]
         );
+        // no User-agent stanza needed: Disallow-only bodies still yield paths
+        assert_eq!(robots_paths("Disallow: /admin\nDisallow: /tmp"), vec!["/admin", "/tmp"]);
         assert_eq!(sitemap_locs("<urlset><url><loc> http://a/x </loc></url><url><loc>http://a/y</loc></url></urlset>"), vec!["http://a/x", "http://a/y"]);
     }
 
