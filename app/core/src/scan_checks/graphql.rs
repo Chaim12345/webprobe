@@ -773,9 +773,23 @@ fn dom_analysis_hits(cx: &ScanCtx) -> Vec<crate::crawl::DomHit> {
     let path = cx.entry.path.split('#').next().unwrap_or("/");
     let url = format!("{scheme}://{}{port}{path}", cx.entry.host);
     let cache = DOM_HITS_CACHE.get_or_init(Default::default);
-    if let Some(hits) = cache.lock().unwrap().get(&url) {
-        return hits.clone();
+    // One browser per URL even under concurrency: the first thread marks
+    // the URL in flight and probes; later threads wait on the condvar
+    // instead of launching duplicate browsers.
+    let mut guard = cache.map.lock().unwrap();
+    loop {
+        match guard.get(&url) {
+            Some(DomHitsState::Done(hits)) => return hits.clone(),
+            Some(DomHitsState::InFlight) => {
+                guard = cache.ready.wait(guard).unwrap();
+            }
+            None => {
+                guard.insert(url.clone(), DomHitsState::InFlight);
+                break;
+            }
+        }
     }
+    drop(guard);
     let canary = format!("wp{}", rnd_letters(10));
     let origin = crate::crawl::origin_of(&url).unwrap_or_default();
     let hits: Vec<crate::crawl::DomHit> = crate::crawl::dom_analysis_probe(&cx.shared, &url, &canary)
@@ -783,7 +797,8 @@ fn dom_analysis_hits(cx: &ScanCtx) -> Vec<crate::crawl::DomHit> {
         .into_iter()
         .filter(|h| h.page_url.starts_with(&origin))
         .collect();
-    cache.lock().unwrap().insert(url, hits.clone());
+    cache.map.lock().unwrap().insert(url, DomHitsState::Done(hits.clone()));
+    cache.ready.notify_all();
     hits
 }
 

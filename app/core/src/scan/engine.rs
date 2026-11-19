@@ -265,12 +265,26 @@ impl StoredBatch {
 /// cleared between sessions by `reset_dom_analysis_cache` (the same
 /// contract as `reset_openapi_hosts`): a long-lived process running more
 /// than one scan must not serve a previous scan's hits.
-static DOM_HITS_CACHE: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, Vec<crate::crawl::DomHit>>>> = std::sync::OnceLock::new();
+/// One browser probe per URL: Done caches the hits; InFlight marks a
+/// probe another thread is running (see dom_analysis_hits).
+enum DomHitsState {
+    InFlight,
+    Done(Vec<crate::crawl::DomHit>),
+}
+
+#[derive(Default)]
+struct DomHitsCache {
+    map: std::sync::Mutex<std::collections::HashMap<String, DomHitsState>>,
+    ready: std::sync::Condvar,
+}
+
+static DOM_HITS_CACHE: std::sync::OnceLock<DomHitsCache> = std::sync::OnceLock::new();
 
 /// Clear the per-URL DOM analysis cache between scan sessions.
 pub(crate) fn reset_dom_analysis_cache() {
     if let Some(c) = DOM_HITS_CACHE.get() {
-        c.lock().unwrap().clear();
+        c.map.lock().unwrap().clear();
+        c.ready.notify_all();
     }
 }
 
