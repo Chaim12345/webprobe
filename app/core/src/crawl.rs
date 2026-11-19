@@ -1244,6 +1244,52 @@ const DOM_INSTRUMENT_JS: &str = r#"
       set: function (v) { record("document.domain", v); return domainDesc.set.call(this, v); }
     });
   }
+  // Setter-heavy sinks (burp.Zcwh's data-manipulation and
+  // link-manipulation families, plus setAttribute's per-attribute split).
+  function wrapSetter(proto, prop, sink) {
+    try {
+      var d = Object.getOwnPropertyDescriptor(proto, prop);
+      if (d && d.set && d.configurable) {
+        Object.defineProperty(proto, prop, {
+          configurable: true,
+          enumerable: d.enumerable,
+          get: d.get,
+          set: function (v) { record(sink, v); return d.set.call(this, v); }
+        });
+      }
+    } catch (e) {}
+  }
+  wrapSetter(Node.prototype, "textContent", "element.textContent");
+  wrapSetter(HTMLElement.prototype, "innerText", "element.innerText");
+  wrapSetter(HTMLInputElement.prototype, "value", "input.value");
+  wrapSetter(Document.prototype, "title", "document.title");
+  wrapSetter(HTMLScriptElement.prototype, "text", "script.text");
+  wrapSetter(HTMLAnchorElement.prototype, "target", "anchor.target");
+  wrapSetter(HTMLFormElement.prototype, "action", "form.action");
+  wrapSetter(HTMLAnchorElement.prototype, "href", "anchor.href");
+  wrapSetter(HTMLButtonElement.prototype, "formaction", "button.formaction");
+  wrapSetter(HTMLInputElement.prototype, "formaction", "input.formaction");
+  try {
+    var wnd = Object.getOwnPropertyDescriptor(window, "name");
+    if (wnd && wnd.set && wnd.configurable) {
+      Object.defineProperty(window, "name", {
+        configurable: true,
+        enumerable: wnd.enumerable,
+        get: wnd.get,
+        set: function (v) { record("window.name", v); return wnd.set.call(window, v); }
+      });
+    }
+  } catch (e) {}
+  ["pushState", "replaceState"].forEach(function (name) {
+    if (window.history && history[name]) {
+      var origH = history[name];
+      history[name] = function (data) { record("history." + name, data); return origH.apply(history, arguments); };
+    }
+  });
+  if (Element.prototype.setAttribute) {
+    var origSetAttr = Element.prototype.setAttribute;
+    Element.prototype.setAttribute = function (n, v) { record("element.setAttribute." + String(n).toLowerCase(), v); return origSetAttr.apply(this, arguments); };
+  }
   // webdatabase.executeSql (burp.Zcwh's client-side SQL sink) is not
   // wrapped: openDatabase is gone from current Chromium.
   // Constructors need Reflect.construct (`new` semantics).

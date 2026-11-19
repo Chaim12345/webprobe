@@ -927,7 +927,7 @@ dom_family_check!(
     "high",
     "Firm",
     "DOM-based cross-site scripting",
-    &["document.write", "document.writeln", "element.innerHTML", "element.outerHTML", "element.insertAdjacentHTML"][..],
+    &["document.write", "document.writeln", "element.innerHTML", "element.outerHTML", "element.insertAdjacentHTML", "element.setAttribute.onclick"][..],
     "Cross-site scripting (DOM-based), KB 00200310, High: the HTML-writing sinks of burp.Zcwh's XSS family (first slice: document.write/writeln, inner/outerHTML, insertAdjacentHTML; jQuery groups not yet). Confidence Firm (burp.Zwf8.Zd: no Tentative rule covers a location.hash source)."
 );
 dom_family_check!(
@@ -949,6 +949,40 @@ dom_family_check!(
     "DOM-based open redirection",
     &["window.open"][..],
     "Open redirection (DOM-based), KB 00500110, Low: window.open, the only wrappable navigation sink of burp.Zcwh's family - the Location members (href, assign, replace, host, hostname, protocol) are LegacyUnforgeable in Chromium. Confidence Tentative (burp.Zwf8.Zd: every open-redirection variant is Tentative)."
+);
+dom_family_check!(
+    DomDataManipulation,
+    "active.dom-data-manipulation",
+    "DOM data manipulation (DOM-based)",
+    "info",
+    "Firm",
+    "DOM-based data manipulation",
+    &[
+        "element.textContent",
+        "element.innerText",
+        "input.value",
+        "document.title",
+        "window.name",
+        "history.pushState",
+        "history.replaceState",
+        "script.text",
+        "anchor.target",
+        "element.setAttribute.action",
+        "element.setAttribute.src",
+        "element.setAttribute.data",
+        "element.setAttribute.formaction"
+    ][..],
+    "DOM data manipulation (DOM-based), KB 00501200, Information: the UI/logic property sinks of burp.Zcwh's data-manipulation family (textContent/innerText, input.value, document.title, window.name, history pushState/replaceState, script.text, anchor.target, setAttribute action/src/data/formaction). script.textContent/innerText collapse onto the element.* sink names (the prototype setters are shared). Confidence Firm (burp.Zwf8.Zd)."
+);
+dom_family_check!(
+    DomLinkManipulation,
+    "active.dom-link-manipulation",
+    "Link manipulation (DOM-based)",
+    "low",
+    "Firm",
+    "DOM-based link manipulation",
+    &["form.action", "anchor.href", "button.formaction", "input.formaction", "element.setAttribute.href"][..],
+    "Link manipulation (DOM-based), KB 00501000, Low: the navigation-target property sinks of burp.Zcwh's link family (form.action, anchor.href, button/input.formaction, setAttribute href; jQuery prop/attr variants not yet). Confidence Firm (burp.Zwf8.Zd)."
 );
 dom_family_check!(
     DomWebSocketPoisoning,
