@@ -1,0 +1,23 @@
+metadata:
+ language: v2-beta
+ name: "Host-level"
+ description: "Checks for an exposed git directory"
+ author: "Carlos Montoya"
+
+run for each:
+ potential_path =
+ "/.git/config",
+ "/.git/config~"
+
+given host then
+ send request called check:
+ method: "GET"
+ path: {potential_path}
+
+ if "[core]" in {check.response.body} then
+ report issue:
+ severity: info
+ confidence: certain
+ detail: `Git directory found at {potential_path}.`
+ remediation: "Ensure your git directories are not exposed."
+ end if

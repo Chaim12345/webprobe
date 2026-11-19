@@ -6,6 +6,7 @@
 pub mod ai;
 pub mod bambda;
 pub mod bambda_library;
+pub mod bcheck;
 pub mod burp_checks;
 pub mod codec;
 pub mod collaborator;

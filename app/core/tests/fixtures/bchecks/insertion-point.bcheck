@@ -1,0 +1,24 @@
+metadata:
+ language: v2-beta
+ name: "Insertion-point-level"
+ description: "Inserts a calculation into each parameter to detect suspicious input transformation"
+ author: "Carlos Montoya"
+
+define:
+ calculation="{{1337*1337}}"
+ answer="1787569"
+
+given insertion point then
+
+ if not({answer} in {base.response}) then
+ send payload:
+ appending: {calculation}
+
+ if {answer} in {latest.response} then
+ report issue:
+ severity: high
+ confidence: tentative
+ detail: "The application transforms input in a way that suggests it might be vulnerable to some kind of server-side code injection."
+ remediation: "Manual investigation is advised."
+ end if
+ end if
