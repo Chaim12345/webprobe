@@ -579,6 +579,13 @@ impl RequestCheck for BrokenAccessControl {
         if cx.stopped() || !cx.runs(self.issue()) || cx.baseline.raw.is_empty() {
             return;
         }
+        // The replay only models GET/POST semantics (query marker, header
+        // strip). HEAD/PUT/DELETE change response semantics the
+        // equivalence test does not capture, so skip them.
+        let method = cx.req.split_whitespace().next().unwrap_or("");
+        if !method.eq_ignore_ascii_case("GET") && !method.eq_ignore_ascii_case("POST") {
+            return;
+        }
         let base = util::parse_http(&cx.baseline.raw);
         let status: u16 = base.first.split_whitespace().nth(1).and_then(|s| s.parse().ok()).unwrap_or(0);
         if !(200..300).contains(&status) {
