@@ -726,6 +726,9 @@ impl RequestCheck for TlsCertificate {
         if flags.contains(&F::Expired) {
             problems.push("has expired");
         }
+        if flags.contains(&F::ValidityUnknown) {
+            problems.push("is outside its validity period (the leaf could not be parsed to tell expired from not yet valid)");
+        }
         let summary = crate::tls_cert::leaf_summary(&cap);
         let error = cap.verify_error.as_deref().map(|e| format!(" Verification failed: {e}.")).unwrap_or_default();
         let desc = format!("{} The certificate {}.{error} Clients cannot rely on the server's identity or on the protection of data in transit.", summary, problems.join(" and "));
