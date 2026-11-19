@@ -58,9 +58,27 @@ impl RequestData {
             out.push_str(v);
             out.push_str("\r\n");
         }
-        out.push_str("\r\n");
-        out.push_str(&self.body);
-        out
+        // A send-payload or replacing op may have changed the body after the
+        // headers were captured: the length on the wire must match it.
+        let mut wrote_len = false;
+        let mut head = String::new();
+        for line in out.lines() {
+            if line.to_ascii_lowercase().starts_with("content-length:") {
+                head.push_str(&format!("Content-Length: {}\r\n", self.body.len()));
+                wrote_len = true;
+            } else if line.is_empty() {
+                break;
+            } else {
+                head.push_str(line);
+                head.push_str("\r\n");
+            }
+        }
+        if !wrote_len {
+            head.push_str(&format!("Content-Length: {}\r\n", self.body.len()));
+        }
+        head.push_str("\r\n");
+        head.push_str(&self.body);
+        head
     }
 }
 
@@ -77,6 +95,36 @@ impl ResponseData {
             self.status_code
         );
         for (k, v) in &self.headers {
+            out.push_str(k);
+            out.push_str(": ");
+            out.push_str(v);
+            out.push_str("\r\n");
+        }
+        out.push_str("\r\n");
+        out.push_str(&self.body);
+        out
+    }
+}
+
+impl ResponseData {
+    /// The response minus headers that change on every identical answer
+    /// (Date, Set-Cookie, ...): `differs from` on live traffic compares
+    /// this, or no two responses ever compare equal.
+    pub fn comparable(&self) -> String {
+        const VOLATILE: &[&str] = &[
+            "date", "set-cookie", "expires", "last-modified", "etag", "age",
+            "cf-ray", "x-request-id", "x-amzn-trace-id", "x-amz-cf-id",
+            "x-amz-cf-pop", "server-timing", "report-to", "nel",
+        ];
+        let mut out = format!(
+            "{} {}\r\n",
+            if self.http_version.is_empty() { "HTTP/1.1" } else { &self.http_version },
+            self.status_code
+        );
+        for (k, v) in &self.headers {
+            if VOLATILE.contains(&k.to_ascii_lowercase().as_str()) {
+                continue;
+            }
             out.push_str(k);
             out.push_str(": ");
             out.push_str(v);
@@ -157,7 +205,14 @@ pub struct Context {
     pub insertion_point_base_value: Option<String>,
     /// User-Agent value returned by the `user_agent` reserved variable.
     pub user_agent: String,
+    /// Requests sent so far in this definition run; a runaway definition
+    /// is cut off at [`MAX_REQUESTS_PER_RUN`] rather than scanning forever.
+    pub requests_sent: usize,
 }
+
+/// Defensive ceiling on requests one definition run may send (Burp's own
+/// checks send a handful; the run-for-each cap is separate).
+pub const MAX_REQUESTS_PER_RUN: usize = 250;
 
 impl Context {
     pub fn new(base: Exchange) -> Self {
@@ -170,6 +225,7 @@ impl Context {
             collaborator: None,
             insertion_point_base_value: None,
             user_agent: "Mozilla/5.0 (compatible; WebProbe)".to_string(),
+            requests_sent: 0,
         }
     }
 
@@ -280,6 +336,21 @@ fn eval_path(cx: &mut Context, segs: &[String]) -> Result<String, ExecError> {
         "request" => request_property(ex, &segs[2..]),
         other => err(format!("expected `request` or `response` after `{name}`, got `{other}`")),
     }
+}
+
+/// A `differs from` operand: a bare `{x.response}` compares without its
+/// volatile headers; everything else evaluates as usual.
+fn eval_diff_operand(cx: &mut Context, e: &Expr) -> Result<String, ExecError> {
+    if let Expr::Path(segs) = e {
+        if segs.len() == 2 && segs[1] == "response" {
+            let ex = cx
+                .exchanges
+                .get(&segs[0])
+                .ok_or_else(|| ExecError(format!("unknown request `{}`", segs[0])))?;
+            return Ok(ex.response.comparable());
+        }
+    }
+    eval_expr(cx, e)
 }
 
 fn response_property(ex: &Exchange, rest: &[String]) -> Result<String, ExecError> {
@@ -592,7 +663,7 @@ pub fn eval_condition(cx: &mut Context, c: &Condition) -> Result<bool, ExecError
         // Burp's `differs from` is a weighted response diff; exact inequality
         // of the serialized responses is the conservative equivalent and is
         // what the documented examples rely on (garbage vs check).
-        Condition::Differs(a, b) => Ok(eval_expr(cx, a)? != eval_expr(cx, b)?),
+        Condition::Differs(a, b) => Ok(eval_diff_operand(cx, a)? != eval_diff_operand(cx, b)?),
         Condition::In(needle, haystack) => {
             Ok(eval_expr(cx, haystack)?.contains(&eval_expr(cx, needle)?))
         }
@@ -648,6 +719,35 @@ mod tests {
                 body: "<html>hello</html>".into(),
             },
         }
+    }
+
+    #[test]
+    fn differs_ignores_volatile_headers() {
+        let mut a = super::ResponseData { status_code: 200, http_version: "HTTP/1.1".into(), headers: vec![("Date".into(), "Tue".into()), ("Content-Type".into(), "text/plain".into())], body: "same".into() };
+        let mut b = super::ResponseData { status_code: 200, http_version: "HTTP/1.1".into(), headers: vec![("Date".into(), "Wed".into()), ("Set-Cookie".into(), "s=1".into()), ("Content-Type".into(), "text/plain".into())], body: "same".into() };
+        assert_eq!(a.comparable(), b.comparable());
+        b.body = "different".into();
+        assert_ne!(a.comparable(), b.comparable());
+        a.headers.clear();
+        b.headers.clear();
+        // ...and through the condition itself
+        let mut cx = cx();
+        let base_req = cx.exchanges["base"].request.clone();
+        let ex = |r: super::ResponseData| super::Exchange { request: base_req.clone(), response: r };
+        cx.exchanges.insert("a".into(), ex(super::ResponseData { status_code: 200, http_version: "HTTP/1.1".into(), headers: vec![("Date".into(), "Tue".into())], body: "same".into() }));
+        cx.exchanges.insert("b".into(), ex(super::ResponseData { status_code: 200, http_version: "HTTP/1.1".into(), headers: vec![("Date".into(), "Wed".into())], body: "same".into() }));
+        let path = |n: &str| Expr::Path(vec![n.to_string(), "response".to_string()]);
+        assert!(!eval_condition(&mut cx, &Condition::Differs(path("a"), path("b"))).unwrap());
+        cx.exchanges.get_mut("b").unwrap().response.body = "changed".into();
+        assert!(eval_condition(&mut cx, &Condition::Differs(path("a"), path("b"))).unwrap());
+    }
+
+    #[test]
+    fn raw_request_recomputes_content_length() {
+        let r = super::RequestData { method: "POST".into(), url: "http://h/x".into(), http_version: "HTTP/1.1".into(), headers: vec![("Content-Length".into(), "3".into())], body: "longer-body".into() };
+        assert!(r.raw().contains("Content-Length: 11"), "{}", r.raw());
+        let r = super::RequestData { method: "POST".into(), url: "http://h/x".into(), http_version: "HTTP/1.1".into(), headers: vec![], body: "abc".into() };
+        assert!(r.raw().contains("Content-Length: 3"), "{}", r.raw());
     }
 
     fn cx() -> Context {
