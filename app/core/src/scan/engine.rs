@@ -780,6 +780,7 @@ pub fn crawl_and_audit(shared: &Arc<Shared>, start_urls: &[String], audit_only: 
     let _wanted = Wanted(shared);
     reset_openapi_hosts();
     checks::reset_dom_analysis_cache();
+    checks::reset_proto_pollution_cache();
     for url in start_urls {
         let mut items = if audit_only {
             crate::crawl::crawl_single(shared, url)
