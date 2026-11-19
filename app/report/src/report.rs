@@ -188,6 +188,23 @@ pub struct KnowledgeBase {
     pub entries: HashMap<String, KbEntry>,
 }
 
+impl KnowledgeBase {
+    /// The issue definitions as the REST API serves them (R-15).
+    pub fn issue_defs(&self) -> Vec<webprobe_core::rest_api::KbIssueDef> {
+        self.entries
+            .values()
+            .map(|e| webprobe_core::rest_api::KbIssueDef {
+                type_index: e.type_index,
+                name: e.name.clone(),
+                background: e.background.clone(),
+                remediation: e.remediation.clone(),
+                references: e.references.clone(),
+                classifications: e.classifications.clone(),
+            })
+            .collect()
+    }
+}
+
 /// Burp's issue type for anything not in its knowledge base (extension-
 /// generated issues: 0x08000000).
 pub const EXTENSION_TYPE: u64 = 134_217_728;

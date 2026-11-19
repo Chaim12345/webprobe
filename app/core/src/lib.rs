@@ -5,6 +5,7 @@
 
 pub mod ai;
 pub mod burp_checks;
+pub mod burp_config;
 pub mod codec;
 pub mod collaborator;
 pub mod cookie_jar;
@@ -41,6 +42,7 @@ pub mod passive_state;
 pub mod project;
 pub mod project_files;
 pub mod repeater_run;
+pub mod rest_api;
 pub mod scan;
 pub mod scan_config;
 pub mod scan_library;

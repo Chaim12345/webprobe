@@ -89,11 +89,18 @@ Worktree: `.worktrees/r07` after M2 integration.
 
 ## M7 — R-15 CLI, configuration and REST
 
-**Status:** pending.
+**Status:** done (2026-11-18 evening) by the Instinct task agent on branch `r15/cli-rest` (PR #5, open, not merged): Burp headless CLI flags, project/user options JSON import/export on the CLI and in the desktop Suite > Project file page (scan keys routed through R-11's scan_library), and the loopback /v0.1 REST API (scan start, status, issues). 658 lib + 4 CLI tests pass; options UI screenshot-verified.
 
 Worktree: `.worktrees/r15`.
 
 Small slices: Burp CLI flags; project/user JSON import/export; local scan start endpoint; status/issues endpoints; CLI/REST integration tests. Bind locally by default and never log secrets.
+
+Progress (2026-11-18 evening, Instinct task agent, branch `r15/cli-rest`):
+- Burp project options JSON (proxy.request_listeners) and user options JSON (user_options.misc.api) import/export in `core/src/burp_config.rs`, keys per AuditDefaults/UserDefaults where recovered. Scan-configuration JSON deliberately not parsed: R-11 owns the scan configuration model (agreed on PR #5).
+- Headless: --config-file/--user-config-file (repeatable, last wins), --project-file, --unpause-spider-and-scanner, --version/--help, --data-dir, --diagnostics.
+- /v0.1 REST API (`core/src/rest_api.rs`): POST /v0.1/scan, GET /v0.1/scan/{id} (status + issue_events), GET /v0.1/knowledge_base/issue_definitions. Loopback by default, key as path prefix unless insecure_mode, key never logged, refuses to start keyless. Started by headless proxy mode and the desktop app when api.enabled.
+- Desktop: same Burp flags plus --disable-extensions and --temporary-project.
+Still open: options export in the UI (Project/User options save), scan-config JSON through R-11's model once it lands, R-15 tasks.json status flip when the milestone closes.
 
 ## M8 — R-17 and remaining core behavior
 

@@ -4,6 +4,7 @@
 
 use webprobe_core::ai;
 use webprobe_core::analysis;
+use webprobe_core::burp_config;
 use webprobe_core::codec;
 mod analysis_ui;
 use webprobe_core::collaborator;
@@ -36,6 +37,8 @@ mod onboarding;
 use webprobe_core::organizer;
 use webprobe_core::project;
 use webprobe_core::project_files;
+use webprobe_core::rest_api;
+use webprobe_report::report as core_report;
 mod project_start;
 mod proxy_settings;
 mod recovery;
@@ -1054,16 +1057,134 @@ fn main() {
     gl_env::apply();
 
     let mut screenshot: Option<PathBuf> = None;
+    // Burp's command line flags (R-15): --project-file FILE opens that
+    // project, --config-file FILE applies project options JSON and
+    // --user-config-file FILE user options JSON (both repeatable, last
+    // wins), --unpause-spider-and-scanner is accepted for parity,
+    // --version / --help print and exit.
+    let mut project_file: Option<String> = None;
+    let mut config_files: Vec<String> = Vec::new();
+    let mut user_config_files: Vec<String> = Vec::new();
+    let mut disable_extensions = false;
+    let mut diagnostics = false;
     let args: Vec<String> = std::env::args().collect();
     let mut i = 1;
     while i < args.len() {
-        if args[i] == "--screenshot" {
-            if let Some(v) = args.get(i + 1) {
-                screenshot = Some(PathBuf::from(v));
+        match args[i].as_str() {
+            "--screenshot" => {
+                if let Some(v) = args.get(i + 1) {
+                    screenshot = Some(PathBuf::from(v));
+                }
+                i += 2;
             }
-            i += 2;
-        } else {
-            i += 1;
+            "--project-file" => {
+                project_file = args.get(i + 1).cloned();
+                i += 2;
+            }
+            "--config-file" => {
+                if let Some(v) = args.get(i + 1) {
+                    config_files.push(v.clone());
+                }
+                i += 2;
+            }
+            "--user-config-file" => {
+                if let Some(v) = args.get(i + 1) {
+                    user_config_files.push(v.clone());
+                }
+                i += 2;
+            }
+            "--unpause-spider-and-scanner" => i += 1,
+            "--disable-extensions" => {
+                disable_extensions = true;
+                i += 1;
+            }
+            "--diagnostics" => {
+                diagnostics = true;
+                i += 1;
+            }
+            "--data-dir" => {
+                // paths::Lookup reads WEBPROBE_DATA_DIR at call time.
+                if let Some(v) = args.get(i + 1) {
+                    // SAFETY: no threads exist yet (gl_env ran, nothing
+                    // else), so setting the environment is race-free here.
+                    unsafe { std::env::set_var("WEBPROBE_DATA_DIR", v) };
+                }
+                i += 2;
+            }
+            "--temporary-project" => {
+                // recovery.rs treats WEBPROBE_TEMP_PROJECT=1 as Burp's
+                // temporary project: nothing is saved or restored.
+                unsafe { std::env::set_var("WEBPROBE_TEMP_PROJECT", "1") };
+                i += 1;
+            }
+            "--version" => {
+                println!("webprobe {}", env!("CARGO_PKG_VERSION"));
+                return;
+            }
+            "--help" => {
+                println!("usage: webprobe [--project-file FILE] [--config-file FILE]... [--user-config-file FILE]... [--unpause-spider-and-scanner] [--disable-extensions] [--temporary-project] [--data-dir DIR] [--diagnostics] [--screenshot FILE]");
+                return;
+            }
+            _ => i += 1,
+        }
+    }
+    if diagnostics {
+        println!("webprobe {}", env!("CARGO_PKG_VERSION"));
+        println!("os: {} {}", std::env::consts::OS, std::env::consts::ARCH);
+        println!(
+            "data dir: {}",
+            webprobe_core::paths::Lookup::process().data_dir().display()
+        );
+        return;
+    }
+    if let Some(f) = &project_file {
+        if !std::path::Path::new(f).is_file() {
+            eprintln!("could not open project file {f}");
+            std::process::exit(1);
+        }
+    }
+    // Read and merge the config JSONs (notes name files and sections only;
+    // API keys are never logged). Scan-configuration keys go through R-11's
+    // model: each --config-file is one library entry, overlaid in order.
+    let mut listener = burp_config::ProxyListener::default();
+    let mut api = burp_config::ApiConfig::default();
+    let mut scan_configs: Vec<webprobe_core::scan_library::LibraryConfig> = Vec::new();
+    let read_config = |path: &str| -> String {
+        std::fs::read_to_string(path).unwrap_or_else(|e| {
+            eprintln!("cannot read {path}: {e}");
+            std::process::exit(1);
+        })
+    };
+    for f in &config_files {
+        let text = read_config(f);
+        let json: serde_json::Value = serde_json::from_str(&text).unwrap_or_else(|e| {
+            eprintln!("{f}: not a JSON object: {e}");
+            std::process::exit(1);
+        });
+        let mut notes = Vec::new();
+        burp_config::apply_project_options(&json, &mut listener, &mut notes);
+        for n in notes {
+            eprintln!("{f}: {n}");
+        }
+        match webprobe_core::scan_library::parse_config(f, text.as_bytes(), false) {
+            Ok(mut c) => {
+                // The proxy listener is applied above; keep it out of the
+                // scan-configuration overlay so not_applied stays honest.
+                c.tree.as_object_mut().map(|m| m.remove("proxy"));
+                scan_configs.push(c);
+            }
+            Err(e) => eprintln!("{f}: {e}"),
+        }
+    }
+    for f in &user_config_files {
+        let json: serde_json::Value = serde_json::from_str(&read_config(f)).unwrap_or_else(|e| {
+            eprintln!("{f}: not a JSON object: {e}");
+            std::process::exit(1);
+        });
+        let mut notes = Vec::new();
+        burp_config::apply_user_options(&json, &mut api, &mut notes);
+        for n in notes {
+            eprintln!("{f}: {n}");
         }
     }
 
@@ -1077,6 +1198,54 @@ fn main() {
     if std::env::var("WEBPROBE_INTERCEPT").as_deref() == Ok("1") {
         shared.intercept_on.store(true, Ordering::SeqCst);
     }
+    // --config-file's proxy listener wins over WEBPROBE_PORT (the later,
+    // explicit source). A disabled listener only notes itself: the desktop
+    // listener toggle is the UI for it.
+    if !config_files.is_empty() {
+        shared.proxy_port.store(listener.port, Ordering::SeqCst);
+        if !listener.running {
+            eprintln!("note: proxy listener disabled by configuration");
+        }
+    }
+    if !scan_configs.is_empty() {
+        let refs: Vec<&webprobe_core::scan_library::LibraryConfig> = scan_configs.iter().collect();
+        for line in webprobe_core::scan_library::not_applied(&refs) {
+            eprintln!("not applied by WebProbe: {line}");
+        }
+        let base = shared.scan_config.lock().unwrap().clone();
+        let applied = webprobe_core::scan_library::apply(
+            &refs,
+            &base,
+            shared.scan_speed.load(Ordering::SeqCst),
+            shared.scan_accuracy.load(Ordering::SeqCst),
+        );
+        *shared.scan_config.lock().unwrap() = applied.config;
+        shared.scan_speed.store(applied.speed, Ordering::SeqCst);
+        shared
+            .scan_accuracy
+            .store(applied.accuracy, Ordering::SeqCst);
+    }
+    if api.enabled {
+        let kb = std::sync::Arc::new(core_report::KnowledgeBase::discover().issue_defs());
+        match rest_api::start(&shared, &api, kb) {
+            Ok(api_port) => {
+                eprintln!(
+                    "REST API listening on {}:{api_port}",
+                    if api.listen_mode == "all_interfaces" {
+                        "0.0.0.0"
+                    } else {
+                        "127.0.0.1"
+                    }
+                );
+                shared.api_started.store(true, Ordering::SeqCst);
+            }
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
+    }
+    *shared.api_config.lock().unwrap() = api;
     let mut collab_state = collaborator::CollaboratorState::new();
     if let Some(p) = std::env::var("WEBPROBE_COLLAB_PORT")
         .ok()
@@ -1196,8 +1365,9 @@ fn main() {
         }
     }
     // Extensions the user installed earlier (Extensions > Installed), loaded
-    // in the background. WEBPROBE_NO_EXTENSIONS=1 skips them (QA runs).
-    if std::env::var_os("WEBPROBE_NO_EXTENSIONS").is_none() {
+    // in the background. Burp's --disable-extensions skips them, and so does
+    // WEBPROBE_NO_EXTENSIONS=1 (QA runs).
+    if !disable_extensions && std::env::var_os("WEBPROBE_NO_EXTENSIONS").is_none() {
         webprobe_core::ext_store::load_all(&shared);
     }
     // This front end refills the Collaborator payload pool (refill_oob_pool).
@@ -1251,11 +1421,13 @@ fn main() {
     };
     // The default project lives in WebProbe's data directory, not in the
     // directory WebProbe was started from (a checkout must not collect one).
-    let project_path = webprobe_core::paths::Lookup::process()
-        .data_dir()
-        .join("webprobe-project.json")
-        .display()
-        .to_string();
+    let project_path = project_file.clone().unwrap_or_else(|| {
+        webprobe_core::paths::Lookup::process()
+            .data_dir()
+            .join("webprobe-project.json")
+            .display()
+            .to_string()
+    });
     // Debug hook: WEBPROBE_SETTINGS=hotkeys|appearance opens Burp's Settings
     // window on that pane (used by the screenshot checks).
     let settings_help = match std::env::var("WEBPROBE_SETTINGS")
@@ -1263,6 +1435,7 @@ fn main() {
         .as_str()
     {
         "hotkeys" => ui::SettingsPane::Hotkeys,
+        "suite" => ui::SettingsPane::Suite,
         _ => ui::SettingsPane::Appearance,
     };
     let settings_open = std::env::var("WEBPROBE_SETTINGS").is_ok();
@@ -1306,6 +1479,7 @@ fn main() {
     // already up, nor in scripted runs (no autosave, a fixed tab, or
     // WEBPROBE_NO_START_SCREEN).
     if autosave_enabled()
+        && project_file.is_none()
         && app.eng.recovery.is_none()
         && std::env::var_os("WEBPROBE_TAB").is_none()
         && std::env::var_os("WEBPROBE_NO_START_SCREEN").is_none()
