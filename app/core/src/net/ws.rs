@@ -294,7 +294,7 @@ impl WsWatch {
         secure: bool,
         upgrade: &[u8],
     ) -> Option<Arc<WsWatch>> {
-        let exts = shared.ext_host.lock().unwrap().active();
+        let exts = shared.ext_hooks.lock().unwrap().active_hooks();
         if exts.is_empty() {
             return None;
         }

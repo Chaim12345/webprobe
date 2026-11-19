@@ -1142,12 +1142,7 @@ pub fn sessions(app: &mut App, ui: &mut Ui) {
                             }
                         });
                 } else if rule.action == "invoke extension" {
-                    let names: Vec<String> = app
-                        .shared
-                        .ext_host
-                        .lock()
-                        .unwrap()
-                        .active()
+                    let names: Vec<String> = webprobe_core::ext_host::active_hooks(&app.shared)
                         .iter()
                         .filter_map(|e| e.ui())
                         .flat_map(|u| u.session_actions)
@@ -1988,15 +1983,12 @@ fn bapp_store(app: &mut App, ui: &mut Ui) {
             return;
         }
     };
-    let installed: Vec<String> = app
-        .shared
-        .ext_host
-        .lock()
-        .unwrap()
-        .extensions
-        .iter()
-        .filter_map(|e| e.source.as_ref().map(|s| s.source.clone()))
-        .collect();
+    let installed: Vec<String> = webprobe_core::ext_host::with_host(&app.shared, |h| {
+        h.extensions
+            .iter()
+            .filter_map(|e| e.source.as_ref().map(|s| s.source.clone()))
+            .collect()
+    });
     let loading = app.ext_loading.load(std::sync::atomic::Ordering::SeqCst);
     egui::Grid::new("bapps")
         .striped(true)
@@ -2115,7 +2107,7 @@ fn extensions_installed(app: &mut App, ui: &mut Ui) {
                 .log(&format!("Could not save the extension list: {e}"));
         }
     };
-    let n = app.shared.ext_host.lock().unwrap().extensions.len();
+    let n = webprobe_core::ext_host::with_host(&app.shared, |h| h.extensions.len());
     ui.horizontal(|ui| {
         ui.add_space(8.0);
         ui.label(
@@ -2146,7 +2138,7 @@ fn extensions_installed(app: &mut App, ui: &mut Ui) {
     });
     // Remembered extensions that failed to load this session: kept in the
     // saved list until the user forgets them, and retried on request.
-    let not_loaded = app.shared.ext_host.lock().unwrap().not_loaded.clone();
+    let not_loaded = webprobe_core::ext_host::with_host(&app.shared, |h| h.not_loaded.clone());
     for item in not_loaded {
         ui.horizontal(|ui| {
             ui.add_space(8.0);
@@ -2170,12 +2162,9 @@ fn extensions_installed(app: &mut App, ui: &mut Ui) {
                 });
             }
             if ui.small_button("Forget").clicked() {
-                app.shared
-                    .ext_host
-                    .lock()
-                    .unwrap()
-                    .not_loaded
-                    .retain(|i| i.source != item.source);
+                webprobe_core::ext_host::with_host(&app.shared, |h| {
+                    h.not_loaded.retain(|i| i.source != item.source);
+                });
                 save(app);
             }
         });
@@ -2203,30 +2192,28 @@ fn extensions_installed(app: &mut App, ui: &mut Ui) {
             crate::table::Column::new("Name", 360.0),
             crate::table::Column::new("Hooks", 360.0),
         ];
-        let rows: Vec<(usize, bool, String, String, String)> = app
-            .shared
-            .ext_host
-            .lock()
-            .unwrap()
-            .extensions
-            .iter()
-            .enumerate()
-            .map(|(i, e)| {
-                let hooks = e.hooks.hooks_registered().to_string();
-                let ty = match &e.source {
-                    Some(src) => src.kind.label(),
-                    None if hooks.contains("sidecar") => "Java",
-                    None if hooks.contains("process") => "Process",
-                    None => "Rust",
-                };
-                let name = if e.hooks.healthy() {
-                    e.hooks.extension_name().to_string()
-                } else {
-                    format!("{} (stopped)", e.hooks.extension_name())
-                };
-                (i, e.enabled, ty.to_string(), name, hooks)
-            })
-            .collect();
+        let rows: Vec<(usize, bool, String, String, String)> =
+            webprobe_core::ext_host::with_host(&app.shared, |h| {
+                h.extensions
+                    .iter()
+                    .enumerate()
+                    .map(|(i, e)| {
+                        let hooks = e.hooks.hooks_registered().to_string();
+                        let ty = match &e.source {
+                            Some(src) => src.kind.label(),
+                            None if hooks.contains("sidecar") => "Java",
+                            None if hooks.contains("process") => "Process",
+                            None => "Rust",
+                        };
+                        let name = if e.hooks.healthy() {
+                            e.hooks.extension_name().to_string()
+                        } else {
+                            format!("{} (stopped)", e.hooks.extension_name())
+                        };
+                        (i, e.enabled, ty.to_string(), name, hooks)
+                    })
+                    .collect()
+            });
         let mut st = app.ext_table.clone();
         let mut pick = None;
         let mut toggle = None;
@@ -2290,15 +2277,16 @@ fn extensions_installed(app: &mut App, ui: &mut Ui) {
         }
         if let Some(i) = toggle {
             {
-                let mut host = app.shared.ext_host.lock().unwrap();
-                if let Some(e) = host.extensions.get_mut(i) {
-                    e.enabled = !e.enabled;
-                    app.shared.log(&format!(
-                        "Extension {} {}",
-                        e.hooks.extension_name(),
-                        if e.enabled { "enabled" } else { "disabled" }
-                    ));
-                }
+                webprobe_core::ext_host::with_host(&app.shared, |host| {
+                    if let Some(e) = host.extensions.get_mut(i) {
+                        e.enabled = !e.enabled;
+                        app.shared.log(&format!(
+                            "Extension {} {}",
+                            e.hooks.extension_name(),
+                            if e.enabled { "enabled" } else { "disabled" }
+                        ));
+                    }
+                });
             }
             save(app);
         }
@@ -2307,10 +2295,9 @@ fn extensions_installed(app: &mut App, ui: &mut Ui) {
         Some("Add") => app.ext_add_open = true,
         Some("Remove") => {
             if let Some(i) = app.ext_sel.take() {
-                let removed = {
-                    let mut host = app.shared.ext_host.lock().unwrap();
+                let removed = webprobe_core::ext_host::with_host(&app.shared, |host| {
                     (i < host.extensions.len()).then(|| host.extensions.remove(i))
-                };
+                });
                 if let Some(e) = removed {
                     app.shared
                         .log(&format!("Removed extension {}", e.hooks.extension_name()));
@@ -2320,15 +2307,14 @@ fn extensions_installed(app: &mut App, ui: &mut Ui) {
         }
         Some(dir @ ("Up" | "Down")) => {
             if let Some(i) = app.ext_sel {
-                let moved = {
-                    let mut host = app.shared.ext_host.lock().unwrap();
+                let moved = webprobe_core::ext_host::with_host(&app.shared, |host| {
                     let j = if dir == "Up" {
                         i.checked_sub(1)
                     } else {
                         (i + 1 < host.extensions.len()).then_some(i + 1)
                     };
                     j.inspect(|&j| host.extensions.swap(i, j))
-                };
+                });
                 if let Some(j) = moved {
                     app.ext_sel = Some(j);
                     save(app);
@@ -2339,10 +2325,11 @@ fn extensions_installed(app: &mut App, ui: &mut Ui) {
     }
     ui.add_space(8.0);
     let sel = app.ext_sel.and_then(|i| {
-        let host = app.shared.ext_host.lock().unwrap();
-        host.extensions
-            .get(i)
-            .map(|e| (e.enabled, std::sync::Arc::clone(&e.hooks), e.source.clone()))
+        webprobe_core::ext_host::with_host(&app.shared, |host| {
+            host.extensions
+                .get(i)
+                .map(|e| (e.enabled, std::sync::Arc::clone(&e.hooks), e.source.clone()))
+        })
     });
     let own_tab = sel.as_ref().and_then(|(_, h, _)| h.tab_title());
     let mut labels = vec![
@@ -3106,7 +3093,7 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
         crawl_items,
         site_links: locked_site_links,
         scanner: locked_scanner,
-        extension_data: app.shared.ext_host.lock().unwrap().data_to_save(),
+        extension_data: webprobe_core::ext_host::with_host(&app.shared, |h| h.data_to_save()),
         proxy: locked_proxy,
         tasks: locked_tasks,
         layout: project::ProjectLayout {
@@ -3267,11 +3254,9 @@ pub fn apply_project(app: &mut App, data: &project::ProjectData, content: bool) 
         // Cross-response passive state belongs to the project it was built in.
         app.shared.passive.clear();
         // Montoya extensions get this project's extensionData().
-        app.shared
-            .ext_host
-            .lock()
-            .unwrap()
-            .restore_data(data.extension_data.clone());
+        webprobe_core::ext_host::with_host(&app.shared, |h| {
+            h.restore_data(data.extension_data.clone());
+        });
         app.shared.ws_history.set_all(
             data.websockets
                 .iter()

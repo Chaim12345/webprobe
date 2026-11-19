@@ -84,11 +84,7 @@ fn items(ui: &egui::Ui, shared: &Shared, ctx: &MenuContext) -> Option<Found> {
     if let Some(slot) = slot {
         return slot.lock().unwrap().clone();
     }
-    let exts: Vec<_> = shared
-        .ext_host
-        .lock()
-        .unwrap()
-        .active()
+    let exts: Vec<_> = webprobe_core::ext_host::active_hooks(shared)
         .into_iter()
         .filter(|e| e.ui().is_some_and(|u| u.menu_providers > 0))
         .collect();
@@ -161,10 +157,12 @@ pub fn editor_items(
     tool: &str,
     target: &str,
 ) {
-    let any = shared.ext_host.lock().unwrap().active().iter().any(|e| {
-        e.ui()
-            .is_some_and(|u| u.request_editors + u.response_editors > 0)
-    });
+    let any = webprobe_core::ext_host::active_hooks(shared)
+        .iter()
+        .any(|e| {
+            e.ui()
+                .is_some_and(|u| u.request_editors + u.response_editors > 0)
+        });
     if !any {
         return;
     }
@@ -201,7 +199,7 @@ pub fn editor_items(
 
 /// Offer a message to every extension editor; a summary for a toast.
 pub fn open_in_editors(shared: &Shared, msg: &MenuMessage, tool: &str) -> String {
-    let exts = shared.ext_host.lock().unwrap().active();
+    let exts = webprobe_core::ext_host::active_hooks(shared);
     let mut shown = Vec::new();
     let mut idle = 0;
     for e in exts {
@@ -231,7 +229,7 @@ pub fn open_in_editors(shared: &Shared, msg: &MenuMessage, tool: &str) -> String
 
 /// The first request an extension editor changed.
 pub fn edited_request(shared: &Shared) -> Option<Vec<u8>> {
-    let exts = shared.ext_host.lock().unwrap().active();
+    let exts = webprobe_core::ext_host::active_hooks(shared);
     exts.iter()
         .filter(|e| e.ui().is_some_and(|u| u.request_editors > 0))
         .find_map(|e| e.edited_request())

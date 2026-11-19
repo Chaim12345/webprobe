@@ -76,6 +76,8 @@ pub use tool_state::*;
 
 mod engine;
 pub use engine::*;
+mod ext_source;
+pub use ext_source::*;
 
 mod url_helpers;
 pub use url_helpers::*;

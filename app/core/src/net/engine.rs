@@ -651,7 +651,7 @@ pub fn report_stream_skips(shared: &Shared, host: &str, url: &str, head: &[u8], 
     if shared.mr_response.lock().unwrap().iter().any(|r| r.enabled) {
         reasons.push("response match and replace rules");
     }
-    if !shared.ext_host.lock().unwrap().active().is_empty() {
+    if !shared.ext_hooks.lock().unwrap().active_hooks().is_empty() {
         reasons.push("extension response handlers");
     }
     for reason in reasons {

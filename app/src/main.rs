@@ -1160,14 +1160,11 @@ fn main() {
     }
     // Test hook: register the built-in example extension, e.g. WEBPROBE_EXT_TEST=1
     if std::env::var("WEBPROBE_EXT_TEST").is_ok() {
-        shared
-            .ext_host
-            .lock()
-            .unwrap()
-            .extensions
-            .push(ext_host::LoadedExtension::new(
+        ext_host::with_host(&shared, |h| {
+            h.extensions.push(ext_host::LoadedExtension::new(
                 ext_host::ExampleHeaderExtension,
             ));
+        });
         shared.log("Registered example extension: Example header add (ProxyRequestHandler)");
     }
     // Path B: load a real Montoya .jar extension through the sidecar JVM,
@@ -1188,12 +1185,9 @@ fn main() {
                     sidecar.extension_name(),
                     sidecar.hooks_registered()
                 ));
-                shared
-                    .ext_host
-                    .lock()
-                    .unwrap()
-                    .extensions
-                    .push(ext_host::LoadedExtension::new(sidecar));
+                ext_host::with_host(&shared, |h| {
+                    h.extensions.push(ext_host::LoadedExtension::new(sidecar));
+                });
             }
             Err(e) => shared.log(&format!("Sidecar JVM failed to load {ext_jar}: {e}")),
         }

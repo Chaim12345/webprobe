@@ -16,7 +16,7 @@ pub use webprobe_support::ext::ToolSend;
 
 /// The Intruder payload generators of the enabled extensions, by name.
 pub fn payload_generators(shared: &Shared) -> Vec<String> {
-    let exts = shared.ext_host.lock().unwrap().active();
+    let exts = crate::ext_host::active_hooks(shared);
     let mut names: Vec<String> = exts
         .iter()
         .filter_map(|e| e.ui())
@@ -46,7 +46,7 @@ pub fn fill_extension_payloads(
         .first()
         .cloned()
         .unwrap_or_default();
-    let exts = shared.ext_host.lock().unwrap().active();
+    let exts = crate::ext_host::active_hooks(shared);
     for src in sources.iter_mut() {
         let crate::intruder::PayloadSource::Extension { provider, payloads } = src else {
             continue;
@@ -81,7 +81,7 @@ pub fn apply_extension_processors(
     if processors.iter().all(String::is_empty) {
         return Ok(());
     }
-    let exts = shared.ext_host.lock().unwrap().active();
+    let exts = crate::ext_host::active_hooks(shared);
     let bases = template.position_values();
     for (spec, name) in specs.iter_mut().zip(processors) {
         if name.is_empty() {

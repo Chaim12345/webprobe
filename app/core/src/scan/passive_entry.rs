@@ -44,7 +44,7 @@ pub fn passive_check_filtered(
         v.retain(|i| crate::scan_library::filter_allows(f, &i.name, false));
     }
     // Montoya extensions' passive checks (bounded by the hook timeout).
-    let exts = shared.ext_host.lock().unwrap().active();
+    let exts = crate::ext_host::active_hooks(shared);
     for x in exts
         .into_iter()
         .filter(|x| x.ui().is_some_and(|u| u.passive_checks > 0))

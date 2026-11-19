@@ -40,7 +40,9 @@ def top_module(path):
 mods = {}
 for dirpath, _, files in os.walk(ROOT):
     for f in files:
-        if f.endswith(".rs"):
+        # *_tests.rs files are whole-file test suites: gated by #[cfg(test)]
+        # at their mod declaration, so their deps are test-only.
+        if f.endswith(".rs") and not f[:-3].endswith("_tests"):
             m = top_module(os.path.join(dirpath, f))
             if m in ("bin",):
                 continue

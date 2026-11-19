@@ -337,7 +337,7 @@ pub fn apply_session_rules_for(
             }
             "use cookie jar" => out = from_jar(&out),
             "invoke extension" => {
-                let exts = shared.ext_host.lock().unwrap().active();
+                let exts = shared.ext_hooks.lock().unwrap().active_hooks();
                 let svc = webprobe_support::ext::HttpService::new(&host, port, https);
                 match exts.iter().find(|e| {
                     e.ui()

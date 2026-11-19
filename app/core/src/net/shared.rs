@@ -117,7 +117,10 @@ pub struct Shared {
     /// Diff-count state for the history table ("Diff count", burp.Zxwu.java:56).
     pub diff_tracker: Mutex<DiffTracker>,
     /// Extension host (Montoya-shaped, Path A): hooks run in the proxy pipeline.
-    pub ext_host: Mutex<crate::ext_host::ExtensionHost>,
+    /// The extension hook source (the extension host, once ext_store or an
+    /// extension call installs it). Trait object so net never names the
+    /// host type.
+    pub ext_hooks: Mutex<Box<dyn ExtHookSource>>,
     /// WebSocket message interception per direction. Burp's
     /// proxy.intercept_web_sockets_messages defaults both to true; messages
     /// are only held while Intercept is on (ProjectDefaults.json).
@@ -270,7 +273,7 @@ impl Shared {
             ws_live: Mutex::new(HashMap::new()),
             tool_state: ToolState::new(),
             diff_tracker: Mutex::new(DiffTracker::default()),
-            ext_host: Mutex::new(crate::ext_host::ExtensionHost::default()),
+            ext_hooks: Mutex::new(Box::new(NoExtHooks)),
             ws_intercept_client: AtomicBool::new(true),
             ws_intercept_server: AtomicBool::new(true),
             ws_edited: Mutex::new(std::collections::HashSet::new()),
@@ -364,7 +367,7 @@ impl Shared {
         req: &mut Vec<u8>,
         ann: &mut webprobe_support::ext::Annotations,
     ) -> bool {
-        let exts = self.ext_host.lock().unwrap().active();
+        let exts = self.ext_hooks.lock().unwrap().active_hooks();
         if exts.is_empty() {
             return true;
         }
@@ -385,7 +388,7 @@ impl Shared {
         resp: &mut Vec<u8>,
         ann: &mut webprobe_support::ext::Annotations,
     ) -> bool {
-        let exts = self.ext_host.lock().unwrap().active();
+        let exts = self.ext_hooks.lock().unwrap().active_hooks();
         if exts.is_empty() {
             return true;
         }

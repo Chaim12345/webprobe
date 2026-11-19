@@ -33,6 +33,35 @@ impl LoadedExtension {
     }
 }
 
+impl crate::net::ExtHookSource for ExtensionHost {
+    fn active_hooks(&self) -> Vec<Arc<dyn webprobe_support::ext::ProxyHooks>> {
+        self.active()
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+}
+
+/// The enabled extensions' hooks on this `Shared`, in host order.
+pub fn active_hooks(
+    shared: &crate::net::Shared,
+) -> Vec<Arc<dyn webprobe_support::ext::ProxyHooks>> {
+    shared.ext_hooks.lock().unwrap().active_hooks()
+}
+
+/// Run `f` with the extension host a `Shared` carries, installing an empty
+/// host on first use (the host lived on `Shared` itself before L8).
+pub fn with_host<R>(shared: &crate::net::Shared, f: impl FnOnce(&mut ExtensionHost) -> R) -> R {
+    let mut g = shared.ext_hooks.lock().unwrap();
+    if g.as_any_mut().downcast_mut::<ExtensionHost>().is_none() {
+        *g = Box::new(ExtensionHost::default());
+    }
+    f(g.as_any_mut()
+        .downcast_mut::<ExtensionHost>()
+        .expect("installed above"))
+}
+
 /// Registry the proxy pipeline runs. Extensions run in registration order;
 /// the first Drop verdict stops the chain and the message.
 #[derive(Default)]
@@ -1781,16 +1810,13 @@ mod tests {
                 .filter(|u| u.active_checks == 1 && u.passive_checks == 1 && u.menu_providers == 1)
         });
         assert_eq!((u.active_checks, u.passive_checks), (1, 1));
-        shared
-            .ext_host
-            .lock()
-            .unwrap()
-            .extensions
-            .push(LoadedExtension {
+        crate::ext_host::with_host(&shared, |h| {
+            h.extensions.push(LoadedExtension {
                 enabled: true,
                 hooks: sc.clone(),
                 source: None,
             });
+        });
         // A stopped scan: the check's request is refused, nothing is sent.
         struct Stopped(std::sync::atomic::AtomicUsize);
         impl ScanHelper for Stopped {
@@ -2122,7 +2148,7 @@ mod tests {
                 .unwrap_err()
                 .contains("Gone")
         );
-        shared.ext_host.lock().unwrap().extensions.clear();
+        crate::ext_host::with_host(&shared, |h| h.extensions.clear());
         let _ = std::fs::remove_dir_all(dir);
     }
 

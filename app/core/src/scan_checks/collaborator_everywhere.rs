@@ -296,7 +296,7 @@ pub(crate) fn run_point_checks(cx: &ScanCtx, points: &[InsertionPoint]) {
 /// `cx.send`, so stop, pause, progress and stored-input detection apply,
 /// and a stopped scan refuses them.
 pub(crate) fn run_extension_checks(cx: &ScanCtx, points: &[InsertionPoint]) {
-    let exts = cx.shared.ext_host.lock().unwrap().active();
+    let exts = crate::ext_host::active_hooks(&cx.shared);
     let exts: Vec<_> = exts
         .into_iter()
         .filter(|e| e.ui().is_some_and(|u| u.active_checks > 0))
