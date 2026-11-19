@@ -7,6 +7,7 @@ pub mod analysis;
 pub mod body;
 pub mod compare;
 pub mod decoder_ops;
+pub mod dns;
 pub mod hist;
 pub mod intercept_rules;
 pub mod io_traits;

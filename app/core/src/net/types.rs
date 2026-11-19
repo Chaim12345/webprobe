@@ -42,13 +42,9 @@ impl From<NetError> for String {
     }
 }
 
-pub const CONNECT_TIMEOUT_MS: u64 = 120000;
-
-pub const READ_TIMEOUT_MS: u64 = 120000;
+pub use webprobe_support::dns::{CONNECT_TIMEOUT_MS, DNS_TIMEOUT_MS, READ_TIMEOUT_MS};
 
 pub use webprobe_support::io_traits::OPEN_ENDED_RESPONSE_TIMEOUT_MS;
-
-pub const DNS_TIMEOUT_MS: u64 = 300000;
 
 pub use webprobe_support::hist::HistEntry;
 
