@@ -80,9 +80,19 @@ pub fn run_definition(
     Ok(issues)
 }
 
+/// Defensive ceiling on `run for each` expansion (not a documented Burp
+/// limit): every combination fires real requests, so an unbounded product
+/// would turn a bad check into a self-inflicted load test.
+const MAX_RUN_FOR_EACH: usize = 1024;
+
 fn expand_tuples(def: &Definition) -> Result<Vec<Vec<(String, Value)>>, ExecError> {
     let mut tuples: Vec<Vec<(String, Value)>> = vec![Vec::new()];
     for decl in &def.run_for_each {
+        if tuples.len().saturating_mul(decl.values.len().max(1)) > MAX_RUN_FOR_EACH {
+            return Err(ExecError(format!(
+                "`run for each` expands past {MAX_RUN_FOR_EACH} combinations"
+            )));
+        }
         let mut next = Vec::new();
         for t in &tuples {
             for v in &decl.values {
@@ -130,11 +140,23 @@ fn exec_block(
                 let ip = ip.ok_or_else(|| {
                     ExecError("`send payload` without an insertion point".into())
                 })?;
-                let mut req = base.request.clone();
+                // Burp builds one payload set per `send payload`: appending
+                // ops accumulate onto the running value and a replacing op
+                // resets it, so earlier ops are not lost when several appear
+                // in one block.
+                let mut cur = ip.base_value.clone();
                 for (mode, value) in ops {
                     let payload = resolve_value(cx, value)?;
-                    apply_payload(&mut req, ip, *mode, &payload);
+                    cur = match mode {
+                        ModModeShim::Append => format!("{cur}{payload}"),
+                        ModModeShim::Replace => payload,
+                        ModModeShim::Remove => {
+                            return Err(ExecError("`removing` is not valid in `send payload`".into()));
+                        }
+                    };
                 }
+                let mut req = base.request.clone();
+                apply_payload(&mut req, ip, &cur)?;
                 let resp = transport.send(&req).map_err(ExecError)?;
                 cx.record(name.as_deref(), Exchange { request: req, response: resp });
             }
@@ -205,34 +227,36 @@ fn parse_raw_request(text: &str, base: &RequestData) -> Result<RequestData, Exec
     let url = if target.starts_with("http://") || target.starts_with("https://") {
         target
     } else {
-        // inherit scheme + authority from the base request
-        let base_url = &base.url;
-        let prefix = match base_url.find("://") {
-            Some(i) => {
-                let rest = &base_url[i + 3..];
-                match rest.find('/') {
-                    Some(j) => &base_url[..i + 3 + j],
-                    None => base_url.as_str(),
-                }
+        // Origin-form target: the authority is the raw request's own Host
+        // header when it has one (Burp sends it there), else the base
+        // request's; the scheme always comes from the base request.
+        let scheme = base.url.find("://").map(|i| &base.url[..i]).unwrap_or("http");
+        let host_header = headers
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case("host"))
+            .map(|(_, v)| v.as_str());
+        let authority = match host_header {
+            Some(h) => h.to_string(),
+            None => {
+                let rest = base.url.find("://").map(|i| &base.url[i + 3..]).unwrap_or(base.url.as_str());
+                let end = rest.find(|c| c == '/' || c == '?').unwrap_or(rest.len());
+                rest[..end].to_string()
             }
-            None => base_url.as_str(),
         };
-        format!("{}{}", prefix.trim_end_matches('/'), if target.starts_with('/') { target.clone() } else { format!("/{target}") })
+        let path = if target.starts_with('/') { target.clone() } else { format!("/{target}") };
+        format!("{scheme}://{}{}", authority.trim_end_matches('/'), path)
     };
     Ok(RequestData { method, url, http_version, headers, body })
 }
 
-/// Apply a payload at the insertion point (append to or replace the base
-/// value), per Burp's `send payload` semantics.
-fn apply_payload(req: &mut RequestData, ip: &InsertionPoint, mode: ModModeShim, payload: &str) {
-    let combined = match mode {
-        ModModeShim::Append => format!("{}{}", ip.base_value, payload),
-        ModModeShim::Replace => payload.to_string(),
-        ModModeShim::Remove => payload.to_string(),
-    };
+/// Apply the computed payload value at the insertion point, per Burp's
+/// `send payload` semantics. Only concrete kinds reach here (the scan
+/// wiring maps `Any` onto the audited point's real kind); anything else is
+/// a wiring bug, not a reason to guess a placement.
+fn apply_payload(req: &mut RequestData, ip: &InsertionPoint, combined: &str) -> Result<(), ExecError> {
     match ip.kind {
-        InsertionPointKind::Query | InsertionPointKind::Any => {
-            set_query_param(req, &ip.name, &combined);
+        InsertionPointKind::Query => {
+            set_query_param(req, &ip.name, combined);
         }
         InsertionPointKind::Header => {
             set_header(req, &ip.name, &combined);
@@ -241,9 +265,13 @@ fn apply_payload(req: &mut RequestData, ip: &InsertionPoint, mode: ModModeShim, 
             set_cookie(req, &ip.name, &combined);
         }
         InsertionPointKind::Body => {
-            req.body = combined;
+            req.body = combined.to_string();
+        }
+        InsertionPointKind::Any => {
+            return Err(ExecError("`send payload` needs a concrete insertion-point kind".into()));
         }
     }
+    Ok(())
 }
 
 use super::ModMode as ModModeShim;
@@ -547,9 +575,40 @@ mod tests {
         assert_eq!(issues.len(), 1);
         let sent = lab.sent.lock().unwrap();
         assert_eq!(sent[0].method, "GET");
-        assert_eq!(sent[0].url, "https://lab.local:9443/raw-path?x=1");
+        // the raw request's own Host header wins over the base authority
+        assert_eq!(sent[0].url, "https://lab.local/raw-path?x=1");
         assert!(sent[0].headers.iter().any(|(k, v)| k == "X-Test" && v == "yes"));
         assert_eq!(sent[0].body, "body-text");
+    }
+
+    #[test]
+    fn raw_request_without_host_header_uses_the_base_authority() {
+        let src = "metadata:\n language: v2-beta\n name: \"t\"\ngiven host then\n send request called probe:\n  \"GET /p HTTP/1.1\nX-Test: yes\"\n report issue and continue:\n  severity: low\n  confidence: firm\n";
+        let def = match parse(src) { Ok(d) => d, Err(e) => panic!("{e:?}") };
+        let lab = Lab {
+            sent: Mutex::new(Vec::new()),
+            responder: Box::new(|req| ok200(req)),
+        };
+        let b = base("https://lab.local:9443/base", "", 200);
+        let _ = run_definition(&def, &b, None, &lab, None).unwrap();
+        let sent = lab.sent.lock().unwrap();
+        assert_eq!(sent[0].url, "https://lab.local:9443/p");
+    }
+
+    #[test]
+    fn send_payload_appends_accumulate_and_replacing_resets() {
+        let src = "metadata:\n language: v2-beta\n name: \"t\"\ngiven insertion point then\n send payload:\n  appending: \"A\"\n  appending: \"B\"\n send payload:\n  appending: \"C\"\n  replacing: \"D\"\n report issue and continue:\n  severity: low\n  confidence: firm\n";
+        let def = match parse(src) { Ok(d) => d, Err(e) => panic!("{e:?}") };
+        let lab = Lab {
+            sent: Mutex::new(Vec::new()),
+            responder: Box::new(|req| ok200(req)),
+        };
+        let b = base("https://lab.local/?q=base", "", 200);
+        let ip = super::InsertionPoint { kind: super::super::InsertionPointKind::Query, name: "q".into(), base_value: "base".into() };
+        let _ = run_definition(&def, &b, Some(&ip), &lab, None).unwrap();
+        let sent = lab.sent.lock().unwrap();
+        assert!(sent[0].url.contains("q=baseAB"), "appends accumulate: {}", sent[0].url);
+        assert!(sent[1].url.contains("q=D"), "replacing resets the running value: {}", sent[1].url);
     }
 
     #[test]
