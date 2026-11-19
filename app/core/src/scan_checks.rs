@@ -395,6 +395,9 @@ pub(crate) static REQUEST_CHECKS: &[&dyn RequestCheck] = &[
     &DomJsInjection,
     &DomOpenRedirection,
     &DomCookieManipulation,
+    &DomWebSocketPoisoning,
+    &DomDos,
+    &DomAjaxHeader,
     &DomStorageManipulation,
     &DomJsonInjection,
     &DomXpathInjection,
@@ -2134,6 +2137,36 @@ dom_family_check!(
     "DOM-based open redirection",
     &["window.open"][..],
     "Open redirection (DOM-based), KB 00500110, Low: window.open, the only wrappable navigation sink of burp.Zcwh's family - the Location members (href, assign, replace, host, hostname, protocol) are LegacyUnforgeable in Chromium. Confidence Tentative (burp.Zwf8.Zd: every open-redirection variant is Tentative)."
+);
+dom_family_check!(
+    DomWebSocketPoisoning,
+    "active.dom-websocket-poisoning",
+    "WebSocket URL poisoning (DOM-based)",
+    "high",
+    "Firm",
+    "DOM-based WebSocket URL poisoning",
+    &["websocket"][..],
+    "WebSocket URL poisoning (DOM-based), KB 00200340, High: the WebSocket constructor (burp.Zcwh's websocket sink). Confidence Firm (burp.Zwf8.Zd)."
+);
+dom_family_check!(
+    DomDos,
+    "active.dom-dos",
+    "Denial of service (DOM-based)",
+    "info",
+    "Firm",
+    "DOM-based denial of service",
+    &["RegExp"][..],
+    "Denial of service (DOM-based), KB 00500d00, Information: the RegExp constructor (burp.Zcwh's literal dynamic mapping for the family). Confidence Firm (burp.Zwf8.Zd)."
+);
+dom_family_check!(
+    DomAjaxHeader,
+    "active.dom-ajax-header-manipulation",
+    "Ajax request header manipulation (DOM-based)",
+    "low",
+    "Firm",
+    "DOM-based Ajax request header manipulation",
+    &["xhr.setRequestHeader.name", "xhr.setRequestHeader.value"][..],
+    "Ajax request header manipulation (DOM-based), KB 00500c00, Low: XMLHttpRequest.setRequestHeader name and value. Confidence Firm (burp.Zwf8.Zd's Tentative rule covers a document.cookie source, not location.hash)."
 );
 dom_family_check!(
     DomStorageManipulation,
@@ -4825,6 +4858,9 @@ mod tests {
                 ("active.dom-javascript-injection", Scope::Request, Some(BURP_GROUP)),
                 ("active.dom-open-redirection", Scope::Request, Some(BURP_GROUP)),
                 ("active.dom-cookie-manipulation", Scope::Request, Some(BURP_GROUP)),
+                ("active.dom-websocket-poisoning", Scope::Request, Some(BURP_GROUP)),
+                ("active.dom-dos", Scope::Request, Some(BURP_GROUP)),
+                ("active.dom-ajax-header-manipulation", Scope::Request, Some(BURP_GROUP)),
                 ("active.dom-storage-manipulation", Scope::Request, Some(BURP_GROUP)),
                 ("active.dom-json-injection", Scope::Request, Some(BURP_GROUP)),
                 ("active.dom-xpath-injection", Scope::Request, Some(BURP_GROUP)),
@@ -5177,6 +5213,47 @@ mod tests {
             "GET",
             "/benign3",
             format!("GET /benign3 HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+        );
+        assert!(got.is_empty(), "{got:?}");
+    }
+
+    /// R-13 batch 3: the WebSocket-poisoning, denial-of-service and
+    /// Ajax-header DOM families against live lab pages driven by a real
+    /// browser. Skipped when no Chromium is available.
+    #[test]
+    fn dom_families_batch3_against_a_live_lab() {
+        if crate::crawl::chromium_binary().is_none() {
+            return;
+        }
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = lab_serve(l, |_method, path, _raw| {
+            let body = if path.starts_with("/ws") {
+                "<html><body><script>new WebSocket(location.hash.slice(1));</script></body></html>"
+            } else if path.starts_with("/dos") {
+                "<html><body><script>new RegExp(location.hash.slice(1));</script></body></html>"
+            } else if path.starts_with("/ajax") {
+                "<html><body><script>new XMLHttpRequest().setRequestHeader('X-T', location.hash.slice(1));</script></body></html>"
+            } else {
+                "<html><body><p>hello</p></body></html>"
+            };
+            format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        });
+        let host = format!("127.0.0.1:{port}");
+        let expect = [
+            ("/ws", "active.dom-websocket-poisoning", "WebSocket URL poisoning (DOM-based)", "high", "Firm"),
+            ("/dos", "active.dom-dos", "Denial of service (DOM-based)", "info", "Firm"),
+            ("/ajax", "active.dom-ajax-header-manipulation", "Ajax request header manipulation (DOM-based)", "low", "Firm"),
+        ];
+        for (page, id, name, sev, conf) in expect {
+            let got = lab_scan(port, &[id], "GET", page, format!("GET {page} HTTP/1.1\r\nHost: {host}\r\n\r\n"));
+            assert!(got.iter().any(|(n, s, c)| n == name && s == sev && c == conf), "{name}: {got:?}");
+        }
+        let got = lab_scan(
+            port,
+            &["active.dom-websocket-poisoning", "active.dom-dos", "active.dom-ajax-header-manipulation"],
+            "GET",
+            "/benign4",
+            format!("GET /benign4 HTTP/1.1\r\nHost: {host}\r\n\r\n"),
         );
         assert!(got.is_empty(), "{got:?}");
     }

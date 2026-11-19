@@ -960,6 +960,25 @@ const DOM_INSTRUMENT_JS: &str = r#"
   }
   // webdatabase.executeSql (burp.Zcwh's client-side SQL sink) is not
   // wrapped: openDatabase is gone from current Chromium.
+  // Constructors need Reflect.construct (`new` semantics).
+  if (typeof WebSocket === "function") {
+    var OrigWs = window.WebSocket;
+    window.WebSocket = function (u) { record("websocket", u); return Reflect.construct(OrigWs, arguments); };
+    window.WebSocket.prototype = OrigWs.prototype;
+  }
+  if (typeof RegExp === "function") {
+    var OrigRe = window.RegExp;
+    window.RegExp = function (pt) { record("RegExp", pt); return Reflect.construct(OrigRe, arguments); };
+    window.RegExp.prototype = OrigRe.prototype;
+  }
+  if (typeof XMLHttpRequest === "function" && XMLHttpRequest.prototype.setRequestHeader) {
+    var origSrh = XMLHttpRequest.prototype.setRequestHeader;
+    XMLHttpRequest.prototype.setRequestHeader = function (n, v) {
+      record("xhr.setRequestHeader.name", n);
+      record("xhr.setRequestHeader.value", v);
+      return origSrh.apply(this, arguments);
+    };
+  }
   var cookieDesc = Object.getOwnPropertyDescriptor(Document.prototype, "cookie");
   if (cookieDesc && cookieDesc.set) {
     Object.defineProperty(Document.prototype, "cookie", {
