@@ -820,3 +820,14 @@ pub fn replace_or_add_header(raw: &[u8], name: &str, value: &str) -> Vec<u8> {
     bytes.extend_from_slice(body);
     bytes
 }
+
+/// A random id in the a-z0-9 alphabet (the id Burp's Zie.ZS hands out when
+/// no Collaborator rewrites it). Moved from core active_checks (L8, #38).
+pub fn rnd_id(n: usize) -> String {
+    use rand::Rng;
+    const ALNUM36: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+    let mut g = rand::thread_rng();
+    (0..n)
+        .map(|_| ALNUM36[g.gen_range(0..ALNUM36.len())] as char)
+        .collect()
+}

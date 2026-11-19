@@ -9,6 +9,7 @@ pub mod compare;
 pub mod decoder_ops;
 pub mod dns;
 pub mod hist;
+pub mod insertion;
 pub mod intercept_rules;
 pub mod io_traits;
 pub mod issues;

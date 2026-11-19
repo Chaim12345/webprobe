@@ -35,9 +35,7 @@ const ALNUM36: &str = "abcdefghijklmnopqrstuvwxyz0123456789";
 
 /// A random id in the a-z0-9 alphabet (the id Burp's Zie.ZS hands out when
 /// no Collaborator rewrites it).
-pub(crate) fn rnd_id(n: usize) -> String {
-    rnd_from(ALNUM36.as_bytes(), n)
-}
+pub(crate) use webprobe_support::util::rnd_id;
 
 fn body_of(resp: &[u8]) -> String {
     let p = util::parse_http(resp);
