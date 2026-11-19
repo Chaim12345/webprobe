@@ -395,6 +395,10 @@ pub(crate) static REQUEST_CHECKS: &[&dyn RequestCheck] = &[
     &DomJsInjection,
     &DomOpenRedirection,
     &DomCookieManipulation,
+    &DomStorageManipulation,
+    &DomJsonInjection,
+    &DomXpathInjection,
+    &DomDocumentDomain,
 ];
 
 /// Whether `check` audits `ip` under `config`: the point type suits it,
@@ -2131,6 +2135,47 @@ dom_family_check!(
     &["window.open"][..],
     "Open redirection (DOM-based), KB 00500110, Low: window.open, the only wrappable navigation sink of burp.Zcwh's family - the Location members (href, assign, replace, host, hostname, protocol) are LegacyUnforgeable in Chromium. Confidence Tentative (burp.Zwf8.Zd: every open-redirection variant is Tentative)."
 );
+dom_family_check!(
+    DomStorageManipulation,
+    "active.dom-storage-manipulation",
+    "HTML5 storage manipulation (DOM-based)",
+    "info",
+    "Firm",
+    "DOM-based HTML5 storage manipulation",
+    &["localStorage.setItem.name", "localStorage.setItem.value", "sessionStorage.setItem.name", "sessionStorage.setItem.value"][..],
+    "HTML5 storage manipulation (DOM-based), KB 00500f00, Information: the localStorage/sessionStorage setItem name and value sinks of burp.Zcwh's storage family. Confidence Firm (burp.Zwf8.Zd)."
+);
+dom_family_check!(
+    DomJsonInjection,
+    "active.dom-json-injection",
+    "Client-side JSON injection (DOM-based)",
+    "low",
+    "Firm",
+    "DOM-based client-side JSON injection",
+    &["JSON.parse"][..],
+    "Client-side JSON injection (DOM-based), KB 00200370, Low: JSON.parse, burp.Zcwh's client-side JSON injection sink. Confidence Firm (burp.Zwf8.Zd)."
+);
+dom_family_check!(
+    DomXpathInjection,
+    "active.dom-xpath-injection",
+    "Client-side XPath injection (DOM-based)",
+    "low",
+    "Firm",
+    "DOM-based client-side XPath injection",
+    &["document.evaluate"][..],
+    "Client-side XPath injection (DOM-based), KB 00200360, Low: document.evaluate (jQuery.parseXML not yet), burp.Zcwh's XPath family. Confidence Firm (burp.Zwf8.Zd)."
+);
+dom_family_check!(
+    DomDocumentDomain,
+    "active.dom-document-domain",
+    "Document domain manipulation (DOM-based)",
+    "medium",
+    "Firm",
+    "DOM-based document domain manipulation",
+    &["document.domain"][..],
+    "Document domain manipulation (DOM-based), KB 00501100, Medium: the document.domain setter (configurable in Chromium, wrapped). Confidence Firm (burp.Zwf8.Zd)."
+);
+
 dom_family_check!(
     DomCookieManipulation,
     "active.dom-cookie-manipulation",
@@ -4780,6 +4825,10 @@ mod tests {
                 ("active.dom-javascript-injection", Scope::Request, Some(BURP_GROUP)),
                 ("active.dom-open-redirection", Scope::Request, Some(BURP_GROUP)),
                 ("active.dom-cookie-manipulation", Scope::Request, Some(BURP_GROUP)),
+                ("active.dom-storage-manipulation", Scope::Request, Some(BURP_GROUP)),
+                ("active.dom-json-injection", Scope::Request, Some(BURP_GROUP)),
+                ("active.dom-xpath-injection", Scope::Request, Some(BURP_GROUP)),
+                ("active.dom-document-domain", Scope::Request, Some(BURP_GROUP)),
             ]
         );
         let mut ids: Vec<&str> = points.iter().copied().chain(requests.iter().map(|r| r.0)).collect();
@@ -5084,6 +5133,50 @@ mod tests {
             "GET",
             "/benign2",
             format!("GET /benign2 HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+        );
+        assert!(got.is_empty(), "{got:?}");
+    }
+
+    /// R-13 batch 2: the storage, JSON-injection, XPath-injection and
+    /// document-domain DOM families against live lab pages driven by a
+    /// real browser. Skipped when no Chromium is available.
+    #[test]
+    fn dom_families_batch2_against_a_live_lab() {
+        if crate::crawl::chromium_binary().is_none() {
+            return;
+        }
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = lab_serve(l, |_method, path, _raw| {
+            let body = if path.starts_with("/storage") {
+                "<html><body><script>localStorage.setItem('k', location.hash.slice(1));</script></body></html>"
+            } else if path.starts_with("/json") {
+                "<html><body><script>JSON.parse(location.hash.slice(1));</script></body></html>"
+            } else if path.starts_with("/xpath") {
+                "<html><body><script>document.evaluate(location.hash.slice(1), document, null, 0, null);</script></body></html>"
+            } else if path.starts_with("/domain") {
+                "<html><body><script>document.domain = location.hash.slice(1);</script></body></html>"
+            } else {
+                "<html><body><p>hello</p></body></html>"
+            };
+            format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        });
+        let host = format!("127.0.0.1:{port}");
+        let expect = [
+            ("/storage", "active.dom-storage-manipulation", "HTML5 storage manipulation (DOM-based)", "info", "Firm"),
+            ("/json", "active.dom-json-injection", "Client-side JSON injection (DOM-based)", "low", "Firm"),
+            ("/xpath", "active.dom-xpath-injection", "Client-side XPath injection (DOM-based)", "low", "Firm"),
+            ("/domain", "active.dom-document-domain", "Document domain manipulation (DOM-based)", "medium", "Firm"),
+        ];
+        for (page, id, name, sev, conf) in expect {
+            let got = lab_scan(port, &[id], "GET", page, format!("GET {page} HTTP/1.1\r\nHost: {host}\r\n\r\n"));
+            assert!(got.iter().any(|(n, s, c)| n == name && s == sev && c == conf), "{name}: {got:?}");
+        }
+        let got = lab_scan(
+            port,
+            &["active.dom-storage-manipulation", "active.dom-json-injection", "active.dom-xpath-injection", "active.dom-document-domain"],
+            "GET",
+            "/benign3",
+            format!("GET /benign3 HTTP/1.1\r\nHost: {host}\r\n\r\n"),
         );
         assert!(got.is_empty(), "{got:?}");
     }

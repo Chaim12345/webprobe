@@ -930,6 +930,36 @@ const DOM_INSTRUMENT_JS: &str = r#"
       return { closed: true, close: function () {}, focus: function () {}, blur: function () {}, postMessage: function () {} };
     };
   }
+  // Storage setters: burp.Zcwh splits name and value; `this` names the
+  // storage area.
+  if (typeof Storage !== "undefined" && Storage.prototype.setItem) {
+    var origSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (k, v) {
+      var area = this === window.localStorage ? "localStorage" : this === window.sessionStorage ? "sessionStorage" : "storage";
+      record(area + ".setItem.name", k);
+      record(area + ".setItem.value", v);
+      return origSetItem.apply(this, arguments);
+    };
+  }
+  if (typeof JSON !== "undefined" && JSON.parse) {
+    var origParse = JSON.parse;
+    JSON.parse = function (t) { record("JSON.parse", t); return origParse.apply(JSON, arguments); };
+  }
+  if (document.evaluate) {
+    var origEvalX = document.evaluate;
+    document.evaluate = function (expr) { record("document.evaluate", expr); return origEvalX.apply(document, arguments); };
+  }
+  var domainDesc = Object.getOwnPropertyDescriptor(Document.prototype, "domain");
+  if (domainDesc && domainDesc.set && domainDesc.configurable) {
+    Object.defineProperty(Document.prototype, "domain", {
+      configurable: true,
+      enumerable: domainDesc.enumerable,
+      get: domainDesc.get,
+      set: function (v) { record("document.domain", v); return domainDesc.set.call(this, v); }
+    });
+  }
+  // webdatabase.executeSql (burp.Zcwh's client-side SQL sink) is not
+  // wrapped: openDatabase is gone from current Chromium.
   var cookieDesc = Object.getOwnPropertyDescriptor(Document.prototype, "cookie");
   if (cookieDesc && cookieDesc.set) {
     Object.defineProperty(Document.prototype, "cookie", {
