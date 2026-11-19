@@ -753,7 +753,8 @@ impl RequestCheck for BackupFile {
 /// Dynamic DOM analysis, R-13 option (b) (burp.Zel5's runAnalysis shape;
 /// the injected script body is not established, so WebProbe's
 /// instrumentation is its own): each HTML page is opened once in a
-/// headless browser with a canary in location.hash, the wrapped sinks are
+/// headless browser with a canary in the fragment and the query (the
+/// location.hash and location.search sources), the wrapped sinks are
 /// the families of burp.Zcwh's dynamic decoder (docs/specs/R-13), and a
 /// canary reaching a sink is reported under the sink's family. One
 /// browser run per URL serves every family check; hits are kept only on
@@ -871,7 +872,8 @@ macro_rules! dom_family_check {
                             util::html_encode(&hit.sink_value)
                         ),
                     );
-                    i.confidence = $confidence.into();
+                    // burp.Zwf8.Zd: a jQuery-dependent result (flag 4) is Tentative.
+                    i.confidence = if hit.sink.starts_with("jQuery.") { "Tentative" } else { $confidence }.into();
                     cx.report(vec![i]);
                 }
             }
@@ -886,7 +888,22 @@ dom_family_check!(
     "high",
     "Firm",
     "DOM-based cross-site scripting",
-    &["document.write", "document.writeln", "element.innerHTML", "element.outerHTML", "element.insertAdjacentHTML", "element.setAttribute.onclick"][..],
+    &[
+        "document.write",
+        "document.writeln",
+        "element.innerHTML",
+        "element.outerHTML",
+        "element.insertAdjacentHTML",
+        "element.setAttribute.onclick",
+        "jQuery.html",
+        "jQuery.append",
+        "jQuery.prepend",
+        "jQuery.before",
+        "jQuery.after",
+        "jQuery.wrap",
+        "jQuery.replaceWith",
+        "jQuery.parseHTML"
+    ][..],
     "Cross-site scripting (DOM-based), KB 00200310, High: the HTML-writing sinks of burp.Zcwh's XSS family (first slice: document.write/writeln, inner/outerHTML, insertAdjacentHTML; jQuery groups not yet). Confidence Firm (burp.Zwf8.Zd: no Tentative rule covers a location.hash source)."
 );
 dom_family_check!(
@@ -896,7 +913,7 @@ dom_family_check!(
     "high",
     "Firm",
     "DOM-based JavaScript injection",
-    &["eval", "Function", "setTimeout", "setInterval"][..],
+    &["eval", "Function", "setTimeout", "setInterval", "jQuery.globalEval"][..],
     "JavaScript injection (DOM-based), KB 00200320, High: the JavaScript-execution sinks of burp.Zcwh's family (eval, Function, setTimeout/setInterval string handlers; execScript and javascript: URLs are not wrappable, not established here). Confidence Firm (burp.Zwf8.Zd)."
 );
 dom_family_check!(
@@ -940,7 +957,7 @@ dom_family_check!(
     "low",
     "Firm",
     "DOM-based link manipulation",
-    &["form.action", "anchor.href", "button.formaction", "input.formaction", "element.setAttribute.href"][..],
+    &["form.action", "anchor.href", "button.formaction", "input.formaction", "element.setAttribute.href", "jQuery.attr.href", "jQuery.prop.href", "jQuery.attr.action", "jQuery.prop.action"][..],
     "Link manipulation (DOM-based), KB 00501000, Low: the navigation-target property sinks of burp.Zcwh's link family (form.action, anchor.href, button/input.formaction, setAttribute href; jQuery prop/attr variants not yet). Confidence Firm (burp.Zwf8.Zd)."
 );
 dom_family_check!(
