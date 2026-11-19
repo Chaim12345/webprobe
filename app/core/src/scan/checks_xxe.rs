@@ -79,7 +79,10 @@ pub fn xxe_points(body: &str) -> (String, usize, Vec<(usize, usize)>) {
 pub fn entity_expansion_doctype(name: &str, seed: &str, depth: usize) -> String {
     let mut decl = format!("<!DOCTYPE foo [<!ENTITY {name}0 \"{seed}\">");
     for d in 1..=depth {
-        decl.push_str(&format!("<!ENTITY {name}{d} \"&{name}{prev};&{name}{prev};\">", prev = d - 1));
+        decl.push_str(&format!(
+            "<!ENTITY {name}{d} \"&{name}{prev};&{name}{prev};\">",
+            prev = d - 1
+        ));
     }
     format!("{decl} ]>")
 }
@@ -92,7 +95,14 @@ pub fn entity_expansion_marker(seed: &str, depth: usize) -> String {
 /// The Zgij probe: DOCTYPE at the document position and the original value
 /// followed by the top entity reference, the xxe_probe_at shape
 /// (burp.Zgij.java:66-71: "the insertion also contains &<entity>;").
-pub fn expansion_probe_at(base: &str, doc: usize, point: (usize, usize), name: &str, seed: &str, depth: usize) -> String {
+pub fn expansion_probe_at(
+    base: &str,
+    doc: usize,
+    point: (usize, usize),
+    name: &str,
+    seed: &str,
+    depth: usize,
+) -> String {
     let (vs, ve) = point;
     format!(
         "{}{}{}{}&{name}{depth};{}",
@@ -120,7 +130,9 @@ pub fn run_entity_expansion_check<F: FnMut(&str) -> Option<String>>(
             continue;
         }
         let confirm = expansion_probe_at(&base, doc, point, name, seed, 3);
-        let Some(resp3) = send(&confirm) else { continue };
+        let Some(resp3) = send(&confirm) else {
+            continue;
+        };
         if !resp3.contains(&entity_expansion_marker(seed, 3)) {
             continue;
         }

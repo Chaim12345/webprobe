@@ -658,7 +658,11 @@ fn entity_expansion_depth2_confirmed_by_depth3() {
     // The doctype: seed entity plus `depth` doublers (burp.Zgij.java:108-150).
     let d2 = entity_expansion_doctype("ab", "SEEDSEED", 2);
     assert_eq!(d2, "<!DOCTYPE foo [<!ENTITY ab0 \"SEEDSEED\"><!ENTITY ab1 \"&ab0;&ab0;\"><!ENTITY ab2 \"&ab1;&ab1;\"> ]>");
-    assert_eq!(entity_expansion_marker("SEEDSEED", 2), "SEEDSEED".repeat(4), "depth 2 is 2^2 copies");
+    assert_eq!(
+        entity_expansion_marker("SEEDSEED", 2),
+        "SEEDSEED".repeat(4),
+        "depth 2 is 2^2 copies"
+    );
     assert_eq!(entity_expansion_marker("SEEDSEED", 3).len(), 8 * 8);
 
     // A lab parser that expands the entities of any probe it gets.
@@ -673,8 +677,14 @@ fn entity_expansion_depth2_confirmed_by_depth3() {
     };
     let body = "<?xml version=\"1.0\"?><order><id>7</id></order>";
     let hit = run_entity_expansion_check(body, "ab", "SEEDSEED", expanding).unwrap();
-    assert!(hit.0.contains("<!ENTITY ab3"), "the confirmation is at depth 3");
-    assert!(hit.0.contains("&ab3;"), "the insertion carries the top reference");
+    assert!(
+        hit.0.contains("<!ENTITY ab3"),
+        "the confirmation is at depth 3"
+    );
+    assert!(
+        hit.0.contains("&ab3;"),
+        "the insertion carries the top reference"
+    );
 
     // A non-expanding parser never reports.
     assert!(run_entity_expansion_check(body, "ab", "SEEDSEED", |_| Some("OK".into())).is_none());

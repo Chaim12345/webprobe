@@ -789,6 +789,28 @@ where
 /// Insert or replace a header in a raw HTTP message, keeping head order and
 /// the body intact. Public: the scanner's header-manipulation probe reuses it.
 /// (Moved from net/match_replace.rs in the Stage A split, #37.)
+/// `raw` without the header `name` (all occurrences), framing unchanged.
+pub fn remove_header(raw: &[u8], name: &str) -> Vec<u8> {
+    let p = parse_http(raw);
+    let body = &raw[p.head_len.min(raw.len())..];
+    let mut out = String::with_capacity(raw.len());
+    out.push_str(&p.first);
+    out.push_str("\r\n");
+    for (k, v) in &p.headers {
+        if k.eq_ignore_ascii_case(name) {
+            continue;
+        }
+        out.push_str(k);
+        out.push_str(": ");
+        out.push_str(v);
+        out.push_str("\r\n");
+    }
+    out.push_str("\r\n");
+    let mut v = out.into_bytes();
+    v.extend_from_slice(body);
+    v
+}
+
 pub fn replace_or_add_header(raw: &[u8], name: &str, value: &str) -> Vec<u8> {
     let p = parse_http(raw);
     let body = &raw[p.head_len.min(raw.len())..];

@@ -109,7 +109,11 @@ fn registry_order_is_pinned() {
             ),
             ("active.header-manipulation", Scope::Request, None),
             ("active.xxe-file-read", Scope::Request, None),
-            ("active.xml-entity-expansion", Scope::Request, Some(BURP_GROUP)),
+            (
+                "active.xml-entity-expansion",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
             ("active.csrf", Scope::Request, None),
             ("active.http-put-enabled", Scope::Host, None),
             ("active.aspnet-tracing", Scope::Host, None),
@@ -472,6 +476,69 @@ fn lab_scan(
         .iter()
         .map(|i| (i.name.clone(), i.sev.clone(), i.confidence.clone()))
         .collect()
+}
+
+/// R-10 follow-up: the entity-expansion check end to end. The lab
+/// behaves like a quadratic parser, expanding whatever probe it gets;
+/// a plain lab that never expands must stay silent.
+#[test]
+fn xml_entity_expansion_against_a_live_lab() {
+    let expander = |_method: &str, _path: &str, raw: &str| {
+        let body = raw.split("\r\n\r\n").nth(1).unwrap_or("");
+        let expanded = (|| {
+            let e0 = body.find("<!ENTITY ")? + "<!ENTITY ".len();
+            let name_end = body[e0..].find('0')? + e0;
+            let name = &body[e0..name_end];
+            let seed_start = body[name_end..].find('"')? + name_end + 1;
+            let seed_end = body[seed_start..].find('"')? + seed_start;
+            let seed = &body[seed_start..seed_end];
+            let depth = if body.contains(&format!("<!ENTITY {name}3")) {
+                3
+            } else if body.contains(&format!("<!ENTITY {name}2")) {
+                2
+            } else {
+                return None;
+            };
+            Some(seed.repeat(1 << depth))
+        })();
+        match expanded {
+            Some(b) => format!("HTTP/1.1 200 OK\r\nContent-Type: text/xml\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{b}", b.len()),
+            None => "HTTP/1.1 200 OK\r\nContent-Type: text/xml\r\nContent-Length: 4\r\nConnection: close\r\n\r\nnone".to_string(),
+        }
+    };
+    let audit = |host: &str| {
+        let body = r#"<?xml version="1.0"?><order><id>7</id></order>"#;
+        format!("POST /order HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/xml\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    };
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, expander);
+    let got = lab_scan(
+        port,
+        &["active.xml-entity-expansion"],
+        "POST",
+        "/order",
+        audit(&format!("127.0.0.1:{port}")),
+    );
+    assert!(
+        got.iter()
+            .any(|(n, s, c)| n == "XML entity expansion" && s == "medium" && c == "Firm"),
+        "expanding parser: {got:?}"
+    );
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_m, _p, _r| {
+        "HTTP/1.1 200 OK\r\nContent-Type: text/xml\r\nContent-Length: 4\r\nConnection: close\r\n\r\nnone".to_string()
+    });
+    let got = lab_scan(
+        port,
+        &["active.xml-entity-expansion"],
+        "POST",
+        "/order",
+        audit(&format!("127.0.0.1:{port}")),
+    );
+    assert!(
+        !got.iter().any(|(n, ..)| n == "XML entity expansion"),
+        "plain parser must stay quiet: {got:?}"
+    );
 }
 
 /// R-10 batch 2: the three GraphQL checks against a live endpoint.

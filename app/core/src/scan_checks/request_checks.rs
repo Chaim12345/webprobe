@@ -451,14 +451,19 @@ impl RequestCheck for XmlEntityExpansion {
     fn run(&self, cx: &ScanCtx) {
         let req_ct = request_ct(cx);
         let req_body = request_body(cx);
-        let is_xml = req_ct.to_ascii_lowercase().contains("xml") || req_body.trim_start().starts_with("<?xml");
+        let is_xml = req_ct.to_ascii_lowercase().contains("xml")
+            || req_body.trim_start().starts_with("<?xml");
         if !is_xml || cx.stopped() {
             return;
         }
         let (name, seed) = {
             use rand::Rng;
             let mut rng = rand::thread_rng();
-            let mut t = |n: usize| (0..n).map(|_| rng.gen_range(b'a'..=b'z') as char).collect::<String>();
+            let mut t = |n: usize| {
+                (0..n)
+                    .map(|_| rng.gen_range(b'a'..=b'z') as char)
+                    .collect::<String>()
+            };
             (format!("xee{}", t(5)), t(8))
         };
         let rec = Recorder::default();
@@ -466,6 +471,10 @@ impl RequestCheck for XmlEntityExpansion {
             let mut req = cx.req.as_bytes().to_vec();
             req.truncate(cx.parts.head_len.min(cx.req.len()));
             req.extend_from_slice(body.as_bytes());
+            // The probe body is raw XML: drop any Content-Encoding /
+            // Transfer-Encoding the original carried, then set the length.
+            let req = util::remove_header(&req, "Content-Encoding");
+            let req = util::remove_header(&req, "Transfer-Encoding");
             let req = util::replace_or_add_header(&req, "Content-Length", &body.len().to_string());
             let resp = rec.send(cx, body, &req)?;
             let rp = util::parse_http(&resp);
@@ -479,7 +488,7 @@ impl RequestCheck for XmlEntityExpansion {
                 "Firm",
                 &cx.entry,
                 "(XML body)",
-                "The parser expanded a quadratic DOCTYPE: the random seed came back repeated 4 times at depth 2 and 8 times at the depth-3 confirmation.".to_string(),
+                "The parser expanded a quadratic DOCTYPE: the random seed came back repeated 4 times at depth 2 and 8 times at the depth-3 confirmation. Only expansion reflected in the response is detected; a parser that expands without reflecting (the blind case) is not.".to_string(),
             )
             .with_evidence(evidence([rec.last(&probe)]))]);
         }
