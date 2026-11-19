@@ -181,7 +181,7 @@ fn pad_be(msg: &[u8], block: usize, len_bytes: usize) -> Vec<u8> {
     data
 }
 
-fn md5_hex(input: &str) -> String {
+pub(crate) fn md5_hex(input: &str) -> String {
     let mut data = input.as_bytes().to_vec();
     data.push(0x80);
     while data.len() % 64 != 56 {
@@ -216,7 +216,7 @@ fn md5_hex(input: &str) -> String {
     h.iter().flat_map(|w| w.to_le_bytes()).map(|b| format!("{b:02x}")).collect()
 }
 
-fn sha1_hex(input: &str) -> String {
+pub(crate) fn sha1_hex(input: &str) -> String {
     let data = pad_be(input.as_bytes(), 64, 8);
     let mut h: [u32; 5] = [0x6745_2301, 0xefcd_ab89, 0x98ba_dcfe, 0x1032_5476, 0xc3d2_e1f0];
     for block in data.chunks_exact(64) {

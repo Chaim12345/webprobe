@@ -12,6 +12,8 @@
 
 use std::fmt;
 
+pub mod exec;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Metadata {
     pub language: String,
@@ -168,7 +170,7 @@ pub enum Condition {
     Not(Box<Condition>),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum InteractionKind {
     Any,
     Dns,
@@ -1499,13 +1501,13 @@ pub fn validate(d: &Definition) -> Result<(), Vec<BcheckError>> {
 mod tests {
     use super::*;
 
-    const HOST: &str = include_str!("../tests/fixtures/bchecks/host.bcheck");
-    const PATH: &str = include_str!("../tests/fixtures/bchecks/path.bcheck");
-    const PASSIVE: &str = include_str!("../tests/fixtures/bchecks/passive.bcheck");
-    const INSERTION: &str = include_str!("../tests/fixtures/bchecks/insertion-point.bcheck");
-    const COLLABORATOR: &str = include_str!("../tests/fixtures/bchecks/collaborator.bcheck");
-    const LOG4SHELL: &str = include_str!("../tests/fixtures/bchecks/log4shell.bcheck");
-    const SSPP: &str = include_str!("../tests/fixtures/bchecks/sspp.bcheck");
+    const HOST: &str = include_str!("../../tests/fixtures/bchecks/host.bcheck");
+    const PATH: &str = include_str!("../../tests/fixtures/bchecks/path.bcheck");
+    const PASSIVE: &str = include_str!("../../tests/fixtures/bchecks/passive.bcheck");
+    const INSERTION: &str = include_str!("../../tests/fixtures/bchecks/insertion-point.bcheck");
+    const COLLABORATOR: &str = include_str!("../../tests/fixtures/bchecks/collaborator.bcheck");
+    const LOG4SHELL: &str = include_str!("../../tests/fixtures/bchecks/log4shell.bcheck");
+    const SSPP: &str = include_str!("../../tests/fixtures/bchecks/sspp.bcheck");
 
     fn ok(src: &str) -> Definition {
         match parse(src) {
