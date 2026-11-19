@@ -63,7 +63,7 @@ Small slices:
 
 ## M5 — R-11 scan configuration library
 
-**Status:** implemented 2026-11-18 (aa490e8, 09e87f8), compiled with 18 smoke tests; full suite and UI not yet run. Work stopped by the user; unclaimed.
+**Status:** done. Implemented 2026-11-18 (aa490e8, 09e87f8); verified 2026-11-18 evening by the Instinct task agent on branch `r11/verify` (PR open, not merged): full core suite 645/645 green, desktop `cargo check --tests` clean, all 29 built-ins parsed from the real community jar and an extracted tree (WEBPROBE_BURP_JAR/WEBPROBE_BURP_BUILTINS, 9c08144), Configuration library UI screenshot-verified listing the built-ins with functions and not-applied counts.
 
 Worktree: `.worktrees/r11`.
 

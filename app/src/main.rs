@@ -1256,13 +1256,14 @@ fn main() {
         .join("webprobe-project.json")
         .display()
         .to_string();
-    // Debug hook: WEBPROBE_SETTINGS=hotkeys|appearance opens Burp's Settings
-    // window on that pane (used by the screenshot checks).
+    // Debug hook: WEBPROBE_SETTINGS=hotkeys|appearance|library opens Burp's
+    // Settings window on that pane (used by the screenshot checks).
     let settings_help = match std::env::var("WEBPROBE_SETTINGS")
         .unwrap_or_default()
         .as_str()
     {
         "hotkeys" => ui::SettingsPane::Hotkeys,
+        "library" => ui::SettingsPane::ConfigurationLibrary,
         _ => ui::SettingsPane::Appearance,
     };
     let settings_open = std::env::var("WEBPROBE_SETTINGS").is_ok();
