@@ -131,10 +131,10 @@ fn registry_order_is_pinned() {
             ("active.graphql-suggestions", Scope::Request, None),
             ("active.graphql-content-type", Scope::Request, None),
             ("active.spoofable-client-ip", Scope::Request, None),
+            ("active.broken-access-control", Scope::Request, None),
             ("active.backup-file", Scope::Request, None),
             ("active.graphql-endpoint-discovered", Scope::Host, None),
             ("active.web-cache-poisoning", Scope::Request, None),
-            ("active.broken-access-control", Scope::Request, None),
             ("active.web-cache-deception", Scope::Request, None),
         ]
     );
