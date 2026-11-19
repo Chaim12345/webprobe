@@ -6,14 +6,14 @@
 use std::time::Duration;
 
 use super::exec::{Collaborator, Exchange, RequestData, ResponseData};
-use std::sync::Arc;
 use super::runner::{run_definition, InsertionPoint as BcheckIp, Transport};
 use super::{parse, Definition, GivenMode, InsertionPointKind};
 use crate::net::{HistEntry, Shared};
-use crate::scan::{ScanEvidence, ScanIssue};
 use crate::scan::checks::ScanCtx;
 use crate::scan::insertion::{InsertionPoint, IpKind};
+use crate::scan::{ScanEvidence, ScanIssue};
 use crate::util;
+use std::sync::Arc;
 
 /// Parse and validate the configured definitions, cached against the
 /// configured sources: parsing ran on every passive entry and every
@@ -38,7 +38,9 @@ fn configured_defs(shared: &Shared) -> Arc<Vec<Definition>> {
                     .map(|e| e.to_string())
                     .collect::<Vec<_>>()
                     .join("; ");
-                shared.log(&format!("Scanner: BCheck skipped, invalid definition: {summary}"));
+                shared.log(&format!(
+                    "Scanner: BCheck skipped, invalid definition: {summary}"
+                ));
             }
         }
     }
@@ -93,7 +95,8 @@ fn entry_exchange(e: &HistEntry) -> Option<Exchange> {
                 .unwrap_or("HTTP/1.1")
                 .to_string(),
             headers: parts.headers.clone(),
-            body: String::from_utf8_lossy(&req_raw[parts.head_len.min(req_raw.len())..]).into_owned(),
+            body: String::from_utf8_lossy(&req_raw[parts.head_len.min(req_raw.len())..])
+                .into_owned(),
         },
         response: parse_response(resp_raw)?,
     })
@@ -209,7 +212,11 @@ fn to_scan_issue(i: super::runner::Issue, e: &HistEntry, evidence: Vec<ScanEvide
             "<b>{}</b> (BCheck)<br><br>{}{}{}",
             i.name,
             i.detail,
-            if i.remediation.is_empty() { String::new() } else { format!("<br><br><b>Remediation:</b> {}", i.remediation) },
+            if i.remediation.is_empty() {
+                String::new()
+            } else {
+                format!("<br><br><b>Remediation:</b> {}", i.remediation)
+            },
             String::new()
         ),
         false_positive: false,
@@ -255,7 +262,11 @@ fn to_bcheck_ip(ip: &InsertionPoint) -> Option<BcheckIp> {
         // payload application is offset-based there. Skipped for now.
         _ => return None,
     };
-    Some(BcheckIp { kind, name: ip.name.clone(), base_value: ip.decoded_value() })
+    Some(BcheckIp {
+        kind,
+        name: ip.name.clone(),
+        base_value: ip.decoded_value(),
+    })
 }
 
 /// Run the configured BChecks for one audited request in an active scan:
@@ -279,7 +290,9 @@ pub(crate) fn run_bcheck_checks(cx: &ScanCtx, points: &[InsertionPoint]) {
             }
             GivenMode::Host => {
                 let key = format!("H|{}|{}", cx.host, cx.port);
-                if claim_once(&cx.shared, &def.metadata.name, &key) && !run_active_def(cx, def, &base, None, &transport) {
+                if claim_once(&cx.shared, &def.metadata.name, &key)
+                    && !run_active_def(cx, def, &base, None, &transport)
+                {
                     // A transient failure (no Collaborator payload, send
                     // error) must not consume the one attempt: a later
                     // audited request retries the check for this host.
@@ -293,7 +306,9 @@ pub(crate) fn run_bcheck_checks(cx: &ScanCtx, points: &[InsertionPoint]) {
                     cx.port,
                     cx.parts.path.split('?').next().unwrap_or("")
                 );
-                if claim_once(&cx.shared, &def.metadata.name, &key) && !run_active_def(cx, def, &base, None, &transport) {
+                if claim_once(&cx.shared, &def.metadata.name, &key)
+                    && !run_active_def(cx, def, &base, None, &transport)
+                {
                     unclaim(&cx.shared, &def.metadata.name, &key);
                 }
             }
@@ -305,7 +320,9 @@ pub(crate) fn run_bcheck_checks(cx: &ScanCtx, points: &[InsertionPoint]) {
                     if !ip_kind_matches(want, ip) {
                         continue;
                     }
-                    let Some(bip) = to_bcheck_ip(ip) else { continue };
+                    let Some(bip) = to_bcheck_ip(ip) else {
+                        continue;
+                    };
                     run_active_def(cx, def, &base, Some(&bip), &transport);
                 }
             }
@@ -322,7 +339,11 @@ fn run_active_def(
     ip: Option<&BcheckIp>,
     transport: &dyn Transport,
 ) -> bool {
-    let collab = ScanCollab { shared: Arc::clone(&cx.shared), tokens: Vec::new(), counted: std::collections::HashSet::new() };
+    let collab = ScanCollab {
+        shared: Arc::clone(&cx.shared),
+        tokens: Vec::new(),
+        counted: std::collections::HashSet::new(),
+    };
     match run_definition(def, base, ip, transport, Some(Box::new(collab))) {
         Ok(issues) => {
             let evidence = vec![ScanEvidence::new(
@@ -376,7 +397,9 @@ pub(crate) fn bcheck_passive_issues(shared: &Shared, e: &HistEntry) -> Vec<ScanI
     if defs.is_empty() {
         return Vec::new();
     }
-    let Some(exchange) = entry_exchange(e) else { return Vec::new() };
+    let Some(exchange) = entry_exchange(e) else {
+        return Vec::new();
+    };
     let mut out = Vec::new();
     for def in defs.iter() {
         if !matches!(def.given, GivenMode::Response) {
@@ -425,7 +448,10 @@ mod tests {
         let r = parse_response(raw).unwrap();
         assert_eq!(r.status_code, 200);
         assert_eq!(r.http_version, "HTTP/1.1");
-        assert!(r.headers.iter().any(|(k, v)| k == "Content-Type" && v == "text/html"));
+        assert!(r
+            .headers
+            .iter()
+            .any(|(k, v)| k == "Content-Type" && v == "text/html"));
         assert_eq!(r.body, "<html>hi</html>");
         assert!(parse_response(b"").is_none());
     }
@@ -437,7 +463,10 @@ mod tests {
         let a = configured_defs(&shared);
         let b = configured_defs(&shared);
         assert!(a.is_empty() && b.is_empty());
-        assert!(std::sync::Arc::ptr_eq(&a, &b), "second call must hit the cache");
+        assert!(
+            std::sync::Arc::ptr_eq(&a, &b),
+            "second call must hit the cache"
+        );
         let logs = shared.events.lock().unwrap();
         let n = logs.iter().filter(|l| l.contains("BCheck skipped")).count();
         drop(logs);
@@ -445,7 +474,10 @@ mod tests {
         // A config change re-parses.
         shared.scan_config.lock().unwrap().bchecks = vec!["still not a bcheck".to_string()];
         let c = configured_defs(&shared);
-        assert!(!std::sync::Arc::ptr_eq(&a, &c), "changed sources must re-parse");
+        assert!(
+            !std::sync::Arc::ptr_eq(&a, &c),
+            "changed sources must re-parse"
+        );
         let logs = shared.events.lock().unwrap();
         let n = logs.iter().filter(|l| l.contains("BCheck skipped")).count();
         drop(logs);
@@ -474,9 +506,7 @@ mod tests {
     // Acceptance: Burp's seven worked-example BChecks against a live lab.
     // ------------------------------------------------------------------
 
-    fn lab_serve(
-        handler: impl Fn(&str, &str, &str) -> String + Send + Sync + 'static,
-    ) -> u16 {
+    fn lab_serve(handler: impl Fn(&str, &str, &str) -> String + Send + Sync + 'static) -> u16 {
         use std::io::{Read, Write};
         let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = l.local_addr().unwrap().port();
@@ -492,17 +522,20 @@ mod tests {
                     loop {
                         let n = s.read(&mut buf).unwrap_or(0);
                         raw.extend_from_slice(&buf[..n]);
-                        let done = String::from_utf8_lossy(&raw).find("\r\n\r\n").is_some_and(|h| {
-                            let cl = String::from_utf8_lossy(&raw[..h])
-                                .lines()
-                                .find_map(|l| {
-                                    l.to_ascii_lowercase()
-                                        .strip_prefix("content-length:")
-                                        .map(|v| v.trim().parse::<usize>().unwrap_or(0))
-                                })
-                                .unwrap_or(0);
-                            raw.len() >= h + 4 + cl
-                        });
+                        let done =
+                            String::from_utf8_lossy(&raw)
+                                .find("\r\n\r\n")
+                                .is_some_and(|h| {
+                                    let cl = String::from_utf8_lossy(&raw[..h])
+                                        .lines()
+                                        .find_map(|l| {
+                                            l.to_ascii_lowercase()
+                                                .strip_prefix("content-length:")
+                                                .map(|v| v.trim().parse::<usize>().unwrap_or(0))
+                                        })
+                                        .unwrap_or(0);
+                                    raw.len() >= h + 4 + cl
+                                });
                         if n == 0 || done {
                             break;
                         }
@@ -593,7 +626,11 @@ mod tests {
         let (_shared, issues) = scan_with_bchecks(port, &[HOST_BC], req, "/");
         assert_eq!(
             issues,
-            vec![("Host-level".to_string(), "info".to_string(), "Certain".to_string())]
+            vec![(
+                "Host-level".to_string(),
+                "info".to_string(),
+                "Certain".to_string()
+            )]
         );
     }
 
@@ -612,7 +649,11 @@ mod tests {
         let (_shared, issues) = scan_with_bchecks(port, &[PATH_BC], req, "/page");
         assert_eq!(
             issues,
-            vec![("Path-level".to_string(), "info".to_string(), "Firm".to_string())]
+            vec![(
+                "Path-level".to_string(),
+                "info".to_string(),
+                "Firm".to_string()
+            )]
         );
     }
 
@@ -622,25 +663,38 @@ mod tests {
         let shared = crate::net::Shared::new();
         shared.scan_config.lock().unwrap().bchecks = vec![PASSIVE_BC.to_string()];
         let req = b"GET / HTTP/1.1\r\nHost: lab.local\r\n\r\n".to_vec();
-        let resp = b"HTTP/1.1 200 OK\r\nContent-Length: 25\r\n\r\nkey: AKIAIOSFODNN7EXAMPLE".to_vec();
-        let mut e = crate::net::HistEntry { host: "lab.local".into(), path: "/".into(), ..Default::default() };
+        let resp =
+            b"HTTP/1.1 200 OK\r\nContent-Length: 25\r\n\r\nkey: AKIAIOSFODNN7EXAMPLE".to_vec();
+        let mut e = crate::net::HistEntry {
+            host: "lab.local".into(),
+            path: "/".into(),
+            ..Default::default()
+        };
         e.req_raw = req.into();
         e.resp_raw = Some(resp.into());
         let issues = crate::scan::passive_check_for(&shared, &e);
         assert!(
-            issues.iter().any(|i| i.name == "Response-level (passive) check"
-                && i.sev == "high"
-                && i.confidence == "Firm"),
+            issues
+                .iter()
+                .any(|i| i.name == "Response-level (passive) check"
+                    && i.sev == "high"
+                    && i.confidence == "Firm"),
             "issues: {:?}",
             issues.iter().map(|i| &i.name).collect::<Vec<_>>()
         );
         // a clean response stays quiet
         let resp2 = b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok".to_vec();
-        let mut e2 = crate::net::HistEntry { host: "lab.local".into(), path: "/".into(), ..Default::default() };
+        let mut e2 = crate::net::HistEntry {
+            host: "lab.local".into(),
+            path: "/".into(),
+            ..Default::default()
+        };
         e2.req_raw = b"GET / HTTP/1.1\r\nHost: lab.local\r\n\r\n".to_vec().into();
         e2.resp_raw = Some(resp2.into());
         let issues2 = crate::scan::passive_check_for(&shared, &e2);
-        assert!(!issues2.iter().any(|i| i.name == "Response-level (passive) check"));
+        assert!(!issues2
+            .iter()
+            .any(|i| i.name == "Response-level (passive) check"));
     }
 
     #[test]
@@ -657,31 +711,47 @@ mod tests {
         let req = format!("GET /calc?n=1 HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
         let (_shared, issues) = scan_with_bchecks(port, &[INSERTION_BC], req, "/calc?n=1");
         assert!(
-            issues.contains(&("Insertion-point-level".to_string(), "high".to_string(), "Tentative".to_string())),
+            issues.contains(&(
+                "Insertion-point-level".to_string(),
+                "high".to_string(),
+                "Tentative".to_string()
+            )),
             "issues: {issues:?}"
         );
     }
 
     fn stock_and_observe(shared: &Shared, kinds: &[&str]) {
-        shared.oob.stock(vec![("tok1".to_string(), "t1.oast.test".to_string())]);
-        shared.oob.stock(vec![("tok2".to_string(), "t2.oast.test".to_string())]);
-        shared.oob.stock(vec![("tok3".to_string(), "t3.oast.test".to_string())]);
-        shared.oob.stock(vec![("tok4".to_string(), "t4.oast.test".to_string())]);
+        shared
+            .oob
+            .stock(vec![("tok1".to_string(), "t1.oast.test".to_string())]);
+        shared
+            .oob
+            .stock(vec![("tok2".to_string(), "t2.oast.test".to_string())]);
+        shared
+            .oob
+            .stock(vec![("tok3".to_string(), "t3.oast.test".to_string())]);
+        shared
+            .oob
+            .stock(vec![("tok4".to_string(), "t4.oast.test".to_string())]);
         let mut interactions = Vec::new();
         for (i, kind) in kinds.iter().enumerate() {
             let detail = match *kind {
-                "dns" => crate::collaborator::InteractionDetail::Dns(crate::collaborator::DnsInteraction {
-                    qname: "t.oast.test".into(),
-                    qtype: 1,
-                    raw_query: Vec::new(),
-                }),
-                "http" => crate::collaborator::InteractionDetail::Http(crate::collaborator::HttpInteraction {
-                    method: "GET".into(),
-                    target: "/".into(),
-                    version: "HTTP/1.1".into(),
-                    headers: Vec::new(),
-                    body: Vec::new(),
-                }),
+                "dns" => crate::collaborator::InteractionDetail::Dns(
+                    crate::collaborator::DnsInteraction {
+                        qname: "t.oast.test".into(),
+                        qtype: 1,
+                        raw_query: Vec::new(),
+                    },
+                ),
+                "http" => crate::collaborator::InteractionDetail::Http(
+                    crate::collaborator::HttpInteraction {
+                        method: "GET".into(),
+                        target: "/".into(),
+                        version: "HTTP/1.1".into(),
+                        headers: Vec::new(),
+                        body: Vec::new(),
+                    },
+                ),
                 _ => continue,
             };
             // the pool hands out tokens from the end: tok4 is drawn first
@@ -725,9 +795,11 @@ mod tests {
         }
         let issues = shared.issues.lock().unwrap();
         assert!(
-            issues.iter().any(|i| i.name == "Request-level collaborator-based check"
-                && i.sev == "high"
-                && i.confidence == "Firm"),
+            issues
+                .iter()
+                .any(|i| i.name == "Request-level collaborator-based check"
+                    && i.sev == "high"
+                    && i.confidence == "Firm"),
             "issues: {:?}",
             issues.iter().map(|i| &i.name).collect::<Vec<_>>()
         );
@@ -747,7 +819,9 @@ mod tests {
         cfg.bchecks = vec![LOG4SHELL_BC.to_string()];
         *shared.scan_config.lock().unwrap() = cfg;
         stock_and_observe(&shared, &["dns"]);
-        let req_t = format!("POST /login HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 3\r\n\r\nabc");
+        let req_t = format!(
+            "POST /login HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 3\r\n\r\nabc"
+        );
         let mut e = crate::net::HistEntry {
             method: "POST".into(),
             host: "127.0.0.1".into(),
@@ -764,9 +838,9 @@ mod tests {
         assert!(!shared.scan.is_busy(), "scan did not finish");
         let issues = shared.issues.lock().unwrap();
         assert!(
-            issues.iter().any(|i| i.name == "Log4Shell check"
-                && i.sev == "high"
-                && i.confidence == "Firm"),
+            issues
+                .iter()
+                .any(|i| i.name == "Log4Shell check" && i.sev == "high" && i.confidence == "Firm"),
             "issues: {:?}",
             issues.iter().map(|i| &i.name).collect::<Vec<_>>()
         );
@@ -781,7 +855,9 @@ mod tests {
         cfg2.bchecks = vec![LOG4SHELL_BC.to_string()];
         *shared2.scan_config.lock().unwrap() = cfg2;
         stock_and_observe(&shared2, &[]);
-        let req_t2 = format!("POST /login HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 3\r\n\r\nabc");
+        let req_t2 = format!(
+            "POST /login HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 3\r\n\r\nabc"
+        );
         let mut e2 = crate::net::HistEntry {
             method: "POST".into(),
             host: "127.0.0.1".into(),
@@ -830,9 +906,11 @@ mod tests {
         );
         let (_shared, issues) = scan_with_bchecks(port, &[SSPP_BC], req, "/merge");
         assert!(
-            issues.iter().any(|i| i.0 == "Server-side prototype pollution"
-                && i.1 == "high"
-                && i.2 == "Firm"),
+            issues
+                .iter()
+                .any(|i| i.0 == "Server-side prototype pollution"
+                    && i.1 == "high"
+                    && i.2 == "Firm"),
             "issues: {issues:?}"
         );
     }

@@ -109,18 +109,36 @@ pub enum ModMode {
 pub enum RequestMod {
     /// headers: "Name": value, ... (append adds a second header on name clash,
     /// replace overwrites or appends).
-    Headers { mode: ModMode, pairs: Vec<(Value, Value)> },
+    Headers {
+        mode: ModMode,
+        pairs: Vec<(Value, Value)>,
+    },
     RemoveHeaders(Vec<Value>),
     /// queries: "name=value", ...
-    Queries { mode: ModMode, entries: Vec<Value> },
+    Queries {
+        mode: ModMode,
+        entries: Vec<Value>,
+    },
     RemoveQueries(Vec<Value>),
-    QueryString { mode: ModMode, value: Value },
+    QueryString {
+        mode: ModMode,
+        value: Value,
+    },
     RemoveQueryString,
-    Path { mode: ModMode, value: Value },
+    Path {
+        mode: ModMode,
+        value: Value,
+    },
     RemovePath,
-    Method { mode: ModMode, value: Value },
+    Method {
+        mode: ModMode,
+        value: Value,
+    },
     RemoveMethod,
-    Body { mode: ModMode, value: Value },
+    Body {
+        mode: ModMode,
+        value: Value,
+    },
     RemoveBody,
 }
 
@@ -153,7 +171,10 @@ pub enum Stmt {
         /// Source line of the statement, for validation messages.
         line: usize,
     },
-    ReportIssue { and_continue: bool, fields: IssueFields },
+    ReportIssue {
+        and_continue: bool,
+        fields: IssueFields,
+    },
     /// If/else-if/else chain. The condition is `None` for the final `else`.
     If {
         arms: Vec<(Option<Condition>, Vec<Stmt>)>,
@@ -211,7 +232,10 @@ impl std::error::Error for BcheckError {}
 enum Tok {
     Ident(String),
     /// Quoted string: raw inner text (escapes still intact), interpolatable flag.
-    Str { raw: String, interpolatable: bool },
+    Str {
+        raw: String,
+        interpolatable: bool,
+    },
     Int(i64),
     Colon,
     Comma,
@@ -237,7 +261,10 @@ fn lex(src: &str) -> Result<Vec<Lexed>, BcheckError> {
     while let Some(&c) = chars.peek() {
         match c {
             '\n' => {
-                out.push(Lexed { tok: Tok::Newline, line });
+                out.push(Lexed {
+                    tok: Tok::Newline,
+                    line,
+                });
                 line += 1;
                 chars.next();
             }
@@ -254,11 +281,17 @@ fn lex(src: &str) -> Result<Vec<Lexed>, BcheckError> {
                 }
             }
             ':' => {
-                out.push(Lexed { tok: Tok::Colon, line });
+                out.push(Lexed {
+                    tok: Tok::Colon,
+                    line,
+                });
                 chars.next();
             }
             ',' => {
-                out.push(Lexed { tok: Tok::Comma, line });
+                out.push(Lexed {
+                    tok: Tok::Comma,
+                    line,
+                });
                 chars.next();
             }
             '=' => {
@@ -266,23 +299,38 @@ fn lex(src: &str) -> Result<Vec<Lexed>, BcheckError> {
                 chars.next();
             }
             '(' => {
-                out.push(Lexed { tok: Tok::LParen, line });
+                out.push(Lexed {
+                    tok: Tok::LParen,
+                    line,
+                });
                 chars.next();
             }
             ')' => {
-                out.push(Lexed { tok: Tok::RParen, line });
+                out.push(Lexed {
+                    tok: Tok::RParen,
+                    line,
+                });
                 chars.next();
             }
             '{' => {
-                out.push(Lexed { tok: Tok::LBrace, line });
+                out.push(Lexed {
+                    tok: Tok::LBrace,
+                    line,
+                });
                 chars.next();
             }
             '}' => {
-                out.push(Lexed { tok: Tok::RBrace, line });
+                out.push(Lexed {
+                    tok: Tok::RBrace,
+                    line,
+                });
                 chars.next();
             }
             '.' => {
-                out.push(Lexed { tok: Tok::Dot, line });
+                out.push(Lexed {
+                    tok: Tok::Dot,
+                    line,
+                });
                 chars.next();
             }
             '"' | '`' => {
@@ -322,7 +370,10 @@ fn lex(src: &str) -> Result<Vec<Lexed>, BcheckError> {
                     });
                 }
                 out.push(Lexed {
-                    tok: Tok::Str { raw, interpolatable },
+                    tok: Tok::Str {
+                        raw,
+                        interpolatable,
+                    },
                     line: start_line,
                 });
             }
@@ -336,7 +387,10 @@ fn lex(src: &str) -> Result<Vec<Lexed>, BcheckError> {
                         break;
                     }
                 }
-                out.push(Lexed { tok: Tok::Ident(name), line });
+                out.push(Lexed {
+                    tok: Tok::Ident(name),
+                    line,
+                });
             }
             _ if c.is_ascii_digit() => {
                 let mut digits = String::new();
@@ -352,7 +406,10 @@ fn lex(src: &str) -> Result<Vec<Lexed>, BcheckError> {
                     line,
                     message: format!("bad integer `{digits}`"),
                 })?;
-                out.push(Lexed { tok: Tok::Int(n), line });
+                out.push(Lexed {
+                    tok: Tok::Int(n),
+                    line,
+                });
             }
             other => {
                 return Err(BcheckError {
@@ -405,7 +462,10 @@ fn parse_interpol(raw: &str, interpolatable: bool, line: usize) -> Result<Interp
     if !text.is_empty() {
         parts.push(Part::Text(text));
     }
-    Ok(Interpol { parts, interpolatable })
+    Ok(Interpol {
+        parts,
+        interpolatable,
+    })
 }
 
 /// Parse the inside of a `{...}` hole from a character stream positioned just
@@ -422,19 +482,31 @@ fn parse_hole(
                 // An escape outside a nested string is not valid expression
                 // syntax; keep it as ONE token so it surfaces as a single
                 // unknown variable at evaluation instead of two bogus refs.
-                let escaped = chars.next().map(|n| format!("\\{n}")).unwrap_or_else(|| "\\".to_string());
-                depth_toks.push(Lexed { tok: Tok::Ident(escaped), line });
+                let escaped = chars
+                    .next()
+                    .map(|n| format!("\\{n}"))
+                    .unwrap_or_else(|| "\\".to_string());
+                depth_toks.push(Lexed {
+                    tok: Tok::Ident(escaped),
+                    line,
+                });
             }
             '{' => {
                 depth += 1;
-                depth_toks.push(Lexed { tok: Tok::LBrace, line });
+                depth_toks.push(Lexed {
+                    tok: Tok::LBrace,
+                    line,
+                });
             }
             '}' => {
                 depth -= 1;
                 if depth == 0 {
                     return parse_hole_expr(&depth_toks, line);
                 }
-                depth_toks.push(Lexed { tok: Tok::RBrace, line });
+                depth_toks.push(Lexed {
+                    tok: Tok::RBrace,
+                    line,
+                });
             }
             '"' | '`' => {
                 let interpolatable = c == '`';
@@ -455,14 +527,35 @@ fn parse_hole(
                     raw.push(c2);
                 }
                 if !closed {
-                    return Err(BcheckError { line, message: "unterminated string in hole".into() });
+                    return Err(BcheckError {
+                        line,
+                        message: "unterminated string in hole".into(),
+                    });
                 }
-                depth_toks.push(Lexed { tok: Tok::Str { raw, interpolatable }, line });
+                depth_toks.push(Lexed {
+                    tok: Tok::Str {
+                        raw,
+                        interpolatable,
+                    },
+                    line,
+                });
             }
-            ',' => depth_toks.push(Lexed { tok: Tok::Comma, line }),
-            '(' => depth_toks.push(Lexed { tok: Tok::LParen, line }),
-            ')' => depth_toks.push(Lexed { tok: Tok::RParen, line }),
-            '.' => depth_toks.push(Lexed { tok: Tok::Dot, line }),
+            ',' => depth_toks.push(Lexed {
+                tok: Tok::Comma,
+                line,
+            }),
+            '(' => depth_toks.push(Lexed {
+                tok: Tok::LParen,
+                line,
+            }),
+            ')' => depth_toks.push(Lexed {
+                tok: Tok::RParen,
+                line,
+            }),
+            '.' => depth_toks.push(Lexed {
+                tok: Tok::Dot,
+                line,
+            }),
             c if c.is_ascii_alphanumeric() || c == '_' || c == '-' => {
                 // merge with previous ident-ish token when adjacent
                 let s = c.to_string();
@@ -474,7 +567,10 @@ fn parse_hole(
                         }
                     }
                 }
-                depth_toks.push(Lexed { tok: Tok::Ident(s), line });
+                depth_toks.push(Lexed {
+                    tok: Tok::Ident(s),
+                    line,
+                });
             }
             c if c.is_whitespace() => {}
             other => {
@@ -485,11 +581,15 @@ fn parse_hole(
             }
         }
     }
-    Err(BcheckError { line, message: "unterminated `{` hole".into() })
+    Err(BcheckError {
+        line,
+        message: "unterminated `{` hole".into(),
+    })
 }
 
 fn is_identish(s: &str) -> bool {
-    s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    s.chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
 /// Build an Expr from the raw tokens collected inside `{...}`.
@@ -498,7 +598,10 @@ fn parse_hole_expr(toks: &[Lexed], line: usize) -> Result<Expr, BcheckError> {
     let e = p.expr()?;
     p.skip_ws();
     if p.pos != toks.len() {
-        return Err(BcheckError { line, message: "trailing content in hole".into() });
+        return Err(BcheckError {
+            line,
+            message: "trailing content in hole".into(),
+        });
     }
     Ok(e)
 }
@@ -522,7 +625,10 @@ impl<'a> HoleParser<'a> {
         t
     }
     fn err(&self, msg: &str) -> BcheckError {
-        BcheckError { line: self.line, message: msg.to_string() }
+        BcheckError {
+            line: self.line,
+            message: msg.to_string(),
+        }
     }
     fn expr(&mut self) -> Result<Expr, BcheckError> {
         match self.next().cloned() {
@@ -531,7 +637,9 @@ impl<'a> HoleParser<'a> {
                     return Ok(Expr::Null);
                 }
                 let is_int_literal = name.chars().next().unwrap().is_ascii_digit()
-                    || (name.len() > 1 && name.starts_with('-') && name[1..].chars().next().unwrap().is_ascii_digit());
+                    || (name.len() > 1
+                        && name.starts_with('-')
+                        && name[1..].chars().next().unwrap().is_ascii_digit());
                 if let Some(n) = name.parse::<i64>().ok().filter(|_| is_int_literal) {
                     return Ok(Expr::Int(n));
                 }
@@ -550,7 +658,11 @@ impl<'a> HoleParser<'a> {
                                     match self.next() {
                                         Some(Tok::Comma) => continue,
                                         Some(Tok::RParen) => break,
-                                        _ => return Err(self.err("expected `,` or `)` in function args")),
+                                        _ => {
+                                            return Err(
+                                                self.err("expected `,` or `)` in function args")
+                                            )
+                                        }
                                     }
                                 }
                                 None => return Err(self.err("unterminated function call")),
@@ -573,11 +685,10 @@ impl<'a> HoleParser<'a> {
                 }
             }
             Some(Tok::Int(n)) => Ok(Expr::Int(n)),
-            Some(Tok::Str { raw, interpolatable }) => Ok(Expr::Str(parse_interpol(
-                &raw,
+            Some(Tok::Str {
+                raw,
                 interpolatable,
-                self.line,
-            )?)),
+            }) => Ok(Expr::Str(parse_interpol(&raw, interpolatable, self.line)?)),
             Some(Tok::LBrace) => {
                 // nested hole value, e.g. function arg that is itself {expr}
                 let e = self.expr()?;
@@ -617,7 +728,10 @@ struct Parser {
 
 impl Parser {
     fn line(&self) -> usize {
-        self.toks.get(self.pos).map(|l| l.line).unwrap_or(usize::MAX)
+        self.toks
+            .get(self.pos)
+            .map(|l| l.line)
+            .unwrap_or(usize::MAX)
     }
     fn peek(&self) -> Option<&Tok> {
         self.toks.get(self.pos).map(|l| &l.tok)
@@ -635,7 +749,10 @@ impl Parser {
         }
     }
     fn err<T>(&self, msg: impl Into<String>) -> Result<T, BcheckError> {
-        Err(BcheckError { line: self.line(), message: msg.into() })
+        Err(BcheckError {
+            line: self.line(),
+            message: msg.into(),
+        })
     }
     fn ident(&mut self) -> Result<String, BcheckError> {
         match self.next() {
@@ -691,7 +808,13 @@ impl Parser {
         if self.pos < self.toks.len() {
             return self.err("unexpected content after the check body");
         }
-        Ok(Definition { metadata, run_for_each, define, given, body })
+        Ok(Definition {
+            metadata,
+            run_for_each,
+            define,
+            given,
+            body,
+        })
     }
 
     fn metadata(&mut self) -> Result<Metadata, BcheckError> {
@@ -714,17 +837,15 @@ impl Parser {
                         "name" => name = Some(self.string_value()?),
                         "description" => description = Some(self.string_value()?),
                         "author" => author = Some(self.string_value()?),
-                        "tags" => {
-                            loop {
-                                tags.push(self.string_value()?);
-                                match self.peek() {
-                                    Some(Tok::Comma) => {
-                                        self.next();
-                                    }
-                                    _ => break,
+                        "tags" => loop {
+                            tags.push(self.string_value()?);
+                            match self.peek() {
+                                Some(Tok::Comma) => {
+                                    self.next();
                                 }
+                                _ => break,
                             }
-                        }
+                        },
                         _ => unreachable!(),
                     }
                 }
@@ -787,16 +908,25 @@ impl Parser {
                     values.push(self.value()?);
                 }
             }
-            decls.push(VarDecl { name, values, line: decl_line });
+            decls.push(VarDecl {
+                name,
+                values,
+                line: decl_line,
+            });
         }
         Ok(decls)
     }
 
     fn value(&mut self) -> Result<Value, BcheckError> {
         match self.next() {
-            Some(Tok::Str { raw, interpolatable }) => {
-                Ok(Value::Str(parse_interpol(&raw, interpolatable, self.line())?))
-            }
+            Some(Tok::Str {
+                raw,
+                interpolatable,
+            }) => Ok(Value::Str(parse_interpol(
+                &raw,
+                interpolatable,
+                self.line(),
+            )?)),
             Some(Tok::LBrace) => {
                 let e = self.expr_until_rbrace()?;
                 Ok(Value::Hole(e))
@@ -816,17 +946,26 @@ impl Parser {
             match self.next() {
                 Some(Tok::LBrace) => {
                     depth += 1;
-                    inner.push(Lexed { tok: Tok::LBrace, line: start_line });
+                    inner.push(Lexed {
+                        tok: Tok::LBrace,
+                        line: start_line,
+                    });
                 }
                 Some(Tok::RBrace) => {
                     depth -= 1;
                     if depth == 0 {
                         break;
                     }
-                    inner.push(Lexed { tok: Tok::RBrace, line: start_line });
+                    inner.push(Lexed {
+                        tok: Tok::RBrace,
+                        line: start_line,
+                    });
                 }
                 Some(Tok::Newline) => {}
-                Some(t) => inner.push(Lexed { tok: t, line: start_line }),
+                Some(t) => inner.push(Lexed {
+                    tok: t,
+                    line: start_line,
+                }),
                 None => {
                     return Err(BcheckError {
                         line: start_line,
@@ -938,7 +1077,11 @@ impl Parser {
             name = Some(match self.next() {
                 Some(Tok::Str { raw, .. }) => unescape_literal(&raw),
                 Some(Tok::Ident(s)) => s,
-                other => return self.err(format!("expected a request name after `called`, got {other:?}")),
+                other => {
+                    return self.err(format!(
+                        "expected a request name after `called`, got {other:?}"
+                    ))
+                }
             });
         }
         self.expect(Tok::Colon)?;
@@ -949,10 +1092,20 @@ impl Parser {
                 // followed by `:` is a headers pair, i.e. modifications.
                 if matches!(self.peek(), Some(Tok::Str { .. })) && !self.str_is_pair_key() {
                     let raw = self.value()?;
-                    return Ok(Stmt::SendRequest { name, raw: Some(raw), mods: Vec::new(), line: stmt_line });
+                    return Ok(Stmt::SendRequest {
+                        name,
+                        raw: Some(raw),
+                        mods: Vec::new(),
+                        line: stmt_line,
+                    });
                 }
                 let mods = self.request_mods()?;
-                Ok(Stmt::SendRequest { name, raw: None, mods, line: stmt_line })
+                Ok(Stmt::SendRequest {
+                    name,
+                    raw: None,
+                    mods,
+                    line: stmt_line,
+                })
             }
             "payload" => {
                 let mut ops = Vec::new();
@@ -970,9 +1123,15 @@ impl Parser {
                 if ops.is_empty() {
                     return self.err("`send payload` needs an `appending:` or `replacing:` entry");
                 }
-                Ok(Stmt::SendPayload { name, ops, line: stmt_line })
+                Ok(Stmt::SendPayload {
+                    name,
+                    ops,
+                    line: stmt_line,
+                })
             }
-            other => self.err(format!("expected `request` or `payload` after `send`, got `{other}`")),
+            other => self.err(format!(
+                "expected `request` or `payload` after `send`, got `{other}`"
+            )),
         }
     }
 
@@ -1007,8 +1166,7 @@ impl Parser {
                 }
             };
             // statement keywords end the modification block
-            if mode.is_none()
-                && matches!(what.as_str(), "send" | "report" | "if" | "else" | "end")
+            if mode.is_none() && matches!(what.as_str(), "send" | "report" | "if" | "else" | "end")
             {
                 break;
             }
@@ -1183,7 +1341,14 @@ impl Parser {
         })?;
         Ok(Stmt::ReportIssue {
             and_continue,
-            fields: IssueFields { line: stmt_line, name, severity, confidence, remediation, detail },
+            fields: IssueFields {
+                line: stmt_line,
+                name,
+                severity,
+                confidence,
+                remediation,
+                detail,
+            },
         })
     }
 
@@ -1211,7 +1376,11 @@ impl Parser {
                             let b = self.statements(false)?;
                             arms.push((None, b));
                         }
-                        other => return self.err(format!("expected `if` or `then` after `else`, got {other:?}")),
+                        other => {
+                            return self.err(format!(
+                                "expected `if` or `then` after `else`, got {other:?}"
+                            ))
+                        }
                     }
                 }
                 Some(Tok::Ident(s)) if s == "end" => {
@@ -1297,10 +1466,15 @@ impl Parser {
         match op.as_str() {
             "matches" => {
                 let re = match self.next() {
-                    Some(Tok::Str { raw, interpolatable }) => {
-                        parse_interpol(&raw, interpolatable, self.line())?
+                    Some(Tok::Str {
+                        raw,
+                        interpolatable,
+                    }) => parse_interpol(&raw, interpolatable, self.line())?,
+                    other => {
+                        return self.err(format!(
+                            "expected regex string after `matches`, got {other:?}"
+                        ))
                     }
-                    other => return self.err(format!("expected regex string after `matches`, got {other:?}")),
                 };
                 Ok(Condition::Matches(lhs, re))
             }
@@ -1323,7 +1497,10 @@ impl Parser {
     fn cond_operand(&mut self) -> Result<Expr, BcheckError> {
         match self.next() {
             Some(Tok::LBrace) => self.expr_until_rbrace(),
-            Some(Tok::Str { raw, interpolatable }) => Ok(Expr::Str(parse_interpol(
+            Some(Tok::Str {
+                raw,
+                interpolatable,
+            }) => Ok(Expr::Str(parse_interpol(
                 &raw,
                 interpolatable,
                 self.line(),
@@ -1430,7 +1607,10 @@ pub fn validate(d: &Definition) -> Result<(), Vec<BcheckError>> {
         });
     }
     if d.metadata.name.is_empty() {
-        errs.push(BcheckError { line: 1, message: "metadata requires a name".into() });
+        errs.push(BcheckError {
+            line: 1,
+            message: "metadata requires a name".into(),
+        });
     }
     for decl in d.run_for_each.iter().chain(d.define.iter()) {
         if RESERVED_VARS.contains(&decl.name.as_str()) || FUNCTIONS.contains(&decl.name.as_str()) {
@@ -1530,7 +1710,9 @@ mod tests {
         // body: send request called check + if
         assert_eq!(d.body.len(), 2);
         match &d.body[0] {
-            Stmt::SendRequest { name, mods, raw, .. } => {
+            Stmt::SendRequest {
+                name, mods, raw, ..
+            } => {
                 assert_eq!(name.as_deref(), Some("check"));
                 assert!(raw.is_none());
                 assert_eq!(mods.len(), 2);
@@ -1542,12 +1724,22 @@ mod tests {
                 assert_eq!(arms.len(), 1);
                 match &arms[0].0 {
                     Some(Condition::In(Expr::Str(_), Expr::Path(p))) => {
-                        assert_eq!(p, &vec!["check".to_string(), "response".to_string(), "body".to_string()]);
+                        assert_eq!(
+                            p,
+                            &vec![
+                                "check".to_string(),
+                                "response".to_string(),
+                                "body".to_string()
+                            ]
+                        );
                     }
                     other => panic!("bad condition {other:?}"),
                 }
                 match &arms[0].1[0] {
-                    Stmt::ReportIssue { and_continue, fields } => {
+                    Stmt::ReportIssue {
+                        and_continue,
+                        fields,
+                    } => {
                         assert!(!and_continue);
                         assert_eq!(fields.severity, Value::Ident("info".into()));
                         assert_eq!(fields.confidence, Value::Ident("certain".into()));
@@ -1565,7 +1757,9 @@ mod tests {
         assert_eq!(d.given, GivenMode::Path);
         assert_eq!(d.run_for_each[0].values.len(), 4);
         // outer if not(...) then send + if ... end if
-        let Stmt::If { arms } = &d.body[0] else { panic!("expected if") };
+        let Stmt::If { arms } = &d.body[0] else {
+            panic!("expected if")
+        };
         assert_eq!(arms.len(), 1);
         match &arms[0].0 {
             Some(Condition::Not(inner)) => match inner.as_ref() {
@@ -1577,18 +1771,35 @@ mod tests {
             other => panic!("bad condition {other:?}"),
         }
         // the send request uses regex_replace with an interpolatable `$1{extension}`
-        let Stmt::SendRequest { mods, .. } = &arms[0].1[0] else { panic!("expected send") };
-        let RequestMod::Path { value: Value::Hole(Expr::Call { name, args }), .. } = &mods[0] else {
+        let Stmt::SendRequest { mods, .. } = &arms[0].1[0] else {
+            panic!("expected send")
+        };
+        let RequestMod::Path {
+            value: Value::Hole(Expr::Call { name, args }),
+            ..
+        } = &mods[0]
+        else {
             panic!("expected replacing path regex_replace, got {mods:?}");
         };
         assert_eq!(name, "regex_replace");
         assert_eq!(args.len(), 3);
-        let Expr::Str(tpl) = &args[2] else { panic!("expected string arg") };
-        assert!(tpl.parts.iter().any(|p| matches!(p, Part::Hole(Expr::Var(v)) if v == "extension")));
+        let Expr::Str(tpl) = &args[2] else {
+            panic!("expected string arg")
+        };
+        assert!(tpl
+            .parts
+            .iter()
+            .any(|p| matches!(p, Part::Hole(Expr::Var(v)) if v == "extension")));
         // `report issue and continue` at the innermost level
-        let Stmt::If { arms: a2 } = &arms[0].1[1] else { panic!("expected inner if") };
-        let Stmt::If { arms: a3 } = &a2[0].1[1] else { panic!("expected third if") };
-        let Stmt::ReportIssue { and_continue, .. } = &a3[0].1[0] else { panic!("expected report") };
+        let Stmt::If { arms: a2 } = &arms[0].1[1] else {
+            panic!("expected inner if")
+        };
+        let Stmt::If { arms: a3 } = &a2[0].1[1] else {
+            panic!("expected third if")
+        };
+        let Stmt::ReportIssue { and_continue, .. } = &a3[0].1[0] else {
+            panic!("expected report")
+        };
         assert!(and_continue);
     }
 
@@ -1597,7 +1808,9 @@ mod tests {
         let d = ok(PASSIVE);
         assert_eq!(d.given, GivenMode::Response);
         assert_eq!(d.metadata.tags, vec!["passive".to_string()]);
-        let Stmt::If { arms } = &d.body[0] else { panic!("expected if") };
+        let Stmt::If { arms } = &d.body[0] else {
+            panic!("expected if")
+        };
         match &arms[0].0 {
             Some(Condition::Matches(Expr::Path(p), re)) => {
                 assert_eq!(p, &vec!["latest".to_string(), "response".to_string()]);
@@ -1621,8 +1834,12 @@ mod tests {
             other => panic!("bad define value {other:?}"),
         }
         // send payload appending: {calculation}
-        let Stmt::If { arms } = &d.body[0] else { panic!("expected if") };
-        let Stmt::SendPayload { ops, .. } = &arms[0].1[0] else { panic!("expected send payload") };
+        let Stmt::If { arms } = &d.body[0] else {
+            panic!("expected if")
+        };
+        let Stmt::SendPayload { ops, .. } = &arms[0].1[0] else {
+            panic!("expected send payload")
+        };
         assert_eq!(ops.len(), 1);
         assert_eq!(ops[0].0, ModMode::Append);
     }
@@ -1631,12 +1848,23 @@ mod tests {
     fn burp_example_collaborator_check_parses() {
         let d = ok(COLLABORATOR);
         assert_eq!(d.given, GivenMode::Request);
-        let Stmt::SendRequest { mods, .. } = &d.body[0] else { panic!("expected send") };
-        let RequestMod::Headers { pairs, .. } = &mods[0] else { panic!("expected headers") };
+        let Stmt::SendRequest { mods, .. } = &d.body[0] else {
+            panic!("expected send")
+        };
+        let RequestMod::Headers { pairs, .. } = &mods[0] else {
+            panic!("expected headers")
+        };
         // "Referer": {generate_collaborator_address()}
-        assert!(matches!(&pairs[0].1, Value::Hole(Expr::Call { name, .. }) if name == "generate_collaborator_address"));
-        let Stmt::If { arms } = &d.body[1] else { panic!("expected if") };
-        assert!(matches!(arms[0].0, Some(Condition::Interactions(InteractionKind::Http))));
+        assert!(
+            matches!(&pairs[0].1, Value::Hole(Expr::Call { name, .. }) if name == "generate_collaborator_address")
+        );
+        let Stmt::If { arms } = &d.body[1] else {
+            panic!("expected if")
+        };
+        assert!(matches!(
+            arms[0].0,
+            Some(Condition::Interactions(InteractionKind::Http))
+        ));
     }
 
     #[test]
@@ -1646,19 +1874,30 @@ mod tests {
         // escaped `\{` inside an interpolatable string stays a literal brace
         match &d.define[0].values[0] {
             Value::Str(s) => {
-                let text: String = s.parts.iter().filter_map(|p| match p {
-                    Part::Text(t) => Some(t.as_str()),
-                    _ => None,
-                }).collect();
+                let text: String = s
+                    .parts
+                    .iter()
+                    .filter_map(|p| match p {
+                        Part::Text(t) => Some(t.as_str()),
+                        _ => None,
+                    })
+                    .collect();
                 assert!(text.contains("${jndi:ldap://"), "got {text:?}");
                 assert!(s.parts.iter().any(|p| matches!(p, Part::Hole(Expr::Call { name, .. }) if name == "generate_collaborator_address")));
             }
             other => panic!("bad define value {other:?}"),
         }
         // if dns interactions then send ... if not(dns interactions) then report
-        let Stmt::If { arms } = &d.body[1] else { panic!("expected if") };
-        assert!(matches!(arms[0].0, Some(Condition::Interactions(InteractionKind::Dns))));
-        let Stmt::If { arms: inner } = &arms[0].1[1] else { panic!("expected inner if") };
+        let Stmt::If { arms } = &d.body[1] else {
+            panic!("expected if")
+        };
+        assert!(matches!(
+            arms[0].0,
+            Some(Condition::Interactions(InteractionKind::Dns))
+        ));
+        let Stmt::If { arms: inner } = &arms[0].1[1] else {
+            panic!("expected inner if")
+        };
         assert!(matches!(inner[0].0, Some(Condition::Not(_))));
     }
 
@@ -1669,35 +1908,51 @@ mod tests {
         // `,"__proto__":\{"status\":510\}\}` keeps literal braces and quotes
         match &d.define[0].values[0] {
             Value::Str(s) => {
-                let text: String = s.parts.iter().filter_map(|p| match p {
-                    Part::Text(t) => Some(t.as_str()),
-                    _ => None,
-                }).collect();
+                let text: String = s
+                    .parts
+                    .iter()
+                    .filter_map(|p| match p {
+                        Part::Text(t) => Some(t.as_str()),
+                        _ => None,
+                    })
+                    .collect();
                 assert_eq!(text, ",\"__proto__\":{\"status\":510}}");
             }
             other => panic!("bad define value {other:?}"),
         }
         // three nested ifs, regex_replace over {base.request.body}
-        let Stmt::If { arms } = &d.body[0] else { panic!("expected if") };
+        let Stmt::If { arms } = &d.body[0] else {
+            panic!("expected if")
+        };
         assert!(matches!(&arms[0].0, Some(Condition::Matches(Expr::Path(p), _)) if p.len() == 3));
-        let Stmt::SendRequest { name, mods, .. } = &arms[0].1[0] else { panic!("expected send") };
+        let Stmt::SendRequest { name, mods, .. } = &arms[0].1[0] else {
+            panic!("expected send")
+        };
         assert_eq!(name.as_deref(), Some("inject_sspp"));
-        assert!(matches!(&mods[1], RequestMod::Body { value: Value::Hole(Expr::Call { name, .. }), .. } if name == "regex_replace"));
+        assert!(
+            matches!(&mods[1], RequestMod::Body { value: Value::Hole(Expr::Call { name, .. }), .. } if name == "regex_replace")
+        );
     }
 
     #[test]
     fn condition_precedence_and_parens() {
         let src = "metadata:\n language: v2-beta\n name: \"x\"\ngiven response then\n if {latest.response} matches \"a\" or {latest.response} matches \"b\" and {latest.response} matches \"c\" then\n  report issue:\n   severity: info\n   confidence: certain\n end if\n";
         let d = ok(src);
-        let Stmt::If { arms } = &d.body[0] else { panic!() };
+        let Stmt::If { arms } = &d.body[0] else {
+            panic!()
+        };
         // or binds looser than and
         assert!(matches!(arms[0].0, Some(Condition::Or(_, _))));
-        let Some(Condition::Or(_, rhs)) = &arms[0].0 else { panic!() };
+        let Some(Condition::Or(_, rhs)) = &arms[0].0 else {
+            panic!()
+        };
         assert!(matches!(rhs.as_ref(), Condition::And(_, _)));
 
         let src2 = "metadata:\n language: v2-beta\n name: \"x\"\ngiven response then\n if ({latest.response} matches \"a\" or {latest.response} matches \"b\") and {latest.response} matches \"c\" then\n  report issue:\n   severity: info\n   confidence: certain\n end if\n";
         let d2 = ok(src2);
-        let Stmt::If { arms } = &d2.body[0] else { panic!() };
+        let Stmt::If { arms } = &d2.body[0] else {
+            panic!()
+        };
         assert!(matches!(arms[0].0, Some(Condition::And(_, _))));
     }
 
@@ -1711,7 +1966,10 @@ mod tests {
         );
         // bare `given insertion point` defaults to any
         let src2 = "metadata:\n language: v2-beta\n name: \"x\"\ngiven insertion point then\n report issue:\n  severity: info\n  confidence: tentative\n";
-        assert_eq!(ok(src2).given, GivenMode::InsertionPoints(vec![InsertionPointKind::Any]));
+        assert_eq!(
+            ok(src2).given,
+            GivenMode::InsertionPoints(vec![InsertionPointKind::Any])
+        );
     }
 
     #[test]
@@ -1719,19 +1977,35 @@ mod tests {
         // quoted severity/confidence spellings are validated like bare ones
         let src = "metadata:\n language: v2-beta\n name: \"x\"\ngiven host then\n report issue:\n  severity: \"hihg\"\n  confidence: certain\n";
         let errs = parse(src).unwrap_err();
-        assert!(errs.iter().any(|e| e.message.contains("bad severity") && e.line == 5), "{errs:?}");
+        assert!(
+            errs.iter()
+                .any(|e| e.message.contains("bad severity") && e.line == 5),
+            "{errs:?}"
+        );
         // a bad confidence on its own line reports that line
         let src = "metadata:\n language: v2-beta\n name: \"x\"\ngiven host then\n report issue:\n  severity: low\n  confidence: \"sure\"\n";
         let errs = parse(src).unwrap_err();
-        assert!(errs.iter().any(|e| e.message.contains("bad confidence") && e.line == 5), "{errs:?}");
+        assert!(
+            errs.iter()
+                .any(|e| e.message.contains("bad confidence") && e.line == 5),
+            "{errs:?}"
+        );
         // send payload under the wrong given reports the statement's line
         let src = "metadata:\n language: v2-beta\n name: \"x\"\ngiven host then\n send payload:\n  appending: \"x\"\n";
         let errs = parse(src).unwrap_err();
-        assert!(errs.iter().any(|e| e.message.contains("insertion-point") && e.line == 5), "{errs:?}");
+        assert!(
+            errs.iter()
+                .any(|e| e.message.contains("insertion-point") && e.line == 5),
+            "{errs:?}"
+        );
         // reserved variable names report the declaration's line
         let src = "metadata:\n language: v2-beta\n name: \"x\"\ndefine:\n base64_encode = \"x\"\ngiven host then\n report issue:\n  severity: low\n  confidence: firm\n";
         let errs = parse(src).unwrap_err();
-        assert!(errs.iter().any(|e| e.message.contains("reserved") && e.line == 5), "{errs:?}");
+        assert!(
+            errs.iter()
+                .any(|e| e.message.contains("reserved") && e.line == 5),
+            "{errs:?}"
+        );
     }
 
     #[test]

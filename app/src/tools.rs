@@ -1972,7 +1972,11 @@ impl BcheckUiCache {
             .iter()
             .map(|s| match webprobe_core::bcheck::parse(s) {
                 Ok(def) => Ok((def.metadata.name.clone(), def.metadata.description.clone())),
-                Err(errs) => Err(errs.iter().map(|e| format!("line {}: {}", e.line, e.message)).collect::<Vec<_>>().join("; ")),
+                Err(errs) => Err(errs
+                    .iter()
+                    .map(|e| format!("line {}: {}", e.line, e.message))
+                    .collect::<Vec<_>>()
+                    .join("; ")),
             })
             .collect();
     }
@@ -1985,7 +1989,12 @@ const BCHECK_MAX_FILE_BYTES: u64 = 1_048_576;
 fn bcheck_checks(app: &mut App, ui: &mut Ui) {
     ui.horizontal(|ui| {
         ui.add_space(8.0);
-        ui.label(RichText::new("Custom scan checks (BChecks)").strong().size(14.0).color(theme::ink()));
+        ui.label(
+            RichText::new("Custom scan checks (BChecks)")
+                .strong()
+                .size(14.0)
+                .color(theme::ink()),
+        );
     });
     ui.horizontal(|ui| {
         ui.add_space(8.0);
@@ -2001,7 +2010,11 @@ fn bcheck_checks(app: &mut App, ui: &mut Ui) {
         if sources.is_empty() {
             ui.horizontal(|ui| {
                 ui.add_space(8.0);
-                ui.label(RichText::new("No BChecks loaded.").size(12.5).color(theme::ink_dim()));
+                ui.label(
+                    RichText::new("No BChecks loaded.")
+                        .size(12.5)
+                        .color(theme::ink_dim()),
+                );
             });
         }
         for (i, summary) in app.bcheck_ui_cache.summaries.iter().enumerate() {
@@ -2015,7 +2028,11 @@ fn bcheck_checks(app: &mut App, ui: &mut Ui) {
                         }
                     }
                     Err(msg) => {
-                        ui.label(RichText::new(format!("Invalid BCheck ({msg}); it does not run.")).size(12.5).color(c(theme::BAD)));
+                        ui.label(
+                            RichText::new(format!("Invalid BCheck ({msg}); it does not run."))
+                                .size(12.5)
+                                .color(c(theme::BAD)),
+                        );
                     }
                 }
                 if ui.small_button("Remove").clicked() {
@@ -2031,26 +2048,40 @@ fn bcheck_checks(app: &mut App, ui: &mut Ui) {
     ui.horizontal(|ui| {
         ui.add_space(8.0);
         ui.label(RichText::new("File:").size(12.5).color(theme::ink()));
-        ui.add(egui::TextEdit::singleline(&mut app.bcheck_load_path).desired_width(360.0).font(egui::TextStyle::Monospace));
+        ui.add(
+            egui::TextEdit::singleline(&mut app.bcheck_load_path)
+                .desired_width(360.0)
+                .font(egui::TextStyle::Monospace),
+        );
         if ui.button("Load").clicked() {
             let path = app.bcheck_load_path.trim();
-            let too_big = std::fs::metadata(path).map(|m| m.len() > BCHECK_MAX_FILE_BYTES).unwrap_or(false);
+            let too_big = std::fs::metadata(path)
+                .map(|m| m.len() > BCHECK_MAX_FILE_BYTES)
+                .unwrap_or(false);
             if too_big {
-                app.shared.log("BCheck not loaded: the file is over the 1 MiB limit");
+                app.shared
+                    .log("BCheck not loaded: the file is over the 1 MiB limit");
             } else {
-            match std::fs::read_to_string(path) {
-                Err(e) => app.shared.log(&format!("Could not read the BCheck file: {e}")),
-                Ok(src) => match webprobe_core::bcheck::parse(&src) {
-                    Ok(def) => {
-                        app.shared.log(&format!("Loaded BCheck \"{}\"", def.metadata.name));
-                        app.shared.scan_config.lock().unwrap().bchecks.push(src);
-                    }
-                    Err(errs) => {
-                        let msg = errs.iter().map(|e| format!("line {}: {}", e.line, e.message)).collect::<Vec<_>>().join("; ");
-                        app.shared.log(&format!("BCheck not loaded: {msg}"));
-                    }
-                },
-            }
+                match std::fs::read_to_string(path) {
+                    Err(e) => app
+                        .shared
+                        .log(&format!("Could not read the BCheck file: {e}")),
+                    Ok(src) => match webprobe_core::bcheck::parse(&src) {
+                        Ok(def) => {
+                            app.shared
+                                .log(&format!("Loaded BCheck \"{}\"", def.metadata.name));
+                            app.shared.scan_config.lock().unwrap().bchecks.push(src);
+                        }
+                        Err(errs) => {
+                            let msg = errs
+                                .iter()
+                                .map(|e| format!("line {}: {}", e.line, e.message))
+                                .collect::<Vec<_>>()
+                                .join("; ");
+                            app.shared.log(&format!("BCheck not loaded: {msg}"));
+                        }
+                    },
+                }
             }
         }
     });
@@ -2062,7 +2093,12 @@ fn bcheck_checks(app: &mut App, ui: &mut Ui) {
 /// adds it to the saved extension list).
 fn bapp_store(app: &mut App, ui: &mut Ui) {
     use webprobe_core::ext_store;
-    ui.label(RichText::new("Customize WebProbe with extensions").strong().size(14.0).color(theme::ink()));
+    ui.label(
+        RichText::new("Customize WebProbe with extensions")
+            .strong()
+            .size(14.0)
+            .color(theme::ink()),
+    );
     ui.label(RichText::new("Extensions in this installation's catalogue. Install starts one in the background and keeps it in your extension list. Burp .jar extensions (BApps) load through Installed > Add > Java.").size(12.5).color(theme::ink_dim()));
     ui.add_space(6.0);
     let Some(dir) = ext_store::catalogue_dir() else {
