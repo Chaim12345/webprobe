@@ -203,7 +203,7 @@ pub fn sample_traffic_to(shared: &std::sync::Arc<net::Shared>, host: &str) {
     let port = shared.proxy_port.load(std::sync::atomic::Ordering::SeqCst);
     let request = format!("GET http://{host}/ HTTP/1.1\r\nHost: {host}\r\nUser-Agent: WebProbe/1.0\r\nAccept: */*\r\nConnection: close\r\n\r\n");
     let shared = shared.clone();
-    std::thread::spawn(move || {
+    webprobe_core::util::spawn_contained("onboarding", move || {
         let out = crate::send_internal_probe(port, request.as_bytes());
         if out.is_empty() {
             shared.log(&format!("Sample traffic failed: no response from the proxy on 127.0.0.1:{port}"));

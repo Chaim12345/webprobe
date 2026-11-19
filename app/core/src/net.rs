@@ -3531,7 +3531,7 @@ fn relay_tunnel(client: &TcpStream, upstream: &mut TcpStream) {
         Ok(c) => c,
         Err(_) => return,
     };
-    let t = std::thread::spawn(move || {
+    let t = crate::util::spawn_contained("net", move || {
         if let Ok(mut up) = up_reader {
             let _ = std::io::copy(&mut up, &mut client_reader);
         }
@@ -4008,7 +4008,7 @@ pub fn start_attack(
         rows.len()
     ));
 
-    std::thread::spawn(move || {
+    crate::util::spawn_contained("net", move || {
         for attack in rows {
             if cur.stop.load(Ordering::SeqCst) {
                 break;

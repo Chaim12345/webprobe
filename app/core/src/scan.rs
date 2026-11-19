@@ -935,7 +935,7 @@ pub fn start_active_scan(shared: Arc<Shared>, entry: HistEntry, oob: &[(String, 
         accuracy: crate::variations::Accuracy::from_u8(shared.scan_accuracy.load(Ordering::SeqCst)),
     };
     let (oob, smtp) = (oob.to_vec(), smtp.to_vec());
-    std::thread::spawn(move || {
+    crate::util::spawn_contained("scan", move || {
         let _tool = crate::net::tool_scope("Scanner");
         // The guard releases the scanner however this thread ends: a
         // panicking check used to leave it claimed, so every later scan was
