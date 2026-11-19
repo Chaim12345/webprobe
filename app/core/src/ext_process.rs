@@ -24,8 +24,8 @@ use std::time::Duration;
 
 use base64::Engine as _;
 
-use crate::ext_host::{ExtIssue, IssueDefinition, ProxyAction, ProxyHooks};
 use crate::sync::Mutex;
+use webprobe_support::ext::{ExtIssue, IssueDefinition, ProxyAction, ProxyHooks};
 
 pub const API_VERSION: u64 = 1;
 const B64: base64::engine::GeneralPurpose = base64::engine::general_purpose::STANDARD;
@@ -411,7 +411,7 @@ impl ProxyHooks for ProcessExtension {
     }
     fn handle_request_received(
         &self,
-        _svc: &crate::ext_host::HttpService,
+        _svc: &webprobe_support::ext::HttpService,
         method: &str,
         path: &str,
         req: &mut Vec<u8>,
@@ -420,7 +420,7 @@ impl ProxyHooks for ProcessExtension {
     }
     fn handle_response_received(
         &self,
-        _svc: &crate::ext_host::HttpService,
+        _svc: &webprobe_support::ext::HttpService,
         method: &str,
         path: &str,
         resp: &mut Vec<u8>,

@@ -8,6 +8,7 @@ pub mod body;
 pub mod compare;
 pub mod decoder_ops;
 pub mod dns;
+pub mod ext;
 pub mod hist;
 pub mod insertion;
 pub mod intercept_rules;
