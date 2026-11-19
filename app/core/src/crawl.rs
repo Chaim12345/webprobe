@@ -1146,13 +1146,62 @@ const DOM_INSTRUMENT_JS: &str = r#"
       document[name] = function (v) { record("document." + name, v); return orig.apply(document, arguments); };
     }
   });
-  var desc = Object.getOwnPropertyDescriptor(Element.prototype, "innerHTML");
-  if (desc && desc.set) {
-    Object.defineProperty(Element.prototype, "innerHTML", {
+  ["innerHTML", "outerHTML"].forEach(function (prop) {
+    var desc = Object.getOwnPropertyDescriptor(Element.prototype, prop);
+    if (desc && desc.set) {
+      Object.defineProperty(Element.prototype, prop, {
+        configurable: true,
+        enumerable: desc.enumerable,
+        get: desc.get,
+        set: function (v) { record("element." + prop, v); return desc.set.call(this, v); }
+      });
+    }
+  });
+  if (Element.prototype.insertAdjacentHTML) {
+    var origIah = Element.prototype.insertAdjacentHTML;
+    Element.prototype.insertAdjacentHTML = function (pos, html) { record("element.insertAdjacentHTML", html); return origIah.apply(this, arguments); };
+  }
+  // JavaScript-execution sinks (the string arguments only).
+  var origEval = window.eval;
+  if (typeof origEval === "function") {
+    window.eval = function (s) { record("eval", s); return origEval(s); };
+  }
+  var OrigFunction = window.Function;
+  if (typeof OrigFunction === "function") {
+    window.Function = function () {
+      for (var i = 0; i < arguments.length; i++) { record("Function", arguments[i]); }
+      return OrigFunction.apply(null, arguments);
+    };
+    window.Function.prototype = OrigFunction.prototype;
+  }
+  ["setTimeout", "setInterval"].forEach(function (name) {
+    var orig = window[name];
+    if (typeof orig === "function") {
+      window[name] = function (h, t) {
+        if (typeof h === "string") { record(name, h); return orig.call(window, h, t); }
+        return orig.apply(window, arguments);
+      };
+    }
+  });
+  // Navigation sinks that can be wrapped (location.href and friends are
+  // non-configurable; javascript: URLs and execScript are not covered).
+  // Navigation sinks: of burp.Zcwh's open-redirection family only
+  // window.open is wrappable - the Location members (href, assign,
+  // replace, host, hostname, protocol) are LegacyUnforgeable in Chromium
+  // (non-writable, non-configurable own properties). The popup is
+  // swallowed: the analysis must not leave the page, and a
+  // navigated-away document's hits are unreachable.
+  if (typeof window.open === "function") {
+    var origOpen = window.open;
+    window.open = function (u) { record("window.open", u); return null; };
+  }
+  var cookieDesc = Object.getOwnPropertyDescriptor(Document.prototype, "cookie");
+  if (cookieDesc && cookieDesc.set) {
+    Object.defineProperty(Document.prototype, "cookie", {
       configurable: true,
-      enumerable: desc.enumerable,
-      get: desc.get,
-      set: function (v) { record("element.innerHTML", v); return desc.set.call(this, v); }
+      enumerable: cookieDesc.enumerable,
+      get: cookieDesc.get,
+      set: function (v) { record("document.cookie", v); return cookieDesc.set.call(this, v); }
     });
   }
 })();
