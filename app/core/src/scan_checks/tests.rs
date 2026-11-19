@@ -142,6 +142,7 @@ fn registry_order_is_pinned() {
             ("active.graphql-endpoint-discovered", Scope::Host, None),
             ("active.web-cache-poisoning", Scope::Request, None),
             ("active.web-cache-deception", Scope::Request, None),
+            ("active.dom-xss", Scope::Request, Some(BURP_GROUP)),
         ]
     );
     let mut ids: Vec<&str> = points
@@ -492,6 +493,33 @@ fn lab_scan(
         .iter()
         .map(|i| (i.name.clone(), i.sev.clone(), i.confidence.clone()))
         .collect()
+}
+
+/// R-13 (b) vertical slice: a page passing location.hash into
+/// document.write is DOM-based XSS; a page that never touches the
+/// hash is not. Skipped when no Chromium is available.
+#[test]
+fn dom_xss_hash_slice_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, _raw| {
+        let body = if path.starts_with("/xss") {
+            "<html><body><script>document.write('<p>' + location.hash.slice(1) + '</p>');</script></body></html>"
+        } else {
+            "<html><body><p>hello</p></body></html>"
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    let got = lab_scan(port, &["active.dom-xss"], "GET", "/xss", format!("GET /xss HTTP/1.1\r\nHost: {host}\r\n\r\n"));
+    assert!(
+        got.iter().any(|(n, s, c)| n == "Cross-site scripting (DOM-based)" && s == "high" && c == "Firm"),
+        "{got:?}"
+    );
+    let got = lab_scan(port, &["active.dom-xss"], "GET", "/benign", format!("GET /benign HTTP/1.1\r\nHost: {host}\r\n\r\n"));
+    assert!(!got.iter().any(|(n, ..)| n == "Cross-site scripting (DOM-based)"), "{got:?}");
 }
 
 /// R-10 batch 2: the three GraphQL checks against a live endpoint.
