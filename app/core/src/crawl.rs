@@ -413,10 +413,7 @@ mod tests {
             vec!["/ftp", "/pub/"]
         );
         // no User-agent stanza needed: Disallow-only bodies still yield paths
-        assert_eq!(
-            robots_paths("Disallow: /admin\nDisallow: /tmp"),
-            vec!["/admin", "/tmp"]
-        );
+        assert_eq!(robots_paths("Disallow: /admin\nDisallow: /tmp"), vec!["/admin", "/tmp"]);
         assert_eq!(sitemap_locs("<urlset><url><loc> http://a/x </loc></url><url><loc>http://a/y</loc></url></urlset>"), vec!["http://a/x", "http://a/y"]);
     }
 
@@ -1135,11 +1132,20 @@ const DOM_INSTRUMENT_JS: &str = r#"
   window.__wpDomAnalysis = true;
   window.__wpDomHits = [];
   var CANARY = "%CANARY%";
+  // The probe carries the canary in both the fragment and a query
+  // parameter; whichever part of the URL holds it names the source
+  // (burp.Zcwh's source strings).
+  function sourceFor() {
+    if (String(location.hash).indexOf(CANARY) >= 0) { return ["location.hash", String(location.hash)]; }
+    if (String(location.search).indexOf(CANARY) >= 0) { return ["location.search", String(location.search)]; }
+    return ["location", String(location.href)];
+  }
   function record(sink, value) {
     try {
       var s = String(value);
       if (s.indexOf(CANARY) >= 0 && window.__wpDomHits.length < 50) {
-        window.__wpDomHits.push({ source: "location.hash", sink: sink, sourceValue: String(location.hash), sinkValue: s.slice(0, 300), pageUrl: String(location.href) });
+        var src = sourceFor();
+        window.__wpDomHits.push({ source: src[0], sink: sink, sourceValue: src[1], sinkValue: s.slice(0, 300), pageUrl: String(location.href) });
       }
     } catch (e) {}
   }
@@ -1291,6 +1297,39 @@ const DOM_INSTRUMENT_JS: &str = r#"
     var origSetAttr = Element.prototype.setAttribute;
     Element.prototype.setAttribute = function (n, v) { record("element.setAttribute." + String(n).toLowerCase(), v); return origSetAttr.apply(this, arguments); };
   }
+  // jQuery sinks: jQuery loads after this script, so poll for it once.
+  // jQuery-dependent results are Tentative in burp.Zwf8.Zd; the jQuery.*
+  // sink names carry that signal.
+  var jqDone = false;
+  function wrapJQuery() {
+    if (jqDone || !window.jQuery || !window.jQuery.fn) { return; }
+    jqDone = true;
+    var jq = window.jQuery;
+    ["html", "append", "prepend", "before", "after", "wrap", "replaceWith"].forEach(function (m) {
+      if (typeof jq.fn[m] === "function") {
+        var orig = jq.fn[m];
+        jq.fn[m] = function (v) { record("jQuery." + m, v); return orig.apply(this, arguments); };
+      }
+    });
+    if (typeof jq.parseHTML === "function") {
+      var origPh = jq.parseHTML;
+      jq.parseHTML = function (v) { record("jQuery.parseHTML", v); return origPh.apply(jq, arguments); };
+    }
+    if (typeof jq.globalEval === "function") {
+      var origGe = jq.globalEval;
+      jq.globalEval = function (v) { record("jQuery.globalEval", v); return origGe.apply(jq, arguments); };
+    }
+    ["attr", "prop"].forEach(function (m) {
+      if (typeof jq.fn[m] === "function") {
+        var orig = jq.fn[m];
+        jq.fn[m] = function (n, v) { record("jQuery." + m + "." + String(n).toLowerCase(), v); return orig.apply(this, arguments); };
+      }
+    });
+  }
+  var jqTimer = setInterval(function () {
+    wrapJQuery();
+    if (jqDone) { clearInterval(jqTimer); }
+  }, 25);
   // webdatabase.executeSql (burp.Zcwh's client-side SQL sink) is not
   // wrapped: openDatabase is gone from current Chromium.
   // Constructors need Reflect.construct (`new` semantics).
@@ -1326,31 +1365,18 @@ const DOM_INSTRUMENT_JS: &str = r#"
 })();
 "#;
 
-/// R-13 option (b) vertical slice: navigate to `url` with `#{canary}` in a
-/// headless browser (locked to the target host, like the crawl) and
-/// return the source-to-sink hits the instrumentation recorded. The
+/// R-13 option (b): navigate to `url` with the canary in both the
+/// fragment and a `wpdom` query parameter (covering the location.hash and
+/// location.search sources in one run) in a headless browser locked to
+/// the target host, like the crawl, and return the source-to-sink hits
+/// the instrumentation recorded. The
 /// browser tree is killed and its profile removed on every path.
-pub fn dom_analysis_probe(
-    shared: &Arc<Shared>,
-    url: &str,
-    canary: &str,
-) -> Result<Vec<DomHit>, String> {
-    let bin = crate::paths::chromium()
-        .map_err(|m| m.to_string())?
-        .display()
-        .to_string();
+pub fn dom_analysis_probe(shared: &Arc<Shared>, url: &str, canary: &str) -> Result<Vec<DomHit>, String> {
+    let bin = crate::paths::chromium().map_err(|m| m.to_string())?.display().to_string();
     let rest = url.split_once("://").map(|x| x.1).unwrap_or(url);
     let authority = rest.split('/').next().unwrap_or("");
-    let target_host = authority
-        .rsplit_once(':')
-        .map(|x| x.0)
-        .unwrap_or(authority)
-        .to_string();
-    let dport = std::net::TcpListener::bind("127.0.0.1:0")
-        .map_err(|e| e.to_string())?
-        .local_addr()
-        .map_err(|e| e.to_string())?
-        .port();
+    let target_host = authority.rsplit_once(':').map(|x| x.0).unwrap_or(authority).to_string();
+    let dport = std::net::TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?.local_addr().map_err(|e| e.to_string())?.port();
     let profile = std::env::temp_dir().join(format!("webprobe-dom-{}-{dport}", std::process::id()));
     let mut cmd = std::process::Command::new(&bin);
     crate::util::own_process_group(&mut cmd);
@@ -1388,10 +1414,7 @@ pub fn dom_analysis_probe(
             }
             if let Some(list) = http_get_local(dport, "/json/list") {
                 let v: serde_json::Value = serde_json::from_str(&list).unwrap_or_default();
-                ws_url = v
-                    .as_array()
-                    .and_then(|a| a.iter().find(|t| t["type"] == "page"))
-                    .and_then(|t| t["webSocketDebuggerUrl"].as_str().map(str::to_string));
+                ws_url = v.as_array().and_then(|a| a.iter().find(|t| t["type"] == "page")).and_then(|t| t["webSocketDebuggerUrl"].as_str().map(str::to_string));
                 if ws_url.is_some() {
                     break;
                 }
@@ -1400,30 +1423,22 @@ pub fn dom_analysis_probe(
         }
         let mut cdp = Cdp::connect(&ws_url.ok_or("browser DevTools endpoint did not come up")?)?;
         cdp.call("Page.enable", serde_json::json!({}))?;
-        cdp.call(
-            "Page.addScriptToEvaluateOnNewDocument",
-            serde_json::json!({"source": DOM_INSTRUMENT_JS.replace("%CANARY%", canary)}),
-        )?;
+        cdp.call("Page.addScriptToEvaluateOnNewDocument", serde_json::json!({"source": DOM_INSTRUMENT_JS.replace("%CANARY%", canary)}))?;
         let base = url.split('#').next().unwrap_or(url);
-        cdp.call(
-            "Page.navigate",
-            serde_json::json!({"url": format!("{base}#{canary}")}),
-        )?;
+        // The canary rides both the fragment and a query parameter, so one
+        // navigation covers the location.hash and location.search sources.
+        let sep = if base.contains('?') { "&" } else { "?" };
+        cdp.call("Page.navigate", serde_json::json!({"url": format!("{base}{sep}wpdom={canary}#{canary}")}))?;
         for _ in 0..25 {
             if shared.scan.stop.load(Ordering::SeqCst) {
                 break;
             }
             cdp.pump(100);
         }
-        let hits: Vec<DomHit> =
-            eval_json(&mut cdp, "JSON.stringify(window.__wpDomHits || [])").unwrap_or_default();
+        let hits: Vec<DomHit> = eval_json(&mut cdp, "JSON.stringify(window.__wpDomHits || [])").unwrap_or_default();
         Ok(hits)
     })();
-    crate::util::kill_process_tree(
-        child.id(),
-        Some(&profile.display().to_string()),
-        std::time::Duration::from_secs(2),
-    );
+    crate::util::kill_process_tree(child.id(), Some(&profile.display().to_string()), std::time::Duration::from_secs(2));
     let _ = child.wait();
     let _ = std::fs::remove_dir_all(&profile);
     result
