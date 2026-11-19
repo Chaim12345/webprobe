@@ -2888,10 +2888,6 @@ const CHARACTERISATION_ISSUES: &[(&str, &str, &str, &str)] = &[
         "Firm",
         "/board",
     ),
-    ("Cross-origin resource sharing", "info", "Certain", "/board"),
-    ("Cross-origin resource sharing", "info", "Certain", "/go"),
-    // G.11: the lab pages reflect the query into link hrefs, so the
-    // `<r3>&<r3>` probe reads as client-side parameter pollution there.
     (
         "Client-side HTTP parameter pollution (reflected)",
         "low",
@@ -2904,6 +2900,10 @@ const CHARACTERISATION_ISSUES: &[(&str, &str, &str, &str)] = &[
         "Tentative",
         "/search",
     ),
+    ("Cross-origin resource sharing", "info", "Certain", "/board"),
+    ("Cross-origin resource sharing", "info", "Certain", "/go"),
+    // G.11: the lab pages reflect the query into link hrefs, so the
+    // `<r3>&<r3>` probe reads as client-side parameter pollution there.
     ("Cross-origin resource sharing", "info", "Certain", "/item"),
     (
         "Cross-origin resource sharing",
