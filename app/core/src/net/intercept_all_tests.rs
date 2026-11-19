@@ -40,6 +40,10 @@ fn response_rules_follow_burps_defaults() {
 /// passively audited (the scope check used a URL without its scheme).
 #[test]
 fn passive_audit_runs_for_in_scope_traffic() {
+    // The proxy reaches the scanner through the registered hooks (issue
+    // #38); the app does this at startup, tests do it here (the OnceLock
+    // makes repeat calls no-ops).
+    crate::scan::register_scan_hooks();
     let shared = Shared::new();
     shared.scan_enabled.store(true, Ordering::SeqCst);
     shared.scope.lock().unwrap().push(ScopeRule {

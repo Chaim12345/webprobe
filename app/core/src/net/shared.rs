@@ -53,7 +53,7 @@ pub struct Shared {
     /// The active scanner's run state (claim, stop, pause, progress).
     pub scan: Arc<crate::scan_run::ScanRun>,
     /// The current scan run's dedup sets (swapped fresh at run start).
-    pub scan_state: Mutex<Arc<crate::scan::ScanDedup>>,
+    pub scan_state: Mutex<Arc<webprobe_support::dedup::ScanDedup>>,
     /// Collaborator ids: the payload pool, registered ids and matching.
     pub oob: crate::oob::OobState,
     /// Stored input pairing of the current scan run (D-10).
@@ -406,7 +406,7 @@ impl Shared {
                     s @ ("high" | "medium" | "low") => s.to_string(),
                     _ => "info".to_string(),
                 },
-                type_id: crate::scan::issue_type_id(&i.name),
+                type_id: scan_hooks().map(|h| h.issue_type_id(&i.name)).unwrap_or(0),
                 name: i.name,
                 host: if i.host.is_empty() {
                     host.to_string()
@@ -429,6 +429,8 @@ impl Shared {
                 ident: String::new(),
             })
             .collect();
-        crate::scan::add_issues(self, issues);
+        if let Some(hooks) = scan_hooks() {
+            hooks.add_issues(self, issues);
+        }
     }
 }

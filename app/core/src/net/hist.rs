@@ -197,17 +197,22 @@ pub fn record_entry(
     // Live passive crawl (Dashboard task 1): "Add links. Add item itself, same
     // domain and URLs in suite scope."
     if shared.crawl_capture.load(Ordering::SeqCst) {
-        if let Some(resp) = &e.resp_raw {
+        if let (Some(resp), Some(hooks)) = (&e.resp_raw, scan_hooks()) {
             let origin = history_host(&e);
             let mut links = shared.site_links.lock().unwrap();
-            for path in crate::scan::crawl_links(&origin, &e.path, resp) {
+            for path in hooks.crawl_links(&origin, &e.path, resp) {
                 links.insert((origin.clone(), path));
             }
         }
     }
     // live passive audit (AuditDefaults.json: scan_type_passive enabled),
     // bounded by the crawler's unique-location cap (CrawlDefaults.json: 1500)
-    if scan && shared.scan_enabled.load(Ordering::SeqCst) && e.path != "/favicon.ico" {
+    let hooks = if scan && shared.scan_enabled.load(Ordering::SeqCst) && e.path != "/favicon.ico" {
+        scan_hooks()
+    } else {
+        None
+    };
+    if let Some(hooks) = hooks {
         let loc = format!(
             "{}:{}{}",
             e.host,
@@ -219,7 +224,7 @@ pub fn record_entry(
         let within_scope = in_scope(shared, &(history_host(&e) + &e.path));
         let within_cap = {
             let mut locs = shared.scan_locations.lock().unwrap();
-            if locs.contains(&loc) || locs.len() < crate::scan::CRAWL_MAX_UNIQUE_LOCATIONS {
+            if locs.contains(&loc) || locs.len() < hooks.crawl_max_unique_locations() {
                 locs.insert(loc);
                 true
             } else {
@@ -227,8 +232,8 @@ pub fn record_entry(
             }
         };
         if within_scope && within_cap {
-            let issues = crate::scan::passive_check_live(shared, &e);
-            crate::scan::add_passive_issues(shared, issues);
+            let issues = hooks.passive_check_live(shared, &e);
+            hooks.add_passive_issues(shared, issues);
         }
     }
 }

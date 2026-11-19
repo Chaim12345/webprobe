@@ -226,6 +226,7 @@ fn scan_urls(mut args: Vec<String>) {
 }
 
 fn main() {
+    webprobe_core::scan::register_scan_hooks();
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     if args.is_empty() {
         usage();

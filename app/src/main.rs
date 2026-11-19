@@ -1067,6 +1067,9 @@ fn main() {
         }
     }
 
+    // The scanner registers its hooks so net's live crawl / passive audit
+    // work without net naming scan (issue #38).
+    webprobe_core::scan::register_scan_hooks();
     let shared = net::Shared::new();
     if let Some(p) = std::env::var("WEBPROBE_PORT")
         .ok()

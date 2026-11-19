@@ -59,7 +59,9 @@ pub use upstream_conn::*;
 mod hist;
 pub use hist::*;
 
+mod scan_hooks;
 mod send;
+pub use scan_hooks::*;
 pub use send::*;
 
 pub use webprobe_support::io_traits::*;
