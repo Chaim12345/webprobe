@@ -514,6 +514,8 @@ fn dom_xss_hash_slice_against_a_live_lab() {
     let port = lab_serve(l, |_method, path, _raw| {
         let body = if path.starts_with("/xss") {
             "<html><body><script>document.write('<p>' + location.hash.slice(1) + '</p>');</script></body></html>"
+        } else if path.starts_with("/searchsrc") {
+            "<html><body><script>document.write('<p>' + new URLSearchParams(location.search).get('wpdom') + '</p>');</script></body></html>"
         } else {
             "<html><body><p>hello</p></body></html>"
         };
@@ -527,6 +529,11 @@ fn dom_xss_hash_slice_against_a_live_lab() {
     );
     let got = lab_scan(port, &["active.dom-xss"], "GET", "/benign", format!("GET /benign HTTP/1.1\r\nHost: {host}\r\n\r\n"));
     assert!(!got.iter().any(|(n, ..)| n == "Cross-site scripting (DOM-based)"), "{got:?}");
+    let got = lab_scan(port, &["active.dom-xss"], "GET", "/searchsrc", format!("GET /searchsrc HTTP/1.1\r\nHost: {host}\r\n\r\n"));
+    assert!(
+        got.iter().any(|(n, s, c)| n == "Cross-site scripting (DOM-based)" && s == "high" && c == "Firm"),
+        "location.search source: {got:?}"
+    );
 }
 
 /// R-13 batch 1: the JavaScript-injection, open-redirection and
@@ -716,6 +723,38 @@ fn dom_families_batch4_against_a_live_lab() {
     assert!(!got.iter().any(|(n, ..)| n == "DOM data manipulation (DOM-based)"), "state object must not be recorded: {got:?}");
 }
 
+
+/// Tentative confidence (burp.Zwf8.Zd flag 4). The lab inlines a
+/// minimal window.jQuery (no network). Skipped when no Chromium is
+/// available.
+#[test]
+fn dom_jquery_sinks_are_tentative_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, _raw| {
+        let body = if path.starts_with("/jquery") {
+            r#"<html><body><script>
+window.jQuery = window.$ = function () { return Object.create(jQuery.fn); };
+jQuery.fn = jQuery.prototype = {
+  html: function (v) { this.v = v; return this; },
+  attr: function (n, v) { return this; }
+};
+setTimeout(function () { jQuery('<p>x</p>').html(location.hash.slice(1)); }, 50);
+</script></body></html>"#
+        } else {
+            "<html><body><p>hello</p></body></html>"
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    let got = lab_scan(port, &["active.dom-xss"], "GET", "/jquery", format!("GET /jquery HTTP/1.1\r\nHost: {host}\r\n\r\n"));
+    assert!(
+        got.iter().any(|(n, s, c)| n == "Cross-site scripting (DOM-based)" && s == "high" && c == "Tentative"),
+        "jQuery sink: {got:?}"
+    );
+}
 
 /// R-10 batch 2: the three GraphQL checks against a live endpoint.
 /// The lab answers the introspection query with a schema, the
