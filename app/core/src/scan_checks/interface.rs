@@ -96,6 +96,7 @@ pub(crate) static REQUEST_CHECKS: &[&dyn RequestCheck] = &[
     &ServerOptions,
     &HeaderManipulation,
     &XxeFileRead,
+    &XmlEntityExpansion,
     &CsrfTokenNotEnforced,
     &HttpPutEnabled,
     &AspNetTracing,

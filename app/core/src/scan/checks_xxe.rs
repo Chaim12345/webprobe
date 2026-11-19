@@ -73,6 +73,62 @@ pub fn xxe_points(body: &str) -> (String, usize, Vec<(usize, usize)>) {
     (base, doc, vec![(doc + 6, doc + 6)])
 }
 
+/// burp.Zgij.java:108-150: the DOCTYPE whose first entity is the seed and
+/// whose following `depth` entities each reference the preceding one twice,
+/// so the top reference expands to the seed repeated 2^depth times.
+pub fn entity_expansion_doctype(name: &str, seed: &str, depth: usize) -> String {
+    let mut decl = format!("<!DOCTYPE foo [<!ENTITY {name}0 \"{seed}\">");
+    for d in 1..=depth {
+        decl.push_str(&format!("<!ENTITY {name}{d} \"&{name}{prev};&{name}{prev};\">", prev = d - 1));
+    }
+    format!("{decl} ]>")
+}
+
+/// The response marker for a successful expansion at `depth`.
+pub fn entity_expansion_marker(seed: &str, depth: usize) -> String {
+    seed.repeat(1 << depth)
+}
+
+/// The Zgij probe: DOCTYPE at the document position and the original value
+/// followed by the top entity reference, the xxe_probe_at shape
+/// (burp.Zgij.java:66-71: "the insertion also contains &<entity>;").
+pub fn expansion_probe_at(base: &str, doc: usize, point: (usize, usize), name: &str, seed: &str, depth: usize) -> String {
+    let (vs, ve) = point;
+    format!(
+        "{}{}{}{}&{name}{depth};{}",
+        &base[..doc],
+        entity_expansion_doctype(name, seed, depth),
+        &base[doc..vs],
+        &base[vs..ve],
+        &base[ve..]
+    )
+}
+
+/// burp.Zgij.java:38-47,77-105: over the element-value points, depth 2 then
+/// the depth-3 confirmation; report the confirming exchange.
+pub fn run_entity_expansion_check<F: FnMut(&str) -> Option<String>>(
+    body: &str,
+    name: &str,
+    seed: &str,
+    mut send: F,
+) -> Option<(String, String)> {
+    let (base, doc, points) = xxe_points(body);
+    for point in points {
+        let probe = expansion_probe_at(&base, doc, point, name, seed, 2);
+        let Some(resp) = send(&probe) else { continue };
+        if !resp.contains(&entity_expansion_marker(seed, 2)) {
+            continue;
+        }
+        let confirm = expansion_probe_at(&base, doc, point, name, seed, 3);
+        let Some(resp3) = send(&confirm) else { continue };
+        if !resp3.contains(&entity_expansion_marker(seed, 3)) {
+            continue;
+        }
+        return Some((confirm, resp3));
+    }
+    None
+}
+
 /// burp.Zge7.Ze: DOCTYPE at the document position, then the original value
 /// (Zsif.ZT0) followed by the entity reference in place of the value range.
 pub fn xxe_probe_at(

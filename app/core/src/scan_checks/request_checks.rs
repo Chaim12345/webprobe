@@ -427,6 +427,67 @@ impl RequestCheck for XxeFileRead {
     }
 }
 
+/// XML entity expansion (burp.Zgij), Burp's two scopes folded into the
+/// request check: the per-request XML base (burp.Ze3z) and the per-insertion
+/// points (burp.Zin9) are the element-value points of `xxe_points`. A
+/// quadratic DOCTYPE with random entity names and seed, depth 2 confirmed by
+/// depth 3; the exponentially repeated seed in the response is the evidence
+/// (no timing, no external entities). XML request bodies only.
+pub(crate) struct XmlEntityExpansion;
+
+impl RequestCheck for XmlEntityExpansion {
+    fn id(&self) -> &'static str {
+        "active.xml-entity-expansion"
+    }
+    fn issue(&self) -> &'static str {
+        "XML entity expansion"
+    }
+    fn scope(&self) -> Scope {
+        Scope::Request
+    }
+    fn group(&self) -> Option<&'static str> {
+        Some(BURP_GROUP)
+    }
+    fn run(&self, cx: &ScanCtx) {
+        let req_ct = request_ct(cx);
+        let req_body = request_body(cx);
+        let is_xml = req_ct.to_ascii_lowercase().contains("xml") || req_body.trim_start().starts_with("<?xml");
+        if !is_xml || cx.stopped() {
+            return;
+        }
+        let (name, seed) = {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+            let mut t = |n: usize| (0..n).map(|_| rng.gen_range(b'a'..=b'z') as char).collect::<String>();
+            (format!("xee{}", t(5)), t(8))
+        };
+        let rec = Recorder::default();
+        let send = |body: &str| -> Option<String> {
+            let mut req = cx.req.as_bytes().to_vec();
+            req.truncate(cx.parts.head_len.min(cx.req.len()));
+            req.extend_from_slice(body.as_bytes());
+            let req = util::replace_or_add_header(&req, "Content-Length", &body.len().to_string());
+            let resp = rec.send(cx, body, &req)?;
+            let rp = util::parse_http(&resp);
+            Some(String::from_utf8_lossy(&resp[rp.head_len.min(resp.len())..]).into_owned())
+        };
+        if let Some((probe, resp)) = run_entity_expansion_check(req_body, &name, &seed, send) {
+            let _ = resp;
+            cx.report(vec![mk_burp(
+                "XML entity expansion",
+                "medium",
+                "Firm",
+                &cx.entry,
+                "(XML body)",
+                "The parser expanded a quadratic DOCTYPE: the random seed came back repeated 4 times at depth 2 and 8 times at the depth-3 confirmation.".to_string(),
+            )
+            .with_evidence(evidence([rec.last(&probe)]))]);
+        }
+        cx.progress();
+        cx.pace(50);
+    }
+}
+
 /// CSRF: replay the state-changing request with its anti-CSRF token
 /// parameters removed (SCANNER_ACTIVE_CHECKS_CSRF). Burp builds the attack
 /// request by dropping the token parameters (burp.Zg8w.ZU/Zi), re-sends it,

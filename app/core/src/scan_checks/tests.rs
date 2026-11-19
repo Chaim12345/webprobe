@@ -109,6 +109,7 @@ fn registry_order_is_pinned() {
             ),
             ("active.header-manipulation", Scope::Request, None),
             ("active.xxe-file-read", Scope::Request, None),
+            ("active.xml-entity-expansion", Scope::Request, Some(BURP_GROUP)),
             ("active.csrf", Scope::Request, None),
             ("active.http-put-enabled", Scope::Host, None),
             ("active.aspnet-tracing", Scope::Host, None),
