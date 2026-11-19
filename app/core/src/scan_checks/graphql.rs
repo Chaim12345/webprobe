@@ -447,19 +447,12 @@ impl RequestCheck for SpoofableClientIp {
 /// Add a query parameter to a raw request's target (before any fragment
 /// would be — HTTP request targets do not carry one).
 fn with_query_param(raw: &[u8], name: &str, value: &str) -> Vec<u8> {
-    let Some(end) = util::find_head_end(raw) else {
-        return raw.to_vec();
-    };
+    let Some(end) = util::find_head_end(raw) else { return raw.to_vec() };
     let head = String::from_utf8_lossy(&raw[..end]);
     let mut lines = head.split("\r\n");
-    let Some(first) = lines.next() else {
-        return raw.to_vec();
-    };
+    let Some(first) = lines.next() else { return raw.to_vec() };
     let mut parts = first.split_whitespace();
-    let (Some(method), Some(target), Some(version)) = (parts.next(), parts.next(), parts.next())
-    else {
-        return raw.to_vec();
-    };
+    let (Some(method), Some(target), Some(version)) = (parts.next(), parts.next(), parts.next()) else { return raw.to_vec() };
     let sep = if target.contains('?') { "&" } else { "?" };
     let mut out = format!("{method} {target}{sep}{name}={value} {version}\r\n");
     for line in lines {
@@ -479,9 +472,7 @@ fn with_query_param(raw: &[u8], name: &str, value: &str) -> Vec<u8> {
 /// `x-requested-with` — from a raw request (burp.Zii_.java:25-64),
 /// returning the rewritten request and the names removed.
 fn strip_auth_headers(raw: &[u8]) -> (Vec<u8>, Vec<String>) {
-    let Some(end) = util::find_head_end(raw) else {
-        return (raw.to_vec(), Vec::new());
-    };
+    let Some(end) = util::find_head_end(raw) else { return (raw.to_vec(), Vec::new()) };
     let head = String::from_utf8_lossy(&raw[..end]);
     let mut out = String::new();
     let mut removed = Vec::new();
@@ -494,9 +485,7 @@ fn strip_auth_headers(raw: &[u8]) -> (Vec<u8>, Vec<String>) {
                 let k = k.trim();
                 let drop = k.eq_ignore_ascii_case("authorization")
                     || k.eq_ignore_ascii_case("cookie")
-                    || (k.len() > 2
-                        && k[..2].eq_ignore_ascii_case("x-")
-                        && !k.eq_ignore_ascii_case("x-requested-with"));
+                    || (k.len() > 2 && k[..2].eq_ignore_ascii_case("x-") && !k.eq_ignore_ascii_case("x-requested-with"));
                 if drop {
                     removed.push(k.to_string());
                     continue;
@@ -522,25 +511,17 @@ fn json_node_count(body: &[u8]) -> i64 {
             _ => 0,
         }
     }
-    serde_json::from_slice::<serde_json::Value>(body)
-        .map(|v| count(&v))
-        .unwrap_or(0)
+    serde_json::from_slice::<serde_json::Value>(body).map(|v| count(&v)).unwrap_or(0)
 }
 
 /// The text of the first <title> element, trimmed ("" when none).
 fn page_title(body: &[u8]) -> String {
     let text = String::from_utf8_lossy(body);
     let lower = text.to_lowercase();
-    let Some(s) = lower.find("<title") else {
-        return String::new();
-    };
-    let Some(gt) = lower[s..].find('>') else {
-        return String::new();
-    };
+    let Some(s) = lower.find("<title") else { return String::new() };
+    let Some(gt) = lower[s..].find('>') else { return String::new() };
     let start = s + gt + 1;
-    let Some(e) = lower[start..].find("</title") else {
-        return String::new();
-    };
+    let Some(e) = lower[start..].find("</title") else { return String::new() };
     text[start..start + e].trim().to_string()
 }
 
@@ -560,15 +541,11 @@ fn bac_equivalent(reference: &[u8], candidate: &[u8]) -> bool {
     if json_node_count(body_a) != json_node_count(body_b) {
         return false;
     }
-    let html = util::get_header(&pa.headers, "Content-Type")
-        .unwrap_or_default()
-        .to_ascii_lowercase()
-        .contains("html");
+    let html = util::get_header(&pa.headers, "Content-Type").unwrap_or_default().to_ascii_lowercase().contains("html");
     if html {
         page_title(body_a) == page_title(body_b)
     } else {
-        body_a.iter().filter(|b| **b == b'\n').count()
-            == body_b.iter().filter(|b| **b == b'\n').count()
+        body_a.iter().filter(|b| **b == b'\n').count() == body_b.iter().filter(|b| **b == b'\n').count()
     }
 }
 
@@ -610,12 +587,7 @@ impl RequestCheck for BrokenAccessControl {
             return;
         }
         let base = util::parse_http(&cx.baseline.raw);
-        let status: u16 = base
-            .first
-            .split_whitespace()
-            .nth(1)
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(0);
+        let status: u16 = base.first.split_whitespace().nth(1).and_then(|s| s.parse().ok()).unwrap_or(0);
         if !(200..300).contains(&status) {
             return;
         }
@@ -631,9 +603,7 @@ impl RequestCheck for BrokenAccessControl {
             if removed.is_empty() {
                 return;
             }
-            let (Some(a), Some(b)) = (burp_send(cx, &full), burp_send(cx, &stripped)) else {
-                return;
-            };
+            let (Some(a), Some(b)) = (burp_send(cx, &full), burp_send(cx, &stripped)) else { return };
             if !bac_equivalent(&a, &b) {
                 return;
             }
@@ -642,9 +612,7 @@ impl RequestCheck for BrokenAccessControl {
                 removed_names = removed;
             }
         }
-        let Some((full, stripped, a, b)) = pair else {
-            return;
-        };
+        let Some((full, stripped, a, b)) = pair else { return };
         let mut i = mk(
             "info",
             self.issue(),
@@ -782,93 +750,134 @@ impl RequestCheck for BackupFile {
     }
 }
 
-/// Cross-site scripting (DOM-based), R-13 option (b) vertical slice
-/// (burp.Zel5's dynamic-analysis shape, first family only): the page is
-/// opened in a headless browser with a canary in location.hash and the
-/// first-slice sinks wrapped (document.write/writeln, the innerHTML
-/// setter); a canary reaching a sink is the issue (KB 00200310, High).
-/// Source/sink tables per docs/specs/R-13 (burp.Zcwh's dynamic decoder
-/// mappings); the injected script's shape follows Zel5/Zp7 but its body
-/// is not established, so WebProbe's instrumentation is its own.
-/// Confidence Firm: burp.Zwf8.Zd's Tentative rules (open redirection,
-/// jQuery, input.value/textarea.value, Ajax cookie) do not cover a
-/// location.hash source, and no dynamic-to-Certain upgrade is
-/// established. Skipped when no Chromium is available.
-pub(crate) struct DomXss;
-
-/// One browser run per URL (fragment dropped): the probe's only source is
-/// location.hash, so a repeated run on the same page repeats the probe.
-fn dom_analysis_seen() -> &'static std::sync::Mutex<std::collections::HashSet<String>> {
-    static SEEN: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> =
-        std::sync::OnceLock::new();
-    SEEN.get_or_init(Default::default)
+/// Dynamic DOM analysis, R-13 option (b) (burp.Zel5's runAnalysis shape;
+/// the injected script body is not established, so WebProbe's
+/// instrumentation is its own): each HTML page is opened once in a
+/// headless browser with a canary in location.hash, the wrapped sinks are
+/// the families of burp.Zcwh's dynamic decoder (docs/specs/R-13), and a
+/// canary reaching a sink is reported under the sink's family. One
+/// browser run per URL serves every family check; hits are kept only on
+/// the probed origin (the browser's own chrome-error pages run the
+/// wrapped sinks too) and merged per sink (burp.Zwf8.identityOf).
+/// Skipped when no Chromium is available.
+fn dom_analysis_hits(cx: &ScanCtx) -> Vec<crate::crawl::DomHit> {
+    // Dynamic analysis runs on pages: the baseline must be HTML.
+    let rp = util::parse_http(&cx.baseline.raw);
+    let ct = util::get_header(&rp.headers, "Content-Type").unwrap_or_default();
+    if !ct.to_ascii_lowercase().contains("html") {
+        return Vec::new();
+    }
+    let scheme = if cx.entry.https { "https" } else { "http" };
+    let default = if cx.entry.https { 443 } else { 80 };
+    let port = if cx.entry.port == default { String::new() } else { format!(":{}", cx.entry.port) };
+    let path = cx.entry.path.split('#').next().unwrap_or("/");
+    let url = format!("{scheme}://{}{port}{path}", cx.entry.host);
+    static CACHE: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, Vec<crate::crawl::DomHit>>>> = std::sync::OnceLock::new();
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some(hits) = cache.lock().unwrap().get(&url) {
+        return hits.clone();
+    }
+    let canary = format!("wp{}", rnd_letters(10));
+    let origin = crate::crawl::origin_of(&url).unwrap_or_default();
+    let hits: Vec<crate::crawl::DomHit> = crate::crawl::dom_analysis_probe(&cx.shared, &url, &canary)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|h| h.page_url.starts_with(&origin))
+        .collect();
+    cache.lock().unwrap().insert(url, hits.clone());
+    hits
 }
 
-impl RequestCheck for DomXss {
-    fn id(&self) -> &'static str {
-        "active.dom-xss"
-    }
-    fn issue(&self) -> &'static str {
-        "Cross-site scripting (DOM-based)"
-    }
-    fn scope(&self) -> Scope {
-        Scope::Request
-    }
-    fn group(&self) -> Option<&'static str> {
-        Some(BURP_GROUP)
-    }
-    fn run(&self, cx: &ScanCtx) {
-        if cx.stopped() || !cx.runs(self.issue()) {
-            return;
-        }
-        // Dynamic analysis runs on pages: the baseline must be HTML.
-        let rp = util::parse_http(&cx.baseline.raw);
-        let ct = util::get_header(&rp.headers, "Content-Type").unwrap_or_default();
-        if !ct.to_ascii_lowercase().contains("html") {
-            return;
-        }
-        let scheme = if cx.entry.https { "https" } else { "http" };
-        let default = if cx.entry.https { 443 } else { 80 };
-        let port = if cx.entry.port == default {
-            String::new()
-        } else {
-            format!(":{}", cx.entry.port)
-        };
-        let path = cx.entry.path.split('#').next().unwrap_or("/");
-        let url = format!("{scheme}://{}{port}{path}", cx.entry.host);
-        if !dom_analysis_seen().lock().unwrap().insert(url.clone()) {
-            return;
-        }
-        let canary = format!("wp{}", rnd_letters(10));
-        let Ok(hits) = crate::crawl::dom_analysis_probe(&cx.shared, &url, &canary) else {
-            return;
-        };
-        // Only hits on the probed origin (the browser's own error pages run
-        // wrapped sinks too), one report per sink (burp.Zwf8.identityOf
-        // merges same issue + same source/sink captions).
-        let origin = crate::crawl::origin_of(&url).unwrap_or_default();
-        let mut sinks: std::collections::HashSet<&str> = std::collections::HashSet::new();
-        for hit in hits.iter().filter(|h| h.page_url.starts_with(&origin)) {
-            if !sinks.insert(hit.sink.as_str()) {
-                continue;
+/// One DOM family check: the sinks of one burp.Zcwh family, the issue it
+/// maps to, and burp.Zwf8's severity/confidence for it.
+macro_rules! dom_family_check {
+    ($name:ident, $id:literal, $issue:literal, $severity:literal, $confidence:literal, $family:literal, $sinks:expr, $doc:literal) => {
+        #[doc = $doc]
+        pub(crate) struct $name;
+
+        impl RequestCheck for $name {
+            fn id(&self) -> &'static str {
+                $id
             }
-            let mut i = mk(
-                "high",
-                self.issue(),
-                &cx.entry,
-                format!(
-                    "The application may be vulnerable to DOM-based cross-site scripting. Data is read from <b>{}</b> and passed to <b>{}</b>.<br><br>The source value <b>{}</b> reached the sink as <b>{}</b>.",
-                    util::html_encode(&hit.source),
-                    util::html_encode(&hit.sink),
-                    util::html_encode(&hit.source_value),
-                    util::html_encode(&hit.sink_value)
-                ),
-            );
-            i.confidence = "Firm".into();
-            cx.report(vec![i]);
+            fn issue(&self) -> &'static str {
+                $issue
+            }
+            fn scope(&self) -> Scope {
+                Scope::Request
+            }
+            fn group(&self) -> Option<&'static str> {
+                Some(BURP_GROUP)
+            }
+            fn run(&self, cx: &ScanCtx) {
+                if cx.stopped() || !cx.runs(self.issue()) {
+                    return;
+                }
+                let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
+                for hit in dom_analysis_hits(cx).iter().filter(|h| $sinks.contains(&h.sink.as_str())) {
+                    if !seen.insert(hit.sink.as_str()) {
+                        continue;
+                    }
+                    let mut i = mk(
+                        $severity,
+                        self.issue(),
+                        &cx.entry,
+                        format!(
+                            "The application may be vulnerable to {}. Data is read from <b>{}</b> and passed to <b>{}</b>.<br><br>The source value <b>{}</b> reached the sink as <b>{}</b>.",
+                            $family,
+                            util::html_encode(&hit.source),
+                            util::html_encode(&hit.sink),
+                            util::html_encode(&hit.source_value),
+                            util::html_encode(&hit.sink_value)
+                        ),
+                    );
+                    i.confidence = $confidence.into();
+                    cx.report(vec![i]);
+                }
+            }
         }
-    }
+    };
 }
+
+dom_family_check!(
+    DomXss,
+    "active.dom-xss",
+    "Cross-site scripting (DOM-based)",
+    "high",
+    "Firm",
+    "DOM-based cross-site scripting",
+    &["document.write", "document.writeln", "element.innerHTML", "element.outerHTML", "element.insertAdjacentHTML"][..],
+    "Cross-site scripting (DOM-based), KB 00200310, High: the HTML-writing sinks of burp.Zcwh's XSS family (first slice: document.write/writeln, inner/outerHTML, insertAdjacentHTML; jQuery groups not yet). Confidence Firm (burp.Zwf8.Zd: no Tentative rule covers a location.hash source)."
+);
+dom_family_check!(
+    DomJsInjection,
+    "active.dom-javascript-injection",
+    "JavaScript injection (DOM-based)",
+    "high",
+    "Firm",
+    "DOM-based JavaScript injection",
+    &["eval", "Function", "setTimeout", "setInterval"][..],
+    "JavaScript injection (DOM-based), KB 00200320, High: the JavaScript-execution sinks of burp.Zcwh's family (eval, Function, setTimeout/setInterval string handlers; execScript and javascript: URLs are not wrappable, not established here). Confidence Firm (burp.Zwf8.Zd)."
+);
+dom_family_check!(
+    DomOpenRedirection,
+    "active.dom-open-redirection",
+    "Open redirection (DOM-based)",
+    "low",
+    "Tentative",
+    "DOM-based open redirection",
+    &["window.open"][..],
+    "Open redirection (DOM-based), KB 00500110, Low: window.open, the only wrappable navigation sink of burp.Zcwh's family - the Location members (href, assign, replace, host, hostname, protocol) are LegacyUnforgeable in Chromium. Confidence Tentative (burp.Zwf8.Zd: every open-redirection variant is Tentative)."
+);
+dom_family_check!(
+    DomCookieManipulation,
+    "active.dom-cookie-manipulation",
+    "Cookie manipulation (DOM-based)",
+    "low",
+    "Firm",
+    "DOM-based cookie manipulation",
+    &["document.cookie"][..],
+    "Cookie manipulation (DOM-based), KB 00500b00, Low: the document.cookie setter (burp.Zcwh's cookie family). Confidence Firm (burp.Zwf8.Zd)."
+);
 
 /// WebProbe's own reflected-DOM canary (Burp finds DOM issues by analysing
 /// JavaScript, which is not this): a plain canary reflected unencoded into
@@ -1212,11 +1221,7 @@ macro_rules! g11_reflected_check {
                         "Tentative",
                         &cx.entry,
                         ip,
-                        format!(
-                            "The injected value <b>{}</b> was reflected in {}.",
-                            util::html_encode(&payload),
-                            context
-                        ),
+                        format!("The injected value <b>{}</b> was reflected in {}.", util::html_encode(&payload), context),
                     )
                     .with_evidence(evidence([rec.last(&payload)]))]);
                 }
