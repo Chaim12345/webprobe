@@ -7,6 +7,8 @@ pub mod analysis;
 pub mod body;
 pub mod compare;
 pub mod decoder_ops;
+pub mod hist;
+pub mod io_traits;
 pub mod intercept_rules;
 pub mod jwt;
 pub mod logger;

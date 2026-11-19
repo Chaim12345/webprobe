@@ -59,8 +59,7 @@ pub use hist::*;
 mod send;
 pub use send::*;
 
-mod io_traits;
-pub use io_traits::*;
+pub use webprobe_support::io_traits::*;
 
 mod conn_reuse;
 pub use conn_reuse::*;

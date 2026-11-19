@@ -6,7 +6,7 @@
 //! (`with_rows`, `get`, `snapshot`) and never hold the lock while doing UI or
 //! network work.
 
-use crate::net::HistEntry;
+use webprobe_support::hist::HistEntry;
 use crate::sync::Mutex;
 
 #[derive(Default)]

@@ -109,29 +109,3 @@ pub fn start_attack(
     Ok(())
 }
 
-pub struct MarkerSeg {
-    pub text: String,
-    pub is_marker: bool,
-}
-
-pub fn parse_markers(text: &str) -> Vec<MarkerSeg> {
-    let mut segs = Vec::new();
-    let mut current = String::new();
-    let mut in_marker = false;
-    for c in text.chars() {
-        if c == '§' {
-            segs.push(MarkerSeg {
-                text: std::mem::take(&mut current),
-                is_marker: in_marker,
-            });
-            in_marker = !in_marker;
-        } else {
-            current.push(c);
-        }
-    }
-    segs.push(MarkerSeg {
-        text: current,
-        is_marker: in_marker,
-    });
-    segs
-}

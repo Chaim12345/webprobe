@@ -19,7 +19,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use crate::net::HistEntry;
+use webprobe_support::hist::HistEntry;
 use crate::scan::InsertionPoint;
 use crate::sync::Mutex;
 
