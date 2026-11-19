@@ -765,11 +765,12 @@ impl RequestCheck for BackupFile {
 /// cleared between sessions by `reset_dom_analysis_cache` (the same
 /// contract as `reset_openapi_hosts`): a long-lived process running more
 /// than one scan must not serve a previous scan's hits.
-/// One browser probe per URL: Done caches the hits; InFlight marks a
-/// probe another thread is running (see dom_analysis_hits).
+/// One browser probe per URL: Done caches the hits and the reflected
+/// flag; InFlight marks a probe another thread is running (see
+/// dom_analysis_hits).
 enum DomHitsState {
     InFlight,
-    Done(Vec<crate::crawl::DomHit>),
+    Done((Vec<crate::crawl::DomHit>, bool)),
 }
 
 #[derive(Default)]
@@ -788,12 +789,12 @@ pub(crate) fn reset_dom_analysis_cache() {
     }
 }
 
-fn dom_analysis_hits(cx: &ScanCtx) -> Vec<crate::crawl::DomHit> {
+fn dom_analysis_hits(cx: &ScanCtx) -> (Vec<crate::crawl::DomHit>, bool) {
     // Dynamic analysis runs on pages: the baseline must be HTML.
     let rp = util::parse_http(&cx.baseline.raw);
     let ct = util::get_header(&rp.headers, "Content-Type").unwrap_or_default();
     if !ct.to_ascii_lowercase().contains("html") {
-        return Vec::new();
+        return (Vec::new(), false);
     }
     let scheme = if cx.entry.https { "https" } else { "http" };
     let default = if cx.entry.https { 443 } else { 80 };
@@ -807,7 +808,7 @@ fn dom_analysis_hits(cx: &ScanCtx) -> Vec<crate::crawl::DomHit> {
     let mut guard = cache.map.lock().unwrap();
     loop {
         match guard.get(&url) {
-            Some(DomHitsState::Done(hits)) => return hits.clone(),
+            Some(DomHitsState::Done(v)) => return v.clone(),
             Some(DomHitsState::InFlight) => {
                 guard = cache.ready.wait(guard).unwrap();
             }
@@ -825,15 +826,28 @@ fn dom_analysis_hits(cx: &ScanCtx) -> Vec<crate::crawl::DomHit> {
         .into_iter()
         .filter(|h| h.page_url.starts_with(&origin))
         .collect();
-    cache.map.lock().unwrap().insert(url, DomHitsState::Done(hits.clone()));
+    // The reflected-DOM variant (burp.Zf24's REFLECTED; Zhp's template has
+    // the value "copied into a JavaScript string literal"): re-request the
+    // URL the browser navigated to (the wpdom query parameter, no
+    // fragment) and classify the canary's reflection contexts. JsText
+    // approximates the string-literal requirement with <script> text, the
+    // granularity the G.11 context parser has.
+    let sep = if path.contains('?') { "&" } else { "?" };
+    let raw = format!("GET {path}{sep}wpdom=q{canary} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", cx.host_hdr);
+    let reflected = cx
+        .send(raw.as_bytes())
+        .map(|r| crate::scan::g11_contexts(&r, &canary).iter().any(|c| matches!(c, crate::scan::G11Context::JsText)))
+        .unwrap_or(false);
+    let v = (hits, reflected);
+    cache.map.lock().unwrap().insert(url, DomHitsState::Done(v.clone()));
     cache.ready.notify_all();
-    hits
+    v
 }
 
 /// One DOM family check: the sinks of one burp.Zcwh family, the issue it
 /// maps to, and burp.Zwf8's severity/confidence for it.
 macro_rules! dom_family_check {
-    ($name:ident, $id:literal, $issue:literal, $severity:literal, $confidence:literal, $family:literal, $sinks:expr, $doc:literal) => {
+    ($name:ident, $id:literal, $issue:literal, $reflected_issue:literal, $severity:literal, $confidence:literal, $family:literal, $sinks:expr, $doc:literal) => {
         #[doc = $doc]
         pub(crate) struct $name;
 
@@ -854,24 +868,40 @@ macro_rules! dom_family_check {
                 if cx.stopped() || !cx.runs(self.issue()) {
                     return;
                 }
+                let (hits, reflected) = dom_analysis_hits(cx);
                 let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
-                for hit in dom_analysis_hits(cx).iter().filter(|h| $sinks.contains(&h.sink.as_str())) {
+                for hit in hits.iter().filter(|h| $sinks.contains(&h.sink.as_str())) {
                     if !seen.insert(hit.sink.as_str()) {
                         continue;
                     }
-                    let mut i = mk(
-                        $severity,
-                        self.issue(),
-                        &cx.entry,
-                        format!(
-                            "The application may be vulnerable to {}. Data is read from <b>{}</b> and passed to <b>{}</b>.<br><br>The source value <b>{}</b> reached the sink as <b>{}</b>.",
-                            $family,
-                            util::html_encode(&hit.source),
-                            util::html_encode(&hit.sink),
-                            util::html_encode(&hit.source_value),
-                            util::html_encode(&hit.sink_value)
-                        ),
-                    );
+                    // burp.Zf24.Zw: the value arriving with the request and
+                    // copied into the response's JavaScript makes the
+                    // reflected variant of the family's issue.
+                    let (issue, detail) = if reflected {
+                        (
+                            $reflected_issue,
+                            format!(
+                                "The application may be vulnerable to reflected {}. The source value is copied into a JavaScript string literal in the response and passed to <b>{}</b>.<br><br>The source value <b>{}</b> reached the sink as <b>{}</b>.",
+                                $family,
+                                util::html_encode(&hit.sink),
+                                util::html_encode(&hit.source_value),
+                                util::html_encode(&hit.sink_value)
+                            ),
+                        )
+                    } else {
+                        (
+                            $issue,
+                            format!(
+                                "The application may be vulnerable to {}. Data is read from <b>{}</b> and passed to <b>{}</b>.<br><br>The source value <b>{}</b> reached the sink as <b>{}</b>.",
+                                $family,
+                                util::html_encode(&hit.source),
+                                util::html_encode(&hit.sink),
+                                util::html_encode(&hit.source_value),
+                                util::html_encode(&hit.sink_value)
+                            ),
+                        )
+                    };
+                    let mut i = mk($severity, issue, &cx.entry, detail);
                     // burp.Zwf8.Zd: a jQuery-dependent result (flag 4) is Tentative.
                     i.confidence = if hit.sink.starts_with("jQuery.") { "Tentative" } else { $confidence }.into();
                     cx.report(vec![i]);
@@ -885,6 +915,7 @@ dom_family_check!(
     DomXss,
     "active.dom-xss",
     "Cross-site scripting (DOM-based)",
+    "Cross-site scripting (reflected DOM-based)",
     "high",
     "Firm",
     "DOM-based cross-site scripting",
@@ -910,6 +941,7 @@ dom_family_check!(
     DomJsInjection,
     "active.dom-javascript-injection",
     "JavaScript injection (DOM-based)",
+    "JavaScript injection (reflected DOM-based)",
     "high",
     "Firm",
     "DOM-based JavaScript injection",
@@ -920,6 +952,7 @@ dom_family_check!(
     DomOpenRedirection,
     "active.dom-open-redirection",
     "Open redirection (DOM-based)",
+    "Open redirection (reflected DOM-based)",
     "low",
     "Tentative",
     "DOM-based open redirection",
@@ -930,6 +963,7 @@ dom_family_check!(
     DomDataManipulation,
     "active.dom-data-manipulation",
     "DOM data manipulation (DOM-based)",
+    "DOM data manipulation (reflected DOM-based)",
     "info",
     "Firm",
     "DOM-based data manipulation",
@@ -954,6 +988,7 @@ dom_family_check!(
     DomLinkManipulation,
     "active.dom-link-manipulation",
     "Link manipulation (DOM-based)",
+    "Link manipulation (reflected DOM-based)",
     "low",
     "Firm",
     "DOM-based link manipulation",
@@ -964,6 +999,7 @@ dom_family_check!(
     DomWebSocketPoisoning,
     "active.dom-websocket-poisoning",
     "WebSocket URL poisoning (DOM-based)",
+    "WebSocket URL poisoning (reflected DOM-based)",
     "high",
     "Firm",
     "DOM-based WebSocket URL poisoning",
@@ -974,6 +1010,7 @@ dom_family_check!(
     DomDos,
     "active.dom-dos",
     "Denial of service (DOM-based)",
+    "Denial of service (reflected DOM-based)",
     "info",
     "Firm",
     "DOM-based denial of service",
@@ -984,6 +1021,7 @@ dom_family_check!(
     DomAjaxHeader,
     "active.dom-ajax-header-manipulation",
     "Ajax request header manipulation (DOM-based)",
+    "Ajax request header manipulation (reflected DOM-based)",
     "low",
     "Firm",
     "DOM-based Ajax request header manipulation",
@@ -994,6 +1032,7 @@ dom_family_check!(
     DomStorageManipulation,
     "active.dom-storage-manipulation",
     "HTML5 storage manipulation (DOM-based)",
+    "HTML5 storage manipulation (reflected DOM-based)",
     "info",
     "Firm",
     "DOM-based HTML5 storage manipulation",
@@ -1004,6 +1043,7 @@ dom_family_check!(
     DomJsonInjection,
     "active.dom-json-injection",
     "Client-side JSON injection (DOM-based)",
+    "Client-side JSON injection (reflected DOM-based)",
     "low",
     "Firm",
     "DOM-based client-side JSON injection",
@@ -1014,6 +1054,7 @@ dom_family_check!(
     DomXpathInjection,
     "active.dom-xpath-injection",
     "Client-side XPath injection (DOM-based)",
+    "Client-side XPath injection (reflected DOM-based)",
     "low",
     "Firm",
     "DOM-based client-side XPath injection",
@@ -1024,6 +1065,7 @@ dom_family_check!(
     DomDocumentDomain,
     "active.dom-document-domain",
     "Document domain manipulation (DOM-based)",
+    "Document domain manipulation (reflected DOM-based)",
     "medium",
     "Firm",
     "DOM-based document domain manipulation",
@@ -1035,6 +1077,7 @@ dom_family_check!(
     DomCookieManipulation,
     "active.dom-cookie-manipulation",
     "Cookie manipulation (DOM-based)",
+    "Cookie manipulation (reflected DOM-based)",
     "low",
     "Firm",
     "DOM-based cookie manipulation",
@@ -1046,6 +1089,7 @@ dom_family_check!(
     DomWebMessage,
     "active.dom-web-message-manipulation",
     "HTML5 web message manipulation (DOM-based)",
+    "HTML5 web message manipulation (reflected DOM-based)",
     "info",
     "Firm",
     "DOM-based HTML5 web message manipulation",
