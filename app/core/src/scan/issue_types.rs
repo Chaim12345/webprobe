@@ -20,7 +20,10 @@ impl ScanEvidence {
     /// A bounded copy: each message is cut at [`EVIDENCE_MAX_BYTES`].
     pub fn new(request: &[u8], response: Option<&[u8]>) -> Self {
         let cap = |b: &[u8]| -> Arc<[u8]> { Arc::from(&b[..b.len().min(EVIDENCE_MAX_BYTES)]) };
-        ScanEvidence { request: cap(request), response: response.map(cap) }
+        ScanEvidence {
+            request: cap(request),
+            response: response.map(cap),
+        }
     }
 }
 
@@ -66,7 +69,11 @@ impl ScanIssue {
 /// `typeIndex`, the names in kb_issue_names.txt), or 0 when Burp has no such
 /// issue (WebProbe's own checks).
 pub fn issue_type_id(name: &str) -> u64 {
-    checks::KB_ISSUE_TYPES.iter().find(|(n, _)| *n == name).map(|(_, t)| *t).unwrap_or(0)
+    checks::KB_ISSUE_TYPES
+        .iter()
+        .find(|(n, _)| *n == name)
+        .map(|(_, t)| *t)
+        .unwrap_or(0)
 }
 
 pub fn mk(sev: &str, name: &str, e: &HistEntry, detail: impl Into<String>) -> ScanIssue {
@@ -91,8 +98,20 @@ pub fn mk(sev: &str, name: &str, e: &HistEntry, detail: impl Into<String>) -> Sc
 /// in Burp's KnowledgeBase (resources/KnowledgeBase/Issues/*.json), so the
 /// Issues table matches Burp's; severity and confidence are what the live
 /// Burp scanner reported for the same finding (parity lab, fnd_54).
-pub fn mk_burp(kb_name: &str, sev: &str, confidence: &str, e: &HistEntry, param: &str, detail: impl Into<String>) -> ScanIssue {
-    let mut i = mk(sev, kb_name, e, format!("Parameter {param}: {}", detail.into()));
+pub fn mk_burp(
+    kb_name: &str,
+    sev: &str,
+    confidence: &str,
+    e: &HistEntry,
+    param: &str,
+    detail: impl Into<String>,
+) -> ScanIssue {
+    let mut i = mk(
+        sev,
+        kb_name,
+        e,
+        format!("Parameter {param}: {}", detail.into()),
+    );
     i.confidence = confidence.into();
     i
 }
@@ -100,8 +119,20 @@ pub fn mk_burp(kb_name: &str, sev: &str, confidence: &str, e: &HistEntry, param:
 /// [`mk_burp`] for an insertion-point check: the detail starts with Burp's
 /// wording for the point (burp.Zsg0.ZD), "The value of the q request
 /// parameter: ...", "The name of an arbitrarily supplied URL parameter: ...".
-pub(crate) fn mk_point(kb_name: &str, sev: &str, confidence: &str, e: &HistEntry, ip: &InsertionPoint, detail: impl Into<String>) -> ScanIssue {
-    let mut i = mk(sev, kb_name, e, format!("The {}: {}", ip.describe(), detail.into()));
+pub(crate) fn mk_point(
+    kb_name: &str,
+    sev: &str,
+    confidence: &str,
+    e: &HistEntry,
+    ip: &InsertionPoint,
+    detail: impl Into<String>,
+) -> ScanIssue {
+    let mut i = mk(
+        sev,
+        kb_name,
+        e,
+        format!("The {}: {}", ip.describe(), detail.into()),
+    );
     i.confidence = confidence.into();
     i
 }
@@ -109,7 +140,10 @@ pub(crate) fn mk_point(kb_name: &str, sev: &str, confidence: &str, e: &HistEntry
 /// Match the interactions `collab` recorded since the last call and add the
 /// issues they prove (see `oob::OobState::match_new`). Called every frame by
 /// whoever owns the Collaborator, whatever view is open.
-pub fn match_new_interactions(shared: &Shared, collab: &crate::collaborator::CollaboratorState) -> usize {
+pub fn match_new_interactions(
+    shared: &Shared,
+    collab: &crate::collaborator::CollaboratorState,
+) -> usize {
     let issues = shared.oob.match_new(collab);
     let n = issues.len();
     if n > 0 {
@@ -119,7 +153,10 @@ pub fn match_new_interactions(shared: &Shared, collab: &crate::collaborator::Col
 }
 
 /// Match `interactions` against the pending ids and add the issues proved.
-pub fn match_oob_interactions(shared: &Shared, interactions: &[crate::collaborator::Interaction]) -> usize {
+pub fn match_oob_interactions(
+    shared: &Shared,
+    interactions: &[crate::collaborator::Interaction],
+) -> usize {
     let issues = shared.oob.match_interactions(interactions);
     let n = issues.len();
     if n > 0 {

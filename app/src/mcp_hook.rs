@@ -26,7 +26,9 @@ pub struct Mcp;
 #[cfg(feature = "mcp")]
 impl Mcp {
     pub fn start() -> Self {
-        let rt = std::sync::Arc::new(tokio::runtime::Runtime::new().expect("tokio runtime for egui-mcp"));
+        let rt = std::sync::Arc::new(
+            tokio::runtime::Runtime::new().expect("tokio runtime for egui-mcp"),
+        );
         let client = egui_mcp_client::McpClient::new();
         let server = client.clone();
         let path = rt.block_on(client.socket_path());
@@ -35,7 +37,13 @@ impl Mcp {
                 eprintln!("webprobe: egui MCP unavailable on {}: {e}", path.display());
             }
         });
-        Mcp { client, rt, staged: Default::default(), waker_set: Default::default(), frame_start: Default::default() }
+        Mcp {
+            client,
+            rt,
+            staged: Default::default(),
+            waker_set: Default::default(),
+            frame_start: Default::default(),
+        }
     }
 
     /// Inputs sent by the agent, merged into the frames' input in the order
@@ -70,18 +78,21 @@ impl Mcp {
         // ~110% CPU while idle).
         if !self.waker_set.get() {
             let c = ctx.clone();
-            self.client.set_waker(std::sync::Arc::new(move || c.request_repaint()));
+            self.client
+                .set_waker(std::sync::Arc::new(move || c.request_repaint()));
             self.waker_set.set(true);
         }
         if self.rt.block_on(self.client.take_screenshot_request()) {
             let client = self.client.clone();
             let rt = self.rt.clone();
-            ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::ScreenshotCallback::new(move |img| {
-                let rgba: Vec<u8> = img.pixels.iter().flat_map(|p| p.to_array()).collect();
-                let png = compressed_png(img.width() as u32, img.height() as u32, &rgba);
-                let c = client.clone();
-                rt.spawn(async move { c.set_screenshot(png).await });
-            })));
+            ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(
+                egui::ScreenshotCallback::new(move |img| {
+                    let rgba: Vec<u8> = img.pixels.iter().flat_map(|p| p.to_array()).collect();
+                    let png = compressed_png(img.width() as u32, img.height() as u32, &rgba);
+                    let c = client.clone();
+                    rt.spawn(async move { c.set_screenshot(png).await });
+                }),
+            ));
             ctx.request_repaint();
         }
         let highlights = self.rt.block_on(self.client.get_highlights());
@@ -102,11 +113,20 @@ fn steps(input: egui_mcp_client::PendingInput) -> Vec<Vec<egui::Event>> {
         egui_mcp_client::MouseButton::Middle => egui::PointerButton::Middle,
         _ => egui::PointerButton::Primary,
     };
-    let press = |pos, button, pressed| egui::Event::PointerButton { pos, button, pressed, modifiers: egui::Modifiers::NONE };
+    let press = |pos, button, pressed| egui::Event::PointerButton {
+        pos,
+        button,
+        pressed,
+        modifiers: egui::Modifiers::NONE,
+    };
     match input {
         P::Click { x, y, button: b } => {
             let (pos, b) = (egui::pos2(x, y), button(&b));
-            vec![vec![egui::Event::PointerMoved(pos)], vec![press(pos, b, true)], vec![press(pos, b, false)]]
+            vec![
+                vec![egui::Event::PointerMoved(pos)],
+                vec![press(pos, b, true)],
+                vec![press(pos, b, false)],
+            ]
         }
         P::DoubleClick { x, y, button: b } => {
             let (pos, b) = (egui::pos2(x, y), button(&b));
@@ -119,8 +139,18 @@ fn steps(input: egui_mcp_client::PendingInput) -> Vec<Vec<egui::Event>> {
             ]
         }
         P::MoveMouse { x, y } => vec![vec![egui::Event::PointerMoved(egui::pos2(x, y))]],
-        P::Drag { start_x, start_y, end_x, end_y, button: b } => {
-            let (a, z, b) = (egui::pos2(start_x, start_y), egui::pos2(end_x, end_y), button(&b));
+        P::Drag {
+            start_x,
+            start_y,
+            end_x,
+            end_y,
+            button: b,
+        } => {
+            let (a, z, b) = (
+                egui::pos2(start_x, start_y),
+                egui::pos2(end_x, end_y),
+                button(&b),
+            );
             let mid = a + (z - a) * 0.5;
             vec![
                 vec![egui::Event::PointerMoved(a)],
@@ -130,7 +160,12 @@ fn steps(input: egui_mcp_client::PendingInput) -> Vec<Vec<egui::Event>> {
                 vec![press(z, b, false)],
             ]
         }
-        P::Scroll { x, y, delta_x, delta_y } => vec![
+        P::Scroll {
+            x,
+            y,
+            delta_x,
+            delta_y,
+        } => vec![
             vec![egui::Event::PointerMoved(egui::pos2(x, y))],
             vec![egui::Event::MouseWheel {
                 unit: egui::MouseWheelUnit::Point,
@@ -172,7 +207,10 @@ fn named_key(name: &str) -> Option<egui::Key> {
     }
     egui::Key::from_name(name).or_else(|| {
         // Case-insensitive match on egui's own names ("enter", "pageup", "f5").
-        egui::Key::ALL.iter().copied().find(|k| k.name().eq_ignore_ascii_case(name))
+        egui::Key::ALL
+            .iter()
+            .copied()
+            .find(|k| k.name().eq_ignore_ascii_case(name))
     })
 }
 
@@ -186,13 +224,22 @@ fn named_key(name: &str) -> Option<egui::Key> {
 #[cfg_attr(not(feature = "mcp"), allow(dead_code))]
 pub fn key_events(key: &str) -> Vec<egui::Event> {
     let pressed_and_released = |k: egui::Key, modifiers: egui::Modifiers| {
-        [true, false].map(|pressed| egui::Event::Key { key: k, physical_key: Some(k), pressed, repeat: false, modifiers }).to_vec()
+        [true, false]
+            .map(|pressed| egui::Event::Key {
+                key: k,
+                physical_key: Some(k),
+                pressed,
+                repeat: false,
+                modifiers,
+            })
+            .to_vec()
     };
     if let Some(text) = key.strip_prefix("text:") {
         return vec![egui::Event::Text(text.to_string())];
     }
     // Modifier combos.
-    let combo = key.len() > 2 && (key.ends_with("++") || (key.contains('+') && !key.ends_with('+')));
+    let combo =
+        key.len() > 2 && (key.ends_with("++") || (key.contains('+') && !key.ends_with('+')));
     if combo {
         let (mods, last) = match key.strip_suffix("++") {
             Some(m) => (m, "+"),
@@ -218,7 +265,8 @@ pub fn key_events(key: &str) -> Vec<egui::Event> {
         let k = named_key(last).or_else(|| {
             let mut chars = last.chars();
             match (chars.next(), chars.next()) {
-                (Some(c), None) => egui::Key::from_name(&c.to_ascii_uppercase().to_string()).or_else(|| egui::Key::from_name(&c.to_string())),
+                (Some(c), None) => egui::Key::from_name(&c.to_ascii_uppercase().to_string())
+                    .or_else(|| egui::Key::from_name(&c.to_string())),
                 _ => None,
             }
         });
@@ -245,11 +293,29 @@ pub fn key_events(key: &str) -> Vec<egui::Event> {
     let mut events = Vec::new();
     let mut chars = key.chars();
     if let (Some(c), None) = (chars.next(), chars.next()) {
-        if let Some(k) = egui::Key::from_name(&c.to_ascii_uppercase().to_string()).filter(|_| c.is_ascii_alphanumeric()) {
-            let modifiers = if c.is_ascii_uppercase() { egui::Modifiers::SHIFT } else { egui::Modifiers::NONE };
-            events.push(egui::Event::Key { key: k, physical_key: Some(k), pressed: true, repeat: false, modifiers });
+        if let Some(k) = egui::Key::from_name(&c.to_ascii_uppercase().to_string())
+            .filter(|_| c.is_ascii_alphanumeric())
+        {
+            let modifiers = if c.is_ascii_uppercase() {
+                egui::Modifiers::SHIFT
+            } else {
+                egui::Modifiers::NONE
+            };
+            events.push(egui::Event::Key {
+                key: k,
+                physical_key: Some(k),
+                pressed: true,
+                repeat: false,
+                modifiers,
+            });
             events.push(egui::Event::Text(key.to_string()));
-            events.push(egui::Event::Key { key: k, physical_key: Some(k), pressed: false, repeat: false, modifiers });
+            events.push(egui::Event::Key {
+                key: k,
+                physical_key: Some(k),
+                pressed: false,
+                repeat: false,
+                modifiers,
+            });
             return events;
         }
     }
@@ -267,7 +333,11 @@ pub fn compressed_png(w: u32, h: u32, rgba: &[u8]) -> Vec<u8> {
             for &b in *part {
                 c ^= b as u32;
                 for _ in 0..8 {
-                    c = if c & 1 != 0 { 0xedb8_8320 ^ (c >> 1) } else { c >> 1 };
+                    c = if c & 1 != 0 {
+                        0xedb8_8320 ^ (c >> 1)
+                    } else {
+                        c >> 1
+                    };
                 }
             }
         }
@@ -313,11 +383,31 @@ mod tests {
     use super::*;
 
     fn text(ev: &[egui::Event]) -> String {
-        ev.iter().filter_map(|e| if let egui::Event::Text(t) = e { Some(t.as_str()) } else { None }).collect()
+        ev.iter()
+            .filter_map(|e| {
+                if let egui::Event::Text(t) = e {
+                    Some(t.as_str())
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 
     fn key(ev: &[egui::Event]) -> Option<(egui::Key, egui::Modifiers)> {
-        ev.iter().find_map(|e| if let egui::Event::Key { key, pressed: true, modifiers, .. } = e { Some((*key, *modifiers)) } else { None })
+        ev.iter().find_map(|e| {
+            if let egui::Event::Key {
+                key,
+                pressed: true,
+                modifiers,
+                ..
+            } = e
+            {
+                Some((*key, *modifiers))
+            } else {
+                None
+            }
+        })
     }
 
     #[test]
@@ -327,14 +417,28 @@ mod tests {
         assert_eq!(text(&key_events("&")), "&");
         assert_eq!(text(&key_events(" ")), " ");
         assert_eq!(text(&key_events("a b&c")), "a b&c");
-        assert_eq!(text(&key_events("ampersand")), "ampersand", "not a key name: typed");
+        assert_eq!(
+            text(&key_events("ampersand")),
+            "ampersand",
+            "not a key name: typed"
+        );
         assert_eq!(text(&key_events("text:Enter")), "Enter");
         assert_eq!(text(&key_events("+")), "+");
     }
 
     #[test]
     fn key_names_press_keys() {
-        for (name, k) in [("Enter", egui::Key::Enter), ("Return", egui::Key::Enter), ("BackSpace", egui::Key::Backspace), ("backspace", egui::Key::Backspace), ("Tab", egui::Key::Tab), ("End", egui::Key::End), ("Page_Up", egui::Key::PageUp), ("F5", egui::Key::F5), ("left", egui::Key::ArrowLeft)] {
+        for (name, k) in [
+            ("Enter", egui::Key::Enter),
+            ("Return", egui::Key::Enter),
+            ("BackSpace", egui::Key::Backspace),
+            ("backspace", egui::Key::Backspace),
+            ("Tab", egui::Key::Tab),
+            ("End", egui::Key::End),
+            ("Page_Up", egui::Key::PageUp),
+            ("F5", egui::Key::F5),
+            ("left", egui::Key::ArrowLeft),
+        ] {
             assert_eq!(key(&key_events(name)).map(|x| x.0), Some(k), "{name}");
             assert_eq!(text(&key_events(name)), "", "{name} types nothing");
         }
@@ -350,6 +454,9 @@ mod tests {
         assert_eq!(k, egui::Key::Tab);
         assert!(m.shift);
         assert!(matches!(key_events("ctrl+c")[..], [egui::Event::Copy]));
-        assert_eq!(key(&key_events("ctrl+shift+z")).map(|x| (x.0, x.1.shift)), Some((egui::Key::Z, true)));
+        assert_eq!(
+            key(&key_events("ctrl+shift+z")).map(|x| (x.0, x.1.shift)),
+            Some((egui::Key::Z, true))
+        );
     }
 }

@@ -8,18 +8,75 @@ use super::passive_checks::{attr, forms, page_url, resolve, PassiveCtx};
 use super::*;
 use std::collections::{BTreeMap, BTreeSet};
 
-pub(crate) const CH_SESSION_TOKEN_URL: CheckDef = CheckDef { id: "passive.session-token-in-url", name: "Session token in URL", sev: "medium", confidence: "Firm" };
-pub(crate) const CH_DUPLICATE_COOKIES: CheckDef = CheckDef { id: "passive.duplicate-cookies", name: "Duplicate cookies set", sev: "info", confidence: "Certain" };
-pub(crate) const CH_CROSS_DOMAIN_SCRIPT: CheckDef = CheckDef { id: "passive.cross-domain-script", name: "Cross-domain script include", sev: "info", confidence: "Certain" };
-pub(crate) const CH_COOKIE_PARENT_DOMAIN: CheckDef = CheckDef { id: "passive.cookie-parent-domain", name: "Cookie scoped to parent domain", sev: "info", confidence: "Certain" };
-pub(crate) const CH_PASSWORD_URL_QUERY: CheckDef = CheckDef { id: "passive.password-in-url-query", name: "Password returned in URL query string", sev: "low", confidence: "Firm" };
-pub(crate) const CH_PASSWORD_LATER: CheckDef = CheckDef { id: "passive.password-later-response", name: "Password returned in later response", sev: "medium", confidence: "Firm" };
-pub(crate) const CH_PASSWORD_COOKIE: CheckDef = CheckDef { id: "passive.password-in-cookie", name: "Password value set in cookie", sev: "medium", confidence: "Firm" };
-pub(crate) const CH_SOURCE_CODE: CheckDef = CheckDef { id: "passive.source-code-disclosure", name: "Source code disclosure", sev: "low", confidence: "Tentative" };
-pub(crate) const CH_SERIALIZED: CheckDef = CheckDef { id: "passive.serialized-object", name: "Serialized object in HTTP message", sev: "high", confidence: "Firm" };
-pub(crate) const CH_DB_CONNECTION: CheckDef = CheckDef { id: "passive.db-connection-string", name: "Database connection string disclosed", sev: "info", confidence: "Firm" };
+pub(crate) const CH_SESSION_TOKEN_URL: CheckDef = CheckDef {
+    id: "passive.session-token-in-url",
+    name: "Session token in URL",
+    sev: "medium",
+    confidence: "Firm",
+};
+pub(crate) const CH_DUPLICATE_COOKIES: CheckDef = CheckDef {
+    id: "passive.duplicate-cookies",
+    name: "Duplicate cookies set",
+    sev: "info",
+    confidence: "Certain",
+};
+pub(crate) const CH_CROSS_DOMAIN_SCRIPT: CheckDef = CheckDef {
+    id: "passive.cross-domain-script",
+    name: "Cross-domain script include",
+    sev: "info",
+    confidence: "Certain",
+};
+pub(crate) const CH_COOKIE_PARENT_DOMAIN: CheckDef = CheckDef {
+    id: "passive.cookie-parent-domain",
+    name: "Cookie scoped to parent domain",
+    sev: "info",
+    confidence: "Certain",
+};
+pub(crate) const CH_PASSWORD_URL_QUERY: CheckDef = CheckDef {
+    id: "passive.password-in-url-query",
+    name: "Password returned in URL query string",
+    sev: "low",
+    confidence: "Firm",
+};
+pub(crate) const CH_PASSWORD_LATER: CheckDef = CheckDef {
+    id: "passive.password-later-response",
+    name: "Password returned in later response",
+    sev: "medium",
+    confidence: "Firm",
+};
+pub(crate) const CH_PASSWORD_COOKIE: CheckDef = CheckDef {
+    id: "passive.password-in-cookie",
+    name: "Password value set in cookie",
+    sev: "medium",
+    confidence: "Firm",
+};
+pub(crate) const CH_SOURCE_CODE: CheckDef = CheckDef {
+    id: "passive.source-code-disclosure",
+    name: "Source code disclosure",
+    sev: "low",
+    confidence: "Tentative",
+};
+pub(crate) const CH_SERIALIZED: CheckDef = CheckDef {
+    id: "passive.serialized-object",
+    name: "Serialized object in HTTP message",
+    sev: "high",
+    confidence: "Firm",
+};
+pub(crate) const CH_DB_CONNECTION: CheckDef = CheckDef {
+    id: "passive.db-connection-string",
+    name: "Database connection string disclosed",
+    sev: "info",
+    confidence: "Firm",
+};
 
-fn issue(c: CheckDef, cx: &PassiveCtx, sev: &str, confidence: &str, ident: String, detail: String) -> ScanIssue {
+fn issue(
+    c: CheckDef,
+    cx: &PassiveCtx,
+    sev: &str,
+    confidence: &str,
+    ident: String,
+    detail: String,
+) -> ScanIssue {
     let mut i = mk(sev, c.name, cx.e, detail);
     i.confidence = confidence.into();
     i.ident = ident;
@@ -44,7 +101,11 @@ fn pct_decode(s: &str) -> Vec<u8> {
     let mut out = Vec::with_capacity(b.len());
     let mut i = 0;
     while i < b.len() {
-        if b[i] == b'%' && i + 2 < b.len() && b[i + 1].is_ascii_hexdigit() && b[i + 2].is_ascii_hexdigit() {
+        if b[i] == b'%'
+            && i + 2 < b.len()
+            && b[i + 1].is_ascii_hexdigit()
+            && b[i + 2].is_ascii_hexdigit()
+        {
             let h = |c: u8| (c as char).to_digit(16).unwrap_or(0) as u8;
             out.push(h(b[i + 1]) << 4 | h(b[i + 2]));
             i += 3;
@@ -79,7 +140,11 @@ pub(crate) struct Param {
 fn split_pairs(s: &str, sep: char, kind: PKind, out: &mut Vec<Param>) {
     for pair in s.split(sep).map(str::trim).filter(|p| !p.is_empty()) {
         let (n, v) = pair.split_once('=').unwrap_or((pair, ""));
-        out.push(Param { kind, name: n.to_string(), raw: v.to_string() });
+        out.push(Param {
+            kind,
+            name: n.to_string(),
+            raw: v.to_string(),
+        });
     }
 }
 
@@ -93,7 +158,9 @@ pub(crate) fn request_params(cx: &PassiveCtx) -> Vec<Param> {
     }
     let req = &cx.e.req_raw;
     let body = &req[cx.req.head_len.min(req.len())..];
-    let ct = util::get_header(&cx.req.headers, "Content-Type").unwrap_or_default().to_ascii_lowercase();
+    let ct = util::get_header(&cx.req.headers, "Content-Type")
+        .unwrap_or_default()
+        .to_ascii_lowercase();
     if ct.contains("application/x-www-form-urlencoded") {
         split_pairs(&String::from_utf8_lossy(body), '&', PKind::Body, &mut out);
     }
@@ -105,9 +172,19 @@ pub(crate) fn request_params(cx: &PassiveCtx) -> Vec<Param> {
     let text = String::from_utf8_lossy(req);
     for p in super::insertion::audit_points(&text, &crate::scan_config::ScanConfig::default()) {
         let other = p.parent.is_none()
-            && matches!(p.kind, super::insertion::IpKind::Json(_) | super::insertion::IpKind::Multipart { .. } | super::insertion::IpKind::XmlParam { .. } | super::insertion::IpKind::XmlAttr { .. });
+            && matches!(
+                p.kind,
+                super::insertion::IpKind::Json(_)
+                    | super::insertion::IpKind::Multipart { .. }
+                    | super::insertion::IpKind::XmlParam { .. }
+                    | super::insertion::IpKind::XmlAttr { .. }
+            );
         if other {
-            out.push(Param { kind: PKind::Other, name: p.name.clone(), raw: p.value.clone() });
+            out.push(Param {
+                kind: PKind::Other,
+                name: p.name.clone(),
+                raw: p.value.clone(),
+            });
         }
     }
     out
@@ -121,7 +198,11 @@ pub(crate) fn session_like(name: &str, value: &str) -> bool {
         return false;
     }
     let n = name.to_lowercase();
-    n.contains("sess") || (n.contains("token") && n != "org.apache.struts.taglib.html.token") || n.contains("nonce") || n == "cfid" || n == "cftoken"
+    n.contains("sess")
+        || (n.contains("token") && n != "org.apache.struts.taglib.html.token")
+        || n.contains("nonce")
+        || n == "cfid"
+        || n == "cftoken"
 }
 
 // ------------------------------------------------------------ links
@@ -145,7 +226,8 @@ fn link_attrs(tag: &str) -> &'static [&'static str] {
         "script" => &["src", "xlink:href"],
         "link" => &["href", "src"],
         "applet" => &["code", "codebase", "archive", "object"],
-        "bgsound" | "sound" | "frame" | "fig" | "iframe" | "li" | "note" | "ul" | "isindex" | "source" | "svg" | "video" => &["src"],
+        "bgsound" | "sound" | "frame" | "fig" | "iframe" | "li" | "note" | "ul" | "isindex"
+        | "source" | "svg" | "video" => &["src"],
         "body" => &["background", "location"],
         "embed" => &["src", "code"],
         "meta" => &["url"],
@@ -176,10 +258,16 @@ pub(crate) fn links(cx: &PassiveCtx) -> Vec<Link> {
     while let Some(o) = low[i..].find('<') {
         let s = i + o;
         if low[s..].starts_with("<!--") {
-            i = low[s + 4..].find("-->").map(|e| s + 4 + e + 3).unwrap_or(low.len());
+            i = low[s + 4..]
+                .find("-->")
+                .map(|e| s + 4 + e + 3)
+                .unwrap_or(low.len());
             continue;
         }
-        let name: String = low[s + 1..].chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == ':').collect();
+        let name: String = low[s + 1..]
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == ':')
+            .collect();
         if name.is_empty() {
             i = s + 1;
             continue;
@@ -191,7 +279,9 @@ pub(crate) fn links(cx: &PassiveCtx) -> Vec<Link> {
             let v = util::html_decode(&v).trim().replace(' ', "%20");
             let head: String = v.chars().take(12).collect();
             if let Some(colon) = head.find(':').filter(|&c| c > 0) {
-                if !["http", "https", "ws", "wss"].contains(&head[..colon].to_ascii_lowercase().as_str()) {
+                if !["http", "https", "ws", "wss"]
+                    .contains(&head[..colon].to_ascii_lowercase().as_str())
+                {
                     continue;
                 }
             }
@@ -206,7 +296,11 @@ pub(crate) fn links(cx: &PassiveCtx) -> Vec<Link> {
                 base = url.clone();
                 base_set = true;
             }
-            out.push(Link { tag: name.clone(), url, at: s });
+            out.push(Link {
+                tag: name.clone(),
+                url,
+                at: s,
+            });
         }
         i = e;
         if (name == "script" || name == "style") && !lt.trim_end().ends_with("/>") {
@@ -238,12 +332,22 @@ pub(crate) fn url_host(u: &str) -> String {
     let rest = u.split_once("://").map(|x| x.1).unwrap_or(u);
     let auth = rest.split(['/', '?', '#']).next().unwrap_or("");
     let auth = auth.rsplit('@').next().unwrap_or(auth);
-    let host = if auth.starts_with('[') { auth.split(']').next().map(|h| format!("{h}]")).unwrap_or_default() } else { auth.split(':').next().unwrap_or("").to_string() };
+    let host = if auth.starts_with('[') {
+        auth.split(']')
+            .next()
+            .map(|h| format!("{h}]"))
+            .unwrap_or_default()
+    } else {
+        auth.split(':').next().unwrap_or("").to_string()
+    };
     host.to_ascii_lowercase()
 }
 
 fn url_query(u: &str) -> Option<&str> {
-    u.split('#').next().and_then(|x| x.split_once('?')).map(|x| x.1)
+    u.split('#')
+        .next()
+        .and_then(|x| x.split_once('?'))
+        .map(|x| x.1)
 }
 
 /// burp.Zx3a.Zj: the dot-separated label ending at `end`, if 2 characters
@@ -291,7 +395,10 @@ pub(crate) fn other_domain(a: &str, b: &str) -> bool {
 pub(crate) fn session_token_in_url(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
     let c = CH_SESSION_TOKEN_URL;
     let mut names: Vec<String> = Vec::new();
-    for p in request_params(cx).into_iter().filter(|p| p.kind == PKind::Url && session_like(&p.name, &p.raw)) {
+    for p in request_params(cx)
+        .into_iter()
+        .filter(|p| p.kind == PKind::Url && session_like(&p.name, &p.raw))
+    {
         if !names.contains(&p.name) {
             names.push(p.name);
         }
@@ -319,7 +426,9 @@ pub(crate) fn session_token_in_url(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
     }
     for (n, mut urls) in by_name {
         urls.sort();
-        let mut t = String::from("The response contains the following links that appear to contain session tokens:<ul>");
+        let mut t = String::from(
+            "The response contains the following links that appear to contain session tokens:<ul>",
+        );
         for u in &urls {
             t.push_str(&format!("<li>{}</li>", util::html_encode(u)));
         }
@@ -349,10 +458,25 @@ fn set_cookies(cx: &PassiveCtx) -> Vec<SetCookie> {
         .filter(|(k, _)| k.eq_ignore_ascii_case("Set-Cookie"))
         .map(|(_, raw)| {
             let mut it = raw.split(';');
-            let (name, value) = it.next().unwrap_or("").split_once('=').map(|(n, v)| (n.trim().to_string(), v.trim().to_string())).unwrap_or_default();
-            let mut c = SetCookie { name, value, domain: None, expired: false, secure: false, httponly: false };
+            let (name, value) = it
+                .next()
+                .unwrap_or("")
+                .split_once('=')
+                .map(|(n, v)| (n.trim().to_string(), v.trim().to_string()))
+                .unwrap_or_default();
+            let mut c = SetCookie {
+                name,
+                value,
+                domain: None,
+                expired: false,
+                secure: false,
+                httponly: false,
+            };
             for a in it {
-                let (k, val) = a.split_once('=').map(|(k, v)| (k.trim(), v.trim())).unwrap_or((a.trim(), ""));
+                let (k, val) = a
+                    .split_once('=')
+                    .map(|(k, v)| (k.trim(), v.trim()))
+                    .unwrap_or((a.trim(), ""));
                 if k.eq_ignore_ascii_case("secure") {
                     c.secure = true;
                 } else if k.eq_ignore_ascii_case("httponly") {
@@ -378,7 +502,10 @@ fn set_cookies(cx: &PassiveCtx) -> Vec<SetCookie> {
 pub(crate) fn duplicate_cookies(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
     let c = CH_DUPLICATE_COOKIES;
     let mut groups: Vec<(String, Vec<String>)> = Vec::new();
-    for ck in set_cookies(cx).into_iter().filter(|ck| !ck.value.is_empty()) {
+    for ck in set_cookies(cx)
+        .into_iter()
+        .filter(|ck| !ck.value.is_empty())
+    {
         match groups.iter_mut().find(|(n, _)| *n == ck.name) {
             Some((_, vals)) => {
                 if !vals.contains(&ck.value) {
@@ -397,7 +524,10 @@ pub(crate) fn duplicate_cookies(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
 /// The cookies burp.Zwqj looks at: live, with a value of 5 characters or
 /// more (Zwqj.Zl / ZL).
 fn audited_cookies(cx: &PassiveCtx) -> Vec<SetCookie> {
-    set_cookies(cx).into_iter().filter(|ck| !ck.expired && ck.value.chars().count() >= 5).collect()
+    set_cookies(cx)
+        .into_iter()
+        .filter(|ck| !ck.expired && ck.value.chars().count() >= 5)
+        .collect()
 }
 
 /// burp.Zwfw / Zwv8 / Zwf5 for one cookie: the session-like one bold with
@@ -420,14 +550,27 @@ pub(crate) fn cookie_parent_domain(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
     let c = CH_COOKIE_PARENT_DOMAIN;
     let host = cx.e.host.to_lowercase();
     for ck in audited_cookies(cx) {
-        let Some(d) = ck.domain.as_deref().map(str::to_lowercase) else { continue };
+        let Some(d) = ck.domain.as_deref().map(str::to_lowercase) else {
+            continue;
+        };
         if !(d.len() < host.len() && host.ends_with(&d)) {
             continue;
         }
         let head = "The following cookie was issued by the application and is scoped to a parent of the issuing domain:<ul>";
         let session = session_like(&ck.name, &ck.value);
-        let (sev, conf, kind) = if session { ("low", "Firm", "Session") } else { ("info", "Certain", "Other") };
-        v.push(issue(c, cx, sev, conf, format!("{kind}: {}", ck.name), cookie_text(head, &ck.name, session)));
+        let (sev, conf, kind) = if session {
+            ("low", "Firm", "Session")
+        } else {
+            ("info", "Certain", "Other")
+        };
+        v.push(issue(
+            c,
+            cx,
+            sev,
+            conf,
+            format!("{kind}: {}", ck.name),
+            cookie_text(head, &ck.name, session),
+        ));
     }
 }
 
@@ -440,10 +583,23 @@ pub(crate) fn cookie_flag(cx: &PassiveCtx, v: &mut Vec<ScanIssue>, secure: bool)
     if secure && !cx.e.https {
         return;
     }
-    let name = if secure { "TLS cookie without secure flag set" } else { "Cookie without HttpOnly flag set" };
-    let what = if secure { "the secure flag" } else { "the HttpOnly flag" };
-    let head = format!("The following cookie was issued by the application and does not have {what} set:<ul>");
-    for ck in audited_cookies(cx).into_iter().filter(|ck| if secure { !ck.secure } else { !ck.httponly }) {
+    let name = if secure {
+        "TLS cookie without secure flag set"
+    } else {
+        "Cookie without HttpOnly flag set"
+    };
+    let what = if secure {
+        "the secure flag"
+    } else {
+        "the HttpOnly flag"
+    };
+    let head = format!(
+        "The following cookie was issued by the application and does not have {what} set:<ul>"
+    );
+    for ck in audited_cookies(cx)
+        .into_iter()
+        .filter(|ck| if secure { !ck.secure } else { !ck.httponly })
+    {
         let session = session_like(&ck.name, &ck.value);
         let (sev, conf, kind) = match (session, secure) {
             (true, true) => ("medium", "Firm", "Session"),
@@ -474,7 +630,11 @@ pub(crate) fn cross_domain_script(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
     }
     for (h, urls) in by_host {
         let mut t = String::from("The response dynamically includes the following ");
-        t.push_str(if urls.len() == 1 { "script from another domain:<ul>" } else { "scripts from other domains:<ul>" });
+        t.push_str(if urls.len() == 1 {
+            "script from another domain:<ul>"
+        } else {
+            "scripts from other domains:<ul>"
+        });
         for u in &urls {
             t.push_str(&format!("<li>{}</li>", util::html_encode(u)));
         }
@@ -525,7 +685,11 @@ fn password_issues(cx: &PassiveCtx) -> Vec<ScanIssue> {
     if cx.html {
         for f in forms(&cx.text, &cx.low) {
             let action = resolve(&page, &f.action);
-            let path = action.split_once("://").map(|x| x.1).and_then(|r| r.find('/').map(|i| &r[i..])).unwrap_or("/");
+            let path = action
+                .split_once("://")
+                .map(|x| x.1)
+                .and_then(|r| r.find('/').map(|i| &r[i..]))
+                .unwrap_or("/");
             let path = path.split(['?', '#']).next().unwrap_or("/");
             for p in &f.passwords {
                 state.note_password_field(&url_host(&action), path, p);
@@ -533,7 +697,11 @@ fn password_issues(cx: &PassiveCtx) -> Vec<ScanIssue> {
         }
     }
     let path = cx.e.path.split(['?', '#']).next().unwrap_or("/");
-    let params: Vec<(String, String)> = request_params(cx).into_iter().filter(|p| p.kind != PKind::Cookie).map(|p| (p.name, p.raw)).collect();
+    let params: Vec<(String, String)> = request_params(cx)
+        .into_iter()
+        .filter(|p| p.kind != PKind::Cookie)
+        .map(|p| (p.name, p.raw))
+        .collect();
     let host = cx.e.host.to_lowercase();
     let submitted = state.submit(&host, path, &params, &cx.e.req_raw);
     let links = links(cx);
@@ -554,7 +722,12 @@ fn password_issues(cx: &PassiveCtx) -> Vec<ScanIssue> {
 }
 
 /// burp.Zcn0.ZO for one password.
-fn password_steps(cx: &PassiveCtx, s: &crate::passive_state::Submitted, current: bool, links: &[Link]) -> Option<ScanIssue> {
+fn password_steps(
+    cx: &PassiveCtx,
+    s: &crate::passive_state::Submitted,
+    current: bool,
+    links: &[Link],
+) -> Option<ScanIssue> {
     let hay = scanned(cx);
     let pw = s.value.as_bytes();
     let found = occurrences(hay, pw);
@@ -563,7 +736,10 @@ fn password_steps(cx: &PassiveCtx, s: &crate::passive_state::Submitted, current:
     }
     let enabled = |c: CheckDef| (cx.enabled)(c.id);
     let later_evidence = |mut i: ScanIssue| {
-        i.evidence = vec![ScanEvidence::new(&s.request, None), ScanEvidence::new(&cx.e.req_raw, Some(cx.resp))];
+        i.evidence = vec![
+            ScanEvidence::new(&s.request, None),
+            ScanEvidence::new(&cx.e.req_raw, Some(cx.resp)),
+        ];
         i
     };
     let mut suppressed = false;
@@ -572,7 +748,14 @@ fn password_steps(cx: &PassiveCtx, s: &crate::passive_state::Submitted, current:
         if !enabled(CH_PASSWORD_COOKIE) {
             Step::Suppressed
         } else {
-            let i = issue(CH_PASSWORD_COOKIE, cx, CH_PASSWORD_COOKIE.sev, CH_PASSWORD_COOKIE.confidence, String::new(), String::new());
+            let i = issue(
+                CH_PASSWORD_COOKIE,
+                cx,
+                CH_PASSWORD_COOKIE.sev,
+                CH_PASSWORD_COOKIE.confidence,
+                String::new(),
+                String::new(),
+            );
             Step::Issue(Box::new(if current { i } else { later_evidence(i) }))
         }
     } else {
@@ -593,7 +776,11 @@ fn password_steps(cx: &PassiveCtx, s: &crate::passive_state::Submitted, current:
         })
     });
     if in_link {
-        let (c, conf) = if current { (CH_PASSWORD_URL_QUERY, "Firm") } else { (CH_PASSWORD_LATER, "Firm") };
+        let (c, conf) = if current {
+            (CH_PASSWORD_URL_QUERY, "Firm")
+        } else {
+            (CH_PASSWORD_LATER, "Firm")
+        };
         if !enabled(c) {
             return None;
         }
@@ -615,17 +802,36 @@ fn password_steps(cx: &PassiveCtx, s: &crate::passive_state::Submitted, current:
                 if !enabled(CH_PASSWORD_LATER) {
                     return None;
                 }
-                return Some(later_evidence(issue(CH_PASSWORD_LATER, cx, CH_PASSWORD_LATER.sev, "Firm", String::new(), String::new())));
+                return Some(later_evidence(issue(
+                    CH_PASSWORD_LATER,
+                    cx,
+                    CH_PASSWORD_LATER.sev,
+                    "Firm",
+                    String::new(),
+                    String::new(),
+                )));
             }
             i = e.max(st + 1);
         }
     }
     // burp.Zcn0.Za: every occurrence glued to a letter or digit.
     let alnum = |i: usize| hay.get(i).is_some_and(|b| (*b as char).is_alphanumeric());
-    if found.iter().all(|&(a, b)| (a > 0 && alnum(a - 1)) || alnum(b)) {
+    if found
+        .iter()
+        .all(|&(a, b)| (a > 0 && alnum(a - 1)) || alnum(b))
+    {
         return None;
     }
-    (enabled(CH_PASSWORD_LATER) && !suppressed).then(|| later_evidence(issue(CH_PASSWORD_LATER, cx, CH_PASSWORD_LATER.sev, "Tentative", String::new(), String::new())))
+    (enabled(CH_PASSWORD_LATER) && !suppressed).then(|| {
+        later_evidence(issue(
+            CH_PASSWORD_LATER,
+            cx,
+            CH_PASSWORD_LATER.sev,
+            "Tentative",
+            String::new(),
+            String::new(),
+        ))
+    })
 }
 
 /// The attribute values of one start tag (quoted or bare), entity-decoded.
@@ -641,12 +847,20 @@ fn tag_attr_values(tag: &str) -> Vec<String> {
             }
             if j < b.len() && (b[j] == b'"' || b[j] == b'\'') {
                 let q = b[j];
-                let end = b[j + 1..].iter().position(|&c| c == q).map(|e| j + 1 + e).unwrap_or(b.len());
+                let end = b[j + 1..]
+                    .iter()
+                    .position(|&c| c == q)
+                    .map(|e| j + 1 + e)
+                    .unwrap_or(b.len());
                 out.push(util::html_decode(&tag[j + 1..end]));
                 i = end + 1;
                 continue;
             }
-            let end = b[j..].iter().position(|&c| c.is_ascii_whitespace() || c == b'>').map(|e| j + e).unwrap_or(b.len());
+            let end = b[j..]
+                .iter()
+                .position(|&c| c.is_ascii_whitespace() || c == b'>')
+                .map(|e| j + e)
+                .unwrap_or(b.len());
             out.push(util::html_decode(&tag[j..end]));
             i = end;
             continue;
@@ -685,7 +899,8 @@ fn code_open(b: &[u8], at: usize) -> u32 {
 }
 
 fn find_from(b: &[u8], needle: &[u8], from: usize, to: usize) -> Option<usize> {
-    (from..to.saturating_sub(needle.len() - 1)).find(|&i| i + needle.len() <= to && &b[i..i + needle.len()] == needle)
+    (from..to.saturating_sub(needle.len() - 1))
+        .find(|&i| i + needle.len() <= to && &b[i..i + needle.len()] == needle)
 }
 
 /// burp.Zgph.ZX over `b`: the code blocks found and the languages seen.
@@ -694,7 +909,9 @@ pub(crate) fn code_blocks(b: &[u8]) -> (usize, u32) {
     let (mut found, mut flags) = (0, 0u32);
     let mut i = 0;
     while i < end {
-        let Some(lt) = b[i..end].iter().position(|&c| c == b'<').map(|x| i + x) else { break };
+        let Some(lt) = b[i..end].iter().position(|&c| c == b'<').map(|x| i + x) else {
+            break;
+        };
         i = lt;
         if i + 1 >= end {
             break;
@@ -720,14 +937,20 @@ pub(crate) fn code_blocks(b: &[u8]) -> (usize, u32) {
         let close = match kind {
             1 => find_from(b, b"?>", i + 3, end).map(|x| x + 2),
             2 | 8 => find_from(b, b"%>", i + 3, end).map(|x| x + 2),
-            _ => b[(i + 5).min(end)..end].iter().position(|&c| c == b'>').map(|x| i + 5 + x + 1),
+            _ => b[(i + 5).min(end)..end]
+                .iter()
+                .position(|&c| c == b'>')
+                .map(|x| i + 5 + x + 1),
         };
         let Some(close) = close else {
             i += 1;
             continue;
         };
         // Zgph.Zx: a letter somewhere from the 5th byte on.
-        if !b[(i + 4).min(close)..close].iter().any(|c| c.is_ascii_alphabetic()) {
+        if !b[(i + 4).min(close)..close]
+            .iter()
+            .any(|c| c.is_ascii_alphabetic())
+        {
             i += 1;
             continue;
         }
@@ -743,7 +966,11 @@ pub(crate) fn code_blocks(b: &[u8]) -> (usize, u32) {
 /// HTML, text, script, CSS, XML, JSON). One issue per host.
 pub(crate) fn source_code(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
     let texty = |m: &str| matches!(m, "" | "HTML" | "text" | "script" | "CSS" | "XML" | "JSON");
-    let stated = if cx.ct.trim().is_empty() { "" } else { crate::mime::burp_mime(&cx.ct, &[]) };
+    let stated = if cx.ct.trim().is_empty() {
+        ""
+    } else {
+        crate::mime::burp_mime(&cx.ct, &[])
+    };
     if !(texty(stated) || texty(crate::mime::burp_mime("", cx.body))) {
         return;
     }
@@ -762,7 +989,10 @@ pub(crate) fn source_code(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
         langs.push("ASP");
     }
     let c = CH_SOURCE_CODE;
-    let t = format!("The application appears to disclose some server-side source code written in {}.", join_and(&langs));
+    let t = format!(
+        "The application appears to disclose some server-side source code written in {}.",
+        join_and(&langs)
+    );
     v.push(issue(c, cx, c.sev, c.confidence, String::new(), t));
 }
 
@@ -786,8 +1016,16 @@ fn is_base64(b: &[u8]) -> bool {
     if n == 0 || n % 4 == 1 {
         return false;
     }
-    let bad_padding = if b[n - 1] == b'=' { !n.is_multiple_of(4) } else { b[n - 2] == b'=' };
-    !bad_padding && b.iter().enumerate().all(|(i, &c)| !(c == b'=' && i + 2 < n) && (c.is_ascii_alphanumeric() || c == b'+' || c == b'/' || c == b'='))
+    let bad_padding = if b[n - 1] == b'=' {
+        !n.is_multiple_of(4)
+    } else {
+        b[n - 2] == b'='
+    };
+    !bad_padding
+        && b.iter().enumerate().all(|(i, &c)| {
+            !(c == b'=' && i + 2 < n)
+                && (c.is_ascii_alphanumeric() || c == b'+' || c == b'/' || c == b'=')
+        })
 }
 
 /// The serialization format of a value (burp.Zxc_.Zx in order: Zcrx Java,
@@ -807,7 +1045,9 @@ pub(crate) fn serialized_kind(s: &[u8]) -> Option<u8> {
     if s.starts_with(&[0x04, 0x08]) && s.ends_with(b"\n") {
         return Some(4);
     }
-    let printable = s.iter().all(|&c| (c >= b' ' || c == b'\n' || c == b'\r' || c == b'\t') && c < 0x7f);
+    let printable = s
+        .iter()
+        .all(|&c| (c >= b' ' || c == b'\n' || c == b'\r' || c == b'\t') && c < 0x7f);
     if printable && s.starts_with(b"---") && s.ends_with(b"...") {
         return Some(5);
     }
@@ -818,7 +1058,11 @@ pub(crate) fn serialized_kind(s: &[u8]) -> Option<u8> {
 /// decoding for URL, body and cookie parameters, then Base64 when it is
 /// Base64.
 fn decoded_param(p: &Param) -> Vec<u8> {
-    let b = if matches!(p.kind, PKind::Url | PKind::Body | PKind::Cookie) { pct_decode(&p.raw) } else { p.raw.as_bytes().to_vec() };
+    let b = if matches!(p.kind, PKind::Url | PKind::Body | PKind::Cookie) {
+        pct_decode(&p.raw)
+    } else {
+        p.raw.as_bytes().to_vec()
+    };
     if is_base64(&b) {
         if let Ok(d) = util::b64_decode(&latin1(&b)) {
             return d;
@@ -851,8 +1095,19 @@ pub(crate) fn serialized_object(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
         }
         if let Some(k) = serialized_kind(&decoded_param(&p)) {
             seen.push(p.name.clone());
-            let t = format!("The parameter <b>{}</b> appears to contain a serialized {}.", util::html_encode(&p.name), kind_name(k));
-            v.push(issue(c, cx, c.sev, c.confidence, format!("{k}|{}", p.name), t));
+            let t = format!(
+                "The parameter <b>{}</b> appears to contain a serialized {}.",
+                util::html_encode(&p.name),
+                kind_name(k)
+            );
+            v.push(issue(
+                c,
+                cx,
+                c.sev,
+                c.confidence,
+                format!("{k}|{}", p.name),
+                t,
+            ));
         }
     }
     for l in links(cx) {
@@ -866,8 +1121,19 @@ pub(crate) fn serialized_object(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
             }
             if let Some(k) = serialized_kind(&decoded_param(&p)) {
                 names.push(p.name.clone());
-                let t = format!("The parameter <b>{}</b> appears to contain a serialized {}.", util::html_encode(&p.name), kind_name(k));
-                v.push(issue(c, cx, c.sev, c.confidence, format!("{k}|{}|{}", p.name, l.at), t));
+                let t = format!(
+                    "The parameter <b>{}</b> appears to contain a serialized {}.",
+                    util::html_encode(&p.name),
+                    kind_name(k)
+                );
+                v.push(issue(
+                    c,
+                    cx,
+                    c.sev,
+                    c.confidence,
+                    format!("{k}|{}|{}", p.name, l.at),
+                    t,
+                ));
             }
         }
     }
@@ -877,11 +1143,18 @@ pub(crate) fn serialized_object(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
 /// does (i, N, b, s, a, O; doubles and references are not recognized).
 pub(crate) mod php {
     fn int_of(s: &[u8]) -> Option<i64> {
-        std::str::from_utf8(s).ok()?.parse::<i32>().ok().map(i64::from)
+        std::str::from_utf8(s)
+            .ok()?
+            .parse::<i32>()
+            .ok()
+            .map(i64::from)
     }
 
     fn find(s: &[u8], c: u8, from: usize) -> Option<usize> {
-        s.get(from..)?.iter().position(|&x| x == c).map(|i| from + i)
+        s.get(from..)?
+            .iter()
+            .position(|&x| x == c)
+            .map(|i| from + i)
     }
 
     /// Java's `matches` with `.*$`: no line terminator in `s`.
@@ -921,10 +1194,17 @@ pub(crate) mod php {
         if t.len() < 7 {
             return false;
         }
-        let Some(c) = find(t, b':', 2) else { return false };
-        let Some(n) = int_of(&t[2..c]) else { return false };
+        let Some(c) = find(t, b':', 2) else {
+            return false;
+        };
+        let Some(n) = int_of(&t[2..c]) else {
+            return false;
+        };
         let inner = &t[c + 1..t.len() - 1];
-        inner.len() >= 2 && inner.starts_with(b"\"") && inner.ends_with(b"\"") && n + 2 == inner.len() as i64
+        inner.len() >= 2
+            && inner.starts_with(b"\"")
+            && inner.ends_with(b"\"")
+            && n + 2 == inner.len() as i64
     }
 
     /// Zb0_.Zo: end of the `{…}` block of an array or object starting at
@@ -975,7 +1255,9 @@ pub(crate) mod php {
                 b'a' | b'O' => block_end(s, n),
                 _ => return false,
             };
-            let Some(e) = end.filter(|&e| e > n) else { return false };
+            let Some(e) = end.filter(|&e| e > n) else {
+                return false;
+            };
             let t = &s[n..e];
             let ok = match s[n] {
                 b'i' => t.len() > 3 && int_of(&t[2..t.len() - 1]).is_some(),
@@ -1002,11 +1284,15 @@ pub(crate) mod php {
         if digits == 0 || !t[2 + digits..].starts_with(b":{") {
             return false;
         }
-        let Some(c) = find(t, b':', 2) else { return false };
+        let Some(c) = find(t, b':', 2) else {
+            return false;
+        };
         if int_of(&t[2..c]).is_none() {
             return false;
         }
-        let Some(open) = find(t, b'{', 0) else { return false };
+        let Some(open) = find(t, b'{', 0) else {
+            return false;
+        };
         serialized_at(&t[open + 1..t.len() - 1], depth)
     }
 
@@ -1022,12 +1308,20 @@ pub(crate) mod php {
         }
         let name_start = 2 + digits + 2;
         let ident = |c: u8| c.is_ascii_alphabetic() || c == b'_' || c >= 0x7f;
-        let name_len = t[name_start..].iter().take_while(|&&c| ident(c) || c.is_ascii_digit()).count();
-        if name_len == 0 || !ident(t[name_start]) || !t[name_start + name_len..].starts_with(b"\":") {
+        let name_len = t[name_start..]
+            .iter()
+            .take_while(|&&c| ident(c) || c.is_ascii_digit())
+            .count();
+        if name_len == 0 || !ident(t[name_start]) || !t[name_start + name_len..].starts_with(b"\":")
+        {
             return false;
         }
-        let Some(q1) = find(t, b'"', 0) else { return false };
-        let Some(q2) = find(t, b'"', q1 + 1) else { return false };
+        let Some(q1) = find(t, b'"', 0) else {
+            return false;
+        };
+        let Some(q2) = find(t, b'"', q1 + 1) else {
+            return false;
+        };
         let n = q2 + 2;
         if n > t.len() || !valid_string(&t[..n]) {
             return false;
@@ -1043,7 +1337,12 @@ pub(crate) mod php {
 const DB_STARTS: [&[u8]; 4] = [b"driver=", b"provider=", b"server=", b"data source="];
 
 fn db_key(b: &[u8]) -> String {
-    latin1(b).trim().chars().filter(|c| !matches!(c, ' ' | '\r' | '\n' | '\t')).collect::<String>().to_lowercase()
+    latin1(b)
+        .trim()
+        .chars()
+        .filter(|c| !matches!(c, ' ' | '\r' | '\n' | '\t'))
+        .collect::<String>()
+        .to_lowercase()
 }
 
 /// burp.Zbjg.checkForDbConnectionString: from each `driver=`, `provider=`,
@@ -1056,10 +1355,23 @@ fn db_key(b: &[u8]) -> String {
 pub(crate) fn db_strings(b: &[u8]) -> (Vec<String>, u32) {
     let (mut out, mut flags) = (Vec::new(), 0u32);
     let n = b.len();
-    let stop = |c: u8| c == b'\'' || c == b'"' || c == b'<' || c == b'>' || (c < 32 && c != b'\r' && c != b'\n' && c != b'\t') || c > 127;
+    let stop = |c: u8| {
+        c == b'\''
+            || c == b'"'
+            || c == b'<'
+            || c == b'>'
+            || (c < 32 && c != b'\r' && c != b'\n' && c != b'\t')
+            || c > 127
+    };
     let mut i = 0;
     while n >= 20 && i < n - 20 {
-        let Some(start) = (i..n).find(|&k| DB_STARTS.iter().any(|p| b.len() >= k + p.len() && b[k..k + p.len()].eq_ignore_ascii_case(p))) else { break };
+        let Some(start) = (i..n).find(|&k| {
+            DB_STARTS
+                .iter()
+                .any(|p| b.len() >= k + p.len() && b[k..k + p.len()].eq_ignore_ascii_case(p))
+        }) else {
+            break;
+        };
         let mut end = (start..n).find(|&k| stop(b[k])).unwrap_or(n);
         while end > start && b[end - 1] <= 32 {
             end -= 1;
@@ -1067,7 +1379,9 @@ pub(crate) fn db_strings(b: &[u8]) -> (Vec<String>, u32) {
         let mut p = (start..end).find(|&k| b[k] == b';').unwrap_or(end) + 1;
         let mut known = 0;
         while p < end {
-            let Some(eq) = (p..end).find(|&k| b[k] == b'=') else { break };
+            let Some(eq) = (p..end).find(|&k| b[k] == b'=') else {
+                break;
+            };
             let key = db_key(&b[p..eq]);
             p = eq + 1;
             let mut has = false;
@@ -1077,10 +1391,17 @@ pub(crate) fn db_strings(b: &[u8]) -> (Vec<String>, u32) {
             }
             let class = match key.as_str() {
                 "hostname" | "remoteserver" | "server" | "servername" | "srvr" => 1,
-                "database" | "dbname" | "datasource" | "dbq" | "initialcatalog" | "systemdb" | "systemdatabase" | "sourcedb" => 2,
+                "database" | "dbname" | "datasource" | "dbq" | "initialcatalog" | "systemdb"
+                | "systemdatabase" | "sourcedb" => 2,
                 "password" | "pwd" => 8,
                 "uid" | "user" | "userid" => 4,
-                "collatingsequence" | "defaultdir" | "driverid" | "extendedproperties" | "integratedsecurity" | "port" | "protocol" | "sourcetype" | "trusted_connection" if known == 0 => 0,
+                "collatingsequence" | "defaultdir" | "driverid" | "extendedproperties"
+                | "integratedsecurity" | "port" | "protocol" | "sourcetype"
+                | "trusted_connection"
+                    if known == 0 =>
+                {
+                    0
+                }
                 _ => u32::MAX,
             };
             if class != u32::MAX {
@@ -1121,7 +1442,12 @@ pub(crate) fn db_connection_string(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
         let mut t = format!("The following database connection string was disclosed in the response:<ul><li>{}</li></ul>", util::html_encode(&s));
         if flags != 0 {
             t.push_str("The connection string appears to contain:<ul>");
-            for (bit, what) in [(1, "Database server name"), (2, "Database name or location"), (4, "Username"), (8, "Password")] {
+            for (bit, what) in [
+                (1, "Database server name"),
+                (2, "Database name or location"),
+                (4, "Username"),
+                (8, "Password"),
+            ] {
                 if flags & bit != 0 {
                     t.push_str(&format!("<li>{what}</li>"));
                 }

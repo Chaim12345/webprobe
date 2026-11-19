@@ -127,7 +127,9 @@ impl Tok {
     }
     fn attr(&self, key: &str) -> Option<&str> {
         match self {
-            Tok::Start(_, a) | Tok::SelfClose(_, a) => a.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str()),
+            Tok::Start(_, a) | Tok::SelfClose(_, a) => {
+                a.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str())
+            }
             _ => None,
         }
     }
@@ -223,7 +225,9 @@ fn tokenize(html: &str) -> Vec<Tok> {
             out.push(Tok::End(name.trim().to_ascii_lowercase()));
             continue;
         }
-        let name_end = inner.find(|c: char| c.is_ascii_whitespace() || c == '/').unwrap_or(inner.len());
+        let name_end = inner
+            .find(|c: char| c.is_ascii_whitespace() || c == '/')
+            .unwrap_or(inner.len());
         let name = inner[..name_end].to_ascii_lowercase();
         if name.is_empty() {
             out.push(Tok::Text(rest[..gt + 1].to_string()));
@@ -265,10 +269,18 @@ pub fn fingerprint(resp: &[u8]) -> Fingerprint {
     let body = &resp[p.head_len.min(resp.len())..];
 
     // status (ZY)
-    fp.insert(Attr::StatusCode, p.status.trim().parse::<i32>().unwrap_or(0));
+    fp.insert(
+        Attr::StatusCode,
+        p.status.trim().parse::<i32>().unwrap_or(0),
+    );
 
     // headers (Ze): first value of each tracked header, CRC32 of the trimmed value
-    let first = |name: &str| p.headers.iter().find(|(k, _)| k.eq_ignore_ascii_case(name)).map(|(_, v)| v.trim().to_string());
+    let first = |name: &str| {
+        p.headers
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case(name))
+            .map(|(_, v)| v.trim().to_string())
+    };
     for (name, attr) in [
         ("Location", Attr::Location),
         ("Content-Location", Attr::ContentLocation),
@@ -280,7 +292,9 @@ pub fn fingerprint(resp: &[u8]) -> Fingerprint {
         }
     }
     // Content-Length header, else the body length (Zhat)
-    let cl = first("Content-Length").map(|v| v.parse::<i32>().unwrap_or(0)).unwrap_or(body.len() as i32);
+    let cl = first("Content-Length")
+        .map(|v| v.parse::<i32>().unwrap_or(0))
+        .unwrap_or(body.len() as i32);
     fp.insert(Attr::ContentLength, cl);
     // Set-Cookie names, sorted and unique (Zhhh); only when there are any
     let cookies: BTreeSet<String> = p
@@ -303,13 +317,23 @@ pub fn fingerprint(resp: &[u8]) -> Fingerprint {
         let mut parts = ct.split(';');
         let media = parts.next().unwrap_or("").trim().to_ascii_lowercase();
         fp.insert(Attr::ContentType, crc_of(&media));
-        if let Some(cs) = parts.find_map(|x| x.trim().strip_prefix("charset=").map(|v| v.trim_matches('"').to_ascii_lowercase())) {
+        if let Some(cs) = parts.find_map(|x| {
+            x.trim()
+                .strip_prefix("charset=")
+                .map(|v| v.trim_matches('"').to_ascii_lowercase())
+        }) {
             fp.insert(Attr::ContentTypeCharset, crc_of(&cs));
         }
     }
     if let Some(link) = first("Link") {
-        if link.to_ascii_lowercase().contains("rel=\"canonical\"") || link.to_ascii_lowercase().contains("rel=canonical") {
-            if let Some(u) = link.split('>').next().and_then(|x| x.trim().strip_prefix('<')) {
+        if link.to_ascii_lowercase().contains("rel=\"canonical\"")
+            || link.to_ascii_lowercase().contains("rel=canonical")
+        {
+            if let Some(u) = link
+                .split('>')
+                .next()
+                .and_then(|x| x.trim().strip_prefix('<'))
+            {
                 fp.insert(Attr::CanonicalLink, crc_of(u));
             }
         }
@@ -328,7 +352,12 @@ pub fn fingerprint(resp: &[u8]) -> Fingerprint {
     }
     fp.insert(Attr::LimitedBodyContent, lc.value());
     let mut ic = Crc::default();
-    ic.bytes(&body[..body.iter().position(|b| java_space(*b)).unwrap_or(body.len())]);
+    ic.bytes(
+        &body[..body
+            .iter()
+            .position(|b| java_space(*b))
+            .unwrap_or(body.len())],
+    );
     fp.insert(Attr::InitialContent, ic.value());
     let mut lines = body.iter().filter(|b| **b == b'\n').count() as i32;
     if body.last().is_some_and(|b| *b != b'\n') {
@@ -352,7 +381,10 @@ pub fn fingerprint(resp: &[u8]) -> Fingerprint {
     }
     fp.insert(Attr::WordCount, words);
     // colons over the whole message (Z_ / Zxqy)
-    fp.insert(Attr::ColonCount, resp.iter().filter(|b| **b == b':').count() as i32);
+    fp.insert(
+        Attr::ColonCount,
+        resp.iter().filter(|b| **b == b':').count() as i32,
+    );
 
     // HTML attributes (Zr), only for real markup (Zx33.ZU)
     let html: String = body.iter().map(|b| *b as char).collect();
@@ -365,17 +397,41 @@ pub fn fingerprint(resp: &[u8]) -> Fingerprint {
 }
 
 fn html_attributes(toks: &[Tok], fp: &mut Fingerprint) {
-    let (mut tag_names, mut tag_ids, mut div_ids, mut comments) = (Crc::default(), Crc::default(), Crc::default(), Crc::default());
+    let (mut tag_names, mut tag_ids, mut div_ids, mut comments) = (
+        Crc::default(),
+        Crc::default(),
+        Crc::default(),
+        Crc::default(),
+    );
     let mut classes = BTreeSet::new();
-    let (mut title, mut first_h, mut headers, mut vis, mut buttons) =
-        (Crc::default(), Crc::default(), Crc::default(), Crc::default(), Crc::default());
-    let (mut in_title, mut title_done, mut in_fh, mut fh_done, mut in_h) = (false, false, false, false, false);
+    let (mut title, mut first_h, mut headers, mut vis, mut buttons) = (
+        Crc::default(),
+        Crc::default(),
+        Crc::default(),
+        Crc::default(),
+        Crc::default(),
+    );
+    let (mut in_title, mut title_done, mut in_fh, mut fh_done, mut in_h) =
+        (false, false, false, false, false);
     let (mut skip_title, mut skip_script, mut vis_words) = (false, false, 0i32);
     let (mut in_form, mut in_button) = (false, false);
     let mut canonical: Option<String> = None;
     // navigation-model approximations (see module docs)
-    let (mut actions, mut action_tags, mut anchor_labels, mut input_submit, mut input_image, mut input_types) =
-        (0i32, Crc::default(), Crc::default(), Crc::default(), Crc::default(), Crc::default());
+    let (
+        mut actions,
+        mut action_tags,
+        mut anchor_labels,
+        mut input_submit,
+        mut input_image,
+        mut input_types,
+    ) = (
+        0i32,
+        Crc::default(),
+        Crc::default(),
+        Crc::default(),
+        Crc::default(),
+        Crc::default(),
+    );
     let (mut in_anchor, mut first_anchor_label) = (false, true);
 
     for t in toks {
@@ -394,7 +450,11 @@ fn html_attributes(toks: &[Tok], fp: &mut Fingerprint) {
             if let Some(c) = t.attr("class") {
                 classes.insert(c.to_string());
             }
-            if canonical.is_none() && t.name() == "link" && matches!(t, Tok::SelfClose(..)) && t.attr("rel") == Some("canonical") {
+            if canonical.is_none()
+                && t.name() == "link"
+                && matches!(t, Tok::SelfClose(..))
+                && t.attr("rel") == Some("canonical")
+            {
                 canonical = t.attr("href").map(str::to_string);
             }
             match t.name() {
@@ -412,7 +472,11 @@ fn html_attributes(toks: &[Tok], fp: &mut Fingerprint) {
                         input_submit.str(t.attr("value").unwrap_or(""));
                     }
                     if ty == "image" {
-                        let label = t.attr("alt").filter(|a| !a.trim().is_empty()).or(t.attr("src")).unwrap_or("");
+                        let label = t
+                            .attr("alt")
+                            .filter(|a| !a.trim().is_empty())
+                            .or(t.attr("src"))
+                            .unwrap_or("");
                         input_image.str(label);
                     }
                     if ty != "hidden" {
@@ -560,14 +624,40 @@ fn html_attributes(toks: &[Tok], fp: &mut Fingerprint) {
 }
 
 const ALL: [Attr; 34] = [
-    Attr::StatusCode, Attr::EtagHeader, Attr::LastModifiedHeader, Attr::ContentType, Attr::ContentTypeCharset,
-    Attr::ContentLength, Attr::CookieNames, Attr::TagNames, Attr::TagIds, Attr::DivIds, Attr::BodyContent,
-    Attr::VisibleText, Attr::WordCount, Attr::VisibleWordCount, Attr::Comments, Attr::InitialContent,
-    Attr::CanonicalLink, Attr::PageTitle, Attr::FirstHeaderTag, Attr::HeaderTags, Attr::AnchorLabels,
-    Attr::InputSubmitLabels, Attr::ButtonSubmitLabels, Attr::CssClasses, Attr::LineCount,
-    Attr::LimitedBodyContent, Attr::PotentialActionCount, Attr::PotentialActionTagNames,
-    Attr::InputImageLabels, Attr::ContentLocation, Attr::Location, Attr::NonHiddenFormInputTypes,
-    Attr::ColonCount, Attr::HeadersNames,
+    Attr::StatusCode,
+    Attr::EtagHeader,
+    Attr::LastModifiedHeader,
+    Attr::ContentType,
+    Attr::ContentTypeCharset,
+    Attr::ContentLength,
+    Attr::CookieNames,
+    Attr::TagNames,
+    Attr::TagIds,
+    Attr::DivIds,
+    Attr::BodyContent,
+    Attr::VisibleText,
+    Attr::WordCount,
+    Attr::VisibleWordCount,
+    Attr::Comments,
+    Attr::InitialContent,
+    Attr::CanonicalLink,
+    Attr::PageTitle,
+    Attr::FirstHeaderTag,
+    Attr::HeaderTags,
+    Attr::AnchorLabels,
+    Attr::InputSubmitLabels,
+    Attr::ButtonSubmitLabels,
+    Attr::CssClasses,
+    Attr::LineCount,
+    Attr::LimitedBodyContent,
+    Attr::PotentialActionCount,
+    Attr::PotentialActionTagNames,
+    Attr::InputImageLabels,
+    Attr::ContentLocation,
+    Attr::Location,
+    Attr::NonHiddenFormInputTypes,
+    Attr::ColonCount,
+    Attr::HeadersNames,
 ];
 
 /// burp.Zeua.Za: an attribute that was never set reads as 0.
@@ -602,7 +692,10 @@ pub struct Comparator {
 
 impl Comparator {
     pub fn new(a: &Fingerprint, b: &Fingerprint) -> Self {
-        let mut c = Comparator { a: Side::seed(a), b: Side::seed(b) };
+        let mut c = Comparator {
+            a: Side::seed(a),
+            b: Side::seed(b),
+        };
         c.add_a(a);
         c.add_b(b);
         c
@@ -676,10 +769,11 @@ pub fn differential(
                     None => fingerprint(&positive()?),
                 };
                 let mut c = Comparator::new(&first, &fingerprint(&negative()?));
-                let ok = c.distinguishable() && (baseline.is_none() || {
-                    c.add_a(&fingerprint(&positive()?));
-                    c.distinguishable()
-                });
+                let ok = c.distinguishable()
+                    && (baseline.is_none() || {
+                        c.add_a(&fingerprint(&positive()?));
+                        c.distinguishable()
+                    });
                 cmp = Some(c);
                 ok
             }
@@ -710,7 +804,11 @@ mod tests {
     use super::*;
 
     fn resp(status: u16, body: &str) -> Vec<u8> {
-        format!("HTTP/1.1 {status} OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{body}", body.len()).into_bytes()
+        format!(
+            "HTTP/1.1 {status} OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{body}",
+            body.len()
+        )
+        .into_bytes()
     }
 
     #[test]
@@ -733,8 +831,15 @@ mod tests {
         let r = resp(200, "<html><head><title>Hi there</title></head><body><h1>Top</h1><div id=\"d\" class=\"x\">one two</div><!--c--><form><button type=\"submit\">Go</button></form></body></html>");
         let fp = fingerprint(&r);
         assert_eq!(fp[&Attr::StatusCode], 200);
-        assert_eq!(fp[&Attr::ContentLength] as usize, r.len() - r.windows(4).position(|w| w == b"\r\n\r\n").unwrap() - 4);
-        assert_eq!(fp[&Attr::VisibleWordCount], 4, "Top one two Go (title excluded)");
+        assert_eq!(
+            fp[&Attr::ContentLength] as usize,
+            r.len() - r.windows(4).position(|w| w == b"\r\n\r\n").unwrap() - 4
+        );
+        assert_eq!(
+            fp[&Attr::VisibleWordCount],
+            4,
+            "Top one two Go (title excluded)"
+        );
         assert_ne!(fp[&Attr::PageTitle], 0);
         assert_ne!(fp[&Attr::ButtonSubmitLabels], 0);
         // plain text: no HTML attributes at all
@@ -757,9 +862,15 @@ mod tests {
         assert!(!same.distinguishable());
         // a second, different positive sample removes attributes that changed
         c.add_a(&fingerprint(&resp(200, "<p>found 4 entries</p>")));
-        assert!(c.distinguishable(), "word count still separates 3 words from 2");
+        assert!(
+            c.distinguishable(),
+            "word count still separates 3 words from 2"
+        );
         assert!(c.attributes().contains(&Attr::WordCount));
-        assert!(!c.a.0.contains_key(&Attr::BodyContent), "body varied within the positive side");
+        assert!(
+            !c.a.0.contains_key(&Attr::BodyContent),
+            "body varied within the positive side"
+        );
         // ...but the negative side's body is still constant and unlike every positive sample
         assert!(c.b.0.contains_key(&Attr::BodyContent));
     }
@@ -768,7 +879,8 @@ mod tests {
     fn differential_needs_consistent_separation() {
         let t = || Some(resp(200, "<ul><li>alice</li><li>bob</li></ul>"));
         let f = || Some(resp(200, "<p>none</p>"));
-        let attrs = differential(Some(&t().unwrap()), Accuracy::Normal, t, f).expect("true/false differ consistently");
+        let attrs = differential(Some(&t().unwrap()), Accuracy::Normal, t, f)
+            .expect("true/false differ consistently");
         assert!(attrs.contains(&Attr::TagNames));
         // random noise on one side: no stable distinguishing attribute
         let mut n = 0;

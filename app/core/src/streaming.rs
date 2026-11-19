@@ -45,7 +45,12 @@ fn yes() -> bool {
 impl Default for StreamSettings {
     /// ProjectDefaults.json: urls [], event stream on, store on, strip on.
     fn default() -> Self {
-        Self { urls: Vec::new(), event_stream: true, store: true, strip_chunked: true }
+        Self {
+            urls: Vec::new(),
+            event_stream: true,
+            store: true,
+            strip_chunked: true,
+        }
     }
 }
 
@@ -61,7 +66,11 @@ pub enum Decision {
 /// that setting is on. Nothing else (intercept, match-and-replace,
 /// extension handlers) changes it: a streaming response passes through.
 pub fn decide(url: &str, head: &[u8], settings: &StreamSettings) -> Decision {
-    let by_url = settings.urls.iter().map(|p| p.trim()).any(|p| !p.is_empty() && starts_with_ignore_case(url, p));
+    let by_url = settings
+        .urls
+        .iter()
+        .map(|p| p.trim())
+        .any(|p| !p.is_empty() && starts_with_ignore_case(url, p));
     if by_url || (settings.event_stream && is_event_stream(head)) {
         Decision::Streaming
     } else {
@@ -72,23 +81,35 @@ pub fn decide(url: &str, head: &[u8], settings: &StreamSettings) -> Decision {
 /// Scheme and host compare case-insensitively; so does the path here (Burp
 /// does not document case for the prefix list; a prefix is typed by hand).
 fn starts_with_ignore_case(url: &str, prefix: &str) -> bool {
-    url.len() >= prefix.len() && url.as_bytes()[..prefix.len()].eq_ignore_ascii_case(prefix.as_bytes())
+    url.len() >= prefix.len()
+        && url.as_bytes()[..prefix.len()].eq_ignore_ascii_case(prefix.as_bytes())
 }
 
 /// A `Content-Type: text/event-stream` (parameters ignored) in a head.
 pub fn is_event_stream(head: &[u8]) -> bool {
     head_header(head, "content-type")
-        .map(|v| v.split(';').next().unwrap_or("").trim().eq_ignore_ascii_case("text/event-stream"))
+        .map(|v| {
+            v.split(';')
+                .next()
+                .unwrap_or("")
+                .trim()
+                .eq_ignore_ascii_case("text/event-stream")
+        })
         .unwrap_or(false)
 }
 
 /// The first value of header `name` (lower case) in a response head.
 fn head_header(head: &[u8], name: &str) -> Option<String> {
     let text = String::from_utf8_lossy(head);
-    text.lines().skip(1).take_while(|l| !l.trim().is_empty()).find_map(|l| {
-        let (k, v) = l.split_once(':')?;
-        k.trim().eq_ignore_ascii_case(name).then(|| v.trim().to_string())
-    })
+    text.lines()
+        .skip(1)
+        .take_while(|l| !l.trim().is_empty())
+        .find_map(|l| {
+            let (k, v) = l.split_once(':')?;
+            k.trim()
+                .eq_ignore_ascii_case(name)
+                .then(|| v.trim().to_string())
+        })
 }
 
 /// What the response reader does with the body once the head is read.
@@ -176,7 +197,11 @@ impl Dechunker {
                     let n = ((input.len() - i) as u64).min(left) as usize;
                     data(&input[i..i + n]);
                     i += n;
-                    self.state = if left == n as u64 { ChunkState::DataEnd } else { ChunkState::Data(left - n as u64) };
+                    self.state = if left == n as u64 {
+                        ChunkState::DataEnd
+                    } else {
+                        ChunkState::Data(left - n as u64)
+                    };
                 }
                 ChunkState::Size | ChunkState::DataEnd | ChunkState::Trailer => {
                     let b = input[i];
@@ -197,8 +222,16 @@ impl Dechunker {
                         ChunkState::Trailer if line.is_empty() => ChunkState::Done,
                         ChunkState::Trailer => ChunkState::Trailer,
                         _ => {
-                            let size = line.split(|&c| c == b';').next().unwrap_or_default().trim_ascii();
-                            match std::str::from_utf8(size).ok().filter(|s| !s.is_empty() && s.len() <= 16).and_then(|s| u64::from_str_radix(s, 16).ok()) {
+                            let size = line
+                                .split(|&c| c == b';')
+                                .next()
+                                .unwrap_or_default()
+                                .trim_ascii();
+                            match std::str::from_utf8(size)
+                                .ok()
+                                .filter(|s| !s.is_empty() && s.len() <= 16)
+                                .and_then(|s| u64::from_str_radix(s, 16).ok())
+                            {
                                 Some(0) => ChunkState::Trailer,
                                 Some(n) => ChunkState::Data(n),
                                 None => ChunkState::Bad,
@@ -214,7 +247,11 @@ impl Dechunker {
                 }
             }
         }
-        if self.state == ChunkState::Done { Fed::Done(i) } else { Fed::More }
+        if self.state == ChunkState::Done {
+            Fed::Done(i)
+        } else {
+            Fed::More
+        }
     }
 }
 
@@ -243,7 +280,13 @@ impl Default for Tee {
 
 impl Tee {
     pub fn new() -> Self {
-        Tee { buf: Vec::with_capacity(TEE_BUFFER), file: None, written: 0, truncated: false, peak: 0 }
+        Tee {
+            buf: Vec::with_capacity(TEE_BUFFER),
+            file: None,
+            written: 0,
+            truncated: false,
+            peak: 0,
+        }
     }
 
     /// Keep `bytes` (up to [`TEE_MAX`] in total).
@@ -294,7 +337,9 @@ impl Tee {
         if self.file.is_none() {
             self.file = crate::body::scratch_file();
         }
-        let Some(f) = self.file.as_mut() else { return false };
+        let Some(f) = self.file.as_mut() else {
+            return false;
+        };
         if f.write_all(&self.buf).is_err() {
             return false;
         }
@@ -323,7 +368,9 @@ pub fn unframed_head(head: &[u8]) -> Vec<u8> {
     let mut out = String::new();
     for (i, line) in text.split("\r\n").enumerate() {
         let lower = line.to_ascii_lowercase();
-        if i > 0 && (lower.starts_with("transfer-encoding:") || lower.starts_with("content-length:")) {
+        if i > 0
+            && (lower.starts_with("transfer-encoding:") || lower.starts_with("content-length:"))
+        {
             continue;
         }
         if line.is_empty() {
@@ -360,8 +407,22 @@ pub struct LiveSink<'a> {
 }
 
 impl<'a> LiveSink<'a> {
-    pub fn new(url: &str, settings: StreamSettings, cancelled: &'a dyn Fn() -> bool, progress: &'a dyn Fn(&[u8], bool)) -> Self {
-        LiveSink { url: url.to_string(), settings, cancelled, progress, shown: Vec::new(), reported: 0, streaming: false, complete: false }
+    pub fn new(
+        url: &str,
+        settings: StreamSettings,
+        cancelled: &'a dyn Fn() -> bool,
+        progress: &'a dyn Fn(&[u8], bool),
+    ) -> Self {
+        LiveSink {
+            url: url.to_string(),
+            settings,
+            cancelled,
+            progress,
+            shown: Vec::new(),
+            reported: 0,
+            streaming: false,
+            complete: false,
+        }
     }
 
     /// The whole streamed response, when the response was streaming.
@@ -391,7 +452,8 @@ impl ResponseSink for LiveSink<'_> {
     }
     fn payload(&mut self, bytes: &[u8]) {
         let room = LIVE_MAX.saturating_sub(self.shown.len());
-        self.shown.extend_from_slice(&bytes[..bytes.len().min(room)]);
+        self.shown
+            .extend_from_slice(&bytes[..bytes.len().min(room)]);
     }
     fn flush(&mut self) {
         if self.reported < self.shown.len() {
@@ -422,18 +484,65 @@ mod tests {
     #[test]
     fn decision_follows_burps_url_prefixes_and_event_stream_setting() {
         let d = StreamSettings::default();
-        assert_eq!(d, StreamSettings { urls: vec![], event_stream: true, store: true, strip_chunked: true });
-        assert_eq!(decide("http://h/sse", &head("text/event-stream; charset=utf-8"), &d), Decision::Streaming);
-        assert_eq!(decide("http://h/sse", &head("Text/Event-Stream"), &d), Decision::Streaming);
-        assert_eq!(decide("http://h/page", &head("text/html"), &d), Decision::Buffered);
-        let off = StreamSettings { event_stream: false, ..d.clone() };
-        assert_eq!(decide("http://h/sse", &head("text/event-stream"), &off), Decision::Buffered);
-        let urls = StreamSettings { urls: vec!["https://api.test/stream".into(), " ".into()], ..off };
-        assert_eq!(decide("HTTPS://API.test/stream/1", &head("application/json"), &urls), Decision::Streaming);
-        assert_eq!(decide("https://api.test/other", &head("application/json"), &urls), Decision::Buffered);
+        assert_eq!(
+            d,
+            StreamSettings {
+                urls: vec![],
+                event_stream: true,
+                store: true,
+                strip_chunked: true
+            }
+        );
+        assert_eq!(
+            decide(
+                "http://h/sse",
+                &head("text/event-stream; charset=utf-8"),
+                &d
+            ),
+            Decision::Streaming
+        );
+        assert_eq!(
+            decide("http://h/sse", &head("Text/Event-Stream"), &d),
+            Decision::Streaming
+        );
+        assert_eq!(
+            decide("http://h/page", &head("text/html"), &d),
+            Decision::Buffered
+        );
+        let off = StreamSettings {
+            event_stream: false,
+            ..d.clone()
+        };
+        assert_eq!(
+            decide("http://h/sse", &head("text/event-stream"), &off),
+            Decision::Buffered
+        );
+        let urls = StreamSettings {
+            urls: vec!["https://api.test/stream".into(), " ".into()],
+            ..off
+        };
+        assert_eq!(
+            decide(
+                "HTTPS://API.test/stream/1",
+                &head("application/json"),
+                &urls
+            ),
+            Decision::Streaming
+        );
+        assert_eq!(
+            decide("https://api.test/other", &head("application/json"), &urls),
+            Decision::Buffered
+        );
         // An empty prefix never matches everything.
-        let blank = StreamSettings { urls: vec!["".into()], event_stream: false, ..StreamSettings::default() };
-        assert_eq!(decide("http://h/", &head("text/plain"), &blank), Decision::Buffered);
+        let blank = StreamSettings {
+            urls: vec!["".into()],
+            event_stream: false,
+            ..StreamSettings::default()
+        };
+        assert_eq!(
+            decide("http://h/", &head("text/plain"), &blank),
+            Decision::Buffered
+        );
     }
 
     #[test]
@@ -441,7 +550,12 @@ mod tests {
         let s: StreamSettings = serde_json::from_str("{}").unwrap();
         assert_eq!(s, StreamSettings::default());
         let v = serde_json::to_value(StreamSettings::default()).unwrap();
-        for k in ["urls", "use_text_event_stream_header", "store", "strip_chunked_encoding_metadata"] {
+        for k in [
+            "urls",
+            "use_text_event_stream_header",
+            "store",
+            "strip_chunked_encoding_metadata",
+        ] {
             assert!(v.get(k).is_some(), "{k}");
         }
     }

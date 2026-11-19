@@ -1,16 +1,16 @@
 // Split from net.rs (L5, issue #35): net is now a module directory.
 
-use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, AtomicUsize, Ordering};
-use std::collections::HashMap;
-use std::sync::mpsc;
-use std::sync::Arc;
 use crate::sync::Mutex;
-use std::time::{Duration, Instant};
 use crate::util;
 /// One captured WebSocket frame or handshake record.
 pub use crate::ws_history::WsEntry;
+use std::collections::HashMap;
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, AtomicUsize, Ordering};
+use std::sync::mpsc;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 thread_local! {
     /// Set while a session rule is itself sending (a macro, a validation

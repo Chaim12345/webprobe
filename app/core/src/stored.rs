@@ -48,7 +48,10 @@ impl Item {
         let default = if self.https { 443 } else { 80 };
         let path = crate::util::parse_http(self.req.as_bytes()).path;
         // An absolute-form request line keeps only its path.
-        let path = match path.split_once("://").and_then(|(_, rest)| rest.find('/').map(|i| rest[i..].to_string())) {
+        let path = match path
+            .split_once("://")
+            .and_then(|(_, rest)| rest.find('/').map(|i| rest[i..].to_string()))
+        {
             Some(p) if !path.starts_with('/') => p,
             _ => path,
         };
@@ -95,7 +98,12 @@ pub struct StoredInputs {
 }
 
 fn point_key(p: &InsertionPoint) -> String {
-    format!("{:?}|{}|{:?}", p.kind, p.name, p.parent.as_ref().map(|q| format!("{:?}{}", q.kind, q.name)))
+    format!(
+        "{:?}|{}|{:?}",
+        p.kind,
+        p.name,
+        p.parent.as_ref().map(|q| format!("{:?}{}", q.kind, q.name))
+    )
 }
 
 impl StoredInputs {
@@ -141,7 +149,10 @@ impl StoredInputs {
             return t.clone();
         }
         let token = loop {
-            let t = format!("{TOKEN_PREFIX}{}", crate::scan::active_checks::rnd_id(TOKEN_BODY));
+            let t = format!(
+                "{TOKEN_PREFIX}{}",
+                crate::scan::active_checks::rnd_id(TOKEN_BODY)
+            );
             if !g.tokens.contains_key(&t) {
                 break t;
             }
@@ -181,13 +192,20 @@ impl StoredInputs {
             if own.contains(&t) {
                 continue;
             }
-            let Some(&pidx) = g.tokens.get(&t) else { continue };
+            let Some(&pidx) = g.tokens.get(&t) else {
+                continue;
+            };
             if retrieval >= g.items.len() || !g.seen.insert((pidx, retrieval)) {
                 continue;
             }
             g.pairs.push((pidx, retrieval));
             let (item, point, req, resp) = g.points[pidx].clone();
-            new.push(Pair { item: g.items[item].clone(), point, retrieval: g.items[retrieval].clone(), injection: (req, resp) });
+            new.push(Pair {
+                item: g.items[item].clone(),
+                point,
+                retrieval: g.items[retrieval].clone(),
+                injection: (req, resp),
+            });
         }
         new
     }
@@ -199,7 +217,12 @@ impl StoredInputs {
             .iter()
             .map(|&(pidx, r)| {
                 let (item, point, req, resp) = g.points[pidx].clone();
-                Pair { item: g.items[item].clone(), point, retrieval: g.items[r].clone(), injection: (req, resp) }
+                Pair {
+                    item: g.items[item].clone(),
+                    point,
+                    retrieval: g.items[r].clone(),
+                    injection: (req, resp),
+                }
             })
             .collect()
     }
@@ -241,7 +264,10 @@ fn find_tokens_counted(bytes: &[u8], work: &mut usize) -> Vec<String> {
         if &bytes[i..i + p.len()] == p {
             let body = &bytes[i + p.len()..i + p.len() + TOKEN_BODY];
             *work += TOKEN_BODY;
-            if body.iter().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit()) {
+            if body
+                .iter()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+            {
                 let t = String::from_utf8_lossy(&bytes[i..i + p.len() + TOKEN_BODY]).into_owned();
                 if !out.contains(&t) {
                     out.push(t);
@@ -261,7 +287,13 @@ mod tests {
     use crate::scan::{InsertionPoint, IpKind};
 
     fn item(path: &str) -> Item {
-        Item { entry: HistEntry::default(), req: format!("GET {path} HTTP/1.1\r\nHost: h\r\n\r\n"), host: "h".into(), port: 80, https: false }
+        Item {
+            entry: HistEntry::default(),
+            req: format!("GET {path} HTTP/1.1\r\nHost: h\r\n\r\n"),
+            host: "h".into(),
+            port: 80,
+            https: false,
+        }
     }
 
     #[test]
@@ -274,14 +306,36 @@ mod tests {
         assert_eq!(s.token(a, &p), t, "one token per point");
         assert!(t.starts_with(TOKEN_PREFIX) && t.len() == TOKEN_PREFIX.len() + TOKEN_BODY);
         // The probe's own response echoing its token is not stored input.
-        assert!(s.observe(a, format!("POST /comment c={t}").as_bytes(), format!("<p>{t}</p>").as_bytes()).is_empty());
+        assert!(s
+            .observe(
+                a,
+                format!("POST /comment c={t}").as_bytes(),
+                format!("<p>{t}</p>").as_bytes()
+            )
+            .is_empty());
         // Another item showing it is.
-        let got = s.observe(b, b"GET /list", format!("<li>{t}</li><li>{t}</li>").as_bytes());
+        let got = s.observe(
+            b,
+            b"GET /list",
+            format!("<li>{t}</li><li>{t}</li>").as_bytes(),
+        );
         assert_eq!(got.len(), 1);
-        assert_eq!((got[0].item.url(), got[0].retrieval.url(), got[0].point.name.as_str()), ("http://h/comment".into(), "http://h/list".into(), "c"));
-        assert!(s.observe(b, b"GET /list", t.as_bytes()).is_empty(), "recorded once");
+        assert_eq!(
+            (
+                got[0].item.url(),
+                got[0].retrieval.url(),
+                got[0].point.name.as_str()
+            ),
+            ("http://h/comment".into(), "http://h/list".into(), "c")
+        );
+        assert!(
+            s.observe(b, b"GET /list", t.as_bytes()).is_empty(),
+            "recorded once"
+        );
         // Unknown tokens and near misses are ignored.
-        assert!(s.observe(b, b"", b"zwq7abcdefghijkl zwq7ABCDEFGHIJKL zwq7short").is_empty());
+        assert!(s
+            .observe(b, b"", b"zwq7abcdefghijkl zwq7ABCDEFGHIJKL zwq7short")
+            .is_empty());
         assert_eq!(s.pairs().len(), 1);
         s.clear();
         assert!(s.pairs().is_empty() && s.is_empty());
@@ -296,14 +350,23 @@ mod tests {
             let mut body = vec![b'z'; n];
             body.extend_from_slice(b"zwq7abc123def456!");
             let mut w = 0;
-            assert_eq!(find_tokens_counted(&body, &mut w), vec!["zwq7abc123def456".to_string()]);
+            assert_eq!(
+                find_tokens_counted(&body, &mut w),
+                vec!["zwq7abc123def456".to_string()]
+            );
             (w, body.len())
         };
         let (small, n) = work(1 << 20);
         let (big, m) = work(4 << 20);
-        assert!(small <= 8 * n && big <= 8 * m, "{small} for {n} bytes, {big} for {m}");
+        assert!(
+            small <= 8 * n && big <= 8 * m,
+            "{small} for {n} bytes, {big} for {m}"
+        );
         let ratio = big as f64 / small as f64;
-        assert!((3.5..4.5).contains(&ratio), "work grew {ratio}x for 4x the body");
+        assert!(
+            (3.5..4.5).contains(&ratio),
+            "work grew {ratio}x for 4x the body"
+        );
     }
 
     #[test]

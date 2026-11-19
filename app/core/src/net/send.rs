@@ -14,7 +14,13 @@ pub fn send_raw(shared: &Shared, host: &str, port: u16, request: &[u8]) -> Upstr
 /// [`send_raw`] with a response sink (streaming responses, R-06); without
 /// one, the tool on this thread gets Burp's "other tools" handling: a
 /// streaming response is cut after its head.
-pub fn send_raw_with(shared: &Shared, host: &str, port: u16, request: &[u8], sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>) -> Upstream {
+pub fn send_raw_with(
+    shared: &Shared,
+    host: &str,
+    port: u16,
+    request: &[u8],
+    sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
+) -> Upstream {
     let request = jar_request(shared, host, false, request);
     let request = session_request(shared, port, false, request);
     let mut tool_sink = tool_sink(shared, host, port, false, &request);
@@ -32,20 +38,45 @@ pub fn send_raw_with(shared: &Shared, host: &str, port: u16, request: &[u8], sin
 /// The full URL of a request sent to host:port (for the streaming rule).
 pub(crate) fn request_url(host: &str, port: u16, https: bool, request: &[u8]) -> String {
     let parts = util::parse_http(request);
-    history_host(&HistEntry { host: host.to_string(), port, https, ..Default::default() }) + &path_of(&parts)
+    history_host(&HistEntry {
+        host: host.to_string(),
+        port,
+        https,
+        ..Default::default()
+    }) + &path_of(&parts)
 }
 
-pub fn send_from(shared: &Shared, host: &str, port: u16, req: &[u8], sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>) -> Upstream {
+pub fn send_from(
+    shared: &Shared,
+    host: &str,
+    port: u16,
+    req: &[u8],
+    sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
+) -> Upstream {
     let t0 = std::time::Instant::now();
     let r = send_inner(shared, host, port, req, sink);
     // Debug aid: WB_TRACE=1 prints every upstream exchange slower than 2 s.
     if std::env::var_os("WB_TRACE").is_some() && t0.elapsed().as_millis() > 2000 {
-        let first = req.split(|b| *b == b'\n').next().map(|l| String::from_utf8_lossy(l).into_owned()).unwrap_or_default();
-        eprintln!("TRACE slow {} ms {first} -> {:?}", t0.elapsed().as_millis(), r.as_ref().err());
+        let first = req
+            .split(|b| *b == b'\n')
+            .next()
+            .map(|l| String::from_utf8_lossy(l).into_owned())
+            .unwrap_or_default();
+        eprintln!(
+            "TRACE slow {} ms {first} -> {:?}",
+            t0.elapsed().as_millis(),
+            r.as_ref().err()
+        );
     }
     match r {
-        Ok(resp) => Upstream { resp: Some(resp), error: None },
-        Err(e) => Upstream { resp: None, error: Some(e) },
+        Ok(resp) => Upstream {
+            resp: Some(resp),
+            error: None,
+        },
+        Err(e) => Upstream {
+            resp: None,
+            error: Some(e),
+        },
     }
 }
 

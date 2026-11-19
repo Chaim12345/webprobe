@@ -16,7 +16,11 @@ pub fn browser_listener(shared: &Arc<Shared>) -> Result<u16, String> {
     }
     let l = TcpListener::bind("127.0.0.1:0").map_err(|e| format!("browser listener: {e}"))?;
     let port = l.local_addr().map_err(|e| e.to_string())?.port();
-    if let Err(existing) = shared.browser_port.compare_exchange(0, port, Ordering::SeqCst, Ordering::SeqCst) {
+    if let Err(existing) =
+        shared
+            .browser_port
+            .compare_exchange(0, port, Ordering::SeqCst, Ordering::SeqCst)
+    {
         return Ok(existing);
     }
     let sh = shared.clone();
@@ -39,9 +43,16 @@ pub fn start_proxy(shared: Arc<Shared>) {
         match listener {
             Ok(l) => {
                 shared.listener_running.store(true, Ordering::SeqCst);
-                shared.log(&format!("Proxy listener started on {addr}, intercept is {}", {
-                    if shared.intercept_on.load(Ordering::SeqCst) { "on" } else { "off" }
-                }));
+                shared.log(&format!(
+                    "Proxy listener started on {addr}, intercept is {}",
+                    {
+                        if shared.intercept_on.load(Ordering::SeqCst) {
+                            "on"
+                        } else {
+                            "off"
+                        }
+                    }
+                ));
                 // Non-blocking accept, so a restart (port change, restored
                 // project) takes effect at once; a blocking accept only saw
                 // the flag after the next client connected.
@@ -56,7 +67,9 @@ pub fn start_proxy(shared: Arc<Shared>) {
                             let sh = shared.clone();
                             spawn_connection(sh, stream);
                         }
-                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => std::thread::sleep(Duration::from_millis(50)),
+                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                            std::thread::sleep(Duration::from_millis(50))
+                        }
                         Err(_) => continue,
                     }
                 }
@@ -66,7 +79,9 @@ pub fn start_proxy(shared: Arc<Shared>) {
             }
             Err(e) => {
                 shared.listener_running.store(false, Ordering::SeqCst);
-                shared.log(&format!("Proxy listener bind failed on {addr}: {e}; waiting for restart command"));
+                shared.log(&format!(
+                    "Proxy listener bind failed on {addr}: {e}; waiting for restart command"
+                ));
                 // Burp alerts on this; a silent failure leaves the user
                 // browsing through nothing.
                 crate::notice::toast(
@@ -100,7 +115,10 @@ pub fn set_listeners(shared: &Arc<Shared>, specs: Vec<ListenerSpec>) -> Result<(
             return Err(format!("duplicate listener {}:{}", s.bind, s.port));
         }
     }
-    *shared.listeners.lock().unwrap() = specs.into_iter().map(|s| Arc::new(ListenerState::new(s))).collect();
+    *shared.listeners.lock().unwrap() = specs
+        .into_iter()
+        .map(|s| Arc::new(ListenerState::new(s)))
+        .collect();
     // Bump the generation so the supervisor spawns workers for the new set and
     // the old workers exit. History and in-flight connections are untouched.
     shared.listener_generation.fetch_add(1, Ordering::SeqCst);
@@ -110,13 +128,30 @@ pub fn set_listeners(shared: &Arc<Shared>, specs: Vec<ListenerSpec>) -> Result<(
 /// The extra listeners' configuration, for editing and re-applying with
 /// `set_listeners`.
 pub fn listener_specs(shared: &Arc<Shared>) -> Vec<ListenerSpec> {
-    shared.listeners.lock().unwrap().iter().map(|l| ListenerSpec { http2: l.http2.load(Ordering::SeqCst), ..l.spec.clone() }).collect()
+    shared
+        .listeners
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|l| ListenerSpec {
+            http2: l.http2.load(Ordering::SeqCst),
+            ..l.spec.clone()
+        })
+        .collect()
 }
 
 /// "Support HTTP/2" of the listener on `port`: an extra listener's own
 /// option, else the primary listener's (also the embedded browser's).
 pub fn listener_supports_http2(shared: &Shared, port: Option<u16>) -> bool {
-    let extra = port.and_then(|p| shared.listeners.lock().unwrap().iter().find(|l| l.spec.port == p).map(|l| l.http2.load(Ordering::SeqCst)));
+    let extra = port.and_then(|p| {
+        shared
+            .listeners
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|l| l.spec.port == p)
+            .map(|l| l.http2.load(Ordering::SeqCst))
+    });
     extra.unwrap_or_else(|| shared.listener_http2.load(Ordering::SeqCst))
 }
 
@@ -167,7 +202,8 @@ pub fn listener_worker(shared: Arc<Shared>, state: Arc<ListenerState>, gen: u64)
                     match l.accept() {
                         Ok((stream, _)) => {
                             let _ = stream.set_nonblocking(false);
-                            let _ = stream.set_read_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)));
+                            let _ = stream
+                                .set_read_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)));
                             let sh = shared.clone();
                             spawn_connection(sh, stream);
                         }
@@ -184,7 +220,10 @@ pub fn listener_worker(shared: Arc<Shared>, state: Arc<ListenerState>, gen: u64)
                 state.running.store(false, Ordering::SeqCst);
                 *state.error.lock().unwrap() = Some(e.to_string());
                 shared.log(&format!("Proxy listener bind failed on {addr}: {e}"));
-                crate::notice::toast(crate::notice::Level::Error, format!("Listener {addr} failed: {e}"));
+                crate::notice::toast(
+                    crate::notice::Level::Error,
+                    format!("Listener {addr} failed: {e}"),
+                );
                 // Wait for a configuration change before retrying.
                 while shared.listener_generation.load(Ordering::SeqCst) == gen {
                     std::thread::sleep(Duration::from_millis(500));
@@ -240,7 +279,9 @@ pub fn stream_limit_check(shared: &Shared, stream: &mut TcpStream, limit: usize)
 
 pub fn spawn_connection_limited(shared: Arc<Shared>, admitted: bool, stream: TcpStream) {
     if !admitted {
-        shared.log(&format!("Refused a connection: {MAX_CONNECTIONS} already open"));
+        shared.log(&format!(
+            "Refused a connection: {MAX_CONNECTIONS} already open"
+        ));
         return;
     }
     struct Slot(Arc<Shared>);
@@ -250,10 +291,12 @@ pub fn spawn_connection_limited(shared: Arc<Shared>, admitted: bool, stream: Tcp
         }
     }
     let counter = shared.clone();
-    let spawned = std::thread::Builder::new().name("proxy-conn".into()).spawn(move || {
-        let _slot = Slot(shared.clone());
-        handle_conn(shared, stream);
-    });
+    let spawned = std::thread::Builder::new()
+        .name("proxy-conn".into())
+        .spawn(move || {
+            let _slot = Slot(shared.clone());
+            handle_conn(shared, stream);
+        });
     if spawned.is_err() {
         // The closure (and its slot) was never run.
         counter.active_connections.fetch_sub(1, Ordering::SeqCst);
@@ -265,7 +308,9 @@ pub fn spawn_connection_limited(shared: Arc<Shared>, admitted: bool, stream: Tcp
 /// The listener port of this thread's connection (history "Listener port"),
 /// the main listener when the thread is not serving one.
 pub fn listener_port(shared: &Shared) -> u16 {
-    LISTENER_PORT.with(|p| p.get()).unwrap_or_else(|| shared.proxy_port.load(Ordering::SeqCst))
+    LISTENER_PORT
+        .with(|p| p.get())
+        .unwrap_or_else(|| shared.proxy_port.load(Ordering::SeqCst))
 }
 
 pub fn upstream_target(shared: &Shared, host: &str, port: u16) -> (String, u16) {
@@ -344,19 +389,27 @@ pub fn handle_connect(shared: Arc<Shared>, mut stream: TcpStream, host: String, 
         let mut upstream = match crate::upstream::connect_target(&config, &host, port) {
             Ok(s) => s,
             Err(e) => {
-                shared.log(&format!("pass-through connect to {host}:{port} failed: {e}"));
+                shared.log(&format!(
+                    "pass-through connect to {host}:{port} failed: {e}"
+                ));
                 let _ = stream.write_all(b"HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n");
                 return;
             }
         };
-        if stream.write_all(b"HTTP/1.1 200 Connection established\r\n\r\n").is_err() {
+        if stream
+            .write_all(b"HTTP/1.1 200 Connection established\r\n\r\n")
+            .is_err()
+        {
             return;
         }
         shared.log(&format!("TLS pass-through tunnel to {host}:{port}"));
         relay_tunnel(&stream, &mut upstream);
         return;
     }
-    let config = match shared.mitm.listener_config(&host, listener_supports_http2(&shared, LISTENER_PORT.with(|p| p.get()))) {
+    let config = match shared.mitm.listener_config(
+        &host,
+        listener_supports_http2(&shared, LISTENER_PORT.with(|p| p.get())),
+    ) {
         Ok(config) => config,
         Err(e) => {
             shared.log(&format!("HTTPS certificate for {host} failed: {e}"));
@@ -364,7 +417,10 @@ pub fn handle_connect(shared: Arc<Shared>, mut stream: TcpStream, host: String, 
             return;
         }
     };
-    if stream.write_all(b"HTTP/1.1 200 Connection established\r\n\r\n").is_err() {
+    if stream
+        .write_all(b"HTTP/1.1 200 Connection established\r\n\r\n")
+        .is_err()
+    {
         return;
     }
     let conn = match rustls::ServerConnection::new(config) {
@@ -385,7 +441,9 @@ pub fn handle_connect(shared: Arc<Shared>, mut stream: TcpStream, host: String, 
         Ok(req) if !req.is_empty() => req,
         Ok(_) => return,
         Err(e) => {
-            shared.log(&format!("HTTPS client handshake/request for {host}:{port} failed: {e}"));
+            shared.log(&format!(
+                "HTTPS client handshake/request for {host}:{port} failed: {e}"
+            ));
             return;
         }
     };
@@ -407,19 +465,26 @@ pub fn handle_connect(shared: Arc<Shared>, mut stream: TcpStream, host: String, 
 /// An HTTPS client that negotiated h2: every stream runs the proxy's
 /// per-request pipeline (intercept, match and replace, extensions,
 /// history, streaming) on its own thread; `h2_server` frames the results.
-pub fn serve_h2_client(shared: Arc<Shared>, mut tls: rustls::StreamOwned<rustls::ServerConnection, TcpStream>, host: String, port: u16) {
+pub fn serve_h2_client(
+    shared: Arc<Shared>,
+    mut tls: rustls::StreamOwned<rustls::ServerConnection, TcpStream>,
+    host: String,
+    port: u16,
+) {
     if tls.get_ref().set_nonblocking(true).is_err() {
         return;
     }
     shared.log(&format!("HTTP/2 client connection for {host}:{port}"));
     let listener = LISTENER_PORT.with(|p| p.get());
     let pipeline_shared = Arc::clone(&shared);
-    let handler: crate::h2_server::Handler = Arc::new(move |req: Vec<u8>, mut out: crate::h2_server::ResponseWriter| {
-        LISTENER_PORT.with(|p| p.set(listener));
-        let (req, state) = intercept_request(&pipeline_shared, req, 443);
-        let Some(req) = req else { return };
-        upstream_and_deliver(&pipeline_shared, &mut out, req, 443, true, state);
-    });
+    let handler: crate::h2_server::Handler = Arc::new(
+        move |req: Vec<u8>, mut out: crate::h2_server::ResponseWriter| {
+            LISTENER_PORT.with(|p| p.set(listener));
+            let (req, state) = intercept_request(&pipeline_shared, req, 443);
+            let Some(req) = req else { return };
+            upstream_and_deliver(&pipeline_shared, &mut out, req, 443, true, state);
+        },
+    );
     crate::h2_server::serve(&mut tls, handler);
     tls.conn.send_close_notify();
     let _ = tls.get_ref().set_nonblocking(false);
@@ -464,7 +529,16 @@ pub struct Streamed {
 
 impl<'a, W: Write> ProxySink<'a, W> {
     fn new(shared: &Shared, client: &'a mut W, url: &str) -> Self {
-        ProxySink { client, url: url.to_string(), settings: shared.streaming.lock().unwrap().clone(), head: None, tee: None, wired: 0, complete: false, client_gone: false }
+        ProxySink {
+            client,
+            url: url.to_string(),
+            settings: shared.streaming.lock().unwrap().clone(),
+            head: None,
+            tee: None,
+            wired: 0,
+            complete: false,
+            client_gone: false,
+        }
     }
 
     /// The streamed response, when this one was streaming.
@@ -476,7 +550,10 @@ impl<'a, W: Write> ProxySink<'a, W> {
                 let cut = t.truncated();
                 (t.finish(), cut)
             }
-            None => (crate::body::Body::from(crate::streaming::unframed_head(&head)), false),
+            None => (
+                crate::body::Body::from(crate::streaming::unframed_head(&head)),
+                false,
+            ),
         };
         let mut note = String::from("Streaming response");
         if !stored {
@@ -489,19 +566,30 @@ impl<'a, W: Write> ProxySink<'a, W> {
         } else if !self.complete {
             note.push_str("; ended early");
         }
-        Some(Streamed { head, message, note, stored })
+        Some(Streamed {
+            head,
+            message,
+            note,
+            stored,
+        })
     }
 }
 
 impl<W: Write> crate::streaming::ResponseSink for ProxySink<'_, W> {
     fn head(&mut self, head: &[u8]) -> crate::streaming::BodyMode {
-        if crate::streaming::decide(&self.url, head, &self.settings) == crate::streaming::Decision::Buffered {
+        if crate::streaming::decide(&self.url, head, &self.settings)
+            == crate::streaming::Decision::Buffered
+        {
             return crate::streaming::BodyMode::Buffer;
         }
         self.head = Some(head.to_vec());
         if self.settings.store {
             let mut tee = crate::streaming::Tee::new();
-            tee.push(&if self.settings.strip_chunked { crate::streaming::unframed_head(head) } else { head.to_vec() });
+            tee.push(&if self.settings.strip_chunked {
+                crate::streaming::unframed_head(head)
+            } else {
+                head.to_vec()
+            });
             self.tee = Some(tee);
         }
         crate::streaming::BodyMode::Stream
@@ -518,7 +606,10 @@ impl<W: Write> crate::streaming::ResponseSink for ProxySink<'_, W> {
                 t.push(bytes);
             }
         }
-        let sent = self.client.write_all(bytes).and_then(|()| self.client.flush());
+        let sent = self
+            .client
+            .write_all(bytes)
+            .and_then(|()| self.client.flush());
         self.client_gone = sent.is_err();
         sent
     }
@@ -557,7 +648,12 @@ pub fn report_stream_skips(shared: &Shared, host: &str, url: &str, head: &[u8], 
         reasons.push("extension response handlers");
     }
     for reason in reasons {
-        if shared.stream_skips.lock().unwrap().insert((host.to_string(), reason)) {
+        if shared
+            .stream_skips
+            .lock()
+            .unwrap()
+            .insert((host.to_string(), reason))
+        {
             shared.log(&format!("Streaming responses from {host} pass straight through: {reason} did not apply to them"));
         }
     }
@@ -589,9 +685,13 @@ pub fn upstream_and_deliver<S: ProxyIo>(
     // Burp answers `http://burpsuite` itself: the browser must already be
     // proxying through the listener, and the page it returns is where the CA
     // certificate is downloaded. WebProbe does the same at http://webprobe.
-    if let Some(resp) =
-        crate::setup_page::local_response(&host, &path_of(&parts), shared.proxy_port.load(Ordering::SeqCst), shared.mitm.ca_pem(), &shared.mitm.ca_der())
-    {
+    if let Some(resp) = crate::setup_page::local_response(
+        &host,
+        &path_of(&parts),
+        shared.proxy_port.load(Ordering::SeqCst),
+        shared.mitm.ca_pem(),
+        &shared.mitm.ca_der(),
+    ) {
         let _ = stream.write_all(&resp);
         let _ = stream.flush();
         let status = String::from_utf8_lossy(&resp)
@@ -602,7 +702,9 @@ pub fn upstream_and_deliver<S: ProxyIo>(
             .to_string();
         // Not recorded: Burp keeps http://burpsuite out of Proxy history and
         // the scanner (live 52685: history stays empty, live audit 0 issues).
-        shared.log(&format!("Served the local setup page for {host} -> {status}"));
+        shared.log(&format!(
+            "Served the local setup page for {host} -> {status}"
+        ));
         return;
     }
     // Session rules run before match-and-replace, matching Burp's handling chain.
@@ -611,12 +713,23 @@ pub fn upstream_and_deliver<S: ProxyIo>(
     // Extension hooks run after the built-in chain (session rules, M&R);
     // a Drop verdict closes the client connection without a response.
     let mut ann = crate::ext_host::Annotations::default();
-    if !shared.ext_handle_request(&crate::ext_host::HttpService::new(&host, port, use_tls), &parts.method, &path_of(&parts), &mut req_out, &mut ann) {
+    if !shared.ext_handle_request(
+        &crate::ext_host::HttpService::new(&host, port, use_tls),
+        &parts.method,
+        &path_of(&parts),
+        &mut req_out,
+        &mut ann,
+    ) {
         shared.log("Request dropped by an extension hook");
         return;
     }
     let (up_host, up_port) = upstream_target(shared, &host, port);
-    let url = history_host(&HistEntry { host: host.clone(), port, https: use_tls, ..Default::default() }) + &path_of(&parts);
+    let url = history_host(&HistEntry {
+        host: host.clone(),
+        port,
+        https: use_tls,
+        ..Default::default()
+    }) + &path_of(&parts);
     // A streaming response (Burp's rule, `streaming::decide`) goes to the
     // client as it arrives, straight from the response reader.
     let mut sink = ProxySink::new(shared, stream, &url);
@@ -627,29 +740,79 @@ pub fn upstream_and_deliver<S: ProxyIo>(
     };
     if let Some(done) = sink.finish() {
         report_stream_skips(shared, &host, &url, &done.head, req_state);
-        let status = util::parse_http(&done.head).first.split_whitespace().nth(1).unwrap_or("").to_string();
-        record_entry(shared, &req_out, Some(done.message), Some(done.note), default_port, use_tls, listener_port(shared), was_edited, &ann, done.stored);
-        shared.log(&format!("Streamed {} {host}:{port}{} -> {status}", parts.method, path_of(&parts)));
+        let status = util::parse_http(&done.head)
+            .first
+            .split_whitespace()
+            .nth(1)
+            .unwrap_or("")
+            .to_string();
+        record_entry(
+            shared,
+            &req_out,
+            Some(done.message),
+            Some(done.note),
+            default_port,
+            use_tls,
+            listener_port(shared),
+            was_edited,
+            &ann,
+            done.stored,
+        );
+        shared.log(&format!(
+            "Streamed {} {host}:{port}{} -> {status}",
+            parts.method,
+            path_of(&parts)
+        ));
         return;
     }
     match up.resp {
         Some(resp) => {
             let mut resp = crate::rules::apply_rules(&resp, &shared.mr_response.lock().unwrap());
-            if !shared.ext_handle_response(&crate::ext_host::HttpService::new(&host, port, use_tls), &parts.method, &path_of(&parts), &req_out, &mut resp, &mut ann) {
+            if !shared.ext_handle_response(
+                &crate::ext_host::HttpService::new(&host, port, use_tls),
+                &parts.method,
+                &path_of(&parts),
+                &req_out,
+                &mut resp,
+                &mut ann,
+            ) {
                 shared.log("Response dropped by an extension hook");
                 return;
             }
-            let Some(resp) = intercept_response(shared, resp, &host, port, use_tls, &url, req_state) else { return };
-            let status = util::parse_http(&resp).first.split_whitespace().nth(1).unwrap_or("").to_string();
+            let Some(resp) =
+                intercept_response(shared, resp, &host, port, use_tls, &url, req_state)
+            else {
+                return;
+            };
+            let status = util::parse_http(&resp)
+                .first
+                .split_whitespace()
+                .nth(1)
+                .unwrap_or("")
+                .to_string();
             let _ = stream.write_all(&resp);
             let _ = stream.flush();
-            record(shared, &req_out, Some(resp), None, default_port, use_tls, listener_port(shared), was_edited, &ann);
+            record(
+                shared,
+                &req_out,
+                Some(resp),
+                None,
+                default_port,
+                use_tls,
+                listener_port(shared),
+                was_edited,
+                &ann,
+            );
             shared.log(&format!(
                 "Proxied {} {host}:{port}{} -> {}{}",
                 parts.method,
                 path_of(&parts),
                 status,
-                if use_tls { " via HTTPS interception" } else { "" }
+                if use_tls {
+                    " via HTTPS interception"
+                } else {
+                    ""
+                }
             ));
         }
         None => {
@@ -657,7 +820,17 @@ pub fn upstream_and_deliver<S: ProxyIo>(
             let msg = format!("HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nWebProbe: upstream failed: {err}");
             let _ = stream.write_all(msg.as_bytes());
             let note = up.error.clone().unwrap_or_else(|| "failed".into());
-            record(shared, &req_out, None, Some(note), default_port, use_tls, listener_port(shared), was_edited, &ann);
+            record(
+                shared,
+                &req_out,
+                None,
+                Some(note),
+                default_port,
+                use_tls,
+                listener_port(shared),
+                was_edited,
+                &ann,
+            );
             shared.log(&format!("Proxy error for {host}:{port}: {err}"));
         }
     }

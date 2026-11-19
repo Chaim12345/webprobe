@@ -10,19 +10,81 @@
 use super::passive_checks::PassiveCtx;
 use super::*;
 
-pub(crate) const CSP_NOT_ENFORCED: CheckDef = CheckDef { id: "passive.csp-not-enforced", name: "Content security policy: not enforced", sev: "info", confidence: "Certain" };
-pub(crate) const CSP_UNTRUSTED_SCRIPTS: CheckDef = CheckDef { id: "passive.csp-untrusted-scripts", name: "Content security policy: allows untrusted script execution", sev: "info", confidence: "Certain" };
-pub(crate) const CSP_UNTRUSTED_STYLES: CheckDef = CheckDef { id: "passive.csp-untrusted-styles", name: "Content security policy: allows untrusted style execution", sev: "info", confidence: "Certain" };
-pub(crate) const CSP_ALLOWLISTED_SCRIPTS: CheckDef = CheckDef { id: "passive.csp-allowlisted-scripts", name: "Content security policy: allowlisted script resources", sev: "info", confidence: "Certain" };
-pub(crate) const CSP_CLICKJACKING: CheckDef = CheckDef { id: "passive.csp-allows-clickjacking", name: "Content security policy: allows clickjacking", sev: "info", confidence: "Certain" };
-pub(crate) const CSP_FORM_HIJACKING: CheckDef = CheckDef { id: "passive.csp-allows-form-hijacking", name: "Content security policy: allows form hijacking", sev: "info", confidence: "Certain" };
-pub(crate) const CSP_MALFORMED: CheckDef = CheckDef { id: "passive.csp-malformed-syntax", name: "Content security policy: malformed syntax", sev: "info", confidence: "Certain" };
+pub(crate) const CSP_NOT_ENFORCED: CheckDef = CheckDef {
+    id: "passive.csp-not-enforced",
+    name: "Content security policy: not enforced",
+    sev: "info",
+    confidence: "Certain",
+};
+pub(crate) const CSP_UNTRUSTED_SCRIPTS: CheckDef = CheckDef {
+    id: "passive.csp-untrusted-scripts",
+    name: "Content security policy: allows untrusted script execution",
+    sev: "info",
+    confidence: "Certain",
+};
+pub(crate) const CSP_UNTRUSTED_STYLES: CheckDef = CheckDef {
+    id: "passive.csp-untrusted-styles",
+    name: "Content security policy: allows untrusted style execution",
+    sev: "info",
+    confidence: "Certain",
+};
+pub(crate) const CSP_ALLOWLISTED_SCRIPTS: CheckDef = CheckDef {
+    id: "passive.csp-allowlisted-scripts",
+    name: "Content security policy: allowlisted script resources",
+    sev: "info",
+    confidence: "Certain",
+};
+pub(crate) const CSP_CLICKJACKING: CheckDef = CheckDef {
+    id: "passive.csp-allows-clickjacking",
+    name: "Content security policy: allows clickjacking",
+    sev: "info",
+    confidence: "Certain",
+};
+pub(crate) const CSP_FORM_HIJACKING: CheckDef = CheckDef {
+    id: "passive.csp-allows-form-hijacking",
+    name: "Content security policy: allows form hijacking",
+    sev: "info",
+    confidence: "Certain",
+};
+pub(crate) const CSP_MALFORMED: CheckDef = CheckDef {
+    id: "passive.csp-malformed-syntax",
+    name: "Content security policy: malformed syntax",
+    sev: "info",
+    confidence: "Certain",
+};
 
 /// burp.Zupz.Zq.
 const DIRECTIVES: [&str; 30] = [
-    "manifest-src", "worker-src", "report-uri", "style-src-attr", "report-to", "frame-ancestors", "default-src", "script-src-elem", "object-src", "img-src",
-    "script-src-attr", "navigate-to", "font-src", "upgrade-insecure-requests", "require-sri-for", "connect-src", "style-src", "script-src", "frame-src", "trusted-types",
-    "require-trusted-types-for", "form-action", "prefetch-src", "style-src-elem", "sandbox", "child-src", "plugin-types", "media-src", "base-uri", "block-all-mixed-content",
+    "manifest-src",
+    "worker-src",
+    "report-uri",
+    "style-src-attr",
+    "report-to",
+    "frame-ancestors",
+    "default-src",
+    "script-src-elem",
+    "object-src",
+    "img-src",
+    "script-src-attr",
+    "navigate-to",
+    "font-src",
+    "upgrade-insecure-requests",
+    "require-sri-for",
+    "connect-src",
+    "style-src",
+    "script-src",
+    "frame-src",
+    "trusted-types",
+    "require-trusted-types-for",
+    "form-action",
+    "prefetch-src",
+    "style-src-elem",
+    "sandbox",
+    "child-src",
+    "plugin-types",
+    "media-src",
+    "base-uri",
+    "block-all-mixed-content",
 ];
 /// burp.Zupz.ZY: directives that take no value.
 const NO_VALUE: [&str; 2] = ["upgrade-insecure-requests", "block-all-mixed-content"];
@@ -30,8 +92,17 @@ const NO_VALUE: [&str; 2] = ["upgrade-insecure-requests", "block-all-mixed-conte
 const MAY_BE_EMPTY: [&str; 1] = ["sandbox"];
 /// burp.Zupz.ZT.
 const SANDBOX: [&str; 11] = [
-    "allow-presentation", "allow-downloads", "allow-top-navigations", "allow-orientation-lock", "allow-same-origin", "allow-scripts", "allow-modals", "allow-popups",
-    "allow-forms", "allow-popups-to-escape-sandbox", "allow-pointer-lock",
+    "allow-presentation",
+    "allow-downloads",
+    "allow-top-navigations",
+    "allow-orientation-lock",
+    "allow-same-origin",
+    "allow-scripts",
+    "allow-modals",
+    "allow-popups",
+    "allow-forms",
+    "allow-popups-to-escape-sandbox",
+    "allow-pointer-lock",
 ];
 
 /// The policies of one response (burp.Zupz).
@@ -82,13 +153,27 @@ fn host_source(t: &str) -> bool {
 fn scheme_source(t: &str) -> bool {
     static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
     let t = t.replace("//*", "");
-    RE.get_or_init(|| re(r"^[a-z][a-z0-9+\-.]{4,}:$")).is_match(&t) || ["http:", "https:", "data:", "blob:", "filesystem:", "ws:", "wss:", "about:", "tel:"].contains(&t.as_str())
+    RE.get_or_init(|| re(r"^[a-z][a-z0-9+\-.]{4,}:$"))
+        .is_match(&t)
+        || [
+            "http:",
+            "https:",
+            "data:",
+            "blob:",
+            "filesystem:",
+            "ws:",
+            "wss:",
+            "about:",
+            "tel:",
+        ]
+        .contains(&t.as_str())
 }
 
 /// java.net.URI's acceptance, approximated: no whitespace or characters
 /// URIs never carry raw.
 fn uri_ok(v: &str) -> bool {
-    !v.chars().any(|c| c.is_whitespace() || "\"<>\\^`{|}".contains(c))
+    !v.chars()
+        .any(|c| c.is_whitespace() || "\"<>\\^`{|}".contains(c))
 }
 
 impl Csp {
@@ -110,10 +195,17 @@ impl Csp {
                     if q == '"' || q == '\'' {
                         rest[1..].find(q).map(|e| rest[1..1 + e].to_string())
                     } else {
-                        Some(rest.split(|ch: char| ch.is_whitespace() || ch == '>').next().unwrap_or("").to_string())
+                        Some(
+                            rest.split(|ch: char| ch.is_whitespace() || ch == '>')
+                                .next()
+                                .unwrap_or("")
+                                .to_string(),
+                        )
                     }
                 };
-                if attr("http-equiv").is_some_and(|h| h.eq_ignore_ascii_case("content-security-policy")) {
+                if attr("http-equiv")
+                    .is_some_and(|h| h.eq_ignore_ascii_case("content-security-policy"))
+                {
                     if let Some(content) = attr("content") {
                         c.parse(content.trim());
                     }
@@ -204,7 +296,11 @@ impl Csp {
                 }
             }
             "report-to" => {
-                if value.chars().all(|c| c.is_ascii_alphanumeric() || "!#$%&'*+-.^_`|~".contains(c)) && !value.is_empty() {
+                if value
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "!#$%&'*+-.^_`|~".contains(c))
+                    && !value.is_empty()
+                {
                     true
                 } else {
                     self.err(format!("Directive {name} has invalid value: {value}"));
@@ -226,9 +322,14 @@ impl Csp {
                     let mut t = t.to_string();
                     let mut quoted = false;
                     if t.contains('\'') {
-                        let well = t.len() >= 3 && t.starts_with('\'') && t.ends_with('\'') && !t[1..t.len() - 1].contains(['\'', ' ', '\t']);
+                        let well = t.len() >= 3
+                            && t.starts_with('\'')
+                            && t.ends_with('\'')
+                            && !t[1..t.len() - 1].contains(['\'', ' ', '\t']);
                         if !well {
-                            self.err(format!("Directive {name} has incorrectly quoted value: {t}"));
+                            self.err(format!(
+                                "Directive {name} has incorrectly quoted value: {t}"
+                            ));
                             ok = false;
                         }
                         t = t.replace('\'', "").trim().to_string();
@@ -245,11 +346,23 @@ impl Csp {
     fn component(&mut self, name: &str, t: &str, quoted: bool) {
         let should_quote = |me: &mut Csp, hit: bool| -> bool {
             if hit && !quoted {
-                me.err(format!("Directive {name} has value component: {t} which should be quoted"));
+                me.err(format!(
+                    "Directive {name} has value component: {t} which should be quoted"
+                ));
             }
             hit && quoted
         };
-        let keyword = ["self", "none", "unsafe-inline", "unsafe-eval", "wasm-unsafe-eval", "unsafe-hashes", "strict-dynamic", "report-sample"].contains(&t);
+        let keyword = [
+            "self",
+            "none",
+            "unsafe-inline",
+            "unsafe-eval",
+            "wasm-unsafe-eval",
+            "unsafe-hashes",
+            "strict-dynamic",
+            "report-sample",
+        ]
+        .contains(&t);
         if should_quote(self, keyword) || scheme_source(t) || host_source(t) {
             return;
         }
@@ -258,7 +371,9 @@ impl Csp {
             return;
         }
         static HASH: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
-        let hash = HASH.get_or_init(|| re(r"^sha(256|384|512)-[A-Za-z0-9+/]+={0,2}$")).is_match(t);
+        let hash = HASH
+            .get_or_init(|| re(r"^sha(256|384|512)-[A-Za-z0-9+/]+={0,2}$"))
+            .is_match(t);
         if should_quote(self, hash) {
             return;
         }
@@ -267,12 +382,23 @@ impl Csp {
 
     /// burp.Zupz.Zw: `dir`, or default-src, of every policy.
     fn with_default(&self, dir: &str) -> Vec<&str> {
-        self.policies.iter().filter_map(|m| m.iter().find(|(k, _)| k == dir).or_else(|| m.iter().find(|(k, _)| k == "default-src")).map(|(_, v)| v.as_str())).collect()
+        self.policies
+            .iter()
+            .filter_map(|m| {
+                m.iter()
+                    .find(|(k, _)| k == dir)
+                    .or_else(|| m.iter().find(|(k, _)| k == "default-src"))
+                    .map(|(_, v)| v.as_str())
+            })
+            .collect()
     }
 
     /// burp.Zupz.Za: `dir` only.
     fn only(&self, dir: &str) -> Vec<&str> {
-        self.policies.iter().filter_map(|m| m.iter().find(|(k, _)| k == dir).map(|(_, v)| v.as_str())).collect()
+        self.policies
+            .iter()
+            .filter_map(|m| m.iter().find(|(k, _)| k == dir).map(|(_, v)| v.as_str()))
+            .collect()
     }
 
     fn none(&self) -> bool {
@@ -280,8 +406,15 @@ impl Csp {
     }
 
     fn unsafe_kw(values: &[&str], kw: &str) -> bool {
-        let mitigated = |v: &str| v.contains("'nonce-") || v.contains("'sha256-") || v.contains("'sha384-") || v.contains("'sha512-");
-        values.iter().any(|v| tokens(v).any(|t| t.replace('\'', "").trim().eq_ignore_ascii_case(kw)) && !mitigated(v))
+        let mitigated = |v: &str| {
+            v.contains("'nonce-")
+                || v.contains("'sha256-")
+                || v.contains("'sha384-")
+                || v.contains("'sha512-")
+        };
+        values.iter().any(|v| {
+            tokens(v).any(|t| t.replace('\'', "").trim().eq_ignore_ascii_case(kw)) && !mitigated(v)
+        })
     }
 
     fn wildcard(v: &str) -> bool {
@@ -312,23 +445,35 @@ impl Csp {
         if has && all(&main) {
             return true;
         }
-        (!has && (attr.is_empty() || elem.is_empty())) || (!attr.is_empty() && all(&attr)) || (!elem.is_empty() && all(&elem))
+        (!has && (attr.is_empty() || elem.is_empty()))
+            || (!attr.is_empty() && all(&attr))
+            || (!elem.is_empty() && all(&elem))
     }
 
     /// burp.Zupz.ZJ / ZK: a `nonce-` shorter than 8 characters in
     /// script-src (style-src).
     fn short_nonce(&self, dir: &str) -> bool {
-        self.policies.iter().flat_map(|m| m.iter()).filter(|(k, _)| k.eq_ignore_ascii_case(dir)).any(|(_, v)| tokens(v).any(|t| {
-            let t = t.replace('\'', "");
-            t.starts_with("nonce-") && t.len() < 14
-        }))
+        self.policies
+            .iter()
+            .flat_map(|m| m.iter())
+            .filter(|(k, _)| k.eq_ignore_ascii_case(dir))
+            .any(|(_, v)| {
+                tokens(v).any(|t| {
+                    let t = t.replace('\'', "");
+                    t.starts_with("nonce-") && t.len() < 14
+                })
+            })
     }
 
     fn scripts_inline(&self) -> bool {
-        ["script-src", "script-src-elem", "script-src-attr"].iter().any(|d| Self::unsafe_kw(&self.with_default(d), "unsafe-inline"))
+        ["script-src", "script-src-elem", "script-src-attr"]
+            .iter()
+            .any(|d| Self::unsafe_kw(&self.with_default(d), "unsafe-inline"))
     }
     fn scripts_eval(&self) -> bool {
-        ["script-src", "script-src-elem", "script-src-attr"].iter().any(|d| Self::unsafe_kw(&self.with_default(d), "unsafe-eval"))
+        ["script-src", "script-src-elem", "script-src-attr"]
+            .iter()
+            .any(|d| Self::unsafe_kw(&self.with_default(d), "unsafe-eval"))
     }
     fn scripts_wildcard(&self) -> bool {
         self.sources("script", Self::wildcard)
@@ -340,7 +485,9 @@ impl Csp {
         self.scripts_wildcard() || self.sources("script", Self::allowlist)
     }
     fn styles_inline(&self) -> bool {
-        ["style-src", "style-src-elem", "style-src-attr"].iter().any(|d| Self::unsafe_kw(&self.with_default(d), "unsafe-inline"))
+        ["style-src", "style-src-elem", "style-src-attr"]
+            .iter()
+            .any(|d| Self::unsafe_kw(&self.with_default(d), "unsafe-inline"))
     }
     fn styles_wildcard(&self) -> bool {
         self.sources("style", Self::wildcard)
@@ -352,16 +499,24 @@ impl Csp {
         !self.only("frame-ancestors").is_empty()
     }
     fn frame_ancestors_wildcard(&self) -> bool {
-        self.with_default("frame-ancestors").iter().all(|v| Self::wildcard(v))
+        self.with_default("frame-ancestors")
+            .iter()
+            .all(|v| Self::wildcard(v))
     }
     fn frame_ancestors_loose(&self) -> bool {
-        self.frame_ancestors_wildcard() || self.with_default("frame-ancestors").iter().all(|v| Self::allowlist(v))
+        self.frame_ancestors_wildcard()
+            || self
+                .with_default("frame-ancestors")
+                .iter()
+                .all(|v| Self::allowlist(v))
     }
     fn form_action_present(&self) -> bool {
         !self.with_default("form-action").is_empty()
     }
     fn form_action_wildcard(&self) -> bool {
-        self.with_default("form-action").iter().all(|v| Self::wildcard(v))
+        self.with_default("form-action")
+            .iter()
+            .all(|v| Self::wildcard(v))
     }
 }
 
@@ -372,13 +527,22 @@ fn applies(cx: &PassiveCtx) -> bool {
     if cx.binary {
         return false;
     }
-    let stated = if cx.ct.trim().is_empty() { "" } else { crate::mime::burp_mime(&cx.ct, &[]) };
+    let stated = if cx.ct.trim().is_empty() {
+        ""
+    } else {
+        crate::mime::burp_mime(&cx.ct, &[])
+    };
     let sniffed = crate::mime::burp_mime("", cx.body);
     stated.is_empty() || matches!(stated, "HTML" | "text") || sniffed == "HTML"
 }
 
 fn policy(cx: &PassiveCtx) -> Option<Csp> {
-    applies(cx).then(|| Csp::of(&cx.p.headers, cx.html.then_some((cx.text.as_str(), cx.low.as_str()))))
+    applies(cx).then(|| {
+        Csp::of(
+            &cx.p.headers,
+            cx.html.then_some((cx.text.as_str(), cx.low.as_str())),
+        )
+    })
 }
 
 fn issue(cx: &PassiveCtx, c: CheckDef, confidence: &str, detail: String) -> ScanIssue {
@@ -410,7 +574,13 @@ fn enforced(cx: &PassiveCtx) -> Option<Csp> {
 
 pub(crate) fn run_untrusted_scripts(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
     let Some(p) = enforced(cx) else { return };
-    let (inline, eval, wild, data, nonce) = (p.scripts_inline(), p.scripts_eval(), p.scripts_wildcard(), p.scripts_data(), p.short_nonce("script-src"));
+    let (inline, eval, wild, data, nonce) = (
+        p.scripts_inline(),
+        p.scripts_eval(),
+        p.scripts_wildcard(),
+        p.scripts_data(),
+        p.short_nonce("script-src"),
+    );
     if inline || eval || wild || data || nonce {
         let mut t = String::from("<p>The content security policy fails to prevent untrusted JavaScript from being executed. As a result, it may fail to mitigate cross-site scripting attacks.</p><p>The policy has the following issues:</p>");
         if inline {
@@ -434,7 +604,12 @@ pub(crate) fn run_untrusted_scripts(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
 
 pub(crate) fn run_untrusted_styles(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
     let Some(p) = enforced(cx) else { return };
-    let (inline, wild, data, nonce) = (p.styles_inline(), p.styles_wildcard(), p.styles_data(), p.short_nonce("style-src"));
+    let (inline, wild, data, nonce) = (
+        p.styles_inline(),
+        p.styles_wildcard(),
+        p.styles_data(),
+        p.short_nonce("style-src"),
+    );
     if inline || wild || data || nonce {
         let mut t = String::from("<p>The content security policy fails to prevent untrusted style execution. As a result, it may fail to mitigate style based data exfiltration.</p>");
         if inline {
@@ -444,7 +619,9 @@ pub(crate) fn run_untrusted_styles(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
             t.push_str("<p>The policy allows global wildcard URLs which allows arbitrary styles to be executed.</p>");
         }
         if data {
-            t.push_str("<p>The policy allows data: URLs which allows arbitrary styles to be executed.</p>");
+            t.push_str(
+                "<p>The policy allows data: URLs which allows arbitrary styles to be executed.</p>",
+            );
         }
         if nonce {
             t.push_str("<p>The nonce is under 8 characters long, which may expose it to brute-force attacks. That could enable an attacker to brute-force the nonce value and bypass the restrictions set out by the policy which could result in an attacker being able to execute arbitrary styles.</p>");
@@ -462,9 +639,12 @@ pub(crate) fn run_allowlisted_scripts(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
 
 /// Zifp.Zb's text.
 fn clickjacking_text(p: &Csp) -> String {
-    let mut t = String::from("<p>The content security policy does not mitigate clickjacking attacks:</p>");
+    let mut t =
+        String::from("<p>The content security policy does not mitigate clickjacking attacks:</p>");
     if !p.frame_ancestors_present() {
-        t.push_str("<p>The frame-ancestors directive is not present in this content security policy.</p>");
+        t.push_str(
+            "<p>The frame-ancestors directive is not present in this content security policy.</p>",
+        );
     } else if p.frame_ancestors_wildcard() {
         t.push_str("<p>The frame-ancestors directive uses a global wildcard which will allow any site to frame the target application.</p>");
     }
@@ -480,9 +660,19 @@ pub(crate) fn run_clickjacking(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
         return;
     }
     if !p.frame_ancestors_in_header || p.frame_ancestors_wildcard() {
-        v.push(issue(cx, CSP_CLICKJACKING, "Certain", clickjacking_text(&p)));
+        v.push(issue(
+            cx,
+            CSP_CLICKJACKING,
+            "Certain",
+            clickjacking_text(&p),
+        ));
     } else if p.frame_ancestors_loose() {
-        v.push(issue(cx, CSP_CLICKJACKING, "Tentative", clickjacking_text(&p)));
+        v.push(issue(
+            cx,
+            CSP_CLICKJACKING,
+            "Tentative",
+            clickjacking_text(&p),
+        ));
     }
 }
 

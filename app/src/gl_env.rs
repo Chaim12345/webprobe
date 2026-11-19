@@ -101,8 +101,12 @@ pub fn software_retry(env: impl Fn(&str) -> Option<String>) -> Option<Plan> {
 #[cfg(unix)]
 pub fn reexec_with_software_gl() {
     use std::os::unix::process::CommandExt;
-    let Some(plan) = software_retry(|name| std::env::var(name).ok()) else { return };
-    let Ok(exe) = std::env::current_exe() else { return };
+    let Some(plan) = software_retry(|name| std::env::var(name).ok()) else {
+        return;
+    };
+    let Ok(exe) = std::env::current_exe() else {
+        return;
+    };
     eprintln!("webprobe: the window could not be created on hardware GL; restarting once with software GL (set {:?})", plan.set);
     let mut cmd = std::process::Command::new(exe);
     cmd.args(std::env::args_os().skip(1));
@@ -141,26 +145,44 @@ mod tests {
     use std::collections::HashMap;
 
     fn env(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
-        let map: HashMap<String, String> =
-            pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
+        let map: HashMap<String, String> = pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
         move |name| map.get(name).cloned()
     }
 
     #[test]
     fn unusable_render_node_gets_one_software_retry() {
-        let p = software_retry(env(&[("DISPLAY", ":97"), ("WAYLAND_DISPLAY", "wayland-0")])).expect("retry");
-        assert_eq!(p.set, vec![("LIBGL_ALWAYS_SOFTWARE", "1"), ("WEBPROBE_GL_RETRY", "1")]);
+        let p = software_retry(env(&[("DISPLAY", ":97"), ("WAYLAND_DISPLAY", "wayland-0")]))
+            .expect("retry");
+        assert_eq!(
+            p.set,
+            vec![("LIBGL_ALWAYS_SOFTWARE", "1"), ("WEBPROBE_GL_RETRY", "1")]
+        );
         assert_eq!(p.unset, vec!["WAYLAND_DISPLAY"]);
-        assert!(software_retry(env(&[("WEBPROBE_GL_RETRY", "1")])).is_none(), "only once");
-        assert!(software_retry(env(&[("LIBGL_ALWAYS_SOFTWARE", "1")])).is_none(), "already software");
-        assert!(software_retry(env(&[("WEBPROBE_GL", "native")])).is_none(), "user's choice");
+        assert!(
+            software_retry(env(&[("WEBPROBE_GL_RETRY", "1")])).is_none(),
+            "only once"
+        );
+        assert!(
+            software_retry(env(&[("LIBGL_ALWAYS_SOFTWARE", "1")])).is_none(),
+            "already software"
+        );
+        assert!(
+            software_retry(env(&[("WEBPROBE_GL", "native")])).is_none(),
+            "user's choice"
+        );
     }
 
     #[test]
     fn indirect_glx_is_always_dropped() {
         for render_node in [true, false] {
             let p = plan(render_node, env(&[("LIBGL_ALWAYS_INDIRECT", "1")]));
-            assert!(p.unset.contains(&"LIBGL_ALWAYS_INDIRECT"), "render node = {render_node}");
+            assert!(
+                p.unset.contains(&"LIBGL_ALWAYS_INDIRECT"),
+                "render node = {render_node}"
+            );
         }
     }
 
@@ -169,7 +191,11 @@ mod tests {
         // The exact environment that broke the window: WSLg plus a stale indirect flag.
         let p = plan(
             false,
-            env(&[("DISPLAY", ":0"), ("WAYLAND_DISPLAY", "wayland-0"), ("LIBGL_ALWAYS_INDIRECT", "1")]),
+            env(&[
+                ("DISPLAY", ":0"),
+                ("WAYLAND_DISPLAY", "wayland-0"),
+                ("LIBGL_ALWAYS_INDIRECT", "1"),
+            ]),
         );
         assert_eq!(p.set, vec![("LIBGL_ALWAYS_SOFTWARE", "1")]);
         assert_eq!(p.unset, vec!["LIBGL_ALWAYS_INDIRECT", "WAYLAND_DISPLAY"]);
@@ -177,7 +203,10 @@ mod tests {
 
     #[test]
     fn a_render_node_keeps_the_hardware_path() {
-        let p = plan(true, env(&[("DISPLAY", ":0"), ("WAYLAND_DISPLAY", "wayland-0")]));
+        let p = plan(
+            true,
+            env(&[("DISPLAY", ":0"), ("WAYLAND_DISPLAY", "wayland-0")]),
+        );
         assert_eq!(p, Plan::default());
     }
 
@@ -190,15 +219,25 @@ mod tests {
 
     #[test]
     fn explicit_user_choice_wins() {
-        let p = plan(false, env(&[("LIBGL_ALWAYS_SOFTWARE", "0"), ("DISPLAY", ":0")]));
-        assert!(p.set.is_empty(), "an explicit LIBGL_ALWAYS_SOFTWARE must not be overridden");
+        let p = plan(
+            false,
+            env(&[("LIBGL_ALWAYS_SOFTWARE", "0"), ("DISPLAY", ":0")]),
+        );
+        assert!(
+            p.set.is_empty(),
+            "an explicit LIBGL_ALWAYS_SOFTWARE must not be overridden"
+        );
     }
 
     #[test]
     fn native_opt_out_skips_every_edit() {
         let p = plan(
             false,
-            env(&[("WEBPROBE_GL", "native"), ("LIBGL_ALWAYS_INDIRECT", "1"), ("DISPLAY", ":0")]),
+            env(&[
+                ("WEBPROBE_GL", "native"),
+                ("LIBGL_ALWAYS_INDIRECT", "1"),
+                ("DISPLAY", ":0"),
+            ]),
         );
         assert_eq!(p, Plan::default());
     }

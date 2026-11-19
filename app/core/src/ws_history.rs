@@ -67,7 +67,11 @@ fn bound_rows(rows: &mut Vec<WsEntry>) -> u64 {
         return 0;
     }
     let excess = rows.len() - MAX_WS_HISTORY_ROWS;
-    let released = rows.iter().take(excess).map(|e| inline_len(&e.payload)).sum();
+    let released = rows
+        .iter()
+        .take(excess)
+        .map(|e| inline_len(&e.payload))
+        .sum();
     rows.drain(..excess);
     released
 }
@@ -80,7 +84,8 @@ impl WsHistory {
     /// Add a message; its payload moves to the body store when large.
     pub fn push(&self, mut e: WsEntry) {
         e.payload = crate::body::spill(&e.payload);
-        self.inline_bytes.fetch_add(inline_len(&e.payload), Ordering::Relaxed);
+        self.inline_bytes
+            .fetch_add(inline_len(&e.payload), Ordering::Relaxed);
         let mut rows = self.rows.write().unwrap_or_else(|p| p.into_inner());
         rows.push(e);
         let released = bound_rows(&mut rows);
@@ -91,13 +96,19 @@ impl WsHistory {
 
     /// Replace everything (a project was loaded).
     pub fn set_all(&self, rows: Vec<WsEntry>) {
-        let rows: Vec<WsEntry> = rows.into_iter().map(|mut e| {
-            e.payload = crate::body::spill(&e.payload);
-            e
-        }).collect();
+        let rows: Vec<WsEntry> = rows
+            .into_iter()
+            .map(|mut e| {
+                e.payload = crate::body::spill(&e.payload);
+                e
+            })
+            .collect();
         let mut rows = rows;
         bound_rows(&mut rows);
-        self.inline_bytes.store(rows.iter().map(|e| inline_len(&e.payload)).sum(), Ordering::Relaxed);
+        self.inline_bytes.store(
+            rows.iter().map(|e| inline_len(&e.payload)).sum(),
+            Ordering::Relaxed,
+        );
         *self.rows.write().unwrap_or_else(|p| p.into_inner()) = rows;
         self.stamp.fetch_add(1, Ordering::SeqCst);
     }
@@ -141,7 +152,13 @@ impl WsHistory {
 
     /// Positions of the rows `keep` accepts (no payload is copied).
     pub fn positions(&self, mut keep: impl FnMut(&WsEntry) -> bool) -> Vec<usize> {
-        self.with_rows(|rows| rows.iter().enumerate().filter(|(_, e)| keep(e)).map(|(i, _)| i).collect())
+        self.with_rows(|rows| {
+            rows.iter()
+                .enumerate()
+                .filter(|(_, e)| keep(e))
+                .map(|(i, _)| i)
+                .collect()
+        })
     }
 }
 
@@ -150,7 +167,15 @@ mod tests {
     use super::*;
 
     fn entry(id: u64, payload: Vec<u8>) -> WsEntry {
-        WsEntry { id, ts: 0, host: "h".into(), direction: "server -> client".into(), opcode: "binary".into(), payload: payload.into(), socket: 1 }
+        WsEntry {
+            id,
+            ts: 0,
+            host: "h".into(),
+            direction: "server -> client".into(),
+            opcode: "binary".into(),
+            payload: payload.into(),
+            socket: 1,
+        }
     }
 
     #[test]
@@ -167,7 +192,11 @@ mod tests {
         // Large payloads went to the body store: only small ones stay inline.
         assert!(h.inline_bytes() <= 100_000 * 256, "{}", h.inline_bytes());
         let big = h.get(5000).unwrap();
-        assert!(big.payload.is_stored() && big.payload.len() == 64 * 1024 && big.payload.iter().all(|&b| b == (5000 % 251) as u8));
+        assert!(
+            big.payload.is_stored()
+                && big.payload.len() == 64 * 1024
+                && big.payload.iter().all(|&b| b == (5000 % 251) as u8)
+        );
         // A view takes positions (no payload copies) and only its window.
         let even = h.positions(|e| e.id % 2 == 0);
         assert_eq!(even.len(), 50_000);

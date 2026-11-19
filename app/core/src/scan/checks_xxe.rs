@@ -36,10 +36,17 @@ pub fn xml_value_points(body: &str, from: usize, max: usize) -> Vec<(usize, usiz
     let bytes = body.as_bytes();
     let mut i = from;
     while out.len() < max {
-        let Some(lt) = body[i..].find('<').map(|x| x + i) else { break };
-        let Some(gt) = body[lt..].find('>').map(|x| x + lt) else { break };
+        let Some(lt) = body[i..].find('<').map(|x| x + i) else {
+            break;
+        };
+        let Some(gt) = body[lt..].find('>').map(|x| x + lt) else {
+            break;
+        };
         let tag = &body[lt + 1..gt];
-        let is_start = !tag.starts_with('/') && !tag.starts_with('?') && !tag.starts_with('!') && !tag.ends_with('/');
+        let is_start = !tag.starts_with('/')
+            && !tag.starts_with('?')
+            && !tag.starts_with('!')
+            && !tag.ends_with('/');
         if is_start {
             let vs = gt + 1;
             if let Some(next) = body[vs..].find('<').map(|x| x + vs) {
@@ -68,7 +75,13 @@ pub fn xxe_points(body: &str) -> (String, usize, Vec<(usize, usize)>) {
 
 /// burp.Zge7.Ze: DOCTYPE at the document position, then the original value
 /// (Zsif.ZT0) followed by the entity reference in place of the value range.
-pub fn xxe_probe_at(base: &str, doc: usize, point: (usize, usize), entity: &str, variant: u8) -> String {
+pub fn xxe_probe_at(
+    base: &str,
+    doc: usize,
+    point: (usize, usize),
+    entity: &str,
+    variant: u8,
+) -> String {
     let (vs, ve) = point;
     format!(
         "{}{}{}{}&{entity};{}",
@@ -99,12 +112,21 @@ pub fn run_xxe_check<F: FnMut(&str) -> Option<String>>(
             if markers.is_empty() {
                 continue;
             }
-            let control = send(&xxe_probe_at(&base, doc, point, entity, os + 2)).unwrap_or_default();
+            let control =
+                send(&xxe_probe_at(&base, doc, point, entity, os + 2)).unwrap_or_default();
             if !file_marker_hits(&control, os, &suppressed).is_empty() {
                 continue;
             }
-            let file = if os == OS_WINDOWS { "win.ini" } else { "/etc/passwd" };
-            return Some(FileReadHit { payload: probe, file, markers });
+            let file = if os == OS_WINDOWS {
+                "win.ini"
+            } else {
+                "/etc/passwd"
+            };
+            return Some(FileReadHit {
+                payload: probe,
+                file,
+                markers,
+            });
         }
     }
     None

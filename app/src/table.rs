@@ -17,10 +17,18 @@ pub struct Column {
 
 impl Column {
     pub fn new(label: &'static str, width: f32) -> Self {
-        Self { label, width, align_right: false }
+        Self {
+            label,
+            width,
+            align_right: false,
+        }
     }
     pub fn right(label: &'static str, width: f32) -> Self {
-        Self { label, width, align_right: true }
+        Self {
+            label,
+            width,
+            align_right: true,
+        }
     }
 }
 
@@ -59,7 +67,10 @@ impl TableState {
     }
 
     pub fn width_of(&self, columns: &[Column], idx: usize) -> f32 {
-        self.widths.get(idx).copied().unwrap_or_else(|| columns[idx].width)
+        self.widths
+            .get(idx)
+            .copied()
+            .unwrap_or_else(|| columns[idx].width)
     }
 
     pub fn is_visible(&self, idx: usize) -> bool {
@@ -78,7 +89,10 @@ impl TableState {
 pub fn column_chooser(ui: &mut Ui, columns: &[Column], state: &mut TableState) {
     ui.horizontal(|ui| {
         let open = state.chooser_open;
-        if ui.small_button(if open { "Hide columns" } else { "Columns" }).clicked() {
+        if ui
+            .small_button(if open { "Hide columns" } else { "Columns" })
+            .clicked()
+        {
             state.chooser_open = !open;
         }
         if state.chooser_open {
@@ -107,17 +121,28 @@ pub fn sort_rows<R>(rows: &mut [R], state: &TableState, key: impl Fn(&R, usize) 
         let ka = key(a, state.sort_col);
         let kb = key(b, state.sort_col);
         let ord = ka.cmp(&kb);
-        if state.sort_asc { ord } else { ord.reverse() }
+        if state.sort_asc {
+            ord
+        } else {
+            ord.reverse()
+        }
     });
 }
 
 /// Filter rows by a case-insensitive substring over `text`.
-pub fn filter_rows<R: Clone>(rows: &[R], state: &TableState, text: impl Fn(&R) -> String) -> Vec<R> {
+pub fn filter_rows<R: Clone>(
+    rows: &[R],
+    state: &TableState,
+    text: impl Fn(&R) -> String,
+) -> Vec<R> {
     let needle = state.filter.trim().to_lowercase();
     if needle.is_empty() {
         return rows.to_vec();
     }
-    rows.iter().filter(|r| text(r).to_lowercase().contains(&needle)).cloned().collect()
+    rows.iter()
+        .filter(|r| text(r).to_lowercase().contains(&needle))
+        .cloned()
+        .collect()
 }
 
 /// Table with a header, a filter box and a virtualized body.
@@ -142,14 +167,27 @@ pub fn data_table<R, F>(
         if !state.filter.is_empty() && ui.small_button("Clear").clicked() {
             state.filter.clear();
         }
-        ui.label(RichText::new(format!("{} rows", rows.len())).size(12.0).color(theme::ink_faint()));
+        ui.label(
+            RichText::new(format!("{} rows", rows.len()))
+                .size(12.0)
+                .color(theme::ink_faint()),
+        );
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             column_chooser(ui, columns, state);
         });
     });
     ui.add_space(theme::SPACE_XS);
     let body_height = (ui.available_height() - 4.0).max(60.0);
-    table_body(ui, id, columns, rows, state, row_height, body_height, &mut render);
+    table_body(
+        ui,
+        id,
+        columns,
+        rows,
+        state,
+        row_height,
+        body_height,
+        &mut render,
+    );
 }
 
 /// Draw only the header + virtualized body (no filter box). Callers that own
@@ -190,7 +228,16 @@ pub fn table_body<R, F>(
                 ui.set_width(content_w);
                 // Header above body even when the caller's layout is horizontal.
                 ui.vertical(|ui| {
-                    table_body_inner(ui, id, columns, rows, state, row_height, body_height, render);
+                    table_body_inner(
+                        ui,
+                        id,
+                        columns,
+                        rows,
+                        state,
+                        row_height,
+                        body_height,
+                        render,
+                    );
                 });
             });
     });
@@ -223,13 +270,24 @@ fn table_body_inner<R, F>(
                     let col = &columns[i];
                     let width = state.width_of(columns, i);
                     let label = if state.sort_col == i {
-                        let arrow = if state.sort_asc { " \u{2191}" } else { " \u{2193}" };
+                        let arrow = if state.sort_asc {
+                            " \u{2191}"
+                        } else {
+                            " \u{2193}"
+                        };
                         format!("{}{arrow}", col.label)
                     } else {
                         col.label.to_string()
                     };
-                    let (rect, resp) = ui.allocate_exact_size(egui::vec2(width, row_height), egui::Sense::click());
-                    resp.widget_info(|| egui::WidgetInfo::labeled(egui::accesskit::Role::ColumnHeader, true, col.label));
+                    let (rect, resp) =
+                        ui.allocate_exact_size(egui::vec2(width, row_height), egui::Sense::click());
+                    resp.widget_info(|| {
+                        egui::WidgetInfo::labeled(
+                            egui::accesskit::Role::ColumnHeader,
+                            true,
+                            col.label,
+                        )
+                    });
                     if resp.hovered() {
                         ui.painter().rect_filled(rect, 0.0, theme::line());
                     }
@@ -249,8 +307,13 @@ fn table_body_inner<R, F>(
                         }
                     }
                     // Divider: drag to resize.
-                    let (rect, _) = ui.allocate_exact_size(egui::vec2(DIVIDER, row_height), egui::Sense::hover());
-                    let drag = ui.interact(rect.expand2(egui::vec2(2.0, 0.0)), ui.scope_id().with(("resize", i)), egui::Sense::drag());
+                    let (rect, _) = ui
+                        .allocate_exact_size(egui::vec2(DIVIDER, row_height), egui::Sense::hover());
+                    let drag = ui.interact(
+                        rect.expand2(egui::vec2(2.0, 0.0)),
+                        ui.scope_id().with(("resize", i)),
+                        egui::Sense::drag(),
+                    );
                     if drag.hovered() || drag.dragged() {
                         ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeColumn);
                     }
@@ -268,25 +331,34 @@ fn table_body_inner<R, F>(
                     }
                     let active = drag.dragged() || drag.hovered();
                     ui.painter().rect_filled(
-                        egui::Rect::from_min_size(egui::pos2(rect.center().x, rect.top() + 2.0), egui::vec2(1.0, (row_height - 4.0).max(1.0))),
+                        egui::Rect::from_min_size(
+                            egui::pos2(rect.center().x, rect.top() + 2.0),
+                            egui::vec2(1.0, (row_height - 4.0).max(1.0)),
+                        ),
                         egui::CornerRadius::ZERO,
-                        if active { c(theme::ORANGE) } else { theme::line_strong() },
+                        if active {
+                            c(theme::ORANGE)
+                        } else {
+                            theme::line_strong()
+                        },
                     );
                 }
             });
         })
         .response;
-    egui::Popup::context_menu(&header.interact(egui::Sense::click())).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
-        for (i, col) in columns.iter().enumerate() {
-            let mut on = state.is_visible(i);
-            if ui.checkbox(&mut on, col.label).changed() {
-                if state.hidden.len() < columns.len() {
-                    state.hidden.resize(columns.len(), true);
+    egui::Popup::context_menu(&header.interact(egui::Sense::click()))
+        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+        .show(|ui| {
+            for (i, col) in columns.iter().enumerate() {
+                let mut on = state.is_visible(i);
+                if ui.checkbox(&mut on, col.label).changed() {
+                    if state.hidden.len() < columns.len() {
+                        state.hidden.resize(columns.len(), true);
+                    }
+                    state.hidden[i] = on;
                 }
-                state.hidden[i] = on;
             }
-        }
-    });
+        });
 
     // `body_height` is what the caller could spare (it may have reserved room for
     // an action row); the pane's own remainder is the other bound.
@@ -324,9 +396,14 @@ fn table_body_inner<R, F>(
                 ui.add_space(stride * first as f32);
             }
             for row in &rows[first..last] {
-                let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), row_height), egui::Sense::hover());
+                let (rect, _) = ui.allocate_exact_size(
+                    egui::vec2(ui.available_width(), row_height),
+                    egui::Sense::hover(),
+                );
                 let mut row_ui = ui.new_child(
-                    egui::UiBuilder::new().max_rect(rect).layout(egui::Layout::left_to_right(egui::Align::Center)),
+                    egui::UiBuilder::new()
+                        .max_rect(rect)
+                        .layout(egui::Layout::left_to_right(egui::Align::Center)),
                 );
                 row_ui.set_clip_rect(rect.intersect(ui.clip_rect()));
                 render(row, &mut row_ui);
@@ -399,7 +476,14 @@ pub fn cells(
         if !state.is_visible(*idx) {
             continue;
         }
-        cell_w(ui, &columns[*idx], state.width_of(columns, *idx), text.clone(), *colour, row_height);
+        cell_w(
+            ui,
+            &columns[*idx],
+            state.width_of(columns, *idx),
+            text.clone(),
+            *colour,
+            row_height,
+        );
         ui.add_space(DIVIDER);
     }
 }
@@ -415,7 +499,12 @@ pub struct MultiSelect {
 
 impl MultiSelect {
     pub fn click(&mut self, order: &[u64], clicked: u64, ctrl: bool, shift: bool) {
-        match (shift, self.anchor.and_then(|a| order.iter().position(|id| *id == a)), order.iter().position(|id| *id == clicked)) {
+        match (
+            shift,
+            self.anchor
+                .and_then(|a| order.iter().position(|id| *id == a)),
+            order.iter().position(|id| *id == clicked),
+        ) {
             (true, Some(a), Some(c)) => {
                 if !ctrl {
                     self.ids.clear();
@@ -456,7 +545,11 @@ impl MultiSelect {
     /// clicked row is part of it, otherwise just that row (Burp's rule).
     pub fn targets(&self, order: &[u64], clicked: u64) -> Vec<u64> {
         if self.ids.len() > 1 && self.ids.contains(&clicked) {
-            order.iter().copied().filter(|id| self.ids.contains(id)).collect()
+            order
+                .iter()
+                .copied()
+                .filter(|id| self.ids.contains(id))
+                .collect()
         } else {
             vec![clicked]
         }
@@ -478,33 +571,66 @@ mod tests {
         let run = |events: Vec<egui::Event>| -> Option<usize> {
             let mut hit = None;
             let mut st = TableState::new();
-            ctx.run_ui(egui::RawInput { screen_rect: Some(screen), events, ..Default::default() }, |ui| {
-                egui::CentralPanel::default().show(ui, |ui| {
-                    table_body(ui, "t", &cols, &rows, &mut st, 19.0, 300.0, &mut |i, ui| {
-                        let rr = egui::Rect::from_min_size(ui.cursor().min, egui::vec2(ui.available_width(), 19.0));
-                        let r = ui.interact(rr, egui::Id::unique(("row", *i)), egui::Sense::click());
-                        // A long cell under the pointer, as in a real table.
-                        cell(ui, &Column::new("Data", 300.0), format!("row {i} with a long text cell under the pointer"), None, 19.0);
-                        if r.clicked() {
-                            hit = Some(*i);
-                        }
+            ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(screen),
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    egui::CentralPanel::default().show(ui, |ui| {
+                        table_body(ui, "t", &cols, &rows, &mut st, 19.0, 300.0, &mut |i, ui| {
+                            let rr = egui::Rect::from_min_size(
+                                ui.cursor().min,
+                                egui::vec2(ui.available_width(), 19.0),
+                            );
+                            let r = ui.interact(
+                                rr,
+                                egui::Id::unique(("row", *i)),
+                                egui::Sense::click(),
+                            );
+                            // A long cell under the pointer, as in a real table.
+                            cell(
+                                ui,
+                                &Column::new("Data", 300.0),
+                                format!("row {i} with a long text cell under the pointer"),
+                                None,
+                                19.0,
+                            );
+                            if r.clicked() {
+                                hit = Some(*i);
+                            }
+                        });
                     });
-                });
-            })
+                },
+            )
             .drop_without_applying_deltas();
             hit
         };
         // Row 2 sits under the header: header ~19 px, rows of 19 px.
         let at = egui::pos2(100.0, 8.0 + 19.0 + 19.0 * 2.0 + 9.0 + 8.0);
-        let press = |pressed| egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() };
+        let press = |pressed| egui::Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: Default::default(),
+        };
         run(vec![]);
         run(vec![egui::Event::PointerMoved(at)]);
         let mut got = run(vec![press(true)]);
         got = got.or(run(vec![press(false)]));
         let slow = got;
         run(vec![]);
-        let fast = run(vec![egui::Event::PointerMoved(at), press(true), press(false)]).or(run(vec![]));
-        assert!(slow.is_some() && fast.is_some(), "slow click -> {slow:?}, one-frame click -> {fast:?}");
+        let fast = run(vec![
+            egui::Event::PointerMoved(at),
+            press(true),
+            press(false),
+        ])
+        .or(run(vec![]));
+        assert!(
+            slow.is_some() && fast.is_some(),
+            "slow click -> {slow:?}, one-frame click -> {fast:?}"
+        );
         assert_eq!(slow, fast);
     }
 
@@ -593,6 +719,9 @@ mod tests {
     fn empty_filter_returns_every_row() {
         let data = rows();
         let state = TableState::new();
-        assert_eq!(filter_rows(&data, &state, |r| r.2.clone()).len(), data.len());
+        assert_eq!(
+            filter_rows(&data, &state, |r| r.2.clone()).len(),
+            data.len()
+        );
     }
 }

@@ -88,7 +88,14 @@ pub fn group_issues(issues: &[ScanIssue], grouping: Grouping) -> Vec<(String, Ve
         }
     }
     for (_, v) in &mut groups {
-        v.sort_by(|a, b| (severity_rank(a), &a.host, &a.path, &a.name).cmp(&(severity_rank(b), &b.host, &b.path, &b.name)));
+        v.sort_by(|a, b| {
+            (severity_rank(a), &a.host, &a.path, &a.name).cmp(&(
+                severity_rank(b),
+                &b.host,
+                &b.path,
+                &b.name,
+            ))
+        });
     }
     groups.sort_by(|a, b| {
         let worst = |v: &Vec<ScanIssue>| v.iter().map(severity_rank).min().unwrap_or(4);
@@ -116,7 +123,12 @@ pub fn issue_menu(ui: &mut Ui, issue: &ScanIssue) -> Option<IssueAction> {
     }
     ui.separator();
     ui.menu_button("Set severity", |ui| {
-        for (label, sev) in [("High", "high"), ("Medium", "medium"), ("Low", "low"), ("Information", "info")] {
+        for (label, sev) in [
+            ("High", "high"),
+            ("Medium", "medium"),
+            ("Low", "low"),
+            ("Information", "info"),
+        ] {
             if ui.button(label).clicked() {
                 out = Some(IssueAction::SetSeverity(sev));
             }
@@ -129,7 +141,14 @@ pub fn issue_menu(ui: &mut Ui, issue: &ScanIssue) -> Option<IssueAction> {
             }
         }
     });
-    if ui.button(if issue.false_positive { "Unmark as false positive" } else { "Mark as false positive" }).clicked() {
+    if ui
+        .button(if issue.false_positive {
+            "Unmark as false positive"
+        } else {
+            "Mark as false positive"
+        })
+        .clicked()
+    {
         out = Some(IssueAction::ToggleFalsePositive);
     }
     ui.separator();
@@ -147,13 +166,26 @@ pub fn issue_menu(ui: &mut Ui, issue: &ScanIssue) -> Option<IssueAction> {
 
 /// Apply a menu action to the shared issue list; returns the issues to
 /// report for `Report`.
-pub fn apply_issue_action(issues: &mut Vec<ScanIssue>, id: u64, action: &IssueAction) -> Option<Vec<u64>> {
+pub fn apply_issue_action(
+    issues: &mut Vec<ScanIssue>,
+    id: u64,
+    action: &IssueAction,
+) -> Option<Vec<u64>> {
     match action {
         IssueAction::Report => return Some(vec![id]),
         IssueAction::Delete => issues.retain(|i| i.id != id),
-        IssueAction::SetSeverity(sev) => issues.iter_mut().filter(|i| i.id == id).for_each(|i| i.sev = sev.to_string()),
-        IssueAction::SetConfidence(c) => issues.iter_mut().filter(|i| i.id == id).for_each(|i| i.confidence = c.to_string()),
-        IssueAction::ToggleFalsePositive => issues.iter_mut().filter(|i| i.id == id).for_each(|i| i.false_positive = !i.false_positive),
+        IssueAction::SetSeverity(sev) => issues
+            .iter_mut()
+            .filter(|i| i.id == id)
+            .for_each(|i| i.sev = sev.to_string()),
+        IssueAction::SetConfidence(c) => issues
+            .iter_mut()
+            .filter(|i| i.id == id)
+            .for_each(|i| i.confidence = c.to_string()),
+        IssueAction::ToggleFalsePositive => issues
+            .iter_mut()
+            .filter(|i| i.id == id)
+            .for_each(|i| i.false_positive = !i.false_positive),
         IssueAction::CopyUrl => {}
     }
     None
@@ -171,43 +203,80 @@ pub fn grouped_list(
 ) -> Option<(u64, IssueAction)> {
     let mut action = None;
     for (key, members) in group_issues(issues, grouping) {
-        let Some(first) = members.first() else { continue };
-        let header = RichText::new(format!("{key} [{}]", members.len())).size(13.0).color(sev_colour(first));
-        egui::CollapsingHeader::new(header).id_salt(("issue-group", &key)).default_open(members.len() <= 5).show(ui, |ui| {
-            for issue in &members {
-                let row = ui
-                    .horizontal(|ui| {
-                        let rr = egui::Rect::from_min_size(ui.cursor().min, egui::vec2(ui.available_width(), 19.0));
-                        if *selected == Some(issue.id) {
-                            ui.painter().rect_filled(rr, 0.0, theme::selection_bg());
-                        }
-                        ui.add_sized([86.0, 19.0], egui::Label::new(RichText::new(sev_label(issue)).size(12.5).color(sev_colour(issue))).selectable(false));
-                        ui.add_sized([74.0, 19.0], egui::Label::new(RichText::new(&issue.confidence).size(12.5).color(theme::ink_dim())).selectable(false));
-                        let where_ = match grouping {
-                            Grouping::Host => format!("{}  {}", issue.name, issue.path),
-                            _ => format!("{}{}", issue.host, issue.path),
-                        };
-                        ui.add(egui::Label::new(RichText::new(where_).size(12.5).color(theme::ink_dim())).selectable(false).truncate());
-                    })
-                    .response
-                    .interact(egui::Sense::click());
-                if row.clicked() {
-                    *selected = Some(issue.id);
-                }
-                row.context_menu(|ui| {
-                    if let Some(a) = issue_menu(ui, issue) {
-                        action = Some((issue.id, a));
+        let Some(first) = members.first() else {
+            continue;
+        };
+        let header = RichText::new(format!("{key} [{}]", members.len()))
+            .size(13.0)
+            .color(sev_colour(first));
+        egui::CollapsingHeader::new(header)
+            .id_salt(("issue-group", &key))
+            .default_open(members.len() <= 5)
+            .show(ui, |ui| {
+                for issue in &members {
+                    let row = ui
+                        .horizontal(|ui| {
+                            let rr = egui::Rect::from_min_size(
+                                ui.cursor().min,
+                                egui::vec2(ui.available_width(), 19.0),
+                            );
+                            if *selected == Some(issue.id) {
+                                ui.painter().rect_filled(rr, 0.0, theme::selection_bg());
+                            }
+                            ui.add_sized(
+                                [86.0, 19.0],
+                                egui::Label::new(
+                                    RichText::new(sev_label(issue))
+                                        .size(12.5)
+                                        .color(sev_colour(issue)),
+                                )
+                                .selectable(false),
+                            );
+                            ui.add_sized(
+                                [74.0, 19.0],
+                                egui::Label::new(
+                                    RichText::new(&issue.confidence)
+                                        .size(12.5)
+                                        .color(theme::ink_dim()),
+                                )
+                                .selectable(false),
+                            );
+                            let where_ = match grouping {
+                                Grouping::Host => format!("{}  {}", issue.name, issue.path),
+                                _ => format!("{}{}", issue.host, issue.path),
+                            };
+                            ui.add(
+                                egui::Label::new(
+                                    RichText::new(where_).size(12.5).color(theme::ink_dim()),
+                                )
+                                .selectable(false)
+                                .truncate(),
+                            );
+                        })
+                        .response
+                        .interact(egui::Sense::click());
+                    if row.clicked() {
+                        *selected = Some(issue.id);
                     }
-                });
-            }
-        });
+                    row.context_menu(|ui| {
+                        if let Some(a) = issue_menu(ui, issue) {
+                            action = Some((issue.id, a));
+                        }
+                    });
+                }
+            });
     }
     action
 }
 
 impl Default for IssueFilter {
     fn default() -> Self {
-        IssueFilter { severity: [true; 4], confidence: [true; 3], false_positives: true, grouping: Grouping::None }
+        IssueFilter {
+            severity: [true; 4],
+            confidence: [true; 3],
+            false_positives: true,
+            grouping: Grouping::None,
+        }
     }
 }
 
@@ -241,24 +310,38 @@ impl IssueFilter {
     /// The row of checkboxes above the issue table.
     pub fn bar(&mut self, ui: &mut Ui) {
         ui.horizontal(|ui| {
-            ui.label(RichText::new("Severity").size(12.0).color(theme::ink_faint()));
+            ui.label(
+                RichText::new("Severity")
+                    .size(12.0)
+                    .color(theme::ink_faint()),
+            );
             for (i, name) in SEVERITIES.iter().enumerate() {
                 ui.checkbox(&mut self.severity[i], *name);
             }
             ui.add_space(10.0);
-            ui.label(RichText::new("Confidence").size(12.0).color(theme::ink_faint()));
+            ui.label(
+                RichText::new("Confidence")
+                    .size(12.0)
+                    .color(theme::ink_faint()),
+            );
             for (i, name) in CONFIDENCES.iter().enumerate() {
                 ui.checkbox(&mut self.confidence[i], *name);
             }
             ui.add_space(10.0);
             ui.checkbox(&mut self.false_positives, "False positives");
             ui.add_space(10.0);
-            ui.label(RichText::new("Group by").size(12.0).color(theme::ink_faint()));
-            egui::ComboBox::from_id_salt("issue-grouping").selected_text(self.grouping.label()).show_ui(ui, |ui| {
-                for g in Grouping::ALL {
-                    ui.selectable_value(&mut self.grouping, g, g.label());
-                }
-            });
+            ui.label(
+                RichText::new("Group by")
+                    .size(12.0)
+                    .color(theme::ink_faint()),
+            );
+            egui::ComboBox::from_id_salt("issue-grouping")
+                .selected_text(self.grouping.label())
+                .show_ui(ui, |ui| {
+                    for g in Grouping::ALL {
+                        ui.selectable_value(&mut self.grouping, g, g.label());
+                    }
+                });
         });
     }
 }
@@ -287,7 +370,9 @@ pub fn tab_target(tab: usize) -> Option<(usize, bool)> {
 
 /// Plain text of a knowledge-base HTML fragment.
 pub fn advisory_text(html: &str) -> String {
-    html2text::from_read(html.as_bytes(), 110).trim_end().to_string()
+    html2text::from_read(html.as_bytes(), 110)
+        .trim_end()
+        .to_string()
 }
 
 /// The issue detail as plain text. Scanner details follow Burp and carry
@@ -313,7 +398,13 @@ fn section(ui: &mut Ui, title: &str, body: &str) {
 
 /// Draw the detail of `issue` in the remaining space. Returns true when the
 /// user pressed the false-positive button.
-pub fn issue_detail(app: &mut App, ui: &mut Ui, issue: &ScanIssue, sev_label: &str, sev_colour: egui::Color32) -> bool {
+pub fn issue_detail(
+    app: &mut App,
+    ui: &mut Ui,
+    issue: &ScanIssue,
+    sev_label: &str,
+    sev_colour: egui::Color32,
+) -> bool {
     let mut toggle_fp = false;
     let labels = tab_labels(issue.evidence.len());
     if app.issue_tab >= labels.len() {
@@ -326,42 +417,97 @@ pub fn issue_detail(app: &mut App, ui: &mut Ui, issue: &ScanIssue, sev_label: &s
     let h = ui.available_height().max(120.0);
     match tab_target(app.issue_tab) {
         None => {
-            egui::ScrollArea::vertical().id_salt("issue_advisory").max_height(h).show(ui, |ui| {
-                ui.set_width(ui.available_width());
-                ui.add_space(6.0);
-                ui.label(RichText::new(&issue.name).strong().size(16.0).color(theme::ink()));
-                ui.add_space(4.0);
-                egui::Grid::new("issue_advisory_facts").num_columns(2).spacing([18.0, 3.0]).show(ui, |ui| {
-                    let key = |ui: &mut Ui, k: &str| {
-                        ui.label(RichText::new(k).size(12.5).color(theme::ink_faint()));
-                    };
-                    key(ui, "Severity:");
-                    ui.label(RichText::new(sev_label).strong().size(12.5).color(sev_colour));
-                    ui.end_row();
-                    key(ui, "Confidence:");
-                    ui.label(RichText::new(&issue.confidence).size(12.5).color(theme::ink()));
-                    ui.end_row();
-                    key(ui, "Host:");
-                    ui.label(RichText::new(&issue.host).size(12.5).color(theme::ink()));
-                    ui.end_row();
-                    key(ui, "Path:");
-                    ui.label(RichText::new(&issue.path).size(12.5).color(theme::ink()));
-                    ui.end_row();
+            egui::ScrollArea::vertical()
+                .id_salt("issue_advisory")
+                .max_height(h)
+                .show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    ui.add_space(6.0);
+                    ui.label(
+                        RichText::new(&issue.name)
+                            .strong()
+                            .size(16.0)
+                            .color(theme::ink()),
+                    );
+                    ui.add_space(4.0);
+                    egui::Grid::new("issue_advisory_facts")
+                        .num_columns(2)
+                        .spacing([18.0, 3.0])
+                        .show(ui, |ui| {
+                            let key = |ui: &mut Ui, k: &str| {
+                                ui.label(RichText::new(k).size(12.5).color(theme::ink_faint()));
+                            };
+                            key(ui, "Severity:");
+                            ui.label(
+                                RichText::new(sev_label)
+                                    .strong()
+                                    .size(12.5)
+                                    .color(sev_colour),
+                            );
+                            ui.end_row();
+                            key(ui, "Confidence:");
+                            ui.label(
+                                RichText::new(&issue.confidence)
+                                    .size(12.5)
+                                    .color(theme::ink()),
+                            );
+                            ui.end_row();
+                            key(ui, "Host:");
+                            ui.label(RichText::new(&issue.host).size(12.5).color(theme::ink()));
+                            ui.end_row();
+                            key(ui, "Path:");
+                            ui.label(RichText::new(&issue.path).size(12.5).color(theme::ink()));
+                            ui.end_row();
+                        });
+                    section(ui, "Issue detail", &detail_text(&issue.detail));
+                    if let Some(kb) = knowledge_base().lookup(&issue.name) {
+                        section(
+                            ui,
+                            "Issue background",
+                            &kb.background
+                                .as_deref()
+                                .map(advisory_text)
+                                .unwrap_or_default(),
+                        );
+                        section(
+                            ui,
+                            "Issue remediation",
+                            &kb.remediation
+                                .as_deref()
+                                .map(advisory_text)
+                                .unwrap_or_default(),
+                        );
+                        section(
+                            ui,
+                            "References",
+                            &kb.references
+                                .as_deref()
+                                .map(advisory_text)
+                                .unwrap_or_default(),
+                        );
+                        section(
+                            ui,
+                            "Vulnerability classifications",
+                            &kb.classifications
+                                .as_deref()
+                                .map(advisory_text)
+                                .unwrap_or_default(),
+                        );
+                    }
+                    ui.add_space(8.0);
+                    // Burp's False positive classification (build 52685, burp.Ze1r line 12).
+                    if ui
+                        .button(if issue.false_positive {
+                            "Unmark false positive"
+                        } else {
+                            "Mark as false positive"
+                        })
+                        .clicked()
+                    {
+                        toggle_fp = true;
+                    }
+                    ui.add_space(6.0);
                 });
-                section(ui, "Issue detail", &detail_text(&issue.detail));
-                if let Some(kb) = knowledge_base().lookup(&issue.name) {
-                    section(ui, "Issue background", &kb.background.as_deref().map(advisory_text).unwrap_or_default());
-                    section(ui, "Issue remediation", &kb.remediation.as_deref().map(advisory_text).unwrap_or_default());
-                    section(ui, "References", &kb.references.as_deref().map(advisory_text).unwrap_or_default());
-                    section(ui, "Vulnerability classifications", &kb.classifications.as_deref().map(advisory_text).unwrap_or_default());
-                }
-                ui.add_space(8.0);
-                // Burp's False positive classification (build 52685, burp.Ze1r line 12).
-                if ui.button(if issue.false_positive { "Unmark false positive" } else { "Mark as false positive" }).clicked() {
-                    toggle_fp = true;
-                }
-                ui.add_space(6.0);
-            });
         }
         Some((n, is_response)) => {
             let ev = issue.evidence.get(n);
@@ -370,7 +516,11 @@ pub fn issue_detail(app: &mut App, ui: &mut Ui, issue: &ScanIssue, sev_label: &s
                 (Some(e), true) => e.response.as_deref(),
                 (None, _) => None,
             };
-            let (id, title) = if is_response { ("issue_resp", "Response") } else { ("issue_req", "Request") };
+            let (id, title) = if is_response {
+                ("issue_resp", "Response")
+            } else {
+                ("issue_req", "Request")
+            };
             crate::msgpane::message_pane(ui, id, title, bytes, &mut app.issue_pane, is_response, h);
         }
     }
@@ -383,23 +533,55 @@ mod tests {
 
     #[test]
     fn issue_actions_edit_the_list() {
-        let mk = |id, sev: &str| ScanIssue { id, sev: sev.into(), name: "X".into(), host: "h".into(), path: "/".into(), detail: String::new(), false_positive: false, confidence: "Firm".into(), ts: 0, type_id: 0, evidence: Vec::new(), ident: String::new() };
+        let mk = |id, sev: &str| ScanIssue {
+            id,
+            sev: sev.into(),
+            name: "X".into(),
+            host: "h".into(),
+            path: "/".into(),
+            detail: String::new(),
+            false_positive: false,
+            confidence: "Firm".into(),
+            ts: 0,
+            type_id: 0,
+            evidence: Vec::new(),
+            ident: String::new(),
+        };
         let mut v = vec![mk(1, "high"), mk(2, "low")];
         apply_issue_action(&mut v, 2, &IssueAction::SetSeverity("medium"));
         apply_issue_action(&mut v, 2, &IssueAction::SetConfidence("Certain"));
         apply_issue_action(&mut v, 2, &IssueAction::ToggleFalsePositive);
-        assert_eq!((v[1].sev.as_str(), v[1].confidence.as_str(), v[1].false_positive), ("medium", "Certain", true));
-        assert_eq!(apply_issue_action(&mut v, 1, &IssueAction::Report), Some(vec![1]));
+        assert_eq!(
+            (
+                v[1].sev.as_str(),
+                v[1].confidence.as_str(),
+                v[1].false_positive
+            ),
+            ("medium", "Certain", true)
+        );
+        assert_eq!(
+            apply_issue_action(&mut v, 1, &IssueAction::Report),
+            Some(vec![1])
+        );
         apply_issue_action(&mut v, 1, &IssueAction::Delete);
         assert_eq!(v.iter().map(|i| i.id).collect::<Vec<_>>(), [2]);
     }
 
     #[test]
     fn filter_selects_by_severity_confidence_and_false_positive() {
-        let mk = |sev: &str, conf: &str, fp: bool| ScanIssue { sev: sev.into(), confidence: conf.into(), false_positive: fp, ..Default::default() };
+        let mk = |sev: &str, conf: &str, fp: bool| ScanIssue {
+            sev: sev.into(),
+            confidence: conf.into(),
+            false_positive: fp,
+            ..Default::default()
+        };
         let mut f = IssueFilter::default();
         assert!(f.is_default());
-        assert!(f.matches(&mk("high", "Certain", false)) && f.matches(&mk("info", "Tentative", false)) && f.matches(&mk("low", "Firm", true)));
+        assert!(
+            f.matches(&mk("high", "Certain", false))
+                && f.matches(&mk("info", "Tentative", false))
+                && f.matches(&mk("low", "Firm", true))
+        );
         f.severity[3] = false; // hide Information
         assert!(!f.matches(&mk("info", "Certain", false)));
         assert!(f.matches(&mk("high", "Certain", false)));
@@ -425,14 +607,29 @@ mod tests {
             ..Default::default()
         };
         let issues = vec![
-            mk(1, "info", "Input returned in response (reflected)", "a.test", "/s"),
+            mk(
+                1,
+                "info",
+                "Input returned in response (reflected)",
+                "a.test",
+                "/s",
+            ),
             mk(2, "high", "SQL injection", "b.test", "/z"),
             mk(3, "low", "Unencrypted communications", "a.test", "/"),
             mk(4, "high", "SQL injection", "a.test", "/item"),
-            mk(5, "info", "Input returned in response (reflected)", "a.test", "/a"),
+            mk(
+                5,
+                "info",
+                "Input returned in response (reflected)",
+                "a.test",
+                "/a",
+            ),
         ];
         let by_type = group_issues(&issues, Grouping::IssueType);
-        let shape: Vec<(&str, Vec<u64>)> = by_type.iter().map(|(k, v)| (k.as_str(), v.iter().map(|i| i.id).collect())).collect();
+        let shape: Vec<(&str, Vec<u64>)> = by_type
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.iter().map(|i| i.id).collect()))
+            .collect();
         assert_eq!(
             shape,
             vec![
@@ -442,20 +639,38 @@ mod tests {
             ]
         );
         let by_host = group_issues(&issues, Grouping::Host);
-        assert_eq!(by_host.iter().map(|(k, v)| (k.as_str(), v.len())).collect::<Vec<_>>(), vec![("a.test", 4), ("b.test", 1)]);
+        assert_eq!(
+            by_host
+                .iter()
+                .map(|(k, v)| (k.as_str(), v.len()))
+                .collect::<Vec<_>>(),
+            vec![("a.test", 4), ("b.test", 1)]
+        );
         // Inside a host the high issue leads.
         assert_eq!(by_host[0].1[0].id, 4);
         // No grouping keeps the caller's order in one group.
         let flat = group_issues(&issues, Grouping::None);
         assert_eq!(flat.len(), 1);
-        assert_eq!(flat[0].1.iter().map(|i| i.id).collect::<Vec<_>>(), vec![1, 2, 3, 4, 5]);
+        assert_eq!(
+            flat[0].1.iter().map(|i| i.id).collect::<Vec<_>>(),
+            vec![1, 2, 3, 4, 5]
+        );
     }
 
     #[test]
     fn tabs_follow_burps_numbering() {
         assert_eq!(tab_labels(0), ["Advisory"]);
         assert_eq!(tab_labels(1), ["Advisory", "Request", "Response"]);
-        assert_eq!(tab_labels(2), ["Advisory", "Request 1", "Response 1", "Request 2", "Response 2"]);
+        assert_eq!(
+            tab_labels(2),
+            [
+                "Advisory",
+                "Request 1",
+                "Response 1",
+                "Request 2",
+                "Response 2"
+            ]
+        );
         assert_eq!(tab_target(0), None);
         assert_eq!(tab_target(1), Some((0, false)));
         assert_eq!(tab_target(2), Some((0, true)));
@@ -466,9 +681,15 @@ mod tests {
     #[test]
     fn detail_markup_is_rendered_and_plain_details_are_untouched() {
         let d = detail_text("The <b>q</b> parameter appears to be vulnerable.");
-        assert!(d.contains("q") && d.contains("parameter appears") && !d.contains("<b>"), "{d}");
+        assert!(
+            d.contains("q") && d.contains("parameter appears") && !d.contains("<b>"),
+            "{d}"
+        );
         // No closing tag: plain text, kept byte for byte (a literal '<' stays).
-        assert_eq!(detail_text("Length 5 < 10 for header X"), "Length 5 < 10 for header X");
+        assert_eq!(
+            detail_text("Length 5 < 10 for header X"),
+            "Length 5 < 10 for header X"
+        );
     }
 
     #[test]

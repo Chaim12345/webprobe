@@ -22,7 +22,10 @@ pub struct Organizer {
 
 impl Organizer {
     pub fn new() -> Self {
-        Self { items: Vec::new(), next_id: 1 }
+        Self {
+            items: Vec::new(),
+            next_id: 1,
+        }
     }
 
     /// Store a new item and return its id. `now` is the creation timestamp
@@ -113,8 +116,20 @@ mod tests {
     fn org() -> Organizer {
         let mut o = Organizer::new();
         o.add("Login", "auth flow", "GET /login HTTP/1.1", "200 OK", 10);
-        o.add("Upload", "file upload", "POST /up HTTP/1.1", "201 Created", 20);
-        o.add("Admin", "admin panel", "GET /admin HTTP/1.1", "403 Forbidden", 30);
+        o.add(
+            "Upload",
+            "file upload",
+            "POST /up HTTP/1.1",
+            "201 Created",
+            20,
+        );
+        o.add(
+            "Admin",
+            "admin panel",
+            "GET /admin HTTP/1.1",
+            "403 Forbidden",
+            30,
+        );
         o
     }
 

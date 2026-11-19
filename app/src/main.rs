@@ -368,7 +368,18 @@ pub struct App {
 /// `ts` and `mime` are carried alongside the fields the Logger stores so the
 /// mirroring step stays pure: it never touches `Shared` and can be tested
 /// without a window or a `net::Shared`.
-type HistRow = (u64, u64, String, String, u16, String, String, usize, usize, String);
+type HistRow = (
+    u64,
+    u64,
+    String,
+    String,
+    u16,
+    String,
+    String,
+    usize,
+    usize,
+    String,
+);
 
 impl App {
     /// While a scan off the UI thread asks for them, keep a stock of
@@ -399,7 +410,11 @@ impl App {
     fn sync_logger(&mut self) {
         // Logger's "Logging on" switch: while off, new traffic is not mirrored.
         if !self.log_on {
-            self.log_seen = self.shared.history.with_rows(|h| h.iter().map(|e| e.id).max()).unwrap_or(self.log_seen);
+            self.log_seen = self
+                .shared
+                .history
+                .with_rows(|h| h.iter().map(|e| e.id).max())
+                .unwrap_or(self.log_seen);
             return;
         }
         let seen = self.log_seen;
@@ -516,7 +531,13 @@ fn autosave_signature(app: &App) -> (usize, usize, usize) {
     (
         app.shared.history.len(),
         app.shared.issues.lock().unwrap().len(),
-        app.shared.repeaters.lock().unwrap().iter().map(|r| r.history.len() + r.request.len()).sum(),
+        app.shared
+            .repeaters
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|r| r.history.len() + r.request.len())
+            .sum(),
     )
 }
 
@@ -588,8 +609,15 @@ impl eframe::App for App {
         let busy = self.shared.scan.is_busy()
             || self.shared.rep.is_busy()
             || crate::intruder_ui::is_running(self)
-            || self.seq_live_stop.as_ref().is_some_and(|s| !s.load(Ordering::SeqCst));
-        ctx.request_repaint_after(std::time::Duration::from_millis(if busy { 200 } else { 1000 }));
+            || self
+                .seq_live_stop
+                .as_ref()
+                .is_some_and(|s| !s.load(Ordering::SeqCst));
+        ctx.request_repaint_after(std::time::Duration::from_millis(if busy {
+            200
+        } else {
+            1000
+        }));
 
         // Optional self test: route one request through our own proxy so the
         // passive-audit pipeline can be exercised in screenshot runs.
@@ -606,14 +634,25 @@ impl eframe::App for App {
                         let path = if path_rest.is_empty() { "/" } else { path_rest };
                         let req = format!("GET {path} HTTP/1.1\r\nHost: {auth}\r\nUser-Agent: WebProbe/1.0\r\nConnection: close\r\n\r\n");
                         let out = crate::send_internal_probe(port, req.as_bytes());
-                        sh.log(&format!("Selftest probe got {} byte(s) via proxy :{port}", out.len()));
+                        sh.log(&format!(
+                            "Selftest probe got {} byte(s) via proxy :{port}",
+                            out.len()
+                        ));
                         // verify a request rule was applied if one was preloaded
                         if !sh.mr_request.lock().unwrap().is_empty() {
                             std::thread::sleep(std::time::Duration::from_millis(500));
-                            let hit = sh.history.last().map(|e| e.req_raw.windows(11).any(|w| w == b"WebProbe-MR")).unwrap_or(false);
+                            let hit = sh
+                                .history
+                                .last()
+                                .map(|e| e.req_raw.windows(11).any(|w| w == b"WebProbe-MR"))
+                                .unwrap_or(false);
                             sh.log(&format!(
                                 "Selftest match-and-replace: rule {}",
-                                if hit { "applied (request carries rewritten value)" } else { "not applied" }
+                                if hit {
+                                    "applied (request carries rewritten value)"
+                                } else {
+                                    "not applied"
+                                }
                             ));
                         }
                         // optionally exercise the light active scan on the just-stored request
@@ -621,7 +660,11 @@ impl eframe::App for App {
                             std::thread::sleep(std::time::Duration::from_millis(800));
                             let e = sh.history.last();
                             if let Some(e) = e {
-                                crate::tasks::enqueue(&sh, "Selftest active scan", crate::tasks::TaskKind::Audit(vec![e]));
+                                crate::tasks::enqueue(
+                                    &sh,
+                                    "Selftest active scan",
+                                    crate::tasks::TaskKind::Audit(vec![e]),
+                                );
                             }
                         }
                     }
@@ -661,7 +704,9 @@ pub fn send_internal_probe(port: u16, request: &[u8]) -> Vec<u8> {
     use std::io::{Read, Write};
     let mut out = Vec::new();
     let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
-    if let Ok(mut s) = std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_secs(10)) {
+    if let Ok(mut s) =
+        std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_secs(10))
+    {
         let _ = s.set_read_timeout(Some(std::time::Duration::from_secs(20)));
         if s.write_all(request).is_ok() {
             let mut buf = [0u8; 65536];
@@ -676,7 +721,12 @@ pub fn send_internal_probe(port: u16, request: &[u8]) -> Vec<u8> {
     out
 }
 
-fn schedule_grab(ctx: &egui::Context, path: &std::path::Path, rect: egui::Rect, done: Arc<Mutex<bool>>) {
+fn schedule_grab(
+    ctx: &egui::Context,
+    path: &std::path::Path,
+    rect: egui::Rect,
+    done: Arc<Mutex<bool>>,
+) {
     let painter = egui::Painter::new(
         ctx.clone(),
         egui::LayerId::new(egui::Order::Tooltip, egui::Id::unique("shot_grab")),
@@ -713,8 +763,10 @@ fn schedule_grab(ctx: &egui::Context, path: &std::path::Path, rect: egui::Rect, 
                     *a = 255;
                 }
             }
-            
-            if let Ok(png) = std::panic::catch_unwind(|| util::encode_png(w as u32, h as u32, &flipped)) {
+
+            if let Ok(png) =
+                std::panic::catch_unwind(|| util::encode_png(w as u32, h as u32, &flipped))
+            {
                 std::fs::write(&path, png).is_ok()
             } else {
                 false
@@ -722,9 +774,11 @@ fn schedule_grab(ctx: &egui::Context, path: &std::path::Path, rect: egui::Rect, 
         };
         *done.lock().unwrap() = ok;
     });
-    painter.add(egui::PaintCallback { rect, callback: Arc::new(cb) });
+    painter.add(egui::PaintCallback {
+        rect,
+        callback: Arc::new(cb),
+    });
 }
-
 
 impl App {
     /// The app state with its defaults, over an engine that is already set
@@ -752,7 +806,9 @@ impl App {
                 .unwrap_or(1),
             // QA hook: WEBPROBE_SELECT_ID=<id> preselects a row so the selected-row
             // highlight can be inspected without a pointer.
-            history_sel: std::env::var("WEBPROBE_SELECT_ID").ok().and_then(|v| v.trim().parse().ok()),
+            history_sel: std::env::var("WEBPROBE_SELECT_ID")
+                .ok()
+                .and_then(|v| v.trim().parse().ok()),
             history_multi: table::MultiSelect::default(),
             waker_installed: false,
             mcp: mcp_hook::Mcp::start(),
@@ -764,7 +820,11 @@ impl App {
             target_items: Vec::new(),
             map_cache_len: usize::MAX,
             // Proxy history opens newest-first, like Burp's HTTP history.
-            hist_table: table::TableState { sort_col: 0, sort_asc: false, ..Default::default() },
+            hist_table: table::TableState {
+                sort_col: 0,
+                sort_asc: false,
+                ..Default::default()
+            },
             hist_filter: history_filter::HistoryFilter::default(),
             hist_cache: Arc::new(Vec::new()),
             hist_cache_len: 0,
@@ -775,7 +835,11 @@ impl App {
             target_table: table::TableState::new(),
             toasts: feedback::Toasts::new(),
             shortcuts: shortcuts::Shortcuts::load(),
-            palette: shortcuts::Palette { open: false, query: String::new(), sel: 0 },
+            palette: shortcuts::Palette {
+                open: false,
+                query: String::new(),
+                sel: 0,
+            },
             hotkey_capture: None,
             hotkey_notice: None,
             settings_open: false,
@@ -820,7 +884,10 @@ impl App {
             seq_live_stop: None,
             intercept_cur: None,
             intercept_text: String::new(),
-            intercept_pane: msgpane::PaneState { view: 1, ..Default::default() },
+            intercept_pane: msgpane::PaneState {
+                view: 1,
+                ..Default::default()
+            },
             dec_chain: Vec::new(),
             cmp_items: Vec::new(),
             cmp_sel1: None,
@@ -834,7 +901,10 @@ impl App {
             cmp_hex: false,
             cmp_sync: false,
             cmp_scroll: egui::Vec2::ZERO,
-            cmp_export_path: std::env::temp_dir().join("comparer.html").display().to_string(),
+            cmp_export_path: std::env::temp_dir()
+                .join("comparer.html")
+                .display()
+                .to_string(),
             cmp_unit_label: "Words",
             log_on: true,
             log_table: table::TableState::default(),
@@ -846,7 +916,10 @@ impl App {
             org_resp_pane: msgpane::PaneState::default(),
             intr_target: String::new(),
             intr_update_host: true,
-            intr_pane: msgpane::PaneState { view: 1, ..Default::default() },
+            intr_pane: msgpane::PaneState {
+                view: 1,
+                ..Default::default()
+            },
             intr_dock: 0,
             intr_set_sel: 0,
             intr_add: String::new(),
@@ -879,7 +952,10 @@ impl App {
             new_scan_urls: String::new(),
             new_scan_type: 0,
             scan_lib: Default::default(),
-            rep_req_pane: msgpane::PaneState { view: 1, ..Default::default() },
+            rep_req_pane: msgpane::PaneState {
+                view: 1,
+                ..Default::default()
+            },
             rep_resp_pane: msgpane::PaneState::default(),
             rep_target_edit: false,
             rep_update_cl: true,
@@ -915,7 +991,10 @@ impl App {
             seq_stats: None,
             seq_report: None,
             seq_bits: None,
-            seq_export_path: std::env::temp_dir().join("sequencer-analysis.csv").display().to_string(),
+            seq_export_path: std::env::temp_dir()
+                .join("sequencer-analysis.csv")
+                .display()
+                .to_string(),
             seq_status: String::new(),
             comparer_state: analysis::ComparerState::default(),
             search_query: String::new(),
@@ -947,7 +1026,8 @@ impl App {
 }
 
 /// Set by SIGTERM / SIGINT (see `main`); the next frame closes the window.
-static TERMINATE: std::sync::LazyLock<Arc<std::sync::atomic::AtomicBool>> = std::sync::LazyLock::new(Default::default);
+static TERMINATE: std::sync::LazyLock<Arc<std::sync::atomic::AtomicBool>> =
+    std::sync::LazyLock::new(Default::default);
 
 fn main() {
     // Panic policy "contain and continue" (issue #32): worker panics are
@@ -1008,7 +1088,10 @@ fn main() {
     // Test hook: seed synthetic history, e.g. WEBPROBE_SEED_HISTORY=10000.
     // Used by the performance checks (N-02) and by screenshot runs that need a
     // populated table without network access.
-    if let Some(n) = std::env::var("WEBPROBE_SEED_HISTORY").ok().and_then(|v| v.trim().parse::<usize>().ok()) {
+    if let Some(n) = std::env::var("WEBPROBE_SEED_HISTORY")
+        .ok()
+        .and_then(|v| v.trim().parse::<usize>().ok())
+    {
         let base = shared.next_id.load(Ordering::SeqCst);
         let mut hist = Vec::with_capacity(n);
         for i in 0..n {
@@ -1032,7 +1115,9 @@ fn main() {
                 path: path.clone(),
                 status: status.into(),
                 resp_len: resp.len(),
-                req_raw: format!("{method} {path} HTTP/1.1\r\nHost: h\r\n\r\n").into_bytes().into(),
+                req_raw: format!("{method} {path} HTTP/1.1\r\nHost: h\r\n\r\n")
+                    .into_bytes()
+                    .into(),
                 resp_raw: Some(resp.into_bytes().into()),
                 https: i % 3 == 0,
                 note: None,
@@ -1073,21 +1158,40 @@ fn main() {
     }
     // Test hook: register the built-in example extension, e.g. WEBPROBE_EXT_TEST=1
     if std::env::var("WEBPROBE_EXT_TEST").is_ok() {
-        shared.ext_host.lock().unwrap().extensions.push(ext_host::LoadedExtension::new(ext_host::ExampleHeaderExtension));
+        shared
+            .ext_host
+            .lock()
+            .unwrap()
+            .extensions
+            .push(ext_host::LoadedExtension::new(
+                ext_host::ExampleHeaderExtension,
+            ));
         shared.log("Registered example extension: Example header add (ProxyRequestHandler)");
     }
     // Path B: load a real Montoya .jar extension through the sidecar JVM,
     // e.g. WEBPROBE_EXT_JAR=app/sidecar/demo-ext/demo-ext.jar
     if let Ok(ext_jar) = std::env::var("WEBPROBE_EXT_JAR") {
-        let opts = ext_host::SidecarOptions { startup: true, ..ext_host::SidecarOptions::for_this_session() };
-        match ext_host::JavaSidecar::spawn_opts(&ext_jar, Some(ext_host::HostLink::to_shared(&shared)), opts) {
+        let opts = ext_host::SidecarOptions {
+            startup: true,
+            ..ext_host::SidecarOptions::for_this_session()
+        };
+        match ext_host::JavaSidecar::spawn_opts(
+            &ext_jar,
+            Some(ext_host::HostLink::to_shared(&shared)),
+            opts,
+        ) {
             Ok(sidecar) => {
                 shared.log(&format!(
                     "Sidecar JVM loaded Montoya extension: {} ({})",
                     sidecar.extension_name(),
                     sidecar.hooks_registered()
                 ));
-                shared.ext_host.lock().unwrap().extensions.push(ext_host::LoadedExtension::new(sidecar));
+                shared
+                    .ext_host
+                    .lock()
+                    .unwrap()
+                    .extensions
+                    .push(ext_host::LoadedExtension::new(sidecar));
             }
             Err(e) => shared.log(&format!("Sidecar JVM failed to load {ext_jar}: {e}")),
         }
@@ -1114,7 +1218,9 @@ fn main() {
     #[cfg(windows)]
     let options = if screenshot.is_some() {
         eframe::NativeOptions {
-            viewport: options.viewport.with_window_level(egui::WindowLevel::AlwaysOnBottom),
+            viewport: options
+                .viewport
+                .with_window_level(egui::WindowLevel::AlwaysOnBottom),
             ..options
         }
     } else {
@@ -1122,7 +1228,11 @@ fn main() {
     };
 
     let port_txt = shared.proxy_port.load(Ordering::SeqCst).to_string();
-    let tab = match std::env::var("WEBPROBE_TAB").unwrap_or_default().to_ascii_lowercase().as_str() {
+    let tab = match std::env::var("WEBPROBE_TAB")
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+        .as_str()
+    {
         "target" => ui::Tab::Target,
         "proxy" => ui::Tab::Proxy,
         "scanner" => ui::Tab::Scanner,
@@ -1142,10 +1252,17 @@ fn main() {
     };
     // The default project lives in WebProbe's data directory, not in the
     // directory WebProbe was started from (a checkout must not collect one).
-    let project_path = webprobe_core::paths::Lookup::process().data_dir().join("webprobe-project.json").display().to_string();
+    let project_path = webprobe_core::paths::Lookup::process()
+        .data_dir()
+        .join("webprobe-project.json")
+        .display()
+        .to_string();
     // Debug hook: WEBPROBE_SETTINGS=hotkeys|appearance opens Burp's Settings
     // window on that pane (used by the screenshot checks).
-    let settings_help = match std::env::var("WEBPROBE_SETTINGS").unwrap_or_default().as_str() {
+    let settings_help = match std::env::var("WEBPROBE_SETTINGS")
+        .unwrap_or_default()
+        .as_str()
+    {
         "hotkeys" => ui::SettingsPane::Hotkeys,
         _ => ui::SettingsPane::Appearance,
     };
@@ -1156,8 +1273,12 @@ fn main() {
     // QA hook: WEBPROBE_DENSITY=compact|comfortable and WEBPROBE_THEME=light|dark.
     if std::env::var("WEBPROBE_DENSITY").is_ok() || std::env::var("WEBPROBE_THEME").is_ok() {
         let (p, d, f) = theme::appearance();
-        let p = std::env::var("WEBPROBE_THEME").map(|v| theme::Palette::parse(&v)).unwrap_or(p);
-        let d = std::env::var("WEBPROBE_DENSITY").map(|v| theme::Density::parse(&v)).unwrap_or(d);
+        let p = std::env::var("WEBPROBE_THEME")
+            .map(|v| theme::Palette::parse(&v))
+            .unwrap_or(p);
+        let d = std::env::var("WEBPROBE_DENSITY")
+            .map(|v| theme::Density::parse(&v))
+            .unwrap_or(d);
         theme::set_appearance(p, d, f);
     }
     let palette = shortcuts::Palette {
@@ -1238,7 +1359,11 @@ mod tests {
     fn mirror_appends_new_rows_in_history_order() {
         let mut log = logger::Logger::new(10);
         let mut seen = 0;
-        mirror_history(&mut log, &mut seen, &[row(1, "/a"), row(2, "/b"), row(3, "/c")]);
+        mirror_history(
+            &mut log,
+            &mut seen,
+            &[row(1, "/a"), row(2, "/b"), row(3, "/c")],
+        );
         let paths: Vec<&str> = log.entries.iter().map(|e| e.path.as_str()).collect();
         assert_eq!(paths, vec!["/a", "/b", "/c"]);
         assert_eq!(seen, 3);
@@ -1275,7 +1400,11 @@ mod tests {
         assert_eq!(seen, 2);
 
         // A later call only appends the ids that are new.
-        mirror_history(&mut log, &mut seen, &[row(1, "/a"), row(2, "/b"), row(3, "/c")]);
+        mirror_history(
+            &mut log,
+            &mut seen,
+            &[row(1, "/a"), row(2, "/b"), row(3, "/c")],
+        );
         assert_eq!(log.len(), 3);
         assert_eq!(log.entries[2].path, "/c");
         assert_eq!(seen, 3);
@@ -1285,7 +1414,11 @@ mod tests {
     fn mirror_skips_ids_below_seen_and_advances_past_gaps() {
         let mut log = logger::Logger::new(10);
         let mut seen = 5;
-        mirror_history(&mut log, &mut seen, &[row(3, "/old"), row(6, "/new"), row(9, "/gap")]);
+        mirror_history(
+            &mut log,
+            &mut seen,
+            &[row(3, "/old"), row(6, "/new"), row(9, "/gap")],
+        );
         let paths: Vec<&str> = log.entries.iter().map(|e| e.path.as_str()).collect();
         assert_eq!(paths, vec!["/new", "/gap"]);
         assert_eq!(seen, 9);
@@ -1295,9 +1428,17 @@ mod tests {
     fn mirror_respects_the_logger_cap() {
         let mut log = logger::Logger::new(2);
         let mut seen = 0;
-        mirror_history(&mut log, &mut seen, &[row(1, "/a"), row(2, "/b"), row(3, "/c")]);
+        mirror_history(
+            &mut log,
+            &mut seen,
+            &[row(1, "/a"), row(2, "/b"), row(3, "/c")],
+        );
         let paths: Vec<&str> = log.entries.iter().map(|e| e.path.as_str()).collect();
-        assert_eq!(paths, vec!["/b", "/c"], "oldest evicted, seen still advanced");
+        assert_eq!(
+            paths,
+            vec!["/b", "/c"],
+            "oldest evicted, seen still advanced"
+        );
         assert_eq!(seen, 3);
     }
 
@@ -1313,9 +1454,13 @@ mod tests {
             path: "/a".into(),
             status: "200".into(),
             resp_len: 0,
-            req_raw: b"GET /a HTTP/1.1\r\nHost: example.com\r\n\r\n".to_vec().into(),
+            req_raw: b"GET /a HTTP/1.1\r\nHost: example.com\r\n\r\n"
+                .to_vec()
+                .into(),
             resp_raw: Some(
-                b"HTTP/1.1 200 OK\r\nContent-Type: Application/JSON; charset=utf-8\r\n\r\n{}".to_vec().into(),
+                b"HTTP/1.1 200 OK\r\nContent-Type: Application/JSON; charset=utf-8\r\n\r\n{}"
+                    .to_vec()
+                    .into(),
             ),
             note: None,
             highlight: None,
@@ -1331,7 +1476,11 @@ mod tests {
         };
         assert_eq!(response_mime(&entry), "application/json");
         entry.resp_raw = None;
-        assert_eq!(response_mime(&entry), "bin", "falls back to the URL extension");
+        assert_eq!(
+            response_mime(&entry),
+            "bin",
+            "falls back to the URL extension"
+        );
     }
 }
 
@@ -1342,11 +1491,17 @@ mod layering_tests {
     /// dependency, or a headless build would pull one in.
     #[test]
     fn engine_crate_has_no_gui_dependency() {
-        let manifest = std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("core/Cargo.toml")).unwrap();
+        let manifest = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("core/Cargo.toml"),
+        )
+        .unwrap();
         for gui in ["eframe", "egui", "winit", "glow", "image"] {
             let found = manifest.lines().any(|l| {
                 let l = l.trim_start();
-                !l.starts_with('#') && [" ", "=", "-", "_"].iter().any(|sep| l.starts_with(&format!("{gui}{sep}")))
+                !l.starts_with('#')
+                    && [" ", "=", "-", "_"]
+                        .iter()
+                        .any(|sep| l.starts_with(&format!("{gui}{sep}")))
             });
             assert!(!found, "core/Cargo.toml must not depend on {gui}");
         }

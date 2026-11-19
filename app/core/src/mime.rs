@@ -10,7 +10,9 @@ pub fn burp_mime(content_type: &str, body: &[u8]) -> &'static str {
     let t = ct.split(';').next().unwrap_or("").trim();
     match t {
         "" => {
-            let head: String = String::from_utf8_lossy(&body[..body.len().min(256)]).trim_start().to_ascii_lowercase();
+            let head: String = String::from_utf8_lossy(&body[..body.len().min(256)])
+                .trim_start()
+                .to_ascii_lowercase();
             if head.starts_with("<!doctype html") || head.starts_with("<html") {
                 "HTML"
             } else if head.starts_with('{') || head.starts_with('[') {
@@ -42,7 +44,9 @@ pub fn burp_mime(content_type: &str, body: &[u8]) -> &'static str {
 
 /// Burp's MIME family of a history entry's response ("" without one).
 pub fn burp_mime_of(entry: &HistEntry) -> &'static str {
-    let Some(resp) = &entry.resp_raw else { return "" };
+    let Some(resp) = &entry.resp_raw else {
+        return "";
+    };
     let parts = crate::util::parse_http(resp);
     let value = crate::util::get_header(&parts.headers, "Content-Type").unwrap_or_default();
     burp_mime(&value, &resp[parts.head_len.min(resp.len())..])

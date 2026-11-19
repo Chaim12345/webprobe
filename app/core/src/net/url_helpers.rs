@@ -36,5 +36,9 @@ pub fn path_of(parts: &util::HttpParts) -> String {
         }
         return "/".into();
     }
-    if parts.path.is_empty() { "/".into() } else { parts.path.clone() }
+    if parts.path.is_empty() {
+        "/".into()
+    } else {
+        parts.path.clone()
+    }
 }

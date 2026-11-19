@@ -14,7 +14,8 @@ impl SiteFilter {
     /// asked when the scope matters.
     pub fn keeps(&self, origin: &str, path: &str, in_scope: impl FnOnce() -> bool) -> bool {
         let t = self.text.trim().to_lowercase();
-        if !t.is_empty() && !origin.to_lowercase().contains(&t) && !path.to_lowercase().contains(&t) {
+        if !t.is_empty() && !origin.to_lowercase().contains(&t) && !path.to_lowercase().contains(&t)
+        {
             return false;
         }
         !self.in_scope_only || in_scope()
@@ -25,7 +26,11 @@ impl SiteFilter {
 /// under `prefix` on `host`, or `None`.
 pub fn worst_issue(issues: &[(String, String, usize)], host: &str, prefix: &str) -> Option<usize> {
     let prefix = if prefix.is_empty() { "/" } else { prefix };
-    issues.iter().filter(|(h, p, _)| h == host && p.starts_with(prefix)).map(|(_, _, rank)| *rank).min()
+    issues
+        .iter()
+        .filter(|(h, p, _)| h == host && p.starts_with(prefix))
+        .map(|(_, _, rank)| *rank)
+        .min()
 }
 
 #[cfg(test)]

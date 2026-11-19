@@ -60,7 +60,11 @@ pub fn tokens(data: &[u8], unit: Unit) -> Vec<&[u8]> {
             while i < data.len() {
                 let len = utf8_len(data[i]).min(data.len() - i).max(1);
                 // An invalid sequence is split byte by byte.
-                let len = if std::str::from_utf8(&data[i..i + len]).is_ok() { len } else { 1 };
+                let len = if std::str::from_utf8(&data[i..i + len]).is_ok() {
+                    len
+                } else {
+                    1
+                };
                 out.push(&data[i..i + len]);
                 i += len;
             }
@@ -81,7 +85,8 @@ pub fn tokens(data: &[u8], unit: Unit) -> Vec<&[u8]> {
             for i in 1..=data.len() {
                 // Punctuation is one token per character; words and
                 // whitespace runs are one token each.
-                let boundary = i == data.len() || class(data[i]) != class(data[i - 1]) || class(data[i]) == 2;
+                let boundary =
+                    i == data.len() || class(data[i]) != class(data[i - 1]) || class(data[i]) == 2;
                 if boundary {
                     out.push(&data[start..i]);
                     start = i;
@@ -125,7 +130,11 @@ fn myers<T: PartialEq>(a: &[T], b: &[T], max_d: usize) -> Option<Vec<Op>> {
         let mut k = -d;
         while k <= d {
             let idx = (k + off) as usize;
-            let mut x = if k == -d || (k != d && v[idx - 1] < v[idx + 1]) { v[idx + 1] } else { v[idx - 1] + 1 };
+            let mut x = if k == -d || (k != d && v[idx - 1] < v[idx + 1]) {
+                v[idx + 1]
+            } else {
+                v[idx - 1] + 1
+            };
             let mut y = x - k;
             while x < n && y < m && a[x as usize] == b[y as usize] {
                 x += 1;
@@ -140,7 +149,11 @@ fn myers<T: PartialEq>(a: &[T], b: &[T], max_d: usize) -> Option<Vec<Op>> {
                     let w = &trace[d as usize];
                     let at = |k: isize| w[(k + d + 1) as usize];
                     let k = x - y;
-                    let prev_k = if k == -d || (k != d && at(k - 1) < at(k + 1)) { k + 1 } else { k - 1 };
+                    let prev_k = if k == -d || (k != d && at(k - 1) < at(k + 1)) {
+                        k + 1
+                    } else {
+                        k - 1
+                    };
                     let prev_x = at(prev_k);
                     let prev_y = prev_x - prev_k;
                     while x > prev_x && y > prev_y {
@@ -170,7 +183,10 @@ fn push(spans: &mut Vec<Span>, text: &[u8], kind: Kind) {
     let s = String::from_utf8_lossy(text);
     match spans.last_mut() {
         Some(last) if last.kind == kind => last.text.push_str(&s),
-        _ => spans.push(Span { text: s.into_owned(), kind }),
+        _ => spans.push(Span {
+            text: s.into_owned(),
+            kind,
+        }),
     }
 }
 
@@ -179,13 +195,27 @@ pub fn compare(left: &[u8], right: &[u8], unit: Unit) -> Comparison {
     let a = tokens(left, unit);
     let b = tokens(right, unit);
     let pre = a.iter().zip(&b).take_while(|(x, y)| x == y).count();
-    let suf = a[pre..].iter().rev().zip(b[pre..].iter().rev()).take_while(|(x, y)| x == y).count();
+    let suf = a[pre..]
+        .iter()
+        .rev()
+        .zip(b[pre..].iter().rev())
+        .take_while(|(x, y)| x == y)
+        .count();
     let (am, bm) = (&a[pre..a.len() - suf], &b[pre..b.len() - suf]);
     let (ops, capped) = match myers(am, bm, MAX_EDITS) {
         Some(ops) => (ops, false),
-        None => (am.iter().map(|_| Op::Del).chain(bm.iter().map(|_| Op::Ins)).collect(), true),
+        None => (
+            am.iter()
+                .map(|_| Op::Del)
+                .chain(bm.iter().map(|_| Op::Ins))
+                .collect(),
+            true,
+        ),
     };
-    let mut out = Comparison { capped, ..Default::default() };
+    let mut out = Comparison {
+        capped,
+        ..Default::default()
+    };
     let concat = |t: &[&[u8]]| t.concat();
     push(&mut out.left, &concat(&a[..pre]), Kind::Same);
     push(&mut out.right, &concat(&b[..pre]), Kind::Same);
@@ -264,7 +294,10 @@ pub fn hex_spans(spans: &[Span]) -> Vec<Span> {
     for sp in spans {
         for &b in sp.text.as_bytes() {
             if off.is_multiple_of(16) {
-                push(format!("{}{:08x}  ", if off == 0 { "" } else { "\n" }, off), Kind::Same);
+                push(
+                    format!("{}{:08x}  ", if off == 0 { "" } else { "\n" }, off),
+                    Kind::Same,
+                );
             } else {
                 push(" ".into(), Kind::Same);
             }
@@ -280,12 +313,30 @@ mod tests {
 
     #[test]
     fn hex_view_keeps_kinds_on_bytes() {
-        let spans = vec![Span { text: "ab".into(), kind: Kind::Same }, Span { text: "Z".into(), kind: Kind::Added }];
+        let spans = vec![
+            Span {
+                text: "ab".into(),
+                kind: Kind::Same,
+            },
+            Span {
+                text: "Z".into(),
+                kind: Kind::Added,
+            },
+        ];
         let h = hex_spans(&spans);
         let text: String = h.iter().map(|s| s.text.as_str()).collect();
         assert_eq!(text, "00000000  61 62 5a");
-        assert_eq!(h.last().unwrap(), &Span { text: "5a".into(), kind: Kind::Added });
-        let long: Vec<Span> = vec![Span { text: "x".repeat(17), kind: Kind::Same }];
+        assert_eq!(
+            h.last().unwrap(),
+            &Span {
+                text: "5a".into(),
+                kind: Kind::Added
+            }
+        );
+        let long: Vec<Span> = vec![Span {
+            text: "x".repeat(17),
+            kind: Kind::Same,
+        }];
         let t: String = hex_spans(&long).iter().map(|s| s.text.as_str()).collect();
         assert!(t.contains("\n00000010  78"), "{t}");
     }
@@ -302,7 +353,10 @@ mod tests {
             assert_eq!(tokens(s, unit).concat(), s);
             assert!(tokens(s, unit).iter().all(|t| !t.is_empty()));
         }
-        let w: Vec<String> = tokens(b"user=ann  smith!", Unit::Words).iter().map(|t| String::from_utf8_lossy(t).into_owned()).collect();
+        let w: Vec<String> = tokens(b"user=ann  smith!", Unit::Words)
+            .iter()
+            .map(|t| String::from_utf8_lossy(t).into_owned())
+            .collect();
         assert_eq!(w, ["user", "=", "ann", "  ", "smith", "!"]);
         let c = tokens("a\u{e9}\u{20ac}".as_bytes(), Unit::Chars);
         assert_eq!(c.len(), 3);
@@ -312,32 +366,65 @@ mod tests {
 
     #[test]
     fn words_marks_modified_deleted_and_added() {
-        let c = compare(b"session=abc; role=user; theme=dark", b"session=xyz; role=user; theme=dark; lang=en", Unit::Words);
+        let c = compare(
+            b"session=abc; role=user; theme=dark",
+            b"session=xyz; role=user; theme=dark; lang=en",
+            Unit::Words,
+        );
         assert_eq!(c.differences, 2);
         assert_eq!(
             kinds(&c.left),
-            vec![("session=".into(), Kind::Same), ("abc".into(), Kind::Modified), ("; role=user; theme=dark".into(), Kind::Same)]
+            vec![
+                ("session=".into(), Kind::Same),
+                ("abc".into(), Kind::Modified),
+                ("; role=user; theme=dark".into(), Kind::Same)
+            ]
         );
         assert_eq!(
             kinds(&c.right),
-            vec![("session=".into(), Kind::Same), ("xyz".into(), Kind::Modified), ("; role=user; theme=dark".into(), Kind::Same), ("; lang=en".into(), Kind::Added)]
+            vec![
+                ("session=".into(), Kind::Same),
+                ("xyz".into(), Kind::Modified),
+                ("; role=user; theme=dark".into(), Kind::Same),
+                ("; lang=en".into(), Kind::Added)
+            ]
         );
         let d = compare(b"a b c", b"a c", Unit::Words);
-        assert_eq!(kinds(&d.left).iter().filter(|(_, k)| *k == Kind::Deleted).count(), 1);
+        assert_eq!(
+            kinds(&d.left)
+                .iter()
+                .filter(|(_, k)| *k == Kind::Deleted)
+                .count(),
+            1
+        );
         assert!(d.right.iter().all(|s| s.kind == Kind::Same));
     }
 
     #[test]
     fn bytes_and_chars_find_single_changes() {
-        let c = compare(b"Content-Length: 1234\r\n", b"Content-Length: 1284\r\n", Unit::Bytes);
+        let c = compare(
+            b"Content-Length: 1234\r\n",
+            b"Content-Length: 1284\r\n",
+            Unit::Bytes,
+        );
         assert_eq!(c.differences, 1);
-        assert_eq!(c.left.iter().find(|s| s.kind == Kind::Modified).unwrap().text, "3");
+        assert_eq!(
+            c.left
+                .iter()
+                .find(|s| s.kind == Kind::Modified)
+                .unwrap()
+                .text,
+            "3"
+        );
         let e = compare("caf\u{e9}".as_bytes(), "cafe".as_bytes(), Unit::Chars);
         assert_eq!(e.left.last().unwrap().text, "\u{e9}");
         assert_eq!(e.right.last().unwrap().text, "e");
         // Identical inputs: one Same span each, no differences.
         let same = compare(b"x y", b"x y", Unit::Words);
-        assert_eq!((same.differences, same.left.len(), same.right.len()), (0, 1, 1));
+        assert_eq!(
+            (same.differences, same.left.len(), same.right.len()),
+            (0, 1, 1)
+        );
         let empty = compare(b"", b"abc", Unit::Bytes);
         assert_eq!(empty.right[0].kind, Kind::Added);
     }
@@ -364,7 +451,11 @@ mod tests {
         let b: Vec<u8> = (0..20_000u32).map(|i| (i % 5) as u8 + b'k').collect();
         let t = std::time::Instant::now();
         assert!(compare(&a, &b, Unit::Bytes).capped);
-        assert!(t.elapsed() < std::time::Duration::from_secs(3), "{:?}", t.elapsed());
+        assert!(
+            t.elapsed() < std::time::Duration::from_secs(3),
+            "{:?}",
+            t.elapsed()
+        );
     }
 
     #[test]
@@ -372,7 +463,10 @@ mod tests {
         let c = compare(b"<a>1</a>", b"<a>2</a>", Unit::Words);
         let html = export_html(&c, "Word compare of #1 and #2");
         assert!(html.starts_with("<!DOCTYPE html>"));
-        assert!(html.contains("<span class=\"mod\">1</span>") && html.contains("<span class=\"mod\">2</span>"));
+        assert!(
+            html.contains("<span class=\"mod\">1</span>")
+                && html.contains("<span class=\"mod\">2</span>")
+        );
         assert!(html.contains("&lt;a&gt;") && !html.contains("<a>"));
         assert!(html.contains("1 difference(s)"));
     }

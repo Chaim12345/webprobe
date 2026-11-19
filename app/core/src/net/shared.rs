@@ -186,7 +186,11 @@ impl Shared {
             crawl_capture: AtomicBool::new(true),
             site_links: Mutex::new(std::collections::BTreeSet::new()),
             crawl_items: Default::default(),
-            h2c_upgrade: AtomicBool::new(std::env::var("WEBPROBE_H2C").map(|v| v == "1").unwrap_or(false)),
+            h2c_upgrade: AtomicBool::new(
+                std::env::var("WEBPROBE_H2C")
+                    .map(|v| v == "1")
+                    .unwrap_or(false),
+            ),
             attack: Mutex::new(Arc::new(Attack {
                 running: AtomicBool::new(false),
                 stop: AtomicBool::new(false),
@@ -204,13 +208,19 @@ impl Shared {
                 // editor (line numbers, hex, find, font size) can be inspected.
                 request: std::env::var("WEBPROBE_SEED_REPEATER")
                     .ok()
-                    .and_then(|p| crate::util::read_text_file_capped(std::path::Path::new(&p), crate::util::MAX_TEXT_FILE_BYTES).ok())
+                    .and_then(|p| {
+                        crate::util::read_text_file_capped(
+                            std::path::Path::new(&p),
+                            crate::util::MAX_TEXT_FILE_BYTES,
+                        )
+                        .ok()
+                    })
                     .unwrap_or_default(),
                 response: None,
                 result_line: String::new(),
-            history: Vec::new(),
-            hist_pos: 0,
-            ws: None,
+                history: Vec::new(),
+                hist_pos: 0,
+                ws: None,
             }]),
             messages: std::sync::atomic::AtomicUsize::new(0),
             next_id: AtomicU64::new(1),
@@ -271,7 +281,9 @@ impl Shared {
             keep_alive: AtomicBool::new(false),
             tls_bypass: Mutex::new(Vec::new()),
             client_certs: Mutex::new(Vec::new()),
-            tls_roots: Mutex::new(rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned())),
+            tls_roots: Mutex::new(rustls::RootCertStore::from_iter(
+                webpki_roots::TLS_SERVER_ROOTS.iter().cloned(),
+            )),
             pool: Mutex::new(std::collections::HashMap::new()),
             tls_pool: Mutex::new(std::collections::HashMap::new()),
             listeners: Mutex::new(Vec::new()),
@@ -326,7 +338,11 @@ impl Shared {
     /// The upstream route for a destination host (Settings > Network >
     /// Upstream proxy servers, then the global setting).
     pub fn upstream_for(&self, host: &str) -> crate::upstream::UpstreamConfig {
-        crate::upstream::choose(&self.upstream_rules.lock().unwrap(), &self.upstream.lock().unwrap(), host)
+        crate::upstream::choose(
+            &self.upstream_rules.lock().unwrap(),
+            &self.upstream.lock().unwrap(),
+            host,
+        )
     }
 
     /// Extension request hooks (Montoya-shaped, Path A): run every enabled
@@ -334,7 +350,14 @@ impl Shared {
     /// The registry is only locked to take the list, not while hooks run.
     /// `ann` collects the exchange's Montoya annotations (comment and
     /// highlight for Proxy history).
-    pub fn ext_handle_request(&self, svc: &crate::ext_host::HttpService, method: &str, path: &str, req: &mut Vec<u8>, ann: &mut crate::ext_host::Annotations) -> bool {
+    pub fn ext_handle_request(
+        &self,
+        svc: &crate::ext_host::HttpService,
+        method: &str,
+        path: &str,
+        req: &mut Vec<u8>,
+        ann: &mut crate::ext_host::Annotations,
+    ) -> bool {
         let exts = self.ext_host.lock().unwrap().active();
         if exts.is_empty() {
             return true;
@@ -346,17 +369,31 @@ impl Shared {
 
     /// Extension response hooks: false means one dropped the message. Issues
     /// the extensions reported are added for `host` + `path`.
-    pub fn ext_handle_response(&self, svc: &crate::ext_host::HttpService, method: &str, path: &str, req: &[u8], resp: &mut Vec<u8>, ann: &mut crate::ext_host::Annotations) -> bool {
+    pub fn ext_handle_response(
+        &self,
+        svc: &crate::ext_host::HttpService,
+        method: &str,
+        path: &str,
+        req: &[u8],
+        resp: &mut Vec<u8>,
+        ann: &mut crate::ext_host::Annotations,
+    ) -> bool {
         let exts = self.ext_host.lock().unwrap().active();
         if exts.is_empty() {
             return true;
         }
-        let pass = crate::ext_host::run_response_hooks_annotated(&exts, svc, method, path, req, resp, ann);
+        let pass =
+            crate::ext_host::run_response_hooks_annotated(&exts, svc, method, path, req, resp, ann);
         self.collect_ext_issues(&exts, &svc.host, path);
         pass
     }
 
-    fn collect_ext_issues(&self, exts: &[Arc<dyn crate::ext_host::ProxyHooks>], host: &str, path: &str) {
+    fn collect_ext_issues(
+        &self,
+        exts: &[Arc<dyn crate::ext_host::ProxyHooks>],
+        host: &str,
+        path: &str,
+    ) {
         let issues: Vec<crate::scan::ScanIssue> = exts
             .iter()
             .flat_map(|e| e.take_issues())
@@ -368,8 +405,16 @@ impl Shared {
                 },
                 type_id: crate::scan::issue_type_id(&i.name),
                 name: i.name,
-                host: if i.host.is_empty() { host.to_string() } else { i.host },
-                path: if i.path.is_empty() { path.split('?').next().unwrap_or("").to_string() } else { i.path },
+                host: if i.host.is_empty() {
+                    host.to_string()
+                } else {
+                    i.host
+                },
+                path: if i.path.is_empty() {
+                    path.split('?').next().unwrap_or("").to_string()
+                } else {
+                    i.path
+                },
                 detail: i.detail,
                 false_positive: false,
                 confidence: match i.confidence.as_str() {

@@ -42,21 +42,37 @@ impl PassiveState {
     /// (burp.Zcn0.ZG): remembered without a value unless already known.
     pub(crate) fn note_password_field(&self, host: &str, path: &str, field: &str) {
         let mut f = self.forms.lock().unwrap();
-        f.entry(host.to_string()).or_default().entry(path.to_string()).or_default().entry(field.to_string()).or_insert(None);
+        f.entry(host.to_string())
+            .or_default()
+            .entry(path.to_string())
+            .or_default()
+            .entry(field.to_string())
+            .or_insert(None);
     }
 
     /// A request to `host` `path` with these (name, raw value) parameters
     /// (burp.Zcn0.Zc / ZW): each parameter named like a known password field
     /// records its value when it looks like a password, else clears it.
     /// Returns the passwords this request submitted.
-    pub(crate) fn submit(&self, host: &str, path: &str, params: &[(String, String)], request: &[u8]) -> Vec<Submitted> {
+    pub(crate) fn submit(
+        &self,
+        host: &str,
+        path: &str,
+        params: &[(String, String)],
+        request: &[u8],
+    ) -> Vec<Submitted> {
         let mut f = self.forms.lock().unwrap();
-        let Some(fields) = f.get_mut(host).and_then(|h| h.get_mut(path)) else { return Vec::new() };
+        let Some(fields) = f.get_mut(host).and_then(|h| h.get_mut(path)) else {
+            return Vec::new();
+        };
         let mut out = Vec::new();
         for (name, value) in params {
             if let Some(slot) = fields.get_mut(name) {
                 if password_like(value) {
-                    let s = Submitted { value: value.clone(), request: request.to_vec() };
+                    let s = Submitted {
+                        value: value.clone(),
+                        request: request.to_vec(),
+                    };
                     *slot = Some(s.clone());
                     out.push(s);
                 } else {
@@ -71,7 +87,19 @@ impl PassiveState {
     /// submitted to (burp.Zcn0.ZQ).
     pub(crate) fn submitted_on(&self, host: &str) -> Vec<(String, Submitted)> {
         let f = self.forms.lock().unwrap();
-        f.get(host).map(|paths| paths.iter().flat_map(|(p, fields)| fields.values().flatten().map(move |s| (p.clone(), s.clone()))).collect()).unwrap_or_default()
+        f.get(host)
+            .map(|paths| {
+                paths
+                    .iter()
+                    .flat_map(|(p, fields)| {
+                        fields
+                            .values()
+                            .flatten()
+                            .map(move |s| (p.clone(), s.clone()))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 }
 
@@ -82,14 +110,35 @@ mod tests {
     #[test]
     fn remembers_submitted_passwords_per_host_and_path() {
         let s = PassiveState::default();
-        assert!(s.submit("h", "/login", &[("pw".into(), "hunter22".into())], b"r").is_empty(), "unknown field");
+        assert!(
+            s.submit("h", "/login", &[("pw".into(), "hunter22".into())], b"r")
+                .is_empty(),
+            "unknown field"
+        );
         s.note_password_field("h", "/login", "pw");
-        assert!(s.submit("h", "/login", &[("pw".into(), "short".into())], b"r").is_empty());
-        let got = s.submit("h", "/login", &[("user".into(), "bob".into()), ("pw".into(), "hunter22".into())], b"r");
+        assert!(s
+            .submit("h", "/login", &[("pw".into(), "short".into())], b"r")
+            .is_empty());
+        let got = s.submit(
+            "h",
+            "/login",
+            &[
+                ("user".into(), "bob".into()),
+                ("pw".into(), "hunter22".into()),
+            ],
+            b"r",
+        );
         assert_eq!(got.len(), 1);
-        assert_eq!(s.submitted_on("h"), vec![("/login".to_string(), got[0].clone())]);
+        assert_eq!(
+            s.submitted_on("h"),
+            vec![("/login".to_string(), got[0].clone())]
+        );
         s.note_password_field("h", "/login", "pw");
-        assert_eq!(s.submitted_on("h").len(), 1, "a known field keeps its value");
+        assert_eq!(
+            s.submitted_on("h").len(),
+            1,
+            "a known field keeps its value"
+        );
         assert!(s.submitted_on("other").is_empty());
         s.clear();
         assert!(s.submitted_on("h").is_empty());

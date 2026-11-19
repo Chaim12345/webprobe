@@ -11,16 +11,29 @@ pub(crate) fn comparer(app: &mut App, ui: &mut Ui) {
     // "Compare ... Words / Bytes" opening a comparison window.
     ui.horizontal(|ui| {
         ui.add_space(4.0);
-        ui.label(RichText::new("Comparer").strong().size(15.0).color(theme::ink()));
+        ui.label(
+            RichText::new("Comparer")
+                .strong()
+                .size(15.0)
+                .color(theme::ink()),
+        );
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.add_space(8.0);
-            let _ = ui.add(egui::Button::new(RichText::new(theme::icon::QUESTION).size(16.0)).frame(false)).on_hover_text("Help: see Discover > Documentation");
+            let _ = ui
+                .add(
+                    egui::Button::new(RichText::new(theme::icon::QUESTION).size(16.0)).frame(false),
+                )
+                .on_hover_text("Help: see Discover > Documentation");
         });
     });
     ui.label(RichText::new("This function lets you do a word- or byte-level comparison between different data. You can load, paste, or send data here from other tools and then select the comparison you want to perform.").size(12.5).color(theme::ink_dim()));
     ui.add_space(8.0);
     let items = app.cmp_items.clone();
-    let cols = [table::Column::new("#", 70.0), table::Column::new("Length", 70.0), table::Column::new("Data", 900.0)];
+    let cols = [
+        table::Column::new("#", 70.0),
+        table::Column::new("Length", 70.0),
+        table::Column::new("Data", 900.0),
+    ];
     let full_h = ui.available_height();
     let btn_w = 96.0;
     egui_extras::StripBuilder::new(ui)
@@ -30,61 +43,106 @@ pub(crate) fn comparer(app: &mut App, ui: &mut Ui) {
             strip.cell(|ui| {
                 for (k, label) in ["Select item 1:", "Select item 2:"].iter().enumerate() {
                     ui.label(RichText::new(*label).size(12.5).color(theme::ink()));
-                    let mut st = if k == 0 { app.cmp_table1.clone() } else { app.cmp_table2.clone() };
+                    let mut st = if k == 0 {
+                        app.cmp_table1.clone()
+                    } else {
+                        app.cmp_table2.clone()
+                    };
                     let sel = if k == 0 { app.cmp_sel1 } else { app.cmp_sel2 };
                     let mut pick = None;
                     let rows: Vec<(usize, String)> = items.iter().cloned().enumerate().collect();
                     let h = (full_h / 2.0 - 70.0).max(100.0);
                     ui.allocate_ui(egui::vec2(ui.available_width(), h + 28.0), |ui| {
-                        table::table_body(ui, if k == 0 { "cmp1" } else { "cmp2" }, &cols, &rows, &mut st, 19.0, h, &mut |(i, d), ui| {
-                            let rr = egui::Rect::from_min_size(ui.cursor().min, egui::vec2(ui.available_width(), 19.0));
-                            if sel == Some(*i) {
-                                ui.painter().rect_filled(rr, 0.0, theme::selection_bg());
-                            }
-                            let preview: String = d.chars().take(200).map(|c| if c.is_control() { ' ' } else { c }).collect();
-                            // The row's click area is registered before its
-                            // cells, under an id unique to this table and row,
-                            // so a click lands even when press and release come
-                            // in one frame (automation) and the two tables'
-                            // rows never share an id.
-                            let row = ui.interact(rr, egui::Id::unique(("comparer-row", k, *i)), egui::Sense::click());
-                            ui.horizontal(|ui| {
-                                table::cells(ui, &cols, &table::TableState::default(), 19.0, &[
-                                    (0, (i + 1).to_string(), None),
-                                    (1, d.len().to_string(), None),
-                                    (2, preview, None),
-                                ]);
-                            });
-                            if row.clicked() {
-                                pick = Some(*i);
-                            }
-                        });
+                        table::table_body(
+                            ui,
+                            if k == 0 { "cmp1" } else { "cmp2" },
+                            &cols,
+                            &rows,
+                            &mut st,
+                            19.0,
+                            h,
+                            &mut |(i, d), ui| {
+                                let rr = egui::Rect::from_min_size(
+                                    ui.cursor().min,
+                                    egui::vec2(ui.available_width(), 19.0),
+                                );
+                                if sel == Some(*i) {
+                                    ui.painter().rect_filled(rr, 0.0, theme::selection_bg());
+                                }
+                                let preview: String = d
+                                    .chars()
+                                    .take(200)
+                                    .map(|c| if c.is_control() { ' ' } else { c })
+                                    .collect();
+                                // The row's click area is registered before its
+                                // cells, under an id unique to this table and row,
+                                // so a click lands even when press and release come
+                                // in one frame (automation) and the two tables'
+                                // rows never share an id.
+                                let row = ui.interact(
+                                    rr,
+                                    egui::Id::unique(("comparer-row", k, *i)),
+                                    egui::Sense::click(),
+                                );
+                                ui.horizontal(|ui| {
+                                    table::cells(
+                                        ui,
+                                        &cols,
+                                        &table::TableState::default(),
+                                        19.0,
+                                        &[
+                                            (0, (i + 1).to_string(), None),
+                                            (1, d.len().to_string(), None),
+                                            (2, preview, None),
+                                        ],
+                                    );
+                                });
+                                if row.clicked() {
+                                    pick = Some(*i);
+                                }
+                            },
+                        );
                     });
                     if k == 0 {
                         app.cmp_table1 = st;
-                        if pick.is_some() { app.cmp_sel1 = pick; }
+                        if pick.is_some() {
+                            app.cmp_sel1 = pick;
+                        }
                     } else {
                         app.cmp_table2 = st;
-                        if pick.is_some() { app.cmp_sel2 = pick; }
+                        if pick.is_some() {
+                            app.cmp_sel2 = pick;
+                        }
                     }
                     ui.add_space(8.0);
                 }
             });
             strip.cell(|ui| {
                 ui.add_space(26.0);
-                let b = |ui: &mut Ui, t: &str| ui.add_sized([btn_w, 22.0], egui::Button::new(RichText::new(t).strong())).clicked();
+                let b = |ui: &mut Ui, t: &str| {
+                    ui.add_sized([btn_w, 22.0], egui::Button::new(RichText::new(t).strong()))
+                        .clicked()
+                };
                 if b(ui, "Paste") {
                     app.cmp_paste_pending = true;
-                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::RequestPaste);
+                    ui.ctx()
+                        .send_viewport_cmd(egui::ViewportCommand::RequestPaste);
                 }
                 if b(ui, "Load") {
                     if let Ok(t) = std::fs::read(app.cmp_load_path.trim()) {
                         app.cmp_items.push(String::from_utf8_lossy(&t).into_owned());
                     } else {
-                        feedback::toast(feedback::Level::Error, "Could not read the file named below");
+                        feedback::toast(
+                            feedback::Level::Error,
+                            "Could not read the file named below",
+                        );
                     }
                 }
-                ui.add(egui::TextEdit::singleline(&mut app.cmp_load_path).hint_text("file path").desired_width(btn_w));
+                ui.add(
+                    egui::TextEdit::singleline(&mut app.cmp_load_path)
+                        .hint_text("file path")
+                        .desired_width(btn_w),
+                );
                 if b(ui, "Remove") {
                     if let Some(i) = app.cmp_sel1.or(app.cmp_sel2) {
                         if i < app.cmp_items.len() {
@@ -103,10 +161,18 @@ pub(crate) fn comparer(app: &mut App, ui: &mut Ui) {
                 ui.label(RichText::new("Compare ...").size(12.5).color(theme::ink()));
                 let ready = app.cmp_sel1.is_some() && app.cmp_sel2.is_some();
                 for (label, bytes) in [("Words", false), ("Bytes", true), ("Characters", false)] {
-                    if ui.add_enabled(ready, egui::Button::new(RichText::new(label).strong()).min_size(egui::vec2(btn_w, 22.0))).clicked() {
+                    if ui
+                        .add_enabled(
+                            ready,
+                            egui::Button::new(RichText::new(label).strong())
+                                .min_size(egui::vec2(btn_w, 22.0)),
+                        )
+                        .clicked()
+                    {
                         let (a, b) = (app.cmp_sel1.unwrap(), app.cmp_sel2.unwrap());
                         app.comparer_state.left = app.cmp_items.get(a).cloned().unwrap_or_default();
-                        app.comparer_state.right = app.cmp_items.get(b).cloned().unwrap_or_default();
+                        app.comparer_state.right =
+                            app.cmp_items.get(b).cloned().unwrap_or_default();
                         app.comparer_state.recompute();
                         let unit = match label {
                             "Bytes" => crate::compare::Unit::Bytes,
@@ -114,7 +180,11 @@ pub(crate) fn comparer(app: &mut App, ui: &mut Ui) {
                             _ => crate::compare::Unit::Words,
                         };
                         app.cmp_unit_label = label;
-                        app.cmp_result = Some(crate::compare::compare(app.comparer_state.left.as_bytes(), app.comparer_state.right.as_bytes(), unit));
+                        app.cmp_result = Some(crate::compare::compare(
+                            app.comparer_state.left.as_bytes(),
+                            app.comparer_state.right.as_bytes(),
+                            unit,
+                        ));
                         app.cmp_window = Some((a, b, bytes));
                         app.cmp_hex = bytes;
                         app.cmp_scroll = egui::Vec2::ZERO;
@@ -123,7 +193,15 @@ pub(crate) fn comparer(app: &mut App, ui: &mut Ui) {
             });
         });
     if app.cmp_paste_pending {
-        let pasted: Option<String> = ui.input(|i| i.events.iter().find_map(|e| if let egui::Event::Paste(t) = e { Some(t.clone()) } else { None }));
+        let pasted: Option<String> = ui.input(|i| {
+            i.events.iter().find_map(|e| {
+                if let egui::Event::Paste(t) = e {
+                    Some(t.clone())
+                } else {
+                    None
+                }
+            })
+        });
         if let Some(t) = pasted {
             app.cmp_items.push(t);
             app.cmp_paste_pending = false;
@@ -140,20 +218,39 @@ pub(crate) fn comparer(app: &mut App, ui: &mut Ui) {
             "Characters" => "Character",
             _ => "Word",
         };
-        let title = format!("{unit_name} compare of #{} and #{} ({} differences)", a + 1, b + 1, result.differences);
-        egui::Window::new(title.clone()).default_pos(crate::theme::window_pos(ui.ctx()))
+        let title = format!(
+            "{unit_name} compare of #{} and #{} ({} differences)",
+            a + 1,
+            b + 1,
+            result.differences
+        );
+        egui::Window::new(title.clone())
+            .default_pos(crate::theme::window_pos(ui.ctx()))
             .open(&mut open)
             .default_size(egui::vec2(1000.0, 620.0))
             .show(ui.ctx(), |ui| {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new("Key:").size(12.5));
-                    for (name, col) in [("Modified", 0x9FBBD4), ("Deleted", 0xEE95A1), ("Added", 0x9BCF88)] {
-                        egui::Frame::NONE.fill(c(col)).inner_margin(egui::Margin::symmetric(6, 1)).show(ui, |ui| {
-                            ui.label(RichText::new(name).size(12.0).color(egui::Color32::BLACK));
-                        });
+                    for (name, col) in [
+                        ("Modified", 0x9FBBD4),
+                        ("Deleted", 0xEE95A1),
+                        ("Added", 0x9BCF88),
+                    ] {
+                        egui::Frame::NONE
+                            .fill(c(col))
+                            .inner_margin(egui::Margin::symmetric(6, 1))
+                            .show(ui, |ui| {
+                                ui.label(
+                                    RichText::new(name).size(12.0).color(egui::Color32::BLACK),
+                                );
+                            });
                     }
                     if result.capped {
-                        ui.label(RichText::new("(very different: the middle is shown as one block)").size(12.0).color(theme::ink_faint()));
+                        ui.label(
+                            RichText::new("(very different: the middle is shown as one block)")
+                                .size(12.0)
+                                .color(theme::ink_faint()),
+                        );
                     }
                     // Burp's result window: Text | Hex view and Sync views.
                     ui.add_space(16.0);
@@ -162,14 +259,32 @@ pub(crate) fn comparer(app: &mut App, ui: &mut Ui) {
                     ui.add_space(8.0);
                     ui.checkbox(&mut app.cmp_sync, "Sync views");
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.button("Export").on_hover_text("Write both sides with the differences highlighted as an HTML page").clicked() {
+                        if ui
+                            .button("Export")
+                            .on_hover_text(
+                                "Write both sides with the differences highlighted as an HTML page",
+                            )
+                            .clicked()
+                        {
                             let path = app.cmp_export_path.trim().to_string();
-                            match std::fs::write(&path, crate::compare::export_html(&result, &title)) {
-                                Ok(()) => feedback::toast(feedback::Level::Success, format!("Comparison written to {path}")),
-                                Err(e) => feedback::toast(feedback::Level::Error, format!("Could not write {path}: {e}")),
+                            match std::fs::write(
+                                &path,
+                                crate::compare::export_html(&result, &title),
+                            ) {
+                                Ok(()) => feedback::toast(
+                                    feedback::Level::Success,
+                                    format!("Comparison written to {path}"),
+                                ),
+                                Err(e) => feedback::toast(
+                                    feedback::Level::Error,
+                                    format!("Could not write {path}: {e}"),
+                                ),
                             }
                         }
-                        ui.add(egui::TextEdit::singleline(&mut app.cmp_export_path).desired_width(220.0));
+                        ui.add(
+                            egui::TextEdit::singleline(&mut app.cmp_export_path)
+                                .desired_width(220.0),
+                        );
                     });
                 });
                 ui.add_space(6.0);
@@ -177,7 +292,15 @@ pub(crate) fn comparer(app: &mut App, ui: &mut Ui) {
                 // highlighted runs keep their position.
                 let shown = |t: &str| -> String {
                     if bytes {
-                        t.chars().map(|ch| if ch == '\n' || ch == '\r' || ch == '\t' || !ch.is_control() { ch } else { '\u{b7}' }).collect()
+                        t.chars()
+                            .map(|ch| {
+                                if ch == '\n' || ch == '\r' || ch == '\t' || !ch.is_control() {
+                                    ch
+                                } else {
+                                    '\u{b7}'
+                                }
+                            })
+                            .collect()
                     } else {
                         t.to_string()
                     }
@@ -186,7 +309,11 @@ pub(crate) fn comparer(app: &mut App, ui: &mut Ui) {
                 let mut scroll = app.cmp_scroll;
                 ui.columns(2, |cols2| {
                     for (side, col) in cols2.iter_mut().enumerate() {
-                        let raw = if side == 0 { &result.left } else { &result.right };
+                        let raw = if side == 0 {
+                            &result.left
+                        } else {
+                            &result.right
+                        };
                         let len: usize = raw.iter().map(|s| s.text.len()).sum();
                         let hexed;
                         let spans = if hex {
@@ -195,10 +322,21 @@ pub(crate) fn comparer(app: &mut App, ui: &mut Ui) {
                         } else {
                             raw
                         };
-                        col.label(RichText::new(format!("#{}  Length: {len}", if side == 0 { a + 1 } else { b + 1 })).size(12.5).color(theme::ink_dim()));
-                        let mut area = egui::ScrollArea::both().id_salt(("cmpw", side)).auto_shrink([false, false]);
+                        col.label(
+                            RichText::new(format!(
+                                "#{}  Length: {len}",
+                                if side == 0 { a + 1 } else { b + 1 }
+                            ))
+                            .size(12.5)
+                            .color(theme::ink_dim()),
+                        );
+                        let mut area = egui::ScrollArea::both()
+                            .id_salt(("cmpw", side))
+                            .auto_shrink([false, false]);
                         if sync {
-                            area = area.vertical_scroll_offset(scroll.y).horizontal_scroll_offset(scroll.x);
+                            area = area
+                                .vertical_scroll_offset(scroll.y)
+                                .horizontal_scroll_offset(scroll.x);
                         }
                         let shown_area = area.show(col, |ui| {
                             let font = egui::FontId::monospace(12.5);
@@ -210,11 +348,32 @@ pub(crate) fn comparer(app: &mut App, ui: &mut Ui) {
                                     crate::compare::Kind::Deleted => c(0xEE95A1),
                                     crate::compare::Kind::Added => c(0x9BCF88),
                                 };
-                                let fg = if sp.kind == crate::compare::Kind::Same { theme::editor_colours().text } else { egui::Color32::BLACK };
-                                let text = if hex { sp.text.clone() } else { shown(&sp.text) };
-                                job.append(&text, 0.0, egui::TextFormat { font_id: font.clone(), color: fg, background: bg, ..Default::default() });
+                                let fg = if sp.kind == crate::compare::Kind::Same {
+                                    theme::editor_colours().text
+                                } else {
+                                    egui::Color32::BLACK
+                                };
+                                let text = if hex {
+                                    sp.text.clone()
+                                } else {
+                                    shown(&sp.text)
+                                };
+                                job.append(
+                                    &text,
+                                    0.0,
+                                    egui::TextFormat {
+                                        font_id: font.clone(),
+                                        color: fg,
+                                        background: bg,
+                                        ..Default::default()
+                                    },
+                                );
                             }
-                            job.wrap.max_width = if hex { f32::INFINITY } else { ui.available_width() };
+                            job.wrap.max_width = if hex {
+                                f32::INFINITY
+                            } else {
+                                ui.available_width()
+                            };
                             ui.label(job);
                         });
                         // With Sync views, whichever side moved leads both.
@@ -239,7 +398,12 @@ pub(crate) fn burp_ai(app: &mut App, ui: &mut Ui) {
     // WebProbe AI: Burp's AI assistant slot, backed by an OpenAI-compatible
     // chat endpoint you configure (nothing is sent until one is set).
     ui.horizontal(|ui| {
-        ui.label(RichText::new(format!("{}  WebProbe AI", theme::icon::LIGHTNING)).strong().size(15.0).color(theme::ink()));
+        ui.label(
+            RichText::new(format!("{}  WebProbe AI", theme::icon::LIGHTNING))
+                .strong()
+                .size(15.0)
+                .color(theme::ink()),
+        );
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui.button("New chat").clicked() {
                 app.ai.messages.lock().unwrap().clear();
@@ -294,10 +458,22 @@ pub(crate) fn burp_ai(app: &mut App, ui: &mut Ui) {
     ui.add_space(6.0);
     ui.horizontal(|ui| {
         let w = (ui.available_width() - 90.0).max(200.0);
-        let r = ui.add(egui::TextEdit::multiline(&mut app.ai.input).desired_rows(3).desired_width(w).hint_text("Ask WebProbe AI"));
-        let enter = r.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter) && i.modifiers.ctrl);
+        let r = ui.add(
+            egui::TextEdit::multiline(&mut app.ai.input)
+                .desired_rows(3)
+                .desired_width(w)
+                .hint_text("Ask WebProbe AI"),
+        );
+        let enter =
+            r.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter) && i.modifiers.ctrl);
         let can = app.ai.configured() && !busy;
-        if ui.add_enabled(can, egui::Button::new(RichText::new("Send").strong().color(egui::Color32::WHITE)).fill(c(theme::ORANGE_1)).min_size(egui::vec2(70.0, 26.0)))
+        if ui
+            .add_enabled(
+                can,
+                egui::Button::new(RichText::new("Send").strong().color(egui::Color32::WHITE))
+                    .fill(c(theme::ORANGE_1))
+                    .min_size(egui::vec2(70.0, 26.0)),
+            )
             .on_disabled_hover_text("Set the model endpoint first")
             .clicked()
             || (enter && can)
@@ -354,7 +530,13 @@ pub(crate) fn logger_view(app: &mut App, ui: &mut Ui) {
         });
     });
     ui.add_space(6.0);
-    let rows: Vec<crate::logger::LogEntry> = app.logger.filter(&app.log_filter).into_iter().rev().cloned().collect();
+    let rows: Vec<crate::logger::LogEntry> = app
+        .logger
+        .filter(&app.log_filter)
+        .into_iter()
+        .rev()
+        .cloned()
+        .collect();
     if rows.is_empty() {
         ui.add_space(ui.available_height() * 0.25);
         ui.vertical_centered(|ui| {
@@ -387,28 +569,49 @@ pub(crate) fn logger_view(app: &mut App, ui: &mut Ui) {
                 let mut pick = None;
                 let sel = app.log_sel;
                 let h = ui.available_height();
-                table::table_body(ui, "logger_rows", &cols, &rows, &mut st, 19.0, h, &mut |e, ui| {
-                    let rr = egui::Rect::from_min_size(ui.cursor().min, egui::vec2(ui.available_width(), 19.0));
-                    if sel == Some(e.id) {
-                        ui.painter().rect_filled(rr, 0.0, theme::selection_bg());
-                    }
-                    let row = ui.horizontal(|ui| {
-                        table::cells(ui, &cols, &table::TableState::default(), 19.0, &[
-                            (0, e.id.to_string(), None),
-                            (1, history_time(e.ts), None),
-                            (2, e.tool.clone(), None),
-                            (3, e.method.clone(), None),
-                            (4, e.host.clone(), None),
-                            (5, e.path.clone(), None),
-                            (6, e.status.clone(), None),
-                            (7, e.resp_len.to_string(), None),
-                            (8, e.mime.clone(), None),
-                        ]);
-                    }).response.interact(egui::Sense::click());
-                    if row.clicked() {
-                        pick = Some(e.id);
-                    }
-                });
+                table::table_body(
+                    ui,
+                    "logger_rows",
+                    &cols,
+                    &rows,
+                    &mut st,
+                    19.0,
+                    h,
+                    &mut |e, ui| {
+                        let rr = egui::Rect::from_min_size(
+                            ui.cursor().min,
+                            egui::vec2(ui.available_width(), 19.0),
+                        );
+                        if sel == Some(e.id) {
+                            ui.painter().rect_filled(rr, 0.0, theme::selection_bg());
+                        }
+                        let row = ui
+                            .horizontal(|ui| {
+                                table::cells(
+                                    ui,
+                                    &cols,
+                                    &table::TableState::default(),
+                                    19.0,
+                                    &[
+                                        (0, e.id.to_string(), None),
+                                        (1, history_time(e.ts), None),
+                                        (2, e.tool.clone(), None),
+                                        (3, e.method.clone(), None),
+                                        (4, e.host.clone(), None),
+                                        (5, e.path.clone(), None),
+                                        (6, e.status.clone(), None),
+                                        (7, e.resp_len.to_string(), None),
+                                        (8, e.mime.clone(), None),
+                                    ],
+                                );
+                            })
+                            .response
+                            .interact(egui::Sense::click());
+                        if row.clicked() {
+                            pick = Some(e.id);
+                        }
+                    },
+                );
                 app.log_table = st;
                 if pick.is_some() {
                     app.log_sel = pick;
@@ -421,9 +624,15 @@ pub(crate) fn logger_view(app: &mut App, ui: &mut Ui) {
                 let (req, resp) = match &row {
                     Some(r) if r.hist_id.is_some() => {
                         let e = r.hist_id.and_then(|id| app.shared.history.get(id));
-                        (e.as_ref().map(|e| util::origin_form(&e.req_raw)), e.and_then(|e| e.resp_raw).map(|b| b.to_vec()))
+                        (
+                            e.as_ref().map(|e| util::origin_form(&e.req_raw)),
+                            e.and_then(|e| e.resp_raw).map(|b| b.to_vec()),
+                        )
                     }
-                    Some(r) => (r.request.as_ref().map(|b| b.to_vec()), r.response.as_ref().map(|b| b.to_vec())),
+                    Some(r) => (
+                        r.request.as_ref().map(|b| b.to_vec()),
+                        r.response.as_ref().map(|b| b.to_vec()),
+                    ),
                     None => (None, None),
                 };
                 let h = ui.available_height().max(full * 0.5);
@@ -431,8 +640,28 @@ pub(crate) fn logger_view(app: &mut App, ui: &mut Ui) {
                     .size(egui_extras::Size::remainder())
                     .size(egui_extras::Size::remainder())
                     .horizontal(|mut s2| {
-                        s2.cell(|ui| crate::msgpane::message_pane(ui, "log_req", "Request", req.as_deref(), &mut app.log_req_pane, false, h));
-                        s2.cell(|ui| crate::msgpane::message_pane(ui, "log_resp", "Response", resp.as_deref(), &mut app.log_resp_pane, true, h));
+                        s2.cell(|ui| {
+                            crate::msgpane::message_pane(
+                                ui,
+                                "log_req",
+                                "Request",
+                                req.as_deref(),
+                                &mut app.log_req_pane,
+                                false,
+                                h,
+                            )
+                        });
+                        s2.cell(|ui| {
+                            crate::msgpane::message_pane(
+                                ui,
+                                "log_resp",
+                                "Response",
+                                resp.as_deref(),
+                                &mut app.log_resp_pane,
+                                true,
+                                h,
+                            )
+                        });
                     });
             });
         });

@@ -20,7 +20,10 @@ pub fn host_matches(pattern: &str, host: &str) -> bool {
     if let Some(rest) = pattern.strip_prefix('*') {
         if let Some(suffix) = rest.strip_prefix('.') {
             let dotted = format!(".{suffix}");
-            if let Some(prefix) = host.to_ascii_lowercase().strip_suffix(&dotted.to_ascii_lowercase()) {
+            if let Some(prefix) = host
+                .to_ascii_lowercase()
+                .strip_suffix(&dotted.to_ascii_lowercase())
+            {
                 return !prefix.is_empty() && !prefix.contains('.');
             }
         }
@@ -36,7 +39,11 @@ pub fn tls_client_config(shared: &Shared, host: &str) -> std::sync::Arc<rustls::
     match H2_CHOICE.with(|c| c.get()).and_then(|c| c.want_h2) {
         Some(h2) => {
             let mut c = (*base).clone();
-            c.alpn_protocols = vec![if h2 { b"h2".to_vec() } else { b"http/1.1".to_vec() }];
+            c.alpn_protocols = vec![if h2 {
+                b"h2".to_vec()
+            } else {
+                b"http/1.1".to_vec()
+            }];
             Arc::new(c)
         }
         None => base,

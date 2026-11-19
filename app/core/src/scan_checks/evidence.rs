@@ -21,7 +21,9 @@ impl Recorder {
 
     /// Keep an exchange sent by other means.
     pub(crate) fn note(&self, key: &str, raw: &[u8], resp: Option<&[u8]>) {
-        self.log.borrow_mut().push((key.to_string(), ScanEvidence::new(raw, resp)));
+        self.log
+            .borrow_mut()
+            .push((key.to_string(), ScanEvidence::new(raw, resp)));
     }
 
     fn last_index(&self, key: &str) -> Option<usize> {
@@ -43,8 +45,13 @@ impl Recorder {
 
     /// The latest exchange for `key` and every exchange after it.
     pub(crate) fn since_last(&self, key: &str) -> Vec<ScanEvidence> {
-        let Some(i) = self.last_index(key) else { return Vec::new() };
-        self.log.borrow()[i..].iter().map(|(_, e)| e.clone()).collect()
+        let Some(i) = self.last_index(key) else {
+            return Vec::new();
+        };
+        self.log.borrow()[i..]
+            .iter()
+            .map(|(_, e)| e.clone())
+            .collect()
     }
 }
 

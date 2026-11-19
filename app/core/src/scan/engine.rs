@@ -26,7 +26,12 @@ pub const CRAWL_MAX_UNIQUE_LOCATIONS: usize = 1500;
 /// header injection check (simple and `>`-enclosed payloads, burp.Zrok).
 /// It is empty unless a public Collaborator (interactsh) is active, as Burp
 /// runs the check only with Collaborator enabled (burp.Zgcg.Zw: Za.Ze()).
-pub fn start_active_scan(shared: Arc<Shared>, entry: HistEntry, oob: &[(String, String, String)], smtp: &[SmtpOob]) {
+pub fn start_active_scan(
+    shared: Arc<Shared>,
+    entry: HistEntry,
+    oob: &[(String, String, String)],
+    smtp: &[SmtpOob],
+) {
     if shared.scan.is_busy() {
         shared.log("Scanner: a scan is already running");
         return;
@@ -57,12 +62,27 @@ pub fn start_active_scan(shared: Arc<Shared>, entry: HistEntry, oob: &[(String, 
     if !shared.stored.in_batch() {
         shared.stored.clear();
     }
-    let item = shared.stored.add_item(crate::stored::Item { entry: entry.clone(), req: req.clone(), host: host.clone(), port, https: entry.https });
-    shared.scan.total.store(planned_progress(&entry, points.len(), oob.len()), Ordering::SeqCst);
+    let item = shared.stored.add_item(crate::stored::Item {
+        entry: entry.clone(),
+        req: req.clone(),
+        host: host.clone(),
+        port,
+        https: entry.https,
+    });
+    shared.scan.total.store(
+        planned_progress(&entry, points.len(), oob.len()),
+        Ordering::SeqCst,
+    );
     shared.scan.done.store(0, Ordering::SeqCst);
     shared.scan.stop.store(false, Ordering::SeqCst);
-    shared.scan.direct.store(shared.scan.running_task.load(Ordering::SeqCst) == 0, Ordering::SeqCst);
-    shared.log(&format!("Scanner: active scan started ({} insertion point(s), light active checks)", points.len()));
+    shared.scan.direct.store(
+        shared.scan.running_task.load(Ordering::SeqCst) == 0,
+        Ordering::SeqCst,
+    );
+    shared.log(&format!(
+        "Scanner: active scan started ({} insertion point(s), light active checks)",
+        points.len()
+    ));
 
     let settings = checks::Settings {
         speed: ScanSpeed::from_u8(shared.scan_speed.load(Ordering::SeqCst)),
@@ -76,7 +96,18 @@ pub fn start_active_scan(shared: Arc<Shared>, entry: HistEntry, oob: &[(String, 
         // refused and the task runner waited forever.
         let _guard = guard;
         let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let cx = checks::ScanCtx::start(shared.clone(), entry, req, parts, host, port, settings, oob, smtp, item);
+            let cx = checks::ScanCtx::start(
+                shared.clone(),
+                entry,
+                req,
+                parts,
+                host,
+                port,
+                settings,
+                oob,
+                smtp,
+                item,
+            );
             checks::run_stored_seeding(&cx, &points);
             checks::run_point_checks(&cx, &points);
             checks::run_request_checks(&cx);
@@ -88,9 +119,18 @@ pub fn start_active_scan(shared: Arc<Shared>, entry: HistEntry, oob: &[(String, 
             }
         }));
         if let Err(e) = run {
-            let why = e.downcast_ref::<&str>().map(|s| s.to_string()).or_else(|| e.downcast_ref::<String>().cloned()).unwrap_or_default();
-            shared.log(&format!("Scanner: the scan stopped on an internal error: {why}"));
-            crate::notice::toast(crate::notice::Level::Error, format!("Active scan stopped on an internal error: {why}"));
+            let why = e
+                .downcast_ref::<&str>()
+                .map(|s| s.to_string())
+                .or_else(|| e.downcast_ref::<String>().cloned())
+                .unwrap_or_default();
+            shared.log(&format!(
+                "Scanner: the scan stopped on an internal error: {why}"
+            ));
+            crate::notice::toast(
+                crate::notice::Level::Error,
+                format!("Active scan stopped on an internal error: {why}"),
+            );
             return;
         }
         drop(_guard);
@@ -113,9 +153,13 @@ pub fn planned_progress(entry: &HistEntry, points: usize, oob: usize) -> usize {
     let total = points * 16 + 1 + oob + 5 + 8 + crate::burp_checks::openapi_paths(false).len();
     let csrf_parts = util::parse_http(&entry.req_raw);
     let csrf_ct = util::get_header(&csrf_parts.headers, "Content-Type").unwrap_or_default();
-    let csrf_body = String::from_utf8_lossy(&entry.req_raw[csrf_parts.head_len.min(entry.req_raw.len())..]).into_owned();
+    let csrf_body =
+        String::from_utf8_lossy(&entry.req_raw[csrf_parts.head_len.min(entry.req_raw.len())..])
+            .into_owned();
     let csrf_total = if csrf_applicable(&csrf_parts.method, &csrf_ct, &csrf_parts.headers)
-        && csrf_ct.to_ascii_lowercase().contains("x-www-form-urlencoded")
+        && csrf_ct
+            .to_ascii_lowercase()
+            .contains("x-www-form-urlencoded")
         && !csrf_body.trim().is_empty()
         && !strip_csrf_params(&csrf_body).1.is_empty()
     {
@@ -155,11 +199,22 @@ pub fn pooled_oob(shared: &Shared, req_raw: &[u8]) -> Vec<(String, String, Strin
     }
     // Wake the front end now so it stocks the pool on its next frame.
     shared.wake();
-    let ids = shared.oob.take(slots.len(), std::time::Duration::from_millis(1500));
+    let ids = shared
+        .oob
+        .take(slots.len(), std::time::Duration::from_millis(1500));
     if ids.len() < slots.len() && !ids.is_empty() {
-        shared.log(&format!("Scanner: only {} of {} Collaborator ids available; {} out-of-band probe(s) skipped", ids.len(), slots.len(), slots.len() - ids.len()));
+        shared.log(&format!(
+            "Scanner: only {} of {} Collaborator ids available; {} out-of-band probe(s) skipped",
+            ids.len(),
+            slots.len(),
+            slots.len() - ids.len()
+        ));
     }
-    slots.into_iter().zip(ids).map(|(slot, (token, dns))| (slot, token, dns)).collect()
+    slots
+        .into_iter()
+        .zip(ids)
+        .map(|(slot, (token, dns))| (slot, token, dns))
+        .collect()
 }
 
 /// Stage A4 for a batch whose items are all audited: wait for the last
@@ -170,11 +225,18 @@ pub fn run_stored_stage_claimed(shared: &Arc<Shared>) {
     if shared.stored.pairs().is_empty() {
         return;
     }
-    let Some(guard) = crate::scan_run::try_claim(shared) else { return };
+    let Some(guard) = crate::scan_run::try_claim(shared) else {
+        return;
+    };
     shared.scan.done.store(0, Ordering::SeqCst);
-    shared.scan.total.store(shared.stored.pairs().len() * 30, Ordering::SeqCst);
+    shared
+        .scan
+        .total
+        .store(shared.stored.pairs().len() * 30, Ordering::SeqCst);
     let _tool = crate::net::tool_scope("Scanner");
-    let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| checks::run_stored_stage(shared)));
+    let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        checks::run_stored_stage(shared)
+    }));
     if run.is_err() {
         shared.log("Scanner: the stored input stage stopped on an internal error");
     }
@@ -191,7 +253,10 @@ pub struct StoredBatch {
 
 impl StoredBatch {
     pub fn open(shared: &Arc<Shared>) -> StoredBatch {
-        StoredBatch { shared: shared.clone(), opened: shared.stored.open_batch() }
+        StoredBatch {
+            shared: shared.clone(),
+            opened: shared.stored.open_batch(),
+        }
     }
 }
 
@@ -234,49 +299,87 @@ pub fn crawl_and_audit(shared: &Arc<Shared>, start_urls: &[String], audit_only: 
             match crate::headless::pick(Some(&engine)) {
                 Some(eng) => match crate::headless::js_crawl(eng.as_ref(), shared, url) {
                     Ok(urls) => {
-                        shared.log(&format!("{} crawl of {url}: {} page(s)", eng.name(), urls.len()));
-                        let mut keys: std::collections::BTreeSet<String> = items.iter().map(|e| format!("{} {}", e.method, crate::crawl::location_key(&e.path))).collect();
+                        shared.log(&format!(
+                            "{} crawl of {url}: {} page(s)",
+                            eng.name(),
+                            urls.len()
+                        ));
+                        let mut keys: std::collections::BTreeSet<String> = items
+                            .iter()
+                            .map(|e| {
+                                format!("{} {}", e.method, crate::crawl::location_key(&e.path))
+                            })
+                            .collect();
                         for u in urls {
                             for it in crate::crawl::crawl_single(shared, &u) {
-                                if keys.insert(format!("{} {}", it.method, crate::crawl::location_key(&it.path))) {
+                                if keys.insert(format!(
+                                    "{} {}",
+                                    it.method,
+                                    crate::crawl::location_key(&it.path)
+                                )) {
                                     items.push(it);
                                 }
                             }
                         }
                     }
-                    Err(e) => shared.log(&format!("{} crawl unavailable ({e}); static crawl only", eng.name())),
+                    Err(e) => shared.log(&format!(
+                        "{} crawl unavailable ({e}); static crawl only",
+                        eng.name()
+                    )),
                 },
-                None => shared.log(&format!("Headless engine {engine} is not installed; static crawl only")),
+                None => shared.log(&format!(
+                    "Headless engine {engine} is not installed; static crawl only"
+                )),
             }
         } else if !audit_only {
             match crate::crawl::browser_crawl(shared, url) {
                 Ok(mut seen) => {
-                    shared.log(&format!("Browser crawl of {url}: {} request(s) observed", seen.len()));
+                    shared.log(&format!(
+                        "Browser crawl of {url}: {} request(s) observed",
+                        seen.len()
+                    ));
                     // Per location, prefer an exchange whose response the
                     // browser itself received (what Burp audits passively): a
                     // replay of a stateful request, such as a socket.io poll
                     // with a stale sid, gets a different answer.
                     seen.sort_by_key(|r| r.resp_head.is_none() || r.resp_body.is_none());
-                    let mut keys: std::collections::BTreeSet<String> =
-                        items.iter().map(|e| format!("{} {}", e.method, crate::crawl::location_key(&e.path))).collect();
+                    let mut keys: std::collections::BTreeSet<String> = items
+                        .iter()
+                        .map(|e| format!("{} {}", e.method, crate::crawl::location_key(&e.path)))
+                        .collect();
                     // Only the start origin is crawled and audited, whatever
                     // the browser was led to request.
                     let start = crate::crawl::origin_of(url).unwrap_or_default();
-                    for r in seen.into_iter().filter(|r| crate::crawl::same_origin(&r.url, &start)) {
-                        let path = r.url.split_once("://").and_then(|(_, x)| x.find('/').map(|i| x[i..].to_string())).unwrap_or_else(|| "/".into());
+                    for r in seen
+                        .into_iter()
+                        .filter(|r| crate::crawl::same_origin(&r.url, &start))
+                    {
+                        let path = r
+                            .url
+                            .split_once("://")
+                            .and_then(|(_, x)| x.find('/').map(|i| x[i..].to_string()))
+                            .unwrap_or_else(|| "/".into());
                         let path = path.split('#').next().unwrap_or("/").to_string();
-                        if keys.insert(format!("{} {}", r.method, crate::crawl::location_key(&path))) {
+                        if keys.insert(format!(
+                            "{} {}",
+                            r.method,
+                            crate::crawl::location_key(&path)
+                        )) {
                             items.push(crate::crawl::replay_seen(shared, &r));
                         }
                     }
                 }
-                Err(e) => shared.log(&format!("Browser crawl unavailable ({e}); static crawl only")),
+                Err(e) => shared.log(&format!(
+                    "Browser crawl unavailable ({e}); static crawl only"
+                )),
             }
         }
         shared.log(&format!("Crawl of {url}: {} item(s)", items.len()));
         shared.add_crawl_items(items.iter().cloned());
         let static_refs = crate::crawl::static_reference_corpus(&items);
-        for e in items.into_iter().filter(|e| crate::crawl::auditable(e) || crate::crawl::referenced_static(e, &static_refs)) {
+        for e in items.into_iter().filter(|e| {
+            crate::crawl::auditable(e) || crate::crawl::referenced_static(e, &static_refs)
+        }) {
             if shared.scan.stop.load(Ordering::SeqCst) {
                 return;
             }

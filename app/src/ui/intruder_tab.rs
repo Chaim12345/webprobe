@@ -6,11 +6,18 @@ use super::*;
 /// Set the Host header of `req` to the authority of `target` (Burp's
 /// "Update Host header to match target").
 pub(crate) fn with_target_host(req: &str, target: &str) -> String {
-    let auth = target.split_once("://").map(|x| x.1).unwrap_or(target).trim_end_matches('/');
+    let auth = target
+        .split_once("://")
+        .map(|x| x.1)
+        .unwrap_or(target)
+        .trim_end_matches('/');
     let auth = auth
         .strip_suffix(":80")
         .filter(|_| target.starts_with("http://"))
-        .or_else(|| auth.strip_suffix(":443").filter(|_| target.starts_with("https://")))
+        .or_else(|| {
+            auth.strip_suffix(":443")
+                .filter(|_| target.starts_with("https://"))
+        })
         .unwrap_or(auth);
     String::from_utf8_lossy(&net::replace_or_add_header(req.as_bytes(), "Host", auth)).into_owned()
 }
@@ -51,19 +58,25 @@ pub(crate) fn intruder(app: &mut App, ui: &mut Ui) {
         return;
     }
     if app.intr_target.is_empty() {
-        let host = util::get_header(&util::parse_http(app.intr_req.as_bytes()).headers, "Host").unwrap_or_default();
+        let host = util::get_header(&util::parse_http(app.intr_req.as_bytes()).headers, "Host")
+            .unwrap_or_default();
         app.intr_target = format!("{}://{host}", if app.intr_https { "https" } else { "http" });
     }
 
-    let positions = intruder::Template::parse(&app.intr_req).map(|t| t.positions()).unwrap_or(0);
+    let positions = intruder::Template::parse(&app.intr_req)
+        .map(|t| t.positions())
+        .unwrap_or(0);
     while app.intr_sets.len() < positions.max(1) {
         app.intr_sets.push(String::new());
     }
     while app.intr_sources.len() < app.intr_sets.len() {
-        app.intr_sources.push(intruder::PayloadSource::SimpleList { items: Vec::new() });
+        app.intr_sources
+            .push(intruder::PayloadSource::SimpleList { items: Vec::new() });
     }
     let needed = app.intr_attack.sets_needed(positions).max(1);
-    let bases: Vec<String> = intruder::Template::parse(&app.intr_req).map(|t| t.position_values().to_vec()).unwrap_or_default();
+    let bases: Vec<String> = intruder::Template::parse(&app.intr_req)
+        .map(|t| t.position_values().to_vec())
+        .unwrap_or_default();
     let sets: Vec<Vec<String>> = app
         .intr_sets
         .iter()
@@ -71,7 +84,11 @@ pub(crate) fn intruder(app: &mut App, ui: &mut Ui) {
         .take(needed)
         .enumerate()
         .map(|(i, (text, source))| match source {
-            intruder::PayloadSource::SimpleList { .. } => text.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect(),
+            intruder::PayloadSource::SimpleList { .. } => text
+                .lines()
+                .map(|l| l.trim().to_string())
+                .filter(|l| !l.is_empty())
+                .collect(),
             other => other.generate_for_base(bases.get(i).map(String::as_str).unwrap_or("")),
         })
         .collect();
@@ -372,7 +389,10 @@ pub(crate) fn payload_source_config(ui: &mut Ui, src: &mut intruder::PayloadSour
     }
     fn row(ui: &mut Ui, label: &str, add: impl FnOnce(&mut Ui)) {
         ui.horizontal(|ui| {
-            ui.add_sized([120.0, 20.0], egui::Label::new(RichText::new(label).size(12.5).color(theme::ink())));
+            ui.add_sized(
+                [120.0, 20.0],
+                egui::Label::new(RichText::new(label).size(12.5).color(theme::ink())),
+            );
             add(ui);
         });
     }
@@ -381,43 +401,103 @@ pub(crate) fn payload_source_config(ui: &mut Ui, src: &mut intruder::PayloadSour
         P::RuntimeFile { path } => {
             note(ui, "This payload type lets you configure a file from which to read payload strings at runtime.");
             row(ui, "Select file:", |ui| {
-                ui.add(egui::TextEdit::singleline(path).hint_text("/path/to/payloads.txt").desired_width(230.0));
+                ui.add(
+                    egui::TextEdit::singleline(path)
+                        .hint_text("/path/to/payloads.txt")
+                        .desired_width(230.0),
+                );
             });
         }
-        P::Numbers { from, to, step, base, min_digits, .. } => {
+        P::Numbers {
+            from,
+            to,
+            step,
+            base,
+            min_digits,
+            ..
+        } => {
             note(ui, "This payload type generates numeric payloads within a given range and in a specified format.");
-            row(ui, "From:", |ui| { ui.add(egui::DragValue::new(from)); });
-            row(ui, "To:", |ui| { ui.add(egui::DragValue::new(to)); });
-            row(ui, "Step:", |ui| { ui.add(egui::DragValue::new(step).range(1..=i64::MAX)); });
+            row(ui, "From:", |ui| {
+                ui.add(egui::DragValue::new(from));
+            });
+            row(ui, "To:", |ui| {
+                ui.add(egui::DragValue::new(to));
+            });
+            row(ui, "Step:", |ui| {
+                ui.add(egui::DragValue::new(step).range(1..=i64::MAX));
+            });
             row(ui, "Base:", |ui| {
                 ui.radio_value(base, intruder::NumberBase::Decimal, "Decimal");
                 ui.radio_value(base, intruder::NumberBase::Hex, "Hex");
             });
-            row(ui, "Min integer digits:", |ui| { ui.add(egui::DragValue::new(min_digits).range(0..=64)); });
+            row(ui, "Min integer digits:", |ui| {
+                ui.add(egui::DragValue::new(min_digits).range(0..=64));
+            });
         }
-        P::Dates { from, to, step_secs, format } => {
+        P::Dates {
+            from,
+            to,
+            step_secs,
+            format,
+        } => {
             note(ui, "This payload type generates date payloads within a given range and in a specified format (UTC).");
-            row(ui, "From (Unix time):", |ui| { ui.add(egui::DragValue::new(from)); });
-            row(ui, "To (Unix time):", |ui| { ui.add(egui::DragValue::new(to)); });
-            row(ui, "Step (seconds):", |ui| { ui.add(egui::DragValue::new(step_secs).range(1..=u64::MAX)); });
-            row(ui, "Format:", |ui| { ui.add(egui::TextEdit::singleline(format).desired_width(160.0)); });
+            row(ui, "From (Unix time):", |ui| {
+                ui.add(egui::DragValue::new(from));
+            });
+            row(ui, "To (Unix time):", |ui| {
+                ui.add(egui::DragValue::new(to));
+            });
+            row(ui, "Step (seconds):", |ui| {
+                ui.add(egui::DragValue::new(step_secs).range(1..=u64::MAX));
+            });
+            row(ui, "Format:", |ui| {
+                ui.add(egui::TextEdit::singleline(format).desired_width(160.0));
+            });
         }
-        P::BruteForcer { charset, min_len, max_len } => {
+        P::BruteForcer {
+            charset,
+            min_len,
+            max_len,
+        } => {
             note(ui, "This payload type generates payloads of specified lengths that contain all permutations of a specified character set.");
-            row(ui, "Character set:", |ui| { ui.add(egui::TextEdit::singleline(charset).desired_width(230.0)); });
-            row(ui, "Min length:", |ui| { ui.add(egui::DragValue::new(min_len).range(0..=32)); });
-            row(ui, "Max length:", |ui| { ui.add(egui::DragValue::new(max_len).range(0..=32)); });
+            row(ui, "Character set:", |ui| {
+                ui.add(egui::TextEdit::singleline(charset).desired_width(230.0));
+            });
+            row(ui, "Min length:", |ui| {
+                ui.add(egui::DragValue::new(min_len).range(0..=32));
+            });
+            row(ui, "Max length:", |ui| {
+                ui.add(egui::DragValue::new(max_len).range(0..=32));
+            });
         }
         P::NullPayloads { count } => {
             note(ui, "This payload type generates payloads whose value is an empty string. With no payload markers configured, this can be used to repeatedly issue the base request unmodified.");
-            row(ui, "Generate:", |ui| { ui.add(egui::DragValue::new(count).range(1..=1_000_000)); ui.label("payloads"); });
+            row(ui, "Generate:", |ui| {
+                ui.add(egui::DragValue::new(count).range(1..=1_000_000));
+                ui.label("payloads");
+            });
         }
-        P::CaseModification { items, no_change, lower, upper, propername, proper_name } => {
+        P::CaseModification {
+            items,
+            no_change,
+            lower,
+            upper,
+            propername,
+            proper_name,
+        } => {
             note(ui, "This payload type lets you configure a list of strings and apply various case modifications to each item on the list.");
             let mut text = items.join("\n");
             // split('\n') keeps the trailing empty line so Enter starts a new item;
             // generate() skips blank items.
-            if ui.add(egui::TextEdit::multiline(&mut text).desired_rows(5).desired_width(ui.available_width() - 8.0).font(egui::TextStyle::Monospace)).changed() {
+            if ui
+                .add(
+                    egui::TextEdit::multiline(&mut text)
+                        .desired_rows(5)
+                        .desired_width(ui.available_width() - 8.0)
+                        .font(egui::TextStyle::Monospace),
+                )
+                .changed()
+            {
                 *items = text.split('\n').map(str::to_string).collect();
             }
             ui.checkbox(no_change, "No change");
@@ -428,16 +508,32 @@ pub(crate) fn payload_source_config(ui: &mut Ui, src: &mut intruder::PayloadSour
         }
         P::CharacterFrobber { base } => {
             note(ui, "This payload type operates on the base value of the payload position and modifies the value of each character position in turn by incrementing its ASCII code by one.");
-            row(ui, "Base value:", |ui| { ui.add(egui::TextEdit::singleline(base).desired_width(230.0)); });
+            row(ui, "Base value:", |ui| {
+                ui.add(egui::TextEdit::singleline(base).desired_width(230.0));
+            });
         }
-        P::CharacterBlocks { base, min_len, max_len } => {
+        P::CharacterBlocks {
+            base,
+            min_len,
+            max_len,
+        } => {
             note(ui, "This payload type generates blocks of a given input string, with specified lengths.");
-            row(ui, "Base string:", |ui| { ui.add(egui::TextEdit::singleline(base).desired_width(230.0)); });
-            row(ui, "Min length:", |ui| { ui.add(egui::DragValue::new(min_len).range(0..=100_000)); });
-            row(ui, "Max length:", |ui| { ui.add(egui::DragValue::new(max_len).range(0..=100_000)); });
+            row(ui, "Base string:", |ui| {
+                ui.add(egui::TextEdit::singleline(base).desired_width(230.0));
+            });
+            row(ui, "Min length:", |ui| {
+                ui.add(egui::DragValue::new(min_len).range(0..=100_000));
+            });
+            row(ui, "Max length:", |ui| {
+                ui.add(egui::DragValue::new(max_len).range(0..=100_000));
+            });
         }
         _ => crate::intruder_ui::source_config(ui, &mut *src),
     }
     ui.add_space(4.0);
-    ui.label(RichText::new(crate::intruder_ui::generated_note(src)).size(12.0).color(theme::ink_hint()));
+    ui.label(
+        RichText::new(crate::intruder_ui::generated_note(src))
+            .size(12.0)
+            .color(theme::ink_hint()),
+    );
 }

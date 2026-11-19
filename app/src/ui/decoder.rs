@@ -59,7 +59,11 @@ pub(crate) fn decoder(app: &mut App, ui: &mut Ui) {
         }
     });
     if let Some((k, op)) = apply {
-        let src = if k == 0 { app.dec_input.clone() } else { app.dec_chain[k - 1].0.clone() };
+        let src = if k == 0 {
+            app.dec_input.clone()
+        } else {
+            app.dec_chain[k - 1].0.clone()
+        };
         let out = crate::decoder_ops::apply(op, &src).unwrap_or_else(|e| format!("<error: {e}>"));
         app.dec_chain.truncate(k);
         app.dec_chain.push((out.clone(), false));

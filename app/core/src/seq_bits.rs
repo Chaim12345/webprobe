@@ -102,7 +102,12 @@ pub fn bit_columns(samples: &[Vec<u8>]) -> Vec<Vec<bool>> {
         // Bits needed for the largest index, most significant first.
         let width = 16 - (size - 1).leading_zeros();
         for bit in (0..width).rev() {
-            columns.push(samples.iter().map(|s| index_of[s[pos] as usize] >> bit & 1 == 1).collect());
+            columns.push(
+                samples
+                    .iter()
+                    .map(|s| index_of[s[pos] as usize] >> bit & 1 == 1)
+                    .collect(),
+            );
         }
     }
     columns
@@ -134,7 +139,9 @@ pub fn poker(bits: &[bool]) -> Option<f64> {
     }
     let mut counts = [0f64; 16];
     for block in bits.as_chunks::<4>().0 {
-        let v = block.iter().fold(0usize, |acc, b| acc << 1 | usize::from(*b));
+        let v = block
+            .iter()
+            .fold(0usize, |acc, b| acc << 1 | usize::from(*b));
         counts[v] += 1.0;
     }
     let k = k as f64;
@@ -171,15 +178,31 @@ pub fn analyze(samples: &[Vec<u8>]) -> Option<BitReport> {
         .enumerate()
         .map(|(position, col)| {
             let (m, p, r, l) = (monobit(col), poker(col), runs(col), long_runs(col));
-            let combined = [Some(m), p, Some(r), Some(l)].into_iter().flatten().fold(1.0f64, f64::min);
-            BitResult { position, monobit: m, poker: p, runs: r, long_runs: l, combined }
+            let combined = [Some(m), p, Some(r), Some(l)]
+                .into_iter()
+                .flatten()
+                .fold(1.0f64, f64::min);
+            BitResult {
+                position,
+                monobit: m,
+                poker: p,
+                runs: r,
+                long_runs: l,
+                combined,
+            }
         })
         .collect();
     let mut effective_entropy = [0usize; 5];
     for (i, level) in LEVELS.iter().enumerate() {
         effective_entropy[i] = bits.iter().filter(|b| b.combined >= *level).count();
     }
-    Some(BitReport { samples: samples.len(), token_bits: columns.len(), rating: rating(effective_entropy[3]), bits, effective_entropy })
+    Some(BitReport {
+        samples: samples.len(),
+        token_bits: columns.len(),
+        rating: rating(effective_entropy[3]),
+        bits,
+        effective_entropy,
+    })
 }
 
 /// Burp's two summary sentences.
@@ -195,7 +218,10 @@ pub fn report_csv(report: &BitReport) -> String {
     let mut out = String::from("Bit,Monobit,Poker,Runs,Long runs,Combined\r\n");
     for b in &report.bits {
         let poker = b.poker.map(|p| format!("{p:.6}")).unwrap_or_default();
-        out.push_str(&format!("{},{:.6},{},{:.6},{:.6},{:.6}\r\n", b.position, b.monobit, poker, b.runs, b.long_runs, b.combined));
+        out.push_str(&format!(
+            "{},{:.6},{},{:.6},{:.6},{:.6}\r\n",
+            b.position, b.monobit, poker, b.runs, b.long_runs, b.combined
+        ));
     }
     out
 }
@@ -228,14 +254,47 @@ mod tests {
             z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
             z ^ (z >> 31)
         };
-        (0..count).map(|_| (0..len).map(|_| (next() >> 24) as u8).collect()).collect()
+        (0..count)
+            .map(|_| (0..len).map(|_| (next() >> 24) as u8).collect())
+            .collect()
     }
 
     #[test]
     fn rating_uses_burps_thresholds() {
         let at = |n| rating(n);
-        assert_eq!([at(0), at(15), at(16), at(23), at(24), at(31)], ["extremely poor", "extremely poor", "very poor", "very poor", "poor", "poor"]);
-        assert_eq!([at(32), at(39), at(40), at(59), at(60), at(79), at(80), at(512)], ["reasonable", "reasonable", "good", "good", "very good", "very good", "excellent", "excellent"]);
+        assert_eq!(
+            [at(0), at(15), at(16), at(23), at(24), at(31)],
+            [
+                "extremely poor",
+                "extremely poor",
+                "very poor",
+                "very poor",
+                "poor",
+                "poor"
+            ]
+        );
+        assert_eq!(
+            [
+                at(32),
+                at(39),
+                at(40),
+                at(59),
+                at(60),
+                at(79),
+                at(80),
+                at(512)
+            ],
+            [
+                "reasonable",
+                "reasonable",
+                "good",
+                "good",
+                "very good",
+                "very good",
+                "excellent",
+                "excellent"
+            ]
+        );
     }
 
     #[test]
@@ -263,27 +322,55 @@ mod tests {
         assert!(r.effective_entropy[3] >= 110, "{:?}", r.effective_entropy);
         assert_eq!(r.rating, "excellent");
         // Stricter levels pass at least as many bits as looser ones.
-        assert!(r.effective_entropy.windows(2).all(|w| w[0] >= w[1]), "{:?}", r.effective_entropy);
-        assert!(summary(&r).starts_with("The overall quality of randomness within the sample is estimated to be: excellent."));
+        assert!(
+            r.effective_entropy.windows(2).all(|w| w[0] >= w[1]),
+            "{:?}",
+            r.effective_entropy
+        );
+        assert!(summary(&r).starts_with(
+            "The overall quality of randomness within the sample is estimated to be: excellent."
+        ));
 
         // An 8-byte constant prefix contributes no bits at all: 64 remain.
-        let half: Vec<Vec<u8>> = random.iter().map(|t| [b"SESSION-".as_slice(), &t[..8]].concat()).collect();
+        let half: Vec<Vec<u8>> = random
+            .iter()
+            .map(|t| [b"SESSION-".as_slice(), &t[..8]].concat())
+            .collect();
         let h = analyze(&half).unwrap();
         assert_eq!(h.token_bits, 64);
-        assert!((52..=64).contains(&h.effective_entropy[3]), "{:?}", h.effective_entropy);
+        assert!(
+            (52..=64).contains(&h.effective_entropy[3]),
+            "{:?}",
+            h.effective_entropy
+        );
         assert!(matches!(h.rating, "good" | "very good"));
 
         // The same 8 random bytes written as 16 hex digits are still 64 bits:
         // four per digit, not eight bits of ASCII.
-        let hex: Vec<Vec<u8>> = random.iter().map(|t| t[..8].iter().map(|b| format!("{b:02x}")).collect::<String>().into_bytes()).collect();
+        let hex: Vec<Vec<u8>> = random
+            .iter()
+            .map(|t| {
+                t[..8]
+                    .iter()
+                    .map(|b| format!("{b:02x}"))
+                    .collect::<String>()
+                    .into_bytes()
+            })
+            .collect();
         let x = analyze(&hex).unwrap();
         assert_eq!(x.token_bits, 64);
-        assert!((52..=64).contains(&x.effective_entropy[3]), "{:?}", x.effective_entropy);
+        assert!(
+            (52..=64).contains(&x.effective_entropy[3]),
+            "{:?}",
+            x.effective_entropy
+        );
     }
 
     #[test]
     fn counters_rate_extremely_poor_and_small_samples_are_refused() {
-        let counter: Vec<Vec<u8>> = (0..3000u32).map(|i| format!("{i:08}").into_bytes()).collect();
+        let counter: Vec<Vec<u8>> = (0..3000u32)
+            .map(|i| format!("{i:08}").into_bytes())
+            .collect();
         let c = analyze(&counter).unwrap();
         assert!(c.effective_entropy[3] < 16, "{:?}", c.effective_entropy);
         assert_eq!(c.rating, "extremely poor");
@@ -294,7 +381,10 @@ mod tests {
     #[test]
     fn exports_list_every_bit_and_tokens_round_trip() {
         // Hex digits: every one of the 16 symbols turns up, so 4 bits each.
-        let tokens: Vec<Vec<u8>> = random_tokens(400, 2, 3).iter().map(|t| format!("{:02x}{:02x}", t[0], t[1]).into_bytes()).collect();
+        let tokens: Vec<Vec<u8>> = random_tokens(400, 2, 3)
+            .iter()
+            .map(|t| format!("{:02x}{:02x}", t[0], t[1]).into_bytes())
+            .collect();
         let r = analyze(&tokens).unwrap();
         let csv = report_csv(&r);
         assert!(csv.starts_with("Bit,Monobit,Poker,Runs,Long runs,Combined\r\n"));

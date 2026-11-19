@@ -14,21 +14,27 @@ pub(crate) fn mr_table(ui: &mut Ui, app: &mut App, request_side: bool) {
 }
 
 pub(crate) fn facts(ui: &mut Ui, rows: &[(&str, &str)]) {
-    egui::Grid::new("facts").num_columns(2).striped(true).show(ui, |ui| {
-        for (k, v) in rows {
-            ui.label(RichText::new(*k).size(12.5).color(theme::ink_faint()));
-            ui.label(RichText::new(*v).monospace().size(12.0).color(theme::ink_dim()));
-            ui.end_row();
-        }
-    });
+    egui::Grid::new("facts")
+        .num_columns(2)
+        .striped(true)
+        .show(ui, |ui| {
+            for (k, v) in rows {
+                ui.label(RichText::new(*k).size(12.5).color(theme::ink_faint()));
+                ui.label(
+                    RichText::new(*v)
+                        .monospace()
+                        .size(12.0)
+                        .color(theme::ink_dim()),
+                );
+                ui.end_row();
+            }
+        });
 }
 
 /// Burp's message area under the history table: Request over Response on the
 /// left, the Inspector (or Notes) panel and the vertical dock on the right.
 pub(crate) fn detail(app: &mut App, ui: &mut Ui) {
-    let entry = app
-        .history_sel
-        .and_then(|id| app.shared.history.get(id));
+    let entry = app.history_sel.and_then(|id| app.shared.history.get(id));
     // Burp shows the request in origin form even when the browser sent it to
     // the proxy in absolute form.
     let req = entry.as_ref().map(|e| util::origin_form(&e.req_raw));
@@ -37,62 +43,109 @@ pub(crate) fn detail(app: &mut App, ui: &mut Ui) {
     let side_w = if app.dock_sel < 2 { 330.0 } else { 0.0 };
     // egui_extras strips give each region a hard size and clip rect, so a
     // wide message never pushes the Inspector off screen.
-    let mut sb = egui_extras::StripBuilder::new(ui).size(egui_extras::Size::remainder().at_least(200.0));
+    let mut sb =
+        egui_extras::StripBuilder::new(ui).size(egui_extras::Size::remainder().at_least(200.0));
     if side_w > 0.0 {
         sb = sb.size(egui_extras::Size::exact(side_w));
     }
-    sb.size(egui_extras::Size::exact(dock_w)).horizontal(|mut strip| {
-        strip.cell(|ui| {
-            // Burp's default message layout here is request and response side
-            // by side; stacked, each pane showed only four or five lines.
-            let full = ui.available_height();
-            egui_extras::StripBuilder::new(ui)
-                .size(egui_extras::Size::relative(0.5))
-                .size(egui_extras::Size::remainder())
-                .horizontal(|mut col| {
-                    col.cell(|ui| {
-                        crate::msgpane::message_pane(ui, "hist_req", "Request", req.as_deref(), &mut app.req_pane, false, full);
+    sb.size(egui_extras::Size::exact(dock_w))
+        .horizontal(|mut strip| {
+            strip.cell(|ui| {
+                // Burp's default message layout here is request and response side
+                // by side; stacked, each pane showed only four or five lines.
+                let full = ui.available_height();
+                egui_extras::StripBuilder::new(ui)
+                    .size(egui_extras::Size::relative(0.5))
+                    .size(egui_extras::Size::remainder())
+                    .horizontal(|mut col| {
+                        col.cell(|ui| {
+                            crate::msgpane::message_pane(
+                                ui,
+                                "hist_req",
+                                "Request",
+                                req.as_deref(),
+                                &mut app.req_pane,
+                                false,
+                                full,
+                            );
+                        });
+                        col.cell(|ui| {
+                            let r = ui.max_rect();
+                            ui.painter().vline(
+                                r.left(),
+                                r.y_range(),
+                                egui::Stroke::new(1.0, theme::line()),
+                            );
+                            crate::msgpane::message_pane(
+                                ui,
+                                "hist_resp",
+                                "Response",
+                                resp.as_deref(),
+                                &mut app.resp_pane,
+                                true,
+                                full,
+                            );
+                        });
                     });
-                    col.cell(|ui| {
-                        let r = ui.max_rect();
-                        ui.painter().vline(r.left(), r.y_range(), egui::Stroke::new(1.0, theme::line()));
-                        crate::msgpane::message_pane(ui, "hist_resp", "Response", resp.as_deref(), &mut app.resp_pane, true, full);
-                    });
+            });
+            if side_w > 0.0 {
+                strip.cell(|ui| {
+                    let r = ui.max_rect();
+                    ui.painter().rect_filled(r, 0.0, theme::chrome());
+                    ui.painter().vline(
+                        r.left(),
+                        r.y_range(),
+                        egui::Stroke::new(1.0, theme::line()),
+                    );
+                    if app.dock_sel == 0 {
+                        crate::msgpane::inspector(
+                            ui,
+                            "hist_insp",
+                            req.as_deref(),
+                            resp.as_deref(),
+                            &mut app.insp_state,
+                        );
+                    } else {
+                        ui.horizontal(|ui| {
+                            ui.add_space(10.0);
+                            ui.label(
+                                RichText::new("Notes")
+                                    .strong()
+                                    .size(15.0)
+                                    .color(theme::ink()),
+                            );
+                        });
+                        if let Some(e) = &entry {
+                            let mut note = e.note.clone().unwrap_or_default();
+                            let w = ui.available_width() - 16.0;
+                            if ui
+                                .add(
+                                    egui::TextEdit::multiline(&mut note)
+                                        .desired_width(w)
+                                        .desired_rows(12),
+                                )
+                                .changed()
+                            {
+                                app.shared.history.update(e.id, |h| {
+                                    h.note = if note.is_empty() { None } else { Some(note) }
+                                });
+                                // The filtered rows are cached copies: refresh the Notes column now.
+                                app.hist_cache_key.clear();
+                            }
+                        }
+                    }
                 });
-        });
-        if side_w > 0.0 {
+            }
             strip.cell(|ui| {
                 let r = ui.max_rect();
                 ui.painter().rect_filled(r, 0.0, theme::chrome());
-                ui.painter().vline(r.left(), r.y_range(), egui::Stroke::new(1.0, theme::line()));
-                if app.dock_sel == 0 {
-                    crate::msgpane::inspector(ui, "hist_insp", req.as_deref(), resp.as_deref(), &mut app.insp_state);
-                } else {
-                    ui.horizontal(|ui| {
-                        ui.add_space(10.0);
-                        ui.label(RichText::new("Notes").strong().size(15.0).color(theme::ink()));
-                    });
-                    if let Some(e) = &entry {
-                        let mut note = e.note.clone().unwrap_or_default();
-                        let w = ui.available_width() - 16.0;
-                        if ui.add(egui::TextEdit::multiline(&mut note).desired_width(w).desired_rows(12)).changed() {
-                            app.shared.history.update(e.id, |h| h.note = if note.is_empty() { None } else { Some(note) });
-                            // The filtered rows are cached copies: refresh the Notes column now.
-                            app.hist_cache_key.clear();
-                        }
-                    }
+                ui.painter()
+                    .vline(r.left(), r.y_range(), egui::Stroke::new(1.0, theme::line()));
+                if let Some(i) = crate::msgpane::side_dock(ui, app.dock_sel) {
+                    app.dock_sel = if app.dock_sel == i { 2 } else { i };
                 }
             });
-        }
-        strip.cell(|ui| {
-            let r = ui.max_rect();
-            ui.painter().rect_filled(r, 0.0, theme::chrome());
-            ui.painter().vline(r.left(), r.y_range(), egui::Stroke::new(1.0, theme::line()));
-            if let Some(i) = crate::msgpane::side_dock(ui, app.dock_sel) {
-                app.dock_sel = if app.dock_sel == i { 2 } else { i };
-            }
         });
-    });
 }
 
 pub(crate) fn scan_sev_color(sev: &str) -> egui::Color32 {
@@ -116,7 +169,12 @@ pub(crate) fn scan_sev_label(sev: &str) -> &'static str {
 }
 
 pub(crate) fn scanner(app: &mut App, ui: &mut Ui) {
-    ui.label(RichText::new("Scanner").color(theme::ink()).size(14.0).strong());
+    ui.label(
+        RichText::new("Scanner")
+            .color(theme::ink())
+            .size(14.0)
+            .strong(),
+    );
     ui.add_space(2.0);
     hint(ui, "Every proxied response is audited live (passive checks). Select a request in the history and press Run active scan to send light active probes (URL parameters, max 30).");
     // Scan configuration: audit speed / accuracy (AuditDefaults.json keys
@@ -165,9 +223,17 @@ pub(crate) fn scanner(app: &mut App, ui: &mut Ui) {
         app.shared.scan.total.load(Ordering::SeqCst),
     );
     ui.horizontal(|ui| {
-        let btn = RichText::new(if busy { "scanning..." } else { "Run active scan on selected request" })
-            .color(if busy { theme::ink_faint() } else { c(theme::ORANGE) })
-            .size(13.0);
+        let btn = RichText::new(if busy {
+            "scanning..."
+        } else {
+            "Run active scan on selected request"
+        })
+        .color(if busy {
+            theme::ink_faint()
+        } else {
+            c(theme::ORANGE)
+        })
+        .size(13.0);
         if !busy && ui.button(btn).clicked() {
             if let Some(id) = app.history_sel {
                 let e = app.shared.history.get(id);
@@ -175,7 +241,10 @@ pub(crate) fn scanner(app: &mut App, ui: &mut Ui) {
                     run_active_scan_on(app, &e);
                 }
             } else {
-                feedback::toast(feedback::Level::Warn, "Select a request in Proxy history first");
+                feedback::toast(
+                    feedback::Level::Warn,
+                    "Select a request in Proxy history first",
+                );
             }
         }
         if total > 0 && feedback::progress(ui, done, total, busy) {
@@ -184,21 +253,35 @@ pub(crate) fn scanner(app: &mut App, ui: &mut Ui) {
         }
         ui.separator();
         let mut on = app.shared.scan_enabled.load(Ordering::SeqCst);
-        if ui.checkbox(&mut on, "live passive scan of proxied traffic").changed() {
+        if ui
+            .checkbox(&mut on, "live passive scan of proxied traffic")
+            .changed()
+        {
             app.shared.scan_enabled.store(on, Ordering::SeqCst);
-            app.shared.log(if on { "Live passive scan: on" } else { "Live passive scan: off" });
+            app.shared.log(if on {
+                "Live passive scan: on"
+            } else {
+                "Live passive scan: off"
+            });
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui.button("Clear issues").clicked() {
                 app.shared.issues.lock().unwrap().clear();
             }
-            if ui.button("Report issues").on_hover_text("Report the issues shown in the table as HTML or XML").clicked() {
+            if ui
+                .button("Report issues")
+                .on_hover_text("Report the issues shown in the table as HTML or XML")
+                .clicked()
+            {
                 report_all = true;
             }
             ui.label(
-                RichText::new(format!("{} issues", app.shared.issues.lock().unwrap().len()))
-                    .size(12.0)
-                    .color(theme::ink_faint()),
+                RichText::new(format!(
+                    "{} issues",
+                    app.shared.issues.lock().unwrap().len()
+                ))
+                .size(12.0)
+                .color(theme::ink_faint()),
             );
         });
     });
@@ -206,10 +289,22 @@ pub(crate) fn scanner(app: &mut App, ui: &mut Ui) {
     ui.add_space(4.0);
     app.issue_filter.bar(ui);
     ui.add_space(4.0);
-    let issues: Vec<scan::ScanIssue> = app.shared.issues.lock().unwrap().iter().filter(|i| app.issue_filter.matches(i)).cloned().collect();
+    let issues: Vec<scan::ScanIssue> = app
+        .shared
+        .issues
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|i| app.issue_filter.matches(i))
+        .cloned()
+        .collect();
     // With an issue selected the table keeps the upper part and the advisory
     // and evidence tabs get the rest, as in Burp's issue activity view.
-    let table_h = if app.scan_sel.is_some() { (ui.available_height() * 0.4).max(140.0) } else { ui.available_height() - 10.0 };
+    let table_h = if app.scan_sel.is_some() {
+        (ui.available_height() * 0.4).max(140.0)
+    } else {
+        ui.available_height() - 10.0
+    };
     let columns = [
         table::Column::new("Severity", 78.0),
         table::Column::new("Confidence", 78.0),
@@ -239,22 +334,41 @@ pub(crate) fn scanner(app: &mut App, ui: &mut Ui) {
     }
     let grouping = app.issue_filter.grouping;
     if grouping != crate::issue_view::Grouping::None {
-        egui::ScrollArea::vertical().id_salt("scan_issues_grouped").max_height(table_h.max(140.0)).show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            issue_action = crate::issue_view::grouped_list(
-                ui,
-                &rows,
-                grouping,
-                &mut selected,
-                |i| if i.false_positive { "False positive".to_string() } else { scan_sev_label(&i.sev).to_string() },
-                |i| if i.false_positive { theme::ink_faint() } else { scan_sev_color(&i.sev) },
-            );
-            if rows.is_empty() {
-                feedback::empty_state(ui, "No issues to group", "Browse sites through the proxy, run an active scan, or widen the filter.");
-            }
-        });
+        egui::ScrollArea::vertical()
+            .id_salt("scan_issues_grouped")
+            .max_height(table_h.max(140.0))
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                issue_action = crate::issue_view::grouped_list(
+                    ui,
+                    &rows,
+                    grouping,
+                    &mut selected,
+                    |i| {
+                        if i.false_positive {
+                            "False positive".to_string()
+                        } else {
+                            scan_sev_label(&i.sev).to_string()
+                        }
+                    },
+                    |i| {
+                        if i.false_positive {
+                            theme::ink_faint()
+                        } else {
+                            scan_sev_color(&i.sev)
+                        }
+                    },
+                );
+                if rows.is_empty() {
+                    feedback::empty_state(
+                        ui,
+                        "No issues to group",
+                        "Browse sites through the proxy, run an active scan, or widen the filter.",
+                    );
+                }
+            });
     } else {
-    egui::ScrollArea::vertical().max_height(table_h.max(140.0)).show(ui, |ui| {
+        egui::ScrollArea::vertical().max_height(table_h.max(140.0)).show(ui, |ui| {
         let row_h = theme::appearance().1.row_height();
         table::data_table(ui, "scan_issues", &columns, &rows, &mut app.scan_table, row_h, |iss, ui| {
             if selected == Some(iss.id) {
@@ -305,7 +419,11 @@ pub(crate) fn scanner(app: &mut App, ui: &mut Ui) {
                     .unwrap_or_else(|| format!("http://{}{}", i.host, i.path));
                 ui.ctx().copy_text(url);
             }
-        } else if let Some(ids) = crate::issue_view::apply_issue_action(&mut app.shared.issues.lock().unwrap(), id, &action) {
+        } else if let Some(ids) = crate::issue_view::apply_issue_action(
+            &mut app.shared.issues.lock().unwrap(),
+            id,
+            &action,
+        ) {
             report_ids = Some(ids);
         }
         if action == crate::issue_view::IssueAction::Delete && app.scan_sel == Some(id) {
@@ -319,10 +437,25 @@ pub(crate) fn scanner(app: &mut App, ui: &mut Ui) {
     if let Some(id) = app.scan_sel {
         if let Some(issue) = issues.iter().find(|i| i.id == id).cloned() {
             ui.add_space(4.0);
-            let label = if issue.false_positive { "False positive" } else { scan_sev_label(&issue.sev) };
-            let colour = if issue.false_positive { theme::ink_faint() } else { scan_sev_color(&issue.sev) };
+            let label = if issue.false_positive {
+                "False positive"
+            } else {
+                scan_sev_label(&issue.sev)
+            };
+            let colour = if issue.false_positive {
+                theme::ink_faint()
+            } else {
+                scan_sev_color(&issue.sev)
+            };
             if crate::issue_view::issue_detail(app, ui, &issue, label, colour) {
-                if let Some(it) = app.shared.issues.lock().unwrap().iter_mut().find(|i| i.id == id) {
+                if let Some(it) = app
+                    .shared
+                    .issues
+                    .lock()
+                    .unwrap()
+                    .iter_mut()
+                    .find(|i| i.id == id)
+                {
                     it.false_positive = !it.false_positive;
                 }
             }

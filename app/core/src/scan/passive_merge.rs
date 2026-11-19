@@ -5,13 +5,22 @@ use super::*;
 
 /// Issue types Burp keys by origin and identifier only, not by path
 /// (their text class answers `Zpx3.ZT`: Zwvk, Zwur, Zwf2, Zwv5).
-pub const ORIGIN_SCOPED: [&str; 4] = ["Social security numbers disclosed", "Password returned in later response", "Database connection string disclosed", "Source code disclosure"];
+pub const ORIGIN_SCOPED: [&str; 4] = [
+    "Social security numbers disclosed",
+    "Password returned in later response",
+    "Database connection string disclosed",
+    "Source code disclosure",
+];
 
 /// The identity under which passive issues merge (burp.Zufk.ZL with the
 /// issue type's Zpx3): name, host, path (left out for the origin-scoped
 /// types) and the pervasive identifier.
 pub fn passive_merge_key(i: &ScanIssue) -> String {
-    let path = if ORIGIN_SCOPED.contains(&i.name.as_str()) { "" } else { i.path.as_str() };
+    let path = if ORIGIN_SCOPED.contains(&i.name.as_str()) {
+        ""
+    } else {
+        i.path.as_str()
+    };
     format!("{}|{}|{}|{}", i.name, i.host, path, i.ident)
 }
 
@@ -21,7 +30,9 @@ pub fn add_passive_issues(shared: &Shared, mut issues: Vec<ScanIssue>) {
     // default issue list is the one Burp would produce.
     if !shared.extra_checks.load(Ordering::SeqCst) {
         // Issues extensions report are theirs to name.
-        issues.retain(|i| is_burp_issue(&i.name) || i.detail.contains("<p>Reported by the extension "));
+        issues.retain(|i| {
+            is_burp_issue(&i.name) || i.detail.contains("<p>Reported by the extension ")
+        });
     }
     if issues.is_empty() {
         return;
@@ -31,8 +42,7 @@ pub fn add_passive_issues(shared: &Shared, mut issues: Vec<ScanIssue>) {
     let before = issues.len();
     let mut seen = std::collections::BTreeSet::new();
     issues.retain(|i| seen.insert(key(i)));
-    let mut known: std::collections::BTreeSet<String> =
-        iss.iter().map(&key).collect();
+    let mut known: std::collections::BTreeSet<String> = iss.iter().map(&key).collect();
     issues.retain(|i| known.insert(key(i)));
     let mut incoming = 0;
     for mut issue in issues {
@@ -44,13 +54,18 @@ pub fn add_passive_issues(shared: &Shared, mut issues: Vec<ScanIssue>) {
         incoming += 1;
     }
     if incoming > 0 {
-        shared.log(&format!("Scanner reported {} new issue(s) ({} consolidated)", incoming, before - incoming));
+        shared.log(&format!(
+            "Scanner reported {} new issue(s) ({} consolidated)",
+            incoming,
+            before - incoming
+        ));
     }
 }
 
 /// Burp's sentence on a pervasive issue merged across locations
 /// (burp.Zcro.ZZ for MERGE_SINGLE_IDENTIFIER).
-pub const MULTIPLE_LOCATIONS: &str = "This issue was found in multiple locations under the reported path.";
+pub const MULTIPLE_LOCATIONS: &str =
+    "This issue was found in multiple locations under the reported path.";
 
 /// Locations after which an issue becomes pervasive (burp.Zwgx.ZN7:
 /// `ZND() >= 10`).
@@ -91,7 +106,10 @@ pub fn common_path(a: &str, b: &str) -> String {
 /// nothing. Returns true when `new` was absorbed (not to be added).
 pub fn pervasive_merge(iss: &mut Vec<ScanIssue>, new: &ScanIssue) -> bool {
     let same = |i: &ScanIssue| i.name == new.name && i.host == new.host && i.ident == new.ident;
-    if iss.iter().any(|i| same(i) && i.detail.ends_with(MULTIPLE_LOCATIONS)) {
+    if iss
+        .iter()
+        .any(|i| same(i) && i.detail.ends_with(MULTIPLE_LOCATIONS))
+    {
         return true;
     }
     let members: Vec<usize> = (0..iss.len()).filter(|&k| same(&iss[k])).collect();

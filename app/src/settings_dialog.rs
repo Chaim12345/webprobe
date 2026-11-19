@@ -56,7 +56,12 @@ pub fn visible_pages(query: &str, pill: u8) -> Vec<&'static PageDef> {
             2 => p.kind == Kind::Project,
             _ => true,
         })
-        .filter(|p| q.is_empty() || p.label.to_lowercase().contains(&q) || p.group.to_lowercase().contains(&q) || p.keywords.contains(&q))
+        .filter(|p| {
+            q.is_empty()
+                || p.label.to_lowercase().contains(&q)
+                || p.group.to_lowercase().contains(&q)
+                || p.keywords.contains(&q)
+        })
         .collect()
 }
 
@@ -82,10 +87,25 @@ fn page(app: &mut App, ui: &mut Ui, pane: SettingsPane) {
     if let Some(section) = section {
         ui.horizontal(|ui| {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.small_button("Restore defaults").on_hover_text("Put the settings on this page back to their defaults").clicked() {
-                    match snapshot(app).and_then(|current| install(app, &crate::project::with_section_defaults(&current, section))) {
-                        Ok(()) => crate::feedback::toast(crate::feedback::Level::Success, "Settings on this page restored to their defaults"),
-                        Err(e) => crate::feedback::toast(crate::feedback::Level::Error, format!("Could not restore defaults: {e}")),
+                if ui
+                    .small_button("Restore defaults")
+                    .on_hover_text("Put the settings on this page back to their defaults")
+                    .clicked()
+                {
+                    match snapshot(app).and_then(|current| {
+                        install(
+                            app,
+                            &crate::project::with_section_defaults(&current, section),
+                        )
+                    }) {
+                        Ok(()) => crate::feedback::toast(
+                            crate::feedback::Level::Success,
+                            "Settings on this page restored to their defaults",
+                        ),
+                        Err(e) => crate::feedback::toast(
+                            crate::feedback::Level::Error,
+                            format!("Could not restore defaults: {e}"),
+                        ),
                     }
                 }
             });
@@ -98,7 +118,10 @@ fn page(app: &mut App, ui: &mut Ui, pane: SettingsPane) {
         SettingsPane::Sessions => crate::tools::sessions(app, ui),
         SettingsPane::Intruder => {
             title(ui, "Intruder");
-            note(ui, "Defaults for new attacks. They apply to the next attack you start.");
+            note(
+                ui,
+                "Defaults for new attacks. They apply to the next attack you start.",
+            );
             ui.add_space(6.0);
             crate::intruder_ui::resource_pool_panel(ui, &mut app.intr_x);
             ui.add_space(8.0);
@@ -108,17 +131,27 @@ fn page(app: &mut App, ui: &mut Ui, pane: SettingsPane) {
             title(ui, "Repeater");
             ui.checkbox(&mut app.rep_update_cl, "Update Content-Length");
             ui.horizontal(|ui| {
-                ui.label(RichText::new("Follow redirections:").size(12.5).color(theme::ink_dim()));
+                ui.label(
+                    RichText::new("Follow redirections:")
+                        .size(12.5)
+                        .color(theme::ink_dim()),
+                );
                 for m in crate::repeater_ops::FollowMode::ALL {
                     ui.radio_value(&mut app.rops.follow, m, m.label());
                 }
             });
-            ui.checkbox(&mut app.rops.process_cookies, "Process cookies in redirections");
+            ui.checkbox(
+                &mut app.rops.process_cookies,
+                "Process cookies in redirections",
+            );
         }
         SettingsPane::Sequencer => {
             title(ui, "Sequencer");
             note(ui, "Token handling for live capture and manual load.");
-            ui.checkbox(&mut app.seq_ignore_abnormal, "Ignore tokens whose length deviates by more than 5 characters");
+            ui.checkbox(
+                &mut app.seq_ignore_abnormal,
+                "Ignore tokens whose length deviates by more than 5 characters",
+            );
         }
         SettingsPane::Comparer => {
             title(ui, "Comparer");
@@ -137,15 +170,34 @@ fn page(app: &mut App, ui: &mut Ui, pane: SettingsPane) {
             note(ui, "Settings used by scans and by the live passive audit.");
             use std::sync::atomic::Ordering;
             let mut live = app.shared.scan_enabled.load(Ordering::SeqCst);
-            if ui.checkbox(&mut live, "Live passive audit of proxied traffic").changed() {
+            if ui
+                .checkbox(&mut live, "Live passive audit of proxied traffic")
+                .changed()
+            {
                 app.shared.scan_enabled.store(live, Ordering::SeqCst);
             }
             for (label, atom, names) in [
-                ("Audit speed", &app.shared.scan_speed, ["Fast", "Normal", "Thorough"]),
-                ("Audit accuracy", &app.shared.scan_accuracy, ["Minimize false negatives", "Normal", "Minimize false positives"]),
+                (
+                    "Audit speed",
+                    &app.shared.scan_speed,
+                    ["Fast", "Normal", "Thorough"],
+                ),
+                (
+                    "Audit accuracy",
+                    &app.shared.scan_accuracy,
+                    [
+                        "Minimize false negatives",
+                        "Normal",
+                        "Minimize false positives",
+                    ],
+                ),
             ] {
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(format!("{label}:")).size(12.5).color(theme::ink_dim()));
+                    ui.label(
+                        RichText::new(format!("{label}:"))
+                            .size(12.5)
+                            .color(theme::ink_dim()),
+                    );
                     let mut v = atom.load(Ordering::SeqCst).min(2);
                     for (i, name) in names.iter().enumerate() {
                         if ui.radio_value(&mut v, i as u8, *name).changed() {
@@ -191,12 +243,27 @@ pub(crate) fn install(app: &mut App, data: &crate::project::ProjectData) -> Resu
 fn manage_menu(app: &mut App, ui: &mut Ui) {
     use crate::feedback::{toast, Level};
     let path_id = egui::Id::unique("settings_file_path");
-    let mut path: String = ui.data_mut(|d| d.get_temp(path_id)).unwrap_or_else(|| "webprobe-settings.json".to_string());
+    let mut path: String = ui
+        .data_mut(|d| d.get_temp(path_id))
+        .unwrap_or_else(|| "webprobe-settings.json".to_string());
     ui.set_min_width(320.0);
-    ui.label(RichText::new("Settings file").size(12.0).color(theme::ink_faint()));
-    ui.add(egui::TextEdit::singleline(&mut path).desired_width(300.0).font(egui::TextStyle::Monospace));
+    ui.label(
+        RichText::new("Settings file")
+            .size(12.0)
+            .color(theme::ink_faint()),
+    );
+    ui.add(
+        egui::TextEdit::singleline(&mut path)
+            .desired_width(300.0)
+            .font(egui::TextStyle::Monospace),
+    );
     if ui.button("Save settings").clicked() {
-        match snapshot(app).and_then(|d| crate::project::save(std::path::Path::new(path.trim()), &crate::project::settings_only(&d))) {
+        match snapshot(app).and_then(|d| {
+            crate::project::save(
+                std::path::Path::new(path.trim()),
+                &crate::project::settings_only(&d),
+            )
+        }) {
             Ok(()) => toast(Level::Success, format!("Settings saved to {}", path.trim())),
             Err(e) => toast(Level::Error, format!("Could not save settings: {e}")),
         }
@@ -208,14 +275,19 @@ fn manage_menu(app: &mut App, ui: &mut Ui) {
             install(app, &crate::project::apply_settings(&current, &settings))
         });
         match result {
-            Ok(()) => toast(Level::Success, format!("Settings loaded from {}", path.trim())),
+            Ok(()) => toast(
+                Level::Success,
+                format!("Settings loaded from {}", path.trim()),
+            ),
             Err(e) => toast(Level::Error, format!("Could not load settings: {e}")),
         }
         ui.close();
     }
     ui.separator();
     if ui.button("Restore defaults").clicked() {
-        match snapshot(app).and_then(|current| install(app, &crate::project::with_default_settings(&current))) {
+        match snapshot(app)
+            .and_then(|current| install(app, &crate::project::with_default_settings(&current)))
+        {
             Ok(()) => toast(Level::Success, "Settings restored to their defaults"),
             Err(e) => toast(Level::Error, format!("Could not restore defaults: {e}")),
         }
@@ -237,9 +309,18 @@ fn scan_configuration(app: &mut App, ui: &mut Ui) {
 /// The scan configuration editor (crawl limits, issues reported, insertion
 /// point types, audit checks), used by Settings > Scanner and by the
 /// configuration library's New / Edit. `salt` keeps widget ids apart.
-pub(crate) fn scan_config_editor(ui: &mut Ui, config: &mut crate::scan_config::ScanConfig, salt: &str) {
+pub(crate) fn scan_config_editor(
+    ui: &mut Ui,
+    config: &mut crate::scan_config::ScanConfig,
+    salt: &str,
+) {
     // Burp's crawl settings (CrawlDefaults.json) for "Crawl and audit".
-    ui.label(RichText::new("Crawl limits").strong().size(13.5).color(theme::ink()));
+    ui.label(
+        RichText::new("Crawl limits")
+            .strong()
+            .size(13.5)
+            .color(theme::ink()),
+    );
     ui.horizontal(|ui| {
         ui.label("Maximum link depth");
         ui.add(egui::DragValue::new(&mut config.crawl.max_depth).range(1..=50));
@@ -260,19 +341,41 @@ pub(crate) fn scan_config_editor(ui: &mut Ui, config: &mut crate::scan_config::S
     });
     ui.horizontal(|ui| {
         ui.label("JavaScript crawl engine");
-        let shown = if config.crawl.engine.is_empty() { "Chromium (default)".to_string() } else { config.crawl.engine.clone() };
-        egui::ComboBox::from_id_salt(("crawl_engine", salt)).selected_text(shown).show_ui(ui, |ui| {
-            ui.selectable_value(&mut config.crawl.engine, String::new(), "Chromium (default)");
-            for e in webprobe_core::headless::engines().iter().filter(|e| e.name() != "Chromium") {
-                let label = if e.binary().is_some() { e.name().to_string() } else { format!("{} (not installed)", e.name()) };
-                ui.selectable_value(&mut config.crawl.engine, e.name().to_string(), label);
-            }
-        });
+        let shown = if config.crawl.engine.is_empty() {
+            "Chromium (default)".to_string()
+        } else {
+            config.crawl.engine.clone()
+        };
+        egui::ComboBox::from_id_salt(("crawl_engine", salt))
+            .selected_text(shown)
+            .show_ui(ui, |ui| {
+                ui.selectable_value(
+                    &mut config.crawl.engine,
+                    String::new(),
+                    "Chromium (default)",
+                );
+                for e in webprobe_core::headless::engines()
+                    .iter()
+                    .filter(|e| e.name() != "Chromium")
+                {
+                    let label = if e.binary().is_some() {
+                        e.name().to_string()
+                    } else {
+                        format!("{} (not installed)", e.name())
+                    };
+                    ui.selectable_value(&mut config.crawl.engine, e.name().to_string(), label);
+                }
+            });
     });
     ui.add_space(8.0);
     issues_reported_editor(ui, config);
     ui.add_space(8.0);
-    ui.label(RichText::new("Insertion point types").strong().size(13.5).color(theme::ink()));
+    ui.label(
+        RichText::new("Insertion point types")
+            .strong()
+            .size(13.5)
+            .color(theme::ink()),
+    );
     ui.horizontal_wrapped(|ui| {
         for (key, label) in crate::scan_config::INSERTION_TYPES {
             let mut on = config.insertion_enabled(key);
@@ -286,7 +389,10 @@ pub(crate) fn scan_config_editor(ui: &mut Ui, config: &mut crate::scan_config::S
         }
         let key = crate::scan_config::NESTED_KEY;
         let mut on = config.insertion_enabled(key);
-        if ui.checkbox(&mut on, crate::scan_config::NESTED_LABEL).changed() {
+        if ui
+            .checkbox(&mut on, crate::scan_config::NESTED_LABEL)
+            .changed()
+        {
             if on {
                 config.disabled_insertion.remove(key);
             } else {
@@ -296,77 +402,138 @@ pub(crate) fn scan_config_editor(ui: &mut Ui, config: &mut crate::scan_config::S
     });
     ui.add_space(8.0);
     ui.horizontal(|ui| {
-        ui.label(RichText::new("Audit checks").strong().size(13.5).color(theme::ink()));
+        ui.label(
+            RichText::new("Audit checks")
+                .strong()
+                .size(13.5)
+                .color(theme::ink()),
+        );
         if ui.small_button("Select all").clicked() {
             config.disabled_checks.clear();
         }
         if ui.small_button("Select none").clicked() {
-            config.disabled_checks = crate::scan::check_catalogue().into_iter().map(|(id, _, _)| id.to_string()).collect();
+            config.disabled_checks = crate::scan::check_catalogue()
+                .into_iter()
+                .map(|(id, _, _)| id.to_string())
+                .collect();
         }
     });
     ui.label(RichText::new("Checks per insertion point, then per request or host, then the passive checks. A check that is off does not run and reports nothing.").size(12.0).color(theme::ink_faint()));
-    egui::Grid::new(("scan_checks", salt)).striped(true).num_columns(3).spacing([12.0, 2.0]).show(ui, |ui| {
-        for (id, issue, scope) in crate::scan::check_catalogue() {
-            let mut on = config.check_enabled(id);
-            if ui.checkbox(&mut on, "").changed() {
-                if on {
-                    config.disabled_checks.remove(id);
-                } else {
-                    config.disabled_checks.insert(id.to_string());
+    egui::Grid::new(("scan_checks", salt))
+        .striped(true)
+        .num_columns(3)
+        .spacing([12.0, 2.0])
+        .show(ui, |ui| {
+            for (id, issue, scope) in crate::scan::check_catalogue() {
+                let mut on = config.check_enabled(id);
+                if ui.checkbox(&mut on, "").changed() {
+                    if on {
+                        config.disabled_checks.remove(id);
+                    } else {
+                        config.disabled_checks.insert(id.to_string());
+                    }
                 }
-            }
-            ui.label(RichText::new(issue).size(12.5).color(theme::ink()));
-            // The id names the method, which tells apart checks reporting the
-            // same issue (error-based and boolean SQL injection, say).
-            let method = id.trim_start_matches("active.").trim_start_matches("passive.").replace('-', " ");
-            let label = ui.label(RichText::new(format!("{method} \u{b7} {scope}")).size(12.0).color(theme::ink_faint()));
-            if let Some(note) = crate::scan::check_note(id) {
-                label.on_hover_text(&note);
+                ui.label(RichText::new(issue).size(12.5).color(theme::ink()));
+                // The id names the method, which tells apart checks reporting the
+                // same issue (error-based and boolean SQL injection, say).
+                let method = id
+                    .trim_start_matches("active.")
+                    .trim_start_matches("passive.")
+                    .replace('-', " ");
+                let label = ui.label(
+                    RichText::new(format!("{method} \u{b7} {scope}"))
+                        .size(12.0)
+                        .color(theme::ink_faint()),
+                );
+                if let Some(note) = crate::scan::check_note(id) {
+                    label.on_hover_text(&note);
+                    ui.end_row();
+                    ui.label("");
+                    ui.label(RichText::new(note).size(11.5).color(theme::c(theme::WARN)));
+                    ui.label("");
+                }
                 ui.end_row();
-                ui.label("");
-                ui.label(RichText::new(note).size(11.5).color(theme::c(theme::WARN)));
-                ui.label("");
             }
-            ui.end_row();
-        }
-    });
+        });
 }
 
 /// Burp's "Issues reported": the scan types, or an individual selection of
 /// issue types (shown with each type's switch; the list itself comes from
 /// a library configuration).
 fn issues_reported_editor(ui: &mut Ui, config: &mut crate::scan_config::ScanConfig) {
-    use webprobe_core::scan_library::{IssueFilter, CAT_INTRUSIVE, CAT_JAVASCRIPT, CAT_LIGHT, CAT_MEDIUM, CAT_PASSIVE};
+    use webprobe_core::scan_library::{
+        IssueFilter, CAT_INTRUSIVE, CAT_JAVASCRIPT, CAT_LIGHT, CAT_MEDIUM, CAT_PASSIVE,
+    };
     const ALL: u8 = CAT_PASSIVE | CAT_LIGHT | CAT_MEDIUM | CAT_INTRUSIVE | CAT_JAVASCRIPT;
-    ui.label(RichText::new("Issues reported").strong().size(13.5).color(theme::ink()));
-    let mut f = config.issues.clone().unwrap_or(IssueFilter { types_on: ALL, selected: None });
+    ui.label(
+        RichText::new("Issues reported")
+            .strong()
+            .size(13.5)
+            .color(theme::ink()),
+    );
+    let mut f = config.issues.clone().unwrap_or(IssueFilter {
+        types_on: ALL,
+        selected: None,
+    });
     let mut individual = f.selected.is_some();
-    if ui.checkbox(&mut individual, "Select individual issues").changed() {
+    if ui
+        .checkbox(&mut individual, "Select individual issues")
+        .changed()
+    {
         f.selected = individual.then(Default::default);
     }
     if let Some(sel) = &mut f.selected {
         if sel.is_empty() {
-            ui.label(RichText::new("No issue types selected: an audit with this selection reports nothing.").size(12.0).color(theme::c(theme::WARN)));
+            ui.label(
+                RichText::new(
+                    "No issue types selected: an audit with this selection reports nothing.",
+                )
+                .size(12.0)
+                .color(theme::c(theme::WARN)),
+            );
         }
-        egui::ScrollArea::vertical().id_salt("issues_selected").max_height(180.0).show(ui, |ui| {
-            for (id, on) in sel.iter_mut() {
-                let name = webprobe_core::scan_library::issue_type_name(*id).map_or_else(|| format!("0x{id:08x}"), str::to_string);
-                let missing = webprobe_core::scan::checks_for_issue_type(*id).is_empty();
-                let label = if missing { format!("{name} (no WebProbe check: kept, not applied)") } else { name };
-                ui.checkbox(on, label);
-            }
-        });
+        egui::ScrollArea::vertical()
+            .id_salt("issues_selected")
+            .max_height(180.0)
+            .show(ui, |ui| {
+                for (id, on) in sel.iter_mut() {
+                    let name = webprobe_core::scan_library::issue_type_name(*id)
+                        .map_or_else(|| format!("0x{id:08x}"), str::to_string);
+                    let missing = webprobe_core::scan::checks_for_issue_type(*id).is_empty();
+                    let label = if missing {
+                        format!("{name} (no WebProbe check: kept, not applied)")
+                    } else {
+                        name
+                    };
+                    ui.checkbox(on, label);
+                }
+            });
     } else {
         ui.horizontal_wrapped(|ui| {
-            for (bit, label) in [(CAT_PASSIVE, "Passive"), (CAT_LIGHT, "Light active"), (CAT_MEDIUM, "Medium active"), (CAT_INTRUSIVE, "Intrusive active"), (CAT_JAVASCRIPT, "JavaScript analysis")] {
+            for (bit, label) in [
+                (CAT_PASSIVE, "Passive"),
+                (CAT_LIGHT, "Light active"),
+                (CAT_MEDIUM, "Medium active"),
+                (CAT_INTRUSIVE, "Intrusive active"),
+                (CAT_JAVASCRIPT, "JavaScript analysis"),
+            ] {
                 let mut on = f.types_on & bit != 0;
                 if ui.checkbox(&mut on, label).changed() {
-                    f.types_on = if on { f.types_on | bit } else { f.types_on & !bit };
+                    f.types_on = if on {
+                        f.types_on | bit
+                    } else {
+                        f.types_on & !bit
+                    };
                 }
             }
         });
     }
-    let new = (f != IssueFilter { types_on: ALL, selected: None }).then_some(f);
+    let new = (f
+        != IssueFilter {
+            types_on: ALL,
+            selected: None,
+        })
+    .then_some(f);
     if new != config.issues {
         config.issues = new;
     }
@@ -379,7 +546,8 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
     let mut open = app.settings_open;
     let mut close = false;
     let state_id = egui::Id::unique("settings_dialog_state");
-    let (mut query, mut pill): (String, u8) = ctx.data_mut(|d| d.get_temp(state_id)).unwrap_or_default();
+    let (mut query, mut pill): (String, u8) =
+        ctx.data_mut(|d| d.get_temp(state_id)).unwrap_or_default();
     egui::Window::new("Settings")
         .open(&mut open)
         .default_pos(ctx.content_rect().center() - egui::vec2(470.0, 300.0))
@@ -388,7 +556,11 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
         .default_height(600.0)
         .show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.add(egui::TextEdit::singleline(&mut query).hint_text("Search settings").desired_width(220.0));
+                ui.add(
+                    egui::TextEdit::singleline(&mut query)
+                        .hint_text("Search settings")
+                        .desired_width(220.0),
+                );
                 ui.add_space(8.0);
                 for (i, name) in ["All", "User", "Project"].iter().enumerate() {
                     if ui.selectable_label(pill == i as u8, *name).clicked() {
@@ -417,18 +589,30 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
                             if !last_group.is_empty() {
                                 ui.add_space(6.0);
                             }
-                            ui.label(RichText::new(p.group).strong().size(12.5).color(theme::ink()));
+                            ui.label(
+                                RichText::new(p.group)
+                                    .strong()
+                                    .size(12.5)
+                                    .color(theme::ink()),
+                            );
                             last_group = p.group;
                         }
                         ui.horizontal(|ui| {
                             ui.add_space(12.0);
-                            if ui.selectable_label(app.settings_help == p.pane, p.label).clicked() {
+                            if ui
+                                .selectable_label(app.settings_help == p.pane, p.label)
+                                .clicked()
+                            {
                                 app.settings_help = p.pane;
                             }
                         });
                     }
                     if pages.is_empty() {
-                        ui.label(RichText::new("No settings match.").size(12.5).color(theme::ink_dim()));
+                        ui.label(
+                            RichText::new("No settings match.")
+                                .size(12.5)
+                                .color(theme::ink_dim()),
+                        );
                     }
                     ui.add_space(12.0);
                     if ui.button("Close").clicked() {
@@ -447,7 +631,9 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
                             .color(theme::ink_faint()),
                         );
                         let pane = def.pane;
-                        egui::ScrollArea::vertical().id_salt("settings_page").show(ui, |ui| page(app, ui, pane));
+                        egui::ScrollArea::vertical()
+                            .id_salt("settings_page")
+                            .show(ui, |ui| page(app, ui, pane));
                     }
                 });
             });
@@ -474,19 +660,60 @@ mod tests {
             }
             v
         });
-        assert_eq!(groups, ["Tools", "Project", "Sessions", "Network", "User interface", "Suite", "Extensions", "Configuration library"]);
-        assert_eq!(labels("", 0)[..5], ["Proxy", "Intruder", "Repeater", "Sequencer", "Comparer"]);
+        assert_eq!(
+            groups,
+            [
+                "Tools",
+                "Project",
+                "Sessions",
+                "Network",
+                "User interface",
+                "Suite",
+                "Extensions",
+                "Configuration library"
+            ]
+        );
+        assert_eq!(
+            labels("", 0)[..5],
+            ["Proxy", "Intruder", "Repeater", "Sequencer", "Comparer"]
+        );
         assert_eq!(labels("", 0).len(), PAGES.len());
     }
 
     #[test]
     fn pills_and_search_narrow_the_tree() {
-        assert_eq!(labels("", 1), ["Intruder", "Repeater", "Comparer", "Appearance", "Hotkeys", "Project file", "Extensions", "Configuration library"]);
-        assert_eq!(labels("", 2), ["Proxy", "Sequencer", "Scope", "Collaborator", "Tasks", "Sessions", "Connections"]);
+        assert_eq!(
+            labels("", 1),
+            [
+                "Intruder",
+                "Repeater",
+                "Comparer",
+                "Appearance",
+                "Hotkeys",
+                "Project file",
+                "Extensions",
+                "Configuration library"
+            ]
+        );
+        assert_eq!(
+            labels("", 2),
+            [
+                "Proxy",
+                "Sequencer",
+                "Scope",
+                "Collaborator",
+                "Tasks",
+                "Sessions",
+                "Connections"
+            ]
+        );
         // Search matches labels, groups and keywords, case-insensitively.
         assert_eq!(labels("COOKIE", 0), ["Repeater", "Sessions"]);
         assert_eq!(labels("listeners", 0), ["Proxy"]);
-        assert_eq!(labels("tools", 0), ["Proxy", "Intruder", "Repeater", "Sequencer", "Comparer"]);
+        assert_eq!(
+            labels("tools", 0),
+            ["Proxy", "Intruder", "Repeater", "Sequencer", "Comparer"]
+        );
         assert_eq!(labels("cookie", 1), ["Repeater"]);
         assert!(labels("no-such-setting", 0).is_empty());
     }

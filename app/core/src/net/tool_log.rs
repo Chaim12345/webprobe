@@ -14,11 +14,16 @@ pub struct ToolSink<'a> {
 
 impl crate::streaming::ResponseSink for ToolSink<'_> {
     fn head(&mut self, head: &[u8]) -> crate::streaming::BodyMode {
-        if crate::streaming::decide(&self.url, head, &self.settings) == crate::streaming::Decision::Buffered {
+        if crate::streaming::decide(&self.url, head, &self.settings)
+            == crate::streaming::Decision::Buffered
+        {
             return crate::streaming::BodyMode::Buffer;
         }
         let tool = TOOL.with(|t| t.get()).unwrap_or("A tool");
-        self.shared.log(&format!("{tool} ignored the streaming response from {} and closed the connection", self.url));
+        self.shared.log(&format!(
+            "{tool} ignored the streaming response from {} and closed the connection",
+            self.url
+        ));
         crate::streaming::BodyMode::HeadOnly
     }
     fn wire(&mut self, _: &[u8]) -> std::io::Result<()> {
@@ -28,12 +33,22 @@ impl crate::streaming::ResponseSink for ToolSink<'_> {
     fn end(&mut self, _: bool) {}
 }
 
-pub fn tool_sink<'a>(shared: &'a Shared, host: &str, port: u16, https: bool, request: &[u8]) -> Option<ToolSink<'a>> {
+pub fn tool_sink<'a>(
+    shared: &'a Shared,
+    host: &str,
+    port: u16,
+    https: bool,
+    request: &[u8],
+) -> Option<ToolSink<'a>> {
     let tool = TOOL.with(|t| t.get())?;
     if tool == "Proxy" || tool == "Repeater" {
         return None;
     }
-    Some(ToolSink { shared, url: request_url(host, port, https, request), settings: shared.streaming.lock().unwrap().clone() })
+    Some(ToolSink {
+        shared,
+        url: request_url(host, port, https, request),
+        settings: shared.streaming.lock().unwrap().clone(),
+    })
 }
 
 /// How a sender wants HTTP/2 used on its thread (Repeater's protocol
@@ -73,7 +88,10 @@ pub fn as_http1(req: &[u8]) -> std::borrow::Cow<'_, [u8]> {
     let line = &req[..line_end];
     let trimmed = line.strip_suffix(b"\r").unwrap_or(line);
     for v in [b"HTTP/2".as_slice(), b"HTTP/2.0".as_slice()] {
-        if trimmed.ends_with(v) && trimmed.len() > v.len() && trimmed[trimmed.len() - v.len() - 1] == b' ' {
+        if trimmed.ends_with(v)
+            && trimmed.len() > v.len()
+            && trimmed[trimmed.len() - v.len() - 1] == b' '
+        {
             let mut out = trimmed[..trimmed.len() - v.len()].to_vec();
             out.extend_from_slice(b"HTTP/1.1");
             out.extend_from_slice(&req[trimmed.len()..]);
@@ -85,8 +103,15 @@ pub fn as_http1(req: &[u8]) -> std::borrow::Cow<'_, [u8]> {
 
 /// The request a tool is about to send, with the cookie jar's cookies when
 /// the jar's rule covers the tool working on this thread; otherwise as given.
-pub fn jar_request<'a>(shared: &Shared, host: &str, https: bool, request: &'a [u8]) -> std::borrow::Cow<'a, [u8]> {
-    let Some(tool) = TOOL.with(|t| t.get()) else { return request.into() };
+pub fn jar_request<'a>(
+    shared: &Shared,
+    host: &str,
+    https: bool,
+    request: &'a [u8],
+) -> std::borrow::Cow<'a, [u8]> {
+    let Some(tool) = TOOL.with(|t| t.get()) else {
+        return request.into();
+    };
     let jar = shared.cookie_jar.lock().unwrap();
     if !jar.applies_to(tool) || jar.cookies.is_empty() {
         return request.into();
@@ -96,8 +121,15 @@ pub fn jar_request<'a>(shared: &Shared, host: &str, https: bool, request: &'a [u
 
 /// The session rules scoped to the tool working on this thread, applied to
 /// the request it is about to send.
-pub fn session_request<'a>(shared: &Shared, port: u16, https: bool, request: std::borrow::Cow<'a, [u8]>) -> std::borrow::Cow<'a, [u8]> {
-    let Some(tool) = TOOL.with(|t| t.get()) else { return request };
+pub fn session_request<'a>(
+    shared: &Shared,
+    port: u16,
+    https: bool,
+    request: std::borrow::Cow<'a, [u8]>,
+) -> std::borrow::Cow<'a, [u8]> {
+    let Some(tool) = TOOL.with(|t| t.get()) else {
+        return request;
+    };
     if shared.session_rules.lock().unwrap().is_empty() {
         return request;
     }
@@ -115,7 +147,9 @@ pub fn session_after(shared: &Shared, host: &str) {
 
 /// Feed a tool's response to the cookie jar when the jar monitors that tool.
 pub fn jar_response(shared: &Shared, host: &str, request: &[u8], up: &Upstream) {
-    let (Some(tool), Some(resp)) = (TOOL.with(|t| t.get()), up.resp.as_deref()) else { return };
+    let (Some(tool), Some(resp)) = (TOOL.with(|t| t.get()), up.resp.as_deref()) else {
+        return;
+    };
     let mut jar = shared.cookie_jar.lock().unwrap();
     if jar.updates_from(tool) {
         let path = util::parse_http(request).path;
@@ -166,8 +200,17 @@ impl Drop for ToolScope {
     }
 }
 
-pub fn log_tool_exchange(shared: &Shared, host: &str, port: u16, https: bool, request: &[u8], up: &Upstream) {
-    let Some(tool) = TOOL.with(|t| t.get()) else { return };
+pub fn log_tool_exchange(
+    shared: &Shared,
+    host: &str,
+    port: u16,
+    https: bool,
+    request: &[u8],
+    up: &Upstream,
+) {
+    let Some(tool) = TOOL.with(|t| t.get()) else {
+        return;
+    };
     let first = request.split(|b| *b == b'\n').next().unwrap_or_default();
     let first = String::from_utf8_lossy(first);
     let mut words = first.split_whitespace();
@@ -176,17 +219,29 @@ pub fn log_tool_exchange(shared: &Shared, host: &str, port: u16, https: bool, re
     let (status, resp_len, mime) = match &up.resp {
         Some(resp) => {
             let parts = crate::util::parse_http(resp);
-            let status = String::from_utf8_lossy(resp.split(|b| *b == b'\n').next().unwrap_or_default())
-                .split_whitespace()
-                .nth(1)
-                .unwrap_or_default()
-                .to_string();
+            let status =
+                String::from_utf8_lossy(resp.split(|b| *b == b'\n').next().unwrap_or_default())
+                    .split_whitespace()
+                    .nth(1)
+                    .unwrap_or_default()
+                    .to_string();
             let ct = crate::util::get_header(&parts.headers, "Content-Type").unwrap_or_default();
-            (status, resp.len(), ct.split(';').next().unwrap_or_default().trim().to_ascii_lowercase())
+            (
+                status,
+                resp.len(),
+                ct.split(';')
+                    .next()
+                    .unwrap_or_default()
+                    .trim()
+                    .to_ascii_lowercase(),
+            )
         }
         None => (String::new(), 0, String::new()),
     };
-    let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
     let mut log = shared.tool_log.lock().unwrap();
     if log.len() >= TOOL_LOG_MAX {
         log.remove(0);

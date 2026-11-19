@@ -7,19 +7,83 @@ use super::*;
 /// Burp's own class. Index 0 is the generic `SQLException`.
 pub const SQL_ERRORS: [(&str, &[&str]); 8] = [
     ("Generic", &["SQLException"]),
-    ("Microsoft SQL Server", &["Incorrect syntax near", "Unclosed quotation mark", ", which was not supplied", "Invalid object name", "Microsoft OLE DB Provider", "ODBC SQL Server Driver", "Column name or number of supplied values does not match table definition", "Cannot find column", "SqlException"]),
-    ("Oracle", &["ODBC driver for Oracle", "quoted string not properly terminated", "missing right parenthesis", "PLS-0", "ORA-0", "ORA-1", "ORA-2", "ORA-3", "ORA-4"]),
-    ("MySQL", &["You have an error in your SQL syntax", "Incorrect column name", "Can't find record in", "Unknown table", "Incorrect column specifier for column", "Column count doesn't match value count at row", "supplied argument is not a valid MySQL result", "MDB2 Error: syntax error"]),
-    ("PostgreSQL", &["unterminated quoted identifier", "unterminated quoted string", "unterminated string literal", "Query failed: ERROR: syntax error", "PostgreSQL"]),
-    ("Microsoft Access", &["ODBC Microsoft Access Driver", "Syntax error in string in query expression"]),
-    ("IBM DB2", &["CLI Driver", "does not have an ending string delimiter", "Expected tokens may include:  ", "Escape syntax error.  See attached Throwable for details."]),
+    (
+        "Microsoft SQL Server",
+        &[
+            "Incorrect syntax near",
+            "Unclosed quotation mark",
+            ", which was not supplied",
+            "Invalid object name",
+            "Microsoft OLE DB Provider",
+            "ODBC SQL Server Driver",
+            "Column name or number of supplied values does not match table definition",
+            "Cannot find column",
+            "SqlException",
+        ],
+    ),
+    (
+        "Oracle",
+        &[
+            "ODBC driver for Oracle",
+            "quoted string not properly terminated",
+            "missing right parenthesis",
+            "PLS-0",
+            "ORA-0",
+            "ORA-1",
+            "ORA-2",
+            "ORA-3",
+            "ORA-4",
+        ],
+    ),
+    (
+        "MySQL",
+        &[
+            "You have an error in your SQL syntax",
+            "Incorrect column name",
+            "Can't find record in",
+            "Unknown table",
+            "Incorrect column specifier for column",
+            "Column count doesn't match value count at row",
+            "supplied argument is not a valid MySQL result",
+            "MDB2 Error: syntax error",
+        ],
+    ),
+    (
+        "PostgreSQL",
+        &[
+            "unterminated quoted identifier",
+            "unterminated quoted string",
+            "unterminated string literal",
+            "Query failed: ERROR: syntax error",
+            "PostgreSQL",
+        ],
+    ),
+    (
+        "Microsoft Access",
+        &[
+            "ODBC Microsoft Access Driver",
+            "Syntax error in string in query expression",
+        ],
+    ),
+    (
+        "IBM DB2",
+        &[
+            "CLI Driver",
+            "does not have an ending string delimiter",
+            "Expected tokens may include:  ",
+            "Escape syntax error.  See attached Throwable for details.",
+        ],
+    ),
     ("ColdFusion", &["Dynamic Page Generation Error"]),
 ];
 
 /// The first database error signature in `body` that the baseline lacks.
 pub fn sql_error_in(body: &str, baseline: &str) -> Option<(usize, &'static str)> {
     for (i, (_, sigs)) in SQL_ERRORS.iter().enumerate() {
-        if let Some(sig) = sigs.iter().find(|s| body.contains(**s) && !baseline.contains(**s)) {
+        if let Some(sig) = sigs
+            .iter()
+            .find(|s| body.contains(**s) && !baseline.contains(**s))
+        {
             return Some((i, sig));
         }
     }
@@ -56,14 +120,19 @@ pub fn run_sql_error_check<F: FnMut(&str) -> Option<String>>(
         let mut probe = |suffix: &str| {
             send(&format!("{value}{suffix}")).and_then(|raw| {
                 let (st, body) = split_resp(&raw);
-                sql_error_in(body, base_body)
-                    .or_else(|| generic_error_in(st, body, base_status, base_body).map(|w| (usize::MAX, w)))
+                sql_error_in(body, base_body).or_else(|| {
+                    generic_error_in(st, body, base_status, base_body).map(|w| (usize::MAX, w))
+                })
             })
         };
         let Some((db, _)) = probe(s[0]) else { continue };
         let second_clean = probe(s[1]).is_none();
         let hit = |confirmed| SqlErrorHit {
-            database: if db == usize::MAX { "General" } else { SQL_ERRORS[db].0 },
+            database: if db == usize::MAX {
+                "General"
+            } else {
+                SQL_ERRORS[db].0
+            },
             payload: format!("{value}{}", s[0]),
             confirmed,
         };
@@ -80,8 +149,16 @@ pub fn run_sql_error_check<F: FnMut(&str) -> Option<String>>(
 /// (status, body) of a raw response; a bare body string counts as a 200.
 pub fn split_resp(raw: &str) -> (u16, &str) {
     if raw.starts_with("HTTP/") {
-        let status = raw.split_whitespace().nth(1).and_then(|x| x.parse().ok()).unwrap_or(0);
-        let body = raw.find("\r\n\r\n").map(|i| &raw[i + 4..]).or_else(|| raw.find("\n\n").map(|i| &raw[i + 2..])).unwrap_or("");
+        let status = raw
+            .split_whitespace()
+            .nth(1)
+            .and_then(|x| x.parse().ok())
+            .unwrap_or(0);
+        let body = raw
+            .find("\r\n\r\n")
+            .map(|i| &raw[i + 4..])
+            .or_else(|| raw.find("\n\n").map(|i| &raw[i + 2..]))
+            .unwrap_or("");
         (status, body)
     } else {
         (200, raw)
@@ -89,11 +166,17 @@ pub fn split_resp(raw: &str) -> (u16, &str) {
 }
 
 /// burp.Ze27.Za, runtime-dumped: the "general error" words (case-insensitive).
-pub const GENERIC_ERROR_WORDS: [&str; 6] = ["error", "exception", "illegal", "invalid", "fail", "stack"];
+pub const GENERIC_ERROR_WORDS: [&str; 6] =
+    ["error", "exception", "illegal", "invalid", "fail", "stack"];
 
 /// burp.Zbpt.ZJ: a new 5xx status, or a general error word the baseline
 /// response did not contain.
-pub fn generic_error_in(status: u16, body: &str, base_status: u16, base_body: &str) -> Option<&'static str> {
+pub fn generic_error_in(
+    status: u16,
+    body: &str,
+    base_status: u16,
+    base_body: &str,
+) -> Option<&'static str> {
     // Without a baseline response there is nothing to compare against.
     if base_status == 0 && base_body.is_empty() {
         return None;
@@ -103,7 +186,10 @@ pub fn generic_error_in(status: u16, body: &str, base_status: u16, base_body: &s
     }
     let low = body.to_ascii_lowercase();
     let base = base_body.to_ascii_lowercase();
-    GENERIC_ERROR_WORDS.iter().copied().find(|w| low.contains(w) && !base.contains(w))
+    GENERIC_ERROR_WORDS
+        .iter()
+        .copied()
+        .find(|w| low.contains(w) && !base.contains(w))
 }
 
 /// burp.Zguq subclasses: the boolean payload shapes.
@@ -129,7 +215,12 @@ pub struct SqlBoolGen {
 
 impl SqlBoolGen {
     pub(crate) fn new(shape: SqlBoolShape, quote: &str) -> Self {
-        SqlBoolGen { shape, quote: quote.to_string(), pos: 0, neg: 0 }
+        SqlBoolGen {
+            shape,
+            quote: quote.to_string(),
+            pos: 0,
+            neg: 0,
+        }
     }
     fn render(&self, r: u32, n: u32, v: &str) -> String {
         let q = &self.quote;
@@ -144,7 +235,11 @@ impl SqlBoolGen {
     /// fourth (starting with the first) compares with "0n" (still equal).
     pub(crate) fn positive_with(&mut self, r: u32, n: u32) -> String {
         let quoted = !self.quote.is_empty();
-        let v = if !quoted && self.pos.is_multiple_of(4) { format!("0{n}") } else { n.to_string() };
+        let v = if !quoted && self.pos.is_multiple_of(4) {
+            format!("0{n}")
+        } else {
+            n.to_string()
+        };
         self.pos += 1;
         self.render(r, n, &v)
     }
@@ -152,7 +247,11 @@ impl SqlBoolGen {
     /// fourth (the second, sixth, ...) with m+quote (quoted) or m+"0".
     pub(crate) fn negative_with(&mut self, r: u32, m: u32, k: u32) -> String {
         let v = if self.neg % 4 == 1 {
-            if self.quote.is_empty() { format!("{m}0") } else { format!("{m}{}", self.quote) }
+            if self.quote.is_empty() {
+                format!("{m}0")
+            } else {
+                format!("{m}{}", self.quote)
+            }
         } else {
             (m + k).to_string()
         };
@@ -162,13 +261,20 @@ impl SqlBoolGen {
     pub(crate) fn positive(&mut self) -> String {
         use rand::Rng;
         let mut g = rand::thread_rng();
-        let (r, n) = (g.gen_range(10_000_000..100_000_000), g.gen_range(1000..10000));
+        let (r, n) = (
+            g.gen_range(10_000_000..100_000_000),
+            g.gen_range(1000..10000),
+        );
         self.positive_with(r, n)
     }
     pub(crate) fn negative(&mut self) -> String {
         use rand::Rng;
         let mut g = rand::thread_rng();
-        let (r, m, k) = (g.gen_range(10_000_000..100_000_000), g.gen_range(1009..9990), g.gen_range(1..10));
+        let (r, m, k) = (
+            g.gen_range(10_000_000..100_000_000),
+            g.gen_range(1009..9990),
+            g.gen_range(1..10),
+        );
         self.negative_with(r, m, k)
     }
 }
@@ -206,7 +312,10 @@ pub fn run_sql_boolean_check<F: FnMut(&str) -> Option<Vec<u8>>>(
     for q in quotes {
         for shape in &shapes {
             let gen = std::cell::RefCell::new(SqlBoolGen::new(*shape, q));
-            let (fp, fnn) = (std::cell::RefCell::new(None::<String>), std::cell::RefCell::new(None::<String>));
+            let (fp, fnn) = (
+                std::cell::RefCell::new(None::<String>),
+                std::cell::RefCell::new(None::<String>),
+            );
             let attrs = crate::variations::differential(
                 Some(baseline),
                 accuracy,
@@ -250,7 +359,11 @@ pub fn run_sql_boolean_check<F: FnMut(&str) -> Option<Vec<u8>>>(
             },
         );
         if let Some(attributes) = attrs {
-            return Some(SqlBoolHit { positive: T[0].into(), negative: F[0].into(), attributes });
+            return Some(SqlBoolHit {
+                positive: T[0].into(),
+                negative: F[0].into(),
+                attributes,
+            });
         }
     }
     None

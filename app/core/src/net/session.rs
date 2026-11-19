@@ -7,7 +7,16 @@ use super::*;
 /// header, set a cookie value, use the cookie jar, run a macro, check the
 /// session is valid, run a post-request macro). "use cookie" is WebProbe's
 /// older "reuse the newest Set-Cookie value from history".
-pub const SESSION_ACTIONS: [&str; 8] = ["set header", "set cookie", "use cookie", "use cookie jar", "run macro", "check session", "post-request macro", "invoke extension"];
+pub const SESSION_ACTIONS: [&str; 8] = [
+    "set header",
+    "set cookie",
+    "use cookie",
+    "use cookie jar",
+    "run macro",
+    "check session",
+    "post-request macro",
+    "invoke extension",
+];
 
 /// "check session" recovery choice, offered next to the macros: instead of
 /// running a login macro, ask the user to log in again in the browser
@@ -45,7 +54,11 @@ pub struct BrowserRecovery {
 impl BrowserRecovery {
     /// The prompt the UI should show, if any.
     pub fn pending(&self) -> Option<RecoveryRequest> {
-        self.state.lock().unwrap_or_else(|e| e.into_inner()).pending.clone()
+        self.state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .pending
+            .clone()
     }
 
     /// The user's answer: `true` once they have logged in again.
@@ -65,7 +78,11 @@ impl BrowserRecovery {
             None => {
                 st.next_id += 1;
                 let id = st.next_id;
-                st.pending = Some(RecoveryRequest { id, host: host.to_string(), rule: rule.to_string() });
+                st.pending = Some(RecoveryRequest {
+                    id,
+                    host: host.to_string(),
+                    rule: rule.to_string(),
+                });
                 id
             }
         };
@@ -84,7 +101,11 @@ impl BrowserRecovery {
                 }
                 return false;
             }
-            st = self.cv.wait_timeout(st, left).unwrap_or_else(|e| e.into_inner()).0;
+            st = self
+                .cv
+                .wait_timeout(st, left)
+                .unwrap_or_else(|e| e.into_inner())
+                .0;
         }
     }
 }
@@ -105,13 +126,27 @@ pub fn in_session<T>(f: impl FnOnce() -> T) -> T {
 pub fn set_request_cookie(raw: &[u8], name: &str, value: &str) -> Vec<u8> {
     let p = util::parse_http(raw);
     let existing = util::get_header(&p.headers, "Cookie").unwrap_or_default();
-    let mut pairs: Vec<(String, String)> =
-        existing.split(';').filter_map(|c| c.split_once('=').map(|(n, v)| (n.trim().to_string(), v.trim().to_string()))).filter(|(n, _)| !n.is_empty()).collect();
+    let mut pairs: Vec<(String, String)> = existing
+        .split(';')
+        .filter_map(|c| {
+            c.split_once('=')
+                .map(|(n, v)| (n.trim().to_string(), v.trim().to_string()))
+        })
+        .filter(|(n, _)| !n.is_empty())
+        .collect();
     match pairs.iter_mut().find(|(n, _)| n == name) {
         Some(pair) => pair.1 = value.to_string(),
         None => pairs.push((name.to_string(), value.to_string())),
     }
-    replace_or_add_header(raw, "Cookie", &pairs.iter().map(|(n, v)| format!("{n}={v}")).collect::<Vec<_>>().join("; "))
+    replace_or_add_header(
+        raw,
+        "Cookie",
+        &pairs
+            .iter()
+            .map(|(n, v)| format!("{n}={v}"))
+            .collect::<Vec<_>>()
+            .join("; "),
+    )
 }
 
 /// What one macro step did.
@@ -136,13 +171,33 @@ pub fn run_macro_text(shared: &Shared, text: &str) -> Vec<MacroStepResult> {
         let p = util::parse_http(&request);
         let (host, port) = host_of(&p, if step.https { 443 } else { 80 });
         let https = step.https || port == 443;
-        let request = shared.cookie_jar.lock().unwrap().apply(&request, &host, https, util::now_secs());
-        let up = in_session(|| if https { send_tls_raw(shared, &host, port, &request) } else { send_raw(shared, &host, port, &request) });
+        let request =
+            shared
+                .cookie_jar
+                .lock()
+                .unwrap()
+                .apply(&request, &host, https, util::now_secs());
+        let up = in_session(|| {
+            if https {
+                send_tls_raw(shared, &host, port, &request)
+            } else {
+                send_raw(shared, &host, port, &request)
+            }
+        });
         if let Some(resp) = &up.resp {
-            shared.cookie_jar.lock().unwrap().update_from_response(&host, &p.path, resp, util::now_secs());
+            shared.cookie_jar.lock().unwrap().update_from_response(
+                &host,
+                &p.path,
+                resp,
+                util::now_secs(),
+            );
         }
         let failed = up.resp.is_none();
-        results.push(MacroStepResult { request, response: up.resp, derived });
+        results.push(MacroStepResult {
+            request,
+            response: up.resp,
+            derived,
+        });
         if failed {
             break;
         }
@@ -168,7 +223,10 @@ pub fn expand_placeholders(shared: &Shared, value: &str) -> String {
         match rest[open..].find('}') {
             Some(close) => {
                 let name = &rest[open + 1..open + close];
-                match (!name.is_empty() && !last.is_empty()).then(|| crate::macros::extract_value(&last, name)).flatten() {
+                match (!name.is_empty() && !last.is_empty())
+                    .then(|| crate::macros::extract_value(&last, name))
+                    .flatten()
+                {
                     Some(v) => out.push_str(&v),
                     None => out.push_str(&rest[open..=open + close]),
                 }
@@ -187,7 +245,13 @@ pub fn expand_placeholders(shared: &Shared, value: &str) -> String {
 /// Run a stored macro by name. Returns the last step's response, or `None`
 /// when the macro is unknown, empty, or a step got no response.
 pub fn run_macro(shared: &Shared, name: &str) -> Option<Vec<u8>> {
-    let text = shared.macros.lock().unwrap().iter().find(|m| m.name == name).map(|m| m.request.clone())?;
+    let text = shared
+        .macros
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|m| m.name == name)
+        .map(|m| m.request.clone())?;
     run_macro_text(shared, &text).pop().and_then(|r| r.response)
 }
 
@@ -208,7 +272,13 @@ pub fn apply_session_rules(shared: &Shared, req: &[u8], default_port: u16) -> Ve
 /// * check session: send the request as it stands and look for the rule's
 ///   expression in the response; when that shows the session is invalid,
 ///   run the named macro (a login) and update the request's cookies
-pub fn apply_session_rules_for(shared: &Shared, tool: &str, req: &[u8], default_port: u16, https: bool) -> Vec<u8> {
+pub fn apply_session_rules_for(
+    shared: &Shared,
+    tool: &str,
+    req: &[u8],
+    default_port: u16,
+    https: bool,
+) -> Vec<u8> {
     if IN_SESSION.with(|s| s.get()) {
         return req.to_vec();
     }
@@ -219,9 +289,18 @@ pub fn apply_session_rules_for(shared: &Shared, tool: &str, req: &[u8], default_
     let parts = util::parse_http(req);
     let (host, port) = host_of(&parts, default_port);
     let mut out = req.to_vec();
-    let from_jar = |out: &[u8]| shared.cookie_jar.lock().unwrap().apply(out, &host, https, util::now_secs());
+    let from_jar = |out: &[u8]| {
+        shared
+            .cookie_jar
+            .lock()
+            .unwrap()
+            .apply(out, &host, https, util::now_secs())
+    };
     for rule in rules {
-        if !rule.enabled || !rule.tools.iter().any(|t| t == tool) || !pattern_matches(&rule.host_match, false, &host) {
+        if !rule.enabled
+            || !rule.tools.iter().any(|t| t == tool)
+            || !pattern_matches(&rule.host_match, false, &host)
+        {
             continue;
         }
         match rule.action.as_str() {
@@ -229,59 +308,113 @@ pub fn apply_session_rules_for(shared: &Shared, tool: &str, req: &[u8], default_
                 let filled = expand_placeholders(shared, &rule.value);
                 if let Some((name, value)) = filled.split_once(':') {
                     out = replace_or_add_header(&out, name.trim(), value.trim());
-                    shared.log(&format!("Session rule '{}' set {} header", rule.name, name.trim()));
+                    shared.log(&format!(
+                        "Session rule '{}' set {} header",
+                        rule.name,
+                        name.trim()
+                    ));
                 }
             }
             "set cookie" => {
                 let filled = expand_placeholders(shared, &rule.value);
                 if let Some((name, value)) = filled.split_once('=') {
                     out = set_request_cookie(&out, name.trim(), value.trim());
-                    shared.log(&format!("Session rule '{}' set cookie {}", rule.name, name.trim()));
+                    shared.log(&format!(
+                        "Session rule '{}' set cookie {}",
+                        rule.name,
+                        name.trim()
+                    ));
                 }
             }
             "use cookie" => {
                 if let Some(value) = latest_cookie(shared, rule.value.trim()) {
                     out = append_cookie(&out, rule.value.trim(), &value);
-                    shared.log(&format!("Session rule '{}' reused cookie {}", rule.name, rule.value));
+                    shared.log(&format!(
+                        "Session rule '{}' reused cookie {}",
+                        rule.name, rule.value
+                    ));
                 }
             }
             "use cookie jar" => out = from_jar(&out),
             "invoke extension" => {
                 let exts = shared.ext_host.lock().unwrap().active();
                 let svc = crate::ext_host::HttpService::new(&host, port, https);
-                match exts.iter().find(|e| e.ui().is_some_and(|u| u.session_actions.contains(&rule.value))) {
+                match exts.iter().find(|e| {
+                    e.ui()
+                        .is_some_and(|u| u.session_actions.contains(&rule.value))
+                }) {
                     Some(e) => match e.session_action(&rule.value, &svc, &out) {
                         Ok(r) => {
                             out = r;
-                            shared.log(&format!("Session rule '{}' invoked the extension action {}", rule.name, rule.value));
+                            shared.log(&format!(
+                                "Session rule '{}' invoked the extension action {}",
+                                rule.name, rule.value
+                            ));
                         }
-                        Err(why) => shared.log(&format!("Session rule '{}': the extension action {} failed: {why}", rule.name, rule.value)),
+                        Err(why) => shared.log(&format!(
+                            "Session rule '{}': the extension action {} failed: {why}",
+                            rule.name, rule.value
+                        )),
                     },
-                    None => shared.log(&format!("Session rule '{}': no loaded extension provides the action {}", rule.name, rule.value)),
+                    None => shared.log(&format!(
+                        "Session rule '{}': no loaded extension provides the action {}",
+                        rule.name, rule.value
+                    )),
                 }
             }
             "run macro" => {
                 let ok = run_macro(shared, &rule.value).is_some();
                 out = from_jar(&out);
-                shared.log(&format!("Session rule '{}' ran macro {}: {}", rule.name, rule.value, if ok { "ok" } else { "failed" }));
+                shared.log(&format!(
+                    "Session rule '{}' ran macro {}: {}",
+                    rule.name,
+                    rule.value,
+                    if ok { "ok" } else { "failed" }
+                ));
             }
             "check session" => {
-                let probe = in_session(|| if https { send_tls_raw(shared, &host, port, &out) } else { send_raw(shared, &host, port, &out) });
+                let probe = in_session(|| {
+                    if https {
+                        send_tls_raw(shared, &host, port, &out)
+                    } else {
+                        send_raw(shared, &host, port, &out)
+                    }
+                });
                 let Some(resp) = probe.resp else {
-                    shared.log(&format!("Session rule '{}': validation request failed", rule.name));
+                    shared.log(&format!(
+                        "Session rule '{}': validation request failed",
+                        rule.name
+                    ));
                     continue;
                 };
-                let found = !rule.check.is_empty() && String::from_utf8_lossy(&resp).to_ascii_lowercase().contains(&rule.check.to_ascii_lowercase());
+                let found = !rule.check.is_empty()
+                    && String::from_utf8_lossy(&resp)
+                        .to_ascii_lowercase()
+                        .contains(&rule.check.to_ascii_lowercase());
                 let invalid = found == rule.check_invalid_on_match;
                 if invalid && rule.value == BROWSER_RECOVERY {
                     shared.log(&format!("Session rule '{}': session invalid, waiting for an in-browser login to {host}", rule.name));
-                    let ok = shared.browser_recovery.ask(&host, &rule.name, BROWSER_RECOVERY_WAIT, || shared.wake());
+                    let ok = shared.browser_recovery.ask(
+                        &host,
+                        &rule.name,
+                        BROWSER_RECOVERY_WAIT,
+                        || shared.wake(),
+                    );
                     out = from_jar(&out);
-                    shared.log(&format!("Session rule '{}': in-browser recovery {}", rule.name, if ok { "done" } else { "cancelled" }));
+                    shared.log(&format!(
+                        "Session rule '{}': in-browser recovery {}",
+                        rule.name,
+                        if ok { "done" } else { "cancelled" }
+                    ));
                 } else if invalid {
                     let ok = !rule.value.is_empty() && run_macro(shared, &rule.value).is_some();
                     out = from_jar(&out);
-                    shared.log(&format!("Session rule '{}': session invalid, macro {} {}", rule.name, rule.value, if ok { "ran" } else { "did not run" }));
+                    shared.log(&format!(
+                        "Session rule '{}': session invalid, macro {} {}",
+                        rule.name,
+                        rule.value,
+                        if ok { "ran" } else { "did not run" }
+                    ));
                 }
             }
             _ => {}
@@ -297,9 +430,18 @@ pub fn run_post_request_rules(shared: &Shared, tool: &str, host: &str) {
     }
     let rules = shared.session_rules.lock().unwrap().clone();
     for rule in rules {
-        if rule.enabled && rule.action == "post-request macro" && rule.tools.iter().any(|t| t == tool) && pattern_matches(&rule.host_match, false, host) {
+        if rule.enabled
+            && rule.action == "post-request macro"
+            && rule.tools.iter().any(|t| t == tool)
+            && pattern_matches(&rule.host_match, false, host)
+        {
             let ok = run_macro(shared, &rule.value).is_some();
-            shared.log(&format!("Session rule '{}' ran post-request macro {}: {}", rule.name, rule.value, if ok { "ok" } else { "failed" }));
+            shared.log(&format!(
+                "Session rule '{}' ran post-request macro {}: {}",
+                rule.name,
+                rule.value,
+                if ok { "ok" } else { "failed" }
+            ));
         }
     }
 }
@@ -309,7 +451,14 @@ pub fn push_ws(shared: &Shared, host: &str, direction: &str, opcode: &str, paylo
 }
 
 /// Record one WebSocket message of connection `socket` (bytes kept exactly).
-pub fn push_ws_in(shared: &Shared, socket: u64, host: &str, direction: &str, opcode: &str, payload: &[u8]) -> u64 {
+pub fn push_ws_in(
+    shared: &Shared,
+    socket: u64,
+    host: &str,
+    direction: &str,
+    opcode: &str,
+    payload: &[u8],
+) -> u64 {
     let id = shared.next_id.fetch_add(1, Ordering::SeqCst);
     shared.ws_history.push(WsEntry {
         id,

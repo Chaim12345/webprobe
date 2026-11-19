@@ -43,7 +43,12 @@ pub enum FollowMode {
 }
 
 impl FollowMode {
-    pub const ALL: [FollowMode; 4] = [FollowMode::Never, FollowMode::OnSite, FollowMode::InScope, FollowMode::Always];
+    pub const ALL: [FollowMode; 4] = [
+        FollowMode::Never,
+        FollowMode::OnSite,
+        FollowMode::InScope,
+        FollowMode::Always,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
@@ -68,7 +73,11 @@ pub struct Service {
 
 impl Service {
     pub fn new(host: &str, port: u16, https: bool) -> Self {
-        Self { host: host.to_string(), port, https }
+        Self {
+            host: host.to_string(),
+            port,
+            https,
+        }
     }
 
     fn default_port(&self) -> bool {
@@ -77,12 +86,20 @@ impl Service {
 
     /// The Host header value: the port only when it is not the default.
     pub fn authority(&self) -> String {
-        if self.default_port() { self.host.clone() } else { format!("{}:{}", self.host, self.port) }
+        if self.default_port() {
+            self.host.clone()
+        } else {
+            format!("{}:{}", self.host, self.port)
+        }
     }
 
     /// `scheme://authority`
     pub fn origin(&self) -> String {
-        format!("{}://{}", if self.https { "https" } else { "http" }, self.authority())
+        format!(
+            "{}://{}",
+            if self.https { "https" } else { "http" },
+            self.authority()
+        )
     }
 
     /// The service a Repeater tab sends to: the configured target, the Host
@@ -94,7 +111,11 @@ impl Service {
         if header.is_empty() && host.is_empty() {
             return None;
         }
-        let (h, p) = if header.is_empty() { (host.to_string(), port) } else { net::split_h_p(header, port) };
+        let (h, p) = if header.is_empty() {
+            (host.to_string(), port)
+        } else {
+            net::split_h_p(header, port)
+        };
         Some(Self::new(&h, p, https))
     }
 }
@@ -120,22 +141,35 @@ pub fn preserves_method(status: u16) -> bool {
 
 /// Strip an absolute-form request target to its path.
 fn request_path(target: &str) -> &str {
-    let lower = target.get(..8.min(target.len())).unwrap_or("").to_ascii_lowercase();
+    let lower = target
+        .get(..8.min(target.len()))
+        .unwrap_or("")
+        .to_ascii_lowercase();
     if lower.starts_with("http://") || lower.starts_with("https://") {
         let from = if lower.starts_with("https://") { 8 } else { 7 };
-        return target[from..].find('/').map(|i| &target[from + i..]).unwrap_or("/");
+        return target[from..]
+            .find('/')
+            .map(|i| &target[from + i..])
+            .unwrap_or("/");
     }
     target
 }
 
 /// Resolve a Location value against the service and request path that
 /// produced it (Zpj9.Zf). Returns the next service and origin-form path.
-pub fn resolve_location(origin: &Service, req_target: &str, location: &str) -> Option<(Service, String)> {
+pub fn resolve_location(
+    origin: &Service,
+    req_target: &str,
+    location: &str,
+) -> Option<(Service, String)> {
     let mut loc = location.trim().to_string();
     if loc.starts_with("//") {
         loc = format!("{}:{loc}", if origin.https { "https" } else { "http" });
     }
-    let lower = loc.get(..8.min(loc.len())).unwrap_or("").to_ascii_lowercase();
+    let lower = loc
+        .get(..8.min(loc.len()))
+        .unwrap_or("")
+        .to_ascii_lowercase();
     let absolute = lower.starts_with("http://") || lower.starts_with("https://");
     let (service, mut path) = if absolute {
         let https = lower.starts_with("https://");
@@ -147,7 +181,10 @@ pub fn resolve_location(origin: &Service, req_target: &str, location: &str) -> O
             return None;
         }
         let (host, port) = net::split_h_p(authority, if https { 443 } else { 80 });
-        let host = host.trim_start_matches('[').trim_end_matches(']').to_string();
+        let host = host
+            .trim_start_matches('[')
+            .trim_end_matches(']')
+            .to_string();
         (Service::new(&host, port, https), rest[end..].to_string())
     } else if loc.starts_with('/') {
         (origin.clone(), loc)
@@ -241,11 +278,20 @@ fn head_lines_and_body(msg: &str) -> (Vec<String>, String) {
             None => (msg.trim_end_matches(['\r', '\n']), ""),
         },
     };
-    (head.split('\n').map(|l| l.trim_end_matches('\r').to_string()).collect(), body.to_string())
+    (
+        head.split('\n')
+            .map(|l| l.trim_end_matches('\r').to_string())
+            .collect(),
+        body.to_string(),
+    )
 }
 
 fn header_name(line: &str) -> String {
-    line.split(':').next().unwrap_or("").trim().to_ascii_lowercase()
+    line.split(':')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase()
 }
 
 /// Replace the first `name:` header line, or append one (Zs65.Zr).
@@ -293,11 +339,12 @@ pub fn redirect_request(
     if version.eq_ignore_ascii_case("HTTP/2") && !target.https {
         version = "HTTP/1.1".into();
     }
-    let original_url = if original_target.starts_with("http://") || original_target.starts_with("https://") {
-        original_target.clone()
-    } else {
-        format!("{}{}", origin.origin(), original_target)
-    };
+    let original_url =
+        if original_target.starts_with("http://") || original_target.starts_with("https://") {
+            original_target.clone()
+        } else {
+            format!("{}{}", origin.origin(), original_target)
+        };
     if cross_site {
         lines = std::iter::once(first)
             .chain(lines.into_iter().skip(1).filter(|l| {
@@ -307,20 +354,45 @@ pub fn redirect_request(
                 let n = header_name(l);
                 CROSS_SITE_HEADERS.contains(&n.as_str())
                     || (n == "referer" && same_protocol)
-                    || (preserve && matches!(n.as_str(), "content-length" | "content-type" | "transfer-encoding"))
+                    || (preserve
+                        && matches!(
+                            n.as_str(),
+                            "content-length" | "content-type" | "transfer-encoding"
+                        ))
             }))
             .collect();
         set_header(&mut lines, "Host", &target.authority());
     } else if process_cookies && !cookies_from_response.is_empty() {
-        let existing = lines.iter().skip(1).find(|l| header_name(l) == "cookie").map(|l| l.split_once(':').map(|x| x.1).unwrap_or("").trim().to_string());
-        set_header(&mut lines, "Cookie", &merge_cookies(existing.as_deref(), cookies_from_response));
+        let existing = lines
+            .iter()
+            .skip(1)
+            .find(|l| header_name(l) == "cookie")
+            .map(|l| {
+                l.split_once(':')
+                    .map(|x| x.1)
+                    .unwrap_or("")
+                    .trim()
+                    .to_string()
+            });
+        set_header(
+            &mut lines,
+            "Cookie",
+            &merge_cookies(existing.as_deref(), cookies_from_response),
+        );
     }
     // No Referer when an HTTPS page redirects to plain HTTP.
     if !(origin.https && !target.https) {
-        let referer = if cross_site { format!("{}/", origin.origin()) } else { original_url };
+        let referer = if cross_site {
+            format!("{}/", origin.origin())
+        } else {
+            original_url
+        };
         set_header(&mut lines, "Referer", &referer);
     }
-    lines[0] = format!("{} {path} {version}", if preserve { method.as_str() } else { "GET" });
+    lines[0] = format!(
+        "{} {path} {version}",
+        if preserve { method.as_str() } else { "GET" }
+    );
     if preserve {
         join_message(&lines, &body)
     } else {
@@ -334,13 +406,25 @@ pub fn redirect_request(
 /// Burp's scope test (Zex.ZU): an include rule must match and no exclude
 /// rule may. Unlike `net::in_scope`, an empty scope holds nothing.
 pub fn burp_in_scope(shared: &net::Shared, url: &str) -> bool {
-    shared.scope.lock().unwrap().iter().any(|r| r.enabled && r.include) && net::in_scope(shared, url)
+    shared
+        .scope
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|r| r.enabled && r.include)
+        && net::in_scope(shared, url)
 }
 
 /// Whether a redirection is followed under `mode` (Zx37 policies), given
 /// how many were followed already, the service the user sent to, the next
 /// service and whether its URL is in scope.
-pub fn should_follow(mode: FollowMode, followed: usize, first: &Service, next: &Service, next_in_scope: bool) -> bool {
+pub fn should_follow(
+    mode: FollowMode,
+    followed: usize,
+    first: &Service,
+    next: &Service,
+    next_in_scope: bool,
+) -> bool {
     if followed >= MAX_REDIRECTS {
         return false;
     }
@@ -355,13 +439,29 @@ pub fn should_follow(mode: FollowMode, followed: usize, first: &Service, next: &
 /// The follow-up request for a response, if it is a redirection:
 /// (next service, request). Used by auto-follow and the "Follow
 /// redirection" button.
-pub fn next_redirect(req: &str, service: &Service, resp: &[u8], process_cookies: bool) -> Option<(Service, String)> {
+pub fn next_redirect(
+    req: &str,
+    service: &Service,
+    resp: &[u8],
+    process_cookies: bool,
+) -> Option<(Service, String)> {
     let (status, loc) = redirect_of(resp)?;
     let first = req.split('\n').next().unwrap_or("");
     let target = first.split_whitespace().nth(1).unwrap_or("/");
     let (next, path) = resolve_location(service, target, &loc)?;
     let cookies = set_cookies(resp);
-    Some((next.clone(), redirect_request(req, service, &next, &path, status, process_cookies, &cookies)))
+    Some((
+        next.clone(),
+        redirect_request(
+            req,
+            service,
+            &next,
+            &path,
+            status,
+            process_cookies,
+            &cookies,
+        ),
+    ))
 }
 
 /// Outcome of a send with redirections.
@@ -379,14 +479,36 @@ pub struct FollowResult {
 /// One send. A streaming response (Settings > Network > HTTP > Streaming
 /// responses) is shown as it arrives through `progress` and comes back
 /// whole when it ends, is cancelled or goes idle for 10 minutes.
-fn send_once(shared: &net::Shared, service: &Service, req: &str, cancelled: &dyn Fn() -> bool, progress: &dyn Fn(&[u8], bool)) -> net::Upstream {
-    let url = format!("{}{}", service.origin(), req.split_whitespace().nth(1).unwrap_or("/"));
+fn send_once(
+    shared: &net::Shared,
+    service: &Service,
+    req: &str,
+    cancelled: &dyn Fn() -> bool,
+    progress: &dyn Fn(&[u8], bool),
+) -> net::Upstream {
+    let url = format!(
+        "{}{}",
+        service.origin(),
+        req.split_whitespace().nth(1).unwrap_or("/")
+    );
     let settings = shared.streaming.lock().unwrap().clone();
     let mut sink = webprobe_core::streaming::LiveSink::new(&url, settings, cancelled, progress);
     let mut up = if service.https {
-        net::send_tls_raw_with(shared, &service.host, service.port, req.as_bytes(), Some(&mut sink))
+        net::send_tls_raw_with(
+            shared,
+            &service.host,
+            service.port,
+            req.as_bytes(),
+            Some(&mut sink),
+        )
     } else {
-        net::send_raw_with(shared, &service.host, service.port, req.as_bytes(), Some(&mut sink))
+        net::send_raw_with(
+            shared,
+            &service.host,
+            service.port,
+            req.as_bytes(),
+            Some(&mut sink),
+        )
     };
     if let Some(whole) = sink.into_response() {
         up.resp = Some(whole);
@@ -412,11 +534,23 @@ pub fn send_following(
     loop {
         let up = send_once(shared, &current, &request, cancelled, progress);
         let Some(resp) = up.resp else {
-            return FollowResult { request, service: current, response: None, error: up.error, followed };
+            return FollowResult {
+                request,
+                service: current,
+                response: None,
+                error: up.error,
+                followed,
+            };
         };
         if mode != FollowMode::Never && !cancelled() {
-            if let Some((next, next_req)) = next_redirect(&request, &current, &resp, process_cookies) {
-                let path = next_req.split_whitespace().nth(1).unwrap_or("/").to_string();
+            if let Some((next, next_req)) =
+                next_redirect(&request, &current, &resp, process_cookies)
+            {
+                let path = next_req
+                    .split_whitespace()
+                    .nth(1)
+                    .unwrap_or("/")
+                    .to_string();
                 let in_scope = burp_in_scope(shared, &format!("{}{}", next.origin(), path));
                 if should_follow(mode, followed, service, &next, in_scope) {
                     followed += 1;
@@ -426,7 +560,13 @@ pub fn send_following(
                 }
             }
         }
-        return FollowResult { request, service: current, response: Some(resp), error: None, followed };
+        return FollowResult {
+            request,
+            service: current,
+            response: Some(resp),
+            error: None,
+            followed,
+        };
     }
 }
 
@@ -438,7 +578,11 @@ fn is_hostname(s: &str) -> bool {
     !s.is_empty()
         && s.len() <= 253
         && s.split('.').all(|l| {
-            !l.is_empty() && l.len() <= 63 && !l.starts_with('-') && !l.ends_with('-') && l.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+            !l.is_empty()
+                && l.len() <= 63
+                && !l.starts_with('-')
+                && !l.ends_with('-')
+                && l.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
         })
 }
 
@@ -454,7 +598,10 @@ pub fn paste_url_as_request(text: &str, keep_alive: bool) -> Result<(Service, St
     } else if is_hostname(t) {
         (Service::new(t, 443, true), "/".to_string())
     } else {
-        return Err(format!("The clipboard does not hold a URL or host name: {}", t.chars().take(80).collect::<String>()));
+        return Err(format!(
+            "The clipboard does not hold a URL or host name: {}",
+            t.chars().take(80).collect::<String>()
+        ));
     };
     if service.host.is_empty() || service.host.contains(char::is_whitespace) {
         return Err(format!("Not a valid URL: {t}"));
@@ -495,11 +642,10 @@ fn split_params(s: &str) -> Vec<(String, String)> {
 
 /// Parts of a multipart/form-data body: (name, value).
 fn multipart_params(body: &str, content_type: &str) -> Vec<(String, String)> {
-    let Some(boundary) = content_type
-        .split(';')
-        .map(str::trim)
-        .find_map(|p| p.strip_prefix("boundary=").or_else(|| p.strip_prefix("BOUNDARY=")))
-    else {
+    let Some(boundary) = content_type.split(';').map(str::trim).find_map(|p| {
+        p.strip_prefix("boundary=")
+            .or_else(|| p.strip_prefix("BOUNDARY="))
+    }) else {
         return Vec::new();
     };
     let boundary = boundary.trim_matches('"');
@@ -509,7 +655,10 @@ fn multipart_params(body: &str, content_type: &str) -> Vec<(String, String)> {
         if part.starts_with("--") {
             break;
         }
-        let part = part.strip_prefix("\r\n").or_else(|| part.strip_prefix('\n')).unwrap_or(part);
+        let part = part
+            .strip_prefix("\r\n")
+            .or_else(|| part.strip_prefix('\n'))
+            .unwrap_or(part);
         let (head, value) = match part.find("\r\n\r\n") {
             Some(i) => (&part[..i], &part[i + 4..]),
             None => match part.find("\n\n") {
@@ -517,7 +666,10 @@ fn multipart_params(body: &str, content_type: &str) -> Vec<(String, String)> {
                 None => continue,
             },
         };
-        let value = value.strip_suffix("\r\n").or_else(|| value.strip_suffix('\n')).unwrap_or(value);
+        let value = value
+            .strip_suffix("\r\n")
+            .or_else(|| value.strip_suffix('\n'))
+            .unwrap_or(value);
         let name = head
             .split(['\n', ';'])
             .map(str::trim)
@@ -549,24 +701,53 @@ pub fn toggle_request_method(req: &str) -> String {
     };
     if method.eq_ignore_ascii_case("GET") {
         let params = query.as_deref().map(split_params).unwrap_or_default();
-        let body = params.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join("&");
+        let body = params
+            .iter()
+            .map(|(k, v)| format!("{k}={v}"))
+            .collect::<Vec<_>>()
+            .join("&");
         lines[0] = format!("POST {path} {version}");
-        set_header(&mut lines, "Content-Type", "application/x-www-form-urlencoded");
+        set_header(
+            &mut lines,
+            "Content-Type",
+            "application/x-www-form-urlencoded",
+        );
         set_header(&mut lines, "Content-Length", &body.len().to_string());
         join_message(&lines, &body)
     } else {
-        let ct = lines.iter().skip(1).find(|l| header_name(l) == "content-type").map(|l| l.split_once(':').map(|x| x.1).unwrap_or("").trim().to_string()).unwrap_or_default();
+        let ct = lines
+            .iter()
+            .skip(1)
+            .find(|l| header_name(l) == "content-type")
+            .map(|l| {
+                l.split_once(':')
+                    .map(|x| x.1)
+                    .unwrap_or("")
+                    .trim()
+                    .to_string()
+            })
+            .unwrap_or_default();
         let lct = ct.to_ascii_lowercase();
         let moved: Vec<(String, String)> = if lct.starts_with("multipart/") {
-            multipart_params(&body, &ct).into_iter().map(|(k, v)| (url_encode_all_special(&k), url_encode_all_special(&v))).collect()
+            multipart_params(&body, &ct)
+                .into_iter()
+                .map(|(k, v)| (url_encode_all_special(&k), url_encode_all_special(&v)))
+                .collect()
         } else if lct.contains("application/x-www-form-urlencoded") {
-            split_params(&body).into_iter().map(|(k, v)| (k.replace(' ', "+"), v.replace(' ', "+"))).collect()
+            split_params(&body)
+                .into_iter()
+                .map(|(k, v)| (k.replace(' ', "+"), v.replace(' ', "+")))
+                .collect()
         } else {
             Vec::new()
         };
         let mut q: Vec<String> = query.into_iter().filter(|q| !q.is_empty()).collect();
         q.extend(moved.iter().map(|(k, v)| format!("{k}={v}")));
-        let target = if q.is_empty() { path } else { format!("{path}?{}", q.join("&")) };
+        let target = if q.is_empty() {
+            path
+        } else {
+            format!("{path}?{}", q.join("&"))
+        };
         lines[0] = format!("GET {target} {version}");
         remove_header(&mut lines, "Content-Type");
         remove_header(&mut lines, "Content-Length");
@@ -580,20 +761,53 @@ pub fn toggle_request_method(req: &str) -> String {
 /// Content-Length follow. Requests without such a body are left alone.
 pub fn toggle_body_encoding(req: &str, boundary: &str) -> String {
     let (mut lines, body) = head_lines_and_body(req);
-    let ct = lines.iter().skip(1).find(|l| header_name(l) == "content-type").map(|l| l.split_once(':').map(|x| x.1).unwrap_or("").trim().to_string()).unwrap_or_default();
+    let ct = lines
+        .iter()
+        .skip(1)
+        .find(|l| header_name(l) == "content-type")
+        .map(|l| {
+            l.split_once(':')
+                .map(|x| x.1)
+                .unwrap_or("")
+                .trim()
+                .to_string()
+        })
+        .unwrap_or_default();
     let lct = ct.to_ascii_lowercase();
     let decode = |t: &str| crate::util::url_decode(&t.replace('+', " "));
     let new_body = if lct.contains("application/x-www-form-urlencoded") {
         let mut out = String::new();
         for (k, v) in split_params(&body) {
-            out.push_str(&format!("--{boundary}\r\nContent-Disposition: form-data; name=\"{}\"\r\n\r\n{}\r\n", decode(&k), decode(&v)));
+            out.push_str(&format!(
+                "--{boundary}\r\nContent-Disposition: form-data; name=\"{}\"\r\n\r\n{}\r\n",
+                decode(&k),
+                decode(&v)
+            ));
         }
         out.push_str(&format!("--{boundary}--\r\n"));
-        set_header(&mut lines, "Content-Type", &format!("multipart/form-data; boundary={boundary}"));
+        set_header(
+            &mut lines,
+            "Content-Type",
+            &format!("multipart/form-data; boundary={boundary}"),
+        );
         out
     } else if lct.starts_with("multipart/") {
-        let out = multipart_params(&body, &ct).into_iter().map(|(k, v)| format!("{}={}", url_encode_all_special(&k), url_encode_all_special(&v))).collect::<Vec<_>>().join("&");
-        set_header(&mut lines, "Content-Type", "application/x-www-form-urlencoded");
+        let out = multipart_params(&body, &ct)
+            .into_iter()
+            .map(|(k, v)| {
+                format!(
+                    "{}={}",
+                    url_encode_all_special(&k),
+                    url_encode_all_special(&v)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("&");
+        set_header(
+            &mut lines,
+            "Content-Type",
+            "application/x-www-form-urlencoded",
+        );
         out
     } else {
         return req.to_string();
@@ -631,13 +845,23 @@ pub fn live_url_encode(before: &str, after: &str) -> Option<(String, usize)> {
     if after.len() <= before.len() {
         return None;
     }
-    let prefix = before.bytes().zip(after.bytes()).take_while(|(a, b)| a == b).count();
+    let prefix = before
+        .bytes()
+        .zip(after.bytes())
+        .take_while(|(a, b)| a == b)
+        .count();
     let mut prefix = prefix.min(before.len());
     while !after.is_char_boundary(prefix) || !before.is_char_boundary(prefix) {
         prefix -= 1;
     }
     let max_suffix = before.len() - prefix;
-    let suffix = before.bytes().rev().zip(after.bytes().rev()).take(max_suffix).take_while(|(a, b)| a == b).count();
+    let suffix = before
+        .bytes()
+        .rev()
+        .zip(after.bytes().rev())
+        .take(max_suffix)
+        .take_while(|(a, b)| a == b)
+        .count();
     let mut end = after.len() - suffix;
     while !after.is_char_boundary(end) {
         end += 1;
@@ -699,14 +923,24 @@ fn bash_ansi_c(bytes: &[u8]) -> String {
 pub fn curl_command(req: &[u8], url: &str) -> String {
     let parts = util::parse_http(req);
     let mut out = String::from("curl --path-as-is -i -s -k ");
-    out.push_str(&format!("-X $'{}' \\\n    ", bash_ansi_c(parts.method.as_bytes())));
+    out.push_str(&format!(
+        "-X $'{}' \\\n    ",
+        bash_ansi_c(parts.method.as_bytes())
+    ));
     let mut headers = String::new();
     let mut cookies: Vec<String> = Vec::new();
     for (k, v) in &parts.headers {
         if k.eq_ignore_ascii_case("Cookie") {
-            cookies.extend(v.split(';').map(|c| c.trim().to_string()).filter(|c| !c.is_empty()));
+            cookies.extend(
+                v.split(';')
+                    .map(|c| c.trim().to_string())
+                    .filter(|c| !c.is_empty()),
+            );
         } else {
-            headers.push_str(&format!("-H $'{}' ", bash_ansi_c(format!("{k}: {v}").as_bytes())));
+            headers.push_str(&format!(
+                "-H $'{}' ",
+                bash_ansi_c(format!("{k}: {v}").as_bytes())
+            ));
         }
     }
     if !headers.is_empty() {
@@ -714,11 +948,18 @@ pub fn curl_command(req: &[u8], url: &str) -> String {
         out.push_str("\\\n    ");
     }
     if !cookies.is_empty() {
-        out.push_str(&format!("-b $'{}' \\\n    ", bash_ansi_c(cookies.join("; ").as_bytes())));
+        out.push_str(&format!(
+            "-b $'{}' \\\n    ",
+            bash_ansi_c(cookies.join("; ").as_bytes())
+        ));
     }
     let body = &req[parts.head_len.min(req.len())..];
     if !body.is_empty() {
-        let flag = if body[0] == b'@' { "--data-raw" } else { "--data-binary" };
+        let flag = if body[0] == b'@' {
+            "--data-raw"
+        } else {
+            "--data-binary"
+        };
         out.push_str(&format!("{flag} $'{}' \\\n    ", bash_ansi_c(body)));
     }
     out.push_str(&format!("$'{}'", bash_ansi_c(url.as_bytes())));
@@ -732,7 +973,11 @@ pub fn previous_request(history: &[(String, Option<Vec<u8>>, String)]) -> Option
 
 /// The response before the latest one in a tab's send history.
 pub fn previous_response(history: &[(String, Option<Vec<u8>>, String)]) -> Option<Vec<u8>> {
-    history.iter().rev().skip(1).find_map(|(_, resp, _)| resp.clone())
+    history
+        .iter()
+        .rev()
+        .skip(1)
+        .find_map(|(_, resp, _)| resp.clone())
 }
 
 fn py_str(text: &str) -> String {
@@ -791,12 +1036,17 @@ pub fn python_requests(req: &[u8], url: &str) -> String {
     out.push_str(&format!("url = {}\n", py_str(url)));
     out.push_str(&format!("headers = {{{}}}\n", headers.join(", ")));
     out.push_str(&format!("cookies = {{{}}}\n", cookies.join(", ")));
-    let mut args = format!("{}, url, headers=headers, cookies=cookies", py_str(&parts.method));
+    let mut args = format!(
+        "{}, url, headers=headers, cookies=cookies",
+        py_str(&parts.method)
+    );
     if !body.is_empty() {
         out.push_str(&format!("data = {}\n", py_bytes(body)));
         args.push_str(", data=data");
     }
-    out.push_str(&format!("response = requests.request({args}, verify=False, allow_redirects=False)\n"));
+    out.push_str(&format!(
+        "response = requests.request({args}, verify=False, allow_redirects=False)\n"
+    ));
     out.push_str("print(response.status_code)\nprint(response.text)\n");
     out
 }
@@ -826,7 +1076,7 @@ pub fn new_tab(id: u64, host: &str, port: u16, https: bool, request: String) -> 
         result_line: String::new(),
         history: Vec::new(),
         hist_pos: 0,
-    ws: None,
+        ws: None,
     }
 }
 
@@ -844,7 +1094,16 @@ pub struct ClosedTab {
 
 impl ClosedTab {
     fn of(t: net::RepTab) -> Self {
-        Self { name: t.name, host: t.host, port: t.port, https: t.https, request: t.request, response: t.response, result_line: t.result_line, history: t.history }
+        Self {
+            name: t.name,
+            host: t.host,
+            port: t.port,
+            https: t.https,
+            request: t.request,
+            response: t.response,
+            result_line: t.result_line,
+            history: t.history,
+        }
     }
 
     fn reopen(self, id: u64) -> net::RepTab {
@@ -877,7 +1136,13 @@ pub enum CloseWhich {
 /// Close tabs relative to `idx`; returns the new selection. The closed tabs
 /// go on the reopen stack. Repeater always keeps one tab: closing the last
 /// one leaves a fresh empty tab with `fresh_id`.
-pub fn close_tabs(reps: &mut Vec<net::RepTab>, idx: usize, which: CloseWhich, closed: &mut Vec<ClosedTab>, fresh_id: impl FnOnce() -> u64) -> usize {
+pub fn close_tabs(
+    reps: &mut Vec<net::RepTab>,
+    idx: usize,
+    which: CloseWhich,
+    closed: &mut Vec<ClosedTab>,
+    fresh_id: impl FnOnce() -> u64,
+) -> usize {
     if idx >= reps.len() {
         return reps.len().saturating_sub(1);
     }
@@ -922,7 +1187,11 @@ pub fn duplicate_tab(reps: &mut Vec<net::RepTab>, idx: usize, id: u64) -> Option
 }
 
 /// Reopen the most recently closed tab at the end of the strip.
-pub fn reopen_tab(reps: &mut Vec<net::RepTab>, closed: &mut Vec<ClosedTab>, id: u64) -> Option<usize> {
+pub fn reopen_tab(
+    reps: &mut Vec<net::RepTab>,
+    closed: &mut Vec<ClosedTab>,
+    id: u64,
+) -> Option<usize> {
     let t = closed.pop()?;
     reps.push(t.reopen(id));
     Some(reps.len() - 1)
@@ -974,8 +1243,7 @@ pub const INTERCEPT_COLUMNS: [(&str, bool); 9] = [
 
 /// WebSockets history display filter (ProjectDefaults.json
 /// web_sockets_history_display_filter).
-#[derive(Clone, Debug, Default)]
-#[derive(Hash)]
+#[derive(Clone, Debug, Default, Hash)]
 pub struct WsFilter {
     pub hide_incoming: bool,
     pub hide_outgoing: bool,
@@ -1015,7 +1283,11 @@ pub fn ws_row_visible(f: &WsFilter, e: &net::WsEntry, in_scope: impl Fn(&str) ->
     }
     let hay = format!("{}\n{}", e.host, e.text());
     let hit = if f.regex {
-        regex::RegexBuilder::new(&f.term).case_insensitive(!f.case_sensitive).build().map(|re| re.is_match(&hay)).unwrap_or(false)
+        regex::RegexBuilder::new(&f.term)
+            .case_insensitive(!f.case_sensitive)
+            .build()
+            .map(|re| re.is_match(&hay))
+            .unwrap_or(false)
     } else if f.case_sensitive {
         hay.contains(&f.term)
     } else {
@@ -1110,9 +1382,21 @@ pub enum RepAction {
 
 /// The Repeater request editor's context menu (Burp's order, the items
 /// WebProbe implements). Returns the chosen action.
-pub fn request_menu(ui: &mut Ui, st: &mut State, has_selection: bool, sel_text: Option<&str>, has_response: bool) -> Option<RepAction> {
+pub fn request_menu(
+    ui: &mut Ui,
+    st: &mut State,
+    has_selection: bool,
+    sel_text: Option<&str>,
+    has_response: bool,
+) -> Option<RepAction> {
     fn item(ui: &mut Ui, label: &str) -> bool {
-        if ui.add(egui::Button::new(RichText::new(label).size(13.0)).wrap_mode(egui::TextWrapMode::Extend)).clicked() {
+        if ui
+            .add(
+                egui::Button::new(RichText::new(label).size(13.0))
+                    .wrap_mode(egui::TextWrapMode::Extend),
+            )
+            .clicked()
+        {
             ui.close();
             true
         } else {
@@ -1181,11 +1465,24 @@ pub fn request_menu(ui: &mut Ui, st: &mut State, has_selection: bool, sel_text: 
         out = Some(RepAction::PasteUrl);
     }
     ui.separator();
-    if ui.checkbox(&mut st.url_encode_live, RichText::new("URL-encode as you type").size(13.0)).clicked() {
+    if ui
+        .checkbox(
+            &mut st.url_encode_live,
+            RichText::new("URL-encode as you type").size(13.0),
+        )
+        .clicked()
+    {
         ui.close();
     }
     ui.separator();
-    if ui.add_enabled(has_selection, egui::Button::new(RichText::new("Copy\tCtrl+C").size(13.0)).wrap_mode(egui::TextWrapMode::Extend)).clicked() {
+    if ui
+        .add_enabled(
+            has_selection,
+            egui::Button::new(RichText::new("Copy\tCtrl+C").size(13.0))
+                .wrap_mode(egui::TextWrapMode::Extend),
+        )
+        .clicked()
+    {
         if let Some(t) = sel_text {
             ui.ctx().copy_text(t.to_string());
         }
@@ -1206,7 +1503,14 @@ pub enum TabCommand {
 pub fn tab_menu(ui: &mut Ui, idx: usize, count: usize, can_reopen: bool) -> Option<TabCommand> {
     let mut out = None;
     let mut item = |ui: &mut Ui, label: &str, enabled: bool, cmd: TabCommand| {
-        if ui.add_enabled(enabled, egui::Button::new(RichText::new(label).size(13.0)).wrap_mode(egui::TextWrapMode::Extend)).clicked() {
+        if ui
+            .add_enabled(
+                enabled,
+                egui::Button::new(RichText::new(label).size(13.0))
+                    .wrap_mode(egui::TextWrapMode::Extend),
+            )
+            .clicked()
+        {
             ui.close();
             out = Some(cmd);
         }
@@ -1217,9 +1521,24 @@ pub fn tab_menu(ui: &mut Ui, idx: usize, count: usize, can_reopen: bool) -> Opti
     item(ui, "Rename tab", true, TabCommand::Rename);
     item(ui, "Close tab", true, TabCommand::Close(CloseWhich::This));
     item(ui, "Duplicate tab", true, TabCommand::Duplicate);
-    item(ui, "Close other tabs", count > 1, TabCommand::Close(CloseWhich::Others));
-    item(ui, "Close tabs to the left", idx > 0, TabCommand::Close(CloseWhich::Left));
-    item(ui, "Close tabs to the right", idx + 1 < count, TabCommand::Close(CloseWhich::Right));
+    item(
+        ui,
+        "Close other tabs",
+        count > 1,
+        TabCommand::Close(CloseWhich::Others),
+    );
+    item(
+        ui,
+        "Close tabs to the left",
+        idx > 0,
+        TabCommand::Close(CloseWhich::Left),
+    );
+    item(
+        ui,
+        "Close tabs to the right",
+        idx + 1 < count,
+        TabCommand::Close(CloseWhich::Right),
+    );
     ui.separator();
     item(ui, "Reopen closed tab", can_reopen, TabCommand::Reopen);
     out
@@ -1227,7 +1546,13 @@ pub fn tab_menu(ui: &mut Ui, idx: usize, count: usize, can_reopen: bool) -> Opti
 
 /// Apply a tab command (from the menu of tab `idx`) to the shared tab list;
 /// returns the new selection given the current one.
-pub fn apply_tab_command(shared: &net::Shared, st: &mut State, idx: usize, selected: usize, cmd: TabCommand) -> usize {
+pub fn apply_tab_command(
+    shared: &net::Shared,
+    st: &mut State,
+    idx: usize,
+    selected: usize,
+    cmd: TabCommand,
+) -> usize {
     let mut reps = shared.repeaters.lock().unwrap();
     let sel_id = reps.get(selected).map(|t| t.id);
     match cmd {
@@ -1238,8 +1563,12 @@ pub fn apply_tab_command(shared: &net::Shared, st: &mut State, idx: usize, selec
             selected
         }
         TabCommand::Close(which) => {
-            let fallback = close_tabs(&mut reps, idx, which, &mut st.closed, || shared.rep.new_tab_id());
-            sel_id.and_then(|id| reps.iter().position(|t| t.id == id)).unwrap_or(fallback)
+            let fallback = close_tabs(&mut reps, idx, which, &mut st.closed, || {
+                shared.rep.new_tab_id()
+            });
+            sel_id
+                .and_then(|id| reps.iter().position(|t| t.id == id))
+                .unwrap_or(fallback)
         }
         TabCommand::Duplicate => {
             let id = shared.rep.new_tab_id();
@@ -1258,7 +1587,14 @@ pub fn apply_tab_command(shared: &net::Shared, st: &mut State, idx: usize, selec
 /// drag reorders, the cross closes, right-click opens Burp's tab menu, "+"
 /// adds a tab.
 pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
-    let tabs: Vec<(u64, String)> = app.shared.repeaters.lock().unwrap().iter().map(|r| (r.id, r.name.clone())).collect();
+    let tabs: Vec<(u64, String)> = app
+        .shared
+        .repeaters
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|r| (r.id, r.name.clone()))
+        .collect();
     let n = tabs.len();
     let can_reopen = !app.rops.closed.is_empty();
     let mut cmd: Option<(usize, TabCommand)> = None;
@@ -1271,8 +1607,19 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
             let sel = app.rep_sel == i;
             let dragging_this = app.rops.drag_from == Some(i);
             let frame = egui::Frame::NONE
-                .fill(if sel { theme::surface() } else { theme::chrome() })
-                .stroke(egui::Stroke::new(1.0_f32, if dragging_this { c(theme::ORANGE_1) } else { theme::line() }))
+                .fill(if sel {
+                    theme::surface()
+                } else {
+                    theme::chrome()
+                })
+                .stroke(egui::Stroke::new(
+                    1.0_f32,
+                    if dragging_this {
+                        c(theme::ORANGE_1)
+                    } else {
+                        theme::line()
+                    },
+                ))
                 .inner_margin(egui::Margin::symmetric(8, 3));
             let inner = frame.show(ui, |ui| {
                 ui.horizontal(|ui| {
@@ -1280,7 +1627,11 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
                     if renaming {
                         let focus_now = std::mem::take(&mut app.rops.rename_focus);
                         if let Some((_, buf)) = app.rops.renaming.as_mut() {
-                            let r = ui.add(egui::TextEdit::singleline(buf).desired_width(110.0).font(egui::FontId::proportional(12.5)));
+                            let r = ui.add(
+                                egui::TextEdit::singleline(buf)
+                                    .desired_width(110.0)
+                                    .font(egui::FontId::proportional(12.5)),
+                            );
                             if focus_now {
                                 r.request_focus();
                             }
@@ -1292,10 +1643,22 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
                         }
                     } else {
                         let label = name.strip_prefix("Rep ").unwrap_or(name).to_string();
-                        let l = ui.add(egui::Label::new(RichText::new(label.clone()).size(12.5).color(theme::ink())).sense(egui::Sense::click_and_drag()));
+                        let l = ui.add(
+                            egui::Label::new(
+                                RichText::new(label.clone()).size(12.5).color(theme::ink()),
+                            )
+                            .sense(egui::Sense::click_and_drag()),
+                        );
                         // A tab to accessibility / UI automation, not a plain label.
                         let selected = app.rep_sel == i;
-                        l.widget_info(|| egui::WidgetInfo::selected(egui::accesskit::Role::Tab, true, selected, &label));
+                        l.widget_info(|| {
+                            egui::WidgetInfo::selected(
+                                egui::accesskit::Role::Tab,
+                                true,
+                                selected,
+                                &label,
+                            )
+                        });
                         if l.clicked() {
                             app.rep_sel = i;
                         }
@@ -1306,20 +1669,36 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
                         if l.drag_started() {
                             app.rops.drag_from = Some(i);
                         }
-                        l.on_hover_text("Double-click to rename, drag to reorder").context_menu(|ui| {
-                            if let Some(c) = tab_menu(ui, i, n, can_reopen) {
-                                cmd = Some((i, c));
-                            }
-                        });
+                        l.on_hover_text("Double-click to rename, drag to reorder")
+                            .context_menu(|ui| {
+                                if let Some(c) = tab_menu(ui, i, n, can_reopen) {
+                                    cmd = Some((i, c));
+                                }
+                            });
                     }
-                    if ui.add(egui::Label::new(RichText::new("\u{00d7}").size(12.0).color(theme::ink_faint())).sense(egui::Sense::click())).on_hover_text("Close tab").clicked() {
+                    if ui
+                        .add(
+                            egui::Label::new(
+                                RichText::new("\u{00d7}")
+                                    .size(12.0)
+                                    .color(theme::ink_faint()),
+                            )
+                            .sense(egui::Sense::click()),
+                        )
+                        .on_hover_text("Close tab")
+                        .clicked()
+                    {
                         cmd = Some((i, TabCommand::Close(CloseWhich::This)));
                     }
                 });
             });
             rects.push(inner.response.rect);
         }
-        if ui.add(egui::Button::new(RichText::new("+").size(14.0)).frame(false)).on_hover_text("New tab").clicked() {
+        if ui
+            .add(egui::Button::new(RichText::new("+").size(14.0)).frame(false))
+            .on_hover_text("New tab")
+            .clicked()
+        {
             let id = app.shared.rep.new_tab_id();
             let mut reps = app.shared.repeaters.lock().unwrap();
             reps.push(new_tab(id, "", 80, false, String::new()));
@@ -1335,13 +1714,25 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
     // Drag-and-drop reorder: drop on another tab's slot.
     if let Some(from) = app.rops.drag_from {
         let pointer = ui.input(|i| i.pointer.hover_pos());
-        let target = pointer.and_then(|p| rects.iter().position(|r| p.x >= r.left() && p.x <= r.right()));
+        let target = pointer.and_then(|p| {
+            rects
+                .iter()
+                .position(|r| p.x >= r.left() && p.x <= r.right())
+        });
         if let (Some(t), Some(p)) = (target, pointer) {
             if t != from {
                 let r = rects[t];
-                let x = if t > from { r.right() + 1.0 } else { r.left() - 1.0 };
+                let x = if t > from {
+                    r.right() + 1.0
+                } else {
+                    r.left() - 1.0
+                };
                 let _ = p;
-                ui.painter().vline(x, r.y_range(), egui::Stroke::new(2.0_f32, c(theme::ORANGE_1)));
+                ui.painter().vline(
+                    x,
+                    r.y_range(),
+                    egui::Stroke::new(2.0_f32, c(theme::ORANGE_1)),
+                );
             }
         }
         if ui.input(|i| i.pointer.any_released()) {
@@ -1350,7 +1741,9 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
                 let mut reps = app.shared.repeaters.lock().unwrap();
                 let sel_id = reps.get(app.rep_sel).map(|r| r.id);
                 move_tab(&mut reps, from, t);
-                app.rep_sel = sel_id.and_then(|id| reps.iter().position(|r| r.id == id)).unwrap_or(t);
+                app.rep_sel = sel_id
+                    .and_then(|id| reps.iter().position(|r| r.id == id))
+                    .unwrap_or(t);
             }
         }
     }
@@ -1376,7 +1769,10 @@ pub fn settings_menu(ui: &mut Ui, app: &mut crate::App) {
             }
         }
     });
-    ui.checkbox(&mut app.rops.process_cookies, "Process cookies in redirections");
+    ui.checkbox(
+        &mut app.rops.process_cookies,
+        "Process cookies in redirections",
+    );
 }
 
 /// The selected tab's request, target service and response.
@@ -1390,14 +1786,20 @@ pub fn current_tab(app: &crate::App) -> Option<(String, Service, Option<Vec<u8>>
 /// Whether the shown response can be followed (Burp shows the "Follow
 /// redirection" button only then).
 pub fn can_follow(app: &crate::App) -> bool {
-    current_tab(app).is_some_and(|(req, svc, resp)| resp.is_some_and(|r| next_redirect(&req, &svc, &r, false).is_some()))
+    current_tab(app).is_some_and(|(req, svc, resp)| {
+        resp.is_some_and(|r| next_redirect(&req, &svc, &r, false).is_some())
+    })
 }
 
 /// "Follow redirection": load the follow-up request into the tab and point
 /// the target at it. The caller sends it.
 pub fn load_redirect(app: &mut crate::App) -> bool {
-    let Some((req, svc, Some(resp))) = current_tab(app) else { return false };
-    let Some((next, next_req)) = next_redirect(&req, &svc, &resp, app.rops.process_cookies) else { return false };
+    let Some((req, svc, Some(resp))) = current_tab(app) else {
+        return false;
+    };
+    let Some((next, next_req)) = next_redirect(&req, &svc, &resp, app.rops.process_cookies) else {
+        return false;
+    };
     let mut reps = app.shared.repeaters.lock().unwrap();
     let i = app.rep_sel.min(reps.len().saturating_sub(1));
     let t = &mut reps[i];
@@ -1412,7 +1814,17 @@ pub fn load_redirect(app: &mut crate::App) -> bool {
 pub fn tab_entry(app: &crate::App) -> Option<net::HistEntry> {
     let (req, svc, resp) = current_tab(app)?;
     let parts = util::parse_http(req.as_bytes());
-    let status = resp.as_deref().map(|r| util::parse_http(r).first.split_whitespace().nth(1).unwrap_or("").to_string()).unwrap_or_default();
+    let status = resp
+        .as_deref()
+        .map(|r| {
+            util::parse_http(r)
+                .first
+                .split_whitespace()
+                .nth(1)
+                .unwrap_or("")
+                .to_string()
+        })
+        .unwrap_or_default();
     Some(net::HistEntry {
         method: parts.method.clone(),
         host: svc.host.clone(),
@@ -1440,7 +1852,10 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
         toast(Level::Warn, "The Repeater tab has no request with a target");
         return true;
     };
-    let resp_text = resp.as_deref().map(|r| String::from_utf8_lossy(r).into_owned()).unwrap_or_default();
+    let resp_text = resp
+        .as_deref()
+        .map(|r| String::from_utf8_lossy(r).into_owned())
+        .unwrap_or_default();
     match action {
         RepAction::PassiveScan => {
             if let Some(e) = tab_entry(app) {
@@ -1471,7 +1886,13 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
         }
         RepAction::ToOrganizer => {
             let first = req.lines().next().unwrap_or("").to_string();
-            app.shared.organizer.lock().unwrap().add(&first, "", &req, &resp_text, util::now_secs());
+            app.shared.organizer.lock().unwrap().add(
+                &first,
+                "",
+                &req,
+                &resp_text,
+                util::now_secs(),
+            );
             toast(Level::Success, "Sent to Organizer");
         }
         RepAction::ChangeMethod => {
@@ -1484,14 +1905,21 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
             // Burp-style boundary: WebKit prefix and 16 random characters.
             let boundary = {
                 use rand::{distributions::Alphanumeric, Rng};
-                let tail: String = rand::thread_rng().sample_iter(&Alphanumeric).take(16).map(char::from).collect();
+                let tail: String = rand::thread_rng()
+                    .sample_iter(&Alphanumeric)
+                    .take(16)
+                    .map(char::from)
+                    .collect();
                 format!("----WebKitFormBoundary{tail}")
             };
             let mut reps = app.shared.repeaters.lock().unwrap();
             let i = app.rep_sel.min(reps.len().saturating_sub(1));
             let changed = toggle_body_encoding(&reps[i].request, &boundary);
             if changed == reps[i].request {
-                toast(Level::Info, "The request has no urlencoded or multipart body to convert");
+                toast(
+                    Level::Info,
+                    "The request has no urlencoded or multipart body to convert",
+                );
             }
             reps[i].request = changed;
         }
@@ -1500,8 +1928,12 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
             ctx.send_viewport_cmd(egui::ViewportCommand::RequestPaste);
         }
         RepAction::CopyUrl => ctx.copy_text(request_url(&req, &svc)),
-        RepAction::CopyCurl => ctx.copy_text(curl_command(req.as_bytes(), &request_url(&req, &svc))),
-        RepAction::CopyPython => ctx.copy_text(python_requests(req.as_bytes(), &request_url(&req, &svc))),
+        RepAction::CopyCurl => {
+            ctx.copy_text(curl_command(req.as_bytes(), &request_url(&req, &svc)))
+        }
+        RepAction::CopyPython => {
+            ctx.copy_text(python_requests(req.as_bytes(), &request_url(&req, &svc)))
+        }
         RepAction::CopyRaw => ctx.copy_text(req.clone()),
         RepAction::BothToComparer => {
             app.cmp_items.push(req.clone());
@@ -1511,33 +1943,67 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
         RepAction::CompareWithPrevious => {
             // The tab's send history ends with the current exchange; the one
             // before it is the previous response.
-            let previous = app.shared.repeaters.lock().unwrap().get(app.rep_sel).and_then(|t| previous_response(&t.history));
+            let previous = app
+                .shared
+                .repeaters
+                .lock()
+                .unwrap()
+                .get(app.rep_sel)
+                .and_then(|t| previous_response(&t.history));
             match previous {
                 Some(prev) => {
-                    app.cmp_items.push(String::from_utf8_lossy(&prev).into_owned());
+                    app.cmp_items
+                        .push(String::from_utf8_lossy(&prev).into_owned());
                     app.cmp_items.push(resp_text);
                     app.tab = Tab::Comparer;
-                    toast(Level::Success, "Previous and current response sent to Comparer");
+                    toast(
+                        Level::Success,
+                        "Previous and current response sent to Comparer",
+                    );
                 }
-                None => toast(Level::Info, "This tab has no earlier response to compare with"),
+                None => toast(
+                    Level::Info,
+                    "This tab has no earlier response to compare with",
+                ),
             }
         }
         RepAction::CompareRequestWithPrevious => {
-            let previous = app.shared.repeaters.lock().unwrap().get(app.rep_sel).and_then(|t| previous_request(&t.history));
+            let previous = app
+                .shared
+                .repeaters
+                .lock()
+                .unwrap()
+                .get(app.rep_sel)
+                .and_then(|t| previous_request(&t.history));
             match previous {
                 Some(prev) => {
                     app.cmp_items.push(prev);
                     app.cmp_items.push(req.clone());
                     app.tab = Tab::Comparer;
-                    toast(Level::Success, "Previous and current request sent to Comparer");
+                    toast(
+                        Level::Success,
+                        "Previous and current request sent to Comparer",
+                    );
                 }
-                None => toast(Level::Info, "This tab has no earlier request to compare with"),
+                None => toast(
+                    Level::Info,
+                    "This tab has no earlier request to compare with",
+                ),
             }
         }
         RepAction::SaveItem => {
-            let dir = std::env::current_dir().map(|d| d.join("saved-items")).unwrap_or_else(|_| "saved-items".into());
+            let dir = std::env::current_dir()
+                .map(|d| d.join("saved-items"))
+                .unwrap_or_else(|_| "saved-items".into());
             let _ = std::fs::create_dir_all(&dir);
-            let id = app.shared.repeaters.lock().unwrap().get(app.rep_sel).map(|t| t.id).unwrap_or(0);
+            let id = app
+                .shared
+                .repeaters
+                .lock()
+                .unwrap()
+                .get(app.rep_sel)
+                .map(|t| t.id)
+                .unwrap_or(0);
             let path = dir.join(format!("repeater-{id}-{}.http", util::now_secs()));
             let mut bytes = req.into_bytes();
             bytes.extend_from_slice(b"\r\n\r\n");
@@ -1556,9 +2022,14 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
 /// paste event the frame after RequestPaste. Consumed here, before the
 /// editor could insert it.
 pub fn poll_paste_url(app: &mut crate::App, ui: &mut Ui) {
-    let Some(since) = app.rops.paste_url_pending else { return };
+    let Some(since) = app.rops.paste_url_pending else {
+        return;
+    };
     let pasted: Option<String> = ui.input_mut(|i| {
-        let pos = i.events.iter().position(|e| matches!(e, egui::Event::Paste(_)))?;
+        let pos = i
+            .events
+            .iter()
+            .position(|e| matches!(e, egui::Event::Paste(_)))?;
         match i.events.remove(pos) {
             egui::Event::Paste(t) => Some(t),
             _ => None,
@@ -1576,7 +2047,10 @@ pub fn poll_paste_url(app: &mut crate::App, ui: &mut Ui) {
         return;
     };
     app.rops.paste_url_pending = None;
-    let keep_alive = app.shared.keep_alive.load(std::sync::atomic::Ordering::SeqCst);
+    let keep_alive = app
+        .shared
+        .keep_alive
+        .load(std::sync::atomic::Ordering::SeqCst);
     match paste_url_as_request(&text, keep_alive) {
         Ok((svc, req)) => {
             let mut reps = app.shared.repeaters.lock().unwrap();
@@ -1615,16 +2089,37 @@ pub fn held_rows(shared: &net::Shared) -> Vec<HeldRow> {
                 net::InterceptKind::Request { https } => {
                     let parts = util::parse_http(i.edited.as_bytes());
                     let svc = Service::new(&i.host, i.port, https);
-                    ("HTTP", "\u{2192} Request", parts.method.clone(), format!("{}{}", svc.origin(), request_path(&parts.path)), https)
+                    (
+                        "HTTP",
+                        "\u{2192} Request",
+                        parts.method.clone(),
+                        format!("{}{}", svc.origin(), request_path(&parts.path)),
+                        https,
+                    )
                 }
                 net::InterceptKind::Response { https } => {
                     let parts = util::parse_http(i.edited.as_bytes());
                     let svc = Service::new(&i.host, i.port, https);
-                    ("HTTP", "\u{2190} Response", parts.status.split_whitespace().next().unwrap_or("").to_string(), svc.origin(), https)
+                    (
+                        "HTTP",
+                        "\u{2190} Response",
+                        parts
+                            .status
+                            .split_whitespace()
+                            .next()
+                            .unwrap_or("")
+                            .to_string(),
+                        svc.origin(),
+                        https,
+                    )
                 }
                 net::InterceptKind::WebSocket { to_server } => (
                     "WS",
-                    if to_server { "\u{2192} To server" } else { "\u{2190} To client" },
+                    if to_server {
+                        "\u{2192} To server"
+                    } else {
+                        "\u{2190} To client"
+                    },
                     String::new(),
                     i.host.clone(),
                     false,
@@ -1638,7 +2133,11 @@ pub fn held_rows(shared: &net::Shared) -> Vec<HeldRow> {
                 method,
                 url,
                 i.edited.len().to_string(),
-                if tls { "\u{2713}".into() } else { String::new() },
+                if tls {
+                    "\u{2713}".into()
+                } else {
+                    String::new()
+                },
                 listener.to_string(),
             ];
             HeldRow { id: i.id, cells }
@@ -1668,7 +2167,9 @@ pub fn intercept_options_menu(ui: &mut Ui, st: &mut State) {
 
 /// The intercepted-messages table; clicking a row selects it.
 pub fn intercept_table(ui: &mut Ui, st: &mut State, rows: &[HeldRow], height: f32) {
-    let cols: Vec<usize> = (0..INTERCEPT_COLUMNS.len()).filter(|k| st.intercept_cols[*k]).collect();
+    let cols: Vec<usize> = (0..INTERCEPT_COLUMNS.len())
+        .filter(|k| st.intercept_cols[*k])
+        .collect();
     let width = |k: usize| match INTERCEPT_COLUMNS[k].0 {
         "URL" => 360.0,
         "Time" => 80.0,
@@ -1683,35 +2184,64 @@ pub fn intercept_table(ui: &mut Ui, st: &mut State, rows: &[HeldRow], height: f3
         for &k in &cols {
             let (r, _) = ui.allocate_exact_size(egui::vec2(width(k), 22.0), egui::Sense::hover());
             ui.painter().rect_filled(r, 0.0, theme::header_bg());
-            ui.painter().text(egui::pos2(r.left() + 6.0, r.center().y), egui::Align2::LEFT_CENTER, INTERCEPT_COLUMNS[k].0, egui::FontId::proportional(12.5), theme::ink());
+            ui.painter().text(
+                egui::pos2(r.left() + 6.0, r.center().y),
+                egui::Align2::LEFT_CENTER,
+                INTERCEPT_COLUMNS[k].0,
+                egui::FontId::proportional(12.5),
+                theme::ink(),
+            );
         }
     });
-    egui::ScrollArea::vertical().id_salt("intercept_rows").max_height(height).auto_shrink([false, true]).show(ui, |ui| {
-        ui.spacing_mut().item_spacing.y = 0.0;
-        for (n, row) in rows.iter().enumerate() {
-            let sel = st.intercept_sel == Some(row.id);
-            let resp = ui
-                .horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 0.0;
-                    ui.add_space(14.0);
-                    for &k in &cols {
-                        let (r, _) = ui.allocate_exact_size(egui::vec2(width(k), 20.0), egui::Sense::hover());
-                        if sel {
-                            ui.painter().rect_filled(r, 0.0, c(0xCADAF0).linear_multiply(if theme::appearance().0 == theme::Palette::Light { 1.0 } else { 0.3 }));
-                        } else if n % 2 == 1 {
-                            ui.painter().rect_filled(r, 0.0, theme::zebra());
+    egui::ScrollArea::vertical()
+        .id_salt("intercept_rows")
+        .max_height(height)
+        .auto_shrink([false, true])
+        .show(ui, |ui| {
+            ui.spacing_mut().item_spacing.y = 0.0;
+            for (n, row) in rows.iter().enumerate() {
+                let sel = st.intercept_sel == Some(row.id);
+                let resp = ui
+                    .horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 0.0;
+                        ui.add_space(14.0);
+                        for &k in &cols {
+                            let (r, _) = ui.allocate_exact_size(
+                                egui::vec2(width(k), 20.0),
+                                egui::Sense::hover(),
+                            );
+                            if sel {
+                                ui.painter().rect_filled(
+                                    r,
+                                    0.0,
+                                    c(0xCADAF0).linear_multiply(
+                                        if theme::appearance().0 == theme::Palette::Light {
+                                            1.0
+                                        } else {
+                                            0.3
+                                        },
+                                    ),
+                                );
+                            } else if n % 2 == 1 {
+                                ui.painter().rect_filled(r, 0.0, theme::zebra());
+                            }
+                            let clip = ui.painter().with_clip_rect(r.shrink2(egui::vec2(3.0, 0.0)));
+                            clip.text(
+                                egui::pos2(r.left() + 6.0, r.center().y),
+                                egui::Align2::LEFT_CENTER,
+                                &row.cells[k],
+                                egui::FontId::proportional(12.5),
+                                theme::ink(),
+                            );
                         }
-                        let clip = ui.painter().with_clip_rect(r.shrink2(egui::vec2(3.0, 0.0)));
-                        clip.text(egui::pos2(r.left() + 6.0, r.center().y), egui::Align2::LEFT_CENTER, &row.cells[k], egui::FontId::proportional(12.5), theme::ink());
-                    }
-                })
-                .response
-                .interact(egui::Sense::click());
-            if resp.clicked() {
-                st.intercept_sel = Some(row.id);
+                    })
+                    .response
+                    .interact(egui::Sense::click());
+                if resp.clicked() {
+                    st.intercept_sel = Some(row.id);
+                }
             }
-        }
-    });
+        });
 }
 
 // ====================== B-09 WebSockets history ======================
@@ -1721,7 +2251,10 @@ pub fn intercept_table(ui: &mut Ui, st: &mut State, rows: &[HeldRow], height: f3
 pub fn ws_history_view(app: &mut crate::App, ui: &mut Ui) {
     let shared = app.shared.clone();
     let history = &shared.ws_history;
-    let scope = |host: &str| burp_in_scope(&shared, &format!("http://{host}/")) || burp_in_scope(&shared, &format!("https://{host}/"));
+    let scope = |host: &str| {
+        burp_in_scope(&shared, &format!("http://{host}/"))
+            || burp_in_scope(&shared, &format!("https://{host}/"))
+    };
     let st = &mut app.rops;
     // Filter bar, as Burp's "Filter settings: ..." strip.
     let f = st.ws_filter.clone();
@@ -1740,8 +2273,18 @@ pub fn ws_history_view(app: &mut crate::App, ui: &mut Ui) {
     }
     ui.horizontal(|ui| {
         ui.add_space(6.0);
-        let text = if summary.is_empty() && f.term.is_empty() { "Filter settings: Showing all items".to_string() } else { format!("Filter settings: {}", summary.join("; ")) };
-        if ui.add(egui::Button::new(RichText::new(text).size(12.5).color(theme::ink_dim())).frame(false)).clicked() {
+        let text = if summary.is_empty() && f.term.is_empty() {
+            "Filter settings: Showing all items".to_string()
+        } else {
+            format!("Filter settings: {}", summary.join("; "))
+        };
+        if ui
+            .add(
+                egui::Button::new(RichText::new(text).size(12.5).color(theme::ink_dim()))
+                    .frame(false),
+            )
+            .clicked()
+        {
             st.ws_filter_open = !st.ws_filter_open;
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -1749,19 +2292,26 @@ pub fn ws_history_view(app: &mut crate::App, ui: &mut Ui) {
             ui.checkbox(&mut st.ws_filter.negative, "Negative");
             ui.checkbox(&mut st.ws_filter.regex, "Regex");
             ui.checkbox(&mut st.ws_filter.case_sensitive, "Aa");
-            ui.add(egui::TextEdit::singleline(&mut st.ws_filter.term).hint_text("Search").desired_width(220.0));
+            ui.add(
+                egui::TextEdit::singleline(&mut st.ws_filter.term)
+                    .hint_text("Search")
+                    .desired_width(220.0),
+            );
         });
     });
     if st.ws_filter_open {
-        egui::Frame::NONE.fill(theme::chrome()).inner_margin(egui::Margin::symmetric(10, 6)).show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(RichText::new("Filter by request type").strong().size(12.5));
-                ui.checkbox(&mut st.ws_filter.in_scope_only, "Show only in-scope items");
-                ui.checkbox(&mut st.ws_filter.hide_incoming, "Hide incoming messages");
-                ui.checkbox(&mut st.ws_filter.hide_outgoing, "Hide outgoing messages");
-                ui.checkbox(&mut st.ws_filter.hide_control, "Hide ping/pong/close");
+        egui::Frame::NONE
+            .fill(theme::chrome())
+            .inner_margin(egui::Margin::symmetric(10, 6))
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("Filter by request type").strong().size(12.5));
+                    ui.checkbox(&mut st.ws_filter.in_scope_only, "Show only in-scope items");
+                    ui.checkbox(&mut st.ws_filter.hide_incoming, "Hide incoming messages");
+                    ui.checkbox(&mut st.ws_filter.hide_outgoing, "Hide outgoing messages");
+                    ui.checkbox(&mut st.ws_filter.hide_control, "Hide ping/pong/close");
+                });
             });
-        });
     }
     ui.add_space(2.0);
     // The rows passing the filter, redone only when history or filter changed.
@@ -1774,66 +2324,132 @@ pub fn ws_history_view(app: &mut crate::App, ui: &mut Ui) {
     let stamp = history.stamp();
     if st.ws_rows.0 != stamp || st.ws_rows.1 != filter_key {
         let f = st.ws_filter.clone();
-        st.ws_rows = (stamp, filter_key, history.positions(|e| e.direction != "handshake" && ws_row_visible(&f, e, scope)));
+        st.ws_rows = (
+            stamp,
+            filter_key,
+            history.positions(|e| e.direction != "handshake" && ws_row_visible(&f, e, scope)),
+        );
     }
     let total = st.ws_rows.2.len();
     let table_h = (ui.available_height() * 0.5).max(120.0);
-    let header = ["#", "URL", "Direction", "Edited", "Length", "Opcode", "Time"];
+    let header = [
+        "#",
+        "URL",
+        "Direction",
+        "Edited",
+        "Length",
+        "Opcode",
+        "Time",
+    ];
     let widths = [56.0, 260.0, 110.0, 60.0, 70.0, 70.0, 80.0];
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 0.0;
         for (h, w) in header.iter().zip(widths) {
             let (r, _) = ui.allocate_exact_size(egui::vec2(w, 22.0), egui::Sense::hover());
             ui.painter().rect_filled(r, 0.0, theme::header_bg());
-            ui.painter().text(egui::pos2(r.left() + 6.0, r.center().y), egui::Align2::LEFT_CENTER, *h, egui::FontId::proportional(12.5), theme::ink());
+            ui.painter().text(
+                egui::pos2(r.left() + 6.0, r.center().y),
+                egui::Align2::LEFT_CENTER,
+                *h,
+                egui::FontId::proportional(12.5),
+                theme::ink(),
+            );
         }
     });
     if total == 0 {
-        ui.label(RichText::new(if history.is_empty() { "No WebSocket messages yet." } else { "No messages match the filter." }).size(12.5).color(theme::ink_hint()));
+        ui.label(
+            RichText::new(if history.is_empty() {
+                "No WebSocket messages yet."
+            } else {
+                "No messages match the filter."
+            })
+            .size(12.5)
+            .color(theme::ink_hint()),
+        );
     }
     // Only the visible rows are fetched and drawn.
-    egui::ScrollArea::vertical().id_salt("ws_hist_rows").max_height(table_h).auto_shrink([false, false]).show_rows(ui, 20.0, total, |ui, range| {
-        ui.spacing_mut().item_spacing.y = 0.0;
-        let window = history.rows_at(&st.ws_rows.2[range.clone()]);
-        let edited = shared.ws_edited.lock().unwrap();
-        for (k, e) in range.zip(window.iter()) {
-            let sel = st.ws_sel == Some(e.id);
-            let cells = [
-                e.id.to_string(),
-                e.host.clone(),
-                ws_direction_label(&e.direction).to_string(),
-                if edited.contains(&e.id) { "\u{2713}".to_string() } else { String::new() },
-                e.payload.len().to_string(),
-                e.opcode.clone(),
-                crate::ui::time_of_day(e.ts),
-            ];
-            let resp = ui
-                .horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 0.0;
-                    for (i, (t, w)) in cells.iter().zip(widths).enumerate() {
-                        let (r, _) = ui.allocate_exact_size(egui::vec2(w, 20.0), egui::Sense::hover());
-                        if sel {
-                            ui.painter().rect_filled(r, 0.0, c(0xCADAF0).linear_multiply(if theme::appearance().0 == theme::Palette::Light { 1.0 } else { 0.3 }));
-                        } else if k % 2 == 1 {
-                            ui.painter().rect_filled(r, 0.0, theme::zebra());
+    egui::ScrollArea::vertical()
+        .id_salt("ws_hist_rows")
+        .max_height(table_h)
+        .auto_shrink([false, false])
+        .show_rows(ui, 20.0, total, |ui, range| {
+            ui.spacing_mut().item_spacing.y = 0.0;
+            let window = history.rows_at(&st.ws_rows.2[range.clone()]);
+            let edited = shared.ws_edited.lock().unwrap();
+            for (k, e) in range.zip(window.iter()) {
+                let sel = st.ws_sel == Some(e.id);
+                let cells = [
+                    e.id.to_string(),
+                    e.host.clone(),
+                    ws_direction_label(&e.direction).to_string(),
+                    if edited.contains(&e.id) {
+                        "\u{2713}".to_string()
+                    } else {
+                        String::new()
+                    },
+                    e.payload.len().to_string(),
+                    e.opcode.clone(),
+                    crate::ui::time_of_day(e.ts),
+                ];
+                let resp = ui
+                    .horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 0.0;
+                        for (i, (t, w)) in cells.iter().zip(widths).enumerate() {
+                            let (r, _) =
+                                ui.allocate_exact_size(egui::vec2(w, 20.0), egui::Sense::hover());
+                            if sel {
+                                ui.painter().rect_filled(
+                                    r,
+                                    0.0,
+                                    c(0xCADAF0).linear_multiply(
+                                        if theme::appearance().0 == theme::Palette::Light {
+                                            1.0
+                                        } else {
+                                            0.3
+                                        },
+                                    ),
+                                );
+                            } else if k % 2 == 1 {
+                                ui.painter().rect_filled(r, 0.0, theme::zebra());
+                            }
+                            let clip = ui.painter().with_clip_rect(r.shrink2(egui::vec2(4.0, 0.0)));
+                            let colour = if i == 2 && e.direction == "client -> server" {
+                                c(theme::ORANGE)
+                            } else {
+                                theme::ink()
+                            };
+                            clip.text(
+                                egui::pos2(r.left() + 6.0, r.center().y),
+                                egui::Align2::LEFT_CENTER,
+                                t,
+                                egui::FontId::proportional(12.5),
+                                colour,
+                            );
                         }
-                        let clip = ui.painter().with_clip_rect(r.shrink2(egui::vec2(4.0, 0.0)));
-                        let colour = if i == 2 && e.direction == "client -> server" { c(theme::ORANGE) } else { theme::ink() };
-                        clip.text(egui::pos2(r.left() + 6.0, r.center().y), egui::Align2::LEFT_CENTER, t, egui::FontId::proportional(12.5), colour);
-                    }
-                })
-                .response
-                .interact(egui::Sense::click());
-            if resp.clicked() {
-                st.ws_sel = Some(e.id);
+                    })
+                    .response
+                    .interact(egui::Sense::click());
+                if resp.clicked() {
+                    st.ws_sel = Some(e.id);
+                }
             }
-        }
-    });
+        });
     ui.add_space(4.0);
     if let Some(e) = st.ws_sel.and_then(|id| history.get(id)) {
         ui.horizontal(|ui| {
             ui.add_space(6.0);
-            ui.label(RichText::new(format!("Message #{} \u{2014} {} \u{2014} {} ({} bytes, {})", e.id, ws_direction_label(&e.direction), e.host, e.payload.len(), e.opcode)).strong().size(13.0));
+            ui.label(
+                RichText::new(format!(
+                    "Message #{} \u{2014} {} \u{2014} {} ({} bytes, {})",
+                    e.id,
+                    ws_direction_label(&e.direction),
+                    e.host,
+                    e.payload.len(),
+                    e.opcode
+                ))
+                .strong()
+                .size(13.0),
+            );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(6.0);
                 ui.toggle_value(&mut st.ws_hex, "Hex");
@@ -1843,17 +2459,38 @@ pub fn ws_history_view(app: &mut crate::App, ui: &mut Ui) {
             });
         });
         // Binary messages show as hex unless asked otherwise; never lossy-edited.
-        let text = if st.ws_hex || (e.is_binary() && std::str::from_utf8(&e.payload).is_err()) { util::hex_view(&e.payload, 65536) } else { e.text().into_owned() };
-        egui::ScrollArea::both().id_salt("ws_hist_payload").auto_shrink([false, false]).show(ui, |ui| {
-            ui.add(egui::Label::new(RichText::new(text).monospace().size(theme::FONT_MONO).color(theme::editor_colours().text)).selectable(true));
-        });
+        let text = if st.ws_hex || (e.is_binary() && std::str::from_utf8(&e.payload).is_err()) {
+            util::hex_view(&e.payload, 65536)
+        } else {
+            e.text().into_owned()
+        };
+        egui::ScrollArea::both()
+            .id_salt("ws_hist_payload")
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                ui.add(
+                    egui::Label::new(
+                        RichText::new(text)
+                            .monospace()
+                            .size(theme::FONT_MONO)
+                            .color(theme::editor_colours().text),
+                    )
+                    .selectable(true),
+                );
+            });
     }
 }
 
 /// Proxy > WebSockets history > "Send to Repeater": a WebSocket Repeater
 /// tab for the message's connection, with the message in its editor.
 pub fn send_ws_to_repeater(shared: &std::sync::Arc<net::Shared>, e: &net::WsEntry) {
-    let tls = shared.ws_live.lock().unwrap().get(&e.socket).map(|l| l.tls).unwrap_or(false);
+    let tls = shared
+        .ws_live
+        .lock()
+        .unwrap()
+        .get(&e.socket)
+        .map(|l| l.tls)
+        .unwrap_or(false);
     let session = webprobe_core::ws_repeater::from_history(shared, e.socket, &e.host, tls);
     let id = shared.rep.new_tab_id();
     shared.repeaters.lock().unwrap().push(net::RepTab {
@@ -1862,7 +2499,11 @@ pub fn send_ws_to_repeater(shared: &std::sync::Arc<net::Shared>, e: &net::WsEntr
         host: session.host.clone(),
         port: session.port,
         https: session.tls,
-        request: if std::str::from_utf8(&e.payload).is_ok() { e.text().into_owned() } else { util::hex_encode(&e.payload) },
+        request: if std::str::from_utf8(&e.payload).is_ok() {
+            e.text().into_owned()
+        } else {
+            util::hex_encode(&e.payload)
+        },
         response: None,
         result_line: String::new(),
         history: Vec::new(),
@@ -1870,7 +2511,10 @@ pub fn send_ws_to_repeater(shared: &std::sync::Arc<net::Shared>, e: &net::WsEntr
         ws: Some(session.id),
     });
     shared.wake();
-    crate::feedback::toast(crate::feedback::Level::Success, "Sent to Repeater (WebSocket)");
+    crate::feedback::toast(
+        crate::feedback::Level::Success,
+        "Sent to Repeater (WebSocket)",
+    );
 }
 
 /// A WebSocket Repeater tab (Burp's Repeater for WebSocket messages):
@@ -1881,14 +2525,25 @@ pub fn send_ws_to_repeater(shared: &std::sync::Arc<net::Shared>, e: &net::WsEntr
 pub fn ws_repeater_view(app: &mut crate::App, ui: &mut Ui, session_id: u64) {
     use webprobe_core::ws_repeater::{self as wsr, WsRepState};
     let shared = app.shared.clone();
-    let Some(session) = shared.ws_sessions.lock().unwrap().iter().find(|s| s.id == session_id).cloned() else {
+    let Some(session) = shared
+        .ws_sessions
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|s| s.id == session_id)
+        .cloned()
+    else {
         ui.label("This WebSocket session is gone.");
         return;
     };
-    let i = app.rep_sel.min(shared.repeaters.lock().unwrap().len().saturating_sub(1));
+    let i = app
+        .rep_sel
+        .min(shared.repeaters.lock().unwrap().len().saturating_sub(1));
     let ui_state_id = ui.scope_id().with(("ws_rep_ui", session_id));
     // (to_server, binary)
-    let (mut to_server, mut binary): (bool, bool) = ui.data_mut(|d| d.get_temp(ui_state_id)).unwrap_or((true, false));
+    let (mut to_server, mut binary): (bool, bool) = ui
+        .data_mut(|d| d.get_temp(ui_state_id))
+        .unwrap_or((true, false));
     let state = session.state();
     ui.horizontal(|ui| {
         ui.add_space(6.0);
@@ -1899,28 +2554,71 @@ pub fn ws_repeater_view(app: &mut crate::App, ui: &mut Ui, session_id: u64) {
             WsRepState::Closed(why) => (format!("Closed: {why}"), c(theme::BAD)),
         };
         let scheme = if session.tls { "wss" } else { "ws" };
-        ui.label(RichText::new(format!("{scheme}://{}:{}", session.host, session.port)).strong().size(13.0));
+        ui.label(
+            RichText::new(format!("{scheme}://{}:{}", session.host, session.port))
+                .strong()
+                .size(13.0),
+        );
         ui.label(RichText::new(label).size(12.5).color(colour));
         if session.attached.is_some() {
-            ui.label(RichText::new("(proxied connection)").size(12.0).color(theme::ink_dim()));
+            ui.label(
+                RichText::new("(proxied connection)")
+                    .size(12.0)
+                    .color(theme::ink_dim()),
+            );
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.add_space(6.0);
-            if ui.add_enabled(session.attached.is_none() && state == WsRepState::Connected, egui::Button::new("Close")).clicked() {
+            if ui
+                .add_enabled(
+                    session.attached.is_none() && state == WsRepState::Connected,
+                    egui::Button::new("Close"),
+                )
+                .clicked()
+            {
                 wsr::close(&session);
             }
-            if ui.button("Clone").on_hover_text("A new tab with this upgrade request, on a connection of its own").clicked() {
+            if ui
+                .button("Clone")
+                .on_hover_text("A new tab with this upgrade request, on a connection of its own")
+                .clicked()
+            {
                 let copy = wsr::clone_session(&shared, &session);
                 let id = shared.rep.new_tab_id();
                 let request = shared.repeaters.lock().unwrap()[i].request.clone();
-                shared.repeaters.lock().unwrap().push(net::RepTab { id, name: format!("WS {id}"), host: copy.host.clone(), port: copy.port, https: copy.tls, request, response: None, result_line: String::new(), history: Vec::new(), hist_pos: 0, ws: Some(copy.id) });
+                shared.repeaters.lock().unwrap().push(net::RepTab {
+                    id,
+                    name: format!("WS {id}"),
+                    host: copy.host.clone(),
+                    port: copy.port,
+                    https: copy.tls,
+                    request,
+                    response: None,
+                    result_line: String::new(),
+                    history: Vec::new(),
+                    hist_pos: 0,
+                    ws: Some(copy.id),
+                });
             }
-            let connect_label = if matches!(state, WsRepState::Disconnected) { "Connect" } else { "Reconnect" };
-            if ui.add_enabled(session.attached.is_none() && state != WsRepState::Connecting, egui::Button::new(connect_label)).clicked() {
+            let connect_label = if matches!(state, WsRepState::Disconnected) {
+                "Connect"
+            } else {
+                "Reconnect"
+            };
+            if ui
+                .add_enabled(
+                    session.attached.is_none() && state != WsRepState::Connecting,
+                    egui::Button::new(connect_label),
+                )
+                .clicked()
+            {
                 let (sh, s) = (shared.clone(), session.clone());
                 webprobe_core::util::spawn_contained("repeater_ops", move || {
                     if let Err(e) = wsr::connect(&sh, &s) {
-                        crate::feedback::toast(crate::feedback::Level::Error, format!("WebSocket connect failed: {e}"));
+                        crate::feedback::toast(
+                            crate::feedback::Level::Error,
+                            format!("WebSocket connect failed: {e}"),
+                        );
                     }
                     sh.wake();
                 });
@@ -1928,12 +2626,22 @@ pub fn ws_repeater_view(app: &mut crate::App, ui: &mut Ui, session_id: u64) {
         });
     });
     if session.attached.is_none() {
-        egui::CollapsingHeader::new(RichText::new("Upgrade request").size(12.5)).id_salt(("ws_hs", session_id)).show(ui, |ui| {
-            let mut hs = session.handshake.lock().unwrap().clone();
-            if ui.add(egui::TextEdit::multiline(&mut hs).code_editor().desired_rows(6).desired_width(f32::INFINITY)).changed() {
-                *session.handshake.lock().unwrap() = hs;
-            }
-        });
+        egui::CollapsingHeader::new(RichText::new("Upgrade request").size(12.5))
+            .id_salt(("ws_hs", session_id))
+            .show(ui, |ui| {
+                let mut hs = session.handshake.lock().unwrap().clone();
+                if ui
+                    .add(
+                        egui::TextEdit::multiline(&mut hs)
+                            .code_editor()
+                            .desired_rows(6)
+                            .desired_width(f32::INFINITY),
+                    )
+                    .changed()
+                {
+                    *session.handshake.lock().unwrap() = hs;
+                }
+            });
     }
     ui.add_space(4.0);
     ui.columns(2, |cols| {
@@ -1950,12 +2658,38 @@ pub fn ws_repeater_view(app: &mut crate::App, ui: &mut Ui, session_id: u64) {
             ui.selectable_value(&mut binary, true, "Binary (hex)");
         });
         let mut text = shared.repeaters.lock().unwrap()[i].request.clone();
-        if ui.add(egui::TextEdit::multiline(&mut text).code_editor().desired_rows(12).desired_width(f32::INFINITY)).changed() {
+        if ui
+            .add(
+                egui::TextEdit::multiline(&mut text)
+                    .code_editor()
+                    .desired_rows(12)
+                    .desired_width(f32::INFINITY),
+            )
+            .changed()
+        {
             shared.repeaters.lock().unwrap()[i].request = text.clone();
         }
-        if ui.add(egui::Button::new(RichText::new("Send").color(egui::Color32::WHITE)).fill(c(theme::ORANGE))).clicked() {
-            let payload = if binary { wsr::parse_hex(&text) } else { Ok(text.into_bytes()) };
-            let sent = payload.and_then(|p| wsr::send(&shared, &session, to_server || !session.can_send_to_client(), binary, &p));
+        if ui
+            .add(
+                egui::Button::new(RichText::new("Send").color(egui::Color32::WHITE))
+                    .fill(c(theme::ORANGE)),
+            )
+            .clicked()
+        {
+            let payload = if binary {
+                wsr::parse_hex(&text)
+            } else {
+                Ok(text.into_bytes())
+            };
+            let sent = payload.and_then(|p| {
+                wsr::send(
+                    &shared,
+                    &session,
+                    to_server || !session.can_send_to_client(),
+                    binary,
+                    &p,
+                )
+            });
             if let Err(e) = sent {
                 crate::feedback::toast(crate::feedback::Level::Error, e);
             }
@@ -1963,18 +2697,46 @@ pub fn ws_repeater_view(app: &mut crate::App, ui: &mut Ui, session_id: u64) {
         let ui = &mut cols[1];
         ui.label(RichText::new("History").strong().size(13.0));
         let msgs = session.messages();
-        egui::ScrollArea::vertical().id_salt(("ws_rep_hist", session_id)).auto_shrink([false, false]).show_rows(ui, 18.0, msgs.len(), |ui, range| {
-            for m in &msgs[range] {
-                let arrow = if m.to_server { "\u{2192} server" } else if m.sent { "\u{2192} client" } else { "\u{2190} server" };
-                let preview = if m.opcode == "binary" { util::hex_encode(&m.payload[..m.payload.len().min(48)]) } else { String::from_utf8_lossy(&m.payload[..m.payload.len().min(200)]).replace('\n', " ") };
-                ui.label(RichText::new(format!("{arrow}  {}  {} B  {preview}", m.opcode, m.payload.len())).monospace().size(12.0).color(if m.sent { c(theme::ORANGE) } else { theme::ink() }));
-            }
-        });
+        egui::ScrollArea::vertical()
+            .id_salt(("ws_rep_hist", session_id))
+            .auto_shrink([false, false])
+            .show_rows(ui, 18.0, msgs.len(), |ui, range| {
+                for m in &msgs[range] {
+                    let arrow = if m.to_server {
+                        "\u{2192} server"
+                    } else if m.sent {
+                        "\u{2192} client"
+                    } else {
+                        "\u{2190} server"
+                    };
+                    let preview = if m.opcode == "binary" {
+                        util::hex_encode(&m.payload[..m.payload.len().min(48)])
+                    } else {
+                        String::from_utf8_lossy(&m.payload[..m.payload.len().min(200)])
+                            .replace('\n', " ")
+                    };
+                    ui.label(
+                        RichText::new(format!(
+                            "{arrow}  {}  {} B  {preview}",
+                            m.opcode,
+                            m.payload.len()
+                        ))
+                        .monospace()
+                        .size(12.0)
+                        .color(if m.sent {
+                            c(theme::ORANGE)
+                        } else {
+                            theme::ink()
+                        }),
+                    );
+                }
+            });
     });
     ui.data_mut(|d| d.insert_temp(ui_state_id, (to_server, binary)));
     // A live connection may change state or receive messages any moment.
     if state == WsRepState::Connected || state == WsRepState::Connecting {
-        ui.ctx().request_repaint_after(std::time::Duration::from_millis(250));
+        ui.ctx()
+            .request_repaint_after(std::time::Duration::from_millis(250));
     }
 }
 
@@ -1988,8 +2750,14 @@ mod tests {
 
     #[test]
     fn redirect_detection_needs_3xx_and_location() {
-        assert_eq!(redirect_of(b"HTTP/1.1 302 Found\r\nLocation: /b\r\n\r\n"), Some((302, "/b".into())));
-        assert_eq!(redirect_of(b"HTTP/1.1 200 OK\r\nLocation: /b\r\n\r\n"), None);
+        assert_eq!(
+            redirect_of(b"HTTP/1.1 302 Found\r\nLocation: /b\r\n\r\n"),
+            Some((302, "/b".into()))
+        );
+        assert_eq!(
+            redirect_of(b"HTTP/1.1 200 OK\r\nLocation: /b\r\n\r\n"),
+            None
+        );
         assert_eq!(redirect_of(b"HTTP/1.1 304 Not Modified\r\n\r\n"), None);
         assert!(preserves_method(307) && preserves_method(308));
         assert!(!preserves_method(301) && !preserves_method(302) && !preserves_method(303));
@@ -1999,18 +2767,42 @@ mod tests {
     fn location_resolution_matches_burp() {
         let o = svc("a.test", 80, false);
         // Absolute, with and without port; default port from the scheme.
-        assert_eq!(resolve_location(&o, "/x/y", "https://b.test/p?q=1"), Some((svc("b.test", 443, true), "/p?q=1".into())));
-        assert_eq!(resolve_location(&o, "/x/y", "http://b.test:8080"), Some((svc("b.test", 8080, false), "/".into())));
+        assert_eq!(
+            resolve_location(&o, "/x/y", "https://b.test/p?q=1"),
+            Some((svc("b.test", 443, true), "/p?q=1".into()))
+        );
+        assert_eq!(
+            resolve_location(&o, "/x/y", "http://b.test:8080"),
+            Some((svc("b.test", 8080, false), "/".into()))
+        );
         // Scheme-relative takes the request's protocol.
-        assert_eq!(resolve_location(&svc("a.test", 443, true), "/", "//c.test/z"), Some((svc("c.test", 443, true), "/z".into())));
+        assert_eq!(
+            resolve_location(&svc("a.test", 443, true), "/", "//c.test/z"),
+            Some((svc("c.test", 443, true), "/z".into()))
+        );
         // Root-relative stays on the service.
-        assert_eq!(resolve_location(&o, "/x/y", "/login"), Some((o.clone(), "/login".into())));
+        assert_eq!(
+            resolve_location(&o, "/x/y", "/login"),
+            Some((o.clone(), "/login".into()))
+        );
         // Relative: the request directory, its query dropped.
-        assert_eq!(resolve_location(&o, "/x/y?z=1", "next?a=b"), Some((o.clone(), "/x/next?a=b".into())));
-        assert_eq!(resolve_location(&o, "http://a.test/dir/page", "other"), Some((o.clone(), "/dir/other".into())));
+        assert_eq!(
+            resolve_location(&o, "/x/y?z=1", "next?a=b"),
+            Some((o.clone(), "/x/next?a=b".into()))
+        );
+        assert_eq!(
+            resolve_location(&o, "http://a.test/dir/page", "other"),
+            Some((o.clone(), "/dir/other".into()))
+        );
         // "?q" and spaces; fragments never reach the wire.
-        assert_eq!(resolve_location(&o, "/", "/a b#frag"), Some((o.clone(), "/a%20b".into())));
-        assert_eq!(resolve_location(&o, "/", "https://b.test?x=1"), Some((svc("b.test", 443, true), "/?x=1".into())));
+        assert_eq!(
+            resolve_location(&o, "/", "/a b#frag"),
+            Some((o.clone(), "/a%20b".into()))
+        );
+        assert_eq!(
+            resolve_location(&o, "/", "https://b.test?x=1"),
+            Some((svc("b.test", 443, true), "/?x=1".into()))
+        );
         assert_eq!(resolve_location(&o, "/", "http:///nohost"), None);
     }
 
@@ -2021,7 +2813,11 @@ mod tests {
         for status in [301u16, 302, 303] {
             let r = redirect_request(req, &o, &o, "/done", status, false, &[]);
             assert!(r.starts_with("GET /done HTTP/1.1\r\n"), "{status}: {r}");
-            assert!(!r.to_ascii_lowercase().contains("content-type") && !r.to_ascii_lowercase().contains("content-length"), "{r}");
+            assert!(
+                !r.to_ascii_lowercase().contains("content-type")
+                    && !r.to_ascii_lowercase().contains("content-length"),
+                "{r}"
+            );
             assert!(r.ends_with("\r\n\r\n"), "body dropped: {r:?}");
             assert!(r.contains("Cookie: s=1\r\n"), "same-site keeps headers");
             assert!(r.contains("Referer: http://a.test/form\r\n"), "{r}");
@@ -2029,7 +2825,10 @@ mod tests {
         for status in [307u16, 308] {
             let r = redirect_request(req, &o, &o, "/again", status, false, &[]);
             assert!(r.starts_with("POST /again HTTP/1.1\r\n"), "{r}");
-            assert!(r.contains("Content-Length: 3\r\n") && r.ends_with("\r\n\r\na=b"), "{r}");
+            assert!(
+                r.contains("Content-Length: 3\r\n") && r.ends_with("\r\n\r\na=b"),
+                "{r}"
+            );
         }
     }
 
@@ -2039,13 +2838,30 @@ mod tests {
         let t = svc("b.test", 8443, true);
         let req = "POST /p HTTP/1.1\r\nHost: a.test\r\nUser-Agent: UA\r\nCookie: s=1\r\nAuthorization: Bearer x\r\nContent-Type: text/plain\r\nContent-Length: 1\r\n\r\nz";
         let r = redirect_request(req, &o, &t, "/q", 302, true, &["n=v".into()]);
-        assert!(r.starts_with("GET /q HTTP/1.1\r\nHost: b.test:8443\r\nUser-Agent: UA\r\n"), "{r}");
+        assert!(
+            r.starts_with("GET /q HTTP/1.1\r\nHost: b.test:8443\r\nUser-Agent: UA\r\n"),
+            "{r}"
+        );
         assert!(!r.contains("Cookie") && !r.contains("Authorization"), "{r}");
-        assert!(r.contains("Referer: http://a.test/\r\n"), "cross-site referer is the origin: {r}");
+        assert!(
+            r.contains("Referer: http://a.test/\r\n"),
+            "cross-site referer is the origin: {r}"
+        );
         let kept = redirect_request(req, &o, &t, "/q", 307, false, &[]);
-        assert!(kept.contains("Content-Type: text/plain") && kept.ends_with("z"), "{kept}");
+        assert!(
+            kept.contains("Content-Type: text/plain") && kept.ends_with("z"),
+            "{kept}"
+        );
         // https -> http: no Referer at all.
-        let down = redirect_request("GET / HTTP/1.1\r\nHost: a\r\n\r\n", &svc("a", 443, true), &svc("a", 80, false), "/", 302, false, &[]);
+        let down = redirect_request(
+            "GET / HTTP/1.1\r\nHost: a\r\n\r\n",
+            &svc("a", 443, true),
+            &svc("a", 80, false),
+            "/",
+            302,
+            false,
+            &[],
+        );
         assert!(!down.contains("Referer"), "{down}");
     }
 
@@ -2072,7 +2888,10 @@ mod tests {
         assert!(should_follow(FollowMode::InScope, 0, &a, &b, true));
         assert!(!should_follow(FollowMode::InScope, 0, &a, &a, false));
         assert!(should_follow(FollowMode::Always, 9, &a, &b, false));
-        assert!(!should_follow(FollowMode::Always, MAX_REDIRECTS, &a, &b, true), "Burp stops at 10");
+        assert!(
+            !should_follow(FollowMode::Always, MAX_REDIRECTS, &a, &b, true),
+            "Burp stops at 10"
+        );
     }
 
     /// Loopback: a 302 chain on 127.0.0.1 is followed under "Always" (and
@@ -2087,7 +2906,8 @@ mod tests {
         std::thread::spawn(move || {
             for s in l.incoming() {
                 let Ok(mut s) = s else { break };
-                s.set_read_timeout(Some(std::time::Duration::from_secs(5))).ok();
+                s.set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                    .ok();
                 let mut buf = Vec::new();
                 let mut chunk = [0u8; 4096];
                 while !buf.windows(4).any(|w| w == b"\r\n\r\n") {
@@ -2098,7 +2918,14 @@ mod tests {
                 }
                 let text = String::from_utf8_lossy(&buf).into_owned();
                 let head_end = text.find("\r\n\r\n").map(|i| i + 4).unwrap_or(text.len());
-                let cl: usize = text.lines().find_map(|l| l.to_ascii_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse().unwrap_or(0))).unwrap_or(0);
+                let cl: usize = text
+                    .lines()
+                    .find_map(|l| {
+                        l.to_ascii_lowercase()
+                            .strip_prefix("content-length:")
+                            .map(|v| v.trim().parse().unwrap_or(0))
+                    })
+                    .unwrap_or(0);
                 while buf.len() < head_end + cl {
                     match s.read(&mut chunk) {
                         Ok(0) | Err(_) => break,
@@ -2113,7 +2940,8 @@ mod tests {
                 } else if first.contains(" /step2 ") {
                     format!("HTTP/1.1 307 Temporary Redirect\r\nLocation: http://127.0.0.1:{port}/final\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
                 } else {
-                    "HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\ndone".to_string()
+                    "HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\ndone"
+                        .to_string()
                 };
                 let _ = s.write_all(resp.as_bytes());
             }
@@ -2121,17 +2949,43 @@ mod tests {
         let shared = net::Shared::new();
         let service = svc("127.0.0.1", port, false);
         let req = format!("POST /start HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: text/plain\r\nContent-Length: 4\r\n\r\nbody");
-        let never = send_following(&shared, &req, &service, FollowMode::Never, true, &|| false, &|_, _| {});
+        let never = send_following(
+            &shared,
+            &req,
+            &service,
+            FollowMode::Never,
+            true,
+            &|| false,
+            &|_, _| {},
+        );
         assert_eq!(never.followed, 0);
-        assert!(String::from_utf8_lossy(never.response.as_deref().unwrap()).starts_with("HTTP/1.1 302"));
+        assert!(
+            String::from_utf8_lossy(never.response.as_deref().unwrap()).starts_with("HTTP/1.1 302")
+        );
         seen.lock().unwrap().clear();
-        let r = send_following(&shared, &req, &service, FollowMode::Always, true, &|| false, &|_, _| {});
+        let r = send_following(
+            &shared,
+            &req,
+            &service,
+            FollowMode::Always,
+            true,
+            &|| false,
+            &|_, _| {},
+        );
         assert_eq!(r.followed, 2, "302 then 307");
         assert!(String::from_utf8_lossy(r.response.as_deref().unwrap()).ends_with("done"));
         let log = seen.lock().unwrap().clone();
         assert!(log[0].starts_with("POST /start "));
-        assert!(log[1].starts_with("GET /step2 ") && log[1].contains("Cookie: sid=abc"), "302 -> GET with the new cookie: {}", log[1]);
-        assert!(log[2].starts_with("GET /final "), "307 keeps the method of the request it redirects (the GET): {}", log[2]);
+        assert!(
+            log[1].starts_with("GET /step2 ") && log[1].contains("Cookie: sid=abc"),
+            "302 -> GET with the new cookie: {}",
+            log[1]
+        );
+        assert!(
+            log[2].starts_with("GET /final "),
+            "307 keeps the method of the request it redirects (the GET): {}",
+            log[2]
+        );
         assert_eq!(r.service, service);
         assert!(r.request.starts_with("GET /final "));
     }
@@ -2148,7 +3002,8 @@ mod tests {
         std::thread::spawn(move || {
             for s in l.incoming() {
                 let Ok(mut s) = s else { break };
-                s.set_read_timeout(Some(std::time::Duration::from_secs(5))).ok();
+                s.set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                    .ok();
                 let mut buf = Vec::new();
                 let mut chunk = [0u8; 4096];
                 while !buf.windows(4).any(|w| w == b"\r\n\r\n") {
@@ -2157,30 +3012,77 @@ mod tests {
                         Ok(n) => buf.extend_from_slice(&chunk[..n]),
                     }
                 }
-                let first = String::from_utf8_lossy(&buf).lines().next().unwrap_or("").to_string();
-                let loc = if first.contains(" /a/start ") { "/b/step" } else { "next" };
+                let first = String::from_utf8_lossy(&buf)
+                    .lines()
+                    .next()
+                    .unwrap_or("")
+                    .to_string();
+                let loc = if first.contains(" /a/start ") {
+                    "/b/step"
+                } else {
+                    "next"
+                };
                 let _ = s.write_all(format!("HTTP/1.1 302 Found\r\nLocation: {loc}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").as_bytes());
             }
         });
         let shared = net::Shared::new();
         let service = svc("127.0.0.1", port, false);
-        let req = format!("POST /a/start HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 1\r\n\r\nx");
-        let none = send_following(&shared, &req, &service, FollowMode::InScope, false, &|| false, &|_, _| {});
+        let req = format!(
+            "POST /a/start HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 1\r\n\r\nx"
+        );
+        let none = send_following(
+            &shared,
+            &req,
+            &service,
+            FollowMode::InScope,
+            false,
+            &|| false,
+            &|_, _| {},
+        );
         assert_eq!(none.followed, 0, "an empty scope holds nothing");
-        shared.scope.lock().unwrap().push(net::ScopeRule::include("/b/step", false));
-        let r = send_following(&shared, &req, &service, FollowMode::InScope, false, &|| false, &|_, _| {});
+        shared
+            .scope
+            .lock()
+            .unwrap()
+            .push(net::ScopeRule::include("/b/step", false));
+        let r = send_following(
+            &shared,
+            &req,
+            &service,
+            FollowMode::InScope,
+            false,
+            &|| false,
+            &|_, _| {},
+        );
         assert_eq!(r.followed, 1);
-        assert!(r.request.starts_with("GET /b/step HTTP/1.1\r\n"), "{}", r.request);
-        let (next, next_req) = next_redirect(&r.request, &r.service, r.response.as_deref().unwrap(), false).unwrap();
+        assert!(
+            r.request.starts_with("GET /b/step HTTP/1.1\r\n"),
+            "{}",
+            r.request
+        );
+        let (next, next_req) = next_redirect(
+            &r.request,
+            &r.service,
+            r.response.as_deref().unwrap(),
+            false,
+        )
+        .unwrap();
         assert_eq!(next, service);
-        assert!(next_req.starts_with("GET /b/next HTTP/1.1\r\n"), "{next_req}");
+        assert!(
+            next_req.starts_with("GET /b/next HTTP/1.1\r\n"),
+            "{next_req}"
+        );
     }
 
     #[test]
     fn paste_url_builds_a_get_request() {
-        let (s, r) = paste_url_as_request("https://ginandjuice.shop/catalog?x=1#top", false).unwrap();
+        let (s, r) =
+            paste_url_as_request("https://ginandjuice.shop/catalog?x=1#top", false).unwrap();
         assert_eq!(s, svc("ginandjuice.shop", 443, true));
-        assert!(r.starts_with("GET /catalog?x=1 HTTP/1.1\r\nHost: ginandjuice.shop\r\n"), "{r}");
+        assert!(
+            r.starts_with("GET /catalog?x=1 HTTP/1.1\r\nHost: ginandjuice.shop\r\n"),
+            "{r}"
+        );
         assert!(r.contains("Connection: close\r\n") && r.ends_with("\r\n\r\n"));
         let (s, r) = paste_url_as_request("  ginandjuice.shop \n", true).unwrap();
         assert_eq!(s, svc("ginandjuice.shop", 443, true));
@@ -2197,7 +3099,11 @@ mod tests {
         let r = toggle_request_method("GET /s?q=a%20b&n=1 HTTP/1.1\r\nHost: h\r\n\r\n");
         assert_eq!(r, "POST /s HTTP/1.1\r\nHost: h\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 11\r\n\r\nq=a%20b&n=1");
         let empty = toggle_request_method("GET / HTTP/1.1\r\nHost: h\r\n\r\n");
-        assert!(empty.starts_with("POST / HTTP/1.1") && empty.contains("Content-Length: 0\r\n") && empty.ends_with("\r\n\r\n"));
+        assert!(
+            empty.starts_with("POST / HTTP/1.1")
+                && empty.contains("Content-Length: 0\r\n")
+                && empty.ends_with("\r\n\r\n")
+        );
     }
 
     #[test]
@@ -2205,11 +3111,16 @@ mod tests {
         let r = toggle_request_method("POST /s?keep=1 HTTP/1.1\r\nHost: h\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 9\r\n\r\na=1&b=x y");
         assert_eq!(r, "GET /s?keep=1&a=1&b=x+y HTTP/1.1\r\nHost: h\r\n\r\n");
         // Round trip is stable.
-        let back = toggle_request_method(&toggle_request_method("GET /p?x=1 HTTP/1.1\r\nHost: h\r\n\r\n"));
+        let back = toggle_request_method(&toggle_request_method(
+            "GET /p?x=1 HTTP/1.1\r\nHost: h\r\n\r\n",
+        ));
         assert_eq!(back, "GET /p?x=1 HTTP/1.1\r\nHost: h\r\n\r\n");
         // Multipart values are URL-encoded on the way into the query.
         let mp = "POST /u HTTP/1.1\r\nHost: h\r\nContent-Type: multipart/form-data; boundary=XX\r\nContent-Length: 1\r\n\r\n--XX\r\nContent-Disposition: form-data; name=\"f\"\r\n\r\na&b\r\n--XX--\r\n";
-        assert_eq!(toggle_request_method(mp), "GET /u?f=a%26b HTTP/1.1\r\nHost: h\r\n\r\n");
+        assert_eq!(
+            toggle_request_method(mp),
+            "GET /u?f=a%26b HTTP/1.1\r\nHost: h\r\n\r\n"
+        );
         // A JSON body has no parameters: it is dropped with its headers.
         let j = toggle_request_method("PUT /j HTTP/1.1\r\nHost: h\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}");
         assert_eq!(j, "GET /j HTTP/1.1\r\nHost: h\r\n\r\n");
@@ -2219,10 +3130,25 @@ mod tests {
     fn body_encoding_toggles_between_urlencoded_and_multipart() {
         let req = "POST /f HTTP/1.1\r\nHost: h\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 15\r\n\r\na=1&b=x+y%26z";
         let mp = toggle_body_encoding(req, "B0");
-        assert!(mp.contains("Content-Type: multipart/form-data; boundary=B0\r\n"), "{mp}");
-        assert!(mp.contains("--B0\r\nContent-Disposition: form-data; name=\"b\"\r\n\r\nx y&z\r\n--B0--\r\n"), "{mp}");
-        let body = mp.split("\r\n\r\n").skip(1).collect::<Vec<_>>().join("\r\n\r\n");
-        assert!(mp.contains(&format!("Content-Length: {}\r\n", body.len())), "{mp}");
+        assert!(
+            mp.contains("Content-Type: multipart/form-data; boundary=B0\r\n"),
+            "{mp}"
+        );
+        assert!(
+            mp.contains(
+                "--B0\r\nContent-Disposition: form-data; name=\"b\"\r\n\r\nx y&z\r\n--B0--\r\n"
+            ),
+            "{mp}"
+        );
+        let body = mp
+            .split("\r\n\r\n")
+            .skip(1)
+            .collect::<Vec<_>>()
+            .join("\r\n\r\n");
+        assert!(
+            mp.contains(&format!("Content-Length: {}\r\n", body.len())),
+            "{mp}"
+        );
         let back = toggle_body_encoding(&mp, "unused");
         assert!(back.contains("Content-Type: application/x-www-form-urlencoded\r\n"));
         assert!(back.ends_with("\r\n\r\na=1&b=x%20y%26z"), "{back}");
@@ -2233,10 +3159,17 @@ mod tests {
     #[test]
     fn url_encode_as_you_type_encodes_typed_key_characters() {
         assert_eq!(live_url_encode("a=1", "a=1&"), Some(("a=1%26".into(), 6)));
-        assert_eq!(live_url_encode("q=ab", "q=a b"), Some(("q=a%20b".into(), 6)));
+        assert_eq!(
+            live_url_encode("q=ab", "q=a b"),
+            Some(("q=a%20b".into(), 6))
+        );
         assert_eq!(live_url_encode("q=a", "q=ax"), None, "letters stay");
         assert_eq!(live_url_encode("x", "x\r\n"), None, "Enter is not encoded");
-        assert_eq!(live_url_encode("", "a=b&c=d&e=f"), None, "a paste is not typing");
+        assert_eq!(
+            live_url_encode("", "a=b&c=d&e=f"),
+            None,
+            "a paste is not typing"
+        );
         assert_eq!(live_url_encode("q=é", "q=é="), Some(("q=é%3d".into(), 6)));
         assert_eq!(encode_typed("abc"), None);
     }
@@ -2244,8 +3177,14 @@ mod tests {
     #[test]
     fn paste_keeps_crlf_messages_crlf() {
         // egui-winit hands the widget LF; an HTTP editor gets CRLF back.
-        assert_eq!(paste_line_breaks("", "GET / HTTP/1.1\nHost: a\n\n"), "GET / HTTP/1.1\r\nHost: a\r\n\r\n");
-        assert_eq!(paste_line_breaks("GET / HTTP/1.1\r\n", "a\r\nb\nc"), "a\r\nb\r\nc");
+        assert_eq!(
+            paste_line_breaks("", "GET / HTTP/1.1\nHost: a\n\n"),
+            "GET / HTTP/1.1\r\nHost: a\r\n\r\n"
+        );
+        assert_eq!(
+            paste_line_breaks("GET / HTTP/1.1\r\n", "a\r\nb\nc"),
+            "a\r\nb\r\nc"
+        );
         // An LF-only buffer keeps LF.
         assert_eq!(paste_line_breaks("line one\nline two", "x\r\ny"), "x\ny");
         assert_eq!(paste_line_breaks("", "single"), "single");
@@ -2255,27 +3194,62 @@ mod tests {
     fn python_script_repeats_the_request() {
         let req = b"POST /api/login?x=1 HTTP/1.1\r\nHost: app.test\r\nContent-Type: application/json\r\nCookie: sid=abc; lang=\"en\"\r\nContent-Length: 20\r\n\r\n{\"u\":\"a\\\\b\",\"n\":1}\n\xff";
         let py = python_requests(req, "https://app.test/api/login?x=1");
-        assert!(py.starts_with("import requests\n\nurl = \"https://app.test/api/login?x=1\"\n"), "{py}");
-        assert!(py.contains("headers = {\"Content-Type\": \"application/json\"}\n"), "{py}");
-        assert!(py.contains("cookies = {\"sid\": \"abc\", \"lang\": \"\\\"en\\\"\"}\n"), "{py}");
-        assert!(py.contains("data = b\"{\\\"u\\\":\\\"a\\\\\\\\b\\\",\\\"n\\\":1}\\n\\xff\"\n"), "{py}");
+        assert!(
+            py.starts_with("import requests\n\nurl = \"https://app.test/api/login?x=1\"\n"),
+            "{py}"
+        );
+        assert!(
+            py.contains("headers = {\"Content-Type\": \"application/json\"}\n"),
+            "{py}"
+        );
+        assert!(
+            py.contains("cookies = {\"sid\": \"abc\", \"lang\": \"\\\"en\\\"\"}\n"),
+            "{py}"
+        );
+        assert!(
+            py.contains("data = b\"{\\\"u\\\":\\\"a\\\\\\\\b\\\",\\\"n\\\":1}\\n\\xff\"\n"),
+            "{py}"
+        );
         assert!(py.contains("requests.request(\"POST\", url, headers=headers, cookies=cookies, data=data, verify=False, allow_redirects=False)"), "{py}");
         // A GET has no data argument.
-        let get = python_requests(b"GET / HTTP/1.1\r\nHost: app.test\r\n\r\n", "http://app.test/");
-        assert!(get.contains("requests.request(\"GET\", url, headers=headers, cookies=cookies, verify=False") && !get.contains("data ="), "{get}");
+        let get = python_requests(
+            b"GET / HTTP/1.1\r\nHost: app.test\r\n\r\n",
+            "http://app.test/",
+        );
+        assert!(
+            get.contains(
+                "requests.request(\"GET\", url, headers=headers, cookies=cookies, verify=False"
+            ) && !get.contains("data ="),
+            "{get}"
+        );
     }
 
     #[test]
     fn previous_response_is_the_one_before_the_latest() {
-        let h = |r: Option<&str>| ("req".to_string(), r.map(|s| s.as_bytes().to_vec()), String::new());
+        let h = |r: Option<&str>| {
+            (
+                "req".to_string(),
+                r.map(|s| s.as_bytes().to_vec()),
+                String::new(),
+            )
+        };
         assert_eq!(previous_response(&[]), None);
         assert_eq!(previous_response(&[h(Some("one"))]), None);
-        assert_eq!(previous_response(&[h(Some("one")), h(Some("two"))]), Some(b"one".to_vec()));
+        assert_eq!(
+            previous_response(&[h(Some("one")), h(Some("two"))]),
+            Some(b"one".to_vec())
+        );
         // A failed send in between is skipped.
-        assert_eq!(previous_response(&[h(Some("one")), h(None), h(Some("three"))]), Some(b"one".to_vec()));
+        assert_eq!(
+            previous_response(&[h(Some("one")), h(None), h(Some("three"))]),
+            Some(b"one".to_vec())
+        );
         let r = |q: &str| (q.to_string(), None, String::new());
         assert_eq!(previous_request(&[r("a")]), None);
-        assert_eq!(previous_request(&[r("a"), r("b"), r("c")]), Some("b".to_string()));
+        assert_eq!(
+            previous_request(&[r("a"), r("b"), r("c")]),
+            Some("b".to_string())
+        );
     }
 
     #[test]
@@ -2291,7 +3265,9 @@ mod tests {
     }
 
     fn tabs(n: u64) -> Vec<net::RepTab> {
-        (1..=n).map(|i| new_tab(i, "h", 80, false, format!("GET /{i} HTTP/1.1\r\n\r\n"))).collect()
+        (1..=n)
+            .map(|i| new_tab(i, "h", 80, false, format!("GET /{i} HTTP/1.1\r\n\r\n")))
+            .collect()
     }
 
     fn ids(v: &[net::RepTab]) -> Vec<u64> {
@@ -2302,20 +3278,40 @@ mod tests {
     fn tab_close_variants_and_reopen() {
         let mut closed = Vec::new();
         let mut v = tabs(5);
-        assert_eq!(close_tabs(&mut v, 2, CloseWhich::Right, &mut closed, || 99), 2);
+        assert_eq!(
+            close_tabs(&mut v, 2, CloseWhich::Right, &mut closed, || 99),
+            2
+        );
         assert_eq!(ids(&v), vec![1, 2, 3]);
-        assert_eq!(close_tabs(&mut v, 1, CloseWhich::Left, &mut closed, || 99), 0);
+        assert_eq!(
+            close_tabs(&mut v, 1, CloseWhich::Left, &mut closed, || 99),
+            0
+        );
         assert_eq!(ids(&v), vec![2, 3]);
-        assert_eq!(close_tabs(&mut v, 1, CloseWhich::Others, &mut closed, || 99), 0);
+        assert_eq!(
+            close_tabs(&mut v, 1, CloseWhich::Others, &mut closed, || 99),
+            0
+        );
         assert_eq!(ids(&v), vec![3]);
         // Closing the last tab leaves a fresh one.
-        assert_eq!(close_tabs(&mut v, 0, CloseWhich::This, &mut closed, || 99), 0);
+        assert_eq!(
+            close_tabs(&mut v, 0, CloseWhich::This, &mut closed, || 99),
+            0
+        );
         assert_eq!(ids(&v), vec![99]);
         assert_eq!(closed.len(), 5);
         let i = reopen_tab(&mut v, &mut closed, 100).unwrap();
-        assert_eq!((i, v[i].request.as_str()), (1, "GET /3 HTTP/1.1\r\n\r\n"), "the last closed tab comes back");
+        assert_eq!(
+            (i, v[i].request.as_str()),
+            (1, "GET /3 HTTP/1.1\r\n\r\n"),
+            "the last closed tab comes back"
+        );
         let mut w = tabs(3);
-        assert_eq!(close_tabs(&mut w, 2, CloseWhich::This, &mut closed, || 0), 1, "selection moves left");
+        assert_eq!(
+            close_tabs(&mut w, 2, CloseWhich::This, &mut closed, || 0),
+            1,
+            "selection moves left"
+        );
     }
 
     #[test]
@@ -2350,33 +3346,75 @@ mod tests {
             response_b64: None,
         };
         let d = crate::project::ProjectData {
-            repeaters: vec![tab("login", "GET /a HTTP/1.1\r\n\r\n"), tab("3", "POST /b HTTP/1.1\r\n\r\nx")],
+            repeaters: vec![
+                tab("login", "GET /a HTTP/1.1\r\n\r\n"),
+                tab("3", "POST /b HTTP/1.1\r\n\r\nx"),
+            ],
             ..Default::default()
         };
         let back = crate::project::import_json(&crate::project::export_json(&d).unwrap()).unwrap();
-        let got: Vec<(&str, &str, u16, bool)> = back.repeaters.iter().map(|r| (r.name.as_str(), r.request.as_str(), r.port, r.https)).collect();
-        assert_eq!(got, vec![("login", "GET /a HTTP/1.1\r\n\r\n", 8443, true), ("3", "POST /b HTTP/1.1\r\n\r\nx", 8443, true)]);
-        assert_eq!(back.repeaters[0].response.as_deref(), Some("HTTP/1.1 200 OK\r\n\r\n"));
+        let got: Vec<(&str, &str, u16, bool)> = back
+            .repeaters
+            .iter()
+            .map(|r| (r.name.as_str(), r.request.as_str(), r.port, r.https))
+            .collect();
+        assert_eq!(
+            got,
+            vec![
+                ("login", "GET /a HTTP/1.1\r\n\r\n", 8443, true),
+                ("3", "POST /b HTTP/1.1\r\n\r\nx", 8443, true)
+            ]
+        );
+        assert_eq!(
+            back.repeaters[0].response.as_deref(),
+            Some("HTTP/1.1 200 OK\r\n\r\n")
+        );
     }
 
     #[test]
     fn ws_filter_by_direction_and_search() {
-        let e = |dir: &str, op: &str, p: &str| net::WsEntry { id: 1, ts: 0, host: "h".into(), direction: dir.into(), opcode: op.into(), payload: p.as_bytes().into(), socket: 0 };
+        let e = |dir: &str, op: &str, p: &str| net::WsEntry {
+            id: 1,
+            ts: 0,
+            host: "h".into(),
+            direction: dir.into(),
+            opcode: op.into(),
+            payload: p.as_bytes().into(),
+            socket: 0,
+        };
         let mut f = WsFilter::default();
         let out = e("client -> server", "text", "Hello");
         let inc = e("server -> client", "text", "world");
         assert!(ws_row_visible(&f, &out, |_| true));
         f.hide_outgoing = true;
         assert!(!ws_row_visible(&f, &out, |_| true) && ws_row_visible(&f, &inc, |_| true));
-        f = WsFilter { term: "hello".into(), ..Default::default() };
+        f = WsFilter {
+            term: "hello".into(),
+            ..Default::default()
+        };
         assert!(ws_row_visible(&f, &out, |_| true) && !ws_row_visible(&f, &inc, |_| true));
         f.case_sensitive = true;
         assert!(!ws_row_visible(&f, &out, |_| true));
-        f = WsFilter { term: "w.rld".into(), regex: true, negative: true, ..Default::default() };
+        f = WsFilter {
+            term: "w.rld".into(),
+            regex: true,
+            negative: true,
+            ..Default::default()
+        };
         assert!(ws_row_visible(&f, &out, |_| true) && !ws_row_visible(&f, &inc, |_| true));
-        f = WsFilter { hide_control: true, ..Default::default() };
-        assert!(!ws_row_visible(&f, &e("server -> client", "ping", ""), |_| true));
-        f = WsFilter { in_scope_only: true, ..Default::default() };
+        f = WsFilter {
+            hide_control: true,
+            ..Default::default()
+        };
+        assert!(!ws_row_visible(
+            &f,
+            &e("server -> client", "ping", ""),
+            |_| true
+        ));
+        f = WsFilter {
+            in_scope_only: true,
+            ..Default::default()
+        };
         assert!(!ws_row_visible(&f, &out, |_| false));
     }
 }
@@ -2400,15 +3438,29 @@ pub fn with_protocol(req: &str, http2: bool) -> String {
         return req.to_string();
     }
     let version = if http2 { "HTTP/2" } else { "HTTP/1.1" };
-    format!("{} {} {version}{}{rest}", words[0], words[1], if cr { "\r" } else { "" })
+    format!(
+        "{} {} {version}{}{rest}",
+        words[0],
+        words[1],
+        if cr { "\r" } else { "" }
+    )
 }
 
 /// How Repeater sends this request (Burp's rules): an HTTP/2 request only
 /// over HTTP/2; an HTTP/1 request only over HTTP/1 unless "Allow HTTP/2
 /// ALPN override" lets the server pick.
 pub fn http2_choice(req: &str, alpn_override: bool, strip_connection: bool) -> net::Http2Choice {
-    let want_h2 = if is_http2(req) { Some(true) } else if alpn_override { None } else { Some(false) };
-    net::Http2Choice { want_h2, strip_connection }
+    let want_h2 = if is_http2(req) {
+        Some(true)
+    } else if alpn_override {
+        None
+    } else {
+        Some(false)
+    };
+    net::Http2Choice {
+        want_h2,
+        strip_connection,
+    }
 }
 
 #[cfg(test)]

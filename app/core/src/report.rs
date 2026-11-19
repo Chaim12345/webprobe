@@ -25,7 +25,6 @@
 //! Everything here is pure, so the generators are tested against fixture
 //! issues; the options window is in the desktop app (`src/report.rs`).
 
-
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 
@@ -48,7 +47,11 @@ pub enum Organization {
 }
 
 impl Organization {
-    pub const ALL: [Organization; 3] = [Organization::ByType, Organization::BySeverity, Organization::ByUrl];
+    pub const ALL: [Organization; 3] = [
+        Organization::ByType,
+        Organization::BySeverity,
+        Organization::ByUrl,
+    ];
     pub fn label(self) -> &'static str {
         match self {
             Organization::ByType => "By type",
@@ -198,7 +201,11 @@ fn link_list(v: Option<&serde_json::Value>) -> Option<String> {
     for it in items {
         let title = it.get("title").and_then(|t| t.as_str()).unwrap_or_default();
         let url = it.get("url").and_then(|t| t.as_str()).unwrap_or_default();
-        out.push_str(&format!("<li><a href=\"{}\">{}</a></li>", html_encode(url), html_encode(title)));
+        out.push_str(&format!(
+            "<li><a href=\"{}\">{}</a></li>",
+            html_encode(url),
+            html_encode(title)
+        ));
     }
     out.push_str("</ul>");
     Some(out)
@@ -208,9 +215,17 @@ impl KnowledgeBase {
     /// Parse one KnowledgeBase JSON document.
     pub fn parse_entry(text: &str) -> Option<KbEntry> {
         let v: serde_json::Value = serde_json::from_str(text).ok()?;
-        let s = |k: &str| v.get(k).and_then(|x| x.as_str()).map(str::to_string).filter(|x| !x.trim().is_empty());
+        let s = |k: &str| {
+            v.get(k)
+                .and_then(|x| x.as_str())
+                .map(str::to_string)
+                .filter(|x| !x.trim().is_empty())
+        };
         Some(KbEntry {
-            type_index: v.get("typeIndex").and_then(|x| x.as_u64()).unwrap_or(EXTENSION_TYPE),
+            type_index: v
+                .get("typeIndex")
+                .and_then(|x| x.as_u64())
+                .unwrap_or(EXTENSION_TYPE),
             name: s("name")?,
             background: s("description"),
             remediation: s("remediation"),
@@ -222,13 +237,19 @@ impl KnowledgeBase {
     /// Load every `*.json` definition in `dir` (missing dir = empty base).
     pub fn load_dir(dir: &Path) -> Self {
         let mut kb = Self::default();
-        let Ok(rd) = std::fs::read_dir(dir) else { return kb };
+        let Ok(rd) = std::fs::read_dir(dir) else {
+            return kb;
+        };
         for e in rd.flatten() {
             let p = e.path();
             if p.extension().and_then(|x| x.to_str()) != Some("json") {
                 continue;
             }
-            if let Some(entry) = crate::util::read_text_file_capped(&p, crate::util::MAX_TEXT_FILE_BYTES).ok().and_then(|t| Self::parse_entry(&t)) {
+            if let Some(entry) =
+                crate::util::read_text_file_capped(&p, crate::util::MAX_TEXT_FILE_BYTES)
+                    .ok()
+                    .and_then(|t| Self::parse_entry(&t))
+            {
                 kb.entries.insert(entry.name.to_lowercase(), entry);
             }
         }
@@ -321,7 +342,11 @@ impl ReportIssue {
 /// recent history entry with that host and the same path (query string
 /// ignored), which for an active issue is the base request, not the probe.
 /// Origin and IP still come from that history entry.
-pub fn build_report_issues(issues: &[ScanIssue], history: &[crate::net::HistEntry], kb: &KnowledgeBase) -> Vec<ReportIssue> {
+pub fn build_report_issues(
+    issues: &[ScanIssue],
+    history: &[crate::net::HistEntry],
+    kb: &KnowledgeBase,
+) -> Vec<ReportIssue> {
     issues
         .iter()
         .map(|i| {
@@ -329,7 +354,9 @@ pub fn build_report_issues(issues: &[ScanIssue], history: &[crate::net::HistEntr
                 .iter()
                 .filter(|e| e.host == i.host && e.path.split('?').next().unwrap_or("") == i.path)
                 .max_by_key(|e| e.id);
-            let origin = ev.map(crate::net::history_host).unwrap_or_else(|| format!("http://{}", i.host));
+            let origin = ev
+                .map(crate::net::history_host)
+                .unwrap_or_else(|| format!("http://{}", i.host));
             let k = kb.lookup(&i.name);
             ReportIssue {
                 serial: i.id,
@@ -355,7 +382,10 @@ pub fn build_report_issues(issues: &[ScanIssue], history: &[crate::net::HistEntr
                     i.evidence
                         .iter()
                         .map(|x| Evidence {
-                            method: String::from_utf8_lossy(x.request.split(|b| *b == b' ').next().unwrap_or_default()).into_owned(),
+                            method: String::from_utf8_lossy(
+                                x.request.split(|b| *b == b' ').next().unwrap_or_default(),
+                            )
+                            .into_owned(),
                             request: x.request.to_vec(),
                             response: x.response.as_ref().map(|r| r.to_vec()),
                             redirected: false,
@@ -504,7 +534,10 @@ fn xml_cdata_element(out: &mut String, indent: &str, tag: &str, attrs: Option<&s
 /// (host, ip). Burp writes them unescaped; escaping is a no-op for normal
 /// hostnames and keeps the document well-formed for hostile ones.
 fn xml_text(s: &str) -> String {
-    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 fn limited(data: &[u8], limit: Option<usize>) -> &[u8] {
@@ -520,7 +553,9 @@ pub fn export_time(secs: u64) -> String {
     match time::OffsetDateTime::from_unix_timestamp(secs as i64) {
         Ok(t) => {
             const D: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-            const M: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+            const M: [&str; 12] = [
+                "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+            ];
             format!(
                 "{} {} {:02} {:02}:{:02}:{:02} UTC {}",
                 D[t.weekday().number_days_from_monday() as usize],
@@ -561,19 +596,40 @@ pub fn xml_report(issues: &[ReportIssue], o: &ReportOptions, export_time: &str) 
     for is in issues {
         out.push_str(i1);
         out.push_str("<issue>\r\n");
-        out.push_str(&format!("{i2}<serialNumber>{}</serialNumber>\r\n", is.serial));
+        out.push_str(&format!(
+            "{i2}<serialNumber>{}</serialNumber>\r\n",
+            is.serial
+        ));
         out.push_str(&format!("{i2}<type>{}</type>\r\n", is.type_index));
         xml_cdata_element(&mut out, i2, "name", None, is.name.as_bytes());
-        out.push_str(&format!("{i2}<host ip=\"{}\">{}</host>\r\n", xml_text(&is.ip), xml_text(&is.origin)));
+        out.push_str(&format!(
+            "{i2}<host ip=\"{}\">{}</host>\r\n",
+            xml_text(&is.ip),
+            xml_text(&is.origin)
+        ));
         xml_cdata_element(&mut out, i2, "path", None, is.path.as_bytes());
         xml_cdata_element(&mut out, i2, "location", None, is.location.as_bytes());
-        out.push_str(&format!("{i2}<severity>{}</severity>\r\n", is.severity_label()));
-        out.push_str(&format!("{i2}<confidence>{}</confidence>\r\n", is.confidence_label()));
+        out.push_str(&format!(
+            "{i2}<severity>{}</severity>\r\n",
+            is.severity_label()
+        ));
+        out.push_str(&format!(
+            "{i2}<confidence>{}</confidence>\r\n",
+            is.confidence_label()
+        ));
         let sections: [(bool, &str, &Option<String>); 4] = [
             (o.issue_background, "issueBackground", &is.background),
-            (o.remediation_background, "remediationBackground", &is.remediation),
+            (
+                o.remediation_background,
+                "remediationBackground",
+                &is.remediation,
+            ),
             (o.references, "references", &is.references),
-            (o.classifications, "vulnerabilityClassifications", &is.classifications),
+            (
+                o.classifications,
+                "vulnerabilityClassifications",
+                &is.classifications,
+            ),
         ];
         for (on, tag, val) in sections {
             if let (true, Some(v)) = (on, val) {
@@ -584,14 +640,24 @@ pub fn xml_report(issues: &[ReportIssue], o: &ReportOptions, export_time: &str) 
             xml_cdata_element(&mut out, i2, "issueDetail", None, html_encode(d).as_bytes());
         }
         if let (true, Some(d)) = (o.remediation_detail, &is.remediation_detail) {
-            xml_cdata_element(&mut out, i2, "remediationDetail", None, html_encode(d).as_bytes());
+            xml_cdata_element(
+                &mut out,
+                i2,
+                "remediationDetail",
+                None,
+                html_encode(d).as_bytes(),
+            );
         }
         // Zpa6.Zc: one requestresponse per message pair, when either side is
         // included and present. XML has no "relevant extract": Burp's wizard
         // switches it to full (Zrac.ZX), so any non-Omit mode writes it all.
         for ev in &is.evidence {
             let req = (o.requests != MessageMode::Omit).then_some(&ev.request);
-            let resp = if o.responses != MessageMode::Omit { ev.response.as_ref() } else { None };
+            let resp = if o.responses != MessageMode::Omit {
+                ev.response.as_ref()
+            } else {
+                None
+            };
             if req.is_none() && resp.is_none() {
                 continue;
             }
@@ -602,20 +668,41 @@ pub fn xml_report(issues: &[ReportIssue], o: &ReportOptions, export_time: &str) 
                 let method = xml_text(&ev.method);
                 if o.base64 {
                     let b = crate::util::b64_encode(r);
-                    xml_cdata_element(&mut out, i3, "request", Some(&format!("method=\"{method}\" base64=\"true\"")), b.as_bytes());
+                    xml_cdata_element(
+                        &mut out,
+                        i3,
+                        "request",
+                        Some(&format!("method=\"{method}\" base64=\"true\"")),
+                        b.as_bytes(),
+                    );
                 } else {
-                    xml_cdata_element(&mut out, i3, "request", Some(&format!("method=\"{method}\" base64=\"false\"")), r);
+                    xml_cdata_element(
+                        &mut out,
+                        i3,
+                        "request",
+                        Some(&format!("method=\"{method}\" base64=\"false\"")),
+                        r,
+                    );
                 }
             }
             if let Some(r) = resp {
                 let r = limited(r, o.response_limit);
                 if o.base64 {
                     let b = crate::util::b64_encode(r);
-                    xml_cdata_element(&mut out, i3, "response", Some("base64=\"true\""), b.as_bytes());
+                    xml_cdata_element(
+                        &mut out,
+                        i3,
+                        "response",
+                        Some("base64=\"true\""),
+                        b.as_bytes(),
+                    );
                 } else {
                     xml_cdata_element(&mut out, i3, "response", Some("base64=\"false\""), r);
                 }
-                out.push_str(&format!("{i3}<responseRedirected>{}</responseRedirected>\r\n", ev.redirected));
+                out.push_str(&format!(
+                    "{i3}<responseRedirected>{}</responseRedirected>\r\n",
+                    ev.redirected
+                ));
             }
             out.push_str(i2);
             out.push_str("</requestresponse>\r\n");
@@ -662,7 +749,13 @@ fn type_groups(issues: &[ReportIssue], idx: &[usize]) -> Vec<Section> {
         .map(|g| {
             let rep = g[0];
             if g.len() == 1 {
-                Section { title: issues[rep].name.clone(), issue: Some(rep), type_rep: Some(rep), instances: 1, children: Vec::new() }
+                Section {
+                    title: issues[rep].name.clone(),
+                    issue: Some(rep),
+                    type_rep: Some(rep),
+                    instances: 1,
+                    children: Vec::new(),
+                }
             } else {
                 Section {
                     title: issues[rep].name.clone(),
@@ -671,7 +764,13 @@ fn type_groups(issues: &[ReportIssue], idx: &[usize]) -> Vec<Section> {
                     instances: g.len(),
                     children: g
                         .iter()
-                        .map(|&i| Section { title: issues[i].url(), issue: Some(i), type_rep: None, instances: 0, children: Vec::new() })
+                        .map(|&i| Section {
+                            title: issues[i].url(),
+                            issue: Some(i),
+                            type_rep: None,
+                            instances: 0,
+                            children: Vec::new(),
+                        })
                         .collect(),
                 }
             }
@@ -686,14 +785,34 @@ fn outline(issues: &[ReportIssue], org: Organization) -> Vec<Section> {
         Organization::BySeverity => {
             let mut out = Vec::new();
             for (s, label) in SEVERITIES.iter().enumerate() {
-                let idx: Vec<usize> = all.iter().copied().filter(|&i| !issues[i].false_positive && issues[i].severity == s).collect();
+                let idx: Vec<usize> = all
+                    .iter()
+                    .copied()
+                    .filter(|&i| !issues[i].false_positive && issues[i].severity == s)
+                    .collect();
                 if !idx.is_empty() {
-                    out.push(Section { title: format!("{label} issues"), issue: None, type_rep: None, instances: 0, children: type_groups(issues, &idx) });
+                    out.push(Section {
+                        title: format!("{label} issues"),
+                        issue: None,
+                        type_rep: None,
+                        instances: 0,
+                        children: type_groups(issues, &idx),
+                    });
                 }
             }
-            let fp: Vec<usize> = all.iter().copied().filter(|&i| issues[i].false_positive).collect();
+            let fp: Vec<usize> = all
+                .iter()
+                .copied()
+                .filter(|&i| issues[i].false_positive)
+                .collect();
             if !fp.is_empty() {
-                out.push(Section { title: format!("{FALSE_POSITIVE} issues"), issue: None, type_rep: None, instances: 0, children: type_groups(issues, &fp) });
+                out.push(Section {
+                    title: format!("{FALSE_POSITIVE} issues"),
+                    issue: None,
+                    type_rep: None,
+                    instances: 0,
+                    children: type_groups(issues, &fp),
+                });
             }
             out
         }
@@ -713,7 +832,13 @@ fn outline(issues: &[ReportIssue], org: Organization) -> Vec<Section> {
                         instances: 0,
                         children: idx
                             .into_iter()
-                            .map(|i| Section { title: issues[i].name.clone(), issue: Some(i), type_rep: Some(i), instances: 1, children: Vec::new() })
+                            .map(|i| Section {
+                                title: issues[i].name.clone(),
+                                issue: Some(i),
+                                type_rep: Some(i),
+                                instances: 1,
+                                children: Vec::new(),
+                            })
                             .collect(),
                     }
                 })
@@ -756,12 +881,19 @@ fn message_text(data: &[u8], mode: MessageMode, limit: Option<usize>) -> Option<
         MessageMode::Omit => None,
         MessageMode::Full => Some(String::from_utf8_lossy(data).into_owned()),
         MessageMode::Extract => {
-            let head = crate::util::find_head_end(data).unwrap_or(data.len()).min(data.len());
+            let head = crate::util::find_head_end(data)
+                .unwrap_or(data.len())
+                .min(data.len());
             let body = &data[head..];
             let mut s = String::from_utf8_lossy(&data[..head]).into_owned();
-            s.push_str(&String::from_utf8_lossy(&body[..body.len().min(EXTRACT_BODY)]));
+            s.push_str(&String::from_utf8_lossy(
+                &body[..body.len().min(EXTRACT_BODY)],
+            ));
             if body.len() > EXTRACT_BODY {
-                s.push_str(&format!("\n...[{} more bytes]...", body.len() - EXTRACT_BODY));
+                s.push_str(&format!(
+                    "\n...[{} more bytes]...",
+                    body.len() - EXTRACT_BODY
+                ));
             }
             Some(s)
         }
@@ -771,7 +903,11 @@ fn message_text(data: &[u8], mode: MessageMode, limit: Option<usize>) -> Option<
 fn summary_table_html(issues: &[ReportIssue], o: &ReportOptions, out: &mut String) {
     let mut counts = [[0usize; 3]; 5];
     for i in issues {
-        let row = if i.false_positive { 4 } else { i.severity.min(3) };
+        let row = if i.false_positive {
+            4
+        } else {
+            i.severity.min(3)
+        };
         counts[row][i.confidence.min(2)] += 1;
     }
     out.push_str("<h1>Summary</h1>\n<span class=\"TEXT\">The table below shows the numbers of issues identified in different categories. Issues are classified according to severity as High, Medium, Low or Information, which reflects the likely impact of each issue for a typical organization, and according to confidence as Certain, Firm or Tentative, which reflects the inherent reliability of the technique used to identify the issue.</span><br><br>\n");
@@ -780,16 +916,27 @@ fn summary_table_html(issues: &[ReportIssue], o: &ReportOptions, out: &mut Strin
         out.push_str(&format!("<td class=\"label\">{c}</td>"));
     }
     out.push_str("<td class=\"label\">Total</td></tr>\n");
-    let mut rows: Vec<(usize, &str)> = SEVERITIES.iter().enumerate().filter(|(s, _)| o.severities[*s]).map(|(s, l)| (s, *l)).collect();
+    let mut rows: Vec<(usize, &str)> = SEVERITIES
+        .iter()
+        .enumerate()
+        .filter(|(s, _)| o.severities[*s])
+        .map(|(s, l)| (s, *l))
+        .collect();
     if o.include_false_positives {
         rows.push((4, FALSE_POSITIVE));
     }
     for (n, (row, label)) in rows.iter().enumerate() {
         out.push_str("<tr>");
         if n == 0 {
-            out.push_str(&format!("<td class=\"label\" rowspan=\"{}\">Severity</td>", rows.len()));
+            out.push_str(&format!(
+                "<td class=\"label\" rowspan=\"{}\">Severity</td>",
+                rows.len()
+            ));
         }
-        out.push_str(&format!("<td class=\"label {}\">{label}</td>", sev_class(label)));
+        out.push_str(&format!(
+            "<td class=\"label {}\">{label}</td>",
+            sev_class(label)
+        ));
         let mut total = 0;
         for (c, on) in o.confidences.iter().enumerate() {
             let v = counts[*row][c];
@@ -808,11 +955,19 @@ fn summary_table_html(issues: &[ReportIssue], o: &ReportOptions, out: &mut Strin
 fn bar_chart_html(issues: &[ReportIssue], o: &ReportOptions, out: &mut String) {
     let mut counts = [0usize; 5];
     for i in issues {
-        counts[if i.false_positive { 4 } else { i.severity.min(3) }] += 1;
+        counts[if i.false_positive {
+            4
+        } else {
+            i.severity.min(3)
+        }] += 1;
     }
     let max = counts.iter().copied().max().unwrap_or(0).max(1);
     out.push_str("<br><span class=\"TEXT\">The chart below shows the aggregated numbers of issues identified in each severity category.</span><br><br>\n<table class=\"bar_chart\">\n");
-    for (s, label) in SEVERITIES.iter().chain(std::iter::once(&FALSE_POSITIVE)).enumerate() {
+    for (s, label) in SEVERITIES
+        .iter()
+        .chain(std::iter::once(&FALSE_POSITIVE))
+        .enumerate()
+    {
         if (s < 4 && !o.severities[s]) || (s == 4 && !o.include_false_positives) {
             continue;
         }
@@ -827,7 +982,10 @@ fn bar_chart_html(issues: &[ReportIssue], o: &ReportOptions, out: &mut String) {
 }
 
 fn number(path: &[usize]) -> String {
-    path.iter().map(|n| n.to_string()).collect::<Vec<_>>().join(".")
+    path.iter()
+        .map(|n| n.to_string())
+        .collect::<Vec<_>>()
+        .join(".")
 }
 
 fn toc_html(sections: &[Section], prefix: &mut Vec<usize>, levels: u8, out: &mut String) {
@@ -854,23 +1012,52 @@ fn issue_body_html(is: &ReportIssue, o: &ReportOptions, out: &mut String) {
         sev_class(is.severity_label()),
         is.severity_label()
     ));
-    out.push_str(&format!("<tr><td>Confidence:&nbsp;&nbsp;</td><td><b>{}</b></td></tr>\n", is.confidence_label()));
-    out.push_str(&format!("<tr><td>Host:&nbsp;&nbsp;</td><td><b>{}</b></td></tr>\n", html_encode(&is.origin)));
-    out.push_str(&format!("<tr><td>Path:&nbsp;&nbsp;</td><td><b>{}</b></td></tr>\n</table>\n", html_encode(&is.path)));
+    out.push_str(&format!(
+        "<tr><td>Confidence:&nbsp;&nbsp;</td><td><b>{}</b></td></tr>\n",
+        is.confidence_label()
+    ));
+    out.push_str(&format!(
+        "<tr><td>Host:&nbsp;&nbsp;</td><td><b>{}</b></td></tr>\n",
+        html_encode(&is.origin)
+    ));
+    out.push_str(&format!(
+        "<tr><td>Path:&nbsp;&nbsp;</td><td><b>{}</b></td></tr>\n</table>\n",
+        html_encode(&is.path)
+    ));
     if let (true, Some(d)) = (o.issue_detail, &is.detail) {
-        out.push_str(&format!("<h2>Issue detail</h2>\n<span class=\"TEXT\">{}</span>\n", html_encode(d).replace('\n', "<br>")));
+        out.push_str(&format!(
+            "<h2>Issue detail</h2>\n<span class=\"TEXT\">{}</span>\n",
+            html_encode(d).replace('\n', "<br>")
+        ));
     }
     if let (true, Some(d)) = (o.remediation_detail, &is.remediation_detail) {
-        out.push_str(&format!("<h2>Remediation detail</h2>\n<span class=\"TEXT\">{}</span>\n", html_encode(d).replace('\n', "<br>")));
+        out.push_str(&format!(
+            "<h2>Remediation detail</h2>\n<span class=\"TEXT\">{}</span>\n",
+            html_encode(d).replace('\n', "<br>")
+        ));
     }
     let many = is.evidence.len() > 1;
     for (n, ev) in is.evidence.iter().enumerate() {
-        let suffix = if many { format!(" {}", n + 1) } else { String::new() };
+        let suffix = if many {
+            format!(" {}", n + 1)
+        } else {
+            String::new()
+        };
         if let Some(t) = message_text(&ev.request, o.requests, o.request_limit) {
-            out.push_str(&format!("<h2>Request{suffix}</h2>\n<div class=\"rr_div\">{}</div>\n", html_encode(&t)));
+            out.push_str(&format!(
+                "<h2>Request{suffix}</h2>\n<div class=\"rr_div\">{}</div>\n",
+                html_encode(&t)
+            ));
         }
-        if let Some(t) = ev.response.as_ref().and_then(|r| message_text(r, o.responses, o.response_limit)) {
-            out.push_str(&format!("<h2>Response{suffix}</h2>\n<div class=\"rr_div\">{}</div>\n", html_encode(&t)));
+        if let Some(t) = ev
+            .response
+            .as_ref()
+            .and_then(|r| message_text(r, o.responses, o.response_limit))
+        {
+            out.push_str(&format!(
+                "<h2>Response{suffix}</h2>\n<div class=\"rr_div\">{}</div>\n",
+                html_encode(&t)
+            ));
         }
     }
 }
@@ -879,18 +1066,34 @@ fn type_info_html(is: &ReportIssue, o: &ReportOptions, out: &mut String) {
     // Knowledge-base text is trusted HTML (as Burp embeds it).
     let parts: [(bool, &str, &Option<String>); 4] = [
         (o.issue_background, "Issue background", &is.background),
-        (o.remediation_background, "Issue remediation", &is.remediation),
+        (
+            o.remediation_background,
+            "Issue remediation",
+            &is.remediation,
+        ),
         (o.references, "References", &is.references),
-        (o.classifications, "Vulnerability classifications", &is.classifications),
+        (
+            o.classifications,
+            "Vulnerability classifications",
+            &is.classifications,
+        ),
     ];
     for (on, heading, val) in parts {
         if let (true, Some(v)) = (on, val) {
-            out.push_str(&format!("<h2>{heading}</h2>\n<span class=\"TEXT\">{v}</span>\n"));
+            out.push_str(&format!(
+                "<h2>{heading}</h2>\n<span class=\"TEXT\">{v}</span>\n"
+            ));
         }
     }
 }
 
-fn body_html(sections: &[Section], issues: &[ReportIssue], o: &ReportOptions, prefix: &mut Vec<usize>, out: &mut String) {
+fn body_html(
+    sections: &[Section],
+    issues: &[ReportIssue],
+    o: &ReportOptions,
+    prefix: &mut Vec<usize>,
+    out: &mut String,
+) {
     for (n, s) in sections.iter().enumerate() {
         prefix.push(n + 1);
         let depth = prefix.len() - 1;
@@ -898,9 +1101,16 @@ fn body_html(sections: &[Section], issues: &[ReportIssue], o: &ReportOptions, pr
         if depth == 0 {
             out.push_str("<div class=\"rule\"></div>\n");
         }
-        out.push_str(&format!("<span class=\"BODH{}\" id=\"{num}\">{num}.&nbsp;{}</span>\n", depth.min(2), html_encode(&s.title)));
+        out.push_str(&format!(
+            "<span class=\"BODH{}\" id=\"{num}\">{num}.&nbsp;{}</span>\n",
+            depth.min(2),
+            html_encode(&s.title)
+        ));
         if s.instances > 1 {
-            out.push_str(&format!("<span class=\"TEXT\">There are {} instances of this issue:<ul>\n", s.instances));
+            out.push_str(&format!(
+                "<span class=\"TEXT\">There are {} instances of this issue:<ul>\n",
+                s.instances
+            ));
             for c in &s.children {
                 out.push_str(&format!("<li>{}</li>\n", html_encode(&c.title)));
             }
@@ -934,7 +1144,12 @@ pub fn html_report(issues: &[ReportIssue], o: &ReportOptions, generated: &str) -
     if sections.is_empty() {
         out.push_str("<span class=\"TEXT\">No issues match the selected report options.</span>\n");
     }
-    toc_html(&sections, &mut Vec::new(), o.toc_levels.clamp(1, 3), &mut out);
+    toc_html(
+        &sections,
+        &mut Vec::new(),
+        o.toc_levels.clamp(1, 3),
+        &mut out,
+    );
     body_html(&sections, issues, o, &mut Vec::new(), &mut out);
     out.push_str(&format!(
         "<div class=\"rule\"></div>\n<span class=\"TEXT\">Report generated by WebProbe at {}.</span>\n</div>\n</body>\n</html>\n",
@@ -965,15 +1180,32 @@ mod tests {
             port: 80,
             path: "/page".into(),
             method: "GET".into(),
-            req_raw: b"GET /page HTTP/1.1\r\nHost: example.com\r\n\r\n".to_vec().into(),
+            req_raw: b"GET /page HTTP/1.1\r\nHost: example.com\r\n\r\n"
+                .to_vec()
+                .into(),
             resp_raw: Some(b"HTTP/1.1 200 OK\r\n\r\nhi".to_vec().into()),
             ..Default::default()
         };
-        let issue = |evidence: Vec<ScanEvidence>| ScanIssue { sev: "high".into(), name: "SQL injection".into(), host: "example.com".into(), path: "/page".into(), confidence: "Firm".into(), evidence, ..Default::default() };
+        let issue = |evidence: Vec<ScanEvidence>| ScanIssue {
+            sev: "high".into(),
+            name: "SQL injection".into(),
+            host: "example.com".into(),
+            path: "/page".into(),
+            confidence: "Firm".into(),
+            evidence,
+            ..Default::default()
+        };
         let probe = b"GET /page?q=%27 HTTP/1.1\r\nHost: example.com\r\n\r\n";
-        let with = issue(vec![ScanEvidence::new(probe, Some(&b"HTTP/1.1 500 Oops\r\n\r\n"[..]))]);
+        let with = issue(vec![ScanEvidence::new(
+            probe,
+            Some(&b"HTTP/1.1 500 Oops\r\n\r\n"[..]),
+        )]);
         let without = issue(Vec::new());
-        let r = build_report_issues(&[with, without], std::slice::from_ref(&e), &KnowledgeBase::default());
+        let r = build_report_issues(
+            &[with, without],
+            std::slice::from_ref(&e),
+            &KnowledgeBase::default(),
+        );
         assert_eq!(r[0].evidence.len(), 1);
         assert_eq!(r[0].evidence[0].request, probe.to_vec());
         assert_eq!(r[0].evidence[0].method, "GET");
@@ -1030,7 +1262,15 @@ mod tests {
         assert_eq!(o.toc_levels, 2);
         assert_eq!(o.requests, MessageMode::Extract);
         assert_eq!(o.responses, MessageMode::Extract);
-        assert!(o.base64 && o.issue_background && o.remediation_background && o.issue_detail && o.remediation_detail && o.references && o.classifications);
+        assert!(
+            o.base64
+                && o.issue_background
+                && o.remediation_background
+                && o.issue_detail
+                && o.remediation_detail
+                && o.references
+                && o.classifications
+        );
         assert!(!o.include_false_positives);
     }
 
@@ -1045,26 +1285,54 @@ mod tests {
             fp,
         ];
         let mut o = ReportOptions::default();
-        assert_eq!(select_issues(&all, &o).iter().map(|i| i.id).collect::<Vec<_>>(), vec![1, 2, 3]);
+        assert_eq!(
+            select_issues(&all, &o)
+                .iter()
+                .map(|i| i.id)
+                .collect::<Vec<_>>(),
+            vec![1, 2, 3]
+        );
         o.severities[3] = false;
         o.confidences[2] = false;
-        assert_eq!(select_issues(&all, &o).iter().map(|i| i.id).collect::<Vec<_>>(), vec![1]);
+        assert_eq!(
+            select_issues(&all, &o)
+                .iter()
+                .map(|i| i.id)
+                .collect::<Vec<_>>(),
+            vec![1]
+        );
         o.include_false_positives = true;
-        assert_eq!(select_issues(&all, &o).iter().map(|i| i.id).collect::<Vec<_>>(), vec![1, 4]);
+        assert_eq!(
+            select_issues(&all, &o)
+                .iter()
+                .map(|i| i.id)
+                .collect::<Vec<_>>(),
+            vec![1, 4]
+        );
     }
 
     #[test]
     fn xml_matches_burp_writer_layout() {
-        let o = ReportOptions { format: ReportFormat::Xml, ..Default::default() };
-        let x = xml_report(&[rissue(7, 0, 0, "SQL injection", "/search")], &o, "Mon Nov 16 21:00:00 UTC 2026");
-        assert!(x.starts_with("<?xml version=\"1.0\"?>\r\n<!DOCTYPE issues [\r\n<!ELEMENT issues (issue*)>\r\n"));
+        let o = ReportOptions {
+            format: ReportFormat::Xml,
+            ..Default::default()
+        };
+        let x = xml_report(
+            &[rissue(7, 0, 0, "SQL injection", "/search")],
+            &o,
+            "Mon Nov 16 21:00:00 UTC 2026",
+        );
+        assert!(x.starts_with(
+            "<?xml version=\"1.0\"?>\r\n<!DOCTYPE issues [\r\n<!ELEMENT issues (issue*)>\r\n"
+        ));
         assert!(!x.contains("NULL bytes"));
         assert!(x.contains("]>\r\n<issues burpVersion=\""));
         assert!(x.contains("exportTime=\"Mon Nov 16 21:00:00 UTC 2026\">\r\n  <issue>\r\n    <serialNumber>7</serialNumber>\r\n    <type>1049088</type>\r\n    <name><![CDATA[SQL injection]]></name>\r\n    <host ip=\"127.0.0.1\">http://127.0.0.1:3000</host>\r\n    <path><![CDATA[/search]]></path>\r\n    <location><![CDATA[/search]]></location>\r\n    <severity>High</severity>\r\n    <confidence>Certain</confidence>\r\n    <issueBackground><![CDATA[<p>Background.</p>]]></issueBackground>\r\n    <remediationBackground><![CDATA[<p>Fix it.</p>]]></remediationBackground>\r\n    <vulnerabilityClassifications>"));
         // Absent sections are omitted, not written empty.
         assert!(!x.contains("<references>"));
         assert!(!x.contains("<remediationDetail>"));
-        let req_b64 = crate::util::b64_encode(b"GET /search?q=1 HTTP/1.1\r\nHost: 127.0.0.1:3000\r\n\r\n");
+        let req_b64 =
+            crate::util::b64_encode(b"GET /search?q=1 HTTP/1.1\r\nHost: 127.0.0.1:3000\r\n\r\n");
         assert!(x.contains(&format!("    <requestresponse>\r\n      <request method=\"GET\" base64=\"true\"><![CDATA[{req_b64}]]></request>\r\n      <response base64=\"true\"><![CDATA[")));
         assert!(x.contains("      <responseRedirected>false</responseRedirected>\r\n    </requestresponse>\r\n  </issue>\r\n</issues>\r\n"));
         // Element order follows the DTD.
@@ -1078,13 +1346,18 @@ mod tests {
     fn xml_without_base64_splits_cdata_and_maps_bytes() {
         let mut is = rissue(1, 1, 1, "N", "/");
         is.evidence[0].response = Some(b"HTTP/1.1 200 OK\r\n\r\na]]>b\x00\x01\xff\tz".to_vec());
-        let o = ReportOptions { format: ReportFormat::Xml, base64: false, ..Default::default() };
+        let o = ReportOptions {
+            format: ReportFormat::Xml,
+            base64: false,
+            ..Default::default()
+        };
         let x = xml_report(&[is], &o, "t");
         assert!(x.starts_with("<?xml version=\"1.1\"?>\r\n<!-- NOTE: Any NULL bytes"));
         assert!(x.contains("<response base64=\"false\"><![CDATA[HTTP/1.1 200 OK\r\n\r\na]]]><![CDATA[]>b...\tz]]></response>"));
         // Every CDATA section is closed exactly where it should be: removing
         // the section markers gives back the (mapped) bytes.
-        let start = x.find("<response base64=\"false\">").unwrap() + "<response base64=\"false\">".len();
+        let start =
+            x.find("<response base64=\"false\">").unwrap() + "<response base64=\"false\">".len();
         let end = x[start..].find("</response>").unwrap() + start;
         let inner = x[start..end].replace("]]><![CDATA[", "");
         assert_eq!(inner, "<![CDATA[HTTP/1.1 200 OK\r\n\r\na]]>b...\tz]]>");
@@ -1118,7 +1391,11 @@ mod tests {
             rissue(2, 0, 1, "SQL injection", "/b"),
             rissue(3, 3, 0, "Cookie without HttpOnly flag set", "/"),
         ];
-        let o = ReportOptions { requests: MessageMode::Full, responses: MessageMode::Full, ..Default::default() };
+        let o = ReportOptions {
+            requests: MessageMode::Full,
+            responses: MessageMode::Full,
+            ..Default::default()
+        };
         let h = html_report(&issues, &o, "now");
         assert!(h.contains("<title>Burp Scanner Report</title>"));
         assert!(h.contains("<h1>Summary</h1>"));
@@ -1133,21 +1410,33 @@ mod tests {
         assert!(h.contains("&lt;script&gt;alert(1)&lt;/script&gt;"));
         assert!(h.contains("<p>Background.</p>"));
         // Summary counts: High row has Certain 1, Firm 1, total 2.
-        assert!(h.contains("<td class=\"label sev_high\">High</td><td>1</td><td>1</td><td>0</td><td><b>2</b></td>"));
+        assert!(h.contains(
+            "<td class=\"label sev_high\">High</td><td>1</td><td>1</td><td>0</td><td><b>2</b></td>"
+        ));
     }
 
     #[test]
     fn html_toc_levels_and_organization() {
         let issues = vec![rissue(1, 1, 0, "A", "/x"), rissue(2, 1, 0, "A", "/y")];
-        let o = ReportOptions { toc_levels: 1, ..Default::default() };
+        let o = ReportOptions {
+            toc_levels: 1,
+            ..Default::default()
+        };
         let h = html_report(&issues, &o, "now");
         assert!(h.contains("href=\"#1\""));
         assert!(!h.contains("href=\"#1.1\""));
-        let o = ReportOptions { organization: Organization::BySeverity, toc_levels: 3, ..Default::default() };
+        let o = ReportOptions {
+            organization: Organization::BySeverity,
+            toc_levels: 3,
+            ..Default::default()
+        };
         let h = html_report(&issues, &o, "now");
         assert!(h.contains("1.&nbsp;Medium issues"));
         assert!(h.contains("href=\"#1.1.2\""));
-        let o = ReportOptions { organization: Organization::ByUrl, ..Default::default() };
+        let o = ReportOptions {
+            organization: Organization::ByUrl,
+            ..Default::default()
+        };
         let h = html_report(&issues, &o, "now");
         assert!(h.contains("1.&nbsp;http://127.0.0.1:3000/x"));
         assert!(h.contains("1.1.&nbsp;A"));
@@ -1161,7 +1450,11 @@ mod tests {
         is.evidence[0].response = Some(resp);
         let h = html_report(&[is.clone()], &ReportOptions::default(), "now");
         assert!(h.contains("...[1976 more bytes]..."));
-        let o = ReportOptions { requests: MessageMode::Omit, responses: MessageMode::Omit, ..Default::default() };
+        let o = ReportOptions {
+            requests: MessageMode::Omit,
+            responses: MessageMode::Omit,
+            ..Default::default()
+        };
         let h = html_report(&[is], &o, "now");
         assert!(!h.contains("<h2>Request"));
         assert!(!h.contains("<h2>Response"));
@@ -1169,7 +1462,11 @@ mod tests {
 
     #[test]
     fn knowledge_base_parses_burp_entries_and_falls_back() {
-        let dir = std::env::temp_dir().join(format!("wp-kb-{}-{}", std::process::id(), crate::util::now_secs()));
+        let dir = std::env::temp_dir().join(format!(
+            "wp-kb-{}-{}",
+            std::process::id(),
+            crate::util::now_secs()
+        ));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(
             dir.join("1_External.json"),
@@ -1181,11 +1478,16 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
         let e = kb.lookup("external service interaction (dns)").unwrap();
         assert_eq!(e.type_index, 3146240);
-        assert_eq!(e.references.as_deref(), Some("<ul><li><a href=\"https://x/\">T</a></li></ul>"));
+        assert_eq!(
+            e.references.as_deref(),
+            Some("<ul><li><a href=\"https://x/\">T</a></li></ul>")
+        );
         assert_eq!(e.classifications, None);
         assert!(kb.lookup("Unknown thing").is_none());
         // Missing directory = empty KB, no panic.
-        assert!(KnowledgeBase::load_dir(Path::new("/nonexistent/wp-kb")).entries.is_empty());
+        assert!(KnowledgeBase::load_dir(Path::new("/nonexistent/wp-kb"))
+            .entries
+            .is_empty());
     }
 
     #[test]
@@ -1204,7 +1506,14 @@ mod tests {
         let mut b = a.clone();
         b.id = 3;
         b.method = "GET".into();
-        let issues = vec![issue(9, "medium", "Firm", "Password field with autocomplete enabled", "shop.local", "/login")];
+        let issues = vec![issue(
+            9,
+            "medium",
+            "Firm",
+            "Password field with autocomplete enabled",
+            "shop.local",
+            "/login",
+        )];
         let r = build_report_issues(&issues, &[b, a], &KnowledgeBase::default());
         assert_eq!(r[0].origin, "https://shop.local:8443");
         assert_eq!(r[0].ip, "10.0.0.2");

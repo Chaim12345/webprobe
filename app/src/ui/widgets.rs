@@ -18,11 +18,7 @@ pub(crate) fn add_marker(text: &str, sel: (usize, usize)) -> String {
 
 /// A muted one-line explanation under a heading.
 pub(crate) fn hint(ui: &mut Ui, text: &str) {
-    ui.label(
-        RichText::new(text)
-            .size(12.0)
-            .color(theme::ink_hint()),
-    );
+    ui.label(RichText::new(text).size(12.0).color(theme::ink_hint()));
 }
 
 /// Small inline sub-tab strip. Returns the newly selected index, if any.

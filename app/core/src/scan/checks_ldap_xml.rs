@@ -9,7 +9,10 @@ pub fn ldap_applicable(value: &str) -> bool {
     if value.eq_ignore_ascii_case("true") || value.eq_ignore_ascii_case("false") {
         return false;
     }
-    value.chars().skip(1).all(|c| c.is_alphanumeric() || " '\"@.-*".contains(c))
+    value
+        .chars()
+        .skip(1)
+        .all(|c| c.is_alphanumeric() || " '\"@.-*".contains(c))
 }
 
 /// burp.Zsna.ZI: `<prefix>)(<filter>` where the filter is objectClass=*
@@ -36,8 +39,20 @@ pub const XML_INJECTION_PAYLOAD: &str = "]]>><";
 /// XML / SOAP markers whose appearance signals the payload reached an XML
 /// document the application builds.
 pub const XML_INJECTION_MARKERS: [&str; 14] = [
-    "xml.", "xml&nbsp;", "xmlschema", "xmlsoap", "xmlns:soap", "xmlns:xsd", "xmlns:xsi",
-    "soap ", "soap.", "soap:", "soapenv", "soap-env", "soap:env", "soap:body",
+    "xml.",
+    "xml&nbsp;",
+    "xmlschema",
+    "xmlsoap",
+    "xmlns:soap",
+    "xmlns:xsd",
+    "xmlns:xsi",
+    "soap ",
+    "soap.",
+    "soap:",
+    "soapenv",
+    "soap-env",
+    "soap:env",
+    "soap:body",
 ];
 
 /// burp.Zp7s.Zq: repetitions by audit accuracy (1, 2 or 3).
@@ -61,7 +76,10 @@ pub fn xml_markers_in(resp: &[u8]) -> Vec<&'static str> {
             let at = from + i;
             if let Some(vs) = body[at..].find("value=\"") {
                 let start = at + vs + 7;
-                let end = body[start..].find('"').map(|e| start + e).unwrap_or(body.len());
+                let end = body[start..]
+                    .find('"')
+                    .map(|e| start + e)
+                    .unwrap_or(body.len());
                 v.push((start, end));
             }
             from = at + 11;
@@ -89,7 +107,13 @@ pub fn xml_markers_in(resp: &[u8]) -> Vec<&'static str> {
 /// round appends the payload and keeps only the markers the round's baseline
 /// (the original response first, then a fresh one) did not already show; the
 /// issue needs new markers in every round.
-pub fn run_xml_injection_check<P, B>(value: &str, baseline: &[u8], rounds: usize, mut send_payload: P, mut send_base: B) -> Option<Vec<&'static str>>
+pub fn run_xml_injection_check<P, B>(
+    value: &str,
+    baseline: &[u8],
+    rounds: usize,
+    mut send_payload: P,
+    mut send_base: B,
+) -> Option<Vec<&'static str>>
 where
     P: FnMut(&str) -> Option<Vec<u8>>,
     B: FnMut() -> Option<Vec<u8>>,
@@ -100,10 +124,17 @@ where
     let payload = format!("{value}{XML_INJECTION_PAYLOAD}");
     let mut last = Vec::new();
     for round in 0..rounds.max(1) {
-        let base = if round == 0 { baseline.to_vec() } else { send_base()? };
+        let base = if round == 0 {
+            baseline.to_vec()
+        } else {
+            send_base()?
+        };
         let before = xml_markers_in(&base);
         let attack = send_payload(&payload)?;
-        let new: Vec<&'static str> = xml_markers_in(&attack).into_iter().filter(|m| !before.contains(m)).collect();
+        let new: Vec<&'static str> = xml_markers_in(&attack)
+            .into_iter()
+            .filter(|m| !before.contains(m))
+            .collect();
         if new.is_empty() {
             return None;
         }
@@ -125,9 +156,15 @@ pub fn run_ldap_check<F: FnMut(&str) -> Option<Vec<u8>>>(
     let random = || {
         use rand::Rng;
         let mut rng = rand::thread_rng();
-        (0..10).map(|_| (b'a' + rng.gen_range(0..26)) as char).collect::<String>()
+        (0..10)
+            .map(|_| (b'a' + rng.gen_range(0..26)) as char)
+            .collect::<String>()
     };
-    let variants: Vec<bool> = if speed >= ScanSpeed::Normal { vec![true, false] } else { vec![false] };
+    let variants: Vec<bool> = if speed >= ScanSpeed::Normal {
+        vec![true, false]
+    } else {
+        vec![false]
+    };
     for random_prefix in variants {
         let prefix = |r: &dyn Fn() -> String| if random_prefix { r() } else { "*".to_string() };
         let (mut kp, mut kn) = (0usize, 1usize);
@@ -150,7 +187,11 @@ pub fn run_ldap_check<F: FnMut(&str) -> Option<Vec<u8>>>(
             },
         );
         if let Some(attributes) = attrs {
-            return Some(LdapHit { positive: first_p.unwrap_or_default(), negative: first_n.unwrap_or_default(), attributes });
+            return Some(LdapHit {
+                positive: first_p.unwrap_or_default(),
+                negative: first_n.unwrap_or_default(),
+                attributes,
+            });
         }
     }
     None

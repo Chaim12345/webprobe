@@ -26,7 +26,10 @@ pub struct SmtpOob {
 /// The address uses burp.Zbzl.Zm's `user@<id>.<domain>` form: a live test
 /// against interactsh showed only that form is attributed to the id.
 pub fn smtp_payload(value: &str, enclosed: bool, host: &str, r3: &str, r1: &str) -> String {
-    format!("{value}{}\r\nBCC:user@{host}\r\n{r3}: {r1}", if enclosed { ">" } else { "" })
+    format!(
+        "{value}{}\r\nBCC:user@{host}\r\n{r3}: {r1}",
+        if enclosed { ">" } else { "" }
+    )
 }
 
 /// TRACE probe: a 2xx response that echoes the request line and headers back
@@ -84,7 +87,9 @@ pub fn is_reflected_dom_hit(body: &str, canary: &str) -> bool {
     let mut start = 0;
     while let Some(open) = lower[start..].find("<script") {
         let s = start + open;
-        let Some(close) = lower[s..].find("</script") else { break };
+        let Some(close) = lower[s..].find("</script") else {
+            break;
+        };
         if body[s..s + close].contains(canary) {
             return true;
         }
@@ -143,9 +148,15 @@ pub fn with_path_segment(path: &str, idx: usize, value: &str) -> String {
         Some((p, q)) => (p, Some(q)),
         None => (path, None),
     };
-    let mut segs: Vec<String> = p.trim_start_matches('/').split('/').map(str::to_string).collect();
+    let mut segs: Vec<String> = p
+        .trim_start_matches('/')
+        .split('/')
+        .map(str::to_string)
+        .collect();
     if let Some(s) = segs.get_mut(idx) {
-        *s = encode_query_payload(value).replace('/', "%2F").replace('?', "%3F");
+        *s = encode_query_payload(value)
+            .replace('/', "%2F")
+            .replace('?', "%3F");
     }
     let joined = format!("/{}", segs.join("/"));
     match q {
@@ -165,24 +176,54 @@ pub const SCOPE_PASSIVE: &str = "passive, per response";
 /// active checks, then the passive ones (R-04), for the scan
 /// configuration's check list.
 pub fn check_catalogue() -> Vec<(&'static str, &'static str, &'static str)> {
-    let mut v: Vec<(&'static str, &'static str, &'static str)> = vec![(checks::STORED_INPUT_ID, checks::STORED_INPUT_ISSUE, SCOPE_POINT)];
-    v.extend(checks::POINT_CHECKS.iter().map(|c| (c.id(), c.issue(), SCOPE_POINT)));
-    v.extend(checks::STORED_CHECKS.iter().map(|c| (c.id(), c.issue(), SCOPE_POINT)));
-    v.extend(checks::REQUEST_CHECKS.iter().map(|c| (c.id(), c.issue(), SCOPE_REQUEST)));
-    v.extend(passive_checks::PASSIVE_CHECKS.iter().map(|c| (c.id, c.issue, SCOPE_PASSIVE)));
+    let mut v: Vec<(&'static str, &'static str, &'static str)> = vec![(
+        checks::STORED_INPUT_ID,
+        checks::STORED_INPUT_ISSUE,
+        SCOPE_POINT,
+    )];
+    v.extend(
+        checks::POINT_CHECKS
+            .iter()
+            .map(|c| (c.id(), c.issue(), SCOPE_POINT)),
+    );
+    v.extend(
+        checks::STORED_CHECKS
+            .iter()
+            .map(|c| (c.id(), c.issue(), SCOPE_POINT)),
+    );
+    v.extend(
+        checks::REQUEST_CHECKS
+            .iter()
+            .map(|c| (c.id(), c.issue(), SCOPE_REQUEST)),
+    );
+    v.extend(
+        passive_checks::PASSIVE_CHECKS
+            .iter()
+            .map(|c| (c.id, c.issue, SCOPE_PASSIVE)),
+    );
     v
 }
 
 /// Issues a check reports besides its own `issue()` (one check, several
 /// Burp issue types).
-pub const SECONDARY_ISSUES: &[(&str, &str)] = &[("active.web-cache-poisoning", "Request URL override")];
+pub const SECONDARY_ISSUES: &[(&str, &str)] =
+    &[("active.web-cache-poisoning", "Request URL override")];
 
 /// R-11's issue table: the WebProbe check ids that report Burp issue type
 /// `type_id` (from [`check_catalogue`] and [`SECONDARY_ISSUES`]). Empty
 /// when WebProbe has no check for it.
 pub fn checks_for_issue_type(type_id: u32) -> Vec<&'static str> {
-    let mut v: Vec<&'static str> = check_catalogue().into_iter().filter(|(_, issue, _)| issue_type_id(issue) as u32 == type_id).map(|(id, _, _)| id).collect();
-    v.extend(SECONDARY_ISSUES.iter().filter(|(_, issue)| issue_type_id(issue) as u32 == type_id).map(|(id, _)| *id));
+    let mut v: Vec<&'static str> = check_catalogue()
+        .into_iter()
+        .filter(|(_, issue, _)| issue_type_id(issue) as u32 == type_id)
+        .map(|(id, _, _)| id)
+        .collect();
+    v.extend(
+        SECONDARY_ISSUES
+            .iter()
+            .filter(|(_, issue)| issue_type_id(issue) as u32 == type_id)
+            .map(|(id, _)| *id),
+    );
     v.sort_unstable();
     v.dedup();
     v
@@ -207,7 +248,12 @@ pub fn multipart_boundary(ct: &str) -> Option<String> {
         return None;
     }
     let i = ct.to_ascii_lowercase().find("boundary=")?;
-    let b = ct[i + 9..].split(';').next().unwrap_or("").trim().trim_matches('"');
+    let b = ct[i + 9..]
+        .split(';')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .trim_matches('"');
     (!b.is_empty()).then(|| b.to_string())
 }
 
@@ -254,12 +300,20 @@ pub fn multipart_parts(body: &str, boundary: &str) -> Vec<MultipartPart> {
             Some(i) => pos + i + 2,
             None => break,
         };
-        let Some(head_len) = body[head_start..].find("\r\n\r\n") else { break };
+        let Some(head_len) = body[head_start..].find("\r\n\r\n") else {
+            break;
+        };
         let head_end = head_start + head_len;
         let content_start = head_end + 4;
-        let Some(next) = body[content_start..].find(&delim) else { break };
+        let Some(next) = body[content_start..].find(&delim) else {
+            break;
+        };
         let next = content_start + next;
-        let content_end = if body[..next].ends_with("\r\n") { next - 2 } else { next };
+        let content_end = if body[..next].ends_with("\r\n") {
+            next - 2
+        } else {
+            next
+        };
         let head = &body[head_start..head_end];
         out.push(MultipartPart {
             name: disposition_attr(head, "name").unwrap_or_default(),
@@ -275,26 +329,52 @@ pub fn multipart_parts(body: &str, boundary: &str) -> Vec<MultipartPart> {
 /// The request with multipart part `index` rewritten: new content and, for a
 /// file-upload part, optionally a new filename and part Content-Type (the
 /// three fields burp.Ziqg.ZL replaces). Content-Length is restamped.
-pub fn with_multipart_part(req: &str, index: usize, content: &str, filename: Option<&str>, part_ct: Option<&str>) -> String {
+pub fn with_multipart_part(
+    req: &str,
+    index: usize,
+    content: &str,
+    filename: Option<&str>,
+    part_ct: Option<&str>,
+) -> String {
     let parts = util::parse_http(req.as_bytes());
     let ct = util::get_header(&parts.headers, "Content-Type").unwrap_or_default();
-    let Some(boundary) = multipart_boundary(&ct) else { return req.to_string() };
+    let Some(boundary) = multipart_boundary(&ct) else {
+        return req.to_string();
+    };
     let body = req.find("\r\n\r\n").map(|i| &req[i + 4..]).unwrap_or("");
-    let Some(p) = multipart_parts(body, &boundary).into_iter().nth(index) else { return req.to_string() };
+    let Some(p) = multipart_parts(body, &boundary).into_iter().nth(index) else {
+        return req.to_string();
+    };
     let mut head = body[p.head.0..p.head.1].to_string();
     if let (Some(new), Some(old)) = (filename, p.filename.as_deref()) {
-        head = head.replacen(&format!("filename=\"{old}\""), &format!("filename=\"{new}\""), 1);
+        head = head.replacen(
+            &format!("filename=\"{old}\""),
+            &format!("filename=\"{new}\""),
+            1,
+        );
     }
     if let Some(new_ct) = part_ct {
         let lines: Vec<String> = head
             .split("\r\n")
-            .map(|l| if l.to_ascii_lowercase().starts_with("content-type:") { format!("Content-Type: {new_ct}") } else { l.to_string() })
+            .map(|l| {
+                if l.to_ascii_lowercase().starts_with("content-type:") {
+                    format!("Content-Type: {new_ct}")
+                } else {
+                    l.to_string()
+                }
+            })
             .collect();
         head = lines.join("\r\n");
         if !head.to_ascii_lowercase().contains("content-type:") {
             head.push_str(&format!("\r\nContent-Type: {new_ct}"));
         }
     }
-    let new_body = format!("{}{}\r\n\r\n{}{}", &body[..p.head.0], head, content, &body[p.content.1..]);
+    let new_body = format!(
+        "{}{}\r\n\r\n{}{}",
+        &body[..p.head.0],
+        head,
+        content,
+        &body[p.content.1..]
+    );
     with_body(req, &new_body)
 }

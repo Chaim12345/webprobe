@@ -11,8 +11,7 @@ use std::collections::VecDeque;
 pub const DEFAULT_CAP: usize = 5000;
 
 /// One captured request/response pair.
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct LogEntry {
     pub id: u64,
     pub ts: u64,
@@ -38,7 +37,6 @@ pub struct LogEntry {
 /// How many tool rows keep their request and response bytes; older rows stay
 /// in the table but show no message (a scan sends thousands of requests).
 pub const BODIES_KEPT: usize = 500;
-
 
 /// Filter applied to the log view. All set fields must match.
 #[derive(Clone, Debug, Default)]
@@ -71,7 +69,12 @@ impl LogQuery {
                 return false;
             }
         }
-        if let Some(tool) = self.tool.as_deref().map(str::trim).filter(|t| !t.is_empty()) {
+        if let Some(tool) = self
+            .tool
+            .as_deref()
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+        {
             if !e.tool.eq_ignore_ascii_case(tool) {
                 return false;
             }
@@ -128,7 +131,9 @@ impl Logger {
         if has_bodies {
             self.with_bodies.push_back(id);
             while self.with_bodies.len() > BODIES_KEPT {
-                let Some(old) = self.with_bodies.pop_front() else { break };
+                let Some(old) = self.with_bodies.pop_front() else {
+                    break;
+                };
                 // Ids only grow, so `entries` is sorted by id.
                 if let Ok(i) = self.entries.binary_search_by_key(&old, |e| e.id) {
                     self.entries[i].request = None;
@@ -141,7 +146,10 @@ impl Logger {
 
     /// The row with this id, if it is still retained.
     pub fn get(&self, id: u64) -> Option<&LogEntry> {
-        self.entries.binary_search_by_key(&id, |e| e.id).ok().map(|i| &self.entries[i])
+        self.entries
+            .binary_search_by_key(&id, |e| e.id)
+            .ok()
+            .map(|i| &self.entries[i])
     }
 
     /// Drop every entry. Ids keep counting from where they left off.
@@ -175,13 +183,27 @@ impl Default for Logger {
 }
 
 /// L-04: the Logger table's columns, in display order (ui::logger_view).
-pub const CSV_COLUMNS: [&str; 9] = ["#", "Time", "Tool", "Method", "Host", "Path", "Status code", "Length", "MIME type"];
+pub const CSV_COLUMNS: [&str; 9] = [
+    "#",
+    "Time",
+    "Tool",
+    "Method",
+    "Host",
+    "Path",
+    "Status code",
+    "Length",
+    "MIME type",
+];
 
 /// One CSV field (RFC 4180): quoted when it holds a comma, quote, CR or LF,
 /// with embedded quotes doubled. A leading `=`, `+`, `-` or `@` is prefixed
 /// with `'` so a spreadsheet does not evaluate traffic as a formula.
 pub fn csv_field(s: &str) -> String {
-    let s = if s.starts_with(['=', '+', '-', '@']) { format!("'{s}") } else { s.to_string() };
+    let s = if s.starts_with(['=', '+', '-', '@']) {
+        format!("'{s}")
+    } else {
+        s.to_string()
+    };
     if s.contains([',', '"', '\r', '\n']) {
         format!("\"{}\"", s.replace('"', "\"\""))
     } else {
@@ -206,7 +228,13 @@ pub fn to_csv(rows: &[LogEntry], time: impl Fn(u64) -> String) -> String {
             e.resp_len.to_string(),
             e.mime.clone(),
         ];
-        out.push_str(&cells.iter().map(|c| csv_field(c)).collect::<Vec<_>>().join(","));
+        out.push_str(
+            &cells
+                .iter()
+                .map(|c| csv_field(c))
+                .collect::<Vec<_>>()
+                .join(","),
+        );
         out.push_str("\r\n");
     }
     out
@@ -216,7 +244,14 @@ pub fn to_csv(rows: &[LogEntry], time: impl Fn(u64) -> String) -> String {
 mod tests {
     use super::*;
 
-    fn entry(tool: &str, host: &str, path: &str, method: &str, status: &str, mime: &str) -> LogEntry {
+    fn entry(
+        tool: &str,
+        host: &str,
+        path: &str,
+        method: &str,
+        status: &str,
+        mime: &str,
+    ) -> LogEntry {
         LogEntry {
             tool: tool.into(),
             host: host.into(),
@@ -229,17 +264,36 @@ mod tests {
     }
 
     fn sample() -> LogEntry {
-        entry("Proxy", "example.com", "/index.html", "GET", "200", "text/html")
+        entry(
+            "Proxy",
+            "example.com",
+            "/index.html",
+            "GET",
+            "200",
+            "text/html",
+        )
     }
 
     #[test]
     fn only_the_newest_tool_rows_keep_their_messages() {
         let mut log = Logger::new(0);
         let body: std::sync::Arc<[u8]> = std::sync::Arc::from(&b"GET / HTTP/1.1\r\n\r\n"[..]);
-        let proxy = log.push(LogEntry { hist_id: Some(9), ..sample() });
-        let first = log.push(LogEntry { tool: "Scanner".into(), request: Some(body.clone()), response: Some(body.clone()), ..sample() });
+        let proxy = log.push(LogEntry {
+            hist_id: Some(9),
+            ..sample()
+        });
+        let first = log.push(LogEntry {
+            tool: "Scanner".into(),
+            request: Some(body.clone()),
+            response: Some(body.clone()),
+            ..sample()
+        });
         for _ in 0..BODIES_KEPT {
-            log.push(LogEntry { tool: "Scanner".into(), request: Some(body.clone()), ..sample() });
+            log.push(LogEntry {
+                tool: "Scanner".into(),
+                request: Some(body.clone()),
+                ..sample()
+            });
         }
         // The oldest tool row is still listed, without its bytes.
         let old = log.get(first).unwrap();
@@ -280,20 +334,53 @@ mod tests {
     #[test]
     fn filter_by_text_is_case_insensitive_over_host_path_method_status() {
         let mut log = Logger::new(10);
-        log.push(entry("Proxy", "Example.COM", "/a", "GET", "200", "text/html"));
-        log.push(entry("Proxy", "other.org", "/Admin/Login", "POST", "302", "text/html"));
-        log.push(entry("Proxy", "third.net", "/x", "GET", "404", "application/json"));
+        log.push(entry(
+            "Proxy",
+            "Example.COM",
+            "/a",
+            "GET",
+            "200",
+            "text/html",
+        ));
+        log.push(entry(
+            "Proxy",
+            "other.org",
+            "/Admin/Login",
+            "POST",
+            "302",
+            "text/html",
+        ));
+        log.push(entry(
+            "Proxy",
+            "third.net",
+            "/x",
+            "GET",
+            "404",
+            "application/json",
+        ));
 
-        let q = LogQuery { text: "example".into(), ..Default::default() };
+        let q = LogQuery {
+            text: "example".into(),
+            ..Default::default()
+        };
         assert_eq!(log.filter(&q).len(), 1);
 
-        let q = LogQuery { text: "ADMIN".into(), ..Default::default() };
+        let q = LogQuery {
+            text: "ADMIN".into(),
+            ..Default::default()
+        };
         assert_eq!(log.filter(&q)[0].path, "/Admin/Login");
 
-        let q = LogQuery { text: "post".into(), ..Default::default() };
+        let q = LogQuery {
+            text: "post".into(),
+            ..Default::default()
+        };
         assert_eq!(log.filter(&q).len(), 1);
 
-        let q = LogQuery { text: "404".into(), ..Default::default() };
+        let q = LogQuery {
+            text: "404".into(),
+            ..Default::default()
+        };
         assert_eq!(log.filter(&q).len(), 1);
     }
 
@@ -301,18 +388,41 @@ mod tests {
     fn filter_by_tool_status_class_and_mime() {
         let mut log = Logger::new(10);
         log.push(entry("Proxy", "a.com", "/1", "GET", "200", "text/html"));
-        log.push(entry("Repeater", "a.com", "/2", "GET", "404", "application/json"));
-        log.push(entry("Scanner", "a.com", "/3", "GET", "500", "application/json"));
+        log.push(entry(
+            "Repeater",
+            "a.com",
+            "/2",
+            "GET",
+            "404",
+            "application/json",
+        ));
+        log.push(entry(
+            "Scanner",
+            "a.com",
+            "/3",
+            "GET",
+            "500",
+            "application/json",
+        ));
 
-        let q = LogQuery { tool: Some("repeater".into()), ..Default::default() };
+        let q = LogQuery {
+            tool: Some("repeater".into()),
+            ..Default::default()
+        };
         assert_eq!(log.filter(&q).len(), 1);
         assert_eq!(log.filter(&q)[0].path, "/2");
 
-        let q = LogQuery { status_class: Some(5), ..Default::default() };
+        let q = LogQuery {
+            status_class: Some(5),
+            ..Default::default()
+        };
         assert_eq!(log.filter(&q).len(), 1);
         assert_eq!(log.filter(&q)[0].status, "500");
 
-        let q = LogQuery { mime: "JSON".into(), ..Default::default() };
+        let q = LogQuery {
+            mime: "JSON".into(),
+            ..Default::default()
+        };
         assert_eq!(log.filter(&q).len(), 2);
 
         let q = LogQuery {
@@ -374,18 +484,45 @@ mod tests {
     #[test]
     fn csv_has_table_columns_and_filtered_rows_in_view_order() {
         let mut log = Logger::new(10);
-        log.push(LogEntry { ts: 7, req_len: 3, resp_len: 120, port: 443, ..entry("Proxy", "a.com", "/x?a=1,2", "GET", "200", "text/html") });
-        log.push(entry("Repeater", "b.com", "/q\"uote", "POST", "404", "JSON"));
+        log.push(LogEntry {
+            ts: 7,
+            req_len: 3,
+            resp_len: 120,
+            port: 443,
+            ..entry("Proxy", "a.com", "/x?a=1,2", "GET", "200", "text/html")
+        });
+        log.push(entry(
+            "Repeater", "b.com", "/q\"uote", "POST", "404", "JSON",
+        ));
         log.push(entry("Proxy", "c.com", "/skip", "GET", "500", "HTML"));
-        let q = LogQuery { status_class: Some(2), ..Default::default() };
+        let q = LogQuery {
+            status_class: Some(2),
+            ..Default::default()
+        };
         let mut rows: Vec<LogEntry> = log.filter(&q).into_iter().cloned().collect();
-        rows.extend(log.filter(&LogQuery { tool: Some("Repeater".into()), ..Default::default() }).into_iter().cloned());
+        rows.extend(
+            log.filter(&LogQuery {
+                tool: Some("Repeater".into()),
+                ..Default::default()
+            })
+            .into_iter()
+            .cloned(),
+        );
         rows.reverse();
         let csv = to_csv(&rows, |ts| format!("t{ts}"));
         let lines: Vec<&str> = csv.split("\r\n").collect();
-        assert_eq!(lines[0], "#,Time,Tool,Method,Host,Path,Status code,Length,MIME type");
-        assert_eq!(lines[1], "2,t0,Repeater,POST,b.com,\"/q\"\"uote\",404,0,JSON");
-        assert_eq!(lines[2], "1,t7,Proxy,GET,a.com,\"/x?a=1,2\",200,120,text/html");
+        assert_eq!(
+            lines[0],
+            "#,Time,Tool,Method,Host,Path,Status code,Length,MIME type"
+        );
+        assert_eq!(
+            lines[1],
+            "2,t0,Repeater,POST,b.com,\"/q\"\"uote\",404,0,JSON"
+        );
+        assert_eq!(
+            lines[2],
+            "1,t7,Proxy,GET,a.com,\"/x?a=1,2\",200,120,text/html"
+        );
         assert_eq!(lines[3], "");
         assert_eq!(lines.len(), 4);
     }

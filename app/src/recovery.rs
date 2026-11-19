@@ -43,8 +43,14 @@ pub enum Startup {
 
 /// `<dir>/.<file>.running` next to the project file.
 pub fn marker_path(project: &Path) -> PathBuf {
-    let name = project.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "webprobe-project.json".into());
-    project.parent().unwrap_or_else(|| Path::new(".")).join(format!(".{name}.running"))
+    let name = project
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "webprobe-project.json".into());
+    project
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join(format!(".{name}.running"))
 }
 
 pub fn read_marker(path: &Path) -> Option<Marker> {
@@ -59,7 +65,10 @@ pub fn read_marker(path: &Path) -> Option<Marker> {
         }
     }
     // A marker we cannot parse still records an unclean exit.
-    Some(Marker { pid: pid.unwrap_or(0), started })
+    Some(Marker {
+        pid: pid.unwrap_or(0),
+        started,
+    })
 }
 
 pub fn write_marker(path: &Path, m: Marker) -> std::io::Result<()> {
@@ -83,7 +92,12 @@ pub fn pid_alive(pid: u32) -> bool {
 }
 
 /// Decide from the previous marker. `alive` says whether a pid is running.
-pub fn decide(previous: Option<Marker>, project_exists: bool, own_pid: u32, alive: impl Fn(u32) -> bool) -> Startup {
+pub fn decide(
+    previous: Option<Marker>,
+    project_exists: bool,
+    own_pid: u32,
+    alive: impl Fn(u32) -> bool,
+) -> Startup {
     match previous {
         None => Startup::Normal,
         Some(m) if m.pid != own_pid && alive(m.pid) => Startup::OtherInstance(m.pid),
@@ -99,14 +113,23 @@ pub fn begin(project: &Path, own_pid: u32, now: u64, alive: impl Fn(u32) -> bool
     let marker = marker_path(project);
     let d = decide(read_marker(&marker), project.is_file(), own_pid, alive);
     if !matches!(d, Startup::OtherInstance(_)) {
-        let _ = write_marker(&marker, Marker { pid: own_pid, started: now });
+        let _ = write_marker(
+            &marker,
+            Marker {
+                pid: own_pid,
+                started: now,
+            },
+        );
     }
     d
 }
 
 /// `webprobe-project.json` -> `webprobe-project.crashed-<now>.json`.
 pub fn backup_path(project: &Path, now: u64) -> PathBuf {
-    let stem = project.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "webprobe-project".into());
+    let stem = project
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "webprobe-project".into());
     let name = match project.extension() {
         Some(ext) => format!("{stem}.crashed-{now}.{}", ext.to_string_lossy()),
         None => format!("{stem}.crashed-{now}"),
@@ -133,7 +156,9 @@ pub fn startup(app: &mut crate::App) -> bool {
     let now = crate::util::now_secs();
     let pid = std::process::id();
     if std::env::var("WEBPROBE_TEMP_PROJECT").as_deref() == Ok("1") {
-        app.project_path = temporary_project_path(&std::env::temp_dir(), pid, now).display().to_string();
+        app.project_path = temporary_project_path(&std::env::temp_dir(), pid, now)
+            .display()
+            .to_string();
         app.project_status = "temporary project".into();
         return false;
     }
@@ -146,7 +171,10 @@ pub fn startup(app: &mut crate::App) -> bool {
         Startup::OtherInstance(_) => project.is_file(),
         Startup::Recover(m) => {
             app.eng.marker = Some(marker_path(&project));
-            app.eng.recovery = Some(Prompt { previous: m, project: app.project_path.clone() });
+            app.eng.recovery = Some(Prompt {
+                previous: m,
+                project: app.project_path.clone(),
+            });
             app.eng.suppress_autosave = true;
             false
         }
@@ -162,7 +190,9 @@ pub fn shutdown(app: &mut crate::App) {
 
 /// The recovery prompt window.
 pub fn prompt_window(app: &mut crate::App, ctx: &egui::Context) {
-    let Some(p) = app.eng.recovery.clone() else { return };
+    let Some(p) = app.eng.recovery.clone() else {
+        return;
+    };
     let mut choice = 0;
     egui::Window::new("Restore project")
         .collapsible(false)
@@ -202,20 +232,35 @@ pub fn prompt_window(app: &mut crate::App, ctx: &egui::Context) {
         2 => {
             app.eng.recovery = None;
             app.eng.suppress_autosave = false;
-            app.project_path = temporary_project_path(&std::env::temp_dir(), std::process::id(), now).display().to_string();
+            app.project_path =
+                temporary_project_path(&std::env::temp_dir(), std::process::id(), now)
+                    .display()
+                    .to_string();
             app.project_status = "temporary project".into();
-            crate::feedback::toast(crate::feedback::Level::Info, format!("Temporary project: {}", app.project_path));
+            crate::feedback::toast(
+                crate::feedback::Level::Info,
+                format!("Temporary project: {}", app.project_path),
+            );
         }
         3 => {
             app.eng.recovery = None;
             app.eng.suppress_autosave = false;
             let backup = backup_path(Path::new(&p.project), now);
             match std::fs::rename(&p.project, &backup) {
-                Ok(()) => crate::feedback::toast(crate::feedback::Level::Info, format!("Old project moved to {}", backup.display())),
+                Ok(()) => crate::feedback::toast(
+                    crate::feedback::Level::Info,
+                    format!("Old project moved to {}", backup.display()),
+                ),
                 Err(e) => {
                     // Keep the old file safe: fall back to a temporary project.
-                    app.project_path = temporary_project_path(&std::env::temp_dir(), std::process::id(), now).display().to_string();
-                    crate::feedback::toast(crate::feedback::Level::Error, format!("Could not back up the project ({e}); using a temporary project"));
+                    app.project_path =
+                        temporary_project_path(&std::env::temp_dir(), std::process::id(), now)
+                            .display()
+                            .to_string();
+                    crate::feedback::toast(
+                        crate::feedback::Level::Error,
+                        format!("Could not back up the project ({e}); using a temporary project"),
+                    );
                 }
             }
         }
@@ -228,14 +273,21 @@ mod tests {
     use super::*;
 
     fn tmp(tag: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("wp-recovery-{tag}-{}-{}", std::process::id(), crate::util::now_secs()));
+        let d = std::env::temp_dir().join(format!(
+            "wp-recovery-{tag}-{}-{}",
+            std::process::id(),
+            crate::util::now_secs()
+        ));
         std::fs::create_dir_all(&d).unwrap();
         d
     }
 
     #[test]
     fn marker_sits_next_to_project() {
-        assert_eq!(marker_path(Path::new("/w/p/webprobe-project.json")), PathBuf::from("/w/p/.webprobe-project.json.running"));
+        assert_eq!(
+            marker_path(Path::new("/w/p/webprobe-project.json")),
+            PathBuf::from("/w/p/.webprobe-project.json.running")
+        );
     }
 
     #[test]
@@ -243,7 +295,13 @@ mod tests {
         let d = tmp("clean");
         let proj = d.join("webprobe-project.json");
         assert_eq!(begin(&proj, 100, 5, |_| false), Startup::Normal);
-        assert_eq!(read_marker(&marker_path(&proj)), Some(Marker { pid: 100, started: 5 }));
+        assert_eq!(
+            read_marker(&marker_path(&proj)),
+            Some(Marker {
+                pid: 100,
+                started: 5
+            })
+        );
         remove_marker(&marker_path(&proj), 100);
         assert!(!marker_path(&proj).exists());
         // Next start after a clean exit is normal again.
@@ -257,8 +315,21 @@ mod tests {
         let d = tmp("crash");
         let proj = d.join("webprobe-project.json");
         std::fs::write(&proj, "{}").unwrap();
-        write_marker(&marker_path(&proj), Marker { pid: 42, started: 9 }).unwrap();
-        assert_eq!(begin(&proj, 100, 10, |_| false), Startup::Recover(Marker { pid: 42, started: 9 }));
+        write_marker(
+            &marker_path(&proj),
+            Marker {
+                pid: 42,
+                started: 9,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            begin(&proj, 100, 10, |_| false),
+            Startup::Recover(Marker {
+                pid: 42,
+                started: 9
+            })
+        );
         // Our marker replaced the stale one.
         assert_eq!(read_marker(&marker_path(&proj)).unwrap().pid, 100);
         std::fs::remove_dir_all(&d).ok();
@@ -269,8 +340,18 @@ mod tests {
         let d = tmp("other");
         let proj = d.join("webprobe-project.json");
         std::fs::write(&proj, "{}").unwrap();
-        write_marker(&marker_path(&proj), Marker { pid: 42, started: 9 }).unwrap();
-        assert_eq!(begin(&proj, 100, 10, |p| p == 42), Startup::OtherInstance(42));
+        write_marker(
+            &marker_path(&proj),
+            Marker {
+                pid: 42,
+                started: 9,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            begin(&proj, 100, 10, |p| p == 42),
+            Startup::OtherInstance(42)
+        );
         assert_eq!(read_marker(&marker_path(&proj)).unwrap().pid, 42);
         // We never remove someone else's marker.
         remove_marker(&marker_path(&proj), 100);
@@ -280,19 +361,28 @@ mod tests {
 
     #[test]
     fn crash_without_project_file_or_with_garbage_marker() {
-        assert_eq!(decide(Some(Marker { pid: 1, started: 0 }), false, 2, |_| false), Startup::Normal);
+        assert_eq!(
+            decide(Some(Marker { pid: 1, started: 0 }), false, 2, |_| false),
+            Startup::Normal
+        );
         let d = tmp("garbage");
         let m = d.join("m");
         std::fs::write(&m, "junk").unwrap();
         assert_eq!(read_marker(&m), Some(Marker { pid: 0, started: 0 }));
-        assert_eq!(decide(read_marker(&m), true, 2, pid_alive), Startup::Recover(Marker { pid: 0, started: 0 }));
+        assert_eq!(
+            decide(read_marker(&m), true, 2, pid_alive),
+            Startup::Recover(Marker { pid: 0, started: 0 })
+        );
         std::fs::remove_dir_all(&d).ok();
     }
 
     #[test]
     fn backup_and_temporary_paths_never_hit_the_project_file() {
         let p = Path::new("/w/webprobe-project.json");
-        assert_eq!(backup_path(p, 77), PathBuf::from("/w/webprobe-project.crashed-77.json"));
+        assert_eq!(
+            backup_path(p, 77),
+            PathBuf::from("/w/webprobe-project.crashed-77.json")
+        );
         let t = temporary_project_path(Path::new("/tmp"), 5, 6);
         assert_eq!(t, PathBuf::from("/tmp/webprobe-temporary-5-6.json"));
         assert_ne!(t, p);
