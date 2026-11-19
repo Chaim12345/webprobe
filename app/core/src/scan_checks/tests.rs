@@ -85,13 +85,6 @@ fn registry_order_is_pinned() {
             "active.jwt",
             "active.expression-language-injection",
             "active.xpath-injection",
-            ("active.dom-javascript-injection", Scope::Request, Some(BURP_GROUP)),
-            ("active.dom-open-redirection", Scope::Request, Some(BURP_GROUP)),
-            ("active.dom-cookie-manipulation", Scope::Request, Some(BURP_GROUP)),
-            ("active.dom-storage-manipulation", Scope::Request, Some(BURP_GROUP)),
-            ("active.dom-json-injection", Scope::Request, Some(BURP_GROUP)),
-            ("active.dom-xpath-injection", Scope::Request, Some(BURP_GROUP)),
-            ("active.dom-document-domain", Scope::Request, Some(BURP_GROUP)),
         ]
     );
     // Stage A4 (burp.Zwp6) runs once per stored-input pair.
@@ -119,9 +112,9 @@ fn registry_order_is_pinned() {
                 Some(BURP_GROUP)
             ),
             ("active.http-trace-enabled", Scope::Host, Some(BURP_GROUP)),
-                ("active.robots-txt", Scope::Host, Some(BURP_GROUP)),
-                ("active.react2shell", Scope::Host, Some(BURP_GROUP)),
-                ("active.tls-certificate", Scope::Host, Some(BURP_GROUP)),
+            ("active.robots-txt", Scope::Host, Some(BURP_GROUP)),
+            ("active.react2shell", Scope::Host, Some(BURP_GROUP)),
+            ("active.tls-certificate", Scope::Host, Some(BURP_GROUP)),
             ("active.openapi-definition", Scope::Host, Some(BURP_GROUP)),
             ("active.collaborator-everywhere", Scope::Host, None),
             (
@@ -144,12 +137,73 @@ fn registry_order_is_pinned() {
             ("active.graphql-suggestions", Scope::Request, None),
             ("active.graphql-content-type", Scope::Request, None),
             ("active.spoofable-client-ip", Scope::Request, None),
+            ("active.broken-access-control", Scope::Request, None),
             ("active.backup-file", Scope::Request, None),
             ("active.graphql-endpoint-discovered", Scope::Host, None),
             ("active.web-cache-poisoning", Scope::Request, None),
-            ("active.broken-access-control", Scope::Request, None),
             ("active.web-cache-deception", Scope::Request, None),
             ("active.dom-xss", Scope::Request, Some(BURP_GROUP)),
+            (
+                "active.dom-javascript-injection",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-open-redirection",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-cookie-manipulation",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-data-manipulation",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-link-manipulation",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-websocket-poisoning",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            ("active.dom-dos", Scope::Request, Some(BURP_GROUP)),
+            (
+                "active.dom-ajax-header-manipulation",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-storage-manipulation",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-web-message-manipulation",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-json-injection",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-xpath-injection",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-document-domain",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
         ]
     );
     let mut ids: Vec<&str> = points
@@ -522,16 +576,40 @@ fn dom_xss_hash_slice_against_a_live_lab() {
         format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
     });
     let host = format!("127.0.0.1:{port}");
-    let got = lab_scan(port, &["active.dom-xss"], "GET", "/xss", format!("GET /xss HTTP/1.1\r\nHost: {host}\r\n\r\n"));
+    let got = lab_scan(
+        port,
+        &["active.dom-xss"],
+        "GET",
+        "/xss",
+        format!("GET /xss HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
     assert!(
-        got.iter().any(|(n, s, c)| n == "Cross-site scripting (DOM-based)" && s == "high" && c == "Firm"),
+        got.iter()
+            .any(|(n, s, c)| n == "Cross-site scripting (DOM-based)" && s == "high" && c == "Firm"),
         "{got:?}"
     );
-    let got = lab_scan(port, &["active.dom-xss"], "GET", "/benign", format!("GET /benign HTTP/1.1\r\nHost: {host}\r\n\r\n"));
-    assert!(!got.iter().any(|(n, ..)| n == "Cross-site scripting (DOM-based)"), "{got:?}");
-    let got = lab_scan(port, &["active.dom-xss"], "GET", "/searchsrc", format!("GET /searchsrc HTTP/1.1\r\nHost: {host}\r\n\r\n"));
+    let got = lab_scan(
+        port,
+        &["active.dom-xss"],
+        "GET",
+        "/benign",
+        format!("GET /benign HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
     assert!(
-        got.iter().any(|(n, s, c)| n == "Cross-site scripting (DOM-based)" && s == "high" && c == "Firm"),
+        !got.iter()
+            .any(|(n, ..)| n == "Cross-site scripting (DOM-based)"),
+        "{got:?}"
+    );
+    let got = lab_scan(
+        port,
+        &["active.dom-xss"],
+        "GET",
+        "/searchsrc",
+        format!("GET /searchsrc HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(
+        got.iter()
+            .any(|(n, s, c)| n == "Cross-site scripting (DOM-based)" && s == "high" && c == "Firm"),
         "location.search source: {got:?}"
     );
 }
@@ -559,25 +637,56 @@ fn dom_families_batch1_against_a_live_lab() {
     });
     let host = format!("127.0.0.1:{port}");
     let expect = [
-        ("/js-inj", "active.dom-javascript-injection", "JavaScript injection (DOM-based)", "high", "Firm"),
-        ("/openredir", "active.dom-open-redirection", "Open redirection (DOM-based)", "low", "Tentative"),
-        ("/cookie", "active.dom-cookie-manipulation", "Cookie manipulation (DOM-based)", "low", "Firm"),
+        (
+            "/js-inj",
+            "active.dom-javascript-injection",
+            "JavaScript injection (DOM-based)",
+            "high",
+            "Firm",
+        ),
+        (
+            "/openredir",
+            "active.dom-open-redirection",
+            "Open redirection (DOM-based)",
+            "low",
+            "Tentative",
+        ),
+        (
+            "/cookie",
+            "active.dom-cookie-manipulation",
+            "Cookie manipulation (DOM-based)",
+            "low",
+            "Firm",
+        ),
     ];
     for (page, id, name, sev, conf) in expect {
-        let got = lab_scan(port, &[id], "GET", page, format!("GET {page} HTTP/1.1\r\nHost: {host}\r\n\r\n"));
-        assert!(got.iter().any(|(n, s, c)| n == name && s == sev && c == conf), "{name}: {got:?}");
+        let got = lab_scan(
+            port,
+            &[id],
+            "GET",
+            page,
+            format!("GET {page} HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+        );
+        assert!(
+            got.iter()
+                .any(|(n, s, c)| n == name && s == sev && c == conf),
+            "{name}: {got:?}"
+        );
     }
     // A benign page reports none of the three.
     let got = lab_scan(
         port,
-        &["active.dom-javascript-injection", "active.dom-open-redirection", "active.dom-cookie-manipulation"],
+        &[
+            "active.dom-javascript-injection",
+            "active.dom-open-redirection",
+            "active.dom-cookie-manipulation",
+        ],
         "GET",
         "/benign2",
         format!("GET /benign2 HTTP/1.1\r\nHost: {host}\r\n\r\n"),
     );
     assert!(got.is_empty(), "{got:?}");
 }
-
 
 /// R-13 batch 2: the storage, JSON-injection, XPath-injection and
 /// document-domain DOM families against live lab pages driven by a
@@ -604,25 +713,63 @@ fn dom_families_batch2_against_a_live_lab() {
     });
     let host = format!("127.0.0.1:{port}");
     let expect = [
-        ("/storage", "active.dom-storage-manipulation", "HTML5 storage manipulation (DOM-based)", "info", "Firm"),
-        ("/json", "active.dom-json-injection", "Client-side JSON injection (DOM-based)", "low", "Firm"),
-        ("/xpath", "active.dom-xpath-injection", "Client-side XPath injection (DOM-based)", "low", "Firm"),
-        ("/domain", "active.dom-document-domain", "Document domain manipulation (DOM-based)", "medium", "Firm"),
+        (
+            "/storage",
+            "active.dom-storage-manipulation",
+            "HTML5 storage manipulation (DOM-based)",
+            "info",
+            "Firm",
+        ),
+        (
+            "/json",
+            "active.dom-json-injection",
+            "Client-side JSON injection (DOM-based)",
+            "low",
+            "Firm",
+        ),
+        (
+            "/xpath",
+            "active.dom-xpath-injection",
+            "Client-side XPath injection (DOM-based)",
+            "low",
+            "Firm",
+        ),
+        (
+            "/domain",
+            "active.dom-document-domain",
+            "Document domain manipulation (DOM-based)",
+            "medium",
+            "Firm",
+        ),
     ];
     for (page, id, name, sev, conf) in expect {
-        let got = lab_scan(port, &[id], "GET", page, format!("GET {page} HTTP/1.1\r\nHost: {host}\r\n\r\n"));
-        assert!(got.iter().any(|(n, s, c)| n == name && s == sev && c == conf), "{name}: {got:?}");
+        let got = lab_scan(
+            port,
+            &[id],
+            "GET",
+            page,
+            format!("GET {page} HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+        );
+        assert!(
+            got.iter()
+                .any(|(n, s, c)| n == name && s == sev && c == conf),
+            "{name}: {got:?}"
+        );
     }
     let got = lab_scan(
         port,
-        &["active.dom-storage-manipulation", "active.dom-json-injection", "active.dom-xpath-injection", "active.dom-document-domain"],
+        &[
+            "active.dom-storage-manipulation",
+            "active.dom-json-injection",
+            "active.dom-xpath-injection",
+            "active.dom-document-domain",
+        ],
         "GET",
         "/benign3",
         format!("GET /benign3 HTTP/1.1\r\nHost: {host}\r\n\r\n"),
     );
     assert!(got.is_empty(), "{got:?}");
 }
-
 
 /// R-13 batch 3: the WebSocket-poisoning, denial-of-service and
 /// Ajax-header DOM families against live lab pages driven by a real
@@ -650,25 +797,62 @@ fn dom_families_batch3_against_a_live_lab() {
     });
     let host = format!("127.0.0.1:{port}");
     let expect = [
-        ("/ws", "active.dom-websocket-poisoning", "WebSocket URL poisoning (DOM-based)", "high", "Firm"),
-        ("/ws-statics", "active.dom-websocket-poisoning", "WebSocket URL poisoning (DOM-based)", "high", "Firm"),
-        ("/dos", "active.dom-dos", "Denial of service (DOM-based)", "info", "Firm"),
-        ("/ajax", "active.dom-ajax-header-manipulation", "Ajax request header manipulation (DOM-based)", "low", "Firm"),
+        (
+            "/ws",
+            "active.dom-websocket-poisoning",
+            "WebSocket URL poisoning (DOM-based)",
+            "high",
+            "Firm",
+        ),
+        (
+            "/ws-statics",
+            "active.dom-websocket-poisoning",
+            "WebSocket URL poisoning (DOM-based)",
+            "high",
+            "Firm",
+        ),
+        (
+            "/dos",
+            "active.dom-dos",
+            "Denial of service (DOM-based)",
+            "info",
+            "Firm",
+        ),
+        (
+            "/ajax",
+            "active.dom-ajax-header-manipulation",
+            "Ajax request header manipulation (DOM-based)",
+            "low",
+            "Firm",
+        ),
     ];
     for (page, id, name, sev, conf) in expect {
-        let got = lab_scan(port, &[id], "GET", page, format!("GET {page} HTTP/1.1\r\nHost: {host}\r\n\r\n"));
-        assert!(got.iter().any(|(n, s, c)| n == name && s == sev && c == conf), "{name}: {got:?}");
+        let got = lab_scan(
+            port,
+            &[id],
+            "GET",
+            page,
+            format!("GET {page} HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+        );
+        assert!(
+            got.iter()
+                .any(|(n, s, c)| n == name && s == sev && c == conf),
+            "{name}: {got:?}"
+        );
     }
     let got = lab_scan(
         port,
-        &["active.dom-websocket-poisoning", "active.dom-dos", "active.dom-ajax-header-manipulation"],
+        &[
+            "active.dom-websocket-poisoning",
+            "active.dom-dos",
+            "active.dom-ajax-header-manipulation",
+        ],
         "GET",
         "/benign4",
         format!("GET /benign4 HTTP/1.1\r\nHost: {host}\r\n\r\n"),
     );
     assert!(got.is_empty(), "{got:?}");
 }
-
 
 /// R-13 batch 4: the setter-heavy DOM families (data manipulation,
 /// link manipulation, setAttribute onclick as XSS) against live lab
@@ -700,29 +884,80 @@ fn dom_families_batch4_against_a_live_lab() {
     });
     let host = format!("127.0.0.1:{port}");
     let expect = [
-        ("/datamanip", "active.dom-data-manipulation", "DOM data manipulation (DOM-based)", "info", "Firm"),
-        ("/linkmanip", "active.dom-link-manipulation", "Link manipulation (DOM-based)", "low", "Firm"),
-        ("/xss-setattr", "active.dom-xss", "Cross-site scripting (DOM-based)", "high", "Firm"),
+        (
+            "/datamanip",
+            "active.dom-data-manipulation",
+            "DOM data manipulation (DOM-based)",
+            "info",
+            "Firm",
+        ),
+        (
+            "/linkmanip",
+            "active.dom-link-manipulation",
+            "Link manipulation (DOM-based)",
+            "low",
+            "Firm",
+        ),
+        (
+            "/xss-setattr",
+            "active.dom-xss",
+            "Cross-site scripting (DOM-based)",
+            "high",
+            "Firm",
+        ),
     ];
     for (page, id, name, sev, conf) in expect {
-        let got = lab_scan(port, &[id], "GET", page, format!("GET {page} HTTP/1.1\r\nHost: {host}\r\n\r\n"));
-        assert!(got.iter().any(|(n, s, c)| n == name && s == sev && c == conf), "{name}: {got:?}");
+        let got = lab_scan(
+            port,
+            &[id],
+            "GET",
+            page,
+            format!("GET {page} HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+        );
+        assert!(
+            got.iter()
+                .any(|(n, s, c)| n == name && s == sev && c == conf),
+            "{name}: {got:?}"
+        );
     }
     let got = lab_scan(
         port,
-        &["active.dom-data-manipulation", "active.dom-link-manipulation", "active.dom-xss"],
+        &[
+            "active.dom-data-manipulation",
+            "active.dom-link-manipulation",
+            "active.dom-xss",
+        ],
         "GET",
         "/benign5",
         format!("GET /benign5 HTTP/1.1\r\nHost: {host}\r\n\r\n"),
     );
     assert!(got.is_empty(), "{got:?}");
     // history.pushState/replaceState: the URL argument is the sink
-    let got = lab_scan(port, &["active.dom-data-manipulation"], "GET", "/pushstate", format!("GET /pushstate HTTP/1.1\r\nHost: {host}\r\n\r\n"));
-    assert!(got.iter().any(|(n, ..)| n == "DOM data manipulation (DOM-based)"), "URL argument: {got:?}");
-    let got = lab_scan(port, &["active.dom-data-manipulation"], "GET", "/pushstate-state", format!("GET /pushstate-state HTTP/1.1\r\nHost: {host}\r\n\r\n"));
-    assert!(!got.iter().any(|(n, ..)| n == "DOM data manipulation (DOM-based)"), "state object must not be recorded: {got:?}");
+    let got = lab_scan(
+        port,
+        &["active.dom-data-manipulation"],
+        "GET",
+        "/pushstate",
+        format!("GET /pushstate HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(
+        got.iter()
+            .any(|(n, ..)| n == "DOM data manipulation (DOM-based)"),
+        "URL argument: {got:?}"
+    );
+    let got = lab_scan(
+        port,
+        &["active.dom-data-manipulation"],
+        "GET",
+        "/pushstate-state",
+        format!("GET /pushstate-state HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(
+        !got.iter()
+            .any(|(n, ..)| n == "DOM data manipulation (DOM-based)"),
+        "state object must not be recorded: {got:?}"
+    );
 }
-
 
 /// Tentative confidence (burp.Zwf8.Zd flag 4). The lab inlines a
 /// minimal window.jQuery (no network). Skipped when no Chromium is
@@ -749,9 +984,18 @@ setTimeout(function () { jQuery('<p>x</p>').html(location.hash.slice(1)); }, 50)
         format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
     });
     let host = format!("127.0.0.1:{port}");
-    let got = lab_scan(port, &["active.dom-xss"], "GET", "/jquery", format!("GET /jquery HTTP/1.1\r\nHost: {host}\r\n\r\n"));
+    let got = lab_scan(
+        port,
+        &["active.dom-xss"],
+        "GET",
+        "/jquery",
+        format!("GET /jquery HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
     assert!(
-        got.iter().any(|(n, s, c)| n == "Cross-site scripting (DOM-based)" && s == "high" && c == "Tentative"),
+        got.iter()
+            .any(|(n, s, c)| n == "Cross-site scripting (DOM-based)"
+                && s == "high"
+                && c == "Tentative"),
         "jQuery sink: {got:?}"
     );
 }
@@ -767,8 +1011,8 @@ fn dom_web_message_against_a_live_lab() {
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let port = lab_serve(l, |_method, path, _raw| {
         let body = if path.starts_with("/webmsg-url") {
-        "<html><body><script>window.postMessage(location.href, '*');</script></body></html>"
-    } else if path.starts_with("/webmsg") {
+            "<html><body><script>window.postMessage(location.href, '*');</script></body></html>"
+        } else if path.starts_with("/webmsg") {
             "<html><body><script>window.postMessage(location.hash.slice(1), '*');</script></body></html>"
         } else {
             "<html><body><p>hello</p></body></html>"
@@ -776,18 +1020,48 @@ fn dom_web_message_against_a_live_lab() {
         format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
     });
     let host = format!("127.0.0.1:{port}");
-    let got = lab_scan(port, &["active.dom-web-message-manipulation"], "GET", "/webmsg", format!("GET /webmsg HTTP/1.1\r\nHost: {host}\r\n\r\n"));
+    let got = lab_scan(
+        port,
+        &["active.dom-web-message-manipulation"],
+        "GET",
+        "/webmsg",
+        format!("GET /webmsg HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
     assert!(
-        got.iter().any(|(n, s, c)| n == "HTML5 web message manipulation (DOM-based)" && s == "info" && c == "Firm"),
+        got.iter().any(
+            |(n, s, c)| n == "HTML5 web message manipulation (DOM-based)"
+                && s == "info"
+                && c == "Firm"
+        ),
         "postMessage sink: {got:?}"
     );
-    let got = lab_scan(port, &["active.dom-web-message-manipulation"], "GET", "/benign", format!("GET /benign HTTP/1.1\r\nHost: {host}\r\n\r\n"));
-    assert!(!got.iter().any(|(n, ..)| n == "HTML5 web message manipulation (DOM-based)"), "{got:?}");
+    let got = lab_scan(
+        port,
+        &["active.dom-web-message-manipulation"],
+        "GET",
+        "/benign",
+        format!("GET /benign HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(
+        !got.iter()
+            .any(|(n, ..)| n == "HTML5 web message manipulation (DOM-based)"),
+        "{got:?}"
+    );
     // posting the page URL itself (iframe resize, analytics) is not
     // web message manipulation even though the probe URL carries the
     // canary
-    let got = lab_scan(port, &["active.dom-web-message-manipulation"], "GET", "/webmsg-url", format!("GET /webmsg-url HTTP/1.1\r\nHost: {host}\r\n\r\n"));
-    assert!(!got.iter().any(|(n, ..)| n == "HTML5 web message manipulation (DOM-based)"), "whole-URL post must not report: {got:?}");
+    let got = lab_scan(
+        port,
+        &["active.dom-web-message-manipulation"],
+        "GET",
+        "/webmsg-url",
+        format!("GET /webmsg-url HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(
+        !got.iter()
+            .any(|(n, ..)| n == "HTML5 web message manipulation (DOM-based)"),
+        "whole-URL post must not report: {got:?}"
+    );
 }
 
 /// R-13 reflected-DOM variant: a page whose response copies the wpdom
@@ -816,19 +1090,39 @@ fn dom_xss_reflected_variant_against_a_live_lab() {
         format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
     });
     let host = format!("127.0.0.1:{port}");
-    let got = lab_scan(port, &["active.dom-xss"], "GET", "/reflxss", format!("GET /reflxss HTTP/1.1\r\nHost: {host}\r\n\r\n"));
+    let got = lab_scan(
+        port,
+        &["active.dom-xss"],
+        "GET",
+        "/reflxss",
+        format!("GET /reflxss HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
     assert!(
-        got.iter().any(|(n, s, c)| n == "Cross-site scripting (reflected DOM-based)" && s == "high" && c == "Firm"),
+        got.iter().any(
+            |(n, s, c)| n == "Cross-site scripting (reflected DOM-based)"
+                && s == "high"
+                && c == "Firm"
+        ),
         "reflected variant: {got:?}"
     );
-    assert!(!got.iter().any(|(n, ..)| n == "Cross-site scripting (DOM-based)"), "not the plain variant: {got:?}");
-    let got = lab_scan(port, &["active.dom-xss"], "GET", "/xss", format!("GET /xss HTTP/1.1\r\nHost: {host}\r\n\r\n"));
     assert!(
-        got.iter().any(|(n, s, c)| n == "Cross-site scripting (DOM-based)" && s == "high" && c == "Firm"),
+        !got.iter()
+            .any(|(n, ..)| n == "Cross-site scripting (DOM-based)"),
+        "not the plain variant: {got:?}"
+    );
+    let got = lab_scan(
+        port,
+        &["active.dom-xss"],
+        "GET",
+        "/xss",
+        format!("GET /xss HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(
+        got.iter()
+            .any(|(n, s, c)| n == "Cross-site scripting (DOM-based)" && s == "high" && c == "Firm"),
         "plain variant: {got:?}"
     );
 }
-
 
 /// R-13 stored-DOM variant: the lab stores wpdom values beginning
 /// with 's' (the stored canary) and embeds the last one in a
@@ -844,7 +1138,11 @@ fn dom_xss_stored_variant_against_a_live_lab() {
     let stored = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
     let stored2 = stored.clone();
     let port = lab_serve(l, move |_method, path, raw| {
-        if let Some(v) = raw.split("wpdom=").nth(1).and_then(|r| r.split(['&', ' ']).next()) {
+        if let Some(v) = raw
+            .split("wpdom=")
+            .nth(1)
+            .and_then(|r| r.split(['&', ' ']).next())
+        {
             if v.starts_with('s') {
                 *stored2.lock().unwrap() = v.to_string();
             }
@@ -858,18 +1156,27 @@ fn dom_xss_stored_variant_against_a_live_lab() {
         format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
     });
     let host = format!("127.0.0.1:{port}");
-    let got = lab_scan(port, &["active.dom-xss"], "GET", "/storexss", format!("GET /storexss HTTP/1.1\r\nHost: {host}\r\n\r\n"));
+    let got = lab_scan(
+        port,
+        &["active.dom-xss"],
+        "GET",
+        "/storexss",
+        format!("GET /storexss HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
     assert!(
-        got.iter().any(|(n, s, c)| n == "Cross-site scripting (stored DOM-based)" && s == "high" && c == "Firm"),
+        got.iter()
+            .any(|(n, s, c)| n == "Cross-site scripting (stored DOM-based)"
+                && s == "high"
+                && c == "Firm"),
         "stored variant: {got:?}"
     );
-    assert!(!got.iter().any(|(n, ..)| n == "Cross-site scripting (DOM-based)" || n == "Cross-site scripting (reflected DOM-based)"), "not the other variants: {got:?}");
+    assert!(
+        !got.iter()
+            .any(|(n, ..)| n == "Cross-site scripting (DOM-based)"
+                || n == "Cross-site scripting (reflected DOM-based)"),
+        "not the other variants: {got:?}"
+    );
 }
-
-/// One browser probe per URL: Done caches the hits, the reflected query
-/// canary and the stored canary; InFlight marks a probe another thread
-/// is running (see dom_analysis_hits).
-Done((Vec<crate::crawl::DomHit>, Option<String>, String)),
 
 /// R-10 batch 2: the three GraphQL checks against a live endpoint.
 /// The lab answers the introspection query with a schema, the
@@ -980,22 +1287,41 @@ fn r10_broken_access_control_against_a_live_lab() {
     let port = lab_serve(l, |_method, target, raw| {
         let authed = raw.to_ascii_lowercase().contains("\r\ncookie:");
         let (status, body) = match (target.split('?').next().unwrap_or(""), authed) {
-            ("/open", _) => ("200 OK", "<html><head><title>account</title></head><body>same</body></html>".to_string()),
-            ("/guarded", true) => ("200 OK", "<html><head><title>account</title></head><body>same</body></html>".to_string()),
-            ("/guarded", false) => ("403 Forbidden", "<html><head><title>denied</title></head></html>".to_string()),
+            ("/open", _) => (
+                "200 OK",
+                "<html><head><title>account</title></head><body>same</body></html>".to_string(),
+            ),
+            ("/guarded", true) => (
+                "200 OK",
+                "<html><head><title>account</title></head><body>same</body></html>".to_string(),
+            ),
+            ("/guarded", false) => (
+                "403 Forbidden",
+                "<html><head><title>denied</title></head></html>".to_string(),
+            ),
             _ => ("404 Not Found", String::new()),
-    };
+        };
         format!("HTTP/1.1 {status}\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
-});
+    });
     let host = format!("127.0.0.1:{port}");
     // Session material removed (cookie + x-*) and the page unchanged:
     // reported.
     let req = format!("GET /open HTTP/1.1\r\nHost: {host}\r\nCookie: sid=abc\r\nX-Csrf: t\r\n\r\n");
     let got = lab_scan(port, &["active.broken-access-control"], "GET", "/open", req);
-    assert!(got.iter().any(|(i, s, c)| i == "Broken access control" && s == "info" && c == "Tentative"), "{got:?}");
+    assert!(
+        got.iter()
+            .any(|(i, s, c)| i == "Broken access control" && s == "info" && c == "Tentative"),
+        "{got:?}"
+    );
     // The response changes without the session: not reported.
     let req = format!("GET /guarded HTTP/1.1\r\nHost: {host}\r\nCookie: sid=abc\r\n\r\n");
-    let got = lab_scan(port, &["active.broken-access-control"], "GET", "/guarded", req);
+    let got = lab_scan(
+        port,
+        &["active.broken-access-control"],
+        "GET",
+        "/guarded",
+        req,
+    );
     assert!(got.is_empty(), "{got:?}");
     // Nothing to remove: not reported.
     let req = format!("GET /open HTTP/1.1\r\nHost: {host}\r\n\r\n");
@@ -1004,9 +1330,15 @@ fn r10_broken_access_control_against_a_live_lab() {
     // A non-GET/POST audit is skipped: the replay models GET/POST
     // semantics only.
     let req = format!("HEAD /open HTTP/1.1\r\nHost: {host}\r\nCookie: sid=abc\r\n\r\n");
-    let got = lab_scan(port, &["active.broken-access-control"], "HEAD", "/open", req);
+    let got = lab_scan(
+        port,
+        &["active.broken-access-control"],
+        "HEAD",
+        "/open",
+        req,
+    );
     assert!(got.is_empty(), "HEAD audit must be skipped: {got:?}");
-    }
+}
 
 /// R-10 web cache poisoning (Zp22 / Zg1g rule): reported only when a
 /// clean request with the probe's cache buster gets the poisoned page
