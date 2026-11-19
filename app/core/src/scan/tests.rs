@@ -2888,12 +2888,22 @@ const CHARACTERISATION_ISSUES: &[(&str, &str, &str, &str)] = &[
         "Firm",
         "/board",
     ),
+    // G.11: the lab pages reflect the query into link hrefs, so the
+    // `<r3>&<r3>` probe reads as client-side parameter pollution there.
+    (
+        "Client-side HTTP parameter pollution (reflected)",
+        "low",
+        "Tentative",
+        "/go",
+    ),
+    (
+        "Client-side HTTP parameter pollution (reflected)",
+        "low",
+        "Tentative",
+        "/search",
+    ),
     ("Cross-origin resource sharing", "info", "Certain", "/board"),
     ("Cross-origin resource sharing", "info", "Certain", "/go"),
-        // G.11: the lab pages reflect the query into link hrefs, so the
-        // `<r3>&<r3>` probe reads as client-side parameter pollution there.
-        ("Client-side HTTP parameter pollution (reflected)", "low", "Tentative", "/go"),
-        ("Client-side HTTP parameter pollution (reflected)", "low", "Tentative", "/search"),
     ("Cross-origin resource sharing", "info", "Certain", "/item"),
     (
         "Cross-origin resource sharing",
@@ -3836,17 +3846,39 @@ fn stored_input_pairs_across_items_and_stage_a4_finds_stored_xss() {
 fn stage_a4_finds_the_stored_g11_families() {
     let (port, _) = guestbook(false);
     let shared = Shared::new();
-    run_task(&shared, vec![guestbook_entry(port, "POST", "/comment", "c=hi"), guestbook_entry(port, "GET", "/embed", "")]);
+    run_task(
+        &shared,
+        vec![
+            guestbook_entry(port, "POST", "/comment", "c=hi"),
+            guestbook_entry(port, "GET", "/embed", ""),
+        ],
+    );
     let expect = [
         ("Link manipulation (stored)", "info", "Firm"),
         ("CSS injection (stored)", "medium", "Tentative"),
-        ("Client-side HTTP parameter pollution (stored)", "low", "Tentative"),
+        (
+            "Client-side HTTP parameter pollution (stored)",
+            "low",
+            "Tentative",
+        ),
         ("Form action hijacking (stored)", "medium", "Tentative"),
     ];
     for (name, sev, confidence) in expect {
         let hits = issues_named(&shared, name);
-        let h = hits.iter().find(|i| i.path == "/comment").unwrap_or_else(|| panic!("{name} not reported: {:?}", hits.iter().map(|i| i.path.clone()).collect::<Vec<_>>()));
-        assert_eq!((h.sev.as_str(), h.confidence.as_str()), (sev, confidence), "{name}");
+        let h = hits
+            .iter()
+            .find(|i| i.path == "/comment")
+            .unwrap_or_else(|| {
+                panic!(
+                    "{name} not reported: {:?}",
+                    hits.iter().map(|i| i.path.clone()).collect::<Vec<_>>()
+                )
+            });
+        assert_eq!(
+            (h.sev.as_str(), h.confidence.as_str()),
+            (sev, confidence),
+            "{name}"
+        );
         assert!(h.detail.contains("GET /embed"), "{name}: {}", h.detail);
     }
 }
