@@ -119,7 +119,7 @@ fn exec_block(
 ) -> Result<bool, ExecError> {
     for stmt in stmts {
         match stmt {
-            Stmt::SendRequest { name, raw, mods } => {
+            Stmt::SendRequest { name, raw, mods, .. } => {
                 let req = match raw {
                     Some(v) => {
                         let text = resolve_value(cx, v)?;
@@ -136,7 +136,7 @@ fn exec_block(
                 let resp = transport.send(&req).map_err(ExecError)?;
                 cx.record(name.as_deref(), Exchange { request: req, response: resp });
             }
-            Stmt::SendPayload { name, ops } => {
+            Stmt::SendPayload { name, ops, .. } => {
                 let ip = ip.ok_or_else(|| {
                     ExecError("`send payload` without an insertion point".into())
                 })?;
