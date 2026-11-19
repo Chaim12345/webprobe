@@ -153,7 +153,7 @@ pub fn start(item: &Installed, shared: &Arc<Shared>, startup: bool) -> Result<Lo
 /// outcome goes to the event log, and `done` is called with it.
 pub fn start_in_background(shared: &Arc<Shared>, item: Installed, done: impl FnOnce(Result<String, String>) + Send + 'static) {
     let shared = Arc::clone(shared);
-    std::thread::spawn(move || {
+    crate::util::spawn_contained("ext_store", move || {
         let result = start(&item, &shared, false).map(|ext| {
             let name = ext.hooks.extension_name().to_string();
             let mut host = shared.ext_host.lock().unwrap();
@@ -190,7 +190,7 @@ pub fn load_all(shared: &Arc<Shared>) {
         return;
     }
     let shared = Arc::clone(shared);
-    std::thread::spawn(move || {
+    crate::util::spawn_contained("ext_store", move || {
         for item in list {
             match start(&item, &shared, true) {
                 Ok(ext) => {

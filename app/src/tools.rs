@@ -503,7 +503,7 @@ fn start_live_capture(app: &mut App, e: net::HistEntry) {
     let shared = app.shared.clone();
     // Burp captures at most 20,000 tokens; fewer when the user asks.
     let limit = app.seq_capture_limit.clamp(100, 20_000);
-    std::thread::spawn(move || {
+    webprobe_core::util::spawn_contained("tools", move || {
         let _tool = net::tool_scope("Sequencer");
         let mut n = 0;
         let mut misses = 0;
@@ -1188,7 +1188,7 @@ pub fn launch_preconfigured_browser(shared: &std::sync::Arc<crate::net::Shared>)
                 // Closed with WebProbe, like Burp's browser (App::on_exit).
                 shared.browsers.lock().unwrap().push((child.id(), profile.display().to_string()));
                 // Reap it when it closes, so no zombie is left behind.
-                std::thread::spawn(move || {
+                webprobe_core::util::spawn_contained("tools", move || {
                     let _ = child.wait();
                 });
                 shared.log(&format!(
@@ -1491,9 +1491,17 @@ fn extensions_installed(app: &mut App, ui: &mut Ui) {
         if now - app.ext_tab_at > 1.0 && !app.ext_tab_busy.swap(true, O::SeqCst) {
             app.ext_tab_at = now;
             let (hooks, busy, ctx) = (std::sync::Arc::clone(hooks), std::sync::Arc::clone(&app.ext_tab_busy), ui.ctx().clone());
-            std::thread::spawn(move || {
+            webprobe_core::util::spawn_contained("tools", move || {
+                // Clear busy however this thread ends: a refresh_tab panic
+                // must not wedge the tab's refresh loop (review nit on #32).
+                struct ClearOnExit(std::sync::Arc<std::sync::atomic::AtomicBool>);
+                impl Drop for ClearOnExit {
+                    fn drop(&mut self) {
+                        self.0.store(false, O::SeqCst);
+                    }
+                }
+                let _clear = ClearOnExit(busy);
                 hooks.refresh_tab();
-                busy.store(false, O::SeqCst);
                 ctx.request_repaint();
             });
         }
@@ -1742,8 +1750,8 @@ pub fn autosave_project(app: &mut App) {
 
 type SaveResult = (String, bool, Result<(), String>);
 
-fn save_results() -> &'static std::sync::Mutex<Vec<SaveResult>> {
-    static R: std::sync::OnceLock<std::sync::Mutex<Vec<SaveResult>>> = std::sync::OnceLock::new();
+fn save_results() -> &'static webprobe_core::sync::Mutex<Vec<SaveResult>> {
+    static R: std::sync::OnceLock<webprobe_core::sync::Mutex<Vec<SaveResult>>> = std::sync::OnceLock::new();
     R.get_or_init(Default::default)
 }
 

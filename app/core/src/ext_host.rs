@@ -433,13 +433,43 @@ pub fn run_response_hooks(exts: &[Arc<dyn ProxyHooks>], svc: &HttpService, metho
 
 /// [`run_request_hooks`] with the exchange's annotations.
 pub fn run_request_hooks_annotated(exts: &[Arc<dyn ProxyHooks>], svc: &HttpService, method: &str, path: &str, req: &mut Vec<u8>, ann: &mut Annotations) -> bool {
-    exts.iter().all(|e| !matches!(e.handle_request(svc, method, path, req, ann), ProxyAction::Drop))
+    exts.iter().all(|e| {
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            e.handle_request(svc, method, path, req, ann)
+        }));
+        match r {
+            Ok(action) => !matches!(action, ProxyAction::Drop),
+            // A panicking extension is skipped, not fatal: it must not kill
+            // the proxied connection or drop the message (panic policy, #32).
+            Err(_) => {
+                crate::notice::toast(
+                    crate::notice::Level::Warn,
+                    format!("request hook of extension '{}' panicked; the hook was skipped", e.extension_name()),
+                );
+                true
+            }
+        }
+    })
 }
 
 /// [`run_response_hooks`] with the request that was sent and the
 /// exchange's annotations.
 pub fn run_response_hooks_annotated(exts: &[Arc<dyn ProxyHooks>], svc: &HttpService, method: &str, path: &str, req: &[u8], resp: &mut Vec<u8>, ann: &mut Annotations) -> bool {
-    exts.iter().all(|e| !matches!(e.handle_response(svc, method, path, req, resp, ann), ProxyAction::Drop))
+    exts.iter().all(|e| {
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            e.handle_response(svc, method, path, req, resp, ann)
+        }));
+        match r {
+            Ok(action) => !matches!(action, ProxyAction::Drop),
+            Err(_) => {
+                crate::notice::toast(
+                    crate::notice::Level::Warn,
+                    format!("response hook of extension '{}' panicked; the hook was skipped", e.extension_name()),
+                );
+                true
+            }
+        }
+    })
 }
 
 /// Built-in example (QA hook WEBPROBE_EXT_TEST): adds an X-WebProbe-Extension
@@ -598,7 +628,7 @@ impl JavaSidecar {
         let errors = Arc::new(Mutex::new(std::collections::VecDeque::new()));
         if let Some(stderr) = child.stderr.take() {
             let errors = Arc::clone(&errors);
-            std::thread::spawn(move || {
+            crate::util::spawn_contained("ext_host", move || {
                 // Bounded lines: an extension printing without newlines
                 // cannot grow memory.
                 for line in crate::util::capped_lines(BufReader::new(stderr), MAX_STDERR_LINE) {
@@ -609,7 +639,7 @@ impl JavaSidecar {
         let mut stdin = child.stdin.take().ok_or("sidecar stdin unavailable")?;
         let stdout = BufReader::new(child.stdout.take().ok_or("sidecar stdout unavailable")?);
         let (to_bridge, writer_rx) = std::sync::mpsc::channel::<String>();
-        std::thread::spawn(move || {
+        crate::util::spawn_contained("ext_host", move || {
             for line in writer_rx {
                 if writeln!(stdin, "{line}").and_then(|_| stdin.flush()).is_err() {
                     break;
@@ -622,7 +652,7 @@ impl JavaSidecar {
         let file_label = std::path::Path::new(ext_jar).file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
         {
             let (errors, back, ui, data, label) = (Arc::clone(&errors), to_bridge.clone(), Arc::clone(&ui), Arc::clone(&data), file_label.clone());
-            std::thread::spawn(move || {
+            crate::util::spawn_contained("ext_host", move || {
                 for line in crate::util::capped_lines(stdout, MAX_BRIDGE_LINE) {
                     let msg: serde_json::Value = serde_json::from_str(&line).unwrap_or_default();
                     match msg.get("type").and_then(|t| t.as_str()) {
@@ -884,7 +914,7 @@ fn b64_field(v: &serde_json::Value, k: &str) -> Option<Vec<u8>> {
 fn serve_call(msg: &serde_json::Value, link: Option<Arc<HostLink>>, back: std::sync::mpsc::Sender<String>, ext: String) {
     let sid = msg.get("sid").and_then(|v| v.as_u64()).unwrap_or(0);
     let (op, args) = (msg["op"].as_str().unwrap_or("").to_string(), msg["args"].clone());
-    std::thread::spawn(move || {
+    crate::util::spawn_contained("ext_host", move || {
         let result = match &link {
             Some(l) => (l.call)(&ext, &op, &args),
             None => Err(format!("{op}: this extension host is not linked to WebProbe's engine")),
@@ -903,7 +933,7 @@ fn serve_send(msg: &serde_json::Value, link: Option<Arc<HostLink>>, back: std::s
     let sid = msg.get("sid").and_then(|v| v.as_u64()).unwrap_or(0);
     let svc = HttpService::new(msg["host"].as_str().unwrap_or(""), msg["port"].as_u64().unwrap_or(80) as u16, msg["secure"].as_bool().unwrap_or(false));
     let raw = msg["raw"].as_str().and_then(|r| crate::util::b64_decode(r).ok()).unwrap_or_default();
-    std::thread::spawn(move || {
+    crate::util::spawn_contained("ext_host", move || {
         let result = match &link {
             Some(l) => (l.send)(&svc, &raw),
             None => Err("this extension host has no HTTP sender".into()),
@@ -1629,4 +1659,45 @@ mod tests {
         panic!("not reached within {secs} s");
     }
 
+}
+
+#[cfg(test)]
+mod panic_policy_tests {
+    use super::*;
+
+    struct PanicExt;
+    impl ProxyHooks for PanicExt {
+        fn extension_name(&self) -> &str {
+            "panic-ext"
+        }
+        fn handle_request(&self, _svc: &HttpService, _m: &str, _p: &str, _req: &mut Vec<u8>, _ann: &mut Annotations) -> ProxyAction {
+            panic!("extension bug");
+        }
+        fn handle_response(&self, _svc: &HttpService, _m: &str, _p: &str, _req: &[u8], _resp: &mut Vec<u8>, _ann: &mut Annotations) -> ProxyAction {
+            panic!("extension bug");
+        }
+    }
+
+    struct MarkerExt;
+    impl ProxyHooks for MarkerExt {
+        fn extension_name(&self) -> &str {
+            "marker-ext"
+        }
+        fn handle_request(&self, _svc: &HttpService, _m: &str, _p: &str, req: &mut Vec<u8>, _ann: &mut Annotations) -> ProxyAction {
+            req.extend_from_slice(b"X-Marker: ran\r\n");
+            ProxyAction::Continue
+        }
+    }
+
+    #[test]
+    fn a_panicking_hook_is_skipped_and_later_hooks_still_run() {
+        let svc = HttpService::new("example.com", 80, false);
+        let exts: Vec<Arc<dyn ProxyHooks>> = vec![Arc::new(PanicExt), Arc::new(MarkerExt)];
+        let mut req = b"GET / HTTP/1.0\r\n\r\n".to_vec();
+        // The panic neither fails the exchange nor stops the next extension.
+        assert!(run_request_hooks(&exts, &svc, "GET", "/", &mut req));
+        assert!(req.windows(b"X-Marker: ran".len()).any(|w| w == b"X-Marker: ran"));
+        let mut resp = b"HTTP/1.0 200 OK\r\n\r\n".to_vec();
+        assert!(run_response_hooks(&exts, &svc, "GET", "/", &mut resp));
+    }
 }

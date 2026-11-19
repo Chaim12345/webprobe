@@ -21,7 +21,8 @@ use std::collections::VecDeque;
 use std::io::{self, Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream, UdpSocket};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, MutexGuard};
+use crate::sync::Mutex;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -50,7 +51,7 @@ const HTTP_OK_BODY: &str =
      This listener is loopback-only; no public callback service is involved.\n";
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
-    m.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    m.lock().unwrap()
 }
 
 fn unix_secs() -> u64 {
@@ -680,7 +681,7 @@ impl CollaboratorState {
         self.stop_remote();
         let (tx, rx) = std::sync::mpsc::channel();
         let (server, token) = (server.to_string(), self.remote_token.clone());
-        std::thread::spawn(move || {
+        crate::util::spawn_contained("collaborator", move || {
             let _ = tx.send(crate::interactsh::Session::register_with(&server, Some(&token)));
         });
         self.registering = Some(rx);
@@ -709,7 +710,7 @@ impl CollaboratorState {
         let stop = Arc::new(AtomicBool::new(false));
         let error = Arc::new(Mutex::new(None));
         let (s2, stop2, err2, log) = (Arc::clone(&session), Arc::clone(&stop), Arc::clone(&error), Arc::clone(&self.log));
-        let handle = std::thread::spawn(move || {
+        let handle = crate::util::spawn_contained("collaborator", move || {
             while !stop2.load(Ordering::SeqCst) {
                 match s2.poll() {
                     Ok(items) => {
@@ -765,7 +766,7 @@ impl CollaboratorState {
     pub fn poll_now(&self) {
         if let Some(r) = &self.remote {
             let (s2, log) = (Arc::clone(&r.session), Arc::clone(&self.log));
-            std::thread::spawn(move || {
+            crate::util::spawn_contained("collaborator", move || {
                 if let Ok(items) = s2.poll() {
                     for it in items {
                         if let Some(detail) = remote_detail(&it) {

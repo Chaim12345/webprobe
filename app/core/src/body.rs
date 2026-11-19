@@ -16,7 +16,8 @@
 
 use std::ops::Deref;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, OnceLock};
+use crate::sync::Mutex;
 
 /// Bytes of one message. Derefs to `[u8]`.
 #[derive(Clone)]
@@ -210,7 +211,7 @@ impl Store {
 /// bytes whose final size is not known yet (a streaming response being
 /// recorded). `None` when there is no store directory.
 pub fn scratch_file() -> Option<std::fs::File> {
-    let dir = store().lock().unwrap_or_else(|p| p.into_inner()).dir.clone()?;
+    let dir = store().lock().unwrap().dir.clone()?;
     std::fs::create_dir_all(&dir).ok()?;
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let path = dir.join(format!("stream-{}-{}", std::process::id(), NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
@@ -247,7 +248,7 @@ pub fn spill(body: &Body) -> Body {
     if body.is_stored() || body.len() < MIN_SPILL {
         return body.clone();
     }
-    let mut st = store().lock().unwrap_or_else(|p| p.into_inner());
+    let mut st = store().lock().unwrap();
     if st.retry_at.is_some_and(|t| std::time::Instant::now() < t) {
         return body.clone();
     }

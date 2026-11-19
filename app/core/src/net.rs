@@ -1614,7 +1614,7 @@ pub fn resolve(
     let display = host.to_string();
     let (tx, rx) = mpsc::sync_channel::<Result<Vec<std::net::SocketAddr>, String>>(1);
     let host = host.to_string();
-    std::thread::spawn(move || {
+    crate::util::spawn_contained("net", move || {
         let r = match (host.as_str(), port).to_socket_addrs() {
             Ok(it) => Ok(it.collect::<Vec<std::net::SocketAddr>>()),
             Err(e) => Err(format!("dns {host}: {e}")),
@@ -2092,7 +2092,7 @@ pub fn browser_listener(shared: &Arc<Shared>) -> Result<u16, String> {
         return Ok(existing);
     }
     let sh = shared.clone();
-    std::thread::spawn(move || {
+    crate::util::spawn_contained("net", move || {
         for stream in l.incoming().flatten() {
             let sh = sh.clone();
             spawn_connection(sh, stream);
@@ -2104,7 +2104,7 @@ pub fn browser_listener(shared: &Arc<Shared>) -> Result<u16, String> {
 
 pub fn start_proxy(shared: Arc<Shared>) {
     start_extra_listeners(shared.clone());
-    std::thread::spawn(move || loop {
+    crate::util::spawn_contained("net", move || loop {
         shared.listener_restart.store(false, Ordering::SeqCst);
         let addr = format!("127.0.0.1:{}", shared.proxy_port.load(Ordering::SeqCst));
         let listener = TcpListener::bind(&addr);
@@ -2270,7 +2270,7 @@ fn listener_worker(shared: Arc<Shared>, state: Arc<ListenerState>, gen: u64) {
 /// Supervisor for the extra listeners: spawns workers for the current set and
 /// lets them exit when the generation changes.
 fn start_extra_listeners(shared: Arc<Shared>) {
-    std::thread::spawn(move || {
+    crate::util::spawn_contained("net", move || {
         let mut spawned_gen = u64::MAX;
         loop {
             let gen = shared.listener_generation.load(Ordering::SeqCst);
@@ -2279,7 +2279,7 @@ fn start_extra_listeners(shared: Arc<Shared>) {
                 let specs: Vec<Arc<ListenerState>> = shared.listeners.lock().unwrap().clone();
                 for st in specs {
                     let sh = shared.clone();
-                    std::thread::spawn(move || listener_worker(sh, st, gen));
+                    crate::util::spawn_contained("net", move || listener_worker(sh, st, gen));
                 }
             }
             std::thread::sleep(Duration::from_millis(250));
@@ -3531,7 +3531,7 @@ fn relay_tunnel(client: &TcpStream, upstream: &mut TcpStream) {
         Ok(c) => c,
         Err(_) => return,
     };
-    let t = std::thread::spawn(move || {
+    let t = crate::util::spawn_contained("net", move || {
         if let Ok(mut up) = up_reader {
             let _ = std::io::copy(&mut up, &mut client_reader);
         }
@@ -4008,7 +4008,7 @@ pub fn start_attack(
         rows.len()
     ));
 
-    std::thread::spawn(move || {
+    crate::util::spawn_contained("net", move || {
         for attack in rows {
             if cur.stop.load(Ordering::SeqCst) {
                 break;

@@ -86,7 +86,7 @@ fn run(mut cmd: Command, deadline: Duration) -> Result<String, String> {
     let mut child = cmd.stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::null()).spawn().map_err(|e| e.to_string())?;
     let mut out = child.stdout.take().ok_or("no stdout")?;
     let (tx, rx) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
+    crate::util::spawn_contained("headless", move || {
         // Bounded: a page that makes the engine print without end cannot
         // exhaust memory; over the cap the run fails (and is killed below).
         let r = crate::util::read_capped(&mut out, MAX_STDOUT, "the browser engine's output").map(|b| String::from_utf8_lossy(&b).into_owned());

@@ -3,7 +3,8 @@
 //! condition variable instead of polling.
 
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar};
+use crate::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use crate::net::Shared;
@@ -28,13 +29,13 @@ pub struct ScanRun {
 
 impl ScanRun {
     pub fn is_busy(&self) -> bool {
-        *self.busy.lock().unwrap_or_else(|p| p.into_inner())
+        *self.busy.lock().unwrap()
     }
 
     /// Block until no scan runs, or until `timeout` passes. True when idle.
     pub fn wait_idle(&self, timeout: Option<Duration>) -> bool {
         let deadline = timeout.map(|t| Instant::now() + t);
-        let mut busy = self.busy.lock().unwrap_or_else(|p| p.into_inner());
+        let mut busy = self.busy.lock().unwrap();
         while *busy {
             match deadline {
                 None => busy = self.idle.wait(busy).unwrap_or_else(|p| p.into_inner()),
@@ -51,7 +52,7 @@ impl ScanRun {
     }
 
     fn claim(&self) -> bool {
-        let mut busy = self.busy.lock().unwrap_or_else(|p| p.into_inner());
+        let mut busy = self.busy.lock().unwrap();
         if *busy {
             return false;
         }
@@ -62,7 +63,7 @@ impl ScanRun {
     fn release(&self) {
         // The planned total assumes every check runs; settle it at the end.
         self.total.store(self.done.load(Ordering::SeqCst), Ordering::SeqCst);
-        *self.busy.lock().unwrap_or_else(|p| p.into_inner()) = false;
+        *self.busy.lock().unwrap() = false;
         self.idle.notify_all();
     }
 }

@@ -98,7 +98,7 @@ fn proxy(mut args: Vec<String>) {
     }
     if seconds.is_none() {
         let flag = stdin_closed.clone();
-        std::thread::spawn(move || {
+        webprobe_core::util::spawn_contained("webprobe-headless", move || {
             for _ in std::io::stdin().lock().lines() {}
             flag.store(true, Ordering::SeqCst);
         });

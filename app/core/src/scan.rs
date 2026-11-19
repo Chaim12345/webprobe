@@ -935,7 +935,7 @@ pub fn start_active_scan(shared: Arc<Shared>, entry: HistEntry, oob: &[(String, 
         accuracy: crate::variations::Accuracy::from_u8(shared.scan_accuracy.load(Ordering::SeqCst)),
     };
     let (oob, smtp) = (oob.to_vec(), smtp.to_vec());
-    std::thread::spawn(move || {
+    crate::util::spawn_contained("scan", move || {
         let _tool = crate::net::tool_scope("Scanner");
         // The guard releases the scanner however this thread ends: a
         // panicking check used to leave it claimed, so every later scan was
@@ -1167,9 +1167,9 @@ pub(crate) fn reset_openapi_hosts() {
     checks::everywhere_hosts().lock().unwrap().clear();
 }
 
-fn openapi_hosts() -> &'static std::sync::Mutex<std::collections::HashSet<String>> {
-    static H: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
-    H.get_or_init(|| std::sync::Mutex::new(std::collections::HashSet::new()))
+fn openapi_hosts() -> &'static crate::sync::Mutex<std::collections::HashSet<String>> {
+    static H: std::sync::OnceLock<crate::sync::Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
+    H.get_or_init(|| crate::sync::Mutex::new(std::collections::HashSet::new()))
 }
 
 fn raw_header_lines(resp: &[u8]) -> Vec<String> {

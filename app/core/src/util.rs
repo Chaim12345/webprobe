@@ -702,3 +702,21 @@ impl<R: std::io::BufRead> Iterator for CappedLines<R> {
         }
     }
 }
+
+/// Spawn a worker thread that contains panics (panic policy "contain and
+/// continue", issue #32): a panicking closure is logged as a warning and the
+/// thread ends, instead of the panic going unnoticed or poisoning shared
+/// state. The policy's loud part: every containment raises a notice.
+pub fn spawn_contained<F>(name: &'static str, f: F) -> std::thread::JoinHandle<()>
+where
+    F: FnOnce() + Send + 'static,
+{
+    std::thread::spawn(move || {
+        if std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).is_err() {
+            crate::notice::toast(
+                crate::notice::Level::Warn,
+                format!("worker thread '{name}' panicked; the thread ended, the session continues"),
+            );
+        }
+    })
+}

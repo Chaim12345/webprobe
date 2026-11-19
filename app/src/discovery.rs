@@ -369,7 +369,7 @@ fn flip_case(path: &str) -> String {
 pub fn start(cfg: DiscoveryConfig, host_header: String, send: Sender) -> Arc<Progress> {
     let prog = Arc::new(Progress::default());
     let p = prog.clone();
-    std::thread::spawn(move || {
+    webprobe_core::util::spawn_contained("discovery", move || {
         let _tool = crate::net::tool_scope("Target");
         let run = Run { cfg, host_header, send, prog: p.clone() };
         run.run();

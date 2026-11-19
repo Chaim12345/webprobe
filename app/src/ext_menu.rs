@@ -4,7 +4,8 @@
 //! editors" hand-off of a message to extension-provided editors.
 
 use std::cell::RefCell;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use webprobe_core::sync::Mutex;
 
 use eframe::egui;
 use webprobe_core::ext_host::{MenuContext, MenuItem, MenuMessage, MenuOutcome, ProxyHooks};
@@ -26,20 +27,20 @@ static EDITS: Mutex<Vec<(String, Vec<u8>)>> = Mutex::new(Vec::new());
 
 /// The request an extension produced for `target`, if one arrived.
 pub fn take_edit(target: &str) -> Option<Vec<u8>> {
-    let mut edits = EDITS.lock().unwrap_or_else(|p| p.into_inner());
+    let mut edits = EDITS.lock().unwrap();
     let at = edits.iter().position(|(t, _)| t == target)?;
     Some(edits.remove(at).1)
 }
 
 fn put_edit(target: &str, request: Vec<u8>) {
-    EDITS.lock().unwrap_or_else(|p| p.into_inner()).push((target.to_string(), request));
+    EDITS.lock().unwrap().push((target.to_string(), request));
 }
 
 /// Run `work` (calls into extension JVMs) off the UI thread and repaint
 /// when it is done: the UI never waits on a sidecar.
 fn off_ui(ctx: &egui::Context, work: impl FnOnce() + Send + 'static) {
     let ctx = ctx.clone();
-    std::thread::spawn(move || {
+    webprobe_core::util::spawn_contained("ext_menu", move || {
         work();
         ctx.request_repaint();
     });
@@ -70,7 +71,7 @@ fn items(ui: &egui::Ui, shared: &Shared, ctx: &MenuContext) -> Option<Found> {
     let k = key(ctx);
     let slot = CACHE.with(|c| c.borrow().as_ref().filter(|(ck, _)| *ck == k).map(|(_, s)| Arc::clone(s)));
     if let Some(slot) = slot {
-        return slot.lock().unwrap_or_else(|p| p.into_inner()).clone();
+        return slot.lock().unwrap().clone();
     }
     let exts: Vec<_> = shared.ext_host.lock().unwrap().active().into_iter().filter(|e| e.ui().is_some_and(|u| u.menu_providers > 0)).collect();
     let slot: Slot = Arc::new(Mutex::new(None));
@@ -83,11 +84,11 @@ fn items(ui: &egui::Ui, shared: &Shared, ctx: &MenuContext) -> Option<Found> {
                 let items = e.menu_items(&ctx);
                 (e, items)
             }).filter(|(_, items)| !items.is_empty()).collect();
-            *fill.lock().unwrap_or_else(|p| p.into_inner()) = Some(found);
+            *fill.lock().unwrap() = Some(found);
         });
     }
     CACHE.with(|c| *c.borrow_mut() = Some((k, Arc::clone(&slot))));
-    let ready = slot.lock().unwrap_or_else(|p| p.into_inner()).clone();
+    let ready = slot.lock().unwrap().clone();
     ready
 }
 
