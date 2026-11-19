@@ -405,6 +405,7 @@ pub(crate) static REQUEST_CHECKS: &[&dyn RequestCheck] = &[
     &DomJsonInjection,
     &DomXpathInjection,
     &DomDocumentDomain,
+    &DomPrototypePollution,
 ];
 
 /// Whether `check` audits `ip` under `config`: the point type suits it,
@@ -2403,6 +2404,68 @@ dom_family_check!(
     &["postMessage"][..],
     "HTML5 web message manipulation (DOM-based), KB 00500e00, Information: controllable data sent as a web message to another document (window.postMessage; no literal Zcwh sink mapping - the family is established by the KB resource). Confidence Firm (burp.Zwf8.Zd)."
 );
+
+/// Client-side prototype pollution, KB 00200316 (issue 2097942),
+/// Information: a query-string or fragment parameter converted to an
+/// object and merged, landing `__proto__` keys on Object.prototype
+/// (burp.Zcwm's decoder, scheduled by burp.Zfk8). Confidence Firm is
+/// WebProbe's choice for a dynamically observed pollution - the
+/// Zcwm/Zwf8 confidence mapping is not established.
+pub(crate) struct DomPrototypePollution;
+
+impl RequestCheck for DomPrototypePollution {
+    fn id(&self) -> &'static str {
+        "active.dom-prototype-pollution"
+    }
+    fn issue(&self) -> &'static str {
+        "Client-side prototype pollution"
+    }
+    fn scope(&self) -> Scope {
+        Scope::Request
+    }
+    fn group(&self) -> Option<&'static str> {
+        Some(BURP_GROUP)
+    }
+    fn run(&self, cx: &ScanCtx) {
+        if cx.stopped() || !cx.runs(self.issue()) {
+            return;
+        }
+        // Dynamic analysis runs on pages: the baseline must be HTML.
+        let rp = util::parse_http(&cx.baseline.raw);
+        let ct = util::get_header(&rp.headers, "Content-Type").unwrap_or_default();
+        if !ct.to_ascii_lowercase().contains("html") {
+            return;
+        }
+        let scheme = if cx.entry.https { "https" } else { "http" };
+        let default = if cx.entry.https { 443 } else { 80 };
+        let port = if cx.entry.port == default { String::new() } else { format!(":{}", cx.entry.port) };
+        let path = cx.entry.path.split('#').next().unwrap_or("/");
+        let url = format!("{scheme}://{}{port}{path}", cx.entry.host);
+        let canary = format!("wpp{}", rnd_letters(8));
+        match crate::crawl::prototype_pollution_probe(&cx.shared, &url, &canary) {
+            Ok(Some(poc)) => {
+                // burp.Zwud's template: the source was found, the payload
+                // was injected into a named URL part and later detected in
+                // Object.prototype; print the PoC URL; recommend DOM
+                // Invader to confirm and scan for gadgets.
+                let mut i = mk(
+                    "info",
+                    self.issue(),
+                    &cx.entry,
+                    format!(
+                        "The application may be vulnerable to client-side prototype pollution. A controllable query string or fragment parameter is converted to a JavaScript object and merged, and the payload <b>{}</b> was later detected in <b>Object.prototype</b>.<br><br>PoC URL: {}<br><br>Client-side prototype pollution is not a vulnerability in its own right; paired with a gadget it may lead to issues such as DOM XSS. Burp's DOM Invader can confirm the issue and scan for gadgets.",
+                        util::html_encode(&canary),
+                        util::html_encode(&poc)
+                    ),
+                );
+                i.confidence = "Firm".into();
+                cx.report(vec![i]);
+            }
+            Ok(None) => {}
+            Err(e) => cx.shared.log(&format!("prototype pollution probe failed for {url}: {e}")),
+        }
+    }
+}
 
 /// WebProbe's own reflected-DOM canary (Burp finds DOM issues by analysing
 /// JavaScript, which is not this): a plain canary reflected unencoded into
@@ -5052,6 +5115,7 @@ mod tests {
                 ("active.dom-json-injection", Scope::Request, Some(BURP_GROUP)),
                 ("active.dom-xpath-injection", Scope::Request, Some(BURP_GROUP)),
                 ("active.dom-document-domain", Scope::Request, Some(BURP_GROUP)),
+                ("active.dom-prototype-pollution", Scope::Request, Some(BURP_GROUP)),
             ]
         );
         let mut ids: Vec<&str> = points.iter().copied().chain(requests.iter().map(|r| r.0)).collect();
@@ -5690,6 +5754,44 @@ setTimeout(function () { jQuery('<p>x</p>').html(location.hash.slice(1)); }, 50)
             "stored variant: {got:?}"
         );
         assert!(!got.iter().any(|(n, ..)| n == "Cross-site scripting (DOM-based)" || n == "Cross-site scripting (reflected DOM-based)"), "not the other variants: {got:?}");
+    }
+
+    /// R-13 prototype pollution: a page deep-merging the query string
+    /// with a qs-style bracket parser pollutes Object.prototype from
+    /// __proto__[key]; a page filtering those keys does not. Skipped when
+    /// no Chromium is available.
+    #[test]
+    fn dom_prototype_pollution_against_a_live_lab() {
+        if crate::crawl::chromium_binary().is_none() {
+            return;
+        }
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = lab_serve(l, |_method, path, _raw| {
+            let body = if path.starts_with("/vulnpp") {
+                r#"<html><body><script>
+var cfg = {};
+function setpath(o, parts, v) { var cur = o; for (var i = 0; i < parts.length - 1; i++) { if (typeof cur[parts[i]] !== 'object' || cur[parts[i]] === null) { cur[parts[i]] = {}; } cur = cur[parts[i]]; } cur[parts[parts.length - 1]] = v; }
+location.search.replace(/^\?/, '').split('&').forEach(function (p) { var kv = p.split('='); var parts = kv[0].split('[').map(function (x) { return x.replace(/\]$/, ''); }); setpath(cfg, parts, decodeURIComponent(kv[1] || '')); });
+</script></body></html>"#
+            } else if path.starts_with("/safepp") {
+                r#"<html><body><script>
+var cfg = {};
+function setpath(o, parts, v) { var cur = o; for (var i = 0; i < parts.length - 1; i++) { if (typeof cur[parts[i]] !== 'object' || cur[parts[i]] === null) { cur[parts[i]] = {}; } cur = cur[parts[i]]; } cur[parts[parts.length - 1]] = v; }
+location.search.replace(/^\?/, '').split('&').forEach(function (p) { var kv = p.split('='); var parts = kv[0].split('[').map(function (x) { return x.replace(/\]$/, ''); }); if (parts[0] === '__proto__' || parts[0] === 'constructor' || parts[0] === 'prototype') { return; } setpath(cfg, parts, decodeURIComponent(kv[1] || '')); });
+</script></body></html>"#
+            } else {
+                "<html><body><p>hello</p></body></html>"
+            };
+            format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        });
+        let host = format!("127.0.0.1:{port}");
+        let got = lab_scan(port, &["active.dom-prototype-pollution"], "GET", "/vulnpp", format!("GET /vulnpp HTTP/1.1\r\nHost: {host}\r\n\r\n"));
+        assert!(
+            got.iter().any(|(n, s, c)| n == "Client-side prototype pollution" && s == "info" && c == "Firm"),
+            "vulnerable merge: {got:?}"
+        );
+        let got = lab_scan(port, &["active.dom-prototype-pollution"], "GET", "/safepp", format!("GET /safepp HTTP/1.1\r\nHost: {host}\r\n\r\n"));
+        assert!(!got.iter().any(|(n, ..)| n == "Client-side prototype pollution"), "filtered merge: {got:?}");
     }
 
     /// R-10 batch 2: the three GraphQL checks against a live endpoint.
