@@ -1141,6 +1141,15 @@ const DOM_INSTRUMENT_JS: &str = r#"
 /// then evaluate `final_js` (which must produce a JSON string) and return
 /// its decoded value - Ok(None) when the evaluation itself fails. The
 /// browser tree is killed and its profile removed on every path.
+// Known browser-probe limitations (raised on #18, applies to every
+// browser-driven check): the headless Chromium navigates with a fresh
+// profile - none of the audited request's cookies/headers - so
+// authenticated pages are not analysed as the user sees them (the
+// HTTP-side follow-ups do carry the session, see authed_get); the
+// browser's traffic goes direct, bypassing any configured upstream
+// proxy; and --no-sandbox / --ignore-certificate-errors are container
+// concessions. Carrying the session into the browser needs DevTools
+// Protocol cookie injection, tracked as future work.
 fn browser_run<T: serde::de::DeserializeOwned>(shared: &Arc<Shared>, url: &str, navigate_url: &str, inject: Option<String>, final_js: &str) -> Result<Option<T>, String> {
     let bin = crate::paths::chromium().map_err(|m| m.to_string())?.display().to_string();
     let rest = url.split_once("://").map(|x| x.1).unwrap_or(url);
