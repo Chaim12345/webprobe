@@ -781,6 +781,30 @@ struct DomHitsCache {
 
 static DOM_HITS_CACHE: std::sync::OnceLock<DomHitsCache> = std::sync::OnceLock::new();
 
+/// The prototype-pollution probe gets the same one-browser-per-URL
+/// treatment as the DOM analysis hits: without a cache, every audited
+/// request to the same page launches another Chromium.
+enum ProtoState {
+    InFlight,
+    Done(Option<(String, String)>),
+}
+
+#[derive(Default)]
+struct ProtoCache {
+    map: std::sync::Mutex<std::collections::HashMap<String, ProtoState>>,
+    ready: std::sync::Condvar,
+}
+
+static PROTO_CACHE: std::sync::OnceLock<ProtoCache> = std::sync::OnceLock::new();
+
+/// Clear the per-URL prototype-pollution cache between scan sessions.
+pub(crate) fn reset_proto_pollution_cache() {
+    if let Some(c) = PROTO_CACHE.get() {
+        c.map.lock().unwrap().clear();
+        c.ready.notify_all();
+    }
+}
+
 /// Clear the per-URL DOM analysis cache between scan sessions.
 pub(crate) fn reset_dom_analysis_cache() {
     if let Some(c) = DOM_HITS_CACHE.get() {
@@ -794,6 +818,19 @@ pub(crate) fn reset_dom_analysis_cache() {
 /// the path changes. A bare GET would never see the authenticated page,
 /// where these variants usually live. Hop-by-hop and body headers are
 /// dropped (the follow-up has no body).
+/// A scan stopping mid-probe must not leave the URL InFlight: every
+/// other thread waiting on it would block on the condvar for the rest of
+/// the process. Cache the empty result (the session is stopping anyway)
+/// and wake all waiters. (A panic instead of a clean return poisons the
+/// mutex, which propagates the panic to the waiters - loud, not silent.)
+fn dom_cache_abandon(url: &str) -> (Vec<crate::crawl::DomHit>, Option<String>, String) {
+    let cache = DOM_HITS_CACHE.get_or_init(Default::default);
+    let v = (Vec::new(), None, String::new());
+    cache.map.lock().unwrap().insert(url.to_string(), DomHitsState::Done(v.clone()));
+    cache.ready.notify_all();
+    v
+}
+
 fn authed_get(cx: &ScanCtx, path_query: &str) -> Vec<u8> {
     let mut raw = format!("GET {path_query} HTTP/1.1\r\nHost: {}\r\n", cx.host_hdr);
     for (k, v) in &cx.parts.headers {
@@ -853,7 +890,7 @@ fn dom_analysis_hits(cx: &ScanCtx) -> (Vec<crate::crawl::DomHit>, Option<String>
     // search history, comments). The canary is a random inert string and
     // the check runs only as part of the active scan.
     if cx.stopped() {
-        return (Vec::new(), None, String::new());
+        return dom_cache_abandon(&url);
     }
     let stored_canary = format!("s{canary}");
     let sep0 = if path.contains('?') { "&" } else { "?" };
@@ -895,7 +932,7 @@ fn dom_analysis_hits(cx: &ScanCtx) -> (Vec<crate::crawl::DomHit>, Option<String>
     // the reflected value, so a hash-flow hit on a page that also
     // reflects the query stays plain DOM-based.
     if cx.stopped() {
-        return (Vec::new(), None, String::new());
+        return dom_cache_abandon(&url);
     }
     let sep = if path.contains('?') { "&" } else { "?" };
     let qcanary = format!("q{canary}");
@@ -1228,29 +1265,56 @@ impl RequestCheck for DomPrototypePollution {
         let port = if cx.entry.port == default { String::new() } else { format!(":{}", cx.entry.port) };
         let path = cx.entry.path.split('#').next().unwrap_or("/");
         let url = format!("{scheme}://{}{port}{path}", cx.entry.host);
-        let canary = format!("wpp{}", rnd_letters(8));
-        match crate::crawl::prototype_pollution_probe(&cx.shared, &url, &canary) {
-            Ok(Some(poc)) => {
-                // burp.Zwud's template: the source was found, the payload
-                // was injected into a named URL part and later detected in
-                // Object.prototype; print the PoC URL; recommend DOM
-                // Invader to confirm and scan for gadgets.
-                let mut i = mk(
-                    "info",
-                    self.issue(),
-                    &cx.entry,
-                    format!(
-                        "The application may be vulnerable to client-side prototype pollution. A controllable query string or fragment parameter is converted to a JavaScript object and merged, and the payload <b>{}</b> was later detected in <b>Object.prototype</b>.<br><br>PoC URL: {}<br><br>Client-side prototype pollution is not a vulnerability in its own right; paired with a gadget it may lead to issues such as DOM XSS. Burp's DOM Invader can confirm the issue and scan for gadgets.",
-                        util::html_encode(&canary),
-                        util::html_encode(&poc)
-                    ),
-                );
-                i.confidence = "Firm".into();
-                cx.report(vec![i]);
+        // One browser per URL even under concurrency: the first thread
+        // marks the URL in flight and probes; later threads wait on the
+        // condvar instead of launching duplicate browsers (the same
+        // pattern as DOM_HITS_CACHE).
+        let cache = PROTO_CACHE.get_or_init(Default::default);
+        let mut guard = cache.map.lock().unwrap();
+        let hit: Option<(String, String)> = loop {
+            match guard.get(&url) {
+                Some(ProtoState::Done(v)) => break v.clone(),
+                Some(ProtoState::InFlight) => {
+                    guard = cache.ready.wait(guard).unwrap();
+                }
+                None => {
+                    guard.insert(url.clone(), ProtoState::InFlight);
+                    drop(guard);
+                    let canary = format!("wpp{}", rnd_letters(8));
+                    // A failed probe is logged and cached as no-finding:
+                    // the cached None only avoids re-probing this URL for
+                    // every request to it this session.
+                    let v = match crate::crawl::prototype_pollution_probe(&cx.shared, &url, &canary) {
+                        Ok(Some(poc)) => Some((canary, poc)),
+                        Ok(None) => None,
+                        Err(e) => {
+                            cx.shared.log(&format!("prototype pollution probe failed for {url}: {e}"));
+                            None
+                        }
+                    };
+                    cache.map.lock().unwrap().insert(url.clone(), ProtoState::Done(v.clone()));
+                    cache.ready.notify_all();
+                    break v;
+                }
             }
-            Ok(None) => {}
-            Err(e) => cx.shared.log(&format!("prototype pollution probe failed for {url}: {e}")),
-        }
+        };
+        let Some((canary, poc)) = hit else { return };
+        // burp.Zwud's template: the source was found, the payload
+        // was injected into a named URL part and later detected in
+        // Object.prototype; print the PoC URL; recommend DOM
+        // Invader to confirm and scan for gadgets.
+        let mut i = mk(
+            "info",
+            self.issue(),
+            &cx.entry,
+            format!(
+                "The application may be vulnerable to client-side prototype pollution. A controllable query string or fragment parameter is converted to a JavaScript object and merged, and the payload <b>{}</b> was later detected in <b>Object.prototype</b>.<br><br>PoC URL: {}<br><br>Client-side prototype pollution is not a vulnerability in its own right; paired with a gadget it may lead to issues such as DOM XSS. Burp's DOM Invader can confirm the issue and scan for gadgets.",
+                util::html_encode(&canary),
+                util::html_encode(&poc)
+            ),
+        );
+        i.confidence = "Firm".into();
+        cx.report(vec![i]);
     }
 }
 
