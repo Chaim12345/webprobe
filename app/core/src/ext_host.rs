@@ -610,7 +610,7 @@ impl ProxyHooks for ExampleHeaderExtension {
         _path: &str,
         req: &mut Vec<u8>,
     ) -> ProxyAction {
-        *req = crate::net::replace_or_add_header(req, "X-WebProbe-Extension", "example");
+        *req = crate::util::replace_or_add_header(req, "X-WebProbe-Extension", "example");
         ProxyAction::Continue
     }
 }

@@ -55,7 +55,7 @@ impl RequestCheck for Cors {
             own,
             &mut bc::ThreadRand,
             |origin| {
-                let probe = net::replace_or_add_header(req.as_bytes(), "Origin", origin);
+                let probe = crate::util::replace_or_add_header(req.as_bytes(), "Origin", origin);
                 let resp = burp_send(cx, &probe)?;
                 Some((probe, resp))
             },
@@ -331,7 +331,7 @@ impl RequestCheck for HeaderManipulation {
         if cx.stopped() {
             return;
         }
-        let manip = net::replace_or_add_header(cx.req.as_bytes(), "X-Forwarded-For", FIP_MARKER);
+        let manip = crate::util::replace_or_add_header(cx.req.as_bytes(), "X-Forwarded-For", FIP_MARKER);
         if let Some(resp) = &cx.send(&manip) {
             let rp = util::parse_http(resp);
             let rbody = String::from_utf8_lossy(&resp[rp.head_len.min(resp.len())..]);
@@ -398,7 +398,7 @@ impl RequestCheck for XxeFileRead {
             xxe_req.truncate(cx.parts.head_len.min(cx.req.len()));
             xxe_req.extend_from_slice(body.as_bytes());
             let xxe_req =
-                net::replace_or_add_header(&xxe_req, "Content-Length", &body.len().to_string());
+                crate::util::replace_or_add_header(&xxe_req, "Content-Length", &body.len().to_string());
             let resp = rec.send(cx, body, &xxe_req)?;
             let rp = util::parse_http(&resp);
             Some(String::from_utf8_lossy(&resp[rp.head_len.min(resp.len())..]).into_owned())
@@ -466,7 +466,7 @@ impl RequestCheck for CsrfTokenNotEnforced {
             csrf_req.extend_from_slice(stripped.as_bytes());
             // The body length changed, so the header must be restamped
             // or the server reads a truncated/oversized body.
-            let csrf_req = net::replace_or_add_header(
+            let csrf_req = crate::util::replace_or_add_header(
                 &csrf_req,
                 "Content-Length",
                 &stripped.len().to_string(),
@@ -504,7 +504,7 @@ impl RequestCheck for CsrfTokenNotEnforced {
             if !blanked_names.is_empty() {
                 let mut csrf_req = req.as_bytes()[..parts.head_len.min(req.len())].to_vec();
                 csrf_req.extend_from_slice(blanked.as_bytes());
-                let csrf_req = net::replace_or_add_header(
+                let csrf_req = crate::util::replace_or_add_header(
                     &csrf_req,
                     "Content-Length",
                     &blanked.len().to_string(),

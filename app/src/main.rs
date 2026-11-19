@@ -30,7 +30,6 @@ mod mcp_hook;
 mod menus;
 use webprobe_core::macros;
 mod msgpane;
-use webprobe_core::mime;
 use webprobe_core::net;
 use webprobe_core::notice;
 mod onboarding;

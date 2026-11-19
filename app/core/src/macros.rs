@@ -224,7 +224,7 @@ pub fn substitute_param(request: &[u8], name: &str, value: &str) -> Vec<u8> {
     let mut out = head_out.into_bytes();
     out.extend_from_slice(body.as_bytes());
     if crate::util::get_header(&parts.headers, "Content-Length").is_some() {
-        out = crate::net::replace_or_add_header(&out, "Content-Length", &body.len().to_string());
+        out = crate::util::replace_or_add_header(&out, "Content-Length", &body.len().to_string());
     }
     out
 }

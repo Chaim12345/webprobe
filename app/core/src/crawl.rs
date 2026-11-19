@@ -74,7 +74,7 @@ pub fn location_key(path: &str) -> String {
 /// audited (Burp's crawl of Juice Shop audited scripts, styles and documents
 /// but not the favicon).
 pub fn auditable(e: &HistEntry) -> bool {
-    let mime = crate::mime::burp_mime_of(e);
+    let mime = crate::net::burp_mime_of(e);
     !matches!(mime, "PNG" | "JPEG" | "GIF" | "ICO" | "image")
         && !matches!(
             e.extension.as_str(),
@@ -98,7 +98,7 @@ pub fn static_reference_corpus(items: &[HistEntry]) -> String {
     let mut out = String::new();
     for e in items {
         let ext = e.extension.as_str();
-        let mime = crate::mime::burp_mime_of(e);
+        let mime = crate::net::burp_mime_of(e);
         if matches!(ext, "js" | "mjs" | "css") || matches!(mime, "script" | "CSS" | "HTML") {
             if let Some(r) = &e.resp_raw {
                 let p = util::parse_http(r);
@@ -1346,7 +1346,7 @@ mod live {
                 "ITEM {} ext={} mime={} len={} auditable={} referenced={}",
                 e.path,
                 e.extension,
-                crate::mime::burp_mime_of(e),
+                crate::net::burp_mime_of(e),
                 e.resp_len,
                 auditable(e),
                 referenced_static(e, &corpus)

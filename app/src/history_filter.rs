@@ -76,12 +76,12 @@ impl Default for HistoryFilter {
 }
 
 #[cfg(test)]
-use crate::mime::burp_mime;
+use webprobe_core::mime::burp_mime;
 
 impl HistoryFilter {
     /// Burp's MIME family of an entry, for the column and the MIME filter.
     pub fn burp_mime_of(entry: &HistEntry) -> &'static str {
-        crate::mime::burp_mime_of(entry)
+        crate::net::burp_mime_of(entry)
     }
 
     /// The one-line summary Burp prints after "Filter settings:".

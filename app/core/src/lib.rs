@@ -4,15 +4,11 @@
 //! server can be another.
 
 pub mod ai;
-pub mod analysis;
-pub mod body;
 pub mod burp_checks;
 pub mod codec;
 pub mod collaborator;
-pub mod compare;
 pub mod cookie_jar;
 pub mod crawl;
-pub mod decoder_ops;
 pub mod ext_calls;
 pub mod ext_host;
 pub mod ext_process;
@@ -27,43 +23,37 @@ pub mod inspector;
 pub mod interactsh;
 #[cfg(test)]
 mod intercept_release_tests;
-pub mod intercept_rules;
 pub mod intruder;
 pub mod intruder_run;
-pub mod jwt;
 #[cfg(test)]
 mod jwt_tests;
-pub mod logger;
+// Stage A (#37): acyclic leaf modules extracted to the webprobe-support crate.
+// Re-exported so `webprobe_core::<module>` paths are unchanged.
+pub use webprobe_support::{
+    analysis, body, compare, decoder_ops, intercept_rules, jwt, logger, mime, organizer, paths,
+    rules, seq_bits, streaming, sync, tls, util, variations, xss,
+};
+
 pub mod macros;
-pub mod mime;
 pub mod net;
 pub mod notice;
 pub mod oob;
-pub mod organizer;
 pub mod passive_state;
-pub mod paths;
 pub mod project;
 pub mod project_files;
 pub mod repeater_run;
-pub mod report;
-pub mod rules;
 pub mod scan;
 pub mod scan_config;
 pub mod scan_library;
 pub mod scan_run;
-pub mod seq_bits;
 pub mod setup_page;
 pub mod sitemap_compare;
 pub mod stored;
-pub mod streaming;
 #[cfg(test)]
 mod streaming_tests;
-pub mod sync;
+mod util_tests;
 pub mod tasks;
-pub mod tls;
 pub mod upstream;
-pub mod util;
-pub mod variations;
 pub mod ws_history;
 pub mod ws_repeater;
 #[cfg(test)]
@@ -71,7 +61,6 @@ mod ws_repeater_tests;
 pub mod ws_rules;
 #[cfg(test)]
 mod ws_tests;
-pub mod xss;
 
 #[cfg(test)]
 mod fuzz_tests;

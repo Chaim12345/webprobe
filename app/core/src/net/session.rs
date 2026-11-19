@@ -138,7 +138,7 @@ pub fn set_request_cookie(raw: &[u8], name: &str, value: &str) -> Vec<u8> {
         Some(pair) => pair.1 = value.to_string(),
         None => pairs.push((name.to_string(), value.to_string())),
     }
-    replace_or_add_header(
+    crate::util::replace_or_add_header(
         raw,
         "Cookie",
         &pairs
@@ -307,7 +307,7 @@ pub fn apply_session_rules_for(
             "set header" => {
                 let filled = expand_placeholders(shared, &rule.value);
                 if let Some((name, value)) = filled.split_once(':') {
-                    out = replace_or_add_header(&out, name.trim(), value.trim());
+                    out = crate::util::replace_or_add_header(&out, name.trim(), value.trim());
                     shared.log(&format!(
                         "Session rule '{}' set {} header",
                         rule.name,

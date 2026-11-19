@@ -407,7 +407,7 @@ impl RequestCheck for SpoofableClientIp {
             return;
         }
         let without = without_header(cx.req.as_bytes(), "X-Forwarded-For");
-        let with = crate::net::replace_or_add_header(&without, "X-Forwarded-For", "127.0.0.1");
+        let with = crate::util::replace_or_add_header(&without, "X-Forwarded-For", "127.0.0.1");
         let fp = crate::variations::fingerprint;
         let (Some(a0), Some(b0)) = (burp_send(cx, &without), burp_send(cx, &with)) else {
             return;

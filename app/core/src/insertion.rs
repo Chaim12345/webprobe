@@ -1576,7 +1576,7 @@ pub(crate) fn inject(req: &str, ip: &InsertionPoint, value: &str) -> String {
         // Multipart content is sent raw, like a browser would.
         IpKind::Multipart { index, .. } => with_multipart_part(req, *index, encoded, None, None),
         IpKind::Cookie => with_cookie(req, &ip.name, &cookie_value(encoded)),
-        IpKind::Header => String::from_utf8_lossy(&net::replace_or_add_header(
+        IpKind::Header => String::from_utf8_lossy(&crate::util::replace_or_add_header(
             req.as_bytes(),
             &ip.name,
             &header_value(encoded),
