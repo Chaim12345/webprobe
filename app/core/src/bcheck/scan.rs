@@ -432,6 +432,10 @@ pub(crate) fn bcheck_passive_issues(shared: &Shared, e: &HistEntry) -> Vec<ScanI
 
 /// Reset the per-scan host/path claim set (called when a scan claims the
 /// scanner).
+/// Parsed-definition cache slot on `Shared` (clippy type_complexity).
+pub type BcheckDefsCache =
+    std::sync::Mutex<Option<(Vec<String>, std::sync::Arc<Vec<crate::bcheck::Definition>>)>>;
+
 pub(crate) fn reset_scan_state(shared: &Shared) {
     shared.bcheck_ran.lock().unwrap().clear();
     *shared.bcheck_defs.lock().unwrap() = None;

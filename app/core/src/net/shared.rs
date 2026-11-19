@@ -62,7 +62,7 @@ pub struct Shared {
     /// parsing every source per audited request was pure waste. Reset
     /// per scan claim (config changes are picked up by the sources
     /// comparison either way).
-    pub bcheck_defs: Mutex<Option<(Vec<String>, std::sync::Arc<Vec<crate::bcheck::Definition>>)>>,
+    pub bcheck_defs: crate::bcheck::scan::BcheckDefsCache,
     /// Passive-scan state across responses (password fields and values
     /// per host); project-scoped, cleared on project load.
     pub passive: crate::passive_state::PassiveState,
@@ -244,7 +244,7 @@ impl Shared {
             oob: Default::default(),
             stored: Default::default(),
             bcheck_ran: Mutex::new(std::collections::HashSet::new()),
-            bcheck_defs: Mutex::new(None),
+            bcheck_defs: std::sync::Mutex::new(None),
             passive: Default::default(),
             rep: Default::default(),
             scan_enabled: AtomicBool::new(true),

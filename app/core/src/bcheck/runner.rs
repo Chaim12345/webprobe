@@ -65,7 +65,7 @@ pub fn run_definition(
         if let Some(ip) = ip {
             cx.insertion_point_base_value = Some(ip.base_value.clone());
         }
-        cx.collaborator = collab.take().map(|c| c);
+        cx.collaborator = collab.take();
         for (name, value) in &tuple {
             let v = resolve_value(&mut cx, value)?;
             cx.vars.insert(name.clone(), v);
@@ -281,7 +281,7 @@ fn parse_raw_request(text: &str, base: &RequestData) -> Result<RequestData, Exec
                     .find("://")
                     .map(|i| &base.url[i + 3..])
                     .unwrap_or(base.url.as_str());
-                let end = rest.find(|c| c == '/' || c == '?').unwrap_or(rest.len());
+                let end = rest.find(['/', '?']).unwrap_or(rest.len());
                 rest[..end].to_string()
             }
         };
