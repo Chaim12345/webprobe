@@ -789,12 +789,30 @@ pub(crate) fn reset_dom_analysis_cache() {
     }
 }
 
-fn dom_analysis_hits(cx: &ScanCtx) -> (Vec<crate::crawl::DomHit>, bool) {
+/// Follow-up GET for the DOM probes, in the audited request's session:
+/// cookies/authorization and the other original headers ride along, only
+/// the path changes. A bare GET would never see the authenticated page,
+/// where these variants usually live. Hop-by-hop and body headers are
+/// dropped (the follow-up has no body).
+fn authed_get(cx: &ScanCtx, path_query: &str) -> Vec<u8> {
+    let mut raw = format!("GET {path_query} HTTP/1.1\r\nHost: {}\r\n", cx.host_hdr);
+    for (k, v) in &cx.parts.headers {
+        let kl = k.to_ascii_lowercase();
+        if matches!(kl.as_str(), "host" | "connection" | "content-length" | "content-type" | "accept-encoding") {
+            continue;
+        }
+        raw.push_str(&format!("{k}: {v}\r\n"));
+    }
+    raw.push_str("Connection: close\r\n\r\n");
+    raw.into_bytes()
+}
+
+fn dom_analysis_hits(cx: &ScanCtx) -> (Vec<crate::crawl::DomHit>, Option<String>) {
     // Dynamic analysis runs on pages: the baseline must be HTML.
     let rp = util::parse_http(&cx.baseline.raw);
     let ct = util::get_header(&rp.headers, "Content-Type").unwrap_or_default();
     if !ct.to_ascii_lowercase().contains("html") {
-        return (Vec::new(), false);
+        return (Vec::new(), None);
     }
     let scheme = if cx.entry.https { "https" } else { "http" };
     let default = if cx.entry.https { 443 } else { 80 };
