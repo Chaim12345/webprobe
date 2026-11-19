@@ -53,7 +53,7 @@ pub fn start_active_scan(
     }
     // Claim the scanner before touching its progress: a refused second
     // scan must not reset the running one's counters.
-    let Some(guard) = crate::scan_run::try_claim(&shared) else {
+    let Some(guard) = crate::scan_run::try_claim(&shared.scan) else {
         shared.log("Scanner: a scan is already running");
         return;
     };
@@ -225,7 +225,7 @@ pub fn run_stored_stage_claimed(shared: &Arc<Shared>) {
     if shared.stored.pairs().is_empty() {
         return;
     }
-    let Some(guard) = crate::scan_run::try_claim(shared) else {
+    let Some(guard) = crate::scan_run::try_claim(&shared.scan) else {
         return;
     };
     shared.scan.done.store(0, Ordering::SeqCst);

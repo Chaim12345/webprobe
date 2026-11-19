@@ -51,7 +51,7 @@ pub struct Shared {
     pub tool_sends: Mutex<Vec<crate::ext_calls::ToolSend>>,
     pub scan_enabled: AtomicBool,
     /// The active scanner's run state (claim, stop, pause, progress).
-    pub scan: crate::scan_run::ScanRun,
+    pub scan: Arc<crate::scan_run::ScanRun>,
     /// Collaborator ids: the payload pool, registered ids and matching.
     pub oob: crate::oob::OobState,
     /// Stored input pairing of the current scan run (D-10).
