@@ -454,9 +454,9 @@ pub(crate) fn everywhere_probes(host_hdr: &str, host: &str, port: u16, direct: b
     out
 }
 
-pub(crate) fn everywhere_hosts() -> &'static std::sync::Mutex<std::collections::HashSet<String>> {
-    static H: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
-    H.get_or_init(|| std::sync::Mutex::new(std::collections::HashSet::new()))
+pub(crate) fn everywhere_hosts() -> &'static crate::sync::Mutex<std::collections::HashSet<String>> {
+    static H: std::sync::OnceLock<crate::sync::Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
+    H.get_or_init(|| crate::sync::Mutex::new(std::collections::HashSet::new()))
 }
 
 /// burp.Zc7h (APH_CollaboratorEverywhere), once per host: Collaborator

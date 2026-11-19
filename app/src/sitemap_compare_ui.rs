@@ -6,7 +6,8 @@
 //! background thread.
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use webprobe_core::sync::Mutex;
 
 use eframe::egui::{self, RichText};
 use webprobe_core::net::HistEntry;

@@ -241,7 +241,7 @@ mod tests {
         use std::io::{Read, Write};
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
-        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let seen = Arc::new(crate::sync::Mutex::new(Vec::new()));
         let s2 = seen.clone();
         std::thread::spawn(move || {
             for mut s in listener.incoming().flatten() {

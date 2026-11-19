@@ -267,8 +267,8 @@ pub(crate) struct WebCachePoisoning;
 
 const URL_OVERRIDE: &str = "Request URL override";
 
-fn known_overrides() -> &'static std::sync::Mutex<std::collections::HashSet<String>> {
-    static S: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
+fn known_overrides() -> &'static crate::sync::Mutex<std::collections::HashSet<String>> {
+    static S: std::sync::OnceLock<crate::sync::Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
     S.get_or_init(Default::default)
 }
 

@@ -1167,9 +1167,9 @@ pub(crate) fn reset_openapi_hosts() {
     checks::everywhere_hosts().lock().unwrap().clear();
 }
 
-fn openapi_hosts() -> &'static std::sync::Mutex<std::collections::HashSet<String>> {
-    static H: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
-    H.get_or_init(|| std::sync::Mutex::new(std::collections::HashSet::new()))
+fn openapi_hosts() -> &'static crate::sync::Mutex<std::collections::HashSet<String>> {
+    static H: std::sync::OnceLock<crate::sync::Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
+    H.get_or_init(|| crate::sync::Mutex::new(std::collections::HashSet::new()))
 }
 
 fn raw_header_lines(resp: &[u8]) -> Vec<String> {

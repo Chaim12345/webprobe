@@ -8,7 +8,7 @@
 //! (burp.Zcn0.ZG / Zc / ZW).
 
 use std::collections::BTreeMap;
-use std::sync::Mutex;
+use crate::sync::Mutex;
 
 /// A password value submitted to a known password field.
 #[derive(Clone, Debug, PartialEq)]

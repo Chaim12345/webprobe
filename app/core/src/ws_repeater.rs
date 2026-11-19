@@ -11,7 +11,8 @@
 
 use std::io::Read;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{mpsc, Arc};
+use crate::sync::Mutex;
 
 use crate::net::{self, Shared};
 
@@ -59,16 +60,16 @@ pub struct WsSession {
 
 impl WsSession {
     pub fn state(&self) -> WsRepState {
-        self.state.lock().unwrap_or_else(|p| p.into_inner()).clone()
+        self.state.lock().unwrap().clone()
     }
 
     fn set_state(&self, s: WsRepState) {
-        *self.state.lock().unwrap_or_else(|p| p.into_inner()) = s;
+        *self.state.lock().unwrap() = s;
         self.stamp.fetch_add(1, Ordering::SeqCst);
     }
 
     pub fn messages(&self) -> Vec<WsRepMessage> {
-        self.messages.lock().unwrap_or_else(|p| p.into_inner()).clone()
+        self.messages.lock().unwrap().clone()
     }
 
     /// Changes whenever the state or the message list changes.
@@ -77,7 +78,7 @@ impl WsSession {
     }
 
     fn push(&self, m: WsRepMessage) {
-        self.messages.lock().unwrap_or_else(|p| p.into_inner()).push(m);
+        self.messages.lock().unwrap().push(m);
         self.stamp.fetch_add(1, Ordering::SeqCst);
     }
 
@@ -128,7 +129,7 @@ pub fn from_history(shared: &Shared, socket: u64, host: &str, tls_hint: bool) ->
 /// Burp's "Clone": a new session with the same target and upgrade request,
 /// on a connection of its own.
 pub fn clone_session(shared: &Shared, s: &WsSession) -> Arc<WsSession> {
-    let hs = s.handshake.lock().unwrap_or_else(|p| p.into_inner()).clone();
+    let hs = s.handshake.lock().unwrap().clone();
     new_session(shared, &s.host, s.port, s.tls, &hs, None)
 }
 
@@ -142,7 +143,7 @@ pub fn connect(shared: &Arc<Shared>, s: &Arc<WsSession>) -> Result<(), String> {
     close(s);
     let generation = s.generation.fetch_add(1, Ordering::SeqCst) + 1;
     s.set_state(WsRepState::Connecting);
-    let hs = s.handshake.lock().unwrap_or_else(|p| p.into_inner()).replace("\r\n", "\n").replace('\n', "\r\n");
+    let hs = s.handshake.lock().unwrap().replace("\r\n", "\n").replace('\n', "\r\n");
     let hs = if hs.ends_with("\r\n\r\n") { hs } else { format!("{}\r\n\r\n", hs.trim_end()) };
     let (mut conn, _resp) = match net::ws_client_connect(shared, &s.host, s.port, s.tls, hs.as_bytes()) {
         Ok(c) => c,
@@ -154,8 +155,8 @@ pub fn connect(shared: &Arc<Shared>, s: &Arc<WsSession>) -> Result<(), String> {
     conn.set_nonblocking(true).map_err(|e| e.to_string())?;
     let (tx, rx) = mpsc::channel::<Vec<u8>>();
     let stop = Arc::new(AtomicBool::new(false));
-    *s.out.lock().unwrap_or_else(|p| p.into_inner()) = Some(tx);
-    *s.stop.lock().unwrap_or_else(|p| p.into_inner()) = Some(Arc::clone(&stop));
+    *s.out.lock().unwrap() = Some(tx);
+    *s.stop.lock().unwrap() = Some(Arc::clone(&stop));
     s.set_state(WsRepState::Connected);
     let (session, shared) = (Arc::clone(s), Arc::clone(shared));
     std::thread::spawn(move || {
@@ -262,7 +263,7 @@ pub fn send(shared: &Shared, s: &WsSession, to_server: bool, binary: bool, paylo
             if !to_server {
                 return Err("A connection opened from Repeater can only send to the server".into());
             }
-            let out = s.out.lock().unwrap_or_else(|p| p.into_inner()).clone().ok_or("Not connected")?;
+            let out = s.out.lock().unwrap().clone().ok_or("Not connected")?;
             if s.state() != WsRepState::Connected {
                 return Err("Not connected".into());
             }
@@ -275,10 +276,10 @@ pub fn send(shared: &Shared, s: &WsSession, to_server: bool, binary: bool, paylo
 
 /// Close the session's own connection (attached sessions just detach).
 pub fn close(s: &WsSession) {
-    if let Some(stop) = s.stop.lock().unwrap_or_else(|p| p.into_inner()).take() {
+    if let Some(stop) = s.stop.lock().unwrap().take() {
         stop.store(true, Ordering::SeqCst);
     }
-    *s.out.lock().unwrap_or_else(|p| p.into_inner()) = None;
+    *s.out.lock().unwrap() = None;
 }
 
 /// Parse "41 42 ff" / "4142ff" hex into bytes (the binary editor).

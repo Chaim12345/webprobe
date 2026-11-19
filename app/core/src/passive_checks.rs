@@ -366,8 +366,8 @@ pub(crate) const CH_JWT_PRIVATE_KEY: CheckDef = CheckDef { id: "passive.jwt-priv
 /// Tokens already tried against the secret list (Burp's Zbpi dedupe), so
 /// one token seen in many requests is brute-forced once.
 fn jwt_tried(raw: &str) -> bool {
-    static TRIED: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
-    let mut t = TRIED.lock().unwrap_or_else(|p| p.into_inner());
+    static TRIED: crate::sync::Mutex<Vec<String>> = crate::sync::Mutex::new(Vec::new());
+    let mut t = TRIED.lock().unwrap();
     if t.iter().any(|x| x == raw) {
         return true;
     }

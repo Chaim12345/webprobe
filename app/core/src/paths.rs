@@ -305,13 +305,13 @@ impl Lookup {
     /// launches in this process wait for one compile instead of racing.
     pub fn montoya_bridge_classes(&self, java: &Path, api_jar: &Path) -> Result<PathBuf, String> {
         use std::hash::{Hash, Hasher};
-        static COMPILING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        static COMPILING: crate::sync::Mutex<()> = crate::sync::Mutex::new(());
         let main = self.montoya_bridge_source().map_err(|e| format!("could not write the Montoya bridge source: {e}"))?;
         let dir = main.parent().map(Path::to_path_buf).unwrap_or_default();
         let mut h = std::collections::hash_map::DefaultHasher::new();
         (MONTOYA_BRIDGE_SOURCES, java, api_jar, std::fs::metadata(java).and_then(|m| m.modified()).ok()).hash(&mut h);
         let out = dir.join(format!("classes-{:016x}", h.finish()));
-        let _one = COMPILING.lock().unwrap_or_else(|p| p.into_inner());
+        let _one = COMPILING.lock().unwrap();
         if out.join("MontoyaBridge.class").is_file() {
             mark_used(&out);
             prune_bridge_classes(&dir, &out);

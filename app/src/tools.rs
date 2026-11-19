@@ -1742,8 +1742,8 @@ pub fn autosave_project(app: &mut App) {
 
 type SaveResult = (String, bool, Result<(), String>);
 
-fn save_results() -> &'static std::sync::Mutex<Vec<SaveResult>> {
-    static R: std::sync::OnceLock<std::sync::Mutex<Vec<SaveResult>>> = std::sync::OnceLock::new();
+fn save_results() -> &'static webprobe_core::sync::Mutex<Vec<SaveResult>> {
+    static R: std::sync::OnceLock<webprobe_core::sync::Mutex<Vec<SaveResult>>> = std::sync::OnceLock::new();
     R.get_or_init(Default::default)
 }
 
