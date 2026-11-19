@@ -495,15 +495,13 @@ impl Run {
                     }
                 }
             }
-            if !case_known {
-                if let Some(f) = found_files.first() {
-                    let upper = flip_case(f);
-                    if upper != *f {
-                        if let Some((sig, _, _)) = self.probe(&upper) {
-                            case_insensitive = !is_like_baseline(sig, Some(file_base));
-                            case_known = true;
-                        }
-                    }
+            if !case_known && let Some(f) = found_files.first() {
+                let upper = flip_case(f);
+                if upper != *f
+                    && let Some((sig, _, _)) = self.probe(&upper)
+                {
+                    case_insensitive = !is_like_baseline(sig, Some(file_base));
+                    case_known = true;
                 }
             }
             let vars: Vec<(String, bool)> = found_files
@@ -876,11 +874,10 @@ pub fn discovery_window(app: &mut crate::App, ctx: &egui::Context) {
             ui.horizontal(|ui| {
                 // burp.Zrfz "Discovery session status" toggle.
                 if running {
-                    if ui.button("Session is running").on_hover_text("Stop the discovery session").clicked() {
-                        if let Some(r) = &d.run {
+                    if ui.button("Session is running").on_hover_text("Stop the discovery session").clicked()
+                        && let Some(r) = &d.run {
                             r.stop.store(true, Ordering::SeqCst);
                         }
-                    }
                 } else if ui.button("Session is not running").on_hover_text("Start the discovery session").clicked() {
                     start_now = true;
                 }

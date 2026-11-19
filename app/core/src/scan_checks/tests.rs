@@ -320,10 +320,16 @@ fn r10_host_checks_against_a_live_lab() {
                         .to_string()
                 } else if method == "GET" && path == "/trace.axd" {
                     let b = "<html><body><span class=\"tracecontent\">trace</span></body></html>";
-                    format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{b}", b.len())
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{b}",
+                        b.len()
+                    )
                 } else if method == "DEBUG" {
                     let b = "DebugSessionID corrupted or not provided.";
-                    format!("HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{b}", b.len())
+                    format!(
+                        "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{b}",
+                        b.len()
+                    )
                 } else if method == "GET" {
                     match files.lock().unwrap().get(&path) {
                         Some(b) => format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", b.len(), String::from_utf8_lossy(b)),
@@ -496,10 +502,15 @@ fn r10_graphql_checks_against_a_live_lab() {
                 "application/json",
             )
         };
-        format!("HTTP/1.1 200 OK\r\nContent-Type: {ct}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: {ct}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
     let host = format!("127.0.0.1:{port}");
-    let req = format!("POST /graphql HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 32\r\n\r\n{{\"query\":\"query{{ user {{ name }} }}\"}}");
+    let req = format!(
+        "POST /graphql HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: 32\r\n\r\n{{\"query\":\"query{{ user {{ name }} }}\"}}"
+    );
     let got = lab_scan(
         port,
         &[
@@ -551,7 +562,10 @@ fn r10_spoofable_ip_and_backup_file_against_a_live_lab() {
             "/files/index.php~" => ("200 OK", "<?php // backup source ?>".to_string()),
             _ => ("404 Not Found", String::new()),
         };
-        format!("HTTP/1.1 {status}\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        format!(
+            "HTTP/1.1 {status}\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
     let host = format!("127.0.0.1:{port}");
     let req = format!("GET /files/index.php HTTP/1.1\r\nHost: {host}\r\n\r\n");
@@ -584,10 +598,8 @@ fn cache_lab(cache: bool) -> u16 {
     >::new()));
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     lab_serve(l, move |_method, target, raw| {
-        if cache {
-            if let Some(hit) = store.lock().unwrap().get(target) {
-                return hit.clone();
-            }
+        if cache && let Some(hit) = store.lock().unwrap().get(target) {
+            return hit.clone();
         }
         let xfh = raw
             .lines()
@@ -601,7 +613,10 @@ fn cache_lab(cache: bool) -> u16 {
         let body = format!(
             "<html><head><script src=\"//{xfh}/app.js\"></script></head><body>home</body></html>"
         );
-        let resp = format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nCache-Control: public, max-age=60\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+        let resp = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nCache-Control: public, max-age=60\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
         if cache {
             store
                 .lock()
@@ -662,7 +677,10 @@ fn r10_el_and_xpath_against_a_live_lab() {
         } else {
             "<html><body>profile page</body></html>".to_string()
         };
-        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
     });
     let host = format!("127.0.0.1:{port}");
     let req = format!("GET /profile?name=x HTTP/1.1\r\nHost: {host}\r\n\r\n");

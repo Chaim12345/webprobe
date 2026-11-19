@@ -531,9 +531,14 @@ fn tokens_are_found_in_headers_cookies_query_and_form() {
     ));
     assert_eq!(found, std::slice::from_ref(&c), "query parameter");
     let body = format!("user=bob&t={d}");
-    let found = tokens_of(&format!("POST /x HTTP/1.1\r\nHost: h\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {}\r\n\r\n{body}", body.len()));
+    let found = tokens_of(&format!(
+        "POST /x HTTP/1.1\r\nHost: h\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {}\r\n\r\n{body}",
+        body.len()
+    ));
     assert_eq!(found, std::slice::from_ref(&d), "form body");
-    let found = tokens_of(&format!("GET /x?a={c} HTTP/1.1\r\nHost: h\r\nX-Custom: {e}\r\nCookie: s={b}\r\nAuthorization: Bearer {a}\r\n\r\n"));
+    let found = tokens_of(&format!(
+        "GET /x?a={c} HTTP/1.1\r\nHost: h\r\nX-Custom: {e}\r\nCookie: s={b}\r\nAuthorization: Bearer {a}\r\n\r\n"
+    ));
     assert_eq!(found.len(), 4);
     for t in [&a, &b, &c, &e] {
         assert!(found.contains(t));
@@ -1205,7 +1210,10 @@ fn active_jwt_applies_only_to_points_holding_a_token() {
     ));
     assert_eq!(q.iter().filter(|b| **b).count(), 1, "cookie: {q:?}");
     let body = format!("{{\"token\":\"{t}\",\"x\":1}}");
-    let q = applies(&format!("POST /x HTTP/1.1\r\nHost: h\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}", body.len()));
+    let q = applies(&format!(
+        "POST /x HTTP/1.1\r\nHost: h\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+        body.len()
+    ));
     assert!(q.iter().any(|b| *b), "JSON member: {q:?}");
     let q = applies("GET /x?a=1&b=2 HTTP/1.1\r\nHost: h\r\nCookie: s=abc\r\n\r\n");
     assert!(q.iter().all(|b| !b), "ordinary values: {q:?}");
@@ -1360,7 +1368,10 @@ fn active_jwt_scan_requests_jku_and_x5u_collaborator_slots() {
         &Default::default(),
     );
     for kind in ["jku", "x5u"] {
-        assert!(slots.contains(&format!("#{k}:{kind}")), "no #{k}:{kind} slot, so a real scan never gets a Collaborator payload for it: {slots:?}");
+        assert!(
+            slots.contains(&format!("#{k}:{kind}")),
+            "no #{k}:{kind} slot, so a real scan never gets a Collaborator payload for it: {slots:?}"
+        );
     }
     // A point that holds no token gets none.
     let req = "GET /me?a=1 HTTP/1.1\r\nHost: h\r\n\r\n";

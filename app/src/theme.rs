@@ -330,10 +330,10 @@ pub fn install_fonts(ctx: &egui::Context) {
     // Phosphor icon font (egui-phosphor): Burp's toolbar glyphs (globe,
     // terminal, search, gear, funnel, check) without drawing them by hand.
     egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
-    if let Some(family) = fonts.families.get_mut(&egui::FontFamily::Proportional) {
-        if !family.iter().any(|name| name == "Hack") {
-            family.push("Hack".to_owned());
-        }
+    if let Some(family) = fonts.families.get_mut(&egui::FontFamily::Proportional)
+        && !family.iter().any(|name| name == "Hack")
+    {
+        family.push("Hack".to_owned());
     }
     ctx.set_fonts(fonts);
 }

@@ -390,10 +390,10 @@ impl Conn {
         if !self.settings_seen && f.ty != FRAME_SETTINGS {
             return err(PROTOCOL_ERROR, "the first frame must be SETTINGS");
         }
-        if let Some((sid, _, _, _)) = &self.block {
-            if f.ty != FRAME_CONTINUATION || f.stream != *sid {
-                return err(PROTOCOL_ERROR, "header block interrupted");
-            }
+        if let Some((sid, _, _, _)) = &self.block
+            && (f.ty != FRAME_CONTINUATION || f.stream != *sid)
+        {
+            return err(PROTOCOL_ERROR, "header block interrupted");
         }
         match f.ty {
             FRAME_SETTINGS => {

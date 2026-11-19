@@ -11,10 +11,10 @@ pub fn content_length(head: &[u8]) -> Option<usize> {
     let s = String::from_utf8_lossy(head);
     for line in s.lines() {
         let lower = line.to_ascii_lowercase();
-        if lower.starts_with("content-length:") {
-            if let Some(v) = line.split(':').nth(1) {
-                return v.trim().parse::<usize>().ok();
-            }
+        if lower.starts_with("content-length:")
+            && let Some(v) = line.split(':').nth(1)
+        {
+            return v.trim().parse::<usize>().ok();
         }
     }
     None

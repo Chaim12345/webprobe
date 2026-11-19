@@ -74,10 +74,9 @@ impl LogQuery {
             .as_deref()
             .map(str::trim)
             .filter(|t| !t.is_empty())
+            && !e.tool.eq_ignore_ascii_case(tool)
         {
-            if !e.tool.eq_ignore_ascii_case(tool) {
-                return false;
-            }
+            return false;
         }
         if let Some(class) = self.status_class {
             let matches_class = e

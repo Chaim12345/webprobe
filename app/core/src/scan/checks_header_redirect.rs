@@ -100,10 +100,10 @@ pub fn redirect_targets(resp: &[u8]) -> Vec<String> {
     let p = util::parse_http(resp);
     let mut out = Vec::new();
     let status: u16 = p.status.trim().parse().unwrap_or(0);
-    if (300..400).contains(&status) {
-        if let Some(l) = util::get_header(&p.headers, "location") {
-            out.push(l.trim().to_string());
-        }
+    if (300..400).contains(&status)
+        && let Some(l) = util::get_header(&p.headers, "location")
+    {
+        out.push(l.trim().to_string());
     }
     let after_url = |s: &str| -> Option<String> {
         let low = s.to_ascii_lowercase();
@@ -124,12 +124,12 @@ pub fn redirect_targets(resp: &[u8]) -> Vec<String> {
         let end = low[m..].find('>').map(|x| x + m).unwrap_or(low.len());
         let tag = &body[m..end];
         let tl = &low[m..end];
-        if tl.contains("http-equiv") && tl.contains("refresh") {
-            if let Some(ci) = tl.find("content") {
-                if let Some(u) = after_url(&tag[ci..]) {
-                    out.push(u.trim_end_matches(['"', '\'', '/', ' ']).to_string());
-                }
-            }
+        if tl.contains("http-equiv")
+            && tl.contains("refresh")
+            && let Some(ci) = tl.find("content")
+            && let Some(u) = after_url(&tag[ci..])
+        {
+            out.push(u.trim_end_matches(['"', '\'', '/', ' ']).to_string());
         }
         i = end.max(m + 5);
     }
@@ -276,17 +276,17 @@ pub fn run_open_redirect_check<F: FnMut(&str) -> Option<Vec<u8>>>(
     }
     // ZR
     let lv = value.to_lowercase();
-    if lv.starts_with("http:") || lv.starts_with("https://") {
-        if let Some((proto, rest)) = value.split_once("://") {
-            let (host, file) = rest
-                .find('/')
-                .map(|i| (&rest[..i], &rest[i..]))
-                .unwrap_or((rest, ""));
-            let host = host.split(':').next().unwrap_or(host);
-            let base = format!("{proto}://{host}.a{}", rnd());
-            if let Some(h) = attempt(format!("{base}{file}"), base) {
-                return Some(h);
-            }
+    if (lv.starts_with("http:") || lv.starts_with("https://"))
+        && let Some((proto, rest)) = value.split_once("://")
+    {
+        let (host, file) = rest
+            .find('/')
+            .map(|i| (&rest[..i], &rest[i..]))
+            .unwrap_or((rest, ""));
+        let host = host.split(':').next().unwrap_or(host);
+        let base = format!("{proto}://{host}.a{}", rnd());
+        if let Some(h) = attempt(format!("{base}{file}"), base) {
+            return Some(h);
         }
     }
     // ZV

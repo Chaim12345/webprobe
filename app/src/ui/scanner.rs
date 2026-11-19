@@ -176,7 +176,10 @@ pub(crate) fn scanner(app: &mut App, ui: &mut Ui) {
             .strong(),
     );
     ui.add_space(2.0);
-    hint(ui, "Every proxied response is audited live (passive checks). Select a request in the history and press Run active scan to send light active probes (URL parameters, max 30).");
+    hint(
+        ui,
+        "Every proxied response is audited live (passive checks). Select a request in the history and press Run active scan to send light active probes (URL parameters, max 30).",
+    );
     // Scan configuration: audit speed / accuracy (AuditDefaults.json keys
     // scan_speed / scan_accuracy; values from burp.Zsv7 and burp.Zgnf).
     ui.horizontal(|ui| {
@@ -419,12 +422,14 @@ pub(crate) fn scanner(app: &mut App, ui: &mut Ui) {
                     .unwrap_or_else(|| format!("http://{}{}", i.host, i.path));
                 ui.ctx().copy_text(url);
             }
-        } else if let Some(ids) = crate::issue_view::apply_issue_action(
-            &mut app.shared.issues.lock().unwrap(),
-            id,
-            &action,
-        ) {
-            report_ids = Some(ids);
+        } else {
+            if let Some(ids) = crate::issue_view::apply_issue_action(
+                &mut app.shared.issues.lock().unwrap(),
+                id,
+                &action,
+            ) {
+                report_ids = Some(ids);
+            }
         }
         if action == crate::issue_view::IssueAction::Delete && app.scan_sel == Some(id) {
             app.scan_sel = None;
@@ -434,31 +439,30 @@ pub(crate) fn scanner(app: &mut App, ui: &mut Ui) {
         app.eng.report.open_for(ids);
     }
 
-    if let Some(id) = app.scan_sel {
-        if let Some(issue) = issues.iter().find(|i| i.id == id).cloned() {
-            ui.add_space(4.0);
-            let label = if issue.false_positive {
-                "False positive"
-            } else {
-                scan_sev_label(&issue.sev)
-            };
-            let colour = if issue.false_positive {
-                theme::ink_faint()
-            } else {
-                scan_sev_color(&issue.sev)
-            };
-            if crate::issue_view::issue_detail(app, ui, &issue, label, colour) {
-                if let Some(it) = app
-                    .shared
-                    .issues
-                    .lock()
-                    .unwrap()
-                    .iter_mut()
-                    .find(|i| i.id == id)
-                {
-                    it.false_positive = !it.false_positive;
-                }
-            }
+    if let Some(id) = app.scan_sel
+        && let Some(issue) = issues.iter().find(|i| i.id == id).cloned()
+    {
+        ui.add_space(4.0);
+        let label = if issue.false_positive {
+            "False positive"
+        } else {
+            scan_sev_label(&issue.sev)
+        };
+        let colour = if issue.false_positive {
+            theme::ink_faint()
+        } else {
+            scan_sev_color(&issue.sev)
+        };
+        if crate::issue_view::issue_detail(app, ui, &issue, label, colour)
+            && let Some(it) = app
+                .shared
+                .issues
+                .lock()
+                .unwrap()
+                .iter_mut()
+                .find(|i| i.id == id)
+        {
+            it.false_positive = !it.false_positive;
         }
     }
 }

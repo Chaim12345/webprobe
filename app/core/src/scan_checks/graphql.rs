@@ -20,10 +20,10 @@ pub(crate) enum GqlStyle {
 pub(crate) fn graphql_query(req: &[u8]) -> Option<(String, GqlStyle)> {
     let p = util::parse_http(req);
     let body = &req[p.head_len.min(req.len())..];
-    if let Ok(serde_json::Value::Object(m)) = serde_json::from_slice::<serde_json::Value>(body) {
-        if let Some(q) = m.get("query").and_then(|q| q.as_str()) {
-            return Some((q.to_string(), GqlStyle::Json));
-        }
+    if let Ok(serde_json::Value::Object(m)) = serde_json::from_slice::<serde_json::Value>(body)
+        && let Some(q) = m.get("query").and_then(|q| q.as_str())
+    {
+        return Some((q.to_string(), GqlStyle::Json));
     }
     let param = |text: &str| {
         text.split('&').find_map(|kv| {
@@ -1351,11 +1351,12 @@ impl PointCheck for PhpCodeInjection {
             send,
             follow,
         );
-        if hit.is_none() {
-            if let Some((id, host)) = &collab {
-                // Raised when the id sees a DNS lookup (burp.Zxvv.ZR).
-                let filename = active_checks::php_upload_filename(orig, &token);
-                let issue = mk_point(
+        if hit.is_none()
+            && let Some((id, host)) = &collab
+        {
+            // Raised when the id sees a DNS lookup (burp.Zxvv.ZR).
+            let filename = active_checks::php_upload_filename(orig, &token);
+            let issue = mk_point(
                     "PHP code injection",
                     "high",
                     "Certain",
@@ -1366,8 +1367,7 @@ impl PointCheck for PhpCodeInjection {
                     ),
                 )
                 .with_evidence(rec.since_last(&filename).into_iter().take(1).collect());
-                cx.shared.oob.register(id.clone(), Some("DNS"), issue);
-            }
+            cx.shared.oob.register(id.clone(), Some("DNS"), issue);
         }
         if let Some(hit) = hit {
             let mut ev = rec.since_last(&hit.filename);
@@ -1664,7 +1664,11 @@ impl PointCheck for SqlErrorInjection {
                 ip.describe_short(false),
                 if general { "general" } else { "database" },
                 // Only a confirmed hit saw the balanced probe come back clean.
-                if hit.confirmed { " Two single quotes were then submitted and the error message disappeared." } else { "" }
+                if hit.confirmed {
+                    " Two single quotes were then submitted and the error message disappeared."
+                } else {
+                    ""
+                }
             );
             let mut i = mk("high", "SQL injection", &cx.entry, text);
             i.confidence = if general {
@@ -2107,13 +2111,19 @@ impl PointCheck for StoredEcho {
                         // "Cross-site scripting (stored)" check).
                         "xss" | "dom" => (
                             "high",
-                            format!("Active probe: stored DOM-based cross-site scripting via parameter {pname}"),
-                            format!("Canary {marker} injected earlier is now reflected into script data or an attribute value of the original URL's response."),
+                            format!(
+                                "Active probe: stored DOM-based cross-site scripting via parameter {pname}"
+                            ),
+                            format!(
+                                "Canary {marker} injected earlier is now reflected into script data or an attribute value of the original URL's response."
+                            ),
                         ),
                         _ => (
                             "medium",
                             format!("Active probe: value of parameter {pname} appears stored"),
-                            format!("Marker {marker} injected earlier shows up in a later response to the original URL (STORED_INPUT)."),
+                            format!(
+                                "Marker {marker} injected earlier shows up in a later response to the original URL (STORED_INPUT)."
+                            ),
                         ),
                     };
                     issues.push(mk(sev, &title, &cx.entry, detail).with_evidence(vec![ev.clone()]));

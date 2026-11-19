@@ -178,17 +178,17 @@ pub enum LineKind {
 /// raw body. Burp's Pretty tab reformats JSON/XML/HTML; JSON is the common case.
 pub fn pretty_body(body: &str) -> String {
     let t = body.trim();
-    if (t.starts_with('{') || t.starts_with('[')) && t.len() < 2_000_000 {
-        if let Ok(v) = serde_json::from_str::<serde_json::Value>(t) {
-            if let Ok(s) = serde_json::to_string_pretty(&v) {
-                return s;
-            }
-        }
+    if (t.starts_with('{') || t.starts_with('['))
+        && t.len() < 2_000_000
+        && let Ok(v) = serde_json::from_str::<serde_json::Value>(t)
+        && let Ok(s) = serde_json::to_string_pretty(&v)
+    {
+        return s;
     }
-    if t.len() < 2_000_000 {
-        if let Some(xml) = pretty_xml(t) {
-            return xml;
-        }
+    if t.len() < 2_000_000
+        && let Some(xml) = pretty_xml(t)
+    {
+        return xml;
     }
     body.to_string()
 }
@@ -303,10 +303,11 @@ fn cached_lines(
     pretty: bool,
 ) -> std::sync::Arc<Vec<(LineKind, String)>> {
     let key = fingerprint(bytes);
-    if let Some((k, p, lines)) = &st.lines_cache {
-        if *k == key && *p == pretty {
-            return lines.clone();
-        }
+    if let Some((k, p, lines)) = &st.lines_cache
+        && *k == key
+        && *p == pretty
+    {
+        return lines.clone();
     }
     let lines = std::sync::Arc::new(message_lines(bytes, pretty));
     st.lines_cache = Some((key, pretty, lines.clone()));
@@ -1018,19 +1019,17 @@ pub fn editable_pane_ex(
                                     || i.pointer.secondary_down()
                                     || i.pointer.secondary_released()
                             });
-                        if secondary {
-                            if let Some((a, b)) = prev_sel.filter(|(a, b)| a < b) {
-                                let mut state = egui::TextEdit::load_state(ui.ctx(), edit_id)
-                                    .unwrap_or_default();
-                                state
-                                    .cursor
-                                    .set_char_range(Some(egui::text::CCursorRange::two(
-                                        egui::text::CCursor::new(a),
-                                        egui::text::CCursor::new(b),
-                                    )));
-                                state.store(ui.ctx(), edit_id);
-                                st.sel = prev_sel;
-                            }
+                        if secondary && let Some((a, b)) = prev_sel.filter(|(a, b)| a < b) {
+                            let mut state =
+                                egui::TextEdit::load_state(ui.ctx(), edit_id).unwrap_or_default();
+                            state
+                                .cursor
+                                .set_char_range(Some(egui::text::CCursorRange::two(
+                                    egui::text::CCursor::new(a),
+                                    egui::text::CCursor::new(b),
+                                )));
+                            state.store(ui.ctx(), edit_id);
+                            st.sel = prev_sel;
                         }
                         if let Some(menu) = menu.as_mut() {
                             let sel = st.sel.and_then(|(a, b)| {
@@ -1039,11 +1038,12 @@ pub fn editable_pane_ex(
                             });
                             out.response.context_menu(|ui| menu(ui, sel));
                         }
-                        if out.response.has_focus() && !secondary {
-                            if let Some(cr) = out.cursor_range {
-                                let [a, b] = cr.sorted_cursors();
-                                st.sel = Some((a.index.0, b.index.0));
-                            }
+                        if out.response.has_focus()
+                            && !secondary
+                            && let Some(cr) = out.cursor_range
+                        {
+                            let [a, b] = cr.sorted_cursors();
+                            st.sel = Some((a.index.0, b.index.0));
                         }
                         // Line numbers: one per logical line, at the row it starts on.
                         let mut n = 1;
@@ -1320,11 +1320,10 @@ pub fn inspector_ex(
                         if row.clicked() {
                             st.edit = if editing { None } else { Some((section, i, k.clone(), v.clone())) };
                         }
-                        if editing {
-                            if let Some(e) = item_editor(ui, st, section) {
+                        if editing
+                            && let Some(e) = item_editor(ui, st, section) {
                                 applied = Some(e);
                             }
-                        }
                     }
                     if can_edit && section.can_add_remove() {
                         let adding = matches!(&st.edit, Some((s, j, _, _)) if *s == section && *j == rows.len());

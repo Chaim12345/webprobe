@@ -89,10 +89,10 @@ impl BrowserRecovery {
         wake();
         let deadline = std::time::Instant::now() + wait;
         loop {
-            if let Some((aid, ok)) = st.answered {
-                if aid == id {
-                    return ok;
-                }
+            if let Some((aid, ok)) = st.answered
+                && aid == id
+            {
+                return ok;
             }
             let left = deadline.saturating_duration_since(std::time::Instant::now());
             if left.is_zero() {

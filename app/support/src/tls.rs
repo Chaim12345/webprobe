@@ -203,15 +203,14 @@ impl MitmAuthority {
     /// Load the CA saved in `dir`, or create one and save it there.
     pub fn load_or_create(dir: Option<std::path::PathBuf>) -> Result<Self, String> {
         let file = dir.as_ref().map(|d| d.join("ca.json"));
-        if let Some(f) = &file {
-            if let Ok(text) =
+        if let Some(f) = &file
+            && let Ok(text) =
                 crate::util::read_text_file_capped(f, crate::util::MAX_TEXT_FILE_BYTES)
-            {
-                match Self::from_saved(&text) {
-                    Ok(ca) => return Ok(ca),
-                    Err(e) => {
-                        eprintln!("webprobe: ignoring unreadable CA file {}: {e}", f.display())
-                    }
+        {
+            match Self::from_saved(&text) {
+                Ok(ca) => return Ok(ca),
+                Err(e) => {
+                    eprintln!("webprobe: ignoring unreadable CA file {}: {e}", f.display())
                 }
             }
         }

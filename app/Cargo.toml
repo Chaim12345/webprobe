@@ -1,7 +1,8 @@
 [package]
 name = "webprobe"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 # SIGTERM / SIGINT close the window cleanly (project saved, no crash prompt).
@@ -64,6 +65,10 @@ debug = "line-tables-only"
 [workspace]
 members = ["core", "support", "report"]
 default-members = [".", "core"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.95"
 
 # Versions shared by webprobe and webprobe-core live here once; members
 # reference them with `workspace = true`. Member-only versions stay in the

@@ -342,7 +342,11 @@ impl WebCachePoisoning {
         let tail = if probe.reflected {
             "A value from these headers was reflected in the response, showing that a header was processed.".to_string()
         } else {
-            format!("This changed the status code from {} to {}, suggesting that the header was processed.", base_status, status_body(&probe.resp).0)
+            format!(
+                "This changed the status code from {} to {}, suggesting that the header was processed.",
+                base_status,
+                status_body(&probe.resp).0
+            )
         };
         let detail = format!(
             "The application appears to support the use of a custom HTTP header to override the {}.<br><br>Burp added the following headers to the request:<br><br>{}<br><br>{tail}",

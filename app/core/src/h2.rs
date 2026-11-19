@@ -414,8 +414,8 @@ impl Rx {
             return Err("h2: header block interrupted before CONTINUATION".into());
         }
         match f.ty {
-            FRAME_SETTINGS => {
-                if f.flags & FLAG_ACK == 0 {
+            FRAME_SETTINGS
+                if f.flags & FLAG_ACK == 0 => {
                     for chunk in f.payload.as_chunks::<6>().0 {
                         let id = u16::from_be_bytes([chunk[0], chunk[1]]);
                         let val = u32::from_be_bytes([chunk[2], chunk[3], chunk[4], chunk[5]]);
@@ -440,7 +440,6 @@ impl Rx {
                     write_frame(stream, FRAME_SETTINGS, FLAG_ACK, 0, &[])
                         .map_err(|e| format!("h2 settings ack: {e}"))?;
                 }
-            }
             FRAME_PING => {
                 if f.payload.len() != 8 {
                     return Err("h2: PING with wrong length".into());
@@ -570,10 +569,10 @@ impl Rx {
                         .map_err(|e| format!("h2 window update: {e}"))?;
                 }
             }
-            FRAME_PUSH_PROMISE => {
+            FRAME_PUSH_PROMISE
                 // We advertised ENABLE_PUSH=0; refuse any promised stream instead
                 // of choking on it (a short payload must not panic).
-                if f.payload.len() >= 4 {
+                if f.payload.len() >= 4 => {
                     let promised = u32::from_be_bytes([
                         f.payload[0],
                         f.payload[1],
@@ -585,7 +584,6 @@ impl Rx {
                             .ok();
                     }
                 }
-            }
             FRAME_PRIORITY => {}
             _ => {}
         }
@@ -790,10 +788,8 @@ pub fn request_from_raw(raw: &[u8], scheme: &str) -> Option<H2Request> {
     let chunked = crate::util::get_header(&parts.headers, "Transfer-Encoding")
         .map(|v| v.to_ascii_lowercase().contains("chunked"))
         .unwrap_or(false);
-    if chunked {
-        if let Some((decoded, _)) = crate::codec::decode_chunked(&body) {
-            body = decoded;
-        }
+    if chunked && let Some((decoded, _)) = crate::codec::decode_chunked(&body) {
+        body = decoded;
     }
     Some(H2Request {
         method: parts.method.clone(),

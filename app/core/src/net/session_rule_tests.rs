@@ -179,7 +179,9 @@ fn header_cookie_and_post_request_actions_apply_in_order() {
             ..rule("set header", "X-Other: 1", &["Intruder"])
         });
     }
-    let req = format!("GET /echo HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nCookie: role=user; lang=en\r\nConnection: close\r\n\r\n");
+    let req = format!(
+        "GET /echo HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nCookie: role=user; lang=en\r\nConnection: close\r\n\r\n"
+    );
     let echoed = {
         let _t = tool_scope("Intruder");
         body(&send_raw(&shared, "127.0.0.1", port, req.as_bytes()))
@@ -220,8 +222,8 @@ fn multi_step_macro_derives_a_token_and_carries_cookies() {
     });
     let shared = Shared::new();
     let text = format!(
-            "###\nGET /form HTTP/1.1\nHost: 127.0.0.1:{port}\n\n### derive=csrf\nPOST /submit HTTP/1.1\nHost: 127.0.0.1:{port}\nContent-Type: application/x-www-form-urlencoded\nContent-Length: 17\n\nuser=a&csrf=stale\n"
-        );
+        "###\nGET /form HTTP/1.1\nHost: 127.0.0.1:{port}\n\n### derive=csrf\nPOST /submit HTTP/1.1\nHost: 127.0.0.1:{port}\nContent-Type: application/x-www-form-urlencoded\nContent-Length: 17\n\nuser=a&csrf=stale\n"
+    );
     let results = run_macro_text(&shared, &text);
     assert_eq!(results.len(), 2);
     assert!(results[0].derived.is_empty());

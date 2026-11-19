@@ -278,12 +278,11 @@ pub(crate) fn links(cx: &PassiveCtx) -> Vec<Link> {
             let Some(v) = attr(lt, t, a) else { continue };
             let v = util::html_decode(&v).trim().replace(' ', "%20");
             let head: String = v.chars().take(12).collect();
-            if let Some(colon) = head.find(':').filter(|&c| c > 0) {
-                if !["http", "https", "ws", "wss"]
+            if let Some(colon) = head.find(':').filter(|&c| c > 0)
+                && !["http", "https", "ws", "wss"]
                     .contains(&head[..colon].to_ascii_lowercase().as_str())
-                {
-                    continue;
-                }
+            {
+                continue;
             }
             if v == "." || v == ".." {
                 continue;
@@ -405,7 +404,10 @@ pub(crate) fn session_token_in_url(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
     }
     let url = page_url(cx.e);
     for n in names {
-        let t = format!("The URL in the request appears to contain a session token within the query string:<ul><li>{}</li></ul>", util::html_encode(&url));
+        let t = format!(
+            "The URL in the request appears to contain a session token within the query string:<ul><li>{}</li></ul>",
+            util::html_encode(&url)
+        );
         v.push(issue(c, cx, c.sev, c.confidence, format!("1|{n}"), t));
     }
     // Links in the response whose query has a session-like parameter.
@@ -516,7 +518,10 @@ pub(crate) fn duplicate_cookies(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
         }
     }
     for (n, _) in groups.into_iter().filter(|(_, vals)| vals.len() > 1) {
-        let t = format!("The application attempted to set the following cookie to multiple values:<ul><li><b>{}</b></li></ul>", util::html_encode(&n));
+        let t = format!(
+            "The application attempted to set the following cookie to multiple values:<ul><li><b>{}</b></li></ul>",
+            util::html_encode(&n)
+        );
         v.push(issue(c, cx, c.sev, c.confidence, n, t));
     }
 }
@@ -536,9 +541,13 @@ fn cookie_text(head: &str, name: &str, session: bool) -> String {
     let name = util::html_encode(name);
     let tail = "You should review the contents of the cookie to determine its function.";
     if session {
-        format!("{head}<li><b>{name}</b></li></ul>The cookie appears to contain a session token, which may increase the risk associated with this issue. {tail}")
+        format!(
+            "{head}<li><b>{name}</b></li></ul>The cookie appears to contain a session token, which may increase the risk associated with this issue. {tail}"
+        )
     } else {
-        format!("{head}<li>{name}</li></ul>The cookie does not appear to contain a session token, which may reduce the risk associated with this issue. {tail}")
+        format!(
+            "{head}<li>{name}</li></ul>The cookie does not appear to contain a session token, which may reduce the risk associated with this issue. {tail}"
+        )
     }
 }
 
@@ -1063,10 +1072,10 @@ fn decoded_param(p: &Param) -> Vec<u8> {
     } else {
         p.raw.as_bytes().to_vec()
     };
-    if is_base64(&b) {
-        if let Ok(d) = util::b64_decode(&latin1(&b)) {
-            return d;
-        }
+    if is_base64(&b)
+        && let Ok(d) = util::b64_decode(&latin1(&b))
+    {
+        return d;
     }
     b
 }
@@ -1439,7 +1448,10 @@ pub(crate) fn db_connection_string(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
     };
     let c = CH_DB_CONNECTION;
     for s in strings {
-        let mut t = format!("The following database connection string was disclosed in the response:<ul><li>{}</li></ul>", util::html_encode(&s));
+        let mut t = format!(
+            "The following database connection string was disclosed in the response:<ul><li>{}</li></ul>",
+            util::html_encode(&s)
+        );
         if flags != 0 {
             t.push_str("The connection string appears to contain:<ul>");
             for (bit, what) in [

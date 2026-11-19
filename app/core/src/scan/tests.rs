@@ -173,7 +173,10 @@ fn live_lab_scan() {
             // 38-byte body, which only worked when a pipelined request
             // supplied the missing byte).
             let body = "<?xml version=\"1.0\"?><a><b>1</b></a>";
-            format!("POST /xml?v=1 HTTP/1.1\r\nHost: {lab}\r\nContent-Type: application/xml\r\nContent-Length: {}\r\n\r\n{body}", body.len())
+            format!(
+                "POST /xml?v=1 HTTP/1.1\r\nHost: {lab}\r\nContent-Type: application/xml\r\nContent-Length: {}\r\n\r\n{body}",
+                body.len()
+            )
         },
     ];
     let mut out = String::new();
@@ -250,15 +253,20 @@ fn live_lab_scan() {
 fn live_send_timing() {
     let shared = net::Shared::new();
     for req in [
-            "GET /rest/products/search?q=apple HTTP/1.1\r\nHost: 127.0.0.1:3001\r\nAccept: application/json\r\nUser-Agent: Mozilla/5.0\r\nConnection: close\r\n\r\n",
-            "GET /rest/products/search?q=apple HTTP/1.1\r\nHost: 127.0.0.1:3001\r\n\r\n",
-        ] {
-            for _ in 0..2 {
-                let t0 = std::time::Instant::now();
-                let up = net::send_raw(&shared, "127.0.0.1", 3001, req.as_bytes());
-                eprintln!("TIMING {} ms len={:?} err={:?}", t0.elapsed().as_millis(), up.resp.as_ref().map(|r| r.len()), up.error);
-            }
+        "GET /rest/products/search?q=apple HTTP/1.1\r\nHost: 127.0.0.1:3001\r\nAccept: application/json\r\nUser-Agent: Mozilla/5.0\r\nConnection: close\r\n\r\n",
+        "GET /rest/products/search?q=apple HTTP/1.1\r\nHost: 127.0.0.1:3001\r\n\r\n",
+    ] {
+        for _ in 0..2 {
+            let t0 = std::time::Instant::now();
+            let up = net::send_raw(&shared, "127.0.0.1", 3001, req.as_bytes());
+            eprintln!(
+                "TIMING {} ms len={:?} err={:?}",
+                t0.elapsed().as_millis(),
+                up.resp.as_ref().map(|r| r.len()),
+                up.error
+            );
         }
+    }
 }
 
 /// Juice Shop coverage parity: crawl and audit from the start URL only,
@@ -323,7 +331,9 @@ fn live_juice_scan() {
     let mut out = String::new();
     for path in paths.lines().map(str::trim).filter(|l| !l.is_empty()) {
         let shared = net::Shared::new();
-        let raw = format!("GET {path} HTTP/1.1\r\nHost: {target}\r\nAccept: */*\r\nUser-Agent: Mozilla/5.0\r\n\r\n");
+        let raw = format!(
+            "GET {path} HTTP/1.1\r\nHost: {target}\r\nAccept: */*\r\nUser-Agent: Mozilla/5.0\r\n\r\n"
+        );
         let resp = net::send_raw(&shared, th, port, raw.as_bytes()).resp;
         let mut entry = HistEntry {
             id: 1,
@@ -456,12 +466,13 @@ fn pct_decode(s: &str) -> Vec<u8> {
     let mut out = Vec::new();
     let mut i = 0;
     while i < b.len() {
-        if b[i] == b'%' && i + 2 < b.len() {
-            if let Ok(v) = u8::from_str_radix(&s[i + 1..i + 3], 16) {
-                out.push(v);
-                i += 3;
-                continue;
-            }
+        if b[i] == b'%'
+            && i + 2 < b.len()
+            && let Ok(v) = u8::from_str_radix(&s[i + 1..i + 3], 16)
+        {
+            out.push(v);
+            i += 3;
+            continue;
         }
         out.push(b[i]);
         i += 1;
@@ -500,9 +511,9 @@ fn active_scan_reports_traversal_against_a_vulnerable_server() {
                 "<html><body>no such page</body></html>".to_string()
             };
             let resp = format!(
-                    "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-                    body.len()
-                );
+                "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
             let _ = s.write_all(resp.as_bytes());
         }
     });
@@ -870,9 +881,9 @@ fn xxe_probe_matches_burp_zge7() {
     let (base, doc, points) = xxe_points(body);
     assert_eq!(points.len(), 1);
     assert_eq!(
-            xxe_probe_at(&base, doc, points[0], "xxeabcde", 1),
-            "<?xml version=\"1.0\"?><!DOCTYPE foo [<!ENTITY xxeabcde SYSTEM \"file:///etc/passwd\"> ]><root><a>1&xxeabcde;</a></root>"
-        );
+        xxe_probe_at(&base, doc, points[0], "xxeabcde", 1),
+        "<?xml version=\"1.0\"?><!DOCTYPE foo [<!ENTITY xxeabcde SYSTEM \"file:///etc/passwd\"> ]><root><a>1&xxeabcde;</a></root>"
+    );
     assert!(xxe_probe_at(&base, doc, points[0], "e", 3).contains("file:///etc/passwdX"));
     // burp.Zmku.ZY: the prolog is only skipped when the body starts with
     // <?xml (after whitespace); a stray ?> elsewhere is ignored.
@@ -2299,10 +2310,16 @@ fn active_scan_finds_stored_xss_and_cookie_xss_on_a_local_server() {
                     g.push_str(&c);
                 }
                 let b = format!("<p>theme {theme}</p>");
-                format!("HTTP/1.1 303 See Other\r\nLocation: /comments\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{b}", b.len())
+                format!(
+                    "HTTP/1.1 303 See Other\r\nLocation: /comments\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{b}",
+                    b.len()
+                )
             } else if target == "/comments" {
                 let b = format!("<html><body><p>{}</p></body></html>", store.lock().unwrap());
-                format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{b}", b.len())
+                format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{b}",
+                    b.len()
+                )
             } else {
                 "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
                     .to_string()
@@ -2311,7 +2328,9 @@ fn active_scan_finds_stored_xss_and_cookie_xss_on_a_local_server() {
         }
     });
     let shared = net::Shared::new();
-    let req = format!("POST /comment HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nCookie: theme=light\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 4\r\n\r\nc=hi");
+    let req = format!(
+        "POST /comment HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nCookie: theme=light\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 4\r\n\r\nc=hi"
+    );
     let mut e = entry("/comment", false, "");
     e.method = "POST".into();
     e.host = "127.0.0.1".into();
@@ -2371,6 +2390,10 @@ fn active_scan_finds_stored_xss_and_cookie_xss_on_a_local_server() {
 /// and DELETE.
 fn characterisation_server() -> u16 {
     use std::io::{Read, Write};
+    static TEMPLATE: std::sync::LazyLock<regex::Regex> =
+        std::sync::LazyLock::new(|| regex::Regex::new(r"\{\{(\d+)\*(\d+)\}\}").unwrap());
+    static CONDITION: std::sync::LazyLock<regex::Regex> =
+        std::sync::LazyLock::new(|| regex::Regex::new(r"or (\d+)=(\d+)").unwrap());
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     let board = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
@@ -2424,7 +2447,10 @@ fn characterisation_server() -> u16 {
                 };
                 let cors = header("Origin").map(|o| format!("Access-Control-Allow-Origin: {o}\r\nAccess-Control-Allow-Credentials: true\r\n")).unwrap_or_default();
                 let ok = |ct: &str, extra: &str, b: &str| {
-                    format!("HTTP/1.1 200 OK\r\nContent-Type: {ct}\r\n{cors}{extra}Content-Length: {}\r\nConnection: close\r\n\r\n{b}", b.len())
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: {ct}\r\n{cors}{extra}Content-Length: {}\r\nConnection: close\r\n\r\n{b}",
+                        b.len()
+                    )
                 };
                 let resp = if method == "TRACE" {
                     ok("message/http", "", &format!("{head}\r\n\r\n"))
@@ -2445,14 +2471,15 @@ fn characterisation_server() -> u16 {
                         .replace('<', "&lt;");
                     let tpl = param("tpl").unwrap_or_default();
                     // A naive template engine: {{a*b}} renders the product.
-                    let tpl = regex::Regex::new(r"\{\{(\d+)\*(\d+)\}\}")
-                        .unwrap()
+                    let tpl = TEMPLATE
                         .replace_all(&tpl, |c: &regex::Captures| {
                             (c[1].parse::<u64>().unwrap_or(0) * c[2].parse::<u64>().unwrap_or(0))
                                 .to_string()
                         })
                         .replace('<', "&lt;");
-                    let mut b = format!("<html><body><h1>Search</h1><p>Results for {q}</p><p>{tpl}</p><script>var sort = \"{sort}\";</script>");
+                    let mut b = format!(
+                        "<html><body><h1>Search</h1><p>Results for {q}</p><p>{tpl}</p><script>var sort = \"{sort}\";</script>"
+                    );
                     if file.ends_with("/etc/passwd") {
                         b.push_str("<pre>root:x:0:0:root:/root:/bin/bash\ndaemon:x:1:1::/:/usr/sbin/nologin\n</pre>");
                     }
@@ -2474,15 +2501,16 @@ fn characterisation_server() -> u16 {
                     let b = if id.matches('\'').count() % 2 == 1 {
                         "<html><body><p>You have an error in your SQL syntax near '' at line 1</p></body></html>"
                     } else {
-                        let cond = regex::Regex::new(r"or (\d+)=(\d+)")
-                            .unwrap()
+                        let cond = CONDITION
                             .captures(&id.replace('\'', ""))
                             .map(|c| c[1].parse::<u64>().ok() == c[2].parse::<u64>().ok());
                         match cond {
-                                Some(true) => "<html><body><ul><li>apple</li><li>banana</li><li>cherry</li></ul></body></html>",
-                                Some(false) => "<html><body><ul></ul></body></html>",
-                                None => "<html><body><ul><li>apple</li></ul></body></html>",
+                            Some(true) => {
+                                "<html><body><ul><li>apple</li><li>banana</li><li>cherry</li></ul></body></html>"
                             }
+                            Some(false) => "<html><body><ul></ul></body></html>",
+                            None => "<html><body><ul><li>apple</li></ul></body></html>",
+                        }
                     };
                     ok("text/html", "", b)
                 } else if path == "/board" {
@@ -2501,7 +2529,10 @@ fn characterisation_server() -> u16 {
                 } else if path == "/go" {
                     let url = param("url").unwrap_or_default();
                     let b = "<html><body>moved</body></html>";
-                    format!("HTTP/1.1 302 Found\r\nLocation: {url}\r\nContent-Type: text/html\r\n{cors}Content-Length: {}\r\nConnection: close\r\n\r\n{b}", b.len())
+                    format!(
+                        "HTTP/1.1 302 Found\r\nLocation: {url}\r\nContent-Type: text/html\r\n{cors}Content-Length: {}\r\nConnection: close\r\n\r\n{b}",
+                        b.len()
+                    )
                 } else if path == "/transfer" {
                     if method == "POST" {
                         ok(
@@ -2510,7 +2541,11 @@ fn characterisation_server() -> u16 {
                             "<html><body><p>Transferred</p></body></html>",
                         )
                     } else {
-                        ok("text/html", "", "<html><body><form method=\"POST\"><input name=\"csrf_token\" value=\"fresh000000\"></form></body></html>")
+                        ok(
+                            "text/html",
+                            "",
+                            "<html><body><form method=\"POST\"><input name=\"csrf_token\" value=\"fresh000000\"></form></body></html>",
+                        )
                     }
                 } else if path == "/xml" && method == "POST" {
                     let b = if body.contains("SYSTEM \"file:///etc/passwd\"") {
@@ -2602,14 +2637,50 @@ fn characterisation_active_scan_issue_list() {
     let form = "amount=10&csrf_token=abcdef123456";
     let xml = "<?xml version=\"1.0\"?><user><n>bob</n></user>";
     let scans: Vec<(&str, &str, String)> = vec![
-            ("GET", "/search?q=hello&file=about.txt&id=1", format!("GET /search?q=hello&file=about.txt&id=1 HTTP/1.1\r\nHost: {host}\r\nOrigin: http://127.0.0.1:{port}\r\n\r\n")),
-            ("GET", "/search?sort=name&tpl=x", format!("GET /search?sort=name&tpl=x HTTP/1.1\r\nHost: {host}\r\n\r\n")),
-            ("GET", "/item?id=5", format!("GET /item?id=5 HTTP/1.1\r\nHost: {host}\r\n\r\n")),
-            ("GET", "/board?msg=hi", format!("GET /board?msg=hi HTTP/1.1\r\nHost: {host}\r\n\r\n")),
-            ("GET", "/go?url=/home", format!("GET /go?url=/home HTTP/1.1\r\nHost: {host}\r\n\r\n")),
-            ("POST", "/transfer", format!("POST /transfer HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {}\r\n\r\n{form}", form.len())),
-            ("POST", "/xml", format!("POST /xml HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/xml\r\nContent-Length: {}\r\n\r\n{xml}", xml.len())),
-        ];
+        (
+            "GET",
+            "/search?q=hello&file=about.txt&id=1",
+            format!(
+                "GET /search?q=hello&file=about.txt&id=1 HTTP/1.1\r\nHost: {host}\r\nOrigin: http://127.0.0.1:{port}\r\n\r\n"
+            ),
+        ),
+        (
+            "GET",
+            "/search?sort=name&tpl=x",
+            format!("GET /search?sort=name&tpl=x HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+        ),
+        (
+            "GET",
+            "/item?id=5",
+            format!("GET /item?id=5 HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+        ),
+        (
+            "GET",
+            "/board?msg=hi",
+            format!("GET /board?msg=hi HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+        ),
+        (
+            "GET",
+            "/go?url=/home",
+            format!("GET /go?url=/home HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+        ),
+        (
+            "POST",
+            "/transfer",
+            format!(
+                "POST /transfer HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {}\r\n\r\n{form}",
+                form.len()
+            ),
+        ),
+        (
+            "POST",
+            "/xml",
+            format!(
+                "POST /xml HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/xml\r\nContent-Length: {}\r\n\r\n{xml}",
+                xml.len()
+            ),
+        ),
+    ];
     for (method, path, req) in scans {
         let mut e = entry(path, false, "");
         e.method = method.into();
@@ -3175,7 +3246,10 @@ fn query_insertion_point() {
 #[test]
 fn multipart_insertion_points_and_file_upload_part() {
     let body = "--XyZ\r\nContent-Disposition: form-data; name=\"title\"\r\n\r\nhello\r\n--XyZ\r\nContent-Disposition: form-data; name=\"doc\"; filename=\"cv.pdf\"\r\nContent-Type: application/pdf\r\n\r\n%PDF-1\r\n--XyZ--\r\n";
-    let req = format!("POST /upload HTTP/1.1\r\nHost: h\r\nContent-Type: multipart/form-data; boundary=XyZ\r\nContent-Length: {}\r\n\r\n{body}", body.len());
+    let req = format!(
+        "POST /upload HTTP/1.1\r\nHost: h\r\nContent-Type: multipart/form-data; boundary=XyZ\r\nContent-Length: {}\r\n\r\n{body}",
+        body.len()
+    );
     let pts: Vec<InsertionPoint> = insertion_points(&req)
         .into_iter()
         .filter(|p| matches!(p.kind, IpKind::Multipart { .. }))
@@ -3423,7 +3497,10 @@ fn same_origin_resolution_keeps_traffic_on_the_target() {
         None,
         "other scheme is another origin"
     );
-    let g = get_request_like("POST /f HTTP/1.1\r\nHost: h\r\nCookie: s=1\r\nContent-Type: a/b\r\nContent-Length: 3\r\n\r\nx=1", "/view");
+    let g = get_request_like(
+        "POST /f HTTP/1.1\r\nHost: h\r\nCookie: s=1\r\nContent-Type: a/b\r\nContent-Length: 3\r\n\r\nx=1",
+        "/view",
+    );
     assert_eq!(g, "GET /view HTTP/1.1\r\nHost: h\r\nCookie: s=1\r\n\r\n");
 }
 
@@ -3698,9 +3775,13 @@ fn guestbook(post_only: bool) -> (u16, std::sync::Arc<std::sync::atomic::AtomicU
                 None
             };
             let resp = match page {
-                    Some(b) => format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{b}", b.len()),
-                    None => "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_string(),
-                };
+                Some(b) => format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{b}",
+                    b.len()
+                ),
+                None => "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    .to_string(),
+            };
             let _ = s.write_all(resp.as_bytes());
         }
     });
@@ -3711,7 +3792,10 @@ fn guestbook_entry(port: u16, method: &str, path: &str, body: &str) -> HistEntry
     let req = if body.is_empty() {
         format!("{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n")
     } else {
-        format!("{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {}\r\n\r\n{body}", body.len())
+        format!(
+            "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {}\r\n\r\n{body}",
+            body.len()
+        )
     };
     HistEntry {
         id: 1,

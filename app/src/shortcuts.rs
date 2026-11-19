@@ -961,10 +961,10 @@ pub fn palette_ui(
         if i.consume_key(Modifiers::NONE, Key::ArrowUp) {
             palette.sel = palette.sel.saturating_sub(1);
         }
-        if i.consume_key(Modifiers::NONE, Key::Enter) {
-            if let Some(&a) = rows.get(palette.sel) {
-                chosen = Some(a);
-            }
+        if i.consume_key(Modifiers::NONE, Key::Enter)
+            && let Some(&a) = rows.get(palette.sel)
+        {
+            chosen = Some(a);
         }
     });
 

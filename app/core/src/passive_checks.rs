@@ -87,7 +87,7 @@ pub(crate) struct PassiveCheck {
 }
 
 macro_rules! unit {
-    ($c:expr, $run:expr) => {
+    ($c:expr_2021, $run:expr_2021) => {
         PassiveCheck {
             id: $c.id,
             issue: $c.name,
@@ -331,10 +331,10 @@ pub(crate) fn forms(text: &str, low: &str) -> Vec<Form> {
                 .map(|x| s + x + 1)
                 .unwrap_or(body_low.len());
             let (lt, t) = (&body_low[s..e], &body[s..e]);
-            if attr(lt, t, "type").is_some_and(|ty| ty.trim().eq_ignore_ascii_case("password")) {
-                if let Some(n) = attr(lt, t, "name") {
-                    passwords.push(n);
-                }
+            if attr(lt, t, "type").is_some_and(|ty| ty.trim().eq_ignore_ascii_case("password"))
+                && let Some(n) = attr(lt, t, "name")
+            {
+                passwords.push(n);
             }
             j = e;
         }
@@ -661,7 +661,14 @@ fn find_ssns(b: &[u8]) -> Vec<String> {
 /// (Zcuc.Zm sets PERVASIVE_ISSUE_IDENTIFIER to the number).
 fn ssn(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
     for s in find_ssns(cx.body) {
-        let mut i = mk_check(CH_SSN, cx.e, format!("The following social security number was disclosed in the response:<ul><li>{}</li></ul>", util::html_encode(&s)));
+        let mut i = mk_check(
+            CH_SSN,
+            cx.e,
+            format!(
+                "The following social security number was disclosed in the response:<ul><li>{}</li></ul>",
+                util::html_encode(&s)
+            ),
+        );
         i.ident = s;
         v.push(i);
     }
@@ -679,7 +686,9 @@ fn password_get(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
         if !f.method_get || f.passwords.is_empty() {
             continue;
         }
-        let mut t = String::from("The page contains a form with the following action URL, which is submitted using the GET method:<ul><li>");
+        let mut t = String::from(
+            "The page contains a form with the following action URL, which is submitted using the GET method:<ul><li>",
+        );
         t.push_str(&util::html_encode(&resolve(&base, &f.action)));
         t.push_str("</li></ul>The form contains the following password ");
         t.push_str(if f.passwords.len() == 1 {
@@ -731,12 +740,22 @@ fn mime(cx: &PassiveCtx, v: &mut Vec<ScanIssue>, which: CheckDef) {
         .into_iter()
         .filter(|i| i.id == which.id)
     {
-        let mut issue = mk_check(i, cx.e, match i.id {
-            "passive.html-no-charset" => "The response states the content type as HTML but does not specify a character set.",
-            "passive.html-unrecognized-charset" => "The response specifies a character set that is not a recognized standard one.",
-            "passive.content-type-missing" => "The response does not contain a Content-Type header.",
-            _ => "The response contains multiple Content-Type statements.",
-        });
+        let mut issue = mk_check(
+            i,
+            cx.e,
+            match i.id {
+                "passive.html-no-charset" => {
+                    "The response states the content type as HTML but does not specify a character set."
+                }
+                "passive.html-unrecognized-charset" => {
+                    "The response specifies a character set that is not a recognized standard one."
+                }
+                "passive.content-type-missing" => {
+                    "The response does not contain a Content-Type header."
+                }
+                _ => "The response contains multiple Content-Type statements.",
+            },
+        );
         issue.confidence = "Certain".into();
         v.push(issue);
     }
@@ -870,14 +889,15 @@ fn server_version(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
 }
 
 fn x_powered_by(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
-    if cx.ok_status && cx.html {
-        if let Some(xpb) = util::get_header(&cx.p.headers, "X-Powered-By") {
-            v.push(mk_check(
-                CH_XPB,
-                cx.e,
-                format!("X-Powered-By header: {xpb}"),
-            ));
-        }
+    if cx.ok_status
+        && cx.html
+        && let Some(xpb) = util::get_header(&cx.p.headers, "X-Powered-By")
+    {
+        v.push(mk_check(
+            CH_XPB,
+            cx.e,
+            format!("X-Powered-By header: {xpb}"),
+        ));
     }
 }
 
@@ -961,10 +981,10 @@ fn cors(cx: &PassiveCtx, v: &mut Vec<ScanIssue>, which: CheckDef) {
     } else {
         None
     };
-    if let Some((c, detail)) = found {
-        if c.id == which.id {
-            v.push(mk_check(c, cx.e, detail));
-        }
+    if let Some((c, detail)) = found
+        && c.id == which.id
+    {
+        v.push(mk_check(c, cx.e, detail));
     }
 }
 
@@ -1396,7 +1416,12 @@ mod tests {
 
     #[test]
     fn csp_untrusted_scripts() {
-        let v = only(&page("default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; frame-ancestors 'none'"), csp::CSP_UNTRUSTED_SCRIPTS);
+        let v = only(
+            &page(
+                "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; frame-ancestors 'none'",
+            ),
+            csp::CSP_UNTRUSTED_SCRIPTS,
+        );
         assert_eq!(v.len(), 1);
         assert!(
             v[0].detail
@@ -1499,7 +1524,10 @@ mod tests {
         let body = "<html><form action=\"/login\"><input type=\"text\" name=\"user\"><input type=\"password\" name=\"pw\"></form></html>";
         let v = only(&ex("/account/", false, HTML, body), CH_PASSWORD_GET);
         assert_eq!(v.len(), 1);
-        assert_eq!(v[0].detail, "The page contains a form with the following action URL, which is submitted using the GET method:<ul><li>http://example.com/login</li></ul>The form contains the following password field:<ul><li>pw</li></ul>");
+        assert_eq!(
+            v[0].detail,
+            "The page contains a form with the following action URL, which is submitted using the GET method:<ul><li>http://example.com/login</li></ul>The form contains the following password field:<ul><li>pw</li></ul>"
+        );
         let post = body.replace("<form ", "<form method=\"POST\" ");
         assert!(only(&ex("/account/", false, HTML, &post), CH_PASSWORD_GET).is_empty());
         // A password input without a name is not submitted.
@@ -1557,7 +1585,10 @@ mod tests {
             v.iter().map(|i| i.ident.as_str()).collect::<Vec<_>>(),
             ["123-45-6789", "234 56 7890"]
         );
-        assert_eq!(v[0].detail, "The following social security number was disclosed in the response:<ul><li>123-45-6789</li></ul>");
+        assert_eq!(
+            v[0].detail,
+            "The following social security number was disclosed in the response:<ul><li>123-45-6789</li></ul>"
+        );
         for neg in [
             "078-05-1120",
             "666-12-3456",
@@ -1704,7 +1735,12 @@ mod tests {
             v[0].detail
         );
         // HTML page: the script tags' src.
-        let v = vuln_js(&ex("/", true, HTML, "<html><script src=\"/js/wpfixture-1.0.0.js\"></script><script src='/js/safelib-0.1.js'></script></html>"));
+        let v = vuln_js(&ex(
+            "/",
+            true,
+            HTML,
+            "<html><script src=\"/js/wpfixture-1.0.0.js\"></script><script src='/js/safelib-0.1.js'></script></html>",
+        ));
         assert_eq!(v.len(), 1);
         assert!(v[0].detail.contains("<strong>1.0.0</strong>"));
     }
@@ -1825,7 +1861,9 @@ mod tests {
 
     #[test]
     fn cookie_flags_one_issue_per_cookie() {
-        let h = format!("{HTML}Set-Cookie: sessionid=abcdef; Path=/\r\nSet-Cookie: theme=darkmode\r\nSet-Cookie: x=ab\r\n");
+        let h = format!(
+            "{HTML}Set-Cookie: sessionid=abcdef; Path=/\r\nSet-Cookie: theme=darkmode\r\nSet-Cookie: x=ab\r\n"
+        );
         let sec = only(&ex("/", true, &h, "x"), CH_COOKIE_SECURE);
         assert_eq!(
             names(&sec),
@@ -1849,7 +1887,10 @@ mod tests {
             ),
             ("medium", "Firm", "info", "Certain")
         );
-        assert_eq!(sec[1].detail, "The following cookie was issued by the application and does not have the secure flag set:<ul><li>theme</li></ul>The cookie does not appear to contain a session token, which may reduce the risk associated with this issue. You should review the contents of the cookie to determine its function.");
+        assert_eq!(
+            sec[1].detail,
+            "The following cookie was issued by the application and does not have the secure flag set:<ul><li>theme</li></ul>The cookie does not appear to contain a session token, which may reduce the risk associated with this issue. You should review the contents of the cookie to determine its function."
+        );
         let ho = only(&ex("/", true, &h, "x"), CH_COOKIE_HTTPONLY);
         assert_eq!(
             (ho.len(), ho[0].sev.as_str(), ho[0].confidence.as_str()),
@@ -1957,7 +1998,10 @@ mod tests {
                 "1|sessionid".to_string()
             )]
         );
-        assert_eq!(v[0].detail, "The URL in the request appears to contain a session token within the query string:<ul><li>https://example.com/app?sessionid=abc123&amp;x=1</li></ul>");
+        assert_eq!(
+            v[0].detail,
+            "The URL in the request appears to contain a session token within the query string:<ul><li>https://example.com/app?sessionid=abc123&amp;x=1</li></ul>"
+        );
         assert_eq!(
             (v[0].sev.as_str(), v[0].confidence.as_str()),
             ("medium", "Firm")
@@ -1985,7 +2029,10 @@ mod tests {
                 )
             ]
         );
-        assert_eq!(v[0].detail, "The response contains the following links that appear to contain session tokens:<ul><li>https://example.com/next?JSESSIONID=XYZ123</li></ul>");
+        assert_eq!(
+            v[0].detail,
+            "The response contains the following links that appear to contain session tokens:<ul><li>https://example.com/next?JSESSIONID=XYZ123</li></ul>"
+        );
         for neg in [
             "/app?q=abc123",
             "/app?token=ab",
@@ -2017,7 +2064,10 @@ mod tests {
             names(&v),
             [("Duplicate cookies set".to_string(), "sid".to_string())]
         );
-        assert_eq!(v[0].detail, "The application attempted to set the following cookie to multiple values:<ul><li><b>sid</b></li></ul>");
+        assert_eq!(
+            v[0].detail,
+            "The application attempted to set the following cookie to multiple values:<ul><li><b>sid</b></li></ul>"
+        );
         for neg in [
             "Set-Cookie: sid=1\r\nSet-Cookie: sid=1\r\n",
             "Set-Cookie: a=1\r\nSet-Cookie: b=2\r\n",
@@ -2046,7 +2096,10 @@ mod tests {
                 "cdn.other.net".to_string()
             )]
         );
-        assert_eq!(v[0].detail, "The response dynamically includes the following scripts from other domains:<ul><li>https://cdn.other.net/a.js</li><li>https://cdn.other.net/b.js</li></ul>");
+        assert_eq!(
+            v[0].detail,
+            "The response dynamically includes the following scripts from other domains:<ul><li>https://cdn.other.net/a.js</li><li>https://cdn.other.net/b.js</li></ul>"
+        );
         assert!(only(
             &ex(
                 "/",
@@ -2069,7 +2122,14 @@ mod tests {
 
     #[test]
     fn cookie_scoped_to_parent_domain() {
-        let mut e = ex("/", true, &format!("{HTML}Set-Cookie: sessionid=abcdef; Domain=example.com\r\nSet-Cookie: pref=dark-mode; Domain=.example.com\r\n"), "x");
+        let mut e = ex(
+            "/",
+            true,
+            &format!(
+                "{HTML}Set-Cookie: sessionid=abcdef; Domain=example.com\r\nSet-Cookie: pref=dark-mode; Domain=.example.com\r\n"
+            ),
+            "x",
+        );
         e.host = "www.example.com".into();
         let v = only(&e, pack::CH_COOKIE_PARENT_DOMAIN);
         assert_eq!(
@@ -2094,7 +2154,10 @@ mod tests {
             ),
             ("low", "Firm", "info", "Certain")
         );
-        assert_eq!(v[0].detail, "The following cookie was issued by the application and is scoped to a parent of the issuing domain:<ul><li><b>sessionid</b></li></ul>The cookie appears to contain a session token, which may increase the risk associated with this issue. You should review the contents of the cookie to determine its function.");
+        assert_eq!(
+            v[0].detail,
+            "The following cookie was issued by the application and is scoped to a parent of the issuing domain:<ul><li><b>sessionid</b></li></ul>The cookie appears to contain a session token, which may increase the risk associated with this issue. You should review the contents of the cookie to determine its function."
+        );
         for neg in [
             "sessionid=abcdef; Domain=www.example.com",
             "sessionid=ab; Domain=example.com",
@@ -2113,7 +2176,15 @@ mod tests {
 
     fn post_login(pw: &str, headers: &str, body: &str) -> HistEntry {
         let form = format!("user=bob&pw={pw}");
-        ex_req("/login", &format!("POST /login HTTP/1.1\r\nHost: example.com\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {}\r\n\r\n{form}", form.len()), headers, body)
+        ex_req(
+            "/login",
+            &format!(
+                "POST /login HTTP/1.1\r\nHost: example.com\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {}\r\n\r\n{form}",
+                form.len()
+            ),
+            headers,
+            body,
+        )
     }
 
     fn with_state(e: &HistEntry, st: &crate::passive_state::PassiveState) -> Vec<ScanIssue> {
@@ -2213,7 +2284,10 @@ mod tests {
             pack::CH_SOURCE_CODE,
         );
         assert_eq!(v.len(), 1);
-        assert_eq!(v[0].detail, "The application appears to disclose some server-side source code written in PHP and ASP.");
+        assert_eq!(
+            v[0].detail,
+            "The application appears to disclose some server-side source code written in PHP and ASP."
+        );
         assert_eq!(
             (v[0].sev.as_str(), v[0].confidence.as_str()),
             ("low", "Tentative")
@@ -2337,7 +2411,10 @@ mod tests {
             )]
         );
         assert_eq!(v[0].sev, "medium");
-        assert_eq!(v[0].detail, "The following database connection string was disclosed in the response:<ul><li>server=db01;database=shop;userid=sa;password=hunter2;</li></ul>The connection string appears to contain:<ul><li>Database name or location</li><li>Username</li><li>Password</li></ul>");
+        assert_eq!(
+            v[0].detail,
+            "The following database connection string was disclosed in the response:<ul><li>server=db01;database=shop;userid=sa;password=hunter2;</li></ul>The connection string appears to contain:<ul><li>Database name or location</li><li>Username</li><li>Password</li></ul>"
+        );
         // Only an unvalued known key: info.
         let v = only(
             &ex(

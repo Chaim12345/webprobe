@@ -342,14 +342,13 @@ pub(crate) fn intruder(app: &mut App, ui: &mut Ui) {
                             ui.ctx().send_viewport_cmd(egui::ViewportCommand::RequestPaste);
                         }
                         let pasted: Option<String> = ui.input(|i| i.events.iter().find_map(|e| if let egui::Event::Paste(t) = e { Some(t.clone()) } else { None }));
-                        if let Some(t) = pasted {
-                            if !ui.ctx().egui_wants_keyboard_input() {
+                        if let Some(t) = pasted
+                            && !ui.ctx().egui_wants_keyboard_input() {
                                 let set_n = app.intr_set_sel.min(needed - 1);
                                 let set = &mut app.intr_sets[set_n];
                                 if !set.is_empty() && !set.ends_with('\n') { set.push('\n'); }
                                 set.push_str(&t);
                             }
-                        }
                     }
                     1 => crate::intruder_ui::resource_pool_panel(ui, &mut app.intr_x),
                     _ => {
@@ -404,7 +403,10 @@ pub(crate) fn payload_source_config(ui: &mut Ui, src: &mut intruder::PayloadSour
     match src {
         P::SimpleList { .. } => {}
         P::RuntimeFile { path } => {
-            note(ui, "This payload type lets you configure a file from which to read payload strings at runtime.");
+            note(
+                ui,
+                "This payload type lets you configure a file from which to read payload strings at runtime.",
+            );
             row(ui, "Select file:", |ui| {
                 ui.add(
                     egui::TextEdit::singleline(path)
@@ -421,7 +423,10 @@ pub(crate) fn payload_source_config(ui: &mut Ui, src: &mut intruder::PayloadSour
             min_digits,
             ..
         } => {
-            note(ui, "This payload type generates numeric payloads within a given range and in a specified format.");
+            note(
+                ui,
+                "This payload type generates numeric payloads within a given range and in a specified format.",
+            );
             row(ui, "From:", |ui| {
                 ui.add(egui::DragValue::new(from));
             });
@@ -445,7 +450,10 @@ pub(crate) fn payload_source_config(ui: &mut Ui, src: &mut intruder::PayloadSour
             step_secs,
             format,
         } => {
-            note(ui, "This payload type generates date payloads within a given range and in a specified format (UTC).");
+            note(
+                ui,
+                "This payload type generates date payloads within a given range and in a specified format (UTC).",
+            );
             row(ui, "From (Unix time):", |ui| {
                 ui.add(egui::DragValue::new(from));
             });
@@ -464,7 +472,10 @@ pub(crate) fn payload_source_config(ui: &mut Ui, src: &mut intruder::PayloadSour
             min_len,
             max_len,
         } => {
-            note(ui, "This payload type generates payloads of specified lengths that contain all permutations of a specified character set.");
+            note(
+                ui,
+                "This payload type generates payloads of specified lengths that contain all permutations of a specified character set.",
+            );
             row(ui, "Character set:", |ui| {
                 ui.add(egui::TextEdit::singleline(charset).desired_width(230.0));
             });
@@ -476,7 +487,10 @@ pub(crate) fn payload_source_config(ui: &mut Ui, src: &mut intruder::PayloadSour
             });
         }
         P::NullPayloads { count } => {
-            note(ui, "This payload type generates payloads whose value is an empty string. With no payload markers configured, this can be used to repeatedly issue the base request unmodified.");
+            note(
+                ui,
+                "This payload type generates payloads whose value is an empty string. With no payload markers configured, this can be used to repeatedly issue the base request unmodified.",
+            );
             row(ui, "Generate:", |ui| {
                 ui.add(egui::DragValue::new(count).range(1..=1_000_000));
                 ui.label("payloads");
@@ -490,7 +504,10 @@ pub(crate) fn payload_source_config(ui: &mut Ui, src: &mut intruder::PayloadSour
             propername,
             proper_name,
         } => {
-            note(ui, "This payload type lets you configure a list of strings and apply various case modifications to each item on the list.");
+            note(
+                ui,
+                "This payload type lets you configure a list of strings and apply various case modifications to each item on the list.",
+            );
             let mut text = items.join("\n");
             // split('\n') keeps the trailing empty line so Enter starts a new item;
             // generate() skips blank items.
@@ -512,7 +529,10 @@ pub(crate) fn payload_source_config(ui: &mut Ui, src: &mut intruder::PayloadSour
             ui.checkbox(proper_name, "To ProperName");
         }
         P::CharacterFrobber { base } => {
-            note(ui, "This payload type operates on the base value of the payload position and modifies the value of each character position in turn by incrementing its ASCII code by one.");
+            note(
+                ui,
+                "This payload type operates on the base value of the payload position and modifies the value of each character position in turn by incrementing its ASCII code by one.",
+            );
             row(ui, "Base value:", |ui| {
                 ui.add(egui::TextEdit::singleline(base).desired_width(230.0));
             });
@@ -522,7 +542,10 @@ pub(crate) fn payload_source_config(ui: &mut Ui, src: &mut intruder::PayloadSour
             min_len,
             max_len,
         } => {
-            note(ui, "This payload type generates blocks of a given input string, with specified lengths.");
+            note(
+                ui,
+                "This payload type generates blocks of a given input string, with specified lengths.",
+            );
             row(ui, "Base string:", |ui| {
                 ui.add(egui::TextEdit::singleline(base).desired_width(230.0));
             });

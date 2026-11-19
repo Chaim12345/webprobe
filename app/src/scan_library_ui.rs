@@ -243,38 +243,36 @@ pub fn library_page(app: &mut App, ui: &mut Ui) {
                 egui::Button::new("Edit"),
             )
             .clicked()
+            && let Some((s, c)) = &sel_entry
         {
-            if let Some((s, c)) = &sel_entry {
-                app.scan_lib.editing = Some(editing_for(
-                    app,
-                    *s,
-                    Some(c.name.clone()),
-                    c.name.clone(),
-                    c,
-                ));
-            }
+            app.scan_lib.editing = Some(editing_for(
+                app,
+                *s,
+                Some(c.name.clone()),
+                c.name.clone(),
+                c,
+            ));
         }
         if ui
             .add_enabled(sel_entry.is_some(), egui::Button::new("Duplicate"))
             .clicked()
+            && let Some((s, c)) = &sel_entry
         {
-            if let Some((s, c)) = &sel_entry {
-                let name = app.scan_lib.unique_name(&format!("Copy of {}", c.name));
-                let target = if *s == Source::Project {
-                    Source::Project
-                } else {
-                    Source::User
-                };
-                let mut copy = c.clone();
-                copy.name = name.clone();
-                copy.built_in = false;
-                match app.scan_lib.store(target, None, copy) {
-                    Ok(()) => {
-                        app.scan_lib.status = format!("Duplicated as \"{name}\".");
-                        app.scan_lib.selected = Some((target, name));
-                    }
-                    Err(e) => app.scan_lib.status = e,
+            let name = app.scan_lib.unique_name(&format!("Copy of {}", c.name));
+            let target = if *s == Source::Project {
+                Source::Project
+            } else {
+                Source::User
+            };
+            let mut copy = c.clone();
+            copy.name = name.clone();
+            copy.built_in = false;
+            match app.scan_lib.store(target, None, copy) {
+                Ok(()) => {
+                    app.scan_lib.status = format!("Duplicated as \"{name}\".");
+                    app.scan_lib.selected = Some((target, name));
                 }
+                Err(e) => app.scan_lib.status = e,
             }
         }
         if ui
@@ -285,15 +283,14 @@ pub fn library_page(app: &mut App, ui: &mut Ui) {
                 egui::Button::new("Delete"),
             )
             .clicked()
+            && let Some((s, c)) = &sel_entry
         {
-            if let Some((s, c)) = &sel_entry {
-                match app.scan_lib.remove(*s, &c.name) {
-                    Ok(()) => {
-                        app.scan_lib.status = format!("Deleted \"{}\".", c.name);
-                        app.scan_lib.selected = None;
-                    }
-                    Err(e) => app.scan_lib.status = e,
+            match app.scan_lib.remove(*s, &c.name) {
+                Ok(()) => {
+                    app.scan_lib.status = format!("Deleted \"{}\".", c.name);
+                    app.scan_lib.selected = None;
                 }
+                Err(e) => app.scan_lib.status = e,
             }
         }
         if ui.button("Reload").clicked() {
@@ -323,18 +320,17 @@ pub fn library_page(app: &mut App, ui: &mut Ui) {
             .add_enabled(entry.is_some(), egui::Button::new("Export"))
             .on_hover_text("Write the selected configuration as Burp JSON")
             .clicked()
+            && let Some(c) = entry
         {
-            if let Some(c) = entry {
-                let path = app.scan_lib.path.trim().to_string();
-                app.scan_lib.status = if path.is_empty() {
-                    "Enter a file path to export to.".into()
-                } else {
-                    match std::fs::write(&path, c.to_burp_json()) {
-                        Ok(()) => format!("Exported \"{}\" to {path}.", c.name),
-                        Err(e) => format!("Export failed: {e}"),
-                    }
-                };
-            }
+            let path = app.scan_lib.path.trim().to_string();
+            app.scan_lib.status = if path.is_empty() {
+                "Enter a file path to export to.".into()
+            } else {
+                match std::fs::write(&path, c.to_burp_json()) {
+                    Ok(()) => format!("Exported \"{}\" to {path}.", c.name),
+                    Err(e) => format!("Export failed: {e}"),
+                }
+            };
         }
     });
     if !app.scan_lib.status.is_empty() {

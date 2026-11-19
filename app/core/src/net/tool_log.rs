@@ -138,10 +138,10 @@ pub fn session_request<'a>(
 
 /// Post-request macros for the tool working on this thread.
 pub fn session_after(shared: &Shared, host: &str) {
-    if let Some(tool) = TOOL.with(|t| t.get()) {
-        if !shared.session_rules.lock().unwrap().is_empty() {
-            run_post_request_rules(shared, tool, host);
-        }
+    if let Some(tool) = TOOL.with(|t| t.get())
+        && !shared.session_rules.lock().unwrap().is_empty()
+    {
+        run_post_request_rules(shared, tool, host);
     }
 }
 

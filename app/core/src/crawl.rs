@@ -99,12 +99,12 @@ pub fn static_reference_corpus(items: &[HistEntry]) -> String {
     for e in items {
         let ext = e.extension.as_str();
         let mime = crate::net::burp_mime_of(e);
-        if matches!(ext, "js" | "mjs" | "css") || matches!(mime, "script" | "CSS" | "HTML") {
-            if let Some(r) = &e.resp_raw {
-                let p = util::parse_http(r);
-                out.push_str(&String::from_utf8_lossy(&r[p.head_len.min(r.len())..]));
-                out.push('\n');
-            }
+        if (matches!(ext, "js" | "mjs" | "css") || matches!(mime, "script" | "CSS" | "HTML"))
+            && let Some(r) = &e.resp_raw
+        {
+            let p = util::parse_http(r);
+            out.push_str(&String::from_utf8_lossy(&r[p.head_len.min(r.len())..]));
+            out.push('\n');
         }
     }
     out
@@ -133,7 +133,9 @@ fn fetch(
     path: &str,
     id: u64,
 ) -> HistEntry {
-    let raw = format!("GET {path} HTTP/1.1\r\nHost: {authority}\r\nAccept: */*\r\nUser-Agent: Mozilla/5.0\r\nConnection: close\r\n\r\n");
+    let raw = format!(
+        "GET {path} HTTP/1.1\r\nHost: {authority}\r\nAccept: */*\r\nUser-Agent: Mozilla/5.0\r\nConnection: close\r\n\r\n"
+    );
     let up = if https {
         net::send_tls_raw(shared, host, port, raw.as_bytes())
     } else {
@@ -302,11 +304,11 @@ pub fn crawl(shared: &Arc<Shared>, start_url: &str) -> Vec<HistEntry> {
             &path,
             shared.next_id.fetch_add(1, Ordering::SeqCst),
         );
-        if depth < limits.max_depth {
-            if let Some(resp) = &e.resp_raw {
-                for link in crate::scan::crawl_links(&origin, &path, resp) {
-                    push(link, depth + 1, &mut seen, &mut queue);
-                }
+        if depth < limits.max_depth
+            && let Some(resp) = &e.resp_raw
+        {
+            for link in crate::scan::crawl_links(&origin, &path, resp) {
+                push(link, depth + 1, &mut seen, &mut queue);
             }
         }
         out.push(e);
@@ -412,7 +414,12 @@ mod tests {
             robots_paths("User-agent: *\nDisallow: /ftp\nAllow: /pub/*.css\n# x\nDisallow:"),
             vec!["/ftp", "/pub/"]
         );
-        assert_eq!(sitemap_locs("<urlset><url><loc> http://a/x </loc></url><url><loc>http://a/y</loc></url></urlset>"), vec!["http://a/x", "http://a/y"]);
+        assert_eq!(
+            sitemap_locs(
+                "<urlset><url><loc> http://a/x </loc></url><url><loc>http://a/y</loc></url></urlset>"
+            ),
+            vec!["http://a/x", "http://a/y"]
+        );
     }
 
     #[test]
@@ -755,10 +762,10 @@ pub fn form_plan(f: &FormSpec, filled: bool, origin: &str) -> Vec<(usize, String
                 }
             }
             "select" | "select-one" | "select-multiple" => {
-                if fl.value.is_empty() {
-                    if let Some(o) = fl.opts.iter().find(|o| !o.is_empty()) {
-                        out.push((i, o.clone(), false));
-                    }
+                if fl.value.is_empty()
+                    && let Some(o) = fl.opts.iter().find(|o| !o.is_empty())
+                {
+                    out.push((i, o.clone(), false));
                 }
             }
             _ => {
@@ -1296,7 +1303,10 @@ mod browser_resp_tests {
     fn browser_response_drops_codings_and_fixes_length() {
         let head = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Encoding: gzip\r\nTransfer-Encoding: chunked\r\nVary: Accept-Encoding\r\n\r\n";
         let r = String::from_utf8(browser_response(head, b"ok")).unwrap();
-        assert_eq!(r, "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nVary: Accept-Encoding\r\nContent-Length: 2\r\n\r\nok");
+        assert_eq!(
+            r,
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nVary: Accept-Encoding\r\nContent-Length: 2\r\n\r\nok"
+        );
     }
 }
 

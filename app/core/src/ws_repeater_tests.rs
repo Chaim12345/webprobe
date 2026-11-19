@@ -165,7 +165,9 @@ fn ws_server(status: u16, after_head: Vec<u8>) -> Srv {
 }
 
 fn handshake(port: u16) -> String {
-    format!("GET /chat HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n")
+    format!(
+        "GET /chat HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
+    )
 }
 
 fn session(shared: &Shared, srv: &Srv) -> Arc<WsSession> {
@@ -247,7 +249,10 @@ fn connect_sends_the_edited_handshake_with_crlf_line_ends() {
     let srv = ws_server(101, vec![]);
     let shared = Shared::new();
     // LF-only line ends and no blank line at the end, as typed in an editor.
-    let typed = format!("GET /edited HTTP/1.1\nHost: 127.0.0.1:{}\nUpgrade: websocket\nConnection: Upgrade\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\nSec-WebSocket-Version: 13", srv.port);
+    let typed = format!(
+        "GET /edited HTTP/1.1\nHost: 127.0.0.1:{}\nUpgrade: websocket\nConnection: Upgrade\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\nSec-WebSocket-Version: 13",
+        srv.port
+    );
     let s = rep::new_session(&shared, "127.0.0.1", srv.port, false, &typed, None);
     assert_eq!(s.state(), WsRepState::Disconnected);
     rep::connect(&shared, &s).unwrap();

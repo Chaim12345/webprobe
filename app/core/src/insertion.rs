@@ -441,10 +441,10 @@ pub(crate) fn insertion_type(kind: &IpKind) -> Option<&'static str> {
 fn allowed(p: &InsertionPoint, config: &ScanConfig) -> bool {
     match &p.parent {
         None => {
-            if let Some(key) = insertion_type(&p.kind) {
-                if !config.insertion_enabled(key) {
-                    return false;
-                }
+            if let Some(key) = insertion_type(&p.kind)
+                && !config.insertion_enabled(key)
+            {
+                return false;
             }
         }
         Some(parent) => {
@@ -1665,7 +1665,10 @@ mod tests {
     #[test]
     fn json_body_gets_the_entire_body_point_first_then_burp_order() {
         let body = r#"{"q":"a","n":5}"#;
-        let req = format!("POST /api/find?x=1 HTTP/1.1\r\nHost: h\r\nContent-Type: application/json\r\nCookie: sid=abc\r\nX-Trace: t1\r\nContent-Length: {}\r\n\r\n{body}", body.len());
+        let req = format!(
+            "POST /api/find?x=1 HTTP/1.1\r\nHost: h\r\nContent-Type: application/json\r\nCookie: sid=abc\r\nX-Trace: t1\r\nContent-Length: {}\r\n\r\n{body}",
+            body.len()
+        );
         let pts = insertion_points(&req);
         let got: Vec<(PointType, &str)> = pts
             .iter()
@@ -1704,7 +1707,10 @@ mod tests {
         // 29 URL parameters, five skip-listed cookies, then a real cookie:
         // the vetoed cookies do not count, so the 30th point is `real`.
         let q: Vec<String> = (0..29).map(|i| format!("p{i}=v")).collect();
-        let req = format!("GET /a?{} HTTP/1.1\r\nHost: h\r\nCookie: _ga=1; _GID=2; x_ga_y=3; AWSALBCORS=4; _gat=5; real=6\r\n\r\n", q.join("&"));
+        let req = format!(
+            "GET /a?{} HTTP/1.1\r\nHost: h\r\nCookie: _ga=1; _GID=2; x_ga_y=3; AWSALBCORS=4; _gat=5; real=6\r\n\r\n",
+            q.join("&")
+        );
         let pts = insertion_points(&req);
         assert_eq!(pts.len(), MAX_INSERTION_POINTS);
         assert_eq!(
@@ -1767,7 +1773,10 @@ mod tests {
             b64pt.describe(),
             "Base64-decoded value of the data parameter"
         );
-        assert_eq!(a.describe(), "value of the a request parameter, within the Base64-decoded value of the data parameter");
+        assert_eq!(
+            a.describe(),
+            "value of the a request parameter, within the Base64-decoded value of the data parameter"
+        );
         // payload -> URL-encoded inside the content -> Base64 -> URL-encoded
         // in the query (burp.Ziqv.ZT).
         let r = inject_payload(&req, a, "x'&y");
@@ -1821,11 +1830,71 @@ mod tests {
             format!("--B\r\nContent-Disposition: form-data; name=\"t\"\r\n\r\n{v}\r\n--B--\r\n");
         type PlacementCase = (String, Box<dyn Fn(&str) -> String>);
         let cases: Vec<PlacementCase> = vec![
-            (format!("GET / HTTP/1.1\r\nHost: h\r\nCookie: t={v}\r\n\r\n"), Box::new(|r: &str| util::url_decode(r.split("Cookie: t=").nth(1).unwrap().split("\r\n").next().unwrap()))),
-            (format!("GET / HTTP/1.1\r\nHost: h\r\nX-T: {v}\r\n\r\n"), Box::new(|r: &str| r.split("X-T: ").nth(1).unwrap().split("\r\n").next().unwrap().to_string())),
-            (format!("POST / HTTP/1.1\r\nHost: h\r\nContent-Type: application/json\r\n\r\n{json}"), Box::new(|r: &str| serde_json::from_str::<serde_json::Value>(body_of(r)).unwrap()["t"].as_str().unwrap().to_string())),
-            (format!("POST / HTTP/1.1\r\nHost: h\r\nContent-Type: text/xml\r\n\r\n{xml}"), Box::new(|r: &str| util::html_decode(body_of(r).split("<t>").nth(1).unwrap().split("</t>").next().unwrap()))),
-            (format!("POST / HTTP/1.1\r\nHost: h\r\nContent-Type: multipart/form-data; boundary=B\r\n\r\n{mp}"), Box::new(|r: &str| body_of(r).split("\r\n\r\n").nth(1).unwrap().split("\r\n").next().unwrap().to_string())),
+            (
+                format!("GET / HTTP/1.1\r\nHost: h\r\nCookie: t={v}\r\n\r\n"),
+                Box::new(|r: &str| {
+                    util::url_decode(
+                        r.split("Cookie: t=")
+                            .nth(1)
+                            .unwrap()
+                            .split("\r\n")
+                            .next()
+                            .unwrap(),
+                    )
+                }),
+            ),
+            (
+                format!("GET / HTTP/1.1\r\nHost: h\r\nX-T: {v}\r\n\r\n"),
+                Box::new(|r: &str| {
+                    r.split("X-T: ")
+                        .nth(1)
+                        .unwrap()
+                        .split("\r\n")
+                        .next()
+                        .unwrap()
+                        .to_string()
+                }),
+            ),
+            (
+                format!(
+                    "POST / HTTP/1.1\r\nHost: h\r\nContent-Type: application/json\r\n\r\n{json}"
+                ),
+                Box::new(|r: &str| {
+                    serde_json::from_str::<serde_json::Value>(body_of(r)).unwrap()["t"]
+                        .as_str()
+                        .unwrap()
+                        .to_string()
+                }),
+            ),
+            (
+                format!("POST / HTTP/1.1\r\nHost: h\r\nContent-Type: text/xml\r\n\r\n{xml}"),
+                Box::new(|r: &str| {
+                    util::html_decode(
+                        body_of(r)
+                            .split("<t>")
+                            .nth(1)
+                            .unwrap()
+                            .split("</t>")
+                            .next()
+                            .unwrap(),
+                    )
+                }),
+            ),
+            (
+                format!(
+                    "POST / HTTP/1.1\r\nHost: h\r\nContent-Type: multipart/form-data; boundary=B\r\n\r\n{mp}"
+                ),
+                Box::new(|r: &str| {
+                    body_of(r)
+                        .split("\r\n\r\n")
+                        .nth(1)
+                        .unwrap()
+                        .split("\r\n")
+                        .next()
+                        .unwrap()
+                        .to_string()
+                }),
+            ),
         ];
         for (req, value_of) in cases {
             let pts = insertion_points(&req);
@@ -1855,7 +1924,10 @@ mod tests {
     #[test]
     fn nested_json_in_a_form_value_and_quoting() {
         let body = format!("q={}&n=7", encode_url_param("{\"k\":\"v\",\"m\":3}"));
-        let req = format!("POST /s HTTP/1.1\r\nHost: h\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {}\r\n\r\n{body}", body.len());
+        let req = format!(
+            "POST /s HTTP/1.1\r\nHost: h\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {}\r\n\r\n{body}",
+            body.len()
+        );
         let pts = insertion_points(&req);
         let k = pts.iter().find(|p| p.name == "k").expect("nested k");
         assert!(k.parent.is_some() && matches!(k.kind, IpKind::Json(_)));
@@ -1880,7 +1952,10 @@ mod tests {
     #[test]
     fn xml_body_parameters_attributes_and_standalone_tags() {
         let body = "<?xml version=\"1.0\"?><r id=\"7\" xmlns:a=\"urn:x\"><name>bob &amp; co</name><e></e><b/><c x='1' /></r>";
-        let req = format!("POST /x HTTP/1.1\r\nHost: h\r\nContent-Type: text/xml\r\nContent-Length: {}\r\n\r\n{body}", body.len());
+        let req = format!(
+            "POST /x HTTP/1.1\r\nHost: h\r\nContent-Type: text/xml\r\nContent-Length: {}\r\n\r\n{body}",
+            body.len()
+        );
         let pts = insertion_points(&req);
         let got: Vec<(PointType, &str, &str)> = pts
             .iter()
@@ -1916,7 +1991,10 @@ mod tests {
     #[test]
     fn standalone_tag_spec_example() {
         let body = "<a><b/></a>";
-        let req = format!("POST /x HTTP/1.1\r\nHost: h\r\nContent-Type: application/xml\r\nContent-Length: {}\r\n\r\n{body}", body.len());
+        let req = format!(
+            "POST /x HTTP/1.1\r\nHost: h\r\nContent-Type: application/xml\r\nContent-Length: {}\r\n\r\n{body}",
+            body.len()
+        );
         let tag = insertion_points(&req)
             .into_iter()
             .find(|p| matches!(p.kind, IpKind::XmlTag { .. }))
@@ -1974,7 +2052,10 @@ mod tests {
         );
         // POST multipart: a part named by the payload, `"` escaped (burp.Zr87).
         let mp = "--B\r\nContent-Disposition: form-data; name=\"t\"\r\n\r\nhi\r\n--B--\r\n";
-        let req = format!("POST /u HTTP/1.1\r\nHost: h\r\nContent-Type: multipart/form-data; boundary=B\r\nContent-Length: {}\r\n\r\n{mp}", mp.len());
+        let req = format!(
+            "POST /u HTTP/1.1\r\nHost: h\r\nContent-Type: multipart/form-data; boundary=B\r\nContent-Length: {}\r\n\r\n{mp}",
+            mp.len()
+        );
         assert_eq!(
             names(&req),
             vec![
@@ -1987,7 +2068,12 @@ mod tests {
             .find(|p| p.kind == IpKind::ParamName(NameSite::Multipart))
             .unwrap();
         let r = inject_payload(&req, &p, "a\"b");
-        assert!(body_of(&r).ends_with("hi\r\n--B\r\nContent-Disposition: form-data; name=\"a\\\"b\"\r\n\r\n1\r\n--B--\r\n"), "{r}");
+        assert!(
+            body_of(&r).ends_with(
+                "hi\r\n--B\r\nContent-Disposition: form-data; name=\"a\\\"b\"\r\n\r\n1\r\n--B--\r\n"
+            ),
+            "{r}"
+        );
         // A .php path also gets `/1` path info (typed as a URL parameter name).
         let php = "GET /app/index.PHP?x=1 HTTP/1.1\r\nHost: h\r\n\r\n";
         assert_eq!(
@@ -2052,7 +2138,9 @@ mod tests {
     #[test]
     fn server_side_skip_list_gates_server_side_checks_only() {
         let sid = b64("user=1&r=2");
-        let req = format!("GET /p HTTP/1.1\r\nHost: h\r\nCookie: PHPSESSID=abc123; JSESSIONID=x9; theme={sid}\r\n\r\n");
+        let req = format!(
+            "GET /p HTTP/1.1\r\nHost: h\r\nCookie: PHPSESSID=abc123; JSESSIONID=x9; theme={sid}\r\n\r\n"
+        );
         let pts = insertion_points(&req);
         let cfg = ScanConfig::default();
         let php = pts.iter().find(|p| p.name == "PHPSESSID").unwrap();
