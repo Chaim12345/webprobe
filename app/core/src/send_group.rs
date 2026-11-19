@@ -408,6 +408,13 @@ pub fn run_parallel(shared: &Shared, items: &[GroupItem], cancel: &AtomicBool, o
                     // as_http1, origin form, absolute form through a plain
                     // upstream proxy.
                     let wire = http1_wire(shared, item, request);
+                    if wire.is_empty() {
+                        // A split_at(len - 1) below would underflow and a
+                        // panic would strand the other senders at the
+                        // barrier: arrive first, then bail.
+                        barrier.wait();
+                        return Err("empty wire form".to_string());
+                    }
                     // A sender that fails BEFORE the barrier still arrives
                     // at it: one failed connect must not leave the other
                     // senders waiting on a barrier that can never release.

@@ -601,13 +601,33 @@ fn pump<S: Read + Write>(stream: &mut S, sid: u32, mut body: Option<&[u8]>, rx: 
     }
 }
 
+/// The peer's initial flow-control window (RFC 7540 6.9.2): the most
+/// DATA a connection accepts before the first WINDOW_UPDATE. The
+/// single-packet burst writes every stream before a WINDOW_UPDATE can
+/// arrive, so the group's total DATA must fit in it.
+pub(crate) const INITIAL_WINDOW_SIZE: usize = 65_535;
+
+/// Fail fast when a single-packet group's request bodies would overrun
+/// the initial connection window: the server would reset every stream
+/// with FLOW_CONTROL_ERROR otherwise.
+pub(crate) fn check_burst_window(body_lens: impl IntoIterator<Item = usize>) -> Result<(), String> {
+    let total: usize = body_lens.into_iter().sum();
+    if total > INITIAL_WINDOW_SIZE {
+        return Err(format!(
+            "the group's request bodies total {total} bytes, past the HTTP/2 initial flow-control window ({INITIAL_WINDOW_SIZE}): the server would reset every stream with FLOW_CONTROL_ERROR. Send the group in sequence or shrink the bodies"
+        ));
+    }
+    Ok(())
+}
+
 /// Every frame of `req` on stream `sid` as one buffer: HEADERS, then the
 /// body as DATA frames. R-12's parallel send writes every stream's buffer
 /// in a single packet (Burp's single-packet attack). DATA is chunked to
 /// 16,384 bytes: the peer's initial SETTINGS_MAX_FRAME_SIZE is 16,384
 /// (RFC 7540 6.5.2) and the burst is written before its SETTINGS arrive,
-/// so one oversized DATA frame earns a PROTOCOL_ERROR. Bodies past the
-/// peer's initial stream window (65,535) still hit flow control.
+/// so one oversized DATA frame earns a PROTOCOL_ERROR. Bodies whose
+/// group total passes the peer's initial window are rejected up front by
+/// check_burst_window.
 pub(crate) fn request_frames(sid: u32, req: &H2Request) -> Result<Vec<u8>, String> {
     let mut out = Vec::new();
     let block = encode_headers(req);
@@ -763,6 +783,20 @@ mod tests {
     /// A body bigger than the peer's default SETTINGS_MAX_FRAME_SIZE
     /// (16,384) must go out as several DATA frames, END_STREAM on the
     /// last, or the burst earns a PROTOCOL_ERROR.
+    #[test]
+    #[test]
+    fn burst_window_rejects_groups_past_the_initial_window() {
+        // Two 40 KB bodies fit their own stream windows but overrun the
+        // shared connection window.
+        assert!(check_burst_window([40 * 1024, 40 * 1024]).is_err());
+        // The same total in one body is rejected too.
+        assert!(check_burst_window([80 * 1024]).is_err());
+        // At and under the window is fine.
+        assert!(check_burst_window([65_535]).is_ok());
+        assert!(check_burst_window([1024, 2048]).is_ok());
+        assert!(check_burst_window([]).is_ok());
+    }
+
     #[test]
     fn request_frames_chunks_large_bodies() {
         let req = H2Request {

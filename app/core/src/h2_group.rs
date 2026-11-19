@@ -67,12 +67,19 @@ pub fn run_parallel_single_packet(shared: &Shared, items: &[GroupItem], cancel: 
     }
     let (sent_all, up_all) = match send_group::open_conn(shared, first)
         .and_then(|mut conn| {
+            // Validate the whole group's DATA before connecting: the
+            // burst precedes any WINDOW_UPDATE, so it must fit in the
+            // peer's initial connection window.
+            let mut reqs = Vec::with_capacity(requests.len());
+            for request in &requests {
+                reqs.push(h2::request_from_raw(request, "https").ok_or_else(|| "the request is not a valid HTTP request".to_string())?);
+            }
+            h2::check_burst_window(reqs.iter().map(|r| r.body.len()))?;
             h2::send_preface(&mut conn)?;
             let mut burst = Vec::new();
-            for (n, request) in requests.iter().enumerate() {
+            for (n, req) in reqs.iter().enumerate() {
                 let sid = 2 * n as u32 + 1;
-                let req = h2::request_from_raw(request, "https").ok_or_else(|| "the request is not a valid HTTP request".to_string())?;
-                burst.extend(h2::request_frames(sid, &req)?);
+                burst.extend(h2::request_frames(sid, req)?);
             }
             // The single packet: every stream's request in one write.
             conn.write_all(&burst).map_err(|e| format!("write: {e}"))?;
