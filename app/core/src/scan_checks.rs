@@ -2020,12 +2020,30 @@ impl RequestCheck for BackupFile {
 /// the probed origin (the browser's own chrome-error pages run the
 /// wrapped sinks too) and merged per sink (burp.Zwf8.identityOf).
 /// Skipped when no Chromium is available.
-fn dom_analysis_hits(cx: &ScanCtx) -> (Vec<crate::crawl::DomHit>, bool) {
+/// Follow-up GET for the DOM probes, in the audited request's session:
+/// cookies/authorization and the other original headers ride along, only
+/// the path changes. A bare GET would never see the authenticated page,
+/// where these variants usually live. Hop-by-hop and body headers are
+/// dropped (the follow-up has no body).
+fn authed_get(cx: &ScanCtx, path_query: &str) -> Vec<u8> {
+    let mut raw = format!("GET {path_query} HTTP/1.1\r\nHost: {}\r\n", cx.host_hdr);
+    for (k, v) in &cx.parts.headers {
+        let kl = k.to_ascii_lowercase();
+        if matches!(kl.as_str(), "host" | "connection" | "content-length" | "content-type" | "accept-encoding") {
+            continue;
+        }
+        raw.push_str(&format!("{k}: {v}\r\n"));
+    }
+    raw.push_str("Connection: close\r\n\r\n");
+    raw.into_bytes()
+}
+
+fn dom_analysis_hits(cx: &ScanCtx) -> (Vec<crate::crawl::DomHit>, Option<String>) {
     // Dynamic analysis runs on pages: the baseline must be HTML.
     let rp = util::parse_http(&cx.baseline.raw);
     let ct = util::get_header(&rp.headers, "Content-Type").unwrap_or_default();
     if !ct.to_ascii_lowercase().contains("html") {
-        return (Vec::new(), false);
+        return (Vec::new(), None);
     }
     let scheme = if cx.entry.https { "https" } else { "http" };
     let default = if cx.entry.https { 443 } else { 80 };
@@ -2062,13 +2080,19 @@ fn dom_analysis_hits(cx: &ScanCtx) -> (Vec<crate::crawl::DomHit>, bool) {
     // URL the browser navigated to (the wpdom query parameter, no
     // fragment) and classify the canary's reflection contexts. JsText
     // approximates the string-literal requirement with <script> text, the
-    // granularity the G.11 context parser has.
+    // granularity the G.11 context parser has. The query canary is
+    // returned, not a bare flag: the reflected variant is per HIT - only a
+    // hit whose sink value carries the query canary can have come from
+    // the reflected value, so a hash-flow hit on a page that also
+    // reflects the query stays plain DOM-based.
     let sep = if path.contains('?') { "&" } else { "?" };
-    let raw = format!("GET {path}{sep}wpdom=q{canary} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", cx.host_hdr);
+    let qcanary = format!("q{canary}");
+    let raw = authed_get(cx, &format!("{path}{sep}wpdom={qcanary}"));
     let reflected = cx
-        .send(raw.as_bytes())
+        .send(&raw)
         .map(|r| crate::scan::g11_contexts(&r, &canary).iter().any(|c| matches!(c, crate::scan::G11Context::JsText)))
-        .unwrap_or(false);
+        .unwrap_or(false)
+        .then_some(qcanary);
     let v = (hits, reflected);
     cache.map.lock().unwrap().insert(url, DomHitsState::Done(v.clone()));
     cache.ready.notify_all();
@@ -2099,7 +2123,7 @@ macro_rules! dom_family_check {
                 if cx.stopped() || !cx.runs(self.issue()) {
                     return;
                 }
-                let (hits, reflected) = dom_analysis_hits(cx);
+                let (hits, reflected_qcanary) = dom_analysis_hits(cx);
                 let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
                 for hit in hits.iter().filter(|h| $sinks.contains(&h.sink.as_str())) {
                     if !seen.insert(hit.sink.as_str()) {
@@ -2108,7 +2132,7 @@ macro_rules! dom_family_check {
                     // burp.Zf24.Zw: the value arriving with the request and
                     // copied into the response's JavaScript makes the
                     // reflected variant of the family's issue.
-                    let (issue, detail) = if reflected {
+                    let (issue, detail) = if reflected_qcanary.as_deref().is_some_and(|qc| hit.sink_value.contains(qc)) {
                         (
                             $reflected_issue,
                             format!(
@@ -5750,11 +5774,11 @@ setTimeout(function () { jQuery('<p>x</p>').html(location.hash.slice(1)); }, 50)
 /// contract as `reset_openapi_hosts`): a long-lived process running more
 /// than one scan must not serve a previous scan's hits.
 /// One browser probe per URL: Done caches the hits and the reflected
-/// flag; InFlight marks a probe another thread is running (see
+/// query canary; InFlight marks a probe another thread is running (see
 /// dom_analysis_hits).
 enum DomHitsState {
     InFlight,
-    Done((Vec<crate::crawl::DomHit>, bool)),
+    Done((Vec<crate::crawl::DomHit>, Option<String>)),
 }
 
 #[derive(Default)]
