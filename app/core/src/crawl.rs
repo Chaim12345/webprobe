@@ -1396,7 +1396,12 @@ const DOM_INSTRUMENT_JS: &str = r#"
     window.postMessage = function (message) {
       try {
         var mv = typeof message === "string" ? message : JSON.stringify(message);
-        record("postMessage", mv);
+        // The page URL itself is not controllable data entering a message:
+        // iframe resize, analytics and auth flows post location.href, and
+        // the probe URL always carries the canary.
+        if (mv !== String(location.href)) {
+          record("postMessage", mv);
+        }
       } catch (e) {}
       return origPM.apply(this, arguments);
     };
