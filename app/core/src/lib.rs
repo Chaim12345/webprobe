@@ -6,6 +6,7 @@
 pub mod body;
 pub mod ai;
 pub mod analysis;
+pub mod bcheck;
 pub mod burp_checks;
 pub mod codec;
 pub mod collaborator;
