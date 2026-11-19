@@ -1314,8 +1314,12 @@ impl StoredCheck for StoredXss {
 /// insertion-point kind, and not server-side, matching their reflected
 /// halves. Each probe is sent to the pair's injection item and the
 /// retrieval item's own request is replayed after it (burp.Zpqv.Z_).
+/// Stored G.11 checks submit their probes into the live application
+/// (comment fields, profiles and the like), as every stored-input
+/// scanner does; the probes are inert tokens and URLs, but operators
+/// should expect them to persist where the application stores input.
 macro_rules! g11_stored_check {
-    ($name:ident, $id:literal, $issue:literal, $severity:literal, $probes:expr, $hit:expr, $doc:literal) => {
+    ($name:ident, $id:literal, $issue:literal, $severity:literal, $confidence:literal, $probes:expr, $hit:expr, $doc:literal) => {
         #[doc = $doc]
         pub(crate) struct $name;
 
@@ -1379,7 +1383,7 @@ macro_rules! g11_stored_check {
                     cx.report(vec![mk_point(
                         $issue,
                         $severity,
-                        "Firm",
+                        $confidence,
                         &pair.item.entry,
                         ip,
                         format!(
@@ -1404,36 +1408,41 @@ g11_stored_check!(
     "active.link-manipulation-stored",
     "Link manipulation (stored)",
     "info",
+    "Firm",
     crate::scan::g11_link_probes(),
     crate::scan::g11_link_stored_hit,
     "Link manipulation (stored), burp.Zb_5 -> Ze20, KB 00501004: the Zpyp probes (random host/path under http://, https://, //, \\/ - established literals) must come back as a link or redirect target of the retrieval response. Severity Information (KB); confidence not established: Firm."
+    "Firm",
 );
 g11_stored_check!(
     CssInjectionStored,
     "active.css-injection-stored",
     "CSS injection (stored)",
     "medium",
+    "Tentative",
     crate::scan::g11_css_probes(),
     |resp: &[u8], probe: &str| crate::scan::g11_stored_context_hit(resp, probe, crate::scan::g11_css_match),
-    "CSS injection (stored), burp.Zb_5 -> Zw0x, KB 00501301: the token probe must be returned in a CSS position (<style> text, a style attribute, a <link rel=stylesheet> href) of the retrieval response. Severity Medium (KB); confidence not established: Firm."
+    "CSS injection (stored), burp.Zb_5 -> Zw0x, KB 00501301: the token probe must be returned in a CSS position (<style> text, a style attribute, a <link rel=stylesheet> href) of the retrieval response. Severity Medium (KB); confidence not established: Tentative (retrieval proves storage, not breakout)."
 );
 g11_stored_check!(
     HppStored,
     "active.client-side-hpp-stored",
     "Client-side HTTP parameter pollution (stored)",
     "low",
+    "Tentative",
     crate::scan::g11_hpp_probes(),
     |resp: &[u8], probe: &str| crate::scan::g11_stored_context_hit(resp, probe, crate::scan::g11_hpp_match),
-    "Client-side HTTP parameter pollution (stored), burp.Zb_5 -> Zi4q, KB 00501401: the `<random3>&<random3>` probe (the stripped suffix is omitted, not established) must be returned in an attribute value, JavaScript string or response header of the retrieval response. Severity Low (KB); confidence not established: Firm."
+    "Client-side HTTP parameter pollution (stored), burp.Zb_5 -> Zi4q, KB 00501401: the `<random3>&<random3>` probe (the stripped suffix is omitted, not established) must be returned in a URL-bearing attribute (href/src/action/formaction), JavaScript string or response header of the retrieval response. Severity Low (KB); confidence not established: Tentative (retrieval proves storage, not exploitability)."
 );
 g11_stored_check!(
     FormActionHijackingStored,
     "active.form-action-hijacking-stored",
     "Form action hijacking (stored)",
     "medium",
+    "Tentative",
     crate::scan::g11_form_action_probes(),
     |resp: &[u8], probe: &str| crate::scan::g11_stored_context_hit(resp, probe, crate::scan::g11_form_action_match),
-    "Form action hijacking (stored), burp.Zb_5 -> Zc51, KB 00501501: the injected URL must be returned as a form's action or an element's formaction in the retrieval response. Severity Medium (KB); confidence not established: Firm."
+    "Form action hijacking (stored), burp.Zb_5 -> Zc51, KB 00501501: the injected URL must be returned as a form's action or an element's formaction in the retrieval response. Severity Medium (KB); confidence not established: Tentative (retrieval proves storage, not exploitability)."
 );
 
 /// Client-side template injection, burp.Zrmh.
