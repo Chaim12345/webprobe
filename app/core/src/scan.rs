@@ -5808,7 +5808,9 @@ pub(crate) fn g11_css_match(c: &G11Context) -> bool {
         G11Context::StyleText => true,
         G11Context::Attr { attr, .. } if attr == "style" => true,
         G11Context::Attr { tag, attr, attrs } if tag == "link" && attr == "href" => {
-            attrs.iter().any(|(k, v)| k == "rel" && v.to_ascii_lowercase().contains("stylesheet"))
+            // rel is a space-separated token list: an exact token match,
+            // not a substring ("preload-stylesheet" is not a stylesheet).
+            attrs.iter().any(|(k, v)| k == "rel" && v.to_ascii_lowercase().split_whitespace().any(|t| t == "stylesheet"))
         }
         _ => false,
     }
@@ -5837,8 +5839,12 @@ where
     H: Fn(&[u8], &str) -> Option<String>,
 {
     for p in probes {
-        send(p)?;
-        let resp = retrieve()?;
+        // A failed send or retrieval skips that probe, not the rest: one
+        // transient failure must not suppress the other probes' hits.
+        if send(p).is_none() {
+            continue;
+        }
+        let Some(resp) = retrieve() else { continue };
         if let Some(what) = hit(&resp, p) {
             return Some((p.clone(), what));
         }
@@ -5935,10 +5941,7 @@ mod g11_tests {
             &["tokaaaaa".to_string()],
             |p: &str| {
                 sent.push(p.to_string());
-                Some(b"HTTP/1.1 200 OK
-Content-Length: 2
-
-ok".to_vec())
+                Some(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok".to_vec())
             },
             || Some(resp("<style>body{color:tokaaaaa}</style>")),
             |r: &[u8], p: &str| g11_stored_context_hit(r, p, g11_css_match),
