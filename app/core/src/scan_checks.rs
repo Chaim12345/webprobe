@@ -367,6 +367,8 @@ pub(crate) static REQUEST_CHECKS: &[&dyn RequestCheck] = &[
     &PathRelativeStyleSheet,
     &TraceEnabled,
     &OpenApiDefinition,
+    &RobotsTxt,
+    &React2Shell,
     &CollaboratorEverywhere,
     &ServerTrace,
     &ServerOptions,
@@ -3424,6 +3426,112 @@ impl RequestCheck for OpenApiDefinition {
     }
 }
 
+/// Robots.txt file (per host), burp.Zut6's robots half: fetch /robots.txt
+/// over HTTP/1.1 with Connection: close and report only a 200 whose body
+/// carries both robots markers `user-agent:` and `allow:` (Zut6.java:64-72,
+/// 110-121). Burp's accepted content-type set is stripped from the readable
+/// source; an HTML body (a soft-404 page) is rejected instead.
+pub(crate) struct RobotsTxt;
+
+impl RequestCheck for RobotsTxt {
+    fn id(&self) -> &'static str {
+        "active.robots-txt"
+    }
+    fn issue(&self) -> &'static str {
+        "Robots.txt file"
+    }
+    fn scope(&self) -> Scope {
+        Scope::Host
+    }
+    fn group(&self) -> Option<&'static str> {
+        Some(BURP_GROUP)
+    }
+    fn run(&self, cx: &ScanCtx) {
+        let (scheme, _) = origin_of(cx);
+        let key = format!("{scheme}://{}:{}|robots", cx.host, cx.port);
+        if !openapi_hosts().lock().unwrap().insert(key) || cx.stopped() {
+            return;
+        }
+        let probe = format!("GET /robots.txt HTTP/1.1\r\nHost: {}\r\nAccept: */*\r\nConnection: close\r\n\r\n", server_host_hdr(cx));
+        let Some(resp) = burp_send(cx, probe.as_bytes()) else { return };
+        let parsed = util::parse_http(&resp);
+        let status = parsed.first.split_whitespace().nth(1).unwrap_or("");
+        let body = String::from_utf8_lossy(&resp[parsed.head_len.min(resp.len())..]).to_ascii_lowercase();
+        let ctype = util::get_header(&parsed.headers, "Content-Type").unwrap_or_default().to_ascii_lowercase();
+        let looks_html = ctype.contains("html") || body.trim_start().starts_with("<!doctype html") || body.trim_start().starts_with("<html");
+        if status != "200" || looks_html || !body.contains("user-agent:") || !body.contains("allow:") {
+            return;
+        }
+        let mut e = cx.entry.clone();
+        e.path = "/robots.txt".to_string();
+        let mut i = mk("info", self.issue(), &e, "The site publishes a /robots.txt file. Its entries may reveal paths the site does not want indexed.".to_string());
+        i.confidence = "Certain".into();
+        cx.report(vec![i.with_evidence(vec![ScanEvidence::new(probe.as_bytes(), Some(&resp[..]))])]);
+    }
+}
+
+/// React Server Components RCE, React2Shell (per host), burp.Zgn0: one POST
+/// to / with random Next-Action and X-Nextjs-Request-Id values,
+/// Next-Router-State-Tree: [""] and a multipart body (part 1 `{}`, part 0
+/// `["$1:a:a"]`; Zgn0.java:53-80). A report needs status 500 and the flight
+/// error digest marker, or both generic error markers (Zgn0.java:83-98; the
+/// stripped field-to-literal assignments read as `E{"digest"` for the
+/// specific marker, `Error` and `digest` for the generic pair).
+pub(crate) struct React2Shell;
+
+impl RequestCheck for React2Shell {
+    fn id(&self) -> &'static str {
+        "active.react2shell"
+    }
+    fn issue(&self) -> &'static str {
+        "React Server Components remote code execution (React2Shell)"
+    }
+    fn scope(&self) -> Scope {
+        Scope::Host
+    }
+    fn group(&self) -> Option<&'static str> {
+        Some(BURP_GROUP)
+    }
+    fn run(&self, cx: &ScanCtx) {
+        let (scheme, _) = origin_of(cx);
+        let key = format!("{scheme}://{}:{}|react2shell", cx.host, cx.port);
+        if !openapi_hosts().lock().unwrap().insert(key) || cx.stopped() {
+            return;
+        }
+        let (action, req_id, boundary) = {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+            let mut t = |n: usize| (0..n).map(|_| format!("{:x}", rng.gen_range(0..16u8))).collect::<String>();
+            (t(32), t(32), format!("----WebProbeBoundary{}", t(16)))
+        };
+        let body = format!(
+            "--{b}\r\nContent-Disposition: form-data; name=\"1\"\r\n\r\n{{}}\r\n--{b}\r\nContent-Disposition: form-data; name=\"0\"\r\n\r\n[\"$1:a:a\"]\r\n--{b}--\r\n",
+            b = boundary
+        );
+        let probe = format!(
+            "POST / HTTP/1.1\r\nHost: {}\r\nNext-Action: {action}\r\nX-Nextjs-Request-Id: {req_id}\r\nNext-Router-State-Tree: [\"\"]\r\nContent-Type: multipart/form-data; boundary={boundary}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            server_host_hdr(cx),
+            body.len()
+        );
+        let Some(resp) = burp_send(cx, probe.as_bytes()) else { return };
+        let parsed = util::parse_http(&resp);
+        let status = parsed.first.split_whitespace().nth(1).unwrap_or("");
+        let text = String::from_utf8_lossy(&resp[parsed.head_len.min(resp.len())..]);
+        let hit = status == "500" && (text.contains("E{\"digest\"") || (text.contains("Error") && text.contains("digest")));
+        if !hit {
+            return;
+        }
+        let mut i = mk(
+            "high",
+            self.issue(),
+            &cx.entry,
+            "The server answered the React Server Components probe with status 500 and a flight-protocol error digest, the React2Shell signature (CVE-2025-55182 class).".to_string(),
+        );
+        i.confidence = "Firm".into();
+        cx.report(vec![i.with_evidence(vec![ScanEvidence::new(probe.as_bytes(), Some(&resp[..]))])]);
+    }
+}
+
 fn server_host_hdr(cx: &ScanCtx) -> String {
     util::get_header(&cx.parts.headers, "Host").unwrap_or_else(|| format!("{}:{}", cx.host, cx.port))
 }
@@ -4000,6 +4108,8 @@ mod tests {
                 ("active.path-relative-style-sheet-import", Scope::Request, Some(BURP_GROUP)),
                 ("active.http-trace-enabled", Scope::Host, Some(BURP_GROUP)),
                 ("active.openapi-definition", Scope::Host, Some(BURP_GROUP)),
+                ("active.robots-txt", Scope::Host, Some(BURP_GROUP)),
+                ("active.react2shell", Scope::Host, Some(BURP_GROUP)),
                 ("active.collaborator-everywhere", Scope::Host, None),
                 ("active.server-trace-echo", Scope::Request, Some(SERVER_GROUP)),
                 ("active.server-options-methods", Scope::Request, Some(SERVER_GROUP)),
