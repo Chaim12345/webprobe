@@ -3,19 +3,6 @@
 
 use super::*;
 
-/// Hosts already probed by the per-host OpenAPI check this session (Burp runs
-/// APH_ checks once per host).
-pub fn reset_openapi_hosts() {
-    openapi_hosts().lock().unwrap().clear();
-    checks::everywhere_hosts().lock().unwrap().clear();
-}
-
-pub fn openapi_hosts() -> &'static crate::sync::Mutex<std::collections::HashSet<String>> {
-    static H: std::sync::OnceLock<crate::sync::Mutex<std::collections::HashSet<String>>> =
-        std::sync::OnceLock::new();
-    H.get_or_init(|| crate::sync::Mutex::new(std::collections::HashSet::new()))
-}
-
 pub fn raw_header_lines(resp: &[u8]) -> Vec<String> {
     let end = resp
         .windows(4)

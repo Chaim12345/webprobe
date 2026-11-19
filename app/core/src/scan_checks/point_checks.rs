@@ -641,7 +641,9 @@ impl RequestCheck for HttpPutEnabled {
         let (scheme, _) = origin_of(cx);
         if cx.stopped()
             || !cx.runs(self.issue())
-            || !openapi_hosts()
+            || !cx
+                .state()
+                .openapi_hosts
                 .lock()
                 .unwrap()
                 .insert(format!("put|{scheme}://{}:{}", cx.host, cx.port))
@@ -708,7 +710,9 @@ impl RequestCheck for AspNetTracing {
         let (scheme, _) = origin_of(cx);
         if cx.stopped()
             || !cx.runs(self.issue())
-            || !openapi_hosts()
+            || !cx
+                .state()
+                .openapi_hosts
                 .lock()
                 .unwrap()
                 .insert(format!("trace.axd|{scheme}://{}:{}", cx.host, cx.port))
@@ -776,7 +780,9 @@ impl RequestCheck for AspNetDebugging {
         let (scheme, _) = origin_of(cx);
         if cx.stopped()
             || !cx.runs(self.issue())
-            || !openapi_hosts()
+            || !cx
+                .state()
+                .openapi_hosts
                 .lock()
                 .unwrap()
                 .insert(format!("aspdebug|{scheme}://{}:{}", cx.host, cx.port))

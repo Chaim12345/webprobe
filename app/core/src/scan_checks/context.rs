@@ -113,6 +113,11 @@ impl ScanCtx {
         cx
     }
 
+    /// The current run's dedup sets (#38).
+    pub(crate) fn state(&self) -> Arc<crate::scan::ScanDedup> {
+        crate::scan::scan_dedup_of(&self.shared)
+    }
+
     pub(crate) fn stopped(&self) -> bool {
         self.shared.scan.stop.load(Ordering::SeqCst)
     }

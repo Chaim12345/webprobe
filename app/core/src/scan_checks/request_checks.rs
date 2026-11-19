@@ -129,7 +129,7 @@ impl RequestCheck for TraceEnabled {
         use crate::burp_checks as bc;
         let (scheme, _) = origin_of(cx);
         let trace_key = format!("trace|{scheme}://{}:{}", cx.host, cx.port);
-        if openapi_hosts().lock().unwrap().insert(trace_key) && !cx.stopped() {
+        if cx.state().openapi_hosts.lock().unwrap().insert(trace_key) && !cx.stopped() {
             let token: String = {
                 use rand::Rng;
                 let mut g = rand::thread_rng();
@@ -180,7 +180,7 @@ impl RequestCheck for OpenApiDefinition {
         let (scheme, _) = origin_of(cx);
         let thorough = cx.settings.speed >= ScanSpeed::Thorough;
         let key = format!("{scheme}://{}:{}|{}", cx.host, cx.port, thorough);
-        if openapi_hosts().lock().unwrap().insert(key) {
+        if cx.state().openapi_hosts.lock().unwrap().insert(key) {
             let host_hdr = util::get_header(&util::parse_http(cx.req.as_bytes()).headers, "Host")
                 .unwrap_or_else(|| cx.host.to_string());
             let mut found = Vec::new();

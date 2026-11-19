@@ -141,12 +141,6 @@ pub(crate) fn everywhere_probes(
     out
 }
 
-pub(crate) fn everywhere_hosts() -> &'static crate::sync::Mutex<std::collections::HashSet<String>> {
-    static H: std::sync::OnceLock<crate::sync::Mutex<std::collections::HashSet<String>>> =
-        std::sync::OnceLock::new();
-    H.get_or_init(|| crate::sync::Mutex::new(std::collections::HashSet::new()))
-}
-
 /// burp.Zc7h (APH_CollaboratorEverywhere), once per host: Collaborator
 /// names in the Host header, X-Forwarded-Host, the request line and the
 /// client-IP / Referer headers (burp.Zs61, Zcg4). Each id raises External
@@ -170,7 +164,9 @@ impl RequestCheck for CollaboratorEverywhere {
             return;
         }
         let (scheme, _) = origin_of(cx);
-        if !everywhere_hosts()
+        if !cx
+            .state()
+            .everywhere_hosts
             .lock()
             .unwrap()
             .insert(format!("{scheme}://{}:{}", cx.host, cx.port))

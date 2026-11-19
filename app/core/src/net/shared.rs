@@ -52,6 +52,8 @@ pub struct Shared {
     pub scan_enabled: AtomicBool,
     /// The active scanner's run state (claim, stop, pause, progress).
     pub scan: Arc<crate::scan_run::ScanRun>,
+    /// The current scan run's dedup sets (swapped fresh at run start).
+    pub scan_state: Mutex<Arc<crate::scan::ScanDedup>>,
     /// Collaborator ids: the payload pool, registered ids and matching.
     pub oob: crate::oob::OobState,
     /// Stored input pairing of the current scan run (D-10).
@@ -234,6 +236,7 @@ impl Shared {
             organizer: Mutex::new(crate::organizer::Organizer::new()),
             tool_sends: Mutex::new(Vec::new()),
             scan: Default::default(),
+            scan_state: Default::default(),
             oob: Default::default(),
             stored: Default::default(),
             passive: Default::default(),
