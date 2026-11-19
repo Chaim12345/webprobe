@@ -1042,6 +1042,17 @@ dom_family_check!(
     "Cookie manipulation (DOM-based), KB 00500b00, Low: the document.cookie setter (burp.Zcwh's cookie family). Confidence Firm (burp.Zwf8.Zd)."
 );
 
+dom_family_check!(
+    DomWebMessage,
+    "active.dom-web-message-manipulation",
+    "HTML5 web message manipulation (DOM-based)",
+    "info",
+    "Firm",
+    "DOM-based HTML5 web message manipulation",
+    &["postMessage"][..],
+    "HTML5 web message manipulation (DOM-based), KB 00500e00, Information: controllable data sent as a web message to another document (window.postMessage; no literal Zcwh sink mapping - the family is established by the KB resource). Confidence Firm (burp.Zwf8.Zd)."
+);
+
 /// WebProbe's own reflected-DOM canary (Burp finds DOM issues by analysing
 /// JavaScript, which is not this): a plain canary reflected unencoded into
 /// script data or an attribute value of an HTML response. Also seeds the

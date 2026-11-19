@@ -1383,6 +1383,21 @@ const DOM_INSTRUMENT_JS: &str = r#"
       set: function (v) { record("document.cookie", v); return cookieDesc.set.call(this, v); }
     });
   }
+  // HTML5 web message manipulation (KB 00500e00): controllable data sent
+  // as a web message to another document. In Blink, postMessage is an own
+  // (writable, configurable) property of the window instance, not
+  // Window.prototype. Objects are stringified so a canary nested in the
+  // message still shows up.
+  try {
+    var origPM = window.postMessage;
+    window.postMessage = function (message) {
+      try {
+        var mv = typeof message === "string" ? message : JSON.stringify(message);
+        record("postMessage", mv);
+      } catch (e) {}
+      return origPM.apply(this, arguments);
+    };
+  } catch (e) {}
 })();
 "#;
 

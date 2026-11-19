@@ -125,6 +125,7 @@ pub(crate) static REQUEST_CHECKS: &[&dyn RequestCheck] = &[
     &DomDos,
     &DomAjaxHeader,
     &DomStorageManipulation,
+    &DomWebMessage,
     &DomJsonInjection,
     &DomXpathInjection,
     &DomDocumentDomain,
