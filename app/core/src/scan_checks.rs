@@ -2011,7 +2011,8 @@ impl RequestCheck for BackupFile {
 /// Dynamic DOM analysis, R-13 option (b) (burp.Zel5's runAnalysis shape;
 /// the injected script body is not established, so WebProbe's
 /// instrumentation is its own): each HTML page is opened once in a
-/// headless browser with a canary in location.hash, the wrapped sinks are
+/// headless browser with a canary in the fragment and the query (the
+/// location.hash and location.search sources), the wrapped sinks are
 /// the families of burp.Zcwh's dynamic decoder (docs/specs/R-13), and a
 /// canary reaching a sink is reported under the sink's family. One
 /// browser run per URL serves every family check; hits are kept only on
@@ -2102,7 +2103,8 @@ macro_rules! dom_family_check {
                             util::html_encode(&hit.sink_value)
                         ),
                     );
-                    i.confidence = $confidence.into();
+                    // burp.Zwf8.Zd: a jQuery-dependent result (flag 4) is Tentative.
+                    i.confidence = if hit.sink.starts_with("jQuery.") { "Tentative" } else { $confidence }.into();
                     cx.report(vec![i]);
                 }
             }
@@ -2117,7 +2119,22 @@ dom_family_check!(
     "high",
     "Firm",
     "DOM-based cross-site scripting",
-    &["document.write", "document.writeln", "element.innerHTML", "element.outerHTML", "element.insertAdjacentHTML", "element.setAttribute.onclick"][..],
+    &[
+        "document.write",
+        "document.writeln",
+        "element.innerHTML",
+        "element.outerHTML",
+        "element.insertAdjacentHTML",
+        "element.setAttribute.onclick",
+        "jQuery.html",
+        "jQuery.append",
+        "jQuery.prepend",
+        "jQuery.before",
+        "jQuery.after",
+        "jQuery.wrap",
+        "jQuery.replaceWith",
+        "jQuery.parseHTML"
+    ][..],
     "Cross-site scripting (DOM-based), KB 00200310, High: the HTML-writing sinks of burp.Zcwh's XSS family (first slice: document.write/writeln, inner/outerHTML, insertAdjacentHTML; jQuery groups not yet). Confidence Firm (burp.Zwf8.Zd: no Tentative rule covers a location.hash source)."
 );
 dom_family_check!(
@@ -2127,7 +2144,7 @@ dom_family_check!(
     "high",
     "Firm",
     "DOM-based JavaScript injection",
-    &["eval", "Function", "setTimeout", "setInterval"][..],
+    &["eval", "Function", "setTimeout", "setInterval", "jQuery.globalEval"][..],
     "JavaScript injection (DOM-based), KB 00200320, High: the JavaScript-execution sinks of burp.Zcwh's family (eval, Function, setTimeout/setInterval string handlers; execScript and javascript: URLs are not wrappable, not established here). Confidence Firm (burp.Zwf8.Zd)."
 );
 dom_family_check!(
@@ -2171,7 +2188,7 @@ dom_family_check!(
     "low",
     "Firm",
     "DOM-based link manipulation",
-    &["form.action", "anchor.href", "button.formaction", "input.formaction", "element.setAttribute.href"][..],
+    &["form.action", "anchor.href", "button.formaction", "input.formaction", "element.setAttribute.href", "jQuery.attr.href", "jQuery.prop.href", "jQuery.attr.action", "jQuery.prop.action"][..],
     "Link manipulation (DOM-based), KB 00501000, Low: the navigation-target property sinks of burp.Zcwh's link family (form.action, anchor.href, button/input.formaction, setAttribute href; jQuery prop/attr variants not yet). Confidence Firm (burp.Zwf8.Zd)."
 );
 dom_family_check!(
@@ -5154,6 +5171,8 @@ mod tests {
         let port = lab_serve(l, |_method, path, _raw| {
             let body = if path.starts_with("/xss") {
                 "<html><body><script>document.write('<p>' + location.hash.slice(1) + '</p>');</script></body></html>"
+            } else if path.starts_with("/searchsrc") {
+                "<html><body><script>document.write('<p>' + new URLSearchParams(location.search).get('wpdom') + '</p>');</script></body></html>"
             } else {
                 "<html><body><p>hello</p></body></html>"
             };
@@ -5164,6 +5183,13 @@ mod tests {
         assert!(
             got.iter().any(|(n, s, c)| n == "Cross-site scripting (DOM-based)" && s == "high" && c == "Firm"),
             "{got:?}"
+        );
+        // The location.search source: the canary arrives as the wpdom
+        // query parameter.
+        let got = lab_scan(port, &["active.dom-xss"], "GET", "/searchsrc", format!("GET /searchsrc HTTP/1.1\r\nHost: {host}\r\n\r\n"));
+        assert!(
+            got.iter().any(|(n, s, c)| n == "Cross-site scripting (DOM-based)" && s == "high" && c == "Firm"),
+            "location.search source: {got:?}"
         );
         let got = lab_scan(port, &["active.dom-xss"], "GET", "/benign", format!("GET /benign HTTP/1.1\r\nHost: {host}\r\n\r\n"));
         assert!(!got.iter().any(|(n, ..)| n == "Cross-site scripting (DOM-based)"), "{got:?}");
@@ -5351,6 +5377,39 @@ mod tests {
             format!("GET /benign5 HTTP/1.1\r\nHost: {host}\r\n\r\n"),
         );
         assert!(got.is_empty(), "{got:?}");
+    }
+
+    /// R-13 jQuery sinks: a jQuery-dependent hit is reported with
+    /// Tentative confidence (burp.Zwf8.Zd flag 4). The lab inlines a
+    /// minimal window.jQuery (no network). Skipped when no Chromium is
+    /// available.
+    #[test]
+    fn dom_jquery_sinks_are_tentative_against_a_live_lab() {
+        if crate::crawl::chromium_binary().is_none() {
+            return;
+        }
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = lab_serve(l, |_method, path, _raw| {
+            let body = if path.starts_with("/jquery") {
+                r#"<html><body><script>
+window.jQuery = window.$ = function () { return Object.create(jQuery.fn); };
+jQuery.fn = jQuery.prototype = {
+  html: function (v) { this.v = v; return this; },
+  attr: function (n, v) { return this; }
+};
+setTimeout(function () { jQuery('<p>x</p>').html(location.hash.slice(1)); }, 50);
+</script></body></html>"#
+            } else {
+                "<html><body><p>hello</p></body></html>"
+            };
+            format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        });
+        let host = format!("127.0.0.1:{port}");
+        let got = lab_scan(port, &["active.dom-xss"], "GET", "/jquery", format!("GET /jquery HTTP/1.1\r\nHost: {host}\r\n\r\n"));
+        assert!(
+            got.iter().any(|(n, s, c)| n == "Cross-site scripting (DOM-based)" && s == "high" && c == "Tentative"),
+            "jQuery sink: {got:?}"
+        );
     }
 
     /// R-10 batch 2: the three GraphQL checks against a live endpoint.

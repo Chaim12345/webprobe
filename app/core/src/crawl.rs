@@ -849,11 +849,20 @@ const DOM_INSTRUMENT_JS: &str = r#"
   window.__wpDomAnalysis = true;
   window.__wpDomHits = [];
   var CANARY = "%CANARY%";
+  // The probe carries the canary in both the fragment and a query
+  // parameter; whichever part of the URL holds it names the source
+  // (burp.Zcwh's source strings).
+  function sourceFor() {
+    if (String(location.hash).indexOf(CANARY) >= 0) { return ["location.hash", String(location.hash)]; }
+    if (String(location.search).indexOf(CANARY) >= 0) { return ["location.search", String(location.search)]; }
+    return ["location", String(location.href)];
+  }
   function record(sink, value) {
     try {
       var s = String(value);
       if (s.indexOf(CANARY) >= 0 && window.__wpDomHits.length < 50) {
-        window.__wpDomHits.push({ source: "location.hash", sink: sink, sourceValue: String(location.hash), sinkValue: s.slice(0, 300), pageUrl: String(location.href) });
+        var src = sourceFor();
+        window.__wpDomHits.push({ source: src[0], sink: sink, sourceValue: src[1], sinkValue: s.slice(0, 300), pageUrl: String(location.href) });
       }
     } catch (e) {}
   }
@@ -1005,6 +1014,39 @@ const DOM_INSTRUMENT_JS: &str = r#"
     var origSetAttr = Element.prototype.setAttribute;
     Element.prototype.setAttribute = function (n, v) { record("element.setAttribute." + String(n).toLowerCase(), v); return origSetAttr.apply(this, arguments); };
   }
+  // jQuery sinks: jQuery loads after this script, so poll for it once.
+  // jQuery-dependent results are Tentative in burp.Zwf8.Zd; the jQuery.*
+  // sink names carry that signal.
+  var jqDone = false;
+  function wrapJQuery() {
+    if (jqDone || !window.jQuery || !window.jQuery.fn) { return; }
+    jqDone = true;
+    var jq = window.jQuery;
+    ["html", "append", "prepend", "before", "after", "wrap", "replaceWith"].forEach(function (m) {
+      if (typeof jq.fn[m] === "function") {
+        var orig = jq.fn[m];
+        jq.fn[m] = function (v) { record("jQuery." + m, v); return orig.apply(this, arguments); };
+      }
+    });
+    if (typeof jq.parseHTML === "function") {
+      var origPh = jq.parseHTML;
+      jq.parseHTML = function (v) { record("jQuery.parseHTML", v); return origPh.apply(jq, arguments); };
+    }
+    if (typeof jq.globalEval === "function") {
+      var origGe = jq.globalEval;
+      jq.globalEval = function (v) { record("jQuery.globalEval", v); return origGe.apply(jq, arguments); };
+    }
+    ["attr", "prop"].forEach(function (m) {
+      if (typeof jq.fn[m] === "function") {
+        var orig = jq.fn[m];
+        jq.fn[m] = function (n, v) { record("jQuery." + m + "." + String(n).toLowerCase(), v); return orig.apply(this, arguments); };
+      }
+    });
+  }
+  var jqTimer = setInterval(function () {
+    wrapJQuery();
+    if (jqDone) { clearInterval(jqTimer); }
+  }, 25);
   // webdatabase.executeSql (burp.Zcwh's client-side SQL sink) is not
   // wrapped: openDatabase is gone from current Chromium.
   // Constructors need Reflect.construct (`new` semantics).
@@ -1040,9 +1082,11 @@ const DOM_INSTRUMENT_JS: &str = r#"
 })();
 "#;
 
-/// R-13 option (b) vertical slice: navigate to `url` with `#{canary}` in a
-/// headless browser (locked to the target host, like the crawl) and
-/// return the source-to-sink hits the instrumentation recorded. The
+/// R-13 option (b): navigate to `url` with the canary in both the
+/// fragment and a `wpdom` query parameter (covering the location.hash and
+/// location.search sources in one run) in a headless browser locked to
+/// the target host, like the crawl, and return the source-to-sink hits
+/// the instrumentation recorded. The
 /// browser tree is killed and its profile removed on every path.
 pub fn dom_analysis_probe(shared: &Arc<Shared>, url: &str, canary: &str) -> Result<Vec<DomHit>, String> {
     let bin = crate::paths::chromium().map_err(|m| m.to_string())?.display().to_string();
@@ -1098,7 +1142,10 @@ pub fn dom_analysis_probe(shared: &Arc<Shared>, url: &str, canary: &str) -> Resu
         cdp.call("Page.enable", serde_json::json!({}))?;
         cdp.call("Page.addScriptToEvaluateOnNewDocument", serde_json::json!({"source": DOM_INSTRUMENT_JS.replace("%CANARY%", canary)}))?;
         let base = url.split('#').next().unwrap_or(url);
-        cdp.call("Page.navigate", serde_json::json!({"url": format!("{base}#{canary}")}))?;
+        // The canary rides both the fragment and a query parameter, so one
+        // navigation covers the location.hash and location.search sources.
+        let sep = if base.contains('?') { "&" } else { "?" };
+        cdp.call("Page.navigate", serde_json::json!({"url": format!("{base}{sep}wpdom={canary}#{canary}")}))?;
         for _ in 0..25 {
             if shared.scan.stop.load(Ordering::SeqCst) {
                 break;
