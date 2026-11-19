@@ -119,6 +119,10 @@ pub(crate) static REQUEST_CHECKS: &[&dyn RequestCheck] = &[
     &DomJsInjection,
     &DomOpenRedirection,
     &DomCookieManipulation,
+    &DomStorageManipulation,
+    &DomJsonInjection,
+    &DomXpathInjection,
+    &DomDocumentDomain,
 ];
 
 /// Whether `check` audits `ip` under `config`: the point type suits it,

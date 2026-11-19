@@ -88,6 +88,10 @@ fn registry_order_is_pinned() {
             ("active.dom-javascript-injection", Scope::Request, Some(BURP_GROUP)),
             ("active.dom-open-redirection", Scope::Request, Some(BURP_GROUP)),
             ("active.dom-cookie-manipulation", Scope::Request, Some(BURP_GROUP)),
+            ("active.dom-storage-manipulation", Scope::Request, Some(BURP_GROUP)),
+            ("active.dom-json-injection", Scope::Request, Some(BURP_GROUP)),
+            ("active.dom-xpath-injection", Scope::Request, Some(BURP_GROUP)),
+            ("active.dom-document-domain", Scope::Request, Some(BURP_GROUP)),
         ]
     );
     // Stage A4 (burp.Zwp6) runs once per stored-input pair.
@@ -563,6 +567,51 @@ fn dom_families_batch1_against_a_live_lab() {
         "GET",
         "/benign2",
         format!("GET /benign2 HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(got.is_empty(), "{got:?}");
+}
+
+
+/// R-13 batch 2: the storage, JSON-injection, XPath-injection and
+/// document-domain DOM families against live lab pages driven by a
+/// real browser. Skipped when no Chromium is available.
+#[test]
+fn dom_families_batch2_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, _raw| {
+        let body = if path.starts_with("/storage") {
+            "<html><body><script>localStorage.setItem('k', location.hash.slice(1));</script></body></html>"
+        } else if path.starts_with("/json") {
+            "<html><body><script>JSON.parse(location.hash.slice(1));</script></body></html>"
+        } else if path.starts_with("/xpath") {
+            "<html><body><script>document.evaluate(location.hash.slice(1), document, null, 0, null);</script></body></html>"
+        } else if path.starts_with("/domain") {
+            "<html><body><script>document.domain = location.hash.slice(1);</script></body></html>"
+        } else {
+            "<html><body><p>hello</p></body></html>"
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    let expect = [
+        ("/storage", "active.dom-storage-manipulation", "HTML5 storage manipulation (DOM-based)", "info", "Firm"),
+        ("/json", "active.dom-json-injection", "Client-side JSON injection (DOM-based)", "low", "Firm"),
+        ("/xpath", "active.dom-xpath-injection", "Client-side XPath injection (DOM-based)", "low", "Firm"),
+        ("/domain", "active.dom-document-domain", "Document domain manipulation (DOM-based)", "medium", "Firm"),
+    ];
+    for (page, id, name, sev, conf) in expect {
+        let got = lab_scan(port, &[id], "GET", page, format!("GET {page} HTTP/1.1\r\nHost: {host}\r\n\r\n"));
+        assert!(got.iter().any(|(n, s, c)| n == name && s == sev && c == conf), "{name}: {got:?}");
+    }
+    let got = lab_scan(
+        port,
+        &["active.dom-storage-manipulation", "active.dom-json-injection", "active.dom-xpath-injection", "active.dom-document-domain"],
+        "GET",
+        "/benign3",
+        format!("GET /benign3 HTTP/1.1\r\nHost: {host}\r\n\r\n"),
     );
     assert!(got.is_empty(), "{got:?}");
 }

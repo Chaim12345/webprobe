@@ -910,6 +910,47 @@ dom_family_check!(
     "Open redirection (DOM-based), KB 00500110, Low: window.open, the only wrappable navigation sink of burp.Zcwh's family - the Location members (href, assign, replace, host, hostname, protocol) are LegacyUnforgeable in Chromium. Confidence Tentative (burp.Zwf8.Zd: every open-redirection variant is Tentative)."
 );
 dom_family_check!(
+    DomStorageManipulation,
+    "active.dom-storage-manipulation",
+    "HTML5 storage manipulation (DOM-based)",
+    "info",
+    "Firm",
+    "DOM-based HTML5 storage manipulation",
+    &["localStorage.setItem.name", "localStorage.setItem.value", "sessionStorage.setItem.name", "sessionStorage.setItem.value"][..],
+    "HTML5 storage manipulation (DOM-based), KB 00500f00, Information: the localStorage/sessionStorage setItem name and value sinks of burp.Zcwh's storage family. Confidence Firm (burp.Zwf8.Zd)."
+);
+dom_family_check!(
+    DomJsonInjection,
+    "active.dom-json-injection",
+    "Client-side JSON injection (DOM-based)",
+    "low",
+    "Firm",
+    "DOM-based client-side JSON injection",
+    &["JSON.parse"][..],
+    "Client-side JSON injection (DOM-based), KB 00200370, Low: JSON.parse, burp.Zcwh's client-side JSON injection sink. Confidence Firm (burp.Zwf8.Zd)."
+);
+dom_family_check!(
+    DomXpathInjection,
+    "active.dom-xpath-injection",
+    "Client-side XPath injection (DOM-based)",
+    "low",
+    "Firm",
+    "DOM-based client-side XPath injection",
+    &["document.evaluate"][..],
+    "Client-side XPath injection (DOM-based), KB 00200360, Low: document.evaluate (jQuery.parseXML not yet), burp.Zcwh's XPath family. Confidence Firm (burp.Zwf8.Zd)."
+);
+dom_family_check!(
+    DomDocumentDomain,
+    "active.dom-document-domain",
+    "Document domain manipulation (DOM-based)",
+    "medium",
+    "Firm",
+    "DOM-based document domain manipulation",
+    &["document.domain"][..],
+    "Document domain manipulation (DOM-based), KB 00501100, Medium: the document.domain setter (configurable in Chromium, wrapped). Confidence Firm (burp.Zwf8.Zd)."
+);
+
+dom_family_check!(
     DomCookieManipulation,
     "active.dom-cookie-manipulation",
     "Cookie manipulation (DOM-based)",
