@@ -1132,19 +1132,27 @@ const DOM_INSTRUMENT_JS: &str = r#"
   window.__wpDomAnalysis = true;
   window.__wpDomHits = [];
   var CANARY = "%CANARY%";
-  // The probe carries the canary in both the fragment and a query
-  // parameter; whichever part of the URL holds it names the source
-  // (burp.Zcwh's source strings).
-  function sourceFor() {
-    if (String(location.hash).indexOf(CANARY) >= 0) { return ["location.hash", String(location.hash)]; }
-    if (String(location.search).indexOf(CANARY) >= 0) { return ["location.search", String(location.search)]; }
+  // The probe carries a distinct variant of the canary in the fragment
+  // and in the wpdom query parameter, and the HIT VALUE says which one the
+  // page actually read: a location.hash reader's value holds only the
+  // fragment variant, a location.search reader's only the query variant,
+  // and a whole-URL reader's both (burp.Zcwh's source strings). Keying
+  // the source off location.* would misattribute every hit to
+  // location.hash, because the fragment variant is always in the URL.
+  var HCANARY = "%HCANARY%";
+  var QCANARY = "%QCANARY%";
+  function sourceFor(s) {
+    var h = s.indexOf(HCANARY) >= 0, q = s.indexOf(QCANARY) >= 0;
+    if (h && q) { return ["location.href", String(location.href)]; }
+    if (h) { return ["location.hash", String(location.hash)]; }
+    if (q) { return ["location.search", String(location.search)]; }
     return ["location", String(location.href)];
   }
   function record(sink, value) {
     try {
       var s = String(value);
       if (s.indexOf(CANARY) >= 0 && window.__wpDomHits.length < 50) {
-        var src = sourceFor();
+        var src = sourceFor(s);
         window.__wpDomHits.push({ source: src[0], sink: sink, sourceValue: src[1], sinkValue: s.slice(0, 300), pageUrl: String(location.href) });
       }
     } catch (e) {}
@@ -1423,12 +1431,13 @@ pub fn dom_analysis_probe(shared: &Arc<Shared>, url: &str, canary: &str) -> Resu
         }
         let mut cdp = Cdp::connect(&ws_url.ok_or("browser DevTools endpoint did not come up")?)?;
         cdp.call("Page.enable", serde_json::json!({}))?;
-        cdp.call("Page.addScriptToEvaluateOnNewDocument", serde_json::json!({"source": DOM_INSTRUMENT_JS.replace("%CANARY%", canary)}))?;
+        cdp.call("Page.addScriptToEvaluateOnNewDocument", serde_json::json!({"source": DOM_INSTRUMENT_JS.replace("%CANARY%", canary).replace("%HCANARY%", &format!("h{canary}")).replace("%QCANARY%", &format!("q{canary}"))}))?;
         let base = url.split('#').next().unwrap_or(url);
-        // The canary rides both the fragment and a query parameter, so one
-        // navigation covers the location.hash and location.search sources.
+        // Distinct canary variants ride the fragment and the query
+        // parameter, so one navigation covers the location.hash and
+        // location.search sources and the hit value attributes the source.
         let sep = if base.contains('?') { "&" } else { "?" };
-        cdp.call("Page.navigate", serde_json::json!({"url": format!("{base}{sep}wpdom={canary}#{canary}")}))?;
+        cdp.call("Page.navigate", serde_json::json!({"url": format!("{base}{sep}wpdom=q{canary}#h{canary}")}))?;
         for _ in 0..25 {
             if shared.scan.stop.load(Ordering::SeqCst) {
                 break;
