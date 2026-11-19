@@ -1730,6 +1730,7 @@ mod tests {
         assert!(errs.iter().any(|e| e.message.contains("reserved") && e.line == 5), "{errs:?}");
     }
 
+    #[test]
     fn negative_integers_and_verbatim_escapes() {
         // a negative integer in a hole is an Int, not a variable reference
         let i = parse_interpol("{random_str(-10)}", true, 1).unwrap();
@@ -1743,6 +1744,7 @@ mod tests {
         assert!(matches!(&i.parts[0], Part::Text(t) if t == "anb"));
     }
 
+    #[test]
     fn validation_rejects_bad_definitions() {
         // wrong language
         let src = "metadata:\n language: v1\n name: \"x\"\ngiven host then\n report issue:\n  severity: info\n  confidence: certain\n";
