@@ -283,7 +283,7 @@ pub fn ws_inflate(z: &mut flate2::Decompress, reset: bool, data: &[u8]) -> Optio
 /// directions closed) tells them the socket closed.
 pub(crate) struct WsWatch {
     socket: u64,
-    hooks: Vec<Arc<dyn crate::ext_host::ProxyHooks>>,
+    hooks: Vec<Arc<dyn webprobe_support::ext::ProxyHooks>>,
 }
 
 impl WsWatch {
@@ -299,7 +299,7 @@ impl WsWatch {
             return None;
         }
         let socket = shared.next_id.fetch_add(1, Ordering::SeqCst);
-        let svc = crate::ext_host::HttpService::new(host, port, secure);
+        let svc = webprobe_support::ext::HttpService::new(host, port, secure);
         let hooks: Vec<_> = exts
             .into_iter()
             .filter(|e| e.ws_open(socket, &svc, upgrade))
@@ -311,12 +311,12 @@ impl WsWatch {
     /// drop wins, the last intercept verdict counts.
     fn message(
         &self,
-        stage: crate::ext_host::WsStage,
+        stage: webprobe_support::ext::WsStage,
         to_server: bool,
         binary: bool,
         payload: &mut Vec<u8>,
-    ) -> crate::ext_host::WsVerdict {
-        use crate::ext_host::WsVerdict;
+    ) -> webprobe_support::ext::WsVerdict {
+        use webprobe_support::ext::WsVerdict;
         let mut verdict = WsVerdict::Continue;
         for h in &self.hooks {
             match h.ws_message(self.socket, stage, to_server, binary, payload) {
@@ -558,20 +558,20 @@ pub fn ws_message(
     if let Some(w) = &watch {
         let before = payload.clone();
         match w.message(
-            crate::ext_host::WsStage::Received,
+            webprobe_support::ext::WsStage::Received,
             client_to_server,
             binary,
             &mut payload,
         ) {
-            crate::ext_host::WsVerdict::Drop => {
+            webprobe_support::ext::WsVerdict::Drop => {
                 shared.log(&format!(
                     "An extension dropped a WebSocket message ({direction}, {host})"
                 ));
                 return Ok(Vec::new());
             }
-            crate::ext_host::WsVerdict::Intercept => hold = true,
-            crate::ext_host::WsVerdict::DoNotIntercept => hold = false,
-            crate::ext_host::WsVerdict::Continue => {}
+            webprobe_support::ext::WsVerdict::Intercept => hold = true,
+            webprobe_support::ext::WsVerdict::DoNotIntercept => hold = false,
+            webprobe_support::ext::WsVerdict::Continue => {}
         }
         changed |= payload != before;
     }
@@ -620,11 +620,11 @@ pub fn ws_message(
     if let Some(w) = &watch {
         let before = payload.clone();
         if w.message(
-            crate::ext_host::WsStage::ToBeSent,
+            webprobe_support::ext::WsStage::ToBeSent,
             client_to_server,
             binary,
             &mut payload,
-        ) == crate::ext_host::WsVerdict::Drop
+        ) == webprobe_support::ext::WsVerdict::Drop
         {
             shared.log(&format!(
                 "An extension dropped a WebSocket message ({direction}, {host})"
@@ -727,7 +727,7 @@ pub fn handle_websocket(shared: Arc<Shared>, mut client: TcpStream, req: Vec<u8>
         req_out = ws_strip_extensions(&req_out);
     }
     if !shared.ext_handle_request(
-        &crate::ext_host::HttpService::new(&host, port, false),
+        &webprobe_support::ext::HttpService::new(&host, port, false),
         &parts.method,
         &path_of(&parts),
         &mut req_out,
@@ -930,7 +930,7 @@ pub fn handle_tls_websocket(
         req_out = ws_strip_extensions(&req_out);
     }
     if !shared.ext_handle_request(
-        &crate::ext_host::HttpService::new(&host, port, true),
+        &webprobe_support::ext::HttpService::new(&host, port, true),
         &parts.method,
         &path_of(&parts),
         &mut req_out,

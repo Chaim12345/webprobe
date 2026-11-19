@@ -338,7 +338,7 @@ pub fn apply_session_rules_for(
             "use cookie jar" => out = from_jar(&out),
             "invoke extension" => {
                 let exts = shared.ext_host.lock().unwrap().active();
-                let svc = crate::ext_host::HttpService::new(&host, port, https);
+                let svc = webprobe_support::ext::HttpService::new(&host, port, https);
                 match exts.iter().find(|e| {
                     e.ui()
                         .is_some_and(|u| u.session_actions.contains(&rule.value))

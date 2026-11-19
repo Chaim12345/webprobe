@@ -82,7 +82,7 @@ pub fn record(
     https: bool,
     listener_port: u16,
     edited: bool,
-    ann: &crate::ext_host::Annotations,
+    ann: &webprobe_support::ext::Annotations,
 ) {
     // History shows the decoded message: chunked bodies reassembled and
     // content coding removed (MECHANICS.md A-01/A-02). The bytes forwarded to
@@ -115,7 +115,7 @@ pub fn record_entry(
     https: bool,
     listener_port: u16,
     edited: bool,
-    ann: &crate::ext_host::Annotations,
+    ann: &webprobe_support::ext::Annotations,
     scan: bool,
 ) {
     let req = crate::codec::normalize_request(req);
@@ -299,7 +299,7 @@ pub fn browser_item_response(shared: &Shared, path: &str) -> Option<Vec<u8>> {
 /// Extension annotations on a history entry: the notes become (or join)
 /// its comment, the highlight its row colour (Burp shows Montoya
 /// annotations the same way).
-pub(crate) fn annotate(e: &mut HistEntry, ann: &crate::ext_host::Annotations) {
+pub(crate) fn annotate(e: &mut HistEntry, ann: &webprobe_support::ext::Annotations) {
     if !ann.notes.is_empty() {
         e.note = Some(match e.note.take() {
             Some(n) if !n.is_empty() => format!("{n}; {}", ann.notes),

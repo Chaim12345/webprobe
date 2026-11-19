@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 // Extension SDK vocabulary, moved from core ext_host.rs (L8, issue #38):
 // the Montoya-shaped hook surface (ProxyHooks), its message and menu
 // types, annotations and extension issue types. Pure data and traits
@@ -430,4 +432,132 @@ pub enum ToolSend {
     },
     Comparer(String),
     Decoder(String),
+}
+
+/// The kind of an installed extension.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Kind {
+    /// A Montoya .jar run by the sidecar JVM.
+    Java,
+    /// A WebProbe API v1 executable (ext_process).
+    Process,
+}
+
+impl Kind {
+    pub fn label(self) -> &'static str {
+        match self {
+            Kind::Java => "Java",
+            Kind::Process => "Process",
+        }
+    }
+}
+
+/// One installed extension, remembered across runs like Burp's extension
+/// list (user-level, not per project).
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Installed {
+    pub kind: Kind,
+    /// The .jar path (Java) or the command line (Process).
+    pub source: String,
+    #[serde(default = "yes")]
+    pub enabled: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+// ---- Hook runners (moved from core ext_host.rs, L8 #38): pure over
+// the SDK types, notice and std::panic, so net never names the host.
+
+pub fn run_request_hooks(
+    exts: &[Arc<dyn ProxyHooks>],
+    svc: &HttpService,
+    method: &str,
+    path: &str,
+    req: &mut Vec<u8>,
+) -> bool {
+    run_request_hooks_annotated(exts, svc, method, path, req, &mut Annotations::default())
+}
+
+/// Run response hooks in order; false when one dropped the message.
+pub fn run_response_hooks(
+    exts: &[Arc<dyn ProxyHooks>],
+    svc: &HttpService,
+    method: &str,
+    path: &str,
+    resp: &mut Vec<u8>,
+) -> bool {
+    run_response_hooks_annotated(
+        exts,
+        svc,
+        method,
+        path,
+        &[],
+        resp,
+        &mut Annotations::default(),
+    )
+}
+
+/// [`run_request_hooks`] with the exchange's annotations.
+pub fn run_request_hooks_annotated(
+    exts: &[Arc<dyn ProxyHooks>],
+    svc: &HttpService,
+    method: &str,
+    path: &str,
+    req: &mut Vec<u8>,
+    ann: &mut Annotations,
+) -> bool {
+    exts.iter().all(|e| {
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            e.handle_request(svc, method, path, req, ann)
+        }));
+        match r {
+            Ok(action) => !matches!(action, ProxyAction::Drop),
+            // A panicking extension is skipped, not fatal: it must not kill
+            // the proxied connection or drop the message (panic policy, #32).
+            Err(_) => {
+                crate::notice::toast(
+                    crate::notice::Level::Warn,
+                    format!(
+                        "request hook of extension '{}' panicked; the hook was skipped",
+                        e.extension_name()
+                    ),
+                );
+                true
+            }
+        }
+    })
+}
+
+/// [`run_response_hooks`] with the request that was sent and the
+/// exchange's annotations.
+pub fn run_response_hooks_annotated(
+    exts: &[Arc<dyn ProxyHooks>],
+    svc: &HttpService,
+    method: &str,
+    path: &str,
+    req: &[u8],
+    resp: &mut Vec<u8>,
+    ann: &mut Annotations,
+) -> bool {
+    exts.iter().all(|e| {
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            e.handle_response(svc, method, path, req, resp, ann)
+        }));
+        match r {
+            Ok(action) => !matches!(action, ProxyAction::Drop),
+            Err(_) => {
+                crate::notice::toast(
+                    crate::notice::Level::Warn,
+                    format!(
+                        "response hook of extension '{}' panicked; the hook was skipped",
+                        e.extension_name()
+                    ),
+                );
+                true
+            }
+        }
+    })
 }

@@ -7,41 +7,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::ext_host::LoadedExtension;
 use crate::net::Shared;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Kind {
-    /// A Montoya .jar run by the sidecar JVM.
-    Java,
-    /// A WebProbe API v1 executable (ext_process).
-    Process,
-}
-
-impl Kind {
-    pub fn label(self) -> &'static str {
-        match self {
-            Kind::Java => "Java",
-            Kind::Process => "Process",
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Installed {
-    pub kind: Kind,
-    /// The .jar path (Java) or the command line (Process).
-    pub source: String,
-    #[serde(default = "yes")]
-    pub enabled: bool,
-}
-
-fn yes() -> bool {
-    true
-}
+pub use webprobe_support::ext::{Installed, Kind};
 
 /// Per-call deadline for process extensions.
 pub const HOOK_TIMEOUT: Duration = Duration::from_secs(2);

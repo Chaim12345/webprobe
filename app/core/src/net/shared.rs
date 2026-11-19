@@ -355,17 +355,18 @@ impl Shared {
     /// highlight for Proxy history).
     pub fn ext_handle_request(
         &self,
-        svc: &crate::ext_host::HttpService,
+        svc: &webprobe_support::ext::HttpService,
         method: &str,
         path: &str,
         req: &mut Vec<u8>,
-        ann: &mut crate::ext_host::Annotations,
+        ann: &mut webprobe_support::ext::Annotations,
     ) -> bool {
         let exts = self.ext_host.lock().unwrap().active();
         if exts.is_empty() {
             return true;
         }
-        let pass = crate::ext_host::run_request_hooks_annotated(&exts, svc, method, path, req, ann);
+        let pass =
+            webprobe_support::ext::run_request_hooks_annotated(&exts, svc, method, path, req, ann);
         self.collect_ext_issues(&exts, &svc.host, path);
         pass
     }
@@ -374,26 +375,27 @@ impl Shared {
     /// the extensions reported are added for `host` + `path`.
     pub fn ext_handle_response(
         &self,
-        svc: &crate::ext_host::HttpService,
+        svc: &webprobe_support::ext::HttpService,
         method: &str,
         path: &str,
         req: &[u8],
         resp: &mut Vec<u8>,
-        ann: &mut crate::ext_host::Annotations,
+        ann: &mut webprobe_support::ext::Annotations,
     ) -> bool {
         let exts = self.ext_host.lock().unwrap().active();
         if exts.is_empty() {
             return true;
         }
-        let pass =
-            crate::ext_host::run_response_hooks_annotated(&exts, svc, method, path, req, resp, ann);
+        let pass = webprobe_support::ext::run_response_hooks_annotated(
+            &exts, svc, method, path, req, resp, ann,
+        );
         self.collect_ext_issues(&exts, &svc.host, path);
         pass
     }
 
     fn collect_ext_issues(
         &self,
-        exts: &[Arc<dyn crate::ext_host::ProxyHooks>],
+        exts: &[Arc<dyn webprobe_support::ext::ProxyHooks>],
         host: &str,
         path: &str,
     ) {
