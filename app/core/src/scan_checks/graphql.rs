@@ -447,12 +447,19 @@ impl RequestCheck for SpoofableClientIp {
 /// Add a query parameter to a raw request's target (before any fragment
 /// would be — HTTP request targets do not carry one).
 fn with_query_param(raw: &[u8], name: &str, value: &str) -> Vec<u8> {
-    let Some(end) = util::find_head_end(raw) else { return raw.to_vec() };
+    let Some(end) = util::find_head_end(raw) else {
+        return raw.to_vec();
+    };
     let head = String::from_utf8_lossy(&raw[..end]);
     let mut lines = head.split("\r\n");
-    let Some(first) = lines.next() else { return raw.to_vec() };
+    let Some(first) = lines.next() else {
+        return raw.to_vec();
+    };
     let mut parts = first.split_whitespace();
-    let (Some(method), Some(target), Some(version)) = (parts.next(), parts.next(), parts.next()) else { return raw.to_vec() };
+    let (Some(method), Some(target), Some(version)) = (parts.next(), parts.next(), parts.next())
+    else {
+        return raw.to_vec();
+    };
     let sep = if target.contains('?') { "&" } else { "?" };
     let mut out = format!("{method} {target}{sep}{name}={value} {version}\r\n");
     for line in lines {
@@ -472,7 +479,9 @@ fn with_query_param(raw: &[u8], name: &str, value: &str) -> Vec<u8> {
 /// `x-requested-with` — from a raw request (burp.Zii_.java:25-64),
 /// returning the rewritten request and the names removed.
 fn strip_auth_headers(raw: &[u8]) -> (Vec<u8>, Vec<String>) {
-    let Some(end) = util::find_head_end(raw) else { return (raw.to_vec(), Vec::new()) };
+    let Some(end) = util::find_head_end(raw) else {
+        return (raw.to_vec(), Vec::new());
+    };
     let head = String::from_utf8_lossy(&raw[..end]);
     let mut out = String::new();
     let mut removed = Vec::new();
@@ -485,7 +494,9 @@ fn strip_auth_headers(raw: &[u8]) -> (Vec<u8>, Vec<String>) {
                 let k = k.trim();
                 let drop = k.eq_ignore_ascii_case("authorization")
                     || k.eq_ignore_ascii_case("cookie")
-                    || (k.len() > 2 && k[..2].eq_ignore_ascii_case("x-") && !k.eq_ignore_ascii_case("x-requested-with"));
+                    || (k.len() > 2
+                        && k[..2].eq_ignore_ascii_case("x-")
+                        && !k.eq_ignore_ascii_case("x-requested-with"));
                 if drop {
                     removed.push(k.to_string());
                     continue;
@@ -511,17 +522,25 @@ fn json_node_count(body: &[u8]) -> i64 {
             _ => 0,
         }
     }
-    serde_json::from_slice::<serde_json::Value>(body).map(|v| count(&v)).unwrap_or(0)
+    serde_json::from_slice::<serde_json::Value>(body)
+        .map(|v| count(&v))
+        .unwrap_or(0)
 }
 
 /// The text of the first <title> element, trimmed ("" when none).
 fn page_title(body: &[u8]) -> String {
     let text = String::from_utf8_lossy(body);
     let lower = text.to_lowercase();
-    let Some(s) = lower.find("<title") else { return String::new() };
-    let Some(gt) = lower[s..].find('>') else { return String::new() };
+    let Some(s) = lower.find("<title") else {
+        return String::new();
+    };
+    let Some(gt) = lower[s..].find('>') else {
+        return String::new();
+    };
     let start = s + gt + 1;
-    let Some(e) = lower[start..].find("</title") else { return String::new() };
+    let Some(e) = lower[start..].find("</title") else {
+        return String::new();
+    };
     text[start..start + e].trim().to_string()
 }
 
@@ -541,11 +560,15 @@ fn bac_equivalent(reference: &[u8], candidate: &[u8]) -> bool {
     if json_node_count(body_a) != json_node_count(body_b) {
         return false;
     }
-    let html = util::get_header(&pa.headers, "Content-Type").unwrap_or_default().to_ascii_lowercase().contains("html");
+    let html = util::get_header(&pa.headers, "Content-Type")
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+        .contains("html");
     if html {
         page_title(body_a) == page_title(body_b)
     } else {
-        body_a.iter().filter(|b| **b == b'\n').count() == body_b.iter().filter(|b| **b == b'\n').count()
+        body_a.iter().filter(|b| **b == b'\n').count()
+            == body_b.iter().filter(|b| **b == b'\n').count()
     }
 }
 
@@ -587,7 +610,12 @@ impl RequestCheck for BrokenAccessControl {
             return;
         }
         let base = util::parse_http(&cx.baseline.raw);
-        let status: u16 = base.first.split_whitespace().nth(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+        let status: u16 = base
+            .first
+            .split_whitespace()
+            .nth(1)
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
         if !(200..300).contains(&status) {
             return;
         }
@@ -603,7 +631,9 @@ impl RequestCheck for BrokenAccessControl {
             if removed.is_empty() {
                 return;
             }
-            let (Some(a), Some(b)) = (burp_send(cx, &full), burp_send(cx, &stripped)) else { return };
+            let (Some(a), Some(b)) = (burp_send(cx, &full), burp_send(cx, &stripped)) else {
+                return;
+            };
             if !bac_equivalent(&a, &b) {
                 return;
             }
@@ -612,7 +642,9 @@ impl RequestCheck for BrokenAccessControl {
                 removed_names = removed;
             }
         }
-        let Some((full, stripped, a, b)) = pair else { return };
+        let Some((full, stripped, a, b)) = pair else {
+            return;
+        };
         let mut i = mk(
             "info",
             self.issue(),
@@ -798,7 +830,10 @@ fn authed_get(cx: &ScanCtx, path_query: &str) -> Vec<u8> {
     let mut raw = format!("GET {path_query} HTTP/1.1\r\nHost: {}\r\n", cx.host_hdr);
     for (k, v) in &cx.parts.headers {
         let kl = k.to_ascii_lowercase();
-        if matches!(kl.as_str(), "host" | "connection" | "content-length" | "content-type" | "accept-encoding") {
+        if matches!(
+            kl.as_str(),
+            "host" | "connection" | "content-length" | "content-type" | "accept-encoding"
+        ) {
             continue;
         }
         raw.push_str(&format!("{k}: {v}\r\n"));
@@ -816,7 +851,11 @@ fn dom_analysis_hits(cx: &ScanCtx) -> (Vec<crate::crawl::DomHit>, Option<String>
     }
     let scheme = if cx.entry.https { "https" } else { "http" };
     let default = if cx.entry.https { 443 } else { 80 };
-    let port = if cx.entry.port == default { String::new() } else { format!(":{}", cx.entry.port) };
+    let port = if cx.entry.port == default {
+        String::new()
+    } else {
+        format!(":{}", cx.entry.port)
+    };
     let path = cx.entry.path.split('#').next().unwrap_or("/");
     let url = format!("{scheme}://{}{port}{path}", cx.entry.host);
     let cache = DOM_HITS_CACHE.get_or_init(Default::default);
@@ -839,11 +878,12 @@ fn dom_analysis_hits(cx: &ScanCtx) -> (Vec<crate::crawl::DomHit>, Option<String>
     drop(guard);
     let canary = format!("wp{}", rnd_letters(10));
     let origin = crate::crawl::origin_of(&url).unwrap_or_default();
-    let hits: Vec<crate::crawl::DomHit> = crate::crawl::dom_analysis_probe(&cx.shared, &url, &canary)
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|h| h.page_url.starts_with(&origin))
-        .collect();
+    let hits: Vec<crate::crawl::DomHit> =
+        crate::crawl::dom_analysis_probe(&cx.shared, &url, &canary)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|h| h.page_url.starts_with(&origin))
+            .collect();
     // The reflected-DOM variant (burp.Zf24's REFLECTED; Zhp's template has
     // the value "copied into a JavaScript string literal"): re-request the
     // URL the browser navigated to (the wpdom query parameter, no
@@ -859,11 +899,19 @@ fn dom_analysis_hits(cx: &ScanCtx) -> (Vec<crate::crawl::DomHit>, Option<String>
     let raw = authed_get(cx, &format!("{path}{sep}wpdom={qcanary}"));
     let reflected = cx
         .send(&raw)
-        .map(|r| crate::scan::g11_contexts(&r, &canary).iter().any(|c| matches!(c, crate::scan::G11Context::JsText)))
+        .map(|r| {
+            crate::scan::g11_contexts(&r, &canary)
+                .iter()
+                .any(|c| matches!(c, crate::scan::G11Context::JsText))
+        })
         .unwrap_or(false)
         .then_some(qcanary);
     let v = (hits, reflected);
-    cache.map.lock().unwrap().insert(url, DomHitsState::Done(v.clone()));
+    cache
+        .map
+        .lock()
+        .unwrap()
+        .insert(url, DomHitsState::Done(v.clone()));
     cache.ready.notify_all();
     v
 }
@@ -1463,7 +1511,11 @@ macro_rules! g11_reflected_check {
                         "Tentative",
                         &cx.entry,
                         ip,
-                        format!("The injected value <b>{}</b> was reflected in {}.", util::html_encode(&payload), context),
+                        format!(
+                            "The injected value <b>{}</b> was reflected in {}.",
+                            util::html_encode(&payload),
+                            context
+                        ),
                     )
                     .with_evidence(evidence([rec.last(&payload)]))]);
                 }
