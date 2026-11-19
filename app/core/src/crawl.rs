@@ -1306,7 +1306,13 @@ const DOM_INSTRUMENT_JS: &str = r#"
   });
   if (Element.prototype.setAttribute) {
     var origSetAttr = Element.prototype.setAttribute;
-    Element.prototype.setAttribute = function (n, v) { record("element.setAttribute." + String(n).toLowerCase(), v); return origSetAttr.apply(this, arguments); };
+    Element.prototype.setAttribute = function (n, v) {
+      // Fires on every attribute set on the page: bail before building the
+      // sink name unless the value can possibly hold the canary.
+      if (String(v).indexOf(CANARY) < 0) { return origSetAttr.apply(this, arguments); }
+      record("element.setAttribute." + String(n).toLowerCase(), v);
+      return origSetAttr.apply(this, arguments);
+    };
   }
   // jQuery sinks: jQuery loads after this script, so poll for it once.
   // jQuery-dependent results are Tentative in burp.Zwf8.Zd; the jQuery.*
