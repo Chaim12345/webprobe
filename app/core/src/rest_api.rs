@@ -41,6 +41,10 @@ pub fn start(shared: &Arc<net::Shared>, api: &ApiConfig, kb: Arc<KnowledgeBase>)
     if !api.insecure_mode && api.keys.is_empty() {
         return Err("user_options.misc.api is enabled with no keys and insecure_mode false; refusing to start without an API key".to_string());
     }
+    if api.listen_mode == "all_interfaces" && api.insecure_mode {
+        // headless has no settings UI to notice this in: say it on stderr
+        eprintln!("webprobe: REST API listens on all interfaces with insecure_mode (no API key); any host that can reach the port can drive it");
+    }
     let host = match api.listen_mode.as_str() {
         "loopback_only" => api.address.clone().unwrap_or_else(|| "127.0.0.1".to_string()),
         "all_interfaces" => api.address.clone().unwrap_or_else(|| "0.0.0.0".to_string()),
@@ -52,8 +56,11 @@ pub fn start(shared: &Arc<net::Shared>, api: &ApiConfig, kb: Arc<KnowledgeBase>)
     let shared = shared.clone();
     let api = api.clone();
     std::thread::spawn(move || {
+        // one thread per client: an idle or slow client must not stall the
+        // others behind its read timeout
         for stream in listener.incoming().flatten() {
-            handle(stream, &shared, &state, &api, &kb);
+            let (shared, state, api, kb) = (shared.clone(), Arc::clone(&state), api.clone(), Arc::clone(&kb));
+            std::thread::spawn(move || handle(stream, &shared, &state, &api, &kb));
         }
     });
     Ok(port)
@@ -228,6 +235,12 @@ fn read_request(stream: &mut std::net::TcpStream) -> Option<(String, String, Vec
         .find(|(k, _)| k.trim().eq_ignore_ascii_case("content-length"))
         .and_then(|(_, v)| v.trim().parse::<usize>().ok())
         .unwrap_or(0);
+    // a client may claim any length; the API's payloads are scan configs
+    // and keys, so anything past this is an error, not a bigger buffer
+    const MAX_BODY: usize = 8 * 1024 * 1024;
+    if content_length > MAX_BODY {
+        return None;
+    }
     let mut body = buf[header_end + 4..].to_vec();
     while body.len() < content_length {
         let n = stream.read(&mut chunk).ok()?;
@@ -272,6 +285,35 @@ mod tests {
         let code: u16 = text.split_whitespace().nth(1).unwrap().parse().unwrap();
         let json: Value = serde_json::from_str(text.split("\r\n\r\n").nth(1).unwrap_or("{}")).unwrap_or(Value::Null);
         (code, json)
+    }
+
+    #[test]
+    fn idle_client_does_not_stall_other_requests() {
+        let api = keyed_api();
+        let (_shared, port) = start_test_server(&api);
+        let key = api.keys[0].clone();
+        // first client connects and sends nothing: before per-connection
+        // threads, everyone else queued behind its read timeout
+        let _idle = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+        let started = std::time::Instant::now();
+        let (code, _) = request(port, "GET", &format!("/{key}/v0.1/knowledge_base/issue_definitions"), None);
+        assert_eq!(code, 200);
+        assert!(started.elapsed() < std::time::Duration::from_secs(5), "request stalled behind the idle client");
+    }
+
+    #[test]
+    fn oversized_declared_body_is_rejected_without_buffering() {
+        let api = keyed_api();
+        let (_shared, port) = start_test_server(&api);
+        let key = api.keys[0].clone();
+        let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+        s.set_read_timeout(Some(std::time::Duration::from_secs(5))).unwrap();
+        // claims 64 MB, sends none: the server must close, not buffer
+        let req = format!("POST /burp/scans?{key} HTTP/1.1\r\nhost: x\r\ncontent-length: 67108864\r\nconnection: close\r\n\r\n");
+        s.write_all(req.as_bytes()).unwrap();
+        let mut resp = Vec::new();
+        let n = s.read_to_end(&mut resp).unwrap();
+        assert_eq!(n, 0, "oversized body should end the connection, got a response");
     }
 
     fn keyed_api() -> ApiConfig {

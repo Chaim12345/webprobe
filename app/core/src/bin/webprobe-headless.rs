@@ -40,9 +40,21 @@ fn usage() -> ! {
 /// rotating `proxy` / `scan` to the front.
 fn burp_command_first(args: &mut Vec<String>) {
     if !matches!(args.first().map(String::as_str), Some("proxy" | "scan" | "--version" | "--help")) {
-        if let Some(i) = args.iter().position(|a| a == "proxy" || a == "scan") {
-            let cmd = args.remove(i);
-            args.insert(0, cmd);
+        // Only a bare positional can be the command word: skip the values
+        // of flags that take one, so `--config-file proxy` stays a file.
+        let mut i = 0;
+        while i < args.len() {
+            let a = &args[i];
+            if matches!(a.as_str(), "--config-file" | "--user-config-file") {
+                i += 2;
+                continue;
+            }
+            if a == "proxy" || a == "scan" {
+                let cmd = args.remove(i);
+                args.insert(0, cmd);
+                return;
+            }
+            i += 1;
         }
     }
 }
@@ -354,6 +366,22 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn burp_command_first_ignores_flag_values() {
+        // a flag value that happens to be `proxy` is not the command word
+        let mut args: Vec<String> = ["--config-file", "proxy", "scan"].iter().map(|s| s.to_string()).collect();
+        burp_command_first(&mut args);
+        assert_eq!(args, ["scan", "--config-file", "proxy"]);
+        // flags before the command rotate as Burp allows
+        let mut args: Vec<String> = ["--unpause-spider-and-scanner", "proxy"].iter().map(|s| s.to_string()).collect();
+        burp_command_first(&mut args);
+        assert_eq!(args, ["proxy", "--unpause-spider-and-scanner"]);
+        // no command word: untouched
+        let mut args: Vec<String> = ["--config-file", "scan"].iter().map(|s| s.to_string()).collect();
+        burp_command_first(&mut args);
+        assert_eq!(args, ["--config-file", "scan"]);
+    }
+
     use super::*;
 
     fn strings(args: &[&str]) -> Vec<String> {
