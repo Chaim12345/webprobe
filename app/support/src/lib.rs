@@ -22,6 +22,7 @@ pub mod notice;
 pub mod organizer;
 pub mod paths;
 pub mod rules;
+pub mod scan_filter;
 pub mod seq_bits;
 pub mod streaming;
 pub mod sync;

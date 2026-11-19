@@ -91,9 +91,11 @@ impl ScanConfig {
     }
 
     /// Whether checks for issue `name` run and report (see
-    /// [`crate::scan_library::IssueFilter::allows`]).
+    /// [`crate::scan_library::filter_allows`]).
     pub fn issue_allowed(&self, name: &str, active: bool) -> bool {
-        self.issues.as_ref().is_none_or(|f| f.allows(name, active))
+        self.issues
+            .as_ref()
+            .is_none_or(|f| crate::scan_library::filter_allows(f, name, active))
     }
 
     pub fn insertion_enabled(&self, key: &str) -> bool {

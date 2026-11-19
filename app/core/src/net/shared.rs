@@ -81,7 +81,7 @@ pub struct Shared {
     /// own setting, as Burp's live passive tasks have their own
     /// configuration (None = every issue type). A scan's library
     /// selection never changes it.
-    pub live_passive_issues: Mutex<Option<crate::scan_library::IssueFilter>>,
+    pub live_passive_issues: Mutex<Option<webprobe_support::scan_filter::IssueFilter>>,
     /// Burp scan configuration "Audit accuracy" (burp.Zgnf): 0 minimise false
     /// negatives, 1 normal, 2 minimise false positives.
     pub scan_accuracy: AtomicU8,

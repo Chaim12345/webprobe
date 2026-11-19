@@ -34,7 +34,7 @@ pub fn passive_check_filtered(
     let mut v = passive_check_with(e, &|id| config.check_enabled(id), Some(&shared.passive));
     // R-11: "Issues reported" (passive scan type, individual selection).
     if let Some(f) = issues {
-        v.retain(|i| f.allows(&i.name, false));
+        v.retain(|i| crate::scan_library::filter_allows(f, &i.name, false));
     }
     // Montoya extensions' passive checks (bounded by the hook timeout).
     let exts = shared.ext_host.lock().unwrap().active();
