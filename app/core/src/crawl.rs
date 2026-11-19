@@ -1283,7 +1283,8 @@ const DOM_INSTRUMENT_JS: &str = r#"
   ["pushState", "replaceState"].forEach(function (name) {
     if (window.history && history[name]) {
       var origH = history[name];
-      history[name] = function (data) { record("history." + name, data); return origH.apply(history, arguments); };
+      // the URL is the third argument; the state object is not a sink value
+      history[name] = function (data, title, url) { if (url !== undefined) record("history." + name, url); return origH.apply(history, arguments); };
     }
   });
   if (Element.prototype.setAttribute) {
