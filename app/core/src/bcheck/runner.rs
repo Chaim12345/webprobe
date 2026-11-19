@@ -358,13 +358,20 @@ fn set_query_param(req: &mut RequestData, name: &str, value: &str) {
                 let rest = &url[i + 3..];
                 match rest.find('/') {
                     Some(j) => &url[i + 3 + j..],
-                    None => "/",
+                    // `http://host?x=1`: the query survives as path "/" + query
+                    None => match rest.find('?') {
+                        Some(q) => &url[i + 3 + q..],
+                        None => "/",
+                    },
                 }
             }
             None => url.as_str(),
         };
         match after.find('?') {
-            Some(i) => (after[..i].to_string(), after[i + 1..].to_string()),
+            Some(i) => {
+                let pth = &after[..i];
+                (if pth.is_empty() { "/".to_string() } else { pth.to_string() }, after[i + 1..].to_string())
+            }
             None => (after.to_string(), String::new()),
         }
     };
@@ -390,7 +397,10 @@ fn set_query_param(req: &mut RequestData, name: &str, value: &str) {
             let rest = &url[i + 3..];
             match rest.find('/') {
                 Some(j) => &url[..i + 3 + j],
-                None => url.as_str(),
+                None => match rest.find('?') {
+                    Some(q) => &url[..i + 3 + q],
+                    None => url.as_str(),
+                },
             }
         }
         None => "",
@@ -414,6 +424,15 @@ pub fn given_mode(def: &Definition) -> &GivenMode {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn set_query_param_keeps_the_query_of_a_pathless_url() {
+        let mut req = RequestData { method: "GET".into(), url: "http://host?x=1".into(), http_version: "HTTP/1.1".into(), headers: Vec::new(), body: String::new() };
+        set_query_param(&mut req, "p", "v");
+        assert_eq!(req.url, "http://host/?x=1&p=v");
+        set_query_param(&mut req, "x", "2");
+        assert_eq!(req.url, "http://host/?x=2&p=v");
+    }
+
     use super::*;
     use crate::bcheck::{parse, InteractionKind};
     use std::sync::Mutex;
