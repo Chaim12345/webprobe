@@ -12,13 +12,18 @@ use crate::sync::Mutex;
 use eframe::egui::{self, RichText, Ui};
 
 use crate::intruder::{self, PayloadSource};
-use crate::intruder_run::{self as run, AttackSettings, ExtractEnd, ExtractItem, ExtractStart, ResultRow, RunState};
+use crate::intruder_run::{
+    self as run, AttackSettings, ExtractEnd, ExtractItem, ExtractStart, ResultRow, RunState,
+};
 use crate::theme;
 use crate::App;
 
 /// (generator / processor calls into the sidecar): its result, and the
 /// flag Stop sets so it never starts.
-type Preparing = (std::sync::mpsc::Receiver<Result<Arc<RunState>, String>>, Arc<std::sync::atomic::AtomicBool>);
+type Preparing = (
+    std::sync::mpsc::Receiver<Result<Arc<RunState>, String>>,
+    Arc<std::sync::atomic::AtomicBool>,
+);
 
 /// Intruder state that is not part of the original `App` fields.
 pub struct IntruderExtra {
@@ -54,7 +59,10 @@ impl Default for IntruderExtra {
             match_new: String::new(),
             match_paste_pending: false,
             extract_form: ExtractForm::default(),
-            csv_path: std::env::temp_dir().join("intruder-results.csv").to_string_lossy().into_owned(),
+            csv_path: std::env::temp_dir()
+                .join("intruder-results.csv")
+                .to_string_lossy()
+                .into_owned(),
             order_key: (usize::MAX, usize::MAX, false),
             order: Vec::new(),
             order_at: None,
@@ -99,9 +107,21 @@ impl Default for ExtractForm {
 impl ExtractForm {
     fn item(&self) -> ExtractItem {
         ExtractItem {
-            start: if self.start_after { ExtractStart::After(self.start_expr.clone()) } else { ExtractStart::Offset(self.start_offset) },
-            end: if self.end_delim { ExtractEnd::Delimiter(self.end_expr.clone()) } else { ExtractEnd::Length(self.end_len) },
-            regex: if self.regex_mode { Some(self.regex.clone()) } else { None },
+            start: if self.start_after {
+                ExtractStart::After(self.start_expr.clone())
+            } else {
+                ExtractStart::Offset(self.start_offset)
+            },
+            end: if self.end_delim {
+                ExtractEnd::Delimiter(self.end_expr.clone())
+            } else {
+                ExtractEnd::Length(self.end_len)
+            },
+            regex: if self.regex_mode {
+                Some(self.regex.clone())
+            } else {
+                None
+            },
             case_sensitive: self.case_sensitive,
             exclude_headers: self.exclude_headers,
         }
@@ -121,7 +141,10 @@ fn heading(ui: &mut Ui, t: &str) {
 
 fn row(ui: &mut Ui, label: &str, add: impl FnOnce(&mut Ui)) {
     ui.horizontal(|ui| {
-        ui.add_sized([150.0, 20.0], egui::Label::new(RichText::new(label).size(12.5).color(theme::ink())));
+        ui.add_sized(
+            [150.0, 20.0],
+            egui::Label::new(RichText::new(label).size(12.5).color(theme::ink())),
+        );
         add(ui);
     });
 }
@@ -130,9 +153,18 @@ fn row(ui: &mut Ui, label: &str, add: impl FnOnce(&mut Ui)) {
 /// trailing empty line, so Enter starts a new item; generation skips blanks.
 fn list_editor(ui: &mut Ui, items: &mut Vec<String>, rows: usize) {
     let mut text = items.join("\n");
-    let r = egui::Frame::NONE.stroke(egui::Stroke::new(1.0_f32, theme::line())).fill(theme::surface()).show(ui, |ui| {
-        ui.add(egui::TextEdit::multiline(&mut text).font(egui::TextStyle::Monospace).desired_rows(rows).desired_width(ui.available_width() - 8.0).frame(egui::Frame::NONE.inner_margin(egui::Margin::symmetric(4, 2))))
-    });
+    let r = egui::Frame::NONE
+        .stroke(egui::Stroke::new(1.0_f32, theme::line()))
+        .fill(theme::surface())
+        .show(ui, |ui| {
+            ui.add(
+                egui::TextEdit::multiline(&mut text)
+                    .font(egui::TextStyle::Monospace)
+                    .desired_rows(rows)
+                    .desired_width(ui.available_width() - 8.0)
+                    .frame(egui::Frame::NONE.inner_margin(egui::Margin::symmetric(4, 2))),
+            )
+        });
     if r.inner.changed() {
         *items = text.split('\n').map(str::to_string).collect();
     }
@@ -141,7 +173,10 @@ fn list_editor(ui: &mut Ui, items: &mut Vec<String>, rows: usize) {
 /// "Base value of payload position" / "Specific string:" radio pair.
 fn base_choice(ui: &mut Ui, label: &str, base: &mut Option<String>) {
     row(ui, label, |ui| {
-        if ui.radio(base.is_none(), "Base value of payload position").clicked() {
+        if ui
+            .radio(base.is_none(), "Base value of payload position")
+            .clicked()
+        {
             *base = None;
         }
     });
@@ -150,7 +185,13 @@ fn base_choice(ui: &mut Ui, label: &str, base: &mut Option<String>) {
             *base = Some(String::new());
         }
         let mut text = base.clone().unwrap_or_default();
-        if ui.add_enabled(base.is_some(), egui::TextEdit::singleline(&mut text).desired_width(150.0)).changed() {
+        if ui
+            .add_enabled(
+                base.is_some(),
+                egui::TextEdit::singleline(&mut text).desired_width(150.0),
+            )
+            .changed()
+        {
             *base = Some(text);
         }
     });
@@ -169,17 +210,30 @@ fn format_choice(ui: &mut Ui, hex: &mut bool) {
 /// "Extension-generated": pick one of the generators the loaded
 /// extensions registered (Montoya `registerPayloadGeneratorProvider`).
 pub fn extension_source_config(ui: &mut Ui, provider: &mut String, names: &[String]) {
-    note(ui, "This payload type invokes a Burp extension to generate payloads.");
+    note(
+        ui,
+        "This payload type invokes a Burp extension to generate payloads.",
+    );
     row(ui, "Selected generator:", |ui| {
-        let shown = if provider.is_empty() { "Select generator ..." } else { provider.as_str() };
-        egui::ComboBox::from_id_salt("intr_ext_gen").selected_text(shown.to_string()).width(230.0).show_ui(ui, |ui| {
-            for n in names {
-                ui.selectable_value(provider, n.clone(), n);
-            }
-        });
+        let shown = if provider.is_empty() {
+            "Select generator ..."
+        } else {
+            provider.as_str()
+        };
+        egui::ComboBox::from_id_salt("intr_ext_gen")
+            .selected_text(shown.to_string())
+            .width(230.0)
+            .show_ui(ui, |ui| {
+                for n in names {
+                    ui.selectable_value(provider, n.clone(), n);
+                }
+            });
     });
     if names.is_empty() {
-        note(ui, "No loaded extension has registered a payload generator.");
+        note(
+            ui,
+            "No loaded extension has registered a payload generator.",
+        );
     }
 }
 
@@ -192,12 +246,18 @@ pub fn source_config(ui: &mut Ui, src: &mut PayloadSource) {
             let id = ui.scope_id().with("intr_ci_pos");
             let mut pos: usize = ui.data(|d| d.get_temp(id)).unwrap_or(0);
             row(ui, "Position:", |ui| {
-                egui::ComboBox::from_id_salt("intr_ci_pos").selected_text((pos + 1).to_string()).show_ui(ui, |ui| {
-                    for k in 0..8 {
-                        ui.selectable_value(&mut pos, k, (k + 1).to_string());
-                    }
-                });
-                if ui.button("Clear all").on_hover_text("Clear all items and separators from all positions").clicked() {
+                egui::ComboBox::from_id_salt("intr_ci_pos")
+                    .selected_text((pos + 1).to_string())
+                    .show_ui(ui, |ui| {
+                        for k in 0..8 {
+                            ui.selectable_value(&mut pos, k, (k + 1).to_string());
+                        }
+                    });
+                if ui
+                    .button("Clear all")
+                    .on_hover_text("Clear all items and separators from all positions")
+                    .clicked()
+                {
                     lists.iter_mut().for_each(Vec::clear);
                     separators.iter_mut().for_each(String::clear);
                 }
@@ -208,28 +268,51 @@ pub fn source_config(ui: &mut Ui, src: &mut PayloadSource) {
                 ui.add(egui::TextEdit::singleline(&mut separators[pos]).desired_width(120.0));
             });
         }
-        PayloadSource::CharacterSubstitution { items, rules, case_sensitive } => {
+        PayloadSource::CharacterSubstitution {
+            items,
+            rules,
+            case_sensitive,
+        } => {
             note(ui, "This payload type lets you configure a list of strings and apply various character substitutions to each item.");
             list_editor(ui, items, 5);
             heading(ui, "Character substitutions");
             rules.resize(16, (String::new(), String::new()));
-            egui::Grid::new("intr_cs_grid").num_columns(4).spacing([10.0, 4.0]).show(ui, |ui| {
-                for (k, (from, to)) in rules.iter_mut().enumerate() {
-                    ui.horizontal(|ui| {
-                        ui.add(egui::TextEdit::singleline(from).char_limit(1).desired_width(18.0));
-                        ui.label(">");
-                        ui.add(egui::TextEdit::singleline(to).char_limit(1).desired_width(18.0));
-                    });
-                    if k % 4 == 3 {
-                        ui.end_row();
+            egui::Grid::new("intr_cs_grid")
+                .num_columns(4)
+                .spacing([10.0, 4.0])
+                .show(ui, |ui| {
+                    for (k, (from, to)) in rules.iter_mut().enumerate() {
+                        ui.horizontal(|ui| {
+                            ui.add(
+                                egui::TextEdit::singleline(from)
+                                    .char_limit(1)
+                                    .desired_width(18.0),
+                            );
+                            ui.label(">");
+                            ui.add(
+                                egui::TextEdit::singleline(to)
+                                    .char_limit(1)
+                                    .desired_width(18.0),
+                            );
+                        });
+                        if k % 4 == 3 {
+                            ui.end_row();
+                        }
                     }
-                }
-            });
+                });
             ui.checkbox(case_sensitive, "Case sensitive match");
         }
-        PayloadSource::RecursiveGrep { initial, extract_index, stop_on_duplicate } => {
+        PayloadSource::RecursiveGrep {
+            initial,
+            extract_index,
+            stop_on_duplicate,
+        } => {
             note(ui, "This payload type lets you extract each payload from the response to the previous request in the attack. It is useful in some situations where you need to work recursively to extract useful data or deliver an exploit. Extract grep items can be defined in the Settings tab.");
-            ui.label(RichText::new("Select the \"extract grep\" item from which to derive payloads:").size(12.5).color(theme::ink()));
+            ui.label(
+                RichText::new("Select the \"extract grep\" item from which to derive payloads:")
+                    .size(12.5)
+                    .color(theme::ink()),
+            );
             let mut shown = *extract_index + 1;
             row(ui, "Extract grep item:", |ui| {
                 ui.add(egui::DragValue::new(&mut shown).range(1..=64));
@@ -244,7 +327,11 @@ pub fn source_config(ui: &mut Ui, src: &mut PayloadSource) {
             note(ui, "This payload type operates on an input and modifies the value of each bit position in turn. It can sometimes be used to meaningfully modify the decrypted values of CBC-encrypted data, and potentially interfere with application logic.");
             base_choice(ui, "Operate on:", base);
             format_choice(ui, hex);
-            ui.label(RichText::new("Select bits to flip:").size(12.5).color(theme::ink()));
+            ui.label(
+                RichText::new("Select bits to flip:")
+                    .size(12.5)
+                    .color(theme::ink()),
+            );
             ui.horizontal_wrapped(|ui| {
                 for bit in 0..8u8 {
                     let label = match bit {
@@ -259,54 +346,105 @@ pub fn source_config(ui: &mut Ui, src: &mut PayloadSource) {
                 }
             });
         }
-        PayloadSource::UsernameGenerator { items, max_per_item } => {
+        PayloadSource::UsernameGenerator {
+            items,
+            max_per_item,
+        } => {
             note(ui, "This payload type lets you configure a list of names or email addresses, and derives potential usernames from these using various common schemes. You can enter items as \"firstname lastname\" or \"firstname.lastname@example.org\".");
             list_editor(ui, items, 5);
             row(ui, "Maximum payloads per item:", |ui| {
                 ui.add(egui::DragValue::new(max_per_item).range(1..=100_000));
             });
         }
-        PayloadSource::EcbBlockShuffler { base, hex, block_size, extra } => {
+        PayloadSource::EcbBlockShuffler {
+            base,
+            hex,
+            block_size,
+            extra,
+        } => {
             note(ui, "This payload type can be used to shuffle blocks of ciphertext in ECB-encrypted data, so as to meaningfully modify the decrypted cleartext and potentially interfere with application logic. You can optionally supply a list of encrypted strings that use the same cipher and key, to provide additional blocks for shuffling into the original data.");
             base_choice(ui, "Encrypted data to shuffle:", base);
             format_choice(ui, hex);
             row(ui, "Block size (usually 8 or 16):", |ui| {
                 ui.add(egui::DragValue::new(block_size).range(1..=1024));
             });
-            ui.label(RichText::new("Additional encrypted strings - optional").size(12.5).color(theme::ink()));
+            ui.label(
+                RichText::new("Additional encrypted strings - optional")
+                    .size(12.5)
+                    .color(theme::ink()),
+            );
             list_editor(ui, extra, 4);
         }
         PayloadSource::IllegalUnicode { .. } => {
             note(ui, "This payload type can be used to generate illegal Unicode representations of characters. It is sometimes effective in bypassing filters designed to block certain characters. See the full help for details of each option.");
             let encodings = src.illegal_encodings().len();
             let PayloadSource::IllegalUnicode {
-                items, match_char, replace_char, max_bytes, max_encodings, illegal_utf8, utf8_permute, illegal_hex, hex_permute, percent_prefix, lowercase,
-            } = src else { return };
+                items,
+                match_char,
+                replace_char,
+                max_bytes,
+                max_encodings,
+                illegal_utf8,
+                utf8_permute,
+                illegal_hex,
+                hex_permute,
+                percent_prefix,
+                lowercase,
+            } = src
+            else {
+                return;
+            };
             heading(ui, "Match / replace in list items");
             list_editor(ui, items, 4);
             row(ui, "Match character:", |ui| {
-                ui.add(egui::TextEdit::singleline(match_char).char_limit(1).desired_width(24.0));
+                ui.add(
+                    egui::TextEdit::singleline(match_char)
+                        .char_limit(1)
+                        .desired_width(24.0),
+                );
             });
             row(ui, "Replace with encodings of:", |ui| {
-                ui.add(egui::TextEdit::singleline(replace_char).char_limit(1).desired_width(24.0));
+                ui.add(
+                    egui::TextEdit::singleline(replace_char)
+                        .char_limit(1)
+                        .desired_width(24.0),
+                );
             });
             row(ui, "Stop at maximum:", |ui| {
                 ui.add(egui::DragValue::new(max_encodings).range(1..=1_000_000));
             });
             heading(ui, "Overlong UTF-8 encodings");
             row(ui, "Maximum length:", |ui| {
-                egui::ComboBox::from_id_salt("intr_iu_len").selected_text(format!("{max_bytes} byte{}", if *max_bytes == 1 { "" } else { "s" })).show_ui(ui, |ui| {
-                    for n in 1..=6u8 {
-                        ui.selectable_value(max_bytes, n, format!("{n} byte{}", if n == 1 { "" } else { "s" }));
-                    }
-                });
+                egui::ComboBox::from_id_salt("intr_iu_len")
+                    .selected_text(format!(
+                        "{max_bytes} byte{}",
+                        if *max_bytes == 1 { "" } else { "s" }
+                    ))
+                    .show_ui(ui, |ui| {
+                        for n in 1..=6u8 {
+                            ui.selectable_value(
+                                max_bytes,
+                                n,
+                                format!("{n} byte{}", if n == 1 { "" } else { "s" }),
+                            );
+                        }
+                    });
             });
             heading(ui, "Illegal UTF-8 continuation bytes");
             ui.checkbox(illegal_utf8, "Do illegal UTF-8");
-            ui.add_enabled(*illegal_utf8, egui::Checkbox::new(utf8_permute, "Maximize permutations in multi-byte encodings"));
+            ui.add_enabled(
+                *illegal_utf8,
+                egui::Checkbox::new(
+                    utf8_permute,
+                    "Maximize permutations in multi-byte encodings",
+                ),
+            );
             heading(ui, "Illegal hex characters");
             ui.checkbox(illegal_hex, "Do illegal hex");
-            ui.add_enabled(*illegal_hex, egui::Checkbox::new(hex_permute, "Maximize permutations in multi-byte encodings"));
+            ui.add_enabled(
+                *illegal_hex,
+                egui::Checkbox::new(hex_permute, "Maximize permutations in multi-byte encodings"),
+            );
             heading(ui, "Hex formatting");
             ui.checkbox(percent_prefix, "Add % prefix before each byte");
             ui.checkbox(lowercase, "Use lower case alpha characters");
@@ -328,10 +466,18 @@ pub fn source_config(ui: &mut Ui, src: &mut PayloadSource) {
 /// The muted line under a payload configuration panel.
 pub fn generated_note(src: &PayloadSource) -> String {
     match src {
-        PayloadSource::RecursiveGrep { .. } => "Payloads are generated from responses while the attack runs".into(),
-        PayloadSource::CopyOtherPayload { .. } => "One payload, copied from the other position for each request".into(),
-        PayloadSource::Extension { .. } => "Payloads are generated by the extension when the attack starts".into(),
-        s if s.uses_position_base() => "Payloads are generated from the base value of each payload position".into(),
+        PayloadSource::RecursiveGrep { .. } => {
+            "Payloads are generated from responses while the attack runs".into()
+        }
+        PayloadSource::CopyOtherPayload { .. } => {
+            "One payload, copied from the other position for each request".into()
+        }
+        PayloadSource::Extension { .. } => {
+            "Payloads are generated by the extension when the attack starts".into()
+        }
+        s if s.uses_position_base() => {
+            "Payloads are generated from the base value of each payload position".into()
+        }
         s => format!("{} payload(s) will be generated", s.len()),
     }
 }
@@ -362,7 +508,12 @@ pub fn request_count_text(app: &App) -> String {
         format!("{kind:?}{sources:?}").hash(&mut h);
         h.finish()
     };
-    if let Some(hit) = LAST.with(|l| l.borrow().as_ref().filter(|(k, _)| *k == key).map(|(_, v)| v.clone())) {
+    if let Some(hit) = LAST.with(|l| {
+        l.borrow()
+            .as_ref()
+            .filter(|(k, _)| *k == key)
+            .map(|(_, v)| v.clone())
+    }) {
         return hit;
     }
     let text = intruder::request_count_resolved(&app.intr_req, kind, &sources);
@@ -391,17 +542,28 @@ pub fn stop(app: &mut App) {
 pub fn start_attack(app: &mut App, request: &str) -> Result<(), String> {
     let template = intruder::Template::parse(request)?;
     let sources = effective_sources(app);
-    let target = run::parse_target(&app.intr_target).ok_or_else(|| "Enter a target such as https://example.com".to_string())?;
-    let (shared, kind, settings, procs) = (app.shared.clone(), app.intr_attack, app.intr_x.settings.clone(), app.intr_ext_proc.clone());
+    let target = run::parse_target(&app.intr_target)
+        .ok_or_else(|| "Enter a target such as https://example.com".to_string())?;
+    let (shared, kind, settings, procs) = (
+        app.shared.clone(),
+        app.intr_attack,
+        app.intr_x.settings.clone(),
+        app.intr_ext_proc.clone(),
+    );
     let request = request.to_string();
     let prepare = move || -> Result<Arc<RunState>, String> {
         let mut sources = sources;
         webprobe_core::ext_calls::fill_extension_payloads(&shared, &request, &mut sources)?;
         let mut specs = intruder::resolve_specs(&template, kind, &sources)?;
-        webprobe_core::ext_calls::apply_extension_processors(&shared, &template, &mut specs, &procs)?;
+        webprobe_core::ext_calls::apply_extension_processors(
+            &shared, &template, &mut specs, &procs,
+        )?;
         run::start(shared, &request, kind, specs, target, settings)
     };
-    let uses_extension = effective_sources(app).iter().any(|s| matches!(s, PayloadSource::Extension { .. })) || app.intr_ext_proc.iter().any(|p| !p.is_empty());
+    let uses_extension = effective_sources(app)
+        .iter()
+        .any(|s| matches!(s, PayloadSource::Extension { .. }))
+        || app.intr_ext_proc.iter().any(|p| !p.is_empty());
     if !uses_extension {
         install_attack(app, prepare()?);
         return Ok(());
@@ -429,7 +591,9 @@ pub fn start_attack(app: &mut App, request: &str) -> Result<(), String> {
 /// Install an attack whose extension payloads were made off the UI thread
 /// (every frame; a failure is shown as a toast).
 pub fn poll_preparing(app: &mut App) {
-    let Some((rx, _)) = &app.intr_x.preparing else { return };
+    let Some((rx, _)) = &app.intr_x.preparing else {
+        return;
+    };
     match rx.try_recv() {
         Ok(Ok(state)) => {
             app.intr_x.preparing = None;
@@ -645,10 +809,23 @@ pub fn settings_panel(ui: &mut Ui, x: &mut IntruderExtra) -> bool {
     // Clipboard text for Grep - Match "Paste": one item per line.
     // Only after the Paste button asked for the clipboard (not on any Ctrl+V).
     if x.match_paste_pending {
-        let pasted: Option<String> = ui.input(|i| i.events.iter().find_map(|e| if let egui::Event::Paste(t) = e { Some(t.clone()) } else { None }));
+        let pasted: Option<String> = ui.input(|i| {
+            i.events.iter().find_map(|e| {
+                if let egui::Event::Paste(t) = e {
+                    Some(t.clone())
+                } else {
+                    None
+                }
+            })
+        });
         if let Some(t) = pasted {
             x.match_paste_pending = false;
-            x.settings.grep_match.items.extend(t.lines().map(str::trim).filter(|l| !l.is_empty()).map(str::to_string));
+            x.settings.grep_match.items.extend(
+                t.lines()
+                    .map(str::trim)
+                    .filter(|l| !l.is_empty())
+                    .map(str::to_string),
+            );
         }
     }
     show_results
@@ -657,7 +834,10 @@ pub fn settings_panel(ui: &mut Ui, x: &mut IntruderExtra) -> bool {
 /// Column labels must be `&'static str`; each distinct label leaks once.
 fn intern(label: &str) -> &'static str {
     static TABLE: OnceLock<Mutex<HashMap<String, &'static str>>> = OnceLock::new();
-    let mut t = TABLE.get_or_init(|| Mutex::new(HashMap::new())).lock().unwrap();
+    let mut t = TABLE
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .unwrap();
     if let Some(s) = t.get(label) {
         return s;
     }
@@ -680,10 +860,13 @@ fn send_row_to_repeater(app: &mut App, r: &ResultRow, target: &(String, u16, boo
         result_line: String::new(),
         history: Vec::new(),
         hist_pos: 0,
-    ws: None,
+        ws: None,
     });
     app.rep_sel = reps.len() - 1;
-    crate::feedback::toast(crate::feedback::Level::Success, format!("Sent request {} to Repeater tab {id}", r.number));
+    crate::feedback::toast(
+        crate::feedback::Level::Success,
+        format!("Sent request {} to Repeater tab {id}", r.number),
+    );
 }
 
 /// The attack results window: progress, pause / resume / stop, Save as CSV,
@@ -700,107 +883,150 @@ pub fn results_window(app: &mut App, ctx: &egui::Context) {
     let mut open = true;
     let target_text = app.intr_target.clone();
     let screen = ctx.content_rect();
-    let size = egui::vec2(980.0f32.min(screen.width() - 40.0), 640.0f32.min(screen.height() - 100.0));
-    egui::Window::new(format!("{}. Intruder attack of {target_text}", app.intr_attack_no.max(1)))
-        .id(egui::Id::unique("intr_results_window"))
-        .open(&mut open)
-        .default_size(size)
-        // Open below the menu and tab rows and stay there: egui 0.37 otherwise
-        // places the window over the tab bar, where it swallows tab clicks.
-        .default_pos(egui::pos2(screen.left() + 16.0, screen.top() + 80.0))
-        .max_size(egui::vec2(screen.width() - 20.0, screen.height() - 86.0))
-        .constrain_to(egui::Rect::from_min_max(egui::pos2(screen.left(), screen.top() + 66.0), screen.max))
-        .show(ctx, |ui| {
-            let running = state.is_running();
-            let paused = state.paused.load(Ordering::SeqCst);
-            let (done, total) = state.progress();
-            ui.horizontal(|ui| {
-                let text = match (running, paused, total) {
-                    (true, true, _) => format!("Paused: {done} of {}", total.map(|t| t.to_string()).unwrap_or_else(|| "?".into())),
-                    (true, false, Some(t)) => format!("Attack running: {done} of {t}"),
-                    (true, false, None) => format!("Attack running: {done} requests (recursive grep)"),
-                    (false, _, _) if state.stop.load(Ordering::SeqCst) => format!("Stopped: {done} requests"),
-                    (false, _, _) => format!("Finished: {done} requests"),
-                };
-                ui.label(RichText::new(text).size(12.5).color(theme::ink_dim()));
-                if running {
-                    if ui.button(if paused { "Resume" } else { "Pause" }).clicked() {
-                        state.paused.store(!paused, Ordering::SeqCst);
-                    }
-                    if ui.button("Stop").clicked() {
-                        state.stop.store(true, Ordering::SeqCst);
-                        state.paused.store(false, Ordering::SeqCst);
-                    }
+    let size = egui::vec2(
+        980.0f32.min(screen.width() - 40.0),
+        640.0f32.min(screen.height() - 100.0),
+    );
+    egui::Window::new(format!(
+        "{}. Intruder attack of {target_text}",
+        app.intr_attack_no.max(1)
+    ))
+    .id(egui::Id::unique("intr_results_window"))
+    .open(&mut open)
+    .default_size(size)
+    // Open below the menu and tab rows and stay there: egui 0.37 otherwise
+    // places the window over the tab bar, where it swallows tab clicks.
+    .default_pos(egui::pos2(screen.left() + 16.0, screen.top() + 80.0))
+    .max_size(egui::vec2(screen.width() - 20.0, screen.height() - 86.0))
+    .constrain_to(egui::Rect::from_min_max(
+        egui::pos2(screen.left(), screen.top() + 66.0),
+        screen.max,
+    ))
+    .show(ctx, |ui| {
+        let running = state.is_running();
+        let paused = state.paused.load(Ordering::SeqCst);
+        let (done, total) = state.progress();
+        ui.horizontal(|ui| {
+            let text = match (running, paused, total) {
+                (true, true, _) => format!(
+                    "Paused: {done} of {}",
+                    total.map(|t| t.to_string()).unwrap_or_else(|| "?".into())
+                ),
+                (true, false, Some(t)) => format!("Attack running: {done} of {t}"),
+                (true, false, None) => format!("Attack running: {done} requests (recursive grep)"),
+                (false, _, _) if state.stop.load(Ordering::SeqCst) => {
+                    format!("Stopped: {done} requests")
                 }
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    // Save the results table: CSV, or XML with the full messages
-                    // (chosen by the file's extension button).
-                    for (label, xml) in [("Save as XML", true), ("Save as CSV", false)] {
-                        if ui.button(label).on_hover_text("Write the results table to the file on the left").clicked() {
-                            let mut sorted = state.rows.lock().unwrap().clone();
-                            sorted.sort_by_key(|r| r.number);
-                            let text = if xml { run::results_xml(&sorted, state.sets, &state.settings) } else { run::results_csv(&sorted, state.sets, &state.settings) };
-                            let path = app.intr_x.csv_path.trim().to_string();
-                            match std::fs::write(&path, text) {
-                                Ok(()) => crate::feedback::toast(crate::feedback::Level::Success, format!("Saved {} rows to {path}", sorted.len())),
-                                Err(e) => crate::feedback::toast(crate::feedback::Level::Error, format!("Could not save results: {e}")),
-                            }
+                (false, _, _) => format!("Finished: {done} requests"),
+            };
+            ui.label(RichText::new(text).size(12.5).color(theme::ink_dim()));
+            if running {
+                if ui.button(if paused { "Resume" } else { "Pause" }).clicked() {
+                    state.paused.store(!paused, Ordering::SeqCst);
+                }
+                if ui.button("Stop").clicked() {
+                    state.stop.store(true, Ordering::SeqCst);
+                    state.paused.store(false, Ordering::SeqCst);
+                }
+            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                // Save the results table: CSV, or XML with the full messages
+                // (chosen by the file's extension button).
+                for (label, xml) in [("Save as XML", true), ("Save as CSV", false)] {
+                    if ui
+                        .button(label)
+                        .on_hover_text("Write the results table to the file on the left")
+                        .clicked()
+                    {
+                        let mut sorted = state.rows.lock().unwrap().clone();
+                        sorted.sort_by_key(|r| r.number);
+                        let text = if xml {
+                            run::results_xml(&sorted, state.sets, &state.settings)
+                        } else {
+                            run::results_csv(&sorted, state.sets, &state.settings)
+                        };
+                        let path = app.intr_x.csv_path.trim().to_string();
+                        match std::fs::write(&path, text) {
+                            Ok(()) => crate::feedback::toast(
+                                crate::feedback::Level::Success,
+                                format!("Saved {} rows to {path}", sorted.len()),
+                            ),
+                            Err(e) => crate::feedback::toast(
+                                crate::feedback::Level::Error,
+                                format!("Could not save results: {e}"),
+                            ),
                         }
                     }
-                    ui.add(egui::TextEdit::singleline(&mut app.intr_x.csv_path).desired_width(220.0));
-                });
+                }
+                ui.add(egui::TextEdit::singleline(&mut app.intr_x.csv_path).desired_width(220.0));
             });
-            if let Some(t) = total {
-                let frac = if t == 0 { 1.0 } else { done as f32 / t as f32 };
-                ui.add(egui::ProgressBar::new(frac).desired_height(6.0));
-            }
+        });
+        if let Some(t) = total {
+            let frac = if t == 0 { 1.0 } else { done as f32 / t as f32 };
+            ui.add(egui::ProgressBar::new(frac).desired_height(6.0));
+        }
 
-            let rows: Vec<Arc<ResultRow>> = state.rows.lock().unwrap().clone();
-            let labels = run::result_columns(state.sets, &state.settings);
-            let cols: Vec<crate::table::Column> = labels
-                .iter()
-                .enumerate()
-                .map(|(i, l)| {
-                    let w = match i {
-                        0 => 70.0,
-                        _ if l.starts_with("Payload") && !l.ends_with("reflected") => 200.0,
-                        _ => 95.0,
-                    };
-                    crate::table::Column::new(intern(l), w)
-                })
-                .collect();
-            let mut st = app.intr_table.clone();
-            let key = (rows.len(), st.sort_col, st.sort_asc);
-            let recent = app.intr_x.order_at.is_some_and(|t| t.elapsed() < std::time::Duration::from_millis(500));
-            match intruder::order_step(app.intr_x.order_key, key, recent, app.intr_x.order_dirty) {
-                intruder::OrderStep::Keep => {}
-                intruder::OrderStep::Append(range) => {
-                    // Sorted view while rows arrive: append now, sort soon.
-                    app.intr_x.order.extend(range);
-                    app.intr_x.order_dirty = true;
-                    app.intr_x.order_key = key;
-                    ui.ctx().request_repaint_after(std::time::Duration::from_millis(500));
-                }
-                intruder::OrderStep::Rebuild => {
-                    app.intr_x.order_dirty = false;
-                    app.intr_x.order = if st.sort_col == usize::MAX {
-                        let mut o: Vec<usize> = (0..rows.len()).collect();
-                        o.sort_by_key(|&i| rows[i].number);
-                        o
-                    } else {
-                        run::sort_order(&rows, state.sets, &state.settings, st.sort_col, st.sort_asc)
-                    };
-                    app.intr_x.order_at = Some(std::time::Instant::now());
-                    app.intr_x.order_key = key;
-                }
+        let rows: Vec<Arc<ResultRow>> = state.rows.lock().unwrap().clone();
+        let labels = run::result_columns(state.sets, &state.settings);
+        let cols: Vec<crate::table::Column> = labels
+            .iter()
+            .enumerate()
+            .map(|(i, l)| {
+                let w = match i {
+                    0 => 70.0,
+                    _ if l.starts_with("Payload") && !l.ends_with("reflected") => 200.0,
+                    _ => 95.0,
+                };
+                crate::table::Column::new(intern(l), w)
+            })
+            .collect();
+        let mut st = app.intr_table.clone();
+        let key = (rows.len(), st.sort_col, st.sort_asc);
+        let recent = app
+            .intr_x
+            .order_at
+            .is_some_and(|t| t.elapsed() < std::time::Duration::from_millis(500));
+        match intruder::order_step(app.intr_x.order_key, key, recent, app.intr_x.order_dirty) {
+            intruder::OrderStep::Keep => {}
+            intruder::OrderStep::Append(range) => {
+                // Sorted view while rows arrive: append now, sort soon.
+                app.intr_x.order.extend(range);
+                app.intr_x.order_dirty = true;
+                app.intr_x.order_key = key;
+                ui.ctx()
+                    .request_repaint_after(std::time::Duration::from_millis(500));
             }
-            let order = app.intr_x.order.clone();
-            let sel = app.intr_row_sel;
-            let mut pick = None;
-            let mut action: Option<(usize, u8)> = None;
-            crate::table::table_body(ui, "intr_results", &cols, &order, &mut st, 19.0, 260.0, &mut |&i, ui| {
+            intruder::OrderStep::Rebuild => {
+                app.intr_x.order_dirty = false;
+                app.intr_x.order = if st.sort_col == usize::MAX {
+                    let mut o: Vec<usize> = (0..rows.len()).collect();
+                    o.sort_by_key(|&i| rows[i].number);
+                    o
+                } else {
+                    run::sort_order(&rows, state.sets, &state.settings, st.sort_col, st.sort_asc)
+                };
+                app.intr_x.order_at = Some(std::time::Instant::now());
+                app.intr_x.order_key = key;
+            }
+        }
+        let order = app.intr_x.order.clone();
+        let sel = app.intr_row_sel;
+        let mut pick = None;
+        let mut action: Option<(usize, u8)> = None;
+        crate::table::table_body(
+            ui,
+            "intr_results",
+            &cols,
+            &order,
+            &mut st,
+            19.0,
+            260.0,
+            &mut |&i, ui| {
                 let Some(r) = rows.get(i) else { return };
-                let rr = egui::Rect::from_min_size(ui.cursor().min, egui::vec2(ui.available_width(), 19.0));
+                let rr = egui::Rect::from_min_size(
+                    ui.cursor().min,
+                    egui::vec2(ui.available_width(), 19.0),
+                );
                 if sel == Some(r.number) {
                     ui.painter().rect_filled(rr, 0.0, theme::selection_bg());
                 }
@@ -811,7 +1037,15 @@ pub fn results_window(app: &mut App, ctx: &egui::Context) {
                     .map(|(k, v)| (k, v, None))
                     .collect();
                 let resp = ui
-                    .horizontal(|ui| crate::table::cells(ui, &cols, &crate::table::TableState::default(), 19.0, &cells))
+                    .horizontal(|ui| {
+                        crate::table::cells(
+                            ui,
+                            &cols,
+                            &crate::table::TableState::default(),
+                            19.0,
+                            &cells,
+                        )
+                    })
                     .response
                     .interact(egui::Sense::click());
                 if resp.clicked() || resp.secondary_clicked() {
@@ -830,38 +1064,75 @@ pub fn results_window(app: &mut App, ctx: &egui::Context) {
                         }
                     }
                 });
-            });
-            app.intr_table = st;
-            if pick.is_some() {
-                app.intr_row_sel = pick;
-            }
-            if let Some((i, code)) = action {
-                if let Some(r) = rows.get(i).cloned() {
-                    let (host, port, https) = state.target.clone();
-                    match code {
-                        0 => send_row_to_repeater(app, &r, &state.target),
-                        1 => {
-                            app.cmp_items.push(String::from_utf8_lossy(&r.request).into_owned());
-                            crate::feedback::toast(crate::feedback::Level::Success, "Request sent to Comparer");
-                        }
-                        2 => {
-                            app.cmp_items.push(r.response.as_ref().map(|b| String::from_utf8_lossy(b).into_owned()).unwrap_or_default());
-                            crate::feedback::toast(crate::feedback::Level::Success, "Response sent to Comparer");
-                        }
-                        _ => ui.ctx().copy_text(run::curl_command(&r.request, https, &host, port)),
+            },
+        );
+        app.intr_table = st;
+        if pick.is_some() {
+            app.intr_row_sel = pick;
+        }
+        if let Some((i, code)) = action {
+            if let Some(r) = rows.get(i).cloned() {
+                let (host, port, https) = state.target.clone();
+                match code {
+                    0 => send_row_to_repeater(app, &r, &state.target),
+                    1 => {
+                        app.cmp_items
+                            .push(String::from_utf8_lossy(&r.request).into_owned());
+                        crate::feedback::toast(
+                            crate::feedback::Level::Success,
+                            "Request sent to Comparer",
+                        );
                     }
+                    2 => {
+                        app.cmp_items.push(
+                            r.response
+                                .as_ref()
+                                .map(|b| String::from_utf8_lossy(b).into_owned())
+                                .unwrap_or_default(),
+                        );
+                        crate::feedback::toast(
+                            crate::feedback::Level::Success,
+                            "Response sent to Comparer",
+                        );
+                    }
+                    _ => ui
+                        .ctx()
+                        .copy_text(run::curl_command(&r.request, https, &host, port)),
                 }
             }
-            let chosen = app.intr_row_sel.and_then(|n| rows.iter().find(|r| r.number == n).cloned());
-            let h = (ui.available_height() - 8.0).clamp(160.0, (screen.height() - 420.0).max(160.0));
-            egui_extras::StripBuilder::new(ui)
-                .size(egui_extras::Size::remainder())
-                .size(egui_extras::Size::remainder())
-                .horizontal(|mut s2| {
-                    s2.cell(|ui| crate::msgpane::message_pane(ui, "intr_res_req", "Request", chosen.as_ref().map(|r| r.request.as_slice()), &mut app.intr_res_req_pane, false, h));
-                    s2.cell(|ui| crate::msgpane::message_pane(ui, "intr_res_resp", "Response", chosen.as_ref().and_then(|r| r.response.as_deref()), &mut app.intr_res_resp_pane, true, h));
+        }
+        let chosen = app
+            .intr_row_sel
+            .and_then(|n| rows.iter().find(|r| r.number == n).cloned());
+        let h = (ui.available_height() - 8.0).clamp(160.0, (screen.height() - 420.0).max(160.0));
+        egui_extras::StripBuilder::new(ui)
+            .size(egui_extras::Size::remainder())
+            .size(egui_extras::Size::remainder())
+            .horizontal(|mut s2| {
+                s2.cell(|ui| {
+                    crate::msgpane::message_pane(
+                        ui,
+                        "intr_res_req",
+                        "Request",
+                        chosen.as_ref().map(|r| r.request.as_slice()),
+                        &mut app.intr_res_req_pane,
+                        false,
+                        h,
+                    )
                 });
-        });
+                s2.cell(|ui| {
+                    crate::msgpane::message_pane(
+                        ui,
+                        "intr_res_resp",
+                        "Response",
+                        chosen.as_ref().and_then(|r| r.response.as_deref()),
+                        &mut app.intr_res_resp_pane,
+                        true,
+                        h,
+                    )
+                });
+            });
+    });
     if !open {
         app.intr_results_open = false;
     }

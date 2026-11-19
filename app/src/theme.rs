@@ -29,7 +29,11 @@ pub const HEADER_BLUE: u32 = 0xD1E8F9;
 pub use egui_phosphor::regular as icon;
 
 pub const fn c(v: u32) -> Color32 {
-    Color32::from_rgb(((v >> 16) & 0xFF) as u8, ((v >> 8) & 0xFF) as u8, (v & 0xFF) as u8)
+    Color32::from_rgb(
+        ((v >> 16) & 0xFF) as u8,
+        ((v >> 8) & 0xFF) as u8,
+        (v & 0xFF) as u8,
+    )
 }
 
 // ---------- palette-aware chrome tokens ----------
@@ -182,7 +186,13 @@ pub fn method_color(m: &str) -> Color32 {
     match m.as_str() {
         "GET" | "OPTIONS" => c(if light { 0x87486F } else { METHOD_GET }),
         "POST" => c(if light { 0x4B44AE } else { METHOD_POST }),
-        "" => if light { c(0x4B4B4B) } else { c(MONO6) },
+        "" => {
+            if light {
+                c(0x4B4B4B)
+            } else {
+                c(MONO6)
+            }
+        }
         _ => c(if light { 0x2A828E } else { METHOD_OTHER }),
     }
 }
@@ -266,7 +276,13 @@ pub fn issue_colour(sev: &str) -> Color32 {
         "high" => c(if light { 0xD6213F } else { BAD }),
         "medium" => c(ORANGE),
         "low" => c(if light { 0x26649D } else { METHOD_OTHER }),
-        _ => if light { c(0xB0AFAF) } else { c(MONO6) },
+        _ => {
+            if light {
+                c(0xB0AFAF)
+            } else {
+                c(MONO6)
+            }
+        }
     }
 }
 
@@ -286,8 +302,14 @@ pub fn apply(ctx: &egui::Context) {
 struct TextEditMargin;
 
 impl egui::theme::StyleProvider<egui::widget_style::TextEditStyle> for TextEditMargin {
-    fn style(&mut self, args: &egui::widget_style::StyleArgs<'_>) -> egui::widget_style::TextEditStyle {
-        let mut s = egui::theme::StyleProvider::<egui::widget_style::TextEditStyle>::style(&mut egui::theme::DefaultStyle, args);
+    fn style(
+        &mut self,
+        args: &egui::widget_style::StyleArgs<'_>,
+    ) -> egui::widget_style::TextEditStyle {
+        let mut s = egui::theme::StyleProvider::<egui::widget_style::TextEditStyle>::style(
+            &mut egui::theme::DefaultStyle,
+            args,
+        );
         let pad = args.style.spacing.button_padding;
         let (dx, dy) = ((pad.x - 4.0).round() as i8, (pad.y - 2.0).round() as i8);
         let m = &mut s.atom_layout.frame.inner_margin;
@@ -531,7 +553,8 @@ pub fn apply_as(ctx: &egui::Context, palette: Palette, density: Density, font_sc
     // egui 0.29 rasterised glyphs unhinted, at whole-pixel positions, with
     // alpha = coverage^0.55 (matched by ink density against 0.29 shots), and
     // drew hint text in override_text_color (always set here), not dimmed.
-    sty.visuals.text_options.color_transfer_function = egui::epaint::FontColorTransferFunction::Gamma(0.55);
+    sty.visuals.text_options.color_transfer_function =
+        egui::epaint::FontColorTransferFunction::Gamma(0.55);
     sty.visuals.text_options.font_hinting = false;
     sty.visuals.text_options.subpixel_binning = false;
     sty.visuals.weak_text_color = Some(sty.visuals.text_color());
@@ -545,11 +568,26 @@ pub fn apply_as(ctx: &egui::Context, palette: Palette, density: Density, font_sc
 
 fn base_text_styles(font_scale: f32) -> std::collections::BTreeMap<egui::TextStyle, egui::FontId> {
     [
-        (egui::TextStyle::Heading, egui::FontId::proportional(FONT_H1 * font_scale)),
-        (egui::TextStyle::Body, egui::FontId::proportional(FONT_BODY * font_scale)),
-        (egui::TextStyle::Button, egui::FontId::proportional(FONT_BODY * font_scale)),
-        (egui::TextStyle::Small, egui::FontId::proportional(FONT_SMALL * font_scale)),
-        (egui::TextStyle::Monospace, egui::FontId::monospace(FONT_MONO * font_scale)),
+        (
+            egui::TextStyle::Heading,
+            egui::FontId::proportional(FONT_H1 * font_scale),
+        ),
+        (
+            egui::TextStyle::Body,
+            egui::FontId::proportional(FONT_BODY * font_scale),
+        ),
+        (
+            egui::TextStyle::Button,
+            egui::FontId::proportional(FONT_BODY * font_scale),
+        ),
+        (
+            egui::TextStyle::Small,
+            egui::FontId::proportional(FONT_SMALL * font_scale),
+        ),
+        (
+            egui::TextStyle::Monospace,
+            egui::FontId::monospace(FONT_MONO * font_scale),
+        ),
     ]
     .into()
 }
@@ -560,7 +598,7 @@ use std::sync::atomic::{AtomicU32, AtomicU8};
 
 // Burp default: user_options.display.user_interface.look_and_feel = Light (UserDefaults.json).
 static PALETTE: AtomicU8 = AtomicU8::new(1); // 0 dark, 1 light, 2 high contrast
-// Burp's Swing UI is compact: ~20 px rows and menu items.
+                                             // Burp's Swing UI is compact: ~20 px rows and menu items.
 static DENSITY: AtomicU8 = AtomicU8::new(0); // 0 compact, 1 comfortable
 static FONT_SCALE_BITS: AtomicU32 = AtomicU32::new(1.0f32.to_bits());
 
@@ -574,7 +612,8 @@ pub fn appearance() -> (Palette, Density, f32) {
         0 => Density::Compact,
         _ => Density::Comfortable,
     };
-    let scale = f32::from_bits(FONT_SCALE_BITS.load(std::sync::atomic::Ordering::Relaxed)).clamp(0.7, 2.0);
+    let scale =
+        f32::from_bits(FONT_SCALE_BITS.load(std::sync::atomic::Ordering::Relaxed)).clamp(0.7, 2.0);
     (palette, density, scale)
 }
 
@@ -594,7 +633,10 @@ pub fn set_appearance(palette: Palette, density: Density, font_scale: f32) {
         },
         std::sync::atomic::Ordering::Relaxed,
     );
-    FONT_SCALE_BITS.store(font_scale.clamp(0.7, 2.0).to_bits(), std::sync::atomic::Ordering::Relaxed);
+    FONT_SCALE_BITS.store(
+        font_scale.clamp(0.7, 2.0).to_bits(),
+        std::sync::atomic::Ordering::Relaxed,
+    );
 }
 
 /// Apply the live appearance (call once per frame; cheap).
@@ -636,9 +678,16 @@ mod tests {
 
     fn missing(ctx: &egui::Context) -> Vec<char> {
         // Fonts are (re)built at the start of a pass.
-        ctx.run_ui(egui::RawInput::default(), |_| {}).drop_without_applying_deltas();
+        ctx.run_ui(egui::RawInput::default(), |_| {})
+            .drop_without_applying_deltas();
         let font = egui::FontId::proportional(13.0);
-        ctx.fonts_mut(|f| UI_GLYPHS.iter().copied().filter(|&c| !f.has_glyph(&font, c)).collect())
+        ctx.fonts_mut(|f| {
+            UI_GLYPHS
+                .iter()
+                .copied()
+                .filter(|&c| !f.has_glyph(&font, c))
+                .collect()
+        })
     }
 
     #[test]
@@ -693,7 +742,8 @@ mod tests {
     #[test]
     fn light_text_is_dark_on_light_surfaces() {
         let t = Tokens::for_palette(Palette::Light);
-        let luma = |c: Color32| 0.2126 * c.r() as f32 + 0.7152 * c.g() as f32 + 0.0722 * c.b() as f32;
+        let luma =
+            |c: Color32| 0.2126 * c.r() as f32 + 0.7152 * c.g() as f32 + 0.0722 * c.b() as f32;
         for (name, bg) in [
             ("chrome", t.chrome),
             ("surface", t.surface),
@@ -701,7 +751,10 @@ mod tests {
             ("zebra", t.zebra),
             ("selection_bg", t.selection_bg),
         ] {
-            assert!(luma(bg) > 200.0, "{name} should be a light surface, got {bg:?}");
+            assert!(
+                luma(bg) > 200.0,
+                "{name} should be a light surface, got {bg:?}"
+            );
         }
         for (name, fg) in [
             ("ink", t.ink),

@@ -25,7 +25,11 @@ pub fn passive_check_live(shared: &Shared, e: &HistEntry) -> Vec<ScanIssue> {
     passive_check_filtered(shared, e, filter.as_ref())
 }
 
-pub fn passive_check_filtered(shared: &Shared, e: &HistEntry, issues: Option<&crate::scan_library::IssueFilter>) -> Vec<ScanIssue> {
+pub fn passive_check_filtered(
+    shared: &Shared,
+    e: &HistEntry,
+    issues: Option<&crate::scan_library::IssueFilter>,
+) -> Vec<ScanIssue> {
     let config = shared.scan_config.lock().unwrap().clone();
     let mut v = passive_check_with(e, &|id| config.check_enabled(id), Some(&shared.passive));
     // R-11: "Issues reported" (passive scan type, individual selection).
@@ -34,7 +38,10 @@ pub fn passive_check_filtered(shared: &Shared, e: &HistEntry, issues: Option<&cr
     }
     // Montoya extensions' passive checks (bounded by the hook timeout).
     let exts = shared.ext_host.lock().unwrap().active();
-    for x in exts.into_iter().filter(|x| x.ui().is_some_and(|u| u.passive_checks > 0)) {
+    for x in exts
+        .into_iter()
+        .filter(|x| x.ui().is_some_and(|u| u.passive_checks > 0))
+    {
         let msg = crate::ext_host::ScanMessage {
             request: e.req_raw.to_vec(),
             response: e.resp_raw.as_ref().map(|r| r.to_vec()),
@@ -46,7 +53,11 @@ pub fn passive_check_filtered(shared: &Shared, e: &HistEntry, issues: Option<&cr
     v
 }
 
-pub fn passive_check_with(e: &HistEntry, enabled: &dyn Fn(&str) -> bool, state: Option<&crate::passive_state::PassiveState>) -> Vec<ScanIssue> {
+pub fn passive_check_with(
+    e: &HistEntry,
+    enabled: &dyn Fn(&str) -> bool,
+    state: Option<&crate::passive_state::PassiveState>,
+) -> Vec<ScanIssue> {
     let mut v = passive_checks::run_passive_in(e, enabled, state);
     if !v.is_empty() {
         let ev = ScanEvidence::new(&e.req_raw, e.resp_raw.as_deref());
@@ -63,7 +74,10 @@ pub fn query_params(path: &str) -> Vec<(String, String)> {
         .filter(|s| !s.is_empty())
         .map(|kv| {
             let mut it = kv.splitn(2, '=');
-            (it.next().unwrap_or("").to_string(), it.next().unwrap_or("").to_string())
+            (
+                it.next().unwrap_or("").to_string(),
+                it.next().unwrap_or("").to_string(),
+            )
         })
         .take(MAX_INSERTION_POINTS)
         .collect()

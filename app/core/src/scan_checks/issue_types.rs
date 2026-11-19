@@ -1,5 +1,3 @@
-
-
 // ---------------------------------------------------------------- issue types
 
 /// Burp's numeric issue type for every name in kb_issue_names.txt, from the
@@ -11,8 +9,14 @@ pub(crate) const KB_ISSUE_TYPES: &[(&str, u64)] = &[
     ("ASP.NET debugging enabled", 0x00100800),
     ("ASP.NET tracing enabled", 0x00100280),
     ("Ajax request header manipulation (DOM-based)", 0x00500c00),
-    ("Ajax request header manipulation (reflected DOM-based)", 0x00500c01),
-    ("Ajax request header manipulation (stored DOM-based)", 0x00500c02),
+    (
+        "Ajax request header manipulation (reflected DOM-based)",
+        0x00500c01,
+    ),
+    (
+        "Ajax request header manipulation (stored DOM-based)",
+        0x00500c02,
+    ),
     ("BCheck generated issue", 0x09000000),
     ("Backup file", 0x006000d8),
     ("Bambda generated issue", 0x09000000),
@@ -23,25 +27,46 @@ pub(crate) const KB_ISSUE_TYPES: &[(&str, u64)] = &[
     ("CSS injection (stored)", 0x00501301),
     ("Cacheable HTTPS response", 0x00700100),
     ("Cleartext submission of password", 0x00300100),
-    ("Client-side HTTP parameter pollution (reflected)", 0x00501400),
+    (
+        "Client-side HTTP parameter pollution (reflected)",
+        0x00501400,
+    ),
     ("Client-side HTTP parameter pollution (stored)", 0x00501401),
     ("Client-side JSON injection (DOM-based)", 0x00200370),
-    ("Client-side JSON injection (reflected DOM-based)", 0x00200371),
+    (
+        "Client-side JSON injection (reflected DOM-based)",
+        0x00200371,
+    ),
     ("Client-side JSON injection (stored DOM-based)", 0x00200372),
     ("Client-side SQL injection (DOM-based)", 0x00200330),
-    ("Client-side SQL injection (reflected DOM-based)", 0x00200331),
+    (
+        "Client-side SQL injection (reflected DOM-based)",
+        0x00200331,
+    ),
     ("Client-side SQL injection (stored DOM-based)", 0x00200332),
     ("Client-side XPath injection (DOM-based)", 0x00200360),
-    ("Client-side XPath injection (reflected DOM-based)", 0x00200361),
+    (
+        "Client-side XPath injection (reflected DOM-based)",
+        0x00200361,
+    ),
     ("Client-side XPath injection (stored DOM-based)", 0x00200362),
     ("Client-side desync", 0x00200141),
     ("Client-side prototype pollution", 0x00200316),
     ("Client-side template injection", 0x00200308),
-    ("Content security policy: allowlisted script resources", 0x00200503),
+    (
+        "Content security policy: allowlisted script resources",
+        0x00200503,
+    ),
     ("Content security policy: allows clickjacking", 0x00200507),
     ("Content security policy: allows form hijacking", 0x00200508),
-    ("Content security policy: allows untrusted script execution", 0x00200504),
-    ("Content security policy: allows untrusted style execution", 0x00200505),
+    (
+        "Content security policy: allows untrusted script execution",
+        0x00200504,
+    ),
+    (
+        "Content security policy: allows untrusted style execution",
+        0x00200505,
+    ),
     ("Content security policy: malformed syntax", 0x00200506),
     ("Content security policy: not enforced", 0x00200509),
     ("Content type incorrectly stated", 0x00800400),
@@ -56,9 +81,18 @@ pub(crate) const KB_ISSUE_TYPES: &[(&str, u64)] = &[
     ("Cross-domain Referer leakage", 0x00500400),
     ("Cross-domain script include", 0x00500500),
     ("Cross-origin resource sharing", 0x00200600),
-    ("Cross-origin resource sharing: all subdomains trusted", 0x00200603),
-    ("Cross-origin resource sharing: arbitrary origin trusted", 0x00200601),
-    ("Cross-origin resource sharing: unencrypted origin trusted", 0x00200602),
+    (
+        "Cross-origin resource sharing: all subdomains trusted",
+        0x00200603,
+    ),
+    (
+        "Cross-origin resource sharing: arbitrary origin trusted",
+        0x00200601,
+    ),
+    (
+        "Cross-origin resource sharing: unencrypted origin trusted",
+        0x00200602,
+    ),
     ("Cross-site request forgery", 0x00200700),
     ("Cross-site scripting (DOM-based)", 0x00200310),
     ("Cross-site scripting (reflected DOM-based)", 0x00200311),
@@ -74,8 +108,14 @@ pub(crate) const KB_ISSUE_TYPES: &[(&str, u64)] = &[
     ("Denial of service (stored DOM-based)", 0x00500d02),
     ("Directory listing", 0x00600100),
     ("Document domain manipulation (DOM-based)", 0x00501100),
-    ("Document domain manipulation (reflected DOM-based)", 0x00501101),
-    ("Document domain manipulation (stored DOM-based)", 0x00501102),
+    (
+        "Document domain manipulation (reflected DOM-based)",
+        0x00501101,
+    ),
+    (
+        "Document domain manipulation (stored DOM-based)",
+        0x00501102,
+    ),
     ("Duplicate cookies set", 0x00400a00),
     ("Email addresses disclosed", 0x00600200),
     ("Expression Language injection", 0x00100f20),
@@ -98,11 +138,20 @@ pub(crate) const KB_ISSUE_TYPES: &[(&str, u64)] = &[
     ("HTML does not specify charset", 0x00800200),
     ("HTML uses unrecognized charset", 0x00800300),
     ("HTML5 storage manipulation (DOM-based)", 0x00500f00),
-    ("HTML5 storage manipulation (reflected DOM-based)", 0x00500f01),
+    (
+        "HTML5 storage manipulation (reflected DOM-based)",
+        0x00500f01,
+    ),
     ("HTML5 storage manipulation (stored DOM-based)", 0x00500f02),
     ("HTML5 web message manipulation (DOM-based)", 0x00500e00),
-    ("HTML5 web message manipulation (reflected DOM-based)", 0x00500e01),
-    ("HTML5 web message manipulation (stored DOM-based)", 0x00500e02),
+    (
+        "HTML5 web message manipulation (reflected DOM-based)",
+        0x00500e01,
+    ),
+    (
+        "HTML5 web message manipulation (stored DOM-based)",
+        0x00500e02,
+    ),
     ("HTTP PUT method is enabled", 0x00100900),
     ("HTTP TRACE method is enabled", 0x00500a00),
     ("HTTP request smuggling", 0x00200140),
@@ -128,8 +177,14 @@ pub(crate) const KB_ISSUE_TYPES: &[(&str, u64)] = &[
     ("Link manipulation (stored DOM-based)", 0x00501002),
     ("Link manipulation (stored)", 0x00501004),
     ("Local file path manipulation (DOM-based)", 0x00200350),
-    ("Local file path manipulation (reflected DOM-based)", 0x00200351),
-    ("Local file path manipulation (stored DOM-based)", 0x00200352),
+    (
+        "Local file path manipulation (reflected DOM-based)",
+        0x00200351,
+    ),
+    (
+        "Local file path manipulation (stored DOM-based)",
+        0x00200352,
+    ),
     ("Long redirection response", 0x00400800),
     ("Manually generated issue", 0x08008000),
     ("Mixed content", 0x01000400),
@@ -154,7 +209,10 @@ pub(crate) const KB_ISSUE_TYPES: &[(&str, u64)] = &[
     ("Private IP addresses disclosed", 0x00600300),
     ("Private key disclosed", 0x00600550),
     ("Python code injection", 0x00100f10),
-    ("React Server Components remote code execution (React2Shell)", 0x00100e00),
+    (
+        "React Server Components remote code execution (React2Shell)",
+        0x00100e00,
+    ),
     ("Referer-dependent response", 0x00400100),
     ("Request URL override", 0x00400f00),
     ("Robots.txt file", 0x00600600),

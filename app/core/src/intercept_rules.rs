@@ -31,7 +31,16 @@ pub enum Kind {
 }
 
 impl Kind {
-    pub const ALL: [Kind; 8] = [Kind::DomainName, Kind::Url, Kind::FileExtension, Kind::HttpMethod, Kind::AnyHeader, Kind::Body, Kind::HasParameters, Kind::InScope];
+    pub const ALL: [Kind; 8] = [
+        Kind::DomainName,
+        Kind::Url,
+        Kind::FileExtension,
+        Kind::HttpMethod,
+        Kind::AnyHeader,
+        Kind::Body,
+        Kind::HasParameters,
+        Kind::InScope,
+    ];
 
     /// Burp's "Match type" column.
     pub fn match_type(self) -> &'static str {
@@ -91,11 +100,30 @@ pub fn defaults() -> Vec<InterceptRule> {
             operator: Operator::And,
             kind: Kind::FileExtension,
             negate: true,
-            condition: "(^gif$|^jpg$|^png$|^css$|^js$|^ico$|^svg$|^eot$|^woff$|^woff2$|^ttf$)".into(),
+            condition: "(^gif$|^jpg$|^png$|^css$|^js$|^ico$|^svg$|^eot$|^woff$|^woff2$|^ttf$)"
+                .into(),
         },
-        InterceptRule { enabled: false, operator: Operator::Or, kind: Kind::HasParameters, negate: false, condition: String::new() },
-        InterceptRule { enabled: false, operator: Operator::Or, kind: Kind::HttpMethod, negate: true, condition: "(get|post)".into() },
-        InterceptRule { enabled: false, operator: Operator::And, kind: Kind::InScope, negate: false, condition: String::new() },
+        InterceptRule {
+            enabled: false,
+            operator: Operator::Or,
+            kind: Kind::HasParameters,
+            negate: false,
+            condition: String::new(),
+        },
+        InterceptRule {
+            enabled: false,
+            operator: Operator::Or,
+            kind: Kind::HttpMethod,
+            negate: true,
+            condition: "(get|post)".into(),
+        },
+        InterceptRule {
+            enabled: false,
+            operator: Operator::And,
+            kind: Kind::InScope,
+            negate: false,
+            condition: String::new(),
+        },
     ]
 }
 
@@ -119,11 +147,17 @@ pub struct Facts {
 pub fn extension_of(target: &str) -> String {
     let path = target.split(['?', '#']).next().unwrap_or(target);
     let name = path.rsplit('/').next().unwrap_or(path);
-    name.rsplit_once('.').map(|(_, e)| e.to_string()).unwrap_or_default()
+    name.rsplit_once('.')
+        .map(|(_, e)| e.to_string())
+        .unwrap_or_default()
 }
 
 fn regex_hit(condition: &str, text: &str) -> bool {
-    regex::RegexBuilder::new(condition).case_insensitive(true).build().map(|re| re.is_match(text)).unwrap_or(false)
+    regex::RegexBuilder::new(condition)
+        .case_insensitive(true)
+        .build()
+        .map(|re| re.is_match(text))
+        .unwrap_or(false)
 }
 
 impl InterceptRule {
@@ -178,13 +212,33 @@ mod tests {
     fn defaults_hold_everything_except_static_file_types() {
         let rules = defaults();
         assert_eq!(rules.iter().filter(|r| r.enabled).count(), 1);
-        for held in ["/login", "/api/users?id=app.js", "/assets/site.css.map", "/"] {
+        for held in [
+            "/login",
+            "/api/users?id=app.js",
+            "/assets/site.css.map",
+            "/",
+        ] {
             assert!(should_intercept(&rules, &facts("GET", held)), "{held}");
         }
-        for skipped in ["/assets/site.CSS?version=2", "/app.js#main", "/logo.png", "/f.woff2"] {
-            assert!(!should_intercept(&rules, &facts("GET", skipped)), "{skipped}");
+        for skipped in [
+            "/assets/site.CSS?version=2",
+            "/app.js#main",
+            "/logo.png",
+            "/f.woff2",
+        ] {
+            assert!(
+                !should_intercept(&rules, &facts("GET", skipped)),
+                "{skipped}"
+            );
         }
-        assert_eq!([extension_of("/a/b.tar.gz?x=1.png"), extension_of("/a.b/c"), extension_of("/x.JS")], ["gz", "", "JS"]);
+        assert_eq!(
+            [
+                extension_of("/a/b.tar.gz?x=1.png"),
+                extension_of("/a.b/c"),
+                extension_of("/x.JS")
+            ],
+            ["gz", "", "JS"]
+        );
     }
 
     #[test]
@@ -207,7 +261,13 @@ mod tests {
         rules[3].enabled = true;
         assert!(!should_intercept(&rules, &facts("PUT", "/logo.png")));
         // The first enabled row's operator is ignored.
-        let only_or = vec![InterceptRule { enabled: true, operator: Operator::Or, kind: Kind::HasParameters, negate: false, condition: String::new() }];
+        let only_or = vec![InterceptRule {
+            enabled: true,
+            operator: Operator::Or,
+            kind: Kind::HasParameters,
+            negate: false,
+            condition: String::new(),
+        }];
         assert!(should_intercept(&only_or, &facts("GET", "/s?q=1")));
         assert!(!should_intercept(&only_or, &facts("GET", "/s")));
         // No enabled rule: hold everything.
@@ -216,7 +276,13 @@ mod tests {
 
     #[test]
     fn regex_kinds_match_case_insensitively_and_bad_patterns_never_match() {
-        let rule = |kind, negate, condition: &str| InterceptRule { enabled: true, operator: Operator::And, kind, negate, condition: condition.into() };
+        let rule = |kind, negate, condition: &str| InterceptRule {
+            enabled: true,
+            operator: Operator::And,
+            kind,
+            negate,
+            condition: condition.into(),
+        };
         let mut f = facts("POST", "/admin/save");
         f.headers = "Host: app.test\r\nX-Requested-With: XMLHttpRequest\r\n".into();
         f.body = "name=a&ROLE=admin".into();
@@ -227,8 +293,17 @@ mod tests {
         assert!(rule(Kind::HttpMethod, true, "(get|head)").holds(&f));
         assert!(!rule(Kind::Url, false, "(unclosed").holds(&f));
         assert!(rule(Kind::Url, true, "(unclosed").holds(&f));
-        assert_eq!((Kind::InScope.match_type(), Kind::InScope.relationship(true)), ("URL", "Is not in target scope"));
-        assert_eq!((Kind::FileExtension.match_type(), Kind::FileExtension.relationship(true)), ("File extension", "Does not match"));
+        assert_eq!(
+            (Kind::InScope.match_type(), Kind::InScope.relationship(true)),
+            ("URL", "Is not in target scope")
+        );
+        assert_eq!(
+            (
+                Kind::FileExtension.match_type(),
+                Kind::FileExtension.relationship(true)
+            ),
+            ("File extension", "Does not match")
+        );
         assert!(!Kind::HasParameters.takes_condition() && Kind::Body.takes_condition());
     }
 }

@@ -21,7 +21,8 @@ impl ResponseRead for TcpStream {
 
 impl ResponseRead for rustls::StreamOwned<rustls::ClientConnection, TcpStream> {
     fn set_read_timeout_ms(&self, ms: u64) -> std::io::Result<()> {
-        self.get_ref().set_read_timeout(Some(Duration::from_millis(ms)))
+        self.get_ref()
+            .set_read_timeout(Some(Duration::from_millis(ms)))
     }
 }
 
@@ -40,7 +41,12 @@ pub fn tcp_closed(s: &TcpStream) -> bool {
     match s.peek(&mut b) {
         Ok(0) => true,
         Ok(_) => false,
-        Err(e) => !matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::Interrupted | std::io::ErrorKind::TimedOut),
+        Err(e) => !matches!(
+            e.kind(),
+            std::io::ErrorKind::WouldBlock
+                | std::io::ErrorKind::Interrupted
+                | std::io::ErrorKind::TimedOut
+        ),
     }
 }
 

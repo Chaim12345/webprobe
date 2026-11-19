@@ -49,19 +49,37 @@ pub fn burp_sniff_unknown(resp: &[u8], head_len: usize) -> bool {
     let head_len = head_len.min(resp.len());
     let total = resp.len().min(head_len + 10_000);
     let mut start = head_len;
-    for bom in [&[0xEF, 0xBB, 0xBF][..], &[0xFE, 0xFF, 0, 0], &[0xFF, 0xFE, 0, 0], &[0xFE, 0xFF], &[0xFF, 0xFE]] {
+    for bom in [
+        &[0xEF, 0xBB, 0xBF][..],
+        &[0xFE, 0xFF, 0, 0],
+        &[0xFF, 0xFE, 0, 0],
+        &[0xFE, 0xFF],
+        &[0xFF, 0xFE],
+    ] {
         if resp[start..total].starts_with(bom) {
             start += bom.len();
             break;
         }
     }
     let threshold = 10 + total / 100;
-    let count = resp[start..total].iter().filter(|&&b| (b as i8) < 32 && !matches!(b, 9 | 10 | 13)).take(threshold).count();
+    let count = resp[start..total]
+        .iter()
+        .filter(|&&b| (b as i8) < 32 && !matches!(b, 9 | 10 | 13))
+        .take(threshold)
+        .count();
     if count < threshold {
         return false;
     }
-    let lead: Vec<u8> = resp[start..total].iter().skip_while(|b| b.is_ascii_whitespace()).take(16).map(|b| b.to_ascii_lowercase()).collect();
-    !(lead.starts_with(b"<!doctype html") || lead.starts_with(b"<html") || lead.starts_with(b"<head") || lead.starts_with(b"<?xml"))
+    let lead: Vec<u8> = resp[start..total]
+        .iter()
+        .skip_while(|b| b.is_ascii_whitespace())
+        .take(16)
+        .map(|b| b.to_ascii_lowercase())
+        .collect();
+    !(lead.starts_with(b"<!doctype html")
+        || lead.starts_with(b"<html")
+        || lead.starts_with(b"<head")
+        || lead.starts_with(b"<?xml"))
 }
 
 /// Checks that only make sense for a browsable document (HTML).
@@ -105,7 +123,15 @@ pub fn attr_value<'a>(attrs: &'a [String], name: &str) -> Option<&'a str> {
 /// Session-looking cookies: name tokens or long opaque values.
 pub fn looks_session_cookie(name: &str, value: &str) -> bool {
     const TOKENS: [&str; 10] = [
-        "sess", "sid", "jsession", "phpsess", "aspsession", "token", "auth", "jwt", "login",
+        "sess",
+        "sid",
+        "jsession",
+        "phpsess",
+        "aspsession",
+        "token",
+        "auth",
+        "jwt",
+        "login",
         "remember",
     ];
     let n = name.to_ascii_lowercase();
@@ -139,11 +165,18 @@ pub fn tags<'a>(low: &'a str, name: &str) -> Vec<&'a str> {
 /// elements Burp walks: a, area, base, link, img, script, iframe, frame,
 /// embed, object, applet, bgsound, sound, body background, meta refresh).
 pub fn has_url_element(low: &str) -> bool {
-    let with = |tag: &str, attrs: &[&str]| tags(low, tag).iter().any(|t| {
-        let name_end = 1 + tag.len();
-        t.as_bytes().get(name_end).map(|c| c.is_ascii_whitespace() || *c == b'>' || *c == b'/').unwrap_or(false)
-            && attrs.iter().any(|a| t.contains(&format!(" {a}=")) || t.contains(&format!("\n{a}=")))
-    });
+    let with = |tag: &str, attrs: &[&str]| {
+        tags(low, tag).iter().any(|t| {
+            let name_end = 1 + tag.len();
+            t.as_bytes()
+                .get(name_end)
+                .map(|c| c.is_ascii_whitespace() || *c == b'>' || *c == b'/')
+                .unwrap_or(false)
+                && attrs
+                    .iter()
+                    .any(|a| t.contains(&format!(" {a}=")) || t.contains(&format!("\n{a}=")))
+        })
+    };
     with("a", &["href"])
         || with("area", &["href"])
         || with("base", &["href"])
@@ -158,12 +191,16 @@ pub fn has_url_element(low: &str) -> bool {
         || with("bgsound", &["src"])
         || with("sound", &["src"])
         || with("body", &["background"])
-        || tags(low, "meta").iter().any(|t| t.contains("refresh") && t.contains("url="))
+        || tags(low, "meta")
+            .iter()
+            .any(|t| t.contains("refresh") && t.contains("url="))
 }
 
 pub fn has_password_input(low: &str) -> bool {
     tags(low, "input").iter().any(|t| {
-        t.contains("type=\"password\"") || t.contains("type='password'") || t.contains("type=password")
+        t.contains("type=\"password\"")
+            || t.contains("type='password'")
+            || t.contains("type=password")
     })
 }
 
@@ -174,8 +211,15 @@ pub const BURP_TLDS: &str = include_str!("../burp_tlds.txt");
 /// Burp's TLD list as a set, built once (it is consulted for every
 /// '@' in every response body).
 pub fn burp_tld_set() -> &'static std::collections::HashSet<&'static str> {
-    static SET: std::sync::OnceLock<std::collections::HashSet<&'static str>> = std::sync::OnceLock::new();
-    SET.get_or_init(|| BURP_TLDS.lines().map(str::trim).filter(|l| !l.is_empty()).collect())
+    static SET: std::sync::OnceLock<std::collections::HashSet<&'static str>> =
+        std::sync::OnceLock::new();
+    SET.get_or_init(|| {
+        BURP_TLDS
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .collect()
+    })
 }
 
 /// burp.Zflt.Zb: email addresses in `text`. The local part is 1-40 bytes of
@@ -238,8 +282,13 @@ pub fn find_emails(text: &str) -> Vec<String> {
 /// The first email Burp would report: not one the request itself contained
 /// (burp.Zpwx.ZL excludes addresses found in the request).
 pub fn find_email_excluding(text: &str, request: &str) -> Option<String> {
-    let req: Vec<String> = find_emails(request).into_iter().map(|e| e.to_ascii_lowercase()).collect();
-    find_emails(text).into_iter().find(|e| !req.contains(&e.to_ascii_lowercase()))
+    let req: Vec<String> = find_emails(request)
+        .into_iter()
+        .map(|e| e.to_ascii_lowercase())
+        .collect();
+    find_emails(text)
+        .into_iter()
+        .find(|e| !req.contains(&e.to_ascii_lowercase()))
 }
 
 #[allow(dead_code)]
@@ -332,7 +381,9 @@ pub fn card_prefix_ok(n: &str) -> bool {
     let p = |x: &str| n.starts_with(x);
     match n.len() {
         13 => p("4"),
-        14 => ["300", "301", "302", "303", "304", "305", "36", "38"].iter().any(|x| p(x)),
+        14 => ["300", "301", "302", "303", "304", "305", "36", "38"]
+            .iter()
+            .any(|x| p(x)),
         15 => ["34", "37", "2131", "1800"].iter().any(|x| p(x)),
         16 => ["4", "5", "6011", "65", "35"].iter().any(|x| p(x)),
         _ => false,

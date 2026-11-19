@@ -43,7 +43,14 @@ pub struct PoolConfig {
 
 impl Default for PoolConfig {
     fn default() -> Self {
-        Self { max_concurrent: 10, delay_enabled: false, delay_ms: 0, random: false, increment_enabled: false, increment_ms: 0 }
+        Self {
+            max_concurrent: 10,
+            delay_enabled: false,
+            delay_ms: 0,
+            random: false,
+            increment_enabled: false,
+            increment_ms: 0,
+        }
     }
 }
 
@@ -56,7 +63,10 @@ pub struct RetryConfig {
 
 impl Default for RetryConfig {
     fn default() -> Self {
-        Self { retries: 3, pause_ms: 2000 }
+        Self {
+            retries: 3,
+            pause_ms: 2000,
+        }
     }
 }
 
@@ -98,7 +108,10 @@ impl Default for GrepMatch {
     fn default() -> Self {
         Self {
             enabled: false,
-            items: DEFAULT_MATCH_ITEMS.iter().map(|(s, _)| s.to_string()).collect(),
+            items: DEFAULT_MATCH_ITEMS
+                .iter()
+                .map(|(s, _)| s.to_string())
+                .collect(),
             regex: false,
             case_sensitive: false,
             exclude_headers: true,
@@ -171,7 +184,11 @@ pub struct GrepExtract {
 
 impl Default for GrepExtract {
     fn default() -> Self {
-        Self { enabled: false, items: Vec::new(), max_len: 100 }
+        Self {
+            enabled: false,
+            items: Vec::new(),
+            max_len: 100,
+        }
     }
 }
 
@@ -187,7 +204,12 @@ pub struct GrepPayloads {
 
 impl Default for GrepPayloads {
     fn default() -> Self {
-        Self { enabled: false, case_sensitive: false, exclude_headers: false, match_pre_encoded: true }
+        Self {
+            enabled: false,
+            case_sensitive: false,
+            exclude_headers: false,
+            match_pre_encoded: true,
+        }
     }
 }
 
@@ -213,7 +235,10 @@ pub struct PayloadEncoding {
 
 impl Default for PayloadEncoding {
     fn default() -> Self {
-        Self { enabled: true, chars: " ./\\=<>?+&*;:\"{}|^`#".into() }
+        Self {
+            enabled: true,
+            chars: " ./\\=<>?+&*;:\"{}|^`#".into(),
+        }
     }
 }
 
@@ -249,7 +274,9 @@ pub fn throttle_delay_ms(pool: &PoolConfig, n: u64, rand01: f64) -> u64 {
         delay = (delay as f64 * (rand01 + 0.5)).round() as u64;
     }
     if pool.increment_enabled {
-        delay = delay.saturating_add(n.saturating_mul(pool.increment_ms)).max(1);
+        delay = delay
+            .saturating_add(n.saturating_mul(pool.increment_ms))
+            .max(1);
     }
     delay
 }
@@ -281,7 +308,10 @@ pub fn send_with_retry(
 
 /// Offset of the response body (after the blank line), or the end.
 fn body_offset(text: &str) -> usize {
-    text.find("\r\n\r\n").map(|i| i + 4).or_else(|| text.find("\n\n").map(|i| i + 2)).unwrap_or(text.len())
+    text.find("\r\n\r\n")
+        .map(|i| i + 4)
+        .or_else(|| text.find("\n\n").map(|i| i + 2))
+        .unwrap_or(text.len())
 }
 
 /// burp.Zh5c.ZW: `\n`, `\r` and `\\` escapes in extract expressions.
@@ -291,9 +321,21 @@ pub fn unescape_expression(s: &str) -> String {
     while let Some(c) = chars.next() {
         if c == '\\' {
             match chars.peek() {
-                Some('n') => { chars.next(); out.push('\n'); continue; }
-                Some('r') => { chars.next(); out.push('\r'); continue; }
-                Some('\\') => { chars.next(); out.push('\\'); continue; }
+                Some('n') => {
+                    chars.next();
+                    out.push('\n');
+                    continue;
+                }
+                Some('r') => {
+                    chars.next();
+                    out.push('\r');
+                    continue;
+                }
+                Some('\\') => {
+                    chars.next();
+                    out.push('\\');
+                    continue;
+                }
                 _ => {}
             }
         }
@@ -305,8 +347,16 @@ pub fn unescape_expression(s: &str) -> String {
 /// Grep - Match: one flag per expression. Invalid regexes never match.
 pub fn grep_match_flags(cfg: &GrepMatch, response: &[u8]) -> Vec<bool> {
     let text = String::from_utf8_lossy(response);
-    let hay = if cfg.exclude_headers { &text[body_offset(&text)..] } else { &text[..] };
-    let lower = if cfg.case_sensitive || cfg.regex { String::new() } else { hay.to_lowercase() };
+    let hay = if cfg.exclude_headers {
+        &text[body_offset(&text)..]
+    } else {
+        &text[..]
+    };
+    let lower = if cfg.case_sensitive || cfg.regex {
+        String::new()
+    } else {
+        hay.to_lowercase()
+    };
     cfg.items
         .iter()
         .map(|item| {
@@ -314,7 +364,11 @@ pub fn grep_match_flags(cfg: &GrepMatch, response: &[u8]) -> Vec<bool> {
                 return false;
             }
             if cfg.regex {
-                let pattern = if cfg.case_sensitive { item.clone() } else { format!("(?i){item}") };
+                let pattern = if cfg.case_sensitive {
+                    item.clone()
+                } else {
+                    format!("(?i){item}")
+                };
                 regex::Regex::new(&pattern).is_ok_and(|re| re.is_match(hay))
             } else if cfg.case_sensitive {
                 hay.contains(item.as_str())
@@ -328,10 +382,18 @@ pub fn grep_match_flags(cfg: &GrepMatch, response: &[u8]) -> Vec<bool> {
 /// burp.Zx92: one extract item against one response.
 pub fn extract_value(item: &ExtractItem, response: &[u8], max_len: usize) -> Option<String> {
     let text = String::from_utf8_lossy(response);
-    let from = if item.exclude_headers { body_offset(&text) } else { 0 };
+    let from = if item.exclude_headers {
+        body_offset(&text)
+    } else {
+        0
+    };
     let len = text.len();
     let (start, end) = if let Some(pattern) = &item.regex {
-        let pattern = if item.case_sensitive { format!("(?s){pattern}") } else { format!("(?si){pattern}") };
+        let pattern = if item.case_sensitive {
+            format!("(?s){pattern}")
+        } else {
+            format!("(?si){pattern}")
+        };
         let re = regex::Regex::new(&pattern).ok()?;
         let caps = re.captures_at(&text, from)?;
         let g = caps.get(1)?;
@@ -339,10 +401,18 @@ pub fn extract_value(item: &ExtractItem, response: &[u8], max_len: usize) -> Opt
     } else {
         // Literal search; case-insensitive compares ASCII-lowered copies so
         // byte offsets stay valid.
-        let hay = if item.case_sensitive { text.to_string() } else { text.to_ascii_lowercase() };
+        let hay = if item.case_sensitive {
+            text.to_string()
+        } else {
+            text.to_ascii_lowercase()
+        };
         let norm = |s: &str| {
             let s = unescape_expression(s);
-            if item.case_sensitive { s } else { s.to_ascii_lowercase() }
+            if item.case_sensitive {
+                s
+            } else {
+                s.to_ascii_lowercase()
+            }
         };
         let start = match &item.start {
             ExtractStart::After(expr) => {
@@ -365,7 +435,10 @@ pub fn extract_value(item: &ExtractItem, response: &[u8], max_len: usize) -> Opt
                     len
                 } else {
                     // Burp captures to the end when the delimiter is missing.
-                    hay.get(start..).and_then(|h| h.find(&delim)).map(|i| i + start).unwrap_or(len)
+                    hay.get(start..)
+                        .and_then(|h| h.find(&delim))
+                        .map(|i| i + start)
+                        .unwrap_or(len)
                 }
             }
             ExtractEnd::Length(n) => (start + n).min(len),
@@ -381,19 +454,38 @@ pub fn extract_value(item: &ExtractItem, response: &[u8], max_len: usize) -> Opt
 
 /// Grep - Extract: one value per item (`None` = no match).
 pub fn extract_all(cfg: &GrepExtract, response: &[u8]) -> Vec<Option<String>> {
-    cfg.items.iter().map(|i| extract_value(i, response, cfg.max_len)).collect()
+    cfg.items
+        .iter()
+        .map(|i| extract_value(i, response, cfg.max_len))
+        .collect()
 }
 
 /// Grep - Payloads: whether each non-empty payload is reflected.
-pub fn payloads_reflected(cfg: &GrepPayloads, payloads: &[Option<String>], response: &[u8]) -> Vec<bool> {
+pub fn payloads_reflected(
+    cfg: &GrepPayloads,
+    payloads: &[Option<String>],
+    response: &[u8],
+) -> Vec<bool> {
     let text = String::from_utf8_lossy(response);
-    let hay = if cfg.exclude_headers { &text[body_offset(&text)..] } else { &text[..] };
-    let lower = if cfg.case_sensitive { String::new() } else { hay.to_lowercase() };
+    let hay = if cfg.exclude_headers {
+        &text[body_offset(&text)..]
+    } else {
+        &text[..]
+    };
+    let lower = if cfg.case_sensitive {
+        String::new()
+    } else {
+        hay.to_lowercase()
+    };
     payloads
         .iter()
         .map(|p| match p {
             Some(p) if !p.is_empty() => {
-                if cfg.case_sensitive { hay.contains(p.as_str()) } else { lower.contains(&p.to_lowercase()) }
+                if cfg.case_sensitive {
+                    hay.contains(p.as_str())
+                } else {
+                    lower.contains(&p.to_lowercase())
+                }
             }
             _ => false,
         })
@@ -419,11 +511,18 @@ pub fn curl_command(request: &[u8], https: bool, host: &str, port: u16) -> Strin
     let parts = crate::util::parse_http(request);
     let target = parts.first.split_whitespace().nth(1).unwrap_or("/");
     let default = if https { 443 } else { 80 };
-    let authority = if port == default { host.to_string() } else { format!("{host}:{port}") };
+    let authority = if port == default {
+        host.to_string()
+    } else {
+        format!("{host}:{port}")
+    };
     let url = if target.starts_with("http://") || target.starts_with("https://") {
         target.to_string()
     } else {
-        format!("{}://{authority}{target}", if https { "https" } else { "http" })
+        format!(
+            "{}://{authority}{target}",
+            if https { "https" } else { "http" }
+        )
     };
     let mut cmd = format!("curl -i -s -k -X {}", sh_quote(&parts.method));
     for (k, v) in &parts.headers {
@@ -432,9 +531,14 @@ pub fn curl_command(request: &[u8], https: bool, host: &str, port: u16) -> Strin
         }
         cmd.push_str(&format!(" -H {}", sh_quote(&format!("{k}: {v}"))));
     }
-    let body = request.get(parts.head_len.min(request.len())..).unwrap_or(&[]);
+    let body = request
+        .get(parts.head_len.min(request.len())..)
+        .unwrap_or(&[]);
     if !body.is_empty() {
-        cmd.push_str(&format!(" --data-binary {}", sh_quote(&String::from_utf8_lossy(body))));
+        cmd.push_str(&format!(
+            " --data-binary {}",
+            sh_quote(&String::from_utf8_lossy(body))
+        ));
     }
     cmd.push(' ');
     cmd.push_str(&sh_quote(&url));
@@ -484,7 +588,12 @@ pub struct ResultRow {
 impl ResultRow {
     /// The "Payload" column text: the non-original payloads joined.
     pub fn payload_text(&self) -> String {
-        self.payloads.iter().flatten().cloned().collect::<Vec<_>>().join(", ")
+        self.payloads
+            .iter()
+            .flatten()
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(", ")
     }
 
     /// Column values in table order (see `result_columns`).
@@ -499,11 +608,19 @@ impl ResultRow {
         }
         out.push(self.status.clone());
         out.push(self.ms.to_string());
-        out.push(if self.error { "true".into() } else { String::new() });
+        out.push(if self.error {
+            "true".into()
+        } else {
+            String::new()
+        });
         out.push(self.length.to_string());
         if cfg.grep_match.enabled {
             for (i, _) in cfg.grep_match.items.iter().enumerate() {
-                out.push(if self.matches.get(i).copied().unwrap_or(false) { "1".into() } else { String::new() });
+                out.push(if self.matches.get(i).copied().unwrap_or(false) {
+                    "1".into()
+                } else {
+                    String::new()
+                });
             }
         }
         if cfg.grep_extract.enabled {
@@ -513,7 +630,11 @@ impl ResultRow {
         }
         if cfg.grep_payloads.enabled {
             for i in 0..sets.max(1) {
-                out.push(if self.reflected.get(i).copied().unwrap_or(false) { "1".into() } else { String::new() });
+                out.push(if self.reflected.get(i).copied().unwrap_or(false) {
+                    "1".into()
+                } else {
+                    String::new()
+                });
             }
         }
         out
@@ -554,7 +675,10 @@ pub fn result_columns(sets: usize, cfg: &AttackSettings) -> Vec<String> {
 /// The results table as CSV (header line + one line per row, CRLF endings).
 pub fn results_csv(rows: &[Arc<ResultRow>], sets: usize, cfg: &AttackSettings) -> String {
     let mut out = String::new();
-    let header: Vec<String> = result_columns(sets, cfg).iter().map(|c| csv_field(c)).collect();
+    let header: Vec<String> = result_columns(sets, cfg)
+        .iter()
+        .map(|c| csv_field(c))
+        .collect();
     out.push_str(&header.join(","));
     out.push_str("\r\n");
     for row in rows {
@@ -570,7 +694,12 @@ pub fn results_csv(rows: &[Arc<ResultRow>], sets: usize, cfg: &AttackSettings) -
 /// the full messages the same way).
 pub fn results_xml(rows: &[Arc<ResultRow>], sets: usize, cfg: &AttackSettings) -> String {
     use base64::Engine as _;
-    let esc = |t: &str| t.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;");
+    let esc = |t: &str| {
+        t.replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+            .replace('"', "&quot;")
+    };
     let cols = result_columns(sets, cfg);
     let mut out = String::from("<?xml version=\"1.0\"?>\n<items>\n");
     for row in rows {
@@ -579,12 +708,22 @@ pub fn results_xml(rows: &[Arc<ResultRow>], sets: usize, cfg: &AttackSettings) -
             // One element type keyed by the column title: titles such as
             // "Request" / "Error" and grep expressions like "error" would
             // otherwise collide with each other and with <request>.
-            out.push_str(&format!("    <column name=\"{n}\">{v}</column>\n", n = esc(c), v = esc(&v)));
+            out.push_str(&format!(
+                "    <column name=\"{n}\">{v}</column>\n",
+                n = esc(c),
+                v = esc(&v)
+            ));
         }
         let b64 = base64::engine::general_purpose::STANDARD;
-        out.push_str(&format!("    <request base64=\"true\">{}</request>\n", b64.encode(&row.request)));
+        out.push_str(&format!(
+            "    <request base64=\"true\">{}</request>\n",
+            b64.encode(&row.request)
+        ));
         if let Some(r) = &row.response {
-            out.push_str(&format!("    <response base64=\"true\">{}</response>\n", b64.encode(r)));
+            out.push_str(&format!(
+                "    <response base64=\"true\">{}</response>\n",
+                b64.encode(r)
+            ));
         }
         out.push_str("  </item>\n");
     }
@@ -593,9 +732,18 @@ pub fn results_xml(rows: &[Arc<ResultRow>], sets: usize, cfg: &AttackSettings) -
 }
 
 /// Row order for a click-sorted column: numeric when both cells parse.
-pub fn sort_order(rows: &[Arc<ResultRow>], sets: usize, cfg: &AttackSettings, col: usize, asc: bool) -> Vec<usize> {
+pub fn sort_order(
+    rows: &[Arc<ResultRow>],
+    sets: usize,
+    cfg: &AttackSettings,
+    col: usize,
+    asc: bool,
+) -> Vec<usize> {
     let mut order: Vec<usize> = (0..rows.len()).collect();
-    let keys: Vec<String> = rows.iter().map(|r| r.cells(sets, cfg).get(col).cloned().unwrap_or_default()).collect();
+    let keys: Vec<String> = rows
+        .iter()
+        .map(|r| r.cells(sets, cfg).get(col).cloned().unwrap_or_default())
+        .collect();
     order.sort_by(|&a, &b| {
         let (ka, kb) = (&keys[a], &keys[b]);
         let ord = match (ka.parse::<f64>(), kb.parse::<f64>()) {
@@ -603,7 +751,11 @@ pub fn sort_order(rows: &[Arc<ResultRow>], sets: usize, cfg: &AttackSettings, co
             _ => ka.cmp(kb),
         };
         let ord = ord.then(rows[a].number.cmp(&rows[b].number));
-        if asc { ord } else { ord.reverse() }
+        if asc {
+            ord
+        } else {
+            ord.reverse()
+        }
     });
     order
 }
@@ -641,8 +793,15 @@ impl RunState {
 
 /// The attack's request source: a precomputed matrix or a recursive walk.
 enum Source {
-    Matrix { attacks: Vec<Attack>, next: AtomicUsize },
-    Recursive { template: Template, walk: Mutex<RecursiveWalk>, made: AtomicUsize },
+    Matrix {
+        attacks: Vec<Attack>,
+        next: AtomicUsize,
+    },
+    Recursive {
+        template: Template,
+        walk: Mutex<RecursiveWalk>,
+        made: AtomicUsize,
+    },
 }
 
 /// Cap on a recursive-grep attack (it has no natural end without a stop rule).
@@ -662,7 +821,10 @@ fn analyse(row: &mut ResultRow, settings: &AttackSettings) {
         let placed: Vec<Option<String>> = if settings.grep_payloads.match_pre_encoded {
             row.payloads.clone()
         } else {
-            row.payloads.iter().map(|p| p.as_deref().map(|v| settings.encoding.apply(v))).collect()
+            row.payloads
+                .iter()
+                .map(|p| p.as_deref().map(|v| settings.encoding.apply(v)))
+                .collect()
         };
         row.reflected = payloads_reflected(&settings.grep_payloads, &placed, resp);
     }
@@ -691,15 +853,33 @@ pub fn start(
     let (source, total, workers) = match RecursiveWalk::new(kind, &specs[..sets]) {
         Some(walk) => {
             if !settings.grep_extract.enabled || settings.grep_extract.items.is_empty() {
-                return Err("\"extract grep\" items must be defined to use recursive grep payloads.".into());
+                return Err(
+                    "\"extract grep\" items must be defined to use recursive grep payloads.".into(),
+                );
             }
-            (Source::Recursive { template, walk: Mutex::new(walk), made: AtomicUsize::new(0) }, None, 1)
+            (
+                Source::Recursive {
+                    template,
+                    walk: Mutex::new(walk),
+                    made: AtomicUsize::new(0),
+                },
+                None,
+                1,
+            )
         }
         None => {
-            let attacks = intruder::requests_specs(&template, kind, &specs, net::INTRUDER_REQUEST_LIMIT)?;
+            let attacks =
+                intruder::requests_specs(&template, kind, &specs, net::INTRUDER_REQUEST_LIMIT)?;
             let total = attacks.len();
             let workers = settings.pool.max_concurrent.clamp(1, 999).min(total.max(1));
-            (Source::Matrix { attacks, next: AtomicUsize::new(0) }, Some(total), workers)
+            (
+                Source::Matrix {
+                    attacks,
+                    next: AtomicUsize::new(0),
+                },
+                Some(total),
+                workers,
+            )
         }
     };
     let state = Arc::new(RunState {
@@ -719,14 +899,22 @@ pub fn start(
     shared.log(&format!(
         "Intruder attack started: {} x {} request(s), {workers} thread(s)",
         kind.label(),
-        total.map(|t| t.to_string()).unwrap_or_else(|| "recursive".into())
+        total
+            .map(|t| t.to_string())
+            .unwrap_or_else(|| "recursive".into())
     ));
     let source = Arc::new(source);
     // Throttle: the next permitted request start time and the request count.
     let gate = Arc::new(Mutex::new((Instant::now(), 0u64, rand_seed())));
     let alive = Arc::new(AtomicUsize::new(workers));
     for _ in 0..workers {
-        let (shared, state, source, gate, alive) = (shared.clone(), state.clone(), source.clone(), gate.clone(), alive.clone());
+        let (shared, state, source, gate, alive) = (
+            shared.clone(),
+            state.clone(),
+            source.clone(),
+            gate.clone(),
+            alive.clone(),
+        );
         std::thread::spawn(move || {
             let _tool = net::tool_scope("Intruder");
             worker(&shared, &state, &source, &gate);
@@ -740,7 +928,10 @@ pub fn start(
 }
 
 fn rand_seed() -> u64 {
-    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(1);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(1);
     nanos | 1
 }
 
@@ -760,7 +951,12 @@ fn nap(state: &RunState, ms: u64) {
     }
 }
 
-fn worker(shared: &net::Shared, state: &RunState, source: &Source, gate: &Mutex<(Instant, u64, u64)>) {
+fn worker(
+    shared: &net::Shared,
+    state: &RunState,
+    source: &Source,
+    gate: &Mutex<(Instant, u64, u64)>,
+) {
     loop {
         while state.paused.load(Ordering::SeqCst) && !state.stop.load(Ordering::SeqCst) {
             std::thread::sleep(Duration::from_millis(30));
@@ -776,7 +972,11 @@ fn worker(shared: &net::Shared, state: &RunState, source: &Source, gate: &Mutex<
                     None => return,
                 }
             }
-            Source::Recursive { template, walk, made } => {
+            Source::Recursive {
+                template,
+                walk,
+                made,
+            } => {
                 if made.load(Ordering::SeqCst) >= RECURSIVE_LIMIT {
                     return;
                 }
@@ -793,7 +993,11 @@ fn worker(shared: &net::Shared, state: &RunState, source: &Source, gate: &Mutex<
             let r = next_rand(&mut g.2);
             let delay = throttle_delay_ms(&state.settings.pool, g.1, r);
             g.1 += 1;
-            let at = if g.1 == 1 { now } else { (g.0 + Duration::from_millis(delay)).max(now) };
+            let at = if g.1 == 1 {
+                now
+            } else {
+                (g.0 + Duration::from_millis(delay)).max(now)
+            };
             g.0 = at;
             at.saturating_duration_since(now)
         };
@@ -808,14 +1012,24 @@ fn worker(shared: &net::Shared, state: &RunState, source: &Source, gate: &Mutex<
         // restamped (Burp's "Update Content-Length header", on by default):
         // a body of another length made the server wait for missing bytes
         // or left bytes on a pooled connection.
-        let encoded: Vec<Option<String>> = attack.payloads.iter().map(|p| p.as_deref().map(|v| state.settings.encoding.apply(v))).collect();
-        let request = state.template.render(&encoded.iter().map(|p| p.as_deref()).collect::<Vec<_>>());
+        let encoded: Vec<Option<String>> = attack
+            .payloads
+            .iter()
+            .map(|p| p.as_deref().map(|v| state.settings.encoding.apply(v)))
+            .collect();
+        let request = state
+            .template
+            .render(&encoded.iter().map(|p| p.as_deref()).collect::<Vec<_>>());
         let bytes = crate::util::update_content_length(request.as_bytes());
         let t0 = Instant::now();
         let (resp, attempts) = send_with_retry(
             &state.settings.retry,
             || {
-                let up = if https { net::send_tls_raw(shared, &host, port, &bytes) } else { net::send_raw(shared, &host, port, &bytes) };
+                let up = if https {
+                    net::send_tls_raw(shared, &host, port, &bytes)
+                } else {
+                    net::send_raw(shared, &host, port, &bytes)
+                };
                 up.resp
             },
             |ms| nap(state, ms),
@@ -824,7 +1038,14 @@ fn worker(shared: &net::Shared, state: &RunState, source: &Source, gate: &Mutex<
         let ms = t0.elapsed().as_millis();
         let status = resp
             .as_ref()
-            .map(|r| crate::util::parse_http(r).first.split_whitespace().nth(1).unwrap_or("").to_string())
+            .map(|r| {
+                crate::util::parse_http(r)
+                    .first
+                    .split_whitespace()
+                    .nth(1)
+                    .unwrap_or("")
+                    .to_string()
+            })
             .unwrap_or_default();
         let mut row = ResultRow {
             number,
@@ -841,7 +1062,10 @@ fn worker(shared: &net::Shared, state: &RunState, source: &Source, gate: &Mutex<
         analyse(&mut row, &state.settings);
         if let Source::Recursive { walk, .. } = source {
             let extracts = if row.extracts.is_empty() && row.response.is_some() {
-                extract_all(&state.settings.grep_extract, row.response.as_deref().unwrap_or(&[]))
+                extract_all(
+                    &state.settings.grep_extract,
+                    row.response.as_deref().unwrap_or(&[]),
+                )
             } else {
                 row.extracts.clone()
             };
@@ -864,7 +1088,14 @@ mod tests {
         assert_eq!(enc.apply("a b&c=d/é"), "a%20b%26c%3Dd%2Fé");
         assert_eq!(enc.apply("ok-_~"), "ok-_~");
         assert_eq!(enc.apply("\"{}|^`#"), "%22%7B%7D%7C%5E%60%23");
-        assert_eq!(PayloadEncoding { enabled: false, ..enc }.apply("a b"), "a b");
+        assert_eq!(
+            PayloadEncoding {
+                enabled: false,
+                ..enc
+            }
+            .apply("a b"),
+            "a b"
+        );
     }
 
     #[test]
@@ -883,7 +1114,11 @@ mod tests {
         pool.increment_ms = 100;
         assert_eq!(throttle_delay_ms(&pool, 3, 0.0), 1300);
         pool.delay_enabled = false;
-        assert_eq!(throttle_delay_ms(&pool, 0, 0.0), 1, "increments never wait 0");
+        assert_eq!(
+            throttle_delay_ms(&pool, 0, 0.0),
+            1,
+            "increments never wait 0"
+        );
     }
 
     #[test]
@@ -892,11 +1127,31 @@ mod tests {
         assert_eq!((retry.retries, retry.pause_ms), (3, 2000));
         let mut pauses = Vec::new();
         let mut calls = 0;
-        let (resp, attempts) = send_with_retry(&retry, || { calls += 1; None }, |ms| pauses.push(ms), || false);
+        let (resp, attempts) = send_with_retry(
+            &retry,
+            || {
+                calls += 1;
+                None
+            },
+            |ms| pauses.push(ms),
+            || false,
+        );
         assert_eq!((resp, attempts, calls), (None, 4, 4));
         assert_eq!(pauses, [2000, 2000, 2000]);
         let mut calls = 0;
-        let (resp, attempts) = send_with_retry(&retry, || { calls += 1; if calls == 2 { Some(b"ok".to_vec()) } else { None } }, |_| {}, || false);
+        let (resp, attempts) = send_with_retry(
+            &retry,
+            || {
+                calls += 1;
+                if calls == 2 {
+                    Some(b"ok".to_vec())
+                } else {
+                    None
+                }
+            },
+            |_| {},
+            || false,
+        );
         assert_eq!((resp.as_deref(), attempts), (Some(&b"ok"[..]), 2));
         let (_, attempts) = send_with_retry(&retry, || None, |_| {}, || true);
         assert_eq!(attempts, 1, "stop aborts the retries");
@@ -906,11 +1161,20 @@ mod tests {
 
     #[test]
     fn grep_match_flags_each_default_expression() {
-        let mut cfg = GrepMatch { enabled: true, ..Default::default() };
+        let mut cfg = GrepMatch {
+            enabled: true,
+            ..Default::default()
+        };
         assert_eq!(cfg.items.len(), 20);
         assert_eq!(cfg.items[12], "c:\\");
         let flags = grep_match_flags(&cfg, RESP);
-        let hit: Vec<&str> = cfg.items.iter().zip(&flags).filter(|(_, f)| **f).map(|(i, _)| i.as_str()).collect();
+        let hit: Vec<&str> = cfg
+            .items
+            .iter()
+            .zip(&flags)
+            .filter(|(_, f)| **f)
+            .map(|(i, _)| i.as_str())
+            .collect();
         assert_eq!(hit, ["error", "SQL", "syntax"]);
         cfg.case_sensitive = true;
         let hit: Vec<bool> = grep_match_flags(&cfg, RESP);
@@ -928,44 +1192,116 @@ mod tests {
 
     #[test]
     fn grep_extract_follows_burps_delimiter_and_regex_rules() {
-        let item = ExtractItem { start: ExtractStart::After("value=\"".into()), end: ExtractEnd::Delimiter("\"".into()), ..Default::default() };
+        let item = ExtractItem {
+            start: ExtractStart::After("value=\"".into()),
+            end: ExtractEnd::Delimiter("\"".into()),
+            ..Default::default()
+        };
         assert_eq!(extract_value(&item, RESP, 100).as_deref(), Some("tok123"));
-        assert_eq!(extract_value(&item, RESP, 3).as_deref(), Some("tok"), "max capture length");
-        let missing_end = ExtractItem { end: ExtractEnd::Delimiter("@@".into()), ..item.clone() };
-        assert_eq!(extract_value(&missing_end, RESP, 100).as_deref(), Some("tok123\">"), "no delimiter: to the end");
-        let fixed = ExtractItem { end: ExtractEnd::Length(3), ..item.clone() };
+        assert_eq!(
+            extract_value(&item, RESP, 3).as_deref(),
+            Some("tok"),
+            "max capture length"
+        );
+        let missing_end = ExtractItem {
+            end: ExtractEnd::Delimiter("@@".into()),
+            ..item.clone()
+        };
+        assert_eq!(
+            extract_value(&missing_end, RESP, 100).as_deref(),
+            Some("tok123\">"),
+            "no delimiter: to the end"
+        );
+        let fixed = ExtractItem {
+            end: ExtractEnd::Length(3),
+            ..item.clone()
+        };
         assert_eq!(extract_value(&fixed, RESP, 100).as_deref(), Some("tok"));
-        let absent = ExtractItem { start: ExtractStart::After("nope=".into()), ..item.clone() };
+        let absent = ExtractItem {
+            start: ExtractStart::After("nope=".into()),
+            ..item.clone()
+        };
         assert_eq!(extract_value(&absent, RESP, 100), None);
-        let caseless = ExtractItem { start: ExtractStart::After("VALUE=\"".into()), ..item.clone() };
-        assert_eq!(extract_value(&caseless, RESP, 100).as_deref(), Some("tok123"));
-        let cased = ExtractItem { case_sensitive: true, ..caseless };
+        let caseless = ExtractItem {
+            start: ExtractStart::After("VALUE=\"".into()),
+            ..item.clone()
+        };
+        assert_eq!(
+            extract_value(&caseless, RESP, 100).as_deref(),
+            Some("tok123")
+        );
+        let cased = ExtractItem {
+            case_sensitive: true,
+            ..caseless
+        };
         assert_eq!(extract_value(&cased, RESP, 100), None);
-        let crlf = ExtractItem { start: ExtractStart::After("X-Error: ".into()), end: ExtractEnd::Delimiter("\\r\\n".into()), ..Default::default() };
-        assert_eq!(extract_value(&crlf, RESP, 100).as_deref(), Some("header-only"));
-        let body_only = ExtractItem { exclude_headers: true, ..crlf };
+        let crlf = ExtractItem {
+            start: ExtractStart::After("X-Error: ".into()),
+            end: ExtractEnd::Delimiter("\\r\\n".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            extract_value(&crlf, RESP, 100).as_deref(),
+            Some("header-only")
+        );
+        let body_only = ExtractItem {
+            exclude_headers: true,
+            ..crlf
+        };
         assert_eq!(extract_value(&body_only, RESP, 100), None);
-        let offset = ExtractItem { start: ExtractStart::Offset(9), end: ExtractEnd::Length(3), ..Default::default() };
+        let offset = ExtractItem {
+            start: ExtractStart::Offset(9),
+            end: ExtractEnd::Length(3),
+            ..Default::default()
+        };
         assert_eq!(extract_value(&offset, RESP, 100).as_deref(), Some("500"));
         let whole = ExtractItem::default();
-        assert_eq!(extract_value(&whole, RESP, 100), None, "the whole response is not an extract");
-        let re = ExtractItem { regex: Some(r#"VALUE="([^"]+)""#.into()), ..Default::default() };
+        assert_eq!(
+            extract_value(&whole, RESP, 100),
+            None,
+            "the whole response is not an extract"
+        );
+        let re = ExtractItem {
+            regex: Some(r#"VALUE="([^"]+)""#.into()),
+            ..Default::default()
+        };
         assert_eq!(extract_value(&re, RESP, 100).as_deref(), Some("tok123"));
-        let no_group = ExtractItem { regex: Some("value".into()), ..Default::default() };
+        let no_group = ExtractItem {
+            regex: Some("value".into()),
+            ..Default::default()
+        };
         assert_eq!(extract_value(&no_group, RESP, 100), None);
-        let cfg = GrepExtract { enabled: true, items: vec![item, absent], max_len: 100 };
+        let cfg = GrepExtract {
+            enabled: true,
+            items: vec![item, absent],
+            max_len: 100,
+        };
         assert_eq!(extract_all(&cfg, RESP), [Some("tok123".to_string()), None]);
         assert_eq!(unescape_expression(r"a\r\nb\\c\t"), "a\r\nb\\c\\t");
     }
 
     #[test]
     fn grep_payloads_flags_reflections() {
-        let mut cfg = GrepPayloads { enabled: true, ..Default::default() };
+        let mut cfg = GrepPayloads {
+            enabled: true,
+            ..Default::default()
+        };
         assert!(!cfg.exclude_headers && !cfg.case_sensitive && cfg.match_pre_encoded);
-        let p = vec![Some("TOK123".to_string()), None, Some("zzz".to_string()), Some(String::new())];
-        assert_eq!(payloads_reflected(&cfg, &p, RESP), [true, false, false, false]);
+        let p = vec![
+            Some("TOK123".to_string()),
+            None,
+            Some("zzz".to_string()),
+            Some(String::new()),
+        ];
+        assert_eq!(
+            payloads_reflected(&cfg, &p, RESP),
+            [true, false, false, false]
+        );
         cfg.case_sensitive = true;
-        assert_eq!(payloads_reflected(&cfg, &p, RESP), [false, false, false, false]);
+        assert_eq!(
+            payloads_reflected(&cfg, &p, RESP),
+            [false, false, false, false]
+        );
         cfg.case_sensitive = false;
         cfg.exclude_headers = true;
         let h = vec![Some("header-only".to_string())];
@@ -973,7 +1309,14 @@ mod tests {
     }
 
     fn row(n: usize, payload: &str, status: &str, len: usize) -> Arc<ResultRow> {
-        Arc::new(ResultRow { number: n, payloads: vec![Some(payload.into())], status: status.into(), length: len, ms: 7, ..Default::default() })
+        Arc::new(ResultRow {
+            number: n,
+            payloads: vec![Some(payload.into())],
+            status: status.into(),
+            length: len,
+            ms: 7,
+            ..Default::default()
+        })
     }
 
     #[test]
@@ -988,7 +1331,10 @@ mod tests {
             csv,
             "Request,Payload,Status code,Response received,Error,Length,error\r\n1,\"a,\"\"b\"\"\n\",200,7,,12,1\r\n2,x,404,7,,3,\r\n"
         );
-        assert_eq!(result_columns(2, &AttackSettings::default())[1..3], ["Payload 1".to_string(), "Payload 2".to_string()]);
+        assert_eq!(
+            result_columns(2, &AttackSettings::default())[1..3],
+            ["Payload 1".to_string(), "Payload 2".to_string()]
+        );
     }
 
     #[test]
@@ -997,19 +1343,44 @@ mod tests {
         r.request = b"GET / HTTP/1.1\r\n\r\n".to_vec();
         r.response = Some(b"HTTP/1.1 200 OK\r\n\r\nhi".to_vec());
         let xml = results_xml(&[Arc::new(r)], 1, &AttackSettings::default());
-        assert!(xml.contains("<column name=\"Payload\">&lt;a&amp;b&gt;</column>"), "{xml}");
-        assert!(xml.contains("<column name=\"Status code\">200</column>"), "{xml}");
-        assert_eq!(xml.matches("<request").count(), 1, "only the message is a <request>");
-        assert!(xml.contains("<request base64=\"true\">R0VUIC8gSFRUUC8xLjENCg0K</request>"), "{xml}");
+        assert!(
+            xml.contains("<column name=\"Payload\">&lt;a&amp;b&gt;</column>"),
+            "{xml}"
+        );
+        assert!(
+            xml.contains("<column name=\"Status code\">200</column>"),
+            "{xml}"
+        );
+        assert_eq!(
+            xml.matches("<request").count(),
+            1,
+            "only the message is a <request>"
+        );
+        assert!(
+            xml.contains("<request base64=\"true\">R0VUIC8gSFRUUC8xLjENCg0K</request>"),
+            "{xml}"
+        );
         assert!(xml.contains("<response base64=\"true\">"));
     }
 
     #[test]
     fn sort_is_numeric_where_possible() {
-        let rows = vec![row(1, "b", "200", 100), row(2, "a", "404", 9), row(3, "c", "200", 20)];
+        let rows = vec![
+            row(1, "b", "200", 100),
+            row(2, "a", "404", 9),
+            row(3, "c", "200", 20),
+        ];
         let cfg = AttackSettings::default();
-        assert_eq!(sort_order(&rows, 1, &cfg, 5, true), [1, 2, 0], "length 9 < 20 < 100");
-        assert_eq!(sort_order(&rows, 1, &cfg, 1, false), [2, 0, 1], "payload descending");
+        assert_eq!(
+            sort_order(&rows, 1, &cfg, 5, true),
+            [1, 2, 0],
+            "length 9 < 20 < 100"
+        );
+        assert_eq!(
+            sort_order(&rows, 1, &cfg, 1, false),
+            [2, 0, 1],
+            "payload descending"
+        );
     }
 
     #[test]
@@ -1020,9 +1391,18 @@ mod tests {
             "curl -i -s -k -X 'POST' -H 'Host: example.test' -H 'X-Q: it'\\''s' --data-binary 'user=a&b' 'https://example.test/login?x=1'"
         );
         let get = b"GET / HTTP/1.1\r\nHost: h\r\n\r\n";
-        assert_eq!(curl_command(get, false, "127.0.0.1", 8000), "curl -i -s -k -X 'GET' -H 'Host: h' 'http://127.0.0.1:8000/'");
-        assert_eq!(parse_target("https://example.test"), Some(("example.test".into(), 443, true)));
-        assert_eq!(parse_target("http://127.0.0.1:9000/"), Some(("127.0.0.1".into(), 9000, false)));
+        assert_eq!(
+            curl_command(get, false, "127.0.0.1", 8000),
+            "curl -i -s -k -X 'GET' -H 'Host: h' 'http://127.0.0.1:8000/'"
+        );
+        assert_eq!(
+            parse_target("https://example.test"),
+            Some(("example.test".into(), 443, true))
+        );
+        assert_eq!(
+            parse_target("http://127.0.0.1:9000/"),
+            Some(("127.0.0.1".into(), 9000, false))
+        );
         assert_eq!(parse_target(""), None);
     }
 
@@ -1044,17 +1424,35 @@ mod tests {
                 let mut buf = [0u8; 2048];
                 let _ = s.read(&mut buf);
                 std::thread::sleep(Duration::from_millis(30));
-                let _ = s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok");
+                let _ = s.write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok",
+                );
             }
         });
         let template = format!("GET /?n=§x§ HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
         let parsed = Template::parse(&template).unwrap();
         let items: Vec<String> = (0..200).map(|i| i.to_string()).collect();
-        let specs = intruder::resolve_specs(&parsed, AttackType::Sniper, &[intruder::PayloadSource::SimpleList { items }]).unwrap();
+        let specs = intruder::resolve_specs(
+            &parsed,
+            AttackType::Sniper,
+            &[intruder::PayloadSource::SimpleList { items }],
+        )
+        .unwrap();
         let mut settings = AttackSettings::default();
         settings.pool.max_concurrent = 2;
-        settings.retry = RetryConfig { retries: 0, pause_ms: 0 };
-        let run = start(net::Shared::new(), &template, AttackType::Sniper, specs, ("127.0.0.1".into(), port, false), settings).unwrap();
+        settings.retry = RetryConfig {
+            retries: 0,
+            pause_ms: 0,
+        };
+        let run = start(
+            net::Shared::new(),
+            &template,
+            AttackType::Sniper,
+            specs,
+            ("127.0.0.1".into(), port, false),
+            settings,
+        )
+        .unwrap();
         while run.progress().0 < 5 {
             std::thread::sleep(Duration::from_millis(10));
         }
@@ -1062,7 +1460,11 @@ mod tests {
         std::thread::sleep(Duration::from_millis(300)); // in-flight requests finish
         let held = hits.load(Ordering::SeqCst);
         std::thread::sleep(Duration::from_millis(500));
-        assert_eq!(hits.load(Ordering::SeqCst), held, "no requests while paused");
+        assert_eq!(
+            hits.load(Ordering::SeqCst),
+            held,
+            "no requests while paused"
+        );
         assert!(run.is_running());
         run.paused.store(false, Ordering::SeqCst);
         let t0 = std::time::Instant::now();
@@ -1072,7 +1474,9 @@ mod tests {
         }
         run.stop.store(true, Ordering::SeqCst);
         for _ in 0..500 {
-            if !run.is_running() { break; }
+            if !run.is_running() {
+                break;
+            }
             std::thread::sleep(Duration::from_millis(10));
         }
         assert!(!run.is_running(), "stopped");
@@ -1094,32 +1498,85 @@ mod tests {
                 s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
                 let mut buf = [0u8; 4096];
                 let n = s.read(&mut buf).unwrap_or(0);
-                let head = String::from_utf8_lossy(&buf[..n]).lines().next().unwrap_or("").to_string();
+                let head = String::from_utf8_lossy(&buf[..n])
+                    .lines()
+                    .next()
+                    .unwrap_or("")
+                    .to_string();
                 seen2.lock().unwrap().push(head);
-                let next = if i < 2 { format!("tok{}", i + 1) } else { "tok2".into() };
+                let next = if i < 2 {
+                    format!("tok{}", i + 1)
+                } else {
+                    "tok2".into()
+                };
                 let body = format!("<i value=\"{next}\">");
-                let _ = s.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes());
+                let _ = s.write_all(
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    )
+                    .as_bytes(),
+                );
             }
         });
         let shared = net::Shared::new();
         let template = format!("GET /?t=§x§ HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
         let parsed = Template::parse(&template).unwrap();
-        let sources = [intruder::PayloadSource::RecursiveGrep { initial: "start".into(), extract_index: 0, stop_on_duplicate: true }];
+        let sources = [intruder::PayloadSource::RecursiveGrep {
+            initial: "start".into(),
+            extract_index: 0,
+            stop_on_duplicate: true,
+        }];
         let specs = intruder::resolve_specs(&parsed, AttackType::Sniper, &sources).unwrap();
         // No 3 x 2 s retries: a transient failure should fail fast, not time out.
-        let mut settings = AttackSettings { retry: RetryConfig { retries: 0, pause_ms: 0 }, ..Default::default() };
-        assert!(start(shared.clone(), &template, AttackType::Sniper, specs.clone(), ("127.0.0.1".into(), port, false), settings.clone()).is_err(), "needs an extract item");
+        let mut settings = AttackSettings {
+            retry: RetryConfig {
+                retries: 0,
+                pause_ms: 0,
+            },
+            ..Default::default()
+        };
+        assert!(
+            start(
+                shared.clone(),
+                &template,
+                AttackType::Sniper,
+                specs.clone(),
+                ("127.0.0.1".into(), port, false),
+                settings.clone()
+            )
+            .is_err(),
+            "needs an extract item"
+        );
         settings.grep_extract.enabled = true;
-        settings.grep_extract.items = vec![ExtractItem { start: ExtractStart::After("value=\"".into()), end: ExtractEnd::Delimiter("\"".into()), ..Default::default() }];
-        let run = start(shared, &template, AttackType::Sniper, specs, ("127.0.0.1".into(), port, false), settings).unwrap();
+        settings.grep_extract.items = vec![ExtractItem {
+            start: ExtractStart::After("value=\"".into()),
+            end: ExtractEnd::Delimiter("\"".into()),
+            ..Default::default()
+        }];
+        let run = start(
+            shared,
+            &template,
+            AttackType::Sniper,
+            specs,
+            ("127.0.0.1".into(), port, false),
+            settings,
+        )
+        .unwrap();
         for _ in 0..1500 {
-            if !run.is_running() { break; }
+            if !run.is_running() {
+                break;
+            }
             std::thread::sleep(Duration::from_millis(10));
         }
         assert!(!run.is_running());
         let rows = run.rows.lock().unwrap().clone();
         let payloads: Vec<String> = rows.iter().map(|r| r.payload_text()).collect();
-        assert_eq!(payloads, ["start", "tok1", "tok2"], "tok2 repeats, so the walk stops");
+        assert_eq!(
+            payloads,
+            ["start", "tok1", "tok2"],
+            "tok2 repeats, so the walk stops"
+        );
         assert_eq!(rows[1].extracts, [Some("tok2".to_string())]);
         assert_eq!(seen.lock().unwrap()[1], "GET /?t=tok1 HTTP/1.1");
         assert_eq!(run.progress(), (3, None));

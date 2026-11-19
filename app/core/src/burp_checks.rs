@@ -25,7 +25,11 @@ pub enum Origin {
     Null,
     Wildcard,
     Invalid,
-    Url { scheme: String, host: String, port: String },
+    Url {
+        scheme: String,
+        host: String,
+        port: String,
+    },
 }
 
 impl Origin {
@@ -45,7 +49,9 @@ impl Origin {
         if t == "null" || t == "http://null" || t == "https://null" {
             return Origin::Null;
         }
-        let Some((scheme, rest)) = t.split_once("://") else { return Origin::Invalid };
+        let Some((scheme, rest)) = t.split_once("://") else {
+            return Origin::Invalid;
+        };
         let scheme = scheme.to_ascii_lowercase();
         if scheme != "http" && scheme != "https" {
             return Origin::Invalid;
@@ -54,7 +60,9 @@ impl Origin {
             return Origin::Invalid;
         }
         let (host, port) = match rest.rsplit_once(':') {
-            Some((h, p)) if !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()) => (h.to_string(), format!(":{p}")),
+            Some((h, p)) if !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()) => {
+                (h.to_string(), format!(":{p}"))
+            }
             Some(_) => return Origin::Invalid,
             None => (rest.to_string(), String::new()),
         };
@@ -96,14 +104,20 @@ impl Origin {
 
     fn with_host(&self, host: String) -> Origin {
         match self {
-            Origin::Url { scheme, port, .. } => Origin::Url { scheme: scheme.clone(), host, port: port.clone() },
+            Origin::Url { scheme, port, .. } => Origin::Url {
+                scheme: scheme.clone(),
+                host,
+                port: port.clone(),
+            },
             o => o.clone(),
         }
     }
 
     /// Zu8t.Zo: the host has at most one dot.
     fn single_dot(&self) -> bool {
-        self.host().map(|h| h.find('.') == h.rfind('.')).unwrap_or(false)
+        self.host()
+            .map(|h| h.find('.') == h.rfind('.'))
+            .unwrap_or(false)
     }
 }
 
@@ -124,19 +138,28 @@ impl Rand for ThreadRand {
 /// The origin variants of burp.Zu8t.
 fn sub_random(o: &Origin, r: &mut dyn Rand) -> Option<Origin> {
     // Zb(): random8 + "." + host
-    o.host().map(|h| o.with_host(format!("{}.{h}", r.letters(8))))
+    o.host()
+        .map(|h| o.with_host(format!("{}.{h}", r.letters(8))))
 }
 fn as_http(o: &Origin) -> Option<Origin> {
     // ZG(): same host over http
     match o {
-        Origin::Url { host, port, .. } => Some(Origin::Url { scheme: "http".into(), host: host.clone(), port: port.clone() }),
+        Origin::Url { host, port, .. } => Some(Origin::Url {
+            scheme: "http".into(),
+            host: host.clone(),
+            port: port.clone(),
+        }),
         _ => None,
     }
 }
 fn random_domain(o: &Origin, r: &mut dyn Rand) -> Option<Origin> {
     // Zw(): scheme://random12.com
     match o {
-        Origin::Url { scheme, .. } => Some(Origin::Url { scheme: scheme.clone(), host: format!("{}.com", r.letters(12)), port: String::new() }),
+        Origin::Url { scheme, .. } => Some(Origin::Url {
+            scheme: scheme.clone(),
+            host: format!("{}.com", r.letters(12)),
+            port: String::new(),
+        }),
         _ => None,
     }
 }
@@ -148,7 +171,8 @@ fn dot_swap(o: &Origin, r: &mut dyn Rand) -> Option<Origin> {
 }
 fn suffix_random(o: &Origin, r: &mut dyn Rand) -> Option<Origin> {
     // ZY(): host + "." + random3
-    o.host().map(|h| o.with_host(format!("{h}.{}", r.letters(3))))
+    o.host()
+        .map(|h| o.with_host(format!("{h}.{}", r.letters(3))))
 }
 fn drop_first_dot(o: &Origin) -> Option<Origin> {
     // ZH(): remove the first dot; None when no dot would remain.
@@ -175,7 +199,14 @@ pub struct Probe {
 
 impl Probe {
     fn none() -> Probe {
-        Probe { sent: Origin::Invalid, resp_origin: Origin::Invalid, credentials: false, flags: 0, request: Vec::new(), response: Vec::new() }
+        Probe {
+            sent: Origin::Invalid,
+            resp_origin: Origin::Invalid,
+            credentials: false,
+            flags: 0,
+            request: Vec::new(),
+            response: Vec::new(),
+        }
     }
     /// Zws.Zb: the response origin admits the origin sent.
     fn reflected(&self) -> bool {
@@ -211,14 +242,20 @@ pub fn cors_flags(resp: &[u8], acao: &str, credentials: bool) -> u32 {
         .headers
         .iter()
         .filter(|(k, _)| k.eq_ignore_ascii_case("vary"))
-        .any(|(_, v)| v.split(',').any(|x| x.trim().eq_ignore_ascii_case("origin")));
+        .any(|(_, v)| {
+            v.split(',')
+                .any(|x| x.trim().eq_ignore_ascii_case("origin"))
+        });
     // Zrbl.Zh: the MIME types that may carry in-session data are none,
     // HTML, text, script, JSON and XML (Zmlg ids 0, 256, 257, 259, 260,
     // 262); any other type sets 64 ("not likely to contain sensitive
     // in-session data").
     let ct = util::get_header(&parts.headers, "Content-Type").unwrap_or_default();
     let body = &resp[parts.head_len.min(resp.len())..];
-    if !matches!(crate::mime::burp_mime(&ct, body), "" | "HTML" | "text" | "script" | "JSON" | "XML") {
+    if !matches!(
+        crate::mime::burp_mime(&ct, body),
+        "" | "HTML" | "text" | "script" | "JSON" | "XML"
+    ) {
         f |= 64;
     }
     if !vary_origin {
@@ -277,11 +314,15 @@ pub fn cors_detail(f: &CorsFinding) -> String {
     s.push_str(match f.kind {
         CorsKind::Arbitrary => " that allows access from any domain.",
         CorsKind::Subdomains => " that allows access from arbitrary subdomains.",
-        CorsKind::Unencrypted => " which trusts websites accessed using unencrypted communications.",
+        CorsKind::Unencrypted => {
+            " which trusts websites accessed using unencrypted communications."
+        }
         CorsKind::Generic => ".",
     });
     if let Some(o) = f.origin_sent.as_deref().filter(|o| !o.is_empty()) {
-        s.push_str(&format!("<br><br>The application allowed access from the requested origin <strong>{o}</strong>"));
+        s.push_str(&format!(
+            "<br><br>The application allowed access from the requested origin <strong>{o}</strong>"
+        ));
     }
     let v = f.flags;
     if v & 33_554_432 != 0 {
@@ -341,12 +382,21 @@ pub fn run_cors_check<F>(
 where
     F: FnMut(&str) -> Option<(Vec<u8>, Vec<u8>)>,
 {
-    let mut c = Collector { own, https, arbitrary: Vec::new(), subdomains: Vec::new(), untrusted: Vec::new(), generic: Vec::new() };
+    let mut c = Collector {
+        own,
+        https,
+        arbitrary: Vec::new(),
+        subdomains: Vec::new(),
+        untrusted: Vec::new(),
+        generic: Vec::new(),
+    };
 
     // Zpqe.ZS / Zo: evaluate one exchange.
     fn evaluate(c: &mut Collector, sent: Origin, req: Vec<u8>, resp: Vec<u8>) -> Probe {
         let parts = util::parse_http(&resp);
-        let Some(acao) = util::get_header(&parts.headers, "Access-Control-Allow-Origin") else { return Probe::none() };
+        let Some(acao) = util::get_header(&parts.headers, "Access-Control-Allow-Origin") else {
+            return Probe::none();
+        };
         let credentials = util::get_header(&parts.headers, "Access-Control-Allow-Credentials")
             .map(|v| v.trim() == "true")
             .unwrap_or(false);
@@ -373,19 +423,35 @@ where
     // Origin header and the response answered it.
     let req_parts = util::parse_http(base_req);
     let base = match util::get_header(&req_parts.headers, "Origin") {
-        Some(o) if util::get_header(&util::parse_http(base_resp).headers, "Access-Control-Allow-Origin").is_some() => {
-            evaluate(&mut c, Origin::parse(&o), base_req.to_vec(), base_resp.to_vec())
+        Some(o)
+            if util::get_header(
+                &util::parse_http(base_resp).headers,
+                "Access-Control-Allow-Origin",
+            )
+            .is_some() =>
+        {
+            evaluate(
+                &mut c,
+                Origin::parse(&o),
+                base_req.to_vec(),
+                base_resp.to_vec(),
+            )
         }
         _ => Probe::none(),
     };
 
     // Zmsy and its sub-probes.
-    let zmsy = |c: &mut Collector, zz: &Probe, probe: &mut dyn FnMut(&mut Collector, Option<Origin>) -> Probe, rng: &mut dyn Rand| {
+    let zmsy = |c: &mut Collector,
+                zz: &Probe,
+                probe: &mut dyn FnMut(&mut Collector, Option<Origin>) -> Probe,
+                rng: &mut dyn Rand| {
         if zz.sent == Origin::Null || zz.sent == Origin::Invalid {
             return;
         }
         // Zmsc: the null origin, then Zmsg: the dot-swapped host.
-        let zmsc = |c: &mut Collector, probe: &mut dyn FnMut(&mut Collector, Option<Origin>) -> Probe, rng: &mut dyn Rand| {
+        let zmsc = |c: &mut Collector,
+                    probe: &mut dyn FnMut(&mut Collector, Option<Origin>) -> Probe,
+                    rng: &mut dyn Rand| {
             let v = probe(c, Some(Origin::Null));
             if c.accepts(&v) {
                 c.arbitrary.push(v);
@@ -438,9 +504,12 @@ where
 
     if base.sent == Origin::Invalid {
         // Zidt.ZH: try the origin the base ACAO names, else our own origin.
-        let named = util::get_header(&util::parse_http(base_resp).headers, "Access-Control-Allow-Origin")
-            .map(|v| Origin::parse(&v))
-            .filter(|o| *o != Origin::Invalid);
+        let named = util::get_header(
+            &util::parse_http(base_resp).headers,
+            "Access-Control-Allow-Origin",
+        )
+        .map(|v| Origin::parse(&v))
+        .filter(|o| *o != Origin::Invalid);
         let first = named.unwrap_or_else(|| c.own.clone());
         let v4 = probe(&mut c, Some(first));
         if v4.reflected() {
@@ -486,15 +555,29 @@ where
 
 /// burp.Zh0b.Zk (runtime dump).
 pub const OPENAPI_PATHS_1: &[&str] = &[
-    "/api/api-docs", "/api/v1/api-docs", "/api/v2/api-docs", "/api/swagger.json",
-    "/swagger/docs/v1", "/swagger/docs/v2", "/swagger/docs/v3", "/swagger/v1/swagger.json",
+    "/api/api-docs",
+    "/api/v1/api-docs",
+    "/api/v2/api-docs",
+    "/api/swagger.json",
+    "/swagger/docs/v1",
+    "/swagger/docs/v2",
+    "/swagger/docs/v3",
+    "/swagger/v1/swagger.json",
 ];
 /// burp.Zh0b.ZB
 pub const OPENAPI_PATHS_2: &[&str] = &["/openapi", "/swagger", "/openapi.json", "/swagger.json"];
 /// burp.Zh0b.ZF (thorough scan speed only)
 pub const OPENAPI_PATHS_THOROUGH: &[&str] = &[
-    "/openapi.yaml", "/swagger.yaml", "/v1/swagger.json", "/v1/swagger.yaml", "/v2/swagger.json",
-    "/v2/swagger.yaml", "/api/v1/swagger.json", "/api/v1/swagger.yaml", "/api/v2/swagger.json", "/api/v2/swagger.yaml",
+    "/openapi.yaml",
+    "/swagger.yaml",
+    "/v1/swagger.json",
+    "/v1/swagger.yaml",
+    "/v2/swagger.json",
+    "/v2/swagger.yaml",
+    "/api/v1/swagger.json",
+    "/api/v1/swagger.yaml",
+    "/api/v2/swagger.json",
+    "/api/v2/swagger.yaml",
 ];
 pub const SWAGGER_UI_INIT: &str = "/api-docs/swagger-ui-init.js";
 
@@ -506,7 +589,9 @@ pub fn openapi_version(doc: &str) -> Option<String> {
     if t.starts_with('{') {
         let v: serde_json::Value = serde_json::from_str(t).ok()?;
         let pick = |v: &serde_json::Value| -> Option<String> {
-            v.get("openapi").or_else(|| v.get("swagger")).and_then(|x| x.as_str().map(|s| s.to_string()))
+            v.get("openapi")
+                .or_else(|| v.get("swagger"))
+                .and_then(|x| x.as_str().map(|s| s.to_string()))
         };
         return pick(&v).or_else(|| v.get("swaggerDoc").and_then(pick));
     }
@@ -515,7 +600,13 @@ pub fn openapi_version(doc: &str) -> Option<String> {
         for key in ["openapi:", "swagger:"] {
             if let Some(rest) = l.strip_prefix(key) {
                 let ver = rest.trim().trim_matches(|c| c == '"' || c == '\'');
-                if !ver.is_empty() && ver.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) {
+                if !ver.is_empty()
+                    && ver
+                        .chars()
+                        .next()
+                        .map(|c| c.is_ascii_digit())
+                        .unwrap_or(false)
+                {
                     return Some(ver.to_string());
                 }
             }
@@ -526,7 +617,11 @@ pub fn openapi_version(doc: &str) -> Option<String> {
 
 fn status_2xx(resp: &[u8]) -> bool {
     let p = util::parse_http(resp);
-    p.first.split_whitespace().nth(1).map(|s| s.starts_with('2')).unwrap_or(false)
+    p.first
+        .split_whitespace()
+        .nth(1)
+        .map(|s| s.starts_with('2'))
+        .unwrap_or(false)
 }
 
 fn body_of(resp: &[u8]) -> String {
@@ -551,7 +646,12 @@ pub fn openapi_in_swagger_init(resp: &[u8]) -> bool {
     if crate::mime::burp_mime(&ct, body.as_bytes()) != "script" {
         return false;
     }
-    let (Some(a), Some(b)) = (body.find("var options ="), body.find("url = options.swaggerUrl")) else { return false };
+    let (Some(a), Some(b)) = (
+        body.find("var options ="),
+        body.find("url = options.swaggerUrl"),
+    ) else {
+        return false;
+    };
     if b <= a {
         return false;
     }
@@ -565,9 +665,16 @@ pub fn openapi_in_swagger_init(resp: &[u8]) -> bool {
 /// burp.Zge_ (passive, PPR_OpenApiDefinitionFound): path suffixes ZZ / ZL / Zv
 /// (runtime-dumped) whose response is a definition, or swagger-ui-init.js.
 pub const OPENAPI_PASSIVE_SUFFIXES: &[&str] = &[
-    "/api-docs", "/swagger/docs/v1", "/swagger/docs/v2", "/swagger/docs/v3",
-    "/openapi", "/swagger", "/openapi.json", "/swagger.json",
-    "/openapi.yaml", "/swagger.yaml",
+    "/api-docs",
+    "/swagger/docs/v1",
+    "/swagger/docs/v2",
+    "/swagger/docs/v3",
+    "/openapi",
+    "/swagger",
+    "/openapi.json",
+    "/swagger.json",
+    "/openapi.yaml",
+    "/swagger.yaml",
 ];
 
 pub fn openapi_passive(path: &str, resp: &[u8]) -> bool {
@@ -580,7 +687,11 @@ pub fn openapi_passive(path: &str, resp: &[u8]) -> bool {
 
 /// The paths the per-host OpenAPI check requests, in Burp's order.
 pub fn openapi_paths(thorough: bool) -> Vec<&'static str> {
-    let mut v: Vec<&str> = OPENAPI_PATHS_1.iter().chain(OPENAPI_PATHS_2).copied().collect();
+    let mut v: Vec<&str> = OPENAPI_PATHS_1
+        .iter()
+        .chain(OPENAPI_PATHS_2)
+        .copied()
+        .collect();
     v.push(SWAGGER_UI_INIT);
     if thorough {
         v.extend_from_slice(OPENAPI_PATHS_THOROUGH);
@@ -595,7 +706,9 @@ pub fn openapi_paths(thorough: bool) -> Vec<&'static str> {
 /// Flags: 2 = no X-Frame-Options, 4 = no leading doctype, 8 = quirks doctype.
 pub fn prssi(resp: &[u8]) -> Option<(u32, Vec<String>)> {
     let p = util::parse_http(resp);
-    let ct = util::get_header(&p.headers, "Content-Type").unwrap_or_default().to_ascii_lowercase();
+    let ct = util::get_header(&p.headers, "Content-Type")
+        .unwrap_or_default()
+        .to_ascii_lowercase();
     if !ct.contains("html") {
         return None;
     }
@@ -618,7 +731,10 @@ pub fn prssi(resp: &[u8]) -> Option<(u32, Vec<String>)> {
         let e = low[s..].find('>').map(|x| s + x).unwrap_or(low.len());
         let tag_low = &low[s..e];
         let tag = &body[s..e];
-        if attr(tag_low, "rel").map(|r| r.trim() == "stylesheet").unwrap_or(false) {
+        if attr(tag_low, "rel")
+            .map(|r| r.trim() == "stylesheet")
+            .unwrap_or(false)
+        {
             if let Some(h) = attr(tag, "href") {
                 let v = h.trim().to_ascii_lowercase();
                 let relative = if v.starts_with("./") || v.starts_with("../") {
@@ -627,7 +743,12 @@ pub fn prssi(resp: &[u8]) -> Option<(u32, Vec<String>)> {
                     false
                 } else {
                     // ^[a-z]+[^:]+ : starts with a letter, no scheme colon.
-                    v.chars().next().map(|c| c.is_ascii_lowercase()).unwrap_or(false) && !v.contains(':') && v.len() >= 2
+                    v.chars()
+                        .next()
+                        .map(|c| c.is_ascii_lowercase())
+                        .unwrap_or(false)
+                        && !v.contains(':')
+                        && v.len() >= 2
                 };
                 if relative {
                     hrefs.push(h.trim().to_string());
@@ -669,7 +790,9 @@ pub fn prssi_detail(flags: u32, hrefs: &[String]) -> String {
         s.push_str(" The doctype directive puts browsers into quirks mode.");
     }
     if flags & 2 != 0 {
-        s.push_str(" The response does not set X-Frame-Options, so it can be framed to force quirks mode.");
+        s.push_str(
+            " The response does not set X-Frame-Options, so it can be framed to force quirks mode.",
+        );
     }
     s
 }
@@ -690,7 +813,9 @@ fn attr(tag: &str, name: &str) -> Option<String> {
             } else if let Some(r) = v.strip_prefix('\'') {
                 r.split('\'').next().unwrap_or("")
             } else {
-                v.split(|c: char| c.is_whitespace() || c == '>').next().unwrap_or("")
+                v.split(|c: char| c.is_whitespace() || c == '>')
+                    .next()
+                    .unwrap_or("")
             };
             return Some(out.to_string());
         }
@@ -706,11 +831,19 @@ mod tests {
     /// Second review, finding 18: Zrbl.Zh sets 64 for non-sensitive types.
     #[test]
     fn cors_flag_64_marks_non_sensitive_content_types() {
-        let resp = |ct: &str| format!("HTTP/1.1 200 OK\r\nContent-Type: {ct}\r\nVary: Origin\r\n\r\nx").into_bytes();
+        let resp = |ct: &str| {
+            format!("HTTP/1.1 200 OK\r\nContent-Type: {ct}\r\nVary: Origin\r\n\r\nx").into_bytes()
+        };
         for ct in ["image/png", "text/css", "application/octet-stream"] {
             assert_ne!(cors_flags(&resp(ct), "https://evil", true) & 64, 0, "{ct}");
         }
-        for ct in ["text/html", "application/json", "text/plain", "application/javascript", "application/xml"] {
+        for ct in [
+            "text/html",
+            "application/json",
+            "text/plain",
+            "application/javascript",
+            "application/xml",
+        ] {
             assert_eq!(cors_flags(&resp(ct), "https://evil", true) & 64, 0, "{ct}");
         }
     }
@@ -738,17 +871,32 @@ mod tests {
         assert_eq!(Origin::parse("*"), Origin::Invalid);
         assert_eq!(Origin::parse_acao("*"), Origin::Wildcard);
         assert_eq!(Origin::parse("http://a.com/x"), Origin::Invalid);
-        assert_eq!(Origin::parse("http://a.com:8080").ser(), "http://a.com:8080");
+        assert_eq!(
+            Origin::parse("http://a.com:8080").ser(),
+            "http://a.com:8080"
+        );
     }
 
     #[test]
     fn origin_variants_follow_zu8t() {
         let mut r = Fixed(0);
         let o = Origin::parse("https://www.example.com");
-        assert_eq!(suffix_random(&o, &mut r).unwrap().ser(), "https://www.example.com.bbb");
-        assert_eq!(random_domain(&o, &mut r).unwrap().ser(), "https://cccccccccccc.com");
-        assert_eq!(dot_swap(&o, &mut r).unwrap().ser(), "https://www.exampledcom");
-        assert_eq!(sub_random(&o, &mut r).unwrap().ser(), "https://eeeeeeee.www.example.com");
+        assert_eq!(
+            suffix_random(&o, &mut r).unwrap().ser(),
+            "https://www.example.com.bbb"
+        );
+        assert_eq!(
+            random_domain(&o, &mut r).unwrap().ser(),
+            "https://cccccccccccc.com"
+        );
+        assert_eq!(
+            dot_swap(&o, &mut r).unwrap().ser(),
+            "https://www.exampledcom"
+        );
+        assert_eq!(
+            sub_random(&o, &mut r).unwrap().ser(),
+            "https://eeeeeeee.www.example.com"
+        );
         assert_eq!(drop_first_dot(&o).unwrap().ser(), "https://wwwexample.com");
         assert_eq!(drop_first_dot(&Origin::parse("https://example.com")), None);
         assert_eq!(as_http(&o).unwrap().ser(), "http://www.example.com");
@@ -765,14 +913,24 @@ mod tests {
         let own = Origin::parse("http://127.0.0.1:3001");
         let found = run_cors_check(base_req, &base_resp, false, own, &mut Fixed(0), |o| {
             sent.push(origin_of(o));
-            Some((Vec::new(), resp("Access-Control-Allow-Origin: *\r\nVary: Accept-Encoding\r\n")))
+            Some((
+                Vec::new(),
+                resp("Access-Control-Allow-Origin: *\r\nVary: Accept-Encoding\r\n"),
+            ))
         });
         let kinds: Vec<_> = found.iter().map(|f| f.kind).collect();
-        assert_eq!(kinds, vec![CorsKind::Arbitrary, CorsKind::Generic], "sent {sent:?}");
+        assert_eq!(
+            kinds,
+            vec![CorsKind::Arbitrary, CorsKind::Generic],
+            "sent {sent:?}"
+        );
         let arb = &found[0];
         assert_eq!(arb.flags, 65569);
         let o = arb.origin_sent.clone().unwrap();
-        assert!(o.starts_with("http://") && o.ends_with(".com") && o.len() == "http://".len() + 12 + 4, "{o}");
+        assert!(
+            o.starts_with("http://") && o.ends_with(".com") && o.len() == "http://".len() + 12 + 4,
+            "{o}"
+        );
         assert_eq!(CorsKind::Arbitrary.severity(arb.flags), "info");
         assert!(cors_detail(arb).contains("that allows access from any domain."));
         assert!(cors_detail(arb).contains("Vary: Origin header was not present"));
@@ -791,7 +949,10 @@ mod tests {
                 resp(&format!("Access-Control-Allow-Origin: {o}\r\nAccess-Control-Allow-Credentials: true\r\nVary: Origin\r\n")),
             ))
         });
-        let arb = found.iter().find(|f| f.kind == CorsKind::Arbitrary).expect("arbitrary");
+        let arb = found
+            .iter()
+            .find(|f| f.kind == CorsKind::Arbitrary)
+            .expect("arbitrary");
         assert_eq!(arb.flags & 1, 0);
         assert_eq!(CorsKind::Arbitrary.severity(arb.flags), "high");
         assert!(found.iter().any(|f| f.kind == CorsKind::Generic));
@@ -804,7 +965,12 @@ mod tests {
         let own = Origin::parse("https://app.test");
         let found = run_cors_check(base_req, &base_resp, true, own, &mut Fixed(0), |_o| {
             let allow = "https://app.test";
-            Some((Vec::new(), resp(&format!("Access-Control-Allow-Origin: {allow}\r\nVary: Origin\r\n"))))
+            Some((
+                Vec::new(),
+                resp(&format!(
+                    "Access-Control-Allow-Origin: {allow}\r\nVary: Origin\r\n"
+                )),
+            ))
         });
         let kinds: Vec<_> = found.iter().map(|f| f.kind).collect();
         assert_eq!(kinds, vec![CorsKind::Generic]);
@@ -812,43 +978,75 @@ mod tests {
 
     #[test]
     fn no_acao_means_no_cors_issue() {
-        let found = run_cors_check(b"GET / HTTP/1.1\r\nHost: a\r\n\r\n", &resp(""), false, Origin::parse("http://a"), &mut Fixed(0), |_| {
-            Some((Vec::new(), resp("")))
-        });
+        let found = run_cors_check(
+            b"GET / HTTP/1.1\r\nHost: a\r\n\r\n",
+            &resp(""),
+            false,
+            Origin::parse("http://a"),
+            &mut Fixed(0),
+            |_| Some((Vec::new(), resp(""))),
+        );
         assert!(found.is_empty());
     }
 
     #[test]
     fn openapi_detection() {
-        assert_eq!(openapi_version(r#"{"openapi":"3.0.0","info":{}}"#).as_deref(), Some("3.0.0"));
-        assert_eq!(openapi_version("swagger: '2.0'\ninfo: x").as_deref(), Some("2.0"));
+        assert_eq!(
+            openapi_version(r#"{"openapi":"3.0.0","info":{}}"#).as_deref(),
+            Some("3.0.0")
+        );
+        assert_eq!(
+            openapi_version("swagger: '2.0'\ninfo: x").as_deref(),
+            Some("2.0")
+        );
         assert!(openapi_version(r#"{"a":1}"#).is_none());
         let js = b"HTTP/1.1 200 OK\r\nContent-Type: application/javascript; charset=UTF-8\r\n\r\nwindow.onload = function() {\n  var options = {\n  \"swaggerDoc\": {\n    \"openapi\": \"3.0.0\"\n  }\n};\n  url = options.swaggerUrl || url\n}";
         assert!(openapi_in_swagger_init(js));
         let html = b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n{\"openapi\":\"3.0.0\"}";
         assert!(!openapi_in_swagger_init(html));
-        assert!(openapi_in_response(b"HTTP/1.1 200 OK\r\n\r\n{\"swagger\":\"2.0\"}"));
-        assert!(!openapi_in_response(b"HTTP/1.1 404 Not Found\r\n\r\n{\"swagger\":\"2.0\"}"));
+        assert!(openapi_in_response(
+            b"HTTP/1.1 200 OK\r\n\r\n{\"swagger\":\"2.0\"}"
+        ));
+        assert!(!openapi_in_response(
+            b"HTTP/1.1 404 Not Found\r\n\r\n{\"swagger\":\"2.0\"}"
+        ));
         assert_eq!(openapi_paths(false).len(), 13);
         assert_eq!(openapi_paths(true).len(), 23);
     }
 
     #[test]
     fn prssi_follows_zwza() {
-        let page = |head: &str, body: &str| format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n{head}\r\n{body}").into_bytes();
+        let page = |head: &str, body: &str| {
+            format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n{head}\r\n{body}").into_bytes()
+        };
         let (f, h) = prssi(&page("", "<!DOCTYPE html><html><head><link rel=\"stylesheet\" href=\"styles.css\"></head></html>")).unwrap();
         assert_eq!(h, vec!["styles.css".to_string()]);
         assert_eq!(f, 2);
-        assert!(prssi(&page("", "<!DOCTYPE html><link rel=stylesheet href=/s.css>")).is_none());
-        assert!(prssi(&page("", "<!DOCTYPE html><link rel=stylesheet href=https://cdn/s.css>")).is_none());
-        assert!(prssi(&page("", "<!DOCTYPE html><base href=\"/\"><link rel=stylesheet href=s.css>")).is_none());
-        let (f, _) = prssi(&page("X-Frame-Options: DENY\r\n", "<html><link rel=stylesheet href=../s.css>")).unwrap();
+        assert!(prssi(&page(
+            "",
+            "<!DOCTYPE html><link rel=stylesheet href=/s.css>"
+        ))
+        .is_none());
+        assert!(prssi(&page(
+            "",
+            "<!DOCTYPE html><link rel=stylesheet href=https://cdn/s.css>"
+        ))
+        .is_none());
+        assert!(prssi(&page(
+            "",
+            "<!DOCTYPE html><base href=\"/\"><link rel=stylesheet href=s.css>"
+        ))
+        .is_none());
+        let (f, _) = prssi(&page(
+            "X-Frame-Options: DENY\r\n",
+            "<html><link rel=stylesheet href=../s.css>",
+        ))
+        .unwrap();
         assert_eq!(f, 4);
         let (f, _) = prssi(&page("", "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\"><link rel=stylesheet href=./a.css>")).unwrap();
         assert_eq!(f, 2 | 8);
     }
 }
-
 
 // ================= HTTP TRACE method is enabled (burp.Zs6x / Zuer) =================
 
@@ -860,7 +1058,10 @@ pub fn trace_probe(base_req: &[u8], token: &str) -> Vec<u8> {
     let mut out = String::from("TRACE / HTTP/1.1\r\n");
     for (k, v) in &parts.headers {
         let kl = k.to_ascii_lowercase();
-        if matches!(kl.as_str(), "cookie" | "content-length" | "content-type" | "transfer-encoding") {
+        if matches!(
+            kl.as_str(),
+            "cookie" | "content-length" | "content-type" | "transfer-encoding"
+        ) {
             continue;
         }
         out.push_str(&format!("{k}: {v}\r\n"));
@@ -890,10 +1091,17 @@ mod trace_tests {
         let probe = String::from_utf8(trace_probe(base, "abcdefghij")).unwrap();
         assert!(probe.starts_with("TRACE / HTTP/1.1\r\n"));
         assert!(probe.contains("Host: h\r\n") && probe.contains("User-Agent: x\r\n"));
-        assert!(probe.ends_with("Cookie: abcdefghij\r\n\r\n") && !probe.contains("s=1") && !probe.contains("Content-Length"));
+        assert!(
+            probe.ends_with("Cookie: abcdefghij\r\n\r\n")
+                && !probe.contains("s=1")
+                && !probe.contains("Content-Length")
+        );
         let echo = format!("HTTP/1.1 200 OK\r\nContent-Type: message/http\r\n\r\n{probe}");
         assert!(trace_hit(echo.as_bytes(), "abcdefghij"));
-        assert!(!trace_hit(b"HTTP/1.1 405 Method Not Allowed\r\n\r\nabcdefghij", "abcdefghij"));
+        assert!(!trace_hit(
+            b"HTTP/1.1 405 Method Not Allowed\r\n\r\nabcdefghij",
+            "abcdefghij"
+        ));
         assert!(!trace_hit(b"HTTP/1.1 200 OK\r\n\r\nnothing", "abcdefghij"));
     }
 }

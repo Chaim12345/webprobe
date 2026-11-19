@@ -1,17 +1,17 @@
 // Split from ui.rs (L5, issue #35): ui/ is now a module directory.
-use std::sync::atomic::Ordering;
-use eframe::egui::{self, RichText, Ui};
-use crate::intruder;
 use crate::feedback;
+use crate::intruder;
 use crate::net;
+/// Burp's Host column: scheme://host, with the port only when it is not the
+/// scheme default.
+pub(crate) use crate::net::history_host;
 use crate::scan;
 use crate::table;
 use crate::theme::{self, c};
 use crate::util;
 use crate::App;
-/// Burp's Host column: scheme://host, with the port only when it is not the
-/// scheme default.
-pub(crate) use crate::net::history_host;
+use eframe::egui::{self, RichText, Ui};
+use std::sync::atomic::Ordering;
 
 mod history;
 pub(crate) use history::*;
@@ -200,12 +200,17 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                         app.chooser.at_start = false;
                         ui.close();
                     }
-                    let recent = webprobe_core::project_files::recent_file().map(|f| webprobe_core::project_files::load_recent(&f)).unwrap_or_default();
+                    let recent = webprobe_core::project_files::recent_file()
+                        .map(|f| webprobe_core::project_files::load_recent(&f))
+                        .unwrap_or_default();
                     ui.add_enabled_ui(!recent.is_empty(), |ui| {
                         ui.menu_button("Open recent project", |ui| {
                             for p in recent {
                                 let exists = std::path::Path::new(&p).is_file();
-                                if ui.add_enabled(exists, egui::Button::new(p.clone())).clicked() {
+                                if ui
+                                    .add_enabled(exists, egui::Button::new(p.clone()))
+                                    .clicked()
+                                {
                                     if let Err(e) = crate::project_start::open(app, &p) {
                                         feedback::toast(feedback::Level::Error, e);
                                     }
@@ -259,9 +264,21 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                         }
                     }
                 });
-                let title = format!("WebProbe - {}", std::path::Path::new(&app.project_path).file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default());
+                let title = format!(
+                    "WebProbe - {}",
+                    std::path::Path::new(&app.project_path)
+                        .file_name()
+                        .map(|f| f.to_string_lossy().into_owned())
+                        .unwrap_or_default()
+                );
                 let full = ui.max_rect();
-                ui.painter().text(full.center(), egui::Align2::CENTER_CENTER, title, egui::FontId::proportional(12.5), theme::ink_dim());
+                ui.painter().text(
+                    full.center(),
+                    egui::Align2::CENTER_CENTER,
+                    title,
+                    egui::FontId::proportional(12.5),
+                    theme::ink_dim(),
+                );
                 ui.menu_button("Help", |ui| {
                     ui.spacing_mut().item_spacing.y = 0.0;
                     ui.spacing_mut().button_padding.y = 4.0;
@@ -272,7 +289,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
 
     egui::Panel::top("main_bar")
         .exact_size(38.0)
-        .frame(egui::Frame::default().fill(theme::surface()).inner_margin(egui::Margin::symmetric(0, 0)))
+        .frame(
+            egui::Frame::default()
+                .fill(theme::surface())
+                .inner_margin(egui::Margin::symmetric(0, 0)),
+        )
         .show(ui, |ui| {
             ui.horizontal_centered(|ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
@@ -280,17 +301,33 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                 // active one, no branding in the row.
                 for (name, tab) in &TABS {
                     let sel = app.tab == *tab;
-                    let galley = ui.painter().layout_no_wrap(name.to_string(), egui::FontId::proportional(12.5), theme::ink());
-                    let (rect, resp) = ui.allocate_exact_size(egui::vec2(galley.size().x + 22.0, 38.0), egui::Sense::click());
+                    let galley = ui.painter().layout_no_wrap(
+                        name.to_string(),
+                        egui::FontId::proportional(12.5),
+                        theme::ink(),
+                    );
+                    let (rect, resp) = ui.allocate_exact_size(
+                        egui::vec2(galley.size().x + 22.0, 38.0),
+                        egui::Sense::click(),
+                    );
                     // Painted by hand, so name it for accessibility / UI automation.
-                    resp.widget_info(|| egui::WidgetInfo::selected(egui::accesskit::Role::Tab, true, sel, *name));
+                    resp.widget_info(|| {
+                        egui::WidgetInfo::selected(egui::accesskit::Role::Tab, true, sel, *name)
+                    });
                     if resp.hovered() && !sel {
                         ui.painter().rect_filled(rect, 0.0, theme::zebra());
                     }
-                    ui.painter().galley(egui::pos2(rect.left() + 11.5, rect.center().y - galley.size().y / 2.0), galley, theme::ink());
+                    ui.painter().galley(
+                        egui::pos2(rect.left() + 11.5, rect.center().y - galley.size().y / 2.0),
+                        galley,
+                        theme::ink(),
+                    );
                     if sel {
                         ui.painter().line_segment(
-                            [egui::pos2(rect.left(), rect.bottom() - 1.5), egui::pos2(rect.right(), rect.bottom() - 1.5)],
+                            [
+                                egui::pos2(rect.left(), rect.bottom() - 1.5),
+                                egui::pos2(rect.right(), rect.bottom() - 1.5),
+                            ],
                             egui::Stroke::new(3.0, c(theme::ORANGE_1)),
                         );
                     }
@@ -303,7 +340,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                     ui.add_space(10.0);
                     // The AI pill (Burp AT). WebProbe's assistant view.
                     let pill = egui::Button::new(
-                        RichText::new(format!("{}  WebProbe AI", theme::icon::LIGHTNING)).strong().size(12.5).color(theme::ink()),
+                        RichText::new(format!("{}  WebProbe AI", theme::icon::LIGHTNING))
+                            .strong()
+                            .size(12.5)
+                            .color(theme::ink()),
                     )
                     .fill(theme::surface())
                     .stroke(egui::Stroke::new(1.5, c(0xFFB090)))
@@ -314,9 +354,15 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                     }
                     ui.add_space(8.0);
                     let icon_btn = |ui: &mut Ui, glyph: &str, tip: &str| {
-                        ui.add(egui::Button::new(RichText::new(glyph).size(17.0).color(theme::ink_dim())).frame(false).min_size(egui::vec2(24.0, 24.0)))
-                            .on_hover_text(tip)
-                            .clicked()
+                        ui.add(
+                            egui::Button::new(
+                                RichText::new(glyph).size(17.0).color(theme::ink_dim()),
+                            )
+                            .frame(false)
+                            .min_size(egui::vec2(24.0, 24.0)),
+                        )
+                        .on_hover_text(tip)
+                        .clicked()
                     };
                     if icon_btn(ui, theme::icon::GEAR, "Settings") {
                         app.settings_open = true;
@@ -336,7 +382,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                 });
             });
             let r = ui.max_rect();
-            ui.painter().hline(r.x_range(), r.bottom() - 0.5, egui::Stroke::new(1.0, theme::line()));
+            ui.painter().hline(
+                r.x_range(),
+                r.bottom() - 0.5,
+                egui::Stroke::new(1.0, theme::line()),
+            );
         });
 
     // Status bar, as Burp draws it: "Event log" and "All issues" on the left,
@@ -351,10 +401,19 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
         )
         .show(ui, |ui| {
             let r = ui.max_rect();
-            ui.painter().hline(r.x_range(), r.top() - 3.0, egui::Stroke::new(1.0, theme::line()));
+            ui.painter().hline(
+                r.x_range(),
+                r.top() - 3.0,
+                egui::Stroke::new(1.0, theme::line()),
+            );
             ui.horizontal_centered(|ui| {
                 let link = |ui: &mut Ui, t: &str| {
-                    ui.add(egui::Button::new(RichText::new(t).size(12.5).color(theme::ink())).frame(false).min_size(egui::vec2(0.0, 24.0))).clicked()
+                    ui.add(
+                        egui::Button::new(RichText::new(t).size(12.5).color(theme::ink()))
+                            .frame(false)
+                            .min_size(egui::vec2(0.0, 24.0)),
+                    )
+                    .clicked()
                 };
                 ui.add_space(6.0);
                 if link(ui, "Event log") {
@@ -375,11 +434,19 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.add_space(8.0);
                     let (used, total) = memory_usage(app);
-                    let (bar, _) = ui.allocate_exact_size(egui::vec2(48.0, 6.0), egui::Sense::hover());
+                    let (bar, _) =
+                        ui.allocate_exact_size(egui::vec2(48.0, 6.0), egui::Sense::hover());
                     ui.painter().rect_filled(bar, 3.0, theme::line());
-                    let frac = if total > 0.0 { (used / total).clamp(0.02, 1.0) } else { 0.0 };
+                    let frac = if total > 0.0 {
+                        (used / total).clamp(0.02, 1.0)
+                    } else {
+                        0.0
+                    };
                     ui.painter().rect_filled(
-                        egui::Rect::from_min_size(bar.min, egui::vec2(bar.width() * frac as f32, bar.height())),
+                        egui::Rect::from_min_size(
+                            bar.min,
+                            egui::vec2(bar.width() * frac as f32, bar.height()),
+                        ),
                         3.0,
                         c(0x5384B2),
                     );
@@ -389,20 +456,43 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                             .size(12.5)
                             .color(theme::ink_dim()),
                     );
-                    ui.label(RichText::new(theme::icon::INFO).size(14.0).color(theme::ink_dim()));
+                    ui.label(
+                        RichText::new(theme::icon::INFO)
+                            .size(14.0)
+                            .color(theme::ink_dim()),
+                    );
                     ui.add_space(18.0);
                     if busy || scan_total > 0 {
-                        ui.label(RichText::new(format!("Scan {done}/{scan_total}")).size(12.0).color(if busy { c(theme::ORANGE) } else { theme::ink_hint() }));
+                        ui.label(
+                            RichText::new(format!("Scan {done}/{scan_total}"))
+                                .size(12.0)
+                                .color(if busy {
+                                    c(theme::ORANGE)
+                                } else {
+                                    theme::ink_hint()
+                                }),
+                        );
                         ui.add_space(12.0);
                     }
                     if waiting > 0 {
-                        ui.label(RichText::new(format!("{waiting} held")).size(12.0).color(c(theme::WARN)));
+                        ui.label(
+                            RichText::new(format!("{waiting} held"))
+                                .size(12.0)
+                                .color(c(theme::WARN)),
+                        );
                         ui.add_space(12.0);
                     }
                     ui.label(
-                        RichText::new(format!("Proxy 127.0.0.1:{port} \u{00B7} intercept {}", if on { "on" } else { "off" }))
-                            .size(12.0)
-                            .color(if on { c(theme::ORANGE) } else { theme::ink_hint() }),
+                        RichText::new(format!(
+                            "Proxy 127.0.0.1:{port} \u{00B7} intercept {}",
+                            if on { "on" } else { "off" }
+                        ))
+                        .size(12.0)
+                        .color(if on {
+                            c(theme::ORANGE)
+                        } else {
+                            theme::ink_hint()
+                        }),
                     );
                 });
             });
@@ -413,7 +503,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
     history_menu_windows(app, ctx);
 
     egui::CentralPanel::default()
-        .frame(egui::Frame::default().fill(theme::surface()).inner_margin(egui::Margin::same(10)))
+        .frame(
+            egui::Frame::default()
+                .fill(theme::surface())
+                .inner_margin(egui::Margin::same(10)),
+        )
         .show(ui, |ui| match app.tab {
             Tab::Dashboard => dashboard(app, ui),
             Tab::Target => target(app, ui),
@@ -423,7 +517,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
             Tab::Repeater => repeater(app, ui),
             // The analysis results run past one screen: the tab scrolls.
             Tab::Sequencer => {
-                egui::ScrollArea::vertical().id_salt("sequencer_tab").auto_shrink([false, false]).show(ui, |ui| crate::tools::sequencer(app, ui));
+                egui::ScrollArea::vertical()
+                    .id_salt("sequencer_tab")
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| crate::tools::sequencer(app, ui));
             }
             Tab::Comparer => comparer(app, ui),
             Tab::Logger => logger_view(app, ui),

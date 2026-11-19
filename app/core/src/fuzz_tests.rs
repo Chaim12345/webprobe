@@ -31,7 +31,25 @@ impl Rng {
 
 /// Values that break naive length arithmetic.
 const NASTY: &[&str] = &[
-    "0", "-1", "18446744073709551615", "ffffffffffffffff", "FFFFFFFFFFFFFFFFFFFF", "99999999999999999999", "", " ", "\0", "1e9", "0x10", "%", "%%", "%zz", "\u{ffff}", ";", "=", "\r\n", "\n\n",
+    "0",
+    "-1",
+    "18446744073709551615",
+    "ffffffffffffffff",
+    "FFFFFFFFFFFFFFFFFFFF",
+    "99999999999999999999",
+    "",
+    " ",
+    "\0",
+    "1e9",
+    "0x10",
+    "%",
+    "%%",
+    "%zz",
+    "\u{ffff}",
+    ";",
+    "=",
+    "\r\n",
+    "\n\n",
 ];
 
 /// Turn a valid message into a broken one: truncate, flip bytes, splice in
@@ -60,7 +78,11 @@ fn mutate(rng: &mut Rng, seed: &[u8]) -> Vec<u8> {
             _ => {
                 // Replace a number with a nasty value.
                 if let Some(i) = v.iter().position(|b| b.is_ascii_digit()) {
-                    let j = v[i..].iter().position(|b| !b.is_ascii_hexdigit()).map(|k| i + k).unwrap_or(v.len());
+                    let j = v[i..]
+                        .iter()
+                        .position(|b| !b.is_ascii_hexdigit())
+                        .map(|k| i + k)
+                        .unwrap_or(v.len());
                     let nasty = NASTY[rng.below(NASTY.len())].as_bytes().to_vec();
                     v.splice(i..j, nasty);
                 }
@@ -122,7 +144,11 @@ fn h2_frames(rng: &mut Rng) -> Vec<u8> {
     let mut out = vec![0, 0, 0, 4, 0, 0, 0, 0, 0];
     for _ in 0..rng.below(6) {
         let payload = rng.bytes(40);
-        let claimed = if rng.below(3) == 0 { rng.below(1 << 24) } else { payload.len() };
+        let claimed = if rng.below(3) == 0 {
+            rng.below(1 << 24)
+        } else {
+            payload.len()
+        };
         out.extend_from_slice(&[(claimed >> 16) as u8, (claimed >> 8) as u8, claimed as u8]);
         out.push(rng.below(12) as u8); // type
         out.push(rng.next() as u8); // flags
@@ -147,7 +173,11 @@ fn parsers_survive_random_and_mutated_input() {
 fn fuzzing_stays_fast() {
     let started = Instant::now();
     let cases = fuzz_rounds(3000);
-    assert!(started.elapsed() < Duration::from_secs(120), "fuzzing is too slow: {cases} cases in {:?}", started.elapsed());
+    assert!(
+        started.elapsed() < Duration::from_secs(120),
+        "fuzzing is too slow: {cases} cases in {:?}",
+        started.elapsed()
+    );
 }
 
 /// Feed `rounds` inputs through every parser; the number of cases run.
@@ -190,7 +220,13 @@ fn fuzz_rounds(rounds: usize) -> usize {
         let _ = crate::net::parse_ws_frame(&input);
         // Scanner and tools that take user or server data.
         let _ = crate::scan::insertion_points(&text);
-        let _ = crate::scan::passive_check(&crate::net::HistEntry { req_raw: seeds[0].clone().into(), resp_raw: Some(input.clone().into()), host: "h".into(), path: "/".into(), ..Default::default() });
+        let _ = crate::scan::passive_check(&crate::net::HistEntry {
+            req_raw: seeds[0].clone().into(),
+            resp_raw: Some(input.clone().into()),
+            host: "h".into(),
+            path: "/".into(),
+            ..Default::default()
+        });
         let _ = crate::intruder::Template::parse(&text);
         let _ = crate::macros::parse(&text);
         let _ = crate::macros::extract_value(&input, "csrf");
@@ -207,7 +243,10 @@ fn fuzz_rounds(rounds: usize) -> usize {
         // HTTP/2 against a hostile server.
         if round % 5 == 0 {
             if let Some(req) = crate::h2::request_from_raw(&seeds[0], "https") {
-                let mut s = Hostile { data: h2_frames(&mut rng), pos: 0 };
+                let mut s = Hostile {
+                    data: h2_frames(&mut rng),
+                    pos: 0,
+                };
                 let _ = crate::h2::exchange(&mut s, &req, None);
             }
             let _ = crate::h2::request_from_raw(&input, "https");
@@ -219,15 +258,25 @@ fn fuzz_rounds(rounds: usize) -> usize {
 
 #[test]
 fn url_decode_keeps_multibyte_text_after_a_percent() {
-    assert_eq!(crate::util::url_decode("%e2%82%ac and %\u{e9}x %4"), "\u{20ac} and %\u{e9}x %4");
+    assert_eq!(
+        crate::util::url_decode("%e2%82%ac and %\u{e9}x %4"),
+        "\u{20ac} and %\u{e9}x %4"
+    );
     assert_eq!(crate::util::url_decode("a%2Fb%2fc%zz%"), "a/b/c%zz%");
 }
 
 #[test]
 fn patch_header_handles_empty_and_headerless_messages() {
-    assert_eq!(crate::util::patch_header(b"", "Content-Length", "0"), b"\r\nContent-Length: 0\r\n\r\n".to_vec());
     assert_eq!(
-        crate::util::patch_header(b"GET / HTTP/1.1\r\nHost: h\r\nContent-Length: 9\r\n\r\nbody", "Content-Length", "4"),
+        crate::util::patch_header(b"", "Content-Length", "0"),
+        b"\r\nContent-Length: 0\r\n\r\n".to_vec()
+    );
+    assert_eq!(
+        crate::util::patch_header(
+            b"GET / HTTP/1.1\r\nHost: h\r\nContent-Length: 9\r\n\r\nbody",
+            "Content-Length",
+            "4"
+        ),
         b"GET / HTTP/1.1\r\nHost: h\r\nContent-Length: 4\r\n\r\nbody".to_vec()
     );
 }
@@ -247,7 +296,8 @@ fn proxy_survives_malformed_connections() {
         for mut s in origin.incoming().flatten() {
             let mut buf = [0u8; 4096];
             let _ = s.read(&mut buf);
-            let _ = s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok");
+            let _ =
+                s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok");
         }
     });
     let shared = crate::net::Shared::new();
@@ -264,7 +314,9 @@ fn proxy_survives_malformed_connections() {
     }
     let mut rng = Rng(0x5eed_f00d);
     for round in 0..60 {
-        let Ok(mut s) = std::net::TcpStream::connect(("127.0.0.1", port)) else { continue };
+        let Ok(mut s) = std::net::TcpStream::connect(("127.0.0.1", port)) else {
+            continue;
+        };
         let _ = s.set_write_timeout(Some(Duration::from_millis(500)));
         let payload: Vec<u8> = match round % 6 {
             0 => rng.bytes(2048),
@@ -293,7 +345,11 @@ fn proxy_survives_malformed_connections() {
     // Every handler finishes once its client is gone.
     let t0 = std::time::Instant::now();
     while shared.active_connections.load(Ordering::SeqCst) > 0 {
-        assert!(t0.elapsed() < Duration::from_secs(30), "{} connection(s) still held", shared.active_connections.load(Ordering::SeqCst));
+        assert!(
+            t0.elapsed() < Duration::from_secs(30),
+            "{} connection(s) still held",
+            shared.active_connections.load(Ordering::SeqCst)
+        );
         std::thread::sleep(Duration::from_millis(50));
     }
     // And the proxy still works.
@@ -302,7 +358,11 @@ fn proxy_survives_malformed_connections() {
     s.write_all(format!("GET http://127.0.0.1:{oport}/after HTTP/1.1\r\nHost: 127.0.0.1:{oport}\r\nConnection: close\r\n\r\n").as_bytes()).unwrap();
     let mut resp = Vec::new();
     let _ = s.read_to_end(&mut resp);
-    assert!(resp.starts_with(b"HTTP/1.1 200"), "{}", String::from_utf8_lossy(&resp));
+    assert!(
+        resp.starts_with(b"HTTP/1.1 200"),
+        "{}",
+        String::from_utf8_lossy(&resp)
+    );
 }
 
 /// R-05: the HTTP/2 server role (the browser side of the listener) never
@@ -327,7 +387,10 @@ fn h2_server_survives_random_and_mutated_frames() {
     }
     let mut rng = Rng(0x5eed_4202);
     let handler: crate::h2_server::Handler = std::sync::Arc::new(|_req, mut out| {
-        let _ = std::io::Write::write_all(&mut out, b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nok\r\n0\r\n\r\n");
+        let _ = std::io::Write::write_all(
+            &mut out,
+            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nok\r\n0\r\n\r\n",
+        );
     });
     let block = hpack::Encoder::new().encode(vec![
         (b":method".as_ref(), b"POST".as_ref()),

@@ -94,10 +94,16 @@ pub fn resolve_ip(shared: &Shared, host: &str) -> String {
 /// "Direction" columns).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InterceptKind {
-    Request { https: bool },
+    Request {
+        https: bool,
+    },
     /// A response held by the response interception rules.
-    Response { https: bool },
-    WebSocket { to_server: bool },
+    Response {
+        https: bool,
+    },
+    WebSocket {
+        to_server: bool,
+    },
 }
 
 /// What happened to a request on its way through Intercept, for the
@@ -146,7 +152,16 @@ pub fn rir_304() -> String {
 
 impl Default for ResponseInterceptRules {
     fn default() -> Self {
-        Self { enabled: false, content_type_on: true, content_type: rir_text(), was_modified: false, was_intercepted: false, status_not_on: true, status_not: rir_304(), in_scope: false }
+        Self {
+            enabled: false,
+            content_type_on: true,
+            content_type: rir_text(),
+            was_modified: false,
+            was_intercepted: false,
+            status_not_on: true,
+            status_not: rir_304(),
+            in_scope: false,
+        }
     }
 }
 
@@ -157,10 +172,20 @@ impl ResponseInterceptRules {
         if !self.enabled {
             return false;
         }
-        let re = |p: &str, t: &str| regex::RegexBuilder::new(p).case_insensitive(true).build().map(|r| r.is_match(t)).unwrap_or(false);
+        let re = |p: &str, t: &str| {
+            regex::RegexBuilder::new(p)
+                .case_insensitive(true)
+                .build()
+                .map(|r| r.is_match(t))
+                .unwrap_or(false)
+        };
         let rules: [(bool, bool, bool); 5] = [
             // (enabled, is_and, result)
-            (self.content_type_on, false, re(&self.content_type, content_type)),
+            (
+                self.content_type_on,
+                false,
+                re(&self.content_type, content_type),
+            ),
             (self.was_modified, false, req.edited),
             (self.was_intercepted, false, req.held),
             (self.status_not_on, true, !re(&self.status_not, status)),
@@ -193,8 +218,23 @@ pub struct InterceptItem {
 }
 
 impl InterceptItem {
-    pub fn new(id: u64, host: &str, port: u16, edited: String, tx: mpsc::Sender<Option<String>>, kind: InterceptKind) -> Self {
-        Self { id, host: host.to_string(), port, edited, tx, kind, ts: util::now_secs() }
+    pub fn new(
+        id: u64,
+        host: &str,
+        port: u16,
+        edited: String,
+        tx: mpsc::Sender<Option<String>>,
+        kind: InterceptKind,
+    ) -> Self {
+        Self {
+            id,
+            host: host.to_string(),
+            port,
+            edited,
+            tx,
+            kind,
+            ts: util::now_secs(),
+        }
     }
 }
 
@@ -219,8 +259,14 @@ impl DiffTracker {
                     .iter()
                     .filter(|(n, v)| prev.iter().any(|(pn, pv)| pn == n && pv != v))
                     .count();
-                let added = attrs.iter().filter(|(n, _)| !prev.iter().any(|(pn, _)| pn == n)).count();
-                let removed = prev.iter().filter(|(pn, _)| !attrs.iter().any(|(n, _)| n == pn)).count();
+                let added = attrs
+                    .iter()
+                    .filter(|(n, _)| !prev.iter().any(|(pn, _)| pn == n))
+                    .count();
+                let removed = prev
+                    .iter()
+                    .filter(|(pn, _)| !attrs.iter().any(|(n, _)| n == pn))
+                    .count();
                 changed + added + removed
             }
         };

@@ -68,7 +68,10 @@ impl WsSession {
     }
 
     pub fn messages(&self) -> Vec<WsRepMessage> {
-        self.messages.lock().unwrap_or_else(|p| p.into_inner()).clone()
+        self.messages
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone()
     }
 
     /// Changes whenever the state or the message list changes.
@@ -77,7 +80,10 @@ impl WsSession {
     }
 
     fn push(&self, m: WsRepMessage) {
-        self.messages.lock().unwrap_or_else(|p| p.into_inner()).push(m);
+        self.messages
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .push(m);
         self.stamp.fetch_add(1, Ordering::SeqCst);
     }
 
@@ -89,8 +95,19 @@ impl WsSession {
 
 /// A new session, listed in `Shared::ws_sessions`. `attached`: a live
 /// proxied connection (`Shared::ws_live`) to send over.
-pub fn new_session(shared: &Shared, host: &str, port: u16, tls: bool, handshake: &str, attached: Option<u64>) -> Arc<WsSession> {
-    let state = if attached.is_some_and(|s| shared.ws_live.lock().unwrap().contains_key(&s)) { WsRepState::Connected } else { WsRepState::Disconnected };
+pub fn new_session(
+    shared: &Shared,
+    host: &str,
+    port: u16,
+    tls: bool,
+    handshake: &str,
+    attached: Option<u64>,
+) -> Arc<WsSession> {
+    let state = if attached.is_some_and(|s| shared.ws_live.lock().unwrap().contains_key(&s)) {
+        WsRepState::Connected
+    } else {
+        WsRepState::Disconnected
+    };
     let s = Arc::new(WsSession {
         id: shared.next_id.fetch_add(1, Ordering::SeqCst),
         host: host.to_string(),
@@ -115,11 +132,25 @@ pub fn new_session(shared: &Shared, host: &str, port: u16, tls: bool, handshake:
 pub fn from_history(shared: &Shared, socket: u64, host: &str, tls_hint: bool) -> Arc<WsSession> {
     let live = shared.ws_live.lock().unwrap().get(&socket).cloned();
     if let Some(live) = live {
-        return new_session(shared, &live.host, live.port, live.tls, &String::from_utf8_lossy(&live.handshake), Some(socket));
+        return new_session(
+            shared,
+            &live.host,
+            live.port,
+            live.tls,
+            &String::from_utf8_lossy(&live.handshake),
+            Some(socket),
+        );
     }
-    let handshake = shared
-        .ws_history
-        .with_rows(|rows| rows.iter().find(|e| e.socket == socket && socket != 0 && e.direction == "handshake" && e.opcode == "request").map(|e| e.text().into_owned()));
+    let handshake = shared.ws_history.with_rows(|rows| {
+        rows.iter()
+            .find(|e| {
+                e.socket == socket
+                    && socket != 0
+                    && e.direction == "handshake"
+                    && e.opcode == "request"
+            })
+            .map(|e| e.text().into_owned())
+    });
     let (h, port) = net::split_h_p(host, if tls_hint { 443 } else { 80 });
     let handshake = handshake.unwrap_or_else(|| format!("GET / HTTP/1.1\r\nHost: {host}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n"));
     new_session(shared, &h, port, tls_hint || port == 443, &handshake, None)
@@ -128,7 +159,11 @@ pub fn from_history(shared: &Shared, socket: u64, host: &str, tls_hint: bool) ->
 /// Burp's "Clone": a new session with the same target and upgrade request,
 /// on a connection of its own.
 pub fn clone_session(shared: &Shared, s: &WsSession) -> Arc<WsSession> {
-    let hs = s.handshake.lock().unwrap_or_else(|p| p.into_inner()).clone();
+    let hs = s
+        .handshake
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .clone();
     new_session(shared, &s.host, s.port, s.tls, &hs, None)
 }
 
@@ -142,15 +177,25 @@ pub fn connect(shared: &Arc<Shared>, s: &Arc<WsSession>) -> Result<(), String> {
     close(s);
     let generation = s.generation.fetch_add(1, Ordering::SeqCst) + 1;
     s.set_state(WsRepState::Connecting);
-    let hs = s.handshake.lock().unwrap_or_else(|p| p.into_inner()).replace("\r\n", "\n").replace('\n', "\r\n");
-    let hs = if hs.ends_with("\r\n\r\n") { hs } else { format!("{}\r\n\r\n", hs.trim_end()) };
-    let (mut conn, _resp) = match net::ws_client_connect(shared, &s.host, s.port, s.tls, hs.as_bytes()) {
-        Ok(c) => c,
-        Err(e) => {
-            s.set_state(WsRepState::Closed(e.clone()));
-            return Err(e);
-        }
+    let hs = s
+        .handshake
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .replace("\r\n", "\n")
+        .replace('\n', "\r\n");
+    let hs = if hs.ends_with("\r\n\r\n") {
+        hs
+    } else {
+        format!("{}\r\n\r\n", hs.trim_end())
     };
+    let (mut conn, _resp) =
+        match net::ws_client_connect(shared, &s.host, s.port, s.tls, hs.as_bytes()) {
+            Ok(c) => c,
+            Err(e) => {
+                s.set_state(WsRepState::Closed(e.clone()));
+                return Err(e);
+            }
+        };
     conn.set_nonblocking(true).map_err(|e| e.to_string())?;
     let (tx, rx) = mpsc::channel::<Vec<u8>>();
     let stop = Arc::new(AtomicBool::new(false));
@@ -170,7 +215,12 @@ pub fn connect(shared: &Arc<Shared>, s: &Arc<WsSession>) -> Result<(), String> {
 
 /// The own connection's loop: write queued frames, read and record server
 /// frames (fragments joined), answer pings. Returns why it ended.
-fn run(conn: &mut net::WsClientConn, s: &WsSession, rx: &mpsc::Receiver<Vec<u8>>, stop: &AtomicBool) -> String {
+fn run(
+    conn: &mut net::WsClientConn,
+    s: &WsSession,
+    rx: &mpsc::Receiver<Vec<u8>>,
+    stop: &AtomicBool,
+) -> String {
     let mut buf: Vec<u8> = Vec::new();
     let mut partial: Option<(u8, Vec<u8>)> = None;
     let mut chunk = [0u8; 16384];
@@ -192,14 +242,28 @@ fn run(conn: &mut net::WsClientConn, s: &WsSession, rx: &mpsc::Receiver<Vec<u8>>
                 progressed = true;
                 buf.extend_from_slice(&chunk[..n]);
             }
-            Err(e) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut | std::io::ErrorKind::Interrupted) => {}
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    std::io::ErrorKind::WouldBlock
+                        | std::io::ErrorKind::TimedOut
+                        | std::io::ErrorKind::Interrupted
+                ) => {}
             Err(e) => return format!("read: {e}"),
         }
         while let Some((first, payload, used)) = net::ws_parse_frame(&buf) {
             buf.drain(..used);
             let opcode = first & 0x0f;
             let fin = first & 0x80 != 0;
-            let record = |op: u8, p: Vec<u8>| s.push(WsRepMessage { to_server: false, sent: false, opcode: opcode_name(op).into(), payload: p, ts: crate::util::now_secs() });
+            let record = |op: u8, p: Vec<u8>| {
+                s.push(WsRepMessage {
+                    to_server: false,
+                    sent: false,
+                    opcode: opcode_name(op).into(),
+                    payload: p,
+                    ts: crate::util::now_secs(),
+                })
+            };
             match opcode {
                 0x9 => {
                     let _ = conn.write_frame(&net::ws_frame(0x8a, &payload, true));
@@ -251,25 +315,50 @@ fn opcode_name(op: u8) -> &'static str {
 
 /// Send a message. `to_server` false needs an attached proxied connection.
 /// Frames to the server are masked, to the client not.
-pub fn send(shared: &Shared, s: &WsSession, to_server: bool, binary: bool, payload: &[u8]) -> Result<(), String> {
+pub fn send(
+    shared: &Shared,
+    s: &WsSession,
+    to_server: bool,
+    binary: bool,
+    payload: &[u8],
+) -> Result<(), String> {
     let frame = net::ws_frame(if binary { 0x82 } else { 0x81 }, payload, to_server);
     match s.attached {
         Some(socket) => {
-            let live = shared.ws_live.lock().unwrap().get(&socket).cloned().ok_or("The proxied connection has closed")?;
-            live.inject.send((to_server, frame)).map_err(|_| "The proxied connection has closed".to_string())?;
+            let live = shared
+                .ws_live
+                .lock()
+                .unwrap()
+                .get(&socket)
+                .cloned()
+                .ok_or("The proxied connection has closed")?;
+            live.inject
+                .send((to_server, frame))
+                .map_err(|_| "The proxied connection has closed".to_string())?;
         }
         None => {
             if !to_server {
                 return Err("A connection opened from Repeater can only send to the server".into());
             }
-            let out = s.out.lock().unwrap_or_else(|p| p.into_inner()).clone().ok_or("Not connected")?;
+            let out = s
+                .out
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .clone()
+                .ok_or("Not connected")?;
             if s.state() != WsRepState::Connected {
                 return Err("Not connected".into());
             }
             out.send(frame).map_err(|_| "Not connected".to_string())?;
         }
     }
-    s.push(WsRepMessage { to_server, sent: true, opcode: if binary { "binary" } else { "text" }.into(), payload: payload.to_vec(), ts: crate::util::now_secs() });
+    s.push(WsRepMessage {
+        to_server,
+        sent: true,
+        opcode: if binary { "binary" } else { "text" }.into(),
+        payload: payload.to_vec(),
+        ts: crate::util::now_secs(),
+    });
     Ok(())
 }
 
@@ -290,5 +379,11 @@ pub fn parse_hex(text: &str) -> Result<Vec<u8>, String> {
     if !digits.len().is_multiple_of(2) {
         return Err("odd number of hex digits".into());
     }
-    (0..digits.len()).step_by(2).map(|i| u8::from_str_radix(&digits[i..i + 2], 16).map_err(|_| format!("not hex: {}", &digits[i..i + 2]))).collect()
+    (0..digits.len())
+        .step_by(2)
+        .map(|i| {
+            u8::from_str_radix(&digits[i..i + 2], 16)
+                .map_err(|_| format!("not hex: {}", &digits[i..i + 2]))
+        })
+        .collect()
 }

@@ -69,7 +69,11 @@ impl ScanCtx {
         smtp: Vec<SmtpOob>,
         item: usize,
     ) -> ScanCtx {
-        let stored_report = shared.scan_config.lock().unwrap().check_enabled(STORED_INPUT_ID);
+        let stored_report = shared
+            .scan_config
+            .lock()
+            .unwrap()
+            .check_enabled(STORED_INPUT_ID);
         let host_hdr = util::get_header(&parts.headers, "Host").unwrap_or_default();
         let mut cx = ScanCtx {
             shared,
@@ -80,7 +84,11 @@ impl ScanCtx {
             port,
             host_hdr,
             settings,
-            baseline: Baseline { resp: None, raw: Vec::new(), body: String::new() },
+            baseline: Baseline {
+                resp: None,
+                raw: Vec::new(),
+                body: String::new(),
+            },
             oob,
             smtp,
             item,
@@ -137,7 +145,14 @@ impl ScanCtx {
             let next = resp
                 .as_deref()
                 .and_then(active_checks::redirect_location)
-                .and_then(|l| same_origin_path(&l, self.entry.https, &self.host_hdr, &util::parse_http(req.as_bytes()).path))
+                .and_then(|l| {
+                    same_origin_path(
+                        &l,
+                        self.entry.https,
+                        &self.host_hdr,
+                        &util::parse_http(req.as_bytes()).path,
+                    )
+                })
                 .map(|p| get_request_like(&self.req, &p));
             out.push((req, resp));
             match next {
@@ -152,7 +167,13 @@ impl ScanCtx {
     /// WebProbe's own probes only with "WebProbe extra checks" on, so a
     /// default scan sends only the traffic Burp's scan would.
     pub(crate) fn runs(&self, issue: &str) -> bool {
-        (is_burp_issue(issue) || self.shared.extra_checks.load(Ordering::SeqCst)) && self.shared.scan_config.lock().unwrap().issue_allowed(issue, true)
+        (is_burp_issue(issue) || self.shared.extra_checks.load(Ordering::SeqCst))
+            && self
+                .shared
+                .scan_config
+                .lock()
+                .unwrap()
+                .issue_allowed(issue, true)
     }
 
     /// Report what a check proved (ids are assigned by the Issues list). Issue types Burp does not have (the

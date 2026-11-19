@@ -22,7 +22,15 @@ pub struct RepeaterRun {
 impl Default for RepeaterRun {
     fn default() -> Self {
         // Tab 1 exists from the start; new tabs count on from 2.
-        RepeaterRun { state: Mutex::new(State { busy: false, generation: 0, result: String::new(), tab: 0 }), next_tab: AtomicU64::new(2) }
+        RepeaterRun {
+            state: Mutex::new(State {
+                busy: false,
+                generation: 0,
+                result: String::new(),
+                tab: 0,
+            }),
+            next_tab: AtomicU64::new(2),
+        }
     }
 }
 
@@ -113,7 +121,10 @@ mod tests {
         assert!(r.is_busy() && r.result() == "sending...");
         assert_eq!(r.cancel(), Some(5));
         assert!(!r.is_busy() && r.result() == "Request cancelled");
-        assert!(!r.finish_with(g, || unreachable!("a cancelled send writes nothing")), "late result dropped");
+        assert!(
+            !r.finish_with(g, || unreachable!("a cancelled send writes nothing")),
+            "late result dropped"
+        );
         assert_eq!(r.result(), "Request cancelled");
         assert_eq!(r.cancel(), None, "nothing in flight");
         let g2 = r.begin(6);

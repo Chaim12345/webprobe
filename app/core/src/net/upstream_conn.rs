@@ -37,7 +37,9 @@ impl ResponseRead for UpstreamConn {
     fn set_read_timeout_ms(&self, ms: u64) -> std::io::Result<()> {
         match self {
             UpstreamConn::Plain(s) => s.set_read_timeout(Some(Duration::from_millis(ms))),
-            UpstreamConn::Tls(s) => s.get_ref().set_read_timeout(Some(Duration::from_millis(ms))),
+            UpstreamConn::Tls(s) => s
+                .get_ref()
+                .set_read_timeout(Some(Duration::from_millis(ms))),
         }
     }
 }
@@ -85,7 +87,11 @@ pub struct ListenerSpec {
 impl ListenerSpec {
     /// A listener with Burp's defaults (HTTP/2 supported).
     pub fn new(bind: &str, port: u16) -> Self {
-        ListenerSpec { bind: bind.to_string(), port, http2: true }
+        ListenerSpec {
+            bind: bind.to_string(),
+            port,
+            http2: true,
+        }
     }
 }
 
@@ -101,6 +107,11 @@ pub struct ListenerState {
 impl ListenerState {
     pub(crate) fn new(spec: ListenerSpec) -> Self {
         let http2 = AtomicBool::new(spec.http2);
-        Self { spec, running: AtomicBool::new(false), error: Mutex::new(None), http2 }
+        Self {
+            spec,
+            running: AtomicBool::new(false),
+            error: Mutex::new(None),
+            http2,
+        }
     }
 }

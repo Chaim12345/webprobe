@@ -4,14 +4,19 @@
 // not part of WebProbe: `paths::retirejs_repository` finds Burp's
 // `RetireJS/retirejs_repository.json` or a retire.js `jsrepository.json`.
 
-use super::*;
 use super::passive_checks::PassiveCtx;
+use super::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, RwLock};
 
 /// burp.Zujw.ZC (VULNERABLE_JAVASCRIPT_DEPENDENCY): Tentative, Low (Zrh
 /// bytes 1 / 2).
-pub(crate) const CH_VULNERABLE_JS: CheckDef = CheckDef { id: "passive.vulnerable-js-dependency", name: "Vulnerable JavaScript dependency", sev: "low", confidence: "Tentative" };
+pub(crate) const CH_VULNERABLE_JS: CheckDef = CheckDef {
+    id: "passive.vulnerable-js-dependency",
+    name: "Vulnerable JavaScript dependency",
+    sev: "low",
+    confidence: "Tentative",
+};
 
 /// One `vulnerabilities[]` entry (burp.Zxpi).
 pub(crate) struct Vuln {
@@ -51,7 +56,14 @@ fn java_pattern(p: &str) -> String {
 
 fn strings(v: &serde_json::Value) -> Vec<String> {
     match v {
-        serde_json::Value::Array(a) => a.iter().map(|x| x.as_str().map(str::to_string).unwrap_or_else(|| x.to_string())).collect(),
+        serde_json::Value::Array(a) => a
+            .iter()
+            .map(|x| {
+                x.as_str()
+                    .map(str::to_string)
+                    .unwrap_or_else(|| x.to_string())
+            })
+            .collect(),
         serde_json::Value::String(s) => vec![s.clone()],
         _ => Vec::new(),
     }
@@ -61,40 +73,83 @@ impl Repository {
     /// burp.Zc_o.Zf: libraries without vulnerabilities are left out; a
     /// library without extractors makes the repository invalid.
     pub(crate) fn parse(json: &str, dead: BTreeSet<String>) -> Result<Self, String> {
-        let root: serde_json::Value = serde_json::from_str(json).map_err(|e| format!("Unable to parse JSON: {e}"))?;
-        let obj = root.as_object().ok_or("Unable to parse JSON: not an object")?;
+        let root: serde_json::Value =
+            serde_json::from_str(json).map_err(|e| format!("Unable to parse JSON: {e}"))?;
+        let obj = root
+            .as_object()
+            .ok_or("Unable to parse JSON: not an object")?;
         let mut libs = Vec::new();
         let mut skipped = Vec::new();
         for (name, lib) in obj {
-            let Some(vulns) = lib.get("vulnerabilities").and_then(|v| v.as_array()).filter(|v| !v.is_empty()) else { continue };
+            let Some(vulns) = lib
+                .get("vulnerabilities")
+                .and_then(|v| v.as_array())
+                .filter(|v| !v.is_empty())
+            else {
+                continue;
+            };
             let vulns = vulns
                 .iter()
                 .map(|v| Vuln {
-                    at_or_above: v.get("atOrAbove").and_then(|x| x.as_str()).map(str::to_string),
+                    at_or_above: v
+                        .get("atOrAbove")
+                        .and_then(|x| x.as_str())
+                        .map(str::to_string),
                     below: v.get("below").and_then(|x| x.as_str()).map(str::to_string),
                     info: v.get("info").map(strings).unwrap_or_default(),
-                    identifiers: v.get("identifiers").and_then(|x| x.as_object()).map(|m| m.iter().map(|(k, x)| (k.clone(), strings(x))).collect()).unwrap_or_default(),
+                    identifiers: v
+                        .get("identifiers")
+                        .and_then(|x| x.as_object())
+                        .map(|m| m.iter().map(|(k, x)| (k.clone(), strings(x))).collect())
+                        .unwrap_or_default(),
                 })
                 .collect();
             let ex = lib.get("extractors").and_then(|x| x.as_object()).ok_or_else(|| format!("No extractors found in library {name}: each library should have at least one extractor"))?;
             let mut compiled = |kind: &str| -> Vec<Extractor> {
-                ex.get(kind).map(strings).unwrap_or_default().iter().filter_map(|p| match Extractor::compile(&java_pattern(p)) {
-                    Some(r) => Some(r),
-                    None => {
-                        skipped.push(format!("{name} {kind}: {p}"));
-                        None
-                    }
-                }).collect()
+                ex.get(kind)
+                    .map(strings)
+                    .unwrap_or_default()
+                    .iter()
+                    .filter_map(|p| match Extractor::compile(&java_pattern(p)) {
+                        Some(r) => Some(r),
+                        None => {
+                            skipped.push(format!("{name} {kind}: {p}"));
+                            None
+                        }
+                    })
+                    .collect()
             };
-            let (uri, filename, filecontent) = (compiled("uri"), compiled("filename"), compiled("filecontent"));
-            libs.push(Library { name: name.clone(), uri, filename, filecontent, vulns });
+            let (uri, filename, filecontent) = (
+                compiled("uri"),
+                compiled("filename"),
+                compiled("filecontent"),
+            );
+            libs.push(Library {
+                name: name.clone(),
+                uri,
+                filename,
+                filecontent,
+                vulns,
+            });
         }
-        Ok(Repository { libs, dead, skipped })
+        Ok(Repository {
+            libs,
+            dead,
+            skipped,
+        })
     }
 
     pub(crate) fn load(path: &std::path::Path) -> Result<Self, String> {
-        let json = crate::util::read_text_file_capped(path, crate::util::MAX_TEXT_FILE_BYTES).map_err(|e| format!("{}: {e}", path.display()))?;
-        let dead = path.parent().map(|d| d.join("deadlinks.txt")).and_then(|f| crate::util::read_text_file_capped(&f, crate::util::MAX_TEXT_FILE_BYTES).ok()).map(|s| s.lines().map(str::to_string).collect()).unwrap_or_default();
+        let json = crate::util::read_text_file_capped(path, crate::util::MAX_TEXT_FILE_BYTES)
+            .map_err(|e| format!("{}: {e}", path.display()))?;
+        let dead = path
+            .parent()
+            .map(|d| d.join("deadlinks.txt"))
+            .and_then(|f| {
+                crate::util::read_text_file_capped(&f, crate::util::MAX_TEXT_FILE_BYTES).ok()
+            })
+            .map(|s| s.lines().map(str::to_string).collect())
+            .unwrap_or_default();
         Self::parse(&json, dead).map_err(|e| format!("{}: {e}", path.display()))
     }
 }
@@ -111,7 +166,8 @@ pub(crate) enum Extractor {
 }
 
 /// The two Java patterns (after `java_pattern`) that need a rewrite.
-const JQUERY_BACKREF: &str = r#"="([0-9][0-9.a-z_\\\\-]+)",.{50,300}(.)\.fn=(\2)\.prototype=\{jquery:"#;
+const JQUERY_BACKREF: &str =
+    r#"="([0-9][0-9.a-z_\\\\-]+)",.{50,300}(.)\.fn=(\2)\.prototype=\{jquery:"#;
 const LODASH_LOOKBEHIND: &str = r#"="([0-9][0-9.a-z_\\\\-]+)(?<=[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,2})"[\s\S]{1,300}__lodash_hash_undefined__"#;
 
 /// Java's `.`: anything but a line terminator.
@@ -132,7 +188,9 @@ impl Extractor {
             return regex::Regex::new(r#"="((?:[0-9][0-9.a-z_\\\\-]*)?[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,2})"[\s\S]{1,300}__lodash_hash_undefined__"#).ok().map(Extractor::Re);
         }
         if p == JQUERY_BACKREF {
-            return regex::Regex::new(r#"="([0-9][0-9.a-z_\\\\-]+)","#).ok().map(Extractor::JqueryFn);
+            return regex::Regex::new(r#"="([0-9][0-9.a-z_\\\\-]+)","#)
+                .ok()
+                .map(Extractor::JqueryFn);
         }
         None
     }
@@ -140,12 +198,17 @@ impl Extractor {
     /// The version (group 1) of the leftmost match, as Java's `find()`.
     fn version(&self, s: &str) -> Option<String> {
         match self {
-            Extractor::Re(r) => r.captures(s).and_then(|c| c.get(1)).map(|m| m.as_str().to_string()),
+            Extractor::Re(r) => r
+                .captures(s)
+                .and_then(|c| c.get(1))
+                .map(|m| m.as_str().to_string()),
             Extractor::JqueryFn(head) => {
                 // Each `="V",` in order (the version cannot contain `"`, so
                 // V is fixed by where the match starts); the first with a
                 // tail 50 to 300 characters on decides.
-                head.captures_iter(s).find(|c| jquery_tail(&s[c.get(0).unwrap().end()..])).map(|c| c[1].to_string())
+                head.captures_iter(s)
+                    .find(|c| jquery_tail(&s[c.get(0).unwrap().end()..]))
+                    .map(|c| c[1].to_string())
             }
         }
     }
@@ -181,7 +244,10 @@ pub(crate) fn repository() -> Result<Arc<Repository>, String> {
     if let Some(r) = REPOSITORY.read().unwrap().as_ref() {
         return r.clone();
     }
-    let loaded = crate::paths::retirejs_repository().map_err(|m| m.to_string()).and_then(|p| Repository::load(&p)).map(Arc::new);
+    let loaded = crate::paths::retirejs_repository()
+        .map_err(|m| m.to_string())
+        .and_then(|p| Repository::load(&p))
+        .map(Arc::new);
     if let Err(e) = &loaded {
         eprintln!("webprobe: {e}");
     }
@@ -214,7 +280,13 @@ fn below(a: &str, b: &str) -> bool {
 /// burp.Zmwd.Zr: the library's vulnerabilities that cover `version`
 /// (below `below`, at or above `atOrAbove`).
 fn vulnerable<'a>(lib: &'a Library, version: &str) -> Vec<&'a Vuln> {
-    lib.vulns.iter().filter(|v| v.below.as_deref().is_none_or(|b| below(version, b)) && v.at_or_above.as_deref().is_none_or(|a| !below(version, a))).collect()
+    lib.vulns
+        .iter()
+        .filter(|v| {
+            v.below.as_deref().is_none_or(|b| below(version, b))
+                && v.at_or_above.as_deref().is_none_or(|a| !below(version, a))
+        })
+        .collect()
 }
 
 fn version_of(r: &Extractor, s: &str) -> Option<String> {
@@ -273,7 +345,9 @@ fn by_content(repo: &Repository, body: &str) -> Vec<Hit> {
 
 /// burp.Zcu3.ZH: the summary, if the vulnerability has that key.
 fn summary(v: &Vuln, t: &mut String, prefix: bool) -> bool {
-    let Some(s) = v.identifiers.get("summary") else { return false };
+    let Some(s) = v.identifiers.get("summary") else {
+        return false;
+    };
     if !s.is_empty() {
         t.push_str(if prefix { ": " } else { "" });
         t.push_str(&s.join(", "));
@@ -288,19 +362,34 @@ fn detail(repo: &Repository, hits: &[Hit]) -> String {
     for (n, h) in hits.iter().enumerate() {
         let lib = &repo.libs[h.lib];
         let vulns = vulnerable(lib, &h.version);
-        let noun = if vulns.len() > 1 { "vulnerabilities" } else { "vulnerability" };
+        let noun = if vulns.len() > 1 {
+            "vulnerabilities"
+        } else {
+            "vulnerability"
+        };
         t.push_str(&format!("<p>We{} detected <strong>{}</strong> version <strong>{}</strong>, which has the following {noun}:</p>\n<ul>\n", if n == 0 { "" } else { " also" }, lib.name, h.version));
         for v in vulns {
             t.push_str("<li>\n");
             if let Some(cves) = v.identifiers.get("CVE") {
-                t.push_str(&cves.iter().map(|c| format!("<a href='https://nvd.nist.gov/vuln/detail/{c}'>{c}</a>")).collect::<Vec<_>>().join(", "));
+                t.push_str(
+                    &cves
+                        .iter()
+                        .map(|c| format!("<a href='https://nvd.nist.gov/vuln/detail/{c}'>{c}</a>"))
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                );
                 summary(v, &mut t, true);
             } else {
                 let has_summary = summary(v, &mut t, false);
                 if !v.info.is_empty() {
-                    let live: Vec<&String> = v.info.iter().filter(|u| !repo.dead.contains(*u)).collect();
+                    let live: Vec<&String> =
+                        v.info.iter().filter(|u| !repo.dead.contains(*u)).collect();
                     let links: Vec<&String> = if live.is_empty() {
-                        t.push_str(if has_summary { "All " } else { "Vulnerability found, all " });
+                        t.push_str(if has_summary {
+                            "All "
+                        } else {
+                            "Vulnerability found, all "
+                        });
                         t.push_str("provided links appear to be broken but have been provided for reference:<br/>");
                         v.info.iter().collect()
                     } else {
@@ -309,7 +398,13 @@ fn detail(repo: &Repository, hits: &[Hit]) -> String {
                         }
                         live
                     };
-                    t.push_str(&links.iter().map(|u| format!("<a href='{u}'>{u}</a><br/>")).collect::<Vec<_>>().join("\n"));
+                    t.push_str(
+                        &links
+                            .iter()
+                            .map(|u| format!("<a href='{u}'>{u}</a><br/>"))
+                            .collect::<Vec<_>>()
+                            .join("\n"),
+                    );
                     t.push('\n');
                 }
             }
@@ -317,7 +412,14 @@ fn detail(repo: &Repository, hits: &[Hit]) -> String {
         }
         t.push_str("</ul><br/>\n");
     }
-    let head = if hits.len() == 1 { "<p>We observed a vulnerable JavaScript library.</p>\n".to_string() } else { format!("<p>We observed {} vulnerable JavaScript libraries.</p>\n", hits.len()) };
+    let head = if hits.len() == 1 {
+        "<p>We observed a vulnerable JavaScript library.</p>\n".to_string()
+    } else {
+        format!(
+            "<p>We observed {} vulnerable JavaScript libraries.</p>\n",
+            hits.len()
+        )
+    };
     head + &t
 }
 
@@ -373,7 +475,11 @@ pub(crate) fn run(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
 
 pub(crate) fn run_with(repo: &Repository, cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
     for h in scan(repo, cx) {
-        let mut i = mk_check(CH_VULNERABLE_JS, cx.e, detail(repo, std::slice::from_ref(&h)));
+        let mut i = mk_check(
+            CH_VULNERABLE_JS,
+            cx.e,
+            detail(repo, std::slice::from_ref(&h)),
+        );
         // burp.Zc2l.ZF: library, the 🧀 separator, version.
         i.ident = format!("{}\u{1f9c0}{}", repo.libs[h.lib].name, h.version);
         v.push(i);
@@ -403,7 +509,10 @@ mod tests {
         assert_eq!(file_name("jquery-1.2.js"), "jquery-1.2.js");
         assert_eq!(file_name("é"), "é");
         assert_eq!(file_name(""), "");
-        assert_eq!(java_pattern("x-(§§version§§)\\.js{}"), r"x-([0-9][0-9.a-z_\\\\-]+)\.js\{\}");
+        assert_eq!(
+            java_pattern("x-(§§version§§)\\.js{}"),
+            r"x-([0-9][0-9.a-z_\\\\-]+)\.js\{\}"
+        );
     }
 
     /// The two rewritten extractors give what Java gives for the same
@@ -427,16 +536,37 @@ mod tests {
         }
         let lo = Extractor::compile(LODASH_LOOKBEHIND).unwrap();
         let cases = [
-            (";var e=\"4.17.21\",n=\"__lodash_hash_undefined__\"".to_string(), Some("4.17.21")),
-            (";var e=\"4.17.210\",n=\"__lodash_hash_undefined__\"".to_string(), None),
-            (";var e=\"1.2\",n=\"__lodash_hash_undefined__\"".to_string(), None),
-            (";var e=\"3.10.1-rc.1.2.3\",n=\"__lodash_hash_undefined__\"".to_string(), Some("3.10.1-rc.1.2.3")),
-            (format!("x=\"5.0.0\";{}__lodash_hash_undefined__", "y".repeat(400)), None),
-            ("x=\"1.0.0-x\"; z=\"2.4.6\"\n__lodash_hash_undefined__".to_string(), Some("2.4.6")),
+            (
+                ";var e=\"4.17.21\",n=\"__lodash_hash_undefined__\"".to_string(),
+                Some("4.17.21"),
+            ),
+            (
+                ";var e=\"4.17.210\",n=\"__lodash_hash_undefined__\"".to_string(),
+                None,
+            ),
+            (
+                ";var e=\"1.2\",n=\"__lodash_hash_undefined__\"".to_string(),
+                None,
+            ),
+            (
+                ";var e=\"3.10.1-rc.1.2.3\",n=\"__lodash_hash_undefined__\"".to_string(),
+                Some("3.10.1-rc.1.2.3"),
+            ),
+            (
+                format!("x=\"5.0.0\";{}__lodash_hash_undefined__", "y".repeat(400)),
+                None,
+            ),
+            (
+                "x=\"1.0.0-x\"; z=\"2.4.6\"\n__lodash_hash_undefined__".to_string(),
+                Some("2.4.6"),
+            ),
         ];
         for (s, want) in &cases {
             assert_eq!(lo.version(s).as_deref(), *want, "{s}");
         }
-        assert!(Extractor::compile(r"(?<=x)y").is_none(), "other look-around stays unsupported");
+        assert!(
+            Extractor::compile(r"(?<=x)y").is_none(),
+            "other look-around stays unsupported"
+        );
     }
 }

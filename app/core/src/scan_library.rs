@@ -43,7 +43,10 @@ impl LibraryConfig {
     /// The library's "Functions" column: whether the configuration has
     /// crawl and/or audit settings.
     pub fn functions(&self) -> (bool, bool) {
-        (self.tree.get("crawler").is_some(), self.tree.get("scanner").is_some())
+        (
+            self.tree.get("crawler").is_some(),
+            self.tree.get("scanner").is_some(),
+        )
     }
 
     /// Burp's JSON for export (pretty-printed, keys as loaded).
@@ -102,27 +105,78 @@ const TYPED: &[(&str, Kind)] = &[
     ("crawler.customization.request_sitemap", Kind::Bool),
     ("scanner.audit_optimization.scan_speed", Kind::Str),
     ("scanner.audit_optimization.scan_accuracy", Kind::Str),
-    ("scanner.audit_optimization.maximum_crawl_and_audit_time", Kind::Int),
+    (
+        "scanner.audit_optimization.maximum_crawl_and_audit_time",
+        Kind::Int,
+    ),
     ("scanner.issues_reported.scan_type_passive", Kind::Bool),
     ("scanner.issues_reported.scan_type_light_active", Kind::Bool),
-    ("scanner.issues_reported.scan_type_medium_active", Kind::Bool),
-    ("scanner.issues_reported.scan_type_intrusive_active", Kind::Bool),
-    ("scanner.issues_reported.scan_type_javascript_analysis", Kind::Bool),
-    ("scanner.issues_reported.select_individual_issues", Kind::Bool),
-    ("scanner.issues_reported.scan_only_selected_issues", Kind::Bool),
+    (
+        "scanner.issues_reported.scan_type_medium_active",
+        Kind::Bool,
+    ),
+    (
+        "scanner.issues_reported.scan_type_intrusive_active",
+        Kind::Bool,
+    ),
+    (
+        "scanner.issues_reported.scan_type_javascript_analysis",
+        Kind::Bool,
+    ),
+    (
+        "scanner.issues_reported.select_individual_issues",
+        Kind::Bool,
+    ),
+    (
+        "scanner.issues_reported.scan_only_selected_issues",
+        Kind::Bool,
+    ),
     ("scanner.issues_reported.selected_issues", Kind::List),
-    ("scanner.insertion_point_types.insert_url_params", Kind::Bool),
-    ("scanner.insertion_point_types.insert_body_params", Kind::Bool),
+    (
+        "scanner.insertion_point_types.insert_url_params",
+        Kind::Bool,
+    ),
+    (
+        "scanner.insertion_point_types.insert_body_params",
+        Kind::Bool,
+    ),
     ("scanner.insertion_point_types.insert_cookies", Kind::Bool),
-    ("scanner.insertion_point_types.insert_param_name", Kind::Bool),
-    ("scanner.insertion_point_types.insert_http_headers", Kind::Bool),
-    ("scanner.insertion_point_types.insert_entire_body", Kind::Bool),
-    ("scanner.insertion_point_types.insert_url_path_folders", Kind::Bool),
-    ("scanner.insertion_point_types.insert_url_path_filename", Kind::Bool),
-    ("scanner.misc_insertion_point_options.use_nested_insertion_points", Kind::Bool),
-    ("scanner.misc_insertion_point_options.max_insertion_points_per_base_request", Kind::Int),
-    ("scanner.ignored_insertion_points.skip_all_tests_for_parameters", Kind::List),
-    ("scanner.ignored_insertion_points.skip_server_side_injection_for_parameters", Kind::List),
+    (
+        "scanner.insertion_point_types.insert_param_name",
+        Kind::Bool,
+    ),
+    (
+        "scanner.insertion_point_types.insert_http_headers",
+        Kind::Bool,
+    ),
+    (
+        "scanner.insertion_point_types.insert_entire_body",
+        Kind::Bool,
+    ),
+    (
+        "scanner.insertion_point_types.insert_url_path_folders",
+        Kind::Bool,
+    ),
+    (
+        "scanner.insertion_point_types.insert_url_path_filename",
+        Kind::Bool,
+    ),
+    (
+        "scanner.misc_insertion_point_options.use_nested_insertion_points",
+        Kind::Bool,
+    ),
+    (
+        "scanner.misc_insertion_point_options.max_insertion_points_per_base_request",
+        Kind::Int,
+    ),
+    (
+        "scanner.ignored_insertion_points.skip_all_tests_for_parameters",
+        Kind::List,
+    ),
+    (
+        "scanner.ignored_insertion_points.skip_server_side_injection_for_parameters",
+        Kind::List,
+    ),
 ];
 
 fn kind_ok(kind: Kind, v: &Value) -> bool {
@@ -148,21 +202,26 @@ pub fn parse_config(name: &str, bytes: &[u8], built_in: bool) -> Result<LibraryC
     if bytes.len() > MAX_CONFIG_BYTES {
         return Err(format!("{name}: larger than {} bytes", MAX_CONFIG_BYTES));
     }
-    let tree: Value = serde_json::from_slice(bytes).map_err(|e| format!("{name}: not valid JSON ({e})"))?;
+    let tree: Value =
+        serde_json::from_slice(bytes).map_err(|e| format!("{name}: not valid JSON ({e})"))?;
     if !tree.is_object() {
         return Err(format!("{name}: a scan configuration is a JSON object"));
     }
     for (path, kind) in TYPED {
         if let Some(v) = get_path(&tree, path) {
             if !kind_ok(*kind, v) {
-                return Err(format!("{name}: {path} has the wrong type (expected {kind:?})"));
+                return Err(format!(
+                    "{name}: {path} has the wrong type (expected {kind:?})"
+                ));
             }
         }
     }
     if let Some(Value::Array(items)) = get_path(&tree, "scanner.issues_reported.selected_issues") {
         for (i, it) in items.iter().enumerate() {
             if parse_type_index(it.get("type_index")).is_none() {
-                return Err(format!("{name}: selected_issues[{i}] has no valid type_index"));
+                return Err(format!(
+                    "{name}: selected_issues[{i}] has no valid type_index"
+                ));
             }
         }
     }
@@ -170,7 +229,11 @@ pub fn parse_config(name: &str, bytes: &[u8], built_in: bool) -> Result<LibraryC
     if name.is_empty() {
         return Err("a scan configuration needs a name".into());
     }
-    Ok(LibraryConfig { name: name.to_string(), tree, built_in })
+    Ok(LibraryConfig {
+        name: name.to_string(),
+        tree,
+        built_in,
+    })
 }
 
 /// Burp writes issue type ids as `"0x00100200"` strings; a number is
@@ -220,9 +283,20 @@ pub fn load_burp_defaults(src: &BurpResources) -> Option<Value> {
     let files: Vec<(String, Vec<u8>)> = match src {
         BurpResources::Dir(d) => {
             let prefs = d.parent()?.join("Preferences");
-            ["AuditDefaults", "CrawlDefaults"].iter().filter_map(|n| read_capped_file(&prefs.join(format!("{n}.json"))).ok().map(|b| (n.to_string(), b))).collect()
+            ["AuditDefaults", "CrawlDefaults"]
+                .iter()
+                .filter_map(|n| {
+                    read_capped_file(&prefs.join(format!("{n}.json")))
+                        .ok()
+                        .map(|b| (n.to_string(), b))
+                })
+                .collect()
         }
-        BurpResources::Jar(j) => jar_files(j, "resources/Preferences/").ok()?.into_iter().filter(|(n, _)| n == "AuditDefaults" || n == "CrawlDefaults").collect(),
+        BurpResources::Jar(j) => jar_files(j, "resources/Preferences/")
+            .ok()?
+            .into_iter()
+            .filter(|(n, _)| n == "AuditDefaults" || n == "CrawlDefaults")
+            .collect(),
     };
     let mut out = Value::Object(Map::new());
     let mut any = false;
@@ -276,7 +350,9 @@ fn overlay_inner(base: &mut Value, top: &Value) {
 /// The settings a scan runs with: `defaults` (Burp's, when found) with
 /// each configuration overlaid in order, the last one winning per key.
 pub fn combine(defaults: Option<&Value>, configs: &[&LibraryConfig]) -> Value {
-    let mut out = defaults.cloned().unwrap_or_else(|| Value::Object(Map::new()));
+    let mut out = defaults
+        .cloned()
+        .unwrap_or_else(|| Value::Object(Map::new()));
     for c in configs {
         overlay(&mut out, &c.tree);
     }
@@ -286,7 +362,9 @@ pub fn combine(defaults: Option<&Value>, configs: &[&LibraryConfig]) -> Value {
 fn read_capped_file(p: &Path) -> Result<Vec<u8>, String> {
     let f = std::fs::File::open(p).map_err(|e| format!("{}: {e}", p.display()))?;
     let mut out = Vec::new();
-    f.take(MAX_CONFIG_BYTES as u64 + 1).read_to_end(&mut out).map_err(|e| format!("{}: {e}", p.display()))?;
+    f.take(MAX_CONFIG_BYTES as u64 + 1)
+        .read_to_end(&mut out)
+        .map_err(|e| format!("{}: {e}", p.display()))?;
     Ok(out)
 }
 
@@ -298,7 +376,10 @@ fn dir_json_files(dir: &Path) -> Result<Vec<(String, Vec<u8>)>, String> {
     for e in rd.flatten() {
         let p = e.path();
         if p.extension().is_some_and(|x| x == "json") && p.is_file() {
-            let name = p.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+            let name = p
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default();
             match read_capped_file(&p) {
                 Ok(b) => out.push((name, b)),
                 Err(e) => out.push((name, e.into_bytes())),
@@ -309,11 +390,13 @@ fn dir_json_files(dir: &Path) -> Result<Vec<(String, Vec<u8>)>, String> {
 }
 
 fn le16(b: &[u8], at: usize) -> Option<usize> {
-    b.get(at..at + 2).map(|s| u16::from_le_bytes([s[0], s[1]]) as usize)
+    b.get(at..at + 2)
+        .map(|s| u16::from_le_bytes([s[0], s[1]]) as usize)
 }
 
 fn le32(b: &[u8], at: usize) -> Option<u64> {
-    b.get(at..at + 4).map(|s| u32::from_le_bytes([s[0], s[1], s[2], s[3]]) as u64)
+    b.get(at..at + 4)
+        .map(|s| u32::from_le_bytes([s[0], s[1], s[2], s[3]]) as u64)
 }
 
 /// The `*.json` entries directly under `prefix` in a jar (zip): reads the
@@ -324,10 +407,14 @@ fn jar_files(jar: &Path, prefix: &str) -> Result<Vec<(String, Vec<u8>)>, String>
     let mut f = std::fs::File::open(jar).map_err(|e| err(&e.to_string()))?;
     let len = f.metadata().map_err(|e| err(&e.to_string()))?.len();
     let tail_len = len.min(22 + 65_535);
-    f.seek(SeekFrom::Start(len - tail_len)).map_err(|e| err(&e.to_string()))?;
+    f.seek(SeekFrom::Start(len - tail_len))
+        .map_err(|e| err(&e.to_string()))?;
     let mut tail = vec![0u8; tail_len as usize];
     f.read_exact(&mut tail).map_err(|e| err(&e.to_string()))?;
-    let eocd = (0..tail.len().saturating_sub(21)).rev().find(|&i| tail[i..i + 4] == *b"PK\x05\x06").ok_or_else(|| err("not a zip file (no end of central directory)"))?;
+    let eocd = (0..tail.len().saturating_sub(21))
+        .rev()
+        .find(|&i| tail[i..i + 4] == *b"PK\x05\x06")
+        .ok_or_else(|| err("not a zip file (no end of central directory)"))?;
     let cd_size = le32(&tail, eocd + 12).ok_or_else(|| err("truncated end record"))?;
     let cd_off = le32(&tail, eocd + 16).ok_or_else(|| err("truncated end record"))?;
     if cd_off == 0xFFFF_FFFF || cd_size == 0xFFFF_FFFF {
@@ -336,18 +423,35 @@ fn jar_files(jar: &Path, prefix: &str) -> Result<Vec<(String, Vec<u8>)>, String>
     if cd_size > 64 << 20 || cd_off + cd_size > len {
         return Err(err("central directory out of range"));
     }
-    f.seek(SeekFrom::Start(cd_off)).map_err(|e| err(&e.to_string()))?;
+    f.seek(SeekFrom::Start(cd_off))
+        .map_err(|e| err(&e.to_string()))?;
     let mut cd = vec![0u8; cd_size as usize];
     f.read_exact(&mut cd).map_err(|e| err(&e.to_string()))?;
     let mut wanted = Vec::new();
     let mut at = 0usize;
     while at + 46 <= cd.len() && cd[at..at + 4] == *b"PK\x01\x02" {
-        let (Some(method), Some(csize), Some(usize_), Some(nlen), Some(xlen), Some(clen), Some(loff)) =
-            (le16(&cd, at + 10), le32(&cd, at + 20), le32(&cd, at + 24), le16(&cd, at + 28), le16(&cd, at + 30), le16(&cd, at + 32), le32(&cd, at + 42))
+        let (
+            Some(method),
+            Some(csize),
+            Some(usize_),
+            Some(nlen),
+            Some(xlen),
+            Some(clen),
+            Some(loff),
+        ) = (
+            le16(&cd, at + 10),
+            le32(&cd, at + 20),
+            le32(&cd, at + 24),
+            le16(&cd, at + 28),
+            le16(&cd, at + 30),
+            le16(&cd, at + 32),
+            le32(&cd, at + 42),
+        )
         else {
             break;
         };
-        let name = String::from_utf8_lossy(cd.get(at + 46..at + 46 + nlen).unwrap_or_default()).into_owned();
+        let name = String::from_utf8_lossy(cd.get(at + 46..at + 46 + nlen).unwrap_or_default())
+            .into_owned();
         if let Some(rest) = name.strip_prefix(prefix) {
             if !rest.contains('/') {
                 if let Some(stem) = rest.strip_suffix(".json") {
@@ -370,14 +474,18 @@ fn jar_files(jar: &Path, prefix: &str) -> Result<Vec<(String, Vec<u8>)>, String>
                 return Err("bad local header".into());
             }
             let skip = le16(&lh, 26).unwrap_or(0) + le16(&lh, 28).unwrap_or(0);
-            f.seek(SeekFrom::Current(skip as i64)).map_err(|e| e.to_string())?;
+            f.seek(SeekFrom::Current(skip as i64))
+                .map_err(|e| e.to_string())?;
             let mut data = vec![0u8; csize as usize];
             f.read_exact(&mut data).map_err(|e| e.to_string())?;
             match method {
                 0 => Ok(data),
                 8 => {
                     let mut o = Vec::new();
-                    flate2::read::DeflateDecoder::new(&data[..]).take(MAX_CONFIG_BYTES as u64 + 1).read_to_end(&mut o).map_err(|e| e.to_string())?;
+                    flate2::read::DeflateDecoder::new(&data[..])
+                        .take(MAX_CONFIG_BYTES as u64 + 1)
+                        .read_to_end(&mut o)
+                        .map_err(|e| e.to_string())?;
                     Ok(o)
                 }
                 m => Err(format!("compression method {m} not supported")),
@@ -405,37 +513,37 @@ const CAT_ACTIVE: u8 = CAT_LIGHT | CAT_MEDIUM | CAT_INTRUSIVE;
 /// type index, then `EnumSet<Zglb>`; one of passive / light / medium /
 /// intrusive, optionally with JavaScript, asserted in Zcot:238).
 pub(crate) const BURP_ISSUE_CATEGORIES: [(u32, u8); 183] = [
-    (0x00100100, 4), // OS_COMMAND_INJECTION
-    (0x00100200, 8), // SQL_INJECTION
-    (0x00100210, 8), // SQL_INJECTION_2ND_ORDER
-    (0x00100280, 4), // ASP_NET_TRACING_ENABLED
-    (0x00100300, 8), // FILE_PATH_TRAVERSAL
-    (0x00100400, 4), // XML_EXTERNAL_ENTITY_INJECTION
-    (0x00100500, 8), // LDAP_INJECTION
-    (0x00100600, 8), // XPATH_INJECTION
-    (0x00100700, 8), // XML_INJECTION
-    (0x00100800, 4), // ASP_NET_DEBUGGING_ENABLED
-    (0x00100850, 2), // BROKEN_ACCESS_CONTROL
-    (0x00100900, 8), // HTTP_PUT_METHOD_IS_ENABLED
-    (0x00100a00, 4), // OUT_OF_BAND_RESOURCE_LOAD_HTTP
-    (0x00100b00, 4), // FILE_PATH_MANIPULATION
-    (0x00100c00, 4), // PHP_CODE_INJECTION
-    (0x00100d00, 8), // SERVER_SIDE_JAVASCRIPT_CODE_INJECTION
-    (0x00100e00, 4), // PERL_CODE_INJECTION
-    (0x00100f00, 4), // RUBY_CODE_INJECTION
-    (0x00100f10, 4), // PYTHON_CODE_INJECTION
-    (0x00100f20, 4), // EXPRESSION_LANGUAGE_ENGINE_INJECTION
-    (0x00101000, 8), // UNIDENTIFIED_CODE_INJECTION
-    (0x00101080, 4), // SERVER_SIDE_TEMPLATE_ENGINE_INJECTION
-    (0x00101100, 8), // SSI_INJECTION
-    (0x00101200, 4), // NEXTJS_REACT2SHELL_RCE
-    (0x00200100, 4), // XSS_STORED
-    (0x00200140, 8), // REQUEST_SMUGGLING
-    (0x00200141, 8), // CLIENT_SIDE_DESYNC
-    (0x00200180, 8), // WEB_CACHE_POISONING
-    (0x00200200, 4), // HTTP_RESPONSE_HEADER_INJECTION_REFLECTED
-    (0x00200300, 4), // XSS_REFLECTED
-    (0x00200308, 4), // CLIENT_SIDE_TEMPLATE_ENGINE_INJECTION
+    (0x00100100, 4),  // OS_COMMAND_INJECTION
+    (0x00100200, 8),  // SQL_INJECTION
+    (0x00100210, 8),  // SQL_INJECTION_2ND_ORDER
+    (0x00100280, 4),  // ASP_NET_TRACING_ENABLED
+    (0x00100300, 8),  // FILE_PATH_TRAVERSAL
+    (0x00100400, 4),  // XML_EXTERNAL_ENTITY_INJECTION
+    (0x00100500, 8),  // LDAP_INJECTION
+    (0x00100600, 8),  // XPATH_INJECTION
+    (0x00100700, 8),  // XML_INJECTION
+    (0x00100800, 4),  // ASP_NET_DEBUGGING_ENABLED
+    (0x00100850, 2),  // BROKEN_ACCESS_CONTROL
+    (0x00100900, 8),  // HTTP_PUT_METHOD_IS_ENABLED
+    (0x00100a00, 4),  // OUT_OF_BAND_RESOURCE_LOAD_HTTP
+    (0x00100b00, 4),  // FILE_PATH_MANIPULATION
+    (0x00100c00, 4),  // PHP_CODE_INJECTION
+    (0x00100d00, 8),  // SERVER_SIDE_JAVASCRIPT_CODE_INJECTION
+    (0x00100e00, 4),  // PERL_CODE_INJECTION
+    (0x00100f00, 4),  // RUBY_CODE_INJECTION
+    (0x00100f10, 4),  // PYTHON_CODE_INJECTION
+    (0x00100f20, 4),  // EXPRESSION_LANGUAGE_ENGINE_INJECTION
+    (0x00101000, 8),  // UNIDENTIFIED_CODE_INJECTION
+    (0x00101080, 4),  // SERVER_SIDE_TEMPLATE_ENGINE_INJECTION
+    (0x00101100, 8),  // SSI_INJECTION
+    (0x00101200, 4),  // NEXTJS_REACT2SHELL_RCE
+    (0x00200100, 4),  // XSS_STORED
+    (0x00200140, 8),  // REQUEST_SMUGGLING
+    (0x00200141, 8),  // CLIENT_SIDE_DESYNC
+    (0x00200180, 8),  // WEB_CACHE_POISONING
+    (0x00200200, 4),  // HTTP_RESPONSE_HEADER_INJECTION_REFLECTED
+    (0x00200300, 4),  // XSS_REFLECTED
+    (0x00200308, 4),  // CLIENT_SIDE_TEMPLATE_ENGINE_INJECTION
     (0x00200310, 17), // XSS_DOM_BASED
     (0x00200311, 20), // XSS_REFLECTED_DOM_BASED
     (0x00200312, 20), // XSS_STORED_DOM_BASED
@@ -443,7 +551,7 @@ pub(crate) const BURP_ISSUE_CATEGORIES: [(u32, u8); 183] = [
     (0x00200320, 17), // JAVASCRIPT_INJECTION_DOM_BASED
     (0x00200321, 20), // JAVASCRIPT_INJECTION_REFLECTED_DOM_BASED
     (0x00200322, 20), // JAVASCRIPT_INJECTION_STORED_DOM_BASED
-    (0x00200328, 2), // PATH_RELATIVE_STYLESHEET_IMPORT
+    (0x00200328, 2),  // PATH_RELATIVE_STYLESHEET_IMPORT
     (0x00200330, 17), // CLIENT_SIDE_SQL_INJECTION_DOM_BASED
     (0x00200331, 20), // CLIENT_SIDE_SQL_INJECTION_REFLECTED_DOM_BASED
     (0x00200332, 20), // CLIENT_SIDE_SQL_INJECTION_STORED_DOM_BASED
@@ -459,73 +567,73 @@ pub(crate) const BURP_ISSUE_CATEGORIES: [(u32, u8); 183] = [
     (0x00200370, 17), // CLIENT_SIDE_JSON_INJECTION_DOM_BASED
     (0x00200371, 20), // CLIENT_SIDE_JSON_INJECTION_REFLECTED_DOM_BASED
     (0x00200372, 20), // CLIENT_SIDE_JSON_INJECTION_STORED_DOM_BASED
-    (0x00200400, 2), // FLASH_CROSS_DOMAIN_POLICY
-    (0x00200500, 2), // SILVERLIGHT_CROSS_DOMAIN_POLICY
-    (0x00200503, 1), // CONTENT_SECURITY_POLICY_ALLOWLISTED_SCRIPTS
-    (0x00200504, 1), // CONTENT_SECURITY_POLICY_UNTRUSTED_SCRIPTS
-    (0x00200505, 1), // CONTENT_SECURITY_POLICY_UNTRUSTED_STYLES
-    (0x00200506, 1), // CONTENT_SECURITY_POLICY_MALFORMED_SYNTAX
-    (0x00200507, 1), // CONTENT_SECURITY_POLICY_ALLOW_CLICKJACKING
-    (0x00200508, 1), // CONTENT_SECURITY_POLICY_ALLOW_FORM_HIGHJACKING
-    (0x00200509, 1), // CONTENT_SECURITY_POLICY_NOT_ENFORCED
-    (0x00200510, 1), // GRAPHQL_ENDPOINT_FOUND
-    (0x00200511, 2), // GRAPHQL_ENDPOINT_DISCOVERED
-    (0x00200512, 2), // GRAPHQL_INTROSPECTION_ENABLED
-    (0x00200513, 2), // GRAPHQL_SUGGESTIONS_ENABLED
-    (0x00200514, 2), // GRAPHQL_CONTENT_TYPE_NOT_VALIDATED
-    (0x00200600, 2), // CROSS_ORIGIN_RESOURCE_SHARING
-    (0x00200601, 2), // CROSS_ORIGIN_RESOURCE_SHARING_ARBITRARY_ORIGIN
-    (0x00200602, 2), // CROSS_ORIGIN_RESOURCE_SHARING_UNTRUSTED_ORIGIN_TRUSTED
-    (0x00200603, 2), // CROSS_ORIGIN_RESOURCE_SHARING_ALL_SUBDOMAINS_TRUSTED
-    (0x00200650, 4), // WEB_CACHE_DECEPTION
-    (0x00200700, 4), // CROSS_SITE_REQUEST_FORGERY
-    (0x00200800, 4), // SMTP_HEADER_INJECTION
-    (0x00200900, 4), // JWT_SIGNATURE_NOT_VERIFIED
-    (0x00200901, 4), // JWT_NONE_ALG_SUPPORTED
-    (0x00200902, 4), // JWT_JWK_HEADER_SUPPORTED
-    (0x00200903, 1), // JWT_WEAK_HMAC_SECRET
-    (0x00200904, 4), // JWT_JKU_HEADER_SUPPORTED
-    (0x00200905, 4), // JWT_X5U_HEADER_SUPPORTED
-    (0x00300100, 1), // CLEARTEXT_SUBMISSION_OF_PASSWORD
-    (0x00300200, 4), // EXTERNAL_SERVICE_INTERACTION_DNS
-    (0x00300210, 4), // EXTERNAL_SERVICE_INTERACTION_HTTP
-    (0x00300220, 4), // EXTERNAL_SERVICE_INTERACTION_SMTP
-    (0x00400100, 2), // REFERER_DEPENDENT_RESPONSE
-    (0x00400110, 2), // SPOOFABLE_CLIENT_IP
-    (0x00400120, 2), // USER_AGENT_DEPENDENT_RESPONSE
-    (0x00400200, 1), // PASSWORD_RETURNED_IN_LATER_RESPONSE
-    (0x00400300, 1), // PASSWORD_SUBMITTED_USING_GET_METHOD
-    (0x00400400, 1), // PASSWORD_RETURNED_IN_URL_QUERY_STRING
-    (0x00400480, 1), // SQL_STATEMENT_IN_REQUEST_PARAMETER
-    (0x00400500, 1), // CROSS_DOMAIN_POST
-    (0x00400600, 1), // ASP_NET_VIEWSTATE_WITHOUT_MAC_ENABLED
-    (0x00400700, 4), // XML_ENTITY_EXPANSION
-    (0x00400800, 1), // LONG_REDIRECTION_RESPONSE
-    (0x00400900, 1), // SERIALIZED_OBJECT_IN_HTTP_MESSAGE
-    (0x00400a00, 1), // DUPLICATE_COOKIES_SET
-    (0x00400b00, 2), // INPUT_RETRIEVAL_STORED
-    (0x00400c00, 2), // INPUT_RETRIEVAL_REFLECTED
-    (0x00400d00, 4), // SUSPICIOUS_INPUT_TRANSFORMATION_REFLECTED
-    (0x00400e00, 4), // SUSPICIOUS_INPUT_TRANSFORMATION_STORED
-    (0x00400f00, 8), // REQUEST_URL_OVERRIDE
-    (0x00500080, 1), // VULNERABLE_JAVASCRIPT_DEPENDENCY
-    (0x00500100, 4), // OPEN_REDIRECTION_REFLECTED
-    (0x00500101, 4), // OPEN_REDIRECTION_STORED
+    (0x00200400, 2),  // FLASH_CROSS_DOMAIN_POLICY
+    (0x00200500, 2),  // SILVERLIGHT_CROSS_DOMAIN_POLICY
+    (0x00200503, 1),  // CONTENT_SECURITY_POLICY_ALLOWLISTED_SCRIPTS
+    (0x00200504, 1),  // CONTENT_SECURITY_POLICY_UNTRUSTED_SCRIPTS
+    (0x00200505, 1),  // CONTENT_SECURITY_POLICY_UNTRUSTED_STYLES
+    (0x00200506, 1),  // CONTENT_SECURITY_POLICY_MALFORMED_SYNTAX
+    (0x00200507, 1),  // CONTENT_SECURITY_POLICY_ALLOW_CLICKJACKING
+    (0x00200508, 1),  // CONTENT_SECURITY_POLICY_ALLOW_FORM_HIGHJACKING
+    (0x00200509, 1),  // CONTENT_SECURITY_POLICY_NOT_ENFORCED
+    (0x00200510, 1),  // GRAPHQL_ENDPOINT_FOUND
+    (0x00200511, 2),  // GRAPHQL_ENDPOINT_DISCOVERED
+    (0x00200512, 2),  // GRAPHQL_INTROSPECTION_ENABLED
+    (0x00200513, 2),  // GRAPHQL_SUGGESTIONS_ENABLED
+    (0x00200514, 2),  // GRAPHQL_CONTENT_TYPE_NOT_VALIDATED
+    (0x00200600, 2),  // CROSS_ORIGIN_RESOURCE_SHARING
+    (0x00200601, 2),  // CROSS_ORIGIN_RESOURCE_SHARING_ARBITRARY_ORIGIN
+    (0x00200602, 2),  // CROSS_ORIGIN_RESOURCE_SHARING_UNTRUSTED_ORIGIN_TRUSTED
+    (0x00200603, 2),  // CROSS_ORIGIN_RESOURCE_SHARING_ALL_SUBDOMAINS_TRUSTED
+    (0x00200650, 4),  // WEB_CACHE_DECEPTION
+    (0x00200700, 4),  // CROSS_SITE_REQUEST_FORGERY
+    (0x00200800, 4),  // SMTP_HEADER_INJECTION
+    (0x00200900, 4),  // JWT_SIGNATURE_NOT_VERIFIED
+    (0x00200901, 4),  // JWT_NONE_ALG_SUPPORTED
+    (0x00200902, 4),  // JWT_JWK_HEADER_SUPPORTED
+    (0x00200903, 1),  // JWT_WEAK_HMAC_SECRET
+    (0x00200904, 4),  // JWT_JKU_HEADER_SUPPORTED
+    (0x00200905, 4),  // JWT_X5U_HEADER_SUPPORTED
+    (0x00300100, 1),  // CLEARTEXT_SUBMISSION_OF_PASSWORD
+    (0x00300200, 4),  // EXTERNAL_SERVICE_INTERACTION_DNS
+    (0x00300210, 4),  // EXTERNAL_SERVICE_INTERACTION_HTTP
+    (0x00300220, 4),  // EXTERNAL_SERVICE_INTERACTION_SMTP
+    (0x00400100, 2),  // REFERER_DEPENDENT_RESPONSE
+    (0x00400110, 2),  // SPOOFABLE_CLIENT_IP
+    (0x00400120, 2),  // USER_AGENT_DEPENDENT_RESPONSE
+    (0x00400200, 1),  // PASSWORD_RETURNED_IN_LATER_RESPONSE
+    (0x00400300, 1),  // PASSWORD_SUBMITTED_USING_GET_METHOD
+    (0x00400400, 1),  // PASSWORD_RETURNED_IN_URL_QUERY_STRING
+    (0x00400480, 1),  // SQL_STATEMENT_IN_REQUEST_PARAMETER
+    (0x00400500, 1),  // CROSS_DOMAIN_POST
+    (0x00400600, 1),  // ASP_NET_VIEWSTATE_WITHOUT_MAC_ENABLED
+    (0x00400700, 4),  // XML_ENTITY_EXPANSION
+    (0x00400800, 1),  // LONG_REDIRECTION_RESPONSE
+    (0x00400900, 1),  // SERIALIZED_OBJECT_IN_HTTP_MESSAGE
+    (0x00400a00, 1),  // DUPLICATE_COOKIES_SET
+    (0x00400b00, 2),  // INPUT_RETRIEVAL_STORED
+    (0x00400c00, 2),  // INPUT_RETRIEVAL_REFLECTED
+    (0x00400d00, 4),  // SUSPICIOUS_INPUT_TRANSFORMATION_REFLECTED
+    (0x00400e00, 4),  // SUSPICIOUS_INPUT_TRANSFORMATION_STORED
+    (0x00400f00, 8),  // REQUEST_URL_OVERRIDE
+    (0x00500080, 1),  // VULNERABLE_JAVASCRIPT_DEPENDENCY
+    (0x00500100, 4),  // OPEN_REDIRECTION_REFLECTED
+    (0x00500101, 4),  // OPEN_REDIRECTION_STORED
     (0x00500110, 17), // OPEN_REDIRECTION_DOM_BASED
     (0x00500111, 20), // OPEN_REDIRECTION_REFLECTED_DOM_BASED
     (0x00500112, 20), // OPEN_REDIRECTION_STORED_DOM_BASED
-    (0x00500200, 1), // TLS_COOKIE_WITHOUT_SECURE_FLAG_SET
-    (0x00500300, 1), // COOKIE_SCOPED_TO_PARENT_DOMAIN
-    (0x00500400, 1), // CROSS_DOMAIN_REFERER_LEAKAGE
-    (0x00500500, 1), // CROSS_DOMAIN_SCRIPT_INCLUDE
-    (0x00500600, 1), // COOKIE_WITHOUT_HTTPONLY_FLAG
-    (0x00500700, 1), // SESSION_TOKEN_IN_URL
-    (0x00500800, 1), // PASSWORD_FIELD_WITH_AUTOCOMPLETE_ENABLED
-    (0x00500900, 1), // PASSWORD_VALUE_SET_IN_COOKIE
-    (0x00500980, 1), // FILE_UPLOAD_FUNCTIONALITY
-    (0x005009a0, 1), // FRAMEABLE_RESPONSE_POTENTIAL_CLICKJACKING
-    (0x005009b0, 1), // BROWSER_XSS_FILTER_DISABLED
-    (0x00500a00, 4), // HTTP_TRACE_METHOD_IS_ENABLED
+    (0x00500200, 1),  // TLS_COOKIE_WITHOUT_SECURE_FLAG_SET
+    (0x00500300, 1),  // COOKIE_SCOPED_TO_PARENT_DOMAIN
+    (0x00500400, 1),  // CROSS_DOMAIN_REFERER_LEAKAGE
+    (0x00500500, 1),  // CROSS_DOMAIN_SCRIPT_INCLUDE
+    (0x00500600, 1),  // COOKIE_WITHOUT_HTTPONLY_FLAG
+    (0x00500700, 1),  // SESSION_TOKEN_IN_URL
+    (0x00500800, 1),  // PASSWORD_FIELD_WITH_AUTOCOMPLETE_ENABLED
+    (0x00500900, 1),  // PASSWORD_VALUE_SET_IN_COOKIE
+    (0x00500980, 1),  // FILE_UPLOAD_FUNCTIONALITY
+    (0x005009a0, 1),  // FRAMEABLE_RESPONSE_POTENTIAL_CLICKJACKING
+    (0x005009b0, 1),  // BROWSER_XSS_FILTER_DISABLED
+    (0x00500a00, 4),  // HTTP_TRACE_METHOD_IS_ENABLED
     (0x00500b00, 17), // COOKIE_MANIPULATION_DOM_BASED
     (0x00500b01, 20), // COOKIE_MANIPULATION_REFLECTED_DOM_BASED
     (0x00500b02, 20), // COOKIE_MANIPULATION_STORED_DOM_BASED
@@ -544,55 +652,58 @@ pub(crate) const BURP_ISSUE_CATEGORIES: [(u32, u8); 183] = [
     (0x00501000, 17), // LINK_MANIPULATION_DOM_BASED
     (0x00501001, 20), // LINK_MANIPULATION_REFLECTED_DOM_BASED
     (0x00501002, 20), // LINK_MANIPULATION_STORED_DOM_BASED
-    (0x00501003, 4), // LINK_MANIPULATION_REFLECTED
-    (0x00501004, 4), // LINK_MANIPULATION_STORED
+    (0x00501003, 4),  // LINK_MANIPULATION_REFLECTED
+    (0x00501004, 4),  // LINK_MANIPULATION_STORED
     (0x00501100, 17), // DOCUMENT_DOMAIN_MANIPULATION_DOM_BASED
     (0x00501101, 20), // DOCUMENT_DOMAIN_MANIPULATION_REFLECTED_DOM_BASED
     (0x00501102, 20), // DOCUMENT_DOMAIN_MANIPULATION_STORED_DOM_BASED
     (0x00501200, 17), // DOM_DATA_MANIPULATION_DOM_BASED
     (0x00501201, 20), // DOM_DATA_MANIPULATION_REFLECTED_DOM_BASED
     (0x00501202, 20), // DOM_DATA_MANIPULATION_STORED_DOM_BASED
-    (0x00501300, 4), // CSS_INJECTION_REFLECTED
-    (0x00501301, 4), // CSS_INJECTION_STORED
-    (0x00501400, 4), // CLIENT_SIDE_HTTP_PARAMETER_POLLUTION_REFLECTED
-    (0x00501401, 4), // CLIENT_SIDE_HTTP_PARAMETER_POLLUTION_STORED
-    (0x00501500, 4), // FORM_ACTION_HIJACKING_REFLECTED
-    (0x00501501, 4), // FORM_ACTION_HIJACKING_STORED
-    (0x00600080, 1), // DATABASE_CONNECTION_STRING_DISCLOSED
-    (0x006000b0, 1), // SOURCE_CODE_DISCLOSURE
-    (0x006000d8, 4), // BACKUP_FILE
-    (0x00600100, 1), // DIRECTORY_LISTING
-    (0x00600200, 1), // EMAIL_ADDRESSES_DISCLOSED
-    (0x00600300, 1), // PRIVATE_IP_ADDRESSES_DISCLOSED
-    (0x00600400, 1), // SOCIAL_SECURITY_NUMBERS_DISCLOSED
-    (0x00600500, 1), // CREDIT_CARD_NUMBERS_DISCLOSED
-    (0x00600550, 1), // PRIVATE_KEY_DISCLOSED
-    (0x00600600, 2), // ROBOTS_TXT_FILE
-    (0x00600700, 2), // JWK_DISCLOSED
-    (0x00600800, 1), // JWT_PRIVATE_KEY_DISCLOSURE
-    (0x00600900, 2), // OPENAPI_DEFINITION_FOUND_ACTIVE
-    (0x00600901, 1), // OPENAPI_DEFINITION_FOUND_PASSIVE
-    (0x00700100, 1), // CACHEABLE_HTTPS_RESPONSE
-    (0x00700200, 1), // BASE_64_ENCODED_DATA_IN_PARAMETER
-    (0x00800100, 1), // MULTIPLE_CONTENT_TYPES_SPECIFIED
-    (0x00800200, 1), // HTML_DOES_NOT_SPECIFY_CHARSET
-    (0x00800300, 1), // HTML_USES_UNRECOGNIZED_CHARSET
-    (0x00800400, 1), // CONTENT_TYPE_INCORRECTLY_STATED
-    (0x00800500, 1), // CONTENT_TYPE_NOT_SPECIFIED
-    (0x01000100, 2), // TLS_CERTIFICATE
-    (0x01000200, 1), // UNENCRYPTED_COMMUNICATIONS
-    (0x01000300, 1), // STRICT_TRANSPORT_SECURITY_NOT_ENFORCED
-    (0x01000400, 1), // MIXED_CONTENT
-    (0x01000500, 2), // HIDDEN_HTTP2
-    (0x08000000, 8), // EXTENSION_GENERATED
-    (0x08008000, 8), // MANUALLY_GENERATED
-    (0x09000000, 8), // BCHECK_GENERATED
-    (0x09008000, 8), // BAMBDA_GENERATED
+    (0x00501300, 4),  // CSS_INJECTION_REFLECTED
+    (0x00501301, 4),  // CSS_INJECTION_STORED
+    (0x00501400, 4),  // CLIENT_SIDE_HTTP_PARAMETER_POLLUTION_REFLECTED
+    (0x00501401, 4),  // CLIENT_SIDE_HTTP_PARAMETER_POLLUTION_STORED
+    (0x00501500, 4),  // FORM_ACTION_HIJACKING_REFLECTED
+    (0x00501501, 4),  // FORM_ACTION_HIJACKING_STORED
+    (0x00600080, 1),  // DATABASE_CONNECTION_STRING_DISCLOSED
+    (0x006000b0, 1),  // SOURCE_CODE_DISCLOSURE
+    (0x006000d8, 4),  // BACKUP_FILE
+    (0x00600100, 1),  // DIRECTORY_LISTING
+    (0x00600200, 1),  // EMAIL_ADDRESSES_DISCLOSED
+    (0x00600300, 1),  // PRIVATE_IP_ADDRESSES_DISCLOSED
+    (0x00600400, 1),  // SOCIAL_SECURITY_NUMBERS_DISCLOSED
+    (0x00600500, 1),  // CREDIT_CARD_NUMBERS_DISCLOSED
+    (0x00600550, 1),  // PRIVATE_KEY_DISCLOSED
+    (0x00600600, 2),  // ROBOTS_TXT_FILE
+    (0x00600700, 2),  // JWK_DISCLOSED
+    (0x00600800, 1),  // JWT_PRIVATE_KEY_DISCLOSURE
+    (0x00600900, 2),  // OPENAPI_DEFINITION_FOUND_ACTIVE
+    (0x00600901, 1),  // OPENAPI_DEFINITION_FOUND_PASSIVE
+    (0x00700100, 1),  // CACHEABLE_HTTPS_RESPONSE
+    (0x00700200, 1),  // BASE_64_ENCODED_DATA_IN_PARAMETER
+    (0x00800100, 1),  // MULTIPLE_CONTENT_TYPES_SPECIFIED
+    (0x00800200, 1),  // HTML_DOES_NOT_SPECIFY_CHARSET
+    (0x00800300, 1),  // HTML_USES_UNRECOGNIZED_CHARSET
+    (0x00800400, 1),  // CONTENT_TYPE_INCORRECTLY_STATED
+    (0x00800500, 1),  // CONTENT_TYPE_NOT_SPECIFIED
+    (0x01000100, 2),  // TLS_CERTIFICATE
+    (0x01000200, 1),  // UNENCRYPTED_COMMUNICATIONS
+    (0x01000300, 1),  // STRICT_TRANSPORT_SECURITY_NOT_ENFORCED
+    (0x01000400, 1),  // MIXED_CONTENT
+    (0x01000500, 2),  // HIDDEN_HTTP2
+    (0x08000000, 8),  // EXTENSION_GENERATED
+    (0x08008000, 8),  // MANUALLY_GENERATED
+    (0x09000000, 8),  // BCHECK_GENERATED
+    (0x09008000, 8),  // BAMBDA_GENERATED
 ];
 
 /// The categories of Burp issue type `id`.
 pub fn issue_categories(id: u32) -> Option<u8> {
-    BURP_ISSUE_CATEGORIES.binary_search_by_key(&id, |(t, _)| *t).ok().map(|i| BURP_ISSUE_CATEGORIES[i].1)
+    BURP_ISSUE_CATEGORIES
+        .binary_search_by_key(&id, |(t, _)| *t)
+        .ok()
+        .map(|i| BURP_ISSUE_CATEGORIES[i].1)
 }
 
 /// The "Issues reported" part of a configuration: which issue types a scan
@@ -611,20 +722,46 @@ impl IssueFilter {
     /// issue (Burp's default), so a scan without a library selection runs
     /// exactly as before.
     pub fn from_tree(tree: &Value) -> Option<IssueFilter> {
-        let flag = |k: &str| get_path(tree, &format!("scanner.issues_reported.{k}")).and_then(Value::as_bool).unwrap_or(true);
-        let types_on = [("scan_type_passive", CAT_PASSIVE), ("scan_type_light_active", CAT_LIGHT), ("scan_type_medium_active", CAT_MEDIUM), ("scan_type_intrusive_active", CAT_INTRUSIVE), ("scan_type_javascript_analysis", CAT_JAVASCRIPT)]
-            .iter()
-            .filter(|(k, _)| flag(k))
-            .fold(0u8, |m, (_, b)| m | b);
-        let individual = get_path(tree, "scanner.issues_reported.select_individual_issues").and_then(Value::as_bool).unwrap_or(false);
+        let flag = |k: &str| {
+            get_path(tree, &format!("scanner.issues_reported.{k}"))
+                .and_then(Value::as_bool)
+                .unwrap_or(true)
+        };
+        let types_on = [
+            ("scan_type_passive", CAT_PASSIVE),
+            ("scan_type_light_active", CAT_LIGHT),
+            ("scan_type_medium_active", CAT_MEDIUM),
+            ("scan_type_intrusive_active", CAT_INTRUSIVE),
+            ("scan_type_javascript_analysis", CAT_JAVASCRIPT),
+        ]
+        .iter()
+        .filter(|(k, _)| flag(k))
+        .fold(0u8, |m, (_, b)| m | b);
+        let individual = get_path(tree, "scanner.issues_reported.select_individual_issues")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
         let selected = individual.then(|| {
             get_path(tree, "scanner.issues_reported.selected_issues")
                 .and_then(Value::as_array)
-                .map(|items| items.iter().filter_map(|it| Some((parse_type_index(it.get("type_index"))?, it.get("enabled").and_then(Value::as_bool).unwrap_or(true)))).collect())
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(|it| {
+                            Some((
+                                parse_type_index(it.get("type_index"))?,
+                                it.get("enabled").and_then(Value::as_bool).unwrap_or(true),
+                            ))
+                        })
+                        .collect()
+                })
                 .unwrap_or_default()
         });
         let f = IssueFilter { types_on, selected };
-        (f != IssueFilter { types_on: CAT_PASSIVE | CAT_ACTIVE | CAT_JAVASCRIPT, selected: None }).then_some(f)
+        (f != IssueFilter {
+            types_on: CAT_PASSIVE | CAT_ACTIVE | CAT_JAVASCRIPT,
+            selected: None,
+        })
+        .then_some(f)
     }
 
     /// Whether issue type `id` is on. Without an individual selection this
@@ -655,7 +792,8 @@ impl IssueFilter {
     pub fn allows(&self, name: &str, active: bool) -> bool {
         let id = crate::scan::issue_type_id(name) as u32;
         if id == 0 {
-            return self.selected.is_none() && self.types_on & if active { CAT_ACTIVE } else { CAT_PASSIVE } != 0;
+            return self.selected.is_none()
+                && self.types_on & if active { CAT_ACTIVE } else { CAT_PASSIVE } != 0;
         }
         self.allows_type(id, if active { CAT_ACTIVE } else { CAT_PASSIVE })
     }
@@ -663,8 +801,13 @@ impl IssueFilter {
     /// Selected, enabled issue types no WebProbe check reports (kept in the
     /// configuration, listed as not applied).
     pub fn unsupported_selection(&self) -> Vec<u32> {
-        let Some(sel) = &self.selected else { return Vec::new() };
-        sel.iter().filter(|(id, on)| **on && crate::scan::checks_for_issue_type(**id).is_empty()).map(|(id, _)| *id).collect()
+        let Some(sel) = &self.selected else {
+            return Vec::new();
+        };
+        sel.iter()
+            .filter(|(id, on)| **on && crate::scan::checks_for_issue_type(**id).is_empty())
+            .map(|(id, _)| *id)
+            .collect()
     }
 }
 
@@ -684,7 +827,11 @@ const INSERTION_KEYS: [(&str, &str); 8] = [
 ];
 
 const SPEEDS: [&str; 3] = ["fast", "normal", "thorough"];
-const ACCURACIES: [&str; 3] = ["minimise_false_negatives", "normal", "minimise_false_positives"];
+const ACCURACIES: [&str; 3] = [
+    "minimise_false_negatives",
+    "normal",
+    "minimise_false_positives",
+];
 
 /// The settings WebProbe applies. Every other setting a configuration
 /// carries is kept and listed by [`not_applied`].
@@ -720,7 +867,10 @@ pub const APPLIED: &[&str] = &[
 /// configuration is overlaid onto (Burp loads a configuration onto the
 /// settings being edited) and what "Save" writes.
 pub fn config_to_tree(c: &crate::scan_config::ScanConfig, speed: u8, accuracy: u8) -> Value {
-    let f = c.issues.clone().unwrap_or(IssueFilter { types_on: CAT_PASSIVE | CAT_ACTIVE | CAT_JAVASCRIPT, selected: None });
+    let f = c.issues.clone().unwrap_or(IssueFilter {
+        types_on: CAT_PASSIVE | CAT_ACTIVE | CAT_JAVASCRIPT,
+        selected: None,
+    });
     let mut ipt = Map::new();
     for (burp, key) in INSERTION_KEYS {
         ipt.insert(burp.into(), Value::Bool(c.insertion_enabled(key)));
@@ -787,7 +937,11 @@ pub fn tree_to_config(tree: &Value, base: &crate::scan_config::ScanConfig) -> Ap
     }
     if let Some(v) = int("crawler.crawl_limits.maximum_unique_locations") {
         // 0 is "no limit" in Burp; WebProbe's ceiling is 100000.
-        c.crawl.max_locations = if v == 0 { 100_000 } else { (v as usize).clamp(1, 100_000) };
+        c.crawl.max_locations = if v == 0 {
+            100_000
+        } else {
+            (v as usize).clamp(1, 100_000)
+        };
     }
     if let Some(v) = int("crawler.crawl_optimization.maximum_link_depth") {
         c.crawl.max_depth = (v as usize).clamp(1, 50);
@@ -811,11 +965,17 @@ pub fn tree_to_config(tree: &Value, base: &crate::scan_config::ScanConfig) -> Ap
         if on {
             c.disabled_insertion.remove(crate::scan_config::NESTED_KEY);
         } else {
-            c.disabled_insertion.insert(crate::scan_config::NESTED_KEY.to_string());
+            c.disabled_insertion
+                .insert(crate::scan_config::NESTED_KEY.to_string());
         }
     }
     c.issues = IssueFilter::from_tree(tree);
-    let pick = |p: &str, names: &[&str; 3]| get_path(tree, p).and_then(Value::as_str).and_then(|s| names.iter().position(|n| *n == s)).map(|i| i as u8);
+    let pick = |p: &str, names: &[&str; 3]| {
+        get_path(tree, p)
+            .and_then(Value::as_str)
+            .and_then(|s| names.iter().position(|n| *n == s))
+            .map(|i| i as u8)
+    };
     Applied {
         config: c,
         speed: pick("scanner.audit_optimization.scan_speed", &SPEEDS).unwrap_or(1),
@@ -825,7 +985,12 @@ pub fn tree_to_config(tree: &Value, base: &crate::scan_config::ScanConfig) -> Ap
 
 /// Load `configs` in order onto the current settings, as Burp's launcher
 /// does (see the module comment).
-pub fn apply(configs: &[&LibraryConfig], current: &crate::scan_config::ScanConfig, speed: u8, accuracy: u8) -> Applied {
+pub fn apply(
+    configs: &[&LibraryConfig],
+    current: &crate::scan_config::ScanConfig,
+    speed: u8,
+    accuracy: u8,
+) -> Applied {
     let mut tree = config_to_tree(current, speed, accuracy);
     for c in configs {
         overlay(&mut tree, &c.tree);
@@ -849,17 +1014,30 @@ pub fn not_applied(configs: &[&LibraryConfig]) -> Vec<String> {
                 add(format!("{p} (not applied by WebProbe)"));
             }
         }
-        for (p, names) in [("scanner.audit_optimization.scan_speed", &SPEEDS), ("scanner.audit_optimization.scan_accuracy", &ACCURACIES)] {
+        for (p, names) in [
+            ("scanner.audit_optimization.scan_speed", &SPEEDS),
+            ("scanner.audit_optimization.scan_accuracy", &ACCURACIES),
+        ] {
             if let Some(v) = get_path(&c.tree, p).and_then(Value::as_str) {
                 if !names.contains(&v) {
-                    add(format!("{p} = {v:?} (unknown value, not applied by WebProbe)"));
+                    add(format!(
+                        "{p} = {v:?} (unknown value, not applied by WebProbe)"
+                    ));
                 }
             }
         }
-        if let Some(Value::Array(items)) = get_path(&c.tree, "scanner.issues_reported.selected_issues") {
+        if let Some(Value::Array(items)) =
+            get_path(&c.tree, "scanner.issues_reported.selected_issues")
+        {
             let mut methods = false;
             for it in items {
-                methods |= it.get("detection_methods").and_then(Value::as_array).is_some_and(|m| m.iter().any(|d| d.get("enabled").and_then(Value::as_bool) == Some(false)));
+                methods |= it
+                    .get("detection_methods")
+                    .and_then(Value::as_array)
+                    .is_some_and(|m| {
+                        m.iter()
+                            .any(|d| d.get("enabled").and_then(Value::as_bool) == Some(false))
+                    });
             }
             if methods {
                 add("scanner.issues_reported.selected_issues: per-issue detection method choices (not applied by WebProbe: checks run all their methods)".into());
@@ -868,8 +1046,17 @@ pub fn not_applied(configs: &[&LibraryConfig]) -> Vec<String> {
         if let Some(f) = IssueFilter::from_tree(&c.tree) {
             let missing = f.unsupported_selection();
             if !missing.is_empty() {
-                let names: Vec<String> = missing.iter().map(|id| issue_type_name(*id).map_or(format!("0x{id:08x}"), |n| format!("{n} (0x{id:08x})"))).collect();
-                add(format!("selected issue types WebProbe has no check for (kept, not applied): {}", names.join(", ")));
+                let names: Vec<String> = missing
+                    .iter()
+                    .map(|id| {
+                        issue_type_name(*id)
+                            .map_or(format!("0x{id:08x}"), |n| format!("{n} (0x{id:08x})"))
+                    })
+                    .collect();
+                add(format!(
+                    "selected issue types WebProbe has no check for (kept, not applied): {}",
+                    names.join(", ")
+                ));
             }
         }
     }
@@ -878,7 +1065,10 @@ pub fn not_applied(configs: &[&LibraryConfig]) -> Vec<String> {
 
 /// Burp's name for issue type `id` (the KnowledgeBase names WebProbe knows).
 pub fn issue_type_name(id: u32) -> Option<&'static str> {
-    crate::scan::checks::KB_ISSUE_TYPES.iter().find(|(_, t)| *t as u32 == id).map(|(n, _)| *n)
+    crate::scan::checks::KB_ISSUE_TYPES
+        .iter()
+        .find(|(_, t)| *t as u32 == id)
+        .map(|(n, _)| *n)
 }
 
 // ---------------------------------------------------------------- user library and saving
@@ -886,7 +1076,9 @@ pub fn issue_type_name(id: u32) -> Option<&'static str> {
 /// Where WebProbe keeps the user's own library entries (one Burp JSON file
 /// per configuration): `<data dir>/scan-configs`.
 pub fn user_dir() -> std::path::PathBuf {
-    crate::paths::Lookup::process().data_dir().join("scan-configs")
+    crate::paths::Lookup::process()
+        .data_dir()
+        .join("scan-configs")
 }
 
 /// The user's entries in `dir` (none when the directory does not exist).
@@ -913,15 +1105,36 @@ pub fn load_dir(dir: &Path) -> LoadReport {
 /// A file name for library entry `name` (path separators and characters
 /// Windows refuses become `_`).
 pub fn file_name_for(name: &str) -> String {
-    let stem: String = name.trim().chars().map(|c| if "/\\:*?\"<>|".contains(c) || c.is_control() { '_' } else { c }).collect();
-    format!("{}.json", if stem.is_empty() || stem == "." || stem == ".." { "_".to_string() } else { stem })
+    let stem: String = name
+        .trim()
+        .chars()
+        .map(|c| {
+            if "/\\:*?\"<>|".contains(c) || c.is_control() {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect();
+    format!(
+        "{}.json",
+        if stem.is_empty() || stem == "." || stem == ".." {
+            "_".to_string()
+        } else {
+            stem
+        }
+    )
 }
 
 /// Write `cfg` into `dir` (atomically: temporary file, then rename).
 pub fn save_to_dir(dir: &Path, cfg: &LibraryConfig) -> std::io::Result<()> {
     std::fs::create_dir_all(dir)?;
     let path = dir.join(file_name_for(&cfg.name));
-    let tmp = dir.join(format!(".{}.{}.tmp", file_name_for(&cfg.name), std::process::id()));
+    let tmp = dir.join(format!(
+        ".{}.{}.tmp",
+        file_name_for(&cfg.name),
+        std::process::id()
+    ));
     std::fs::write(&tmp, cfg.to_burp_json())?;
     std::fs::rename(&tmp, &path)
 }
@@ -940,19 +1153,31 @@ pub fn delete_from_dir(dir: &Path, name: &str) -> std::io::Result<()> {
 /// settings the editor opened with). Unknown keys stay untouched, and
 /// selected issues keep their detection methods.
 pub fn with_settings(entry: &Value, edited: &Value, start: &Value) -> Value {
-    let mut out = if entry.is_object() { entry.clone() } else { Value::Object(Map::new()) };
+    let mut out = if entry.is_object() {
+        entry.clone()
+    } else {
+        Value::Object(Map::new())
+    };
     for p in APPLIED {
-        let Some(new) = get_path(edited, p) else { continue };
+        let Some(new) = get_path(edited, p) else {
+            continue;
+        };
         if get_path(entry, p).is_none() && get_path(start, p) == Some(new) {
             continue;
         }
         let mut value = new.clone();
         if *p == "scanner.issues_reported.selected_issues" {
-            if let (Value::Array(items), Some(Value::Array(old))) = (&mut value, get_path(entry, p)) {
+            if let (Value::Array(items), Some(Value::Array(old))) = (&mut value, get_path(entry, p))
+            {
                 for it in items.iter_mut() {
                     let id = parse_type_index(it.get("type_index"));
-                    if let Some(prev) = old.iter().find(|o| parse_type_index(o.get("type_index")) == id) {
-                        if let (Some(m), Value::Object(obj)) = (prev.get("detection_methods"), &mut *it) {
+                    if let Some(prev) = old
+                        .iter()
+                        .find(|o| parse_type_index(o.get("type_index")) == id)
+                    {
+                        if let (Some(m), Value::Object(obj)) =
+                            (prev.get("detection_methods"), &mut *it)
+                        {
                             obj.insert("detection_methods".into(), m.clone());
                         }
                     }
@@ -976,7 +1201,9 @@ fn set_path(tree: &mut Value, path: &str, value: Value) {
             m.insert(k.to_string(), value);
             return;
         }
-        cur = m.entry(k.to_string()).or_insert_with(|| Value::Object(Map::new()));
+        cur = m
+            .entry(k.to_string())
+            .or_insert_with(|| Value::Object(Map::new()));
     }
 }
 
@@ -990,24 +1217,55 @@ mod tests {
 
     #[test]
     fn later_configs_win_per_key_and_lists_replace_whole() {
-        let a = cfg("a", r#"{"scanner":{"issues_reported":{"scan_type_passive":true,"scan_type_light_active":true,"selected_issues":[{"type_index":"0x00100200","enabled":true}]}}}"#);
-        let b = cfg("b", r#"{"scanner":{"issues_reported":{"scan_type_light_active":false,"selected_issues":[]}},"crawler":{"crawl_limits":{"maximum_crawl_time":10}}}"#);
+        let a = cfg(
+            "a",
+            r#"{"scanner":{"issues_reported":{"scan_type_passive":true,"scan_type_light_active":true,"selected_issues":[{"type_index":"0x00100200","enabled":true}]}}}"#,
+        );
+        let b = cfg(
+            "b",
+            r#"{"scanner":{"issues_reported":{"scan_type_light_active":false,"selected_issues":[]}},"crawler":{"crawl_limits":{"maximum_crawl_time":10}}}"#,
+        );
         let both = combine(None, &[&a, &b]);
-        assert_eq!(get_path(&both, "scanner.issues_reported.scan_type_passive"), Some(&Value::Bool(true)));
-        assert_eq!(get_path(&both, "scanner.issues_reported.scan_type_light_active"), Some(&Value::Bool(false)));
-        assert_eq!(get_path(&both, "scanner.issues_reported.selected_issues"), Some(&Value::Array(vec![])));
+        assert_eq!(
+            get_path(&both, "scanner.issues_reported.scan_type_passive"),
+            Some(&Value::Bool(true))
+        );
+        assert_eq!(
+            get_path(&both, "scanner.issues_reported.scan_type_light_active"),
+            Some(&Value::Bool(false))
+        );
+        assert_eq!(
+            get_path(&both, "scanner.issues_reported.selected_issues"),
+            Some(&Value::Array(vec![]))
+        );
         let reversed = combine(None, &[&b, &a]);
-        assert_eq!(get_path(&reversed, "scanner.issues_reported.scan_type_light_active"), Some(&Value::Bool(true)));
+        assert_eq!(
+            get_path(&reversed, "scanner.issues_reported.scan_type_light_active"),
+            Some(&Value::Bool(true))
+        );
     }
 
     #[test]
     fn malformed_configs_are_rejected_and_unknown_keys_kept() {
         assert!(parse_config("x", b"[1]", false).is_err());
         assert!(parse_config("x", b"{", false).is_err());
-        assert!(parse_config("x", br#"{"scanner":{"issues_reported":{"scan_type_passive":"yes"}}}"#, false).is_err());
-        assert!(parse_config("x", br#"{"scanner":{"issues_reported":{"selected_issues":[{"enabled":true}]}}}"#, false).is_err());
+        assert!(parse_config(
+            "x",
+            br#"{"scanner":{"issues_reported":{"scan_type_passive":"yes"}}}"#,
+            false
+        )
+        .is_err());
+        assert!(parse_config(
+            "x",
+            br#"{"scanner":{"issues_reported":{"selected_issues":[{"enabled":true}]}}}"#,
+            false
+        )
+        .is_err());
         assert!(parse_config("x", &vec![b' '; MAX_CONFIG_BYTES + 1], false).is_err());
-        let c = cfg("x", r#"{"scanner":{"future_section":{"k":1}},"other":true}"#);
+        let c = cfg(
+            "x",
+            r#"{"scanner":{"future_section":{"k":1}},"other":true}"#,
+        );
         let back: Value = serde_json::from_str(&c.to_burp_json()).unwrap();
         assert_eq!(back, c.tree);
     }
@@ -1016,7 +1274,10 @@ mod tests {
     /// all 29 built-ins parse from the jar, and from an extracted tree.
     #[test]
     fn builtins_load_from_the_local_burp_install() {
-        for src in [BurpResources::Jar("/opt/BurpSuite/burpsuite.jar".into()), BurpResources::Dir("/root/burp-re/in/extract/resources/BuiltInConfigs".into())] {
+        for src in [
+            BurpResources::Jar("/opt/BurpSuite/burpsuite.jar".into()),
+            BurpResources::Dir("/root/burp-re/in/extract/resources/BuiltInConfigs".into()),
+        ] {
             let present = match &src {
                 BurpResources::Jar(p) | BurpResources::Dir(p) => p.exists(),
             };
@@ -1026,36 +1287,68 @@ mod tests {
             let rep = load_builtin(&src).unwrap();
             assert!(rep.errors.is_empty(), "{:?}", rep.errors);
             assert_eq!(rep.configs.len(), 29, "{src:?}");
-            assert!(rep.configs.iter().any(|c| c.name == "Audit checks - passive"));
-            assert!(load_burp_defaults(&src).is_some_and(|d| get_path(&d, "crawler.crawl_limits.maximum_crawl_time").is_some()));
+            assert!(rep
+                .configs
+                .iter()
+                .any(|c| c.name == "Audit checks - passive"));
+            assert!(load_burp_defaults(&src).is_some_and(|d| get_path(
+                &d,
+                "crawler.crawl_limits.maximum_crawl_time"
+            )
+            .is_some()));
         }
     }
 
     #[test]
     fn passive_only_allows_passive_types_only() {
-        let c = cfg("p", r#"{"scanner":{"issues_reported":{"scan_type_intrusive_active":false,"scan_type_light_active":false,"scan_type_medium_active":false,"scan_type_passive":true,"scan_type_javascript_analysis":false,"select_individual_issues":false,"selected_issues":[]}}}"#);
+        let c = cfg(
+            "p",
+            r#"{"scanner":{"issues_reported":{"scan_type_intrusive_active":false,"scan_type_light_active":false,"scan_type_medium_active":false,"scan_type_passive":true,"scan_type_javascript_analysis":false,"select_individual_issues":false,"selected_issues":[]}}}"#,
+        );
         let f = IssueFilter::from_tree(&combine(None, &[&c])).unwrap();
         assert!(!f.allows("SQL injection", true));
         assert!(!f.allows("Web cache poisoning", true));
         assert!(f.allows("Strict transport security not enforced", false));
         assert!(!f.allows("Some WebProbe-only probe", true));
-        assert_eq!(IssueFilter::from_tree(&combine(None, &[])), None, "defaults allow everything");
+        assert_eq!(
+            IssueFilter::from_tree(&combine(None, &[])),
+            None,
+            "defaults allow everything"
+        );
     }
 
     #[test]
     fn applying_overlays_onto_current_settings_and_lists_the_rest() {
         let mut cur = crate::scan_config::ScanConfig::default();
         cur.disabled_checks.insert("active.csrf".into());
-        let crawl10 = cfg("Crawl limit - 10 minutes", r#"{"crawler":{"crawl_limits":{"maximum_crawl_time":10,"maximum_request_count":0,"maximum_unique_locations":1500}}}"#);
-        let fast = cfg("f", r#"{"scanner":{"audit_optimization":{"scan_speed":"fast","skip_ineffective_checks":true},"insertion_point_types":{"insert_http_headers":false}},"crawler":{"crawl_optimization":{"crawl_strategy":"fastest"}}}"#);
+        let crawl10 = cfg(
+            "Crawl limit - 10 minutes",
+            r#"{"crawler":{"crawl_limits":{"maximum_crawl_time":10,"maximum_request_count":0,"maximum_unique_locations":1500}}}"#,
+        );
+        let fast = cfg(
+            "f",
+            r#"{"scanner":{"audit_optimization":{"scan_speed":"fast","skip_ineffective_checks":true},"insertion_point_types":{"insert_http_headers":false}},"crawler":{"crawl_optimization":{"crawl_strategy":"fastest"}}}"#,
+        );
         let a = apply(&[&crawl10, &fast], &cur, 1, 1);
-        assert_eq!((a.config.crawl.max_minutes, a.speed, a.accuracy), (10, 0, 1));
+        assert_eq!(
+            (a.config.crawl.max_minutes, a.speed, a.accuracy),
+            (10, 0, 1)
+        );
         assert!(!a.config.insertion_enabled("header") && a.config.insertion_enabled("url"));
-        assert!(!a.config.check_enabled("active.csrf"), "WebProbe-only settings survive");
+        assert!(
+            !a.config.check_enabled("active.csrf"),
+            "WebProbe-only settings survive"
+        );
         assert_eq!(a.config.issues, None);
         let na = not_applied(&[&crawl10, &fast]);
-        assert!(na.iter().any(|l| l.starts_with("crawler.crawl_optimization.crawl_strategy")), "{na:?}");
-        assert!(na.iter().any(|l| l.starts_with("scanner.audit_optimization.skip_ineffective_checks")));
+        assert!(
+            na.iter()
+                .any(|l| l.starts_with("crawler.crawl_optimization.crawl_strategy")),
+            "{na:?}"
+        );
+        assert!(na
+            .iter()
+            .any(|l| l.starts_with("scanner.audit_optimization.skip_ineffective_checks")));
         assert!(!na.iter().any(|l| l.contains("maximum_crawl_time")));
         // Round trip: the current settings as a tree decode to themselves.
         let back = tree_to_config(&config_to_tree(&a.config, a.speed, a.accuracy), &a.config);
@@ -1064,7 +1357,10 @@ mod tests {
 
     #[test]
     fn saving_edits_keeps_entries_partial_and_unknown_keys() {
-        let entry = cfg("Crawl limit - 10 minutes", r#"{"description":{"uuid":"x"},"crawler":{"crawl_limits":{"maximum_crawl_time":10},"future":1}}"#);
+        let entry = cfg(
+            "Crawl limit - 10 minutes",
+            r#"{"description":{"uuid":"x"},"crawler":{"crawl_limits":{"maximum_crawl_time":10},"future":1}}"#,
+        );
         let cur = crate::scan_config::ScanConfig::default();
         let start_cfg = apply(&[&entry], &cur, 1, 1);
         let start = config_to_tree(&start_cfg.config, 1, 1);
@@ -1072,9 +1368,19 @@ mod tests {
         edited_cfg.crawl.max_minutes = 20;
         edited_cfg.disabled_insertion.insert("header".into());
         let out = with_settings(&entry.tree, &config_to_tree(&edited_cfg, 1, 1), &start);
-        assert_eq!(get_path(&out, "crawler.crawl_limits.maximum_crawl_time"), Some(&Value::from(20)));
-        assert_eq!(get_path(&out, "scanner.insertion_point_types.insert_http_headers"), Some(&Value::Bool(false)));
-        assert_eq!(get_path(&out, "scanner.audit_optimization.scan_speed"), None, "unchanged settings stay out");
+        assert_eq!(
+            get_path(&out, "crawler.crawl_limits.maximum_crawl_time"),
+            Some(&Value::from(20))
+        );
+        assert_eq!(
+            get_path(&out, "scanner.insertion_point_types.insert_http_headers"),
+            Some(&Value::Bool(false))
+        );
+        assert_eq!(
+            get_path(&out, "scanner.audit_optimization.scan_speed"),
+            None,
+            "unchanged settings stay out"
+        );
         assert_eq!(get_path(&out, "crawler.future"), Some(&Value::from(1)));
         assert_eq!(get_path(&out, "description.uuid"), Some(&Value::from("x")));
         assert_eq!(file_name_for("a/b:c"), "a_b_c.json");

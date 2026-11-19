@@ -1,7 +1,6 @@
 // Split from scan.rs (L5, issue #35). Bodies unchanged; visibility promoted
 // to pub(crate) where siblings across the split need access.
 
-
 /// burp.Zsv7: audit speed. A payload is used when configured >= payload tier
 /// (Zsv7.Zi). Set in Settings > Scanner > Audit speed (`Shared::scan_speed`).
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
@@ -31,7 +30,13 @@ pub const TRAV_FILENAMES: [&str; 3] = ["win.ini", "passwd", "shadow"];
 /// burp.Zw_c.ZE: per-OS file-content markers. Burp stores them upper-cased
 /// in byte tries, i.e. the match is ASCII case-insensitive.
 pub const FILE_MARKERS: [&[&str]; 2] = [
-    &["; FOR 16-BIT APP SUPPORT", "[FONTS]", "[EXTENSIONS]", "[MCI EXTENSIONS]", "[FILES]"],
+    &[
+        "; FOR 16-BIT APP SUPPORT",
+        "[FONTS]",
+        "[EXTENSIONS]",
+        "[MCI EXTENSIONS]",
+        "[FILES]",
+    ],
     &["ROOT:", "BIN:", "NOBODY:"],
 ];
 
@@ -46,7 +51,12 @@ pub struct TravPayload {
 }
 
 pub const fn tp(os: u8, placement: u8, speed: ScanSpeed, text: &'static str) -> TravPayload {
-    TravPayload { os, placement, speed, text }
+    TravPayload {
+        os,
+        placement,
+        speed,
+        text,
+    }
 }
 
 /// burp.Zscp.ZL, in Burp's order.
@@ -91,7 +101,8 @@ pub fn traversal_speed(configured: ScanSpeed, value: &str) -> ScanSpeed {
     if configured == ScanSpeed::Thorough || value.is_empty() {
         return ScanSpeed::Thorough;
     }
-    let re = PATHLIKE.get_or_init(|| regex::Regex::new(r"^([ -.0-\[\]-~]*[\\/.][ -.0-\[\]-~]+)+$").unwrap());
+    let re = PATHLIKE
+        .get_or_init(|| regex::Regex::new(r"^([ -.0-\[\]-~]*[\\/.][ -.0-\[\]-~]+)+$").unwrap());
     if re.is_match(value) {
         ScanSpeed::Thorough
     } else {
@@ -118,7 +129,10 @@ pub fn traversal_candidates(value: &str, os: u8, speed: ScanSpeed) -> Vec<String
 /// are disabled, so a page that always says "[FILES]" never reports.
 pub fn file_marker_baseline(baseline: &str, os: u8) -> Vec<bool> {
     let up = baseline.to_ascii_uppercase();
-    FILE_MARKERS[os as usize].iter().map(|m| up.contains(m)).collect()
+    FILE_MARKERS[os as usize]
+        .iter()
+        .map(|m| up.contains(m))
+        .collect()
 }
 
 /// burp.Zw_c.ZN: the enabled markers for `os` found in `body`.
@@ -188,15 +202,29 @@ pub fn run_traversal_check<F: FnMut(&str) -> Option<String>>(
     };
     for os in [OS_WINDOWS, OS_UNIX] {
         for cand in traversal_candidates(value, os, speed) {
-            let Some(markers) = probe(&cand, os, &mut send) else { continue };
+            let Some(markers) = probe(&cand, os, &mut send) else {
+                continue;
+            };
             if os == OS_UNIX {
                 let shadow = cand.replace("passwd", "shadow");
                 if let Some(m2) = probe(&shadow, OS_UNIX, &mut send) {
-                    return Some(FileReadHit { payload: shadow, file: "/etc/shadow", markers: m2 });
+                    return Some(FileReadHit {
+                        payload: shadow,
+                        file: "/etc/shadow",
+                        markers: m2,
+                    });
                 }
             }
-            let file = if os == OS_WINDOWS { "win.ini" } else { "/etc/passwd" };
-            return Some(FileReadHit { payload: cand, file, markers });
+            let file = if os == OS_WINDOWS {
+                "win.ini"
+            } else {
+                "/etc/passwd"
+            };
+            return Some(FileReadHit {
+                payload: cand,
+                file,
+                markers,
+            });
         }
     }
     None

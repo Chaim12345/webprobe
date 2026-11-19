@@ -1,7 +1,6 @@
 // Split from net.rs (L5, issue #35). Bodies unchanged; visibility promoted
 // to pub where siblings across the split need access.
 
-
 /// Target scope entry. Include=false excludes a matching location.
 #[derive(Clone)]
 pub struct ScopeRule {
@@ -13,7 +12,12 @@ pub struct ScopeRule {
 
 impl ScopeRule {
     pub fn include(pattern: impl Into<String>, is_regex: bool) -> Self {
-        Self { enabled: true, include: true, pattern: pattern.into(), is_regex }
+        Self {
+            enabled: true,
+            include: true,
+            pattern: pattern.into(),
+            is_regex,
+        }
     }
 }
 
@@ -40,7 +44,8 @@ pub struct SessionRule {
 
 /// Burp's default tool scope for a new session rule: everything except the
 /// Proxy (which Burp marks "use with caution").
-pub const SESSION_DEFAULT_TOOLS: [&str; 5] = ["Target", "Scanner", "Repeater", "Intruder", "Sequencer"];
+pub const SESSION_DEFAULT_TOOLS: [&str; 5] =
+    ["Target", "Scanner", "Repeater", "Intruder", "Sequencer"];
 
 impl SessionRule {
     pub fn new() -> Self {
@@ -50,7 +55,10 @@ impl SessionRule {
             action: "set header".into(),
             host_match: String::new(),
             value: String::new(),
-            tools: SESSION_DEFAULT_TOOLS.iter().map(|t| t.to_string()).collect(),
+            tools: SESSION_DEFAULT_TOOLS
+                .iter()
+                .map(|t| t.to_string())
+                .collect(),
             check: String::new(),
             check_invalid_on_match: true,
         }

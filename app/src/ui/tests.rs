@@ -12,7 +12,10 @@ mod repeater_fix_tests {
     #[test]
     fn links_in_response_walks_every_link() {
         let body = "<a href=\"http://a\"> x <a href=\"http://b\"> é <img src=\"https://c/ü\"> <a href=\"/rel\">";
-        let e = net::HistEntry { resp_raw: Some(format!("HTTP/1.1 200 OK\r\n\r\n{body}").into()), ..Default::default() };
+        let e = net::HistEntry {
+            resp_raw: Some(format!("HTTP/1.1 200 OK\r\n\r\n{body}").into()),
+            ..Default::default()
+        };
         assert_eq!(links_in_response(&e), "http://a\nhttp://b\nhttps://c/ü");
     }
 
@@ -24,10 +27,17 @@ mod repeater_fix_tests {
         let tab = sh.repeaters.lock().unwrap()[0].id;
         let gen = sh.rep.begin(tab);
         cancel_repeater_send(&sh);
-        assert_eq!(sh.repeaters.lock().unwrap()[0].result_line, "Request cancelled", "shown in the tab's status line");
+        assert_eq!(
+            sh.repeaters.lock().unwrap()[0].result_line,
+            "Request cancelled",
+            "shown in the tab's status line"
+        );
         assert!(!sh.rep.is_busy());
         assert_eq!(sh.rep.result(), "Request cancelled");
-        assert!(!sh.rep.is_current(gen), "the worker sees a stale generation");
+        assert!(
+            !sh.rep.is_current(gen),
+            "the worker sees a stale generation"
+        );
         // Cancel with nothing in flight changes nothing.
         cancel_repeater_send(&sh);
         assert_eq!(sh.rep.result(), "Request cancelled");
@@ -80,26 +90,52 @@ mod suite {
 
     #[test]
     fn history_view_keeps_every_match_and_new_rows_go_on_top() {
-        let history: Vec<_> = (1..=1500u64).map(|id| entry(id, if id == 1 { "old.example" } else { "other.example" })).collect();
+        let history: Vec<_> = (1..=1500u64)
+            .map(|id| {
+                entry(
+                    id,
+                    if id == 1 {
+                        "old.example"
+                    } else {
+                        "other.example"
+                    },
+                )
+            })
+            .collect();
         // The only match is the oldest entry.
-        let (rows, truncated) = history_view(&history, |e| e.host.contains("old.example"), &TableState::new());
+        let (rows, truncated) = history_view(
+            &history,
+            |e| e.host.contains("old.example"),
+            &TableState::new(),
+        );
         assert_eq!(rows.iter().map(|row| row.id).collect::<Vec<_>>(), [1]);
         assert!(!truncated);
         // No cap: all 1500 rows, newest first.
         let (rows, truncated) = history_view(&history, |_| true, &TableState::new());
         assert_eq!(rows.len(), 1500);
         assert!(!truncated);
-        assert_eq!((rows.first().unwrap().id, rows.last().unwrap().id), (1500, 1));
+        assert_eq!(
+            (rows.first().unwrap().id, rows.last().unwrap().id),
+            (1500, 1)
+        );
         // Appended rows, filtered and newest first, are what an incremental
         // update puts on top: the result equals a full rebuild.
         let mut grown = history.clone();
-        grown.extend((1501..=1505u64).map(|id| entry(id, if id % 2 == 0 { "old.example" } else { "x" })));
+        grown.extend(
+            (1501..=1505u64).map(|id| entry(id, if id % 2 == 0 { "old.example" } else { "x" })),
+        );
         let keep = |e: &crate::net::HistEntry| e.host.contains("old.example");
         let mut incremental = history_new_rows(&grown, history.len(), keep);
         incremental.extend(history_view(&history, keep, &TableState::new()).0);
         let full = history_view(&grown, keep, &TableState::new()).0;
-        assert_eq!(incremental.iter().map(|r| r.id).collect::<Vec<_>>(), full.iter().map(|r| r.id).collect::<Vec<_>>());
-        assert_eq!(full.iter().map(|r| r.id).collect::<Vec<_>>(), [1504, 1502, 1]);
+        assert_eq!(
+            incremental.iter().map(|r| r.id).collect::<Vec<_>>(),
+            full.iter().map(|r| r.id).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            full.iter().map(|r| r.id).collect::<Vec<_>>(),
+            [1504, 1502, 1]
+        );
         assert!(history_new_rows(&history, 9999, keep).is_empty());
     }
 
@@ -123,16 +159,25 @@ mod suite {
             host: "h".into(),
             port: 80,
             path: "/change".into(),
-            req_raw: b"POST /change HTTP/1.1\r\nHost: h\r\n\r\nemail=a%40b.c&x=1".to_vec().into(),
+            req_raw: b"POST /change HTTP/1.1\r\nHost: h\r\n\r\nemail=a%40b.c&x=1"
+                .to_vec()
+                .into(),
             ..Default::default()
         };
         let html = crate::ui::csrf_poc_html(&e);
-        assert!(html.contains("action=\"http://h/change\"") && html.contains("name=\"email\" value=\"a@b.c\""), "{html}");
+        assert!(
+            html.contains("action=\"http://h/change\"")
+                && html.contains("name=\"email\" value=\"a@b.c\""),
+            "{html}"
+        );
     }
 
     #[test]
     fn add_marker_wraps_the_selection() {
-        assert_eq!(crate::ui::add_marker("q=apple", (2, 7)), "q=\u{00A7}apple\u{00A7}");
+        assert_eq!(
+            crate::ui::add_marker("q=apple", (2, 7)),
+            "q=\u{00A7}apple\u{00A7}"
+        );
         assert_eq!(crate::ui::add_marker("ab", (1, 1)), "a\u{00A7}\u{00A7}b");
     }
 
@@ -144,7 +189,9 @@ mod suite {
 
     #[test]
     fn repeater_updates_content_length() {
-        let r = crate::ui::update_content_length("POST / HTTP/1.1\r\nHost: a\r\nContent-Length: 1\r\n\r\nabcd");
+        let r = crate::ui::update_content_length(
+            "POST / HTTP/1.1\r\nHost: a\r\nContent-Length: 1\r\n\r\nabcd",
+        );
         assert!(r.contains("Content-Length: 4\r\n"), "{r}");
         let g = crate::ui::update_content_length("GET / HTTP/1.1\r\nHost: a\r\n\r\n");
         assert!(!g.contains("Content-Length"));

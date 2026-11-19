@@ -1,4 +1,3 @@
-
 use super::*;
 
 // ---------------------------------------------------------------- request checks
@@ -49,15 +48,28 @@ impl RequestCheck for Cors {
         let (_, own) = origin_of(cx);
         let req = &cx.req;
         let mut issues = Vec::new();
-        let found = bc::run_cors_check(req.as_bytes(), &cx.baseline.raw, cx.entry.https, own, &mut bc::ThreadRand, |origin| {
-            let probe = net::replace_or_add_header(req.as_bytes(), "Origin", origin);
-            let resp = burp_send(cx, &probe)?;
-            Some((probe, resp))
-        });
+        let found = bc::run_cors_check(
+            req.as_bytes(),
+            &cx.baseline.raw,
+            cx.entry.https,
+            own,
+            &mut bc::ThreadRand,
+            |origin| {
+                let probe = net::replace_or_add_header(req.as_bytes(), "Origin", origin);
+                let resp = burp_send(cx, &probe)?;
+                Some((probe, resp))
+            },
+        );
         for f in &found {
-            let mut i = mk(f.kind.severity(f.flags), f.kind.kb_name(), &cx.entry, bc::cors_detail(f));
+            let mut i = mk(
+                f.kind.severity(f.flags),
+                f.kind.kb_name(),
+                &cx.entry,
+                bc::cors_detail(f),
+            );
             i.confidence = "Certain".into();
-            issues.push(i.with_evidence(vec![ScanEvidence::new(&f.request, Some(&f.response[..]))]));
+            issues
+                .push(i.with_evidence(vec![ScanEvidence::new(&f.request, Some(&f.response[..]))]));
         }
         cx.report(issues);
     }
@@ -82,9 +94,17 @@ impl RequestCheck for PathRelativeStyleSheet {
     }
     fn run(&self, cx: &ScanCtx) {
         if let Some((flags, hrefs)) = crate::burp_checks::prssi(&cx.baseline.raw) {
-            let mut i = mk("info", "Path-relative style sheet import", &cx.entry, crate::burp_checks::prssi_detail(flags, &hrefs));
+            let mut i = mk(
+                "info",
+                "Path-relative style sheet import",
+                &cx.entry,
+                crate::burp_checks::prssi_detail(flags, &hrefs),
+            );
             i.confidence = "Tentative".into();
-            cx.report(vec![i.with_evidence(vec![ScanEvidence::new(cx.req.as_bytes(), cx.baseline.resp.as_deref())])]);
+            cx.report(vec![i.with_evidence(vec![ScanEvidence::new(
+                cx.req.as_bytes(),
+                cx.baseline.resp.as_deref(),
+            )])]);
         }
     }
 }
@@ -113,7 +133,9 @@ impl RequestCheck for TraceEnabled {
             let token: String = {
                 use rand::Rng;
                 let mut g = rand::thread_rng();
-                (0..10).map(|_| (b'a' + g.gen_range(0..26)) as char).collect()
+                (0..10)
+                    .map(|_| (b'a' + g.gen_range(0..26)) as char)
+                    .collect()
             };
             let probe = bc::trace_probe(cx.req.as_bytes(), &token);
             if let Some(resp) = burp_send(cx, &probe) {
@@ -127,7 +149,9 @@ impl RequestCheck for TraceEnabled {
                         format!("The TRACE method is enabled on this server: the request's Cookie value {token} was echoed back in the response."),
                     );
                     i.confidence = "Certain".into();
-                    cx.report(vec![i.with_evidence(vec![ScanEvidence::new(&probe, Some(&resp[..]))])]);
+                    cx.report(vec![
+                        i.with_evidence(vec![ScanEvidence::new(&probe, Some(&resp[..]))])
+                    ]);
                 }
             }
         }
@@ -157,7 +181,8 @@ impl RequestCheck for OpenApiDefinition {
         let thorough = cx.settings.speed >= ScanSpeed::Thorough;
         let key = format!("{scheme}://{}:{}|{}", cx.host, cx.port, thorough);
         if openapi_hosts().lock().unwrap().insert(key) {
-            let host_hdr = util::get_header(&util::parse_http(cx.req.as_bytes()).headers, "Host").unwrap_or_else(|| cx.host.to_string());
+            let host_hdr = util::get_header(&util::parse_http(cx.req.as_bytes()).headers, "Host")
+                .unwrap_or_else(|| cx.host.to_string());
             let mut found = Vec::new();
             for path in bc::openapi_paths(thorough) {
                 if cx.stopped() {
@@ -165,7 +190,11 @@ impl RequestCheck for OpenApiDefinition {
                 }
                 let probe = format!("GET {path} HTTP/1.1\r\nHost: {host_hdr}\r\nAccept: */*\r\nConnection: close\r\n\r\n");
                 if let Some(resp) = burp_send(cx, probe.as_bytes()) {
-                    let hit = if path == bc::SWAGGER_UI_INIT { bc::openapi_in_swagger_init(&resp) } else { bc::openapi_in_response(&resp) };
+                    let hit = if path == bc::SWAGGER_UI_INIT {
+                        bc::openapi_in_swagger_init(&resp)
+                    } else {
+                        bc::openapi_in_response(&resp)
+                    };
                     if hit {
                         found.push((path, ScanEvidence::new(probe.as_bytes(), Some(&resp[..]))));
                     }
@@ -193,7 +222,8 @@ impl RequestCheck for OpenApiDefinition {
 }
 
 pub fn server_host_hdr(cx: &ScanCtx) -> String {
-    util::get_header(&cx.parts.headers, "Host").unwrap_or_else(|| format!("{}:{}", cx.host, cx.port))
+    util::get_header(&cx.parts.headers, "Host")
+        .unwrap_or_else(|| format!("{}:{}", cx.host, cx.port))
 }
 
 /// TRACE echoing the request back (cross-site tracing), per request.
@@ -271,7 +301,10 @@ impl RequestCheck for ServerOptions {
                     &cx.entry,
                     format!("Allow advertises risky methods: {}.", risky.join(", ")),
                 )
-                .with_evidence(vec![ScanEvidence::new(options_req.as_bytes(), Some(&resp[..]))])]);
+                .with_evidence(vec![ScanEvidence::new(
+                    options_req.as_bytes(),
+                    Some(&resp[..]),
+                )])]);
             }
         }
         cx.progress();
@@ -344,21 +377,28 @@ impl RequestCheck for XxeFileRead {
     fn run(&self, cx: &ScanCtx) {
         let req_ct = request_ct(cx);
         let req_body = request_body(cx);
-        let is_xml = req_ct.to_ascii_lowercase().contains("xml") || req_body.trim_start().starts_with("<?xml");
+        let is_xml = req_ct.to_ascii_lowercase().contains("xml")
+            || req_body.trim_start().starts_with("<?xml");
         if !is_xml || cx.stopped() {
             return;
         }
         use rand::Rng;
         let entity: String = {
             let mut rng = rand::thread_rng();
-            format!("xxe{}", (0..5).map(|_| rng.gen_range(b'a'..=b'z') as char).collect::<String>())
+            format!(
+                "xxe{}",
+                (0..5)
+                    .map(|_| rng.gen_range(b'a'..=b'z') as char)
+                    .collect::<String>()
+            )
         };
         let rec = Recorder::default();
         let send = |body: &str| -> Option<String> {
             let mut xxe_req = cx.req.as_bytes().to_vec();
             xxe_req.truncate(cx.parts.head_len.min(cx.req.len()));
             xxe_req.extend_from_slice(body.as_bytes());
-            let xxe_req = net::replace_or_add_header(&xxe_req, "Content-Length", &body.len().to_string());
+            let xxe_req =
+                net::replace_or_add_header(&xxe_req, "Content-Length", &body.len().to_string());
             let resp = rec.send(cx, body, &xxe_req)?;
             let rp = util::parse_http(&resp);
             Some(String::from_utf8_lossy(&resp[rp.head_len.min(resp.len())..]).into_owned())
@@ -406,7 +446,9 @@ impl RequestCheck for CsrfTokenNotEnforced {
         let req_ct = request_ct(cx);
         let req_body = request_body(cx);
         if !(csrf_applicable(&parts.method, &req_ct, &parts.headers)
-            && req_ct.to_ascii_lowercase().contains("x-www-form-urlencoded")
+            && req_ct
+                .to_ascii_lowercase()
+                .contains("x-www-form-urlencoded")
             && !req_body.trim().is_empty()
             && !cx.stopped())
         {
@@ -424,7 +466,11 @@ impl RequestCheck for CsrfTokenNotEnforced {
             csrf_req.extend_from_slice(stripped.as_bytes());
             // The body length changed, so the header must be restamped
             // or the server reads a truncated/oversized body.
-            let csrf_req = net::replace_or_add_header(&csrf_req, "Content-Length", &stripped.len().to_string());
+            let csrf_req = net::replace_or_add_header(
+                &csrf_req,
+                "Content-Length",
+                &stripped.len().to_string(),
+            );
             if let Some(resp) = &cx.send(&csrf_req) {
                 let rp = util::parse_http(resp);
                 let probe_status = rp.first.split_whitespace().nth(1).unwrap_or("").to_string();
@@ -458,7 +504,11 @@ impl RequestCheck for CsrfTokenNotEnforced {
             if !blanked_names.is_empty() {
                 let mut csrf_req = req.as_bytes()[..parts.head_len.min(req.len())].to_vec();
                 csrf_req.extend_from_slice(blanked.as_bytes());
-                let csrf_req = net::replace_or_add_header(&csrf_req, "Content-Length", &blanked.len().to_string());
+                let csrf_req = net::replace_or_add_header(
+                    &csrf_req,
+                    "Content-Length",
+                    &blanked.len().to_string(),
+                );
                 if let Some(resp) = &cx.send(&csrf_req) {
                     let rp = util::parse_http(resp);
                     let probe_status = rp.first.split_whitespace().nth(1).unwrap_or("").to_string();
@@ -491,7 +541,9 @@ impl RequestCheck for CsrfTokenNotEnforced {
         // page with no Cookie header and compare the freshly rendered
         // token values against the ones the original request sent.
         if !csrf_reported && !cx.stopped() {
-            if let Some(static_hit) = csrf_static_token_hit(&|raw: &[u8]| cx.send(raw), &cx.host, parts, &req_body_str) {
+            if let Some(static_hit) =
+                csrf_static_token_hit(&|raw: &[u8]| cx.send(raw), &cx.host, parts, &req_body_str)
+            {
                 cx.report(vec![mk_burp(
                     "Cross-site request forgery",
                     "medium",

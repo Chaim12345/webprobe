@@ -44,10 +44,19 @@ const MAX_BODY: usize = 256 * 1024 * 1024;
 /// (the CVE-2024-27316 class).
 const MAX_HEADER_BLOCK: usize = 256 * 1024;
 
-pub(crate) fn write_frame<W: Write>(w: &mut W, ty: u8, flags: u8, stream: u32, payload: &[u8]) -> std::io::Result<()> {
+pub(crate) fn write_frame<W: Write>(
+    w: &mut W,
+    ty: u8,
+    flags: u8,
+    stream: u32,
+    payload: &[u8],
+) -> std::io::Result<()> {
     let len = payload.len();
     if len > MAX_FRAME {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "frame too large"));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "frame too large",
+        ));
     }
     let mut head = [0u8; 9];
     head[0] = (len >> 16) as u8;
@@ -79,13 +88,23 @@ pub(crate) fn parse_frame(buf: &[u8], max: usize) -> Result<Option<(Frame, usize
     }
     let len = ((buf[0] as usize) << 16) | ((buf[1] as usize) << 8) | buf[2] as usize;
     if len > max {
-        return Err(format!("h2: frame of {len} bytes exceeds SETTINGS_MAX_FRAME_SIZE {max}"));
+        return Err(format!(
+            "h2: frame of {len} bytes exceeds SETTINGS_MAX_FRAME_SIZE {max}"
+        ));
     }
     if buf.len() < 9 + len {
         return Ok(None);
     }
     let stream = u32::from_be_bytes([buf[5], buf[6], buf[7], buf[8]]) & 0x7fff_ffff;
-    Ok(Some((Frame { ty: buf[3], flags: buf[4], stream, payload: buf[9..9 + len].to_vec() }, 9 + len)))
+    Ok(Some((
+        Frame {
+            ty: buf[3],
+            flags: buf[4],
+            stream,
+            payload: buf[9..9 + len].to_vec(),
+        },
+        9 + len,
+    )))
 }
 
 fn read_frame<R: Read>(r: &mut R) -> std::io::Result<Frame> {
@@ -95,7 +114,10 @@ fn read_frame<R: Read>(r: &mut R) -> std::io::Result<Frame> {
     // We never advertise SETTINGS_MAX_FRAME_SIZE, so the peer may send at
     // most the default 16 KiB (RFC 9113 §4.2: larger is FRAME_SIZE_ERROR).
     if len > DEFAULT_MAX_FRAME {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "frame larger than SETTINGS_MAX_FRAME_SIZE"));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "frame larger than SETTINGS_MAX_FRAME_SIZE",
+        ));
     }
     let mut payload = vec![0u8; len];
     r.read_exact(&mut payload)?;
@@ -112,7 +134,9 @@ fn read_frame<R: Read>(r: &mut R) -> std::io::Result<Frame> {
 pub(crate) fn header_fragment(flags: u8, payload: &[u8]) -> Result<&[u8], String> {
     let mut p = payload;
     if flags & FLAG_PADDED != 0 {
-        let (&pad, rest) = p.split_first().ok_or("h2: padded HEADERS without pad length")?;
+        let (&pad, rest) = p
+            .split_first()
+            .ok_or("h2: padded HEADERS without pad length")?;
         let pad = pad as usize;
         if pad > rest.len() {
             return Err("h2: HEADERS padding exceeds frame".into());
@@ -133,7 +157,9 @@ pub(crate) fn data_payload(flags: u8, payload: &[u8]) -> Result<&[u8], String> {
     if flags & FLAG_PADDED == 0 {
         return Ok(payload);
     }
-    let (&pad, rest) = payload.split_first().ok_or("h2: padded DATA without pad length")?;
+    let (&pad, rest) = payload
+        .split_first()
+        .ok_or("h2: padded DATA without pad length")?;
     let pad = pad as usize;
     if pad > rest.len() {
         return Err("h2: DATA padding exceeds frame".into());
@@ -159,14 +185,22 @@ pub struct H2Request {
 pub(crate) fn is_connection_header(name: &str) -> bool {
     matches!(
         name,
-        "connection" | "proxy-connection" | "keep-alive" | "transfer-encoding" | "upgrade" | "http2-settings"
+        "connection"
+            | "proxy-connection"
+            | "keep-alive"
+            | "transfer-encoding"
+            | "upgrade"
+            | "http2-settings"
     ) || name.starts_with("proxy-")
 }
 
 fn send_preface<S: Read + Write>(stream: &mut S) -> Result<(), String> {
-    stream.write_all(PREFACE).map_err(|e| format!("h2 preface: {e}"))?;
+    stream
+        .write_all(PREFACE)
+        .map_err(|e| format!("h2 preface: {e}"))?;
     // Our SETTINGS: ENABLE_PUSH=0 (id 0x2), INITIAL_WINDOW_SIZE default.
-    write_frame(stream, FRAME_SETTINGS, 0, 0, &[0, 2, 0, 0, 0, 0]).map_err(|e| format!("h2 settings: {e}"))
+    write_frame(stream, FRAME_SETTINGS, 0, 0, &[0, 2, 0, 0, 0, 0])
+        .map_err(|e| format!("h2 settings: {e}"))
 }
 
 /// Encode the request header list. HTTP/2 requires lowercase field names and
@@ -182,7 +216,11 @@ fn encode_headers(req: &H2Request) -> Vec<u8> {
     ];
     for (k, v) in &req.headers {
         let lower = k.to_ascii_lowercase();
-        if lower.is_empty() || lower == "host" || lower == "content-length" || is_connection_header(&lower) {
+        if lower.is_empty()
+            || lower == "host"
+            || lower == "content-length"
+            || is_connection_header(&lower)
+        {
             continue;
         }
         // `te` is the one connection header HTTP/2 allows, and only "trailers".
@@ -195,14 +233,22 @@ fn encode_headers(req: &H2Request) -> Vec<u8> {
         headers.push((b"connection".to_vec(), c.as_bytes().to_vec()));
     }
     if !req.body.is_empty() {
-        headers.push((b"content-length".to_vec(), req.body.len().to_string().into_bytes()));
+        headers.push((
+            b"content-length".to_vec(),
+            req.body.len().to_string().into_bytes(),
+        ));
     }
     enc.encode(headers.iter().map(|(k, v)| (k.as_slice(), v.as_slice())))
 }
 
 fn send_request_headers<S: Read + Write>(stream: &mut S, req: &H2Request) -> Result<(), String> {
     let block = encode_headers(req);
-    let flags = FLAG_END_HEADERS | if req.body.is_empty() { FLAG_END_STREAM } else { 0 };
+    let flags = FLAG_END_HEADERS
+        | if req.body.is_empty() {
+            FLAG_END_STREAM
+        } else {
+            0
+        };
     write_frame(stream, FRAME_HEADERS, flags, 1, &block).map_err(|e| format!("h2 headers: {e}"))
 }
 
@@ -265,7 +311,10 @@ impl Rx {
         let mut out = format!("HTTP/1.1 {}\r\n", self.status.as_deref().unwrap_or("502"));
         for (k, v) in &self.headers {
             let lower = k.to_ascii_lowercase();
-            if lower == "content-length" || lower == "transfer-encoding" || is_connection_header(&lower) {
+            if lower == "content-length"
+                || lower == "transfer-encoding"
+                || is_connection_header(&lower)
+            {
                 continue;
             }
             out.push_str(&format!("{k}: {v}\r\n"));
@@ -278,7 +327,9 @@ impl Rx {
     /// The head is in: ask the sink how to read the body. Streamed to an
     /// HTTP/1.1 client, DATA frames become chunks.
     fn ask_sink(&mut self, sink: &mut Option<&mut (dyn crate::streaming::ResponseSink + '_)>) {
-        let (Some(s), true, None) = (sink.as_deref_mut(), self.got_headers, self.mode) else { return };
+        let (Some(s), true, None) = (sink.as_deref_mut(), self.got_headers, self.mode) else {
+            return;
+        };
         let head = self.head_h1("");
         let mode = s.head(&head);
         self.mode = Some(mode);
@@ -289,7 +340,9 @@ impl Rx {
                     self.client_gone = s.wire(&full).is_err();
                     s.end(true);
                 } else {
-                    self.client_gone = s.wire(&self.head_h1("Transfer-Encoding: chunked\r\n")).is_err();
+                    self.client_gone = s
+                        .wire(&self.head_h1("Transfer-Encoding: chunked\r\n"))
+                        .is_err();
                 }
             }
             crate::streaming::BodyMode::HeadOnly => self.done = true,
@@ -308,8 +361,9 @@ impl Rx {
         // hpack 0.3 panics on some truncated encodings (e.g. a dynamic table
         // size update cut short); a hostile server must not take the proxy
         // thread down. The connection is dropped with the error.
-        let decoded = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.dec.decode(&block)))
-            .map_err(|_| "h2 decode: malformed header block".to_string())?;
+        let decoded =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.dec.decode(&block)))
+                .map_err(|_| "h2 decode: malformed header block".to_string())?;
         let fields = decoded.map_err(|e| format!("h2 decode: {e:?}"))?;
         let mut status: Option<String> = None;
         let mut headers: Vec<(String, String)> = Vec::new();
@@ -350,7 +404,12 @@ impl Rx {
         }
     }
 
-    fn handle<S: Read + Write>(&mut self, stream: &mut S, f: Frame, sink: &mut Option<&mut (dyn crate::streaming::ResponseSink + '_)>) -> Result<(), String> {
+    fn handle<S: Read + Write>(
+        &mut self,
+        stream: &mut S,
+        f: Frame,
+        sink: &mut Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
+    ) -> Result<(), String> {
         if self.in_continuation && !(f.ty == FRAME_CONTINUATION && f.stream == 1) {
             return Err("h2: header block interrupted before CONTINUATION".into());
         }
@@ -364,7 +423,11 @@ impl Rx {
                             SETTINGS_INITIAL_WINDOW_SIZE => {
                                 let new = val as i64;
                                 // Applies as a delta to every open stream (RFC 9113 §6.5.2).
-                                grow_window(&mut self.stream_window, new - self.peer_initial_window, "stream")?;
+                                grow_window(
+                                    &mut self.stream_window,
+                                    new - self.peer_initial_window,
+                                    "stream",
+                                )?;
                                 self.peer_initial_window = new;
                             }
                             SETTINGS_MAX_FRAME_SIZE => {
@@ -374,7 +437,8 @@ impl Rx {
                         }
                     }
                     self.settings_seen = true;
-                    write_frame(stream, FRAME_SETTINGS, FLAG_ACK, 0, &[]).map_err(|e| format!("h2 settings ack: {e}"))?;
+                    write_frame(stream, FRAME_SETTINGS, FLAG_ACK, 0, &[])
+                        .map_err(|e| format!("h2 settings ack: {e}"))?;
                 }
             }
             FRAME_PING => {
@@ -382,14 +446,17 @@ impl Rx {
                     return Err("h2: PING with wrong length".into());
                 }
                 if f.flags & FLAG_ACK == 0 {
-                    write_frame(stream, FRAME_PING, FLAG_ACK, 0, &f.payload).map_err(|e| format!("h2 ping: {e}"))?;
+                    write_frame(stream, FRAME_PING, FLAG_ACK, 0, &f.payload)
+                        .map_err(|e| format!("h2 ping: {e}"))?;
                 }
             }
             FRAME_WINDOW_UPDATE => {
                 if f.payload.len() < 4 {
                     return Err("h2: short WINDOW_UPDATE".into());
                 }
-                let inc = (u32::from_be_bytes([f.payload[0], f.payload[1], f.payload[2], f.payload[3]]) & 0x7fff_ffff) as i64;
+                let inc =
+                    (u32::from_be_bytes([f.payload[0], f.payload[1], f.payload[2], f.payload[3]])
+                        & 0x7fff_ffff) as i64;
                 if inc == 0 {
                     return Err("h2: zero WINDOW_UPDATE".into());
                 }
@@ -403,11 +470,16 @@ impl Rx {
                 if f.payload.len() < 8 {
                     return Err("h2: short GOAWAY".into());
                 }
-                let last = u32::from_be_bytes([f.payload[0], f.payload[1], f.payload[2], f.payload[3]]) & 0x7fff_ffff;
-                let code = u32::from_be_bytes([f.payload[4], f.payload[5], f.payload[6], f.payload[7]]);
+                let last =
+                    u32::from_be_bytes([f.payload[0], f.payload[1], f.payload[2], f.payload[3]])
+                        & 0x7fff_ffff;
+                let code =
+                    u32::from_be_bytes([f.payload[4], f.payload[5], f.payload[6], f.payload[7]]);
                 // Our only stream was not processed, so a fresh connection is safe.
                 if last < 1 || code == 0x7 {
-                    return Err(format!("h2: GOAWAY (retryable): error={code} last_stream_id={last}"));
+                    return Err(format!(
+                        "h2: GOAWAY (retryable): error={code} last_stream_id={last}"
+                    ));
                 }
                 return Err(format!("h2: GOAWAY: error={code} last_stream_id={last}"));
             }
@@ -423,7 +495,8 @@ impl Rx {
                 return Err(format!("h2: stream reset by server: error={code}"));
             }
             FRAME_HEADERS if f.stream == 1 => {
-                self.block.extend_from_slice(header_fragment(f.flags, &f.payload)?);
+                self.block
+                    .extend_from_slice(header_fragment(f.flags, &f.payload)?);
                 if self.block.len() > MAX_HEADER_BLOCK {
                     return Err("h2: header block too large".into());
                 }
@@ -491,17 +564,25 @@ impl Rx {
                     // included, and must be replenished or a body larger than
                     // the initial window stalls.
                     let inc = (f.payload.len() as u32).to_be_bytes();
-                    write_frame(stream, FRAME_WINDOW_UPDATE, 0, 0, &inc).map_err(|e| format!("h2 window update: {e}"))?;
-                    write_frame(stream, FRAME_WINDOW_UPDATE, 0, 1, &inc).map_err(|e| format!("h2 window update: {e}"))?;
+                    write_frame(stream, FRAME_WINDOW_UPDATE, 0, 0, &inc)
+                        .map_err(|e| format!("h2 window update: {e}"))?;
+                    write_frame(stream, FRAME_WINDOW_UPDATE, 0, 1, &inc)
+                        .map_err(|e| format!("h2 window update: {e}"))?;
                 }
             }
             FRAME_PUSH_PROMISE => {
                 // We advertised ENABLE_PUSH=0; refuse any promised stream instead
                 // of choking on it (a short payload must not panic).
                 if f.payload.len() >= 4 {
-                    let promised = u32::from_be_bytes([f.payload[0], f.payload[1], f.payload[2], f.payload[3]]) & 0x7fff_ffff;
+                    let promised = u32::from_be_bytes([
+                        f.payload[0],
+                        f.payload[1],
+                        f.payload[2],
+                        f.payload[3],
+                    ]) & 0x7fff_ffff;
                     if promised != 0 {
-                        write_frame(stream, FRAME_RST_STREAM, 0, promised, &8u32.to_be_bytes()).ok();
+                        write_frame(stream, FRAME_RST_STREAM, 0, promised, &8u32.to_be_bytes())
+                            .ok();
                     }
                 }
             }
@@ -528,7 +609,10 @@ impl Rx {
     /// upstream `content-length`/`transfer-encoding` is replaced so the view
     /// never carries two framing headers.
     fn finish(self) -> Result<Vec<u8>, String> {
-        if self.mode.is_some_and(|m| m != crate::streaming::BodyMode::Buffer) {
+        if self
+            .mode
+            .is_some_and(|m| m != crate::streaming::BodyMode::Buffer)
+        {
             // Streamed or cut after the head: the head is the message.
             return Ok(self.head_h1(""));
         }
@@ -543,7 +627,10 @@ impl Rx {
         out.extend_from_slice(format!("HTTP/1.1 {status}\r\n").as_bytes());
         for (k, v) in &self.headers {
             let lower = k.to_ascii_lowercase();
-            if lower == "content-length" || lower == "transfer-encoding" || is_connection_header(&lower) {
+            if lower == "content-length"
+                || lower == "transfer-encoding"
+                || is_connection_header(&lower)
+            {
                 continue;
             }
             out.extend_from_slice(format!("{k}: {v}\r\n").as_bytes());
@@ -558,7 +645,12 @@ impl Rx {
 /// DATA is only written once the server's SETTINGS is known (it is required to
 /// be the first frame, RFC 9113 §3.4), so a small INITIAL_WINDOW_SIZE or
 /// MAX_FRAME_SIZE is honoured before the first byte goes out.
-fn pump<S: Read + Write>(stream: &mut S, mut body: Option<&[u8]>, rx: &mut Rx, sink: &mut Option<&mut (dyn crate::streaming::ResponseSink + '_)>) -> Result<(), String> {
+fn pump<S: Read + Write>(
+    stream: &mut S,
+    mut body: Option<&[u8]>,
+    rx: &mut Rx,
+    sink: &mut Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
+) -> Result<(), String> {
     let mut sending = body.map(|b| !b.is_empty()).unwrap_or(false);
     loop {
         if sending && rx.settings_seen {
@@ -576,8 +668,14 @@ fn pump<S: Read + Write>(stream: &mut S, mut body: Option<&[u8]>, rx: &mut Rx, s
                 }
                 let n = (allowance as usize).min(rx.max_frame).min(rest.len());
                 let last = n == rest.len();
-                write_frame(stream, FRAME_DATA, if last { FLAG_END_STREAM } else { 0 }, 1, &rest[..n])
-                    .map_err(|e| format!("h2 data: {e}"))?;
+                write_frame(
+                    stream,
+                    FRAME_DATA,
+                    if last { FLAG_END_STREAM } else { 0 },
+                    1,
+                    &rest[..n],
+                )
+                .map_err(|e| format!("h2 data: {e}"))?;
                 rx.send_window -= n as i64;
                 rx.stream_window -= n as i64;
                 body = Some(&rest[n..]);
@@ -601,11 +699,19 @@ fn pump<S: Read + Write>(stream: &mut S, mut body: Option<&[u8]>, rx: &mut Rx, s
 /// With a `sink`, the sink sees the head first and may take the body as it
 /// arrives (see `codec::read_message`); a streamed body that is cut short
 /// still returns the head, after telling the sink.
-pub fn exchange<S: Read + Write>(stream: &mut S, req: &H2Request, mut sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>) -> Result<Vec<u8>, String> {
+pub fn exchange<S: Read + Write>(
+    stream: &mut S,
+    req: &H2Request,
+    mut sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
+) -> Result<Vec<u8>, String> {
     send_preface(stream)?;
     send_request_headers(stream, req)?;
     let mut rx = Rx::new();
-    let body = if req.body.is_empty() { None } else { Some(req.body.as_slice()) };
+    let body = if req.body.is_empty() {
+        None
+    } else {
+        Some(req.body.as_slice())
+    };
     if let Err(e) = pump(stream, body, &mut rx, &mut sink) {
         if !rx.streaming() {
             return Err(e);
@@ -638,7 +744,11 @@ pub fn base64url(data: &[u8]) -> String {
     const TBL: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
     let mut out = String::new();
     for chunk in data.chunks(3) {
-        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let b = [
+            chunk[0],
+            *chunk.get(1).unwrap_or(&0),
+            *chunk.get(2).unwrap_or(&0),
+        ];
         let n = ((b[0] as u32) << 16) | ((b[1] as u32) << 8) | b[2] as u32;
         out.push(TBL[(n >> 18) as usize & 63] as char);
         out.push(TBL[(n >> 12) as usize & 63] as char);
@@ -689,7 +799,11 @@ pub fn request_from_raw(raw: &[u8], scheme: &str) -> Option<H2Request> {
         method: parts.method.clone(),
         scheme: scheme.to_string(),
         authority,
-        path: if parts.path.is_empty() { "/".into() } else { parts.path.clone() },
+        path: if parts.path.is_empty() {
+            "/".into()
+        } else {
+            parts.path.clone()
+        },
         headers,
         body,
         connection: None,
@@ -754,7 +868,11 @@ mod tests {
     fn server_bytes(frames: &[(u8, u8, u32, &[u8])]) -> Vec<u8> {
         let mut out = Vec::new();
         for (ty, flags, stream, payload) in frames {
-            out.extend_from_slice(&[(payload.len() >> 16) as u8, (payload.len() >> 8) as u8, payload.len() as u8]);
+            out.extend_from_slice(&[
+                (payload.len() >> 16) as u8,
+                (payload.len() >> 8) as u8,
+                payload.len() as u8,
+            ]);
             out.extend_from_slice(&[*ty, *flags]);
             out.extend_from_slice(&stream.to_be_bytes());
             out.extend_from_slice(payload);
@@ -763,7 +881,10 @@ mod tests {
     }
 
     fn scripted(frames: &[(u8, u8, u32, &[u8])]) -> Scripted {
-        Scripted { input: Cursor::new(server_bytes(frames)), out: Vec::new() }
+        Scripted {
+            input: Cursor::new(server_bytes(frames)),
+            out: Vec::new(),
+        }
     }
 
     fn get_request() -> H2Request {
@@ -803,11 +924,22 @@ mod tests {
             }
         }
         let mut enc = Encoder::new();
-        let hb = enc.encode(vec![(b":status".as_ref(), b"200".as_ref()), (b"content-type".as_ref(), b"text/event-stream".as_ref())]);
-        let frames: [(u8, u8, u32, &[u8]); 4] = [(FRAME_SETTINGS, 0, 0, &[]), (FRAME_HEADERS, FLAG_END_HEADERS, 1, &hb), (FRAME_DATA, 0, 1, b"data: 1\n\n"), (FRAME_DATA, FLAG_END_STREAM, 1, b"data: 2\n\n")];
+        let hb = enc.encode(vec![
+            (b":status".as_ref(), b"200".as_ref()),
+            (b"content-type".as_ref(), b"text/event-stream".as_ref()),
+        ]);
+        let frames: [(u8, u8, u32, &[u8]); 4] = [
+            (FRAME_SETTINGS, 0, 0, &[]),
+            (FRAME_HEADERS, FLAG_END_HEADERS, 1, &hb),
+            (FRAME_DATA, 0, 1, b"data: 1\n\n"),
+            (FRAME_DATA, FLAG_END_STREAM, 1, b"data: 2\n\n"),
+        ];
         let mut rec = Rec(Vec::new(), Vec::new(), None, 0);
         let head = exchange(&mut scripted(&frames), &get_request(), Some(&mut rec)).unwrap();
-        assert!(String::from_utf8_lossy(&head).starts_with("HTTP/1.1 200") && head.ends_with(b"\r\n\r\n"));
+        assert!(
+            String::from_utf8_lossy(&head).starts_with("HTTP/1.1 200")
+                && head.ends_with(b"\r\n\r\n")
+        );
         let wire = String::from_utf8_lossy(&rec.0).into_owned();
         assert!(wire.contains("Transfer-Encoding: chunked\r\n\r\n9\r\ndata: 1\n\n\r\n9\r\ndata: 2\n\n\r\n0\r\n\r\n"), "{wire}");
         assert_eq!(rec.1, b"data: 1\n\ndata: 2\n\n");
@@ -819,11 +951,15 @@ mod tests {
     #[test]
     fn hostile_header_blocks_and_frames_are_rejected() {
         // Truncated dynamic table size update: hpack 0.3 panics on it.
-        let mut s = scripted(&[(FRAME_SETTINGS, 0, 0, &[]), (FRAME_HEADERS, FLAG_END_HEADERS, 1, &[0x3f])]);
+        let mut s = scripted(&[
+            (FRAME_SETTINGS, 0, 0, &[]),
+            (FRAME_HEADERS, FLAG_END_HEADERS, 1, &[0x3f]),
+        ]);
         assert!(exchange(&mut s, &get_request(), None).is_err());
         // Endless CONTINUATION frames: stopped at MAX_HEADER_BLOCK.
         let chunk = vec![0x40u8; 16_000];
-        let mut frames: Vec<(u8, u8, u32, &[u8])> = vec![(FRAME_SETTINGS, 0, 0, &[]), (FRAME_HEADERS, 0, 1, &chunk)];
+        let mut frames: Vec<(u8, u8, u32, &[u8])> =
+            vec![(FRAME_SETTINGS, 0, 0, &[]), (FRAME_HEADERS, 0, 1, &chunk)];
         for _ in 0..40 {
             frames.push((FRAME_CONTINUATION, 0, 1, &chunk));
         }
@@ -831,7 +967,12 @@ mod tests {
         assert!(err.contains("header block too large"), "{err}");
         // A frame over the 16 KiB we allow.
         let big = vec![0u8; 20_000];
-        let err = exchange(&mut scripted(&[(FRAME_SETTINGS, 0, 0, &[]), (FRAME_DATA, 0, 1, &big)]), &get_request(), None).unwrap_err();
+        let err = exchange(
+            &mut scripted(&[(FRAME_SETTINGS, 0, 0, &[]), (FRAME_DATA, 0, 1, &big)]),
+            &get_request(),
+            None,
+        )
+        .unwrap_err();
         assert!(err.contains("SETTINGS_MAX_FRAME_SIZE"), "{err}");
     }
 
@@ -839,7 +980,10 @@ mod tests {
     #[test]
     fn malformed_frames_error_instead_of_panicking() {
         // WINDOW_UPDATE with a 2-byte payload.
-        let mut s = scripted(&[(FRAME_SETTINGS, 0, 0, &[]), (FRAME_WINDOW_UPDATE, 0, 0, &[0, 1])]);
+        let mut s = scripted(&[
+            (FRAME_SETTINGS, 0, 0, &[]),
+            (FRAME_WINDOW_UPDATE, 0, 0, &[0, 1]),
+        ]);
         assert!(exchange(&mut s, &get_request(), None).is_err());
 
         // PUSH_PROMISE with an empty payload.
@@ -847,11 +991,17 @@ mod tests {
         assert!(exchange(&mut s, &get_request(), None).is_err());
 
         // HEADERS marked PADDED with an empty payload.
-        let mut s = scripted(&[(FRAME_SETTINGS, 0, 0, &[]), (FRAME_HEADERS, FLAG_END_HEADERS | FLAG_PADDED, 1, &[])]);
+        let mut s = scripted(&[
+            (FRAME_SETTINGS, 0, 0, &[]),
+            (FRAME_HEADERS, FLAG_END_HEADERS | FLAG_PADDED, 1, &[]),
+        ]);
         assert!(exchange(&mut s, &get_request(), None).is_err());
 
         // HEADERS marked PRIORITY but shorter than the 5-byte prefix.
-        let mut s = scripted(&[(FRAME_SETTINGS, 0, 0, &[]), (FRAME_HEADERS, FLAG_END_HEADERS | FLAG_PRIORITY, 1, &[0, 0])]);
+        let mut s = scripted(&[
+            (FRAME_SETTINGS, 0, 0, &[]),
+            (FRAME_HEADERS, FLAG_END_HEADERS | FLAG_PRIORITY, 1, &[0, 0]),
+        ]);
         assert!(exchange(&mut s, &get_request(), None).is_err());
 
         // DATA marked PADDED whose pad length exceeds the frame.
@@ -905,15 +1055,30 @@ mod tests {
             match f.ty {
                 FRAME_HEADERS => {
                     assert_eq!(f.stream, 1);
-                    write_frame(s, FRAME_WINDOW_UPDATE, 0, 0, &10_000_000u32.to_be_bytes()).unwrap();
+                    write_frame(s, FRAME_WINDOW_UPDATE, 0, 0, &10_000_000u32.to_be_bytes())
+                        .unwrap();
                 }
                 FRAME_SETTINGS if f.flags & FLAG_ACK == 0 => {
                     write_frame(s, FRAME_SETTINGS, FLAG_ACK, 0, &[]).unwrap();
                 }
                 FRAME_DATA => {
                     body.extend_from_slice(&f.payload);
-                    write_frame(s, FRAME_WINDOW_UPDATE, 0, 0, &(f.payload.len() as u32).to_be_bytes()).unwrap();
-                    write_frame(s, FRAME_WINDOW_UPDATE, 0, 1, &(f.payload.len() as u32).to_be_bytes()).unwrap();
+                    write_frame(
+                        s,
+                        FRAME_WINDOW_UPDATE,
+                        0,
+                        0,
+                        &(f.payload.len() as u32).to_be_bytes(),
+                    )
+                    .unwrap();
+                    write_frame(
+                        s,
+                        FRAME_WINDOW_UPDATE,
+                        0,
+                        1,
+                        &(f.payload.len() as u32).to_be_bytes(),
+                    )
+                    .unwrap();
                     if f.flags & FLAG_END_STREAM != 0 {
                         break;
                     }
@@ -934,12 +1099,18 @@ mod tests {
         rx.send_window = 1;
         let mut stream = scripted(&[]);
         let mut sink = None;
-        let err = rx.handle(&mut stream, Frame {
-            ty: FRAME_WINDOW_UPDATE,
-            flags: 0,
-            stream: 0,
-            payload: 0x7fff_ffffu32.to_be_bytes().to_vec(),
-        }, &mut sink).unwrap_err();
+        let err = rx
+            .handle(
+                &mut stream,
+                Frame {
+                    ty: FRAME_WINDOW_UPDATE,
+                    flags: 0,
+                    stream: 0,
+                    payload: 0x7fff_ffffu32.to_be_bytes().to_vec(),
+                },
+                &mut sink,
+            )
+            .unwrap_err();
         assert!(err.contains("overflow"), "{err}");
         assert_eq!(rx.send_window, 1);
     }
@@ -955,11 +1126,13 @@ mod tests {
         let expected = body.len();
         let t = std::thread::spawn(move || {
             let (mut s, _) = listener.accept().unwrap();
-            s.set_read_timeout(Some(std::time::Duration::from_secs(10))).unwrap();
+            s.set_read_timeout(Some(std::time::Duration::from_secs(10)))
+                .unwrap();
             serve_flow_control(&mut s, expected);
         });
         let mut tcp = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
-        tcp.set_read_timeout(Some(std::time::Duration::from_secs(10))).unwrap();
+        tcp.set_read_timeout(Some(std::time::Duration::from_secs(10)))
+            .unwrap();
         let req = H2Request {
             method: "POST".into(),
             scheme: "http".into(),

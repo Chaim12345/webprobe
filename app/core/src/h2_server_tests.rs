@@ -20,10 +20,15 @@ const CONTINUATION: u8 = 0x9;
 const END_STREAM: u8 = 0x1;
 const END_HEADERS: u8 = 0x4;
 
-fn tls_client(ca: rustls::pki_types::CertificateDer<'static>, alpn: &[&[u8]]) -> Arc<rustls::ClientConfig> {
+fn tls_client(
+    ca: rustls::pki_types::CertificateDer<'static>,
+    alpn: &[&[u8]],
+) -> Arc<rustls::ClientConfig> {
     let mut roots = rustls::RootCertStore::empty();
     roots.add(ca).unwrap();
-    let mut c = rustls::ClientConfig::builder().with_root_certificates(roots).with_no_client_auth();
+    let mut c = rustls::ClientConfig::builder()
+        .with_root_certificates(roots)
+        .with_no_client_auth();
     c.alpn_protocols = alpn.iter().map(|a| a.to_vec()).collect();
     Arc::new(c)
 }
@@ -49,7 +54,9 @@ fn upstream(shared: &Shared, release: Arc<Mutex<Option<mpsc::Receiver<()>>>>) ->
                     req.extend_from_slice(&buf[..n]);
                     if let Some(h) = crate::util::find_head_end(&req) {
                         let p = crate::util::parse_http(&req[..h]);
-                        let len = crate::util::get_header(&p.headers, "Content-Length").and_then(|v| v.trim().parse::<usize>().ok()).unwrap_or(0);
+                        let len = crate::util::get_header(&p.headers, "Content-Length")
+                            .and_then(|v| v.trim().parse::<usize>().ok())
+                            .unwrap_or(0);
                         break (h, len);
                     }
                 };
@@ -62,13 +69,24 @@ fn upstream(shared: &Shared, release: Arc<Mutex<Option<mpsc::Receiver<()>>>>) ->
                 }
                 let path = crate::util::parse_http(&req).path;
                 let body = &req[head_end..];
-                let reply = |tls: &mut rustls::StreamOwned<rustls::ServerConnection, TcpStream>, ct: &str, b: &[u8]| {
+                let reply = |tls: &mut rustls::StreamOwned<rustls::ServerConnection, TcpStream>,
+                             ct: &str,
+                             b: &[u8]| {
                     let _ = tls.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: {ct}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", b.len()).as_bytes());
                     let _ = tls.write_all(b);
                     let _ = tls.flush();
                 };
                 match path.split('?').next().unwrap_or("") {
-                    "/post" => reply(&mut tls, "text/plain", format!("got {} bytes: {}", body.len(), String::from_utf8_lossy(body)).as_bytes()),
+                    "/post" => reply(
+                        &mut tls,
+                        "text/plain",
+                        format!(
+                            "got {} bytes: {}",
+                            body.len(),
+                            String::from_utf8_lossy(body)
+                        )
+                        .as_bytes(),
+                    ),
                     "/big" => reply(&mut tls, "application/octet-stream", &vec![b'b'; 1 << 20]),
                     "/edit" => reply(&mut tls, "text/html", b"<p>original</p>"),
                     "/sse" => {
@@ -97,7 +115,9 @@ fn proxy() -> Arc<Shared> {
     let ca = shared.mitm.ca_der();
     Arc::get_mut(&mut shared).unwrap().tls_upstream = tls_client(ca, &[]);
     let l = TcpListener::bind("127.0.0.1:0").unwrap();
-    shared.proxy_port.store(l.local_addr().unwrap().port(), Ordering::SeqCst);
+    shared
+        .proxy_port
+        .store(l.local_addr().unwrap().port(), Ordering::SeqCst);
     drop(l);
     crate::net::start_proxy(shared.clone());
     for _ in 0..500 {
@@ -121,7 +141,12 @@ impl<S: Read + Write> Client<S> {
     fn new(mut io: S) -> Self {
         io.write_all(PREFACE).unwrap();
         write_frame(&mut io, SETTINGS, 0, 0, &[]).unwrap();
-        Client { io, buf: Vec::new(), enc: hpack::Encoder::new(), dec: hpack::Decoder::new() }
+        Client {
+            io,
+            buf: Vec::new(),
+            enc: hpack::Encoder::new(),
+            dec: hpack::Decoder::new(),
+        }
     }
     fn send(&mut self, ty: u8, flags: u8, stream: u32, payload: &[u8]) {
         write_frame(&mut self.io, ty, flags, stream, payload).unwrap();
@@ -134,7 +159,12 @@ impl<S: Read + Write> Client<S> {
             (b":path".as_ref(), path.as_bytes()),
             (b"user-agent".as_ref(), b"h2-test".as_ref()),
         ]);
-        self.send(HEADERS, END_HEADERS | if body.is_none() { END_STREAM } else { 0 }, id, &block);
+        self.send(
+            HEADERS,
+            END_HEADERS | if body.is_none() { END_STREAM } else { 0 },
+            id,
+            &block,
+        );
         if let Some(b) = body {
             self.send(DATA, END_STREAM, id, b);
         }
@@ -156,11 +186,20 @@ impl<S: Read + Write> Client<S> {
     /// Read until every stream in `ids` ended: (status, body) per stream.
     /// DATA is acknowledged with WINDOW_UPDATEs as it arrives; `on_data`
     /// sees each piece first.
-    fn responses(&mut self, ids: &[u32], mut on_data: impl FnMut(u32, &[u8])) -> Vec<(String, Vec<u8>)> {
-        let mut out: Vec<(String, Vec<u8>, bool)> = ids.iter().map(|_| (String::new(), Vec::new(), false)).collect();
+    fn responses(
+        &mut self,
+        ids: &[u32],
+        mut on_data: impl FnMut(u32, &[u8]),
+    ) -> Vec<(String, Vec<u8>)> {
+        let mut out: Vec<(String, Vec<u8>, bool)> = ids
+            .iter()
+            .map(|_| (String::new(), Vec::new(), false))
+            .collect();
         while out.iter().any(|o| !o.2) {
             let f = self.next().expect("connection closed early");
-            let Some(k) = ids.iter().position(|&i| i == f.stream) else { continue };
+            let Some(k) = ids.iter().position(|&i| i == f.stream) else {
+                continue;
+            };
             match f.ty {
                 HEADERS => {
                     for (n, v) in self.dec.decode(&f.payload).unwrap() {
@@ -190,14 +229,32 @@ impl<S: Read + Write> Client<S> {
 }
 
 /// CONNECT through the listener, then TLS offering `alpn`.
-fn connect(shared: &Shared, up_port: u16, alpn: &[&[u8]]) -> rustls::StreamOwned<rustls::ClientConnection, TcpStream> {
-    connect_via(shared, shared.proxy_port.load(Ordering::SeqCst), up_port, alpn)
+fn connect(
+    shared: &Shared,
+    up_port: u16,
+    alpn: &[&[u8]],
+) -> rustls::StreamOwned<rustls::ClientConnection, TcpStream> {
+    connect_via(
+        shared,
+        shared.proxy_port.load(Ordering::SeqCst),
+        up_port,
+        alpn,
+    )
 }
 
-fn connect_via(shared: &Shared, proxy_port: u16, up_port: u16, alpn: &[&[u8]]) -> rustls::StreamOwned<rustls::ClientConnection, TcpStream> {
+fn connect_via(
+    shared: &Shared,
+    proxy_port: u16,
+    up_port: u16,
+    alpn: &[&[u8]],
+) -> rustls::StreamOwned<rustls::ClientConnection, TcpStream> {
     let mut s = TcpStream::connect(("127.0.0.1", proxy_port)).unwrap();
     s.set_read_timeout(Some(Duration::from_secs(30))).unwrap();
-    write!(s, "CONNECT localhost:{up_port} HTTP/1.1\r\nHost: localhost:{up_port}\r\n\r\n").unwrap();
+    write!(
+        s,
+        "CONNECT localhost:{up_port} HTTP/1.1\r\nHost: localhost:{up_port}\r\n\r\n"
+    )
+    .unwrap();
     let mut head = Vec::new();
     let mut b = [0u8; 1];
     while !head.ends_with(b"\r\n\r\n") {
@@ -225,7 +282,10 @@ fn alpn_negotiates_h2_and_streams_are_multiplexed() {
     c.request(5, "GET", "/get?b=2", &auth, None);
     let r = c.responses(&[1, 3, 5], |_, _| {});
     assert_eq!(r[0], ("200".to_string(), b"hello /get".to_vec()));
-    assert_eq!(r[1], ("200".to_string(), b"got 10 bytes: name=value".to_vec()));
+    assert_eq!(
+        r[1],
+        ("200".to_string(), b"got 10 bytes: name=value".to_vec())
+    );
     assert_eq!(r[2].0, "200");
     // Each stream went through the ordinary pipeline into history.
     for _ in 0..500 {
@@ -234,7 +294,9 @@ fn alpn_negotiates_h2_and_streams_are_multiplexed() {
         }
         std::thread::sleep(Duration::from_millis(10));
     }
-    let paths: Vec<String> = shared.history.with_rows(|rows| rows.iter().map(|e| e.path.clone()).collect());
+    let paths: Vec<String> = shared
+        .history
+        .with_rows(|rows| rows.iter().map(|e| e.path.clone()).collect());
     for p in ["/get?a=1", "/post", "/get?b=2"] {
         assert!(paths.iter().any(|x| x == p), "{p} in {paths:?}");
     }
@@ -245,21 +307,53 @@ fn the_listener_option_off_keeps_https_clients_on_http1() {
     let shared = proxy();
     let port = upstream(&shared, Arc::new(Mutex::new(None)));
     // An extra listener with "Support HTTP/2" off; the primary keeps it on.
-    let extra = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
-    crate::net::set_listeners(&shared, vec![crate::net::ListenerSpec { bind: "127.0.0.1".into(), port: extra, http2: false }]).unwrap();
+    let extra = TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    crate::net::set_listeners(
+        &shared,
+        vec![crate::net::ListenerSpec {
+            bind: "127.0.0.1".into(),
+            port: extra,
+            http2: false,
+        }],
+    )
+    .unwrap();
     for _ in 0..500 {
         if TcpStream::connect(("127.0.0.1", extra)).is_ok() {
             break;
         }
         std::thread::sleep(Duration::from_millis(10));
     }
-    assert_eq!(connect_via(&shared, extra, port, &[b"h2", b"http/1.1"]).conn.alpn_protocol(), None);
-    assert_eq!(connect(&shared, port, &[b"h2", b"http/1.1"]).conn.alpn_protocol(), Some(b"h2".as_slice()));
+    assert_eq!(
+        connect_via(&shared, extra, port, &[b"h2", b"http/1.1"])
+            .conn
+            .alpn_protocol(),
+        None
+    );
+    assert_eq!(
+        connect(&shared, port, &[b"h2", b"http/1.1"])
+            .conn
+            .alpn_protocol(),
+        Some(b"h2".as_slice())
+    );
     // Switched per listener without a restart.
     crate::net::set_listener_http2(&shared, 1, true);
-    assert_eq!(connect_via(&shared, extra, port, &[b"h2", b"http/1.1"]).conn.alpn_protocol(), Some(b"h2".as_slice()));
+    assert_eq!(
+        connect_via(&shared, extra, port, &[b"h2", b"http/1.1"])
+            .conn
+            .alpn_protocol(),
+        Some(b"h2".as_slice())
+    );
     crate::net::set_listener_http2(&shared, 0, false);
-    assert_eq!(connect(&shared, port, &[b"h2", b"http/1.1"]).conn.alpn_protocol(), None);
+    assert_eq!(
+        connect(&shared, port, &[b"h2", b"http/1.1"])
+            .conn
+            .alpn_protocol(),
+        None
+    );
 }
 
 #[test]
@@ -284,7 +378,9 @@ fn an_h2_response_can_be_intercepted_and_edited() {
             let mut handled = 0;
             for _ in 0..3000 {
                 if let Some(item) = shared.queue.lock().unwrap().pop() {
-                    let _ = item.tx.send(Some(item.edited.replace("original", "edited!!")));
+                    let _ = item
+                        .tx
+                        .send(Some(item.edited.replace("original", "edited!!")));
                     handled += 1;
                     if handled == 2 {
                         return;
@@ -365,7 +461,10 @@ fn frame(ty: u8, flags: u8, stream: u32, payload: &[u8]) -> Vec<u8> {
 }
 
 fn goaway_code(frames: &[Frame]) -> Option<u32> {
-    frames.iter().find(|f| f.ty == GOAWAY).map(|f| u32::from_be_bytes([f.payload[4], f.payload[5], f.payload[6], f.payload[7]]))
+    frames
+        .iter()
+        .find(|f| f.ty == GOAWAY)
+        .map(|f| u32::from_be_bytes([f.payload[4], f.payload[5], f.payload[6], f.payload[7]]))
 }
 
 fn get_block(path: &str) -> Vec<u8> {
@@ -385,14 +484,39 @@ fn hostile_frames_close_the_connection_with_goaway() {
     big.extend(vec![0u8; 0x5000]);
     assert_eq!(goaway_code(&raw(&big, calls.clone(), false)), Some(0x6));
     // SETTINGS whose length is not a multiple of 6.
-    assert_eq!(goaway_code(&raw(&frame(SETTINGS, 0, 0, &[0, 4, 0]), calls.clone(), false)), Some(0x6));
+    assert_eq!(
+        goaway_code(&raw(
+            &frame(SETTINGS, 0, 0, &[0, 4, 0]),
+            calls.clone(),
+            false
+        )),
+        Some(0x6)
+    );
     // A zero WINDOW_UPDATE on the connection.
-    assert_eq!(goaway_code(&raw(&frame(WINDOW_UPDATE, 0, 0, &[0, 0, 0, 0]), calls.clone(), false)), Some(0x1));
+    assert_eq!(
+        goaway_code(&raw(
+            &frame(WINDOW_UPDATE, 0, 0, &[0, 0, 0, 0]),
+            calls.clone(),
+            false
+        )),
+        Some(0x1)
+    );
     // A window pushed past 2^31-1.
-    let over = [frame(WINDOW_UPDATE, 0, 0, &0x7fff_ffffu32.to_be_bytes()), frame(WINDOW_UPDATE, 0, 0, &0x7fff_ffffu32.to_be_bytes())].concat();
+    let over = [
+        frame(WINDOW_UPDATE, 0, 0, &0x7fff_ffffu32.to_be_bytes()),
+        frame(WINDOW_UPDATE, 0, 0, &0x7fff_ffffu32.to_be_bytes()),
+    ]
+    .concat();
     assert_eq!(goaway_code(&raw(&over, calls.clone(), false)), Some(0x3));
     // INITIAL_WINDOW_SIZE above the limit.
-    assert_eq!(goaway_code(&raw(&frame(SETTINGS, 0, 0, &[0, 4, 0x80, 0, 0, 0]), calls.clone(), false)), Some(0x3));
+    assert_eq!(
+        goaway_code(&raw(
+            &frame(SETTINGS, 0, 0, &[0, 4, 0x80, 0, 0, 0]),
+            calls.clone(),
+            false
+        )),
+        Some(0x3)
+    );
     // A CONTINUATION flood.
     let mut flood = frame(HEADERS, 0, 1, &get_block("/")[..2]);
     for _ in 0..100 {
@@ -402,13 +526,43 @@ fn hostile_frames_close_the_connection_with_goaway() {
     // An HPACK dynamic table size update above SETTINGS_HEADER_TABLE_SIZE.
     let mut huge_table = vec![0x3f, 0xe1, 0xff, 0x03]; // size update to 65 536
     huge_table.extend(get_block("/"));
-    assert_eq!(goaway_code(&raw(&frame(HEADERS, END_HEADERS | END_STREAM, 1, &huge_table), calls.clone(), false)), Some(0x9));
+    assert_eq!(
+        goaway_code(&raw(
+            &frame(HEADERS, END_HEADERS | END_STREAM, 1, &huge_table),
+            calls.clone(),
+            false
+        )),
+        Some(0x9)
+    );
     // Truncated HPACK and random garbage never panic.
-    assert_eq!(goaway_code(&raw(&frame(HEADERS, END_HEADERS | END_STREAM, 1, &[0x40, 0x7f]), calls.clone(), false)), Some(0x9));
-    assert!(goaway_code(&raw(b"\x00\x00\x08\x06\x00\x00\x00\x00\x01garbage!", calls.clone(), false)).is_some());
+    assert_eq!(
+        goaway_code(&raw(
+            &frame(HEADERS, END_HEADERS | END_STREAM, 1, &[0x40, 0x7f]),
+            calls.clone(),
+            false
+        )),
+        Some(0x9)
+    );
+    assert!(goaway_code(&raw(
+        b"\x00\x00\x08\x06\x00\x00\x00\x00\x01garbage!",
+        calls.clone(),
+        false
+    ))
+    .is_some());
     // A client cannot push.
-    assert_eq!(goaway_code(&raw(&frame(0x5, END_HEADERS, 1, &[0, 0, 0, 2]), calls.clone(), false)), Some(0x1));
-    assert_eq!(calls.load(Ordering::SeqCst), 0, "no hostile frame reached the pipeline");
+    assert_eq!(
+        goaway_code(&raw(
+            &frame(0x5, END_HEADERS, 1, &[0, 0, 0, 2]),
+            calls.clone(),
+            false
+        )),
+        Some(0x1)
+    );
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        0,
+        "no hostile frame reached the pipeline"
+    );
 }
 
 #[test]
@@ -422,7 +576,11 @@ fn rapid_reset_is_cut_off() {
     }
     let frames = raw(&input, calls.clone(), false);
     assert_eq!(goaway_code(&frames), Some(0xb));
-    assert_eq!(calls.load(Ordering::SeqCst), 0, "streams that never ended never ran");
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        0,
+        "streams that never ended never ran"
+    );
 }
 
 #[test]
@@ -430,15 +588,37 @@ fn streams_beyond_the_limit_are_refused_and_oversized_header_lists_reset() {
     let calls = Arc::new(AtomicUsize::new(0));
     let mut input = Vec::new();
     for k in 0..(crate::h2_server::MAX_CONCURRENT_STREAMS as u32 + 1) {
-        input.extend(frame(HEADERS, END_HEADERS | END_STREAM, 2 * k + 1, &get_block("/")));
+        input.extend(frame(
+            HEADERS,
+            END_HEADERS | END_STREAM,
+            2 * k + 1,
+            &get_block("/"),
+        ));
     }
     input.extend(frame(GOAWAY, 0, 0, &[0, 0, 0, 0, 0, 0, 0, 0]));
     let frames = raw(&input, calls.clone(), true);
-    let refused: Vec<u32> = frames.iter().filter(|f| f.ty == RST && f.payload == 7u32.to_be_bytes()).map(|f| f.stream).collect();
-    assert_eq!(refused, vec![2 * crate::h2_server::MAX_CONCURRENT_STREAMS as u32 + 1]);
-    assert_eq!(calls.load(Ordering::SeqCst), crate::h2_server::MAX_CONCURRENT_STREAMS);
-    let answered = frames.iter().filter(|f| f.ty == DATA && f.flags & END_STREAM != 0).count();
-    assert_eq!(answered, crate::h2_server::MAX_CONCURRENT_STREAMS, "the accepted streams were answered before the connection closed");
+    let refused: Vec<u32> = frames
+        .iter()
+        .filter(|f| f.ty == RST && f.payload == 7u32.to_be_bytes())
+        .map(|f| f.stream)
+        .collect();
+    assert_eq!(
+        refused,
+        vec![2 * crate::h2_server::MAX_CONCURRENT_STREAMS as u32 + 1]
+    );
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        crate::h2_server::MAX_CONCURRENT_STREAMS
+    );
+    let answered = frames
+        .iter()
+        .filter(|f| f.ty == DATA && f.flags & END_STREAM != 0)
+        .count();
+    assert_eq!(
+        answered,
+        crate::h2_server::MAX_CONCURRENT_STREAMS,
+        "the accepted streams were answered before the connection closed"
+    );
 }
 
 #[test]
@@ -456,12 +636,26 @@ fn a_header_list_above_the_limit_resets_its_stream() {
     let mut input = Vec::new();
     for (k, part) in parts.iter().enumerate() {
         let last = k + 1 == parts.len();
-        let (ty, flags) = if k == 0 { (HEADERS, END_STREAM) } else { (CONTINUATION, 0) };
-        input.extend(frame(ty, flags | if last { END_HEADERS } else { 0 }, 1, part));
+        let (ty, flags) = if k == 0 {
+            (HEADERS, END_STREAM)
+        } else {
+            (CONTINUATION, 0)
+        };
+        input.extend(frame(
+            ty,
+            flags | if last { END_HEADERS } else { 0 },
+            1,
+            part,
+        ));
     }
     input.extend(frame(GOAWAY, 0, 0, &[0, 0, 0, 0, 0, 0, 0, 0]));
     let frames = raw(&input, calls.clone(), false);
-    assert!(frames.iter().any(|f| f.ty == RST && f.stream == 1 && f.payload == 1u32.to_be_bytes()), "stream reset with PROTOCOL_ERROR");
+    assert!(
+        frames
+            .iter()
+            .any(|f| f.ty == RST && f.stream == 1 && f.payload == 1u32.to_be_bytes()),
+        "stream reset with PROTOCOL_ERROR"
+    );
     assert_eq!(calls.load(Ordering::SeqCst), 0);
 }
 
@@ -471,7 +665,10 @@ fn a_header_list_above_the_limit_resets_its_stream() {
 /// (one stream) or HTTP/1.1, whichever was negotiated, with the protocol's
 /// name as the body; reports the request line it saw over HTTP/1.
 fn lab(shared: &Shared, alpn: Vec<Vec<u8>>) -> (u16, std::thread::JoinHandle<String>) {
-    let config = shared.mitm.server_config_with_alpn("localhost", alpn).unwrap();
+    let config = shared
+        .mitm
+        .server_config_with_alpn("localhost", alpn)
+        .unwrap();
     let l = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = l.local_addr().unwrap().port();
     let t = std::thread::spawn(move || {
@@ -490,7 +687,8 @@ fn lab(shared: &Shared, alpn: Vec<Vec<u8>>) -> (u16, std::thread::JoinHandle<Str
                 while let Ok(Some((f, n))) = parse_frame(&buf, 1 << 24) {
                     buf.drain(..n);
                     if f.ty == HEADERS && f.flags & END_STREAM != 0 {
-                        let hb = hpack::Encoder::new().encode(vec![(b":status".as_ref(), b"200".as_ref())]);
+                        let hb = hpack::Encoder::new()
+                            .encode(vec![(b":status".as_ref(), b"200".as_ref())]);
                         write_frame(&mut tls, HEADERS, END_HEADERS, f.stream, &hb).unwrap();
                         write_frame(&mut tls, DATA, END_STREAM, f.stream, b"h2").unwrap();
                         let _ = tls.flush();
@@ -523,9 +721,14 @@ fn lab(shared: &Shared, alpn: Vec<Vec<u8>>) -> (u16, std::thread::JoinHandle<Str
             }
             req.push(b[0]);
         }
-        let _ = tls.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nh1");
+        let _ =
+            tls.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nh1");
         let _ = tls.flush();
-        String::from_utf8_lossy(&req).lines().next().unwrap_or("").to_string()
+        String::from_utf8_lossy(&req)
+            .lines()
+            .next()
+            .unwrap_or("")
+            .to_string()
     });
     (port, t)
 }
@@ -537,8 +740,16 @@ fn repeater_sends_with_the_protocol_the_request_asks_for() {
     Arc::get_mut(&mut shared).unwrap().tls_upstream = tls_client(ca, &[b"h2", b"http/1.1"]);
     let both = || vec![b"h2".to_vec(), b"http/1.1".to_vec()];
     let send = |port: u16, line: &str, want: Option<bool>| {
-        let _h2 = crate::net::http2_scope(crate::net::Http2Choice { want_h2: want, strip_connection: true });
-        let up = crate::net::send_tls_raw(&shared, "localhost", port, format!("{line}\r\nHost: localhost\r\n\r\n").as_bytes());
+        let _h2 = crate::net::http2_scope(crate::net::Http2Choice {
+            want_h2: want,
+            strip_connection: true,
+        });
+        let up = crate::net::send_tls_raw(
+            &shared,
+            "localhost",
+            port,
+            format!("{line}\r\nHost: localhost\r\n\r\n").as_bytes(),
+        );
         (up, crate::net::last_protocol())
     };
     // HTTP/2 asked for, the server offers it.
@@ -549,7 +760,10 @@ fn repeater_sends_with_the_protocol_the_request_asks_for() {
     // HTTP/1 asked for, though the server offers h2: HTTP/1.1 on the wire.
     let (port, t) = lab(&shared, both());
     let (up, proto) = send(port, "GET /x HTTP/1.1", Some(false));
-    assert_eq!((t.join().unwrap().as_str(), proto), ("GET /x HTTP/1.1", "HTTP/1.1"));
+    assert_eq!(
+        (t.join().unwrap().as_str(), proto),
+        ("GET /x HTTP/1.1", "HTTP/1.1")
+    );
     assert!(up.resp.unwrap().ends_with(b"h1"));
     // ALPN override: the server picks h2 for an HTTP/1 request.
     let (port, t) = lab(&shared, both());
@@ -573,6 +787,12 @@ fn an_h2_request_from_the_listener_reaches_an_http1_upstream_as_http1() {
     let r = c.responses(&[1], |_, _| {});
     assert_eq!(r[0], ("200".to_string(), b"h1".to_vec()));
     assert_eq!(t.join().unwrap(), "GET /x HTTP/1.1");
-    let first = shared.history.with_rows(|rows| String::from_utf8_lossy(&rows[0].req_raw).lines().next().unwrap_or("").to_string());
+    let first = shared.history.with_rows(|rows| {
+        String::from_utf8_lossy(&rows[0].req_raw)
+            .lines()
+            .next()
+            .unwrap_or("")
+            .to_string()
+    });
     assert_eq!(first, "GET /x HTTP/2");
 }

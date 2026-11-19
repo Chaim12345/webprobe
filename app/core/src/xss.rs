@@ -20,7 +20,9 @@
 const EVENT_HANDLERS: &str = include_str!("xss_event_handlers.txt");
 
 fn is_event_handler(attr: &str) -> bool {
-    EVENT_HANDLERS.lines().any(|l| l.trim().eq_ignore_ascii_case(attr))
+    EVENT_HANDLERS
+        .lines()
+        .any(|l| l.trim().eq_ignore_ascii_case(attr))
 }
 
 /// burp.Zueq.ZZ: attributes whose value is a navigable URL.
@@ -100,7 +102,10 @@ pub fn classify(body: &str, pos: usize) -> u8 {
             continue;
         }
         if body[i..].starts_with("<!--") {
-            let end = body[i + 4..].find("-->").map(|x| x + i + 7).unwrap_or(b.len());
+            let end = body[i + 4..]
+                .find("-->")
+                .map(|x| x + i + 7)
+                .unwrap_or(b.len());
             if pos >= i && pos < end {
                 return 23;
             }
@@ -111,7 +116,9 @@ pub fn classify(body: &str, pos: usize) -> u8 {
         let inner = &body[i + 1..gt.min(b.len())];
         let closing = inner.starts_with('/');
         let name_start = i + 1 + usize::from(closing);
-        let name_len = body[name_start..gt].find(|c: char| c.is_ascii_whitespace() || c == '/' || c == '>').unwrap_or(gt - name_start);
+        let name_len = body[name_start..gt]
+            .find(|c: char| c.is_ascii_whitespace() || c == '/' || c == '>')
+            .unwrap_or(gt - name_start);
         let tag = body[name_start..name_start + name_len].to_ascii_lowercase();
         if pos >= i && pos <= gt {
             if pos < name_start + name_len.max(1) {
@@ -125,11 +132,20 @@ pub fn classify(body: &str, pos: usize) -> u8 {
             }
         } else if !inner.trim_end().ends_with('/') && !tag.is_empty() {
             open.push(tag.clone());
-            if tag == "script" || tag == "xmp" || tag == "title" || tag == "noscript" || tag == "style" {
+            if tag == "script"
+                || tag == "xmp"
+                || tag == "title"
+                || tag == "noscript"
+                || tag == "style"
+            {
                 // raw text up to the matching close tag
                 let close = format!("</{tag}");
                 let start = gt + 1;
-                let end = body[start..].to_ascii_lowercase().find(&close).map(|x| x + start).unwrap_or(b.len());
+                let end = body[start..]
+                    .to_ascii_lowercase()
+                    .find(&close)
+                    .map(|x| x + start)
+                    .unwrap_or(b.len());
                 if pos >= start && pos < end {
                     return text_context(&open, body, start, pos);
                 }
@@ -190,7 +206,10 @@ fn attr_context(body: &str, tag: &str, from: usize, gt: usize, pos: usize) -> u8
                 let q = b[i];
                 body[vs..gt].find(q as char).map(|x| x + vs).unwrap_or(gt)
             } else {
-                body[vs..gt].find(|c: char| c.is_ascii_whitespace()).map(|x| x + vs).unwrap_or(gt)
+                body[vs..gt]
+                    .find(|c: char| c.is_ascii_whitespace())
+                    .map(|x| x + vs)
+                    .unwrap_or(gt)
             };
             if pos >= vs && pos <= ve {
                 let base = if is_script_url_attr(tag, name) {
@@ -214,7 +233,13 @@ fn attr_context(body: &str, tag: &str, from: usize, gt: usize, pos: usize) -> u8
 // ================= XSS breakout payloads (burp.Zglf handler trees) =================
 
 /// Burp's reflected-XSS PoCs (burp.Zglf.ZX, decoded at runtime).
-pub const XSS_POCS: [&str; 5] = ["alert(1)", "confirm(1)", "prompt(1)", "document.location=1", "document.title=1"];
+pub const XSS_POCS: [&str; 5] = [
+    "alert(1)",
+    "confirm(1)",
+    "prompt(1)",
+    "document.location=1",
+    "document.title=1",
+];
 
 /// A breakout template for one context, ported from the burp.Zuw7 leaf for
 /// that context. `{P}` = PoC, `{M}`/`{M2}` = random markers. `signature` is a
@@ -225,7 +250,10 @@ pub struct XssTemplate {
 }
 
 const fn xt(template: &'static str, signature: &'static str) -> XssTemplate {
-    XssTemplate { template, signature }
+    XssTemplate {
+        template,
+        signature,
+    }
 }
 
 /// Burp's breakout templates per context id (burp.Zgd7.ZP), in handler-tree
@@ -284,12 +312,22 @@ pub struct XssHit {
 /// burp.Zw9s.Zi: letters and digits kept, every other char as %xx.
 fn zw9s_encode(s: &str) -> String {
     s.chars()
-        .map(|c| if c.is_alphanumeric() { c.to_string() } else { format!("%{:02x}", (c as u32) & 0xff) })
+        .map(|c| {
+            if c.is_alphanumeric() {
+                c.to_string()
+            } else {
+                format!("%{:02x}", (c as u32) & 0xff)
+            }
+        })
         .collect()
 }
 
 fn xss_variants(payload: &str) -> Vec<String> {
-    vec![payload.to_string(), zw9s_encode(payload), format!("\0{payload}")]
+    vec![
+        payload.to_string(),
+        zw9s_encode(payload),
+        format!("\0{payload}"),
+    ]
 }
 
 /// burp.Zi6p reflected XSS: classify where a marker reflects, then try that
@@ -297,11 +335,16 @@ fn xss_variants(payload: &str) -> Vec<String> {
 /// payload survives unencoded in the response body (an approximation of
 /// Burp's HTML re-parse, burp.Zi_x/Zw8c). Appended first, then replaced
 /// (burp.Zguu APPEND then REPLACE).
-pub fn run_xss_check<F: FnMut(&str) -> Option<Vec<u8>>>(value: &str, mut send: F) -> Option<XssHit> {
+pub fn run_xss_check<F: FnMut(&str) -> Option<Vec<u8>>>(
+    value: &str,
+    mut send: F,
+) -> Option<XssHit> {
     let rnd = || {
         use rand::Rng;
         let mut g = rand::thread_rng();
-        (0..8).map(|_| (b'a' + g.gen_range(0..26)) as char).collect::<String>()
+        (0..8)
+            .map(|_| (b'a' + g.gen_range(0..26)) as char)
+            .collect::<String>()
     };
     let body_of = |r: &[u8]| {
         let p = crate::util::parse_http(r);
@@ -309,19 +352,36 @@ pub fn run_xss_check<F: FnMut(&str) -> Option<Vec<u8>>>(value: &str, mut send: F
     };
     for append in [true, false] {
         let marker = rnd();
-        let probe = if append { format!("{value}{marker}") } else { marker.clone() };
+        let probe = if append {
+            format!("{value}{marker}")
+        } else {
+            marker.clone()
+        };
         let Some(resp) = send(&probe) else { continue };
         let body = body_of(&resp);
-        let Some(pos) = body.find(&marker) else { continue };
+        let Some(pos) = body.find(&marker) else {
+            continue;
+        };
         let context = classify(&body, pos);
         for t in xss_templates(context) {
             let (m, m2) = (rnd(), rnd());
-            let expanded = t.template.replace("{P}", XSS_POCS[0]).replace("{M2}", &m2).replace("{M}", &m);
+            let expanded = t
+                .template
+                .replace("{P}", XSS_POCS[0])
+                .replace("{M2}", &m2)
+                .replace("{M}", &m);
             for variant in xss_variants(&expanded) {
-                let v = if append { format!("{value}{variant}") } else { variant.clone() };
+                let v = if append {
+                    format!("{value}{variant}")
+                } else {
+                    variant.clone()
+                };
                 let Some(r) = send(&v) else { continue };
                 if body_of(&r).contains(&expanded) {
-                    return Some(XssHit { payload: v, context });
+                    return Some(XssHit {
+                        payload: v,
+                        context,
+                    });
                 }
             }
         }
@@ -348,7 +408,9 @@ mod tests {
     #[test]
     fn xss_check_reports_only_real_breakouts() {
         // Reflects the value into HTML text with no encoding: vulnerable.
-        let vuln = |v: &str| Some(format!("HTTP/1.1 200 OK\r\n\r\n<html><body>Hi {v}</body></html>").into_bytes());
+        let vuln = |v: &str| {
+            Some(format!("HTTP/1.1 200 OK\r\n\r\n<html><body>Hi {v}</body></html>").into_bytes())
+        };
         let hit = run_xss_check("name", vuln).expect("unencoded HTML text is XSS");
         assert_eq!(hit.context, 19);
         assert!(hit.payload.contains("<script>") || hit.payload.contains("onerror="));
@@ -360,10 +422,19 @@ mod tests {
         assert!(run_xss_check("name", safe).is_none());
         // Reflected inside a double-quoted attribute, quote not encoded: the
         // "><script> breakout survives.
-        let attr = |v: &str| Some(format!("HTTP/1.1 200 OK\r\n\r\n<input value=\"{v}\">").into_bytes());
+        let attr =
+            |v: &str| Some(format!("HTTP/1.1 200 OK\r\n\r\n<input value=\"{v}\">").into_bytes());
         assert!(run_xss_check("q", attr).is_some());
         // Same attribute but the quote is encoded: no breakout.
-        let attr_safe = |v: &str| Some(format!("HTTP/1.1 200 OK\r\n\r\n<input value=\"{}\">", v.replace('"', "&quot;")).into_bytes());
+        let attr_safe = |v: &str| {
+            Some(
+                format!(
+                    "HTTP/1.1 200 OK\r\n\r\n<input value=\"{}\">",
+                    v.replace('"', "&quot;")
+                )
+                .into_bytes(),
+            )
+        };
         assert!(run_xss_check("q", attr_safe).is_none());
     }
 
@@ -387,7 +458,11 @@ mod tests {
         assert_eq!(at("<a href=\"X\">"), 8, "href on a can run javascript:");
         assert_eq!(at("<iframe src='X'>"), 9);
         assert_eq!(at("<form action=X>"), 11);
-        assert_eq!(at("<img src=\"X\">"), 4, "img src is not a script URL in Burp's list");
+        assert_eq!(
+            at("<img src=\"X\">"),
+            4,
+            "img src is not a script URL in Burp's list"
+        );
         assert_eq!(at("<div onclick=\"X\">"), 12);
         assert_eq!(at("<div onmouseover='X'>"), 13);
         assert_eq!(at("<script>var a = \"X\";</script>"), 16);
@@ -395,6 +470,10 @@ mod tests {
         assert_eq!(at("<script>var a = X;</script>"), 18);
         assert_eq!(at("<script>// X\n</script>"), 24);
         assert_eq!(at("<script>/* X */</script>"), 25);
-        assert_eq!(at("<script>var s='a\\'X';</script>"), 17, "escaped quote stays in the string");
+        assert_eq!(
+            at("<script>var s='a\\'X';</script>"),
+            17,
+            "escaped quote stays in the string"
+        );
     }
 }

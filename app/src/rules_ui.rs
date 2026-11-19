@@ -150,10 +150,16 @@ pub fn rules_editor(ui: &mut egui::Ui, rules: &mut Vec<MrRule>, request_side: bo
     });
 
     ui.add_space(4.0);
-    let add_label = if request_side { "+ request rule" } else { "+ response rule" };
-    if ui.button(add_label).on_hover_text(
-        "Add an enabled rule with an empty match, replacement, and comment.",
-    ).clicked() {
+    let add_label = if request_side {
+        "+ request rule"
+    } else {
+        "+ response rule"
+    };
+    if ui
+        .button(add_label)
+        .on_hover_text("Add an enabled rule with an empty match, replacement, and comment.")
+        .clicked()
+    {
         edit_rules(rules, RuleEdit::Add, request_side);
     }
 }

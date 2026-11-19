@@ -32,7 +32,10 @@ pub fn take_edit(target: &str) -> Option<Vec<u8>> {
 }
 
 fn put_edit(target: &str, request: Vec<u8>) {
-    EDITS.lock().unwrap_or_else(|p| p.into_inner()).push((target.to_string(), request));
+    EDITS
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .push((target.to_string(), request));
 }
 
 /// Run `work` (calls into extension JVMs) off the UI thread and repaint
@@ -61,28 +64,50 @@ fn key(ctx: &MenuContext) -> String {
         m.request.hash(&mut h);
         m.response.hash(&mut h);
     }
-    format!("{}|{}|{:?}|{}", ctx.tool, ctx.invocation, ctx.editor, h.finish())
+    format!(
+        "{}|{}|{:?}|{}",
+        ctx.tool,
+        ctx.invocation,
+        ctx.editor,
+        h.finish()
+    )
 }
 
 /// The extensions' items for this menu (asked once per opened menu, on a
 /// worker thread); `None` while they are on their way.
 fn items(ui: &egui::Ui, shared: &Shared, ctx: &MenuContext) -> Option<Found> {
     let k = key(ctx);
-    let slot = CACHE.with(|c| c.borrow().as_ref().filter(|(ck, _)| *ck == k).map(|(_, s)| Arc::clone(s)));
+    let slot = CACHE.with(|c| {
+        c.borrow()
+            .as_ref()
+            .filter(|(ck, _)| *ck == k)
+            .map(|(_, s)| Arc::clone(s))
+    });
     if let Some(slot) = slot {
         return slot.lock().unwrap_or_else(|p| p.into_inner()).clone();
     }
-    let exts: Vec<_> = shared.ext_host.lock().unwrap().active().into_iter().filter(|e| e.ui().is_some_and(|u| u.menu_providers > 0)).collect();
+    let exts: Vec<_> = shared
+        .ext_host
+        .lock()
+        .unwrap()
+        .active()
+        .into_iter()
+        .filter(|e| e.ui().is_some_and(|u| u.menu_providers > 0))
+        .collect();
     let slot: Slot = Arc::new(Mutex::new(None));
     if exts.is_empty() {
         *slot.lock().unwrap() = Some(Vec::new());
     } else {
         let (fill, ctx) = (Arc::clone(&slot), ctx.clone());
         off_ui(ui.ctx(), move || {
-            let found: Found = exts.into_iter().map(|e| {
-                let items = e.menu_items(&ctx);
-                (e, items)
-            }).filter(|(_, items)| !items.is_empty()).collect();
+            let found: Found = exts
+                .into_iter()
+                .map(|e| {
+                    let items = e.menu_items(&ctx);
+                    (e, items)
+                })
+                .filter(|(_, items)| !items.is_empty())
+                .collect();
             *fill.lock().unwrap_or_else(|p| p.into_inner()) = Some(found);
         });
     }
@@ -110,7 +135,8 @@ pub fn submenu(ui: &mut egui::Ui, shared: &Shared, ctx: &MenuContext, target: Op
             ui.menu_button(ext.extension_name(), |ui| {
                 for it in items {
                     if ui.button(&it.label).clicked() {
-                        let (ext, id, target) = (Arc::clone(ext), it.id.clone(), target.map(str::to_string));
+                        let (ext, id, target) =
+                            (Arc::clone(ext), it.id.clone(), target.map(str::to_string));
                         off_ui(ui.ctx(), move || {
                             let outcome: MenuOutcome = ext.invoke_menu_item(&id);
                             if let (Some(t), Some(r)) = (target, outcome.request) {
@@ -130,22 +156,45 @@ pub fn submenu(ui: &mut egui::Ui, shared: &Shared, ctx: &MenuContext, target: Op
 /// extension provides editors: send the message to them (they show in the
 /// extension's window), or take back the request one changed (it arrives
 /// through [`take_edit`] for `target`).
-pub fn editor_items(ui: &mut egui::Ui, shared: &Arc<Shared>, msg: &MenuMessage, tool: &str, target: &str) {
-    let any = shared.ext_host.lock().unwrap().active().iter().any(|e| e.ui().is_some_and(|u| u.request_editors + u.response_editors > 0));
+pub fn editor_items(
+    ui: &mut egui::Ui,
+    shared: &Arc<Shared>,
+    msg: &MenuMessage,
+    tool: &str,
+    target: &str,
+) {
+    let any = shared.ext_host.lock().unwrap().active().iter().any(|e| {
+        e.ui()
+            .is_some_and(|u| u.request_editors + u.response_editors > 0)
+    });
     if !any {
         return;
     }
     ui.menu_button("Extension editors", |ui| {
-        if ui.button("Open this message in extension editors").clicked() {
+        if ui
+            .button("Open this message in extension editors")
+            .clicked()
+        {
             let (shared, msg, tool) = (Arc::clone(shared), msg.clone(), tool.to_string());
-            off_ui(ui.ctx(), move || crate::feedback::toast(crate::feedback::Level::Info, open_in_editors(&shared, &msg, &tool)));
+            off_ui(ui.ctx(), move || {
+                crate::feedback::toast(
+                    crate::feedback::Level::Info,
+                    open_in_editors(&shared, &msg, &tool),
+                )
+            });
             ui.close();
         }
-        if ui.button("Use the request edited in an extension editor").clicked() {
+        if ui
+            .button("Use the request edited in an extension editor")
+            .clicked()
+        {
             let (shared, target) = (Arc::clone(shared), target.to_string());
             off_ui(ui.ctx(), move || match edited_request(&shared) {
                 Some(r) => put_edit(&target, r),
-                None => crate::feedback::toast(crate::feedback::Level::Info, "No extension editor has changed the request."),
+                None => crate::feedback::toast(
+                    crate::feedback::Level::Info,
+                    "No extension editor has changed the request.",
+                ),
             });
             ui.close();
         }
@@ -170,7 +219,8 @@ pub fn open_in_editors(shared: &Shared, msg: &MenuMessage, tool: &str) -> String
                 }
             }
             if u.headless {
-                return "The extension editors cannot be shown: its JVM runs without a display.".into();
+                return "The extension editors cannot be shown: its JVM runs without a display."
+                    .into();
             }
         }
     }
@@ -184,5 +234,7 @@ pub fn open_in_editors(shared: &Shared, msg: &MenuMessage, tool: &str) -> String
 /// The first request an extension editor changed.
 pub fn edited_request(shared: &Shared) -> Option<Vec<u8>> {
     let exts = shared.ext_host.lock().unwrap().active();
-    exts.iter().filter(|e| e.ui().is_some_and(|u| u.request_editors > 0)).find_map(|e| e.edited_request())
+    exts.iter()
+        .filter(|e| e.ui().is_some_and(|u| u.request_editors > 0))
+        .find_map(|e| e.edited_request())
 }

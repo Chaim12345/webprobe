@@ -19,8 +19,16 @@ pub fn b64_encode(data: &[u8]) -> String {
         let n = (b0 << 16) | (b1 << 8) | b2;
         out.push(B64[(n >> 18) as usize & 63] as char);
         out.push(B64[(n >> 12) as usize & 63] as char);
-        out.push(if chunk.len() > 1 { B64[(n >> 6) as usize & 63] as char } else { '=' });
-        out.push(if chunk.len() > 2 { B64[n as usize & 63] as char } else { '=' });
+        out.push(if chunk.len() > 1 {
+            B64[(n >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            B64[n as usize & 63] as char
+        } else {
+            '='
+        });
     }
     out
 }
@@ -74,8 +82,12 @@ pub fn hex_decode(s: &str) -> Result<Vec<u8>, String> {
     let bytes = cleaned.as_bytes();
     let mut i = 0;
     while i < bytes.len() {
-        let hi = (bytes[i] as char).to_digit(16).ok_or_else(|| format!("bad hex at {i}"))?;
-        let lo = (bytes[i + 1] as char).to_digit(16).ok_or_else(|| format!("bad hex at {}", i + 1))?;
+        let hi = (bytes[i] as char)
+            .to_digit(16)
+            .ok_or_else(|| format!("bad hex at {i}"))?;
+        let lo = (bytes[i + 1] as char)
+            .to_digit(16)
+            .ok_or_else(|| format!("bad hex at {}", i + 1))?;
         out.push(((hi << 4) | lo) as u8);
         i += 2;
     }
@@ -106,7 +118,11 @@ pub fn url_decode(s: &str) -> String {
     while i < bytes.len() {
         // Work on bytes: slicing the &str at i+1..i+3 panicked when a
         // multi-byte character followed the '%' (found by the fuzz test).
-        if bytes[i] == b'%' && i + 3 <= bytes.len() && bytes[i + 1].is_ascii_hexdigit() && bytes[i + 2].is_ascii_hexdigit() {
+        if bytes[i] == b'%'
+            && i + 3 <= bytes.len()
+            && bytes[i + 1].is_ascii_hexdigit()
+            && bytes[i + 2].is_ascii_hexdigit()
+        {
             let hex = |b: u8| (b as char).to_digit(16).unwrap_or(0) as u8;
             out.push(hex(bytes[i + 1]) << 4 | hex(bytes[i + 2]));
             i += 3;
@@ -147,13 +163,12 @@ pub fn html_decode(s: &str) -> String {
             if let Some(end) = s[i..].find(';') {
                 let entity = &s[i + 1..i + end];
                 let decoded = if let Some(num) = entity.strip_prefix('#') {
-                    let (digits, radix) = if num.len() > 1
-                        && (num.starts_with('x') || num.starts_with('X'))
-                    {
-                        (&num[1..], 16u32)
-                    } else {
-                        (num, 10u32)
-                    };
+                    let (digits, radix) =
+                        if num.len() > 1 && (num.starts_with('x') || num.starts_with('X')) {
+                            (&num[1..], 16u32)
+                        } else {
+                            (num, 10u32)
+                        };
                     u32::from_str_radix(digits, radix)
                         .ok()
                         .and_then(char::from_u32)
@@ -196,9 +211,9 @@ pub struct HttpParts {
 
 pub fn parse_http(raw: &[u8]) -> HttpParts {
     let mut p = HttpParts::default();
-    let head_end = find_sub(raw, b"\r\n\r\n").map(|i| i + 4).unwrap_or_else(|| {
-        find_sub(raw, b"\n\n").map(|i| i + 2).unwrap_or(raw.len())
-    });
+    let head_end = find_sub(raw, b"\r\n\r\n")
+        .map(|i| i + 4)
+        .unwrap_or_else(|| find_sub(raw, b"\n\n").map(|i| i + 2).unwrap_or(raw.len()));
     p.head_len = head_end.min(raw.len());
     let head = String::from_utf8_lossy(&raw[..p.head_len]);
     let mut lines = head.lines();
@@ -232,7 +247,10 @@ pub fn parse_http(raw: &[u8]) -> HttpParts {
             continue;
         }
         if let Some(colon) = line.find(':') {
-            p.headers.push((line[..colon].trim().to_string(), line[colon + 1..].trim().to_string()));
+            p.headers.push((
+                line[..colon].trim().to_string(),
+                line[colon + 1..].trim().to_string(),
+            ));
             last_header = Some(p.headers.len() - 1);
         }
     }
@@ -255,12 +273,16 @@ pub fn find_sub(hay: &[u8], needle: &[u8]) -> Option<usize> {
 
 /// Byte offset just past the CRLFCRLF (or LFLF) that ends the message head.
 pub fn find_head_end(raw: &[u8]) -> Option<usize> {
-    find_sub(raw, b"\r\n\r\n").map(|i| i + 4).or_else(|| find_sub(raw, b"\n\n").map(|i| i + 2))
+    find_sub(raw, b"\r\n\r\n")
+        .map(|i| i + 4)
+        .or_else(|| find_sub(raw, b"\n\n").map(|i| i + 2))
 }
 
 /// Replace or add an arbitrary request header.
 pub fn patch_header(raw: &[u8], name: &str, value: &str) -> Vec<u8> {
-    let head_end = find_sub(raw, b"\r\n\r\n").map(|i| i + 4).unwrap_or(raw.len());
+    let head_end = find_sub(raw, b"\r\n\r\n")
+        .map(|i| i + 4)
+        .unwrap_or(raw.len());
     let head = String::from_utf8_lossy(&raw[..head_end]);
     let mut lines = head.lines();
     // The request or status line is kept as it is; only header lines are
@@ -271,7 +293,9 @@ pub fn patch_header(raw: &[u8], name: &str, value: &str) -> Vec<u8> {
     let prefix = format!("{}:", name.to_ascii_lowercase());
     // The blank line that ends the head is not a header: re-emitting it put
     // the patched header into the body.
-    let rest: Vec<&str> = lines.filter(|l| !l.is_empty() && !l.to_ascii_lowercase().starts_with(&prefix)).collect();
+    let rest: Vec<&str> = lines
+        .filter(|l| !l.is_empty() && !l.to_ascii_lowercase().starts_with(&prefix))
+        .collect();
     let mut out = Vec::with_capacity(raw.len() + 32);
     out.extend_from_slice(first.as_bytes());
     out.extend_from_slice(b"\r\n");
@@ -287,11 +311,14 @@ pub fn patch_header(raw: &[u8], name: &str, value: &str) -> Vec<u8> {
 
 /// Convert an absolute-form request URI (proxy form) to origin form before
 /// sending to an origin server (HTTP/1.1 spec §5.3.2).
-pub fn origin_form(raw: &[u8]) -> Vec<u8> {    let line_end = match raw.iter().position(|&b| b == b'\n') {
+pub fn origin_form(raw: &[u8]) -> Vec<u8> {
+    let line_end = match raw.iter().position(|&b| b == b'\n') {
         Some(i) => i + 1,
         None => return raw.to_vec(),
     };
-    let line = String::from_utf8_lossy(&raw[..line_end]).trim_end().to_string();
+    let line = String::from_utf8_lossy(&raw[..line_end])
+        .trim_end()
+        .to_string();
     let mut it = line.split_whitespace();
     let method = it.next().unwrap_or("");
     let uri = it.next().unwrap_or("");
@@ -328,7 +355,11 @@ pub fn hex_view(data: &[u8], limit: usize) -> String {
         }
         s.push_str(" |");
         for b in chunk {
-            let c = if b.is_ascii_graphic() || *b == b' ' { *b as char } else { '.' };
+            let c = if b.is_ascii_graphic() || *b == b' ' {
+                *b as char
+            } else {
+                '.'
+            };
             s.push(c);
         }
         s.push_str("|\n");
@@ -342,7 +373,11 @@ fn crc32(data: &[u8]) -> u32 {
     for (i, t) in table.iter_mut().enumerate() {
         let mut c = i as u32;
         for _ in 0..8 {
-            c = if c & 1 != 0 { 0xEDB88320 ^ (c >> 1) } else { c >> 1 };
+            c = if c & 1 != 0 {
+                0xEDB88320 ^ (c >> 1)
+            } else {
+                c >> 1
+            };
         }
         *t = c;
     }
@@ -422,15 +457,25 @@ mod tests {
 
     #[test]
     fn content_length_is_restamped() {
-        assert_eq!(update_content_length(b"POST / HTTP/1.1\r\nContent-Length: 1\r\n\r\nabc"), b"POST / HTTP/1.1\r\nContent-Length: 3\r\n\r\nabc".to_vec());
-        assert_eq!(update_content_length(b"POST / HTTP/1.1\r\nHost: h\r\n\r\nab"), b"POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 2\r\n\r\nab".to_vec());
-        assert_eq!(update_content_length(b"GET / HTTP/1.1\r\nHost: h\r\n\r\n"), b"GET / HTTP/1.1\r\nHost: h\r\n\r\n".to_vec());
+        assert_eq!(
+            update_content_length(b"POST / HTTP/1.1\r\nContent-Length: 1\r\n\r\nabc"),
+            b"POST / HTTP/1.1\r\nContent-Length: 3\r\n\r\nabc".to_vec()
+        );
+        assert_eq!(
+            update_content_length(b"POST / HTTP/1.1\r\nHost: h\r\n\r\nab"),
+            b"POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 2\r\n\r\nab".to_vec()
+        );
+        assert_eq!(
+            update_content_length(b"GET / HTTP/1.1\r\nHost: h\r\n\r\n"),
+            b"GET / HTTP/1.1\r\nHost: h\r\n\r\n".to_vec()
+        );
     }
 
     /// A-04: obsolete line folding (RFC 9112 §5.2) is joined into one value.
     #[test]
     fn folded_header_lines_are_joined() {
-        let raw = b"HTTP/1.1 200 OK\r\nX-Long: first\r\n\tsecond\r\n  third\r\nContent-Length: 0\r\n\r\n";
+        let raw =
+            b"HTTP/1.1 200 OK\r\nX-Long: first\r\n\tsecond\r\n  third\r\nContent-Length: 0\r\n\r\n";
         let p = parse_http(raw);
         let long = get_header(&p.headers, "X-Long").unwrap();
         assert_eq!(long, "first second third");
@@ -466,7 +511,6 @@ mod tests {
     }
 }
 
-
 /// Start a child in its own process group, so it and everything it forks
 /// (a browser's zygotes, renderers, GPU and crash handlers) can be ended
 /// together. Killing only the main browser process leaves the rest orphaned
@@ -487,26 +531,38 @@ pub fn kill_process_tree(pid: u32, marker: Option<&str>, grace: std::time::Durat
     #[cfg(unix)]
     {
         let group = format!("-{pid}");
-        let _ = std::process::Command::new("kill").args(["-TERM", "--", &group]).output();
+        let _ = std::process::Command::new("kill")
+            .args(["-TERM", "--", &group])
+            .output();
         let t0 = std::time::Instant::now();
         while t0.elapsed() < grace {
-            let alive = std::process::Command::new("kill").args(["-0", "--", &group]).output().map(|o| o.status.success()).unwrap_or(false);
+            let alive = std::process::Command::new("kill")
+                .args(["-0", "--", &group])
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false);
             if !alive {
                 break;
             }
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
-        let _ = std::process::Command::new("kill").args(["-KILL", "--", &group]).output();
+        let _ = std::process::Command::new("kill")
+            .args(["-KILL", "--", &group])
+            .output();
         if let Some(m) = marker {
             if let Ok(entries) = std::fs::read_dir("/proc") {
                 for e in entries.flatten() {
-                    let Ok(p) = e.file_name().to_string_lossy().parse::<u32>() else { continue };
+                    let Ok(p) = e.file_name().to_string_lossy().parse::<u32>() else {
+                        continue;
+                    };
                     if p == std::process::id() {
                         continue;
                     }
                     let cmdline = std::fs::read(format!("/proc/{p}/cmdline")).unwrap_or_default();
                     if String::from_utf8_lossy(&cmdline).contains(m) {
-                        let _ = std::process::Command::new("kill").args(["-KILL", &p.to_string()]).output();
+                        let _ = std::process::Command::new("kill")
+                            .args(["-KILL", &p.to_string()])
+                            .output();
                     }
                 }
             }
@@ -517,7 +573,6 @@ pub fn kill_process_tree(pid: u32, marker: Option<&str>, grace: std::time::Durat
         let _ = (pid, marker, grace);
     }
 }
-
 
 #[cfg(all(test, unix))]
 mod process_tree_tests {
@@ -539,13 +594,21 @@ mod process_tree_tests {
     fn a_forking_child_is_ended_with_all_its_descendants() {
         let marker = format!("wp-tree-test-{}", std::process::id());
         let mut cmd = std::process::Command::new("sh");
-        cmd.args(["-c", &format!("sleep 300 & sleep 300 & exec -a {marker} sleep 300")]);
+        cmd.args([
+            "-c",
+            &format!("sleep 300 & sleep 300 & exec -a {marker} sleep 300"),
+        ]);
         super::own_process_group(&mut cmd);
         let mut child = cmd.spawn().unwrap();
         std::thread::sleep(std::time::Duration::from_millis(300));
         super::kill_process_tree(child.id(), Some(&marker), std::time::Duration::from_secs(2));
         let _ = child.wait();
-        let pgid_left = std::process::Command::new("kill").args(["-0", "--", &format!("-{}", child.id())]).output().unwrap().status.success();
+        let pgid_left = std::process::Command::new("kill")
+            .args(["-0", "--", &format!("-{}", child.id())])
+            .output()
+            .unwrap()
+            .status
+            .success();
         assert!(!pgid_left, "the background sleeps must be gone too");
         assert_eq!(alive_with(&marker), 0);
     }
@@ -554,12 +617,20 @@ mod process_tree_tests {
     /// running (about 70 processes each). Every one must be gone.
     #[test]
     fn a_headless_browser_leaves_no_processes_behind() {
-        let Some(bin) = crate::crawl::chromium_binary() else { return };
+        let Some(bin) = crate::crawl::chromium_binary() else {
+            return;
+        };
         let profile = std::env::temp_dir().join(format!("wp-tree-browser-{}", std::process::id()));
         let mut cmd = std::process::Command::new(bin);
-        cmd.args(["--headless=new", "--no-sandbox", "--disable-gpu", &format!("--user-data-dir={}", profile.display()), "about:blank"])
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null());
+        cmd.args([
+            "--headless=new",
+            "--no-sandbox",
+            "--disable-gpu",
+            &format!("--user-data-dir={}", profile.display()),
+            "about:blank",
+        ])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
         super::own_process_group(&mut cmd);
         let mut child = cmd.spawn().unwrap();
         let marker = profile.display().to_string();
@@ -585,11 +656,18 @@ mod process_tree_tests {
 /// (added when the message has a body but no header). Messages without a
 /// head/body separator are returned unchanged.
 pub fn update_content_length(raw: &[u8]) -> Vec<u8> {
-    let Some(head_end) = find_sub(raw, b"\r\n\r\n").map(|i| i + 4) else { return raw.to_vec() };
+    let Some(head_end) = find_sub(raw, b"\r\n\r\n").map(|i| i + 4) else {
+        return raw.to_vec();
+    };
     let body_len = raw.len() - head_end;
     let head = String::from_utf8_lossy(&raw[..head_end]);
-    let has_cl = head.lines().any(|l| l.to_ascii_lowercase().starts_with("content-length:"));
-    let chunked = head.lines().any(|l| l.to_ascii_lowercase().starts_with("transfer-encoding:") && l.to_ascii_lowercase().contains("chunked"));
+    let has_cl = head
+        .lines()
+        .any(|l| l.to_ascii_lowercase().starts_with("content-length:"));
+    let chunked = head.lines().any(|l| {
+        l.to_ascii_lowercase().starts_with("transfer-encoding:")
+            && l.to_ascii_lowercase().contains("chunked")
+    });
     if chunked || (!has_cl && body_len == 0) {
         return raw.to_vec();
     }
@@ -601,7 +679,11 @@ pub fn update_content_length(raw: &[u8]) -> Vec<u8> {
 /// keeps sending cannot grow memory without bound. Bytes read before an
 /// error other than the cap come back as Ok when there are any and the
 /// error is an unexpected EOF (servers closing without TLS close_notify).
-pub fn read_capped<R: std::io::Read + ?Sized>(r: &mut R, cap: usize, what: &str) -> std::io::Result<Vec<u8>> {
+pub fn read_capped<R: std::io::Read + ?Sized>(
+    r: &mut R,
+    cap: usize,
+    what: &str,
+) -> std::io::Result<Vec<u8>> {
     let mut out = Vec::new();
     let mut chunk = [0u8; 16384];
     loop {
@@ -609,12 +691,17 @@ pub fn read_capped<R: std::io::Read + ?Sized>(r: &mut R, cap: usize, what: &str)
             Ok(0) => return Ok(out),
             Ok(n) => {
                 if out.len() + n > cap {
-                    return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("{what} exceeded {cap} bytes")));
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!("{what} exceeded {cap} bytes"),
+                    ));
                 }
                 out.extend_from_slice(&chunk[..n]);
             }
             Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
-            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof && !out.is_empty() => return Ok(out),
+            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof && !out.is_empty() => {
+                return Ok(out)
+            }
             Err(e) => return Err(e),
         }
     }
@@ -630,21 +717,33 @@ pub fn read_text_file_capped(path: &std::path::Path, cap: usize) -> std::io::Res
     let what = path.display().to_string();
     let mut file = std::fs::File::open(path)?;
     if file.metadata()?.len() > cap as u64 {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("{what} exceeded {cap} bytes")));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("{what} exceeded {cap} bytes"),
+        ));
     }
     let bytes = read_capped(&mut file, cap, &what)?;
-    String::from_utf8(bytes).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("{what} is not UTF-8: {e}")))
+    String::from_utf8(bytes).map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("{what} is not UTF-8: {e}"),
+        )
+    })
 }
 
 #[cfg(test)]
 mod bounded_file_tests {
     #[test]
     fn text_file_limit_rejects_before_reading_and_allows_exact_limit() {
-        let path = std::env::temp_dir().join(format!("webprobe-bounded-file-{}", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("webprobe-bounded-file-{}", std::process::id()));
         std::fs::write(&path, b"1234").unwrap();
         assert_eq!(super::read_text_file_capped(&path, 4).unwrap(), "1234");
         std::fs::write(&path, b"12345").unwrap();
-        assert_eq!(super::read_text_file_capped(&path, 4).unwrap_err().kind(), std::io::ErrorKind::InvalidData);
+        assert_eq!(
+            super::read_text_file_capped(&path, 4).unwrap_err().kind(),
+            std::io::ErrorKind::InvalidData
+        );
         let _ = std::fs::remove_file(path);
     }
 }
@@ -654,7 +753,11 @@ mod bounded_file_tests {
 /// process writing without newlines cannot grow memory. Ends at EOF or on
 /// an error.
 pub fn capped_lines<R: std::io::BufRead>(r: R, cap: usize) -> CappedLines<R> {
-    CappedLines { r, cap, done: false }
+    CappedLines {
+        r,
+        cap,
+        done: false,
+    }
 }
 
 pub struct CappedLines<R> {

@@ -1,7 +1,6 @@
 // Split from scan.rs (L5, issue #35). Bodies unchanged; visibility promoted
 // to pub(crate) where siblings across the split need access.
 
-
 pub const SSI_ALPHABET: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
 
 /// burp.Zcub.Zy: Caesar shift of the first `len` alphabet chars of `s` by
@@ -35,7 +34,9 @@ pub fn run_ssi_check<F: FnMut(&str) -> Option<String>>(value: &str, mut send: F)
     let token: String = {
         use rand::Rng;
         let mut g = rand::thread_rng();
-        (0..10).map(|_| SSI_ALPHABET[g.gen_range(0..26)] as char).collect()
+        (0..10)
+            .map(|_| SSI_ALPHABET[g.gen_range(0..26)] as char)
+            .collect()
     };
     let (payload, expected) = ssi_payload(&token);
     let body = send(&format!("{value}{payload}"))?;
@@ -64,13 +65,37 @@ pub fn ssti_probes(prefix: &str, suffix: &str) -> Vec<SstiProbe> {
     let mut g = rand::thread_rng();
     let n = |g: &mut rand::rngs::ThreadRng| g.gen_range(100..1000);
     let (a, b, c, d) = (n(&mut g), n(&mut g), n(&mut g), n(&mut g));
-    let p = |engine: &'static str, payload: String, expected: Vec<String>| SstiProbe { engine, payload, expected };
+    let p = |engine: &'static str, payload: String, expected: Vec<String>| SstiProbe {
+        engine,
+        payload,
+        expected,
+    };
     vec![
-        p("Freemarker/EL ${}", format!("{prefix}${{{a}*{b}}}{suffix}"), vec![format!("{prefix}{}{suffix}", a * b)]),
-        p("Jinja/Twig {{}}", format!("{prefix}{{{{{a}*{b}}}}}{suffix}"), vec![format!("{prefix}{}{suffix}", a * b)]),
-        p("Spring/Thymeleaf #{}", format!("{prefix}#{{{a}*{b}}}{suffix}"), vec![format!("{prefix}{}{suffix}", a * b)]),
-        p("Struts/OGNL %{}", format!("{prefix}%{{{a}*{b}}}{suffix}"), vec![format!("{prefix}{}{suffix}", a * b)]),
-        p("Angular/other [[]]", format!("{prefix}[[{a}*{b}]]{suffix}"), vec![format!("{prefix}{}{suffix}", a * b)]),
+        p(
+            "Freemarker/EL ${}",
+            format!("{prefix}${{{a}*{b}}}{suffix}"),
+            vec![format!("{prefix}{}{suffix}", a * b)],
+        ),
+        p(
+            "Jinja/Twig {{}}",
+            format!("{prefix}{{{{{a}*{b}}}}}{suffix}"),
+            vec![format!("{prefix}{}{suffix}", a * b)],
+        ),
+        p(
+            "Spring/Thymeleaf #{}",
+            format!("{prefix}#{{{a}*{b}}}{suffix}"),
+            vec![format!("{prefix}{}{suffix}", a * b)],
+        ),
+        p(
+            "Struts/OGNL %{}",
+            format!("{prefix}%{{{a}*{b}}}{suffix}"),
+            vec![format!("{prefix}{}{suffix}", a * b)],
+        ),
+        p(
+            "Angular/other [[]]",
+            format!("{prefix}[[{a}*{b}]]{suffix}"),
+            vec![format!("{prefix}{}{suffix}", a * b)],
+        ),
         p(
             "Smarty {}",
             format!("{prefix}{{{a}*{b}}}{{*commentedout*}}{{{c}*{d}}}{suffix}"),
@@ -79,11 +104,29 @@ pub fn ssti_probes(prefix: &str, suffix: &str) -> Vec<SstiProbe> {
         p(
             "Twig {{*'*'}}",
             format!("{prefix}{{{{{a}*'{b}'}}}}{{#commentedout#}}{{{{{c}*{d}}}}}{suffix}"),
-            vec![format!("{prefix}{}{suffix}", c * d), format!("{prefix}{}{}{suffix}", a * b, c * d)],
+            vec![
+                format!("{prefix}{}{suffix}", c * d),
+                format!("{prefix}{}{}{suffix}", a * b, c * d),
+            ],
         ),
-        p("EL ${''.class}", format!("{prefix}${{''.class}}{suffix}"), vec![format!("{prefix}class java.lang.String{suffix}")]),
-        p("EL ${os.arch}", format!("{prefix}${{os.arch}}{suffix}"), vec![format!("{prefix}amd64{suffix}"), format!("{prefix}x86_64{suffix}")]),
-        p("EL ${file.separator}", format!("{prefix}${{file.separator}}{suffix}"), vec![format!("{prefix}/{suffix}"), format!("{prefix}\\{suffix}")]),
+        p(
+            "EL ${''.class}",
+            format!("{prefix}${{''.class}}{suffix}"),
+            vec![format!("{prefix}class java.lang.String{suffix}")],
+        ),
+        p(
+            "EL ${os.arch}",
+            format!("{prefix}${{os.arch}}{suffix}"),
+            vec![
+                format!("{prefix}amd64{suffix}"),
+                format!("{prefix}x86_64{suffix}"),
+            ],
+        ),
+        p(
+            "EL ${file.separator}",
+            format!("{prefix}${{file.separator}}{suffix}"),
+            vec![format!("{prefix}/{suffix}"), format!("{prefix}\\{suffix}")],
+        ),
     ]
 }
 
@@ -95,18 +138,30 @@ pub struct SstiHit {
 /// burp.Zi6p echo-based template/code injection: for each detector, send
 /// `<prefix>EXPR<suffix>` and report when the rendered `expected` appears in
 /// the response while the raw payload does not (so a literal echo is rejected).
-pub fn run_ssti_check<F: FnMut(&str) -> Option<String>>(value: &str, mut send: F) -> Option<SstiHit> {
+pub fn run_ssti_check<F: FnMut(&str) -> Option<String>>(
+    value: &str,
+    mut send: F,
+) -> Option<SstiHit> {
     use rand::Rng;
     let mut g = rand::thread_rng();
-    let rnd = |g: &mut rand::rngs::ThreadRng| (0..5).map(|_| (b'a' + g.gen_range(0..26)) as char).collect::<String>();
+    let rnd = |g: &mut rand::rngs::ThreadRng| {
+        (0..5)
+            .map(|_| (b'a' + g.gen_range(0..26)) as char)
+            .collect::<String>()
+    };
     let (prefix, suffix) = (rnd(&mut g), rnd(&mut g));
     for probe in ssti_probes(&prefix, &suffix) {
-        let Some(body) = send(&format!("{value}{}", probe.payload)) else { continue };
+        let Some(body) = send(&format!("{value}{}", probe.payload)) else {
+            continue;
+        };
         if body.contains(&probe.payload) {
             continue; // literal echo, not evaluation
         }
         if probe.expected.iter().any(|e| body.contains(e)) {
-            return Some(SstiHit { engine: probe.engine, payload: probe.payload });
+            return Some(SstiHit {
+                engine: probe.engine,
+                payload: probe.payload,
+            });
         }
     }
     None

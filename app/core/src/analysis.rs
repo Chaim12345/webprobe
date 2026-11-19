@@ -168,10 +168,7 @@ fn find_excerpt(
 
     let (match_character, query_characters) = if case_sensitive {
         let byte_index = text.find(query)?;
-        (
-            text[..byte_index].chars().count(),
-            query.chars().count(),
-        )
+        (text[..byte_index].chars().count(), query.chars().count())
     } else {
         // Lowercasing can expand a character (e.g. 'İ' becomes two chars), so
         // the folded match position has to be mapped back onto the original
@@ -185,10 +182,7 @@ fn find_excerpt(
             .get(folded_end)
             .copied()
             .unwrap_or_else(|| text.chars().count());
-        (
-            original_start,
-            original_end.saturating_sub(original_start),
-        )
+        (original_start, original_end.saturating_sub(original_start))
     };
 
     Some(make_excerpt(text, match_character, query_characters.max(1)))
@@ -203,9 +197,7 @@ fn make_excerpt(text: &str, match_character: usize, query_characters: usize) -> 
 
     let match_character = match_character.min(total);
     let start = match_character.saturating_sub(EXCERPT_BEFORE);
-    let match_end = match_character
-        .saturating_add(query_characters)
-        .min(total);
+    let match_end = match_character.saturating_add(query_characters).min(total);
     let end = match_end.saturating_add(EXCERPT_AFTER).min(total);
 
     let mut excerpt = String::new();
@@ -223,10 +215,7 @@ fn make_excerpt(text: &str, match_character: usize, query_characters: usize) -> 
         excerpt.push('…');
     }
 
-    let collapsed = excerpt
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
+    let collapsed = excerpt.split_whitespace().collect::<Vec<_>>().join(" ");
     if collapsed.is_empty() {
         "…".to_string()
     } else {
@@ -436,7 +425,11 @@ fn gamma_continued_fraction(shape: f64, x: f64) -> f64 {
     const FPMIN: f64 = 1e-300;
     let mut b = x + 1.0 - shape;
     let mut c = 1.0 / FPMIN;
-    let mut d = if b.abs() < FPMIN { 1.0 / FPMIN } else { 1.0 / b };
+    let mut d = if b.abs() < FPMIN {
+        1.0 / FPMIN
+    } else {
+        1.0 / b
+    };
     let mut h = d;
     for index in 1..20_000u32 {
         let an = -(index as f64) * (index as f64 - shape);
@@ -528,9 +521,21 @@ impl ComparerState {
     /// Recompute the exact line-level LCS diff and summary counts.
     pub fn recompute(&mut self) {
         self.rows = diff_line_rows(&self.left, &self.right);
-        self.common = self.rows.iter().filter(|row| row.kind == DiffKind::Same).count();
-        self.added = self.rows.iter().filter(|row| row.kind == DiffKind::Added).count();
-        self.removed = self.rows.iter().filter(|row| row.kind == DiffKind::Removed).count();
+        self.common = self
+            .rows
+            .iter()
+            .filter(|row| row.kind == DiffKind::Same)
+            .count();
+        self.added = self
+            .rows
+            .iter()
+            .filter(|row| row.kind == DiffKind::Added)
+            .count();
+        self.removed = self
+            .rows
+            .iter()
+            .filter(|row| row.kind == DiffKind::Removed)
+            .count();
         self.common_bytes = self
             .rows
             .iter()
@@ -551,7 +556,12 @@ impl ComparerState {
             .sum();
         self.status = format!(
             "{} common ({} bytes), {} added ({} bytes), {} removed ({} bytes)",
-            self.common, self.common_bytes, self.added, self.added_bytes, self.removed, self.removed_bytes
+            self.common,
+            self.common_bytes,
+            self.added,
+            self.added_bytes,
+            self.removed,
+            self.removed_bytes
         );
     }
 
@@ -654,13 +664,7 @@ fn lcs_hirschberg(left: &[&str], right: &[&str]) -> Vec<(usize, usize)> {
     }
     let middle_left = &left[prefix..left.len() - suffix];
     let middle_right = &right[prefix..right.len() - suffix];
-    hirschberg_recursion(
-        middle_left,
-        middle_right,
-        prefix,
-        prefix,
-        &mut matches,
-    );
+    hirschberg_recursion(middle_left, middle_right, prefix, prefix, &mut matches);
     for index in 0..suffix {
         matches.push((left.len() - suffix + index, right.len() - suffix + index));
     }
@@ -706,7 +710,13 @@ fn hirschberg_recursion(
         }
     }
 
-    hirschberg_recursion(&left[..middle], &right[..best_split], left_offset, right_offset, out);
+    hirschberg_recursion(
+        &left[..middle],
+        &right[..best_split],
+        left_offset,
+        right_offset,
+        out,
+    );
     hirschberg_recursion(
         &left[middle..],
         &right[best_split..],
@@ -745,9 +755,16 @@ mod tests {
         // ln Gamma at integers and a half-integer.
         assert!(close(super::ln_gamma(1.0), 0.0), "{}", super::ln_gamma(1.0));
         assert!(close(super::ln_gamma(5.0), 24f64.ln()));
-        assert!(close(super::ln_gamma(0.5), std::f64::consts::PI.sqrt().ln()));
+        assert!(close(
+            super::ln_gamma(0.5),
+            std::f64::consts::PI.sqrt().ln()
+        ));
         // Q(1/2, x^2) = erfc(x).
-        assert!(close(regularized_gamma_q(0.5, 0.25), 0.479_500_122), "{}", regularized_gamma_q(0.5, 0.25));
+        assert!(
+            close(regularized_gamma_q(0.5, 0.25), 0.479_500_122),
+            "{}",
+            regularized_gamma_q(0.5, 0.25)
+        );
         assert!(close(regularized_gamma_q(0.5, 1.0), 0.157_299_207));
         // Q(1, x) = exp(-x), on both the series and the continued-fraction side.
         assert!(close(regularized_gamma_q(1.0, 0.5), (-0.5f64).exp()));
@@ -792,10 +809,7 @@ mod tests {
         assert_eq!(stats.token_length, 4);
         close(stats.bits_per_character, 1.0);
         close(stats.total_entropy_bits, 8.0);
-        assert_eq!(
-            stats.char_distribution,
-            vec![('a', 4), ('b', 4)]
-        );
+        assert_eq!(stats.char_distribution, vec![('a', 4), ('b', 4)]);
     }
 
     #[test]
@@ -855,12 +869,7 @@ mod tests {
 
     #[test]
     fn search_handles_unicode_without_panicking() {
-        let records = vec![record(
-            "1",
-            "Proxy",
-            "Über",
-            "İstanbul αβγ needle δ\u{0}ε",
-        )];
+        let records = vec![record("1", "Proxy", "Über", "İstanbul αβγ needle δ\u{0}ε")];
         let hits = search_records(false, "needle", &records);
         assert_eq!(hits.len(), 1);
         assert!(hits[0].excerpt.contains("needle"));

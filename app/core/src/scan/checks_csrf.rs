@@ -62,7 +62,10 @@ pub fn csrf_applicable(method: &str, content_type: &str, headers: &[(String, Str
         return false;
     }
     let ct = content_type.to_ascii_lowercase();
-    if !(ct.contains("x-www-form-urlencoded") || ct.contains("multipart/form-data") || ct.is_empty()) {
+    if !(ct.contains("x-www-form-urlencoded")
+        || ct.contains("multipart/form-data")
+        || ct.is_empty())
+    {
         return false;
     }
     !headers.iter().any(|(k, _)| {
@@ -130,12 +133,9 @@ pub struct StaticTokenHit {
 /// variant, which reads the freshly rendered token out of the page.
 pub fn form_token_value(html: &str, name: &str) -> Option<String> {
     let esc = regex::escape(name);
-    let name_first = format!(
-        r#"(?i)name\s*=\s*["']?{esc}["']?[^>]*?value\s*=\s*["']([^"']*)["']"#
-    );
-    let value_first = format!(
-        r#"(?i)value\s*=\s*["']([^"']*)["'][^>]*?name\s*=\s*["']?{esc}["']?"#
-    );
+    let name_first = format!(r#"(?i)name\s*=\s*["']?{esc}["']?[^>]*?value\s*=\s*["']([^"']*)["']"#);
+    let value_first =
+        format!(r#"(?i)value\s*=\s*["']([^"']*)["'][^>]*?name\s*=\s*["']?{esc}["']?"#);
     let re = regex::Regex::new(&name_first).ok()?;
     if let Some(c) = re.captures(html) {
         return Some(c[1].to_string());
@@ -199,7 +199,11 @@ pub fn csrf_static_token_hit(
     for (name, original) in &originals {
         if let Some(fresh) = form_token_value(&html, name) {
             if !fresh.is_empty() && fresh == *original {
-                return Some(StaticTokenHit { param: name.clone(), value: fresh, exchange: ScanEvidence::new(get_req.as_bytes(), Some(&resp[..])) });
+                return Some(StaticTokenHit {
+                    param: name.clone(),
+                    value: fresh,
+                    exchange: ScanEvidence::new(get_req.as_bytes(), Some(&resp[..])),
+                });
             }
         }
     }
@@ -239,7 +243,12 @@ pub fn redirect_stays_on_path(location: &str, path: &str) -> bool {
 /// SCANNER_ACTIVE_CHECKS_CSRF (burp.Zg8u); the baseline itself must be a
 /// success (burp.Zg8u.ZN skips 4xx/5xx originals) and the replay must not
 /// have been bounced to a login page.
-pub fn is_csrf_hit(baseline_status: &str, probe_status: &str, probe_location: &str, path: &str) -> bool {
+pub fn is_csrf_hit(
+    baseline_status: &str,
+    probe_status: &str,
+    probe_location: &str,
+    path: &str,
+) -> bool {
     if !(baseline_status.starts_with('2') || baseline_status.starts_with('3')) {
         return false;
     }

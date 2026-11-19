@@ -36,22 +36,30 @@ pub fn read_request<R: Read>(stream: &mut R) -> std::io::Result<Vec<u8>> {
             break;
         }
         if buf.len() > 4 * 1024 * 1024 {
-            return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "request too large"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "request too large",
+            ));
         }
     }
     let head_len = match head_len {
         Some(h) => h,
         None => return Ok(buf),
     };
-    let too_large = || std::io::Error::new(std::io::ErrorKind::InvalidData, "request body too large");
+    let too_large =
+        || std::io::Error::new(std::io::ErrorKind::InvalidData, "request body too large");
     // Transfer-Encoding wins over Content-Length (RFC 9112 §6.3). A chunked
     // upload is read to its last chunk; it used to be forwarded with only the
     // bytes of the first read.
     let head = String::from_utf8_lossy(&buf[..head_len]).to_ascii_lowercase();
-    let chunked = head.lines().any(|l| l.starts_with("transfer-encoding:") && l.contains("chunked"));
+    let chunked = head
+        .lines()
+        .any(|l| l.starts_with("transfer-encoding:") && l.contains("chunked"));
     if chunked {
         let mut cur = crate::codec::ChunkCursor::default();
-        while crate::codec::scan_chunked(&buf[head_len..], &mut cur, |_| {}) == crate::codec::Chunked::Partial {
+        while crate::codec::scan_chunked(&buf[head_len..], &mut cur, |_| {})
+            == crate::codec::Chunked::Partial
+        {
             if buf.len() - head_len > crate::codec::MAX_BODY {
                 return Err(too_large());
             }

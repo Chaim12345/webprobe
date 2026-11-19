@@ -20,11 +20,17 @@ impl<T> Mutex<T> {
     }
 
     pub fn lock(&self) -> Result<MutexGuard<'_, T>, Infallible> {
-        Ok(self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner()))
+        Ok(self
+            .0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()))
     }
 
     pub fn into_inner(self) -> Result<T, Infallible> {
-        Ok(self.0.into_inner().unwrap_or_else(|poisoned| poisoned.into_inner()))
+        Ok(self
+            .0
+            .into_inner()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()))
     }
 }
 

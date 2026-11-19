@@ -12,8 +12,8 @@ use crate::sync::Mutex;
 
 use rand::RngCore;
 use rcgen::{
-    BasicConstraints, Certificate, CertificateParams, DnType, ExtendedKeyUsagePurpose, IsCa, KeyPair,
-    KeyUsagePurpose, SerialNumber, PKCS_RSA_SHA256,
+    BasicConstraints, Certificate, CertificateParams, DnType, ExtendedKeyUsagePurpose, IsCa,
+    KeyPair, KeyUsagePurpose, SerialNumber, PKCS_RSA_SHA256,
 };
 use rsa::pkcs8::EncodePrivateKey;
 use rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};
@@ -33,7 +33,12 @@ fn der_of(input: &[u8]) -> Vec<u8> {
     if let (Some(a), Some(b)) = (text.find("-----BEGIN "), text.find("-----END ")) {
         let body_start = text[a..].find('\n').map(|i| a + i + 1).unwrap_or(a);
         // END before the line after BEGIN: not a PEM block (no reversed range).
-        let b64: String = text.get(body_start..b).unwrap_or("").chars().filter(|c| !c.is_whitespace()).collect();
+        let b64: String = text
+            .get(body_start..b)
+            .unwrap_or("")
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .collect();
         if let Ok(d) = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, b64) {
             return d;
         }
@@ -43,12 +48,20 @@ fn der_of(input: &[u8]) -> Vec<u8> {
 
 /// Check that `cert_der` is a CA certificate and `key_pkcs8` its private key.
 fn check_ca_pair(cert_der: &[u8], key_pkcs8: &[u8]) -> Result<(Vec<u8>, KeyPair), String> {
-    let (_, cert) = x509_parser::parse_x509_certificate(cert_der).map_err(|e| format!("not an X.509 certificate: {e}"))?;
-    let is_ca = cert.basic_constraints().ok().flatten().is_some_and(|b| b.value.ca);
+    let (_, cert) = x509_parser::parse_x509_certificate(cert_der)
+        .map_err(|e| format!("not an X.509 certificate: {e}"))?;
+    let is_ca = cert
+        .basic_constraints()
+        .ok()
+        .flatten()
+        .is_some_and(|b| b.value.ca);
     if !is_ca {
-        return Err("the certificate is not a CA certificate (basicConstraints CA:TRUE missing)".into());
+        return Err(
+            "the certificate is not a CA certificate (basicConstraints CA:TRUE missing)".into(),
+        );
     }
-    let key = KeyPair::try_from(key_pkcs8).map_err(|e| format!("private key (PKCS#8 expected): {e}"))?;
+    let key =
+        KeyPair::try_from(key_pkcs8).map_err(|e| format!("private key (PKCS#8 expected): {e}"))?;
     if key.public_key_der() != cert.public_key().raw {
         return Err("the private key does not belong to the certificate".into());
     }
@@ -65,22 +78,35 @@ pub fn import_ca(dir: &std::path::Path, cert: &[u8], key: &[u8]) -> Result<Strin
     let enc = |b: &[u8]| base64::Engine::encode(&base64::engine::general_purpose::STANDARD, b);
     let saved = serde_json::json!({ "imported": true, "cert_der": enc(&cert_der), "key_pkcs8": enc(&key_der) });
     let file = dir.join("ca.json");
-    write_private(dir, &file, saved.to_string().as_bytes()).map_err(|e| format!("{}: {e}", file.display()))?;
+    write_private(dir, &file, saved.to_string().as_bytes())
+        .map_err(|e| format!("{}: {e}", file.display()))?;
     use sha2::Digest;
-    Ok(sha2::Sha256::digest(&cert_der).iter().map(|b| format!("{b:02X}")).collect::<Vec<_>>().join(":"))
+    Ok(sha2::Sha256::digest(&cert_der)
+        .iter()
+        .map(|b| format!("{b:02X}"))
+        .collect::<Vec<_>>()
+        .join(":"))
 }
 
 fn generate_rsa_key() -> Result<KeyPair, String> {
     let mut rng = rand::rngs::OsRng;
-    let key = rsa::RsaPrivateKey::new(&mut rng, RSA_BITS).map_err(|e| format!("generate RSA key: {e}"))?;
-    let der = key.to_pkcs8_der().map_err(|e| format!("encode RSA key: {e}"))?;
-    KeyPair::from_pkcs8_der_and_sign_algo(&PrivatePkcs8KeyDer::from(der.as_bytes()), &PKCS_RSA_SHA256)
-        .map_err(|e| format!("import RSA key: {e}"))
+    let key = rsa::RsaPrivateKey::new(&mut rng, RSA_BITS)
+        .map_err(|e| format!("generate RSA key: {e}"))?;
+    let der = key
+        .to_pkcs8_der()
+        .map_err(|e| format!("encode RSA key: {e}"))?;
+    KeyPair::from_pkcs8_der_and_sign_algo(
+        &PrivatePkcs8KeyDer::from(der.as_bytes()),
+        &PKCS_RSA_SHA256,
+    )
+    .map_err(|e| format!("import RSA key: {e}"))
 }
 
 fn add_calendar_years(value: OffsetDateTime, years: i32) -> Result<OffsetDateTime, String> {
     let year = value.year() + years;
-    value.replace_year(year).or_else(|_| value.replace_day(28).and_then(|v| v.replace_year(year)))
+    value
+        .replace_year(year)
+        .or_else(|_| value.replace_day(28).and_then(|v| v.replace_year(year)))
         .map_err(|e| format!("set certificate year: {e}"))
 }
 
@@ -103,7 +129,9 @@ pub fn default_ca_dir() -> Option<std::path::PathBuf> {
     }
     let base = std::env::var_os("XDG_CONFIG_HOME")
         .map(std::path::PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".config")))?;
+        .or_else(|| {
+            std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".config"))
+        })?;
     Some(base.join("webprobe"))
 }
 
@@ -115,14 +143,21 @@ pub fn retire_ca(dir: &std::path::Path) -> Result<std::path::PathBuf, String> {
     if !file.exists() {
         return Err(format!("No stored CA at {}", file.display()));
     }
-    let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
     let backup = dir.join(format!("ca.json.retired-{secs}"));
     std::fs::rename(&file, &backup).map_err(|e| format!("Could not set the CA aside: {e}"))?;
     Ok(backup)
 }
 
 /// Write a file only its owner can read (the CA private key is inside).
-fn write_private(dir: &std::path::Path, file: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+fn write_private(
+    dir: &std::path::Path,
+    file: &std::path::Path,
+    bytes: &[u8],
+) -> std::io::Result<()> {
     std::fs::create_dir_all(dir)?;
     let tmp = file.with_extension("tmp");
     {
@@ -169,10 +204,14 @@ impl MitmAuthority {
     pub fn load_or_create(dir: Option<std::path::PathBuf>) -> Result<Self, String> {
         let file = dir.as_ref().map(|d| d.join("ca.json"));
         if let Some(f) = &file {
-            if let Ok(text) = crate::util::read_text_file_capped(f, crate::util::MAX_TEXT_FILE_BYTES) {
+            if let Ok(text) =
+                crate::util::read_text_file_capped(f, crate::util::MAX_TEXT_FILE_BYTES)
+            {
                 match Self::from_saved(&text) {
                     Ok(ca) => return Ok(ca),
-                    Err(e) => eprintln!("webprobe: ignoring unreadable CA file {}: {e}", f.display()),
+                    Err(e) => {
+                        eprintln!("webprobe: ignoring unreadable CA file {}: {e}", f.display())
+                    }
                 }
             }
         }
@@ -182,7 +221,8 @@ impl MitmAuthority {
         rng.fill_bytes(&mut serial_bytes);
         let seed = CaSeed {
             serial: u64::from(u32::from_be_bytes(serial_bytes)),
-            not_before: add_calendar_years(now, ca_not_before_year(now.year()) - now.year())?.unix_timestamp(),
+            not_before: add_calendar_years(now, ca_not_before_year(now.year()) - now.year())?
+                .unix_timestamp(),
             not_after: add_calendar_years(now, CA_VALIDITY_YEARS)?.unix_timestamp(),
         };
         let ca_key = generate_rsa_key()?;
@@ -194,7 +234,10 @@ impl MitmAuthority {
                 "key_pkcs8": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, ca_key.serialize_der()),
             });
             if let Err(e) = write_private(d, f, saved.to_string().as_bytes()) {
-                eprintln!("webprobe: could not save the CA to {}: {e}; it will change on the next start", f.display());
+                eprintln!(
+                    "webprobe: could not save the CA to {}: {e}; it will change on the next start",
+                    f.display()
+                );
             }
         }
         Self::from_seed(&seed, ca_key)
@@ -203,7 +246,13 @@ impl MitmAuthority {
     fn from_saved(text: &str) -> Result<Self, String> {
         let v: serde_json::Value = serde_json::from_str(text).map_err(|e| e.to_string())?;
         if v["imported"].as_bool() == Some(true) {
-            let b64 = |k: &str| base64::Engine::decode(&base64::engine::general_purpose::STANDARD, v[k].as_str().unwrap_or_default()).map_err(|e| format!("{k}: {e}"));
+            let b64 = |k: &str| {
+                base64::Engine::decode(
+                    &base64::engine::general_purpose::STANDARD,
+                    v[k].as_str().unwrap_or_default(),
+                )
+                .map_err(|e| format!("{k}: {e}"))
+            };
             return Self::from_imported(&b64("cert_der")?, &b64("key_pkcs8")?);
         }
         let seed = CaSeed {
@@ -211,10 +260,14 @@ impl MitmAuthority {
             not_before: v["not_before"].as_i64().ok_or("no not_before")?,
             not_after: v["not_after"].as_i64().ok_or("no not_after")?,
         };
-        let der = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, v["key_pkcs8"].as_str().ok_or("no key")?)
-            .map_err(|e| e.to_string())?;
-        let key = KeyPair::from_pkcs8_der_and_sign_algo(&PrivatePkcs8KeyDer::from(der), &PKCS_RSA_SHA256)
-            .map_err(|e| format!("CA key: {e}"))?;
+        let der = base64::Engine::decode(
+            &base64::engine::general_purpose::STANDARD,
+            v["key_pkcs8"].as_str().ok_or("no key")?,
+        )
+        .map_err(|e| e.to_string())?;
+        let key =
+            KeyPair::from_pkcs8_der_and_sign_algo(&PrivatePkcs8KeyDer::from(der), &PKCS_RSA_SHA256)
+                .map_err(|e| format!("CA key: {e}"))?;
         Self::from_seed(&seed, key)
     }
 
@@ -223,7 +276,9 @@ impl MitmAuthority {
     /// the one a browser or OS was told to trust.
     fn from_seed(seed: &CaSeed, ca_key: KeyPair) -> Result<Self, String> {
         let mut params = CertificateParams::default();
-        params.distinguished_name.push(DnType::CommonName, "WebProbe Local CA");
+        params
+            .distinguished_name
+            .push(DnType::CommonName, "WebProbe Local CA");
         params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
         params.key_usages = vec![
             KeyUsagePurpose::DigitalSignature,
@@ -231,9 +286,13 @@ impl MitmAuthority {
             KeyUsagePurpose::CrlSign,
         ];
         params.serial_number = Some(SerialNumber::from(seed.serial));
-        params.not_before = OffsetDateTime::from_unix_timestamp(seed.not_before).map_err(|e| e.to_string())?;
-        params.not_after = OffsetDateTime::from_unix_timestamp(seed.not_after).map_err(|e| e.to_string())?;
-        let ca_cert = params.self_signed(&ca_key).map_err(|e| format!("generate CA: {e}"))?;
+        params.not_before =
+            OffsetDateTime::from_unix_timestamp(seed.not_before).map_err(|e| e.to_string())?;
+        params.not_after =
+            OffsetDateTime::from_unix_timestamp(seed.not_after).map_err(|e| e.to_string())?;
+        let ca_cert = params
+            .self_signed(&ca_key)
+            .map_err(|e| format!("generate CA: {e}"))?;
         let ca_der = ca_cert.der().clone();
         let ca_pem = ca_cert.pem();
         let now = OffsetDateTime::now_utc();
@@ -244,7 +303,8 @@ impl MitmAuthority {
             ca_der,
             ca_pem,
             next_serial: AtomicI32::new(leaf_seed),
-            hosts: Mutex::new(HashMap::new()), leaf_key: std::sync::OnceLock::new(),
+            hosts: Mutex::new(HashMap::new()),
+            leaf_key: std::sync::OnceLock::new(),
         })
     }
 
@@ -253,12 +313,23 @@ impl MitmAuthority {
     /// and trusted.
     fn from_imported(cert_der: &[u8], key_pkcs8: &[u8]) -> Result<Self, String> {
         let (_, key) = check_ca_pair(cert_der, key_pkcs8)?;
-        let params = CertificateParams::from_ca_cert_der(&CertificateDer::from(cert_der.to_vec())).map_err(|e| format!("CA certificate: {e}"))?;
-        let issuer = params.self_signed(&key).map_err(|e| format!("CA certificate: {e}"))?;
+        let params = CertificateParams::from_ca_cert_der(&CertificateDer::from(cert_der.to_vec()))
+            .map_err(|e| format!("CA certificate: {e}"))?;
+        let issuer = params
+            .self_signed(&key)
+            .map_err(|e| format!("CA certificate: {e}"))?;
         let ca_der = CertificateDer::from(cert_der.to_vec());
         let ca_pem = crate::tls::pem_armor(cert_der, "CERTIFICATE");
         let leaf_seed = (OffsetDateTime::now_utc().unix_timestamp_nanos() / 1_000_000) as i32;
-        Ok(Self { ca_cert: issuer, ca_key: key, ca_der, ca_pem, next_serial: AtomicI32::new(leaf_seed), hosts: Mutex::new(HashMap::new()), leaf_key: std::sync::OnceLock::new() })
+        Ok(Self {
+            ca_cert: issuer,
+            ca_key: key,
+            ca_der,
+            ca_pem,
+            next_serial: AtomicI32::new(leaf_seed),
+            hosts: Mutex::new(HashMap::new()),
+            leaf_key: std::sync::OnceLock::new(),
+        })
     }
 
     pub fn ca_pem(&self) -> &str {
@@ -269,7 +340,11 @@ impl MitmAuthority {
     /// show as the certificate fingerprint).
     pub fn ca_fingerprint(&self) -> String {
         use sha2::Digest;
-        sha2::Sha256::digest(self.ca_der.as_ref()).iter().map(|b| format!("{b:02X}")).collect::<Vec<_>>().join(":")
+        sha2::Sha256::digest(self.ca_der.as_ref())
+            .iter()
+            .map(|b| format!("{b:02X}"))
+            .collect::<Vec<_>>()
+            .join(":")
     }
 
     pub fn ca_der(&self) -> CertificateDer<'static> {
@@ -286,12 +361,20 @@ impl MitmAuthority {
     pub fn listener_config(&self, host: &str, http2: bool) -> Result<Arc<ServerConfig>, String> {
         // Built under the cache lock: with the shared leaf key a build is one
         // signature, and two connections to a new host no longer both build.
-        let key = if http2 { format!("{host}\0h2") } else { host.to_string() };
+        let key = if http2 {
+            format!("{host}\0h2")
+        } else {
+            host.to_string()
+        };
         let mut hosts = self.hosts.lock().unwrap();
         if let Some(config) = hosts.get(&key) {
             return Ok(config.clone());
         }
-        let alpn = if http2 { vec![b"h2".to_vec(), b"http/1.1".to_vec()] } else { Vec::new() };
+        let alpn = if http2 {
+            vec![b"h2".to_vec(), b"http/1.1".to_vec()]
+        } else {
+            Vec::new()
+        };
         let config = self.build_config(host, alpn)?;
         // Bounded: a crawl over many hosts must not grow this forever.
         if hosts.len() >= MAX_CACHED_HOSTS {
@@ -303,13 +386,21 @@ impl MitmAuthority {
 
     /// A fresh server config (not cached) advertising the given ALPN protocols,
     /// e.g. `h2` for an HTTP/2 upstream test server.
-    pub fn server_config_with_alpn(&self, host: &str, alpn: Vec<Vec<u8>>) -> Result<Arc<ServerConfig>, String> {
+    pub fn server_config_with_alpn(
+        &self,
+        host: &str,
+        alpn: Vec<Vec<u8>>,
+    ) -> Result<Arc<ServerConfig>, String> {
         self.build_config(host, alpn)
     }
 
     /// A server config that requires and verifies client certificates signed by
     /// the given roots (upstream mTLS test servers).
-    pub fn server_config_with_client_auth(&self, host: &str, client_roots: RootCertStore) -> Result<Arc<ServerConfig>, String> {
+    pub fn server_config_with_client_auth(
+        &self,
+        host: &str,
+        client_roots: RootCertStore,
+    ) -> Result<Arc<ServerConfig>, String> {
         use rustls::server::WebPkiClientVerifier;
         let verifier = WebPkiClientVerifier::builder(Arc::new(client_roots))
             .build()
@@ -323,7 +414,10 @@ impl MitmAuthority {
         let not_before = OffsetDateTime::now_utc() - Duration::days(LEAF_BACKDATE_DAYS);
         params.not_before = not_before;
         params.not_after = not_before + Duration::days(LEAF_VALIDITY_DAYS);
-        let serial = self.next_serial.fetch_add(1, Ordering::Relaxed).unsigned_abs();
+        let serial = self
+            .next_serial
+            .fetch_add(1, Ordering::Relaxed)
+            .unsigned_abs();
         params.serial_number = Some(SerialNumber::from(u64::from(serial)));
         let leaf_key = generate_rsa_key()?;
         let leaf = params
@@ -343,14 +437,19 @@ impl MitmAuthority {
     pub fn client_certificate(&self, common_name: &str) -> Result<(String, String), String> {
         let mut params = CertificateParams::new(Vec::new())
             .map_err(|e| format!("invalid client certificate name: {e}"))?;
-        params.distinguished_name.push(DnType::CommonName, common_name);
+        params
+            .distinguished_name
+            .push(DnType::CommonName, common_name);
         params.use_authority_key_identifier_extension = true;
         params.key_usages = vec![KeyUsagePurpose::DigitalSignature];
         params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ClientAuth];
         let not_before = OffsetDateTime::now_utc() - Duration::days(LEAF_BACKDATE_DAYS);
         params.not_before = not_before;
         params.not_after = not_before + Duration::days(LEAF_VALIDITY_DAYS);
-        let serial = self.next_serial.fetch_add(1, Ordering::Relaxed).unsigned_abs();
+        let serial = self
+            .next_serial
+            .fetch_add(1, Ordering::Relaxed)
+            .unsigned_abs();
         params.serial_number = Some(SerialNumber::from(u64::from(serial)));
         let key = generate_rsa_key()?;
         let cert = params
@@ -371,7 +470,10 @@ impl MitmAuthority {
         params.not_after = not_before + Duration::days(LEAF_VALIDITY_DAYS);
         // Java uses Math.abs(previous), then wrapping increment. rcgen only emits positive serials;
         // unsigned_abs deliberately maps Java's negative MIN_VALUE overflow to +2147483648.
-        let serial = self.next_serial.fetch_add(1, Ordering::Relaxed).unsigned_abs();
+        let serial = self
+            .next_serial
+            .fetch_add(1, Ordering::Relaxed)
+            .unsigned_abs();
         params.serial_number = Some(SerialNumber::from(u64::from(serial)));
         let leaf_key = match self.leaf_key.get() {
             Some(k) => k,
@@ -417,7 +519,9 @@ pub fn upstream_config() -> Arc<ClientConfig> {
 /// must be the real thing: verified against the WebPKI roots.
 pub fn verified_client_config() -> Arc<ClientConfig> {
     let roots = RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-    let mut config = ClientConfig::builder().with_root_certificates(roots).with_no_client_auth();
+    let mut config = ClientConfig::builder()
+        .with_root_certificates(roots)
+        .with_no_client_auth();
     config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
     Arc::new(config)
 }
@@ -443,7 +547,12 @@ impl rustls::client::danger::ServerCertVerifier for AcceptAnyServerCert {
         cert: &CertificateDer<'_>,
         dss: &rustls::DigitallySignedStruct,
     ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        rustls::crypto::verify_tls12_signature(message, cert, dss, &self.0.signature_verification_algorithms)
+        rustls::crypto::verify_tls12_signature(
+            message,
+            cert,
+            dss,
+            &self.0.signature_verification_algorithms,
+        )
     }
 
     fn verify_tls13_signature(
@@ -452,7 +561,12 @@ impl rustls::client::danger::ServerCertVerifier for AcceptAnyServerCert {
         cert: &CertificateDer<'_>,
         dss: &rustls::DigitallySignedStruct,
     ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        rustls::crypto::verify_tls13_signature(message, cert, dss, &self.0.signature_verification_algorithms)
+        rustls::crypto::verify_tls13_signature(
+            message,
+            cert,
+            dss,
+            &self.0.signature_verification_algorithms,
+        )
     }
 
     fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
@@ -466,7 +580,11 @@ pub fn pem_armor(der: &[u8], label: &str) -> String {
     const TBL: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut b64 = String::new();
     for chunk in der.chunks(3) {
-        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let b = [
+            chunk[0],
+            *chunk.get(1).unwrap_or(&0),
+            *chunk.get(2).unwrap_or(&0),
+        ];
         let n = ((b[0] as u32) << 16) | ((b[1] as u32) << 8) | b[2] as u32;
         b64.push(TBL[(n >> 18) as usize & 63] as char);
         b64.push(TBL[(n >> 12) as usize & 63] as char);
@@ -486,7 +604,11 @@ pub fn pem_armor(der: &[u8], label: &str) -> String {
     out
 }
 
-pub fn client_auth_config(cert_pem: &str, key_pem: &str, roots: RootCertStore) -> Result<Arc<ClientConfig>, String> {
+pub fn client_auth_config(
+    cert_pem: &str,
+    key_pem: &str,
+    roots: RootCertStore,
+) -> Result<Arc<ClientConfig>, String> {
     use rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};
     fn pem_to_der(pem: &str) -> Result<Vec<u8>, String> {
         let normalized = pem.replace("\\n", "\n");
@@ -549,24 +671,52 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         let key = KeyPair::generate().unwrap();
         let mut params = CertificateParams::default();
-        params.distinguished_name.push(DnType::CommonName, "Engagement Test CA");
+        params
+            .distinguished_name
+            .push(DnType::CommonName, "Engagement Test CA");
         params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
         let ca = params.self_signed(&key).unwrap();
         // Not a CA, and a key from elsewhere: both refused.
-        let leafish = CertificateParams::new(vec!["x.test".into()]).unwrap().self_signed(&key).unwrap();
-        assert!(super::import_ca(&dir, leafish.pem().as_bytes(), key.serialize_pem().as_bytes()).unwrap_err().contains("not a CA"));
+        let leafish = CertificateParams::new(vec!["x.test".into()])
+            .unwrap()
+            .self_signed(&key)
+            .unwrap();
+        assert!(super::import_ca(
+            &dir,
+            leafish.pem().as_bytes(),
+            key.serialize_pem().as_bytes()
+        )
+        .unwrap_err()
+        .contains("not a CA"));
         let other = KeyPair::generate().unwrap();
-        assert!(super::import_ca(&dir, ca.pem().as_bytes(), other.serialize_pem().as_bytes()).unwrap_err().contains("does not belong"));
-        let fp = super::import_ca(&dir, ca.pem().as_bytes(), key.serialize_pem().as_bytes()).unwrap();
+        assert!(
+            super::import_ca(&dir, ca.pem().as_bytes(), other.serialize_pem().as_bytes())
+                .unwrap_err()
+                .contains("does not belong")
+        );
+        let fp =
+            super::import_ca(&dir, ca.pem().as_bytes(), key.serialize_pem().as_bytes()).unwrap();
         let auth = super::MitmAuthority::load_or_create(Some(dir.clone())).unwrap();
-        assert_eq!(auth.ca_der().as_ref(), ca.der().as_ref(), "the imported certificate is the trusted one");
+        assert_eq!(
+            auth.ca_der().as_ref(),
+            ca.der().as_ref(),
+            "the imported certificate is the trusted one"
+        );
         assert_eq!(auth.ca_fingerprint(), fp);
         // Handshake: client trusts only the imported CA.
         let mut roots = rustls::RootCertStore::empty();
         roots.add(ca.der().clone()).unwrap();
-        let client_cfg = Arc::new(rustls::ClientConfig::builder().with_root_certificates(roots).with_no_client_auth());
-        let mut client = rustls::ClientConnection::new(client_cfg, "shop.example.test".try_into().unwrap()).unwrap();
-        let mut server = rustls::ServerConnection::new(auth.server_config("shop.example.test").unwrap()).unwrap();
+        let client_cfg = Arc::new(
+            rustls::ClientConfig::builder()
+                .with_root_certificates(roots)
+                .with_no_client_auth(),
+        );
+        let mut client =
+            rustls::ClientConnection::new(client_cfg, "shop.example.test".try_into().unwrap())
+                .unwrap();
+        let mut server =
+            rustls::ServerConnection::new(auth.server_config("shop.example.test").unwrap())
+                .unwrap();
         for _ in 0..10 {
             let mut buf = Vec::new();
             client.write_tls(&mut buf).unwrap();
@@ -575,7 +725,9 @@ mod tests {
             let mut back = Vec::new();
             server.write_tls(&mut back).unwrap();
             client.read_tls(&mut back.as_slice()).unwrap();
-            client.process_new_packets().expect("host certificate chains to the imported CA");
+            client
+                .process_new_packets()
+                .expect("host certificate chains to the imported CA");
             if !client.is_handshaking() && !server.is_handshaking() {
                 break;
             }
@@ -586,16 +738,29 @@ mod tests {
 
     #[test]
     fn retiring_the_ca_renames_it_and_a_new_one_is_made_on_next_load() {
-        let dir = std::env::temp_dir().join(format!("wp-ca-retire-{}-{:?}", std::process::id(), std::thread::current().id()));
+        let dir = std::env::temp_dir().join(format!(
+            "wp-ca-retire-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         // Nothing stored yet.
         assert!(super::retire_ca(&dir).is_err());
-        let first = super::MitmAuthority::load_or_create(Some(dir.clone())).unwrap().ca_pem().to_string();
-        let again = super::MitmAuthority::load_or_create(Some(dir.clone())).unwrap().ca_pem().to_string();
+        let first = super::MitmAuthority::load_or_create(Some(dir.clone()))
+            .unwrap()
+            .ca_pem()
+            .to_string();
+        let again = super::MitmAuthority::load_or_create(Some(dir.clone()))
+            .unwrap()
+            .ca_pem()
+            .to_string();
         assert_eq!(first, again, "the stored CA is reused");
         let backup = super::retire_ca(&dir).unwrap();
         assert!(backup.exists() && !dir.join("ca.json").exists());
-        let fresh = super::MitmAuthority::load_or_create(Some(dir.clone())).unwrap().ca_pem().to_string();
+        let fresh = super::MitmAuthority::load_or_create(Some(dir.clone()))
+            .unwrap()
+            .ca_pem()
+            .to_string();
         assert_ne!(first, fresh, "a new CA after retiring the old one");
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -611,7 +776,11 @@ mod tests {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mode = std::fs::metadata(d.join("ca.json")).unwrap().permissions().mode() & 0o777;
+            let mode = std::fs::metadata(d.join("ca.json"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777;
             assert_eq!(mode, 0o600, "private key file is owner-only");
         }
         // A leaf issued after the restart chains to the saved CA.

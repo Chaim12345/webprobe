@@ -1,4 +1,3 @@
-
 use super::*;
 
 // ---------------------------------------------------------------- interface
@@ -114,6 +113,12 @@ pub(crate) static REQUEST_CHECKS: &[&dyn RequestCheck] = &[
 /// Whether `check` audits `ip` under `config`: the point type suits it,
 /// it is switched on, and a server-side check leaves the points on Burp's
 /// skip_server_side_injection_for_parameters list alone.
-pub(crate) fn check_applies(check: &dyn PointCheck, ip: &InsertionPoint, config: &crate::scan_config::ScanConfig) -> bool {
-    check.applies_to(ip) && config.check_enabled(check.id()) && !(check.server_side() && ip.skips_server_side())
+pub(crate) fn check_applies(
+    check: &dyn PointCheck,
+    ip: &InsertionPoint,
+    config: &crate::scan_config::ScanConfig,
+) -> bool {
+    check.applies_to(ip)
+        && config.check_enabled(check.id())
+        && !(check.server_side() && ip.skips_server_side())
 }

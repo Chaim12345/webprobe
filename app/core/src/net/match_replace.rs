@@ -9,7 +9,9 @@ pub fn pattern_matches(pattern: &str, is_regex: bool, text: &str) -> bool {
         return true;
     }
     if is_regex {
-        regex::Regex::new(pattern).map(|re| re.is_match(text)).unwrap_or(false)
+        regex::Regex::new(pattern)
+            .map(|re| re.is_match(text))
+            .unwrap_or(false)
     } else {
         text.contains(pattern)
     }
@@ -20,11 +22,17 @@ pub fn pattern_matches(pattern: &str, is_regex: bool, text: &str) -> bool {
 pub fn in_scope(shared: &Shared, url: &str) -> bool {
     let rules = shared.scope.lock().unwrap().clone();
     let active: Vec<&ScopeRule> = rules.iter().filter(|r| r.enabled).collect();
-    if active.iter().any(|r| !r.include && pattern_matches(&r.pattern, r.is_regex, url)) {
+    if active
+        .iter()
+        .any(|r| !r.include && pattern_matches(&r.pattern, r.is_regex, url))
+    {
         return false;
     }
     let includes: Vec<&ScopeRule> = active.iter().copied().filter(|r| r.include).collect();
-    includes.is_empty() || includes.iter().any(|r| pattern_matches(&r.pattern, r.is_regex, url))
+    includes.is_empty()
+        || includes
+            .iter()
+            .any(|r| pattern_matches(&r.pattern, r.is_regex, url))
 }
 
 /// Insert or replace a header in a raw HTTP message, keeping head order and
@@ -74,7 +82,9 @@ pub fn append_cookie(raw: &[u8], name: &str, value: &str) -> Vec<u8> {
 pub fn latest_cookie(shared: &Shared, name: &str) -> Option<String> {
     let history = shared.history.snapshot();
     for entry in history.iter().rev() {
-        let Some(resp) = &entry.resp_raw else { continue };
+        let Some(resp) = &entry.resp_raw else {
+            continue;
+        };
         let p = util::parse_http(resp);
         for (key, set_cookie) in &p.headers {
             if !key.eq_ignore_ascii_case("Set-Cookie") {

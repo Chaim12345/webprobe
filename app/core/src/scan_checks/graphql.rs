@@ -25,7 +25,13 @@ pub(crate) fn graphql_query(req: &[u8]) -> Option<(String, GqlStyle)> {
             return Some((q.to_string(), GqlStyle::Json));
         }
     }
-    let param = |text: &str| text.split('&').find_map(|kv| kv.split_once('=').filter(|(k, _)| *k == "query").map(|(_, v)| util::url_decode(&v.replace('+', " "))));
+    let param = |text: &str| {
+        text.split('&').find_map(|kv| {
+            kv.split_once('=')
+                .filter(|(k, _)| *k == "query")
+                .map(|(_, v)| util::url_decode(&v.replace('+', " ")))
+        })
+    };
     if let Some(q) = p.path.split_once('?').and_then(|(_, q)| param(q)) {
         return Some((q, GqlStyle::Get));
     }
@@ -36,14 +42,29 @@ pub(crate) fn graphql_query(req: &[u8]) -> Option<(String, GqlStyle)> {
 pub(crate) fn graphql_response(resp: &[u8]) -> Option<serde_json::Map<String, serde_json::Value>> {
     let (_, body) = status_body(resp);
     match serde_json::from_slice::<serde_json::Value>(body).ok()? {
-        serde_json::Value::Object(m) if m.contains_key("data") || m.contains_key("errors") => Some(m),
+        serde_json::Value::Object(m) if m.contains_key("data") || m.contains_key("errors") => {
+            Some(m)
+        }
         _ => None,
     }
 }
 
 /// burp.Zeuo.Za: `data.__schema` with at least one introspection field.
 pub(crate) fn has_introspection(m: &serde_json::Map<String, serde_json::Value>) -> bool {
-    m.get("data").and_then(|d| d.get("__schema")).and_then(|s| s.as_object()).is_some_and(|s| ["queryType", "mutationType", "subscriptionType", "types", "directives"].iter().any(|k| s.contains_key(*k)))
+    m.get("data")
+        .and_then(|d| d.get("__schema"))
+        .and_then(|s| s.as_object())
+        .is_some_and(|s| {
+            [
+                "queryType",
+                "mutationType",
+                "subscriptionType",
+                "types",
+                "directives",
+            ]
+            .iter()
+            .any(|k| s.contains_key(*k))
+        })
 }
 
 /// The base request rewritten to send `query` in `style` to the same path.
@@ -55,9 +76,30 @@ pub fn graphql_request(cx: &ScanCtx, query: &str, style: GqlStyle) -> Vec<u8> {
 /// A request sending `query` in `style` to `path` on the scanned host.
 pub fn graphql_request_to(cx: &ScanCtx, path: &str, query: &str, style: GqlStyle) -> Vec<u8> {
     match style {
-        GqlStyle::Json => host_request(cx, "POST", path, &[("Content-Type", "application/json; charset=utf-8")], serde_json::json!({ "query": query }).to_string().as_bytes()),
-        GqlStyle::Get => host_request(cx, "GET", &format!("{path}?query={}", crate::scan::insertion::encode_url_param(query)), &[], b""),
-        GqlStyle::Form => host_request(cx, "POST", path, &[("Content-Type", "application/x-www-form-urlencoded")], format!("query={}", crate::scan::insertion::encode_url_param(query)).as_bytes()),
+        GqlStyle::Json => host_request(
+            cx,
+            "POST",
+            path,
+            &[("Content-Type", "application/json; charset=utf-8")],
+            serde_json::json!({ "query": query }).to_string().as_bytes(),
+        ),
+        GqlStyle::Get => host_request(
+            cx,
+            "GET",
+            &format!(
+                "{path}?query={}",
+                crate::scan::insertion::encode_url_param(query)
+            ),
+            &[],
+            b"",
+        ),
+        GqlStyle::Form => host_request(
+            cx,
+            "POST",
+            path,
+            &[("Content-Type", "application/x-www-form-urlencoded")],
+            format!("query={}", crate::scan::insertion::encode_url_param(query)).as_bytes(),
+        ),
     }
 }
 
@@ -78,7 +120,19 @@ pub fn graphql_issue(cx: &ScanCtx, name: &str, detail: String, ev: Vec<ScanEvide
 
 /// The paths Burp probes for a GraphQL endpoint (burp.Zeuo.Zc, decoded).
 pub(crate) const GRAPHQL_PATHS: [&str; 13] = [
-    "/graphql", "/api", "/api/graphql", "/graphql/api", "/graphql/graphql", "/v1/api", "/v1/api/graphql", "/api/v1", "/api/graphql/v1", "/v1/graphql/api", "/graphql/api/v1", "/v1/graphql", "/graphql/v1",
+    "/graphql",
+    "/api",
+    "/api/graphql",
+    "/graphql/api",
+    "/graphql/graphql",
+    "/v1/api",
+    "/v1/api/graphql",
+    "/api/v1",
+    "/api/graphql/v1",
+    "/v1/graphql/api",
+    "/graphql/api/v1",
+    "/v1/graphql",
+    "/graphql/v1",
 ];
 
 /// GraphQL endpoint discovered, burp.Zmzj (per host): `query{__typename}`
@@ -101,7 +155,13 @@ impl RequestCheck for GraphqlEndpointDiscovered {
     }
     fn run(&self, cx: &ScanCtx) {
         let (scheme, _) = origin_of(cx);
-        if cx.stopped() || !cx.runs(self.issue()) || !openapi_hosts().lock().unwrap().insert(format!("graphql|{scheme}://{}:{}", cx.host, cx.port)) {
+        if cx.stopped()
+            || !cx.runs(self.issue())
+            || !openapi_hosts()
+                .lock()
+                .unwrap()
+                .insert(format!("graphql|{scheme}://{}:{}", cx.host, cx.port))
+        {
             return;
         }
         for path in GRAPHQL_PATHS {
@@ -111,7 +171,9 @@ impl RequestCheck for GraphqlEndpointDiscovered {
                     return;
                 }
                 let req = graphql_request_to(cx, path, "query{__typename}", style);
-                let Some(resp) = burp_send(cx, &req) else { continue };
+                let Some(resp) = burp_send(cx, &req) else {
+                    continue;
+                };
                 if graphql_response(&resp).is_some() {
                     ok.push(ScanEvidence::new(&req, Some(&resp)));
                 }
@@ -119,7 +181,16 @@ impl RequestCheck for GraphqlEndpointDiscovered {
             if !ok.is_empty() {
                 let mut e = cx.entry.clone();
                 e.path = path.to_string();
-                let mut i = mk("info", self.issue(), &e, format!("A GraphQL endpoint was found at <b>{}</b>: it answered a GraphQL query.", util::html_encode(path))).with_evidence(ok);
+                let mut i = mk(
+                    "info",
+                    self.issue(),
+                    &e,
+                    format!(
+                        "A GraphQL endpoint was found at <b>{}</b>: it answered a GraphQL query.",
+                        util::html_encode(path)
+                    ),
+                )
+                .with_evidence(ok);
                 i.confidence = "Certain".into();
                 cx.report(vec![i]);
             }
@@ -149,16 +220,32 @@ impl RequestCheck for GraphqlIntrospection {
         if cx.stopped() || !cx.runs(self.issue()) {
             return;
         }
-        let Some(style) = graphql_exchange(cx) else { return };
-        let detail = "The GraphQL endpoint answers introspection queries, which disclose its whole schema.".to_string();
+        let Some(style) = graphql_exchange(cx) else {
+            return;
+        };
+        let detail =
+            "The GraphQL endpoint answers introspection queries, which disclose its whole schema."
+                .to_string();
         if graphql_response(&cx.baseline.raw).is_some_and(|m| has_introspection(&m)) {
-            cx.report(vec![graphql_issue(cx, self.issue(), detail, vec![ScanEvidence::new(cx.req.as_bytes(), Some(&cx.baseline.raw))])]);
+            cx.report(vec![graphql_issue(
+                cx,
+                self.issue(),
+                detail,
+                vec![ScanEvidence::new(cx.req.as_bytes(), Some(&cx.baseline.raw))],
+            )]);
             return;
         }
         let req = graphql_request(cx, INTROSPECTION_QUERY, style);
-        let Some(resp) = burp_send(cx, &req) else { return };
+        let Some(resp) = burp_send(cx, &req) else {
+            return;
+        };
         if graphql_response(&resp).is_some_and(|m| has_introspection(&m)) {
-            cx.report(vec![graphql_issue(cx, self.issue(), detail, vec![ScanEvidence::new(&req, Some(&resp))])]);
+            cx.report(vec![graphql_issue(
+                cx,
+                self.issue(),
+                detail,
+                vec![ScanEvidence::new(&req, Some(&resp))],
+            )]);
         }
     }
 }
@@ -182,10 +269,19 @@ impl RequestCheck for GraphqlSuggestions {
         if cx.stopped() || !cx.runs(self.issue()) {
             return;
         }
-        let Some(style) = graphql_exchange(cx) else { return };
+        let Some(style) = graphql_exchange(cx) else {
+            return;
+        };
         let req = graphql_request(cx, "query{__type}", style);
-        let Some(resp) = burp_send(cx, &req) else { return };
-        if graphql_response(&resp).is_some() && find_sub(status_body(&resp).1, b"must have a selection of subfields. Did you mean") {
+        let Some(resp) = burp_send(cx, &req) else {
+            return;
+        };
+        if graphql_response(&resp).is_some()
+            && find_sub(
+                status_body(&resp).1,
+                b"must have a selection of subfields. Did you mean",
+            )
+        {
             cx.report(vec![graphql_issue(cx, self.issue(), "The GraphQL endpoint suggests field names in its error messages, which can disclose its schema even with introspection disabled.".into(), vec![ScanEvidence::new(&req, Some(&resp))])]);
         }
     }
@@ -212,9 +308,15 @@ impl RequestCheck for GraphqlContentType {
         if cx.stopped() || !cx.runs(self.issue()) {
             return;
         }
-        let Some(_) = graphql_exchange(cx) else { return };
-        let Some((query, style)) = graphql_query(cx.req.as_bytes()) else { return };
-        let post = util::parse_http(cx.req.as_bytes()).method.eq_ignore_ascii_case("POST");
+        let Some(_) = graphql_exchange(cx) else {
+            return;
+        };
+        let Some((query, style)) = graphql_query(cx.req.as_bytes()) else {
+            return;
+        };
+        let post = util::parse_http(cx.req.as_bytes())
+            .method
+            .eq_ignore_ascii_case("POST");
         let mut styles = Vec::new();
         if post && style != GqlStyle::Get {
             styles.push(GqlStyle::Get);
@@ -227,14 +329,24 @@ impl RequestCheck for GraphqlContentType {
                 return;
             }
             let req = graphql_request(cx, &query, s);
-            let Some(resp) = burp_send(cx, &req) else { continue };
+            let Some(resp) = burp_send(cx, &req) else {
+                continue;
+            };
             if graphql_response(&resp).is_none() {
                 continue;
             }
             let confirm = graphql_request(cx, "query{__typename}", s);
-            let Some(cr) = burp_send(cx, &confirm) else { continue };
-            if graphql_response(&cr).is_some_and(|m| m.get("data").and_then(|d| d.get("__typename")).is_some()) {
-                let how = if s == GqlStyle::Get { "as a GET request with the query in the URL" } else { "as a POST request with a URL-encoded body (application/x-www-form-urlencoded)" };
+            let Some(cr) = burp_send(cx, &confirm) else {
+                continue;
+            };
+            if graphql_response(&cr)
+                .is_some_and(|m| m.get("data").and_then(|d| d.get("__typename")).is_some())
+            {
+                let how = if s == GqlStyle::Get {
+                    "as a GET request with the query in the URL"
+                } else {
+                    "as a POST request with a URL-encoded body (application/x-www-form-urlencoded)"
+                };
                 cx.report(vec![graphql_issue(cx, self.issue(), format!("The GraphQL endpoint also accepted the query sent {how}, so it does not validate the request's content type; this can make cross-site request forgery possible."), vec![ScanEvidence::new(&req, Some(&resp))])]);
                 return;
             }
@@ -244,11 +356,17 @@ impl RequestCheck for GraphqlContentType {
 
 /// The request without header `name` (any case).
 pub fn without_header(raw: &[u8], name: &str) -> Vec<u8> {
-    let Some(end) = util::find_head_end(raw) else { return raw.to_vec() };
+    let Some(end) = util::find_head_end(raw) else {
+        return raw.to_vec();
+    };
     let head = String::from_utf8_lossy(&raw[..end]);
     let mut out = String::new();
     for (i, line) in head.split("\r\n").enumerate() {
-        if i > 0 && line.split_once(':').is_some_and(|(k, _)| k.trim().eq_ignore_ascii_case(name)) {
+        if i > 0
+            && line
+                .split_once(':')
+                .is_some_and(|(k, _)| k.trim().eq_ignore_ascii_case(name))
+        {
             continue;
         }
         if line.is_empty() {
@@ -291,7 +409,9 @@ impl RequestCheck for SpoofableClientIp {
         let without = without_header(cx.req.as_bytes(), "X-Forwarded-For");
         let with = crate::net::replace_or_add_header(&without, "X-Forwarded-For", "127.0.0.1");
         let fp = crate::variations::fingerprint;
-        let (Some(a0), Some(b0)) = (burp_send(cx, &without), burp_send(cx, &with)) else { return };
+        let (Some(a0), Some(b0)) = (burp_send(cx, &without), burp_send(cx, &with)) else {
+            return;
+        };
         let mut c = crate::variations::Comparator::new(&fp(&a0), &fp(&b0));
         c.add_a(&fp(&cx.baseline.raw));
         if !c.distinguishable() {
@@ -302,7 +422,9 @@ impl RequestCheck for SpoofableClientIp {
             if cx.stopped() {
                 return;
             }
-            let (Some(a), Some(b)) = (burp_send(cx, &without), burp_send(cx, &with)) else { return };
+            let (Some(a), Some(b)) = (burp_send(cx, &without), burp_send(cx, &with)) else {
+                return;
+            };
             c.add_a(&fp(&a));
             c.add_b(&fp(&b));
             if !c.distinguishable() {
@@ -330,10 +452,31 @@ impl RequestCheck for SpoofableClientIp {
 /// extension list (Zebr.ZD) is stripped and not included.
 pub(crate) fn backup_names(stem: &str, ext: &str) -> Vec<String> {
     let mut out = Vec::new();
-    for p in ["bak_", "backup_", "old_", "Copy%20of%20", "Copy%20(2)%20of%20", "Copy%20of%20Copy%20of%20"] {
+    for p in [
+        "bak_",
+        "backup_",
+        "old_",
+        "Copy%20of%20",
+        "Copy%20(2)%20of%20",
+        "Copy%20of%20Copy%20of%20",
+    ] {
         out.push(format!("{p}{stem}{ext}"));
     }
-    for sfx in ["_bak", "_backup", "_old", "%20(copy)", "%20(2nd%20copy)", "%20(3rd%20copy)", "%20(4th%20copy)", "%20(third%20copy)", "%20(fourth%20copy)", "%20(another%20copy)", "%20-%20Copy", "%20-%20Copy%20(2)", "%20-%20Copy%20-%20Copy"] {
+    for sfx in [
+        "_bak",
+        "_backup",
+        "_old",
+        "%20(copy)",
+        "%20(2nd%20copy)",
+        "%20(3rd%20copy)",
+        "%20(4th%20copy)",
+        "%20(third%20copy)",
+        "%20(fourth%20copy)",
+        "%20(another%20copy)",
+        "%20-%20Copy",
+        "%20-%20Copy%20(2)",
+        "%20-%20Copy%20-%20Copy",
+    ] {
         out.push(format!("{stem}{sfx}{ext}"));
     }
     if ext.eq_ignore_ascii_case(".jsp") {
@@ -370,7 +513,12 @@ impl RequestCheck for BackupFile {
         let path = cx.entry.path.split('?').next().unwrap_or("/").to_string();
         let Some(slash) = path.rfind('/') else { return };
         let (dir, file) = (&path[..slash + 1], &path[slash + 1..]);
-        if file.is_empty() || !openapi_hosts().lock().unwrap().insert(format!("backup|{}:{}{path}", cx.host, cx.port)) {
+        if file.is_empty()
+            || !openapi_hosts()
+                .lock()
+                .unwrap()
+                .insert(format!("backup|{}:{}{path}", cx.host, cx.port))
+        {
             return;
         }
         let (stem, ext) = match file.rfind('.') {
@@ -384,18 +532,27 @@ impl RequestCheck for BackupFile {
                 return;
             }
             let req = host_request(cx, "GET", &format!("{dir}{name}"), &[], b"");
-            let Some(resp) = burp_send(cx, &req) else { continue };
+            let Some(resp) = burp_send(cx, &req) else {
+                continue;
+            };
             if status_body(&resp).0 >= 400 {
                 continue;
             }
-            let control_name = backup_names(&random, ext).into_iter().nth(k).unwrap_or_default();
+            let control_name = backup_names(&random, ext)
+                .into_iter()
+                .nth(k)
+                .unwrap_or_default();
             let control = host_request(cx, "GET", &format!("{dir}{control_name}"), &[], b"");
-            let Some(cresp) = burp_send(cx, &control) else { continue };
+            let Some(cresp) = burp_send(cx, &control) else {
+                continue;
+            };
             let mut c = crate::variations::Comparator::new(&fp(&resp), &fp(&cresp));
             if !c.distinguishable() {
                 continue;
             }
-            let (Some(again), Some(cagain)) = (burp_send(cx, &req), burp_send(cx, &control)) else { continue };
+            let (Some(again), Some(cagain)) = (burp_send(cx, &req), burp_send(cx, &control)) else {
+                continue;
+            };
             c.add_a(&fp(&again));
             c.add_b(&fp(&cagain));
             if !c.distinguishable() {
@@ -453,13 +610,15 @@ impl PointCheck for LightProbes {
             return;
         }
         let dom_canary = format!("wb{idx:03}dom");
-        st.stored_markers.push((ip.name.clone(), dom_canary.clone()));
+        st.stored_markers
+            .push((ip.name.clone(), dom_canary.clone()));
         let new_req = inject(&cx.req, ip, &format!("{}{dom_canary}", ip.value));
         if let Some(resp) = cx.send(new_req.as_bytes()) {
             let rp = util::parse_http(&resp);
             let body = String::from_utf8_lossy(&resp[rp.head_len.min(resp.len())..]);
             let ct = util::get_header(&rp.headers, "Content-Type").unwrap_or_default();
-            if ct.to_ascii_lowercase().contains("html") && is_reflected_dom_hit(&body, &dom_canary) {
+            if ct.to_ascii_lowercase().contains("html") && is_reflected_dom_hit(&body, &dom_canary)
+            {
                 cx.report(vec![mk(
                     "high",
                     &format!("Active probe: DOM-based cross-site scripting (reflected) via parameter {}", ip.name),
@@ -523,7 +682,11 @@ impl PointCheck for OsCommandInjection {
             if cx.stopped() {
                 break;
             }
-            let value = if append { format!("{}{payload}", ip.value) } else { payload.clone() };
+            let value = if append {
+                format!("{}{payload}", ip.value)
+            } else {
+                payload.clone()
+            };
             let new_req = inject_payload(&cx.req, ip, &value);
             // Through the scan's own sender: it honours pause and the
             // resource pool, as every other check does.
@@ -550,7 +713,9 @@ impl PointCheck for OsCommandInjection {
                 &ip.describe_short(true),
                 ". This payload is designed to trigger a CNAME DNS lookup if the application is vulnerable to OS command injection.",
             );
-            cx.shared.oob.register_delivered(token, Some("CNAME"), issue, delivery);
+            cx.shared
+                .oob
+                .register_delivered(token, Some("CNAME"), issue, delivery);
             cx.progress();
             cx.pace(50);
         }
@@ -570,8 +735,7 @@ impl PointCheck for PathTraversal {
     /// burp.Zp3a.Zh -> Zibp.ZZ: not on parameter names or HTTP headers (Zewr.ZY cases 1-4); server-side. Zibp.Zo's value rules are not ported (it depends on Zp3a's own flag and the point's ZO(), not established).
     fn applies_to(&self, ip: &InsertionPoint) -> bool {
         match &ip.kind {
-            IpKind::ParamName(_)
-            | IpKind::Header => false,
+            IpKind::ParamName(_) | IpKind::Header => false,
             IpKind::Query
             | IpKind::Body
             | IpKind::Json(_)
@@ -604,7 +768,9 @@ impl PointCheck for PathTraversal {
             let rp = util::parse_http(&resp);
             Some(String::from_utf8_lossy(&resp[rp.head_len.min(resp.len())..]).into_owned())
         };
-        if let Some(hit) = run_traversal_check(&ip.value, &cx.baseline.body, cx.settings.speed, send) {
+        if let Some(hit) =
+            run_traversal_check(&ip.value, &cx.baseline.body, cx.settings.speed, send)
+        {
             let control = traversal_control(&hit.payload);
             cx.report(vec![mk_point(
                 "File path traversal",
@@ -678,7 +844,10 @@ impl PointCheck for LinkManipulation {
                 "Firm",
                 &cx.entry,
                 ip,
-                format!("Injected URL {:?} became a link/redirect target: {:?}.", hit.payload, hit.target),
+                format!(
+                    "Injected URL {:?} became a link/redirect target: {:?}.",
+                    hit.payload, hit.target
+                ),
             )
             .with_evidence(evidence([rec.last(&hit.payload)]))]);
         }
@@ -701,7 +870,10 @@ impl PointCheck for FilePathManipulation {
     /// value that is not an http(s) URL (`!Zp3a.ZG()`); server-side.
     fn applies_to(&self, ip: &InsertionPoint) -> bool {
         match &ip.kind {
-            IpKind::ParamName(_) | IpKind::Header | IpKind::PathFolder(_) | IpKind::PathFilename(_) => false,
+            IpKind::ParamName(_)
+            | IpKind::Header
+            | IpKind::PathFolder(_)
+            | IpKind::PathFilename(_) => false,
             IpKind::Query
             | IpKind::Body
             | IpKind::Json(_)
@@ -733,7 +905,9 @@ impl PointCheck for FilePathManipulation {
             let new_req = inject_payload(&cx.req, ip, payload);
             rec.send(cx, payload, new_req.as_bytes())
         };
-        if let Some(hit) = run_file_path_manip_check(&ip.value, &cx.baseline.raw, cx.settings.accuracy, send) {
+        if let Some(hit) =
+            run_file_path_manip_check(&ip.value, &cx.baseline.raw, cx.settings.accuracy, send)
+        {
             cx.report(vec![mk_point(
                 "File path manipulation",
                 "high",
@@ -762,7 +936,10 @@ impl PointCheck for SsiInjection {
     fn applies_to(&self, ip: &InsertionPoint) -> bool {
         match &ip.kind {
             IpKind::PathFolder(_) => false,
-            IpKind::Header => !ip.name.eq_ignore_ascii_case("user-agent") && !ip.name.eq_ignore_ascii_case("referer"),
+            IpKind::Header => {
+                !ip.name.eq_ignore_ascii_case("user-agent")
+                    && !ip.name.eq_ignore_ascii_case("referer")
+            }
             IpKind::Query
             | IpKind::Body
             | IpKind::Json(_)
@@ -802,9 +979,14 @@ impl PointCheck for SsiInjection {
                 "Firm",
                 &cx.entry,
                 ip,
-                format!("SSI directives {:?} were processed by the server.", hit.payload),
+                format!(
+                    "SSI directives {:?} were processed by the server.",
+                    hit.payload
+                ),
             )
-            .with_evidence(evidence([rec.last(&format!("{}{}", ip.value, hit.payload))]))]);
+            .with_evidence(evidence([
+                rec.last(&format!("{}{}", ip.value, hit.payload))
+            ]))]);
         }
         cx.progress();
     }
@@ -864,9 +1046,14 @@ impl PointCheck for TemplateInjection {
                 "Tentative",
                 &cx.entry,
                 ip,
-                format!("Template expression {:?} ({}) was evaluated by the server.", hit.payload, hit.engine),
+                format!(
+                    "Template expression {:?} ({}) was evaluated by the server.",
+                    hit.payload, hit.engine
+                ),
             )
-            .with_evidence(evidence([rec.last(&format!("{}{}", ip.value, hit.payload))]))]);
+            .with_evidence(evidence([
+                rec.last(&format!("{}{}", ip.value, hit.payload))
+            ]))]);
         }
         cx.progress();
     }
@@ -924,7 +1111,10 @@ impl PointCheck for ReflectedXss {
                 "Certain",
                 &cx.entry,
                 ip,
-                format!("Payload {:?} broke out of reflection context {} and executed.", hit.payload, hit.context),
+                format!(
+                    "Payload {:?} broke out of reflection context {} and executed.",
+                    hit.payload, hit.context
+                ),
             )
             .with_evidence(evidence([rec.last(&hit.payload)]))]);
         }
@@ -973,15 +1163,32 @@ impl StoredCheck for StoredXss {
         let log: RefCell<Vec<(String, ScanEvidence)>> = RefCell::new(Vec::new());
         let last = |chain: Vec<(String, Option<Vec<u8>>)>, key: &str| -> Option<Vec<u8>> {
             let (req, resp) = chain.into_iter().last()?;
-            log.borrow_mut().push((key.to_string(), ScanEvidence::new(req.as_bytes(), resp.as_deref())));
+            log.borrow_mut().push((
+                key.to_string(),
+                ScanEvidence::new(req.as_bytes(), resp.as_deref()),
+            ));
             resp
         };
-        let send = |payload: &str| -> Option<Vec<u8>> { last(cx.send_following(&pair.item, &inject_payload(&pair.item.req, ip, payload)), payload) };
-        let retrieve = |_: usize| -> Option<Vec<u8>> { last(cx.send_following(&pair.retrieval, &pair.retrieval.req), "") };
+        let send = |payload: &str| -> Option<Vec<u8>> {
+            last(
+                cx.send_following(&pair.item, &inject_payload(&pair.item.req, ip, payload)),
+                payload,
+            )
+        };
+        let retrieve = |_: usize| -> Option<Vec<u8>> {
+            last(cx.send_following(&pair.retrieval, &pair.retrieval.req), "")
+        };
         if let Some(hit) = active_checks::run_stored_xss_check(&ip.value, 1, send, retrieve) {
             let log = log.borrow();
             let at = log.iter().rposition(|(k, _)| *k == hit.payload);
-            let ev: Vec<ScanEvidence> = at.map(|i| log[i..(i + 2).min(log.len())].iter().map(|(_, e)| e.clone()).collect()).unwrap_or_default();
+            let ev: Vec<ScanEvidence> = at
+                .map(|i| {
+                    log[i..(i + 2).min(log.len())]
+                        .iter()
+                        .map(|(_, e)| e.clone())
+                        .collect()
+                })
+                .unwrap_or_default();
             let retrieval = pair.retrieval.req.lines().next().unwrap_or("").to_string();
             cx.report(vec![mk_point(
                 "Cross-site scripting (stored)",
@@ -1110,23 +1317,40 @@ impl PointCheck for PhpCodeInjection {
     }
     fn run(&self, cx: &ScanCtx, st: &mut ScanState, pt: &mut PointRun) {
         let (idx, ip) = (pt.idx, pt.ip);
-        let IpKind::Multipart { index, filename: Some(orig) } = &ip.kind else { return };
+        let IpKind::Multipart {
+            index,
+            filename: Some(orig),
+        } = &ip.kind
+        else {
+            return;
+        };
         if cx.stopped() {
             return;
         }
         let token = active_checks::rnd_id(20);
         // The Collaborator half (burp.Zxvv.ZQ): the same uploaded file also
         // resolves a Collaborator name, when the scan has an id for it.
-        let collab = oob_slot(&cx.oob, idx, &ip.name, "php", &mut st.oob_used).map(|(_, t, d)| (t.clone(), active_checks::php_collaborator_host(t, d)));
+        let collab = oob_slot(&cx.oob, idx, &ip.name, "php", &mut st.oob_used)
+            .map(|(_, t, d)| (t.clone(), active_checks::php_collaborator_host(t, d)));
         let rec = Recorder::default();
         let send = |fname: &str, ct: &str, content: &str| -> Option<Vec<u8>> {
-            rec.send(cx, fname, with_multipart_part(&cx.req, *index, content, Some(fname), Some(ct)).as_bytes())
+            rec.send(
+                cx,
+                fname,
+                with_multipart_part(&cx.req, *index, content, Some(fname), Some(ct)).as_bytes(),
+            )
         };
         let follow = |loc: &str| -> Option<Vec<u8>> {
             let path = same_origin_path(loc, cx.entry.https, &cx.host_hdr, &cx.parts.path)?;
             rec.send(cx, "", get_request_like(&cx.req, &path).as_bytes())
         };
-        let hit = active_checks::run_php_echo_check(orig, &token, collab.as_ref().map(|(_, h)| h.as_str()), send, follow);
+        let hit = active_checks::run_php_echo_check(
+            orig,
+            &token,
+            collab.as_ref().map(|(_, h)| h.as_str()),
+            send,
+            follow,
+        );
         if hit.is_none() {
             if let Some((id, host)) = &collab {
                 // Raised when the id sees a DNS lookup (burp.Zxvv.ZR).
@@ -1212,9 +1436,15 @@ impl PointCheck for InputReflected {
             let marker: String = {
                 use rand::Rng;
                 let mut g = rand::thread_rng();
-                (0..10).map(|_| (b'a' + g.gen_range(0..26)) as char).collect()
+                (0..10)
+                    .map(|_| (b'a' + g.gen_range(0..26)) as char)
+                    .collect()
             };
-            let v = if append { format!("{value}{marker}") } else { marker.clone() };
+            let v = if append {
+                format!("{value}{marker}")
+            } else {
+                marker.clone()
+            };
             let new_req = inject_payload(&cx.req, ip, &v);
             let resp = cx.send(new_req.as_bytes());
             // Anywhere in the response, headers included: on a fresh
@@ -1222,14 +1452,27 @@ impl PointCheck for InputReflected {
             // back only in Location (scan 5, 2026-11-16). The earlier
             // "body only" reading (fnd_56) came from a reused project,
             // where the REST API lists only issues new to the project.
-            let reflected = resp.as_ref().is_some_and(|r| r.windows(marker.len()).any(|w| w == marker.as_bytes()));
+            let reflected = resp
+                .as_ref()
+                .is_some_and(|r| r.windows(marker.len()).any(|w| w == marker.as_bytes()));
             if reflected {
                 // Burp's own sentence with its point wording (burp.Zsg0.ZD;
                 // live 52685 on Juice Shop: "The value of the URL path
                 // filename is copied into the application's response.").
-                let mut issue = mk("info", "Input returned in response (reflected)", &cx.entry, format!("The {} is copied into the application's response.", ip.describe_bold()));
+                let mut issue = mk(
+                    "info",
+                    "Input returned in response (reflected)",
+                    &cx.entry,
+                    format!(
+                        "The {} is copied into the application's response.",
+                        ip.describe_bold()
+                    ),
+                );
                 issue.confidence = "Certain".into();
-                cx.report(vec![issue.with_evidence(vec![ScanEvidence::new(new_req.as_bytes(), resp.as_deref())])]);
+                cx.report(vec![issue.with_evidence(vec![ScanEvidence::new(
+                    new_req.as_bytes(),
+                    resp.as_deref(),
+                )])]);
                 break;
             }
         }
@@ -1289,7 +1532,10 @@ impl PointCheck for HeaderInjection {
                 "Certain",
                 &cx.entry,
                 ip,
-                format!("Payload {:?} produced the response header line {:?}.", hit.payload, hit.injected_line),
+                format!(
+                    "Payload {:?} produced the response header line {:?}.",
+                    hit.payload, hit.injected_line
+                ),
             )
             .with_evidence(evidence([rec.last(&hit.payload)]))]);
         }
@@ -1349,7 +1595,10 @@ impl PointCheck for OpenRedirect {
                 "Certain",
                 &cx.entry,
                 ip,
-                format!("Payload {:?} made the response redirect to {:?}.", hit.payload, hit.target),
+                format!(
+                    "Payload {:?} made the response redirect to {:?}.",
+                    hit.payload, hit.target
+                ),
             )
             .with_evidence(evidence([rec.last(&hit.payload)]))]);
         }
@@ -1418,8 +1667,17 @@ impl PointCheck for SqlErrorInjection {
                 if hit.confirmed { " Two single quotes were then submitted and the error message disappeared." } else { "" }
             );
             let mut i = mk("high", "SQL injection", &cx.entry, text);
-            i.confidence = if general { "Tentative".into() } else if hit.confirmed { "Certain".into() } else { "Firm".into() };
-            cx.report(vec![i.with_evidence(evidence([rec.last(&hit.payload), rec.next_after(&hit.payload)]))]);
+            i.confidence = if general {
+                "Tentative".into()
+            } else if hit.confirmed {
+                "Certain".into()
+            } else {
+                "Firm".into()
+            };
+            cx.report(vec![i.with_evidence(evidence([
+                rec.last(&hit.payload),
+                rec.next_after(&hit.payload),
+            ]))]);
             pt.sqli_reported = true;
         }
         cx.progress();
@@ -1477,7 +1735,13 @@ impl PointCheck for SqlBooleanInjection {
             let new_req = inject_payload(&cx.req, ip, payload);
             rec.send(cx, payload, new_req.as_bytes())
         };
-        if let Some(hit) = run_sql_boolean_check(&ip.value, &cx.baseline.raw, cx.settings.speed, accuracy, send) {
+        if let Some(hit) = run_sql_boolean_check(
+            &ip.value,
+            &cx.baseline.raw,
+            cx.settings.speed,
+            accuracy,
+            send,
+        ) {
             cx.report(vec![mk_point(
                 "SQL injection",
                 "high",
@@ -1515,8 +1779,7 @@ impl PointCheck for XmlInjectionOob {
     fn applies_to(&self, ip: &InsertionPoint) -> bool {
         match &ip.kind {
             // burp.Zp7s.Zh: Zxmw.Zl lists HEADER and the parameter-name kinds.
-            IpKind::Header
-            | IpKind::ParamName(_) => false,
+            IpKind::Header | IpKind::ParamName(_) => false,
             IpKind::Query
             | IpKind::Body
             | IpKind::Json(_)
@@ -1537,11 +1800,15 @@ impl PointCheck for XmlInjectionOob {
     fn run(&self, cx: &ScanCtx, st: &mut ScanState, pt: &mut PointRun) {
         let (idx, ip) = (pt.idx, pt.ip);
         let name = &ip.name;
-        let xsd = oob_slot(&cx.oob, idx, name, "xsd", &mut st.oob_used).map(|(_, t, h)| (t.clone(), h.clone()));
-        let xi = oob_slot(&cx.oob, idx, name, "xi", &mut st.oob_used).map(|(_, t, h)| (t.clone(), h.clone()));
+        let xsd = oob_slot(&cx.oob, idx, name, "xsd", &mut st.oob_used)
+            .map(|(_, t, h)| (t.clone(), h.clone()));
+        let xi = oob_slot(&cx.oob, idx, name, "xi", &mut st.oob_used)
+            .map(|(_, t, h)| (t.clone(), h.clone()));
         if (xsd.is_some() || xi.is_some()) && !cx.stopped() {
             let rec = Recorder::default();
-            let send = |payload: &str| -> Option<Vec<u8>> { rec.send(cx, payload, inject_payload(&cx.req, ip, payload).as_bytes()) };
+            let send = |payload: &str| -> Option<Vec<u8>> {
+                rec.send(cx, payload, inject_payload(&cx.req, ip, payload).as_bytes())
+            };
             let sent = active_checks::run_xml_oob_check(
                 &ip.kind,
                 &ip.value,
@@ -1581,8 +1848,7 @@ impl PointCheck for XmlInjectionError {
     fn applies_to(&self, ip: &InsertionPoint) -> bool {
         match &ip.kind {
             // Zxmw.Zl: HEADER and the parameter-name kinds.
-            IpKind::Header
-            | IpKind::ParamName(_) => false,
+            IpKind::Header | IpKind::ParamName(_) => false,
             IpKind::Query
             | IpKind::Body
             | IpKind::Json(_)
@@ -1614,7 +1880,13 @@ impl PointCheck for XmlInjectionError {
             rec.send(cx, payload, new_req.as_bytes())
         };
         let send_base = || -> Option<Vec<u8>> { cx.send(cx.req.as_bytes()) };
-        if let Some(markers) = run_xml_injection_check(&ip.value, &cx.baseline.raw, xml_injection_rounds(cx.settings.accuracy), send_payload, send_base) {
+        if let Some(markers) = run_xml_injection_check(
+            &ip.value,
+            &cx.baseline.raw,
+            xml_injection_rounds(cx.settings.accuracy),
+            send_payload,
+            send_base,
+        ) {
             cx.report(vec![mk_point(
                 "XML injection",
                 "medium",
@@ -1675,7 +1947,13 @@ impl PointCheck for LdapInjection {
             let new_req = inject_payload(&cx.req, ip, payload);
             rec.send(cx, payload, new_req.as_bytes())
         };
-        if let Some(hit) = run_ldap_check(&ip.value, &cx.baseline.raw, cx.settings.speed, accuracy, send) {
+        if let Some(hit) = run_ldap_check(
+            &ip.value,
+            &cx.baseline.raw,
+            cx.settings.speed,
+            accuracy,
+            send,
+        ) {
             cx.report(vec![mk_point(
                 "LDAP injection",
                 "high",
@@ -1713,7 +1991,10 @@ impl PointCheck for SmtpHeaderInjection {
     fn applies_to(&self, ip: &InsertionPoint) -> bool {
         match &ip.kind {
             IpKind::PathFolder(_) => false,
-            IpKind::Header => !ip.name.eq_ignore_ascii_case("user-agent") && !ip.name.eq_ignore_ascii_case("referer"),
+            IpKind::Header => {
+                !ip.name.eq_ignore_ascii_case("user-agent")
+                    && !ip.name.eq_ignore_ascii_case("referer")
+            }
             IpKind::Query
             | IpKind::Body
             | IpKind::Json(_)
@@ -1734,7 +2015,9 @@ impl PointCheck for SmtpHeaderInjection {
     fn run(&self, cx: &ScanCtx, _st: &mut ScanState, pt: &mut PointRun) {
         let ip = pt.ip;
         let (name, value) = (&ip.name, &ip.value);
-        let Some(plan) = cx.smtp.iter().find(|p| &p.param == name) else { return };
+        let Some(plan) = cx.smtp.iter().find(|p| &p.param == name) else {
+            return;
+        };
         for (enclosed, (token, collab_host)) in [(false, &plan.simple), (true, &plan.enclosed)] {
             if cx.stopped() {
                 break;
@@ -1742,7 +2025,11 @@ impl PointCheck for SmtpHeaderInjection {
             let (r3, r1) = {
                 use rand::Rng;
                 let mut rng = rand::thread_rng();
-                let mut pick = |n: usize| (0..n).map(|_| rng.gen_range(b'a'..=b'z') as char).collect::<String>();
+                let mut pick = |n: usize| {
+                    (0..n)
+                        .map(|_| rng.gen_range(b'a'..=b'z') as char)
+                        .collect::<String>()
+                };
                 (pick(3), pick(1))
             };
             let payload = smtp_payload(value, enclosed, collab_host, &r3, &r1);

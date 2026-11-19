@@ -58,11 +58,21 @@ impl Jwt {
             serde_json::Value::Object(m) => m,
             _ => return None,
         };
-        Some(Jwt { raw: s.to_string(), header, header_b64: h.into(), payload_b64: p.into(), signature_b64: sig.into() })
+        Some(Jwt {
+            raw: s.to_string(),
+            header,
+            header_b64: h.into(),
+            payload_b64: p.into(),
+            signature_b64: sig.into(),
+        })
     }
 
     pub fn alg(&self) -> String {
-        self.header.get("alg").and_then(|v| v.as_str()).unwrap_or("").to_string()
+        self.header
+            .get("alg")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string()
     }
 
     pub fn signing_input(&self) -> String {
@@ -77,7 +87,12 @@ impl Jwt {
         b64d(&self.signature_b64).unwrap_or_default()
     }
 
-    fn with_header(&self, header: &serde_json::Map<String, serde_json::Value>, payload_b64: &str, signature_b64: &str) -> String {
+    fn with_header(
+        &self,
+        header: &serde_json::Map<String, serde_json::Value>,
+        payload_b64: &str,
+        signature_b64: &str,
+    ) -> String {
         let h = B64.encode(serde_json::to_vec(header).unwrap_or_default());
         format!("{h}.{payload_b64}.{signature_b64}")
     }
@@ -85,13 +100,21 @@ impl Jwt {
     /// The JWK in the header holds private key material (RSA/EC/OKP "d",
     /// or a symmetric "k").
     pub fn jwk_has_private_key(&self) -> bool {
-        self.header.get("jwk").and_then(|j| j.as_object()).is_some_and(|j| j.contains_key("d") || j.contains_key("k"))
+        self.header
+            .get("jwk")
+            .and_then(|j| j.as_object())
+            .is_some_and(|j| j.contains_key("d") || j.contains_key("k"))
     }
 }
 
 /// Case 1: the signature replaced by as many "A" characters.
 pub fn corrupt_signature(t: &Jwt) -> String {
-    format!("{}.{}.{}", t.header_b64, t.payload_b64, "A".repeat(t.signature_b64.len()))
+    format!(
+        "{}.{}.{}",
+        t.header_b64,
+        t.payload_b64,
+        "A".repeat(t.signature_b64.len())
+    )
 }
 
 /// Case 2: alg "nonE", "None", "none", each with an empty signature.
@@ -116,16 +139,30 @@ pub const JWK_KID: &str = "webprobe-jwk-3f2c";
 pub fn jwk_variant(t: &Jwt) -> Option<String> {
     let mut h = t.header.clone();
     h.insert("alg".into(), "RS256".into());
-    h.insert("jwk".into(), serde_json::json!({"kty": "RSA", "kid": JWK_KID, "e": "AQAB", "n": JWK_N}));
-    if h.get("kid").and_then(|k| k.as_str()).is_none_or(str::is_empty) {
+    h.insert(
+        "jwk".into(),
+        serde_json::json!({"kty": "RSA", "kid": JWK_KID, "e": "AQAB", "n": JWK_N}),
+    );
+    if h.get("kid")
+        .and_then(|k| k.as_str())
+        .is_none_or(str::is_empty)
+    {
         h.insert("kid".into(), JWK_KID.into());
     }
     let hb = B64.encode(serde_json::to_vec(&h).ok()?);
     let input = format!("{hb}.{}", t.payload_b64);
-    let der = base64::engine::general_purpose::STANDARD.decode(JWK_KEY_DER_B64).ok()?;
+    let der = base64::engine::general_purpose::STANDARD
+        .decode(JWK_KEY_DER_B64)
+        .ok()?;
     let key = ring::signature::RsaKeyPair::from_der(&der).ok()?;
     let mut sig = vec![0u8; key.public().modulus_len()];
-    key.sign(&ring::signature::RSA_PKCS1_SHA256, &ring::rand::SystemRandom::new(), input.as_bytes(), &mut sig).ok()?;
+    key.sign(
+        &ring::signature::RSA_PKCS1_SHA256,
+        &ring::rand::SystemRandom::new(),
+        input.as_bytes(),
+        &mut sig,
+    )
+    .ok()?;
     Some(format!("{input}.{}", B64.encode(sig)))
 }
 
@@ -144,9 +181,16 @@ pub fn control_token(t: &Jwt) -> String {
     format!("{}.{}.{}", t.header_b64, B64.encode(p), t.signature_b64)
 }
 
-fn hmac<D: sha2::Digest + sha2::digest::core_api::BlockSizeUser>(key: &[u8], data: &[u8]) -> Vec<u8> {
+fn hmac<D: sha2::Digest + sha2::digest::core_api::BlockSizeUser>(
+    key: &[u8],
+    data: &[u8],
+) -> Vec<u8> {
     let block = <D as sha2::digest::core_api::BlockSizeUser>::block_size();
-    let mut k = if key.len() > block { D::digest(key).to_vec() } else { key.to_vec() };
+    let mut k = if key.len() > block {
+        D::digest(key).to_vec()
+    } else {
+        key.to_vec()
+    };
     k.resize(block, 0);
     let mut inner = D::new();
     inner.update(k.iter().map(|b| b ^ 0x36).collect::<Vec<u8>>());
@@ -177,10 +221,13 @@ pub fn weak_secret<'a>(t: &Jwt, candidates: impl IntoIterator<Item = &'a str>) -
     }
     let sig = t.signature();
     let input = t.signing_input();
-    candidates.into_iter().find(|c| {
-        let key: &[u8] = if c.is_empty() { &[0] } else { c.as_bytes() };
-        hmac_for(&alg, key, input.as_bytes()).is_some_and(|m| m == sig)
-    }).map(str::to_string)
+    candidates
+        .into_iter()
+        .find(|c| {
+            let key: &[u8] = if c.is_empty() { &[0] } else { c.as_bytes() };
+            hmac_for(&alg, key, input.as_bytes()).is_some_and(|m| m == sig)
+        })
+        .map(str::to_string)
 }
 
 /// Burp's token sources (Zb2r): each request header value (after an
@@ -196,7 +243,11 @@ pub fn tokens_in_request(req: &crate::util::HttpParts, raw: &[u8]) -> Vec<Jwt> {
         }
     };
     for (k, v) in &req.headers {
-        let v = if k.eq_ignore_ascii_case("authorization") { v.trim().strip_prefix("Bearer ").unwrap_or(v) } else { v };
+        let v = if k.eq_ignore_ascii_case("authorization") {
+            v.trim().strip_prefix("Bearer ").unwrap_or(v)
+        } else {
+            v
+        };
         add(v);
         if k.eq_ignore_ascii_case("cookie") {
             for c in v.split(';') {
@@ -217,5 +268,13 @@ pub fn tokens_in_request(req: &crate::util::HttpParts, raw: &[u8]) -> Vec<Jwt> {
 /// Burp's secret list (the user's install, `paths::jwt_secrets`), read once.
 pub fn secrets() -> &'static [String] {
     static LIST: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
-    LIST.get_or_init(|| crate::paths::jwt_secrets().ok().and_then(|p| crate::util::read_text_file_capped(&p, crate::util::MAX_TEXT_FILE_BYTES).ok()).map(|t| t.lines().map(str::to_string).collect()).unwrap_or_default())
+    LIST.get_or_init(|| {
+        crate::paths::jwt_secrets()
+            .ok()
+            .and_then(|p| {
+                crate::util::read_text_file_capped(&p, crate::util::MAX_TEXT_FILE_BYTES).ok()
+            })
+            .map(|t| t.lines().map(str::to_string).collect())
+            .unwrap_or_default()
+    })
 }

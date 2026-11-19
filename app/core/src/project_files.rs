@@ -25,14 +25,18 @@ pub fn remember(list: &[String], path: &str) -> Vec<String> {
 }
 
 pub fn load_recent(file: &Path) -> Vec<String> {
-    crate::util::read_text_file_capped(file, crate::util::MAX_TEXT_FILE_BYTES).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+    crate::util::read_text_file_capped(file, crate::util::MAX_TEXT_FILE_BYTES)
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_default()
 }
 
 pub fn save_recent(file: &Path, list: &[String]) -> Result<(), String> {
     if let Some(dir) = file.parent() {
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     }
-    std::fs::write(file, serde_json::to_string_pretty(list).unwrap_or_default()).map_err(|e| e.to_string())
+    std::fs::write(file, serde_json::to_string_pretty(list).unwrap_or_default())
+        .map_err(|e| e.to_string())
 }
 
 /// Record `path` as the most recently used project (best effort).
@@ -58,9 +62,18 @@ pub struct Summary {
 /// the header, version and JSON must all be sound. A damaged file is
 /// reported, never half-loaded.
 pub fn check(path: &Path) -> Result<Summary, String> {
-    let bytes = std::fs::metadata(path).map_err(|e| format!("cannot open {}: {e}", path.display()))?.len();
+    let bytes = std::fs::metadata(path)
+        .map_err(|e| format!("cannot open {}: {e}", path.display()))?
+        .len();
     let data = crate::project::load(path)?;
-    Ok(Summary { version: data.version, saved_at: data.saved_at, history: data.history.len(), issues: data.issues.len(), repeater_tabs: data.repeaters.len(), bytes })
+    Ok(Summary {
+        version: data.version,
+        saved_at: data.saved_at,
+        history: data.history.len(),
+        issues: data.issues.len(),
+        repeater_tabs: data.repeaters.len(),
+        bytes,
+    })
 }
 
 #[cfg(test)]
@@ -68,7 +81,8 @@ mod tests {
     use super::*;
 
     fn tmp(name: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("wp-project-files-{}-{name}", std::process::id()));
+        let d =
+            std::env::temp_dir().join(format!("wp-project-files-{}-{name}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
@@ -88,7 +102,10 @@ mod tests {
         assert_eq!(many[0], "/p14");
         let d = tmp("recent");
         let f = d.join("sub/recent.json");
-        assert!(load_recent(&f).is_empty(), "a missing file is an empty list");
+        assert!(
+            load_recent(&f).is_empty(),
+            "a missing file is an empty list"
+        );
         save_recent(&f, &many).unwrap();
         assert_eq!(load_recent(&f), many);
         std::fs::write(&f, "not json").unwrap();
@@ -101,12 +118,22 @@ mod tests {
         let d = tmp("check");
         let good = d.join("good.json");
         let data = crate::project::ProjectData {
-            history: vec![crate::project::ProjectHistory::from_entry(&crate::net::HistEntry { id: 1, method: "GET".into(), path: "/".into(), ..Default::default() })],
+            history: vec![crate::project::ProjectHistory::from_entry(
+                &crate::net::HistEntry {
+                    id: 1,
+                    method: "GET".into(),
+                    path: "/".into(),
+                    ..Default::default()
+                },
+            )],
             ..Default::default()
         };
         crate::project::save(&good, &data).unwrap();
         let s = check(&good).unwrap();
-        assert_eq!((s.version, s.history, s.issues), (crate::project::PROJECT_VERSION, 1, 0));
+        assert_eq!(
+            (s.version, s.history, s.issues),
+            (crate::project::PROJECT_VERSION, 1, 0)
+        );
         assert!(s.bytes > 0);
         // Truncated, wrong header, missing: all refused with a reason.
         let text = std::fs::read_to_string(&good).unwrap();
@@ -115,12 +142,16 @@ mod tests {
         assert!(check(&cut).is_err());
         let other = d.join("other.json");
         std::fs::write(&other, "SOMETHING ELSE 2\n{}").unwrap();
-        assert!(check(&other).unwrap_err().contains("not a WebProbe project file"));
+        assert!(check(&other)
+            .unwrap_err()
+            .contains("not a WebProbe project file"));
         // Headerless JSON is the older project format and still opens.
         let legacy = d.join("legacy.json");
         std::fs::write(&legacy, "{\"version\":2}").unwrap();
         assert_eq!(check(&legacy).unwrap().history, 0);
-        assert!(check(&d.join("missing.json")).unwrap_err().contains("cannot open"));
+        assert!(check(&d.join("missing.json"))
+            .unwrap_err()
+            .contains("cannot open"));
         let _ = std::fs::remove_dir_all(&d);
     }
 }

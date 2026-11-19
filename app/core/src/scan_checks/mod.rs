@@ -23,15 +23,15 @@ pub(crate) use super::*;
 #[path = "cache_checks.rs"]
 pub(crate) mod cache;
 
+mod collaborator_everywhere;
 mod context;
 mod evidence;
-mod interface;
-mod collaborator_everywhere;
-mod stored_input;
-mod point_checks;
 mod graphql;
-mod request_checks;
+mod interface;
 mod issue_types;
+mod point_checks;
+mod request_checks;
+mod stored_input;
 
 pub use collaborator_everywhere::*;
 pub(crate) use context::*;

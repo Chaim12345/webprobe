@@ -8,16 +8,36 @@ pub(crate) fn discover(app: &mut App, ui: &mut Ui) {
     let r = ui.available_rect_before_wrap();
     let hero = egui::Rect::from_min_size(r.min, egui::vec2(r.width(), 300.0_f32.min(r.height())));
     ui.painter().rect_filled(hero, 0.0, c(0x14102A));
-    ui.scope_builder(egui::UiBuilder::new().max_rect(hero.shrink2(egui::vec2(r.width() * 0.3, 80.0))), |ui| {
-        ui.label(RichText::new("WebProbe").size(44.0).strong().color(egui::Color32::WHITE));
-        ui.add_space(8.0);
-        ui.label(RichText::new("Intercept, replay, fuzz and audit HTTP traffic from one window.").size(18.0).color(egui::Color32::WHITE));
-    });
+    ui.scope_builder(
+        egui::UiBuilder::new().max_rect(hero.shrink2(egui::vec2(r.width() * 0.3, 80.0))),
+        |ui| {
+            ui.label(
+                RichText::new("WebProbe")
+                    .size(44.0)
+                    .strong()
+                    .color(egui::Color32::WHITE),
+            );
+            ui.add_space(8.0);
+            ui.label(
+                RichText::new("Intercept, replay, fuzz and audit HTTP traffic from one window.")
+                    .size(18.0)
+                    .color(egui::Color32::WHITE),
+            );
+        },
+    );
     ui.add_space(320.0);
     ui.horizontal(|ui| {
         for (glyph, title, sub) in [
-            (theme::icon::BOOK_OPEN, "Documentation", "docs/ in the repository"),
-            (theme::icon::KEYBOARD, "Keyboard shortcuts", "Help > Keyboard shortcuts"),
+            (
+                theme::icon::BOOK_OPEN,
+                "Documentation",
+                "docs/ in the repository",
+            ),
+            (
+                theme::icon::KEYBOARD,
+                "Keyboard shortcuts",
+                "Help > Keyboard shortcuts",
+            ),
             (theme::icon::TERMINAL, "Command palette", "Ctrl+K"),
         ] {
             ui.add_space(40.0);
@@ -45,12 +65,19 @@ pub(crate) fn dashboard(app: &mut App, ui: &mut Ui) {
     let live_on = app.shared.scan_enabled.load(Ordering::SeqCst);
     if !live_on {
         let r = ui.available_rect_before_wrap();
-        let band = egui::Rect::from_min_size(r.min - egui::vec2(10.0, 10.0), egui::vec2(r.width() + 20.0, 28.0));
+        let band = egui::Rect::from_min_size(
+            r.min - egui::vec2(10.0, 10.0),
+            egui::vec2(r.width() + 20.0, 28.0),
+        );
         ui.painter().rect_filled(band, 0.0, c(0xEBF1F6));
         ui.scope_builder(egui::UiBuilder::new().max_rect(band), |ui| {
             ui.horizontal_centered(|ui| {
                 ui.add_space(band.width() / 2.0 - 120.0);
-                ui.label(RichText::new("Task execution is paused").size(13.5).color(theme::ink()));
+                ui.label(
+                    RichText::new("Task execution is paused")
+                        .size(13.5)
+                        .color(theme::ink()),
+                );
                 ui.add_space(14.0);
                 if ui.button(RichText::new("Resume").strong()).clicked() {
                     app.shared.scan_enabled.store(true, Ordering::SeqCst);
@@ -64,7 +91,12 @@ pub(crate) fn dashboard(app: &mut App, ui: &mut Ui) {
     let counts = |pred: &dyn Fn(&crate::scan::ScanIssue) -> bool| -> [usize; 4] {
         let mut v = [0usize; 4];
         for i in all_issues.iter().filter(|i| !i.false_positive && pred(i)) {
-            v[match i.sev.as_str() { "high" => 0, "medium" => 1, "low" => 2, _ => 3 }] += 1;
+            v[match i.sev.as_str() {
+                "high" => 0,
+                "medium" => 1,
+                "low" => 2,
+                _ => 3,
+            }] += 1;
         }
         v
     };
@@ -73,8 +105,13 @@ pub(crate) fn dashboard(app: &mut App, ui: &mut Ui) {
     let has_active = scan_total > 0 || busy;
     // Scan tasks have card ids 1000 + task id (0 and 1 are the live tasks).
     let task_list: Vec<crate::tasks::ScanTask> = app.shared.tasks.lock().unwrap().clone();
-    let card_task = |id: usize| -> Option<&crate::tasks::ScanTask> { id.checked_sub(1000).and_then(|t| task_list.iter().find(|x| x.id as usize == t)) };
-    if (app.dash_task == 2 && !(has_active && app.shared.scan.direct.load(Ordering::SeqCst))) || (app.dash_task >= 1000 && card_task(app.dash_task).is_none()) {
+    let card_task = |id: usize| -> Option<&crate::tasks::ScanTask> {
+        id.checked_sub(1000)
+            .and_then(|t| task_list.iter().find(|x| x.id as usize == t))
+    };
+    if (app.dash_task == 2 && !(has_active && app.shared.scan.direct.load(Ordering::SeqCst)))
+        || (app.dash_task >= 1000 && card_task(app.dash_task).is_none())
+    {
         app.dash_task = 1;
     }
 
@@ -86,27 +123,68 @@ pub(crate) fn dashboard(app: &mut App, ui: &mut Ui) {
             // ---------------- Tasks rail ----------------
             strip.cell(|ui| {
                 let r = ui.max_rect();
-                ui.painter().vline(r.right(), r.y_range(), egui::Stroke::new(1.0, theme::line()));
+                ui.painter().vline(
+                    r.right(),
+                    r.y_range(),
+                    egui::Stroke::new(1.0, theme::line()),
+                );
                 ui.horizontal(|ui| {
                     ui.add_space(6.0);
-                    ui.label(RichText::new("Tasks").strong().size(15.0).color(theme::ink()));
+                    ui.label(
+                        RichText::new("Tasks")
+                            .strong()
+                            .size(15.0)
+                            .color(theme::ink()),
+                    );
                     ui.add_space(8.0);
-                    let orange = |t: &str| egui::Button::new(RichText::new(t).strong().color(egui::Color32::WHITE)).fill(c(theme::ORANGE_1)).min_size(egui::vec2(90.0, 24.0));
+                    let orange = |t: &str| {
+                        egui::Button::new(RichText::new(t).strong().color(egui::Color32::WHITE))
+                            .fill(c(theme::ORANGE_1))
+                            .min_size(egui::vec2(90.0, 24.0))
+                    };
                     if ui.add(orange("New scan")).clicked() {
                         app.new_scan_open = true;
                     }
-                    if ui.add(orange("New live task")).on_hover_text("Live audit of proxy traffic").clicked() {
+                    if ui
+                        .add(orange("New live task"))
+                        .on_hover_text("Live audit of proxy traffic")
+                        .clicked()
+                    {
                         app.shared.scan_enabled.store(true, Ordering::SeqCst);
                         app.dash_task = 1;
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.add_space(8.0);
-                        let _ = ui.add(egui::Button::new(RichText::new(theme::icon::QUESTION).size(16.0)).frame(false)).on_hover_text("Help: see Discover > Documentation");
-                        if ui.add(egui::Button::new(RichText::new(theme::icon::GEAR).size(16.0)).frame(false)).on_hover_text("Scanner settings").clicked() {
+                        let _ = ui
+                            .add(
+                                egui::Button::new(RichText::new(theme::icon::QUESTION).size(16.0))
+                                    .frame(false),
+                            )
+                            .on_hover_text("Help: see Discover > Documentation");
+                        if ui
+                            .add(
+                                egui::Button::new(RichText::new(theme::icon::GEAR).size(16.0))
+                                    .frame(false),
+                            )
+                            .on_hover_text("Scanner settings")
+                            .clicked()
+                        {
                             app.tab = Tab::Scanner;
                         }
-                        let glyph = if live_on { theme::icon::PAUSE_CIRCLE } else { theme::icon::PLAY_CIRCLE };
-                        if ui.add(egui::Button::new(RichText::new(glyph).size(16.0)).frame(false)).on_hover_text(if live_on { "Pause task execution" } else { "Resume task execution" }).clicked() {
+                        let glyph = if live_on {
+                            theme::icon::PAUSE_CIRCLE
+                        } else {
+                            theme::icon::PLAY_CIRCLE
+                        };
+                        if ui
+                            .add(egui::Button::new(RichText::new(glyph).size(16.0)).frame(false))
+                            .on_hover_text(if live_on {
+                                "Pause task execution"
+                            } else {
+                                "Resume task execution"
+                            })
+                            .clicked()
+                        {
                             app.shared.scan_enabled.store(!live_on, Ordering::SeqCst);
                         }
                     });
@@ -114,10 +192,18 @@ pub(crate) fn dashboard(app: &mut App, ui: &mut Ui) {
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
                     ui.add_space(6.0);
-                    ui.label(RichText::new(format!("{}  Filter", theme::icon::FUNNEL)).size(12.5).color(theme::ink_dim()));
+                    ui.label(
+                        RichText::new(format!("{}  Filter", theme::icon::FUNNEL))
+                            .size(12.5)
+                            .color(theme::ink_dim()),
+                    );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.add_space(8.0);
-                        ui.add(egui::TextEdit::singleline(&mut app.dash_search).hint_text("Search").desired_width(140.0));
+                        ui.add(
+                            egui::TextEdit::singleline(&mut app.dash_search)
+                                .hint_text("Search")
+                                .desired_width(140.0),
+                        );
                     });
                 });
                 ui.add_space(8.0);
@@ -125,19 +211,52 @@ pub(crate) fn dashboard(app: &mut App, ui: &mut Ui) {
                 let mut cards: Vec<(usize, String, String, bool)> = Vec::new();
                 for t in task_list.iter().rev() {
                     let progress = match (t.state, t.total) {
-                        (crate::tasks::TaskState::Running, Some(n)) => format!("Auditing: {} of {n} items", t.done),
-                        (crate::tasks::TaskState::Running, None) => format!("Crawling and auditing: request {} of {}", app.shared.scan.done.load(Ordering::SeqCst), scan_total),
+                        (crate::tasks::TaskState::Running, Some(n)) => {
+                            format!("Auditing: {} of {n} items", t.done)
+                        }
+                        (crate::tasks::TaskState::Running, None) => format!(
+                            "Crawling and auditing: request {} of {}",
+                            app.shared.scan.done.load(Ordering::SeqCst),
+                            scan_total
+                        ),
                         (s, Some(n)) => format!("{}: {} of {n} items", s.label(), t.done),
                         (s, None) => s.label().to_string(),
                     };
-                    cards.push((1000 + t.id as usize, format!("{}. {}", t.id + 2, t.name), progress, false));
+                    cards.push((
+                        1000 + t.id as usize,
+                        format!("{}. {}", t.id + 2, t.name),
+                        progress,
+                        false,
+                    ));
                 }
                 if has_active && app.shared.scan.direct.load(Ordering::SeqCst) {
                     let done = app.shared.scan.done.load(Ordering::SeqCst);
-                    cards.push((2, format!("{}. Active scan", app.shared.next_task_id.load(Ordering::SeqCst) + 2), if busy { format!("Auditing: {done} of {scan_total} requests") } else { format!("Finished: {done} requests") }, false));
+                    cards.push((
+                        2,
+                        format!(
+                            "{}. Active scan",
+                            app.shared.next_task_id.load(Ordering::SeqCst) + 2
+                        ),
+                        if busy {
+                            format!("Auditing: {done} of {scan_total} requests")
+                        } else {
+                            format!("Finished: {done} requests")
+                        },
+                        false,
+                    ));
                 }
-                cards.push((1, "2. Live audit from Proxy (all traffic)".into(), "Audit checks - passive".into(), true));
-                cards.push((0, "1. Live passive crawl from Proxy (all traffic)".into(), "Add links. Add item itself, same domain and URLs in suite scope.".into(), true));
+                cards.push((
+                    1,
+                    "2. Live audit from Proxy (all traffic)".into(),
+                    "Audit checks - passive".into(),
+                    true,
+                ));
+                cards.push((
+                    0,
+                    "1. Live passive crawl from Proxy (all traffic)".into(),
+                    "Add links. Add item itself, same domain and URLs in suite scope.".into(),
+                    true,
+                ));
                 let q = app.dash_search.to_ascii_lowercase();
                 for (id, title, sub, capturing) in cards {
                     if !q.is_empty() && !title.to_ascii_lowercase().contains(&q) {
@@ -148,9 +267,9 @@ pub(crate) fn dashboard(app: &mut App, ui: &mut Ui) {
                     // the menu and pause buttons stay on top of it (egui hit-
                     // tests the last widget first). Its size is last frame's.
                     let rect_key = egui::Id::unique(("dash-card-rect", id));
-                    let card_click = ui
-                        .data(|d| d.get_temp::<egui::Rect>(rect_key))
-                        .map(|r| ui.interact(r, egui::Id::unique(("dash-card", id)), egui::Sense::click()));
+                    let card_click = ui.data(|d| d.get_temp::<egui::Rect>(rect_key)).map(|r| {
+                        ui.interact(r, egui::Id::unique(("dash-card", id)), egui::Sense::click())
+                    });
                     let frame = egui::Frame::NONE
                         .fill(if sel { c(0xEBF1F6) } else { theme::surface() })
                         .stroke(egui::Stroke::new(1.0, theme::line()))
@@ -161,97 +280,200 @@ pub(crate) fn dashboard(app: &mut App, ui: &mut Ui) {
                         .show(ui, |ui| {
                             ui.set_width(rail_w - 46.0);
                             ui.horizontal(|ui| {
-                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                    // Buttons first (right to left), then the title in what
-                                    // is left, truncated, so a long URL never runs under them.
-                                    let title_label = |ui: &mut Ui| {
-                                        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                                            ui.add(egui::Label::new(RichText::new(&title).strong().size(13.0).color(theme::ink())).truncate().selectable(false));
-                                        });
-                                    };
-                                    // Per-task pause and menu (Burp: pause/resume, view details).
-                                    let flag = match id {
-                                        0 => Some(&app.shared.crawl_capture),
-                                        1 => Some(&app.shared.scan_enabled),
-                                        _ => None,
-                                    };
-                                    if let Some(t) = card_task(id) {
-                                        // A scan task: pause/resume, cancel, remove.
-                                        let (tid, state) = (t.id, t.state);
-                                        ui.menu_button(RichText::new(theme::icon::DOTS_THREE_VERTICAL).size(14.0), |ui| {
-                                            if state == crate::tasks::TaskState::Paused {
-                                                if ui.button("Resume task").clicked() {
-                                                    crate::tasks::resume(&app.shared, tid);
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        // Buttons first (right to left), then the title in what
+                                        // is left, truncated, so a long URL never runs under them.
+                                        let title_label = |ui: &mut Ui| {
+                                            ui.with_layout(
+                                                egui::Layout::left_to_right(egui::Align::Center),
+                                                |ui| {
+                                                    ui.add(
+                                                        egui::Label::new(
+                                                            RichText::new(&title)
+                                                                .strong()
+                                                                .size(13.0)
+                                                                .color(theme::ink()),
+                                                        )
+                                                        .truncate()
+                                                        .selectable(false),
+                                                    );
+                                                },
+                                            );
+                                        };
+                                        // Per-task pause and menu (Burp: pause/resume, view details).
+                                        let flag = match id {
+                                            0 => Some(&app.shared.crawl_capture),
+                                            1 => Some(&app.shared.scan_enabled),
+                                            _ => None,
+                                        };
+                                        if let Some(t) = card_task(id) {
+                                            // A scan task: pause/resume, cancel, remove.
+                                            let (tid, state) = (t.id, t.state);
+                                            ui.menu_button(
+                                                RichText::new(theme::icon::DOTS_THREE_VERTICAL)
+                                                    .size(14.0),
+                                                |ui| {
+                                                    if state == crate::tasks::TaskState::Paused {
+                                                        if ui.button("Resume task").clicked() {
+                                                            crate::tasks::resume(&app.shared, tid);
+                                                            ui.close();
+                                                        }
+                                                    } else if ui
+                                                        .add_enabled(
+                                                            state.is_open(),
+                                                            egui::Button::new("Pause task"),
+                                                        )
+                                                        .clicked()
+                                                    {
+                                                        crate::tasks::pause(&app.shared, tid);
+                                                        ui.close();
+                                                    }
+                                                    if ui
+                                                        .add_enabled(
+                                                            state.is_open(),
+                                                            egui::Button::new("Cancel task"),
+                                                        )
+                                                        .clicked()
+                                                    {
+                                                        crate::tasks::cancel(&app.shared, tid);
+                                                        ui.close();
+                                                    }
+                                                    if ui
+                                                        .add_enabled(
+                                                            !state.is_open(),
+                                                            egui::Button::new("Delete task"),
+                                                        )
+                                                        .clicked()
+                                                    {
+                                                        crate::tasks::remove(&app.shared, tid);
+                                                        ui.close();
+                                                    }
+                                                },
+                                            );
+                                            if state.is_open() {
+                                                let paused =
+                                                    state == crate::tasks::TaskState::Paused;
+                                                let glyph = if paused {
+                                                    theme::icon::PLAY_CIRCLE
+                                                } else {
+                                                    theme::icon::PAUSE_CIRCLE
+                                                };
+                                                if ui
+                                                    .add(
+                                                        egui::Button::new(
+                                                            RichText::new(glyph).size(14.0),
+                                                        )
+                                                        .frame(false),
+                                                    )
+                                                    .on_hover_text(if paused {
+                                                        "Resume"
+                                                    } else {
+                                                        "Pause"
+                                                    })
+                                                    .clicked()
+                                                {
+                                                    if paused {
+                                                        crate::tasks::resume(&app.shared, tid);
+                                                    } else {
+                                                        crate::tasks::pause(&app.shared, tid);
+                                                    }
+                                                }
+                                            }
+                                            title_label(ui);
+                                            return;
+                                        }
+                                        let running =
+                                            flag.map(|f| f.load(Ordering::SeqCst)).unwrap_or(busy);
+                                        ui.menu_button(
+                                            RichText::new(theme::icon::DOTS_THREE_VERTICAL)
+                                                .size(14.0),
+                                            |ui| {
+                                                if let Some(f) = flag {
+                                                    if ui
+                                                        .button(if running {
+                                                            "Pause task"
+                                                        } else {
+                                                            "Resume task"
+                                                        })
+                                                        .clicked()
+                                                    {
+                                                        f.store(!running, Ordering::SeqCst);
+                                                        ui.close();
+                                                    }
+                                                } else if ui
+                                                    .add_enabled(
+                                                        busy,
+                                                        egui::Button::new("Stop scan"),
+                                                    )
+                                                    .clicked()
+                                                {
+                                                    app.shared
+                                                        .scan
+                                                        .stop
+                                                        .store(true, Ordering::SeqCst);
                                                     ui.close();
                                                 }
-                                            } else if ui.add_enabled(state.is_open(), egui::Button::new("Pause task")).clicked() {
-                                                crate::tasks::pause(&app.shared, tid);
-                                                ui.close();
-                                            }
-                                            if ui.add_enabled(state.is_open(), egui::Button::new("Cancel task")).clicked() {
-                                                crate::tasks::cancel(&app.shared, tid);
-                                                ui.close();
-                                            }
-                                            if ui.add_enabled(!state.is_open(), egui::Button::new("Delete task")).clicked() {
-                                                crate::tasks::remove(&app.shared, tid);
-                                                ui.close();
-                                            }
-                                        });
-                                        if state.is_open() {
-                                            let paused = state == crate::tasks::TaskState::Paused;
-                                            let glyph = if paused { theme::icon::PLAY_CIRCLE } else { theme::icon::PAUSE_CIRCLE };
-                                            if ui.add(egui::Button::new(RichText::new(glyph).size(14.0)).frame(false)).on_hover_text(if paused { "Resume" } else { "Pause" }).clicked() {
-                                                if paused {
-                                                    crate::tasks::resume(&app.shared, tid);
-                                                } else {
-                                                    crate::tasks::pause(&app.shared, tid);
+                                                if ui.button("View details").clicked() {
+                                                    app.dash_task = id;
+                                                    ui.close();
                                                 }
+                                            },
+                                        );
+                                        let glyph = if running {
+                                            theme::icon::PAUSE_CIRCLE
+                                        } else {
+                                            theme::icon::PLAY_CIRCLE
+                                        };
+                                        if ui
+                                            .add(
+                                                egui::Button::new(RichText::new(glyph).size(14.0))
+                                                    .frame(false),
+                                            )
+                                            .on_hover_text(if running { "Pause" } else { "Resume" })
+                                            .clicked()
+                                        {
+                                            match flag {
+                                                Some(f) => f.store(!running, Ordering::SeqCst),
+                                                None => app
+                                                    .shared
+                                                    .scan
+                                                    .stop
+                                                    .store(true, Ordering::SeqCst),
                                             }
                                         }
                                         title_label(ui);
-                                        return;
-                                    }
-                                    let running = flag.map(|f| f.load(Ordering::SeqCst)).unwrap_or(busy);
-                                    ui.menu_button(RichText::new(theme::icon::DOTS_THREE_VERTICAL).size(14.0), |ui| {
-                                        if let Some(f) = flag {
-                                            if ui.button(if running { "Pause task" } else { "Resume task" }).clicked() {
-                                                f.store(!running, Ordering::SeqCst);
-                                                ui.close();
-                                            }
-                                        } else if ui.add_enabled(busy, egui::Button::new("Stop scan")).clicked() {
-                                            app.shared.scan.stop.store(true, Ordering::SeqCst);
-                                            ui.close();
-                                        }
-                                        if ui.button("View details").clicked() {
-                                            app.dash_task = id;
-                                            ui.close();
-                                        }
-                                    });
-                                    let glyph = if running { theme::icon::PAUSE_CIRCLE } else { theme::icon::PLAY_CIRCLE };
-                                    if ui.add(egui::Button::new(RichText::new(glyph).size(14.0)).frame(false)).on_hover_text(if running { "Pause" } else { "Resume" }).clicked() {
-                                        match flag {
-                                            Some(f) => f.store(!running, Ordering::SeqCst),
-                                            None => app.shared.scan.stop.store(true, Ordering::SeqCst),
-                                        }
-                                    }
-                                    title_label(ui);
-                                });
+                                    },
+                                );
                             });
                             ui.add_space(4.0);
-                            ui.add(egui::Label::new(RichText::new(&sub).size(12.5).color(theme::ink_dim())).wrap());
+                            ui.add(
+                                egui::Label::new(
+                                    RichText::new(&sub).size(12.5).color(theme::ink_dim()),
+                                )
+                                .wrap(),
+                            );
                             if capturing {
                                 ui.add_space(4.0);
                                 ui.horizontal(|ui| {
-                                    ui.label(RichText::new("Capturing").size(12.5).color(theme::ink_dim()));
+                                    ui.label(
+                                        RichText::new("Capturing")
+                                            .size(12.5)
+                                            .color(theme::ink_dim()),
+                                    );
                                     ui.add_space(10.0);
                                     if id == 1 {
                                         let mut on = app.shared.scan_enabled.load(Ordering::SeqCst);
-                                        if ui.add(crate::history_filter::toggle(&mut on)).changed() {
+                                        if ui.add(crate::history_filter::toggle(&mut on)).changed()
+                                        {
                                             app.shared.scan_enabled.store(on, Ordering::SeqCst);
                                         }
                                     } else {
-                                        let mut on = app.shared.crawl_capture.load(Ordering::SeqCst);
-                                        if ui.add(crate::history_filter::toggle(&mut on)).changed() {
+                                        let mut on =
+                                            app.shared.crawl_capture.load(Ordering::SeqCst);
+                                        if ui.add(crate::history_filter::toggle(&mut on)).changed()
+                                        {
                                             app.shared.crawl_capture.store(on, Ordering::SeqCst);
                                         }
                                     }
@@ -261,21 +483,46 @@ pub(crate) fn dashboard(app: &mut App, ui: &mut Ui) {
                                 ui.add_space(4.0);
                                 let v = counts(&|_| true);
                                 ui.horizontal(|ui| {
-                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                        for (k, col) in [(3, 0xB0AFAF), (2, 0x26649D), (1, 0xFF6633), (0, 0xD6213F)] {
-                                            egui::Frame::NONE.fill(c(col)).corner_radius(8.0).inner_margin(egui::Margin::symmetric(9, 1)).show(ui, |ui| {
-                                                ui.label(RichText::new(v[k].to_string()).size(11.5).strong().color(egui::Color32::WHITE));
-                                            });
-                                        }
-                                        ui.label(RichText::new("Issues:").size(12.5).color(theme::ink_dim()));
-                                    });
+                                    ui.with_layout(
+                                        egui::Layout::right_to_left(egui::Align::Center),
+                                        |ui| {
+                                            for (k, col) in [
+                                                (3, 0xB0AFAF),
+                                                (2, 0x26649D),
+                                                (1, 0xFF6633),
+                                                (0, 0xD6213F),
+                                            ] {
+                                                egui::Frame::NONE
+                                                    .fill(c(col))
+                                                    .corner_radius(8.0)
+                                                    .inner_margin(egui::Margin::symmetric(9, 1))
+                                                    .show(ui, |ui| {
+                                                        ui.label(
+                                                            RichText::new(v[k].to_string())
+                                                                .size(11.5)
+                                                                .strong()
+                                                                .color(egui::Color32::WHITE),
+                                                        );
+                                                    });
+                                            }
+                                            ui.label(
+                                                RichText::new("Issues:")
+                                                    .size(12.5)
+                                                    .color(theme::ink_dim()),
+                                            );
+                                        },
+                                    );
                                 });
                             }
                         })
                         .response;
                     if sel {
                         let rr = resp.rect;
-                        ui.painter().vline(rr.right() - 2.0, rr.y_range(), egui::Stroke::new(4.0, c(0x26649D)));
+                        ui.painter().vline(
+                            rr.right() - 2.0,
+                            rr.y_range(),
+                            egui::Stroke::new(4.0, c(0x26649D)),
+                        );
                     }
                     ui.data_mut(|d| d.insert_temp(rect_key, resp.rect));
                     if card_click.is_some_and(|r| r.clicked()) {
@@ -289,35 +536,71 @@ pub(crate) fn dashboard(app: &mut App, ui: &mut Ui) {
                 let title = match app.dash_task {
                     0 => "1. Live passive crawl from Proxy (all traffic)",
                     2 => {
-                        task_title = format!("{}. Active scan", app.shared.next_task_id.load(Ordering::SeqCst) + 2);
+                        task_title = format!(
+                            "{}. Active scan",
+                            app.shared.next_task_id.load(Ordering::SeqCst) + 2
+                        );
                         task_title.as_str()
                     }
                     id if id >= 1000 => {
-                        task_title = card_task(id).map(|t| format!("{}. {} \u{2014} {}, {} issue(s)", t.id + 2, t.name, t.state.label(), t.issues_found)).unwrap_or_default();
+                        task_title = card_task(id)
+                            .map(|t| {
+                                format!(
+                                    "{}. {} \u{2014} {}, {} issue(s)",
+                                    t.id + 2,
+                                    t.name,
+                                    t.state.label(),
+                                    t.issues_found
+                                )
+                            })
+                            .unwrap_or_default();
                         task_title.as_str()
                     }
                     _ => "2. Live audit from Proxy (all traffic)",
                 };
                 ui.horizontal(|ui| {
                     ui.add_space(14.0);
-                    ui.label(RichText::new(theme::icon::CARET_LEFT).size(16.0).color(theme::ink_dim()));
+                    ui.label(
+                        RichText::new(theme::icon::CARET_LEFT)
+                            .size(16.0)
+                            .color(theme::ink_dim()),
+                    );
                     ui.add_space(8.0);
                     ui.label(RichText::new(title).strong().size(15.0).color(theme::ink()));
                 });
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
                     ui.add_space(12.0);
-                    if let Some(v) = crate::msgpane::underline_tabs(ui, &["Summary", "Audit items", "Issues", "Event log", "Logger", "Audit log"], app.dash_sub, 13.0) {
+                    if let Some(v) = crate::msgpane::underline_tabs(
+                        ui,
+                        &[
+                            "Summary",
+                            "Audit items",
+                            "Issues",
+                            "Event log",
+                            "Logger",
+                            "Audit log",
+                        ],
+                        app.dash_sub,
+                        13.0,
+                    ) {
                         app.dash_sub = v;
                     }
                 });
                 let r = ui.cursor();
-                ui.painter().hline(ui.max_rect().x_range(), r.top(), egui::Stroke::new(1.0, theme::line()));
+                ui.painter().hline(
+                    ui.max_rect().x_range(),
+                    r.top(),
+                    egui::Stroke::new(1.0, theme::line()),
+                );
                 ui.add_space(10.0);
                 match app.dash_sub {
                     0 => dashboard_summary(app, ui, &all_issues),
                     1 => {
-                        let rows: Vec<net::HistEntry> = app.shared.history.with_rows(|h| h.iter().rev().take(2000).cloned().collect());
+                        let rows: Vec<net::HistEntry> = app
+                            .shared
+                            .history
+                            .with_rows(|h| h.iter().rev().take(2000).cloned().collect());
                         let cols = [
                             table::Column::new("#", 50.0),
                             table::Column::new("Host", 200.0),
@@ -328,35 +611,83 @@ pub(crate) fn dashboard(app: &mut App, ui: &mut Ui) {
                         ];
                         let mut st = app.dash_items_table.clone();
                         let h = ui.available_height();
-                        table::table_body(ui, "dash_items", &cols, &rows, &mut st, 19.0, h, &mut |e, ui| {
-                            table::cells(ui, &cols, &table::TableState::default(), 19.0, &[
-                                (0, e.id.to_string(), None),
-                                (1, history_host(e), None),
-                                (2, e.method.clone(), None),
-                                (3, e.path.clone(), None),
-                                (4, e.status.clone(), None),
-                                (5, if e.audited { theme::icon::CHECK.to_string() } else { String::new() }, None),
-                            ]);
-                        });
+                        table::table_body(
+                            ui,
+                            "dash_items",
+                            &cols,
+                            &rows,
+                            &mut st,
+                            19.0,
+                            h,
+                            &mut |e, ui| {
+                                table::cells(
+                                    ui,
+                                    &cols,
+                                    &table::TableState::default(),
+                                    19.0,
+                                    &[
+                                        (0, e.id.to_string(), None),
+                                        (1, history_host(e), None),
+                                        (2, e.method.clone(), None),
+                                        (3, e.path.clone(), None),
+                                        (4, e.status.clone(), None),
+                                        (
+                                            5,
+                                            if e.audited {
+                                                theme::icon::CHECK.to_string()
+                                            } else {
+                                                String::new()
+                                            },
+                                            None,
+                                        ),
+                                    ],
+                                );
+                            },
+                        );
                         app.dash_items_table = st;
                     }
                     2 => scanner(app, ui),
                     3 | 5 => {
-                        let events: Vec<String> = app.shared.events.lock().map(|e| e.iter().rev().cloned().collect()).unwrap_or_default();
-                        let filt: Vec<&String> = events.iter().filter(|e| app.dash_sub == 3 || e.contains("Scanner")).collect();
-                        egui::ScrollArea::vertical().id_salt("dash_events").auto_shrink([false, false]).show(ui, |ui| {
-                            if filt.is_empty() {
-                                hint(ui, "Nothing logged yet.");
-                            }
-                            for ev in filt {
-                                let (ts, msg) = ev.split_once("] ").unwrap_or(("", ev.as_str()));
-                                let t = ts.trim_start_matches('[').parse::<u64>().map(history_time).unwrap_or_default();
-                                ui.horizontal(|ui| {
-                                    ui.add_sized([150.0, 16.0], egui::Label::new(RichText::new(t).size(12.0).color(theme::ink_faint())));
-                                    ui.label(RichText::new(msg).size(12.5).color(theme::ink_dim()));
-                                });
-                            }
-                        });
+                        let events: Vec<String> = app
+                            .shared
+                            .events
+                            .lock()
+                            .map(|e| e.iter().rev().cloned().collect())
+                            .unwrap_or_default();
+                        let filt: Vec<&String> = events
+                            .iter()
+                            .filter(|e| app.dash_sub == 3 || e.contains("Scanner"))
+                            .collect();
+                        egui::ScrollArea::vertical()
+                            .id_salt("dash_events")
+                            .auto_shrink([false, false])
+                            .show(ui, |ui| {
+                                if filt.is_empty() {
+                                    hint(ui, "Nothing logged yet.");
+                                }
+                                for ev in filt {
+                                    let (ts, msg) =
+                                        ev.split_once("] ").unwrap_or(("", ev.as_str()));
+                                    let t = ts
+                                        .trim_start_matches('[')
+                                        .parse::<u64>()
+                                        .map(history_time)
+                                        .unwrap_or_default();
+                                    ui.horizontal(|ui| {
+                                        ui.add_sized(
+                                            [150.0, 16.0],
+                                            egui::Label::new(
+                                                RichText::new(t)
+                                                    .size(12.0)
+                                                    .color(theme::ink_faint()),
+                                            ),
+                                        );
+                                        ui.label(
+                                            RichText::new(msg).size(12.5).color(theme::ink_dim()),
+                                        );
+                                    });
+                                }
+                            });
                     }
                     _ => logger_view(app, ui),
                 }
@@ -523,8 +854,20 @@ pub(crate) fn dashboard_summary(app: &mut App, ui: &mut Ui, issues: &[crate::sca
 /// one after the other (Burp: "Audit" scan type over the listed URLs).
 pub(crate) fn start_url_scan(app: &mut App, urls: Vec<String>) {
     let audit_only = app.new_scan_type == 1;
-    let name = format!("{} of {}", if audit_only { "Audit" } else { "Crawl and audit" }, urls.first().cloned().unwrap_or_default());
-    crate::tasks::enqueue(&app.shared, name, crate::tasks::TaskKind::CrawlAudit { urls, audit_only });
+    let name = format!(
+        "{} of {}",
+        if audit_only {
+            "Audit"
+        } else {
+            "Crawl and audit"
+        },
+        urls.first().cloned().unwrap_or_default()
+    );
+    crate::tasks::enqueue(
+        &app.shared,
+        name,
+        crate::tasks::TaskKind::CrawlAudit { urls, audit_only },
+    );
 }
 
 /// One node of the site map tree.
@@ -548,7 +891,10 @@ impl MapNode {
 }
 
 pub(crate) fn path_segments(path: &str) -> Vec<String> {
-    let (p, q) = match path.split_once('?') { Some((p, q)) => (p, Some(q)), None => (path, None) };
+    let (p, q) = match path.split_once('?') {
+        Some((p, q)) => (p, Some(q)),
+        None => (path, None),
+    };
     let mut v: Vec<String> = Vec::new();
     let trimmed = p.trim_start_matches('/');
     if !trimmed.is_empty() {
@@ -558,7 +904,11 @@ pub(crate) fn path_segments(path: &str) -> Vec<String> {
                 continue;
             }
             // Folders keep their trailing slash, as Burp's tree shows them.
-            if i + 1 < parts.len() { v.push(format!("{seg}/")) } else { v.push(seg.to_string()) }
+            if i + 1 < parts.len() {
+                v.push(format!("{seg}/"))
+            } else {
+                v.push(seg.to_string())
+            }
         }
     }
     if let Some(q) = q {
@@ -576,7 +926,9 @@ pub(crate) fn target(app: &mut App, ui: &mut Ui) {
     ui.add_space(6.0);
     match app.target_sub {
         1 => {
-            egui::ScrollArea::vertical().id_salt("scope_page").show(ui, |ui| crate::tools::scope_editor(app, ui));
+            egui::ScrollArea::vertical()
+                .id_salt("scope_page")
+                .show(ui, |ui| crate::tools::scope_editor(app, ui));
             return;
         }
         2 => {
@@ -589,9 +941,13 @@ pub(crate) fn target(app: &mut App, ui: &mut Ui) {
         ui.spacing_mut().item_spacing.x = 0.0;
         for (i, label) in ["URL view", "Crawl paths view"].iter().enumerate() {
             let sel = app.target_view == i;
-            let b = egui::Button::new(RichText::new(*label).size(12.0).color(if sel { egui::Color32::WHITE } else { theme::ink() }))
-                .fill(if sel { c(0x26649D) } else { theme::header_bg() })
-                .corner_radius(2.0);
+            let b = egui::Button::new(RichText::new(*label).size(12.0).color(if sel {
+                egui::Color32::WHITE
+            } else {
+                theme::ink()
+            }))
+            .fill(if sel { c(0x26649D) } else { theme::header_bg() })
+            .corner_radius(2.0);
             if ui.add(b).clicked() {
                 app.target_view = i;
             }
@@ -600,18 +956,43 @@ pub(crate) fn target(app: &mut App, ui: &mut Ui) {
     ui.add_space(4.0);
     // Burp's site map filter: text, in-scope only, unrequested items.
     ui.horizontal(|ui| {
-        ui.label(RichText::new(theme::icon::FUNNEL).size(13.0).color(theme::ink_dim()));
-        ui.add(egui::TextEdit::singleline(&mut app.site_filter.text).hint_text("Filter by host or path").desired_width(220.0));
-        ui.checkbox(&mut app.site_filter.in_scope_only, "Show only in-scope items");
-        ui.checkbox(&mut app.site_filter.hide_unrequested, "Hide unrequested items");
+        ui.label(
+            RichText::new(theme::icon::FUNNEL)
+                .size(13.0)
+                .color(theme::ink_dim()),
+        );
+        ui.add(
+            egui::TextEdit::singleline(&mut app.site_filter.text)
+                .hint_text("Filter by host or path")
+                .desired_width(220.0),
+        );
+        ui.checkbox(
+            &mut app.site_filter.in_scope_only,
+            "Show only in-scope items",
+        );
+        ui.checkbox(
+            &mut app.site_filter.hide_unrequested,
+            "Hide unrequested items",
+        );
     });
     ui.add_space(4.0);
 
     // The site contents are rebuilt only when the history, the crawl, the
     // scope or the filter changed, not on every frame.
     let (hist_len, crawl_len) = (app.shared.history.len(), app.shared.crawl_items.len());
-    let scope_key = app.shared.scope.lock().unwrap().iter().map(|r| format!("{}{}{}{}", r.enabled, r.include, r.is_regex, r.pattern)).collect::<Vec<_>>().join("|");
-    let key = format!("{hist_len}|{crawl_len}|{}|{}|{}|{scope_key}", app.site_filter.text, app.site_filter.in_scope_only, app.site_filter.hide_unrequested);
+    let scope_key = app
+        .shared
+        .scope
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|r| format!("{}{}{}{}", r.enabled, r.include, r.is_regex, r.pattern))
+        .collect::<Vec<_>>()
+        .join("|");
+    let key = format!(
+        "{hist_len}|{crawl_len}|{}|{}|{}|{scope_key}",
+        app.site_filter.text, app.site_filter.in_scope_only, app.site_filter.hide_unrequested
+    );
     if key != app.site_cache_key {
         let mut all: Vec<net::HistEntry> = app.shared.history.snapshot();
         // Crawler requests are site-map contents too (Burp keeps them out of
@@ -619,11 +1000,25 @@ pub(crate) fn target(app: &mut App, ui: &mut Ui) {
         all.extend(app.shared.crawl_items.snapshot().iter().cloned());
         let shared = app.shared.clone();
         let filter = app.site_filter.clone();
-        let kept: Vec<net::HistEntry> = all.into_iter().filter(|e| filter.keeps(&history_host(e), &e.path, || net::in_scope(&shared, &history_url(e)))).collect();
+        let kept: Vec<net::HistEntry> = all
+            .into_iter()
+            .filter(|e| {
+                filter.keeps(&history_host(e), &e.path, || {
+                    net::in_scope(&shared, &history_url(e))
+                })
+            })
+            .collect();
         let links: Vec<(String, String)> = if filter.hide_unrequested {
             Vec::new()
         } else {
-            app.shared.site_links.lock().unwrap().iter().filter(|(o, p)| filter.keeps(o, p, || net::in_scope(&shared, &format!("{o}{p}")))).cloned().collect()
+            app.shared
+                .site_links
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|(o, p)| filter.keeps(o, p, || net::in_scope(&shared, &format!("{o}{p}"))))
+                .cloned()
+                .collect()
         };
         app.site_cache = std::sync::Arc::new((kept, links));
         app.site_cache_key = key;
@@ -639,9 +1034,21 @@ pub(crate) fn target(app: &mut App, ui: &mut Ui) {
         .unwrap()
         .iter()
         .filter(|i| !i.false_positive)
-        .map(|i| (i.host.clone(), i.path.clone(), crate::report::severity_index(&i.sev)))
+        .map(|i| {
+            (
+                i.host.clone(),
+                i.path.clone(),
+                crate::report::severity_index(&i.sev),
+            )
+        })
         .collect();
-    let scope_set = app.shared.scope.lock().unwrap().iter().any(|r| r.enabled && r.include);
+    let scope_set = app
+        .shared
+        .scope
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|r| r.enabled && r.include);
     if entries.is_empty() && links.is_empty() {
         ui.add_space(ui.available_height() * 0.25);
         ui.vertical_centered(|ui| {
@@ -674,18 +1081,26 @@ pub(crate) fn target(app: &mut App, ui: &mut Ui) {
     // frame with 10k items.
     let tree_key = format!("{}|{}", app.site_cache_key, app.target_view);
     if tree_key != app.site_tree_key {
-        let mut roots: std::collections::BTreeMap<String, MapNode> = std::collections::BTreeMap::new();
+        let mut roots: std::collections::BTreeMap<String, MapNode> =
+            std::collections::BTreeMap::new();
         for e in entries.iter() {
             let segs = path_segments(&e.path);
             let refs: Vec<&str> = segs.iter().map(String::as_str).collect();
             let root = roots.entry(history_host(e)).or_default();
-            if refs.is_empty() { root.requested = true; } else { root.insert(&refs, true); }
+            if refs.is_empty() {
+                root.requested = true;
+            } else {
+                root.insert(&refs, true);
+            }
         }
         if app.target_view == 0 {
             for (origin, path) in links.iter() {
                 let segs = path_segments(path);
                 let refs: Vec<&str> = segs.iter().map(String::as_str).collect();
-                roots.entry(origin.clone()).or_default().insert(&refs, false);
+                roots
+                    .entry(origin.clone())
+                    .or_default()
+                    .insert(&refs, false);
             }
         }
         app.site_tree = std::sync::Arc::new(roots);
@@ -869,5 +1284,12 @@ pub(crate) fn target(app: &mut App, ui: &mut Ui) {
                     });
             });
         });
-    vsplit_handle(ui, "map_split", map_top.x + tree_w, map_top.y..=map_top.y + map_h, &mut app.map_split, map_w);
+    vsplit_handle(
+        ui,
+        "map_split",
+        map_top.x + tree_w,
+        map_top.y..=map_top.y + map_h,
+        &mut app.map_split,
+        map_w,
+    );
 }

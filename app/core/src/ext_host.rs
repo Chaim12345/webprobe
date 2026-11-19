@@ -31,7 +31,11 @@ pub struct HttpService {
 
 impl HttpService {
     pub fn new(host: &str, port: u16, secure: bool) -> Self {
-        HttpService { host: host.to_string(), port, secure }
+        HttpService {
+            host: host.to_string(),
+            port,
+            secure,
+        }
     }
 
     /// `scheme://host[:port]`, the port omitted when it is the default.
@@ -56,21 +60,48 @@ pub trait ProxyHooks: Send + Sync {
     fn hooks_registered(&self) -> &'static str {
         ""
     }
-    fn handle_request_received(&self, _svc: &crate::ext_host::HttpService, _method: &str, _path: &str, _req: &mut Vec<u8>) -> ProxyAction {
+    fn handle_request_received(
+        &self,
+        _svc: &crate::ext_host::HttpService,
+        _method: &str,
+        _path: &str,
+        _req: &mut Vec<u8>,
+    ) -> ProxyAction {
         ProxyAction::Continue
     }
-    fn handle_response_received(&self, _svc: &crate::ext_host::HttpService, _method: &str, _path: &str, _resp: &mut Vec<u8>) -> ProxyAction {
+    fn handle_response_received(
+        &self,
+        _svc: &crate::ext_host::HttpService,
+        _method: &str,
+        _path: &str,
+        _resp: &mut Vec<u8>,
+    ) -> ProxyAction {
         ProxyAction::Continue
     }
     /// The request hook with the exchange's annotations (Montoya notes and
     /// highlight), which the extension may change. Defaults to
     /// [`ProxyHooks::handle_request_received`].
-    fn handle_request(&self, svc: &crate::ext_host::HttpService, method: &str, path: &str, req: &mut Vec<u8>, _ann: &mut Annotations) -> ProxyAction {
+    fn handle_request(
+        &self,
+        svc: &crate::ext_host::HttpService,
+        method: &str,
+        path: &str,
+        req: &mut Vec<u8>,
+        _ann: &mut Annotations,
+    ) -> ProxyAction {
         self.handle_request_received(svc, method, path, req)
     }
     /// The response hook with the request that was sent and the exchange's
     /// annotations. Defaults to [`ProxyHooks::handle_response_received`].
-    fn handle_response(&self, svc: &crate::ext_host::HttpService, method: &str, path: &str, _req: &[u8], resp: &mut Vec<u8>, _ann: &mut Annotations) -> ProxyAction {
+    fn handle_response(
+        &self,
+        svc: &crate::ext_host::HttpService,
+        method: &str,
+        path: &str,
+        _req: &[u8],
+        resp: &mut Vec<u8>,
+        _ann: &mut Annotations,
+    ) -> ProxyAction {
         self.handle_response_received(svc, method, path, resp)
     }
     /// Issue types the extension can report (Burp's custom issue
@@ -130,7 +161,11 @@ pub trait ProxyHooks: Send + Sync {
     }
     /// Run the extension's active scan checks on one request of a scan; its
     /// requests go through `helper` (the scan's own send path).
-    fn scan_active(&self, _msg: &ScanMessage, _helper: &dyn ScanHelper) -> Vec<crate::scan::ScanIssue> {
+    fn scan_active(
+        &self,
+        _msg: &ScanMessage,
+        _helper: &dyn ScanHelper,
+    ) -> Vec<crate::scan::ScanIssue> {
         Vec::new()
     }
     /// Run the extension's passive scan checks on one exchange.
@@ -139,13 +174,29 @@ pub trait ProxyHooks: Send + Sync {
     }
     /// Payloads from the extension's Intruder payload generator `provider`
     /// for a request template (the base value of its first position).
-    fn generate_payloads(&self, provider: &str, _template: &[u8], _base: &str) -> Result<Vec<String>, String> {
-        Err(format!("{} has no Intruder payload generator named {provider}", self.extension_name()))
+    fn generate_payloads(
+        &self,
+        provider: &str,
+        _template: &[u8],
+        _base: &str,
+    ) -> Result<Vec<String>, String> {
+        Err(format!(
+            "{} has no Intruder payload generator named {provider}",
+            self.extension_name()
+        ))
     }
     /// Run payloads through the extension's Intruder payload processor
     /// `processor`; skipped payloads are left out.
-    fn process_payloads(&self, processor: &str, _payloads: &[String], _base: &str) -> Result<Vec<String>, String> {
-        Err(format!("{} has no Intruder payload processor named {processor}", self.extension_name()))
+    fn process_payloads(
+        &self,
+        processor: &str,
+        _payloads: &[String],
+        _base: &str,
+    ) -> Result<Vec<String>, String> {
+        Err(format!(
+            "{} has no Intruder payload processor named {processor}",
+            self.extension_name()
+        ))
     }
     /// A proxied WebSocket was upgraded: true when the extension's handlers
     /// watch it (its messages then go through `ws_message`).
@@ -155,15 +206,30 @@ pub trait ProxyHooks: Send + Sync {
     /// One data message of a watched socket at one stage: the handlers may
     /// edit `payload`, drop it, or (when received) force or skip
     /// interception.
-    fn ws_message(&self, _socket: u64, _stage: WsStage, _to_server: bool, _binary: bool, _payload: &mut Vec<u8>) -> WsVerdict {
+    fn ws_message(
+        &self,
+        _socket: u64,
+        _stage: WsStage,
+        _to_server: bool,
+        _binary: bool,
+        _payload: &mut Vec<u8>,
+    ) -> WsVerdict {
         WsVerdict::Continue
     }
     /// A watched socket closed.
     fn ws_close(&self, _socket: u64) {}
     /// Run the extension's session handling action `name` on a request
     /// (session rule "invoke extension"); the request it returns is sent.
-    fn session_action(&self, name: &str, _svc: &HttpService, _req: &[u8]) -> Result<Vec<u8>, String> {
-        Err(format!("{} has no session handling action named {name}", self.extension_name()))
+    fn session_action(
+        &self,
+        name: &str,
+        _svc: &HttpService,
+        _req: &[u8],
+    ) -> Result<Vec<u8>, String> {
+        Err(format!(
+            "{} has no session handling action named {name}",
+            self.extension_name()
+        ))
     }
     /// The extension's saved data (Montoya `extensionData()`), as JSON.
     fn extension_data(&self) -> Option<serde_json::Value> {
@@ -295,8 +361,12 @@ pub struct SidecarOptions {
 impl SidecarOptions {
     /// Headless when there is no X11 / Wayland display.
     pub fn for_this_session() -> Self {
-        let no_display = std::env::var_os("DISPLAY").is_none_or(|d| d.is_empty()) && std::env::var_os("WAYLAND_DISPLAY").is_none_or(|d| d.is_empty());
-        SidecarOptions { headless: no_display, ..Default::default() }
+        let no_display = std::env::var_os("DISPLAY").is_none_or(|d| d.is_empty())
+            && std::env::var_os("WAYLAND_DISPLAY").is_none_or(|d| d.is_empty());
+        SidecarOptions {
+            headless: no_display,
+            ..Default::default()
+        }
     }
 }
 
@@ -310,17 +380,26 @@ pub struct Annotations {
 }
 
 /// Montoya `HighlightColor` names, in the order of [`Annotations::highlight`].
-pub const HIGHLIGHT_COLOURS: [&str; 9] = ["RED", "ORANGE", "YELLOW", "GREEN", "CYAN", "BLUE", "PINK", "MAGENTA", "GRAY"];
+pub const HIGHLIGHT_COLOURS: [&str; 9] = [
+    "RED", "ORANGE", "YELLOW", "GREEN", "CYAN", "BLUE", "PINK", "MAGENTA", "GRAY",
+];
 
 impl Annotations {
     /// The Montoya colour name, if highlighted.
     pub fn colour_name(&self) -> Option<&'static str> {
-        self.highlight.and_then(|i| HIGHLIGHT_COLOURS.get(i as usize).copied())
+        self.highlight
+            .and_then(|i| HIGHLIGHT_COLOURS.get(i as usize).copied())
     }
 
     /// Set the highlight from a Montoya colour name (None / NONE clears it).
     pub fn set_colour(&mut self, name: Option<&str>) {
-        self.highlight = name.and_then(|n| HIGHLIGHT_COLOURS.iter().position(|c| c.eq_ignore_ascii_case(n))).map(|i| i as u8);
+        self.highlight = name
+            .and_then(|n| {
+                HIGHLIGHT_COLOURS
+                    .iter()
+                    .position(|c| c.eq_ignore_ascii_case(n))
+            })
+            .map(|i| i as u8);
     }
 }
 
@@ -357,7 +436,11 @@ pub struct LoadedExtension {
 
 impl LoadedExtension {
     pub fn new(hooks: impl ProxyHooks + 'static) -> Self {
-        Self { enabled: true, hooks: Arc::new(hooks), source: None }
+        Self {
+            enabled: true,
+            hooks: Arc::new(hooks),
+            source: None,
+        }
     }
 }
 
@@ -378,7 +461,10 @@ pub struct ExtensionHost {
 /// The key an extension's saved data is filed under in the project: where
 /// it was installed from, else its name.
 pub fn extension_key(e: &LoadedExtension) -> String {
-    e.source.as_ref().map(|s| s.source.trim().to_string()).unwrap_or_else(|| e.hooks.extension_name().to_string())
+    e.source
+        .as_ref()
+        .map(|s| s.source.trim().to_string())
+        .unwrap_or_else(|| e.hooks.extension_name().to_string())
 }
 
 impl ExtensionHost {
@@ -399,7 +485,10 @@ impl ExtensionHost {
     pub fn restore_data(&mut self, data: std::collections::BTreeMap<String, serde_json::Value>) {
         for e in &self.extensions {
             if e.hooks.extension_data().is_some() || data.contains_key(&extension_key(e)) {
-                e.hooks.restore_data(data.get(&extension_key(e)).unwrap_or(&serde_json::json!({})));
+                e.hooks.restore_data(
+                    data.get(&extension_key(e))
+                        .unwrap_or(&serde_json::json!({})),
+                );
             }
         }
         self.saved_data = data;
@@ -409,37 +498,98 @@ impl ExtensionHost {
     /// with the host unlocked, so one slow extension does not hold up every
     /// other connection waiting for the registry.
     pub fn active(&self) -> Vec<Arc<dyn ProxyHooks>> {
-        self.extensions.iter().filter(|e| e.enabled).map(|e| Arc::clone(&e.hooks)).collect()
+        self.extensions
+            .iter()
+            .filter(|e| e.enabled)
+            .map(|e| Arc::clone(&e.hooks))
+            .collect()
     }
 
-    pub fn run_request_hooks(&self, svc: &HttpService, method: &str, path: &str, req: &mut Vec<u8>) -> bool {
+    pub fn run_request_hooks(
+        &self,
+        svc: &HttpService,
+        method: &str,
+        path: &str,
+        req: &mut Vec<u8>,
+    ) -> bool {
         run_request_hooks(&self.active(), svc, method, path, req)
     }
 
-    pub fn run_response_hooks(&self, svc: &HttpService, method: &str, path: &str, resp: &mut Vec<u8>) -> bool {
+    pub fn run_response_hooks(
+        &self,
+        svc: &HttpService,
+        method: &str,
+        path: &str,
+        resp: &mut Vec<u8>,
+    ) -> bool {
         run_response_hooks(&self.active(), svc, method, path, resp)
     }
 }
 
 /// Run request hooks in order; false when one dropped the message.
-pub fn run_request_hooks(exts: &[Arc<dyn ProxyHooks>], svc: &HttpService, method: &str, path: &str, req: &mut Vec<u8>) -> bool {
+pub fn run_request_hooks(
+    exts: &[Arc<dyn ProxyHooks>],
+    svc: &HttpService,
+    method: &str,
+    path: &str,
+    req: &mut Vec<u8>,
+) -> bool {
     run_request_hooks_annotated(exts, svc, method, path, req, &mut Annotations::default())
 }
 
 /// Run response hooks in order; false when one dropped the message.
-pub fn run_response_hooks(exts: &[Arc<dyn ProxyHooks>], svc: &HttpService, method: &str, path: &str, resp: &mut Vec<u8>) -> bool {
-    run_response_hooks_annotated(exts, svc, method, path, &[], resp, &mut Annotations::default())
+pub fn run_response_hooks(
+    exts: &[Arc<dyn ProxyHooks>],
+    svc: &HttpService,
+    method: &str,
+    path: &str,
+    resp: &mut Vec<u8>,
+) -> bool {
+    run_response_hooks_annotated(
+        exts,
+        svc,
+        method,
+        path,
+        &[],
+        resp,
+        &mut Annotations::default(),
+    )
 }
 
 /// [`run_request_hooks`] with the exchange's annotations.
-pub fn run_request_hooks_annotated(exts: &[Arc<dyn ProxyHooks>], svc: &HttpService, method: &str, path: &str, req: &mut Vec<u8>, ann: &mut Annotations) -> bool {
-    exts.iter().all(|e| !matches!(e.handle_request(svc, method, path, req, ann), ProxyAction::Drop))
+pub fn run_request_hooks_annotated(
+    exts: &[Arc<dyn ProxyHooks>],
+    svc: &HttpService,
+    method: &str,
+    path: &str,
+    req: &mut Vec<u8>,
+    ann: &mut Annotations,
+) -> bool {
+    exts.iter().all(|e| {
+        !matches!(
+            e.handle_request(svc, method, path, req, ann),
+            ProxyAction::Drop
+        )
+    })
 }
 
 /// [`run_response_hooks`] with the request that was sent and the
 /// exchange's annotations.
-pub fn run_response_hooks_annotated(exts: &[Arc<dyn ProxyHooks>], svc: &HttpService, method: &str, path: &str, req: &[u8], resp: &mut Vec<u8>, ann: &mut Annotations) -> bool {
-    exts.iter().all(|e| !matches!(e.handle_response(svc, method, path, req, resp, ann), ProxyAction::Drop))
+pub fn run_response_hooks_annotated(
+    exts: &[Arc<dyn ProxyHooks>],
+    svc: &HttpService,
+    method: &str,
+    path: &str,
+    req: &[u8],
+    resp: &mut Vec<u8>,
+    ann: &mut Annotations,
+) -> bool {
+    exts.iter().all(|e| {
+        !matches!(
+            e.handle_response(svc, method, path, req, resp, ann),
+            ProxyAction::Drop
+        )
+    })
 }
 
 /// Built-in example (QA hook WEBPROBE_EXT_TEST): adds an X-WebProbe-Extension
@@ -453,7 +603,13 @@ impl ProxyHooks for ExampleHeaderExtension {
     fn hooks_registered(&self) -> &'static str {
         "ProxyRequestHandler"
     }
-    fn handle_request_received(&self, _svc: &crate::ext_host::HttpService, _method: &str, _path: &str, req: &mut Vec<u8>) -> ProxyAction {
+    fn handle_request_received(
+        &self,
+        _svc: &crate::ext_host::HttpService,
+        _method: &str,
+        _path: &str,
+        req: &mut Vec<u8>,
+    ) -> ProxyAction {
         *req = crate::net::replace_or_add_header(req, "X-WebProbe-Extension", "example");
         ProxyAction::Continue
     }
@@ -461,11 +617,11 @@ impl ProxyHooks for ExampleHeaderExtension {
 
 // ---------- Path B: sidecar JVM for real Montoya .jar extensions ----------
 
+use crate::sync::Mutex;
 use std::io::{BufReader, Write};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
-use crate::sync::Mutex;
 
 /// How long a Montoya handler may take on one message before the bridge is
 /// stopped (its hooks then pass everything through).
@@ -479,7 +635,8 @@ pub type HostSend = Box<dyn Fn(&HttpService, &[u8]) -> Result<Vec<u8>, String> +
 /// `Logging.raise*Event` (the event log).
 pub type HostEvent = Box<dyn Fn(&str, &str) + Send + Sync>;
 /// Engine calls (`crate::ext_calls`): (extension, op, args).
-pub type HostCall = Box<dyn Fn(&str, &str, &serde_json::Value) -> Result<serde_json::Value, String> + Send + Sync>;
+pub type HostCall =
+    Box<dyn Fn(&str, &str, &serde_json::Value) -> Result<serde_json::Value, String> + Send + Sync>;
 
 pub struct HostLink {
     pub send: HostSend,
@@ -493,12 +650,21 @@ impl HostLink {
     /// `send_tls_raw`, events to the event log. Holds the engine weakly (the
     /// engine owns its extensions).
     pub fn to_shared(shared: &Arc<crate::net::Shared>) -> Arc<HostLink> {
-        let (a, b, c) = (Arc::downgrade(shared), Arc::downgrade(shared), Arc::downgrade(shared));
+        let (a, b, c) = (
+            Arc::downgrade(shared),
+            Arc::downgrade(shared),
+            Arc::downgrade(shared),
+        );
         Arc::new(HostLink {
             send: Box::new(move |svc, req| {
                 let shared = a.upgrade().ok_or("WebProbe is shutting down")?;
-                let up = if svc.secure { crate::net::send_tls_raw(&shared, &svc.host, svc.port, req) } else { crate::net::send_raw(&shared, &svc.host, svc.port, req) };
-                up.resp.ok_or_else(|| up.error.unwrap_or_else(|| "no response".into()))
+                let up = if svc.secure {
+                    crate::net::send_tls_raw(&shared, &svc.host, svc.port, req)
+                } else {
+                    crate::net::send_raw(&shared, &svc.host, svc.port, req)
+                };
+                up.resp
+                    .ok_or_else(|| up.error.unwrap_or_else(|| "no response".into()))
             }),
             event: Box::new(move |level, msg| {
                 if let Some(shared) = b.upgrade() {
@@ -569,7 +735,11 @@ impl JavaSidecar {
     }
 
     /// [`JavaSidecar::spawn_with`] with explicit start options.
-    pub fn spawn_opts(ext_jar: &str, link: Option<Arc<HostLink>>, opts: SidecarOptions) -> Result<JavaSidecar, String> {
+    pub fn spawn_opts(
+        ext_jar: &str,
+        link: Option<Arc<HostLink>>,
+        opts: SidecarOptions,
+    ) -> Result<JavaSidecar, String> {
         // The Montoya API classes come from the jar the resolver finds; the
         // bridge is WebProbe's own source, embedded and written out.
         let java = crate::paths::java().map_err(|m| m.to_string())?;
@@ -582,17 +752,27 @@ impl JavaSidecar {
         if opts.headless {
             cmd.arg("-Djava.awt.headless=true");
         }
-        let cp = std::env::join_paths([api_jar.as_path(), classes.as_path()]).map_err(|e| format!("bad class path: {e}"))?;
+        let cp = std::env::join_paths([api_jar.as_path(), classes.as_path()])
+            .map_err(|e| format!("bad class path: {e}"))?;
         cmd.arg("-cp").arg(cp).arg("MontoyaBridge");
         if opts.startup {
             cmd.arg("--startup");
         }
         if let Some(d) = &opts.data {
-            let f = std::env::temp_dir().join(format!("webprobe-extdata-{}-{}.json", std::process::id(), crate::util::now_secs()));
-            std::fs::write(&f, d.to_string()).map_err(|e| format!("could not write extension data: {e}"))?;
+            let f = std::env::temp_dir().join(format!(
+                "webprobe-extdata-{}-{}.json",
+                std::process::id(),
+                crate::util::now_secs()
+            ));
+            std::fs::write(&f, d.to_string())
+                .map_err(|e| format!("could not write extension data: {e}"))?;
             cmd.arg("--data").arg(f);
         }
-        if let Some(p) = opts.prefs_dir.clone().or_else(|| crate::paths::config_dir().map(|c| c.join("extension-preferences"))) {
+        if let Some(p) = opts
+            .prefs_dir
+            .clone()
+            .or_else(|| crate::paths::config_dir().map(|c| c.join("extension-preferences")))
+        {
             cmd.arg("--prefs").arg(p);
         }
         let mut child = cmd
@@ -618,17 +798,32 @@ impl JavaSidecar {
         let (to_bridge, writer_rx) = std::sync::mpsc::channel::<String>();
         std::thread::spawn(move || {
             for line in writer_rx {
-                if writeln!(stdin, "{line}").and_then(|_| stdin.flush()).is_err() {
+                if writeln!(stdin, "{line}")
+                    .and_then(|_| stdin.flush())
+                    .is_err()
+                {
                     break;
                 }
             }
         });
         let (reader_tx, from_bridge) = std::sync::mpsc::channel::<String>();
-        let ui = Arc::new(Mutex::new(ExtUi { headless: opts.headless, ..Default::default() }));
+        let ui = Arc::new(Mutex::new(ExtUi {
+            headless: opts.headless,
+            ..Default::default()
+        }));
         let data = Arc::new(Mutex::new(opts.data.clone()));
-        let file_label = std::path::Path::new(ext_jar).file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+        let file_label = std::path::Path::new(ext_jar)
+            .file_name()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_default();
         {
-            let (errors, back, ui, data, label) = (Arc::clone(&errors), to_bridge.clone(), Arc::clone(&ui), Arc::clone(&data), file_label.clone());
+            let (errors, back, ui, data, label) = (
+                Arc::clone(&errors),
+                to_bridge.clone(),
+                Arc::clone(&ui),
+                Arc::clone(&data),
+                file_label.clone(),
+            );
             std::thread::spawn(move || {
                 for line in crate::util::capped_lines(stdout, MAX_BRIDGE_LINE) {
                     let msg: serde_json::Value = serde_json::from_str(&line).unwrap_or_default();
@@ -636,9 +831,20 @@ impl JavaSidecar {
                         Some("send") => serve_send(&msg, link.clone(), back.clone()),
                         // Calls a scan check makes are answered on the scan's
                         // thread (`exchange_with`); the rest here.
-                        Some("call") if !msg["op"].as_str().unwrap_or("").starts_with("scan-") => serve_call(&msg, link.clone(), back.clone(), label.clone()),
+                        Some("call") if !msg["op"].as_str().unwrap_or("").starts_with("scan-") => {
+                            serve_call(&msg, link.clone(), back.clone(), label.clone())
+                        }
                         Some("ui") => {
-                            let names = |k: &str| msg[k].as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect()).unwrap_or_default();
+                            let names = |k: &str| {
+                                msg[k]
+                                    .as_array()
+                                    .map(|a| {
+                                        a.iter()
+                                            .filter_map(|v| v.as_str().map(str::to_string))
+                                            .collect()
+                                    })
+                                    .unwrap_or_default()
+                            };
                             let n = |k: &str| msg[k].as_u64().unwrap_or(0) as usize;
                             *ui.lock().unwrap() = ExtUi {
                                 tabs: names("tabs"),
@@ -657,7 +863,10 @@ impl JavaSidecar {
                         }
                         Some("persist") => *data.lock().unwrap() = Some(msg["data"].clone()),
                         Some("event") => {
-                            let (level, text) = (msg["level"].as_str().unwrap_or("info"), msg["message"].as_str().unwrap_or(""));
+                            let (level, text) = (
+                                msg["level"].as_str().unwrap_or("info"),
+                                msg["message"].as_str().unwrap_or(""),
+                            );
                             push_line(&errors, format!("[event {level}] {text}"));
                             if let Some(l) = &link {
                                 (l.event)(level, text);
@@ -692,8 +901,21 @@ impl JavaSidecar {
             Err(e) => {
                 // The JVM's own words are the useful part of a load failure.
                 std::thread::sleep(std::time::Duration::from_millis(200));
-                let tail: Vec<String> = sidecar.errors.lock().unwrap().iter().rev().take(5).rev().cloned().collect();
-                return Err(if tail.is_empty() { e } else { format!("{e}; {}", tail.join(" | ")) });
+                let tail: Vec<String> = sidecar
+                    .errors
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .rev()
+                    .take(5)
+                    .rev()
+                    .cloned()
+                    .collect();
+                return Err(if tail.is_empty() {
+                    e
+                } else {
+                    format!("{e}; {}", tail.join(" | "))
+                });
             }
         }
         Ok(sidecar)
@@ -704,9 +926,17 @@ impl JavaSidecar {
         // The first ping waits for the JVM to compile the bridge and run the
         // extension's initialize(): about 20 s on an idle machine, over 60 s
         // under a build. Generous, but bounded.
-        let reply = self.exchange(r#"{"type":"ping"}"#, None, std::time::Duration::from_secs(180))?;
+        let reply = self.exchange(
+            r#"{"type":"ping"}"#,
+            None,
+            std::time::Duration::from_secs(180),
+        )?;
         match reply.get("type").and_then(|v| v.as_str()) {
-            Some("pong") => Ok(reply.get("name").and_then(|n| n.as_str()).unwrap_or_default().to_string()),
+            Some("pong") => Ok(reply
+                .get("name")
+                .and_then(|n| n.as_str())
+                .unwrap_or_default()
+                .to_string()),
             other => Err(format!("unexpected ping reply: {other:?}")),
         }
     }
@@ -719,7 +949,12 @@ impl JavaSidecar {
         }
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
         while std::time::Instant::now() < deadline {
-            let exited = self.child.lock().unwrap().as_mut().is_none_or(|c| c.try_wait().map(|s| s.is_some()).unwrap_or(true));
+            let exited = self
+                .child
+                .lock()
+                .unwrap()
+                .as_mut()
+                .is_none_or(|c| c.try_wait().map(|s| s.is_some()).unwrap_or(true));
             if exited {
                 break;
             }
@@ -735,7 +970,12 @@ impl JavaSidecar {
     /// hooks degrade to pass-through without blocking the pipeline. The reply
     /// must carry `id` (pings have none and answer `{"type":"pong"}`); other
     /// lines are logged and skipped. No reply within `wait` stops the bridge.
-    fn exchange(&self, line: &str, id: Option<u64>, wait: std::time::Duration) -> Result<serde_json::Value, String> {
+    fn exchange(
+        &self,
+        line: &str,
+        id: Option<u64>,
+        wait: std::time::Duration,
+    ) -> Result<serde_json::Value, String> {
         self.exchange_with(line, id, wait, &mut |_, _| Err("no scan is running".into()))
     }
 
@@ -743,17 +983,31 @@ impl JavaSidecar {
     /// calls with `on_call` on this thread, each answered call restarting
     /// the deadline (a check that keeps working is not cut off; one that
     /// hangs is, after `wait` of silence).
-    fn exchange_with(&self, line: &str, id: Option<u64>, wait: std::time::Duration, on_call: &mut dyn FnMut(&str, &serde_json::Value) -> Result<serde_json::Value, String>) -> Result<serde_json::Value, String> {
+    fn exchange_with(
+        &self,
+        line: &str,
+        id: Option<u64>,
+        wait: std::time::Duration,
+        on_call: &mut dyn FnMut(&str, &serde_json::Value) -> Result<serde_json::Value, String>,
+    ) -> Result<serde_json::Value, String> {
         let _guard = self.io_lock.lock().unwrap();
         if self.dead.load(Ordering::Relaxed) {
             return Err("sidecar is dead".into());
         }
         let mark_dead = |sc: &Self, why: &str| {
             sc.dead.store(true, Ordering::Relaxed);
-            push_line(&sc.errors, format!("sidecar stopped ({why}); its hooks now let everything through"));
+            push_line(
+                &sc.errors,
+                format!("sidecar stopped ({why}); its hooks now let everything through"),
+            );
             sc.kill();
         };
-        let sent = self.to_bridge.lock().unwrap().as_ref().is_some_and(|tx| tx.send(line.to_string()).is_ok());
+        let sent = self
+            .to_bridge
+            .lock()
+            .unwrap()
+            .as_ref()
+            .is_some_and(|tx| tx.send(line.to_string()).is_ok());
         if !sent {
             mark_dead(self, "stdin closed");
             return Err("sidecar stdin closed".into());
@@ -770,10 +1024,15 @@ impl JavaSidecar {
                     };
                     if reply.get("type").and_then(|t| t.as_str()) == Some("call") {
                         let sid = reply["sid"].as_u64().unwrap_or(0);
-                        let answer = match on_call(reply["op"].as_str().unwrap_or(""), &reply["args"]) {
-                            Ok(v) => serde_json::json!({"type": "sent", "sid": sid, "result": v}),
-                            Err(e) => serde_json::json!({"type": "sent", "sid": sid, "error": e}),
-                        };
+                        let answer =
+                            match on_call(reply["op"].as_str().unwrap_or(""), &reply["args"]) {
+                                Ok(v) => {
+                                    serde_json::json!({"type": "sent", "sid": sid, "result": v})
+                                }
+                                Err(e) => {
+                                    serde_json::json!({"type": "sent", "sid": sid, "error": e})
+                                }
+                            };
                         if let Some(tx) = self.to_bridge.lock().unwrap().as_ref() {
                             let _ = tx.send(answer.to_string());
                         }
@@ -811,7 +1070,14 @@ impl JavaSidecar {
 
     /// One message through the extension's handlers: the verdict, with
     /// `msg` replaced when a handler edited it and `ann` updated.
-    fn run(&self, kind: &str, svc: &HttpService, msg: &mut Vec<u8>, req: Option<&[u8]>, ann: &mut Annotations) -> ProxyAction {
+    fn run(
+        &self,
+        kind: &str,
+        svc: &HttpService,
+        msg: &mut Vec<u8>,
+        req: Option<&[u8]>,
+        ann: &mut Annotations,
+    ) -> ProxyAction {
         if self.dead.load(Ordering::Relaxed) {
             return ProxyAction::Continue;
         }
@@ -839,7 +1105,11 @@ impl JavaSidecar {
                 if reply.get("action").and_then(|a| a.as_str()) == Some("drop") {
                     return ProxyAction::Drop;
                 }
-                if let Some(raw) = reply.get("raw").and_then(|r| r.as_str()).and_then(|r| crate::util::b64_decode(r).ok()) {
+                if let Some(raw) = reply
+                    .get("raw")
+                    .and_then(|r| r.as_str())
+                    .and_then(|r| crate::util::b64_decode(r).ok())
+                {
                     *msg = raw;
                 }
                 ProxyAction::Continue
@@ -864,7 +1134,8 @@ impl JavaSidecar {
         }
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         line["id"] = id.into();
-        self.exchange(&line.to_string(), Some(id), HOOK_TIMEOUT).ok()
+        self.exchange(&line.to_string(), Some(id), HOOK_TIMEOUT)
+            .ok()
     }
 }
 
@@ -880,21 +1151,40 @@ fn message_json(m: &MenuMessage) -> serde_json::Value {
 }
 
 fn issues_of(reply: &serde_json::Value, ext: &str) -> Vec<crate::scan::ScanIssue> {
-    reply["issues"].as_array().map(|a| a.iter().map(|i| crate::ext_calls::issue_of(i, ext)).collect()).unwrap_or_default()
+    reply["issues"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .map(|i| crate::ext_calls::issue_of(i, ext))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn b64_field(v: &serde_json::Value, k: &str) -> Option<Vec<u8>> {
-    v.get(k).and_then(|x| x.as_str()).and_then(|x| crate::util::b64_decode(x).ok())
+    v.get(k)
+        .and_then(|x| x.as_str())
+        .and_then(|x| crate::util::b64_decode(x).ok())
 }
 
 /// Answer one engine call from the bridge on its own thread.
-fn serve_call(msg: &serde_json::Value, link: Option<Arc<HostLink>>, back: std::sync::mpsc::Sender<String>, ext: String) {
+fn serve_call(
+    msg: &serde_json::Value,
+    link: Option<Arc<HostLink>>,
+    back: std::sync::mpsc::Sender<String>,
+    ext: String,
+) {
     let sid = msg.get("sid").and_then(|v| v.as_u64()).unwrap_or(0);
-    let (op, args) = (msg["op"].as_str().unwrap_or("").to_string(), msg["args"].clone());
+    let (op, args) = (
+        msg["op"].as_str().unwrap_or("").to_string(),
+        msg["args"].clone(),
+    );
     std::thread::spawn(move || {
         let result = match &link {
             Some(l) => (l.call)(&ext, &op, &args),
-            None => Err(format!("{op}: this extension host is not linked to WebProbe's engine")),
+            None => Err(format!(
+                "{op}: this extension host is not linked to WebProbe's engine"
+            )),
         };
         let reply = match result {
             Ok(v) => serde_json::json!({"type": "sent", "sid": sid, "result": v}),
@@ -906,17 +1196,30 @@ fn serve_call(msg: &serde_json::Value, link: Option<Arc<HostLink>>, back: std::s
 
 /// Answer one `Http.sendRequest` from the bridge on its own thread (the
 /// extension may be waiting inside a handler).
-fn serve_send(msg: &serde_json::Value, link: Option<Arc<HostLink>>, back: std::sync::mpsc::Sender<String>) {
+fn serve_send(
+    msg: &serde_json::Value,
+    link: Option<Arc<HostLink>>,
+    back: std::sync::mpsc::Sender<String>,
+) {
     let sid = msg.get("sid").and_then(|v| v.as_u64()).unwrap_or(0);
-    let svc = HttpService::new(msg["host"].as_str().unwrap_or(""), msg["port"].as_u64().unwrap_or(80) as u16, msg["secure"].as_bool().unwrap_or(false));
-    let raw = msg["raw"].as_str().and_then(|r| crate::util::b64_decode(r).ok()).unwrap_or_default();
+    let svc = HttpService::new(
+        msg["host"].as_str().unwrap_or(""),
+        msg["port"].as_u64().unwrap_or(80) as u16,
+        msg["secure"].as_bool().unwrap_or(false),
+    );
+    let raw = msg["raw"]
+        .as_str()
+        .and_then(|r| crate::util::b64_decode(r).ok())
+        .unwrap_or_default();
     std::thread::spawn(move || {
         let result = match &link {
             Some(l) => (l.send)(&svc, &raw),
             None => Err("this extension host has no HTTP sender".into()),
         };
         let reply = match result {
-            Ok(resp) => serde_json::json!({"type": "sent", "sid": sid, "raw": crate::util::b64_encode(&resp)}),
+            Ok(resp) => {
+                serde_json::json!({"type": "sent", "sid": sid, "raw": crate::util::b64_encode(&resp)})
+            }
             Err(e) => serde_json::json!({"type": "sent", "sid": sid, "error": e}),
         };
         let _ = back.send(reply.to_string());
@@ -951,7 +1254,13 @@ impl ProxyHooks for JavaSidecar {
         !self.dead.load(Ordering::Relaxed)
     }
 
-    fn handle_request_received(&self, svc: &crate::ext_host::HttpService, method: &str, path: &str, req: &mut Vec<u8>) -> ProxyAction {
+    fn handle_request_received(
+        &self,
+        svc: &crate::ext_host::HttpService,
+        method: &str,
+        path: &str,
+        req: &mut Vec<u8>,
+    ) -> ProxyAction {
         self.handle_request(svc, method, path, req, &mut Annotations::default())
     }
 
@@ -972,18 +1281,36 @@ impl ProxyHooks for JavaSidecar {
             "messages": ctx.messages.iter().map(message_json).collect::<Vec<_>>(),
         });
         if let Some((context, start, end, caret)) = &ctx.editor {
-            line["editor"] = serde_json::json!({"context": context, "start": start, "end": end, "caret": caret});
+            line["editor"] =
+                serde_json::json!({"context": context, "start": start, "end": end, "caret": caret});
         }
-        let Some(reply) = self.ask(line) else { return Vec::new() };
+        let Some(reply) = self.ask(line) else {
+            return Vec::new();
+        };
         reply["items"]
             .as_array()
-            .map(|a| a.iter().filter_map(|i| Some(MenuItem { id: i["id"].as_str()?.to_string(), label: i["label"].as_str()?.to_string() })).collect())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|i| {
+                        Some(MenuItem {
+                            id: i["id"].as_str()?.to_string(),
+                            label: i["label"].as_str()?.to_string(),
+                        })
+                    })
+                    .collect()
+            })
             .unwrap_or_default()
     }
 
     fn invoke_menu_item(&self, id: &str) -> MenuOutcome {
-        let Some(reply) = self.ask(serde_json::json!({"type": "menu-invoke", "item": id})) else { return MenuOutcome::default() };
-        MenuOutcome { ok: reply["ok"].as_bool().unwrap_or(false), request: b64_field(&reply, "request"), response: b64_field(&reply, "response") }
+        let Some(reply) = self.ask(serde_json::json!({"type": "menu-invoke", "item": id})) else {
+            return MenuOutcome::default();
+        };
+        MenuOutcome {
+            ok: reply["ok"].as_bool().unwrap_or(false),
+            request: b64_field(&reply, "request"),
+            response: b64_field(&reply, "response"),
+        }
     }
 
     fn open_in_editors(&self, msg: &MenuMessage, tool: &str) -> Vec<EditorTab> {
@@ -994,51 +1321,81 @@ impl ProxyHooks for JavaSidecar {
         let mut line = message_json(msg);
         line["type"] = "editors".into();
         line["tool"] = tool.into();
-        let Some(reply) = self.ask(line) else { return Vec::new() };
+        let Some(reply) = self.ask(line) else {
+            return Vec::new();
+        };
         reply["editors"]
             .as_array()
             .map(|a| {
                 a.iter()
-                    .map(|e| EditorTab { caption: e["caption"].as_str().unwrap_or("").to_string(), enabled: e["enabled"].as_bool().unwrap_or(false), request: e["request"].as_bool().unwrap_or(false) })
+                    .map(|e| EditorTab {
+                        caption: e["caption"].as_str().unwrap_or("").to_string(),
+                        enabled: e["enabled"].as_bool().unwrap_or(false),
+                        request: e["request"].as_bool().unwrap_or(false),
+                    })
                     .collect()
             })
             .unwrap_or_default()
     }
 
     fn edited_request(&self) -> Option<Vec<u8>> {
-        b64_field(&self.ask(serde_json::json!({"type": "editor-get"}))?, "request")
+        b64_field(
+            &self.ask(serde_json::json!({"type": "editor-get"}))?,
+            "request",
+        )
     }
 
     fn extension_data(&self) -> Option<serde_json::Value> {
         self.data.lock().unwrap().clone()
     }
 
-    fn scan_active(&self, msg: &ScanMessage, helper: &dyn ScanHelper) -> Vec<crate::scan::ScanIssue> {
+    fn scan_active(
+        &self,
+        msg: &ScanMessage,
+        helper: &dyn ScanHelper,
+    ) -> Vec<crate::scan::ScanIssue> {
         if self.ui.lock().unwrap().active_checks == 0 || self.dead.load(Ordering::Relaxed) {
             return Vec::new();
         }
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        let mut line = message_json(&MenuMessage { request: msg.request.clone(), response: msg.response.clone(), service: msg.service.clone() });
+        let mut line = message_json(&MenuMessage {
+            request: msg.request.clone(),
+            response: msg.response.clone(),
+            service: msg.service.clone(),
+        });
         line["type"] = "scan-active".into();
         line["id"] = id.into();
-        line["points"] = msg.points.iter().map(|(n, b)| serde_json::json!({"name": n, "base": b})).collect::<Vec<_>>().into();
-        let mut on_call = |op: &str, args: &serde_json::Value| -> Result<serde_json::Value, String> {
-            if helper.stopped() {
-                return Err("the scan was stopped".into());
-            }
-            match op {
-                "scan-send" => {
-                    let raw = b64_field(args, "request").ok_or("no request")?;
-                    Ok(helper.send(&raw).map(|r| crate::util::b64_encode(&r)).unwrap_or_default().into())
+        line["points"] = msg
+            .points
+            .iter()
+            .map(|(n, b)| serde_json::json!({"name": n, "base": b}))
+            .collect::<Vec<_>>()
+            .into();
+        let mut on_call =
+            |op: &str, args: &serde_json::Value| -> Result<serde_json::Value, String> {
+                if helper.stopped() {
+                    return Err("the scan was stopped".into());
                 }
-                "scan-build" => {
-                    let payload = b64_field(args, "payload").unwrap_or_default();
-                    let point = args["point"].as_u64().unwrap_or(0) as usize;
-                    helper.build(point, &payload).map(|r| crate::util::b64_encode(&r).into()).ok_or_else(|| format!("no insertion point {point}"))
+                match op {
+                    "scan-send" => {
+                        let raw = b64_field(args, "request").ok_or("no request")?;
+                        Ok(helper
+                            .send(&raw)
+                            .map(|r| crate::util::b64_encode(&r))
+                            .unwrap_or_default()
+                            .into())
+                    }
+                    "scan-build" => {
+                        let payload = b64_field(args, "payload").unwrap_or_default();
+                        let point = args["point"].as_u64().unwrap_or(0) as usize;
+                        helper
+                            .build(point, &payload)
+                            .map(|r| crate::util::b64_encode(&r).into())
+                            .ok_or_else(|| format!("no insertion point {point}"))
+                    }
+                    _ => Err(format!("{op} is not supported by WebProbe")),
                 }
-                _ => Err(format!("{op} is not supported by WebProbe")),
-            }
-        };
+            };
         match self.exchange_with(&line.to_string(), Some(id), HOOK_TIMEOUT, &mut on_call) {
             Ok(reply) => issues_of(&reply, &self.name),
             Err(_) => Vec::new(),
@@ -1049,43 +1406,95 @@ impl ProxyHooks for JavaSidecar {
         if self.ui.lock().unwrap().passive_checks == 0 {
             return Vec::new();
         }
-        let mut line = message_json(&MenuMessage { request: msg.request.clone(), response: msg.response.clone(), service: msg.service.clone() });
+        let mut line = message_json(&MenuMessage {
+            request: msg.request.clone(),
+            response: msg.response.clone(),
+            service: msg.service.clone(),
+        });
         line["type"] = "scan-passive".into();
-        self.ask(line).map(|r| issues_of(&r, &self.name)).unwrap_or_default()
+        self.ask(line)
+            .map(|r| issues_of(&r, &self.name))
+            .unwrap_or_default()
     }
 
-    fn generate_payloads(&self, provider: &str, template: &[u8], base: &str) -> Result<Vec<String>, String> {
+    fn generate_payloads(
+        &self,
+        provider: &str,
+        template: &[u8],
+        base: &str,
+    ) -> Result<Vec<String>, String> {
         let line = serde_json::json!({"type": "intruder-generate", "provider": provider, "request": crate::util::b64_encode(template), "base": base});
-        let reply = self.ask(line).ok_or_else(|| format!("{} did not answer", self.name))?;
+        let reply = self
+            .ask(line)
+            .ok_or_else(|| format!("{} did not answer", self.name))?;
         if let Some(e) = reply["error"].as_str() {
             return Err(e.to_string());
         }
-        Ok(reply["payloads"].as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect()).unwrap_or_default())
+        Ok(reply["payloads"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default())
     }
 
-    fn process_payloads(&self, processor: &str, payloads: &[String], base: &str) -> Result<Vec<String>, String> {
+    fn process_payloads(
+        &self,
+        processor: &str,
+        payloads: &[String],
+        base: &str,
+    ) -> Result<Vec<String>, String> {
         let line = serde_json::json!({"type": "intruder-process", "processor": processor, "payloads": payloads, "base": base});
-        let reply = self.ask(line).ok_or_else(|| format!("{} did not answer", self.name))?;
+        let reply = self
+            .ask(line)
+            .ok_or_else(|| format!("{} did not answer", self.name))?;
         if let Some(e) = reply["error"].as_str() {
             return Err(e.to_string());
         }
-        Ok(reply["payloads"].as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect()).unwrap_or_default())
+        Ok(reply["payloads"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default())
     }
 
     fn ws_open(&self, socket: u64, svc: &HttpService, upgrade: &[u8]) -> bool {
         if self.ui.lock().unwrap().ws_handlers == 0 {
             return false;
         }
-        let mut line = message_json(&MenuMessage { request: upgrade.to_vec(), response: None, service: svc.clone() });
+        let mut line = message_json(&MenuMessage {
+            request: upgrade.to_vec(),
+            response: None,
+            service: svc.clone(),
+        });
         line["type"] = "ws-open".into();
         line["socket"] = socket.into();
-        self.ask(line).is_some_and(|r| r["handlers"].as_u64().unwrap_or(0) > 0)
+        self.ask(line)
+            .is_some_and(|r| r["handlers"].as_u64().unwrap_or(0) > 0)
     }
 
-    fn ws_message(&self, socket: u64, stage: WsStage, to_server: bool, binary: bool, payload: &mut Vec<u8>) -> WsVerdict {
-        let stage = if stage == WsStage::Received { "received" } else { "send" };
+    fn ws_message(
+        &self,
+        socket: u64,
+        stage: WsStage,
+        to_server: bool,
+        binary: bool,
+        payload: &mut Vec<u8>,
+    ) -> WsVerdict {
+        let stage = if stage == WsStage::Received {
+            "received"
+        } else {
+            "send"
+        };
         let line = serde_json::json!({"type": "ws-message", "socket": socket, "stage": stage, "toServer": to_server, "binary": binary, "payload": crate::util::b64_encode(payload)});
-        let Some(reply) = self.ask(line) else { return WsVerdict::Continue };
+        let Some(reply) = self.ask(line) else {
+            return WsVerdict::Continue;
+        };
         if let Some(p) = b64_field(&reply, "payload") {
             *payload = p;
         }
@@ -1098,10 +1507,16 @@ impl ProxyHooks for JavaSidecar {
     }
 
     fn session_action(&self, name: &str, svc: &HttpService, req: &[u8]) -> Result<Vec<u8>, String> {
-        let mut line = message_json(&MenuMessage { request: req.to_vec(), response: None, service: svc.clone() });
+        let mut line = message_json(&MenuMessage {
+            request: req.to_vec(),
+            response: None,
+            service: svc.clone(),
+        });
         line["type"] = "session-action".into();
         line["name"] = name.into();
-        let reply = self.ask(line).ok_or_else(|| format!("{} did not answer", self.name))?;
+        let reply = self
+            .ask(line)
+            .ok_or_else(|| format!("{} did not answer", self.name))?;
         if let Some(e) = reply["error"].as_str() {
             return Err(e.to_string());
         }
@@ -1117,15 +1532,36 @@ impl ProxyHooks for JavaSidecar {
         self.tell(serde_json::json!({"type": "restore", "data": data}).to_string());
     }
 
-    fn handle_response_received(&self, svc: &crate::ext_host::HttpService, method: &str, path: &str, resp: &mut Vec<u8>) -> ProxyAction {
+    fn handle_response_received(
+        &self,
+        svc: &crate::ext_host::HttpService,
+        method: &str,
+        path: &str,
+        resp: &mut Vec<u8>,
+    ) -> ProxyAction {
         self.handle_response(svc, method, path, &[], resp, &mut Annotations::default())
     }
 
-    fn handle_request(&self, svc: &crate::ext_host::HttpService, _method: &str, _path: &str, req: &mut Vec<u8>, ann: &mut Annotations) -> ProxyAction {
+    fn handle_request(
+        &self,
+        svc: &crate::ext_host::HttpService,
+        _method: &str,
+        _path: &str,
+        req: &mut Vec<u8>,
+        ann: &mut Annotations,
+    ) -> ProxyAction {
         self.run("request", svc, req, None, ann)
     }
 
-    fn handle_response(&self, svc: &crate::ext_host::HttpService, _method: &str, _path: &str, req: &[u8], resp: &mut Vec<u8>, ann: &mut Annotations) -> ProxyAction {
+    fn handle_response(
+        &self,
+        svc: &crate::ext_host::HttpService,
+        _method: &str,
+        _path: &str,
+        req: &[u8],
+        resp: &mut Vec<u8>,
+        ann: &mut Annotations,
+    ) -> ProxyAction {
         self.run("response", svc, resp, Some(req), ann)
     }
 }
@@ -1147,7 +1583,13 @@ mod tests {
         fn extension_name(&self) -> &str {
             "Dropper"
         }
-        fn handle_request_received(&self, _svc: &crate::ext_host::HttpService, _: &str, _: &str, _: &mut Vec<u8>) -> ProxyAction {
+        fn handle_request_received(
+            &self,
+            _svc: &crate::ext_host::HttpService,
+            _: &str,
+            _: &str,
+            _: &mut Vec<u8>,
+        ) -> ProxyAction {
             ProxyAction::Drop
         }
     }
@@ -1160,7 +1602,13 @@ mod tests {
         fn extension_name(&self) -> &str {
             &self.name
         }
-        fn handle_request_received(&self, _svc: &crate::ext_host::HttpService, method: &str, path: &str, req: &mut Vec<u8>) -> ProxyAction {
+        fn handle_request_received(
+            &self,
+            _svc: &crate::ext_host::HttpService,
+            method: &str,
+            path: &str,
+            req: &mut Vec<u8>,
+        ) -> ProxyAction {
             req.extend_from_slice(format!("|{method}{path}").as_bytes());
             ProxyAction::Continue
         }
@@ -1170,8 +1618,18 @@ mod tests {
     fn empty_host_lets_everything_through() {
         let host = ExtensionHost::default();
         let mut req = b"GET / HTTP/1.1\r\n\r\n".to_vec();
-        assert!(host.run_request_hooks(&crate::ext_host::HttpService::new("qa.test", 80, false), "GET", "/", &mut req));
-        assert!(host.run_response_hooks(&crate::ext_host::HttpService::new("qa.test", 80, false), "GET", "/", &mut req));
+        assert!(host.run_request_hooks(
+            &crate::ext_host::HttpService::new("qa.test", 80, false),
+            "GET",
+            "/",
+            &mut req
+        ));
+        assert!(host.run_response_hooks(
+            &crate::ext_host::HttpService::new("qa.test", 80, false),
+            "GET",
+            "/",
+            &mut req
+        ));
     }
 
     #[test]
@@ -1180,13 +1638,31 @@ mod tests {
             not_loaded: Vec::new(),
             saved_data: Default::default(),
             extensions: vec![
-                LoadedExtension { enabled: true, hooks: Arc::new(DropExtension), source: None },
-                LoadedExtension { enabled: true, hooks: Arc::new(EchoExtension { name: "Second".into() }), source: None },
+                LoadedExtension {
+                    enabled: true,
+                    hooks: Arc::new(DropExtension),
+                    source: None,
+                },
+                LoadedExtension {
+                    enabled: true,
+                    hooks: Arc::new(EchoExtension {
+                        name: "Second".into(),
+                    }),
+                    source: None,
+                },
             ],
         };
         let mut req = b"GET / HTTP/1.1\r\n\r\n".to_vec();
-        assert!(!host.run_request_hooks(&crate::ext_host::HttpService::new("qa.test", 80, false), "GET", "/", &mut req));
-        assert!(!req.windows(5).any(|w| w == b"|GET/"), "the extension after the Drop never ran");
+        assert!(!host.run_request_hooks(
+            &crate::ext_host::HttpService::new("qa.test", 80, false),
+            "GET",
+            "/",
+            &mut req
+        ));
+        assert!(
+            !req.windows(5).any(|w| w == b"|GET/"),
+            "the extension after the Drop never ran"
+        );
     }
 
     #[test]
@@ -1195,13 +1671,34 @@ mod tests {
             not_loaded: Vec::new(),
             saved_data: Default::default(),
             extensions: vec![
-                LoadedExtension { enabled: false, hooks: Arc::new(DropExtension), source: None },
-                LoadedExtension { enabled: true, hooks: Arc::new(EchoExtension { name: "Echo".into() }), source: None },
+                LoadedExtension {
+                    enabled: false,
+                    hooks: Arc::new(DropExtension),
+                    source: None,
+                },
+                LoadedExtension {
+                    enabled: true,
+                    hooks: Arc::new(EchoExtension {
+                        name: "Echo".into(),
+                    }),
+                    source: None,
+                },
             ],
         };
         let mut req = b"GET / HTTP/1.1\r\n\r\n".to_vec();
-        assert!(host.run_request_hooks(&crate::ext_host::HttpService::new("qa.test", 80, false), "GET", "/", &mut req), "the disabled Dropper is skipped");
-        assert!(req.windows(5).any(|w| w == b"|GET/"), "the enabled Echo ran and edited the message");
+        assert!(
+            host.run_request_hooks(
+                &crate::ext_host::HttpService::new("qa.test", 80, false),
+                "GET",
+                "/",
+                &mut req
+            ),
+            "the disabled Dropper is skipped"
+        );
+        assert!(
+            req.windows(5).any(|w| w == b"|GET/"),
+            "the enabled Echo ran and edited the message"
+        );
     }
 
     #[test]
@@ -1216,7 +1713,12 @@ mod tests {
             }],
         };
         let mut req = b"GET / HTTP/1.1\r\nHost: example.com\r\n\r\n".to_vec();
-        assert!(host.run_request_hooks(&crate::ext_host::HttpService::new("qa.test", 80, false), "GET", "/", &mut req));
+        assert!(host.run_request_hooks(
+            &crate::ext_host::HttpService::new("qa.test", 80, false),
+            "GET",
+            "/",
+            &mut req
+        ));
         let text = String::from_utf8_lossy(&req);
         assert!(text.contains("X-WebProbe-Extension: example"));
     }
@@ -1226,10 +1728,11 @@ mod tests {
     /// are absent so the suite stays green on machines without Burp.
     #[test]
     fn java_sidecar_runs_a_real_montoya_extension() {
-        let jar = concat!(env!("CARGO_MANIFEST_DIR"), "/../sidecar/demo-ext/demo-ext.jar");
-        if crate::paths::montoya_jar().is_err()
-            || !std::path::Path::new(jar).exists()
-        {
+        let jar = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../sidecar/demo-ext/demo-ext.jar"
+        );
+        if crate::paths::montoya_jar().is_err() || !std::path::Path::new(jar).exists() {
             eprintln!("skipping: sidecar prerequisites missing (Burp jar or demo-ext.jar)");
             return;
         }
@@ -1245,22 +1748,49 @@ mod tests {
         let host = ExtensionHost {
             not_loaded: Vec::new(),
             saved_data: Default::default(),
-            extensions: vec![LoadedExtension { enabled: true, hooks: Arc::new(sidecar), source: None }],
+            extensions: vec![LoadedExtension {
+                enabled: true,
+                hooks: Arc::new(sidecar),
+                source: None,
+            }],
         };
         // The demo extension drops any path containing "/admin-drop".
         let mut req = b"GET /admin-drop/panel HTTP/1.1\r\nHost: qa.test\r\n\r\n".to_vec();
-        assert!(!host.run_request_hooks(&crate::ext_host::HttpService::new("qa.test", 80, false), "GET", "/admin-drop/panel", &mut req));
+        assert!(!host.run_request_hooks(
+            &crate::ext_host::HttpService::new("qa.test", 80, false),
+            "GET",
+            "/admin-drop/panel",
+            &mut req
+        ));
         // Everything else continues, edited by the extension (withAddedHeader).
         let mut req = b"GET http://qa.test/normal HTTP/1.1\r\nHost: qa.test\r\n\r\n".to_vec();
-        assert!(host.run_request_hooks(&crate::ext_host::HttpService::new("qa.test", 80, false), "GET", "/normal", &mut req));
+        assert!(host.run_request_hooks(
+            &crate::ext_host::HttpService::new("qa.test", 80, false),
+            "GET",
+            "/normal",
+            &mut req
+        ));
         let text = String::from_utf8_lossy(&req);
-        assert!(text.starts_with("GET http://qa.test/normal HTTP/1.1\r\n"), "target kept: {text}");
+        assert!(
+            text.starts_with("GET http://qa.test/normal HTTP/1.1\r\n"),
+            "target kept: {text}"
+        );
         assert!(text.contains("\r\nX-Montoya-Demo: 1\r\n"), "{text}");
         // Response hooks run and edit too.
         let mut resp = b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\nhello".to_vec();
-        assert!(host.run_response_hooks(&crate::ext_host::HttpService::new("qa.test", 80, false), "GET", "/normal", &mut resp));
+        assert!(host.run_response_hooks(
+            &crate::ext_host::HttpService::new("qa.test", 80, false),
+            "GET",
+            "/normal",
+            &mut resp
+        ));
         let text = String::from_utf8_lossy(&resp);
-        assert!(text.starts_with("HTTP/1.1 200 OK\r\n") && text.contains("X-Montoya-Seen: 1") && text.ends_with("\r\n\r\nhello"), "{text}");
+        assert!(
+            text.starts_with("HTTP/1.1 200 OK\r\n")
+                && text.contains("X-Montoya-Seen: 1")
+                && text.ends_with("\r\n\r\nhello"),
+            "{text}"
+        );
     }
 
     /// Compile one of `sidecar/stage-tests` into a fresh class directory
@@ -1269,13 +1799,38 @@ mod tests {
     fn stage_extension(name: &str) -> Option<std::path::PathBuf> {
         let api = crate::paths::montoya_jar().ok()?;
         let java = crate::paths::java().ok()?;
-        let javac = [java.with_file_name("javac"), std::fs::canonicalize(&java).ok()?.with_file_name("javac")].into_iter().find(|p| p.is_file())?;
+        let javac = [
+            java.with_file_name("javac"),
+            std::fs::canonicalize(&java).ok()?.with_file_name("javac"),
+        ]
+        .into_iter()
+        .find(|p| p.is_file())?;
         static N: AtomicU64 = AtomicU64::new(0);
-        let dir = std::env::temp_dir().join(format!("wp-stage-{name}-{}-{}-{}", std::process::id(), crate::util::now_secs(), N.fetch_add(1, Ordering::Relaxed)));
+        let dir = std::env::temp_dir().join(format!(
+            "wp-stage-{name}-{}-{}-{}",
+            std::process::id(),
+            crate::util::now_secs(),
+            N.fetch_add(1, Ordering::Relaxed)
+        ));
         std::fs::create_dir_all(dir.join("META-INF/services")).ok()?;
-        std::fs::write(dir.join("META-INF/services/burp.api.montoya.BurpExtension"), format!("{name}\n")).ok()?;
-        let src = concat!(env!("CARGO_MANIFEST_DIR"), "/../sidecar/stage-tests/").to_string() + name + ".java";
-        let ok = Command::new(javac).arg("-nowarn").arg("-cp").arg(&api).arg("-d").arg(&dir).arg(src).status().ok()?.success();
+        std::fs::write(
+            dir.join("META-INF/services/burp.api.montoya.BurpExtension"),
+            format!("{name}\n"),
+        )
+        .ok()?;
+        let src = concat!(env!("CARGO_MANIFEST_DIR"), "/../sidecar/stage-tests/").to_string()
+            + name
+            + ".java";
+        let ok = Command::new(javac)
+            .arg("-nowarn")
+            .arg("-cp")
+            .arg(&api)
+            .arg("-d")
+            .arg(&dir)
+            .arg(src)
+            .status()
+            .ok()?
+            .success();
         assert!(ok, "javac failed on {name}");
         Some(dir)
     }
@@ -1290,7 +1845,11 @@ mod tests {
         };
         let events = Arc::new(Mutex::new(Vec::<String>::new()));
         let seen = Arc::clone(&events);
-        let link = Arc::new(HostLink { send: Box::new(|_, _| Err("unused".into())), event: Box::new(move |l, m| seen.lock().unwrap().push(format!("{l}: {m}"))), call: Box::new(|_, op, _| Err(format!("{op} unused"))) });
+        let link = Arc::new(HostLink {
+            send: Box::new(|_, _| Err("unused".into())),
+            event: Box::new(move |l, m| seen.lock().unwrap().push(format!("{l}: {m}"))),
+            call: Box::new(|_, op, _| Err(format!("{op} unused"))),
+        });
         let sc = JavaSidecar::spawn_with(dir.to_str().unwrap(), Some(link)).expect("stage 1 loads");
         let dir_name = dir.file_name().unwrap().to_string_lossy().into_owned();
         assert_eq!(sc.extension_name(), format!("Stage One ({dir_name})"));
@@ -1303,14 +1862,24 @@ mod tests {
             "[out] version=WebProbe edition=COMMUNITY_EDITION".into(),
             "[out] state=PAUSED args=0".into(),
             "[out] caught: MontoyaApi.bambda is not supported by WebProbe".into(),
-            "[out] caught: BurpSuite.exportProjectOptionsAsJson is not supported by WebProbe".into(),
+            "[out] caught: BurpSuite.exportProjectOptionsAsJson is not supported by WebProbe"
+                .into(),
             "[event info] stage1 event".into(),
             "[out] stage1 unloaded".into(),
         ] {
             assert!(log.contains(&want), "missing {want:?} in {log:#?}");
         }
-        assert_eq!(log.iter().filter(|l| *l == "[error] MontoyaApi.bambda is not supported by WebProbe").count(), 1, "reported once");
-        assert!(events.lock().unwrap().contains(&"info: stage1 event".to_string()));
+        assert_eq!(
+            log.iter()
+                .filter(|l| *l == "[error] MontoyaApi.bambda is not supported by WebProbe")
+                .count(),
+            1,
+            "reported once"
+        );
+        assert!(events
+            .lock()
+            .unwrap()
+            .contains(&"info: stage1 event".to_string()));
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -1336,30 +1905,73 @@ mod tests {
                         Ok(n) => got.extend_from_slice(&buf[..n]),
                     }
                 }
-                let _ = s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\npong");
+                let _ = s.write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\npong",
+                );
             }
         });
         let shared = crate::net::Shared::new();
-        let sc = JavaSidecar::spawn_with(dir.to_str().unwrap(), Some(HostLink::to_shared(&shared))).expect("stage 2 loads");
+        let sc = JavaSidecar::spawn_with(dir.to_str().unwrap(), Some(HostLink::to_shared(&shared)))
+            .expect("stage 2 loads");
         let exts: Vec<Arc<dyn ProxyHooks>> = vec![Arc::new(sc)];
         let svc = HttpService::new("qa.test", 80, false);
         let mut ann = Annotations::default();
-        let mut req = format!("GET /a?body=x HTTP/1.1\r\nHost: qa.test\r\nX-Target-Port: {port}\r\n\r\n").into_bytes();
-        assert!(run_request_hooks_annotated(&exts, &svc, "GET", "/a?body=x", &mut req, &mut ann));
+        let mut req =
+            format!("GET /a?body=x HTTP/1.1\r\nHost: qa.test\r\nX-Target-Port: {port}\r\n\r\n")
+                .into_bytes();
+        assert!(run_request_hooks_annotated(
+            &exts,
+            &svc,
+            "GET",
+            "/a?body=x",
+            &mut req,
+            &mut ann
+        ));
         let text = String::from_utf8_lossy(&req).into_owned();
         assert!(text.starts_with("GET /a?body=x HTTP/1.1\r\n"), "{text}");
-        assert!(text.contains("\r\nX-Stage2: Proxy GET /a\r\n") && text.contains("\r\nX-Sent: 200 pong\r\n"), "{text}");
+        assert!(
+            text.contains("\r\nX-Stage2: Proxy GET /a\r\n")
+                && text.contains("\r\nX-Sent: 200 pong\r\n"),
+            "{text}"
+        );
         assert!(!text.contains("X-Target-Port"), "{text}");
-        assert!(text.ends_with("Content-Length: 8\r\n\r\nedited=x"), "withBody keeps Content-Length right: {text}");
-        assert_eq!(ann, Annotations { notes: "seen by stage2".into(), highlight: Some(4) }, "CYAN");
+        assert!(
+            text.ends_with("Content-Length: 8\r\n\r\nedited=x"),
+            "withBody keeps Content-Length right: {text}"
+        );
+        assert_eq!(
+            ann,
+            Annotations {
+                notes: "seen by stage2".into(),
+                highlight: Some(4)
+            },
+            "CYAN"
+        );
         let mut resp = b"HTTP/1.1 200 OK\r\nServer: nginx\r\nContent-Length: 2\r\n\r\nok".to_vec();
-        assert!(run_response_hooks_annotated(&exts, &svc, "GET", "/a?body=x", &req, &mut resp, &mut ann));
-        assert_eq!(String::from_utf8_lossy(&resp), "HTTP/1.1 200 OK\r\nServer: stage2 saw /a?body=x\r\nContent-Length: 2\r\n\r\nok");
+        assert!(run_response_hooks_annotated(
+            &exts,
+            &svc,
+            "GET",
+            "/a?body=x",
+            &req,
+            &mut resp,
+            &mut ann
+        ));
+        assert_eq!(
+            String::from_utf8_lossy(&resp),
+            "HTTP/1.1 200 OK\r\nServer: stage2 saw /a?body=x\r\nContent-Length: 2\r\n\r\nok"
+        );
         assert_eq!(ann.notes, "seen by stage2; response 200");
         // As Proxy history shows it.
-        let mut e = crate::net::HistEntry { note: Some("upstream note".into()), ..Default::default() };
+        let mut e = crate::net::HistEntry {
+            note: Some("upstream note".into()),
+            ..Default::default()
+        };
         crate::net::annotate(&mut e, &ann);
-        assert_eq!((e.note.as_deref(), e.highlight), (Some("upstream note; seen by stage2; response 200"), Some(4)));
+        assert_eq!(
+            (e.note.as_deref(), e.highlight),
+            (Some("upstream note; seen by stage2; response 200"), Some(4))
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -1374,10 +1986,17 @@ mod tests {
         assert_eq!(a.colour_name(), None);
     }
 
-
-    fn stage3(data: Option<serde_json::Value>, prefs: &std::path::Path) -> Option<(JavaSidecar, std::path::PathBuf)> {
+    fn stage3(
+        data: Option<serde_json::Value>,
+        prefs: &std::path::Path,
+    ) -> Option<(JavaSidecar, std::path::PathBuf)> {
         let dir = stage_extension("Stage3Extension")?;
-        let opts = SidecarOptions { headless: true, startup: false, data, prefs_dir: Some(prefs.to_path_buf()) };
+        let opts = SidecarOptions {
+            headless: true,
+            startup: false,
+            data,
+            prefs_dir: Some(prefs.to_path_buf()),
+        };
         let sc = JavaSidecar::spawn_opts(dir.to_str().unwrap(), None, opts).expect("stage 3 loads");
         Some((sc, dir))
     }
@@ -1399,20 +2018,45 @@ mod tests {
     /// utilities() work.
     #[test]
     fn stage3_ui_headless_menus_editors_and_utilities() {
-        let prefs = std::env::temp_dir().join(format!("wp-prefs-{}-{}", std::process::id(), crate::util::now_secs()));
+        let prefs = std::env::temp_dir().join(format!(
+            "wp-prefs-{}-{}",
+            std::process::id(),
+            crate::util::now_secs()
+        ));
         let Some((sc, dir)) = stage3(None, &prefs) else {
             eprintln!("skipping: no JDK or Montoya API jar");
             return;
         };
-        assert_eq!(sc.extension_name(), format!("Stage Three ({})", dir.file_name().unwrap().to_string_lossy()));
+        assert_eq!(
+            sc.extension_name(),
+            format!(
+                "Stage Three ({})",
+                dir.file_name().unwrap().to_string_lossy()
+            )
+        );
         let u = eventually(|| sc.ui().filter(|u| u.request_editors == 1));
-        assert_eq!((u.tabs.clone(), u.headless, u.visible, u.menu_providers), (vec!["Stage3".to_string()], true, false, 1));
+        assert_eq!(
+            (u.tabs.clone(), u.headless, u.visible, u.menu_providers),
+            (vec!["Stage3".to_string()], true, false, 1)
+        );
         sc.show_window(); // headless: a no-op, nothing throws
         let req = b"GET /x HTTP/1.1\r\nHost: qa.test\r\nX-Edit: 1\r\n\r\nbody".to_vec();
-        let msg = MenuMessage { request: req.clone(), response: None, service: HttpService::new("qa.test", 80, false) };
-        let ctx = MenuContext { tool: "Repeater".into(), invocation: "MESSAGE_EDITOR_REQUEST".into(), messages: vec![msg.clone()], editor: Some(("REQUEST".into(), 4, 6, 4)) };
+        let msg = MenuMessage {
+            request: req.clone(),
+            response: None,
+            service: HttpService::new("qa.test", 80, false),
+        };
+        let ctx = MenuContext {
+            tool: "Repeater".into(),
+            invocation: "MESSAGE_EDITOR_REQUEST".into(),
+            messages: vec![msg.clone()],
+            editor: Some(("REQUEST".into(), 4, 6, 4)),
+        };
         let items = sc.menu_items(&ctx);
-        assert_eq!(items.iter().map(|i| i.label.as_str()).collect::<Vec<_>>(), ["Log selection", "Tools > Tag request"]);
+        assert_eq!(
+            items.iter().map(|i| i.label.as_str()).collect::<Vec<_>>(),
+            ["Log selection", "Tools > Tag request"]
+        );
         let out = sc.invoke_menu_item(&items[1].id);
         assert!(out.ok);
         let edited = String::from_utf8(out.request.expect("the action set the request")).unwrap();
@@ -1420,17 +2064,38 @@ mod tests {
         let out = sc.invoke_menu_item(&items[0].id);
         assert_eq!((out.ok, out.request), (true, None));
         let tabs = sc.open_in_editors(&msg, "Repeater");
-        assert_eq!(tabs, vec![EditorTab { caption: "Stage3 editor".into(), enabled: true, request: true }]);
+        assert_eq!(
+            tabs,
+            vec![EditorTab {
+                caption: "Stage3 editor".into(),
+                enabled: true,
+                request: true
+            }]
+        );
         assert_eq!(sc.edited_request(), None, "nothing typed in the editor");
         let mut plain = msg.clone();
         plain.request = b"GET / HTTP/1.1\r\nHost: qa.test\r\n\r\n".to_vec();
         assert!(!sc.open_in_editors(&plain, "Repeater")[0].enabled);
         sc.unload();
         let log = sc.errors();
-        for want in ["[out] menu tool=Repeater type=MESSAGE_EDITOR_REQUEST", "[out] pref=dark", "[out] b64=aGk=", "[out] sha256=ba7816bf", "[out] gzip=zip me", "[out] url=a+b%26c html=&lt;x&gt; hex=ff", "[out] json=2 {\"a\":2}", "[out] headless window=HeadlessException"] {
-            assert!(log.iter().any(|l| l == want), "missing {want:?} in {log:#?}");
+        for want in [
+            "[out] menu tool=Repeater type=MESSAGE_EDITOR_REQUEST",
+            "[out] pref=dark",
+            "[out] b64=aGk=",
+            "[out] sha256=ba7816bf",
+            "[out] gzip=zip me",
+            "[out] url=a+b%26c html=&lt;x&gt; hex=ff",
+            "[out] json=2 {\"a\":2}",
+            "[out] headless window=HeadlessException",
+        ] {
+            assert!(
+                log.iter().any(|l| l == want),
+                "missing {want:?} in {log:#?}"
+            );
         }
-        assert!(std::fs::read_to_string(prefs.join("Stage Three.json")).unwrap().contains("\"theme\":\"dark\""));
+        assert!(std::fs::read_to_string(prefs.join("Stage Three.json"))
+            .unwrap()
+            .contains("\"theme\":\"dark\""));
         let _ = std::fs::remove_dir_all(dir);
         let _ = std::fs::remove_dir_all(prefs);
     }
@@ -1440,38 +2105,85 @@ mod tests {
     /// running extension that project's data.
     #[test]
     fn stage3_extension_data_round_trips_through_a_project_file() {
-        let prefs = std::env::temp_dir().join(format!("wp-prefs2-{}-{}", std::process::id(), crate::util::now_secs()));
+        let prefs = std::env::temp_dir().join(format!(
+            "wp-prefs2-{}-{}",
+            std::process::id(),
+            crate::util::now_secs()
+        ));
         let Some((sc, dir)) = stage3(None, &prefs) else {
             eprintln!("skipping: no JDK or Montoya API jar");
             return;
         };
-        let source = crate::ext_store::Installed { kind: crate::ext_store::Kind::Java, source: dir.to_string_lossy().into_owned(), enabled: true };
+        let source = crate::ext_store::Installed {
+            kind: crate::ext_store::Kind::Java,
+            source: dir.to_string_lossy().into_owned(),
+            enabled: true,
+        };
         let mut host = ExtensionHost::default();
-        host.extensions.push(LoadedExtension { enabled: true, hooks: Arc::new(sc), source: Some(source.clone()) });
-        let saved = eventually(|| host.data_to_save().get(&source.source).filter(|d| d.get("HttpRequest").is_some()).cloned());
+        host.extensions.push(LoadedExtension {
+            enabled: true,
+            hooks: Arc::new(sc),
+            source: Some(source.clone()),
+        });
+        let saved = eventually(|| {
+            host.data_to_save()
+                .get(&source.source)
+                .filter(|d| d.get("HttpRequest").is_some())
+                .cloned()
+        });
         assert_eq!(saved["Integer"]["runs"], 1);
-        assert_eq!(saved["ChildObject"]["child"]["StringList"]["names"], serde_json::json!(["a", "b"]));
+        assert_eq!(
+            saved["ChildObject"]["child"]["StringList"]["names"],
+            serde_json::json!(["a", "b"])
+        );
         // Through a project file.
         let file = std::env::temp_dir().join(format!("wp-extdata-{}.json", std::process::id()));
-        let data = crate::project::ProjectData { extension_data: host.data_to_save(), ..Default::default() };
+        let data = crate::project::ProjectData {
+            extension_data: host.data_to_save(),
+            ..Default::default()
+        };
         crate::project::save(&file, &data).unwrap();
         let back = crate::project::load(&file).unwrap();
         assert_eq!(back.extension_data, data.extension_data);
         // A new load of the extension with the project's data sees it.
-        let opts = SidecarOptions { headless: true, startup: true, data: back.extension_data.get(&source.source).cloned(), prefs_dir: Some(prefs.clone()) };
+        let opts = SidecarOptions {
+            headless: true,
+            startup: true,
+            data: back.extension_data.get(&source.source).cloned(),
+            prefs_dir: Some(prefs.clone()),
+        };
         let again = JavaSidecar::spawn_opts(&source.source, None, opts).unwrap();
         let second = eventually(|| again.extension_data().filter(|d| d["Integer"]["runs"] == 2));
-        assert_eq!(second["HttpRequest"]["req"]["request"], saved["HttpRequest"]["req"]["request"]);
+        assert_eq!(
+            second["HttpRequest"]["req"]["request"],
+            saved["HttpRequest"]["req"]["request"]
+        );
         again.unload();
-        assert!(again.errors().iter().any(|l| l == "[out] runs before=1 child=[a, b]"), "{:#?}", again.errors());
+        assert!(
+            again
+                .errors()
+                .iter()
+                .any(|l| l == "[out] runs before=1 child=[a, b]"),
+            "{:#?}",
+            again.errors()
+        );
         // Loading another project hands the running extension that data.
-        host.restore_data([(source.source.clone(), serde_json::json!({"Integer": {"runs": 7}}))].into_iter().collect());
-        assert_eq!(host.extensions[0].hooks.extension_data().unwrap()["Integer"]["runs"], 7);
+        host.restore_data(
+            [(
+                source.source.clone(),
+                serde_json::json!({"Integer": {"runs": 7}}),
+            )]
+            .into_iter()
+            .collect(),
+        );
+        assert_eq!(
+            host.extensions[0].hooks.extension_data().unwrap()["Integer"]["runs"],
+            7
+        );
         let _ = std::fs::remove_file(file);
         let _ = std::fs::remove_dir_all(dir);
         let _ = std::fs::remove_dir_all(prefs);
     }
-
 
     /// A loopback responder that echoes each request's first line (URL
     /// decoded) in its body: a reflection target for scan checks.
@@ -1482,7 +2194,11 @@ mod tests {
             for mut s in listener.incoming().flatten() {
                 let mut buf = [0u8; 8192];
                 let n = std::io::Read::read(&mut s, &mut buf).unwrap_or(0);
-                let first = String::from_utf8_lossy(&buf[..n]).lines().next().unwrap_or("").to_string();
+                let first = String::from_utf8_lossy(&buf[..n])
+                    .lines()
+                    .next()
+                    .unwrap_or("")
+                    .to_string();
                 let body = crate::util::url_decode(&first);
                 let _ = s.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes());
             }
@@ -1508,65 +2224,218 @@ mod tests {
         let shared = crate::net::Shared::new();
         let port = echo_responder();
         let entry = |path: &str, resp: Option<&[u8]>| crate::net::HistEntry {
-            id: 1, method: "GET".into(), host: "127.0.0.1".into(), port, path: path.into(), status: "200".into(),
-            req_raw: format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n").into_bytes().into(),
-            resp_raw: resp.map(|r| r.to_vec().into()), ..Default::default()
+            id: 1,
+            method: "GET".into(),
+            host: "127.0.0.1".into(),
+            port,
+            path: path.into(),
+            status: "200".into(),
+            req_raw: format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n")
+                .into_bytes()
+                .into(),
+            resp_raw: resp.map(|r| r.to_vec().into()),
+            ..Default::default()
         };
-        shared.history.push(entry("/hist", Some(b"HTTP/1.1 200 OK\r\n\r\nx")));
-        let opts = SidecarOptions { headless: true, startup: true, data: None, prefs_dir: Some(std::env::temp_dir().join("wp-prefs-stage4")) };
-        let sc = Arc::new(JavaSidecar::spawn_opts(dir.to_str().unwrap(), Some(HostLink::to_shared(&shared)), opts).expect("stage 4 loads"));
-        let u = eventually(|| sc.ui().filter(|u| u.active_checks == 1 && u.passive_checks == 1 && u.menu_providers == 1));
+        shared
+            .history
+            .push(entry("/hist", Some(b"HTTP/1.1 200 OK\r\n\r\nx")));
+        let opts = SidecarOptions {
+            headless: true,
+            startup: true,
+            data: None,
+            prefs_dir: Some(std::env::temp_dir().join("wp-prefs-stage4")),
+        };
+        let sc = Arc::new(
+            JavaSidecar::spawn_opts(
+                dir.to_str().unwrap(),
+                Some(HostLink::to_shared(&shared)),
+                opts,
+            )
+            .expect("stage 4 loads"),
+        );
+        let u = eventually(|| {
+            sc.ui()
+                .filter(|u| u.active_checks == 1 && u.passive_checks == 1 && u.menu_providers == 1)
+        });
         assert_eq!((u.active_checks, u.passive_checks), (1, 1));
-        shared.ext_host.lock().unwrap().extensions.push(LoadedExtension { enabled: true, hooks: sc.clone(), source: None });
+        shared
+            .ext_host
+            .lock()
+            .unwrap()
+            .extensions
+            .push(LoadedExtension {
+                enabled: true,
+                hooks: sc.clone(),
+                source: None,
+            });
         // A stopped scan: the check's request is refused, nothing is sent.
         struct Stopped(std::sync::atomic::AtomicUsize);
         impl ScanHelper for Stopped {
-            fn send(&self, _: &[u8]) -> Option<Vec<u8>> { self.0.fetch_add(1, Ordering::SeqCst); None }
-            fn build(&self, _: usize, _: &[u8]) -> Option<Vec<u8>> { Some(b"GET / HTTP/1.1\r\n\r\n".to_vec()) }
-            fn stopped(&self) -> bool { true }
+            fn send(&self, _: &[u8]) -> Option<Vec<u8>> {
+                self.0.fetch_add(1, Ordering::SeqCst);
+                None
+            }
+            fn build(&self, _: usize, _: &[u8]) -> Option<Vec<u8>> {
+                Some(b"GET / HTTP/1.1\r\n\r\n".to_vec())
+            }
+            fn stopped(&self) -> bool {
+                true
+            }
         }
         let stopped = Stopped(Default::default());
-        let msg = ScanMessage { request: b"GET /s?q=a HTTP/1.1\r\nHost: h\r\n\r\n".to_vec(), response: None, service: HttpService::new("h", 80, false), points: vec![("q".into(), "a".into())] };
+        let msg = ScanMessage {
+            request: b"GET /s?q=a HTTP/1.1\r\nHost: h\r\n\r\n".to_vec(),
+            response: None,
+            service: HttpService::new("h", 80, false),
+            points: vec![("q".into(), "a".into())],
+        };
         assert!(sc.scan_active(&msg, &stopped).is_empty());
-        assert_eq!(stopped.0.load(Ordering::SeqCst), 0, "a stopped scan sends nothing for the extension");
+        assert_eq!(
+            stopped.0.load(Ordering::SeqCst),
+            0,
+            "a stopped scan sends nothing for the extension"
+        );
         // A real active scan of a reflecting page.
         crate::scan::start_active_scan(shared.clone(), entry("/s?q=abc", None), &[], &[]);
-        let issue = eventually_for(240, || shared.issues.lock().unwrap().iter().find(|i| i.name == "Stage4 reflection").cloned());
-        assert_eq!((issue.sev.as_str(), issue.confidence.as_str(), issue.path.as_str()), ("high", "Certain", "/s"));
-        assert!(issue.detail.contains("Reported by the extension Stage Four") && !issue.evidence.is_empty(), "{}", issue.detail);
-        assert!(sc.errors().iter().any(|l| l.starts_with("[out] active sent /s?q=st4%3cprobe%3e got 200") || l.starts_with("[out] active sent /s?q=st4<probe> got 200")), "{:#?}", sc.errors());
+        let issue = eventually_for(240, || {
+            shared
+                .issues
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|i| i.name == "Stage4 reflection")
+                .cloned()
+        });
+        assert_eq!(
+            (
+                issue.sev.as_str(),
+                issue.confidence.as_str(),
+                issue.path.as_str()
+            ),
+            ("high", "Certain", "/s")
+        );
+        assert!(
+            issue
+                .detail
+                .contains("Reported by the extension Stage Four")
+                && !issue.evidence.is_empty(),
+            "{}",
+            issue.detail
+        );
+        assert!(
+            sc.errors().iter().any(|l| l
+                .starts_with("[out] active sent /s?q=st4%3cprobe%3e got 200")
+                || l.starts_with("[out] active sent /s?q=st4<probe> got 200")),
+            "{:#?}",
+            sc.errors()
+        );
         // The passive check in the passive scan.
-        let v = crate::scan::passive_check_for(&shared, &entry("/p", Some(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\nthe secret")));
-        assert!(v.iter().any(|i| i.name == "Stage4 passive" && i.sev == "info"));
+        let v = crate::scan::passive_check_for(
+            &shared,
+            &entry(
+                "/p",
+                Some(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\nthe secret"),
+            ),
+        );
+        assert!(v
+            .iter()
+            .any(|i| i.name == "Stage4 passive" && i.sev == "info"));
         // Engine calls.
-        let ctx = MenuContext { tool: "Proxy".into(), invocation: "PROXY_HISTORY".into(), messages: vec![MenuMessage { request: b"GET / HTTP/1.1\r\n\r\n".to_vec(), response: None, service: HttpService::new("h", 80, false) }], editor: None };
-        shared.oob.stock([("st4one".to_string(), "st4one.oast.test".to_string()), ("st4two".to_string(), "st4two.oast.test".to_string()), ("st4three".to_string(), "st4three.oast.test".to_string())]);
+        let ctx = MenuContext {
+            tool: "Proxy".into(),
+            invocation: "PROXY_HISTORY".into(),
+            messages: vec![MenuMessage {
+                request: b"GET / HTTP/1.1\r\n\r\n".to_vec(),
+                response: None,
+                service: HttpService::new("h", 80, false),
+            }],
+            editor: None,
+        };
+        shared.oob.stock([
+            ("st4one".to_string(), "st4one.oast.test".to_string()),
+            ("st4two".to_string(), "st4two.oast.test".to_string()),
+            ("st4three".to_string(), "st4three.oast.test".to_string()),
+        ]);
         let items = sc.menu_items(&ctx);
         assert!(sc.invoke_menu_item(&items[0].id).ok, "{:#?}", sc.errors());
         let log = sc.errors();
-        assert!(log.iter().any(|l| l.starts_with("[out] sitemap=2 issues=")), "{log:#?}");
-        for want in ["[out] history=1 first=/hist filtered=1", "[out] intercept=true", "[out] scope=true,false", "[out] cookies=sid", "[out] organizer=1 /added NEW", "[out] menu registered true ai=false"] {
-            assert!(log.iter().any(|l| l == want), "missing {want:?} in {log:#?}");
+        assert!(
+            log.iter().any(|l| l.starts_with("[out] sitemap=2 issues=")),
+            "{log:#?}"
+        );
+        for want in [
+            "[out] history=1 first=/hist filtered=1",
+            "[out] intercept=true",
+            "[out] scope=true,false",
+            "[out] cookies=sid",
+            "[out] organizer=1 /added NEW",
+            "[out] menu registered true ai=false",
+        ] {
+            assert!(
+                log.iter().any(|l| l == want),
+                "missing {want:?} in {log:#?}"
+            );
         }
         assert!(!shared.intercept_on.load(Ordering::SeqCst));
         // Collaborator: payloads from WebProbe's pool, interactions it saw.
-        let pay = log.iter().find(|l| l.starts_with("[out] payload=")).expect("payload line").clone();
-        assert!(pay.contains(".oast.test bare=") && pay.ends_with("server=oast.test"), "{pay}");
-        let token = pay.trim_start_matches("[out] payload=").split('.').next().unwrap().to_string();
+        let pay = log
+            .iter()
+            .find(|l| l.starts_with("[out] payload="))
+            .expect("payload line")
+            .clone();
+        assert!(
+            pay.contains(".oast.test bare=") && pay.ends_with("server=oast.test"),
+            "{pay}"
+        );
+        let token = pay
+            .trim_start_matches("[out] payload=")
+            .split('.')
+            .next()
+            .unwrap()
+            .to_string();
         shared.oob.observe(&[crate::collaborator::Interaction {
-            id: 1, at: 0, source: "10.0.0.9".into(), token: Some(token.clone()),
-            detail: crate::collaborator::InteractionDetail::Dns(crate::collaborator::DnsInteraction { qname: format!("{token}.oast.test"), qtype: 1, raw_query: Vec::new() }),
+            id: 1,
+            at: 0,
+            source: "10.0.0.9".into(),
+            token: Some(token.clone()),
+            detail: crate::collaborator::InteractionDetail::Dns(
+                crate::collaborator::DnsInteraction {
+                    qname: format!("{token}.oast.test"),
+                    qtype: 1,
+                    raw_query: Vec::new(),
+                },
+            ),
         }]);
         let items = sc.menu_items(&ctx);
         assert!(sc.invoke_menu_item(&items[1].id).ok);
-        assert!(sc.errors().iter().any(|l| l == &format!("[out] interactions=1 type=DNS client=10.0.0.9 id={token}")), "{:#?}", sc.errors());
-        assert!(shared.repeaters.lock().unwrap().iter().any(|t| t.name == "From Stage4" && t.request.starts_with("GET /added HTTP/1.1")));
-        assert!(shared.issues.lock().unwrap().iter().any(|i| i.name == "Stage4 sitemap issue" && i.sev == "low"));
+        assert!(
+            sc.errors()
+                .iter()
+                .any(|l| l == &format!("[out] interactions=1 type=DNS client=10.0.0.9 id={token}")),
+            "{:#?}",
+            sc.errors()
+        );
+        assert!(shared
+            .repeaters
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|t| t.name == "From Stage4" && t.request.starts_with("GET /added HTTP/1.1")));
+        assert!(shared
+            .issues
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|i| i.name == "Stage4 sitemap issue" && i.sev == "low"));
         use crate::ext_calls::ToolSend;
         assert_eq!(
             *shared.tool_sends.lock().unwrap(),
             vec![
-                ToolSend::Intruder { request: "GET /?a=\u{a7}1\u{a7} HTTP/1.1\r\n\r\n".into(), target: "https://site.test:8443".into(), https: true },
+                ToolSend::Intruder {
+                    request: "GET /?a=\u{a7}1\u{a7} HTTP/1.1\r\n\r\n".into(),
+                    target: "https://site.test:8443".into(),
+                    https: true
+                },
                 ToolSend::Comparer("left".into()),
                 ToolSend::Comparer("right".into()),
                 ToolSend::Decoder("to decode".into()),
@@ -1575,41 +2444,137 @@ mod tests {
         // Intruder: the generator's payloads, through the processor (which
         // changes one and skips another), drive an attack.
         let u = sc.ui().unwrap();
-        assert_eq!((u.generators, u.processors), (vec!["Stage4 generator".to_string()], vec!["Stage4 processor".to_string()]));
-        assert_eq!(crate::ext_calls::payload_generators(&shared), ["Stage4 generator"]);
-        let request = format!("GET /i?q=\u{a7}base\u{a7} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
-        let mut sources = vec![crate::intruder::PayloadSource::Extension { provider: "Stage4 generator".into(), payloads: Vec::new() }];
+        assert_eq!(
+            (u.generators, u.processors),
+            (
+                vec!["Stage4 generator".to_string()],
+                vec!["Stage4 processor".to_string()]
+            )
+        );
+        assert_eq!(
+            crate::ext_calls::payload_generators(&shared),
+            ["Stage4 generator"]
+        );
+        let request =
+            format!("GET /i?q=\u{a7}base\u{a7} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
+        let mut sources = vec![crate::intruder::PayloadSource::Extension {
+            provider: "Stage4 generator".into(),
+            payloads: Vec::new(),
+        }];
         crate::ext_calls::fill_extension_payloads(&shared, &request, &mut sources).unwrap();
         let template = crate::intruder::Template::parse(&request).unwrap();
-        let mut specs = crate::intruder::resolve_specs(&template, crate::intruder::AttackType::Sniper, &sources).unwrap();
-        crate::ext_calls::apply_extension_processors(&shared, &template, &mut specs, &["Stage4 processor".to_string()]).unwrap();
-        let run = crate::intruder_run::start(shared.clone(), &request, crate::intruder::AttackType::Sniper, specs, ("127.0.0.1".into(), port, false), Default::default()).unwrap();
+        let mut specs = crate::intruder::resolve_specs(
+            &template,
+            crate::intruder::AttackType::Sniper,
+            &sources,
+        )
+        .unwrap();
+        crate::ext_calls::apply_extension_processors(
+            &shared,
+            &template,
+            &mut specs,
+            &["Stage4 processor".to_string()],
+        )
+        .unwrap();
+        let run = crate::intruder_run::start(
+            shared.clone(),
+            &request,
+            crate::intruder::AttackType::Sniper,
+            specs,
+            ("127.0.0.1".into(), port, false),
+            Default::default(),
+        )
+        .unwrap();
         eventually(|| (!run.is_running()).then_some(()));
-        let mut got: Vec<String> = run.rows.lock().unwrap().iter().map(|r| String::from_utf8_lossy(r.response.as_deref().unwrap_or_default()).rsplit("\r\n\r\n").next().unwrap_or("").to_string()).collect();
+        let mut got: Vec<String> = run
+            .rows
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|r| {
+                String::from_utf8_lossy(r.response.as_deref().unwrap_or_default())
+                    .rsplit("\r\n\r\n")
+                    .next()
+                    .unwrap_or("")
+                    .to_string()
+            })
+            .collect();
         got.sort();
-        assert_eq!(got, ["GET /i?q=base-1-1-pbase HTTP/1.1", "GET /i?q=base-3-1-pbase HTTP/1.1"], "processor appends, and skips the second");
+        assert_eq!(
+            got,
+            [
+                "GET /i?q=base-1-1-pbase HTTP/1.1",
+                "GET /i?q=base-3-1-pbase HTTP/1.1"
+            ],
+            "processor appends, and skips the second"
+        );
         // A session rule invokes the extension's session handling action.
         let mut rule = crate::net::SessionRule::new();
-        (rule.action, rule.value, rule.tools) = ("invoke extension".into(), "Stage4 session".into(), vec!["Proxy".into()]);
+        (rule.action, rule.value, rule.tools) = (
+            "invoke extension".into(),
+            "Stage4 session".into(),
+            vec!["Proxy".into()],
+        );
         *shared.session_rules.lock().unwrap() = vec![rule];
-        let out = crate::net::apply_session_rules(&shared, b"GET /sess HTTP/1.1\r\nHost: s.test\r\n\r\n", 80);
-        assert!(String::from_utf8_lossy(&out).contains("X-Stage4: token-0\r\n"), "{}", String::from_utf8_lossy(&out));
+        let out = crate::net::apply_session_rules(
+            &shared,
+            b"GET /sess HTTP/1.1\r\nHost: s.test\r\n\r\n",
+            80,
+        );
+        assert!(
+            String::from_utf8_lossy(&out).contains("X-Stage4: token-0\r\n"),
+            "{}",
+            String::from_utf8_lossy(&out)
+        );
         shared.session_rules.lock().unwrap().clear();
         // Proxy WebSocket handlers edit and drop messages; close is heard.
-        let watch = crate::net::WsWatch::open(&shared, "ws.test", 80, false, b"GET /chat HTTP/1.1\r\nHost: ws.test\r\nUpgrade: websocket\r\n\r\n");
+        let watch = crate::net::WsWatch::open(
+            &shared,
+            "ws.test",
+            80,
+            false,
+            b"GET /chat HTTP/1.1\r\nHost: ws.test\r\nUpgrade: websocket\r\n\r\n",
+        );
         let mut st = crate::net::WsStream::watched(&watch);
         drop(watch);
-        let out = crate::net::intercept_ws_stream(&shared, "ws.test", &crate::net::build_ws_frame(0x81, b"hello", true), &mut st, true);
+        let out = crate::net::intercept_ws_stream(
+            &shared,
+            "ws.test",
+            &crate::net::build_ws_frame(0x81, b"hello", true),
+            &mut st,
+            true,
+        );
         assert_eq!(crate::net::parse_ws_frame(&out).unwrap().2, b"hello+ext>");
-        assert!(crate::net::intercept_ws_stream(&shared, "ws.test", &crate::net::build_ws_frame(0x81, b"please drop", false), &mut st, false).is_empty());
-        let out = crate::net::intercept_ws_stream(&shared, "ws.test", &crate::net::build_ws_frame(0x82, &[1, 2], false), &mut st, false);
+        assert!(crate::net::intercept_ws_stream(
+            &shared,
+            "ws.test",
+            &crate::net::build_ws_frame(0x81, b"please drop", false),
+            &mut st,
+            false
+        )
+        .is_empty());
+        let out = crate::net::intercept_ws_stream(
+            &shared,
+            "ws.test",
+            &crate::net::build_ws_frame(0x82, &[1, 2], false),
+            &mut st,
+            false,
+        );
         assert_eq!(crate::net::parse_ws_frame(&out).unwrap().2, [1, 2]);
         // Held for the user: "received" handlers run before (the user sees
         // "hi+ext"), "to be sent" handlers after the user's edit.
         shared.intercept_on.store(true, Ordering::SeqCst);
         shared.ws_intercept_client.store(true, Ordering::SeqCst);
         let held = std::thread::scope(|s| {
-            let relay = s.spawn(|| crate::net::intercept_ws_stream(&shared, "ws.test", &crate::net::build_ws_frame(0x81, b"hi", true), &mut st, true));
+            let relay = s.spawn(|| {
+                crate::net::intercept_ws_stream(
+                    &shared,
+                    "ws.test",
+                    &crate::net::build_ws_frame(0x81, b"hi", true),
+                    &mut st,
+                    true,
+                )
+            });
             let item = eventually(|| shared.queue.lock().unwrap().pop());
             assert_eq!(item.edited, "hi+ext");
             item.tx.send(Some("user edit".into())).unwrap();
@@ -1618,10 +2583,22 @@ mod tests {
         assert_eq!(crate::net::parse_ws_frame(&held).unwrap().2, b"user edit>");
         shared.intercept_on.store(false, Ordering::SeqCst);
         drop(st);
-        eventually(|| sc.errors().iter().any(|l| l == "[out] ws closed").then_some(()));
+        eventually(|| {
+            sc.errors()
+                .iter()
+                .any(|l| l == "[out] ws closed")
+                .then_some(())
+        });
         assert!(sc.errors().iter().any(|l| l == "[out] ws open /chat"));
-        let mut missing = vec![crate::intruder::PayloadSource::Extension { provider: "Gone".into(), payloads: Vec::new() }];
-        assert!(crate::ext_calls::fill_extension_payloads(&shared, &request, &mut missing).unwrap_err().contains("Gone"));
+        let mut missing = vec![crate::intruder::PayloadSource::Extension {
+            provider: "Gone".into(),
+            payloads: Vec::new(),
+        }];
+        assert!(
+            crate::ext_calls::fill_extension_payloads(&shared, &request, &mut missing)
+                .unwrap_err()
+                .contains("Gone")
+        );
         shared.ext_host.lock().unwrap().extensions.clear();
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -1635,5 +2612,4 @@ mod tests {
         }
         panic!("not reached within {secs} s");
     }
-
 }

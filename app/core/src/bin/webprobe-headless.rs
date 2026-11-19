@@ -64,17 +64,31 @@ fn issue_json(i: &scan::ScanIssue) -> String {
 
 fn save_project(shared: &net::Shared, path: &str) -> Result<(), String> {
     let data = project::ProjectData {
-        history: shared.history.snapshot().iter().map(project::ProjectHistory::from_entry).collect(),
-        issues: shared.issues.lock().unwrap().iter().map(project::ProjectIssue::from_issue).collect(),
+        history: shared
+            .history
+            .snapshot()
+            .iter()
+            .map(project::ProjectHistory::from_entry)
+            .collect(),
+        issues: shared
+            .issues
+            .lock()
+            .unwrap()
+            .iter()
+            .map(project::ProjectIssue::from_issue)
+            .collect(),
         ..Default::default()
     };
     project::save(std::path::Path::new(path), &data)
 }
 
 fn proxy(mut args: Vec<String>) {
-    let port: u16 = take_opt(&mut args, "--port").map(|p| p.parse().unwrap_or_else(|_| usage())).unwrap_or(8090);
+    let port: u16 = take_opt(&mut args, "--port")
+        .map(|p| p.parse().unwrap_or_else(|_| usage()))
+        .unwrap_or(8090);
     let project_file = take_opt(&mut args, "--project");
-    let seconds: Option<u64> = take_opt(&mut args, "--seconds").map(|s| s.parse().unwrap_or_else(|_| usage()));
+    let seconds: Option<u64> =
+        take_opt(&mut args, "--seconds").map(|s| s.parse().unwrap_or_else(|_| usage()));
     if !args.is_empty() {
         usage();
     }
@@ -109,14 +123,28 @@ fn proxy(mut args: Vec<String>) {
         // the history lock every proxy thread needs to record.
         let fresh: Vec<String> = {
             let history = shared.history.snapshot();
-            let rows = history.iter().skip(printed).map(|e| format!("{}\t{}\t{}\t{}\t{}", e.id, e.method, net::history_host(e), e.path, e.status)).collect();
+            let rows = history
+                .iter()
+                .skip(printed)
+                .map(|e| {
+                    format!(
+                        "{}\t{}\t{}\t{}\t{}",
+                        e.id,
+                        e.method,
+                        net::history_host(e),
+                        e.path,
+                        e.status
+                    )
+                })
+                .collect();
             printed = history.len();
             rows
         };
         for row in fresh {
             println!("{row}");
         }
-        let done = stdin_closed.load(Ordering::SeqCst) || seconds.is_some_and(|s| started.elapsed() >= Duration::from_secs(s));
+        let done = stdin_closed.load(Ordering::SeqCst)
+            || seconds.is_some_and(|s| started.elapsed() >= Duration::from_secs(s));
         if done {
             break;
         }
@@ -128,7 +156,10 @@ fn proxy(mut args: Vec<String>) {
     }
     if let Some(path) = project_file {
         match save_project(&shared, &path) {
-            Ok(()) => eprintln!("saved {printed} exchange(s) and {} issue(s) to {path}", issues.len()),
+            Ok(()) => eprintln!(
+                "saved {printed} exchange(s) and {} issue(s) to {path}",
+                issues.len()
+            ),
             Err(e) => {
                 eprintln!("could not save {path}: {e}");
                 std::process::exit(1);
@@ -159,10 +190,21 @@ fn scan_urls(mut args: Vec<String>) {
     for i in &issues {
         println!("{}", issue_json(i));
     }
-    eprintln!("{} issue(s) in {:.1} s", issues.len(), started.elapsed().as_secs_f32());
+    eprintln!(
+        "{} issue(s) in {:.1} s",
+        issues.len(),
+        started.elapsed().as_secs_f32()
+    );
     if let Some(path) = report_file {
-        let format = if path.to_ascii_lowercase().ends_with(".xml") { report::ReportFormat::Xml } else { report::ReportFormat::Html };
-        let options = report::ReportOptions { format, ..Default::default() };
+        let format = if path.to_ascii_lowercase().ends_with(".xml") {
+            report::ReportFormat::Xml
+        } else {
+            report::ReportFormat::Html
+        };
+        let options = report::ReportOptions {
+            format,
+            ..Default::default()
+        };
         let mut known: Vec<net::HistEntry> = shared.crawl_items.snapshot();
         known.extend(shared.history.snapshot().iter().cloned());
         let chosen = report::select_issues(&issues, &options);

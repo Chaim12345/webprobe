@@ -28,7 +28,9 @@ pub(crate) fn run_shortcut(app: &mut App, idx: usize) {
         }
         "forward_intercepted_proxy_message" => {
             // The message on screen, with its edits (Burp forwards the selection).
-            let done = app.intercept_cur.take().is_some_and(|id| net::intercept_release(&app.shared, id, false, Some(app.intercept_text.clone())));
+            let done = app.intercept_cur.take().is_some_and(|id| {
+                net::intercept_release(&app.shared, id, false, Some(app.intercept_text.clone()))
+            });
             if !done {
                 net::intercept_forward(&app.shared, false);
             }
@@ -70,7 +72,9 @@ pub(crate) fn run_shortcut(app: &mut App, idx: usize) {
 
 /// Burp's Ctrl+Minus / Ctrl+Equals walk the tab strip in its own order.
 pub(crate) fn cycle_tab(app: &mut App, delta: i32) {
-    let Some(pos) = TABS.iter().position(|(_, t)| *t == app.tab) else { return };
+    let Some(pos) = TABS.iter().position(|(_, t)| *t == app.tab) else {
+        return;
+    };
     let n = TABS.len() as i32;
     let next = (pos as i32 + delta).rem_euclid(n) as usize;
     app.tab = TABS[next].1;
@@ -81,7 +85,10 @@ pub(crate) fn cycle_tab(app: &mut App, delta: i32) {
 /// menu uses this; visually close to the native menu rows.
 pub(crate) fn menu_action(ui: &mut Ui, label: &str) -> bool {
     if ui
-        .add(egui::Button::new(RichText::new(label).size(13.0)).wrap_mode(egui::TextWrapMode::Extend))
+        .add(
+            egui::Button::new(RichText::new(label).size(13.0))
+                .wrap_mode(egui::TextWrapMode::Extend),
+        )
         .clicked()
     {
         ui.close();
@@ -98,7 +105,10 @@ pub(crate) fn menu_action(ui: &mut Ui, label: &str) -> bool {
 /// that check only with Collaborator enabled, burp.Zgcg).
 pub(crate) fn run_active_scan_on(app: &mut App, e: &net::HistEntry) {
     let parts = util::parse_http(&e.req_raw);
-    let names: Vec<String> = scan::query_params(&parts.path).into_iter().map(|(n, _)| n).collect();
+    let names: Vec<String> = scan::query_params(&parts.path)
+        .into_iter()
+        .map(|(n, _)| n)
+        .collect();
     let oob: Vec<(String, String, String)> = scan::oob_slots(&app.shared, &e.req_raw)
         .iter()
         .map(|name| {
@@ -112,14 +122,26 @@ pub(crate) fn run_active_scan_on(app: &mut App, e: &net::HistEntry) {
             .map(|name| {
                 let a = app.collab_state.generate_payload();
                 let b = app.collab_state.generate_payload();
-                scan::SmtpOob { param: name.clone(), simple: (a.token, a.dns_name), enclosed: (b.token, b.dns_name) }
+                scan::SmtpOob {
+                    param: name.clone(),
+                    simple: (a.token, a.dns_name),
+                    enclosed: (b.token, b.dns_name),
+                }
             })
             .collect()
     } else {
         Vec::new()
     };
     let name = format!("Active scan of {}", history_url(e));
-    crate::tasks::enqueue(&app.shared, name, crate::tasks::TaskKind::Single { entry: Box::new(e.clone()), oob, smtp });
+    crate::tasks::enqueue(
+        &app.shared,
+        name,
+        crate::tasks::TaskKind::Single {
+            entry: Box::new(e.clone()),
+            oob,
+            smtp,
+        },
+    );
     feedback::toast(feedback::Level::Info, "Active scan queued");
 }
 
@@ -130,8 +152,14 @@ pub(crate) fn history_url(e: &net::HistEntry) -> String {
     if parts.path.starts_with("http://") || parts.path.starts_with("https://") {
         return parts.path.clone();
     }
-    let host = util::get_header(&parts.headers, "Host").unwrap_or_else(|| format!("{}:{}", e.host, e.port));
-    format!("{}://{}{}", if e.https { "https" } else { "http" }, host, parts.path)
+    let host = util::get_header(&parts.headers, "Host")
+        .unwrap_or_else(|| format!("{}:{}", e.host, e.port));
+    format!(
+        "{}://{}{}",
+        if e.https { "https" } else { "http" },
+        host,
+        parts.path
+    )
 }
 
 /// "Copy as curl command (bash)": Burp's curl line (Zc2z) for the request.
@@ -142,7 +170,9 @@ pub(crate) fn curl_command_of(e: &net::HistEntry) -> String {
 /// Links found in a response body (href/src/action attribute values and bare
 /// absolute URLs), for "Copy links in response".
 pub(crate) fn links_in_response(e: &net::HistEntry) -> String {
-    let Some(resp) = &e.resp_raw else { return String::new() };
+    let Some(resp) = &e.resp_raw else {
+        return String::new();
+    };
     let rp = util::parse_http(resp);
     let body = String::from_utf8_lossy(&resp[rp.head_len.min(resp.len())..]);
     let mut links = Vec::new();
@@ -157,7 +187,9 @@ pub(crate) fn links_in_response(e: &net::HistEntry) -> String {
             rest = &rest[at + needle.len()..];
             let Some(end) = rest.find('"') else { break };
             let link = &rest[..end];
-            if (link.starts_with("http://") || link.starts_with("https://")) && !links.contains(&link) {
+            if (link.starts_with("http://") || link.starts_with("https://"))
+                && !links.contains(&link)
+            {
                 links.push(link);
             }
             rest = &rest[end + 1..];
@@ -199,7 +231,7 @@ pub fn send_history_to_repeater(app: &mut App) {
             result_line: String::new(),
             history: Vec::new(),
             hist_pos: 0,
-        ws: None,
+            ws: None,
         });
         app.rep_sel = reps.len() - 1;
         app.tab = Tab::Repeater;
@@ -214,7 +246,9 @@ pub(crate) fn current_repeater(app: &App) -> Option<(String, bool, String, u16)>
 }
 
 pub(crate) fn repeater_tab_to_intruder(app: &mut App) {
-    let Some((req, https, _, _)) = current_repeater(app) else { return };
+    let Some((req, https, _, _)) = current_repeater(app) else {
+        return;
+    };
     if req.trim().is_empty() {
         feedback::toast(feedback::Level::Warn, "The Repeater tab has no request");
         return;
@@ -225,7 +259,9 @@ pub(crate) fn repeater_tab_to_intruder(app: &mut App) {
 }
 
 pub(crate) fn repeater_tab_to_new_tab(app: &mut App) {
-    let Some((request, https, host, port)) = current_repeater(app) else { return };
+    let Some((request, https, host, port)) = current_repeater(app) else {
+        return;
+    };
     let mut reps = app.shared.repeaters.lock().unwrap();
     let id = app.shared.rep.new_tab_id();
     reps.push(net::RepTab {
@@ -239,7 +275,7 @@ pub(crate) fn repeater_tab_to_new_tab(app: &mut App) {
         result_line: String::new(),
         history: Vec::new(),
         hist_pos: 0,
-    ws: None,
+        ws: None,
     });
     app.rep_sel = reps.len() - 1;
 }

@@ -127,7 +127,13 @@ fn is_zero_port(p: &u16) -> bool {
 fn message_out(bytes: &[u8]) -> (std::borrow::Cow<'_, str>, Option<String>) {
     match std::str::from_utf8(bytes) {
         Ok(t) => (std::borrow::Cow::Borrowed(t), None),
-        Err(_) => (String::from_utf8_lossy(bytes), Some(base64::Engine::encode(&base64::engine::general_purpose::STANDARD, bytes))),
+        Err(_) => (
+            String::from_utf8_lossy(bytes),
+            Some(base64::Engine::encode(
+                &base64::engine::general_purpose::STANDARD,
+                bytes,
+            )),
+        ),
     }
 }
 
@@ -178,8 +184,13 @@ impl<'de> Deserialize<'de> for ProjectHistory {
             status: h.status,
             // Into the body store as each item is parsed (a no-op for small
             // bodies), so loading a large project does not hold every body.
-            request: crate::body::spill(&decode_message(&h.request, h.request_b64.as_deref()).into()),
-            response: h.response.as_deref().map(|r| crate::body::spill(&decode_message(r, h.response_b64.as_deref()).into())),
+            request: crate::body::spill(
+                &decode_message(&h.request, h.request_b64.as_deref()).into(),
+            ),
+            response: h
+                .response
+                .as_deref()
+                .map(|r| crate::body::spill(&decode_message(r, h.response_b64.as_deref()).into())),
             note: h.note,
             highlight: h.highlight,
             edited: h.edited,
@@ -196,7 +207,10 @@ pub fn encode_message(bytes: &[u8]) -> (String, Option<String>) {
         Ok(t) => (t.to_string(), None),
         Err(_) => (
             String::from_utf8_lossy(bytes).into_owned(),
-            Some(base64::Engine::encode(&base64::engine::general_purpose::STANDARD, bytes)),
+            Some(base64::Engine::encode(
+                &base64::engine::general_purpose::STANDARD,
+                bytes,
+            )),
         ),
     }
 }
@@ -249,8 +263,6 @@ fn proxy_only() -> Vec<String> {
     vec!["Proxy".to_string()]
 }
 
-
-
 /// One reusable macro request.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ProjectMacro {
@@ -287,7 +299,9 @@ impl ProjectRepeater {
 
     /// The saved response bytes, exact when base64 was stored.
     pub fn response_bytes(&self) -> Option<Vec<u8>> {
-        self.response.as_deref().map(|r| decode_message(r, self.response_b64.as_deref()))
+        self.response
+            .as_deref()
+            .map(|r| decode_message(r, self.response_b64.as_deref()))
     }
 }
 
@@ -334,12 +348,16 @@ pub struct ProjectEvidence {
 impl ProjectEvidence {
     pub fn encode(request: &[u8], response: Option<&[u8]>) -> Self {
         let b64 = |b: &[u8]| base64::Engine::encode(&base64::engine::general_purpose::STANDARD, b);
-        ProjectEvidence { request_b64: b64(request), response_b64: response.map(b64) }
+        ProjectEvidence {
+            request_b64: b64(request),
+            response_b64: response.map(b64),
+        }
     }
 
     /// The request and response bytes; `None` when the stored text is not base64.
     pub fn decode(&self) -> Option<(Vec<u8>, Option<Vec<u8>>)> {
-        let de = |t: &str| base64::Engine::decode(&base64::engine::general_purpose::STANDARD, t).ok();
+        let de =
+            |t: &str| base64::Engine::decode(&base64::engine::general_purpose::STANDARD, t).ok();
         let request = de(&self.request_b64)?;
         let response = match &self.response_b64 {
             Some(t) => Some(de(t)?),
@@ -381,12 +399,33 @@ impl ProjectWebsocket {
             Ok(t) => (t.to_string(), None),
             Err(_) => (String::new(), Some(crate::util::b64_encode(&w.payload))),
         };
-        ProjectWebsocket { id: w.id, timestamp: w.ts, host: w.host.clone(), direction: w.direction.clone(), opcode: w.opcode.clone(), payload, payload_base64, socket: w.socket }
+        ProjectWebsocket {
+            id: w.id,
+            timestamp: w.ts,
+            host: w.host.clone(),
+            direction: w.direction.clone(),
+            opcode: w.opcode.clone(),
+            payload,
+            payload_base64,
+            socket: w.socket,
+        }
     }
 
     pub fn to_entry(&self) -> crate::ws_history::WsEntry {
-        let bytes = self.payload_base64.as_deref().and_then(|b| crate::util::b64_decode(b).ok()).unwrap_or_else(|| self.payload.clone().into_bytes());
-        crate::ws_history::WsEntry { id: self.id, ts: self.timestamp, host: self.host.clone(), direction: self.direction.clone(), opcode: self.opcode.clone(), payload: bytes.into(), socket: self.socket }
+        let bytes = self
+            .payload_base64
+            .as_deref()
+            .and_then(|b| crate::util::b64_decode(b).ok())
+            .unwrap_or_else(|| self.payload.clone().into_bytes());
+        crate::ws_history::WsEntry {
+            id: self.id,
+            ts: self.timestamp,
+            host: self.host.clone(),
+            direction: self.direction.clone(),
+            opcode: self.opcode.clone(),
+            payload: bytes.into(),
+            socket: self.socket,
+        }
     }
 }
 
@@ -649,7 +688,23 @@ fn yes() -> bool {
 
 impl Default for ProjectScanner {
     fn default() -> Self {
-        Self { speed: 1, accuracy: 1, extra_checks: false, disabled_checks: Vec::new(), disabled_insertion_points: Vec::new(), crawl_max_depth: None, crawl_max_locations: None, crawl_robots: None, crawl_sitemap: None, crawl_engine: None, crawl_max_minutes: None, crawl_max_requests: None, issues_reported: None, library: Vec::new(), library_selection: Vec::new() }
+        Self {
+            speed: 1,
+            accuracy: 1,
+            extra_checks: false,
+            disabled_checks: Vec::new(),
+            disabled_insertion_points: Vec::new(),
+            crawl_max_depth: None,
+            crawl_max_locations: None,
+            crawl_robots: None,
+            crawl_sitemap: None,
+            crawl_engine: None,
+            crawl_max_minutes: None,
+            crawl_max_requests: None,
+            issues_reported: None,
+            library: Vec::new(),
+            library_selection: Vec::new(),
+        }
     }
 }
 
@@ -765,9 +820,27 @@ impl ProjectScanTask {
             .map(|t| {
                 let paused = t.state == crate::tasks::TaskState::Paused;
                 match &t.kind {
-                    crate::tasks::TaskKind::Audit(e) => ProjectScanTask { name: t.name.clone(), entries: e.iter().map(ProjectHistory::from_entry).collect(), urls: Vec::new(), audit_only: true, paused },
-                    crate::tasks::TaskKind::Single { entry, .. } => ProjectScanTask { name: t.name.clone(), entries: vec![ProjectHistory::from_entry(entry.as_ref())], urls: Vec::new(), audit_only: true, paused },
-                    crate::tasks::TaskKind::CrawlAudit { urls, audit_only } => ProjectScanTask { name: t.name.clone(), entries: Vec::new(), urls: urls.clone(), audit_only: *audit_only, paused },
+                    crate::tasks::TaskKind::Audit(e) => ProjectScanTask {
+                        name: t.name.clone(),
+                        entries: e.iter().map(ProjectHistory::from_entry).collect(),
+                        urls: Vec::new(),
+                        audit_only: true,
+                        paused,
+                    },
+                    crate::tasks::TaskKind::Single { entry, .. } => ProjectScanTask {
+                        name: t.name.clone(),
+                        entries: vec![ProjectHistory::from_entry(entry.as_ref())],
+                        urls: Vec::new(),
+                        audit_only: true,
+                        paused,
+                    },
+                    crate::tasks::TaskKind::CrawlAudit { urls, audit_only } => ProjectScanTask {
+                        name: t.name.clone(),
+                        entries: Vec::new(),
+                        urls: urls.clone(),
+                        audit_only: *audit_only,
+                        paused,
+                    },
                 }
             })
             .collect()
@@ -777,9 +850,14 @@ impl ProjectScanTask {
     pub fn restore_all(saved: &[Self], shared: &std::sync::Arc<crate::net::Shared>) {
         for s in saved {
             let kind = if s.urls.is_empty() {
-                crate::tasks::TaskKind::Audit(s.entries.iter().map(ProjectHistory::to_entry).collect())
+                crate::tasks::TaskKind::Audit(
+                    s.entries.iter().map(ProjectHistory::to_entry).collect(),
+                )
             } else {
-                crate::tasks::TaskKind::CrawlAudit { urls: s.urls.clone(), audit_only: s.audit_only }
+                crate::tasks::TaskKind::CrawlAudit {
+                    urls: s.urls.clone(),
+                    audit_only: s.audit_only,
+                }
             };
             let id = crate::tasks::enqueue(shared, s.name.clone(), kind);
             if s.paused {
@@ -791,7 +869,11 @@ impl ProjectScanTask {
 
 impl Default for ProjectTasks {
     fn default() -> Self {
-        Self { live_passive_crawl: true, live_audit: true, scans: Vec::new() }
+        Self {
+            live_passive_crawl: true,
+            live_audit: true,
+            scans: Vec::new(),
+        }
     }
 }
 
@@ -1116,7 +1198,11 @@ impl ProjectIssue {
             confidence: i.confidence.clone(),
             timestamp: i.ts,
             type_id: i.type_id,
-            evidence: i.evidence.iter().map(|e| ProjectEvidence::encode(&e.request, e.response.as_deref())).collect(),
+            evidence: i
+                .evidence
+                .iter()
+                .map(|e| ProjectEvidence::encode(&e.request, e.response.as_deref()))
+                .collect(),
             ident: i.ident.clone(),
         }
     }
@@ -1133,7 +1219,12 @@ impl ProjectIssue {
             confidence: self.confidence.clone(),
             ts: self.timestamp,
             type_id: self.type_id,
-            evidence: self.evidence.iter().filter_map(|e| e.decode()).map(|(req, resp)| crate::scan::ScanEvidence::new(&req, resp.as_deref())).collect(),
+            evidence: self
+                .evidence
+                .iter()
+                .filter_map(|e| e.decode())
+                .map(|(req, resp)| crate::scan::ScanEvidence::new(&req, resp.as_deref()))
+                .collect(),
             ident: self.ident.clone(),
         }
     }
@@ -1160,7 +1251,10 @@ pub fn settings_only(data: &ProjectData) -> ProjectData {
         decoder: blank.decoder,
         editors: blank.editors,
         layout: blank.layout,
-        cookie_jar: data.cookie_jar.as_ref().map(|j| ProjectCookieJar { cookies: Vec::new(), ..j.clone() }),
+        cookie_jar: data.cookie_jar.as_ref().map(|j| ProjectCookieJar {
+            cookies: Vec::new(),
+            ..j.clone()
+        }),
         ..data.clone()
     }
 }
@@ -1168,10 +1262,21 @@ pub fn settings_only(data: &ProjectData) -> ProjectData {
 /// `current` with its settings replaced by those in `settings` ("Import
 /// settings"): the project's data, layout and stored cookies are kept.
 pub fn apply_settings(current: &ProjectData, settings: &ProjectData) -> ProjectData {
-    let cookies = current.cookie_jar.as_ref().map(|j| j.cookies.clone()).unwrap_or_default();
+    let cookies = current
+        .cookie_jar
+        .as_ref()
+        .map(|j| j.cookies.clone())
+        .unwrap_or_default();
     let cookie_jar = match (&settings.cookie_jar, cookies.is_empty()) {
-        (Some(j), _) => Some(ProjectCookieJar { cookies, ..j.clone() }),
-        (None, false) => Some(ProjectCookieJar { cookies, update_from: vec!["Proxy".into()], apply_to: vec!["Scanner".into()] }),
+        (Some(j), _) => Some(ProjectCookieJar {
+            cookies,
+            ..j.clone()
+        }),
+        (None, false) => Some(ProjectCookieJar {
+            cookies,
+            update_from: vec!["Proxy".into()],
+            apply_to: vec!["Scanner".into()],
+        }),
         (None, true) => None,
     };
     ProjectData {
@@ -1198,7 +1303,10 @@ pub fn apply_settings(current: &ProjectData, settings: &ProjectData) -> ProjectD
 /// The listening port is kept: restoring defaults should not move the proxy
 /// out from under a configured browser.
 pub fn with_default_settings(current: &ProjectData) -> ProjectData {
-    let defaults = ProjectData { listener_port: current.listener_port, ..ProjectData::default() };
+    let defaults = ProjectData {
+        listener_port: current.listener_port,
+        ..ProjectData::default()
+    };
     apply_settings(current, &defaults)
 }
 
@@ -1238,8 +1346,16 @@ pub fn with_section_defaults(current: &ProjectData, section: SettingsSection) ->
         SettingsSection::Sessions => {
             out.session_rules = d.session_rules;
             out.macros = d.macros;
-            let cookies = current.cookie_jar.as_ref().map(|j| j.cookies.clone()).unwrap_or_default();
-            out.cookie_jar = (!cookies.is_empty()).then(|| ProjectCookieJar { cookies, update_from: vec!["Proxy".into()], apply_to: vec!["Scanner".into()] });
+            let cookies = current
+                .cookie_jar
+                .as_ref()
+                .map(|j| j.cookies.clone())
+                .unwrap_or_default();
+            out.cookie_jar = (!cookies.is_empty()).then(|| ProjectCookieJar {
+                cookies,
+                update_from: vec!["Proxy".into()],
+                apply_to: vec!["Scanner".into()],
+            });
         }
         SettingsSection::Scope => out.scope = d.scope,
         SettingsSection::Collaborator => {
@@ -1249,7 +1365,10 @@ pub fn with_section_defaults(current: &ProjectData, section: SettingsSection) ->
         }
         SettingsSection::Tasks => {
             out.scanner = d.scanner;
-            out.tasks = ProjectTasks { scans: current.tasks.scans.clone(), ..d.tasks };
+            out.tasks = ProjectTasks {
+                scans: current.tasks.scans.clone(),
+                ..d.tasks
+            };
         }
         SettingsSection::Network => {
             out.upstream = d.upstream;
@@ -1266,7 +1385,6 @@ pub fn with_section_defaults(current: &ProjectData, section: SettingsSection) ->
 /// and then renamed into place, so a failed write leaves the previous project
 /// intact.
 pub fn save(path: &Path, data: &ProjectData) -> Result<(), String> {
-
     let temporary = temporary_path(path)?;
     // The temp file is deleted only after create_new succeeds; a failing open
     // must not remove an unrelated file that blocked the unique name.
@@ -1343,15 +1461,29 @@ struct Saver {
 }
 
 fn saver() -> &'static (std::sync::Mutex<Saver>, std::sync::Condvar) {
-    static S: std::sync::OnceLock<(std::sync::Mutex<Saver>, std::sync::Condvar)> = std::sync::OnceLock::new();
-    S.get_or_init(|| (std::sync::Mutex::new(Saver { pending: Default::default(), busy: false }), std::sync::Condvar::new()))
+    static S: std::sync::OnceLock<(std::sync::Mutex<Saver>, std::sync::Condvar)> =
+        std::sync::OnceLock::new();
+    S.get_or_init(|| {
+        (
+            std::sync::Mutex::new(Saver {
+                pending: Default::default(),
+                busy: false,
+            }),
+            std::sync::Condvar::new(),
+        )
+    })
 }
 
 /// One queued save, isolated: a panic in serialization or in `done` is
 /// reported as an error and never takes the worker down.
 fn run_save(path: &std::path::Path, data: &ProjectData, done: SaveDone) {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| save(path, data)))
-        .unwrap_or_else(|_| Err(format!("saving {} failed with an internal error", path.display())));
+        .unwrap_or_else(|_| {
+            Err(format!(
+                "saving {} failed with an internal error",
+                path.display()
+            ))
+        });
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| done(result)));
 }
 
@@ -1403,11 +1535,18 @@ pub fn save_in_background(path: std::path::PathBuf, data: ProjectData, done: Sav
             run_save(&path, &data, done);
         }
     };
-    if let Err(e) = std::thread::Builder::new().name("project-save".into()).spawn(worker) {
+    if let Err(e) = std::thread::Builder::new()
+        .name("project-save".into())
+        .spawn(worker)
+    {
         // No thread: save on this one rather than lose the snapshot.
         eprintln!("webprobe: project-save thread unavailable ({e}); saving inline");
         loop {
-            let job = lock.lock().unwrap_or_else(|p| p.into_inner()).pending.pop_front();
+            let job = lock
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .pending
+                .pop_front();
             match job {
                 Some((path, data, done)) => run_save(&path, &data, done),
                 None => break,
@@ -1430,10 +1569,17 @@ pub fn wait_for_saves() {
 
 /// Read and validate a project file.
 pub fn load(path: &Path) -> Result<ProjectData, String> {
-    let file = std::fs::File::open(path).map_err(|err| format!("cannot read project {}: {err}", path.display()))?;
-    let len = file.metadata().map_err(|err| format!("cannot read project {}: {err}", path.display()))?.len();
+    let file = std::fs::File::open(path)
+        .map_err(|err| format!("cannot read project {}: {err}", path.display()))?;
+    let len = file
+        .metadata()
+        .map_err(|err| format!("cannot read project {}: {err}", path.display()))?
+        .len();
     if len > MAX_PROJECT_FILE_BYTES {
-        return Err(format!("cannot read project {}: file exceeds {MAX_PROJECT_FILE_BYTES} bytes", path.display()));
+        return Err(format!(
+            "cannot read project {}: file exceeds {MAX_PROJECT_FILE_BYTES} bytes",
+            path.display()
+        ));
     }
     if len == 0 {
         return decode(b"", &path.display().to_string());
@@ -1443,7 +1589,8 @@ pub fn load(path: &Path) -> Result<ProjectData, String> {
     // (ProjectHistory's Deserialize), so a large project is not held twice.
     // SAFETY: saves replace the file by rename, so this inode is not
     // modified while it is mapped.
-    let map = unsafe { memmap2::Mmap::map(&file) }.map_err(|err| format!("cannot read project {}: {err}", path.display()))?;
+    let map = unsafe { memmap2::Mmap::map(&file) }
+        .map_err(|err| format!("cannot read project {}: {err}", path.display()))?;
     decode(&map, &path.display().to_string())
 }
 
@@ -1470,9 +1617,7 @@ fn split_document<'a>(text: &'a str, label: &str) -> Result<(Option<u32>, &'a st
     }
 
     let (header, body) = trimmed.split_once('\n').ok_or_else(|| {
-        format!(
-            "not a WebProbe project file {label}: missing \"{PROJECT_MAGIC} <version>\" header"
-        )
+        format!("not a WebProbe project file {label}: missing \"{PROJECT_MAGIC} <version>\" header")
     })?;
     let header = header.trim_end_matches('\r');
 
@@ -1518,8 +1663,8 @@ fn decode(bytes: &[u8], label: &str) -> Result<ProjectData, String> {
         check_supported(version, label)?;
     }
 
-    let mut data: ProjectData = serde_json::from_str(body)
-        .map_err(|err| format!("cannot parse project {label}: {err}"))?;
+    let mut data: ProjectData =
+        serde_json::from_str(body).map_err(|err| format!("cannot parse project {label}: {err}"))?;
 
     // The body carries a version too; the header wins when both are present,
     // so a headerless legacy file is still checked against this build.
@@ -1531,10 +1676,7 @@ fn decode(bytes: &[u8], label: &str) -> Result<ProjectData, String> {
 /// A unique sibling of the destination, so rename stays on one filesystem.
 fn temporary_path(path: &Path) -> Result<PathBuf, String> {
     if path.file_name().is_none() {
-        return Err(format!(
-            "project path has no file name: {}",
-            path.display()
-        ));
+        return Err(format!("project path has no file name: {}", path.display()));
     }
 
     let parent = path
@@ -1573,7 +1715,12 @@ mod tests {
     #[test]
     fn one_settings_page_resets_and_the_rest_stays() {
         let mut cur = ProjectData {
-            scope: vec![ProjectScope { enabled: true, include: true, pattern: "https://a/".into(), is_regex: false }],
+            scope: vec![ProjectScope {
+                enabled: true,
+                include: true,
+                pattern: "https://a/".into(),
+                is_regex: false,
+            }],
             listener_port: 6566,
             ..Default::default()
         };
@@ -1581,7 +1728,11 @@ mod tests {
         cur.collaborator.payloads = vec!["p".into()];
         let out = with_section_defaults(&cur, SettingsSection::Collaborator);
         assert_eq!(out.collaborator.poll_secs, None);
-        assert_eq!(out.collaborator.payloads, vec!["p".to_string()], "data stays");
+        assert_eq!(
+            out.collaborator.payloads,
+            vec!["p".to_string()],
+            "data stays"
+        );
         assert_eq!(out.scope.len(), 1, "other pages untouched");
         assert_eq!(out.listener_port, 6566);
         let out = with_section_defaults(&cur, SettingsSection::Scope);
@@ -1591,10 +1742,19 @@ mod tests {
 
     fn sample() -> ProjectData {
         ProjectData {
-            extension_data: [("/opt/ext/demo.jar".to_string(), serde_json::json!({"String": {"k": "v"}}))].into_iter().collect(),
+            extension_data: [(
+                "/opt/ext/demo.jar".to_string(),
+                serde_json::json!({"String": {"k": "v"}}),
+            )]
+            .into_iter()
+            .collect(),
             version: PROJECT_VERSION,
             saved_at: 1_760_000_002,
-            appearance: Appearance { palette: "light".into(), density: "compact".into(), font_scale: 1.1 },
+            appearance: Appearance {
+                palette: "light".into(),
+                density: "compact".into(),
+                font_scale: 1.1,
+            },
             history: vec![ProjectHistory {
                 id: 7,
                 timestamp: 1_760_000_000,
@@ -1646,8 +1806,24 @@ mod tests {
             }],
             cookie_jar: Some(ProjectCookieJar {
                 cookies: vec![
-                    ProjectCookie { domain: "example.com".into(), host_only: false, path: "/".into(), name: "sid".into(), value: "abc".into(), secure: true, expires: Some(1_900_000_000) },
-                    ProjectCookie { domain: "app.example.com".into(), host_only: true, path: "/account".into(), name: "pref".into(), value: "1".into(), secure: false, expires: None },
+                    ProjectCookie {
+                        domain: "example.com".into(),
+                        host_only: false,
+                        path: "/".into(),
+                        name: "sid".into(),
+                        value: "abc".into(),
+                        secure: true,
+                        expires: Some(1_900_000_000),
+                    },
+                    ProjectCookie {
+                        domain: "app.example.com".into(),
+                        host_only: true,
+                        path: "/account".into(),
+                        name: "pref".into(),
+                        value: "1".into(),
+                        secure: false,
+                        expires: None,
+                    },
                 ],
                 update_from: vec!["Proxy".into(), "Repeater".into()],
                 apply_to: vec!["Scanner".into()],
@@ -1678,19 +1854,33 @@ mod tests {
                 confidence: "Firm".into(),
                 timestamp: 1_760_000_006,
                 type_id: 5_244_416,
-                evidence: vec![ProjectEvidence::encode(b"GET /index.html HTTP/1.1\r\n\r\n", Some(&[b'H', 0xff, 0x00, b'\n']))],
+                evidence: vec![ProjectEvidence::encode(
+                    b"GET /index.html HTTP/1.1\r\n\r\n",
+                    Some(&[b'H', 0xff, 0x00, b'\n']),
+                )],
                 ident: "Session: sid".into(),
             }],
-            websockets: vec![ProjectWebsocket {
-                id: 13,
-                timestamp: 1_760_000_001,
-                host: "example.com".into(),
-                direction: "out".into(),
-                opcode: "text".into(),
-                payload: "hello".into(),
-                payload_base64: None,
-                socket: 0,
-            }, ProjectWebsocket::from_entry(&crate::ws_history::WsEntry { id: 14, ts: 1, host: "example.com".into(), direction: "server -> client".into(), opcode: "binary".into(), payload: vec![0xff, 0x00, 0xc3, 0x28].into(), socket: 7 })],
+            websockets: vec![
+                ProjectWebsocket {
+                    id: 13,
+                    timestamp: 1_760_000_001,
+                    host: "example.com".into(),
+                    direction: "out".into(),
+                    opcode: "text".into(),
+                    payload: "hello".into(),
+                    payload_base64: None,
+                    socket: 0,
+                },
+                ProjectWebsocket::from_entry(&crate::ws_history::WsEntry {
+                    id: 14,
+                    ts: 1,
+                    host: "example.com".into(),
+                    direction: "server -> client".into(),
+                    opcode: "binary".into(),
+                    payload: vec![0xff, 0x00, 0xc3, 0x28].into(),
+                    socket: 7,
+                }),
+            ],
             logger: vec![ProjectLoggerEntry {
                 id: 17,
                 timestamp: 1_760_000_003,
@@ -1760,7 +1950,10 @@ mod tests {
                     body: "ping".into(),
                     qname: String::new(),
                     qtype: 0,
-                    headers: vec![ProjectHeader { name: "Host".into(), value: "127.0.0.1".into() }],
+                    headers: vec![ProjectHeader {
+                        name: "Host".into(),
+                        value: "127.0.0.1".into(),
+                    }],
                 }],
                 server: Some("oast.example.com:8443".into()),
                 poll_secs: Some(10),
@@ -1787,22 +1980,56 @@ mod tests {
                 listener_port: 0,
             }],
             site_links: vec![("https://example.com".into(), "/unvisited".into())],
-            scanner: ProjectScanner { speed: 2, accuracy: 0, extra_checks: true, disabled_checks: vec!["active.csrf".into()], disabled_insertion_points: vec!["header".into()], crawl_max_depth: Some(2), crawl_max_locations: Some(100), crawl_robots: Some(false), crawl_sitemap: Some(true), crawl_engine: Some("Lightpanda".into()), ..Default::default() },
+            scanner: ProjectScanner {
+                speed: 2,
+                accuracy: 0,
+                extra_checks: true,
+                disabled_checks: vec!["active.csrf".into()],
+                disabled_insertion_points: vec!["header".into()],
+                crawl_max_depth: Some(2),
+                crawl_max_locations: Some(100),
+                crawl_robots: Some(false),
+                crawl_sitemap: Some(true),
+                crawl_engine: Some("Lightpanda".into()),
+                ..Default::default()
+            },
             proxy: ProjectProxy {
-                listeners: vec![ProjectListener { bind: "127.0.0.1".into(), port: 18_090, http2: false }],
+                listeners: vec![ProjectListener {
+                    bind: "127.0.0.1".into(),
+                    port: 18_090,
+                    http2: false,
+                }],
                 ws_intercept_client: false,
                 ws_intercept_server: true,
                 redirects: vec![(18_090, "127.0.0.1".into(), 3001)],
-                response_rules: Some(crate::net::ResponseInterceptRules { enabled: true, ..Default::default() }),
+                response_rules: Some(crate::net::ResponseInterceptRules {
+                    enabled: true,
+                    ..Default::default()
+                }),
                 tls_pass_through: vec!["*.bank.example".into()],
-                streaming_responses: crate::streaming::StreamSettings { urls: vec!["https://api.example/stream".into()], event_stream: false, store: false, strip_chunked: true },
+                streaming_responses: crate::streaming::StreamSettings {
+                    urls: vec!["https://api.example/stream".into()],
+                    event_stream: false,
+                    store: false,
+                    strip_chunked: true,
+                },
                 listener_http2: false,
                 ws_match_replace_rules: vec![crate::ws_rules::WsRule::new(true, "a", "b")],
                 ws_match_replace_disable_out_of_scope: true,
                 ws_intercept_in_scope_only: true,
                 strip_sec_websocket_extensions: false,
             },
-            tasks: ProjectTasks { live_passive_crawl: false, live_audit: true, scans: vec![ProjectScanTask { name: "Audit of https://example.com/".into(), entries: Vec::new(), urls: vec!["https://example.com/".into()], audit_only: true, paused: true }] },
+            tasks: ProjectTasks {
+                live_passive_crawl: false,
+                live_audit: true,
+                scans: vec![ProjectScanTask {
+                    name: "Audit of https://example.com/".into(),
+                    entries: Vec::new(),
+                    urls: vec!["https://example.com/".into()],
+                    audit_only: true,
+                    paused: true,
+                }],
+            },
             layout: ProjectLayout {
                 tab: "repeater".into(),
                 proxy_sub: Some(1),
@@ -1870,10 +2097,21 @@ mod tests {
     fn pre_j01_file_loads_with_defaults_for_new_sections() {
         let mut v = serde_json::to_value(sample()).unwrap();
         let obj = v.as_object_mut().unwrap();
-        for k in ["crawl_items", "site_links", "scanner", "proxy", "tasks", "layout", "editors"] {
+        for k in [
+            "crawl_items",
+            "site_links",
+            "scanner",
+            "proxy",
+            "tasks",
+            "layout",
+            "editors",
+        ] {
             assert!(obj.remove(k).is_some(), "{k} missing from sample");
         }
-        obj["issues"][0].as_object_mut().unwrap().remove("timestamp");
+        obj["issues"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("timestamp");
         obj["logger"][0].as_object_mut().unwrap().remove("mime");
         let text = format!("{PROJECT_MAGIC} 2\n{}", serde_json::to_string(&v).unwrap());
         let d = import_json(&text).unwrap();
@@ -1891,7 +2129,10 @@ mod tests {
         let back = import_json(&export_json(&sample()).unwrap()).unwrap();
         assert_eq!(back.layout.tab, "repeater");
         assert_eq!(back.proxy.listeners[0].port, 18_090);
-        assert_eq!(back.editors.comparer_items, vec!["a".to_string(), "b".to_string()]);
+        assert_eq!(
+            back.editors.comparer_items,
+            vec!["a".to_string(), "b".to_string()]
+        );
     }
 
     #[test]
@@ -2059,8 +2300,14 @@ mod tests {
         let loaded = load(&path).unwrap();
 
         assert_eq!(loaded.history[0].request, request);
-        assert_eq!(loaded.history[0].response.as_deref(), Some(response.as_bytes()));
-        assert_eq!(loaded.history[0].note.as_deref(), Some("n\u{f6}te \u{2713}"));
+        assert_eq!(
+            loaded.history[0].response.as_deref(),
+            Some(response.as_bytes())
+        );
+        assert_eq!(
+            loaded.history[0].note.as_deref(),
+            Some("n\u{f6}te \u{2713}")
+        );
         assert_eq!(loaded.decoder.input, "\u{fffd}\u{4e16}\u{754c}");
         assert!(loaded.history[0].request.windows(2).any(|w| w == b"\r\n"));
         let _ = std::fs::remove_file(&path);
@@ -2071,7 +2318,12 @@ mod tests {
         let full = sample();
         let exported = settings_only(&full);
         // Data is gone, settings stay.
-        assert!(exported.history.is_empty() && exported.issues.is_empty() && exported.repeaters.is_empty() && exported.websockets.is_empty());
+        assert!(
+            exported.history.is_empty()
+                && exported.issues.is_empty()
+                && exported.repeaters.is_empty()
+                && exported.websockets.is_empty()
+        );
         assert_eq!(exported.session_rules.len(), full.session_rules.len());
         assert_eq!(exported.scope.len(), full.scope.len());
         assert_eq!(exported.intercept_rules, full.intercept_rules);
@@ -2083,7 +2335,11 @@ mod tests {
         // stored cookies survive, its rules are replaced.
         let other = ProjectData {
             history: full.history.clone(),
-            cookie_jar: Some(ProjectCookieJar { cookies: full.cookie_jar.as_ref().unwrap().cookies.clone(), update_from: vec!["Proxy".into()], apply_to: Vec::new() }),
+            cookie_jar: Some(ProjectCookieJar {
+                cookies: full.cookie_jar.as_ref().unwrap().cookies.clone(),
+                update_from: vec!["Proxy".into()],
+                apply_to: Vec::new(),
+            }),
             ..Default::default()
         };
         let merged = apply_settings(&other, &exported);
@@ -2097,8 +2353,13 @@ mod tests {
         let mut configured = full.clone();
         configured.listener_port = 9191;
         let reset = with_default_settings(&configured);
-        assert!(reset.session_rules.is_empty() && reset.scope.is_empty() && reset.macros.is_empty());
-        assert!(reset.intercept_rules.is_none(), "None restores Burp's default rules on load");
+        assert!(
+            reset.session_rules.is_empty() && reset.scope.is_empty() && reset.macros.is_empty()
+        );
+        assert!(
+            reset.intercept_rules.is_none(),
+            "None restores Burp's default rules on load"
+        );
         assert_eq!(reset.history.len(), full.history.len());
         assert_eq!(reset.listener_port, 9191);
         assert_eq!(reset.cookie_jar.as_ref().unwrap().cookies.len(), 2);
@@ -2110,8 +2371,18 @@ mod tests {
     fn binary_repeater_response_round_trips() {
         let bytes = vec![b'H', 0xff, 0x00, 0xfe];
         let (response, response_b64) = ProjectRepeater::encode_response(Some(&bytes));
-        let tab = ProjectRepeater { name: "1".into(), host: "h".into(), port: 80, https: false, request: String::new(), response, result_line: String::new(), response_b64 };
-        let back: ProjectRepeater = serde_json::from_str(&serde_json::to_string(&tab).unwrap()).unwrap();
+        let tab = ProjectRepeater {
+            name: "1".into(),
+            host: "h".into(),
+            port: 80,
+            https: false,
+            request: String::new(),
+            response,
+            result_line: String::new(),
+            response_b64,
+        };
+        let back: ProjectRepeater =
+            serde_json::from_str(&serde_json::to_string(&tab).unwrap()).unwrap();
         assert_eq!(back.response_bytes(), Some(bytes));
     }
 
@@ -2126,7 +2397,10 @@ mod tests {
         save(&path, &ProjectData::default()).unwrap();
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
         save(&path, &ProjectData::default()).unwrap();
-        assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -2138,18 +2412,32 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         for i in 0..5u64 {
             for name in ["a.json", "b.json"] {
-                let data = ProjectData { saved_at: i, ..Default::default() };
+                let data = ProjectData {
+                    saved_at: i,
+                    ..Default::default()
+                };
                 save_in_background(dir.join(name), data, Box::new(|r| r.unwrap()));
             }
         }
         // A `done` that panics does not take the worker down.
-        save_in_background(dir.join("c.json"), ProjectData::default(), Box::new(|_| panic!("callback failure")));
-        save_in_background(dir.join("d.json"), ProjectData::default(), Box::new(|r| r.unwrap()));
+        save_in_background(
+            dir.join("c.json"),
+            ProjectData::default(),
+            Box::new(|_| panic!("callback failure")),
+        );
+        save_in_background(
+            dir.join("d.json"),
+            ProjectData::default(),
+            Box::new(|r| r.unwrap()),
+        );
         wait_for_saves();
         for name in ["a.json", "b.json"] {
             assert_eq!(load(&dir.join(name)).unwrap().saved_at, 4, "{name}");
         }
-        assert!(load(&dir.join("d.json")).is_ok(), "the queue kept running after a panicking callback");
+        assert!(
+            load(&dir.join("d.json")).is_ok(),
+            "the queue kept running after a panicking callback"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -2164,14 +2452,26 @@ mod tests {
         for i in 0..20u64 {
             let data = ProjectData {
                 saved_at: i,
-                history: (0..200).map(|k| ProjectHistory::from_entry(&crate::net::HistEntry { id: k, req_raw: vec![b'x'; 2000].into(), ..Default::default() })).collect(),
+                history: (0..200)
+                    .map(|k| {
+                        ProjectHistory::from_entry(&crate::net::HistEntry {
+                            id: k,
+                            req_raw: vec![b'x'; 2000].into(),
+                            ..Default::default()
+                        })
+                    })
+                    .collect(),
                 ..Default::default()
             };
             let d = done.clone();
-            save_in_background(path.clone(), data, Box::new(move |r| {
-                r.unwrap();
-                d.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            }));
+            save_in_background(
+                path.clone(),
+                data,
+                Box::new(move |r| {
+                    r.unwrap();
+                    d.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                }),
+            );
         }
         wait_for_saves();
         let loaded = load(&path).unwrap();
@@ -2188,7 +2488,12 @@ mod tests {
     fn history_bodies_are_spilled_and_saved_exactly() {
         let shared = crate::net::Shared::new();
         let body: Vec<u8> = (0..5000u32).map(|i| (i % 256) as u8).collect();
-        shared.push_history(crate::net::HistEntry { id: 1, req_raw: b"GET / HTTP/1.1\r\n\r\n".into(), resp_raw: Some(body.clone().into()), ..Default::default() });
+        shared.push_history(crate::net::HistEntry {
+            id: 1,
+            req_raw: b"GET / HTTP/1.1\r\n\r\n".into(),
+            resp_raw: Some(body.clone().into()),
+            ..Default::default()
+        });
         let e = shared.history.snapshot()[0].clone();
         if cfg!(unix) {
             assert!(e.resp_raw.as_ref().unwrap().is_stored());
@@ -2196,7 +2501,10 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("wp-spill-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("p.json");
-        let data = ProjectData { history: vec![ProjectHistory::from_entry(&e)], ..Default::default() };
+        let data = ProjectData {
+            history: vec![ProjectHistory::from_entry(&e)],
+            ..Default::default()
+        };
         save(&path, &data).unwrap();
         let back = load(&path).unwrap().history[0].to_entry();
         assert_eq!(back.resp_raw.unwrap(), body);
@@ -2216,12 +2524,20 @@ mod tests {
         // pages of the body store are reported apart; the kernel can drop
         // and reread them.
         let field = |name: &str| {
-            std::fs::read_to_string("/proc/self/status").ok().and_then(|s| {
-                s.lines().find(|l| l.starts_with(name)).and_then(|l| l.split_whitespace().nth(1)?.parse::<u64>().ok())
-            }).unwrap_or(0)
+            std::fs::read_to_string("/proc/self/status")
+                .ok()
+                .and_then(|s| {
+                    s.lines()
+                        .find(|l| l.starts_with(name))
+                        .and_then(|l| l.split_whitespace().nth(1)?.parse::<u64>().ok())
+                })
+                .unwrap_or(0)
         };
         let rss = || field("RssAnon:");
-        let n: usize = std::env::var("WEBPROBE_BENCH_N").ok().and_then(|v| v.parse().ok()).unwrap_or(20_000);
+        let n: usize = std::env::var("WEBPROBE_BENCH_N")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(20_000);
         let before = rss();
         let body = "x".repeat(4096);
         let shared = crate::net::Shared::new();
@@ -2233,19 +2549,34 @@ mod tests {
                 port: 80,
                 path: format!("/item/{i}?q=1"),
                 status: "200".into(),
-                req_raw: format!("GET /item/{i}?q=1 HTTP/1.1\r\nHost: app.test\r\n\r\n").into_bytes().into(),
-                resp_raw: Some(format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n{body}").into_bytes().into()),
+                req_raw: format!("GET /item/{i}?q=1 HTTP/1.1\r\nHost: app.test\r\n\r\n")
+                    .into_bytes()
+                    .into(),
+                resp_raw: Some(
+                    format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n{body}")
+                        .into_bytes()
+                        .into(),
+                ),
                 ..Default::default()
             });
         }
         let held = rss();
         // Not the temp dir: /tmp is often tmpfs (RAM).
-        let dir = std::env::var_os("HOME").map(std::path::PathBuf::from).unwrap_or_else(std::env::temp_dir).join(".cache/webprobe").join(format!("hist-bench-{}", std::process::id()));
+        let dir = std::env::var_os("HOME")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir)
+            .join(".cache/webprobe")
+            .join(format!("hist-bench-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("p.json");
         let t0 = std::time::Instant::now();
         let data = ProjectData {
-            history: shared.history.snapshot().iter().map(ProjectHistory::from_entry).collect(),
+            history: shared
+                .history
+                .snapshot()
+                .iter()
+                .map(ProjectHistory::from_entry)
+                .collect(),
             ..Default::default()
         };
         save(&path, &data).unwrap();
@@ -2275,18 +2606,47 @@ mod tests {
             https: true,
             path: "/login.php?x=1".into(),
             status: "200".into(),
-            req_raw: b"POST /login.php?x=1 HTTP/1.1\r\nHost: app.test\r\n\r\nu=a".to_vec().into(),
+            req_raw: b"POST /login.php?x=1 HTTP/1.1\r\nHost: app.test\r\n\r\nu=a"
+                .to_vec()
+                .into(),
             resp_raw: Some(vec![b'H', 0xff, 0x00, b'\n'].into()),
             note: Some("n".into()),
             ..Default::default()
         };
-        let e = crate::net::HistEntry { highlight: Some(3), edited: true, ip: "192.0.2.7".into(), listener_port: 8443, ..e };
+        let e = crate::net::HistEntry {
+            highlight: Some(3),
+            edited: true,
+            ip: "192.0.2.7".into(),
+            listener_port: 8443,
+            ..e
+        };
         let json = serde_json::to_string(&ProjectHistory::from_entry(&e)).unwrap();
         let back: ProjectHistory = serde_json::from_str(&json).unwrap();
         let back = back.to_entry();
-        assert_eq!((back.highlight, back.edited, back.ip.as_str(), back.listener_port), (Some(3), true, "192.0.2.7", 8443), "table state survives a reopen");
-        assert_eq!((back.id, back.ts, back.method.as_str(), back.port, back.https), (4, 1_800_000_000, "POST", 8443, true));
-        assert_eq!((back.req_raw.clone(), back.resp_raw.clone()), (e.req_raw.clone(), e.resp_raw.clone()));
+        assert_eq!(
+            (
+                back.highlight,
+                back.edited,
+                back.ip.as_str(),
+                back.listener_port
+            ),
+            (Some(3), true, "192.0.2.7", 8443),
+            "table state survives a reopen"
+        );
+        assert_eq!(
+            (
+                back.id,
+                back.ts,
+                back.method.as_str(),
+                back.port,
+                back.https
+            ),
+            (4, 1_800_000_000, "POST", 8443, true)
+        );
+        assert_eq!(
+            (back.req_raw.clone(), back.resp_raw.clone()),
+            (e.req_raw.clone(), e.resp_raw.clone())
+        );
         assert_eq!(back.resp_len, 4);
         assert!(back.params, "derived columns are recomputed");
         assert_eq!(back.extension, "php");
@@ -2296,18 +2656,29 @@ mod tests {
             name: "SQL injection".into(),
             confidence: "Firm".into(),
             type_id: 1_049_088,
-            evidence: vec![crate::scan::ScanEvidence::new(b"GET /?q=' HTTP/1.1\r\n\r\n", Some(&b"HTTP/1.1 500\r\n\r\n"[..]))],
+            evidence: vec![crate::scan::ScanEvidence::new(
+                b"GET /?q=' HTTP/1.1\r\n\r\n",
+                Some(&b"HTTP/1.1 500\r\n\r\n"[..]),
+            )],
             ..Default::default()
         };
         let i2 = ProjectIssue::from_issue(&issue).to_issue();
-        assert_eq!((i2.id, i2.sev.as_str(), i2.type_id, i2.evidence.len()), (9, "high", 1_049_088, 1));
+        assert_eq!(
+            (i2.id, i2.sev.as_str(), i2.type_id, i2.evidence.len()),
+            (9, "high", 1_049_088, 1)
+        );
         assert_eq!(&*i2.evidence[0].request, &*issue.evidence[0].request);
     }
 
     #[test]
     fn cookie_jar_round_trips_and_old_files_get_the_default_jar() {
         let mut jar = crate::cookie_jar::CookieJar::default();
-        jar.set_cookie("a.example.com", "/x/y", "sid=1; Domain=example.com; Path=/; Secure; Max-Age=100", 1_000);
+        jar.set_cookie(
+            "a.example.com",
+            "/x/y",
+            "sid=1; Domain=example.com; Path=/; Secure; Max-Age=100",
+            1_000,
+        );
         jar.set_cookie("a.example.com", "/x/y", "local=2", 1_000);
         jar.update_from.push("Intruder".into());
         let saved = ProjectCookieJar::from_jar(&jar);
@@ -2336,14 +2707,20 @@ mod tests {
             confidence: "Firm".into(),
             timestamp: 1,
             type_id: 1_049_088,
-            evidence: vec![ProjectEvidence::encode(&request, Some(&response)), ProjectEvidence::encode(&request, None)],
+            evidence: vec![
+                ProjectEvidence::encode(&request, Some(&response)),
+                ProjectEvidence::encode(&request, None),
+            ],
             ident: String::new(),
         };
         let json = serde_json::to_string(&issue).unwrap();
         let back: ProjectIssue = serde_json::from_str(&json).unwrap();
         assert_eq!(back.type_id, 1_049_088);
         assert_eq!(back.evidence.len(), 2);
-        assert_eq!(back.evidence[0].decode(), Some((request.clone(), Some(response))));
+        assert_eq!(
+            back.evidence[0].decode(),
+            Some((request.clone(), Some(response)))
+        );
         assert_eq!(back.evidence[1].decode(), Some((request, None)));
 
         // A file written before evidence existed: both fields take defaults,
@@ -2353,12 +2730,23 @@ mod tests {
         assert_eq!((old.type_id, old.evidence.len()), (0, 0));
         assert!(!serde_json::to_string(&old).unwrap().contains("evidence"));
         // Damaged base64 is skipped, not a panic.
-        assert_eq!(ProjectEvidence { request_b64: "***".into(), response_b64: None }.decode(), None);
+        assert_eq!(
+            ProjectEvidence {
+                request_b64: "***".into(),
+                response_b64: None
+            }
+            .decode(),
+            None
+        );
     }
 
     #[test]
     fn binary_messages_round_trip_exactly() {
-        let body: Vec<u8> = [b"HTTP/1.1 200 OK\r\nContent-Type: image/png\r\n\r\n".to_vec(), vec![0x89, b'P', b'N', b'G', 0xff, 0x00, 0xfe]].concat();
+        let body: Vec<u8> = [
+            b"HTTP/1.1 200 OK\r\nContent-Type: image/png\r\n\r\n".to_vec(),
+            vec![0x89, b'P', b'N', b'G', 0xff, 0x00, 0xfe],
+        ]
+        .concat();
         let (text, b64) = encode_message(&body);
         assert!(b64.is_some(), "non-UTF-8 bytes are kept exactly");
         assert_eq!(decode_message(&text, b64.as_deref()), body);
@@ -2397,7 +2785,10 @@ mod tests {
         assert_eq!(loaded.history.len(), 1000);
         assert_eq!(loaded.history[0].id, 0);
         assert_eq!(loaded.history[999].path, "/item/999");
-        assert_eq!(loaded.history[999].response.as_deref(), Some(&b"HTTP/1.1 200 OK\r\n\r\n999"[..]));
+        assert_eq!(
+            loaded.history[999].response.as_deref(),
+            Some(&b"HTTP/1.1 200 OK\r\n\r\n999"[..])
+        );
         let _ = std::fs::remove_file(&path);
     }
 

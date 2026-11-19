@@ -126,7 +126,10 @@ impl MrScope {
     /// lists are applied to one side only, so a scope of the other side
     /// would never apply.
     pub fn for_side(request_side: bool) -> Vec<MrScope> {
-        Self::ALL.into_iter().filter(|s| s.is_request() == request_side).collect()
+        Self::ALL
+            .into_iter()
+            .filter(|s| s.is_request() == request_side)
+            .collect()
     }
 
     /// Default scope for a newly added request or response rule.
@@ -178,7 +181,9 @@ impl MrRule {
     /// An empty match on a header scope with a replacement: Burp adds the
     /// replacement as a new header line.
     pub fn adds_header(&self) -> bool {
-        self.match_.is_empty() && !self.replacement.is_empty() && matches!(self.scope, MrScope::RequestHeader | MrScope::ResponseHeader)
+        self.match_.is_empty()
+            && !self.replacement.is_empty()
+            && matches!(self.scope, MrScope::RequestHeader | MrScope::ResponseHeader)
     }
 
     /// Empty patterns are valid. Invalid regexes are rejected.
@@ -206,7 +211,13 @@ pub fn apply_rules(bytes: &[u8], rules: &[MrRule]) -> Vec<u8> {
     for rule in rules {
         let input = current.as_deref().unwrap_or(bytes);
         if let Some(next) = apply_rule(input, rule) {
-            body_edited |= matches!(rule.scope, MrScope::RequestBody | MrScope::ResponseBody | MrScope::RequestParamName | MrScope::RequestParamValue);
+            body_edited |= matches!(
+                rule.scope,
+                MrScope::RequestBody
+                    | MrScope::ResponseBody
+                    | MrScope::RequestParamName
+                    | MrScope::RequestParamValue
+            );
             current = Some(next);
         }
     }
@@ -292,12 +303,7 @@ fn apply_rule(bytes: &[u8], rule: &MrRule) -> Option<Vec<u8>> {
                 &engine,
                 rule.replacement.as_bytes(),
             )?;
-            Some(replace_span(
-                bytes,
-                0,
-                parts.first_line_end,
-                &replaced,
-            ))
+            Some(replace_span(bytes, 0, parts.first_line_end, &replaced))
         }
         MrScope::RequestHeader | MrScope::ResponseHeader => {
             apply_header(bytes, &parts, &engine, rule.replacement.as_bytes())
@@ -318,27 +324,19 @@ fn apply_rule(bytes: &[u8], rule: &MrRule) -> Option<Vec<u8>> {
                 &replaced,
             ))
         }
-        MrScope::RequestParamName | MrScope::RequestParamValue => {
-            apply_params(
-                bytes,
-                &parts,
-                rule.scope == MrScope::RequestParamName,
-                &engine,
-                rule.replacement.as_bytes(),
-            )
-        }
+        MrScope::RequestParamName | MrScope::RequestParamValue => apply_params(
+            bytes,
+            &parts,
+            rule.scope == MrScope::RequestParamName,
+            &engine,
+            rule.replacement.as_bytes(),
+        ),
     }
 }
 
-fn replace_target(
-    target: &[u8],
-    engine: &MatchEngine<'_>,
-    replacement: &[u8],
-) -> Option<Vec<u8>> {
+fn replace_target(target: &[u8], engine: &MatchEngine<'_>, replacement: &[u8]) -> Option<Vec<u8>> {
     match engine {
-        MatchEngine::Literal(needle) => {
-            replace_literal_all(target, needle, replacement)
-        }
+        MatchEngine::Literal(needle) => replace_literal_all(target, needle, replacement),
         MatchEngine::Regex(regex) => {
             let rep = java_replacement(&String::from_utf8_lossy(replacement), regex.captures_len());
             match regex.replace_all(target, rep.as_bytes()) {
@@ -349,11 +347,7 @@ fn replace_target(
     }
 }
 
-fn replace_literal_all(
-    haystack: &[u8],
-    needle: &[u8],
-    replacement: &[u8],
-) -> Option<Vec<u8>> {
+fn replace_literal_all(haystack: &[u8], needle: &[u8], replacement: &[u8]) -> Option<Vec<u8>> {
     if needle.is_empty() || needle.len() > haystack.len() {
         return None;
     }
@@ -429,7 +423,8 @@ fn apply_header(
 
 /// Append `line` as the last header line, with the message's line ending.
 fn add_header(bytes: &[u8], parts: &HttpParts, line: &[u8]) -> Vec<u8> {
-    let crlf = bytes[..parts.header_start].ends_with(b"\r\n") || parts.header_start == parts.first_line_end;
+    let crlf = bytes[..parts.header_start].ends_with(b"\r\n")
+        || parts.header_start == parts.first_line_end;
     let eol: &[u8] = if crlf { b"\r\n" } else { b"\n" };
     let mut out = Vec::with_capacity(bytes.len() + line.len() + 2);
     if parts.header_start == parts.first_line_end && parts.header_end == bytes.len() {
@@ -530,9 +525,7 @@ fn collect_param_edits(
             };
 
             if range.end > range.start {
-                if let Some(replaced) =
-                    replace_target(&pairs[range.clone()], engine, replacement)
-                {
+                if let Some(replaced) = replace_target(&pairs[range.clone()], engine, replacement) {
                     edits.push(Edit {
                         start: base_offset + range.start,
                         end: base_offset + range.end,
@@ -550,10 +543,7 @@ fn collect_param_edits(
 }
 
 fn apply_edits(bytes: &[u8], edits: &[Edit]) -> Vec<u8> {
-    let extra: usize = edits
-        .iter()
-        .map(|edit| edit.replacement.len())
-        .sum();
+    let extra: usize = edits.iter().map(|edit| edit.replacement.len()).sum();
     let mut out = Vec::with_capacity(bytes.len().saturating_add(extra));
     let mut pos = 0;
 
@@ -570,12 +560,7 @@ fn apply_edits(bytes: &[u8], edits: &[Edit]) -> Vec<u8> {
     out
 }
 
-fn replace_span(
-    bytes: &[u8],
-    start: usize,
-    end: usize,
-    replacement: &[u8],
-) -> Vec<u8> {
+fn replace_span(bytes: &[u8], start: usize, end: usize, replacement: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(
         bytes
             .len()
@@ -636,10 +621,7 @@ fn parse_http(bytes: &[u8]) -> HttpParts {
         header_start,
         header_end,
         body_start,
-        is_response: starts_with_ignore_ascii_case(
-            &bytes[..first_line_end],
-            b"HTTP/",
-        ),
+        is_response: starts_with_ignore_ascii_case(&bytes[..first_line_end], b"HTTP/"),
     }
 }
 
@@ -650,12 +632,11 @@ fn line_bounds(bytes: &[u8], start: usize, limit: usize) -> (usize, usize) {
     match bytes[start..limit].iter().position(|&b| b == b'\n') {
         Some(offset) => {
             let newline = start + offset;
-            let content_end =
-                if newline > start && bytes[newline - 1] == b'\r' {
-                    newline - 1
-                } else {
-                    newline
-                };
+            let content_end = if newline > start && bytes[newline - 1] == b'\r' {
+                newline - 1
+            } else {
+                newline
+            };
             (content_end, newline + 1)
         }
         None => (limit, limit),
@@ -667,15 +648,10 @@ fn header_is_form_urlencoded(bytes: &[u8], parts: &HttpParts) -> bool {
         return false;
     };
     let media_type = value.split(|&b| b == b';').next().unwrap_or(value);
-    trim_ascii_ws(media_type)
-        .eq_ignore_ascii_case(b"application/x-www-form-urlencoded")
+    trim_ascii_ws(media_type).eq_ignore_ascii_case(b"application/x-www-form-urlencoded")
 }
 
-fn header_value<'a>(
-    bytes: &'a [u8],
-    parts: &HttpParts,
-    name: &[u8],
-) -> Option<&'a [u8]> {
+fn header_value<'a>(bytes: &'a [u8], parts: &HttpParts, name: &[u8]) -> Option<&'a [u8]> {
     let mut pos = parts.header_start;
     while pos < parts.header_end {
         let (content_end, next) = line_bounds(bytes, pos, parts.header_end);
@@ -736,8 +712,7 @@ fn is_http_space(byte: u8) -> bool {
 }
 
 fn starts_with_ignore_ascii_case(haystack: &[u8], needle: &[u8]) -> bool {
-    haystack.len() >= needle.len()
-        && haystack[..needle.len()].eq_ignore_ascii_case(needle)
+    haystack.len() >= needle.len() && haystack[..needle.len()].eq_ignore_ascii_case(needle)
 }
 
 fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
@@ -752,9 +727,7 @@ fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     let last_start = haystack.len() - needle.len();
     let mut at = 0;
     while at <= last_start {
-        if haystack[at] == first
-            && &haystack[at..at + needle.len()] == needle
-        {
+        if haystack[at] == first && &haystack[at..at + needle.len()] == needle {
             return Some(at);
         }
         at += 1;
@@ -767,7 +740,12 @@ mod tests {
     use super::*;
 
     fn rule(scope: MrScope, m: &str, r: &str, regex: bool) -> MrRule {
-        MrRule { match_: m.into(), replacement: r.into(), is_regex: regex, ..MrRule::new(scope) }
+        MrRule {
+            match_: m.into(),
+            replacement: r.into(),
+            is_regex: regex,
+            ..MrRule::new(scope)
+        }
     }
 
     fn apply(msg: &[u8], rules: &[MrRule]) -> String {
@@ -775,42 +753,119 @@ mod tests {
     }
 
     const REQ: &[u8] = b"POST /p?a=1&token=old HTTP/1.1\r\nHost: example.com\r\nUser-Agent: Mozilla/5.0\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 13\r\n\r\nuser=a&pw=old";
-    const RESP: &[u8] = b"HTTP/1.1 200 OK\r\nServer: nginx\r\nContent-Length: 11\r\n\r\nhello world";
+    const RESP: &[u8] =
+        b"HTTP/1.1 200 OK\r\nServer: nginx\r\nContent-Length: 11\r\n\r\nhello world";
 
     #[test]
     fn each_scope_edits_only_its_part() {
         // Headers, not the body or first line.
-        let out = apply(REQ, &[rule(MrScope::RequestHeader, "Mozilla/5.0", "WebProbe", false)]);
+        let out = apply(
+            REQ,
+            &[rule(
+                MrScope::RequestHeader,
+                "Mozilla/5.0",
+                "WebProbe",
+                false,
+            )],
+        );
         assert!(out.contains("User-Agent: WebProbe\r\n") && out.ends_with("pw=old"));
-        assert_eq!(apply(REQ, &[rule(MrScope::RequestHeader, "POST", "GET", false)]), String::from_utf8_lossy(REQ), "first line is not a header");
+        assert_eq!(
+            apply(REQ, &[rule(MrScope::RequestHeader, "POST", "GET", false)]),
+            String::from_utf8_lossy(REQ),
+            "first line is not a header"
+        );
         // First line only.
-        assert!(apply(REQ, &[rule(MrScope::RequestFirstLine, "HTTP/1.1", "HTTP/1.0", false)]).starts_with("POST /p?a=1&token=old HTTP/1.0\r\n"));
+        assert!(apply(
+            REQ,
+            &[rule(
+                MrScope::RequestFirstLine,
+                "HTTP/1.1",
+                "HTTP/1.0",
+                false
+            )]
+        )
+        .starts_with("POST /p?a=1&token=old HTTP/1.0\r\n"));
         // Parameter names and values: query and form body, not headers.
-        let out = apply(REQ, &[rule(MrScope::RequestParamValue, "old", "new", false)]);
-        assert!(out.starts_with("POST /p?a=1&token=new ") && out.ends_with("user=a&pw=new"), "{out}");
-        let out = apply(REQ, &[rule(MrScope::RequestParamName, "pw", "password", false)]);
+        let out = apply(
+            REQ,
+            &[rule(MrScope::RequestParamValue, "old", "new", false)],
+        );
+        assert!(
+            out.starts_with("POST /p?a=1&token=new ") && out.ends_with("user=a&pw=new"),
+            "{out}"
+        );
+        let out = apply(
+            REQ,
+            &[rule(MrScope::RequestParamName, "pw", "password", false)],
+        );
         assert!(out.ends_with("user=a&password=old"), "{out}");
         // Response scopes leave requests alone, and the other way round.
-        assert_eq!(apply(REQ, &[rule(MrScope::ResponseBody, "old", "x", false)]), String::from_utf8_lossy(REQ));
-        assert_eq!(apply(RESP, &[rule(MrScope::RequestHeader, "nginx", "x", false)]), String::from_utf8_lossy(RESP));
-        assert!(apply(RESP, &[rule(MrScope::ResponseHeader, "nginx", "hidden", false)]).contains("Server: hidden\r\n"));
+        assert_eq!(
+            apply(REQ, &[rule(MrScope::ResponseBody, "old", "x", false)]),
+            String::from_utf8_lossy(REQ)
+        );
+        assert_eq!(
+            apply(RESP, &[rule(MrScope::RequestHeader, "nginx", "x", false)]),
+            String::from_utf8_lossy(RESP)
+        );
+        assert!(apply(
+            RESP,
+            &[rule(MrScope::ResponseHeader, "nginx", "hidden", false)]
+        )
+        .contains("Server: hidden\r\n"));
         // A header replaced by nothing is removed with its line ending.
-        let out = apply(RESP, &[rule(MrScope::ResponseHeader, "^Server: .*$", "", true)]);
-        assert_eq!(out, "HTTP/1.1 200 OK\r\nContent-Length: 11\r\n\r\nhello world");
+        let out = apply(
+            RESP,
+            &[rule(MrScope::ResponseHeader, "^Server: .*$", "", true)],
+        );
+        assert_eq!(
+            out,
+            "HTTP/1.1 200 OK\r\nContent-Length: 11\r\n\r\nhello world"
+        );
     }
 
     #[test]
     fn body_edits_restamp_content_length() {
-        let out = apply(RESP, &[rule(MrScope::ResponseBody, "world", "there, everyone", false)]);
-        assert_eq!(out, "HTTP/1.1 200 OK\r\nServer: nginx\r\nContent-Length: 21\r\n\r\nhello there, everyone");
-        let out = apply(REQ, &[rule(MrScope::RequestParamValue, "old", "longer", false)]);
-        assert!(out.contains("Content-Length: 16\r\n") && out.ends_with("pw=longer"), "{out}");
+        let out = apply(
+            RESP,
+            &[rule(
+                MrScope::ResponseBody,
+                "world",
+                "there, everyone",
+                false,
+            )],
+        );
+        assert_eq!(
+            out,
+            "HTTP/1.1 200 OK\r\nServer: nginx\r\nContent-Length: 21\r\n\r\nhello there, everyone"
+        );
+        let out = apply(
+            REQ,
+            &[rule(MrScope::RequestParamValue, "old", "longer", false)],
+        );
+        assert!(
+            out.contains("Content-Length: 16\r\n") && out.ends_with("pw=longer"),
+            "{out}"
+        );
         // A header-only edit leaves a deliberately set length alone.
-        let out = apply(RESP, &[rule(MrScope::ResponseHeader, "Content-Length: 11", "Content-Length: 5", false)]);
+        let out = apply(
+            RESP,
+            &[rule(
+                MrScope::ResponseHeader,
+                "Content-Length: 11",
+                "Content-Length: 5",
+                false,
+            )],
+        );
         assert!(out.contains("Content-Length: 5\r\n"));
         // Chunked bodies keep their framing.
-        let chunked = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n";
-        assert!(!apply(chunked, &[rule(MrScope::ResponseBody, "hello", "HELLO", false)]).contains("Content-Length"));
+        let chunked =
+            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n";
+        assert!(!apply(
+            chunked,
+            &[rule(MrScope::ResponseBody, "hello", "HELLO", false)]
+        )
+        .contains("Content-Length"));
     }
 
     #[test]
@@ -828,7 +883,10 @@ mod tests {
         // Literal rules take the replacement as is.
         let r = rule(MrScope::ResponseBody, "world", "$1", false);
         assert!(apply(RESP, &[r]).ends_with("hello $1"));
-        assert!(!rule(MrScope::ResponseBody, "(", "x", true).is_active(), "invalid regex is inactive");
+        assert!(
+            !rule(MrScope::ResponseBody, "(", "x", true).is_active(),
+            "invalid regex is inactive"
+        );
     }
 
     #[test]
@@ -851,11 +909,21 @@ mod tests {
     fn rules_run_in_order_and_disabled_or_empty_ones_are_skipped() {
         let a = rule(MrScope::ResponseBody, "hello", "goodbye", false);
         let b = rule(MrScope::ResponseBody, "goodbye", "ciao", false);
-        assert!(apply(RESP, &[a.clone(), b.clone()]).ends_with("ciao world"), "each rule sees the previous result");
+        assert!(
+            apply(RESP, &[a.clone(), b.clone()]).ends_with("ciao world"),
+            "each rule sees the previous result"
+        );
         assert!(apply(RESP, &[b.clone(), a.clone()]).ends_with("goodbye world"));
-        let off = MrRule { enabled: false, ..a.clone() };
+        let off = MrRule {
+            enabled: false,
+            ..a.clone()
+        };
         assert_eq!(apply(RESP, &[off]), String::from_utf8_lossy(RESP));
-        assert_eq!(apply(RESP, &[rule(MrScope::ResponseBody, "", "x", false)]), String::from_utf8_lossy(RESP), "empty match on a body does nothing");
+        assert_eq!(
+            apply(RESP, &[rule(MrScope::ResponseBody, "", "x", false)]),
+            String::from_utf8_lossy(RESP),
+            "empty match on a body does nothing"
+        );
     }
 
     #[test]
@@ -863,17 +931,37 @@ mod tests {
         let r = rule(MrScope::RequestHeader, "", "X-Test: 1", false);
         assert!(r.is_active());
         let out = apply(REQ, std::slice::from_ref(&r));
-        assert!(out.contains("Content-Length: 13\r\nX-Test: 1\r\n\r\nuser=a"), "{out}");
-        assert_eq!(apply(b"GET / HTTP/1.1\r\n\r\n", std::slice::from_ref(&r)), "GET / HTTP/1.1\r\nX-Test: 1\r\n\r\n");
-        assert_eq!(apply(b"GET / HTTP/1.1\nHost: h\n\n", &[r]), "GET / HTTP/1.1\nHost: h\nX-Test: 1\n\n");
-        let resp = apply(RESP, &[rule(MrScope::ResponseHeader, "", "Cache-Control: no-store", false)]);
+        assert!(
+            out.contains("Content-Length: 13\r\nX-Test: 1\r\n\r\nuser=a"),
+            "{out}"
+        );
+        assert_eq!(
+            apply(b"GET / HTTP/1.1\r\n\r\n", std::slice::from_ref(&r)),
+            "GET / HTTP/1.1\r\nX-Test: 1\r\n\r\n"
+        );
+        assert_eq!(
+            apply(b"GET / HTTP/1.1\nHost: h\n\n", &[r]),
+            "GET / HTTP/1.1\nHost: h\nX-Test: 1\n\n"
+        );
+        let resp = apply(
+            RESP,
+            &[rule(
+                MrScope::ResponseHeader,
+                "",
+                "Cache-Control: no-store",
+                false,
+            )],
+        );
         assert!(resp.contains("Content-Length: 11\r\nCache-Control: no-store\r\n\r\nhello"));
     }
 
     #[test]
     fn rule_table_edits_and_side_scopes() {
         assert_eq!(MrScope::for_side(true).len(), 5);
-        assert_eq!(MrScope::for_side(false), vec![MrScope::ResponseHeader, MrScope::ResponseBody]);
+        assert_eq!(
+            MrScope::for_side(false),
+            vec![MrScope::ResponseHeader, MrScope::ResponseBody]
+        );
         let mut v = Vec::new();
         edit_rules(&mut v, RuleEdit::Add, false);
         assert_eq!(v[0].scope, MrScope::ResponseHeader);

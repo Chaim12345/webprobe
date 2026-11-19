@@ -40,7 +40,10 @@ pub(crate) enum IpKind {
     Json(Vec<String>),
     /// multipart/form-data part `index` (0-based); `filename` is set for a
     /// file-upload part (burp.Zsdt / Ziqg, the parts with a filename attribute).
-    Multipart { index: usize, filename: Option<String> },
+    Multipart {
+        index: usize,
+        filename: Option<String>,
+    },
     /// A cookie in the Cookie header (Zg6r.COOKIE).
     Cookie,
     /// A request header value (Zbg8.HEADER); added when absent (Referer).
@@ -54,20 +57,31 @@ pub(crate) enum IpKind {
     /// Text of an XML element, raw range `start..end` (Zbg8.XML_PARAM from the
     /// request parser, burp.Zhjs: a text token, or the empty value between a
     /// start tag and its end tag).
-    XmlParam { start: usize, end: usize },
+    XmlParam {
+        start: usize,
+        end: usize,
+    },
     /// A self-closing XML element turned into `<tag>value</tag>`
     /// (Zbg8.XML_PARAM, Zuq.addStandaloneTagInsertionPoint): `close` is
     /// where `/>` starts (spaces before `/` included), `end` is just after
     /// the `>`.
-    XmlTag { close: usize, end: usize },
+    XmlTag {
+        close: usize,
+        end: usize,
+    },
     /// Value of an XML attribute, raw range `start..end` inside its quotes
     /// (Zbg8.XML_ATTR).
-    XmlAttr { start: usize, end: usize },
+    XmlAttr {
+        start: usize,
+        end: usize,
+    },
     /// Name of an added `1=1` parameter (Zbg8.PARAM_NAME_*, Zuq.Zp).
     ParamName(NameSite),
     /// A Base64 (or Base64url) value decoded from its parent
     /// (Zbg8.BASE64_ENCODED / BASE64URL_ENCODED, Zuq.ZS). Always nested.
-    Base64 { url: bool },
+    Base64 {
+        url: bool,
+    },
 }
 
 /// Where a parameter-name point adds its `1=1` parameter (Zuq.Zp).
@@ -143,11 +157,26 @@ pub(crate) struct InsertionPoint {
 
 impl InsertionPoint {
     pub(crate) fn new(kind: IpKind, name: impl Into<String>, value: impl Into<String>) -> Self {
-        InsertionPoint { kind, name: name.into(), value: value.into(), parent: None }
+        InsertionPoint {
+            kind,
+            name: name.into(),
+            value: value.into(),
+            parent: None,
+        }
     }
 
-    fn nested(parent: &InsertionPoint, kind: IpKind, name: impl Into<String>, value: impl Into<String>) -> Self {
-        InsertionPoint { kind, name: name.into(), value: value.into(), parent: Some(Box::new(parent.clone())) }
+    fn nested(
+        parent: &InsertionPoint,
+        kind: IpKind,
+        name: impl Into<String>,
+        value: impl Into<String>,
+    ) -> Self {
+        InsertionPoint {
+            kind,
+            name: name.into(),
+            value: value.into(),
+            parent: Some(Box::new(parent.clone())),
+        }
     }
 
     /// The base value as Burp's point encoder decodes it (burp.Zr4u runs
@@ -211,8 +240,18 @@ impl InsertionPoint {
 /// burp.Zsg0.Zy (short form) and Zsg0.ZX (`value_form`) for one point.
 fn point_label(t: PointType, name: &str, value_form: bool, bold: bool) -> String {
     // Zsg0.Zj(…, html, bold): the name HTML-escaped (Zucz.ZL) inside <b>.
-    let n = if bold { format!("<b>{}</b>", util::html_encode(name)) } else { name.to_string() };
-    let named = |what: &str| if value_form { format!("value of the {n} {what}") } else { format!("{n} {what}") };
+    let n = if bold {
+        format!("<b>{}</b>", util::html_encode(name))
+    } else {
+        name.to_string()
+    };
+    let named = |what: &str| {
+        if value_form {
+            format!("value of the {n} {what}")
+        } else {
+            format!("{n} {what}")
+        }
+    };
     match t {
         PointType::UrlParam | PointType::BodyParamUrlEncoded | PointType::BodyParamMultipart => {
             if value_form {
@@ -227,7 +266,9 @@ fn point_label(t: PointType, name: &str, value_form: bool, bold: bool) -> String
         PointType::Header => named("HTTP header"),
         PointType::JsonParam => named("JSON parameter"),
         PointType::ParamNameUrl => "name of an arbitrarily supplied URL parameter".into(),
-        PointType::ParamNameBodyUrlEncoded | PointType::ParamNameBodyMultipart => "name of an arbitrarily supplied body parameter".into(),
+        PointType::ParamNameBodyUrlEncoded | PointType::ParamNameBodyMultipart => {
+            "name of an arbitrarily supplied body parameter".into()
+        }
         // Zsg0 case 13 appends the folder's name (no bold) to the label;
         // WebProbe names folders "URL path folder N" already.
         PointType::PathFolder => {
@@ -238,8 +279,18 @@ fn point_label(t: PointType, name: &str, value_form: bool, bold: bool) -> String
                 format!("URL path folder {num}")
             }
         }
-        PointType::PathFilename => if value_form { "value of the URL path filename" } else { "URL path filename" }.into(),
-        PointType::EntireBody => if value_form { "value of the request body" } else { "request body" }.into(),
+        PointType::PathFilename => if value_form {
+            "value of the URL path filename"
+        } else {
+            "URL path filename"
+        }
+        .into(),
+        PointType::EntireBody => if value_form {
+            "value of the request body"
+        } else {
+            "request body"
+        }
+        .into(),
         PointType::Base64 => "Base64-decoded value".into(),
         PointType::Base64Url => "Base64Url-decoded value".into(),
     }
@@ -253,7 +304,12 @@ fn describe_chain(chain: &[&InsertionPoint], value_form: bool, bold: bool) -> St
     let mut s = String::new();
     for i in (0..n).rev() {
         let t = chain[i].kind.point_type();
-        s.push_str(&point_label(t, &chain[i].name, value_form && i == n - 1, bold));
+        s.push_str(&point_label(
+            t,
+            &chain[i].name,
+            value_form && i == n - 1,
+            bold,
+        ));
         if n > 1 && i > 0 {
             if matches!(t, PointType::Base64 | PointType::Base64Url) {
                 s.push_str(" of the ");
@@ -326,7 +382,10 @@ fn rule_param_matches(param: RuleParam, t: PointType) -> bool {
         RuleParam::Any => true,
         // burp.Zr2c: body_parameter covers URL-encoded and multipart body
         // parameters (and multipart attributes), not JSON or XML.
-        RuleParam::Body => matches!(t, PointType::BodyParamUrlEncoded | PointType::BodyParamMultipart),
+        RuleParam::Body => matches!(
+            t,
+            PointType::BodyParamUrlEncoded | PointType::BodyParamMultipart
+        ),
         RuleParam::Cookie => t == PointType::Cookie,
         RuleParam::XmlAttr => t == PointType::XmlAttr,
     }
@@ -338,7 +397,10 @@ fn rule_hits(rules: &[(RuleParam, RuleMatch)], p: &InsertionPoint) -> bool {
         rule_param_matches(*param, t)
             && match m {
                 RuleMatch::Is(x) => p.name.eq_ignore_ascii_case(x),
-                RuleMatch::Contains(x) => p.name.to_ascii_lowercase().contains(&x.to_ascii_lowercase()),
+                RuleMatch::Contains(x) => p
+                    .name
+                    .to_ascii_lowercase()
+                    .contains(&x.to_ascii_lowercase()),
             }
     })
 }
@@ -357,7 +419,12 @@ fn skipped_by_skip_all(p: &InsertionPoint) -> bool {
 pub(crate) fn insertion_type(kind: &IpKind) -> Option<&'static str> {
     match kind {
         IpKind::Query => Some("url"),
-        IpKind::Body | IpKind::Json(_) | IpKind::Multipart { .. } | IpKind::XmlParam { .. } | IpKind::XmlTag { .. } | IpKind::XmlAttr { .. } => Some("body"),
+        IpKind::Body
+        | IpKind::Json(_)
+        | IpKind::Multipart { .. }
+        | IpKind::XmlParam { .. }
+        | IpKind::XmlTag { .. }
+        | IpKind::XmlAttr { .. } => Some("body"),
         IpKind::Cookie => Some("cookie"),
         IpKind::Header => Some("header"),
         IpKind::PathFolder(_) => Some("folder"),
@@ -381,7 +448,8 @@ fn allowed(p: &InsertionPoint, config: &ScanConfig) -> bool {
             }
         }
         Some(parent) => {
-            if !config.insertion_enabled(crate::scan_config::NESTED_KEY) || !allowed(parent, config) {
+            if !config.insertion_enabled(crate::scan_config::NESTED_KEY) || !allowed(parent, config)
+            {
                 return false;
             }
         }
@@ -401,7 +469,11 @@ fn allowed(p: &InsertionPoint, config: &ScanConfig) -> bool {
 /// not a point per element and a nested walk per point: the slots of
 /// `scan::oob_slots` are computed on the UI thread.
 pub(crate) fn audit_points(req: &str, config: &ScanConfig) -> Vec<InsertionPoint> {
-    let mut sink = Sink { config, out: Vec::new(), base: Vec::new() };
+    let mut sink = Sink {
+        config,
+        out: Vec::new(),
+        base: Vec::new(),
+    };
     build_points(req, &mut sink);
     sink.out
 }
@@ -528,9 +600,13 @@ fn body_kind(ct_raw: &str, body: &str) -> BodyKind {
     }
     let ct = ct_raw.to_ascii_lowercase();
     let sniffed = sniff(body);
-    if ct.contains("json") || body.trim_start().starts_with('{') || body.trim_start().starts_with('[') {
+    if ct.contains("json")
+        || body.trim_start().starts_with('{')
+        || body.trim_start().starts_with('[')
+    {
         BodyKind::Json
-    } else if ct.contains("xml") || (sniffed == Sniff::Xml && !ct.contains("x-www-form-urlencoded")) {
+    } else if ct.contains("xml") || (sniffed == Sniff::Xml && !ct.contains("x-www-form-urlencoded"))
+    {
         BodyKind::Xml
     } else if ct.contains("x-www-form-urlencoded") || body.contains('=') {
         BodyKind::Form
@@ -573,7 +649,13 @@ fn xml_tokens(s: &str) -> Vec<XmlTok> {
     while i < b.len() {
         if b[i] != b'<' {
             let end = s[i..].find('<').map(|x| x + i).unwrap_or(b.len());
-            out.push(XmlTok { kind: TokKind::Text, start: i, end, name: String::new(), attrs: Vec::new() });
+            out.push(XmlTok {
+                kind: TokKind::Text,
+                start: i,
+                end,
+                name: String::new(),
+                attrs: Vec::new(),
+            });
             i = end;
             continue;
         }
@@ -590,7 +672,13 @@ fn xml_tokens(s: &str) -> Vec<XmlTok> {
         };
         if let Some(end) = other_end {
             let Some(end) = end else { break };
-            out.push(XmlTok { kind: TokKind::Other, start: i, end, name: String::new(), attrs: Vec::new() });
+            out.push(XmlTok {
+                kind: TokKind::Other,
+                start: i,
+                end,
+                name: String::new(),
+                attrs: Vec::new(),
+            });
             i = end;
             continue;
         }
@@ -612,7 +700,13 @@ fn xml_tokens(s: &str) -> Vec<XmlTok> {
         let end = j + 1;
         if b.get(i + 1) == Some(&b'/') {
             let name = s[i + 2..j].trim().to_string();
-            out.push(XmlTok { kind: TokKind::End, start: i, end, name, attrs: Vec::new() });
+            out.push(XmlTok {
+                kind: TokKind::End,
+                start: i,
+                end,
+                name,
+                attrs: Vec::new(),
+            });
             i = end;
             continue;
         }
@@ -670,11 +764,24 @@ fn xml_tokens(s: &str) -> Vec<XmlTok> {
                 v1 = k;
             }
             if !aname.is_empty() {
-                attrs.push(XmlAttrTok { name: aname, value: (v0, v1) });
+                attrs.push(XmlAttrTok {
+                    name: aname,
+                    value: (v0, v1),
+                });
             }
         }
-        let kind = if self_close { TokKind::SelfClose } else { TokKind::Start };
-        out.push(XmlTok { kind, start: i, end, name, attrs });
+        let kind = if self_close {
+            TokKind::SelfClose
+        } else {
+            TokKind::Start
+        };
+        out.push(XmlTok {
+            kind,
+            start: i,
+            end,
+            name,
+            attrs,
+        });
         i = end;
     }
     out
@@ -696,7 +803,11 @@ fn xml_points(content: &str, parent: Option<&InsertionPoint>) -> Vec<InsertionPo
 
 /// [`xml_points`] handing each point to `f`; stops (and returns false) when
 /// `f` returns false.
-fn xml_points_each(content: &str, parent: Option<&InsertionPoint>, f: &mut dyn FnMut(InsertionPoint) -> bool) -> bool {
+fn xml_points_each(
+    content: &str,
+    parent: Option<&InsertionPoint>,
+    f: &mut dyn FnMut(InsertionPoint) -> bool,
+) -> bool {
     let mut last: Option<String> = None;
     let mut prev: Option<TokKind> = None;
     let mk = |kind: IpKind, name: String, value: String| match parent {
@@ -709,23 +820,46 @@ fn xml_points_each(content: &str, parent: Option<&InsertionPoint>, f: &mut dyn F
                 last = Some(t.name.clone());
                 for a in &t.attrs {
                     let raw = &content[a.value.0..a.value.1];
-                    if !f(mk(IpKind::XmlAttr { start: a.value.0, end: a.value.1 }, a.name.clone(), util::html_decode(raw))) {
+                    if !f(mk(
+                        IpKind::XmlAttr {
+                            start: a.value.0,
+                            end: a.value.1,
+                        },
+                        a.name.clone(),
+                        util::html_decode(raw),
+                    )) {
                         return false;
                     }
                 }
             }
             TokKind::End => {
                 if prev == Some(TokKind::Start)
-                    && !f(mk(IpKind::XmlParam { start: t.start, end: t.start }, last.clone().unwrap_or_default(), String::new())) {
-                        return false;
-                    }
+                    && !f(mk(
+                        IpKind::XmlParam {
+                            start: t.start,
+                            end: t.start,
+                        },
+                        last.clone().unwrap_or_default(),
+                        String::new(),
+                    ))
+                {
+                    return false;
+                }
             }
             TokKind::Text => {
                 let raw = &content[t.start..t.end];
                 if !raw.trim().is_empty()
-                    && !f(mk(IpKind::XmlParam { start: t.start, end: t.end }, last.clone().unwrap_or_default(), util::html_decode(raw))) {
-                        return false;
-                    }
+                    && !f(mk(
+                        IpKind::XmlParam {
+                            start: t.start,
+                            end: t.end,
+                        },
+                        last.clone().unwrap_or_default(),
+                        util::html_decode(raw),
+                    ))
+                {
+                    return false;
+                }
             }
             TokKind::Other => {}
         }
@@ -749,7 +883,11 @@ fn standalone_tag_points(body: &str) -> Vec<InsertionPoint> {
         while close > t.start + 1 && b[close - 1] == b' ' {
             close -= 1;
         }
-        out.push(InsertionPoint::new(IpKind::XmlTag { close, end: t.end }, t.name, ""));
+        out.push(InsertionPoint::new(
+            IpKind::XmlTag { close, end: t.end },
+            t.name,
+            "",
+        ));
     }
     out
 }
@@ -801,7 +939,14 @@ fn json_string_end(b: &[u8], i: usize) -> Option<usize> {
 
 /// Walk one value at `i` (valid JSON); record leaves when `record`.
 /// Returns the index after the value.
-fn json_value(text: &str, b: &[u8], i: usize, path: &mut Vec<String>, record: bool, out: &mut Vec<JsonLeaf>) -> Option<usize> {
+fn json_value(
+    text: &str,
+    b: &[u8],
+    i: usize,
+    path: &mut Vec<String>,
+    record: bool,
+    out: &mut Vec<JsonLeaf>,
+) -> Option<usize> {
     let mut i = json_ws(b, i);
     let record = record && out.len() < MAX_INSERTION_POINTS;
     match *b.get(i)? {
@@ -852,17 +997,29 @@ fn json_value(text: &str, b: &[u8], i: usize, path: &mut Vec<String>, record: bo
         b'"' => {
             let end = json_string_end(b, i)?;
             if record {
-                out.push(JsonLeaf { path: path.clone(), start: i, end, string: true });
+                out.push(JsonLeaf {
+                    path: path.clone(),
+                    start: i,
+                    end,
+                    string: true,
+                });
             }
             Some(end)
         }
         _ => {
             let mut end = i;
-            while end < b.len() && !matches!(b[end], b',' | b']' | b'}' | b' ' | b'\t' | b'\r' | b'\n') {
+            while end < b.len()
+                && !matches!(b[end], b',' | b']' | b'}' | b' ' | b'\t' | b'\r' | b'\n')
+            {
                 end += 1;
             }
             if record && &text[i..end] != "null" {
-                out.push(JsonLeaf { path: path.clone(), start: i, end, string: false });
+                out.push(JsonLeaf {
+                    path: path.clone(),
+                    start: i,
+                    end,
+                    string: false,
+                });
             }
             Some(end)
         }
@@ -935,23 +1092,34 @@ fn base64_shape(b: &[u8], alphabet: fn(u8) -> bool) -> bool {
         return false;
     }
     let last = b[b.len() - 1];
-    if if last == b'=' { !b.len().is_multiple_of(4) } else { b[b.len() - 2] == b'=' } {
+    if if last == b'=' {
+        !b.len().is_multiple_of(4)
+    } else {
+        b[b.len() - 2] == b'='
+    } {
         return false;
     }
     let n = b.len() - 2;
-    b.iter().enumerate().all(|(i, &c)| !(c == b'=' && i < n) && alphabet(c))
+    b.iter()
+        .enumerate()
+        .all(|(i, &c)| !(c == b'=' && i < n) && alphabet(c))
 }
 
 /// burp net.portswigger.Zyn.Za: printable ASCII, tab, CR or LF only.
 fn printable(b: &[u8]) -> bool {
-    b.iter().all(|&c| (c >= 32 || c == b'\n' || c == b'\r' || c == b'\t') && c < 127)
+    b.iter()
+        .all(|&c| (c >= 32 || c == b'\n' || c == b'\r' || c == b'\t') && c < 127)
 }
 
 fn base64_engine(url: bool) -> base64::engine::GeneralPurpose {
     let cfg = base64::engine::GeneralPurposeConfig::new()
         .with_decode_padding_mode(base64::engine::DecodePaddingMode::Indifferent)
         .with_decode_allow_trailing_bits(true);
-    let alphabet = if url { &base64::alphabet::URL_SAFE } else { &base64::alphabet::STANDARD };
+    let alphabet = if url {
+        &base64::alphabet::URL_SAFE
+    } else {
+        &base64::alphabet::STANDARD
+    };
     base64::engine::GeneralPurpose::new(alphabet, cfg)
 }
 
@@ -1018,7 +1186,12 @@ fn nested_points(base: &InsertionPoint, sink: &mut Sink) {
         for url in [false, true] {
             if let Some(decoded) = base64_decoded(&content, url) {
                 made += 1;
-                stack.push(InsertionPoint::nested(&node, IpKind::Base64 { url }, node.name.clone(), decoded));
+                stack.push(InsertionPoint::nested(
+                    &node,
+                    IpKind::Base64 { url },
+                    node.name.clone(),
+                    decoded,
+                ));
                 break;
             }
         }
@@ -1052,7 +1225,9 @@ fn build_points(req: &str, sink: &mut Sink) {
     let body = req.find("\r\n\r\n").map(|i| &req[i + 4..]).unwrap_or("");
     let ct_raw = util::get_header(&parts.headers, "Content-Type").unwrap_or_default();
     let kind = body_kind(&ct_raw, body);
-    if matches!(kind, BodyKind::Json | BodyKind::Xml) && !sink.offer(InsertionPoint::new(IpKind::EntireBody, "", body)) {
+    if matches!(kind, BodyKind::Json | BodyKind::Xml)
+        && !sink.offer(InsertionPoint::new(IpKind::EntireBody, "", body))
+    {
         return;
     }
     for (name, value) in query_params(&parts.path) {
@@ -1064,8 +1239,19 @@ fn build_points(req: &str, sink: &mut Sink) {
         BodyKind::Multipart(boundary) => multipart_parts(body, boundary)
             .into_iter()
             .enumerate()
-            .all(|(index, p)| sink.offer_base(InsertionPoint::new(IpKind::Multipart { index, filename: p.filename.clone() }, p.name.clone(), &body[p.content.0..p.content.1]))),
-        BodyKind::Json => json_points(body, None).into_iter().all(|p| sink.offer_base(p)),
+            .all(|(index, p)| {
+                sink.offer_base(InsertionPoint::new(
+                    IpKind::Multipart {
+                        index,
+                        filename: p.filename.clone(),
+                    },
+                    p.name.clone(),
+                    &body[p.content.0..p.content.1],
+                ))
+            }),
+        BodyKind::Json => json_points(body, None)
+            .into_iter()
+            .all(|p| sink.offer_base(p)),
         BodyKind::Xml => xml_points_each(body, None, &mut |p| sink.offer_base(p)),
         BodyKind::Form => body.split('&').filter(|x| !x.is_empty()).all(|kv| {
             let (k, v) = kv.split_once('=').unwrap_or((kv, ""));
@@ -1077,7 +1263,12 @@ fn build_points(req: &str, sink: &mut Sink) {
         return;
     }
     // Cookies, in header order (the skip-all list is a veto, applied later).
-    for v in parts.headers.iter().filter(|(k, _)| k.eq_ignore_ascii_case("Cookie")).map(|(_, v)| v) {
+    for v in parts
+        .headers
+        .iter()
+        .filter(|(k, _)| k.eq_ignore_ascii_case("Cookie"))
+        .map(|(_, v)| v)
+    {
         for pair in v.split(';').map(str::trim).filter(|p| !p.is_empty()) {
             let (n, val) = pair.split_once('=').unwrap_or((pair, ""));
             if !sink.offer_base(InsertionPoint::new(IpKind::Cookie, n, val)) {
@@ -1087,7 +1278,10 @@ fn build_points(req: &str, sink: &mut Sink) {
     }
     // X-* headers present in the request.
     for (k, v) in &parts.headers {
-        if k.len() > 2 && k.get(..2).is_some_and(|p| p.eq_ignore_ascii_case("x-")) && !sink.offer_base(InsertionPoint::new(IpKind::Header, k.clone(), v.clone())) {
+        if k.len() > 2
+            && k.get(..2).is_some_and(|p| p.eq_ignore_ascii_case("x-"))
+            && !sink.offer_base(InsertionPoint::new(IpKind::Header, k.clone(), v.clone()))
+        {
             return;
         }
     }
@@ -1098,25 +1292,49 @@ fn build_points(req: &str, sink: &mut Sink) {
             return;
         }
     }
-    if sniff(body) == Sniff::Xml && !standalone_tag_points(body).into_iter().all(|p| sink.offer(p)) {
+    if sniff(body) == Sniff::Xml
+        && !standalone_tag_points(body)
+            .into_iter()
+            .all(|p| sink.offer(p))
+    {
         return;
     }
     let mut tail = Vec::new();
-    if base.iter().any(|p| matches!(p.kind, IpKind::Body | IpKind::Multipart { .. })) {
-        let site = if matches!(kind, BodyKind::Multipart(_)) { NameSite::Multipart } else { NameSite::Body };
+    if base
+        .iter()
+        .any(|p| matches!(p.kind, IpKind::Body | IpKind::Multipart { .. }))
+    {
+        let site = if matches!(kind, BodyKind::Multipart(_)) {
+            NameSite::Multipart
+        } else {
+            NameSite::Body
+        };
         tail.push(InsertionPoint::new(IpKind::ParamName(site), "", "1"));
     }
-    tail.push(InsertionPoint::new(IpKind::ParamName(NameSite::Url), "", "1"));
+    tail.push(InsertionPoint::new(
+        IpKind::ParamName(NameSite::Url),
+        "",
+        "1",
+    ));
     if path_extension(&parts.path).eq_ignore_ascii_case("php") {
-        tail.push(InsertionPoint::new(IpKind::ParamName(NameSite::PhpPathInfo), "", "1"));
+        tail.push(InsertionPoint::new(
+            IpKind::ParamName(NameSite::PhpPathInfo),
+            "",
+            "1",
+        ));
     }
     if let Some(ua) = util::get_header(&parts.headers, "User-Agent") {
         tail.push(InsertionPoint::new(IpKind::Header, "User-Agent", ua));
     }
-    let referer = util::get_header(&parts.headers, "Referer").unwrap_or_else(|| SYNTH_REFERER.to_string());
+    let referer =
+        util::get_header(&parts.headers, "Referer").unwrap_or_else(|| SYNTH_REFERER.to_string());
     tail.push(InsertionPoint::new(IpKind::Header, "Referer", referer));
     for (label, idx, seg) in path_insertion_points(&parts.path) {
-        let kind = if label == "URL path filename" { IpKind::PathFilename(idx) } else { IpKind::PathFolder(idx) };
+        let kind = if label == "URL path filename" {
+            IpKind::PathFilename(idx)
+        } else {
+            IpKind::PathFolder(idx)
+        };
         tail.push(InsertionPoint::new(kind, label, seg));
     }
     for p in tail {
@@ -1139,7 +1357,25 @@ pub(crate) fn encode_url_param(s: &str) -> String {
     for &b in s.as_bytes() {
         let special = matches!(
             b,
-            b' ' | b'"' | b'#' | b'%' | b'&' | b'+' | b',' | b'/' | b':' | b';' | b'<' | b'=' | b'>' | b'?' | b'\\' | b'^' | b'`' | b'{' | b'|' | b'}'
+            b' ' | b'"'
+                | b'#'
+                | b'%'
+                | b'&'
+                | b'+'
+                | b','
+                | b'/'
+                | b':'
+                | b';'
+                | b'<'
+                | b'='
+                | b'>'
+                | b'?'
+                | b'\\'
+                | b'^'
+                | b'`'
+                | b'{'
+                | b'|'
+                | b'}'
         );
         if special || !(0x21..0x7f).contains(&b) {
             out.push_str(&format!("%{b:02X}"));
@@ -1211,9 +1447,14 @@ fn open_tag(s: &str, close: usize, end: usize, name: &str, value: &str) -> Strin
 /// `value` placed verbatim at a nested point inside its parent's content.
 fn place_in_content(content: &str, ip: &InsertionPoint, value: &str) -> String {
     match &ip.kind {
-        IpKind::Query => replace_param(&format!("?{content}"), &ip.name, value).get(1..).unwrap_or("").to_string(),
+        IpKind::Query => replace_param(&format!("?{content}"), &ip.name, value)
+            .get(1..)
+            .unwrap_or("")
+            .to_string(),
         IpKind::Json(path) => json_splice(content, path, value),
-        IpKind::XmlParam { start, end } | IpKind::XmlAttr { start, end } => splice(content, *start, *end, value),
+        IpKind::XmlParam { start, end } | IpKind::XmlAttr { start, end } => {
+            splice(content, *start, *end, value)
+        }
         IpKind::XmlTag { close, end } => open_tag(content, *close, *end, &ip.name, value),
         // burp.Zg16 / Zmqa: the whole content, re-encoded (padded).
         IpKind::Base64 { url } => base64_engine(*url).encode(value.as_bytes()),
@@ -1234,17 +1475,24 @@ fn place_in_content(content: &str, ip: &InsertionPoint, value: &str) -> String {
 /// builds its content, the parent places it with flag 0, replace).
 fn compose_into_parent(req: &str, parent: &InsertionPoint, content: &str) -> String {
     match &parent.kind {
-        IpKind::Query | IpKind::Body | IpKind::Cookie => inject(req, parent, &encode_url_param(content)),
+        IpKind::Query | IpKind::Body | IpKind::Cookie => {
+            inject(req, parent, &encode_url_param(content))
+        }
         // inject() URL-decodes a header value; encode it so it decodes back.
         IpKind::Header => inject(req, parent, &encode_url_param(content)),
-        IpKind::XmlParam { .. } | IpKind::XmlTag { .. } => inject(req, parent, &xml_text_escape(content)),
+        IpKind::XmlParam { .. } | IpKind::XmlTag { .. } => {
+            inject(req, parent, &xml_text_escape(content))
+        }
         IpKind::XmlAttr { .. } => inject(req, parent, &xml_attr_escape(content)),
         // JSON escapes on its own; multipart is raw (burp.Zaa); a Base64
         // parent encodes its whole content.
         IpKind::Json(_) => inject(req, parent, &json_escape(content)),
         IpKind::Multipart { .. } | IpKind::Base64 { .. } => inject(req, parent, content),
         // Not parents in Burp's builder (no nested pass over them).
-        IpKind::PathFolder(_) | IpKind::PathFilename(_) | IpKind::EntireBody | IpKind::ParamName(_) => inject(req, parent, content),
+        IpKind::PathFolder(_)
+        | IpKind::PathFilename(_)
+        | IpKind::EntireBody
+        | IpKind::ParamName(_) => inject(req, parent, content),
     }
 }
 
@@ -1279,13 +1527,21 @@ pub(crate) fn inject_payload(req: &str, ip: &InsertionPoint, payload: &str) -> S
     }
     match &ip.kind {
         IpKind::Json(_) => inject(req, ip, &json_escape(payload)),
-        IpKind::Multipart { .. } | IpKind::PathFolder(_) | IpKind::PathFilename(_) => inject(req, ip, payload),
-        IpKind::Query | IpKind::Body | IpKind::Cookie | IpKind::Header => inject(req, ip, &encode_query_payload(payload)),
+        IpKind::Multipart { .. } | IpKind::PathFolder(_) | IpKind::PathFilename(_) => {
+            inject(req, ip, payload)
+        }
+        IpKind::Query | IpKind::Body | IpKind::Cookie | IpKind::Header => {
+            inject(req, ip, &encode_query_payload(payload))
+        }
         IpKind::EntireBody | IpKind::Base64 { .. } => inject(req, ip, payload),
-        IpKind::XmlParam { .. } | IpKind::XmlTag { .. } => inject(req, ip, &xml_text_escape(payload)),
+        IpKind::XmlParam { .. } | IpKind::XmlTag { .. } => {
+            inject(req, ip, &xml_text_escape(payload))
+        }
         IpKind::XmlAttr { .. } => inject(req, ip, &xml_attr_escape(payload)),
         IpKind::ParamName(NameSite::Multipart) => inject(req, ip, &multipart_name_escape(payload)),
-        IpKind::ParamName(NameSite::Url | NameSite::Body | NameSite::PhpPathInfo) => inject(req, ip, &encode_url_param(payload)),
+        IpKind::ParamName(NameSite::Url | NameSite::Body | NameSite::PhpPathInfo) => {
+            inject(req, ip, &encode_url_param(payload))
+        }
     }
 }
 
@@ -1307,7 +1563,11 @@ pub(crate) fn inject(req: &str, ip: &InsertionPoint, value: &str) -> String {
                 .split('&')
                 .map(|kv| {
                     let k = kv.split('=').next().unwrap_or("");
-                    if k == ip.name { format!("{k}={encoded}") } else { kv.to_string() }
+                    if k == ip.name {
+                        format!("{k}={encoded}")
+                    } else {
+                        kv.to_string()
+                    }
                 })
                 .collect();
             with_body(req, &new.join("&"))
@@ -1316,14 +1576,23 @@ pub(crate) fn inject(req: &str, ip: &InsertionPoint, value: &str) -> String {
         // Multipart content is sent raw, like a browser would.
         IpKind::Multipart { index, .. } => with_multipart_part(req, *index, encoded, None, None),
         IpKind::Cookie => with_cookie(req, &ip.name, &cookie_value(encoded)),
-        IpKind::Header => String::from_utf8_lossy(&net::replace_or_add_header(req.as_bytes(), &ip.name, &header_value(encoded))).into_owned(),
+        IpKind::Header => String::from_utf8_lossy(&net::replace_or_add_header(
+            req.as_bytes(),
+            &ip.name,
+            &header_value(encoded),
+        ))
+        .into_owned(),
         IpKind::PathFolder(idx) | IpKind::PathFilename(idx) => {
             // with_path_segment escapes what would leave the segment.
             rebuild_with_path(req, &with_path_segment(&parts.path, *idx, encoded))
         }
         IpKind::EntireBody => with_body(req, encoded),
-        IpKind::XmlParam { start, end } | IpKind::XmlAttr { start, end } => with_body(req, &splice(body, *start, *end, encoded)),
-        IpKind::XmlTag { close, end } => with_body(req, &open_tag(body, *close, *end, &ip.name, encoded)),
+        IpKind::XmlParam { start, end } | IpKind::XmlAttr { start, end } => {
+            with_body(req, &splice(body, *start, *end, encoded))
+        }
+        IpKind::XmlTag { close, end } => {
+            with_body(req, &open_tag(body, *close, *end, &ip.name, encoded))
+        }
         // Zuq.addNewParameterNameInsertionPoint: the request with a `1=1`
         // parameter added; the point is that parameter's name.
         IpKind::ParamName(NameSite::Url) => {
@@ -1335,13 +1604,21 @@ pub(crate) fn inject(req: &str, ip: &InsertionPoint, value: &str) -> String {
             rebuild_with_path(req, &format!("{}{sep}{encoded}=1", parts.path))
         }
         IpKind::ParamName(NameSite::Body) => {
-            let sep = if body.is_empty() || body.ends_with('&') { "" } else { "&" };
+            let sep = if body.is_empty() || body.ends_with('&') {
+                ""
+            } else {
+                "&"
+            };
             with_body(req, &format!("{body}{sep}{encoded}=1"))
         }
         IpKind::ParamName(NameSite::Multipart) => {
             let ct = util::get_header(&parts.headers, "Content-Type").unwrap_or_default();
-            let Some(boundary) = multipart_boundary(&ct) else { return req.to_string() };
-            let part = format!("--{boundary}\r\nContent-Disposition: form-data; name=\"{encoded}\"\r\n\r\n1\r\n");
+            let Some(boundary) = multipart_boundary(&ct) else {
+                return req.to_string();
+            };
+            let part = format!(
+                "--{boundary}\r\nContent-Disposition: form-data; name=\"{encoded}\"\r\n\r\n1\r\n"
+            );
             let closing = format!("--{boundary}--");
             let new_body = match body.rfind(&closing) {
                 Some(i) => format!("{}{part}{}", &body[..i], &body[i..]),
@@ -1380,7 +1657,9 @@ mod tests {
     }
 
     fn summary(pts: &[InsertionPoint]) -> Vec<(PointType, String, String)> {
-        pts.iter().map(|p| (p.kind.point_type(), p.name.clone(), p.value.clone())).collect()
+        pts.iter()
+            .map(|p| (p.kind.point_type(), p.name.clone(), p.value.clone()))
+            .collect()
     }
 
     #[test]
@@ -1388,7 +1667,10 @@ mod tests {
         let body = r#"{"q":"a","n":5}"#;
         let req = format!("POST /api/find?x=1 HTTP/1.1\r\nHost: h\r\nContent-Type: application/json\r\nCookie: sid=abc\r\nX-Trace: t1\r\nContent-Length: {}\r\n\r\n{body}", body.len());
         let pts = insertion_points(&req);
-        let got: Vec<(PointType, &str)> = pts.iter().map(|p| (p.kind.point_type(), p.name.as_str())).collect();
+        let got: Vec<(PointType, &str)> = pts
+            .iter()
+            .map(|p| (p.kind.point_type(), p.name.as_str()))
+            .collect();
         assert_eq!(
             got,
             vec![
@@ -1412,7 +1694,9 @@ mod tests {
         assert!(r.contains("Content-Length: 9\r\n"), "{r}");
         // A form body has no entire-body point (Zuq.ZT: XML and JSON only).
         let form = "POST /f HTTP/1.1\r\nHost: h\r\nContent-Type: application/x-www-form-urlencoded\r\n\r\na=1";
-        assert!(!insertion_points(form).iter().any(|p| p.kind == IpKind::EntireBody));
+        assert!(!insertion_points(form)
+            .iter()
+            .any(|p| p.kind == IpKind::EntireBody));
     }
 
     #[test]
@@ -1423,13 +1707,19 @@ mod tests {
         let req = format!("GET /a?{} HTTP/1.1\r\nHost: h\r\nCookie: _ga=1; _GID=2; x_ga_y=3; AWSALBCORS=4; _gat=5; real=6\r\n\r\n", q.join("&"));
         let pts = insertion_points(&req);
         assert_eq!(pts.len(), MAX_INSERTION_POINTS);
-        assert_eq!((pts[29].kind.clone(), pts[29].name.as_str()), (IpKind::Cookie, "real"));
+        assert_eq!(
+            (pts[29].kind.clone(), pts[29].name.as_str()),
+            (IpKind::Cookie, "real")
+        );
     }
 
     #[test]
     fn base64_heuristic_follows_zq4() {
         // Positive: padded, unpadded (length % 4 == 2 or 3).
-        assert_eq!(base64_decoded(&b64("a=1&b=2"), false).as_deref(), Some("a=1&b=2"));
+        assert_eq!(
+            base64_decoded(&b64("a=1&b=2"), false).as_deref(),
+            Some("a=1&b=2")
+        );
         assert_eq!(base64_decoded("Zm9vYg", false).as_deref(), Some("foob"));
         assert_eq!(base64_decoded("Zm9vYmE", false).as_deref(), Some("fooba"));
         // Negative, one rule each: shorter than 4; length % 4 == 1; a final
@@ -1454,9 +1744,15 @@ mod tests {
     #[test]
     fn nested_base64_then_url_encoded_points_round_trip() {
         let inner = b64("a=1&b=2");
-        let req = format!("GET /p?data={} HTTP/1.1\r\nHost: h\r\n\r\n", inner.replace('=', "%3D"));
+        let req = format!(
+            "GET /p?data={} HTTP/1.1\r\nHost: h\r\n\r\n",
+            inner.replace('=', "%3D")
+        );
         let pts = insertion_points(&req);
-        let i = pts.iter().position(|p| p.name == "data" && p.kind == IpKind::Query).unwrap();
+        let i = pts
+            .iter()
+            .position(|p| p.name == "data" && p.kind == IpKind::Query)
+            .unwrap();
         // Directly after the base points: the Base64 value, then a and b.
         assert_eq!(
             summary(&pts[i + 1..i + 4]),
@@ -1467,20 +1763,50 @@ mod tests {
             ]
         );
         let (b64pt, a) = (&pts[i + 1], &pts[i + 2]);
-        assert_eq!(b64pt.describe(), "Base64-decoded value of the data parameter");
+        assert_eq!(
+            b64pt.describe(),
+            "Base64-decoded value of the data parameter"
+        );
         assert_eq!(a.describe(), "value of the a request parameter, within the Base64-decoded value of the data parameter");
         // payload -> URL-encoded inside the content -> Base64 -> URL-encoded
         // in the query (burp.Ziqv.ZT).
         let r = inject_payload(&req, a, "x'&y");
         let path = r.split_whitespace().nth(1).unwrap();
         let sent = util::url_decode(path.split_once("data=").unwrap().1);
-        let decoded = String::from_utf8(base64::engine::general_purpose::STANDARD.decode(sent).unwrap()).unwrap();
+        let decoded = String::from_utf8(
+            base64::engine::general_purpose::STANDARD
+                .decode(sent)
+                .unwrap(),
+        )
+        .unwrap();
         assert_eq!(decoded, "a=x'%26y&b=2");
-        assert_eq!(util::url_decode(decoded.split('&').next().unwrap().strip_prefix("a=").unwrap()), "x'&y");
+        assert_eq!(
+            util::url_decode(
+                decoded
+                    .split('&')
+                    .next()
+                    .unwrap()
+                    .strip_prefix("a=")
+                    .unwrap()
+            ),
+            "x'&y"
+        );
         // The Base64 point itself: the payload replaces the decoded text.
         let r = inject_payload(&req, b64pt, "<p>");
-        let sent = util::url_decode(r.split_whitespace().nth(1).unwrap().split_once("data=").unwrap().1);
-        assert_eq!(base64::engine::general_purpose::STANDARD.decode(sent).unwrap(), b"<p>");
+        let sent = util::url_decode(
+            r.split_whitespace()
+                .nth(1)
+                .unwrap()
+                .split_once("data=")
+                .unwrap()
+                .1,
+        );
+        assert_eq!(
+            base64::engine::general_purpose::STANDARD
+                .decode(sent)
+                .unwrap(),
+            b"<p>"
+        );
     }
 
     #[test]
@@ -1491,7 +1817,8 @@ mod tests {
         let v = b64("a=1&b=2");
         let json = format!("{{\"t\":\"{v}\"}}");
         let xml = format!("<r><t>{v}</t></r>");
-        let mp = format!("--B\r\nContent-Disposition: form-data; name=\"t\"\r\n\r\n{v}\r\n--B--\r\n");
+        let mp =
+            format!("--B\r\nContent-Disposition: form-data; name=\"t\"\r\n\r\n{v}\r\n--B--\r\n");
         type PlacementCase = (String, Box<dyn Fn(&str) -> String>);
         let cases: Vec<PlacementCase> = vec![
             (format!("GET / HTTP/1.1\r\nHost: h\r\nCookie: t={v}\r\n\r\n"), Box::new(|r: &str| util::url_decode(r.split("Cookie: t=").nth(1).unwrap().split("\r\n").next().unwrap()))),
@@ -1502,11 +1829,24 @@ mod tests {
         ];
         for (req, value_of) in cases {
             let pts = insertion_points(&req);
-            let a = pts.iter().find(|p| p.name == "a" && p.parent.is_some()).unwrap_or_else(|| panic!("no nested a in {req}"));
+            let a = pts
+                .iter()
+                .find(|p| p.name == "a" && p.parent.is_some())
+                .unwrap_or_else(|| panic!("no nested a in {req}"));
             let r = inject_payload(&req, a, "x'&<y>");
             let sent = value_of(&r);
-            let decoded = String::from_utf8(base64::engine::general_purpose::STANDARD.decode(&sent).unwrap()).unwrap();
-            let got = decoded.split('&').next().unwrap().strip_prefix("a=").unwrap();
+            let decoded = String::from_utf8(
+                base64::engine::general_purpose::STANDARD
+                    .decode(&sent)
+                    .unwrap(),
+            )
+            .unwrap();
+            let got = decoded
+                .split('&')
+                .next()
+                .unwrap()
+                .strip_prefix("a=")
+                .unwrap();
             assert_eq!(util::url_decode(got), "x'&<y>", "{req}");
             assert!(decoded.ends_with("&b=2"), "{decoded}");
         }
@@ -1519,11 +1859,19 @@ mod tests {
         let pts = insertion_points(&req);
         let k = pts.iter().find(|p| p.name == "k").expect("nested k");
         assert!(k.parent.is_some() && matches!(k.kind, IpKind::Json(_)));
-        assert_eq!(k.describe(), "value of the k JSON parameter within the q parameter");
+        assert_eq!(
+            k.describe(),
+            "value of the k JSON parameter within the q parameter"
+        );
         // The unquoted number becomes a quoted string, as Zuq.Zm rewrites it.
         let m = pts.iter().find(|p| p.name == "m").unwrap();
         let r = inject_payload(&req, m, "1'");
-        let q = body_of(&r).split('&').next().unwrap().strip_prefix("q=").unwrap();
+        let q = body_of(&r)
+            .split('&')
+            .next()
+            .unwrap()
+            .strip_prefix("q=")
+            .unwrap();
         let v: serde_json::Value = serde_json::from_str(&util::url_decode(q)).unwrap();
         assert_eq!((v["k"].as_str(), v["m"].as_str()), (Some("v"), Some("1'")));
         assert!(body_of(&r).ends_with("&n=7"));
@@ -1534,7 +1882,11 @@ mod tests {
         let body = "<?xml version=\"1.0\"?><r id=\"7\" xmlns:a=\"urn:x\"><name>bob &amp; co</name><e></e><b/><c x='1' /></r>";
         let req = format!("POST /x HTTP/1.1\r\nHost: h\r\nContent-Type: text/xml\r\nContent-Length: {}\r\n\r\n{body}", body.len());
         let pts = insertion_points(&req);
-        let got: Vec<(PointType, &str, &str)> = pts.iter().take(7).map(|p| (p.kind.point_type(), p.name.as_str(), p.value.as_str())).collect();
+        let got: Vec<(PointType, &str, &str)> = pts
+            .iter()
+            .take(7)
+            .map(|p| (p.kind.point_type(), p.name.as_str(), p.value.as_str()))
+            .collect();
         assert_eq!(
             got,
             vec![
@@ -1565,43 +1917,92 @@ mod tests {
     fn standalone_tag_spec_example() {
         let body = "<a><b/></a>";
         let req = format!("POST /x HTTP/1.1\r\nHost: h\r\nContent-Type: application/xml\r\nContent-Length: {}\r\n\r\n{body}", body.len());
-        let tag = insertion_points(&req).into_iter().find(|p| matches!(p.kind, IpKind::XmlTag { .. })).unwrap();
+        let tag = insertion_points(&req)
+            .into_iter()
+            .find(|p| matches!(p.kind, IpKind::XmlTag { .. }))
+            .unwrap();
         assert_eq!((tag.name.as_str(), tag.value.as_str()), ("b", ""));
-        assert_eq!(body_of(&inject(&req, &tag, "PAYLOAD")), "<a><b>PAYLOAD</b></a>");
+        assert_eq!(
+            body_of(&inject(&req, &tag, "PAYLOAD")),
+            "<a><b>PAYLOAD</b></a>"
+        );
         assert_eq!(tag.describe(), "value of the b XML parameter");
     }
 
     #[test]
     fn parameter_name_points() {
-        let names = |req: &str| -> Vec<IpKind> { insertion_points(req).into_iter().filter(|p| matches!(p.kind, IpKind::ParamName(_))).map(|p| p.kind).collect() };
+        let names = |req: &str| -> Vec<IpKind> {
+            insertion_points(req)
+                .into_iter()
+                .filter(|p| matches!(p.kind, IpKind::ParamName(_)))
+                .map(|p| p.kind)
+                .collect()
+        };
         // GET: the URL name only; `1=1` is added and its name replaced.
         let get = "GET /s?q=1 HTTP/1.1\r\nHost: h\r\n\r\n";
         assert_eq!(names(get), vec![IpKind::ParamName(NameSite::Url)]);
-        let p = insertion_points(get).into_iter().find(|p| p.kind == IpKind::ParamName(NameSite::Url)).unwrap();
+        let p = insertion_points(get)
+            .into_iter()
+            .find(|p| p.kind == IpKind::ParamName(NameSite::Url))
+            .unwrap();
         assert_eq!((p.name.as_str(), p.value.as_str()), ("", "1"));
         assert!(inject_payload(get, &p, "a b=").starts_with("GET /s?q=1&a%20b%3D=1 HTTP/1.1\r\n"));
         assert!(inject(&get.replace("?q=1", ""), &p, "z").starts_with("GET /s?z=1 HTTP/1.1\r\n"));
-        assert_eq!(p.describe(), "name of an arbitrarily supplied URL parameter");
+        assert_eq!(
+            p.describe(),
+            "name of an arbitrarily supplied URL parameter"
+        );
         // POST form: the body name first, then the URL name.
         let form = "POST /f HTTP/1.1\r\nHost: h\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 3\r\n\r\na=1";
-        assert_eq!(names(form), vec![IpKind::ParamName(NameSite::Body), IpKind::ParamName(NameSite::Url)]);
-        let p = insertion_points(form).into_iter().find(|p| p.kind == IpKind::ParamName(NameSite::Body)).unwrap();
+        assert_eq!(
+            names(form),
+            vec![
+                IpKind::ParamName(NameSite::Body),
+                IpKind::ParamName(NameSite::Url)
+            ]
+        );
+        let p = insertion_points(form)
+            .into_iter()
+            .find(|p| p.kind == IpKind::ParamName(NameSite::Body))
+            .unwrap();
         let r = inject_payload(form, &p, "x'");
         assert_eq!(body_of(&r), "a=1&x'=1");
         assert!(r.contains("Content-Length: 8\r\n"));
-        assert_eq!(p.describe(), "name of an arbitrarily supplied body parameter");
+        assert_eq!(
+            p.describe(),
+            "name of an arbitrarily supplied body parameter"
+        );
         // POST multipart: a part named by the payload, `"` escaped (burp.Zr87).
         let mp = "--B\r\nContent-Disposition: form-data; name=\"t\"\r\n\r\nhi\r\n--B--\r\n";
         let req = format!("POST /u HTTP/1.1\r\nHost: h\r\nContent-Type: multipart/form-data; boundary=B\r\nContent-Length: {}\r\n\r\n{mp}", mp.len());
-        assert_eq!(names(&req), vec![IpKind::ParamName(NameSite::Multipart), IpKind::ParamName(NameSite::Url)]);
-        let p = insertion_points(&req).into_iter().find(|p| p.kind == IpKind::ParamName(NameSite::Multipart)).unwrap();
+        assert_eq!(
+            names(&req),
+            vec![
+                IpKind::ParamName(NameSite::Multipart),
+                IpKind::ParamName(NameSite::Url)
+            ]
+        );
+        let p = insertion_points(&req)
+            .into_iter()
+            .find(|p| p.kind == IpKind::ParamName(NameSite::Multipart))
+            .unwrap();
         let r = inject_payload(&req, &p, "a\"b");
         assert!(body_of(&r).ends_with("hi\r\n--B\r\nContent-Disposition: form-data; name=\"a\\\"b\"\r\n\r\n1\r\n--B--\r\n"), "{r}");
         // A .php path also gets `/1` path info (typed as a URL parameter name).
         let php = "GET /app/index.PHP?x=1 HTTP/1.1\r\nHost: h\r\n\r\n";
-        assert_eq!(names(php), vec![IpKind::ParamName(NameSite::Url), IpKind::ParamName(NameSite::PhpPathInfo)]);
-        let p = insertion_points(php).into_iter().find(|p| p.kind == IpKind::ParamName(NameSite::PhpPathInfo)).unwrap();
-        assert!(inject_payload(php, &p, "../x").starts_with("GET /app/index.PHP/..%2Fx?x=1 HTTP/1.1\r\n"));
+        assert_eq!(
+            names(php),
+            vec![
+                IpKind::ParamName(NameSite::Url),
+                IpKind::ParamName(NameSite::PhpPathInfo)
+            ]
+        );
+        let p = insertion_points(php)
+            .into_iter()
+            .find(|p| p.kind == IpKind::ParamName(NameSite::PhpPathInfo))
+            .unwrap();
+        assert!(inject_payload(php, &p, "../x")
+            .starts_with("GET /app/index.PHP/..%2Fx?x=1 HTTP/1.1\r\n"));
     }
 
     #[test]
@@ -1610,26 +2011,42 @@ mod tests {
         let req = format!("GET /p?data={inner} HTTP/1.1\r\nHost: h\r\nCookie: _ga={inner}\r\n\r\n");
         let all = insertion_points(&req);
         // The skip-listed cookie takes its nested points with it (Zb9c).
-        assert!(all.iter().all(|p| p.chain().iter().all(|q| q.name != "_ga")));
+        assert!(all
+            .iter()
+            .all(|p| p.chain().iter().all(|q| q.name != "_ga")));
         assert!(all.iter().any(|p| p.kind == IpKind::Base64 { url: false }));
         // Nested points off: no Base64 / nested points.
         let mut cfg = ScanConfig::default();
-        cfg.disabled_insertion.insert(crate::scan_config::NESTED_KEY.into());
+        cfg.disabled_insertion
+            .insert(crate::scan_config::NESTED_KEY.into());
         assert!(audit_points(&req, &cfg).iter().all(|p| p.parent.is_none()));
         // URL parameters off: the parameter and everything nested in it go
         // (Zgai checks the parent), the nested toggle notwithstanding.
         let mut cfg = ScanConfig::default();
         cfg.disabled_insertion.insert("url".into());
         let pts = audit_points(&req, &cfg);
-        assert!(pts.iter().all(|p| p.kind != IpKind::Query && p.parent.is_none()), "{:?}", summary(&pts));
+        assert!(
+            pts.iter()
+                .all(|p| p.kind != IpKind::Query && p.parent.is_none()),
+            "{:?}",
+            summary(&pts)
+        );
         // The new types have their own switches.
         let mut cfg = ScanConfig::default();
         cfg.disabled_insertion.insert("param_name".into());
-        assert!(!audit_points(&req, &cfg).iter().any(|p| matches!(p.kind, IpKind::ParamName(_))));
+        assert!(!audit_points(&req, &cfg)
+            .iter()
+            .any(|p| matches!(p.kind, IpKind::ParamName(_))));
         // A configuration saved before D-11 (no new keys) has them on.
-        let old = ScanConfig { disabled_insertion: ["header".to_string()].into_iter().collect(), ..Default::default() };
+        let old = ScanConfig {
+            disabled_insertion: ["header".to_string()].into_iter().collect(),
+            ..Default::default()
+        };
         let pts = audit_points(&req, &old);
-        assert!(pts.iter().any(|p| matches!(p.kind, IpKind::ParamName(_))) && pts.iter().any(|p| p.parent.is_some()));
+        assert!(
+            pts.iter().any(|p| matches!(p.kind, IpKind::ParamName(_)))
+                && pts.iter().any(|p| p.parent.is_some())
+        );
     }
 
     #[test]
@@ -1639,11 +2056,31 @@ mod tests {
         let pts = insertion_points(&req);
         let cfg = ScanConfig::default();
         let php = pts.iter().find(|p| p.name == "PHPSESSID").unwrap();
-        assert!(php.skips_server_side(), "cookie PHPSESSID, matched ignoring case as Burp's `is` rules do");
+        assert!(
+            php.skips_server_side(),
+            "cookie PHPSESSID, matched ignoring case as Burp's `is` rules do"
+        );
         // burp.Zi6p (XSS and template injection), Zppj, Zx8l, Zp3a, Zxfo,
         // Zwkf, Zp7s, Zexx, Zgcg are server-side: none runs on PHPSESSID.
-        for check in [&ck::ReflectedXss as &dyn ck::PointCheck, &ck::TemplateInjection, &ck::SqlErrorInjection, &ck::SqlBooleanInjection, &ck::OsCommandInjection, &ck::PathTraversal, &ck::FilePathManipulation, &ck::ExternalInteraction, &ck::LdapInjection, &ck::XmlInjectionError, &ck::SsiInjection, &ck::SmtpHeaderInjection] {
-            assert!(!check_applies(check, php, &cfg), "{} runs on PHPSESSID", check.id());
+        for check in [
+            &ck::ReflectedXss as &dyn ck::PointCheck,
+            &ck::TemplateInjection,
+            &ck::SqlErrorInjection,
+            &ck::SqlBooleanInjection,
+            &ck::OsCommandInjection,
+            &ck::PathTraversal,
+            &ck::FilePathManipulation,
+            &ck::ExternalInteraction,
+            &ck::LdapInjection,
+            &ck::XmlInjectionError,
+            &ck::SsiInjection,
+            &ck::SmtpHeaderInjection,
+        ] {
+            assert!(
+                !check_applies(check, php, &cfg),
+                "{} runs on PHPSESSID",
+                check.id()
+            );
         }
         // Stored XSS (stage A4, the same Zi6p.Zh) is server-side too.
         {
@@ -1651,25 +2088,53 @@ mod tests {
             assert!(ck::StoredXss.server_side());
         }
         // The checks with no Zgx0.Zr test still run (Zr02, Zb_5, Zuag, Zwi, Zrmh).
-        for check in [&ck::InputReflected as &dyn ck::PointCheck, &ck::LinkManipulation, &ck::OpenRedirect, &ck::HeaderInjection, &ck::ClientTemplateInjection] {
-            assert!(check_applies(check, php, &cfg), "{} skipped on PHPSESSID", check.id());
+        for check in [
+            &ck::InputReflected as &dyn ck::PointCheck,
+            &ck::LinkManipulation,
+            &ck::OpenRedirect,
+            &ck::HeaderInjection,
+            &ck::ClientTemplateInjection,
+        ] {
+            assert!(
+                check_applies(check, php, &cfg),
+                "{} skipped on PHPSESSID",
+                check.id()
+            );
         }
         // `jsessionid` is an any_parameter rule; an ordinary cookie is not listed.
-        assert!(pts.iter().find(|p| p.name == "JSESSIONID").unwrap().skips_server_side());
-        let theme = pts.iter().find(|p| p.name == "theme" && p.parent.is_none()).unwrap();
+        assert!(pts
+            .iter()
+            .find(|p| p.name == "JSESSIONID")
+            .unwrap()
+            .skips_server_side());
+        let theme = pts
+            .iter()
+            .find(|p| p.name == "theme" && p.parent.is_none())
+            .unwrap();
         assert!(!theme.skips_server_side() && check_applies(&ck::SqlErrorInjection, theme, &cfg));
         // Only the point itself is matched (Ziqf.Zr): a Base64 value under a
         // listed cookie is a BASE64 point, which the cookie rule does not cover.
         let req = format!("GET /p HTTP/1.1\r\nHost: h\r\nCookie: PHPSESSID={sid}\r\n\r\n");
         let pts = insertion_points(&req);
-        let nested = pts.iter().find(|p| p.kind == IpKind::Base64 { url: false }).unwrap();
+        let nested = pts
+            .iter()
+            .find(|p| p.kind == IpKind::Base64 { url: false })
+            .unwrap();
         assert!(!nested.skips_server_side());
         assert!(check_applies(&ck::SqlErrorInjection, nested, &cfg));
         // Body rules cover form parameters, not JSON ones.
         let form = "POST / HTTP/1.1\r\nHost: h\r\nContent-Type: application/x-www-form-urlencoded\r\n\r\n__VIEWSTATE=x";
-        assert!(insertion_points(form).iter().find(|p| p.name == "__VIEWSTATE").unwrap().skips_server_side());
+        assert!(insertion_points(form)
+            .iter()
+            .find(|p| p.name == "__VIEWSTATE")
+            .unwrap()
+            .skips_server_side());
         let json = "POST / HTTP/1.1\r\nHost: h\r\nContent-Type: application/json\r\n\r\n{\"__viewstate\":\"x\"}";
-        assert!(!insertion_points(json).iter().find(|p| p.name == "__viewstate").unwrap().skips_server_side());
+        assert!(!insertion_points(json)
+            .iter()
+            .find(|p| p.name == "__viewstate")
+            .unwrap()
+            .skips_server_side());
     }
 
     #[test]
@@ -1678,13 +2143,29 @@ mod tests {
         let name = InsertionPoint::new(IpKind::ParamName(NameSite::Url), "", "1");
         let body = InsertionPoint::new(IpKind::EntireBody, "", "{}");
         // burp.Zx8l / Zibp.ZU / Zibp.ZZ / Zp7s refuse parameter names.
-        for check in [&ck::OsCommandInjection as &dyn ck::PointCheck, &ck::ExternalInteraction, &ck::PathTraversal, &ck::FilePathManipulation, &ck::XmlInjectionError, &ck::XmlInjectionOob] {
+        for check in [
+            &ck::OsCommandInjection as &dyn ck::PointCheck,
+            &ck::ExternalInteraction,
+            &ck::PathTraversal,
+            &ck::FilePathManipulation,
+            &ck::XmlInjectionError,
+            &ck::XmlInjectionOob,
+        ] {
             assert!(!check_applies(check, &name, &cfg), "{}", check.id());
             assert!(check_applies(check, &body, &cfg), "{}", check.id());
         }
         // Checks without a type rule take every kind.
-        for check in [&ck::ReflectedXss as &dyn ck::PointCheck, &ck::SqlErrorInjection, &ck::SsiInjection, &ck::InputReflected] {
-            assert!(check_applies(check, &name, &cfg) && check_applies(check, &body, &cfg), "{}", check.id());
+        for check in [
+            &ck::ReflectedXss as &dyn ck::PointCheck,
+            &ck::SqlErrorInjection,
+            &ck::SsiInjection,
+            &ck::InputReflected,
+        ] {
+            assert!(
+                check_applies(check, &name, &cfg) && check_applies(check, &body, &cfg),
+                "{}",
+                check.id()
+            );
         }
         // PHP code injection stays on file-upload parts.
         assert!(!check_applies(&ck::PhpCodeInjection, &body, &cfg));
@@ -1693,28 +2174,79 @@ mod tests {
     #[test]
     fn wording_follows_zsg0() {
         let pt = |kind: IpKind, name: &str| InsertionPoint::new(kind, name, "v");
-        assert_eq!(pt(IpKind::Query, "q").describe(), "value of the q request parameter");
-        assert_eq!(pt(IpKind::Query, "q").describe_short(true), "<b>q</b> parameter");
-        assert_eq!(pt(IpKind::Cookie, "sid").describe(), "value of the sid cookie");
-        assert_eq!(pt(IpKind::Header, "User-Agent").describe_short(false), "User-Agent HTTP header");
-        assert_eq!(pt(IpKind::Json(vec!["k".into()]), "k").describe(), "value of the k JSON parameter");
-        assert_eq!(pt(IpKind::XmlAttr { start: 0, end: 0 }, "id").describe(), "value of the id XML attribute");
-        assert_eq!(pt(IpKind::EntireBody, "").describe(), "value of the request body");
-        assert_eq!(pt(IpKind::EntireBody, "").describe_short(false), "request body");
-        assert_eq!(pt(IpKind::ParamName(NameSite::Multipart), "").describe(), "name of an arbitrarily supplied body parameter");
-        assert_eq!(pt(IpKind::PathFolder(0), "URL path folder 1").describe(), "value of the URL path folder 1");
-        assert_eq!(pt(IpKind::PathFilename(1), "URL path filename").describe(), "value of the URL path filename");
+        assert_eq!(
+            pt(IpKind::Query, "q").describe(),
+            "value of the q request parameter"
+        );
+        assert_eq!(
+            pt(IpKind::Query, "q").describe_short(true),
+            "<b>q</b> parameter"
+        );
+        assert_eq!(
+            pt(IpKind::Cookie, "sid").describe(),
+            "value of the sid cookie"
+        );
+        assert_eq!(
+            pt(IpKind::Header, "User-Agent").describe_short(false),
+            "User-Agent HTTP header"
+        );
+        assert_eq!(
+            pt(IpKind::Json(vec!["k".into()]), "k").describe(),
+            "value of the k JSON parameter"
+        );
+        assert_eq!(
+            pt(IpKind::XmlAttr { start: 0, end: 0 }, "id").describe(),
+            "value of the id XML attribute"
+        );
+        assert_eq!(
+            pt(IpKind::EntireBody, "").describe(),
+            "value of the request body"
+        );
+        assert_eq!(
+            pt(IpKind::EntireBody, "").describe_short(false),
+            "request body"
+        );
+        assert_eq!(
+            pt(IpKind::ParamName(NameSite::Multipart), "").describe(),
+            "name of an arbitrarily supplied body parameter"
+        );
+        assert_eq!(
+            pt(IpKind::PathFolder(0), "URL path folder 1").describe(),
+            "value of the URL path folder 1"
+        );
+        assert_eq!(
+            pt(IpKind::PathFilename(1), "URL path filename").describe(),
+            "value of the URL path filename"
+        );
         // Two levels: " within the " (or " of the " after a Base64 level).
         let parent = pt(IpKind::Cookie, "c");
         let child = InsertionPoint::nested(&parent, IpKind::Query, "a", "1");
-        assert_eq!(child.describe(), "value of the a request parameter within the c cookie");
+        assert_eq!(
+            child.describe(),
+            "value of the a request parameter within the c cookie"
+        );
         let b = InsertionPoint::nested(&parent, IpKind::Base64 { url: true }, "c", "x");
-        assert_eq!(b.describe_short(false), "Base64Url-decoded value of the c cookie");
+        assert_eq!(
+            b.describe_short(false),
+            "Base64Url-decoded value of the c cookie"
+        );
     }
 
     #[test]
     fn hostile_xml_and_nesting_never_panic() {
-        for body in ["<", "<a", "<a b=\"", "<a b='x' c", "</", "<!--", "<![CDATA[x", "<a/><b / ><é x=\"é\"/>", "<a>é</a", "<>", "< / >"] {
+        for body in [
+            "<",
+            "<a",
+            "<a b=\"",
+            "<a b='x' c",
+            "</",
+            "<!--",
+            "<![CDATA[x",
+            "<a/><b / ><é x=\"é\"/>",
+            "<a>é</a",
+            "<>",
+            "< / >",
+        ] {
             let req = format!("POST / HTTP/1.1\r\nHost: h\r\nContent-Type: text/xml\r\n\r\n{body}");
             for p in insertion_points(&req) {
                 let _ = inject_payload(&req, &p, "<x>");
@@ -1727,7 +2259,10 @@ mod tests {
         }
         let req = format!("GET /?d={v} HTTP/1.1\r\nHost: h\r\n\r\n");
         let pts = insertion_points(&req);
-        assert!(pts.len() <= MAX_INSERTION_POINTS && pts.iter().filter(|p| p.parent.is_some()).count() >= 12);
+        assert!(
+            pts.len() <= MAX_INSERTION_POINTS
+                && pts.iter().filter(|p| p.parent.is_some()).count() >= 12
+        );
         for p in &pts {
             let _ = inject_payload(&req, p, "'");
         }
@@ -1741,40 +2276,75 @@ mod tests {
         let mut cfg = ScanConfig::default();
         cfg.disabled_insertion.insert("url".into());
         let pts = audit_points(&String::from_utf8_lossy(req), &cfg);
-        assert_eq!((pts[0].kind.clone(), pts[0].name.as_str()), (IpKind::ParamName(NameSite::Url), ""));
+        assert_eq!(
+            (pts[0].kind.clone(), pts[0].name.as_str()),
+            (IpKind::ParamName(NameSite::Url), "")
+        );
         let slots = crate::scan::slots_for(req, crate::scan::ScanSpeed::Normal, &cfg);
-        assert!(!slots.iter().any(|s| s.starts_with("#0:")), "no out-of-band check runs on the name point: {slots:?}");
+        assert!(
+            !slots.iter().any(|s| s.starts_with("#0:")),
+            "no out-of-band check runs on the name point: {slots:?}"
+        );
         assert_eq!(pts[1].name, "Referer");
         assert!(slots.contains(&"#1:ext".to_string()), "{slots:?}");
     }
     #[test]
     fn json_points_keep_request_order_and_injection_keeps_the_body() {
         let body = "{ \"z\": \"a\",\n  \"b\": [1, true, null, \"s\"], \"m\": {\"y\": 2.5, \"x\": \"\\u00e9\"} }";
-        let req = format!("POST /j HTTP/1.1\r\nHost: h\r\nContent-Type: application/json\r\n\r\n{body}");
-        let pts: Vec<InsertionPoint> = insertion_points(&req).into_iter().filter(|p| matches!(p.kind, IpKind::Json(_))).collect();
-        let got: Vec<(&str, &str)> = pts.iter().map(|p| (p.name.as_str(), p.value.as_str())).collect();
-        assert_eq!(got, vec![("z", "a"), ("0", "1"), ("1", "true"), ("3", "s"), ("y", "2.5"), ("x", "\u{e9}")]);
+        let req =
+            format!("POST /j HTTP/1.1\r\nHost: h\r\nContent-Type: application/json\r\n\r\n{body}");
+        let pts: Vec<InsertionPoint> = insertion_points(&req)
+            .into_iter()
+            .filter(|p| matches!(p.kind, IpKind::Json(_)))
+            .collect();
+        let got: Vec<(&str, &str)> = pts
+            .iter()
+            .map(|p| (p.name.as_str(), p.value.as_str()))
+            .collect();
+        assert_eq!(
+            got,
+            vec![
+                ("z", "a"),
+                ("0", "1"),
+                ("1", "true"),
+                ("3", "s"),
+                ("y", "2.5"),
+                ("x", "\u{e9}")
+            ]
+        );
         // Only the value changes: spacing, key order and the other values
         // are sent as they were (a byte splice, not a re-serialisation).
         let r = inject_payload(&req, &pts[0], "q\"/\u{e9}");
-        assert_eq!(body_of(&r), body.replacen("\"a\"", "\"q\\\"\\/\\u00c3\\u00a9\"", 1));
+        assert_eq!(
+            body_of(&r),
+            body.replacen("\"a\"", "\"q\\\"\\/\\u00c3\\u00a9\"", 1)
+        );
         // A number becomes a quoted string (burp.Zuq.Zm).
         let r = inject_payload(&req, &pts[4], "x'");
         assert!(body_of(&r).contains("{\"y\": \"x'\", \"x\""), "{r}");
         let v: serde_json::Value = serde_json::from_str(body_of(&r)).unwrap();
         assert_eq!(v["m"]["y"], "x'");
         // burp.Zgh2: `"` `/` `\` escaped, controls named, other bytes \u00xx.
-        assert_eq!(json_escape("a\"/\\\n\u{1}\u{e9}"), "a\\\"\\/\\\\\\n\\u0001\\u00c3\\u00a9");
+        assert_eq!(
+            json_escape("a\"/\\\n\u{1}\u{e9}"),
+            "a\\\"\\/\\\\\\n\\u0001\\u00c3\\u00a9"
+        );
     }
 
     #[test]
     fn a_huge_body_stops_the_builder_at_the_cap() {
-        let items: String = (0..20_000).map(|i| format!("<i a=\"{i}\">{}</i>", b64("a=1&b=2"))).collect();
+        let items: String = (0..20_000)
+            .map(|i| format!("<i a=\"{i}\">{}</i>", b64("a=1&b=2")))
+            .collect();
         let body = format!("<r>{items}</r>");
         let req = format!("POST /soap HTTP/1.1\r\nHost: h\r\nContent-Type: text/xml\r\n\r\n{body}");
         let t0 = std::time::Instant::now();
         let pts = insertion_points(&req);
         assert_eq!(pts.len(), MAX_INSERTION_POINTS);
-        assert!(t0.elapsed() < std::time::Duration::from_secs(2), "{:?}", t0.elapsed());
+        assert!(
+            t0.elapsed() < std::time::Duration::from_secs(2),
+            "{:?}",
+            t0.elapsed()
+        );
     }
 }

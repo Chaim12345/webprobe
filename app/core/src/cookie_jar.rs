@@ -25,7 +25,14 @@ pub struct Cookie {
 }
 
 /// Which tools feed the jar and which have its cookies applied.
-pub const TOOLS: [&str; 6] = ["Proxy", "Scanner", "Repeater", "Intruder", "Sequencer", "Target"];
+pub const TOOLS: [&str; 6] = [
+    "Proxy",
+    "Scanner",
+    "Repeater",
+    "Intruder",
+    "Sequencer",
+    "Target",
+];
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct CookieJar {
@@ -39,14 +46,25 @@ pub struct CookieJar {
 
 impl Default for CookieJar {
     fn default() -> Self {
-        CookieJar { cookies: Vec::new(), update_from: vec!["Proxy".into()], apply_to: vec!["Scanner".into()] }
+        CookieJar {
+            cookies: Vec::new(),
+            update_from: vec!["Proxy".into()],
+            apply_to: vec!["Scanner".into()],
+        }
     }
 }
 
 /// Host without port, lower case.
 fn bare_host(host: &str) -> String {
     let h = host.trim();
-    let h = if h.starts_with('[') { h.split(']').next().map(|s| &s[1..]).unwrap_or(h) } else { h.rsplit_once(':').filter(|(_, p)| p.bytes().all(|b| b.is_ascii_digit())).map(|(h, _)| h).unwrap_or(h) };
+    let h = if h.starts_with('[') {
+        h.split(']').next().map(|s| &s[1..]).unwrap_or(h)
+    } else {
+        h.rsplit_once(':')
+            .filter(|(_, p)| p.bytes().all(|b| b.is_ascii_digit()))
+            .map(|(h, _)| h)
+            .unwrap_or(h)
+    };
     h.to_ascii_lowercase()
 }
 
@@ -56,13 +74,19 @@ fn is_ip(host: &str) -> bool {
 
 /// RFC 6265 5.1.3: the host is the domain, or a subdomain of it.
 pub fn domain_matches(host: &str, domain: &str) -> bool {
-    host == domain || (!is_ip(host) && host.len() > domain.len() && host.ends_with(domain) && host.as_bytes()[host.len() - domain.len() - 1] == b'.')
+    host == domain
+        || (!is_ip(host)
+            && host.len() > domain.len()
+            && host.ends_with(domain)
+            && host.as_bytes()[host.len() - domain.len() - 1] == b'.')
 }
 
 /// RFC 6265 5.1.4: the request path is the cookie path or below it.
 pub fn path_matches(request_path: &str, cookie_path: &str) -> bool {
     let p = request_path.split(['?', '#']).next().unwrap_or("/");
-    p == cookie_path || (p.starts_with(cookie_path) && (cookie_path.ends_with('/') || p.as_bytes().get(cookie_path.len()) == Some(&b'/')))
+    p == cookie_path
+        || (p.starts_with(cookie_path)
+            && (cookie_path.ends_with('/') || p.as_bytes().get(cookie_path.len()) == Some(&b'/')))
 }
 
 /// RFC 6265 5.1.4: the default cookie path of a request path.
@@ -110,7 +134,11 @@ pub fn parse_http_date(text: &str) -> Option<u64> {
         } else if month.is_none() && tok.len() >= 3 {
             // Compare bytes: slicing the &str at 3 panicked inside a multi-byte
             // character (found by the fuzz test).
-            let m = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"].iter().position(|m| tok.as_bytes()[..3].eq_ignore_ascii_case(m.as_bytes()));
+            let m = [
+                "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+            ]
+            .iter()
+            .position(|m| tok.as_bytes()[..3].eq_ignore_ascii_case(m.as_bytes()));
             month = m.map(|m| m as i64 + 1).or(month);
         }
     }
@@ -133,18 +161,37 @@ impl CookieJar {
     /// to `request_path`. Returns false when the cookie is rejected (no name,
     /// or a Domain the host does not belong to). A cookie that is already
     /// expired deletes the stored one.
-    pub fn set_cookie(&mut self, host: &str, request_path: &str, header_value: &str, now: u64) -> bool {
+    pub fn set_cookie(
+        &mut self,
+        host: &str,
+        request_path: &str,
+        header_value: &str,
+        now: u64,
+    ) -> bool {
         let host = bare_host(host);
         let mut parts = header_value.split(';');
-        let Some((name, value)) = parts.next().and_then(|nv| nv.split_once('=')) else { return false };
+        let Some((name, value)) = parts.next().and_then(|nv| nv.split_once('=')) else {
+            return false;
+        };
         let (name, value) = (name.trim(), value.trim().trim_matches('"'));
         if name.is_empty() {
             return false;
         }
-        let mut c = Cookie { domain: host.clone(), host_only: true, path: default_path(request_path), name: name.to_string(), value: value.to_string(), secure: false, expires: None };
+        let mut c = Cookie {
+            domain: host.clone(),
+            host_only: true,
+            path: default_path(request_path),
+            name: name.to_string(),
+            value: value.to_string(),
+            secure: false,
+            expires: None,
+        };
         let mut max_age: Option<i64> = None;
         for attr in parts {
-            let (k, v) = attr.split_once('=').map(|(k, v)| (k.trim(), v.trim())).unwrap_or((attr.trim(), ""));
+            let (k, v) = attr
+                .split_once('=')
+                .map(|(k, v)| (k.trim(), v.trim()))
+                .unwrap_or((attr.trim(), ""));
             match k.to_ascii_lowercase().as_str() {
                 "domain" if !v.is_empty() => {
                     let d = v.trim_start_matches('.').to_ascii_lowercase();
@@ -165,7 +212,8 @@ impl CookieJar {
         if let Some(age) = max_age {
             c.expires = Some(if age <= 0 { 0 } else { now + age as u64 });
         }
-        self.cookies.retain(|o| !(o.name == c.name && o.domain == c.domain && o.path == c.path));
+        self.cookies
+            .retain(|o| !(o.name == c.name && o.domain == c.domain && o.path == c.path));
         if c.expires.is_some_and(|e| e <= now) {
             return true;
         }
@@ -174,9 +222,20 @@ impl CookieJar {
     }
 
     /// Store every Set-Cookie of a response. Returns how many were accepted.
-    pub fn update_from_response(&mut self, host: &str, request_path: &str, response: &[u8], now: u64) -> usize {
+    pub fn update_from_response(
+        &mut self,
+        host: &str,
+        request_path: &str,
+        response: &[u8],
+        now: u64,
+    ) -> usize {
         let parts = crate::util::parse_http(response);
-        parts.headers.iter().filter(|(k, _)| k.eq_ignore_ascii_case("Set-Cookie")).filter(|(_, v)| self.set_cookie(host, request_path, v, now)).count()
+        parts
+            .headers
+            .iter()
+            .filter(|(k, _)| k.eq_ignore_ascii_case("Set-Cookie"))
+            .filter(|(_, v)| self.set_cookie(host, request_path, v, now))
+            .count()
     }
 
     /// The cookies to send to this URL, longest path first (RFC 6265 5.4).
@@ -185,7 +244,13 @@ impl CookieJar {
         let mut out: Vec<&Cookie> = self
             .cookies
             .iter()
-            .filter(|c| if c.host_only { host == c.domain } else { domain_matches(&host, &c.domain) })
+            .filter(|c| {
+                if c.host_only {
+                    host == c.domain
+                } else {
+                    domain_matches(&host, &c.domain)
+                }
+            })
             .filter(|c| path_matches(path, &c.path))
             .filter(|c| https || !c.secure)
             .filter(|c| c.expires.is_none_or(|e| e > now))
@@ -207,7 +272,10 @@ impl CookieJar {
         let existing = crate::util::get_header(&parts.headers, "Cookie").unwrap_or_default();
         let mut pairs: Vec<(String, String)> = existing
             .split(';')
-            .filter_map(|p| p.split_once('=').map(|(n, v)| (n.trim().to_string(), v.trim().to_string())))
+            .filter_map(|p| {
+                p.split_once('=')
+                    .map(|(n, v)| (n.trim().to_string(), v.trim().to_string()))
+            })
             .filter(|(n, _)| !n.is_empty())
             .collect();
         for c in jar {
@@ -216,7 +284,11 @@ impl CookieJar {
                 None => pairs.push((c.name.clone(), c.value.clone())),
             }
         }
-        let value = pairs.iter().map(|(n, v)| format!("{n}={v}")).collect::<Vec<_>>().join("; ");
+        let value = pairs
+            .iter()
+            .map(|(n, v)| format!("{n}={v}"))
+            .collect::<Vec<_>>()
+            .join("; ");
         crate::net::replace_or_add_header(request, "Cookie", &value)
     }
 
@@ -243,15 +315,40 @@ mod tests {
     #[test]
     fn stores_by_domain_path_and_name_and_replaces_same_key() {
         let mut jar = CookieJar::default();
-        assert!(jar.set_cookie("shop.example.com:8443", "/account/login", "sid=one; Path=/; Secure; HttpOnly", NOW));
+        assert!(jar.set_cookie(
+            "shop.example.com:8443",
+            "/account/login",
+            "sid=one; Path=/; Secure; HttpOnly",
+            NOW
+        ));
         assert!(jar.set_cookie("shop.example.com", "/account/login", "theme=dark", NOW));
         assert!(jar.set_cookie("shop.example.com", "/x", "sid=two; Path=/", NOW));
         assert_eq!(jar.cookies.len(), 2);
         let sid = jar.cookies.iter().find(|c| c.name == "sid").unwrap();
-        assert_eq!((sid.value.as_str(), sid.domain.as_str(), sid.host_only, sid.path.as_str(), sid.secure), ("two", "shop.example.com", true, "/", false));
+        assert_eq!(
+            (
+                sid.value.as_str(),
+                sid.domain.as_str(),
+                sid.host_only,
+                sid.path.as_str(),
+                sid.secure
+            ),
+            ("two", "shop.example.com", true, "/", false)
+        );
         // Default path is the request path's directory.
-        assert_eq!(jar.cookies.iter().find(|c| c.name == "theme").unwrap().path, "/account");
-        assert_eq!([default_path("/"), default_path("/a"), default_path("/a/b?x=1"), default_path("")], ["/", "/", "/a", "/"]);
+        assert_eq!(
+            jar.cookies.iter().find(|c| c.name == "theme").unwrap().path,
+            "/account"
+        );
+        assert_eq!(
+            [
+                default_path("/"),
+                default_path("/a"),
+                default_path("/a/b?x=1"),
+                default_path("")
+            ],
+            ["/", "/", "/a", "/"]
+        );
         // No name, or no '=' at all: rejected.
         assert!(!jar.set_cookie("shop.example.com", "/", "=v", NOW));
         assert!(!jar.set_cookie("shop.example.com", "/", "novalue", NOW));
@@ -265,11 +362,20 @@ mod tests {
         assert!(!jar.set_cookie("example.com", "/", "sub=1; Domain=a.example.com", NOW));
         // A domain cookie reaches sibling subdomains; a host-only one does not.
         assert!(jar.set_cookie("a.example.com", "/", "narrow=1", NOW));
-        let names = |jar: &CookieJar, host: &str| jar.cookies_for(host, "/", true, NOW).iter().map(|c| c.name.clone()).collect::<Vec<_>>();
+        let names = |jar: &CookieJar, host: &str| {
+            jar.cookies_for(host, "/", true, NOW)
+                .iter()
+                .map(|c| c.name.clone())
+                .collect::<Vec<_>>()
+        };
         assert_eq!(names(&jar, "b.example.com"), ["wide"]);
         assert_eq!(names(&jar, "a.example.com"), ["wide", "narrow"]);
         assert!(names(&jar, "notexample.com").is_empty());
-        assert!(domain_matches("a.b.test", "b.test") && !domain_matches("ab.test", "b.test") && !domain_matches("10.0.0.1", "0.0.1"));
+        assert!(
+            domain_matches("a.b.test", "b.test")
+                && !domain_matches("ab.test", "b.test")
+                && !domain_matches("10.0.0.1", "0.0.1")
+        );
     }
 
     #[test]
@@ -279,31 +385,68 @@ mod tests {
         jar.set_cookie("h.test", "/", "admin=1; Path=/admin", NOW);
         jar.set_cookie("h.test", "/", "tls=1; Path=/; Secure", NOW);
         jar.set_cookie("h.test", "/", "short=1; Path=/; Max-Age=60", NOW);
-        jar.set_cookie("h.test", "/", "dated=1; Path=/; Expires=Wed, 21 Oct 2099 07:28:00 GMT", NOW);
-        let names = |path: &str, https: bool, now: u64| jar.cookies_for("h.test", path, https, now).iter().map(|c| c.name.as_str()).collect::<Vec<_>>();
+        jar.set_cookie(
+            "h.test",
+            "/",
+            "dated=1; Path=/; Expires=Wed, 21 Oct 2099 07:28:00 GMT",
+            NOW,
+        );
+        let names = |path: &str, https: bool, now: u64| {
+            jar.cookies_for("h.test", path, https, now)
+                .iter()
+                .map(|c| c.name.as_str())
+                .collect::<Vec<_>>()
+        };
         assert_eq!(names("/", false, NOW), ["root", "short", "dated"]);
         // Longest path first; /administrator is not under /admin.
-        assert_eq!(names("/admin/users?x=1", true, NOW), ["admin", "root", "tls", "short", "dated"]);
-        assert_eq!(names("/administrator", false, NOW), ["root", "short", "dated"]);
+        assert_eq!(
+            names("/admin/users?x=1", true, NOW),
+            ["admin", "root", "tls", "short", "dated"]
+        );
+        assert_eq!(
+            names("/administrator", false, NOW),
+            ["root", "short", "dated"]
+        );
         assert_eq!(names("/", false, NOW + 61), ["root", "dated"]);
-        assert!(path_matches("/a/b", "/a") && path_matches("/a", "/a") && path_matches("/a/b", "/a/") && !path_matches("/ab", "/a"));
+        assert!(
+            path_matches("/a/b", "/a")
+                && path_matches("/a", "/a")
+                && path_matches("/a/b", "/a/")
+                && !path_matches("/ab", "/a")
+        );
     }
 
     #[test]
     fn expired_set_cookie_deletes_and_dates_parse() {
         let mut jar = CookieJar::default();
         jar.set_cookie("h.test", "/", "sid=1; Path=/", NOW);
-        assert!(jar.set_cookie("h.test", "/", "sid=gone; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT", NOW));
+        assert!(jar.set_cookie(
+            "h.test",
+            "/",
+            "sid=gone; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT",
+            NOW
+        ));
         assert!(jar.cookies.is_empty());
         jar.set_cookie("h.test", "/", "sid=1; Path=/; Max-Age=10", NOW);
         assert!(jar.set_cookie("h.test", "/", "sid=1; Path=/; Max-Age=0", NOW));
         assert!(jar.cookies.is_empty());
         assert_eq!(parse_http_date("Thu, 01 Jan 1970 00:00:00 GMT"), Some(0));
-        assert_eq!(parse_http_date("Wed, 21 Oct 2015 07:28:00 GMT"), Some(1_445_412_480));
-        assert_eq!(parse_http_date("Wednesday, 21-Oct-15 07:28:00 GMT"), Some(1_445_412_480));
+        assert_eq!(
+            parse_http_date("Wed, 21 Oct 2015 07:28:00 GMT"),
+            Some(1_445_412_480)
+        );
+        assert_eq!(
+            parse_http_date("Wednesday, 21-Oct-15 07:28:00 GMT"),
+            Some(1_445_412_480)
+        );
         assert_eq!(parse_http_date("not a date"), None);
         // Max-Age beats Expires.
-        jar.set_cookie("h.test", "/", "both=1; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=100", NOW);
+        jar.set_cookie(
+            "h.test",
+            "/",
+            "both=1; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=100",
+            NOW,
+        );
         assert_eq!(jar.cookies[0].expires, Some(NOW + 100));
         jar.purge_expired(NOW + 101);
         assert!(jar.cookies.is_empty());
@@ -313,10 +456,16 @@ mod tests {
     fn apply_updates_known_cookies_and_appends_the_rest() {
         let mut jar = CookieJar::default();
         let resp = b"HTTP/1.1 200 OK\r\nSet-Cookie: session=fresh; Path=/\r\nSet-Cookie: csrf=tok; Path=/\r\nSet-Cookie: bad=1; Domain=evil.test\r\n\r\n";
-        assert_eq!(jar.update_from_response("app.test:8080", "/login", resp, NOW), 2);
+        assert_eq!(
+            jar.update_from_response("app.test:8080", "/login", resp, NOW),
+            2
+        );
         let req = b"GET /profile HTTP/1.1\r\nHost: app.test:8080\r\nCookie: session=stale; lang=en\r\n\r\n";
         let out = String::from_utf8(jar.apply(req, "app.test:8080", false, NOW)).unwrap();
-        assert!(out.contains("Cookie: session=fresh; lang=en; csrf=tok\r\n"), "{out}");
+        assert!(
+            out.contains("Cookie: session=fresh; lang=en; csrf=tok\r\n"),
+            "{out}"
+        );
         // No Cookie header yet: one is added.
         let bare = b"GET / HTTP/1.1\r\nHost: app.test\r\n\r\n";
         let out = String::from_utf8(jar.apply(bare, "app.test", false, NOW)).unwrap();

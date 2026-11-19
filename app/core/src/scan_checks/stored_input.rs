@@ -28,7 +28,9 @@ pub(crate) fn run_stored_seeding(cx: &ScanCtx, points: &[InsertionPoint]) {
         let req = inject_payload(&cx.req, ip, &token);
         let chain = cx.send_following(&req);
         if let Some((r, resp)) = chain.first() {
-            cx.shared.stored.note_injection(&token, r.as_bytes(), resp.as_deref());
+            cx.shared
+                .stored
+                .note_injection(&token, r.as_bytes(), resp.as_deref());
         }
         cx.progress();
     }
@@ -36,7 +38,11 @@ pub(crate) fn run_stored_seeding(cx: &ScanCtx, points: &[InsertionPoint]) {
 
 /// burp.Zwfa (INPUT_RETRIEVAL_STORED) with burp.Zmkj's evidence: the
 /// injection exchange, then the retrieval exchange; information, certain.
-pub(crate) fn stored_input_issue(pair: &crate::stored::Pair, retrieval_req: &[u8], retrieval_resp: &[u8]) -> ScanIssue {
+pub(crate) fn stored_input_issue(
+    pair: &crate::stored::Pair,
+    retrieval_req: &[u8],
+    retrieval_resp: &[u8],
+) -> ScanIssue {
     let mut i = mk(
         "info",
         STORED_INPUT_ISSUE,
@@ -50,7 +56,10 @@ pub(crate) fn stored_input_issue(pair: &crate::stored::Pair, retrieval_req: &[u8
     );
     i.confidence = "Certain".into();
     let injection = ScanEvidence::new(&pair.injection.0, pair.injection.1.as_deref());
-    i.with_evidence(vec![injection, ScanEvidence::new(retrieval_req, Some(retrieval_resp))])
+    i.with_evidence(vec![
+        injection,
+        ScanEvidence::new(retrieval_req, Some(retrieval_resp)),
+    ])
 }
 
 /// A check of stage A4 (burp.Zwp6): it runs once per recorded pair.
@@ -79,20 +88,38 @@ impl PairCtx {
     /// One request to `item`'s service and its same-origin redirects; each
     /// request counts toward progress. Stage A4 does not look for new
     /// stored input (burp.Zpqv senders are not detectors).
-    pub(crate) fn send_following(&self, item: &crate::stored::Item, raw: &str) -> Vec<(String, Option<Vec<u8>>)> {
+    pub(crate) fn send_following(
+        &self,
+        item: &crate::stored::Item,
+        raw: &str,
+    ) -> Vec<(String, Option<Vec<u8>>)> {
         let mut out = Vec::new();
         let mut req = raw.to_string();
-        let host_hdr = util::get_header(&util::parse_http(item.req.as_bytes()).headers, "Host").unwrap_or_default();
+        let host_hdr = util::get_header(&util::parse_http(item.req.as_bytes()).headers, "Host")
+            .unwrap_or_default();
         for _ in 0..=STORED_MAX_REDIRECTS {
             if self.stopped() {
                 break;
             }
-            let resp = send_one(&self.shared, item.https, &item.host, item.port, req.as_bytes());
+            let resp = send_one(
+                &self.shared,
+                item.https,
+                &item.host,
+                item.port,
+                req.as_bytes(),
+            );
             bump_progress(&self.shared);
             let next = resp
                 .as_deref()
                 .and_then(active_checks::redirect_location)
-                .and_then(|l| same_origin_path(&l, item.https, &host_hdr, &util::parse_http(req.as_bytes()).path))
+                .and_then(|l| {
+                    same_origin_path(
+                        &l,
+                        item.https,
+                        &host_hdr,
+                        &util::parse_http(req.as_bytes()).path,
+                    )
+                })
                 .map(|p| get_request_like(&item.req, &p));
             out.push((req, resp));
             match next {
@@ -128,15 +155,26 @@ pub(crate) fn run_stored_stage(shared: &Arc<Shared>) {
         return;
     }
     let config = shared.scan_config.lock().unwrap().clone();
-    shared.log(&format!("Scanner: stored input stage, {} pair(s)", pairs.len()));
+    shared.log(&format!(
+        "Scanner: stored input stage, {} pair(s)",
+        pairs.len()
+    ));
     for pair in pairs {
         if shared.scan.stop.load(Ordering::SeqCst) {
             break;
         }
         for check in STORED_CHECKS {
-            let runs = (is_burp_issue(check.issue()) || shared.extra_checks.load(Ordering::SeqCst)) && config.issue_allowed(check.issue(), true);
-            if runs && check.applies_to(&pair.point) && config.check_enabled(check.id()) && !(check.server_side() && pair.point.skips_server_side()) {
-                check.run(&PairCtx { shared: shared.clone(), pair: pair.clone() });
+            let runs = (is_burp_issue(check.issue()) || shared.extra_checks.load(Ordering::SeqCst))
+                && config.issue_allowed(check.issue(), true);
+            if runs
+                && check.applies_to(&pair.point)
+                && config.check_enabled(check.id())
+                && !(check.server_side() && pair.point.skips_server_side())
+            {
+                check.run(&PairCtx {
+                    shared: shared.clone(),
+                    pair: pair.clone(),
+                });
             }
         }
     }

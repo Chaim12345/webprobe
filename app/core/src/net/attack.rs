@@ -71,10 +71,31 @@ pub fn start_attack(
             let req_bytes = attack.request.clone().into_bytes();
             cur.rows.lock().unwrap().push(match up.resp {
                 Some(resp) => {
-                    let st = util::parse_http(&resp).first.split_whitespace().nth(1).unwrap_or("").to_string();
-                    AttackRow { payload, status: st, len: resp.len(), ms, ok: true, req: req_bytes, resp: Some(resp) }
+                    let st = util::parse_http(&resp)
+                        .first
+                        .split_whitespace()
+                        .nth(1)
+                        .unwrap_or("")
+                        .to_string();
+                    AttackRow {
+                        payload,
+                        status: st,
+                        len: resp.len(),
+                        ms,
+                        ok: true,
+                        req: req_bytes,
+                        resp: Some(resp),
+                    }
                 }
-                None => AttackRow { payload, status: String::new(), len: 0, ms, ok: false, req: req_bytes, resp: None },
+                None => AttackRow {
+                    payload,
+                    status: String::new(),
+                    len: 0,
+                    ms,
+                    ok: false,
+                    req: req_bytes,
+                    resp: None,
+                },
             });
             cur.done.fetch_add(1, Ordering::SeqCst);
             // Gentle pacing so one bad host does not hammer (500 ms default throttle
@@ -98,12 +119,18 @@ pub fn parse_markers(text: &str) -> Vec<MarkerSeg> {
     let mut in_marker = false;
     for c in text.chars() {
         if c == '§' {
-            segs.push(MarkerSeg { text: std::mem::take(&mut current), is_marker: in_marker });
+            segs.push(MarkerSeg {
+                text: std::mem::take(&mut current),
+                is_marker: in_marker,
+            });
             in_marker = !in_marker;
         } else {
             current.push(c);
         }
     }
-    segs.push(MarkerSeg { text: current, is_marker: in_marker });
+    segs.push(MarkerSeg {
+        text: current,
+        is_marker: in_marker,
+    });
     segs
 }

@@ -38,7 +38,13 @@ WebProbe's built-in browser already trusts it. For any other browser or device, 
 
 /// True when this request is for the local setup page (or the CA download) and
 /// should be answered by the proxy instead of being sent upstream.
-pub fn local_response(host: &str, path: &str, port: u16, ca_pem: &str, ca_der: &[u8]) -> Option<Vec<u8>> {
+pub fn local_response(
+    host: &str,
+    path: &str,
+    port: u16,
+    ca_pem: &str,
+    ca_der: &[u8],
+) -> Option<Vec<u8>> {
     let host = host.split(':').next().unwrap_or(host);
     if !SETUP_HOSTS.iter().any(|h| h.eq_ignore_ascii_case(host)) {
         return None;

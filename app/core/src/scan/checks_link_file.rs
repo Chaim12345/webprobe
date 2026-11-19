@@ -25,7 +25,10 @@ pub fn link_targets(resp: &[u8]) -> Vec<String> {
                 let q = rest.as_bytes()[0] as char;
                 rest[1..].split(q).next().unwrap_or("").to_string()
             } else {
-                rest.split([' ', '>', '\t', '\n']).next().unwrap_or("").to_string()
+                rest.split([' ', '>', '\t', '\n'])
+                    .next()
+                    .unwrap_or("")
+                    .to_string()
             };
             if !val.is_empty() {
                 out.push(val);
@@ -41,25 +44,46 @@ pub fn link_targets(resp: &[u8]) -> Vec<String> {
 pub fn crawl_links(origin: &str, req_path: &str, resp: &[u8]) -> Vec<String> {
     let base = req_path.split('?').next().unwrap_or("/");
     let base = match base.split_once("://") {
-        Some((_, r)) => r.find('/').map(|i| r[i..].to_string()).unwrap_or_else(|| "/".into()),
+        Some((_, r)) => r
+            .find('/')
+            .map(|i| r[i..].to_string())
+            .unwrap_or_else(|| "/".into()),
         None => base.to_string(),
     };
     let dir = &base[..=base.rfind('/').unwrap_or(0)];
     let mut out = Vec::new();
     // Links come from HTML documents (and redirects), as a browser sees them:
     // href/src strings inside script bundles are not navigations.
-    let ct = util::get_header(&util::parse_http(resp).headers, "Content-Type").unwrap_or_default().to_ascii_lowercase();
-    let targets = if ct.contains("html") { link_targets(resp) } else { redirect_targets(resp) };
+    let ct = util::get_header(&util::parse_http(resp).headers, "Content-Type")
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let targets = if ct.contains("html") {
+        link_targets(resp)
+    } else {
+        redirect_targets(resp)
+    };
     for l in targets {
         let l = l.split('#').next().unwrap_or("").trim().to_string();
-        if l.is_empty() || l.starts_with("javascript:") || l.starts_with("mailto:") || l.starts_with("data:") {
+        if l.is_empty()
+            || l.starts_with("javascript:")
+            || l.starts_with("mailto:")
+            || l.starts_with("data:")
+        {
             continue;
         }
-        if l.chars().any(|c| c.is_whitespace() || "`{}()<>;$\"'\\".contains(c)) {
+        if l.chars()
+            .any(|c| c.is_whitespace() || "`{}()<>;$\"'\\".contains(c))
+        {
             continue;
         }
         let path = if let Some(rest) = l.strip_prefix(origin) {
-            if rest.is_empty() { "/".to_string() } else if rest.starts_with('/') { rest.to_string() } else { continue }
+            if rest.is_empty() {
+                "/".to_string()
+            } else if rest.starts_with('/') {
+                rest.to_string()
+            } else {
+                continue;
+            }
         } else if l.contains("://") || l.starts_with("//") {
             continue;
         } else if l.starts_with('/') {
@@ -68,13 +92,18 @@ pub fn crawl_links(origin: &str, req_path: &str, resp: &[u8]) -> Vec<String> {
             format!("{dir}{l}")
         };
         // Collapse ./ and ../ segments.
-        let (p, q) = match path.split_once('?') { Some((p, q)) => (p.to_string(), Some(q.to_string())), None => (path.clone(), None) };
+        let (p, q) = match path.split_once('?') {
+            Some((p, q)) => (p.to_string(), Some(q.to_string())),
+            None => (path.clone(), None),
+        };
         let mut segs: Vec<&str> = Vec::new();
         let ends_dir = p.ends_with('/') || p.ends_with("/.") || p.ends_with("/..");
         for seg in p.split('/') {
             match seg {
                 "." => {}
-                ".." => { segs.pop(); }
+                ".." => {
+                    segs.pop();
+                }
                 s => segs.push(s),
             }
         }
@@ -98,7 +127,10 @@ pub fn crawl_links(origin: &str, req_path: &str, resp: &[u8]) -> Vec<String> {
 /// burp.Zb_5 reflected link manipulation: inject an absolute URL and report
 /// when it becomes a link or redirect target the page points at (value
 /// replaced then appended, burp.Zw7s REPLACE/APPEND).
-pub fn run_link_manip_check<F: FnMut(&str) -> Option<Vec<u8>>>(_value: &str, mut send: F) -> Option<LinkManipHit> {
+pub fn run_link_manip_check<F: FnMut(&str) -> Option<Vec<u8>>>(
+    _value: &str,
+    mut send: F,
+) -> Option<LinkManipHit> {
     // burp.Zb_5 (LINK_MANIPULATION_REFLECTED): the value is replaced by a
     // random 10-character token, which must come back unmodified inside a
     // URL: a link in the page or the Location / Refresh target (Burp, lab
@@ -108,17 +140,35 @@ pub fn run_link_manip_check<F: FnMut(&str) -> Option<Vec<u8>>>(_value: &str, mut
     let token: String = {
         use rand::Rng;
         let mut g = rand::thread_rng();
-        (0..10).map(|i| if i == 8 { (b'0' + g.gen_range(0..10)) as char } else { (b'a' + g.gen_range(0..26)) as char }).collect()
+        (0..10)
+            .map(|i| {
+                if i == 8 {
+                    (b'0' + g.gen_range(0..10)) as char
+                } else {
+                    (b'a' + g.gen_range(0..26)) as char
+                }
+            })
+            .collect()
     };
     let resp = send(&token)?;
-    let target = link_targets(&resp).into_iter().chain(redirect_targets(&resp)).find(|t| t.contains(&token))?;
-    Some(LinkManipHit { payload: token, target })
+    let target = link_targets(&resp)
+        .into_iter()
+        .chain(redirect_targets(&resp))
+        .find(|t| t.contains(&token))?;
+    Some(LinkManipHit {
+        payload: token,
+        target,
+    })
 }
 
 /// burp.Zulm: valid (same-file) and invalid path variants of a path-like
 /// value. Templates decoded from Zulm.ZV/Zb (%1=sep, %2=file, %3=random).
 pub fn file_path_variants(value: &str) -> Option<(String, Vec<String>, Vec<String>)> {
-    let sep = if !value.contains('/') && value.contains('\\') { "\\" } else { "/" };
+    let sep = if !value.contains('/') && value.contains('\\') {
+        "\\"
+    } else {
+        "/"
+    };
     let cut = value.rfind(['/', '\\']);
     let (dir, file) = match cut {
         Some(i) => (&value[..i + 1], &value[i + 1..]),
@@ -130,7 +180,9 @@ pub fn file_path_variants(value: &str) -> Option<(String, Vec<String>, Vec<Strin
     let r = || {
         use rand::Rng;
         let mut g = rand::thread_rng();
-        (0..3).map(|_| (b'a' + g.gen_range(0..26)) as char).collect::<String>()
+        (0..3)
+            .map(|_| (b'a' + g.gen_range(0..26)) as char)
+            .collect::<String>()
     };
     // Zulm.ZV: redundant paths to the same file (should return the same file).
     let valid = vec![
@@ -183,5 +235,9 @@ pub fn run_file_path_manip_check<F: FnMut(&str) -> Option<Vec<u8>>>(
             (sent.borrow_mut())(p)
         },
     )?;
-    Some(FilePathManipHit { valid: valid[0].clone(), invalid: invalid[0].clone(), attributes: attrs })
+    Some(FilePathManipHit {
+        valid: valid[0].clone(),
+        invalid: invalid[0].clone(),
+        attributes: attrs,
+    })
 }

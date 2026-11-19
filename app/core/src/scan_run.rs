@@ -43,7 +43,11 @@ impl ScanRun {
                     if left.is_zero() {
                         return false;
                     }
-                    busy = self.idle.wait_timeout(busy, left).unwrap_or_else(|p| p.into_inner()).0;
+                    busy = self
+                        .idle
+                        .wait_timeout(busy, left)
+                        .unwrap_or_else(|p| p.into_inner())
+                        .0;
                 }
             }
         }
@@ -61,7 +65,8 @@ impl ScanRun {
 
     fn release(&self) {
         // The planned total assumes every check runs; settle it at the end.
-        self.total.store(self.done.load(Ordering::SeqCst), Ordering::SeqCst);
+        self.total
+            .store(self.done.load(Ordering::SeqCst), Ordering::SeqCst);
         *self.busy.lock().unwrap_or_else(|p| p.into_inner()) = false;
         self.idle.notify_all();
     }
@@ -81,7 +86,9 @@ impl Drop for ScanGuard {
 
 /// Claim the scanner, or `None` when a scan is already running.
 pub fn try_claim(shared: &Arc<Shared>) -> Option<ScanGuard> {
-    shared.scan.claim().then(|| ScanGuard { shared: Arc::clone(shared) })
+    shared.scan.claim().then(|| ScanGuard {
+        shared: Arc::clone(shared),
+    })
 }
 
 #[cfg(test)]
@@ -94,7 +101,10 @@ mod tests {
         let g = try_claim(&shared).expect("first claim");
         assert!(try_claim(&shared).is_none(), "second claim refused");
         assert!(shared.scan.is_busy());
-        assert!(!shared.scan.wait_idle(Some(Duration::from_millis(50))), "still busy");
+        assert!(
+            !shared.scan.wait_idle(Some(Duration::from_millis(50))),
+            "still busy"
+        );
         let s2 = Arc::clone(&shared);
         let waiter = std::thread::spawn(move || s2.scan.wait_idle(Some(Duration::from_secs(10))));
         std::thread::sleep(Duration::from_millis(50));

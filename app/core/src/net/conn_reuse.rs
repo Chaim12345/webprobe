@@ -39,7 +39,10 @@ pub fn set_connection(req: &[u8], value: &str) -> Vec<u8> {
 /// `upgraded = true` means the socket now speaks HTTP/2 (never pool it);
 /// `upgraded = false` means the server declined and `resp` is an ordinary
 /// HTTP/1.1 reply whose connection may still be pooled for keep-alive.
-pub fn try_h2c_upgrade<S: Read + Write + ResponseRead>(stream: &mut S, routed: &[u8]) -> Result<Option<(Vec<u8>, bool)>, String> {
+pub fn try_h2c_upgrade<S: Read + Write + ResponseRead>(
+    stream: &mut S,
+    routed: &[u8],
+) -> Result<Option<(Vec<u8>, bool)>, String> {
     let parts = util::parse_http(routed);
     if parts.head_len == 0 || parts.head_len > routed.len() {
         return Ok(None);
@@ -61,14 +64,24 @@ pub fn try_h2c_upgrade<S: Read + Write + ResponseRead>(stream: &mut S, routed: &
     }
     upgrade.extend_from_slice(b"Connection: Upgrade, HTTP2-Settings\r\n");
     upgrade.extend_from_slice(b"Upgrade: h2c\r\n");
-    upgrade.extend_from_slice(format!("HTTP2-Settings: {}\r\n\r\n", crate::h2::empty_settings_value()).as_bytes());
+    upgrade.extend_from_slice(
+        format!(
+            "HTTP2-Settings: {}\r\n\r\n",
+            crate::h2::empty_settings_value()
+        )
+        .as_bytes(),
+    );
     upgrade.extend_from_slice(&routed[parts.head_len..]);
-    stream.write_all(&upgrade).map_err(|e| format!("h2c upgrade write: {e}"))?;
+    stream
+        .write_all(&upgrade)
+        .map_err(|e| format!("h2c upgrade write: {e}"))?;
 
     let mut head = Vec::new();
     let mut byte = [0u8; 1];
     loop {
-        stream.read_exact(&mut byte).map_err(|e| format!("h2c upgrade read: {e}"))?;
+        stream
+            .read_exact(&mut byte)
+            .map_err(|e| format!("h2c upgrade read: {e}"))?;
         head.push(byte[0]);
         if head.ends_with(b"\r\n\r\n") {
             break;
@@ -106,7 +119,10 @@ pub fn try_h2c_upgrade<S: Read + Write + ResponseRead>(stream: &mut S, routed: &
         crate::codec::BodyKind::Chunked => {
             let mut cur = crate::codec::ChunkCursor::default();
             loop {
-                if crate::codec::scan_chunked(&msg[head_len..], &mut cur, |_| {}) != crate::codec::Chunked::Partial || msg.len() - head_len > crate::codec::MAX_BODY {
+                if crate::codec::scan_chunked(&msg[head_len..], &mut cur, |_| {})
+                    != crate::codec::Chunked::Partial
+                    || msg.len() - head_len > crate::codec::MAX_BODY
+                {
                     break;
                 }
                 let mut chunk = [0u8; 16384];
@@ -118,9 +134,12 @@ pub fn try_h2c_upgrade<S: Read + Write + ResponseRead>(stream: &mut S, routed: &
             }
         }
         crate::codec::BodyKind::UntilEof => {
-            stream.set_open_ended_timeout().map_err(|e| format!("h2c open-ended timeout: {e}"))?;
+            stream
+                .set_open_ended_timeout()
+                .map_err(|e| format!("h2c open-ended timeout: {e}"))?;
             // Bounded like every response body (codec::MAX_BODY).
-            let mut rest = util::read_capped(stream, crate::codec::MAX_BODY, "the response body").map_err(|e| format!("h2c fallback: {e}"))?;
+            let mut rest = util::read_capped(stream, crate::codec::MAX_BODY, "the response body")
+                .map_err(|e| format!("h2c fallback: {e}"))?;
             msg.append(&mut rest);
         }
     }
@@ -142,7 +161,13 @@ pub fn response_allows_reuse(resp: &[u8]) -> bool {
     framed && not_close
 }
 
-pub fn send_inner(shared: &Shared, host: &str, port: u16, req: &[u8], mut sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>) -> Result<Vec<u8>, String> {
+pub fn send_inner(
+    shared: &Shared,
+    host: &str,
+    port: u16,
+    req: &[u8],
+    mut sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
+) -> Result<Vec<u8>, String> {
     let config = shared.upstream_for(host);
     let req = util::origin_form(req);
     let routed = crate::upstream::absolute_form_request(&config, &req, host, port);
@@ -153,7 +178,11 @@ pub fn send_inner(shared: &Shared, host: &str, port: u16, req: &[u8], mut sink: 
         set_connection(&routed, "close")
     };
     let key = (host.to_string(), port);
-    let mut pooled = if keep_alive { shared.pool.lock().unwrap().remove(&key) } else { None };
+    let mut pooled = if keep_alive {
+        shared.pool.lock().unwrap().remove(&key)
+    } else {
+        None
+    };
     if let Some(conn) = pooled.as_mut() {
         if !conn.writable() {
             pooled = None;
@@ -165,7 +194,8 @@ pub fn send_inner(shared: &Shared, host: &str, port: u16, req: &[u8], mut sink: 
         None => {
             shared.conns_opened.fetch_add(1, Ordering::SeqCst);
             let tcp = crate::upstream::connect_target(&config, host, port)?;
-            tcp.set_read_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS))).ok();
+            tcp.set_read_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)))
+                .ok();
             UpstreamConn::Plain(tcp)
         }
     };
@@ -191,7 +221,8 @@ pub fn send_inner(shared: &Shared, host: &str, port: u16, req: &[u8], mut sink: 
             Err(_) => {
                 // The server hung up on the upgrade: retry plainly on a new socket.
                 let tcp = crate::upstream::connect_target(&config, host, port)?;
-                tcp.set_read_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS))).ok();
+                tcp.set_read_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)))
+                    .ok();
                 shared.conns_opened.fetch_add(1, Ordering::SeqCst);
                 stream = UpstreamConn::Plain(tcp);
             }
@@ -206,11 +237,14 @@ pub fn send_inner(shared: &Shared, host: &str, port: u16, req: &[u8], mut sink: 
             if reused {
                 let mut fresh = UpstreamConn::Plain({
                     let tcp = crate::upstream::connect_target(&config, host, port)?;
-                    tcp.set_read_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS))).ok();
+                    tcp.set_read_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)))
+                        .ok();
                     tcp
                 });
                 shared.conns_opened.fetch_add(1, Ordering::SeqCst);
-                exchange(&mut fresh, &routed, sink).map(|(r, reusable)| (r, reusable, fresh)).map_err(|e2| format!("{e}; retry: {e2}"))
+                exchange(&mut fresh, &routed, sink)
+                    .map(|(r, reusable)| (r, reusable, fresh))
+                    .map_err(|e2| format!("{e}; retry: {e2}"))
             } else {
                 Err(e)
             }
@@ -231,7 +265,13 @@ pub fn send_tls_raw(shared: &Shared, host: &str, port: u16, request: &[u8]) -> U
 }
 
 /// [`send_tls_raw`] with a response sink (see [`send_raw_with`]).
-pub fn send_tls_raw_with(shared: &Shared, host: &str, port: u16, request: &[u8], sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>) -> Upstream {
+pub fn send_tls_raw_with(
+    shared: &Shared,
+    host: &str,
+    port: u16,
+    request: &[u8],
+    sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
+) -> Upstream {
     let request = jar_request(shared, host, true, request);
     let request = session_request(shared, port, true, request);
     let mut tool_sink = tool_sink(shared, host, port, true, &request);
@@ -241,8 +281,14 @@ pub fn send_tls_raw_with(shared: &Shared, host: &str, port: u16, request: &[u8],
         (None, None) => send_tls_inner(shared, host, port, &request, None),
     };
     let up = match sent {
-        Ok(resp) => Upstream { resp: Some(resp), error: None },
-        Err(e) => Upstream { resp: None, error: Some(e) },
+        Ok(resp) => Upstream {
+            resp: Some(resp),
+            error: None,
+        },
+        Err(e) => Upstream {
+            resp: None,
+            error: Some(e),
+        },
     };
     jar_response(shared, host, &request, &up);
     session_after(shared, host);
@@ -250,16 +296,30 @@ pub fn send_tls_raw_with(shared: &Shared, host: &str, port: u16, request: &[u8],
     up
 }
 
-pub fn send_tls_inner(shared: &Shared, host: &str, port: u16, req: &[u8], mut sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>) -> Result<Vec<u8>, String> {
+pub fn send_tls_inner(
+    shared: &Shared,
+    host: &str,
+    port: u16,
+    req: &[u8],
+    mut sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
+) -> Result<Vec<u8>, String> {
     let config = shared.upstream_for(host);
     let req = util::origin_form(req);
     let keep_alive = shared.keep_alive.load(Ordering::SeqCst);
-    let req = if keep_alive { set_connection(&req, "keep-alive") } else { set_connection(&req, "close") };
+    let req = if keep_alive {
+        set_connection(&req, "keep-alive")
+    } else {
+        set_connection(&req, "close")
+    };
     let key = (host.to_string(), port);
     let choice = H2_CHOICE.with(|c| c.get());
     let want_h2 = choice.and_then(|c| c.want_h2);
     // Pooled connections are HTTP/1.x: HTTP/2 asked for needs a fresh one.
-    let mut pooled = if want_h2 == Some(true) { None } else { shared.tls_pool.lock().unwrap().remove(&key) };
+    let mut pooled = if want_h2 == Some(true) {
+        None
+    } else {
+        shared.tls_pool.lock().unwrap().remove(&key)
+    };
     if let Some(conn) = pooled.as_mut() {
         if !conn.writable() {
             pooled = None;
@@ -271,7 +331,8 @@ pub fn send_tls_inner(shared: &Shared, host: &str, port: u16, req: &[u8], mut si
         None => {
             shared.conns_opened.fetch_add(1, Ordering::SeqCst);
             let tcp = crate::upstream::connect_tls_target(&config, host, port)?;
-            tcp.set_read_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS))).ok();
+            tcp.set_read_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)))
+                .ok();
             let name = rustls::pki_types::ServerName::try_from(host.to_string())
                 .map_err(|e| format!("invalid upstream TLS name {host}: {e}"))?;
             let conn = rustls::ClientConnection::new(tls_client_config(shared, host), name)
@@ -292,11 +353,13 @@ pub fn send_tls_inner(shared: &Shared, host: &str, port: u16, req: &[u8], mut si
         };
     LAST_PROTOCOL.with(|p| p.set(if use_h2 { "HTTP/2" } else { "HTTP/1.1" }));
     if want_h2 == Some(true) && !use_h2 {
-        return Err("the server did not agree to HTTP/2 (ALPN); switch the request to HTTP/1".into());
+        return Err(
+            "the server did not agree to HTTP/2 (ALPN); switch the request to HTTP/1".into(),
+        );
     }
     if use_h2 {
-        let mut h2req = crate::h2::request_from_raw(&req, "https")
-            .ok_or("h2: request without Host header")?;
+        let mut h2req =
+            crate::h2::request_from_raw(&req, "https").ok_or("h2: request without Host header")?;
         if choice.is_some_and(|c| !c.strip_connection) {
             // Repeater's "Strip Connection header over HTTP/2" off: send it.
             let parts = util::parse_http(&req);
@@ -338,7 +401,9 @@ pub fn send_tls_inner(shared: &Shared, host: &str, port: u16, req: &[u8], mut si
             // on a fresh one before reporting the failure.
             if reused {
                 let mut fresh = new_tls_conn(shared, &config, host, port)?;
-                exchange(&mut fresh, &req, sink).map(|(r, reusable)| (r, reusable, fresh)).map_err(|e2| format!("{e}; retry: {e2}"))
+                exchange(&mut fresh, &req, sink)
+                    .map(|(r, reusable)| (r, reusable, fresh))
+                    .map_err(|e2| format!("{e}; retry: {e2}"))
             } else {
                 Err(e)
             }
@@ -361,12 +426,15 @@ pub fn new_tls_conn(
     port: u16,
 ) -> Result<UpstreamConn, String> {
     let tcp = crate::upstream::connect_tls_target(config, host, port)?;
-    tcp.set_read_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS))).ok();
+    tcp.set_read_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)))
+        .ok();
     let name = rustls::pki_types::ServerName::try_from(host.to_string())
         .map_err(|e| format!("invalid upstream TLS name {host}: {e}"))?;
     let conn = rustls::ClientConnection::new(tls_client_config(shared, host), name)
         .map_err(|e| format!("configure upstream TLS: {e}"))?;
-    Ok(UpstreamConn::Tls(Box::new(rustls::StreamOwned::new(conn, tcp))))
+    Ok(UpstreamConn::Tls(Box::new(rustls::StreamOwned::new(
+        conn, tcp,
+    ))))
 }
 
 /// Write a request and read exactly one framed response. Returns the response
@@ -374,11 +442,20 @@ pub fn new_tls_conn(
 /// EOF-delimited, malformed or cut short, and not when the peer sent bytes
 /// past it (pipelining stays off, MECHANICS.md A-03; those bytes would
 /// otherwise become the next request's response).
-pub fn exchange<S: Read + Write + ResponseRead>(stream: &mut S, req: &[u8], sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>) -> Result<(Vec<u8>, bool), String> {
+pub fn exchange<S: Read + Write + ResponseRead>(
+    stream: &mut S,
+    req: &[u8],
+    sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
+) -> Result<(Vec<u8>, bool), String> {
     stream.write_all(req).map_err(|e| format!("write: {e}"))?;
     stream.flush().ok();
-    let method = req.split(|&b| b == b' ').next().map(String::from_utf8_lossy).unwrap_or_default();
+    let method = req
+        .split(|&b| b == b' ')
+        .next()
+        .map(String::from_utf8_lossy)
+        .unwrap_or_default();
     let mut buffer = Vec::new();
-    let (resp, reusable) = crate::codec::read_message(stream, &mut buffer, &method, sink).map_err(|e| format!("read: {e}"))?;
+    let (resp, reusable) = crate::codec::read_message(stream, &mut buffer, &method, sink)
+        .map_err(|e| format!("read: {e}"))?;
     Ok((resp, reusable && buffer.is_empty()))
 }

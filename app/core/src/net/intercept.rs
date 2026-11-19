@@ -3,7 +3,11 @@
 
 use super::*;
 
-pub fn intercept_request(shared: &Shared, req: Vec<u8>, default_port: u16) -> (Option<Vec<u8>>, ReqState) {
+pub fn intercept_request(
+    shared: &Shared,
+    req: Vec<u8>,
+    default_port: u16,
+) -> (Option<Vec<u8>>, ReqState) {
     if !shared.intercept_on.load(Ordering::SeqCst) {
         return (Some(req), ReqState::default());
     }
@@ -11,7 +15,12 @@ pub fn intercept_request(shared: &Shared, req: Vec<u8>, default_port: u16) -> (O
     let (host, port) = host_of(&parts, default_port);
     {
         let head = parts.head_len.min(req.len());
-        let url = history_host(&HistEntry { host: host.clone(), port, https: default_port == 443, ..Default::default() }) + &path_of(&parts);
+        let url = history_host(&HistEntry {
+            host: host.clone(),
+            port,
+            https: default_port == 443,
+            ..Default::default()
+        }) + &path_of(&parts);
         let facts = crate::intercept_rules::Facts {
             in_scope: in_scope(shared, &url),
             domain: host.clone(),
@@ -22,31 +31,69 @@ pub fn intercept_request(shared: &Shared, req: Vec<u8>, default_port: u16) -> (O
             has_parameters: parts.path.contains('?') || req.len() > head,
             url,
         };
-        if !crate::intercept_rules::should_intercept(&shared.intercept_rules.lock().unwrap(), &facts) {
+        if !crate::intercept_rules::should_intercept(
+            &shared.intercept_rules.lock().unwrap(),
+            &facts,
+        ) {
             return (Some(req), ReqState::default());
         }
     }
     let (tx, rx) = mpsc::channel::<Option<String>>();
     let id = shared.next_id.fetch_add(1, Ordering::SeqCst);
     let shown = String::from_utf8_lossy(&req).into_owned();
-    shared.queue.lock().unwrap().push(InterceptItem::new(id, &host, port, shown.clone(), tx, InterceptKind::Request { https: default_port == 443 }));
+    shared.queue.lock().unwrap().push(InterceptItem::new(
+        id,
+        &host,
+        port,
+        shown.clone(),
+        tx,
+        InterceptKind::Request {
+            https: default_port == 443,
+        },
+    ));
     shared.wake();
     match rx.recv() {
         Ok(Some(edited)) => {
             let (bytes, changed) = forwarded(req, &shown, edited);
-            (Some(bytes), ReqState { edited: changed, held: true })
-        },
+            (
+                Some(bytes),
+                ReqState {
+                    edited: changed,
+                    held: true,
+                },
+            )
+        }
         Ok(None) => {
             shared.log("Intercepted request dropped");
-            (None, ReqState { edited: false, held: true })
+            (
+                None,
+                ReqState {
+                    edited: false,
+                    held: true,
+                },
+            )
         }
-        Err(_) => (None, ReqState { edited: false, held: true }),
+        Err(_) => (
+            None,
+            ReqState {
+                edited: false,
+                held: true,
+            },
+        ),
     }
 }
 
 /// Hold a response that the response interception rules select, as Burp
 /// does: the user forwards (possibly edited) or drops it.
-pub fn intercept_response(shared: &Shared, resp: Vec<u8>, host: &str, port: u16, https: bool, url: &str, st: ReqState) -> Option<Vec<u8>> {
+pub fn intercept_response(
+    shared: &Shared,
+    resp: Vec<u8>,
+    host: &str,
+    port: u16,
+    https: bool,
+    url: &str,
+    st: ReqState,
+) -> Option<Vec<u8>> {
     if !shared.intercept_on.load(Ordering::SeqCst) {
         return Some(resp);
     }
@@ -60,7 +107,14 @@ pub fn intercept_response(shared: &Shared, resp: Vec<u8>, host: &str, port: u16,
     let (tx, rx) = mpsc::channel::<Option<String>>();
     let id = shared.next_id.fetch_add(1, Ordering::SeqCst);
     let shown = String::from_utf8_lossy(&resp).into_owned();
-    shared.queue.lock().unwrap().push(InterceptItem::new(id, host, port, shown.clone(), tx, InterceptKind::Response { https }));
+    shared.queue.lock().unwrap().push(InterceptItem::new(
+        id,
+        host,
+        port,
+        shown.clone(),
+        tx,
+        InterceptKind::Response { https },
+    ));
     shared.wake();
     match rx.recv() {
         Ok(Some(edited)) => Some(forwarded(resp, &shown, edited).0),
@@ -81,7 +135,9 @@ pub fn set_intercept(shared: &Shared, on: bool) -> usize {
     }
     let n = intercept_release_all(shared, false);
     if n > 0 {
-        shared.log(&format!("Interception turned off: forwarded {n} held message(s)"));
+        shared.log(&format!(
+            "Interception turned off: forwarded {n} held message(s)"
+        ));
     }
     n
 }
@@ -90,7 +146,12 @@ pub fn set_intercept(shared: &Shared, on: bool) -> usize {
 /// and the item leaves the queue) when `alive` says the connection is gone;
 /// the toggle going off and shutdown answer through the queue
 /// ([`set_intercept`], [`intercept_release_all`]).
-pub(crate) fn intercept_wait(shared: &Shared, id: u64, rx: &mpsc::Receiver<Option<String>>, alive: &dyn Fn() -> bool) -> Option<String> {
+pub(crate) fn intercept_wait(
+    shared: &Shared,
+    id: u64,
+    rx: &mpsc::Receiver<Option<String>>,
+    alive: &dyn Fn() -> bool,
+) -> Option<String> {
     loop {
         match rx.recv_timeout(Duration::from_millis(200)) {
             Ok(v) => return v,
@@ -112,7 +173,11 @@ pub fn intercept_release_all(shared: &Shared, drop: bool) -> usize {
     let items: Vec<_> = shared.queue.lock().unwrap().drain(..).collect();
     let n = items.len();
     for item in items {
-        let payload = if drop { None } else { Some(item.edited.clone()) };
+        let payload = if drop {
+            None
+        } else {
+            Some(item.edited.clone())
+        };
         let _ = item.tx.send(payload);
     }
     n
@@ -125,7 +190,11 @@ pub fn intercept_forward(shared: &Arc<Shared>, drop: bool) {
         return;
     }
     let item = q.remove(0);
-    let payload = if drop { None } else { Some(item.edited.clone()) };
+    let payload = if drop {
+        None
+    } else {
+        Some(item.edited.clone())
+    };
     let _ = item.tx.send(payload);
 }
 
@@ -140,7 +209,11 @@ pub fn intercept_release(shared: &Shared, id: u64, drop: bool, edited: Option<St
             None => return false,
         }
     };
-    let payload = if drop { None } else { Some(edited.unwrap_or(item.edited)) };
+    let payload = if drop {
+        None
+    } else {
+        Some(edited.unwrap_or(item.edited))
+    };
     let _ = item.tx.send(payload);
     true
 }
