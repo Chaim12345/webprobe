@@ -630,6 +630,9 @@ pub struct ProjectScanner {
     /// order.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub library_selection: Vec<String>,
+    /// R-14: BCheck definition sources loaded in the Extensions tab.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bchecks: Vec<String>,
 }
 
 /// One project library entry: its name and Burp's JSON for it.
@@ -649,7 +652,7 @@ fn yes() -> bool {
 
 impl Default for ProjectScanner {
     fn default() -> Self {
-        Self { speed: 1, accuracy: 1, extra_checks: false, disabled_checks: Vec::new(), disabled_insertion_points: Vec::new(), crawl_max_depth: None, crawl_max_locations: None, crawl_robots: None, crawl_sitemap: None, crawl_engine: None, crawl_max_minutes: None, crawl_max_requests: None, issues_reported: None, library: Vec::new(), library_selection: Vec::new() }
+        Self { speed: 1, accuracy: 1, extra_checks: false, disabled_checks: Vec::new(), disabled_insertion_points: Vec::new(), crawl_max_depth: None, crawl_max_locations: None, crawl_robots: None, crawl_sitemap: None, crawl_engine: None, crawl_max_minutes: None, crawl_max_requests: None, issues_reported: None, library: Vec::new(), library_selection: Vec::new(), bchecks: Vec::new() }
     }
 }
 

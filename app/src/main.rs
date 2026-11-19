@@ -196,6 +196,8 @@ pub struct App {
     pub seq_field: String,
     pub seq_custom: String,
     pub seq_load_path: String,
+    /// Extensions > Custom scan checks: path of the BCheck file to load.
+    pub bcheck_load_path: String,
     pub seq_live_buf: Option<Arc<Mutex<Vec<Vec<u8>>>>>,
     pub seq_live_stop: Option<Arc<std::sync::atomic::AtomicBool>>,
     /// Intercept: the held item being edited and its text.
@@ -816,6 +818,7 @@ impl App {
             seq_field: String::new(),
             seq_custom: String::new(),
             seq_load_path: String::new(),
+            bcheck_load_path: String::new(),
             seq_live_buf: None,
             seq_live_stop: None,
             intercept_cur: None,

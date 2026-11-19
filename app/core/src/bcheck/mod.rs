@@ -14,6 +14,7 @@ use std::fmt;
 
 pub mod exec;
 pub mod runner;
+pub(crate) mod scan;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Metadata {

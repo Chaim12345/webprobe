@@ -193,7 +193,10 @@ fn url_host_port(url: &str) -> (String, String) {
 /// set of interaction kinds observed so far.
 pub trait Collaborator {
     fn generate_address(&mut self) -> Result<String, String>;
-    fn has_interaction(&self, kind: InteractionKind) -> bool;
+    /// True when an interaction of the kind has arrived. Implementations
+    /// may consume observations (a later condition does not re-see them),
+    /// which Burp's Log4Shell worked example relies on.
+    fn has_interaction(&mut self, kind: InteractionKind) -> bool;
 }
 
 /// Evaluation context for one check run: variables, named exchanges and
@@ -668,7 +671,7 @@ pub fn eval_condition(cx: &mut Context, c: &Condition) -> Result<bool, ExecError
             Ok(eval_expr(cx, haystack)?.contains(&eval_expr(cx, needle)?))
         }
         Condition::Is(a, b) => Ok(eval_expr(cx, a)? == eval_expr(cx, b)?),
-        Condition::Interactions(kind) => match cx.collaborator.as_deref() {
+        Condition::Interactions(kind) => match cx.collaborator.as_deref_mut() {
             Some(c) => Ok(c.has_interaction(*kind)),
             None => Ok(false),
         },
@@ -692,7 +695,7 @@ mod tests {
             self.next += 1;
             Ok(format!("{}.oast.test", self.next))
         }
-        fn has_interaction(&self, kind: InteractionKind) -> bool {
+        fn has_interaction(&mut self, kind: InteractionKind) -> bool {
             match kind {
                 InteractionKind::Any => !self.kinds.is_empty(),
                 other => self.kinds.contains(&other),

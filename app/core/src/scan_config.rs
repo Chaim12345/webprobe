@@ -38,6 +38,9 @@ pub struct ScanConfig {
     /// "Issues reported" from the scan configuration library (R-11); None
     /// runs every check, as before the library existed.
     pub issues: Option<crate::scan_library::IssueFilter>,
+    /// BCheck definition sources loaded in the Extensions tab (R-14);
+    /// parsed and validated when a scan starts.
+    pub bchecks: Vec<String>,
 }
 
 /// Burp's crawl settings (CrawlDefaults.json): link depth, unique locations,
@@ -100,6 +103,7 @@ impl ScanConfig {
     pub fn from_saved(s: &crate::project::ProjectScanner) -> Self {
         let d = CrawlLimits::default();
         ScanConfig {
+            bchecks: s.bchecks.clone(),
             disabled_checks: s.disabled_checks.iter().cloned().collect(),
             disabled_insertion: s.disabled_insertion_points.iter().cloned().collect(),
             crawl: CrawlLimits {
@@ -127,6 +131,7 @@ impl ScanConfig {
         s.crawl_max_minutes = Some(self.crawl.max_minutes);
         s.crawl_max_requests = Some(self.crawl.max_requests);
         s.issues_reported = self.issues.as_ref().and_then(|_| crate::scan_library::get_path(&crate::scan_library::config_to_tree(self, 1, 1), "scanner.issues_reported").cloned());
+        s.bchecks = self.bchecks.clone();
     }
 }
 

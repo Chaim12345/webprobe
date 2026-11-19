@@ -56,6 +56,8 @@ pub(crate) fn bump_progress(shared: &Shared) {
 }
 
 /// Everything a check needs about the scan, shared by all checks.
+pub(crate) use crate::bcheck::scan::run_bcheck_checks;
+
 pub(crate) struct ScanCtx {
     pub shared: Arc<Shared>,
     pub entry: HistEntry,

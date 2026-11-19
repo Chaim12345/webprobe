@@ -849,6 +849,8 @@ fn passive_check_filtered(shared: &Shared, e: &HistEntry, issues: Option<&crate:
         };
         v.extend(x.scan_passive(&msg));
     }
+    // BCheck `given response` definitions (R-14).
+    v.extend(crate::bcheck::scan::bcheck_passive_issues(shared, e));
     v
 }
 
@@ -947,6 +949,7 @@ pub fn start_active_scan(shared: Arc<Shared>, entry: HistEntry, oob: &[(String, 
             checks::run_point_checks(&cx, &points);
             checks::run_request_checks(&cx);
             checks::run_extension_checks(&cx, &points);
+            checks::run_bcheck_checks(&cx, &points);
             // A scan on its own runs stage A4 now; a batch runs it once its
             // last item is done (`run_stored_stage_claimed`).
             if !shared.stored.in_batch() {
