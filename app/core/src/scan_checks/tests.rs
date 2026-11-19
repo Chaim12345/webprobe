@@ -663,6 +663,49 @@ fn dom_families_batch3_against_a_live_lab() {
 }
 
 
+/// R-13 batch 4: the setter-heavy DOM families (data manipulation,
+/// link manipulation, setAttribute onclick as XSS) against live lab
+/// pages driven by a real browser. Skipped when no Chromium is
+/// available.
+#[test]
+fn dom_families_batch4_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, _raw| {
+        let body = if path.starts_with("/datamanip") {
+            "<html><body><script>document.body.textContent = location.hash.slice(1);</script></body></html>"
+        } else if path.starts_with("/linkmanip") {
+            "<html><body><script>var f = document.createElement('form'); f.action = location.hash.slice(1);</script></body></html>"
+        } else if path.starts_with("/xss-setattr") {
+            "<html><body><script>document.body.setAttribute('onclick', location.hash.slice(1));</script></body></html>"
+        } else {
+            "<html><body><p>hello</p></body></html>"
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    let expect = [
+        ("/datamanip", "active.dom-data-manipulation", "DOM data manipulation (DOM-based)", "info", "Firm"),
+        ("/linkmanip", "active.dom-link-manipulation", "Link manipulation (DOM-based)", "low", "Firm"),
+        ("/xss-setattr", "active.dom-xss", "Cross-site scripting (DOM-based)", "high", "Firm"),
+    ];
+    for (page, id, name, sev, conf) in expect {
+        let got = lab_scan(port, &[id], "GET", page, format!("GET {page} HTTP/1.1\r\nHost: {host}\r\n\r\n"));
+        assert!(got.iter().any(|(n, s, c)| n == name && s == sev && c == conf), "{name}: {got:?}");
+    }
+    let got = lab_scan(
+        port,
+        &["active.dom-data-manipulation", "active.dom-link-manipulation", "active.dom-xss"],
+        "GET",
+        "/benign5",
+        format!("GET /benign5 HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(got.is_empty(), "{got:?}");
+}
+
+
 /// R-10 batch 2: the three GraphQL checks against a live endpoint.
 /// The lab answers the introspection query with a schema, the
 /// `query{__type}` probe with a suggestion error, and the query in
