@@ -395,6 +395,8 @@ pub(crate) static REQUEST_CHECKS: &[&dyn RequestCheck] = &[
     &DomJsInjection,
     &DomOpenRedirection,
     &DomCookieManipulation,
+    &DomDataManipulation,
+    &DomLinkManipulation,
     &DomWebSocketPoisoning,
     &DomDos,
     &DomAjaxHeader,
@@ -2115,7 +2117,7 @@ dom_family_check!(
     "high",
     "Firm",
     "DOM-based cross-site scripting",
-    &["document.write", "document.writeln", "element.innerHTML", "element.outerHTML", "element.insertAdjacentHTML"][..],
+    &["document.write", "document.writeln", "element.innerHTML", "element.outerHTML", "element.insertAdjacentHTML", "element.setAttribute.onclick"][..],
     "Cross-site scripting (DOM-based), KB 00200310, High: the HTML-writing sinks of burp.Zcwh's XSS family (first slice: document.write/writeln, inner/outerHTML, insertAdjacentHTML; jQuery groups not yet). Confidence Firm (burp.Zwf8.Zd: no Tentative rule covers a location.hash source)."
 );
 dom_family_check!(
@@ -2137,6 +2139,40 @@ dom_family_check!(
     "DOM-based open redirection",
     &["window.open"][..],
     "Open redirection (DOM-based), KB 00500110, Low: window.open, the only wrappable navigation sink of burp.Zcwh's family - the Location members (href, assign, replace, host, hostname, protocol) are LegacyUnforgeable in Chromium. Confidence Tentative (burp.Zwf8.Zd: every open-redirection variant is Tentative)."
+);
+dom_family_check!(
+    DomDataManipulation,
+    "active.dom-data-manipulation",
+    "DOM data manipulation (DOM-based)",
+    "info",
+    "Firm",
+    "DOM-based data manipulation",
+    &[
+        "element.textContent",
+        "element.innerText",
+        "input.value",
+        "document.title",
+        "window.name",
+        "history.pushState",
+        "history.replaceState",
+        "script.text",
+        "anchor.target",
+        "element.setAttribute.action",
+        "element.setAttribute.src",
+        "element.setAttribute.data",
+        "element.setAttribute.formaction"
+    ][..],
+    "DOM data manipulation (DOM-based), KB 00501200, Information: the UI/logic property sinks of burp.Zcwh's data-manipulation family (textContent/innerText, input.value, document.title, window.name, history pushState/replaceState, script.text, anchor.target, setAttribute action/src/data/formaction). script.textContent/innerText collapse onto the element.* sink names (the prototype setters are shared). Confidence Firm (burp.Zwf8.Zd)."
+);
+dom_family_check!(
+    DomLinkManipulation,
+    "active.dom-link-manipulation",
+    "Link manipulation (DOM-based)",
+    "low",
+    "Firm",
+    "DOM-based link manipulation",
+    &["form.action", "anchor.href", "button.formaction", "input.formaction", "element.setAttribute.href"][..],
+    "Link manipulation (DOM-based), KB 00501000, Low: the navigation-target property sinks of burp.Zcwh's link family (form.action, anchor.href, button/input.formaction, setAttribute href; jQuery prop/attr variants not yet). Confidence Firm (burp.Zwf8.Zd)."
 );
 dom_family_check!(
     DomWebSocketPoisoning,
@@ -4858,6 +4894,8 @@ mod tests {
                 ("active.dom-javascript-injection", Scope::Request, Some(BURP_GROUP)),
                 ("active.dom-open-redirection", Scope::Request, Some(BURP_GROUP)),
                 ("active.dom-cookie-manipulation", Scope::Request, Some(BURP_GROUP)),
+                ("active.dom-data-manipulation", Scope::Request, Some(BURP_GROUP)),
+                ("active.dom-link-manipulation", Scope::Request, Some(BURP_GROUP)),
                 ("active.dom-websocket-poisoning", Scope::Request, Some(BURP_GROUP)),
                 ("active.dom-dos", Scope::Request, Some(BURP_GROUP)),
                 ("active.dom-ajax-header-manipulation", Scope::Request, Some(BURP_GROUP)),
@@ -5258,6 +5296,48 @@ mod tests {
             "GET",
             "/benign4",
             format!("GET /benign4 HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+        );
+        assert!(got.is_empty(), "{got:?}");
+    }
+
+    /// R-13 batch 4: the setter-heavy DOM families (data manipulation,
+    /// link manipulation, setAttribute onclick as XSS) against live lab
+    /// pages driven by a real browser. Skipped when no Chromium is
+    /// available.
+    #[test]
+    fn dom_families_batch4_against_a_live_lab() {
+        if crate::crawl::chromium_binary().is_none() {
+            return;
+        }
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = lab_serve(l, |_method, path, _raw| {
+            let body = if path.starts_with("/datamanip") {
+                "<html><body><script>document.body.textContent = location.hash.slice(1);</script></body></html>"
+            } else if path.starts_with("/linkmanip") {
+                "<html><body><script>var f = document.createElement('form'); f.action = location.hash.slice(1);</script></body></html>"
+            } else if path.starts_with("/xss-setattr") {
+                "<html><body><script>document.body.setAttribute('onclick', location.hash.slice(1));</script></body></html>"
+            } else {
+                "<html><body><p>hello</p></body></html>"
+            };
+            format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        });
+        let host = format!("127.0.0.1:{port}");
+        let expect = [
+            ("/datamanip", "active.dom-data-manipulation", "DOM data manipulation (DOM-based)", "info", "Firm"),
+            ("/linkmanip", "active.dom-link-manipulation", "Link manipulation (DOM-based)", "low", "Firm"),
+            ("/xss-setattr", "active.dom-xss", "Cross-site scripting (DOM-based)", "high", "Firm"),
+        ];
+        for (page, id, name, sev, conf) in expect {
+            let got = lab_scan(port, &[id], "GET", page, format!("GET {page} HTTP/1.1\r\nHost: {host}\r\n\r\n"));
+            assert!(got.iter().any(|(n, s, c)| n == name && s == sev && c == conf), "{name}: {got:?}");
+        }
+        let got = lab_scan(
+            port,
+            &["active.dom-data-manipulation", "active.dom-link-manipulation", "active.dom-xss"],
+            "GET",
+            "/benign5",
+            format!("GET /benign5 HTTP/1.1\r\nHost: {host}\r\n\r\n"),
         );
         assert!(got.is_empty(), "{got:?}");
     }
