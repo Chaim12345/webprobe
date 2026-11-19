@@ -68,6 +68,7 @@ pub mod sitemap_compare;
 pub mod sync;
 pub mod tasks;
 pub mod tls;
+pub mod tls_cert;
 pub mod upstream;
 pub mod util;
 pub mod variations;
