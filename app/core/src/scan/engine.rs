@@ -326,6 +326,8 @@ fn g11_body_context(body: &str, pos: usize) -> G11Context {
             if top == "script" || top == "style" {
                 let close = format!("</{top}");
                 match body[i..].to_ascii_lowercase().find(&close) {
+                    // Already at the close tag: parse it normally below.
+                    Some(0) => {}
                     // Re-check the loop condition: the jump may pass pos.
                     Some(rel) => {
                         i += rel;
@@ -552,6 +554,10 @@ mod g11_tests {
         // A '<' inside script text is not a tag; the probe stays JsText.
         let r = resp("<script>if (a<b) { x = 'PROBEBODY'; }</script><p>y</p>");
         assert_eq!(g11_contexts(&r, "PROBEBODY"), vec![G11Context::JsText]);
+        // A probe after a script close tag parses normally (regression:
+        // landing exactly on the close tag must not spin).
+        let r = resp("<script>var a=1;</script><p>PROBEBODY</p>");
+        assert_eq!(g11_contexts(&r, "PROBEBODY"), vec![G11Context::Other]);
         // Void elements never open, so text after <br>/<img> is Other.
         let r = resp("<div><br><img src=x>PROBEBODY</div>");
         assert_eq!(g11_contexts(&r, "PROBEBODY"), vec![G11Context::Other]);
