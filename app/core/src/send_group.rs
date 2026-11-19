@@ -269,7 +269,8 @@ pub struct GroupResult {
     pub protocol: &'static str,
     pub elapsed_ms: u128,
     /// Parallel over HTTP/2: this response's place among the group's
-    /// responses, by arrival of its first frame, and the count
+    /// responses, by arrival order (HTTP/1: full response received;
+    /// HTTP/2: first response frame on the stream), and the count
     /// (burp.Zglm.processHttpRequestResults: "%d/%d").
     pub arrival: Option<(usize, usize)>,
 }
@@ -399,23 +400,42 @@ pub fn run_parallel(shared: &Shared, items: &[GroupItem], cancel: &AtomicBool, o
                     if request.is_empty() {
                         return Err("empty request".to_string());
                     }
-                    let mut conn = open_conn(shared, item)?;
-                    let (prefix, last) = request.split_at(request.len() - 1);
+                    // The same wire form the sequence sender uses:
+                    // as_http1, origin form, absolute form through a plain
+                    // upstream proxy.
+                    let wire = http1_wire(shared, item, request);
+                    // A sender that fails BEFORE the barrier still arrives
+                    // at it: one failed connect must not leave the other
+                    // senders waiting on a barrier that can never release.
+                    let mut conn = match open_conn(shared, item) {
+                        Ok(conn) => conn,
+                        Err(e) => {
+                            barrier.wait();
+                            return Err(e);
+                        }
+                    };
+                    let (prefix, last) = wire.split_at(wire.len() - 1);
                     use std::io::Write as _;
-                    conn.write_all(prefix).map_err(|e| format!("write: {e}"))?;
+                    if let Err(e) = conn.write_all(prefix) {
+                        barrier.wait();
+                        return Err(format!("write: {e}"));
+                    }
                     conn.flush().ok();
                     // Every sender is here: all prefixes are sent. Release
                     // the last bytes together.
                     barrier.wait();
                     conn.write_all(last).map_err(|e| format!("write: {e}"))?;
                     conn.flush().ok();
-                    let method = request.split(|&b| b == b' ').next().map(String::from_utf8_lossy).unwrap_or_default().into_owned();
+                    let method = wire.split(|&b| b == b' ').next().map(String::from_utf8_lossy).unwrap_or_default().into_owned();
                     let mut buffer = Vec::new();
                     let (resp, _) = crate::codec::read_message(&mut conn, &mut buffer, &method, None).map_err(|e| format!("read: {e}"))?;
                     Ok(resp)
                 });
-                arrival.lock().unwrap().push(n);
-                let at = arrival.lock().unwrap().len();
+                let at = {
+                    let mut done = arrival.lock().unwrap();
+                    done.push(n);
+                    done.len()
+                };
                 let mut r = GroupResult::from_up(sent, up, "HTTP/1.1", t0.elapsed().as_millis());
                 r.arrival = Some((at, items.len()));
                 on_result.lock().unwrap()(n, r);
@@ -711,6 +731,50 @@ mod tests {
         let last_prefix = ev.iter().rposition(|e| *e == "prefix").unwrap();
         let first_last = ev.iter().position(|e| *e == "last").unwrap();
         assert!(last_prefix < first_last, "every prefix must land before the first last byte: {ev:?}");
+    }
+
+    /// One sender that cannot connect must not leave the others waiting
+    /// on the prefix barrier forever: the group completes, with the
+    /// failed tab carrying its error.
+    #[test]
+    fn parallel_sender_error_releases_the_barrier() {
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            while let Ok((mut s, _)) = l.accept() {
+                std::thread::spawn(move || {
+                    let mut buf = [0u8; 4096];
+                    use std::io::Read as _;
+                    s.set_read_timeout(Some(std::time::Duration::from_secs(10))).ok();
+                    let mut got = 0;
+                    while got < buf.len() {
+                        match s.read(&mut buf[got..]) {
+                            Ok(0) | Err(_) => break,
+                            Ok(n) => {
+                                got += n;
+                                if buf[..got].ends_with(b"\r\n\r\n") { break; }
+                            }
+                        }
+                    }
+                    use std::io::Write as _;
+                    let _ = s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok");
+                });
+            }
+        });
+        let shared = crate::net::Shared::new();
+        let cancel = AtomicBool::new(false);
+        let good = GroupItem { tab: 0, host: "127.0.0.1".into(), port, https: false, request: get("/ok", port).into_bytes(), http2: false, websocket: false };
+        // Nothing listens on this port: the connect fails fast.
+        let bad_port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        let bad = GroupItem { tab: 1, host: "127.0.0.1".into(), port: bad_port, https: false, request: get("/bad", bad_port).into_bytes(), http2: false, websocket: false };
+        let got = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let keep = got.clone();
+        let end = run_parallel(&shared, &[good, bad], &cancel, move |n, r| keep.lock().unwrap().push((n, r)));
+        assert_eq!(end, SequenceEnd::Completed);
+        let got = got.lock().unwrap();
+        assert_eq!(got.len(), 2);
+        assert!(got.iter().find(|(n, _)| *n == 0).is_some_and(|(_, r)| r.error.is_none() && r.response.is_some()));
+        assert!(got.iter().find(|(n, _)| *n == 1).is_some_and(|(_, r)| r.error.is_some()));
     }
 
     fn get(path: &str, port: u16) -> String {

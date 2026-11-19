@@ -601,17 +601,22 @@ fn pump<S: Read + Write>(stream: &mut S, sid: u32, mut body: Option<&[u8]>, rx: 
     }
 }
 
-/// Every frame of `req` on stream `sid` as one buffer: HEADERS, then one
-/// DATA when there is a body. R-12's parallel send writes every stream's
-/// buffer in a single packet (Burp's single-packet attack); bodies must
-/// fit the peer's default flow-control window.
+/// Every frame of `req` on stream `sid` as one buffer: HEADERS, then the
+/// body as DATA frames. R-12's parallel send writes every stream's buffer
+/// in a single packet (Burp's single-packet attack). DATA is chunked to
+/// 16,384 bytes: the peer's initial SETTINGS_MAX_FRAME_SIZE is 16,384
+/// (RFC 7540 6.5.2) and the burst is written before its SETTINGS arrive,
+/// so one oversized DATA frame earns a PROTOCOL_ERROR. Bodies past the
+/// peer's initial stream window (65,535) still hit flow control.
 pub(crate) fn request_frames(sid: u32, req: &H2Request) -> Result<Vec<u8>, String> {
     let mut out = Vec::new();
     let block = encode_headers(req);
     let flags = FLAG_END_HEADERS | if req.body.is_empty() { FLAG_END_STREAM } else { 0 };
     write_frame(&mut out, FRAME_HEADERS, flags, sid, &block).map_err(|e| format!("h2 headers: {e}"))?;
-    if !req.body.is_empty() {
-        write_frame(&mut out, FRAME_DATA, FLAG_END_STREAM, sid, &req.body).map_err(|e| format!("h2 data: {e}"))?;
+    let mut chunks = req.body.chunks(16_384).peekable();
+    while let Some(chunk) = chunks.next() {
+        let flags = if chunks.peek().is_none() { FLAG_END_STREAM } else { 0 };
+        write_frame(&mut out, FRAME_DATA, flags, sid, chunk).map_err(|e| format!("h2 data: {e}"))?;
     }
     Ok(out)
 }
@@ -754,6 +759,47 @@ pub fn request_from_raw(raw: &[u8], scheme: &str) -> Option<H2Request> {
 mod tests {
     use super::*;
     use std::io::Cursor;
+
+    /// A body bigger than the peer's default SETTINGS_MAX_FRAME_SIZE
+    /// (16,384) must go out as several DATA frames, END_STREAM on the
+    /// last, or the burst earns a PROTOCOL_ERROR.
+    #[test]
+    fn request_frames_chunks_large_bodies() {
+        let req = H2Request {
+            method: "POST".into(),
+            scheme: "https".into(),
+            authority: "example.com".into(),
+            path: "/".into(),
+            headers: Vec::new(),
+            body: vec![7u8; 40_000],
+            connection: None,
+        };
+        let burst = request_frames(1, &req).unwrap();
+        let mut cursor = Cursor::new(burst.as_slice());
+        let mut data_lengths = Vec::new();
+        let mut end_stream = false;
+        loop {
+            match read_frame(&mut cursor) {
+                Ok(f) => {
+                    if f.ty == FRAME_DATA {
+                        data_lengths.push(f.payload.len());
+                        end_stream = f.flags & FLAG_END_STREAM != 0;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+        assert_eq!(data_lengths, vec![16_384, 16_384, 7_232]);
+        assert!(end_stream);
+        // An empty body keeps END_STREAM on HEADERS and adds no DATA.
+        let req = H2Request { body: Vec::new(), ..req };
+        let burst = request_frames(1, &req).unwrap();
+        let mut cursor = Cursor::new(burst.as_slice());
+        let f = read_frame(&mut cursor).unwrap();
+        assert_eq!(f.ty, FRAME_HEADERS);
+        assert!(f.flags & FLAG_END_STREAM != 0);
+        assert!(read_frame(&mut cursor).is_err());
+    }
 
     #[test]
     fn base64url_matches_rfc7540_example() {

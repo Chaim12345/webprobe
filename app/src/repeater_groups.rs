@@ -253,7 +253,7 @@ pub fn send(app: &mut crate::App, group: u64, mode: GroupMode) {
                     host = h;
                     port = p;
                 }
-                GroupItem { tab: r.id, host, port, https: r.https, request: r.request.clone().into_bytes(), http2: false, websocket: r.ws.is_some() }
+                GroupItem { tab: r.id, host, port, https: r.https, request: r.request.clone().into_bytes(), http2: crate::repeater_ops::is_http2(&r.request), websocket: r.ws.is_some() }
             })
             .collect()
     };
