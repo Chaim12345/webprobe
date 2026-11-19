@@ -2777,7 +2777,7 @@ pub fn autosave_project(app: &mut App) {
     save_project_with(app, true, true);
 }
 
-type SaveResult = (String, bool, Result<(), String>);
+type SaveResult = (String, bool, Result<(), webprobe_core::project::ProjectError>);
 
 fn save_results() -> &'static std::sync::Mutex<Vec<SaveResult>> {
     static R: std::sync::OnceLock<std::sync::Mutex<Vec<SaveResult>>> = std::sync::OnceLock::new();

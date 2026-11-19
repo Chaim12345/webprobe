@@ -13,6 +13,91 @@
 //! never truncates an existing project file.
 
 use std::io::Write;
+
+/// Errors from project save/load, one enum for the project area (issue #34).
+/// Display text matches the previous `String` messages byte for byte; callers
+/// at the UI edge convert with `ToString` / `From<ProjectError> for String`.
+#[derive(Debug, thiserror::Error)]
+pub enum ProjectError {
+    #[error("cannot create project temporary file {}: {source}", .path.display())]
+    CreateTemporary {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    #[error("cannot write project temporary file {}: {source}", .path.display())]
+    WriteTemporary {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    #[error("cannot replace project file {}: {source}", .path.display())]
+    Replace {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    #[error("cannot read project {}: {source}", .path.display())]
+    Read {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    #[error("cannot read project {}: file exceeds {max} bytes", .path.display())]
+    TooLarge { path: PathBuf, max: u64 },
+    #[error("project path has no file name: {}", .path.display())]
+    NoFileName { path: PathBuf },
+    #[error("cannot serialize project: {source}")]
+    Serialize { source: serde_json::Error },
+    #[error("saving {} failed with an internal error", .path.display())]
+    SavePanicked { path: PathBuf },
+    #[error("project document is not UTF-8: {source}")]
+    DocumentNotUtf8 {
+        source: std::string::FromUtf8Error,
+    },
+    #[error("cannot parse project {label}: not UTF-8 ({source})")]
+    ParseNotUtf8 {
+        label: String,
+        source: std::str::Utf8Error,
+    },
+    #[error("cannot parse project {label}: {source}")]
+    Parse {
+        label: String,
+        source: serde_json::Error,
+    },
+    #[error("not a WebProbe project file {label}: missing \"{magic} <version>\" header")]
+    MissingHeader {
+        label: String,
+        magic: &'static str,
+    },
+    #[error("not a WebProbe project file {label}: wrong magic header {header:?} (expected {magic:?})")]
+    WrongMagic {
+        label: String,
+        header: String,
+        magic: &'static str,
+    },
+    #[error("invalid project header {header:?} in {label}: version {version_text:?} is not a number")]
+    InvalidVersionHeader {
+        header: String,
+        label: String,
+        version_text: String,
+    },
+    #[error("project version {version} in {label} is newer than this build supports ({supported}); upgrade WebProbe to open it")]
+    NewerThanSupported {
+        version: u32,
+        label: String,
+        supported: u32,
+    },
+    #[error("unsupported project version {version} in {label} (expected {min}..={max})")]
+    UnsupportedVersion {
+        version: u32,
+        label: String,
+        min: u32,
+        max: u32,
+    },
+}
+
+impl From<ProjectError> for String {
+    fn from(err: ProjectError) -> Self {
+        err.to_string()
+    }
+}
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -1120,11 +1205,11 @@ fn header_line() -> String {
 }
 
 /// The full document bytes: header, JSON, trailing newline.
-fn document_bytes(data: &ProjectData) -> Result<Vec<u8>, String> {
+fn document_bytes(data: &ProjectData) -> Result<Vec<u8>, ProjectError> {
     let mut normalized = data.clone();
     normalized.version = PROJECT_VERSION;
     let json = serde_json::to_vec_pretty(&normalized)
-        .map_err(|err| format!("cannot serialize project: {err}"))?;
+        .map_err(|source| ProjectError::Serialize { source })?;
 
     let mut bytes = header_line().into_bytes();
     bytes.extend_from_slice(&json);
@@ -1384,7 +1469,7 @@ pub fn with_section_defaults(current: &ProjectData, section: SettingsSection) ->
 /// is written through a uniquely named file in the same directory, flushed,
 /// and then renamed into place, so a failed write leaves the previous project
 /// intact.
-pub fn save(path: &Path, data: &ProjectData) -> Result<(), String> {
+pub fn save(path: &Path, data: &ProjectData) -> Result<(), ProjectError> {
     let temporary = temporary_path(path)?;
     // The temp file is deleted only after create_new succeeds; a failing open
     // must not remove an unrelated file that blocked the unique name.
@@ -1394,11 +1479,11 @@ pub fn save(path: &Path, data: &ProjectData) -> Result<(), String> {
         .open(&temporary)
     {
         Ok(file) => file,
-        Err(err) => {
-            return Err(format!(
-                "cannot create project temporary file {}: {err}",
-                temporary.display()
-            ));
+        Err(source) => {
+            return Err(ProjectError::CreateTemporary {
+                path: temporary.clone(),
+                source,
+            });
         }
     };
 
@@ -1425,20 +1510,20 @@ pub fn save(path: &Path, data: &ProjectData) -> Result<(), String> {
         drop(w);
         file.sync_all()
     })();
-    if let Err(err) = written {
+    if let Err(source) = written {
         let _ = std::fs::remove_file(&temporary);
-        return Err(format!(
-            "cannot write project temporary file {}: {err}",
-            temporary.display()
-        ));
+        return Err(ProjectError::WriteTemporary {
+            path: temporary.clone(),
+            source,
+        });
     }
 
-    if let Err(err) = std::fs::rename(&temporary, path) {
+    if let Err(source) = std::fs::rename(&temporary, path) {
         let _ = std::fs::remove_file(&temporary);
-        return Err(format!(
-            "cannot replace project file {}: {err}",
-            path.display()
-        ));
+        return Err(ProjectError::Replace {
+            path: path.to_path_buf(),
+            source,
+        });
     }
 
     // Persist the directory entry too; best effort, the file data is already
@@ -1453,7 +1538,7 @@ pub fn save(path: &Path, data: &ProjectData) -> Result<(), String> {
 /// waiting replaces it (only the latest state of a file is written); saves
 /// to different files are never merged. `wait_for_saves` blocks until the
 /// worker is idle (exit, tests).
-pub type SaveDone = Box<dyn FnOnce(Result<(), String>) + Send>;
+pub type SaveDone = Box<dyn FnOnce(Result<(), ProjectError>) + Send>;
 
 struct Saver {
     pending: std::collections::VecDeque<(std::path::PathBuf, ProjectData, SaveDone)>,
@@ -1479,10 +1564,9 @@ fn saver() -> &'static (std::sync::Mutex<Saver>, std::sync::Condvar) {
 fn run_save(path: &std::path::Path, data: &ProjectData, done: SaveDone) {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| save(path, data)))
         .unwrap_or_else(|_| {
-            Err(format!(
-                "saving {} failed with an internal error",
-                path.display()
-            ))
+            Err(ProjectError::SavePanicked {
+                path: path.to_path_buf(),
+            })
         });
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| done(result)));
 }
@@ -1568,18 +1652,24 @@ pub fn wait_for_saves() {
 }
 
 /// Read and validate a project file.
-pub fn load(path: &Path) -> Result<ProjectData, String> {
+pub fn load(path: &Path) -> Result<ProjectData, ProjectError> {
     let file = std::fs::File::open(path)
-        .map_err(|err| format!("cannot read project {}: {err}", path.display()))?;
+        .map_err(|source| ProjectError::Read {
+            path: path.to_path_buf(),
+            source,
+        })?;
     let len = file
         .metadata()
-        .map_err(|err| format!("cannot read project {}: {err}", path.display()))?
+        .map_err(|source| ProjectError::Read {
+            path: path.to_path_buf(),
+            source,
+        })?
         .len();
     if len > MAX_PROJECT_FILE_BYTES {
-        return Err(format!(
-            "cannot read project {}: file exceeds {MAX_PROJECT_FILE_BYTES} bytes",
-            path.display()
-        ));
+        return Err(ProjectError::TooLarge {
+            path: path.to_path_buf(),
+            max: MAX_PROJECT_FILE_BYTES,
+        });
     }
     if len == 0 {
         return decode(b"", &path.display().to_string());
@@ -1590,72 +1680,87 @@ pub fn load(path: &Path) -> Result<ProjectData, String> {
     // SAFETY: saves replace the file by rename, so this inode is not
     // modified while it is mapped.
     let map = unsafe { memmap2::Mmap::map(&file) }
-        .map_err(|err| format!("cannot read project {}: {err}", path.display()))?;
+        .map_err(|source| ProjectError::Read {
+            path: path.to_path_buf(),
+            source,
+        })?;
     decode(&map, &path.display().to_string())
 }
 
 /// Render a project document as a string (header plus JSON), for tests and
 /// clipboard export.
-pub fn export_json(data: &ProjectData) -> Result<String, String> {
+pub fn export_json(data: &ProjectData) -> Result<String, ProjectError> {
     let bytes = document_bytes(data)?;
-    String::from_utf8(bytes).map_err(|err| format!("project document is not UTF-8: {err}"))
+    String::from_utf8(bytes).map_err(|source| ProjectError::DocumentNotUtf8 { source })
 }
 
 /// Parse a project document from a string. Accepts both the header format and
 /// legacy bare-JSON files.
-pub fn import_json(text: &str) -> Result<ProjectData, String> {
+pub fn import_json(text: &str) -> Result<ProjectData, ProjectError> {
     decode(text.as_bytes(), "input")
 }
 
 /// Split a document into its header version (if any) and the JSON body.
 ///
 /// A body that starts with `{` is treated as a legacy headerless file.
-fn split_document<'a>(text: &'a str, label: &str) -> Result<(Option<u32>, &'a str), String> {
+fn split_document<'a>(text: &'a str, label: &str) -> Result<(Option<u32>, &'a str), ProjectError> {
     let trimmed = text.trim_start();
     if trimmed.starts_with('{') {
         return Ok((None, trimmed));
     }
 
-    let (header, body) = trimmed.split_once('\n').ok_or_else(|| {
-        format!("not a WebProbe project file {label}: missing \"{PROJECT_MAGIC} <version>\" header")
+    let (header, body) = trimmed.split_once('\n').ok_or_else(|| ProjectError::MissingHeader {
+        label: label.to_string(),
+        magic: PROJECT_MAGIC,
     })?;
     let header = header.trim_end_matches('\r');
 
     let rest = match header.strip_prefix(PROJECT_MAGIC) {
         Some(rest) if rest.is_empty() || rest.starts_with(char::is_whitespace) => rest,
         _ => {
-            return Err(format!(
-                "not a WebProbe project file {label}: wrong magic header {header:?} (expected {PROJECT_MAGIC:?})"
-            ));
+            return Err(ProjectError::WrongMagic {
+                label: label.to_string(),
+                header: header.to_string(),
+                magic: PROJECT_MAGIC,
+            });
         }
     };
 
     let version_text = rest.trim();
-    let version = version_text.parse::<u32>().map_err(|_| {
-        format!("invalid project header {header:?} in {label}: version {version_text:?} is not a number")
+    let version = version_text.parse::<u32>().map_err(|_| ProjectError::InvalidVersionHeader {
+        header: header.to_string(),
+        label: label.to_string(),
+        version_text: version_text.to_string(),
     })?;
     Ok((Some(version), body))
 }
 
 /// Reject versions this build cannot read.
-fn check_supported(version: u32, label: &str) -> Result<(), String> {
+fn check_supported(version: u32, label: &str) -> Result<(), ProjectError> {
     if version > PROJECT_VERSION {
-        return Err(format!(
-            "project version {version} in {label} is newer than this build supports ({PROJECT_VERSION}); upgrade WebProbe to open it"
-        ));
+        return Err(ProjectError::NewerThanSupported {
+            version,
+            label: label.to_string(),
+            supported: PROJECT_VERSION,
+        });
     }
     if version < MIN_PROJECT_VERSION {
-        return Err(format!(
-            "unsupported project version {version} in {label} (expected {MIN_PROJECT_VERSION}..={PROJECT_VERSION})"
-        ));
+        return Err(ProjectError::UnsupportedVersion {
+            version,
+            label: label.to_string(),
+            min: MIN_PROJECT_VERSION,
+            max: PROJECT_VERSION,
+        });
     }
     Ok(())
 }
 
 /// Parse a project document from raw bytes, validating the header and version.
-fn decode(bytes: &[u8], label: &str) -> Result<ProjectData, String> {
-    let text = std::str::from_utf8(bytes)
-        .map_err(|err| format!("cannot parse project {label}: not UTF-8 ({err})"))?;
+fn decode(bytes: &[u8], label: &str) -> Result<ProjectData, ProjectError> {
+    let text = std::str::from_utf8(bytes).map_err(|source| ProjectError::ParseNotUtf8 {
+        label: label.to_string(),
+        source,
+    })?;
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
 
     let (header_version, body) = split_document(text, label)?;
@@ -1664,7 +1769,10 @@ fn decode(bytes: &[u8], label: &str) -> Result<ProjectData, String> {
     }
 
     let mut data: ProjectData =
-        serde_json::from_str(body).map_err(|err| format!("cannot parse project {label}: {err}"))?;
+        serde_json::from_str(body).map_err(|source| ProjectError::Parse {
+            label: label.to_string(),
+            source,
+        })?;
 
     // The body carries a version too; the header wins when both are present,
     // so a headerless legacy file is still checked against this build.
@@ -1674,9 +1782,11 @@ fn decode(bytes: &[u8], label: &str) -> Result<ProjectData, String> {
 }
 
 /// A unique sibling of the destination, so rename stays on one filesystem.
-fn temporary_path(path: &Path) -> Result<PathBuf, String> {
+fn temporary_path(path: &Path) -> Result<PathBuf, ProjectError> {
     if path.file_name().is_none() {
-        return Err(format!("project path has no file name: {}", path.display()));
+        return Err(ProjectError::NoFileName {
+            path: path.to_path_buf(),
+        });
     }
 
     let parent = path
@@ -2068,10 +2178,10 @@ mod tests {
         ))
     }
 
-    fn expect_error(result: Result<ProjectData, String>) -> String {
+    fn expect_error(result: Result<ProjectData, ProjectError>) -> String {
         match result {
             Ok(_) => panic!("expected project load to fail"),
-            Err(err) => err,
+            Err(err) => err.to_string(),
         }
     }
 
@@ -2258,7 +2368,7 @@ mod tests {
     fn save_rejects_path_without_file_name() {
         let err = match save(Path::new("/"), &sample()) {
             Ok(()) => panic!("expected save to fail"),
-            Err(err) => err,
+            Err(err) => err.to_string(),
         };
 
         assert!(err.contains("file name"), "{err}");
@@ -2817,7 +2927,7 @@ mod tests {
         file.set_len(MAX_PROJECT_FILE_BYTES + 1).unwrap();
         let err = match load(&path) {
             Ok(_) => panic!("oversized project was accepted"),
-            Err(err) => err,
+            Err(err) => err.to_string(),
         };
         assert!(err.contains("exceeds"), "{err}");
         let _ = std::fs::remove_file(path);
@@ -2835,7 +2945,7 @@ mod tests {
         std::fs::create_dir(&blocked).unwrap();
         let err = match save(&blocked, &sample()) {
             Ok(()) => panic!("expected save to fail"),
-            Err(err) => err,
+            Err(err) => err.to_string(),
         };
         assert!(err.contains("replace"), "{err}");
         assert!(blocked.is_dir());

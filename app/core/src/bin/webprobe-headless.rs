@@ -79,7 +79,7 @@ fn save_project(shared: &net::Shared, path: &str) -> Result<(), String> {
             .collect(),
         ..Default::default()
     };
-    project::save(std::path::Path::new(path), &data)
+    project::save(std::path::Path::new(path), &data).map_err(String::from)
 }
 
 fn proxy(mut args: Vec<String>) {
