@@ -85,9 +85,6 @@ fn registry_order_is_pinned() {
             "active.jwt",
             "active.expression-language-injection",
             "active.xpath-injection",
-            ("active.dom-javascript-injection", Scope::Request, Some(BURP_GROUP)),
-            ("active.dom-open-redirection", Scope::Request, Some(BURP_GROUP)),
-            ("active.dom-cookie-manipulation", Scope::Request, Some(BURP_GROUP)),
         ]
     );
     // Stage A4 (burp.Zwp6) runs once per stored-input pair.
@@ -565,25 +562,56 @@ fn dom_families_batch1_against_a_live_lab() {
     });
     let host = format!("127.0.0.1:{port}");
     let expect = [
-        ("/js-inj", "active.dom-javascript-injection", "JavaScript injection (DOM-based)", "high", "Firm"),
-        ("/openredir", "active.dom-open-redirection", "Open redirection (DOM-based)", "low", "Tentative"),
-        ("/cookie", "active.dom-cookie-manipulation", "Cookie manipulation (DOM-based)", "low", "Firm"),
+        (
+            "/js-inj",
+            "active.dom-javascript-injection",
+            "JavaScript injection (DOM-based)",
+            "high",
+            "Firm",
+        ),
+        (
+            "/openredir",
+            "active.dom-open-redirection",
+            "Open redirection (DOM-based)",
+            "low",
+            "Tentative",
+        ),
+        (
+            "/cookie",
+            "active.dom-cookie-manipulation",
+            "Cookie manipulation (DOM-based)",
+            "low",
+            "Firm",
+        ),
     ];
     for (page, id, name, sev, conf) in expect {
-        let got = lab_scan(port, &[id], "GET", page, format!("GET {page} HTTP/1.1\r\nHost: {host}\r\n\r\n"));
-        assert!(got.iter().any(|(n, s, c)| n == name && s == sev && c == conf), "{name}: {got:?}");
+        let got = lab_scan(
+            port,
+            &[id],
+            "GET",
+            page,
+            format!("GET {page} HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+        );
+        assert!(
+            got.iter()
+                .any(|(n, s, c)| n == name && s == sev && c == conf),
+            "{name}: {got:?}"
+        );
     }
     // A benign page reports none of the three.
     let got = lab_scan(
         port,
-        &["active.dom-javascript-injection", "active.dom-open-redirection", "active.dom-cookie-manipulation"],
+        &[
+            "active.dom-javascript-injection",
+            "active.dom-open-redirection",
+            "active.dom-cookie-manipulation",
+        ],
         "GET",
         "/benign2",
         format!("GET /benign2 HTTP/1.1\r\nHost: {host}\r\n\r\n"),
     );
     assert!(got.is_empty(), "{got:?}");
 }
-
 
 /// R-10 batch 2: the three GraphQL checks against a live endpoint.
 /// The lab answers the introspection query with a schema, the
