@@ -347,7 +347,7 @@ fn pad_be(msg: &[u8], block: usize, len_bytes: usize) -> Vec<u8> {
     data
 }
 
-fn md5_hex(input: &str) -> String {
+pub(crate) fn md5_hex(input: &str) -> String {
     let mut data = input.as_bytes().to_vec();
     data.push(0x80);
     while data.len() % 64 != 56 {
@@ -394,7 +394,7 @@ fn md5_hex(input: &str) -> String {
         .collect()
 }
 
-fn sha1_hex(input: &str) -> String {
+pub(crate) fn sha1_hex(input: &str) -> String {
     let data = pad_be(input.as_bytes(), 64, 8);
     let mut h: [u32; 5] = [
         0x6745_2301,
