@@ -92,6 +92,7 @@ fn registry_order_is_pinned() {
             ("active.dom-json-injection", Scope::Request, Some(BURP_GROUP)),
             ("active.dom-xpath-injection", Scope::Request, Some(BURP_GROUP)),
             ("active.dom-document-domain", Scope::Request, Some(BURP_GROUP)),
+            ("active.dom-prototype-pollution", Scope::Request, Some(BURP_GROUP)),
         ]
     );
     // Stage A4 (burp.Zwp6) runs once per stored-input pair.
@@ -870,6 +871,45 @@ fn dom_xss_stored_variant_against_a_live_lab() {
 /// canary and the stored canary; InFlight marks a probe another thread
 /// is running (see dom_analysis_hits).
 Done((Vec<crate::crawl::DomHit>, Option<String>, String)),
+
+/// R-13 prototype pollution: a page deep-merging the query string
+/// with a qs-style bracket parser pollutes Object.prototype from
+/// __proto__[key]; a page filtering those keys does not. Skipped when
+/// no Chromium is available.
+#[test]
+fn dom_prototype_pollution_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, _raw| {
+        let body = if path.starts_with("/vulnpp") {
+            r#"<html><body><script>
+var cfg = {};
+function setpath(o, parts, v) { var cur = o; for (var i = 0; i < parts.length - 1; i++) { if (typeof cur[parts[i]] !== 'object' || cur[parts[i]] === null) { cur[parts[i]] = {}; } cur = cur[parts[i]]; } cur[parts[parts.length - 1]] = v; }
+location.search.replace(/^\?/, '').split('&').forEach(function (p) { var kv = p.split('='); var parts = kv[0].split('[').map(function (x) { return x.replace(/\]$/, ''); }); setpath(cfg, parts, decodeURIComponent(kv[1] || '')); });
+</script></body></html>"#
+        } else if path.starts_with("/safepp") {
+            r#"<html><body><script>
+var cfg = {};
+function setpath(o, parts, v) { var cur = o; for (var i = 0; i < parts.length - 1; i++) { if (typeof cur[parts[i]] !== 'object' || cur[parts[i]] === null) { cur[parts[i]] = {}; } cur = cur[parts[i]]; } cur[parts[parts.length - 1]] = v; }
+location.search.replace(/^\?/, '').split('&').forEach(function (p) { var kv = p.split('='); var parts = kv[0].split('[').map(function (x) { return x.replace(/\]$/, ''); }); if (parts[0] === '__proto__' || parts[0] === 'constructor' || parts[0] === 'prototype') { return; } setpath(cfg, parts, decodeURIComponent(kv[1] || '')); });
+</script></body></html>"#
+        } else {
+            "<html><body><p>hello</p></body></html>"
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    let got = lab_scan(port, &["active.dom-prototype-pollution"], "GET", "/vulnpp", format!("GET /vulnpp HTTP/1.1\r\nHost: {host}\r\n\r\n"));
+    assert!(
+        got.iter().any(|(n, s, c)| n == "Client-side prototype pollution" && s == "info" && c == "Firm"),
+        "vulnerable merge: {got:?}"
+    );
+    let got = lab_scan(port, &["active.dom-prototype-pollution"], "GET", "/safepp", format!("GET /safepp HTTP/1.1\r\nHost: {host}\r\n\r\n"));
+    assert!(!got.iter().any(|(n, ..)| n == "Client-side prototype pollution"), "filtered merge: {got:?}");
+}
+
 
 /// R-10 batch 2: the three GraphQL checks against a live endpoint.
 /// The lab answers the introspection query with a schema, the
