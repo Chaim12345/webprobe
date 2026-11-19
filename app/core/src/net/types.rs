@@ -312,6 +312,6 @@ pub struct RepTab {
     pub history: Vec<(String, Option<Vec<u8>>, String)>,
     /// Position in `history` being shown (len = the live, editable item).
     pub hist_pos: usize,
-    /// A WebSocket Repeater tab: its session (`Shared::ws_sessions`).
+    /// A WebSocket Repeater tab: its session (in `Shared::tool_state`).
     pub ws: Option<u64>,
 }

@@ -110,7 +110,10 @@ pub struct Shared {
     /// Live proxied WebSockets by connection id (WebSocket Repeater attaches).
     pub ws_live: Mutex<HashMap<u64, LiveWs>>,
     /// WebSocket Repeater connections.
-    pub ws_sessions: Mutex<Vec<Arc<crate::ws_repeater::WsSession>>>,
+    /// State of tools net does not know (WebSocket Repeater sessions, ...):
+    /// each tool stores its own state type here (keeps `Shared` free of
+    /// tool-module types).
+    pub tool_state: ToolState,
     /// Diff-count state for the history table ("Diff count", burp.Zxwu.java:56).
     pub diff_tracker: Mutex<DiffTracker>,
     /// Extension host (Montoya-shaped, Path A): hooks run in the proxy pipeline.
@@ -265,7 +268,7 @@ impl Shared {
             ws_intercept_in_scope: AtomicBool::new(false),
             ws_strip_extensions: AtomicBool::new(true),
             ws_live: Mutex::new(HashMap::new()),
-            ws_sessions: Mutex::new(Vec::new()),
+            tool_state: ToolState::new(),
             diff_tracker: Mutex::new(DiffTracker::default()),
             ext_host: Mutex::new(crate::ext_host::ExtensionHost::default()),
             ws_intercept_client: AtomicBool::new(true),
