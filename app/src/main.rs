@@ -200,6 +200,10 @@ pub struct App {
     pub seq_load_path: String,
     /// Extensions > Custom scan checks: path of the BCheck file to load.
     pub bcheck_load_path: String,
+    /// Parsed BCheck summaries for the Extensions UI, refreshed only
+    /// when the configured sources change (parsing every source on every
+    /// egui frame held the scan-config lock the scanner also needs).
+    pub bcheck_ui_cache: crate::tools::BcheckUiCache,
     pub seq_live_buf: Option<Arc<Mutex<Vec<Vec<u8>>>>>,
     pub seq_live_stop: Option<Arc<std::sync::atomic::AtomicBool>>,
     /// Intercept: the held item being edited and its text.
@@ -882,6 +886,7 @@ impl App {
             seq_custom: String::new(),
             seq_load_path: String::new(),
             bcheck_load_path: String::new(),
+            bcheck_ui_cache: Default::default(),
             seq_live_buf: None,
             seq_live_stop: None,
             intercept_cur: None,
