@@ -66,7 +66,7 @@ pub struct Shared {
     /// Client connections being handled right now (see `MAX_CONNECTIONS`).
     pub active_connections: AtomicUsize,
     /// The scan task queue (`tasks.rs`).
-    pub tasks: Mutex<Vec<crate::tasks::ScanTask>>,
+    pub tasks: Mutex<Vec<webprobe_support::tasks::ScanTask>>,
     pub next_task_id: AtomicU64,
     pub task_runner: AtomicBool,
     /// Called when engine state a front end shows has changed (new traffic,

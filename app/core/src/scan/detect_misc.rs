@@ -10,17 +10,6 @@ pub fn is_header_manipulation_hit(body: &str, headers: &[(String, String)], mark
     body.contains(marker) || headers.iter().any(|(_, v)| v.contains(marker))
 }
 
-/// Collaborator ids for Burp's SMTP header injection check on one
-/// parameter: `simple` and `enclosed` (burp.Zrok, Zpu2
-/// SMTP_HEADER_INJECTION_SIMPLE_PAYLOAD / _ENCLOSED_PAYLOAD), each with the
-/// public host its id lives under.
-#[derive(Clone, Debug)]
-pub struct SmtpOob {
-    pub param: String,
-    pub simple: (String, String),
-    pub enclosed: (String, String),
-}
-
 /// burp.Zrok.Zl: `String.format("%s\r\nBCC:%s\r\n%s: %s", enclosed ? ">" : "",
 /// address, rand(3), rand(1))`, appended to the base value (Ziqd mode 1).
 /// The address uses burp.Zbzl.Zm's `user@<id>.<domain>` form: a live test

@@ -9,66 +9,7 @@ use std::time::Duration;
 
 use crate::net::{HistEntry, Shared};
 
-#[derive(Clone)]
-pub enum TaskKind {
-    /// Actively audit these requests.
-    Audit(Vec<HistEntry>),
-    /// Actively audit one request with Collaborator payloads the caller has
-    /// already generated (per-parameter OOB slots and Burp's SMTP header
-    /// injection pairs), as the "Do active scan" action does. Saved with a
-    /// project as a plain `Audit`: payloads belong to the session.
-    Single {
-        entry: Box<HistEntry>,
-        oob: Vec<(String, String, String)>,
-        smtp: Vec<crate::scan::SmtpOob>,
-    },
-    /// Fetch the URLs, crawl from them unless `audit_only`, audit what is found.
-    CrawlAudit { urls: Vec<String>, audit_only: bool },
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TaskState {
-    Queued,
-    Running,
-    Paused,
-    Finished,
-    Cancelled,
-}
-
-impl TaskState {
-    pub fn label(self) -> &'static str {
-        match self {
-            TaskState::Queued => "Waiting to start",
-            TaskState::Running => "Running",
-            TaskState::Paused => "Paused",
-            TaskState::Finished => "Finished",
-            TaskState::Cancelled => "Cancelled",
-        }
-    }
-
-    pub fn is_open(self) -> bool {
-        matches!(
-            self,
-            TaskState::Queued | TaskState::Running | TaskState::Paused
-        )
-    }
-}
-
-#[derive(Clone)]
-pub struct ScanTask {
-    pub id: u64,
-    pub name: String,
-    pub kind: TaskKind,
-    pub state: TaskState,
-    /// Requests audited so far and in all (Audit tasks; a crawl does not
-    /// know its total in advance).
-    pub done: usize,
-    pub total: Option<usize>,
-    /// Issues reported while the task ran.
-    pub issues_found: usize,
-    pub created: u64,
-    pub finished: Option<u64>,
-}
+pub use webprobe_support::tasks::{ScanTask, TaskKind, TaskState};
 
 /// Add a scan to the queue and make sure the runner is going. Returns its id.
 pub fn enqueue(shared: &Arc<Shared>, name: impl Into<String>, kind: TaskKind) -> u64 {

@@ -25,6 +25,7 @@ pub mod rules;
 pub mod seq_bits;
 pub mod streaming;
 pub mod sync;
+pub mod tasks;
 pub mod tls;
 pub mod util;
 pub mod variations;
