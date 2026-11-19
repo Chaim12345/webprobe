@@ -50,7 +50,7 @@ pub(crate) fn csrf_poc_html(e: &net::HistEntry) -> String {
 pub(crate) fn history_menu_windows(app: &mut App, ctx: &egui::Context) {
     if let Some((title, url)) = app.browser_url.clone() {
         let mut open = true;
-        egui::Window::new(title).default_pos(crate::theme::window_pos(&ctx)).open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {
+        egui::Window::new(title).default_pos(crate::theme::window_pos(ctx)).open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {
             ui.label("To show this item in your browser, copy the URL below and paste it into a browser that is configured to use WebProbe as its proxy.");
             ui.add_space(6.0);
             let mut u = url.clone();
@@ -70,7 +70,7 @@ pub(crate) fn history_menu_windows(app: &mut App, ctx: &egui::Context) {
     }
     if let Some(html) = app.csrf_poc.clone() {
         let mut open = true;
-        egui::Window::new("CSRF PoC generator").default_pos(crate::theme::window_pos(&ctx)).open(&mut open).default_size(egui::vec2(640.0, 420.0)).show(ctx, |ui| {
+        egui::Window::new("CSRF PoC generator").default_pos(crate::theme::window_pos(ctx)).open(&mut open).default_size(egui::vec2(640.0, 420.0)).show(ctx, |ui| {
             ui.label(RichText::new("CSRF HTML:").strong());
             let mut h = html.clone();
             ui.add(egui::TextEdit::multiline(&mut h).font(egui::TextStyle::Monospace).desired_width(f32::INFINITY).desired_rows(16));
@@ -89,14 +89,16 @@ pub(crate) fn history_menu_windows(app: &mut App, ctx: &egui::Context) {
     }
     if app.hist_window_open {
         let mut open = true;
-        egui::Window::new("HTTP history").default_pos(crate::theme::window_pos(&ctx)).open(&mut open).default_size(egui::vec2(900.0, 420.0)).show(ctx, |ui| {
+        egui::Window::new("HTTP history").default_pos(crate::theme::window_pos(ctx)).open(&mut open).default_size(egui::vec2(900.0, 420.0)).show(ctx, |ui| {
             ui.add(egui::TextEdit::singleline(&mut app.hist_window_filter).hint_text("Search").desired_width(260.0));
             let q = app.hist_window_filter.to_ascii_lowercase();
             // Rebuilt only when the history or the filter changes: filtering
             // and copying every entry under the history lock on every frame
             // held up the proxy threads that record traffic.
+            // (row count, newest id, filter key) -> shared rows.
+            type RowsCache = ((usize, u64, String), std::rc::Rc<Vec<net::HistEntry>>);
             thread_local! {
-                static ROWS: std::cell::RefCell<((usize, u64, String), std::rc::Rc<Vec<net::HistEntry>>)> = std::cell::RefCell::new(((usize::MAX, 0, String::new()), Default::default()));
+                static ROWS: std::cell::RefCell<RowsCache> = std::cell::RefCell::new(((usize::MAX, 0, String::new()), Default::default()));
             }
             let stamp = {
                 let (len, last) = app.shared.history.stamp();

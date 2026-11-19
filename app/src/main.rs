@@ -72,6 +72,9 @@ use eframe::egui::{self, ViewportCommand};
 
 use crate::ext_host::ProxyHooks as _;
 
+/// The history and issue rows the site map tree is built from.
+pub type SiteCache = (Vec<net::HistEntry>, Vec<(String, String)>);
+
 pub struct App {
     pub shared: Arc<net::Shared>,
     /// Cross-tool HTTP Logger, mirrored from proxy history every frame.
@@ -257,7 +260,7 @@ pub struct App {
     /// Site map filter, and the filtered contents with the inputs they were
     /// built from.
     pub site_filter: site_map::SiteFilter,
-    pub site_cache: Arc<(Vec<net::HistEntry>, Vec<(String, String)>)>,
+    pub site_cache: Arc<SiteCache>,
     pub site_cache_key: String,
     /// The site map tree built from `site_cache`, and the key it was built for.
     pub(crate) site_tree: Arc<std::collections::BTreeMap<String, ui::MapNode>>,
@@ -658,31 +661,28 @@ pub fn send_internal_probe(port: u16, request: &[u8]) -> Vec<u8> {
     use std::io::{Read, Write};
     let mut out = Vec::new();
     let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
-    match std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_secs(10)) {
-        Ok(mut s) => {
-            let _ = s.set_read_timeout(Some(std::time::Duration::from_secs(20)));
-            if s.write_all(request).is_ok() {
-                let mut buf = [0u8; 65536];
-                while let Ok(n) = s.read(&mut buf) {
-                    if n == 0 {
-                        break;
-                    }
-                    out.extend_from_slice(&buf[..n]);
+    if let Ok(mut s) = std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_secs(10)) {
+        let _ = s.set_read_timeout(Some(std::time::Duration::from_secs(20)));
+        if s.write_all(request).is_ok() {
+            let mut buf = [0u8; 65536];
+            while let Ok(n) = s.read(&mut buf) {
+                if n == 0 {
+                    break;
                 }
+                out.extend_from_slice(&buf[..n]);
             }
         }
-        Err(_) => {}
     }
     out
 }
 
-fn schedule_grab(ctx: &egui::Context, path: &PathBuf, rect: egui::Rect, done: Arc<Mutex<bool>>) {
+fn schedule_grab(ctx: &egui::Context, path: &std::path::Path, rect: egui::Rect, done: Arc<Mutex<bool>>) {
     let painter = egui::Painter::new(
         ctx.clone(),
         egui::LayerId::new(egui::Order::Tooltip, egui::Id::unique("shot_grab")),
         rect,
     );
-    let path = path.clone();
+    let path = path.to_path_buf();
     let cb = egui_glow::CallbackFn::new(move |info, painter| {
         use eframe::glow::HasContext;
         let gl = painter.gl();
@@ -713,12 +713,12 @@ fn schedule_grab(ctx: &egui::Context, path: &PathBuf, rect: egui::Rect, done: Ar
                     *a = 255;
                 }
             }
-            let ok = if let Ok(png) = std::panic::catch_unwind(|| util::encode_png(w as u32, h as u32, &flipped)) {
+            
+            if let Ok(png) = std::panic::catch_unwind(|| util::encode_png(w as u32, h as u32, &flipped)) {
                 std::fs::write(&path, png).is_ok()
             } else {
                 false
-            };
-            ok
+            }
         };
         *done.lock().unwrap() = ok;
     });

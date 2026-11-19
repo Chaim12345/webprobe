@@ -73,6 +73,9 @@ pub fn new_project(app: &mut App, path: Option<&str>) -> Result<(), String> {
     Ok(())
 }
 
+/// What the start dialog asks the app to do next.
+type StartAction = Box<dyn FnOnce(&mut App) -> Result<(), String>>;
+
 fn summary_line(s: &project_files::Summary) -> String {
     format!(
         "{} request(s), {} issue(s), {} Repeater tab(s); saved {}; {} KB",
@@ -89,7 +92,7 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
         return;
     }
     let mut shown = true;
-    let mut action: Option<Box<dyn FnOnce(&mut App) -> Result<(), String>>> = None;
+    let mut action: Option<StartAction> = None;
     let title = if app.chooser.at_start { "Welcome to WebProbe" } else { "Project" };
     egui::Window::new(title).open(&mut shown).collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0)).show(ctx, |ui: &mut Ui| {
         ui.set_width(560.0);

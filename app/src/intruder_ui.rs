@@ -16,6 +16,10 @@ use crate::intruder_run::{self as run, AttackSettings, ExtractEnd, ExtractItem, 
 use crate::theme;
 use crate::App;
 
+/// (generator / processor calls into the sidecar): its result, and the
+/// flag Stop sets so it never starts.
+type Preparing = (std::sync::mpsc::Receiver<Result<Arc<RunState>, String>>, Arc<std::sync::atomic::AtomicBool>);
+
 /// Intruder state that is not part of the original `App` fields.
 pub struct IntruderExtra {
     pub settings: AttackSettings,
@@ -39,7 +43,7 @@ pub struct IntruderExtra {
     /// An attack whose extension payloads are being made off the UI thread
     /// (generator / processor calls into the sidecar): its result, and the
     /// flag Stop sets so it never starts.
-    preparing: Option<(std::sync::mpsc::Receiver<Result<Arc<RunState>, String>>, Arc<std::sync::atomic::AtomicBool>)>,
+    preparing: Option<Preparing>,
 }
 
 impl Default for IntruderExtra {
@@ -367,7 +371,7 @@ pub fn request_count_text(app: &App) -> String {
 }
 
 pub fn is_running(app: &App) -> bool {
-    app.intr_x.preparing.is_some() || app.intr_x.run.as_ref().map_or(false, |r| r.is_running())
+    app.intr_x.preparing.is_some() || app.intr_x.run.as_ref().is_some_and(|r| r.is_running())
 }
 
 pub fn stop(app: &mut App) {

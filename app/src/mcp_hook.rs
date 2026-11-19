@@ -256,52 +256,6 @@ pub fn key_events(key: &str) -> Vec<egui::Event> {
     vec![egui::Event::Text(key.to_string())]
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn text(ev: &[egui::Event]) -> String {
-        ev.iter().filter_map(|e| if let egui::Event::Text(t) = e { Some(t.as_str()) } else { None }).collect()
-    }
-
-    fn key(ev: &[egui::Event]) -> Option<(egui::Key, egui::Modifiers)> {
-        ev.iter().find_map(|e| if let egui::Event::Key { key, pressed: true, modifiers, .. } = e { Some((*key, *modifiers)) } else { None })
-    }
-
-    #[test]
-    fn characters_and_strings_type_text() {
-        assert_eq!(text(&key_events("a")), "a");
-        assert_eq!(key(&key_events("a")).map(|k| k.0), Some(egui::Key::A));
-        assert_eq!(text(&key_events("&")), "&");
-        assert_eq!(text(&key_events(" ")), " ");
-        assert_eq!(text(&key_events("a b&c")), "a b&c");
-        assert_eq!(text(&key_events("ampersand")), "ampersand", "not a key name: typed");
-        assert_eq!(text(&key_events("text:Enter")), "Enter");
-        assert_eq!(text(&key_events("+")), "+");
-    }
-
-    #[test]
-    fn key_names_press_keys() {
-        for (name, k) in [("Enter", egui::Key::Enter), ("Return", egui::Key::Enter), ("BackSpace", egui::Key::Backspace), ("backspace", egui::Key::Backspace), ("Tab", egui::Key::Tab), ("End", egui::Key::End), ("Page_Up", egui::Key::PageUp), ("F5", egui::Key::F5), ("left", egui::Key::ArrowLeft)] {
-            assert_eq!(key(&key_events(name)).map(|x| x.0), Some(k), "{name}");
-            assert_eq!(text(&key_events(name)), "", "{name} types nothing");
-        }
-        assert_eq!(text(&key_events("space")), " ", "space types a space");
-    }
-
-    #[test]
-    fn combos_carry_modifiers() {
-        let (k, m) = key(&key_events("ctrl+a")).unwrap();
-        assert_eq!(k, egui::Key::A);
-        assert!(m.ctrl && m.command && !m.shift);
-        let (k, m) = key(&key_events("shift+Tab")).unwrap();
-        assert_eq!(k, egui::Key::Tab);
-        assert!(m.shift);
-        assert!(matches!(key_events("ctrl+c")[..], [egui::Event::Copy]));
-        assert_eq!(key(&key_events("ctrl+shift+z")).map(|x| (x.0, x.1.shift)), Some((egui::Key::Z, true)));
-    }
-}
-
 /// A deflate-compressed RGBA PNG. The MCP protocol caps a message at 1 MB;
 /// the uncompressed encoder in `util` makes a 1440x900 screenshot ~5 MB.
 #[cfg(feature = "mcp")]
@@ -352,4 +306,50 @@ impl Mcp {
     pub fn inject(&self, _ctx: &egui::Context, _raw: &mut egui::RawInput) {}
     pub fn begin_frame(&self) {}
     pub fn frame(&self, _ctx: &egui::Context) {}
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn text(ev: &[egui::Event]) -> String {
+        ev.iter().filter_map(|e| if let egui::Event::Text(t) = e { Some(t.as_str()) } else { None }).collect()
+    }
+
+    fn key(ev: &[egui::Event]) -> Option<(egui::Key, egui::Modifiers)> {
+        ev.iter().find_map(|e| if let egui::Event::Key { key, pressed: true, modifiers, .. } = e { Some((*key, *modifiers)) } else { None })
+    }
+
+    #[test]
+    fn characters_and_strings_type_text() {
+        assert_eq!(text(&key_events("a")), "a");
+        assert_eq!(key(&key_events("a")).map(|k| k.0), Some(egui::Key::A));
+        assert_eq!(text(&key_events("&")), "&");
+        assert_eq!(text(&key_events(" ")), " ");
+        assert_eq!(text(&key_events("a b&c")), "a b&c");
+        assert_eq!(text(&key_events("ampersand")), "ampersand", "not a key name: typed");
+        assert_eq!(text(&key_events("text:Enter")), "Enter");
+        assert_eq!(text(&key_events("+")), "+");
+    }
+
+    #[test]
+    fn key_names_press_keys() {
+        for (name, k) in [("Enter", egui::Key::Enter), ("Return", egui::Key::Enter), ("BackSpace", egui::Key::Backspace), ("backspace", egui::Key::Backspace), ("Tab", egui::Key::Tab), ("End", egui::Key::End), ("Page_Up", egui::Key::PageUp), ("F5", egui::Key::F5), ("left", egui::Key::ArrowLeft)] {
+            assert_eq!(key(&key_events(name)).map(|x| x.0), Some(k), "{name}");
+            assert_eq!(text(&key_events(name)), "", "{name} types nothing");
+        }
+        assert_eq!(text(&key_events("space")), " ", "space types a space");
+    }
+
+    #[test]
+    fn combos_carry_modifiers() {
+        let (k, m) = key(&key_events("ctrl+a")).unwrap();
+        assert_eq!(k, egui::Key::A);
+        assert!(m.ctrl && m.command && !m.shift);
+        let (k, m) = key(&key_events("shift+Tab")).unwrap();
+        assert_eq!(k, egui::Key::Tab);
+        assert!(m.shift);
+        assert!(matches!(key_events("ctrl+c")[..], [egui::Event::Copy]));
+        assert_eq!(key(&key_events("ctrl+shift+z")).map(|x| (x.0, x.1.shift)), Some((egui::Key::Z, true)));
+    }
 }

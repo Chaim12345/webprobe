@@ -11,6 +11,7 @@ use crate::scan::ScanIssue;
 
 /// State of the report dialog.
 #[derive(Clone, Debug)]
+#[derive(Default)]
 pub struct ReportDialog {
     pub open: bool,
     pub options: ReportOptions,
@@ -22,19 +23,6 @@ pub struct ReportDialog {
     pub status: String,
 }
 
-impl Default for ReportDialog {
-    fn default() -> Self {
-        Self {
-            open: false,
-            options: ReportOptions::default(),
-            issue_ids: Vec::new(),
-            path: String::new(),
-            limit_req: String::new(),
-            limit_resp: String::new(),
-            status: String::new(),
-        }
-    }
-}
 
 impl ReportDialog {
     /// Open the dialog for these issue ids.

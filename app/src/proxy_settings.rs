@@ -150,18 +150,6 @@ pub fn parse_target(text: &str) -> Option<(String, u16)> {
     (!host.is_empty()).then(|| (host.to_string(), port))
 }
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn redirect_targets_need_a_host_and_a_port() {
-        assert_eq!(super::parse_target(" 127.0.0.1:3001 "), Some(("127.0.0.1".to_string(), 3001)));
-        assert_eq!(super::parse_target("app.test:443"), Some(("app.test".to_string(), 443)));
-        for bad in ["app.test", ":80", "app.test:0", "app.test:port", ""] {
-            assert_eq!(super::parse_target(bad), None, "{bad}");
-        }
-    }
-}
-
 /// Burp's "Import / export CA certificate" and "Regenerate CA certificate".
 pub fn ca_buttons(app: &mut App, ui: &mut Ui) {
     heading(ui, "CA certificate");
@@ -458,5 +446,17 @@ pub fn ws_match_replace(app: &mut App, ui: &mut Ui) {
     }
     if rules != before {
         *app.shared.ws_rules.lock().unwrap() = rules;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn redirect_targets_need_a_host_and_a_port() {
+        assert_eq!(super::parse_target(" 127.0.0.1:3001 "), Some(("127.0.0.1".to_string(), 3001)));
+        assert_eq!(super::parse_target("app.test:443"), Some(("app.test".to_string(), 443)));
+        for bad in ["app.test", ":80", "app.test:0", "app.test:port", ""] {
+            assert_eq!(super::parse_target(bad), None, "{bad}");
+        }
     }
 }

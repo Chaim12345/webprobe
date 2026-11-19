@@ -312,7 +312,7 @@ pub fn redirect_request(
             .collect();
         set_header(&mut lines, "Host", &target.authority());
     } else if process_cookies && !cookies_from_response.is_empty() {
-        let existing = lines.iter().skip(1).find(|l| header_name(l) == "cookie").map(|l| l.splitn(2, ':').nth(1).unwrap_or("").trim().to_string());
+        let existing = lines.iter().skip(1).find(|l| header_name(l) == "cookie").map(|l| l.split_once(':').map(|x| x.1).unwrap_or("").trim().to_string());
         set_header(&mut lines, "Cookie", &merge_cookies(existing.as_deref(), cookies_from_response));
     }
     // No Referer when an HTTPS page redirects to plain HTTP.
@@ -555,7 +555,7 @@ pub fn toggle_request_method(req: &str) -> String {
         set_header(&mut lines, "Content-Length", &body.len().to_string());
         join_message(&lines, &body)
     } else {
-        let ct = lines.iter().skip(1).find(|l| header_name(l) == "content-type").map(|l| l.splitn(2, ':').nth(1).unwrap_or("").trim().to_string()).unwrap_or_default();
+        let ct = lines.iter().skip(1).find(|l| header_name(l) == "content-type").map(|l| l.split_once(':').map(|x| x.1).unwrap_or("").trim().to_string()).unwrap_or_default();
         let lct = ct.to_ascii_lowercase();
         let moved: Vec<(String, String)> = if lct.starts_with("multipart/") {
             multipart_params(&body, &ct).into_iter().map(|(k, v)| (url_encode_all_special(&k), url_encode_all_special(&v))).collect()
@@ -580,7 +580,7 @@ pub fn toggle_request_method(req: &str) -> String {
 /// Content-Length follow. Requests without such a body are left alone.
 pub fn toggle_body_encoding(req: &str, boundary: &str) -> String {
     let (mut lines, body) = head_lines_and_body(req);
-    let ct = lines.iter().skip(1).find(|l| header_name(l) == "content-type").map(|l| l.splitn(2, ':').nth(1).unwrap_or("").trim().to_string()).unwrap_or_default();
+    let ct = lines.iter().skip(1).find(|l| header_name(l) == "content-type").map(|l| l.split_once(':').map(|x| x.1).unwrap_or("").trim().to_string()).unwrap_or_default();
     let lct = ct.to_ascii_lowercase();
     let decode = |t: &str| crate::util::url_decode(&t.replace('+', " "));
     let new_body = if lct.contains("application/x-www-form-urlencoded") {
@@ -2349,8 +2349,10 @@ mod tests {
             result_line: "Done".into(),
             response_b64: None,
         };
-        let mut d = crate::project::ProjectData::default();
-        d.repeaters = vec![tab("login", "GET /a HTTP/1.1\r\n\r\n"), tab("3", "POST /b HTTP/1.1\r\n\r\nx")];
+        let d = crate::project::ProjectData {
+            repeaters: vec![tab("login", "GET /a HTTP/1.1\r\n\r\n"), tab("3", "POST /b HTTP/1.1\r\n\r\nx")],
+            ..Default::default()
+        };
         let back = crate::project::import_json(&crate::project::export_json(&d).unwrap()).unwrap();
         let got: Vec<(&str, &str, u16, bool)> = back.repeaters.iter().map(|r| (r.name.as_str(), r.request.as_str(), r.port, r.https)).collect();
         assert_eq!(got, vec![("login", "GET /a HTTP/1.1\r\n\r\n", 8443, true), ("3", "POST /b HTTP/1.1\r\n\r\nx", 8443, true)]);

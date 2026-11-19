@@ -53,7 +53,7 @@ pub(crate) fn event_log_window(app: &mut App, ctx: &egui::Context) {
         return;
     }
     let mut open = true;
-    egui::Window::new("Event log").default_pos(crate::theme::window_pos(&ctx))
+    egui::Window::new("Event log").default_pos(crate::theme::window_pos(ctx))
         .open(&mut open)
         .default_size(egui::vec2(760.0, 320.0))
         .show(ctx, |ui| {
@@ -85,7 +85,7 @@ pub(crate) fn search_window(app: &mut App, ctx: &egui::Context) {
         return;
     }
     let mut open = true;
-    egui::Window::new("Search").default_pos(crate::theme::window_pos(&ctx))
+    egui::Window::new("Search").default_pos(crate::theme::window_pos(ctx))
         .open(&mut open)
         .default_size(egui::vec2(820.0, 520.0))
         .show(ctx, |ui| crate::tools::search(app, ui));

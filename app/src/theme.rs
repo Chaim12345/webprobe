@@ -603,6 +603,14 @@ pub fn apply_current(ctx: &egui::Context) {
     apply_as(ctx, palette, density, scale);
 }
 
+/// Where a floating window opens when it has no better place: below the menu
+/// and tab rows and a little in from the left. Without a position egui 0.37
+/// puts new windows in the top-left corner, over the menu bar.
+pub fn window_pos(ctx: &egui::Context) -> egui::Pos2 {
+    let r = ctx.content_rect();
+    egui::pos2(r.left() + 60.0, r.top() + 96.0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -705,12 +713,4 @@ mod tests {
             assert!(luma(fg) < 120.0, "{name} should be dark ink, got {fg:?}");
         }
     }
-}
-
-/// Where a floating window opens when it has no better place: below the menu
-/// and tab rows and a little in from the left. Without a position egui 0.37
-/// puts new windows in the top-left corner, over the menu bar.
-pub fn window_pos(ctx: &egui::Context) -> egui::Pos2 {
-    let r = ctx.content_rect();
-    egui::pos2(r.left() + 60.0, r.top() + 96.0)
 }
