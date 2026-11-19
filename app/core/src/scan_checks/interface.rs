@@ -104,6 +104,8 @@ pub(crate) static REQUEST_CHECKS: &[&dyn RequestCheck] = &[
     &GraphqlSuggestions,
     &GraphqlContentType,
     &SpoofableClientIp,
+    &HeaderDependent { user_agent: false },
+    &HeaderDependent { user_agent: true },
     &BackupFile,
     &GraphqlEndpointDiscovered,
     &cache::WebCachePoisoning,

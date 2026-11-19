@@ -565,3 +565,108 @@ impl RequestCheck for CsrfTokenNotEnforced {
         }
     }
 }
+
+/// burp.Zxly.java:34-45: does this User-Agent look mobile?
+pub(crate) fn ua_looks_mobile(ua: &str) -> bool {
+    let ua = ua.to_ascii_lowercase();
+    [
+        "iphone",
+        "android",
+        "blackberry",
+        "htc",
+        "symbian",
+        "nokia",
+        "samsung",
+        "mot",
+        "sonyericsson",
+    ]
+    .iter()
+    .any(|t| ua.contains(t))
+}
+
+/// burp.Zxly.java:29-46: the swapped User-Agent - a desktop request gets the
+/// iPhone string, a mobile request the IE9 string.
+pub(crate) fn ua_variant(existing: Option<&str>) -> &'static str {
+    match existing {
+        Some(ua) if ua_looks_mobile(ua) => "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Win64; x64; Trident/5.0)",
+        _ => "Mozilla/5.0 (iPhone; CPU iPhone OS 5_1 like Mac OS X) AppleWebKit/534.46 (KHTML, like Gecko) Version/5.1 Mobile/9B176 Safari/7534.48.3",
+    }
+}
+
+/// Referer-dependent and User agent-dependent response (per request),
+/// burp.Zxlg / burp.Zxly over the shared burp.Zxld/Zmaq comparison: the
+/// request with the header swapped must stay distinguishable from the base
+/// request for the accuracy's rounds (4/6/10). burp.Zg4d's removal variant
+/// is the base request itself when the header is absent.
+pub(crate) struct HeaderDependent {
+    pub user_agent: bool,
+}
+
+impl RequestCheck for HeaderDependent {
+    fn id(&self) -> &'static str {
+        if self.user_agent {
+            "active.user-agent-dependent-response"
+        } else {
+            "active.referer-dependent-response"
+        }
+    }
+    fn issue(&self) -> &'static str {
+        if self.user_agent {
+            "User agent-dependent response"
+        } else {
+            "Referer-dependent response"
+        }
+    }
+    fn scope(&self) -> Scope {
+        Scope::Request
+    }
+    fn run(&self, cx: &ScanCtx) {
+        if cx.stopped() || !cx.runs(self.issue()) || cx.baseline.raw.is_empty() {
+            return;
+        }
+        let (header, swapped) = if self.user_agent {
+            let existing = util::get_header(&cx.parts.headers, "User-Agent");
+            ("User-Agent", ua_variant(existing.as_deref()).to_string())
+        } else {
+            // burp.Zxlg's static replacement is stripped from the readable
+            // source; its fragments are "http://" and ".com/". Any foreign
+            // origin serves the differential.
+            ("Referer", "http://www.google.com/".to_string())
+        };
+        let base = cx.req.as_bytes().to_vec();
+        let changed = crate::util::replace_or_add_header(&base, header, &swapped);
+        let fp = crate::variations::fingerprint;
+        let (Some(a0), Some(b0)) = (burp_send(cx, &base), burp_send(cx, &changed)) else {
+            return;
+        };
+        let mut c = crate::variations::Comparator::new(&fp(&a0), &fp(&b0));
+        c.add_a(&fp(&cx.baseline.raw));
+        if !c.distinguishable() {
+            return;
+        }
+        let (mut last_a, mut last_b) = (a0, b0);
+        for _ in 1..cx.settings.accuracy.rounds() {
+            if cx.stopped() {
+                return;
+            }
+            let (Some(a), Some(b)) = (burp_send(cx, &base), burp_send(cx, &changed)) else {
+                return;
+            };
+            c.add_a(&fp(&a));
+            c.add_b(&fp(&b));
+            if !c.distinguishable() {
+                return;
+            }
+            (last_a, last_b) = (a, b);
+        }
+        let mut i = mk(
+            "info",
+            self.issue(),
+            &cx.entry,
+            format!("The response changed consistently when the header <b>{header}</b> was swapped for <b>{swapped}</b> (attributes: {:?}).", c.attributes()),
+        )
+        .with_evidence(vec![ScanEvidence::new(&base, Some(&last_a)), ScanEvidence::new(&changed, Some(&last_b))]);
+        i.confidence = "Tentative".into();
+        cx.report(vec![i]);
+    }
+}
