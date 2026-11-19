@@ -680,6 +680,12 @@ fn dom_families_batch4_against_a_live_lab() {
             "<html><body><script>var f = document.createElement('form'); f.action = location.hash.slice(1);</script></body></html>"
         } else if path.starts_with("/xss-setattr") {
             "<html><body><script>document.body.setAttribute('onclick', location.hash.slice(1));</script></body></html>"
+        } else if path.starts_with("/pushstate-state") {
+            // only the state object (argument 0) carries it: not a sink hit
+            "<html><body><script>history.pushState({x: location.hash}, '', '/clean');</script></body></html>"
+        } else if path.starts_with("/pushstate") {
+            // the URL argument carries the source value: a hit
+            "<html><body><script>history.pushState({}, '', '/p' + location.hash);</script></body></html>"
         } else {
             "<html><body><p>hello</p></body></html>"
         };
@@ -703,6 +709,11 @@ fn dom_families_batch4_against_a_live_lab() {
         format!("GET /benign5 HTTP/1.1\r\nHost: {host}\r\n\r\n"),
     );
     assert!(got.is_empty(), "{got:?}");
+    // history.pushState/replaceState: the URL argument is the sink
+    let got = lab_scan(port, &["active.dom-data-manipulation"], "GET", "/pushstate", format!("GET /pushstate HTTP/1.1\r\nHost: {host}\r\n\r\n"));
+    assert!(got.iter().any(|(n, ..)| n == "DOM data manipulation (DOM-based)"), "URL argument: {got:?}");
+    let got = lab_scan(port, &["active.dom-data-manipulation"], "GET", "/pushstate-state", format!("GET /pushstate-state HTTP/1.1\r\nHost: {host}\r\n\r\n"));
+    assert!(!got.iter().any(|(n, ..)| n == "DOM data manipulation (DOM-based)"), "state object must not be recorded: {got:?}");
 }
 
 
