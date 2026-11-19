@@ -1068,6 +1068,97 @@ impl PointCheck for LinkManipulation {
     }
 }
 
+/// The G.11 reflected families share burp.Zb_5's applicability (every
+/// insertion-point kind, not server-side) and differ only in probe and
+/// reflection context; the impls below are that shape three times.
+macro_rules! g11_reflected_check {
+    ($name:ident, $id:literal, $issue:literal, $severity:literal, $runner:path, $doc:literal) => {
+        #[doc = $doc]
+        pub(crate) struct $name;
+
+        impl PointCheck for $name {
+            fn id(&self) -> &'static str {
+                $id
+            }
+            fn issue(&self) -> &'static str {
+                $issue
+            }
+            fn applies_to(&self, ip: &InsertionPoint) -> bool {
+                match &ip.kind {
+                    IpKind::Query
+                    | IpKind::Body
+                    | IpKind::Json(_)
+                    | IpKind::Multipart { .. }
+                    | IpKind::Cookie
+                    | IpKind::Header
+                    | IpKind::PathFolder(_)
+                    | IpKind::PathFilename(_)
+                    | IpKind::EntireBody
+                    | IpKind::XmlParam { .. }
+                    | IpKind::XmlTag { .. }
+                    | IpKind::XmlAttr { .. }
+                    | IpKind::ParamName(_)
+                    | IpKind::Base64 { .. } => true,
+                }
+            }
+            fn server_side(&self) -> bool {
+                false
+            }
+            fn run(&self, cx: &ScanCtx, _st: &mut ScanState, pt: &mut PointRun) {
+                if cx.stopped() {
+                    return;
+                }
+                let ip = pt.ip;
+                let rec = Recorder::default();
+                let send = |payload: &str| -> Option<Vec<u8>> {
+                    if cx.stopped() {
+                        return None;
+                    }
+                    let new_req = inject_payload(&cx.req, ip, &payload);
+                    rec.send(cx, payload, new_req.as_bytes())
+                };
+                if let Some((payload, context, _resp)) = $runner(send) {
+                    cx.report(vec![mk_point(
+                        $issue,
+                        $severity,
+                        "Firm",
+                        &cx.entry,
+                        ip,
+                        format!("The injected value <b>{}</b> was reflected in {}.", util::html_encode(&payload), context),
+                    )
+                    .with_evidence(evidence([rec.last(&payload)]))]);
+                }
+                cx.progress();
+            }
+        }
+    };
+}
+
+g11_reflected_check!(
+    CssInjectionReflected,
+    "active.css-injection",
+    "CSS injection (reflected)",
+    "medium",
+    crate::scan::run_css_reflected,
+    "CSS injection (reflected), burp.Zb_5 -> Zw0x, KB 00501300: the probe must reflect in a CSS position (<style> text, a style attribute, a <link rel=stylesheet> href). Burp's payload literal and applicable-tag map are stripped (not established): plain token, contextual detection, REPLACE only. Severity Medium (KB); confidence not established: Firm."
+);
+g11_reflected_check!(
+    HppReflected,
+    "active.client-side-hpp",
+    "Client-side HTTP parameter pollution (reflected)",
+    "low",
+    crate::scan::run_hpp_reflected,
+    "Client-side HTTP parameter pollution (reflected), burp.Zb_5 -> Zi4q, KB 00501400: a `<random3>&<random3>` pair (the stripped suffix is omitted, not established) must reflect in an attribute value, JavaScript string or response header. Severity Low (KB); confidence not established: Firm."
+);
+g11_reflected_check!(
+    FormActionHijacking,
+    "active.form-action-hijacking",
+    "Form action hijacking (reflected)",
+    "medium",
+    crate::scan::run_form_action_reflected,
+    "Form action hijacking (reflected), burp.Zb_5 -> Zc51, KB 00501500: an injected URL must reflect as a form's action or an element's formaction. Severity Medium (KB); confidence not established: Firm."
+);
+
 /// File path manipulation (burp.Zsl1).
 pub(crate) struct FilePathManipulation;
 
