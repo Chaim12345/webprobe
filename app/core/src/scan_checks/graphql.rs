@@ -846,8 +846,8 @@ fn dom_analysis_hits(cx: &ScanCtx) -> (Vec<crate::crawl::DomHit>, Option<String>
     // not read from this navigation's URL.
     let stored_canary = format!("s{canary}");
     let sep0 = if path.contains('?') { "&" } else { "?" };
-    let submit = format!("GET {path}{sep0}wpdom={stored_canary} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", cx.host_hdr);
-    let _ = cx.send(submit.as_bytes());
+    let submit = authed_get(cx, &format!("{path}{sep0}wpdom={stored_canary}"));
+    let _ = cx.send(&submit);
     let probe = crate::crawl::dom_analysis_probe(&cx.shared, &url, &canary);
     if let Err(e) = &probe {
         // A crashed/timed-out probe is not a clean bill of health: say so
