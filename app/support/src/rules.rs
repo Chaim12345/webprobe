@@ -414,11 +414,7 @@ fn apply_header(
     }
 
     out.extend_from_slice(&bytes[parts.header_end..]);
-    if changed {
-        Some(out)
-    } else {
-        None
-    }
+    if changed { Some(out) } else { None }
 }
 
 /// Append `line` as the last header line, with the message's line ending.
@@ -682,11 +678,7 @@ fn request_target_range(first_line: &[u8]) -> Option<Range<usize>> {
     while pos < first_line.len() && !is_http_space(first_line[pos]) {
         pos += 1;
     }
-    if start == pos {
-        None
-    } else {
-        Some(start..pos)
-    }
+    if start == pos { None } else { Some(start..pos) }
 }
 
 fn trim_ascii_ws(mut value: &[u8]) -> &[u8] {
@@ -775,16 +767,18 @@ mod tests {
             "first line is not a header"
         );
         // First line only.
-        assert!(apply(
-            REQ,
-            &[rule(
-                MrScope::RequestFirstLine,
-                "HTTP/1.1",
-                "HTTP/1.0",
-                false
-            )]
-        )
-        .starts_with("POST /p?a=1&token=old HTTP/1.0\r\n"));
+        assert!(
+            apply(
+                REQ,
+                &[rule(
+                    MrScope::RequestFirstLine,
+                    "HTTP/1.1",
+                    "HTTP/1.0",
+                    false
+                )]
+            )
+            .starts_with("POST /p?a=1&token=old HTTP/1.0\r\n")
+        );
         // Parameter names and values: query and form body, not headers.
         let out = apply(
             REQ,
@@ -808,11 +802,13 @@ mod tests {
             apply(RESP, &[rule(MrScope::RequestHeader, "nginx", "x", false)]),
             String::from_utf8_lossy(RESP)
         );
-        assert!(apply(
-            RESP,
-            &[rule(MrScope::ResponseHeader, "nginx", "hidden", false)]
-        )
-        .contains("Server: hidden\r\n"));
+        assert!(
+            apply(
+                RESP,
+                &[rule(MrScope::ResponseHeader, "nginx", "hidden", false)]
+            )
+            .contains("Server: hidden\r\n")
+        );
         // A header replaced by nothing is removed with its line ending.
         let out = apply(
             RESP,
@@ -861,11 +857,13 @@ mod tests {
         // Chunked bodies keep their framing.
         let chunked =
             b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n";
-        assert!(!apply(
-            chunked,
-            &[rule(MrScope::ResponseBody, "hello", "HELLO", false)]
-        )
-        .contains("Content-Length"));
+        assert!(
+            !apply(
+                chunked,
+                &[rule(MrScope::ResponseBody, "hello", "HELLO", false)]
+            )
+            .contains("Content-Length")
+        );
     }
 
     #[test]

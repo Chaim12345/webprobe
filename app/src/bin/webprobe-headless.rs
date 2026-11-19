@@ -16,8 +16,8 @@
 //! Only point it at hosts you are authorised to test.
 
 use std::io::BufRead;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use webprobe_core::{net, project, scan};

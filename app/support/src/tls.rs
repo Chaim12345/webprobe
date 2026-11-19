@@ -5,15 +5,15 @@
 // WEBPROBE_CA_DIR to move it). No operating-system trust store is touched.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicI32, Ordering};
 
 use crate::sync::Mutex;
 
 use rand::RngCore;
 use rcgen::{
     BasicConstraints, Certificate, CertificateParams, DnType, ExtendedKeyUsagePurpose, IsCa,
-    KeyPair, KeyUsagePurpose, SerialNumber, PKCS_RSA_SHA256,
+    KeyPair, KeyUsagePurpose, PKCS_RSA_SHA256, SerialNumber,
 };
 use rsa::pkcs8::EncodePrivateKey;
 use rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};
@@ -680,13 +680,15 @@ mod tests {
             .unwrap()
             .self_signed(&key)
             .unwrap();
-        assert!(super::import_ca(
-            &dir,
-            leafish.pem().as_bytes(),
-            key.serialize_pem().as_bytes()
-        )
-        .unwrap_err()
-        .contains("not a CA"));
+        assert!(
+            super::import_ca(
+                &dir,
+                leafish.pem().as_bytes(),
+                key.serialize_pem().as_bytes()
+            )
+            .unwrap_err()
+            .contains("not a CA")
+        );
         let other = KeyPair::generate().unwrap();
         assert!(
             super::import_ca(&dir, ca.pem().as_bytes(), other.serialize_pem().as_bytes())
@@ -789,7 +791,7 @@ mod tests {
         assert_ne!(c.ca_der(), a.ca_der(), "no directory: a fresh in-memory CA");
     }
 
-    use super::{ca_not_before_year, CA_NOT_BEFORE_YEAR};
+    use super::{CA_NOT_BEFORE_YEAR, ca_not_before_year};
 
     #[test]
     fn ca_not_before_uses_original_year_clamp() {

@@ -1488,9 +1488,11 @@ mod tests {
         assert_eq!(e.classifications, None);
         assert!(kb.lookup("Unknown thing").is_none());
         // Missing directory = empty KB, no panic.
-        assert!(KnowledgeBase::load_dir(Path::new("/nonexistent/wp-kb"))
-            .entries
-            .is_empty());
+        assert!(
+            KnowledgeBase::load_dir(Path::new("/nonexistent/wp-kb"))
+                .entries
+                .is_empty()
+        );
     }
 
     #[test]

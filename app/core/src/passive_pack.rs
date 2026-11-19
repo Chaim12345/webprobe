@@ -4,7 +4,7 @@
 // severity from the Zrh constructor bytes (confidence 1/2/3 = Tentative /
 // Firm / Certain, severity 1..4 = info..high).
 
-use super::passive_checks::{attr, forms, page_url, resolve, PassiveCtx};
+use super::passive_checks::{PassiveCtx, attr, forms, page_url, resolve};
 use super::*;
 use std::collections::{BTreeMap, BTreeSet};
 

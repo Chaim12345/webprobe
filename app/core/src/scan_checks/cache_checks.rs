@@ -301,11 +301,7 @@ fn prime_count(speed: ScanSpeed, resp: &[u8]) -> usize {
         ScanSpeed::Normal => 3,
         ScanSpeed::Thorough => 5,
     };
-    if shows_cache(resp) {
-        n * 2 - 1
-    } else {
-        n - 1
-    }
+    if shows_cache(resp) { n * 2 - 1 } else { n - 1 }
 }
 
 /// Web cache poisoning through override headers, burp.Zp22 -> Zg0y.ZN
@@ -641,13 +637,15 @@ mod tests {
                 .is_none()
         );
         let already_cached = resp("private account", true);
-        assert!(deception_attempt(
-            base,
-            &already_cached,
-            "GET",
-            "/account/abcdef.css",
-            &mut dynamic
-        )
-        .is_none());
+        assert!(
+            deception_attempt(
+                base,
+                &already_cached,
+                "GET",
+                "/account/abcdef.css",
+                &mut dynamic
+            )
+            .is_none()
+        );
     }
 }

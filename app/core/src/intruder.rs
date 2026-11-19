@@ -722,11 +722,7 @@ fn substitution_variants(item: &str, table: &[(char, char)], cap: usize) -> Vec<
                 Some(&(_, to)) => {
                     let on = j < 64 && (i >> j) & 1 == 1;
                     j += 1;
-                    if on {
-                        to
-                    } else {
-                        c
-                    }
+                    if on { to } else { c }
                 }
             })
             .collect();
@@ -1496,11 +1492,7 @@ impl PayloadSource {
                         total = total.saturating_mul(n);
                     }
                 }
-                if any {
-                    total.min(MAX_PAYLOADS)
-                } else {
-                    0
-                }
+                if any { total.min(MAX_PAYLOADS) } else { 0 }
             }
             PayloadSource::CharacterSubstitution {
                 items,
@@ -2431,13 +2423,15 @@ mod tests {
             .is_err(),
             "over the limit"
         );
-        assert!(requests(
-            &Template::parse("no positions").unwrap(),
-            AttackType::Sniper,
-            &[set(&["x"])],
-            100
-        )
-        .is_err());
+        assert!(
+            requests(
+                &Template::parse("no positions").unwrap(),
+                AttackType::Sniper,
+                &[set(&["x"])],
+                100
+            )
+            .is_err()
+        );
         assert_eq!(
             count(AttackType::ClusterBomb, 2, &[usize::MAX, 2]),
             None,
@@ -2616,13 +2610,15 @@ mod tests {
         };
         assert_eq!(source.generate(), ["b", "a", "bb", "ba", "ab", "aa"]);
         assert_eq!(source.len(), 6);
-        assert!(PayloadSource::BruteForcer {
-            charset: String::new(),
-            min_len: 1,
-            max_len: 2
-        }
-        .generate()
-        .is_empty());
+        assert!(
+            PayloadSource::BruteForcer {
+                charset: String::new(),
+                min_len: 1,
+                max_len: 2
+            }
+            .generate()
+            .is_empty()
+        );
     }
 
     #[test]
@@ -2677,13 +2673,15 @@ mod tests {
         };
         assert_eq!(source.generate(), ["a", "ab", "aba"]);
         assert_eq!(source.len(), 3);
-        assert!(PayloadSource::CharacterBlocks {
-            base: String::new(),
-            min_len: 1,
-            max_len: 3
-        }
-        .generate()
-        .is_empty());
+        assert!(
+            PayloadSource::CharacterBlocks {
+                base: String::new(),
+                min_len: 1,
+                max_len: 3
+            }
+            .generate()
+            .is_empty()
+        );
     }
 
     #[test]

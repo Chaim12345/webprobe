@@ -11,12 +11,12 @@ use crate::sync::Mutex;
 
 use eframe::egui::{self, RichText, Ui};
 
+use crate::App;
 use crate::intruder::{self, PayloadSource};
 use crate::intruder_run::{
     self as run, AttackSettings, ExtractEnd, ExtractItem, ExtractStart, ResultRow, RunState,
 };
 use crate::theme;
-use crate::App;
 
 /// (generator / processor calls into the sidecar): its result, and the
 /// flag Stop sets so it never starts.

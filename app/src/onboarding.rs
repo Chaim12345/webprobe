@@ -21,10 +21,10 @@
 
 use eframe::egui::{self, RichText, Ui};
 
+use crate::App;
 use crate::feedback;
 use crate::net;
 use crate::theme::{self, c};
-use crate::App;
 
 #[cfg(test)]
 use webprobe_core::setup_page::{local_response, setup_page};

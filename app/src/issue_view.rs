@@ -9,10 +9,10 @@ use std::sync::OnceLock;
 
 use eframe::egui::{self, RichText, Ui};
 
+use crate::App;
 use crate::report::KnowledgeBase;
 use crate::scan::ScanIssue;
 use crate::theme;
-use crate::App;
 
 /// Burp's issue definitions, read once from the knowledge-base folder (none
 /// are bundled; without the folder the advisory omits those sections).

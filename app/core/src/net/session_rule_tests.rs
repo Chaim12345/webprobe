@@ -147,13 +147,15 @@ fn check_session_logs_in_once_and_only_for_tools_in_scope() {
         );
     }
     assert_eq!(logins.load(Ordering::SeqCst), 1);
-    assert!(shared
-        .cookie_jar
-        .lock()
-        .unwrap()
-        .cookies
-        .iter()
-        .any(|c| c.name == "sid" && c.value == "ok"));
+    assert!(
+        shared
+            .cookie_jar
+            .lock()
+            .unwrap()
+            .cookies
+            .iter()
+            .any(|c| c.name == "sid" && c.value == "ok")
+    );
 }
 
 #[test]

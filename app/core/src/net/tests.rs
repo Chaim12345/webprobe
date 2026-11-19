@@ -298,12 +298,13 @@ fn keep_alive_pool_reuses_upstream_socket() {
     eprintln!("one error: {:?}", one.error);
     eprintln!("two error: {:?}", two.error);
     t.join().unwrap();
-    assert!(one
-        .resp
-        .as_deref()
-        .map(|r| r.to_vec())
-        .unwrap_or_default()
-        .ends_with(b"ok0"));
+    assert!(
+        one.resp
+            .as_deref()
+            .map(|r| r.to_vec())
+            .unwrap_or_default()
+            .ends_with(b"ok0")
+    );
     assert!(two.resp.as_ref().unwrap().ends_with(b"ok1"));
     assert_eq!(
         shared.conns_opened.load(Ordering::SeqCst),
@@ -980,14 +981,16 @@ fn listener_validation() {
     let shared = Shared::new();
     assert!(set_listeners(&shared, vec![ListenerSpec::new("", 8081)]).is_err());
     assert!(set_listeners(&shared, vec![ListenerSpec::new("127.0.0.1", 0)]).is_err());
-    assert!(set_listeners(
-        &shared,
-        vec![
-            ListenerSpec::new("127.0.0.1", 8081),
-            ListenerSpec::new("127.0.0.1", 8081),
-        ]
-    )
-    .is_err());
+    assert!(
+        set_listeners(
+            &shared,
+            vec![
+                ListenerSpec::new("127.0.0.1", 8081),
+                ListenerSpec::new("127.0.0.1", 8081),
+            ]
+        )
+        .is_err()
+    );
     assert!(set_listeners(&shared, vec![ListenerSpec::new("127.0.0.1", 8081)]).is_ok());
     let status = listener_status(&shared);
     // primary + one extra

@@ -4,11 +4,11 @@
 
 use eframe::egui::{self, RichText, Ui};
 
+use crate::App;
 use crate::feedback::{self, Level};
 use crate::intercept_rules::{InterceptRule, Kind, Operator};
 use crate::net;
 use crate::theme::{self, c};
-use crate::App;
 
 fn heading(ui: &mut Ui, text: &str) {
     ui.label(RichText::new(text).color(theme::ink()).size(14.0).strong());

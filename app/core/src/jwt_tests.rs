@@ -692,7 +692,7 @@ fn passive_weak_secret_dedupe_skips_a_token_already_tried() {
 
 #[test]
 fn passive_checks_are_registered_and_switchable() {
-    use crate::scan::passive_checks::{run_passive, PASSIVE_CHECKS};
+    use crate::scan::passive_checks::{PASSIVE_CHECKS, run_passive};
     for id in [
         "passive.jwt-weak-hmac-secret",
         "passive.jwt-private-key-disclosed",

@@ -8,8 +8,8 @@
 // staying on the start URL's origin.
 
 use std::collections::{BTreeSet, VecDeque};
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use crate::net::{self, HistEntry, Shared};
 use crate::util;

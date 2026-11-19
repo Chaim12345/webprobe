@@ -4,14 +4,14 @@
 
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::net::{
-    self, build_ws_frame, parse_ws_frame, ws_relay_chunk_alive, InterceptItem, InterceptKind,
-    Shared, WsOut, WsStream,
+    self, InterceptItem, InterceptKind, Shared, WsOut, WsStream, build_ws_frame, parse_ws_frame,
+    ws_relay_chunk_alive,
 };
 
 const DEADLINE: Duration = Duration::from_secs(5);

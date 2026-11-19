@@ -22,8 +22,8 @@
 use eframe::egui;
 
 use std::collections::{BTreeSet, VecDeque};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use crate::sync::Mutex;
 
@@ -419,14 +419,16 @@ impl Run {
         let out = Mutex::new(Vec::new());
         std::thread::scope(|s| {
             for _ in 0..self.cfg.threads.clamp(1, 16) {
-                s.spawn(|| loop {
-                    let _tool = crate::net::tool_scope("Target");
-                    let i = next.fetch_add(1, Ordering::SeqCst);
-                    let Some((p, d)) = paths.get(i) else { break };
-                    let Some((sig, req, resp)) = self.probe(p) else {
-                        break;
-                    };
-                    out.lock().unwrap().push((p.clone(), *d, sig, req, resp));
+                s.spawn(|| {
+                    loop {
+                        let _tool = crate::net::tool_scope("Target");
+                        let i = next.fetch_add(1, Ordering::SeqCst);
+                        let Some((p, d)) = paths.get(i) else { break };
+                        let Some((sig, req, resp)) = self.probe(p) else {
+                            break;
+                        };
+                        out.lock().unwrap().push((p.clone(), *d, sig, req, resp));
+                    }
                 });
             }
         });
@@ -1161,13 +1163,14 @@ mod tests {
         let p = start(c, format!("127.0.0.1:{port}"), tcp_sender(port));
         wait(&p);
         assert_eq!(p.sent.load(Ordering::SeqCst), 7);
-        assert!(p
-            .error
-            .lock()
-            .unwrap()
-            .as_deref()
-            .unwrap_or("")
-            .contains("cap"));
+        assert!(
+            p.error
+                .lock()
+                .unwrap()
+                .as_deref()
+                .unwrap_or("")
+                .contains("cap")
+        );
     }
 
     #[test]

@@ -19,13 +19,13 @@
 use std::collections::HashMap;
 use std::io::{ErrorKind, Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc};
+use std::sync::{Arc, mpsc};
 
 use crate::h2::{
-    data_payload, header_fragment, is_connection_header, parse_frame, write_frame,
     DEFAULT_MAX_FRAME, DEFAULT_WINDOW, FLAG_ACK, FLAG_END_HEADERS, FLAG_END_STREAM,
     FRAME_CONTINUATION, FRAME_DATA, FRAME_GOAWAY, FRAME_HEADERS, FRAME_PING, FRAME_PRIORITY,
     FRAME_PUSH_PROMISE, FRAME_RST_STREAM, FRAME_SETTINGS, FRAME_WINDOW_UPDATE, PREFACE,
+    data_payload, header_fragment, is_connection_header, parse_frame, write_frame,
 };
 use crate::streaming::{Dechunker, Fed};
 

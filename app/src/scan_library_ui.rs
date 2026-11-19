@@ -14,8 +14,8 @@ use eframe::egui::{self, RichText, Ui};
 use serde_json::Value;
 use webprobe_core::scan_library::{self as lib, LibraryConfig};
 
-use crate::theme;
 use crate::App;
+use crate::theme;
 
 /// Where a library entry lives.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

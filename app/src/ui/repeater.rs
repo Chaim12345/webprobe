@@ -442,11 +442,7 @@ pub(crate) fn repeater_send(app: &mut App) {
                 return;
             }
             let default_port = if r.port == 0 {
-                if r.https {
-                    443
-                } else {
-                    80
-                }
+                if r.https { 443 } else { 80 }
             } else {
                 r.port
             };

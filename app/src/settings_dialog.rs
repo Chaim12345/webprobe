@@ -9,9 +9,9 @@
 
 use eframe::egui::{self, RichText, Ui};
 
+use crate::App;
 use crate::theme;
 use crate::ui::SettingsPane;
-use crate::App;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
@@ -337,7 +337,7 @@ pub(crate) fn install(app: &mut App, data: &crate::project::ProjectData) -> Resu
 }
 
 fn manage_menu(app: &mut App, ui: &mut Ui) {
-    use crate::feedback::{toast, Level};
+    use crate::feedback::{Level, toast};
     let path_id = egui::Id::unique("settings_file_path");
     let mut path: String = ui
         .data_mut(|d| d.get_temp(path_id))
@@ -561,7 +561,7 @@ pub(crate) fn scan_config_editor(
 /// a library configuration).
 fn issues_reported_editor(ui: &mut Ui, config: &mut crate::scan_config::ScanConfig) {
     use webprobe_core::scan_library::{
-        IssueFilter, CAT_INTRUSIVE, CAT_JAVASCRIPT, CAT_LIGHT, CAT_MEDIUM, CAT_PASSIVE,
+        CAT_INTRUSIVE, CAT_JAVASCRIPT, CAT_LIGHT, CAT_MEDIUM, CAT_PASSIVE, IssueFilter,
     };
     const ALL: u8 = CAT_PASSIVE | CAT_LIGHT | CAT_MEDIUM | CAT_INTRUSIVE | CAT_JAVASCRIPT;
     ui.label(

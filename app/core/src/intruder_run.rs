@@ -17,8 +17,8 @@
 //! - Grep - Payloads: burp.Zruj (off, case-insensitive, headers included,
 //!   match pre-URL-encoded on).
 
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use crate::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -751,11 +751,7 @@ pub fn sort_order(
             _ => ka.cmp(kb),
         };
         let ord = ord.then(rows[a].number.cmp(&rows[b].number));
-        if asc {
-            ord
-        } else {
-            ord.reverse()
-        }
+        if asc { ord } else { ord.reverse() }
     });
     order
 }

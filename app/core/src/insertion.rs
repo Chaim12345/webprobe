@@ -1697,9 +1697,11 @@ mod tests {
         assert!(r.contains("Content-Length: 9\r\n"), "{r}");
         // A form body has no entire-body point (Zuq.ZT: XML and JSON only).
         let form = "POST /f HTTP/1.1\r\nHost: h\r\nContent-Type: application/x-www-form-urlencoded\r\n\r\na=1";
-        assert!(!insertion_points(form)
-            .iter()
-            .any(|p| p.kind == IpKind::EntireBody));
+        assert!(
+            !insertion_points(form)
+                .iter()
+                .any(|p| p.kind == IpKind::EntireBody)
+        );
     }
 
     #[test]
@@ -2087,8 +2089,10 @@ mod tests {
             .into_iter()
             .find(|p| p.kind == IpKind::ParamName(NameSite::PhpPathInfo))
             .unwrap();
-        assert!(inject_payload(php, &p, "../x")
-            .starts_with("GET /app/index.PHP/..%2Fx?x=1 HTTP/1.1\r\n"));
+        assert!(
+            inject_payload(php, &p, "../x")
+                .starts_with("GET /app/index.PHP/..%2Fx?x=1 HTTP/1.1\r\n")
+        );
     }
 
     #[test]
@@ -2097,9 +2101,10 @@ mod tests {
         let req = format!("GET /p?data={inner} HTTP/1.1\r\nHost: h\r\nCookie: _ga={inner}\r\n\r\n");
         let all = insertion_points(&req);
         // The skip-listed cookie takes its nested points with it (Zb9c).
-        assert!(all
-            .iter()
-            .all(|p| p.chain().iter().all(|q| q.name != "_ga")));
+        assert!(
+            all.iter()
+                .all(|p| p.chain().iter().all(|q| q.name != "_ga"))
+        );
         assert!(all.iter().any(|p| p.kind == IpKind::Base64 { url: false }));
         // Nested points off: no Base64 / nested points.
         let mut cfg = ScanConfig::default();
@@ -2120,9 +2125,11 @@ mod tests {
         // The new types have their own switches.
         let mut cfg = ScanConfig::default();
         cfg.disabled_insertion.insert("param_name".into());
-        assert!(!audit_points(&req, &cfg)
-            .iter()
-            .any(|p| matches!(p.kind, IpKind::ParamName(_))));
+        assert!(
+            !audit_points(&req, &cfg)
+                .iter()
+                .any(|p| matches!(p.kind, IpKind::ParamName(_)))
+        );
         // A configuration saved before D-11 (no new keys) has them on.
         let old = ScanConfig {
             disabled_insertion: ["header".to_string()].into_iter().collect(),
@@ -2190,11 +2197,12 @@ mod tests {
             );
         }
         // `jsessionid` is an any_parameter rule; an ordinary cookie is not listed.
-        assert!(pts
-            .iter()
-            .find(|p| p.name == "JSESSIONID")
-            .unwrap()
-            .skips_server_side());
+        assert!(
+            pts.iter()
+                .find(|p| p.name == "JSESSIONID")
+                .unwrap()
+                .skips_server_side()
+        );
         let theme = pts
             .iter()
             .find(|p| p.name == "theme" && p.parent.is_none())
@@ -2212,17 +2220,21 @@ mod tests {
         assert!(check_applies(&ck::SqlErrorInjection, nested, &cfg));
         // Body rules cover form parameters, not JSON ones.
         let form = "POST / HTTP/1.1\r\nHost: h\r\nContent-Type: application/x-www-form-urlencoded\r\n\r\n__VIEWSTATE=x";
-        assert!(insertion_points(form)
-            .iter()
-            .find(|p| p.name == "__VIEWSTATE")
-            .unwrap()
-            .skips_server_side());
+        assert!(
+            insertion_points(form)
+                .iter()
+                .find(|p| p.name == "__VIEWSTATE")
+                .unwrap()
+                .skips_server_side()
+        );
         let json = "POST / HTTP/1.1\r\nHost: h\r\nContent-Type: application/json\r\n\r\n{\"__viewstate\":\"x\"}";
-        assert!(!insertion_points(json)
-            .iter()
-            .find(|p| p.name == "__viewstate")
-            .unwrap()
-            .skips_server_side());
+        assert!(
+            !insertion_points(json)
+                .iter()
+                .find(|p| p.name == "__viewstate")
+                .unwrap()
+                .skips_server_side()
+        );
     }
 
     #[test]

@@ -1843,7 +1843,7 @@ pub fn tab_entry(app: &crate::App) -> Option<net::HistEntry> {
 /// Run a request-menu action that needs no ui.rs helper. Returns false for
 /// the ones ui.rs handles itself (active scan, Intruder, Repeater, follow).
 pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction) -> bool {
-    use crate::feedback::{toast, Level};
+    use crate::feedback::{Level, toast};
     use crate::ui::Tab;
     let Some((req, svc, resp)) = current_tab(app).or_else(|| {
         // An empty tab still takes "Paste URL as request".
@@ -1904,7 +1904,7 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
         RepAction::ChangeBodyEncoding => {
             // Burp-style boundary: WebKit prefix and 16 random characters.
             let boundary = {
-                use rand::{distributions::Alphanumeric, Rng};
+                use rand::{Rng, distributions::Alphanumeric};
                 let tail: String = rand::thread_rng()
                     .sample_iter(&Alphanumeric)
                     .take(16)

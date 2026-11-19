@@ -654,14 +654,16 @@ fn traversal_check_requires_negative_control_and_escalates_to_shadow() {
     // Same content for passwdX: the control rejects it.
     assert!(run_traversal_check("abc", "", ScanSpeed::Normal, |_| Some(PASSWD.into())).is_none());
     // Markers already on the baseline page: never reported.
-    assert!(run_traversal_check("abc", PASSWD, ScanSpeed::Normal, |p| {
-        Some(if p.contains("passwdX") {
-            String::new()
-        } else {
-            PASSWD.into()
+    assert!(
+        run_traversal_check("abc", PASSWD, ScanSpeed::Normal, |p| {
+            Some(if p.contains("passwdX") {
+                String::new()
+            } else {
+                PASSWD.into()
+            })
         })
-    })
-    .is_none());
+        .is_none()
+    );
 }
 
 #[test]
@@ -723,22 +725,26 @@ fn file_path_manip_detects_a_file_selector() {
         )
     };
     let baseline = serve("img/logo.png").unwrap();
-    assert!(run_file_path_manip_check(
-        "img/logo.png",
-        &baseline,
-        crate::variations::Accuracy::Normal,
-        serve
-    )
-    .is_some());
+    assert!(
+        run_file_path_manip_check(
+            "img/logo.png",
+            &baseline,
+            crate::variations::Accuracy::Normal,
+            serve
+        )
+        .is_some()
+    );
     // A page that ignores the value: no report.
     let fixed = |_: &str| Some(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok".to_vec());
-    assert!(run_file_path_manip_check(
-        "img/logo.png",
-        &fixed(""[..].as_ref()).unwrap(),
-        crate::variations::Accuracy::Normal,
-        fixed
-    )
-    .is_none());
+    assert!(
+        run_file_path_manip_check(
+            "img/logo.png",
+            &fixed(""[..].as_ref()).unwrap(),
+            crate::variations::Accuracy::Normal,
+            fixed
+        )
+        .is_none()
+    );
 }
 
 #[test]
@@ -759,10 +765,12 @@ fn ssi_check_detects_processed_directives() {
         }
         Some(format!("<html>{out}</html>"))
     };
-    assert!(run_ssi_check("q", ssi)
-        .expect("processed SSI must report")
-        .payload
-        .contains("#echo"));
+    assert!(
+        run_ssi_check("q", ssi)
+            .expect("processed SSI must report")
+            .payload
+            .contains("#echo")
+    );
     assert!(run_ssi_check("q", |p| Some(format!("<html>{p}</html>"))).is_none());
     assert!(run_ssi_check("q", |_| Some("<html>ok</html>".into())).is_none());
 }
@@ -845,14 +853,16 @@ fn ldap_check_detects_a_filter_sink() {
     assert!(hit.positive.ends_with(")(objectClass=*"));
     assert!(hit.negative.ends_with(")(!(objectClass=*)"));
     // A page that ignores the parameter: never reported.
-    assert!(run_ldap_check(
-        "smith",
-        &baseline,
-        ScanSpeed::Normal,
-        crate::variations::Accuracy::Normal,
-        |_| Some(page(true))
-    )
-    .is_none());
+    assert!(
+        run_ldap_check(
+            "smith",
+            &baseline,
+            ScanSpeed::Normal,
+            crate::variations::Accuracy::Normal,
+            |_| Some(page(true))
+        )
+        .is_none()
+    );
 }
 
 #[test]
@@ -939,18 +949,22 @@ fn sql_error_check_follows_burp_ze() {
     assert_eq!((hit.database, hit.confirmed), ("MySQL", true));
     assert_eq!(hit.payload, "5'");
     // The error already on the baseline page: nothing.
-    assert!(run_sql_error_check(
-        "5",
-        "You have an error in your SQL syntax",
-        ScanSpeed::Normal,
-        mysql
-    )
-    .is_none());
+    assert!(
+        run_sql_error_check(
+            "5",
+            "You have an error in your SQL syntax",
+            ScanSpeed::Normal,
+            mysql
+        )
+        .is_none()
+    );
     // Generic SQLException needs the full alternation.
-    assert!(run_sql_error_check("5", "", ScanSpeed::Normal, |_| Some(
-        "java.sql.SQLException".to_string()
-    ))
-    .is_none());
+    assert!(
+        run_sql_error_check("5", "", ScanSpeed::Normal, |_| Some(
+            "java.sql.SQLException".to_string()
+        ))
+        .is_none()
+    );
     let generic_alt = |p: &str| {
         Some(if quotes(p) % 2 == 1 {
             "SQLException".to_string()
@@ -1082,14 +1096,16 @@ fn sql_boolean_check_detects_a_quoted_sink() {
     .expect("quoted sink must report");
     assert!(hit.positive.starts_with("bob"));
     // An insensitive page never reports.
-    assert!(run_sql_boolean_check(
-        "bob",
-        &baseline,
-        ScanSpeed::Normal,
-        crate::variations::Accuracy::Normal,
-        |_| Some(page(1))
-    )
-    .is_none());
+    assert!(
+        run_sql_boolean_check(
+            "bob",
+            &baseline,
+            ScanSpeed::Normal,
+            crate::variations::Accuracy::Normal,
+            |_| Some(page(1))
+        )
+        .is_none()
+    );
 }
 
 #[test]
@@ -1949,12 +1965,15 @@ fn technology_headers_are_reported() {
 fn stack_traces_are_disclosed() {
     let body = "<html><pre>Traceback (most recent call last):\n  File \"app.py\"</pre></html>";
     let v = passive_check(&entry("/", true, &resp("200 OK", CLEAN_HEADERS, body)));
-    assert!(v
-        .iter()
-        .any(|i| i.name == "Python stack trace disclosed in response"));
-    assert!(!passive_check(&entry("/", true, &clean()))
-        .iter()
-        .any(|i| i.name.contains("stack trace")));
+    assert!(
+        v.iter()
+            .any(|i| i.name == "Python stack trace disclosed in response")
+    );
+    assert!(
+        !passive_check(&entry("/", true, &clean()))
+            .iter()
+            .any(|i| i.name.contains("stack trace"))
+    );
 }
 
 #[test]
@@ -3357,8 +3376,10 @@ fn header_insertion_points() {
         .find(|p| p.name == "Referer")
         .unwrap();
     assert_eq!(rf.value, SYNTH_REFERER);
-    assert!(inject(bare, &rf, "https://example.com/zz")
-        .contains("\r\nReferer: https://example.com/zz\r\n"));
+    assert!(
+        inject(bare, &rf, "https://example.com/zz")
+            .contains("\r\nReferer: https://example.com/zz\r\n")
+    );
     // A header name with a multibyte char at byte 2 must not panic.
     assert!(
         !insertion_points("GET / HTTP/1.1\r\nHost: h\r\nXé-a: 1\r\n\r\n")
@@ -3520,11 +3541,13 @@ fn email_finder_follows_burp_zflt() {
         vec!["user@mail.co.uk".to_string()]
     );
     // Addresses the request already carried are not disclosures.
-    assert!(find_email_excluding(
-        "hi bob@example.com",
-        "POST / HTTP/1.1\r\n\r\nemail=bob@example.com"
-    )
-    .is_none());
+    assert!(
+        find_email_excluding(
+            "hi bob@example.com",
+            "POST / HTTP/1.1\r\n\r\nemail=bob@example.com"
+        )
+        .is_none()
+    );
 }
 
 /// burp.Zp7s error-based: markers that only appear after "]]>><" is
@@ -3543,14 +3566,16 @@ fn xml_injection_follows_zp7s() {
     assert!(hit.contains(&"soap:") && hit.contains(&"soap:body"));
     // Markers already in the baseline do not count.
     let soapy = b"HTTP/1.1 200 OK\r\n\r\n<soap:Body/>".to_vec();
-    assert!(run_xml_injection_check(
-        "bob",
-        &soapy,
-        2,
-        |_| Some(soapy.clone()),
-        || Some(soapy.clone())
-    )
-    .is_none());
+    assert!(
+        run_xml_injection_check(
+            "bob",
+            &soapy,
+            2,
+            |_| Some(soapy.clone()),
+            || Some(soapy.clone())
+        )
+        .is_none()
+    );
     // Values that already carry markup are skipped (Zp7s.ZQ).
     assert!(run_xml_injection_check("<a>", &base, 2, vuln, || Some(base.clone())).is_none());
     // Markers inside an ASP.NET viewstate are ignored (Zw4k.ZI).
@@ -3683,10 +3708,10 @@ fn card_scanner_follows_burp_zu0p() {
     // Luhn-valid but no issuer prefix for the length.
     assert!(find_card(" 7992739871300000 ").is_none());
     // SVG path data from Juice Shop's main.js (a false positive before).
-    assert!(find_card(
-        "`M504 256C504 119 393 8 256 8S8 119 8 256s111 248 248 248 248-111 248-248z`"
-    )
-    .is_none());
+    assert!(
+        find_card("`M504 256C504 119 393 8 256 8S8 119 8 256s111 248 248 248 248-111 248-248z`")
+            .is_none()
+    );
 }
 
 #[test]
@@ -3914,9 +3939,11 @@ fn a_post_can_be_the_retrieval_request_and_own_reflection_is_not_stored() {
         ],
     );
     let pairs = shared.stored.pairs();
-    assert!(pairs
-        .iter()
-        .any(|p| p.point.name == "c" && p.retrieval.url().ends_with("/search")));
+    assert!(
+        pairs
+            .iter()
+            .any(|p| p.point.name == "c" && p.retrieval.url().ends_with("/search"))
+    );
     // q comes straight back in its own response only: never a pair.
     assert!(
         !pairs.iter().any(|p| p.point.name == "q"),
@@ -3961,9 +3988,11 @@ fn nothing_is_recorded_without_a_returned_token_and_scans_do_not_share_the_store
     assert!(!shared.stored.pairs().is_empty());
     let e = guestbook_entry(port, "GET", "/nothing?y=2", "");
     start_active_scan(shared.clone(), e, &[], &[]);
-    assert!(shared
-        .scan
-        .wait_idle(Some(std::time::Duration::from_secs(120))));
+    assert!(
+        shared
+            .scan
+            .wait_idle(Some(std::time::Duration::from_secs(120)))
+    );
     assert!(
         shared.stored.pairs().is_empty(),
         "a new scan clears the store"

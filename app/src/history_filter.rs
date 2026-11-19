@@ -635,8 +635,8 @@ mod tests {
         assert!(f.matches(&e, &shared));
         f.text = "/v1/users".into();
         assert!(f.matches(&e, &shared)); // literal substring
-                                         // The haystack is "id method host port path status", so an anchor that
-                                         // only fits the path does not match it.
+        // The haystack is "id method host port path status", so an anchor that
+        // only fits the path does not match it.
         f.text = "^/v1/".into();
         f.regex = true;
         assert!(!f.matches(&e, &shared));

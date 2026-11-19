@@ -153,7 +153,7 @@ impl RequestCheck for TraceEnabled {
                 );
                 i.confidence = "Certain".into();
                 cx.report(vec![
-                    i.with_evidence(vec![ScanEvidence::new(&probe, Some(&resp[..]))])
+                    i.with_evidence(vec![ScanEvidence::new(&probe, Some(&resp[..]))]),
                 ]);
             }
         }
@@ -299,16 +299,18 @@ impl RequestCheck for ServerOptions {
             let allow = util::get_header(&rp.headers, "Allow");
             let risky = risky_methods_allowed(&status, allow.as_deref());
             if !risky.is_empty() {
-                cx.report(vec![mk(
-                    "low",
-                    "Active probe: permissive HTTP methods advertised via OPTIONS",
-                    &cx.entry,
-                    format!("Allow advertises risky methods: {}.", risky.join(", ")),
-                )
-                .with_evidence(vec![ScanEvidence::new(
-                    options_req.as_bytes(),
-                    Some(&resp[..]),
-                )])]);
+                cx.report(vec![
+                    mk(
+                        "low",
+                        "Active probe: permissive HTTP methods advertised via OPTIONS",
+                        &cx.entry,
+                        format!("Allow advertises risky methods: {}.", risky.join(", ")),
+                    )
+                    .with_evidence(vec![ScanEvidence::new(
+                        options_req.as_bytes(),
+                        Some(&resp[..]),
+                    )]),
+                ]);
             }
         }
         cx.progress();
@@ -341,13 +343,17 @@ impl RequestCheck for HeaderManipulation {
             let rp = util::parse_http(resp);
             let rbody = String::from_utf8_lossy(&resp[rp.head_len.min(resp.len())..]);
             if is_header_manipulation_hit(&rbody, &rp.headers, FIP_MARKER) {
-                cx.report(vec![mk(
-                    "low",
-                    "Active probe: attacker-set header value reflected (header manipulation)",
-                    &cx.entry,
-                    format!("The response echoes the {FIP_MARKER} value sent in X-Forwarded-For."),
-                )
-                .with_evidence(vec![ScanEvidence::new(&manip, Some(&resp[..]))])]);
+                cx.report(vec![
+                    mk(
+                        "low",
+                        "Active probe: attacker-set header value reflected (header manipulation)",
+                        &cx.entry,
+                        format!(
+                            "The response echoes the {FIP_MARKER} value sent in X-Forwarded-For."
+                        ),
+                    )
+                    .with_evidence(vec![ScanEvidence::new(&manip, Some(&resp[..]))]),
+                ]);
             }
         }
         cx.progress();

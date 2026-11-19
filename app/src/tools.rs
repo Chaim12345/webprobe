@@ -6,12 +6,12 @@ use std::sync::atomic::Ordering;
 
 use eframe::egui::{self, RichText, Ui};
 
+use crate::App;
 use crate::analysis;
 use crate::net;
 use crate::project;
 use crate::theme::{self, c};
 use crate::upstream::UpstreamKind;
-use crate::App;
 
 const SEQUENCER_MAX_LENGTH_DEVIATION: usize = 5; // ProjectDefaults.json sequencer.live_capture
 

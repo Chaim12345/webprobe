@@ -5,8 +5,8 @@
 //! webprobe_core::sitemap_compare; loading and re-requesting run on a
 //! background thread.
 
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use webprobe_core::sync::Mutex;
 
 use eframe::egui::{self, RichText};

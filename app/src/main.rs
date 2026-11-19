@@ -62,8 +62,8 @@ use webprobe_core::upstream;
 use webprobe_core::util;
 
 use std::path::PathBuf;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use crate::sync::Mutex;
 

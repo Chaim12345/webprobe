@@ -306,13 +306,14 @@ mod tests {
         assert_eq!(s.token(a, &p), t, "one token per point");
         assert!(t.starts_with(TOKEN_PREFIX) && t.len() == TOKEN_PREFIX.len() + TOKEN_BODY);
         // The probe's own response echoing its token is not stored input.
-        assert!(s
-            .observe(
+        assert!(
+            s.observe(
                 a,
                 format!("POST /comment c={t}").as_bytes(),
                 format!("<p>{t}</p>").as_bytes()
             )
-            .is_empty());
+            .is_empty()
+        );
         // Another item showing it is.
         let got = s.observe(
             b,
@@ -333,9 +334,10 @@ mod tests {
             "recorded once"
         );
         // Unknown tokens and near misses are ignored.
-        assert!(s
-            .observe(b, b"", b"zwq7abcdefghijkl zwq7ABCDEFGHIJKL zwq7short")
-            .is_empty());
+        assert!(
+            s.observe(b, b"", b"zwq7abcdefghijkl zwq7ABCDEFGHIJKL zwq7short")
+                .is_empty()
+        );
         assert_eq!(s.pairs().len(), 1);
         s.clear();
         assert!(s.pairs().is_empty() && s.is_empty());

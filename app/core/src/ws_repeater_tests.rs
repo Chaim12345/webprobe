@@ -667,11 +667,12 @@ fn from_history_without_a_live_connection_prepares_a_new_one() {
         (s.host.as_str(), s.port, s.tls),
         ("plain.example.test", 80, false)
     );
-    assert!(s
-        .handshake
-        .lock()
-        .unwrap()
-        .starts_with("GET / HTTP/1.1\r\nHost: plain.example.test\r\n"));
+    assert!(
+        s.handshake
+            .lock()
+            .unwrap()
+            .starts_with("GET / HTTP/1.1\r\nHost: plain.example.test\r\n")
+    );
     let s = rep::from_history(&shared, 4242, "secure.example.test", true);
     assert_eq!((s.port, s.tls), (443, true));
     // An attach to an id that is not live is not attached.

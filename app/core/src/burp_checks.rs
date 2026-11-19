@@ -1025,21 +1025,27 @@ mod tests {
         let (f, h) = prssi(&page("", "<!DOCTYPE html><html><head><link rel=\"stylesheet\" href=\"styles.css\"></head></html>")).unwrap();
         assert_eq!(h, vec!["styles.css".to_string()]);
         assert_eq!(f, 2);
-        assert!(prssi(&page(
-            "",
-            "<!DOCTYPE html><link rel=stylesheet href=/s.css>"
-        ))
-        .is_none());
-        assert!(prssi(&page(
-            "",
-            "<!DOCTYPE html><link rel=stylesheet href=https://cdn/s.css>"
-        ))
-        .is_none());
-        assert!(prssi(&page(
-            "",
-            "<!DOCTYPE html><base href=\"/\"><link rel=stylesheet href=s.css>"
-        ))
-        .is_none());
+        assert!(
+            prssi(&page(
+                "",
+                "<!DOCTYPE html><link rel=stylesheet href=/s.css>"
+            ))
+            .is_none()
+        );
+        assert!(
+            prssi(&page(
+                "",
+                "<!DOCTYPE html><link rel=stylesheet href=https://cdn/s.css>"
+            ))
+            .is_none()
+        );
+        assert!(
+            prssi(&page(
+                "",
+                "<!DOCTYPE html><base href=\"/\"><link rel=stylesheet href=s.css>"
+            ))
+            .is_none()
+        );
         let (f, _) = prssi(&page(
             "X-Frame-Options: DENY\r\n",
             "<html><link rel=stylesheet href=../s.css>",

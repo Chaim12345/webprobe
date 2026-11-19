@@ -1561,11 +1561,13 @@ mod tests {
             ("info", "Certain")
         );
         // Under 200 base64 characters, or not a private key.
-        assert!(only(
-            &ex("/k", true, HTML, &pem("RSA PRIVATE KEY", 2)),
-            CH_PRIVATE_KEY
-        )
-        .is_empty());
+        assert!(
+            only(
+                &ex("/k", true, HTML, &pem("RSA PRIVATE KEY", 2)),
+                CH_PRIVATE_KEY
+            )
+            .is_empty()
+        );
         assert!(only(&ex("/k", true, HTML, &pem("PUBLIC KEY", 4)), CH_PRIVATE_KEY).is_empty());
     }
 
@@ -1750,19 +1752,23 @@ mod tests {
         // Fixed version, a library without vulnerabilities, no scripts.
         assert!(vuln_js(&ex("/static/wpfixture/1.4.0/wpfixture.js", true, JS, "x")).is_empty());
         assert!(vuln_js(&ex("/app/bundle.js", true, JS, "/*! wpfixture v2.0.0 */")).is_empty());
-        assert!(vuln_js(&ex(
-            "/",
-            true,
-            HTML,
-            "<script src=/js/safelib-0.1.js></script><script>var x</script>"
-        ))
-        .is_empty());
+        assert!(
+            vuln_js(&ex(
+                "/",
+                true,
+                HTML,
+                "<script src=/js/safelib-0.1.js></script><script>var x</script>"
+            ))
+            .is_empty()
+        );
         // A library without extractors makes the repository invalid.
-        assert!(retirejs::Repository::parse(
-            r#"{"x": {"vulnerabilities": [{"below": "1"}]}}"#,
-            Default::default()
-        )
-        .is_err());
+        assert!(
+            retirejs::Repository::parse(
+                r#"{"x": {"vulnerabilities": [{"below": "1"}]}}"#,
+                Default::default()
+            )
+            .is_err()
+        );
     }
 
     /// Each new check stops when the scan configuration switches it off.
@@ -2253,23 +2259,27 @@ mod tests {
         let mut other = ex("/profile", true, HTML, "<p> S3cretPass </p>");
         other.host = "other.com".into();
         assert!(with_state(&other, &st).is_empty());
-        assert!(only(
-            &ex("/profile", true, HTML, "<p> S3cretPass </p>"),
-            pack::CH_PASSWORD_LATER
-        )
-        .is_empty());
+        assert!(
+            only(
+                &ex("/profile", true, HTML, "<p> S3cretPass </p>"),
+                pack::CH_PASSWORD_LATER
+            )
+            .is_empty()
+        );
         // A placeholder value is not tracked.
         let st2 = crate::passive_state::PassiveState::default();
         with_state(&ex("/", true, HTML, LOGIN), &st2);
-        assert!(with_state(
-            &post_login(
-                "password",
-                &format!("{HTML}Set-Cookie: c=password\r\n"),
-                "ok"
-            ),
-            &st2
-        )
-        .is_empty());
+        assert!(
+            with_state(
+                &post_login(
+                    "password",
+                    &format!("{HTML}Set-Cookie: c=password\r\n"),
+                    "ok"
+                ),
+                &st2
+            )
+            .is_empty()
+        );
     }
 
     #[test]
@@ -2356,16 +2366,18 @@ mod tests {
                 "The parameter <b>obj</b> appears to contain a serialized <b>Python 3 object</b>."
             ]
         );
-        assert!(only(
-            &ex(
-                "/?data=hello&n=12345",
-                true,
-                HTML,
-                "<a href=/x?q=abcd>x</a>"
-            ),
-            pack::CH_SERIALIZED
-        )
-        .is_empty());
+        assert!(
+            only(
+                &ex(
+                    "/?data=hello&n=12345",
+                    true,
+                    HTML,
+                    "<a href=/x?q=abcd>x</a>"
+                ),
+                pack::CH_SERIALIZED
+            )
+            .is_empty()
+        );
         // burp.Zb0_ shapes.
         use pack::php::serialized;
         for ok in [

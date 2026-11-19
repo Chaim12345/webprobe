@@ -219,19 +219,11 @@ impl PointCheck for JwtAttacks {
                 continue;
             }
             if let Some(v) = variants.iter().find(|v| accepted(v)) {
-                cx.report(vec![mk_point(
-                    name,
-                    "high",
-                    "Tentative",
-                    &cx.entry,
-                    ip,
-                    detail,
-                )
-                .with_evidence(evidence([
-                    rec.last(v),
-                    rec.last(&token.raw),
-                    rec.last(&control),
-                ]))]);
+                cx.report(vec![
+                    mk_point(name, "high", "Tentative", &cx.entry, ip, detail).with_evidence(
+                        evidence([rec.last(v), rec.last(&token.raw), rec.last(&control)]),
+                    ),
+                ]);
             }
         }
         // Zs83: jku / x5u at a Collaborator URL; Zmir.Zl: High, Certain,
@@ -406,18 +398,17 @@ impl PointCheck for ExpressionLanguageInjection {
                     ip.describe_short(false),
                     util::html_encode(&expected)
                 );
-                cx.report(vec![mk_point(
-                    "Expression Language injection",
-                    "high",
-                    "Certain",
-                    &cx.entry,
-                    ip,
-                    detail,
-                )
-                .with_evidence(vec![ScanEvidence::new(
-                    new_req.as_bytes(),
-                    Some(&resp),
-                )])]);
+                cx.report(vec![
+                    mk_point(
+                        "Expression Language injection",
+                        "high",
+                        "Certain",
+                        &cx.entry,
+                        ip,
+                        detail,
+                    )
+                    .with_evidence(vec![ScanEvidence::new(new_req.as_bytes(), Some(&resp))]),
+                ]);
             }
         }
         cx.progress();
@@ -593,18 +584,10 @@ impl PointCheck for XPathInjection {
                 } else {
                     "<br><br>The application appears to be using the Java XPath APIs."
                 });
-                cx.report(vec![mk_point(
-                    "XPath injection",
-                    "high",
-                    "Firm",
-                    &cx.entry,
-                    ip,
-                    detail,
-                )
-                .with_evidence(vec![ScanEvidence::new(
-                    new_req.as_bytes(),
-                    Some(&resp),
-                )])]);
+                cx.report(vec![
+                    mk_point("XPath injection", "high", "Firm", &cx.entry, ip, detail)
+                        .with_evidence(vec![ScanEvidence::new(new_req.as_bytes(), Some(&resp))]),
+                ]);
                 reported = true;
                 break;
             }

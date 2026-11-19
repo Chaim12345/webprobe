@@ -729,12 +729,16 @@ fn collaborator_everywhere_builds_burps_request_set() {
         ]
     );
     assert!(probes[0].request.contains("\r\nHost: host.oast.test\r\nPragma: no-cache\r\nCache-Control: no-cache, no-transform\r\nConnection: close\r\n\r\n"));
-    assert!(probes[1]
-        .request
-        .contains("\r\nHost: shop.test:8080\r\nX-Forwarded-Host: xfh.oast.test\r\n"));
-    assert!(probes[2]
-        .request
-        .contains("\r\nHost: shop.test:8080@hostauth.oast.test\r\n"));
+    assert!(
+        probes[1]
+            .request
+            .contains("\r\nHost: shop.test:8080\r\nX-Forwarded-Host: xfh.oast.test\r\n")
+    );
+    assert!(
+        probes[2]
+            .request
+            .contains("\r\nHost: shop.test:8080@hostauth.oast.test\r\n")
+    );
     // One request carries the six client-IP / Referer headers, an id each.
     let combined = &probes[5];
     assert_eq!(

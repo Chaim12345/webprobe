@@ -1244,18 +1244,22 @@ mod tests {
     fn malformed_configs_are_rejected_and_unknown_keys_kept() {
         assert!(parse_config("x", b"[1]", false).is_err());
         assert!(parse_config("x", b"{", false).is_err());
-        assert!(parse_config(
-            "x",
-            br#"{"scanner":{"issues_reported":{"scan_type_passive":"yes"}}}"#,
-            false
-        )
-        .is_err());
-        assert!(parse_config(
-            "x",
-            br#"{"scanner":{"issues_reported":{"selected_issues":[{"enabled":true}]}}}"#,
-            false
-        )
-        .is_err());
+        assert!(
+            parse_config(
+                "x",
+                br#"{"scanner":{"issues_reported":{"scan_type_passive":"yes"}}}"#,
+                false
+            )
+            .is_err()
+        );
+        assert!(
+            parse_config(
+                "x",
+                br#"{"scanner":{"issues_reported":{"selected_issues":[{"enabled":true}]}}}"#,
+                false
+            )
+            .is_err()
+        );
         assert!(parse_config("x", &vec![b' '; MAX_CONFIG_BYTES + 1], false).is_err());
         let c = cfg(
             "x",
@@ -1282,10 +1286,11 @@ mod tests {
             let rep = load_builtin(&src).unwrap();
             assert!(rep.errors.is_empty(), "{:?}", rep.errors);
             assert_eq!(rep.configs.len(), 29, "{src:?}");
-            assert!(rep
-                .configs
-                .iter()
-                .any(|c| c.name == "Audit checks - passive"));
+            assert!(
+                rep.configs
+                    .iter()
+                    .any(|c| c.name == "Audit checks - passive")
+            );
             assert!(load_burp_defaults(&src).is_some_and(|d| {
                 get_path(&d, "crawler.crawl_limits.maximum_crawl_time").is_some()
             }));
@@ -1339,9 +1344,10 @@ mod tests {
                 .any(|l| l.starts_with("crawler.crawl_optimization.crawl_strategy")),
             "{na:?}"
         );
-        assert!(na
-            .iter()
-            .any(|l| l.starts_with("scanner.audit_optimization.skip_ineffective_checks")));
+        assert!(
+            na.iter()
+                .any(|l| l.starts_with("scanner.audit_optimization.skip_ineffective_checks"))
+        );
         assert!(!na.iter().any(|l| l.contains("maximum_crawl_time")));
         // Round trip: the current settings as a tree decode to themselves.
         let back = tree_to_config(&config_to_tree(&a.config, a.speed, a.accuracy), &a.config);

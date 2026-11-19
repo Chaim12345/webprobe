@@ -12,7 +12,7 @@
 // DarkTheme.json via theme::editor_colours(). Search matches are painted with
 // editor.message.highlight.search and counted in the "N highlights" label.
 
-use eframe::egui::{self, text::LayoutJob, Color32, FontId, RichText, TextFormat, Ui};
+use eframe::egui::{self, Color32, FontId, RichText, TextFormat, Ui, text::LayoutJob};
 
 use crate::theme::{self, c};
 use crate::util;
