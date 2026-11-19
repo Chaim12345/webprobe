@@ -2022,9 +2022,23 @@ fn dom_analysis_hits(cx: &ScanCtx) -> Vec<crate::crawl::DomHit> {
     let path = cx.entry.path.split('#').next().unwrap_or("/");
     let url = format!("{scheme}://{}{port}{path}", cx.entry.host);
     let cache = DOM_HITS_CACHE.get_or_init(Default::default);
-    if let Some(hits) = cache.lock().unwrap().get(&url) {
-        return hits.clone();
+    // One browser per URL even under concurrency: the first thread marks
+    // the URL in flight and probes; later threads wait on the condvar
+    // instead of launching duplicate browsers.
+    let mut guard = cache.map.lock().unwrap();
+    loop {
+        match guard.get(&url) {
+            Some(DomHitsState::Done(hits)) => return hits.clone(),
+            Some(DomHitsState::InFlight) => {
+                guard = cache.ready.wait(guard).unwrap();
+            }
+            None => {
+                guard.insert(url.clone(), DomHitsState::InFlight);
+                break;
+            }
+        }
     }
+    drop(guard);
     let canary = format!("wp{}", rnd_letters(10));
     let origin = crate::crawl::origin_of(&url).unwrap_or_default();
     let hits: Vec<crate::crawl::DomHit> = crate::crawl::dom_analysis_probe(&cx.shared, &url, &canary)
@@ -2032,7 +2046,8 @@ fn dom_analysis_hits(cx: &ScanCtx) -> Vec<crate::crawl::DomHit> {
         .into_iter()
         .filter(|h| h.page_url.starts_with(&origin))
         .collect();
-    cache.lock().unwrap().insert(url, hits.clone());
+    cache.map.lock().unwrap().insert(url, DomHitsState::Done(hits.clone()));
+    cache.ready.notify_all();
     hits
 }
 
@@ -5281,11 +5296,25 @@ mod tests {
 /// cleared between sessions by `reset_dom_analysis_cache` (the same
 /// contract as `reset_openapi_hosts`): a long-lived process running more
 /// than one scan must not serve a previous scan's hits.
-static DOM_HITS_CACHE: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, Vec<crate::crawl::DomHit>>>> = std::sync::OnceLock::new();
+/// One browser probe per URL: Done caches the hits; InFlight marks a
+/// probe another thread is running (see dom_analysis_hits).
+enum DomHitsState {
+    InFlight,
+    Done(Vec<crate::crawl::DomHit>),
+}
+
+#[derive(Default)]
+struct DomHitsCache {
+    map: std::sync::Mutex<std::collections::HashMap<String, DomHitsState>>,
+    ready: std::sync::Condvar,
+}
+
+static DOM_HITS_CACHE: std::sync::OnceLock<DomHitsCache> = std::sync::OnceLock::new();
 
 /// Clear the per-URL DOM analysis cache between scan sessions.
 pub(crate) fn reset_dom_analysis_cache() {
     if let Some(c) = DOM_HITS_CACHE.get() {
-        c.lock().unwrap().clear();
+        c.map.lock().unwrap().clear();
+        c.ready.notify_all();
     }
 }
