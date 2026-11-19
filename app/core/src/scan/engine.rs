@@ -306,6 +306,13 @@ impl G11Context {
     }
 }
 
+/// HTML elements with no end tag; they are never pushed onto the
+/// open-tag stack.
+const VOID_TAGS: [&str; 14] = [
+    "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param",
+    "source", "track", "wbr",
+];
+
 /// The context of one body position: the open-tag stack at `pos`, and an
 /// attribute match when `pos` is inside a quoted or unquoted value.
 fn g11_body_context(body: &str, pos: usize) -> G11Context {
@@ -313,6 +320,21 @@ fn g11_body_context(body: &str, pos: usize) -> G11Context {
     let mut open: Vec<String> = Vec::new();
     let mut i = 0;
     while i < pos && i < b.len() {
+        // Raw-text elements: everything up to their close tag is text,
+        // never markup, so a '<' in script or style text is not a tag.
+        if let Some(top) = open.last() {
+            if top == "script" || top == "style" {
+                let close = format!("</{top}");
+                match body[i..].to_ascii_lowercase().find(&close) {
+                    // Re-check the loop condition: the jump may pass pos.
+                    Some(rel) => {
+                        i += rel;
+                        continue;
+                    }
+                    None => break,
+                }
+            }
+        }
         if b[i] != b'<' {
             i += 1;
             continue;
@@ -325,8 +347,15 @@ fn g11_body_context(body: &str, pos: usize) -> G11Context {
         let mut gt = b.len();
         // A tag's '>' can hide inside a quoted attribute value.
         let mut q: Option<u8> = None;
+        let mut esc = false;
         for (off, ch) in gt_scan.bytes().enumerate().skip(1) {
+            if esc {
+                esc = false;
+                continue;
+            }
             match (q, ch) {
+                // Inside quotes a backslash escapes the next byte.
+                (Some(_), b'\\') => esc = true,
                 (None, b'"') => q = Some(b'"'),
                 (None, b'\'') => q = Some(b'\''),
                 (Some(qc), c) if c == qc => q = None,
@@ -371,7 +400,9 @@ fn g11_body_context(body: &str, pos: usize) -> G11Context {
                     let vs = j + 1;
                     let mut ve = vs;
                     while ve < gt && b[ve] != qc {
-                        ve += 1;
+                        // A backslash escapes the next byte (common inside
+                        // values holding JavaScript), so it cannot close.
+                        ve += if b[ve] == b'\\' { 2 } else { 1 };
                     }
                     j = (ve + 1).min(gt);
                     (vs, ve)
@@ -397,7 +428,7 @@ fn g11_body_context(body: &str, pos: usize) -> G11Context {
             if let Some(k) = open.iter().rposition(|t| *t == tag) {
                 open.truncate(k);
             }
-        } else if !tag.is_empty() && !body[i..gt].trim_end().ends_with('/') {
+        } else if !tag.is_empty() && !VOID_TAGS.contains(&tag.as_str()) && !body[i..gt].trim_end().ends_with('/') {
             open.push(tag);
         }
         i = gt + 1;
@@ -413,8 +444,10 @@ fn g11_body_context(body: &str, pos: usize) -> G11Context {
 
 /// Every occurrence of `probe` in `resp`, classified (burp.Zcpt).
 pub(crate) fn g11_contexts(resp: &[u8], probe: &str) -> Vec<G11Context> {
-    let head_end = util::find_head_end(resp).unwrap_or(0);
     let text = String::from_utf8_lossy(resp);
+    // Locate the head/body split in the lossy string, not the raw bytes:
+    // invalid UTF-8 before it would otherwise shift every body offset.
+    let head_end = text.find("\r\n\r\n").map(|x| x + 4).unwrap_or(0);
     let mut out = Vec::new();
     let mut start = 0;
     while start + probe.len() <= text.len() {
@@ -463,7 +496,13 @@ pub(crate) fn run_css_reflected<F: FnMut(&str) -> Option<Vec<u8>>>(mut send: F) 
 pub(crate) fn run_hpp_reflected<F: FnMut(&str) -> Option<Vec<u8>>>(mut send: F) -> Option<(String, String, Vec<u8>)> {
     let probe = format!("{}&{}", g11_token(3), g11_token(3));
     let resp = send(&probe)?;
-    let cx = g11_contexts(&resp, &probe).into_iter().find(|c| matches!(c, G11Context::Attr { .. } | G11Context::JsText | G11Context::Head))?;
+    // Attribute hits only count on URL-bearing attributes: a parameter
+    // pair reflected into a URL is what client-side navigation reads.
+    let cx = g11_contexts(&resp, &probe).into_iter().find(|c| match c {
+        G11Context::Attr { attr, .. } => matches!(attr.as_str(), "href" | "src" | "action" | "formaction"),
+        G11Context::JsText | G11Context::Head => true,
+        _ => false,
+    })?;
     Some((probe, cx.describe(), resp))
 }
 
@@ -509,6 +548,23 @@ mod g11_tests {
     }
 
     #[test]
+    fn contexts_survive_script_text_void_tags_and_invalid_utf8() {
+        // A '<' inside script text is not a tag; the probe stays JsText.
+        let r = resp("<script>if (a<b) { x = 'PROBEBODY'; }</script><p>y</p>");
+        assert_eq!(g11_contexts(&r, "PROBEBODY"), vec![G11Context::JsText]);
+        // Void elements never open, so text after <br>/<img> is Other.
+        let r = resp("<div><br><img src=x>PROBEBODY</div>");
+        assert_eq!(g11_contexts(&r, "PROBEBODY"), vec![G11Context::Other]);
+        // Invalid UTF-8 in a header must not shift the head/body split:
+        // a header reflection still classifies as Head.
+        let raw = b"HTTP/1.1 302 Found\r\nX-Loc: \xff\xfe/PROBEBODY\r\nContent-Length: 2\r\n\r\nok".to_vec();
+        assert_eq!(g11_contexts(&raw, "PROBEBODY"), vec![G11Context::Head]);
+        // An escaped quote does not end the attribute value.
+        let r = resp("<a title=\"x \\\" PROBEBODY\">y</a>");
+        assert!(matches!(g11_contexts(&r, "PROBEBODY").as_slice(), [G11Context::Attr { attr, .. }] if attr == "title"), "{:?}", g11_contexts(&r, "PROBEBODY"));
+    }
+
+    #[test]
     fn css_reflected_only_in_css_positions() {
         let hit = run_css_reflected(|p| Some(resp(&format!("<style>body{{color:{p}}}</style>"))));
         assert!(hit.is_some());
@@ -521,9 +577,12 @@ mod g11_tests {
     }
 
     #[test]
-    fn hpp_reflected_in_attr_js_and_header_only() {
+    fn hpp_reflected_in_url_attr_js_and_header_only() {
         let hit = run_hpp_reflected(|p| Some(resp(&format!("<a href=\"/go?next={p}\">x</a>"))));
         assert!(hit.is_some());
+        // A non-URL attribute is not a client-side navigation context.
+        let hit = run_hpp_reflected(|p| Some(resp(&format!("<div data-x=\"{p}\">x</div>"))));
+        assert!(hit.is_none(), "non-URL attribute must not flag: {hit:?}");
         let hit = run_hpp_reflected(|p| Some(resp(&format!("<p>{p}</p>"))));
         assert!(hit.is_none());
         let hit = run_hpp_reflected(|p| Some(format!("HTTP/1.1 302 Found\r\nLocation: /next?{p}\r\nContent-Length: 2\r\n\r\nok").into_bytes()));
