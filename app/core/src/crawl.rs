@@ -879,6 +879,12 @@ const DOM_INSTRUMENT_JS: &str = r#"
     Element.prototype.insertAdjacentHTML = function (pos, html) { record("element.insertAdjacentHTML", html); return origIah.apply(this, arguments); };
   }
   // JavaScript-execution sinks (the string arguments only).
+  // The record happens BEFORE the call, so detection does not depend on
+  // the call succeeding. Caveat: any wrapper turns a direct eval into an
+  // indirect one (global scope), so page code relying on local scope in
+  // the evaluated string behaves differently under the probe - direct-eval
+  // fidelity needs engine-level hooks (Burp patches Chromium); documented
+  // gap, coverage kept.
   var origEval = window.eval;
   if (typeof origEval === "function") {
     window.eval = function (s) { record("eval", s); return origEval(s); };
@@ -890,6 +896,12 @@ const DOM_INSTRUMENT_JS: &str = r#"
       return OrigFunction.apply(null, arguments);
     };
     window.Function.prototype = OrigFunction.prototype;
+    // keep the constructor's other properties reachable through the wrapper
+    Object.getOwnPropertyNames(OrigFunction).forEach(function (k) {
+      if (k !== "prototype" && k !== "length" && k !== "name" && k !== "arguments" && k !== "caller") {
+        try { window.Function[k] = OrigFunction[k]; } catch (e) {}
+      }
+    });
   }
   ["setTimeout", "setInterval"].forEach(function (name) {
     var orig = window[name];
