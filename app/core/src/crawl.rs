@@ -1026,6 +1026,19 @@ const DOM_INSTRUMENT_JS: &str = r#"
   // jQuery-dependent results are Tentative in burp.Zwf8.Zd; the jQuery.*
   // sink names carry that signal.
   var jqDone = false;
+  // Wrap the moment jQuery arrives, not on the next poll tick: a setter on
+  // window.jQuery catches the assignment. The fast poll stays: jQuery.fn is
+  // often attached a tick after the assignment, and some pages define the
+  // property themselves.
+  try {
+    var jqVal = window.jQuery;
+    Object.defineProperty(window, "jQuery", {
+      configurable: true,
+      enumerable: true,
+      get: function () { return jqVal; },
+      set: function (v) { jqVal = v; wrapJQuery(); }
+    });
+  } catch (e) {}
   function wrapJQuery() {
     if (jqDone || !window.jQuery || !window.jQuery.fn) { return; }
     jqDone = true;
