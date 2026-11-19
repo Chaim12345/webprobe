@@ -2971,7 +2971,10 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
         .iter()
         .cloned()
         .collect();
-    let scan_cfg = app.shared.scan_config.lock().unwrap().clone();
+    let scan_cfg = webprobe_core::scan_config::shared_config(&app.shared)
+        .lock()
+        .unwrap()
+        .clone();
     let mut locked_scanner = project::ProjectScanner {
         speed: app.shared.scan_speed.load(Ordering::SeqCst),
         accuracy: app.shared.scan_accuracy.load(Ordering::SeqCst),
@@ -3372,7 +3375,9 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData, content: boo
         app.collab_state.set_retention_secs(secs);
     }
     let s = &data.scanner;
-    *app.shared.scan_config.lock().unwrap() = crate::scan_config::ScanConfig::from_saved(s);
+    *webprobe_core::scan_config::shared_config(&app.shared)
+        .lock()
+        .unwrap() = crate::scan_config::ScanConfig::from_saved(s);
     app.shared
         .scan_speed
         .store(s.speed.min(2), Ordering::SeqCst);
@@ -3769,14 +3774,12 @@ mod save_restore_tests {
         std::thread::spawn(move || {
             let mut app = crate::App::new(net::Shared::new());
             app.project_path = p2;
-            app.shared
-                .scan_config
+            webprobe_core::scan_config::shared_config(&app.shared)
                 .lock()
                 .unwrap()
                 .disabled_checks
                 .insert("xss".into());
-            app.shared
-                .scan_config
+            webprobe_core::scan_config::shared_config(&app.shared)
                 .lock()
                 .unwrap()
                 .disabled_insertion
@@ -3797,7 +3800,10 @@ mod save_restore_tests {
             let mut fresh = crate::App::new(net::Shared::new());
             fresh.project_path = app.project_path.clone();
             restore_project(&mut fresh, true);
-            let cfg = fresh.shared.scan_config.lock().unwrap().clone();
+            let cfg = webprobe_core::scan_config::shared_config(&fresh.shared)
+                .lock()
+                .unwrap()
+                .clone();
             let _ = tx.send((
                 cfg.disabled_checks.contains("xss"),
                 cfg.disabled_insertion.contains("cookie"),

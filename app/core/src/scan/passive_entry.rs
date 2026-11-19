@@ -13,7 +13,11 @@ pub fn passive_check(e: &HistEntry) -> Vec<ScanIssue> {
 /// [`passive_check`] with the checks switched off in `shared`'s scan
 /// configuration left out (Settings > Scanner > scan configuration).
 pub fn passive_check_for(shared: &Shared, e: &HistEntry) -> Vec<ScanIssue> {
-    let filter = shared.scan_config.lock().unwrap().issues.clone();
+    let filter = crate::scan_config::shared_config(shared)
+        .lock()
+        .unwrap()
+        .issues
+        .clone();
     passive_check_filtered(shared, e, filter.as_ref())
 }
 
@@ -30,7 +34,10 @@ pub fn passive_check_filtered(
     e: &HistEntry,
     issues: Option<&crate::scan_library::IssueFilter>,
 ) -> Vec<ScanIssue> {
-    let config = shared.scan_config.lock().unwrap().clone();
+    let config = crate::scan_config::shared_config(shared)
+        .lock()
+        .unwrap()
+        .clone();
     let mut v = passive_check_with(e, &|id| config.check_enabled(id), Some(&shared.passive));
     // R-11: "Issues reported" (passive scan type, individual selection).
     if let Some(f) = issues {

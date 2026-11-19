@@ -196,7 +196,10 @@ pub fn load_project_entries(
 
 fn current(app: &App) -> (webprobe_core::scan_config::ScanConfig, u8, u8) {
     (
-        app.shared.scan_config.lock().unwrap().clone(),
+        webprobe_core::scan_config::shared_config(&app.shared)
+            .lock()
+            .unwrap()
+            .clone(),
         app.shared.scan_speed.load(Ordering::SeqCst).min(2),
         app.shared.scan_accuracy.load(Ordering::SeqCst).min(2),
     )
@@ -661,7 +664,9 @@ pub fn apply_launch(app: &mut App) -> Vec<String> {
     let (cur, speed, accuracy) = current(app);
     let refs: Vec<&LibraryConfig> = chosen.iter().collect();
     let a = lib::apply(&refs, &cur, speed, accuracy);
-    *app.shared.scan_config.lock().unwrap() = a.config;
+    *webprobe_core::scan_config::shared_config(&app.shared)
+        .lock()
+        .unwrap() = a.config;
     app.shared.scan_speed.store(a.speed, Ordering::SeqCst);
     app.shared.scan_accuracy.store(a.accuracy, Ordering::SeqCst);
     for l in lib::not_applied(&refs) {

@@ -351,7 +351,7 @@ fn r10_host_checks_against_a_live_lab() {
             cfg.disabled_checks.insert(id.into());
         }
     }
-    *shared.scan_config.lock().unwrap() = cfg;
+    *crate::scan_config::shared_config(&shared).lock().unwrap() = cfg;
     let mut e = crate::net::HistEntry {
         method: "GET".into(),
         host: "127.0.0.1".into(),
@@ -451,7 +451,7 @@ fn lab_scan(
             cfg.disabled_checks.insert(id.into());
         }
     }
-    *shared.scan_config.lock().unwrap() = cfg;
+    *crate::scan_config::shared_config(&shared).lock().unwrap() = cfg;
     let mut e = crate::net::HistEntry {
         method: method.into(),
         host: "127.0.0.1".into(),

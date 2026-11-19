@@ -2,6 +2,16 @@
 //! types they attack (Burp's scan configuration "Issues reported" and
 //! "Insertion point types" sections). Everything is on by default.
 
+/// The live scan configuration a `Shared` carries (stored in
+/// `Shared::tool_state` so net does not name this type). The returned guard
+/// shares one mutex across all callers, as the old `Shared::scan_config`
+/// field did.
+pub fn shared_config(
+    shared: &crate::net::Shared,
+) -> std::sync::Arc<crate::sync::Mutex<ScanConfig>> {
+    shared.tool_state.get_or_insert()
+}
+
 use std::collections::BTreeSet;
 
 /// Burp's insertion point types, as (key, label): AuditDefaults.json

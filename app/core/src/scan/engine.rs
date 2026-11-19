@@ -44,7 +44,10 @@ pub fn start_active_scan(
         return;
     }
     let (host, port) = net::split_h_p(&host_header, entry.port);
-    let config = shared.scan_config.lock().unwrap().clone();
+    let config = crate::scan_config::shared_config(&shared)
+        .lock()
+        .unwrap()
+        .clone();
     let points: Vec<InsertionPoint> = audit_points(&req, &config);
     if points.is_empty() {
         // Burp still runs its per-request and per-host checks (CORS,
@@ -293,7 +296,12 @@ pub fn crawl_and_audit(shared: &Arc<Shared>, start_urls: &[String], audit_only: 
         // Browser-driven crawl (Burp's crawler drives Chromium): picks up
         // client-side routes and the API calls pages make; each observed
         // same-origin request is re-issued as a crawl item.
-        let engine = shared.scan_config.lock().unwrap().crawl.engine.clone();
+        let engine = crate::scan_config::shared_config(shared)
+            .lock()
+            .unwrap()
+            .crawl
+            .engine
+            .clone();
         if !audit_only && !engine.is_empty() && !engine.eq_ignore_ascii_case("chromium") {
             // Another headless engine (headless.rs): render through the
             // proxy, then fetch each page it found as a crawl item.

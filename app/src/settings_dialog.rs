@@ -301,11 +301,16 @@ fn manage_menu(app: &mut App, ui: &mut Ui) {
 
 /// Burp's scan configuration: insertion point types and the audit checks.
 fn scan_configuration(app: &mut App, ui: &mut Ui) {
-    let mut config = app.shared.scan_config.lock().unwrap().clone();
+    let mut config = webprobe_core::scan_config::shared_config(&app.shared)
+        .lock()
+        .unwrap()
+        .clone();
     let before = config.clone();
     scan_config_editor(ui, &mut config, "settings");
     if config != before {
-        *app.shared.scan_config.lock().unwrap() = config;
+        *webprobe_core::scan_config::shared_config(&app.shared)
+            .lock()
+            .unwrap() = config;
     }
 }
 

@@ -135,7 +135,8 @@ impl PairCtx {
             issues.retain(|i| is_burp_issue(&i.name));
         }
         {
-            let config = self.shared.scan_config.lock().unwrap();
+            let cfg_slot = crate::scan_config::shared_config(&self.shared);
+            let config = cfg_slot.lock().unwrap();
             issues.retain(|i| config.issue_allowed(&i.name, true));
         }
         add_issues(&self.shared, issues);
@@ -154,7 +155,10 @@ pub(crate) fn run_stored_stage(shared: &Arc<Shared>) {
     if pairs.is_empty() {
         return;
     }
-    let config = shared.scan_config.lock().unwrap().clone();
+    let config = crate::scan_config::shared_config(shared)
+        .lock()
+        .unwrap()
+        .clone();
     shared.log(&format!(
         "Scanner: stored input stage, {} pair(s)",
         pairs.len()

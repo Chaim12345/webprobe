@@ -76,7 +76,7 @@ pub struct Shared {
     /// Burp scan configuration "Audit speed" (burp.Zsv7): 0 fast, 1 normal, 2 thorough.
     pub scan_speed: AtomicU8,
     /// Which checks run and which insertion point types are attacked.
-    pub scan_config: Mutex<crate::scan_config::ScanConfig>,
+    // The scan configuration lives in tool_state (scan_config::shared_config).
     /// Issue selection of live passive auditing of proxied traffic: its
     /// own setting, as Burp's live passive tasks have their own
     /// configuration (None = every issue type). A scan's library
@@ -250,7 +250,7 @@ impl Shared {
             next_task_id: AtomicU64::new(1),
             task_runner: AtomicBool::new(false),
             waker: Mutex::new(None),
-            scan_config: Mutex::new(crate::scan_config::ScanConfig::default()),
+
             live_passive_issues: Mutex::new(None),
             // AuditDefaults.json: scan_speed / scan_accuracy "normal"
             scan_speed: AtomicU8::new(1),

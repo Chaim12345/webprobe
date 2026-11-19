@@ -269,7 +269,10 @@ pub fn zibp_zu_value_ok(v: &str) -> bool {
 /// in registry order. Stops at the next point once the scan is stopped.
 pub(crate) fn run_point_checks(cx: &ScanCtx, points: &[InsertionPoint]) {
     let mut st = ScanState::default();
-    let config = cx.shared.scan_config.lock().unwrap().clone();
+    let config = crate::scan_config::shared_config(&cx.shared)
+        .lock()
+        .unwrap()
+        .clone();
     for (idx, ip) in points.iter().enumerate() {
         if cx.stopped() {
             break;
@@ -350,7 +353,10 @@ pub(crate) fn run_extension_checks(cx: &ScanCtx, points: &[InsertionPoint]) {
 /// The request phase: every request-level check once, honouring groups.
 pub(crate) fn run_request_checks(cx: &ScanCtx) {
     let mut open: Vec<(&'static str, bool)> = Vec::new();
-    let config = cx.shared.scan_config.lock().unwrap().clone();
+    let config = crate::scan_config::shared_config(&cx.shared)
+        .lock()
+        .unwrap()
+        .clone();
     for check in REQUEST_CHECKS {
         if !config.check_enabled(check.id()) || !cx.runs(check.issue()) {
             continue;

@@ -2540,7 +2540,7 @@ fn scan_configuration_switches_checks_and_insertion_types_off() {
     let host = format!("127.0.0.1:{port}");
     let scan = |config: crate::scan_config::ScanConfig| -> Vec<String> {
         let shared = net::Shared::new();
-        *shared.scan_config.lock().unwrap() = config;
+        *crate::scan_config::shared_config(&shared).lock().unwrap() = config;
         let mut e = entry("/item?id=5", false, "");
         e.host = "127.0.0.1".into();
         e.port = port;

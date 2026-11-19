@@ -380,7 +380,11 @@ pub fn js_crawl(
     shared: &Arc<Shared>,
     start_url: &str,
 ) -> Result<Vec<String>, String> {
-    let limits = shared.scan_config.lock().unwrap().crawl.clone();
+    let limits = crate::scan_config::shared_config(shared)
+        .lock()
+        .unwrap()
+        .crawl
+        .clone();
     let started = std::time::Instant::now();
     let proxy_port = shared.proxy_port.load(std::sync::atomic::Ordering::SeqCst);
     let ca_file = std::env::temp_dir().join(format!("webprobe-ca-{}.pem", std::process::id()));

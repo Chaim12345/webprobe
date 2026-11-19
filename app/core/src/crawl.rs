@@ -221,7 +221,11 @@ pub fn crawl(shared: &Arc<Shared>, start_url: &str) -> Vec<HistEntry> {
         format!("{scheme}://{host}:{port}")
     };
 
-    let limits = shared.scan_config.lock().unwrap().crawl.clone();
+    let limits = crate::scan_config::shared_config(shared)
+        .lock()
+        .unwrap()
+        .crawl
+        .clone();
     let started = std::time::Instant::now();
     let mut seen: BTreeSet<String> = BTreeSet::new();
     let mut queue: VecDeque<(String, usize)> = VecDeque::new();
@@ -379,7 +383,8 @@ mod tests {
         });
         let shared = Shared::new();
         {
-            let mut c = shared.scan_config.lock().unwrap();
+            let cfg_slot = crate::scan_config::shared_config(&shared);
+            let mut c = cfg_slot.lock().unwrap();
             c.crawl = crate::scan_config::CrawlLimits {
                 max_depth: 1,
                 max_locations: 100,
@@ -868,7 +873,11 @@ pub fn browser_crawl(shared: &Arc<Shared>, start_url: &str) -> Result<Vec<SeenRe
         .map_err(|m| m.to_string())?
         .display()
         .to_string();
-    let limits = shared.scan_config.lock().unwrap().crawl.clone();
+    let limits = crate::scan_config::shared_config(shared)
+        .lock()
+        .unwrap()
+        .crawl
+        .clone();
     let started = std::time::Instant::now();
     let (scheme, rest) = start_url.split_once("://").unwrap_or(("http", start_url));
     let authority = rest.split('/').next().unwrap_or("").to_string();

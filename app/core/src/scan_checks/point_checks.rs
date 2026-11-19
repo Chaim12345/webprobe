@@ -191,9 +191,7 @@ impl PointCheck for JwtAttacks {
         ];
         for (name, variants, detail) in attacks {
             if !cx.runs(name)
-                || !cx
-                    .shared
-                    .scan_config
+                || !crate::scan_config::shared_config(&cx.shared)
                     .lock()
                     .unwrap()
                     .check_enabled(&jwt_issue_id(name))
@@ -228,9 +226,7 @@ impl PointCheck for JwtAttacks {
         ] {
             if cx.stopped()
                 || !cx.runs(name)
-                || !cx
-                    .shared
-                    .scan_config
+                || !crate::scan_config::shared_config(&cx.shared)
                     .lock()
                     .unwrap()
                     .check_enabled(&jwt_issue_id(name))

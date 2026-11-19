@@ -35,6 +35,18 @@ impl ToolState {
             .cloned()
     }
 
+    /// The tool state of type `T`, storing `T::default()` on first use.
+    pub fn get_or_insert<T: Any + Send + Sync + Clone + Default>(&self) -> T {
+        self.map
+            .lock()
+            .unwrap()
+            .entry(TypeId::of::<T>())
+            .or_insert_with(|| Box::new(T::default()))
+            .downcast_ref::<T>()
+            .expect("slot type is keyed by TypeId")
+            .clone()
+    }
+
     /// Store (or replace) the tool state of type `T`.
     pub fn insert<T: Any + Send + Sync>(&self, v: T) {
         self.map
