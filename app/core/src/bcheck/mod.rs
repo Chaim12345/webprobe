@@ -14,6 +14,7 @@ use std::cell::Cell;
 use std::fmt;
 
 pub mod exec;
+pub mod runner;
 
 // Shared across the mutually recursive interpolation/expression parsers, so a
 // nested string cannot reset the budget. Each thread parses independently.
