@@ -414,7 +414,7 @@ fn g11_body_context(body: &str, pos: usize) -> G11Context {
                 spans.push((name, 0, 0));
             }
         }
-        if let Some((name, vs, ve)) = spans.iter().find(|(_, vs, ve)| pos >= *vs && pos < *ve) {
+        if let Some((name, _, _)) = spans.iter().find(|(_, vs, ve)| pos >= *vs && pos < *ve) {
             let attrs = spans
                 .iter()
                 .map(|(k, vs, ve)| (k.clone(), body[*vs..*ve].to_string()))
@@ -551,119 +551,6 @@ pub(crate) fn run_form_action_reflected<F: FnMut(&str) -> Option<Vec<u8>>>(
     Some((probe, cx.describe(), resp))
 }
 
-#[cfg(test)]
-mod g11_tests {
-    use super::*;
-
-    fn resp(body: &str) -> Vec<u8> {
-        format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{body}",
-            body.len()
-        )
-        .into_bytes()
-    }
-
-    #[test]
-    fn contexts_cover_style_attr_script_and_head() {
-        let r = resp("<html><style>body{color:PROBEBODY}</style></html>");
-        assert_eq!(g11_contexts(&r, "PROBEBODY"), vec![G11Context::StyleText]);
-        let r = resp("<div style=\"background:PROBEBODY\">x</div>");
-        assert!(
-            matches!(g11_contexts(&r, "PROBEBODY").as_slice(), [G11Context::Attr { tag, attr, .. }] if tag == "div" && attr == "style")
-        );
-        let r = resp("<script>var x = 'PROBEBODY';</script>");
-        assert_eq!(g11_contexts(&r, "PROBEBODY"), vec![G11Context::JsText]);
-        // A reflection in the response head.
-        let r =
-            b"HTTP/1.1 302 Found\r\nLocation: https://x/PROBEBODY\r\nContent-Length: 2\r\n\r\nok"
-                .to_vec();
-        assert_eq!(g11_contexts(&r, "PROBEBODY"), vec![G11Context::Head]);
-        // Plain body text is Other; rel before href and href before rel both match.
-        let r = resp("<p>PROBEBODY</p>");
-        assert_eq!(g11_contexts(&r, "PROBEBODY"), vec![G11Context::Other]);
-        let r = resp("<link href=\"/x?c=PROBEBODY\" rel=\"stylesheet\">");
-        assert!(
-            matches!(g11_contexts(&r, "PROBEBODY").as_slice(), [G11Context::Attr { tag, attr, attrs }] if tag == "link" && attr == "href" && attrs.iter().any(|(k, _)| k == "rel"))
-        );
-    }
-
-    #[test]
-    fn contexts_survive_script_text_void_tags_and_invalid_utf8() {
-        // A '<' inside script text is not a tag; the probe stays JsText.
-        let r = resp("<script>if (a<b) { x = 'PROBEBODY'; }</script><p>y</p>");
-        assert_eq!(g11_contexts(&r, "PROBEBODY"), vec![G11Context::JsText]);
-        // A probe after a script close tag parses normally (regression:
-        // landing exactly on the close tag must not spin).
-        let r = resp("<script>var a=1;</script><p>PROBEBODY</p>");
-        assert_eq!(g11_contexts(&r, "PROBEBODY"), vec![G11Context::Other]);
-        // Void elements never open, so text after <br>/<img> is Other.
-        let r = resp("<div><br><img src=x>PROBEBODY</div>");
-        assert_eq!(g11_contexts(&r, "PROBEBODY"), vec![G11Context::Other]);
-        // Invalid UTF-8 in a header must not shift the head/body split:
-        // a header reflection still classifies as Head.
-        let raw = b"HTTP/1.1 302 Found\r\nX-Loc: \xff\xfe/PROBEBODY\r\nContent-Length: 2\r\n\r\nok"
-            .to_vec();
-        assert_eq!(g11_contexts(&raw, "PROBEBODY"), vec![G11Context::Head]);
-        // HTML attribute values have no escape mechanism: a backslash
-        // does not keep the value open, so the probe after the closing
-        // quote is plain text.
-        let r = resp("<a title=\"x \\\" PROBEBODY\">y</a>");
-        assert_eq!(g11_contexts(&r, "PROBEBODY"), vec![G11Context::Other]);
-        // An LF-only head/body split still classifies header reflections.
-        let raw = b"HTTP/1.1 302 Found\nLocation: https://x/PROBEBODY\n\nok".to_vec();
-        assert_eq!(g11_contexts(&raw, "PROBEBODY"), vec![G11Context::Head]);
-    }
-
-    #[test]
-    fn css_reflected_only_in_css_positions() {
-        let hit = run_css_reflected(|p| Some(resp(&format!("<style>body{{color:{p}}}</style>"))));
-        assert!(hit.is_some());
-        let hit = run_css_reflected(|p| Some(resp(&format!("<p>{p}</p>"))));
-        assert!(hit.is_none());
-        let hit = run_css_reflected(|p| Some(resp(&format!("<div style=\"x:{p}\">y</div>"))));
-        assert!(hit.is_some());
-        let hit = run_css_reflected(|p| {
-            Some(resp(&format!(
-                "<link rel=\"stylesheet\" href=\"/x?c={p}\">"
-            )))
-        });
-        assert!(hit.is_some());
-    }
-
-    #[test]
-    fn hpp_reflected_in_url_attr_js_and_header_only() {
-        let hit = run_hpp_reflected(|p| Some(resp(&format!("<a href=\"/go?next={p}\">x</a>"))));
-        assert!(hit.is_some());
-        // A non-URL attribute is not a client-side navigation context.
-        let hit = run_hpp_reflected(|p| Some(resp(&format!("<div data-x=\"{p}\">x</div>"))));
-        assert!(hit.is_none(), "non-URL attribute must not flag: {hit:?}");
-        let hit = run_hpp_reflected(|p| Some(resp(&format!("<p>{p}</p>"))));
-        assert!(hit.is_none());
-        let hit = run_hpp_reflected(|p| {
-            Some(
-                format!("HTTP/1.1 302 Found\r\nLocation: /next?{p}\r\nContent-Length: 2\r\n\r\nok")
-                    .into_bytes(),
-            )
-        });
-        assert!(hit.is_some());
-    }
-
-    #[test]
-    fn form_action_reflected_on_submission_targets() {
-        let hit = run_form_action_reflected(|p| {
-            Some(resp(&format!(
-                "<form action=\"{p}\"><input type=\"text\"></form>"
-            )))
-        });
-        assert!(hit.is_some());
-        let hit = run_form_action_reflected(|p| {
-            Some(resp(&format!("<button formaction=\"{p}\">go</button>")))
-        });
-        assert!(hit.is_some());
-        let hit = run_form_action_reflected(|p| Some(resp(&format!("<a href=\"{p}\">x</a>"))));
-        assert!(hit.is_none());
-    }
-}
 impl Drop for StoredBatch {
     fn drop(&mut self) {
         if self.opened {
@@ -795,4 +682,118 @@ pub fn crawl_and_audit(shared: &Arc<Shared>, start_urls: &[String], audit_only: 
         }
     }
     shared.log("Crawl and audit finished");
+}
+
+#[cfg(test)]
+mod g11_tests {
+    use super::*;
+
+    fn resp(body: &str) -> Vec<u8> {
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{body}",
+            body.len()
+        )
+        .into_bytes()
+    }
+
+    #[test]
+    fn contexts_cover_style_attr_script_and_head() {
+        let r = resp("<html><style>body{color:PROBEBODY}</style></html>");
+        assert_eq!(g11_contexts(&r, "PROBEBODY"), vec![G11Context::StyleText]);
+        let r = resp("<div style=\"background:PROBEBODY\">x</div>");
+        assert!(
+            matches!(g11_contexts(&r, "PROBEBODY").as_slice(), [G11Context::Attr { tag, attr, .. }] if tag == "div" && attr == "style")
+        );
+        let r = resp("<script>var x = 'PROBEBODY';</script>");
+        assert_eq!(g11_contexts(&r, "PROBEBODY"), vec![G11Context::JsText]);
+        // A reflection in the response head.
+        let r =
+            b"HTTP/1.1 302 Found\r\nLocation: https://x/PROBEBODY\r\nContent-Length: 2\r\n\r\nok"
+                .to_vec();
+        assert_eq!(g11_contexts(&r, "PROBEBODY"), vec![G11Context::Head]);
+        // Plain body text is Other; rel before href and href before rel both match.
+        let r = resp("<p>PROBEBODY</p>");
+        assert_eq!(g11_contexts(&r, "PROBEBODY"), vec![G11Context::Other]);
+        let r = resp("<link href=\"/x?c=PROBEBODY\" rel=\"stylesheet\">");
+        assert!(
+            matches!(g11_contexts(&r, "PROBEBODY").as_slice(), [G11Context::Attr { tag, attr, attrs }] if tag == "link" && attr == "href" && attrs.iter().any(|(k, _)| k == "rel"))
+        );
+    }
+
+    #[test]
+    fn contexts_survive_script_text_void_tags_and_invalid_utf8() {
+        // A '<' inside script text is not a tag; the probe stays JsText.
+        let r = resp("<script>if (a<b) { x = 'PROBEBODY'; }</script><p>y</p>");
+        assert_eq!(g11_contexts(&r, "PROBEBODY"), vec![G11Context::JsText]);
+        // A probe after a script close tag parses normally (regression:
+        // landing exactly on the close tag must not spin).
+        let r = resp("<script>var a=1;</script><p>PROBEBODY</p>");
+        assert_eq!(g11_contexts(&r, "PROBEBODY"), vec![G11Context::Other]);
+        // Void elements never open, so text after <br>/<img> is Other.
+        let r = resp("<div><br><img src=x>PROBEBODY</div>");
+        assert_eq!(g11_contexts(&r, "PROBEBODY"), vec![G11Context::Other]);
+        // Invalid UTF-8 in a header must not shift the head/body split:
+        // a header reflection still classifies as Head.
+        let raw = b"HTTP/1.1 302 Found\r\nX-Loc: \xff\xfe/PROBEBODY\r\nContent-Length: 2\r\n\r\nok"
+            .to_vec();
+        assert_eq!(g11_contexts(&raw, "PROBEBODY"), vec![G11Context::Head]);
+        // HTML attribute values have no escape mechanism: a backslash
+        // does not keep the value open, so the probe after the closing
+        // quote is plain text.
+        let r = resp("<a title=\"x \\\" PROBEBODY\">y</a>");
+        assert_eq!(g11_contexts(&r, "PROBEBODY"), vec![G11Context::Other]);
+        // An LF-only head/body split still classifies header reflections.
+        let raw = b"HTTP/1.1 302 Found\nLocation: https://x/PROBEBODY\n\nok".to_vec();
+        assert_eq!(g11_contexts(&raw, "PROBEBODY"), vec![G11Context::Head]);
+    }
+
+    #[test]
+    fn css_reflected_only_in_css_positions() {
+        let hit = run_css_reflected(|p| Some(resp(&format!("<style>body{{color:{p}}}</style>"))));
+        assert!(hit.is_some());
+        let hit = run_css_reflected(|p| Some(resp(&format!("<p>{p}</p>"))));
+        assert!(hit.is_none());
+        let hit = run_css_reflected(|p| Some(resp(&format!("<div style=\"x:{p}\">y</div>"))));
+        assert!(hit.is_some());
+        let hit = run_css_reflected(|p| {
+            Some(resp(&format!(
+                "<link rel=\"stylesheet\" href=\"/x?c={p}\">"
+            )))
+        });
+        assert!(hit.is_some());
+    }
+
+    #[test]
+    fn hpp_reflected_in_url_attr_js_and_header_only() {
+        let hit = run_hpp_reflected(|p| Some(resp(&format!("<a href=\"/go?next={p}\">x</a>"))));
+        assert!(hit.is_some());
+        // A non-URL attribute is not a client-side navigation context.
+        let hit = run_hpp_reflected(|p| Some(resp(&format!("<div data-x=\"{p}\">x</div>"))));
+        assert!(hit.is_none(), "non-URL attribute must not flag: {hit:?}");
+        let hit = run_hpp_reflected(|p| Some(resp(&format!("<p>{p}</p>"))));
+        assert!(hit.is_none());
+        let hit = run_hpp_reflected(|p| {
+            Some(
+                format!("HTTP/1.1 302 Found\r\nLocation: /next?{p}\r\nContent-Length: 2\r\n\r\nok")
+                    .into_bytes(),
+            )
+        });
+        assert!(hit.is_some());
+    }
+
+    #[test]
+    fn form_action_reflected_on_submission_targets() {
+        let hit = run_form_action_reflected(|p| {
+            Some(resp(&format!(
+                "<form action=\"{p}\"><input type=\"text\"></form>"
+            )))
+        });
+        assert!(hit.is_some());
+        let hit = run_form_action_reflected(|p| {
+            Some(resp(&format!("<button formaction=\"{p}\">go</button>")))
+        });
+        assert!(hit.is_some());
+        let hit = run_form_action_reflected(|p| Some(resp(&format!("<a href=\"{p}\">x</a>"))));
+        assert!(hit.is_none());
+    }
 }
