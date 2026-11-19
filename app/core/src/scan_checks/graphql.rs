@@ -766,11 +766,11 @@ impl RequestCheck for BackupFile {
 /// contract as `reset_openapi_hosts`): a long-lived process running more
 /// than one scan must not serve a previous scan's hits.
 /// One browser probe per URL: Done caches the hits and the reflected
-/// flag; InFlight marks a probe another thread is running (see
+/// query canary; InFlight marks a probe another thread is running (see
 /// dom_analysis_hits).
 enum DomHitsState {
     InFlight,
-    Done((Vec<crate::crawl::DomHit>, bool)),
+    Done((Vec<crate::crawl::DomHit>, Option<String>)),
 }
 
 #[derive(Default)]
@@ -831,13 +831,19 @@ fn dom_analysis_hits(cx: &ScanCtx) -> (Vec<crate::crawl::DomHit>, bool) {
     // URL the browser navigated to (the wpdom query parameter, no
     // fragment) and classify the canary's reflection contexts. JsText
     // approximates the string-literal requirement with <script> text, the
-    // granularity the G.11 context parser has.
+    // granularity the G.11 context parser has. The query canary is
+    // returned, not a bare flag: the reflected variant is per HIT - only a
+    // hit whose sink value carries the query canary can have come from
+    // the reflected value, so a hash-flow hit on a page that also
+    // reflects the query stays plain DOM-based.
     let sep = if path.contains('?') { "&" } else { "?" };
-    let raw = format!("GET {path}{sep}wpdom=q{canary} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", cx.host_hdr);
+    let qcanary = format!("q{canary}");
+    let raw = authed_get(cx, &format!("{path}{sep}wpdom={qcanary}"));
     let reflected = cx
-        .send(raw.as_bytes())
+        .send(&raw)
         .map(|r| crate::scan::g11_contexts(&r, &canary).iter().any(|c| matches!(c, crate::scan::G11Context::JsText)))
-        .unwrap_or(false);
+        .unwrap_or(false)
+        .then_some(qcanary);
     let v = (hits, reflected);
     cache.map.lock().unwrap().insert(url, DomHitsState::Done(v.clone()));
     cache.ready.notify_all();
@@ -868,7 +874,7 @@ macro_rules! dom_family_check {
                 if cx.stopped() || !cx.runs(self.issue()) {
                     return;
                 }
-                let (hits, reflected) = dom_analysis_hits(cx);
+                let (hits, reflected_qcanary) = dom_analysis_hits(cx);
                 let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
                 for hit in hits.iter().filter(|h| $sinks.contains(&h.sink.as_str())) {
                     if !seen.insert(hit.sink.as_str()) {
@@ -877,7 +883,7 @@ macro_rules! dom_family_check {
                     // burp.Zf24.Zw: the value arriving with the request and
                     // copied into the response's JavaScript makes the
                     // reflected variant of the family's issue.
-                    let (issue, detail) = if reflected {
+                    let (issue, detail) = if reflected_qcanary.as_deref().is_some_and(|qc| hit.sink_value.contains(qc)) {
                         (
                             $reflected_issue,
                             format!(
