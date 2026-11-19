@@ -85,46 +85,6 @@ fn registry_order_is_pinned() {
             "active.jwt",
             "active.expression-language-injection",
             "active.xpath-injection",
-            (
-                "active.dom-javascript-injection",
-                Scope::Request,
-                Some(BURP_GROUP)
-            ),
-            (
-                "active.dom-open-redirection",
-                Scope::Request,
-                Some(BURP_GROUP)
-            ),
-            (
-                "active.dom-cookie-manipulation",
-                Scope::Request,
-                Some(BURP_GROUP)
-            ),
-            (
-                "active.dom-storage-manipulation",
-                Scope::Request,
-                Some(BURP_GROUP)
-            ),
-            (
-                "active.dom-json-injection",
-                Scope::Request,
-                Some(BURP_GROUP)
-            ),
-            (
-                "active.dom-xpath-injection",
-                Scope::Request,
-                Some(BURP_GROUP)
-            ),
-            (
-                "active.dom-document-domain",
-                Scope::Request,
-                Some(BURP_GROUP)
-            ),
-            (
-                "active.dom-prototype-pollution",
-                Scope::Request,
-                Some(BURP_GROUP)
-            ),
         ]
     );
     // Stage A4 (burp.Zwp6) runs once per stored-input pair.
@@ -177,12 +137,78 @@ fn registry_order_is_pinned() {
             ("active.graphql-suggestions", Scope::Request, None),
             ("active.graphql-content-type", Scope::Request, None),
             ("active.spoofable-client-ip", Scope::Request, None),
+            ("active.broken-access-control", Scope::Request, None),
             ("active.backup-file", Scope::Request, None),
             ("active.graphql-endpoint-discovered", Scope::Host, None),
             ("active.web-cache-poisoning", Scope::Request, None),
-            ("active.broken-access-control", Scope::Request, None),
             ("active.web-cache-deception", Scope::Request, None),
             ("active.dom-xss", Scope::Request, Some(BURP_GROUP)),
+            (
+                "active.dom-javascript-injection",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-open-redirection",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-cookie-manipulation",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-data-manipulation",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-link-manipulation",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-websocket-poisoning",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            ("active.dom-dos", Scope::Request, Some(BURP_GROUP)),
+            (
+                "active.dom-ajax-header-manipulation",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-storage-manipulation",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-web-message-manipulation",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-json-injection",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-xpath-injection",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-document-domain",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-prototype-pollution",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
         ]
     );
     let mut ids: Vec<&str> = points
