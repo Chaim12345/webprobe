@@ -852,10 +852,16 @@ fn dom_analysis_hits(cx: &ScanCtx) -> (Vec<crate::crawl::DomHit>, Option<String>
     // request's session, and an application may persist the value (logs,
     // search history, comments). The canary is a random inert string and
     // the check runs only as part of the active scan.
+    if cx.stopped() {
+        return (Vec::new(), None, String::new());
+    }
     let stored_canary = format!("s{canary}");
     let sep0 = if path.contains('?') { "&" } else { "?" };
     let submit = authed_get(cx, &format!("{path}{sep0}wpdom={stored_canary}"));
-    let _ = cx.send(&submit);
+    if cx.send(&submit).is_none() {
+        // No stored variant is detectable without the submission landing.
+        cx.shared.log(&format!("DOM stored-canary submission failed for {url}"));
+    }
     let probe = crate::crawl::dom_analysis_probe(&cx.shared, &url, &canary);
     if let Err(e) = &probe {
         // A crashed/timed-out probe is not a clean bill of health: say so
@@ -878,6 +884,9 @@ fn dom_analysis_hits(cx: &ScanCtx) -> (Vec<crate::crawl::DomHit>, Option<String>
     // hit whose sink value carries the query canary can have come from
     // the reflected value, so a hash-flow hit on a page that also
     // reflects the query stays plain DOM-based.
+    if cx.stopped() {
+        return (Vec::new(), None, String::new());
+    }
     let sep = if path.contains('?') { "&" } else { "?" };
     let qcanary = format!("q{canary}");
     let raw = authed_get(cx, &format!("{path}{sep}wpdom={qcanary}"));
@@ -998,7 +1007,7 @@ dom_family_check!(
         "jQuery.replaceWith",
         "jQuery.parseHTML"
     ][..],
-    "Cross-site scripting (DOM-based), KB 00200310, High: the HTML-writing sinks of burp.Zcwh's XSS family (first slice: document.write/writeln, inner/outerHTML, insertAdjacentHTML; jQuery groups not yet). Confidence Firm (burp.Zwf8.Zd: no Tentative rule covers a location.hash source)."
+    "Cross-site scripting (DOM-based), KB 00200310, High: the HTML-writing sinks of burp.Zcwh's XSS family (document.write/writeln, inner/outerHTML, insertAdjacentHTML, setAttribute onclick, and the jQuery html/append/prepend/before/after/wrap/replaceWith/parseHTML group). Confidence Firm; jQuery-backed hits Tentative (burp.Zwf8.Zd flag 4)."
 );
 dom_family_check!(
     DomJsInjection,
@@ -1010,7 +1019,7 @@ dom_family_check!(
     "Firm",
     "DOM-based JavaScript injection",
     &["eval", "Function", "setTimeout", "setInterval", "jQuery.globalEval"][..],
-    "JavaScript injection (DOM-based), KB 00200320, High: the JavaScript-execution sinks of burp.Zcwh's family (eval, Function, setTimeout/setInterval string handlers; execScript and javascript: URLs are not wrappable, not established here). Confidence Firm (burp.Zwf8.Zd)."
+    "JavaScript injection (DOM-based), KB 00200320, High: the JavaScript-execution sinks of burp.Zcwh's family (eval, Function, setTimeout/setInterval string handlers, jQuery.globalEval; execScript and javascript: URLs are not wrappable, not established here). Confidence Firm; jQuery-backed hits Tentative (burp.Zwf8.Zd flag 4)."
 );
 dom_family_check!(
     DomOpenRedirection,
@@ -1060,7 +1069,7 @@ dom_family_check!(
     "Firm",
     "DOM-based link manipulation",
     &["form.action", "anchor.href", "button.formaction", "input.formaction", "element.setAttribute.href", "jQuery.attr.href", "jQuery.prop.href", "jQuery.attr.action", "jQuery.prop.action"][..],
-    "Link manipulation (DOM-based), KB 00501000, Low: the navigation-target property sinks of burp.Zcwh's link family (form.action, anchor.href, button/input.formaction, setAttribute href; jQuery prop/attr variants not yet). Confidence Firm (burp.Zwf8.Zd)."
+    "Link manipulation (DOM-based), KB 00501000, Low: the navigation-target property sinks of burp.Zcwh's link family (form.action, anchor.href, button/input.formaction, setAttribute href, jQuery attr/prop href and action). Confidence Firm; jQuery-backed hits Tentative (burp.Zwf8.Zd flag 4)."
 );
 dom_family_check!(
     DomWebSocketPoisoning,
