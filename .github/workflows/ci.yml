@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [master, "parity/**", "roadmap/**"]
+  pull_request:
+
+# app/.cargo/config.toml pins a machine-local rustc, sccache and ld.lld-22.
+# These overrides make the repo build on a fresh runner. (An empty
+# RUSTFLAGS replaces the linker flags from that file.)
+env:
+  CARGO_BUILD_RUSTC: rustc
+  CARGO_BUILD_RUSTC_WRAPPER: ""
+  RUSTFLAGS: ""
+  CARGO_TERM_COLOR: always
+
+defaults:
+  run:
+    working-directory: app
+
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup update stable && rustup default stable && rustup component add clippy
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            app/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('app/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+      # webprobe-core has no UI dependency, so no system libraries are needed.
+      - run: cargo check -p webprobe-core --locked
+      - run: cargo test -p webprobe-core --locked --no-run
+      # 82 warnings today (docs/adr/0001); blocking once they are fixed.
+      - run: cargo clippy -p webprobe-core --locked
+        continue-on-error: true
