@@ -417,3 +417,17 @@ pub struct ExtIssue {
     pub host: String,
     pub path: String,
 }
+
+/// A message an extension sent to a tool whose state is the desktop
+/// app's; the app applies it on its next frame.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ToolSend {
+    /// The request (with section position markers) and its target origin.
+    Intruder {
+        request: String,
+        target: String,
+        https: bool,
+    },
+    Comparer(String),
+    Decoder(String),
+}

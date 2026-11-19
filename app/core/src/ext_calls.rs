@@ -12,19 +12,7 @@ use serde_json::{json, Value};
 use crate::net::{HistEntry, Shared};
 use crate::util;
 
-/// A message an extension sent to a tool whose state is the desktop
-/// app's; the app applies it on its next frame.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ToolSend {
-    /// The request (with § position markers) and its target origin.
-    Intruder {
-        request: String,
-        target: String,
-        https: bool,
-    },
-    Comparer(String),
-    Decoder(String),
-}
+pub use webprobe_support::ext::ToolSend;
 
 /// The Intruder payload generators of the enabled extensions, by name.
 pub fn payload_generators(shared: &Shared) -> Vec<String> {

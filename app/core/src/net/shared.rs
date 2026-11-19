@@ -34,7 +34,7 @@ pub struct Shared {
     pub browser_port: std::sync::atomic::AtomicU16,
     /// Browsers opened from WebProbe (main pid, profile dir), closed on exit.
     pub browsers: Mutex<Vec<(u32, String)>>,
-    pub issues: Mutex<Vec<crate::scan::ScanIssue>>,
+    pub issues: Mutex<Vec<webprobe_support::issues::ScanIssue>>,
     /// The primary listener's "Support HTTP/2" (ProjectDefaults.json
     /// request_listeners[].enable_http2, default on): ALPN offers h2 to
     /// HTTPS clients. Extra listeners have their own (`ListenerState`).
@@ -48,7 +48,7 @@ pub struct Shared {
     pub organizer: Mutex<crate::organizer::Organizer>,
     /// What extensions sent to tools whose state is the desktop app's
     /// (Intruder, Comparer, Decoder); the app takes them every frame.
-    pub tool_sends: Mutex<Vec<crate::ext_calls::ToolSend>>,
+    pub tool_sends: Mutex<Vec<webprobe_support::ext::ToolSend>>,
     pub scan_enabled: AtomicBool,
     /// The active scanner's run state (claim, stop, pause, progress).
     pub scan: Arc<crate::scan_run::ScanRun>,
@@ -394,10 +394,10 @@ impl Shared {
         host: &str,
         path: &str,
     ) {
-        let issues: Vec<crate::scan::ScanIssue> = exts
+        let issues: Vec<webprobe_support::issues::ScanIssue> = exts
             .iter()
             .flat_map(|e| e.take_issues())
-            .map(|i| crate::scan::ScanIssue {
+            .map(|i| webprobe_support::issues::ScanIssue {
                 id: 0,
                 sev: match i.severity.to_ascii_lowercase().as_str() {
                     s @ ("high" | "medium" | "low") => s.to_string(),
