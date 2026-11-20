@@ -703,11 +703,17 @@ impl RequestCheck for TlsCertificate {
             return;
         }
         let key = format!("https://{}:{}|tls-cert", cx.host, cx.port);
-        if !openapi_hosts().lock().unwrap().insert(key) || cx.stopped() {
+        if !openapi_hosts().lock().unwrap().insert(key.clone()) || cx.stopped() {
             return;
         }
         let roots = cx.shared.tls_roots.lock().unwrap().clone();
-        let Some(cap) = crate::tls_cert::capture(&cx.host, cx.port, &roots, std::time::Duration::from_secs(10)) else { return };
+        let Some(cap) = crate::tls_cert::capture(&cx.host, cx.port, &roots, std::time::Duration::from_secs(10)) else {
+            // Transient capture/handshake failure: release the dedupe key so a
+            // later pass can retry instead of suppressing this host's TLS check
+            // for the rest of the session.
+            openapi_hosts().lock().unwrap().remove(&key);
+            return;
+        };
         let flags = crate::tls_cert::analyze(&cap, &cx.host, std::time::SystemTime::now());
         if flags.is_empty() {
             return;
