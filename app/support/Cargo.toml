@@ -8,6 +8,7 @@ edition = "2021"
 # webprobe-core; anything engine-facing stays in core.
 [dependencies]
 tracing.workspace = true
+tracing-subscriber.workspace = true
 base64 = "0.22"
 flate2 = "1"
 memmap2 = "0.9"
@@ -42,5 +43,3 @@ time = "0.3"
 webpki-roots = "0.26"
 x509-parser = { version = "0.16", features = ["verify"] }
 
-[dev-dependencies]
-tracing-subscriber.workspace = true

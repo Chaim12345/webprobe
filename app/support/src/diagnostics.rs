@@ -34,6 +34,30 @@ pub fn emit(level: Level, code: &'static str, message: &'static str, fields: &[F
     }
 }
 
+/// Install the executable's stderr subscriber once. Libraries never install it
+/// implicitly. Ignore dependency targets, whose fields are not governed by this
+/// facade's traffic policy. Existing embedding subscribers are left untouched.
+pub fn init_stderr() {
+    use tracing_subscriber::prelude::*;
+    let debug =
+        std::env::var_os("WB_TRACE").is_some() || std::env::var_os("WB_INTERACTSH_DEBUG").is_some();
+    let subscriber = tracing_subscriber::registry().with(targets(debug)).with(
+        tracing_subscriber::fmt::layer()
+            .with_writer(std::io::stderr)
+            .with_ansi(false),
+    );
+    let _ = tracing::subscriber::set_global_default(subscriber);
+}
+
+fn targets(debug: bool) -> tracing_subscriber::filter::Targets {
+    let level = if debug {
+        tracing::Level::DEBUG
+    } else {
+        tracing::Level::INFO
+    };
+    tracing_subscriber::filter::Targets::new().with_target("webprobe", level)
+}
+
 /// Human-readable summary for the existing bounded UI event list.
 pub fn summary(code: &'static str, message: &'static str, fields: &[Field]) -> String {
     let mut out = format!("{code}: {message}");
@@ -98,6 +122,33 @@ mod subscriber_tests {
         }
         fn flush(&mut self) -> std::io::Result<()> {
             Ok(())
+        }
+    }
+
+    #[test]
+    fn opt_in_debug_flags_enable_safe_debug_events_only() {
+        use tracing_subscriber::prelude::*;
+        for debug in [false, true] {
+            let bytes = Arc::new(Mutex::new(Vec::new()));
+            let sink = Capture(bytes.clone());
+            let subscriber = tracing_subscriber::registry().with(targets(debug)).with(
+                tracing_subscriber::fmt::layer()
+                    .without_time()
+                    .with_ansi(false)
+                    .with_writer(move || sink.clone()),
+            );
+            tracing::subscriber::with_default(subscriber, || {
+                tracing::debug!(target: "webprobe", event_code = "net.upstream.slow",
+                    elapsed_ms = 2100_u64, failed = false, "Slow upstream exchange");
+                tracing::debug!(target: "webprobe", event_code = "oast.poll.received",
+                    status = 200_u16, response_bytes = 42_usize, "Collaborator poll received");
+                tracing::info!(target: "unreviewed_dependency", "secret-dependency-output");
+            });
+            let out = String::from_utf8(bytes.lock().unwrap().clone()).unwrap();
+            assert_eq!(out.contains("net.upstream.slow"), debug);
+            assert_eq!(out.contains("oast.poll.received"), debug);
+            assert!(!out.contains("secret-dependency-output"));
+            assert_eq!(out.lines().count(), if debug { 2 } else { 0 });
         }
     }
 

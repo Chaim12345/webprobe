@@ -958,11 +958,7 @@ static TERMINATE: std::sync::LazyLock<Arc<std::sync::atomic::AtomicBool>> =
     std::sync::LazyLock::new(Default::default);
 
 fn main() {
-    let _ = tracing_subscriber::fmt()
-        .with_writer(std::io::stderr)
-        .with_target(true)
-        .with_ansi(false)
-        .try_init();
+    webprobe_core::diagnostics::init_stderr();
     // Panic policy "contain and continue" (issue #32): worker panics are
     // contained per thread (catch_unwind at spawn boundaries, poison-tolerant
     // locks). This hook makes every panic loud - stderr plus a UI notice.

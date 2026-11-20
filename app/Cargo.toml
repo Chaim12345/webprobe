@@ -5,7 +5,6 @@ edition = "2021"
 
 [dependencies]
 tracing.workspace = true
-tracing-subscriber.workspace = true
 # SIGTERM / SIGINT close the window cleanly (project saved, no crash prompt).
 signal-hook.workspace = true
 webprobe-core = { path = "core" }
