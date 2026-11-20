@@ -430,6 +430,14 @@ pub fn handle_connect(shared: Arc<Shared>, mut stream: TcpStream, host: String, 
     {
         return;
     }
+    // A CONNECT tunnel is not always TLS: a ws:// or plain-HTTP client
+    // tunnelled to port 80 sends cleartext. A TLS handshake starts with
+    // record type 0x16; anything else is served as a plain request.
+    let mut first = [0u8; 1];
+    if matches!(stream.peek(&mut first), Ok(1)) && first[0] != 0x16 {
+        handle_plain_in_tunnel(shared, stream, port);
+        return;
+    }
     let conn = match rustls::ServerConnection::new(config) {
         Ok(conn) => conn,
         Err(e) => {
@@ -467,6 +475,26 @@ pub fn handle_connect(shared: Arc<Shared>, mut stream: TcpStream, host: String, 
     upstream_and_deliver(&shared, &mut tls, req, 443, true, req_state);
     tls.conn.send_close_notify();
     let _ = tls.flush();
+}
+
+/// Serve cleartext HTTP (including a WebSocket upgrade) that arrived inside
+/// a CONNECT tunnel, the same way a direct proxy request is served.
+fn handle_plain_in_tunnel(shared: Arc<Shared>, mut stream: TcpStream, port: u16) {
+    let req = match read_request(&mut stream) {
+        Ok(r) if !r.is_empty() => r,
+        _ => return,
+    };
+    let (req, req_state) = intercept_request(&shared, req, port);
+    let Some(req) = req else { return };
+    let parts = util::parse_http(&req);
+    let is_ws = util::get_header(&parts.headers, "Upgrade")
+        .map(|v| v.eq_ignore_ascii_case("websocket"))
+        .unwrap_or(false);
+    if is_ws {
+        handle_websocket(shared, stream, req);
+        return;
+    }
+    upstream_and_deliver(&shared, &mut stream, req, port, false, req_state);
 }
 
 /// An HTTPS client that negotiated h2: every stream runs the proxy's

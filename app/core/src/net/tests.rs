@@ -1733,3 +1733,47 @@ fn setup_host_is_served_locally_instead_of_upstream() {
     assert_eq!(shared.history.len(), 0);
     t.join().unwrap();
 }
+
+#[test]
+fn connect_tunnel_carrying_cleartext_websocket_upgrade_is_served() {
+    // A ws:// client tunnelled with CONNECT sends cleartext, not TLS.
+    let shared = Shared::new();
+    let origin = TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin_port = origin.local_addr().unwrap().port();
+    let server = std::thread::spawn(move || {
+        let (mut s, _) = origin.accept().unwrap();
+        s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+        let _ = read_request_head(&mut s);
+        s.write_all(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: x\r\n\r\n").unwrap();
+    });
+    let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+    let proxy_port = proxy.local_addr().unwrap().port();
+    let sh = shared.clone();
+    std::thread::spawn(move || {
+        let (s, _) = proxy.accept().unwrap();
+        handle_conn(sh, s);
+    });
+    let mut client = TcpStream::connect(("127.0.0.1", proxy_port)).unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    write!(
+        client,
+        "CONNECT 127.0.0.1:{origin_port} HTTP/1.1\r\nHost: 127.0.0.1:{origin_port}\r\n\r\n"
+    )
+    .unwrap();
+    let head = read_response_head(&mut client).unwrap();
+    assert!(String::from_utf8_lossy(&head).starts_with("HTTP/1.1 200"));
+    write!(
+        client,
+        "GET /ws HTTP/1.1\r\nHost: 127.0.0.1:{origin_port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
+    )
+    .unwrap();
+    let head = read_response_head(&mut client).expect("no reply to cleartext request in tunnel");
+    assert!(
+        String::from_utf8_lossy(&head).starts_with("HTTP/1.1 101"),
+        "got: {}",
+        String::from_utf8_lossy(&head)
+    );
+    server.join().unwrap();
+}
