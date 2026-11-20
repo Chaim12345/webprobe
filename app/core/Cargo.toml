@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+polling = "3"
 brotli = "7"
 flate2 = "1"
 hpack = "0.3"

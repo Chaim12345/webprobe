@@ -2102,6 +2102,8 @@ pub fn browser_listener(shared: &Arc<Shared>) -> Result<u16, String> {
     Ok(port)
 }
 
+mod accept_wait;
+
 pub fn start_proxy(shared: Arc<Shared>) {
     start_extra_listeners(shared.clone());
     std::thread::spawn(move || loop {
@@ -2118,6 +2120,10 @@ pub fn start_proxy(shared: Arc<Shared>) {
                 // project) takes effect at once; a blocking accept only saw
                 // the flag after the next client connected.
                 let _ = l.set_nonblocking(true);
+                let mut readiness = accept_wait::Readiness::new(&l).ok();
+                if readiness.is_none() {
+                    shared.log("Proxy readiness unavailable; using polling fallback");
+                }
                 loop {
                     if shared.listener_restart.load(Ordering::SeqCst) {
                         break;
@@ -2128,7 +2134,19 @@ pub fn start_proxy(shared: Arc<Shared>) {
                             let sh = shared.clone();
                             spawn_connection(sh, stream);
                         }
-                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => std::thread::sleep(Duration::from_millis(50)),
+                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                            if let Some(wait) = &mut readiness {
+                                if wait.wait(Duration::from_millis(50)).is_err() {
+                                    // Preserve service if the OS poller fails. Dropping
+                                    // unregisters the borrowed listener before reuse.
+                                    readiness = None;
+                                    shared.log("Proxy readiness failed; using polling fallback");
+                                    std::thread::sleep(Duration::from_millis(50));
+                                }
+                            } else {
+                                std::thread::sleep(Duration::from_millis(50));
+                            }
+                        },
                         Err(_) => continue,
                     }
                 }
