@@ -11,12 +11,12 @@ use crate::sync::Mutex;
 
 use eframe::egui::{self, RichText, Ui};
 
+use crate::App;
 use crate::intruder::{self, PayloadSource};
 use crate::intruder_run::{
     self as run, AttackSettings, ExtractEnd, ExtractItem, ExtractStart, ResultRow, RunState,
 };
 use crate::theme;
-use crate::App;
 
 /// (generator / processor calls into the sidecar): its result, and the
 /// flag Stop sets so it never starts.
@@ -240,7 +240,10 @@ pub fn extension_source_config(ui: &mut Ui, provider: &mut String, names: &[Stri
 pub fn source_config(ui: &mut Ui, src: &mut PayloadSource) {
     match src {
         PayloadSource::CustomIterator { lists, separators } => {
-            note(ui, "This payload type lets you configure multiple lists of items, and generate payloads using all permutations of items in the lists.");
+            note(
+                ui,
+                "This payload type lets you configure multiple lists of items, and generate payloads using all permutations of items in the lists.",
+            );
             lists.resize(8, Vec::new());
             separators.resize(8, String::new());
             let id = ui.scope_id().with("intr_ci_pos");
@@ -273,7 +276,10 @@ pub fn source_config(ui: &mut Ui, src: &mut PayloadSource) {
             rules,
             case_sensitive,
         } => {
-            note(ui, "This payload type lets you configure a list of strings and apply various character substitutions to each item.");
+            note(
+                ui,
+                "This payload type lets you configure a list of strings and apply various character substitutions to each item.",
+            );
             list_editor(ui, items, 5);
             heading(ui, "Character substitutions");
             rules.resize(16, (String::new(), String::new()));
@@ -307,7 +313,10 @@ pub fn source_config(ui: &mut Ui, src: &mut PayloadSource) {
             extract_index,
             stop_on_duplicate,
         } => {
-            note(ui, "This payload type lets you extract each payload from the response to the previous request in the attack. It is useful in some situations where you need to work recursively to extract useful data or deliver an exploit. Extract grep items can be defined in the Settings tab.");
+            note(
+                ui,
+                "This payload type lets you extract each payload from the response to the previous request in the attack. It is useful in some situations where you need to work recursively to extract useful data or deliver an exploit. Extract grep items can be defined in the Settings tab.",
+            );
             ui.label(
                 RichText::new("Select the \"extract grep\" item from which to derive payloads:")
                     .size(12.5)
@@ -324,7 +333,10 @@ pub fn source_config(ui: &mut Ui, src: &mut PayloadSource) {
             ui.checkbox(stop_on_duplicate, "Stop if duplicate payload found");
         }
         PayloadSource::BitFlipper { base, hex, mask } => {
-            note(ui, "This payload type operates on an input and modifies the value of each bit position in turn. It can sometimes be used to meaningfully modify the decrypted values of CBC-encrypted data, and potentially interfere with application logic.");
+            note(
+                ui,
+                "This payload type operates on an input and modifies the value of each bit position in turn. It can sometimes be used to meaningfully modify the decrypted values of CBC-encrypted data, and potentially interfere with application logic.",
+            );
             base_choice(ui, "Operate on:", base);
             format_choice(ui, hex);
             ui.label(
@@ -350,7 +362,10 @@ pub fn source_config(ui: &mut Ui, src: &mut PayloadSource) {
             items,
             max_per_item,
         } => {
-            note(ui, "This payload type lets you configure a list of names or email addresses, and derives potential usernames from these using various common schemes. You can enter items as \"firstname lastname\" or \"firstname.lastname@example.org\".");
+            note(
+                ui,
+                "This payload type lets you configure a list of names or email addresses, and derives potential usernames from these using various common schemes. You can enter items as \"firstname lastname\" or \"firstname.lastname@example.org\".",
+            );
             list_editor(ui, items, 5);
             row(ui, "Maximum payloads per item:", |ui| {
                 ui.add(egui::DragValue::new(max_per_item).range(1..=100_000));
@@ -362,7 +377,10 @@ pub fn source_config(ui: &mut Ui, src: &mut PayloadSource) {
             block_size,
             extra,
         } => {
-            note(ui, "This payload type can be used to shuffle blocks of ciphertext in ECB-encrypted data, so as to meaningfully modify the decrypted cleartext and potentially interfere with application logic. You can optionally supply a list of encrypted strings that use the same cipher and key, to provide additional blocks for shuffling into the original data.");
+            note(
+                ui,
+                "This payload type can be used to shuffle blocks of ciphertext in ECB-encrypted data, so as to meaningfully modify the decrypted cleartext and potentially interfere with application logic. You can optionally supply a list of encrypted strings that use the same cipher and key, to provide additional blocks for shuffling into the original data.",
+            );
             base_choice(ui, "Encrypted data to shuffle:", base);
             format_choice(ui, hex);
             row(ui, "Block size (usually 8 or 16):", |ui| {
@@ -376,7 +394,10 @@ pub fn source_config(ui: &mut Ui, src: &mut PayloadSource) {
             list_editor(ui, extra, 4);
         }
         PayloadSource::IllegalUnicode { .. } => {
-            note(ui, "This payload type can be used to generate illegal Unicode representations of characters. It is sometimes effective in bypassing filters designed to block certain characters. See the full help for details of each option.");
+            note(
+                ui,
+                "This payload type can be used to generate illegal Unicode representations of characters. It is sometimes effective in bypassing filters designed to block certain characters. See the full help for details of each option.",
+            );
             let encodings = src.illegal_encodings().len();
             let PayloadSource::IllegalUnicode {
                 items,
@@ -454,7 +475,10 @@ pub fn source_config(ui: &mut Ui, src: &mut PayloadSource) {
             });
         }
         PayloadSource::CopyOtherPayload { from_position } => {
-            note(ui, "This payload type copies the value of the current payload at another payload position. It can be used with attack types that have multiple payload sets.");
+            note(
+                ui,
+                "This payload type copies the value of the current payload at another payload position. It can be used with attack types that have multiple payload sets.",
+            );
             row(ui, "Copy from position:", |ui| {
                 ui.add(egui::DragValue::new(from_position).range(1..=64));
             });
@@ -1070,35 +1094,35 @@ pub fn results_window(app: &mut App, ctx: &egui::Context) {
         if pick.is_some() {
             app.intr_row_sel = pick;
         }
-        if let Some((i, code)) = action {
-            if let Some(r) = rows.get(i).cloned() {
-                let (host, port, https) = state.target.clone();
-                match code {
-                    0 => send_row_to_repeater(app, &r, &state.target),
-                    1 => {
-                        app.cmp_items
-                            .push(String::from_utf8_lossy(&r.request).into_owned());
-                        crate::feedback::toast(
-                            crate::feedback::Level::Success,
-                            "Request sent to Comparer",
-                        );
-                    }
-                    2 => {
-                        app.cmp_items.push(
-                            r.response
-                                .as_ref()
-                                .map(|b| String::from_utf8_lossy(b).into_owned())
-                                .unwrap_or_default(),
-                        );
-                        crate::feedback::toast(
-                            crate::feedback::Level::Success,
-                            "Response sent to Comparer",
-                        );
-                    }
-                    _ => ui
-                        .ctx()
-                        .copy_text(run::curl_command(&r.request, https, &host, port)),
+        if let Some((i, code)) = action
+            && let Some(r) = rows.get(i).cloned()
+        {
+            let (host, port, https) = state.target.clone();
+            match code {
+                0 => send_row_to_repeater(app, &r, &state.target),
+                1 => {
+                    app.cmp_items
+                        .push(String::from_utf8_lossy(&r.request).into_owned());
+                    crate::feedback::toast(
+                        crate::feedback::Level::Success,
+                        "Request sent to Comparer",
+                    );
                 }
+                2 => {
+                    app.cmp_items.push(
+                        r.response
+                            .as_ref()
+                            .map(|b| String::from_utf8_lossy(b).into_owned())
+                            .unwrap_or_default(),
+                    );
+                    crate::feedback::toast(
+                        crate::feedback::Level::Success,
+                        "Response sent to Comparer",
+                    );
+                }
+                _ => ui
+                    .ctx()
+                    .copy_text(run::curl_command(&r.request, https, &host, port)),
             }
         }
         let chosen = app

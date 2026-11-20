@@ -183,10 +183,10 @@ pub fn send_inner(
     } else {
         None
     };
-    if let Some(conn) = pooled.as_mut() {
-        if !conn.writable() {
-            pooled = None;
-        }
+    if let Some(conn) = pooled.as_mut()
+        && !conn.writable()
+    {
+        pooled = None;
     }
     let reused = pooled.is_some();
     let mut stream = match pooled {
@@ -320,10 +320,10 @@ pub fn send_tls_inner(
     } else {
         shared.tls_pool.lock().unwrap().remove(&key)
     };
-    if let Some(conn) = pooled.as_mut() {
-        if !conn.writable() {
-            pooled = None;
-        }
+    if let Some(conn) = pooled.as_mut()
+        && !conn.writable()
+    {
+        pooled = None;
     }
     let reused = pooled.is_some();
     let mut stream = match pooled {

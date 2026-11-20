@@ -3,7 +3,7 @@
 
 use super::*;
 
-pub use webprobe_support::issues::{ScanEvidence, ScanIssue, EVIDENCE_MAX_BYTES};
+pub use webprobe_support::issues::{EVIDENCE_MAX_BYTES, ScanEvidence, ScanIssue};
 
 /// Burp's numeric issue type for `name` (resources/KnowledgeBase/Issues
 /// `typeIndex`, the names in kb_issue_names.txt), or 0 when Burp has no such

@@ -9,9 +9,9 @@
 
 use eframe::egui::{self, RichText, Ui};
 
+use crate::App;
 use crate::theme;
 use crate::ui::SettingsPane;
-use crate::App;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
@@ -29,21 +29,111 @@ pub struct PageDef {
 }
 
 pub const PAGES: &[PageDef] = &[
-    PageDef { group: "Tools", label: "Proxy", pane: SettingsPane::Proxy, kind: Kind::Project, keywords: "listeners interception intercept websockets match replace tls pass through certificate ca" },
-    PageDef { group: "Tools", label: "Intruder", pane: SettingsPane::Intruder, kind: Kind::User, keywords: "resource pool concurrent requests delay retries grep match extract payloads attack" },
-    PageDef { group: "Tools", label: "Repeater", pane: SettingsPane::Repeater, kind: Kind::User, keywords: "content-length follow redirections cookies" },
-    PageDef { group: "Tools", label: "Sequencer", pane: SettingsPane::Sequencer, kind: Kind::Project, keywords: "token handling live capture abnormal length" },
-    PageDef { group: "Tools", label: "Comparer", pane: SettingsPane::Comparer, kind: Kind::User, keywords: "compare words bytes diff" },
-    PageDef { group: "Project", label: "Scope", pane: SettingsPane::Scope, kind: Kind::Project, keywords: "target scope include exclude url" },
-    PageDef { group: "Project", label: "Collaborator", pane: SettingsPane::Collaborator, kind: Kind::Project, keywords: "collaborator server polling dns http smtp interactsh out-of-band" },
-    PageDef { group: "Project", label: "Tasks", pane: SettingsPane::Tasks, kind: Kind::Project, keywords: "scan speed accuracy live passive audit crawl" },
-    PageDef { group: "Sessions", label: "Sessions", pane: SettingsPane::Sessions, kind: Kind::Project, keywords: "session handling rules cookie jar macros login" },
-    PageDef { group: "Network", label: "Connections", pane: SettingsPane::Network, kind: Kind::Project, keywords: "upstream proxy socks platform authentication timeouts hostname resolution" },
-    PageDef { group: "User interface", label: "Appearance", pane: SettingsPane::Appearance, kind: Kind::User, keywords: "display theme dark light font size density" },
-    PageDef { group: "User interface", label: "Hotkeys", pane: SettingsPane::Hotkeys, kind: Kind::User, keywords: "keyboard shortcuts keys" },
-    PageDef { group: "Suite", label: "Project file", pane: SettingsPane::Suite, kind: Kind::User, keywords: "save restore load automatic backup autosave temporary files startup shutdown" },
-    PageDef { group: "Extensions", label: "Extensions", pane: SettingsPane::Extensions, kind: Kind::User, keywords: "extensions bapp java montoya load" },
-    PageDef { group: "Configuration library", label: "Configuration library", pane: SettingsPane::ConfigurationLibrary, kind: Kind::User, keywords: "saved configurations import export" },
+    PageDef {
+        group: "Tools",
+        label: "Proxy",
+        pane: SettingsPane::Proxy,
+        kind: Kind::Project,
+        keywords: "listeners interception intercept websockets match replace tls pass through certificate ca",
+    },
+    PageDef {
+        group: "Tools",
+        label: "Intruder",
+        pane: SettingsPane::Intruder,
+        kind: Kind::User,
+        keywords: "resource pool concurrent requests delay retries grep match extract payloads attack",
+    },
+    PageDef {
+        group: "Tools",
+        label: "Repeater",
+        pane: SettingsPane::Repeater,
+        kind: Kind::User,
+        keywords: "content-length follow redirections cookies",
+    },
+    PageDef {
+        group: "Tools",
+        label: "Sequencer",
+        pane: SettingsPane::Sequencer,
+        kind: Kind::Project,
+        keywords: "token handling live capture abnormal length",
+    },
+    PageDef {
+        group: "Tools",
+        label: "Comparer",
+        pane: SettingsPane::Comparer,
+        kind: Kind::User,
+        keywords: "compare words bytes diff",
+    },
+    PageDef {
+        group: "Project",
+        label: "Scope",
+        pane: SettingsPane::Scope,
+        kind: Kind::Project,
+        keywords: "target scope include exclude url",
+    },
+    PageDef {
+        group: "Project",
+        label: "Collaborator",
+        pane: SettingsPane::Collaborator,
+        kind: Kind::Project,
+        keywords: "collaborator server polling dns http smtp interactsh out-of-band",
+    },
+    PageDef {
+        group: "Project",
+        label: "Tasks",
+        pane: SettingsPane::Tasks,
+        kind: Kind::Project,
+        keywords: "scan speed accuracy live passive audit crawl",
+    },
+    PageDef {
+        group: "Sessions",
+        label: "Sessions",
+        pane: SettingsPane::Sessions,
+        kind: Kind::Project,
+        keywords: "session handling rules cookie jar macros login",
+    },
+    PageDef {
+        group: "Network",
+        label: "Connections",
+        pane: SettingsPane::Network,
+        kind: Kind::Project,
+        keywords: "upstream proxy socks platform authentication timeouts hostname resolution",
+    },
+    PageDef {
+        group: "User interface",
+        label: "Appearance",
+        pane: SettingsPane::Appearance,
+        kind: Kind::User,
+        keywords: "display theme dark light font size density",
+    },
+    PageDef {
+        group: "User interface",
+        label: "Hotkeys",
+        pane: SettingsPane::Hotkeys,
+        kind: Kind::User,
+        keywords: "keyboard shortcuts keys",
+    },
+    PageDef {
+        group: "Suite",
+        label: "Project file",
+        pane: SettingsPane::Suite,
+        kind: Kind::User,
+        keywords: "save restore load automatic backup autosave temporary files startup shutdown",
+    },
+    PageDef {
+        group: "Extensions",
+        label: "Extensions",
+        pane: SettingsPane::Extensions,
+        kind: Kind::User,
+        keywords: "extensions bapp java montoya load",
+    },
+    PageDef {
+        group: "Configuration library",
+        label: "Configuration library",
+        pane: SettingsPane::ConfigurationLibrary,
+        kind: Kind::User,
+        keywords: "saved configurations import export",
+    },
 ];
 
 /// Pill selection: 0 = All, 1 = User, 2 = Project.
@@ -155,7 +245,10 @@ fn page(app: &mut App, ui: &mut Ui, pane: SettingsPane) {
         }
         SettingsPane::Comparer => {
             title(ui, "Comparer");
-            note(ui, "Comparer has no settings: choose Words, Bytes or Characters when you compare two items.");
+            note(
+                ui,
+                "Comparer has no settings: choose Words, Bytes or Characters when you compare two items.",
+            );
         }
         SettingsPane::Scope => {
             title(ui, "Target scope");
@@ -215,7 +308,10 @@ fn page(app: &mut App, ui: &mut Ui, pane: SettingsPane) {
         }
         SettingsPane::Suite => {
             title(ui, "Project file");
-            note(ui, "The project is saved automatically every minute and on exit. Save it elsewhere or restore a saved file here.");
+            note(
+                ui,
+                "The project is saved automatically every minute and on exit. Save it elsewhere or restore a saved file here.",
+            );
             ui.add_space(4.0);
             crate::tools::project_controls(app, ui);
         }
@@ -241,7 +337,7 @@ pub(crate) fn install(app: &mut App, data: &crate::project::ProjectData) -> Resu
 }
 
 fn manage_menu(app: &mut App, ui: &mut Ui) {
-    use crate::feedback::{toast, Level};
+    use crate::feedback::{Level, toast};
     let path_id = egui::Id::unique("settings_file_path");
     let mut path: String = ui
         .data_mut(|d| d.get_temp(path_id))
@@ -470,7 +566,7 @@ pub(crate) fn scan_config_editor(
 /// a library configuration).
 fn issues_reported_editor(ui: &mut Ui, config: &mut crate::scan_config::ScanConfig) {
     use webprobe_core::scan_library::{
-        IssueFilter, CAT_INTRUSIVE, CAT_JAVASCRIPT, CAT_LIGHT, CAT_MEDIUM, CAT_PASSIVE,
+        CAT_INTRUSIVE, CAT_JAVASCRIPT, CAT_LIGHT, CAT_MEDIUM, CAT_PASSIVE, IssueFilter,
     };
     const ALL: u8 = CAT_PASSIVE | CAT_LIGHT | CAT_MEDIUM | CAT_INTRUSIVE | CAT_JAVASCRIPT;
     ui.label(
@@ -583,10 +679,10 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
             let pages = visible_pages(&query, pill);
             // Keep the selected page while it is visible; otherwise show the
             // first match, so typing in the search box always lands on a page.
-            if !pages.iter().any(|p| p.pane == app.settings_help) {
-                if let Some(first) = pages.first() {
-                    app.settings_help = first.pane;
-                }
+            if !pages.iter().any(|p| p.pane == app.settings_help)
+                && let Some(first) = pages.first()
+            {
+                app.settings_help = first.pane;
             }
             ui.horizontal_top(|ui| {
                 ui.vertical(|ui| {

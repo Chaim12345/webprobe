@@ -121,11 +121,7 @@ pub fn sort_rows<R>(rows: &mut [R], state: &TableState, key: impl Fn(&R, usize) 
         let ka = key(a, state.sort_col);
         let kb = key(b, state.sort_col);
         let ord = ka.cmp(&kb);
-        if state.sort_asc {
-            ord
-        } else {
-            ord.reverse()
-        }
+        if state.sort_asc { ord } else { ord.reverse() }
     });
 }
 

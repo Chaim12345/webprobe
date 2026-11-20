@@ -16,15 +16,17 @@
 //! Only point it at hosts you are authorised to test.
 
 use std::io::BufRead;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use webprobe_core::{net, project, scan};
 use webprobe_report::report;
 
 fn usage() -> ! {
-    eprintln!("usage:\n  webprobe-headless proxy [--port N] [--project FILE] [--seconds N]\n  webprobe-headless scan URL... [--crawl] [--speed fast|normal|thorough] [--report FILE.html|FILE.xml]");
+    eprintln!(
+        "usage:\n  webprobe-headless proxy [--port N] [--project FILE] [--seconds N]\n  webprobe-headless scan URL... [--crawl] [--speed fast|normal|thorough] [--report FILE.html|FILE.xml]"
+    );
     std::process::exit(2)
 }
 

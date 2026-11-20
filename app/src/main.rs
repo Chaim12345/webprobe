@@ -62,8 +62,8 @@ use webprobe_core::upstream;
 use webprobe_core::util;
 
 use std::path::PathBuf;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use crate::sync::Mutex;
 
@@ -507,12 +507,12 @@ fn response_mime(entry: &net::HistEntry) -> String {
         let head_end = util::find_head_end(resp).unwrap_or(resp.len());
         let head = String::from_utf8_lossy(&resp[..head_end]);
         for line in head.split("\r\n").flat_map(|l| l.split('\n')) {
-            if let Some((name, value)) = line.split_once(':') {
-                if name.trim().eq_ignore_ascii_case("content-type") {
-                    let essence = value.split(';').next().unwrap_or("").trim().to_lowercase();
-                    if !essence.is_empty() {
-                        return essence;
-                    }
+            if let Some((name, value)) = line.split_once(':')
+                && name.trim().eq_ignore_ascii_case("content-type")
+            {
+                let essence = value.split(';').next().unwrap_or("").trim().to_lowercase();
+                if !essence.is_empty() {
+                    return essence;
                 }
             }
         }
@@ -631,7 +631,9 @@ impl eframe::App for App {
                         let auth = rest.split('/').next().unwrap_or_default();
                         let path_rest = &url["http://".len() + auth.len()..];
                         let path = if path_rest.is_empty() { "/" } else { path_rest };
-                        let req = format!("GET {path} HTTP/1.1\r\nHost: {auth}\r\nUser-Agent: WebProbe/1.0\r\nConnection: close\r\n\r\n");
+                        let req = format!(
+                            "GET {path} HTTP/1.1\r\nHost: {auth}\r\nUser-Agent: WebProbe/1.0\r\nConnection: close\r\n\r\n"
+                        );
                         let out = crate::send_internal_probe(port, req.as_bytes());
                         sh.log(&format!(
                             "Selftest probe got {} byte(s) via proxy :{port}",
@@ -763,12 +765,9 @@ fn schedule_grab(
                 }
             }
 
-            if let Ok(png) =
-                std::panic::catch_unwind(|| util::encode_png(w as u32, h as u32, &flipped))
-            {
-                std::fs::write(&path, png).is_ok()
-            } else {
-                false
+            match std::panic::catch_unwind(|| util::encode_png(w as u32, h as u32, &flipped)) {
+                Ok(png) => std::fs::write(&path, png).is_ok(),
+                _ => false,
             }
         };
         *done.lock().unwrap() = ok;
@@ -1029,6 +1028,10 @@ static TERMINATE: std::sync::LazyLock<Arc<std::sync::atomic::AtomicBool>> =
     std::sync::LazyLock::new(Default::default);
 
 fn main() {
+    // SAFETY: first operation in main, before hooks, signals, workers or native
+    // window/GL libraries can access the process environment concurrently.
+    unsafe { gl_env::apply() };
+
     // Panic policy "contain and continue" (issue #32): worker panics are
     // contained per thread (catch_unwind at spawn boundaries, poison-tolerant
     // locks). This hook makes every panic loud - stderr plus a UI notice.
@@ -1050,8 +1053,6 @@ fn main() {
     for sig in [signal_hook::consts::SIGTERM, signal_hook::consts::SIGINT] {
         let _ = signal_hook::flag::register(sig, Arc::clone(&TERMINATE));
     }
-    // Must run before any thread or window exists (see gl_env for why).
-    gl_env::apply();
 
     let mut screenshot: Option<PathBuf> = None;
     let args: Vec<String> = std::env::args().collect();

@@ -116,9 +116,10 @@ mod tests {
             "unknown field"
         );
         s.note_password_field("h", "/login", "pw");
-        assert!(s
-            .submit("h", "/login", &[("pw".into(), "short".into())], b"r")
-            .is_empty());
+        assert!(
+            s.submit("h", "/login", &[("pw".into(), "short".into())], b"r")
+                .is_empty()
+        );
         let got = s.submit(
             "h",
             "/login",

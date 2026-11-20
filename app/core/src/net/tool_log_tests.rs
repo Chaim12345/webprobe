@@ -57,8 +57,9 @@ fn tool_requests_are_logged_under_the_tool_name_and_untagged_ones_are_not() {
     assert_eq!(e.req_len, request.len());
     assert!(e.resp_len > 0);
     assert_eq!(&e.request[..], &request[..]);
-    assert!(e
-        .response
-        .as_deref()
-        .is_some_and(|r| r.starts_with(b"HTTP/1.1 404")));
+    assert!(
+        e.response
+            .as_deref()
+            .is_some_and(|r| r.starts_with(b"HTTP/1.1 404"))
+    );
 }

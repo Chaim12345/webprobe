@@ -301,11 +301,7 @@ fn prime_count(speed: ScanSpeed, resp: &[u8]) -> usize {
         ScanSpeed::Normal => 3,
         ScanSpeed::Thorough => 5,
     };
-    if shows_cache(resp) {
-        n * 2 - 1
-    } else {
-        n - 1
-    }
+    if shows_cache(resp) { n * 2 - 1 } else { n - 1 }
 }
 
 /// Web cache poisoning through override headers, burp.Zp22 -> Zg0y.ZN
@@ -342,7 +338,11 @@ impl WebCachePoisoning {
         let tail = if probe.reflected {
             "A value from these headers was reflected in the response, showing that a header was processed.".to_string()
         } else {
-            format!("This changed the status code from {} to {}, suggesting that the header was processed.", base_status, status_body(&probe.resp).0)
+            format!(
+                "This changed the status code from {} to {}, suggesting that the header was processed.",
+                base_status,
+                status_body(&probe.resp).0
+            )
         };
         let detail = format!(
             "The application appears to support the use of a custom HTTP header to override the {}.<br><br>Burp added the following headers to the request:<br><br>{}<br><br>{tail}",
@@ -637,13 +637,15 @@ mod tests {
                 .is_none()
         );
         let already_cached = resp("private account", true);
-        assert!(deception_attempt(
-            base,
-            &already_cached,
-            "GET",
-            "/account/abcdef.css",
-            &mut dynamic
-        )
-        .is_none());
+        assert!(
+            deception_attempt(
+                base,
+                &already_cached,
+                "GET",
+                "/account/abcdef.css",
+                &mut dynamic
+            )
+            .is_none()
+        );
     }
 }

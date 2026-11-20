@@ -78,7 +78,9 @@ pub enum ProjectError {
         label: String,
         version_text: String,
     },
-    #[error("project version {version} in {label} is newer than this build supports ({supported}); upgrade WebProbe to open it")]
+    #[error(
+        "project version {version} in {label} is newer than this build supports ({supported}); upgrade WebProbe to open it"
+    )]
     NewerThanSupported {
         version: u32,
         label: String,

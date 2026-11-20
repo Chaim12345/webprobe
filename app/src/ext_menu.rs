@@ -106,8 +106,8 @@ fn items(ui: &egui::Ui, shared: &Shared, ctx: &MenuContext) -> Option<Found> {
         });
     }
     CACHE.with(|c| *c.borrow_mut() = Some((k, Arc::clone(&slot))));
-    let ready = slot.lock().unwrap().clone();
-    ready
+
+    slot.lock().unwrap().clone()
 }
 
 /// Draw "Extensions > <extension> > items". A chosen item runs on a worker

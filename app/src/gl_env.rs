@@ -57,15 +57,20 @@ pub fn plan(has_render_node: bool, env: impl Fn(&str) -> Option<String>) -> Plan
     plan
 }
 
-/// Apply the plan to this process. Call first thing in `main`, before any thread
-/// exists: editing the environment is not thread safe.
-pub fn apply() {
+/// Apply the plan to this process.
+///
+/// # Safety
+/// Call only during single-threaded startup, before any other code can read or
+/// write the process environment (including through native libraries).
+pub unsafe fn apply() {
     let plan = plan(has_render_node(), |name| std::env::var(name).ok());
     for name in &plan.unset {
-        std::env::remove_var(name);
+        // SAFETY: the caller guarantees single-threaded startup.
+        unsafe { std::env::remove_var(name) };
     }
     for (name, value) in &plan.set {
-        std::env::set_var(name, value);
+        // SAFETY: the caller guarantees single-threaded startup.
+        unsafe { std::env::set_var(name, value) };
     }
     if !plan.unset.is_empty() || !plan.set.is_empty() {
         eprintln!(
@@ -107,7 +112,10 @@ pub fn reexec_with_software_gl() {
     let Ok(exe) = std::env::current_exe() else {
         return;
     };
-    eprintln!("webprobe: the window could not be created on hardware GL; restarting once with software GL (set {:?})", plan.set);
+    eprintln!(
+        "webprobe: the window could not be created on hardware GL; restarting once with software GL (set {:?})",
+        plan.set
+    );
     let mut cmd = std::process::Command::new(exe);
     cmd.args(std::env::args_os().skip(1));
     for name in &plan.unset {
@@ -144,7 +152,7 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
 
-    fn env(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
+    fn env(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> + use<> {
         let map: HashMap<String, String> = pairs
             .iter()
             .map(|(k, v)| (k.to_string(), v.to_string()))

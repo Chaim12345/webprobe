@@ -295,10 +295,10 @@ impl ProcessExtension {
                 let line = match rx.recv_timeout(left) {
                     Ok(l) => l,
                     Err(RecvTimeoutError::Timeout) => {
-                        return Err(format!("no reply within {} ms", timeout.as_millis()))
+                        return Err(format!("no reply within {} ms", timeout.as_millis()));
                     }
                     Err(RecvTimeoutError::Disconnected) => {
-                        return Err("extension exited".to_string())
+                        return Err("extension exited".to_string());
                     }
                 };
                 if line.trim().is_empty() {

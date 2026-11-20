@@ -20,10 +20,10 @@ pub(crate) enum GqlStyle {
 pub(crate) fn graphql_query(req: &[u8]) -> Option<(String, GqlStyle)> {
     let p = util::parse_http(req);
     let body = &req[p.head_len.min(req.len())..];
-    if let Ok(serde_json::Value::Object(m)) = serde_json::from_slice::<serde_json::Value>(body) {
-        if let Some(q) = m.get("query").and_then(|q| q.as_str()) {
-            return Some((q.to_string(), GqlStyle::Json));
-        }
+    if let Ok(serde_json::Value::Object(m)) = serde_json::from_slice::<serde_json::Value>(body)
+        && let Some(q) = m.get("query").and_then(|q| q.as_str())
+    {
+        return Some((q.to_string(), GqlStyle::Json));
     }
     let param = |text: &str| {
         text.split('&').find_map(|kv| {
@@ -842,18 +842,20 @@ impl PointCheck for LinkManipulation {
             rec.send(cx, payload, new_req.as_bytes())
         };
         if let Some(hit) = run_link_manip_check(&ip.value, send) {
-            cx.report(vec![mk_point(
-                "Link manipulation (reflected)",
-                "info",
-                "Firm",
-                &cx.entry,
-                ip,
-                format!(
-                    "Injected URL {:?} became a link/redirect target: {:?}.",
-                    hit.payload, hit.target
-                ),
-            )
-            .with_evidence(evidence([rec.last(&hit.payload)]))]);
+            cx.report(vec![
+                mk_point(
+                    "Link manipulation (reflected)",
+                    "info",
+                    "Firm",
+                    &cx.entry,
+                    ip,
+                    format!(
+                        "Injected URL {:?} became a link/redirect target: {:?}.",
+                        hit.payload, hit.target
+                    ),
+                )
+                .with_evidence(evidence([rec.last(&hit.payload)])),
+            ]);
         }
         cx.progress();
     }
@@ -977,20 +979,22 @@ impl PointCheck for SsiInjection {
             Some(String::from_utf8_lossy(&resp[rp.head_len.min(resp.len())..]).into_owned())
         };
         if let Some(hit) = run_ssi_check(&ip.value, send) {
-            cx.report(vec![mk_point(
-                "SSI injection",
-                "high",
-                "Firm",
-                &cx.entry,
-                ip,
-                format!(
-                    "SSI directives {:?} were processed by the server.",
-                    hit.payload
-                ),
-            )
-            .with_evidence(evidence([
-                rec.last(&format!("{}{}", ip.value, hit.payload))
-            ]))]);
+            cx.report(vec![
+                mk_point(
+                    "SSI injection",
+                    "high",
+                    "Firm",
+                    &cx.entry,
+                    ip,
+                    format!(
+                        "SSI directives {:?} were processed by the server.",
+                        hit.payload
+                    ),
+                )
+                .with_evidence(evidence([
+                    rec.last(&format!("{}{}", ip.value, hit.payload))
+                ])),
+            ]);
         }
         cx.progress();
     }
@@ -1044,20 +1048,22 @@ impl PointCheck for TemplateInjection {
             Some(String::from_utf8_lossy(&resp[rp.head_len.min(resp.len())..]).into_owned())
         };
         if let Some(hit) = run_ssti_check(&ip.value, send) {
-            cx.report(vec![mk_point(
-                "Server-side template injection",
-                "high",
-                "Tentative",
-                &cx.entry,
-                ip,
-                format!(
-                    "Template expression {:?} ({}) was evaluated by the server.",
-                    hit.payload, hit.engine
-                ),
-            )
-            .with_evidence(evidence([
-                rec.last(&format!("{}{}", ip.value, hit.payload))
-            ]))]);
+            cx.report(vec![
+                mk_point(
+                    "Server-side template injection",
+                    "high",
+                    "Tentative",
+                    &cx.entry,
+                    ip,
+                    format!(
+                        "Template expression {:?} ({}) was evaluated by the server.",
+                        hit.payload, hit.engine
+                    ),
+                )
+                .with_evidence(evidence([
+                    rec.last(&format!("{}{}", ip.value, hit.payload))
+                ])),
+            ]);
         }
         cx.progress();
     }
@@ -1109,18 +1115,20 @@ impl PointCheck for ReflectedXss {
             rec.send(cx, payload, new_req.as_bytes())
         };
         if let Some(hit) = crate::xss::run_xss_check(&ip.value, send) {
-            cx.report(vec![mk_point(
-                "Cross-site scripting (reflected)",
-                reflected_xss_severity(&ip.kind),
-                "Certain",
-                &cx.entry,
-                ip,
-                format!(
-                    "Payload {:?} broke out of reflection context {} and executed.",
-                    hit.payload, hit.context
-                ),
-            )
-            .with_evidence(evidence([rec.last(&hit.payload)]))]);
+            cx.report(vec![
+                mk_point(
+                    "Cross-site scripting (reflected)",
+                    reflected_xss_severity(&ip.kind),
+                    "Certain",
+                    &cx.entry,
+                    ip,
+                    format!(
+                        "Payload {:?} broke out of reflection context {} and executed.",
+                        hit.payload, hit.context
+                    ),
+                )
+                .with_evidence(evidence([rec.last(&hit.payload)])),
+            ]);
         }
         cx.progress();
     }
@@ -1355,11 +1363,12 @@ impl PointCheck for PhpCodeInjection {
             send,
             follow,
         );
-        if hit.is_none() {
-            if let Some((id, host)) = &collab {
-                // Raised when the id sees a DNS lookup (burp.Zxvv.ZR).
-                let filename = active_checks::php_upload_filename(orig, &token);
-                let issue = mk_point(
+        if hit.is_none()
+            && let Some((id, host)) = &collab
+        {
+            // Raised when the id sees a DNS lookup (burp.Zxvv.ZR).
+            let filename = active_checks::php_upload_filename(orig, &token);
+            let issue = mk_point(
                     "PHP code injection",
                     "high",
                     "Certain",
@@ -1370,8 +1379,7 @@ impl PointCheck for PhpCodeInjection {
                     ),
                 )
                 .with_evidence(rec.since_last(&filename).into_iter().take(1).collect());
-                cx.shared.oob.register(id.clone(), Some("DNS"), issue);
-            }
+            cx.shared.oob.register(id.clone(), Some("DNS"), issue);
         }
         if let Some(hit) = hit {
             let mut ev = rec.since_last(&hit.filename);
@@ -1530,18 +1538,20 @@ impl PointCheck for HeaderInjection {
             rec.send(cx, payload, new_req.as_bytes())
         };
         if let Some(hit) = run_header_injection_check(&ip.value, send) {
-            cx.report(vec![mk_point(
-                "HTTP response header injection",
-                "high",
-                "Certain",
-                &cx.entry,
-                ip,
-                format!(
-                    "Payload {:?} produced the response header line {:?}.",
-                    hit.payload, hit.injected_line
-                ),
-            )
-            .with_evidence(evidence([rec.last(&hit.payload)]))]);
+            cx.report(vec![
+                mk_point(
+                    "HTTP response header injection",
+                    "high",
+                    "Certain",
+                    &cx.entry,
+                    ip,
+                    format!(
+                        "Payload {:?} produced the response header line {:?}.",
+                        hit.payload, hit.injected_line
+                    ),
+                )
+                .with_evidence(evidence([rec.last(&hit.payload)])),
+            ]);
         }
         cx.progress();
     }
@@ -1593,18 +1603,20 @@ impl PointCheck for OpenRedirect {
             rec.send(cx, payload, new_req.as_bytes())
         };
         if let Some(hit) = run_open_redirect_check(&ip.value, cx.settings.speed, send) {
-            cx.report(vec![mk_point(
-                "Open redirection (reflected)",
-                "low",
-                "Certain",
-                &cx.entry,
-                ip,
-                format!(
-                    "Payload {:?} made the response redirect to {:?}.",
-                    hit.payload, hit.target
-                ),
-            )
-            .with_evidence(evidence([rec.last(&hit.payload)]))]);
+            cx.report(vec![
+                mk_point(
+                    "Open redirection (reflected)",
+                    "low",
+                    "Certain",
+                    &cx.entry,
+                    ip,
+                    format!(
+                        "Payload {:?} made the response redirect to {:?}.",
+                        hit.payload, hit.target
+                    ),
+                )
+                .with_evidence(evidence([rec.last(&hit.payload)])),
+            ]);
         }
         cx.progress();
     }
@@ -1668,7 +1680,11 @@ impl PointCheck for SqlErrorInjection {
                 ip.describe_short(false),
                 if general { "general" } else { "database" },
                 // Only a confirmed hit saw the balanced probe come back clean.
-                if hit.confirmed { " Two single quotes were then submitted and the error message disappeared." } else { "" }
+                if hit.confirmed {
+                    " Two single quotes were then submitted and the error message disappeared."
+                } else {
+                    ""
+                }
             );
             let mut i = mk("high", "SQL injection", &cx.entry, text);
             i.confidence = if general {
@@ -2111,13 +2127,19 @@ impl PointCheck for StoredEcho {
                         // "Cross-site scripting (stored)" check).
                         "xss" | "dom" => (
                             "high",
-                            format!("Active probe: stored DOM-based cross-site scripting via parameter {pname}"),
-                            format!("Canary {marker} injected earlier is now reflected into script data or an attribute value of the original URL's response."),
+                            format!(
+                                "Active probe: stored DOM-based cross-site scripting via parameter {pname}"
+                            ),
+                            format!(
+                                "Canary {marker} injected earlier is now reflected into script data or an attribute value of the original URL's response."
+                            ),
                         ),
                         _ => (
                             "medium",
                             format!("Active probe: value of parameter {pname} appears stored"),
-                            format!("Marker {marker} injected earlier shows up in a later response to the original URL (STORED_INPUT)."),
+                            format!(
+                                "Marker {marker} injected earlier shows up in a later response to the original URL (STORED_INPUT)."
+                            ),
                         ),
                     };
                     issues.push(mk(sev, &title, &cx.entry, detail).with_evidence(vec![ev.clone()]));

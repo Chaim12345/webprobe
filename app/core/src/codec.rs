@@ -22,7 +22,7 @@ pub enum BodyKind {
     None,
 }
 
-fn header_values<'a>(head: &'a str, name: &str) -> impl Iterator<Item = &'a str> {
+fn header_values<'a>(head: &'a str, name: &str) -> impl Iterator<Item = &'a str> + use<'a> {
     let lower = name.to_ascii_lowercase();
     head.lines().filter_map(move |line| {
         let (k, v) = line.split_once(':')?;
@@ -366,7 +366,7 @@ pub(crate) fn read_message<R: std::io::Read + webprobe_support::io_traits::Respo
             loop {
                 match scan_chunked(&buffer[body_start..], &mut cur, |_| {}) {
                     Chunked::Complete(consumed) => {
-                        return Ok((buffer.drain(..body_start + consumed).collect(), true))
+                        return Ok((buffer.drain(..body_start + consumed).collect(), true));
                     }
                     Chunked::Malformed => return Ok((std::mem::take(buffer), false)),
                     Chunked::Partial => {}

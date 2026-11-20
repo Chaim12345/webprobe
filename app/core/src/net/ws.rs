@@ -577,16 +577,16 @@ pub fn ws_message(
     }
     // WebSocket match and replace (Proxy settings), before interception as
     // for HTTP messages.
-    if !shared.ws_rules_in_scope_only.load(Ordering::SeqCst) || ws_in_scope(shared, host) {
-        if let Some(new) = crate::ws_rules::apply(
+    if (!shared.ws_rules_in_scope_only.load(Ordering::SeqCst) || ws_in_scope(shared, host))
+        && let Some(new) = crate::ws_rules::apply(
             &shared.ws_rules.lock().unwrap(),
             client_to_server,
             binary,
             &payload,
-        ) {
-            payload = new;
-            changed = true;
-        }
+        )
+    {
+        payload = new;
+        changed = true;
     }
     if hold {
         let id = shared.next_id.fetch_add(1, Ordering::SeqCst);
@@ -803,7 +803,7 @@ pub fn write_nonblocking<W: Write>(stream: &mut W, mut bytes: &[u8]) -> std::io:
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::WriteZero,
                     "socket write returned zero",
-                ))
+                ));
             }
             Ok(n) => bytes = &bytes[n..],
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {

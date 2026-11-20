@@ -12,7 +12,7 @@
 use crate::sync::Mutex;
 use std::io::Read;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{mpsc, Arc};
+use std::sync::{Arc, mpsc};
 
 use crate::net::{self, Shared};
 

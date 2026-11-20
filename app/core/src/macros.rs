@@ -44,14 +44,14 @@ pub fn parse(text: &str) -> Vec<Step> {
     let mut plain = String::new();
     for line in text.replace("\r\n", "\n").split('\n') {
         if let Some(rest) = line.strip_prefix(STEP_MARK) {
-            if let Some((https, derive, body)) = current.take() {
-                if !body.trim().is_empty() {
-                    steps.push(Step {
-                        request: normalise(&body),
-                        https,
-                        derive,
-                    });
-                }
+            if let Some((https, derive, body)) = current.take()
+                && !body.trim().is_empty()
+            {
+                steps.push(Step {
+                    request: normalise(&body),
+                    https,
+                    derive,
+                });
             }
             let mut https = false;
             let mut derive = Vec::new();
@@ -76,14 +76,14 @@ pub fn parse(text: &str) -> Vec<Step> {
             plain.push('\n');
         }
     }
-    if let Some((https, derive, body)) = current {
-        if !body.trim().is_empty() {
-            steps.push(Step {
-                request: normalise(&body),
-                https,
-                derive,
-            });
-        }
+    if let Some((https, derive, body)) = current
+        && !body.trim().is_empty()
+    {
+        steps.push(Step {
+            request: normalise(&body),
+            https,
+            derive,
+        });
     }
     if steps.is_empty() && !plain.trim().is_empty() {
         steps.push(Step {
@@ -124,12 +124,11 @@ pub fn step_text(request: &[u8], https: bool, derive: &[String]) -> String {
 pub fn extract_value(response: &[u8], name: &str) -> Option<String> {
     let parts = crate::util::parse_http(response);
     for (k, v) in &parts.headers {
-        if k.eq_ignore_ascii_case("Set-Cookie") {
-            if let Some((n, val)) = v.split(';').next().and_then(|nv| nv.split_once('=')) {
-                if n.trim() == name {
-                    return Some(val.trim().to_string());
-                }
-            }
+        if k.eq_ignore_ascii_case("Set-Cookie")
+            && let Some((n, val)) = v.split(';').next().and_then(|nv| nv.split_once('='))
+            && n.trim() == name
+        {
+            return Some(val.trim().to_string());
         }
     }
     let body =
@@ -195,12 +194,10 @@ pub fn substitute_param(request: &[u8], name: &str, value: &str) -> Vec<u8> {
         let mut words = line.splitn(3, ' ');
         if let (Some(method), Some(target), Some(version)) =
             (words.next(), words.next(), words.next())
+            && let Some((path, query)) = target.split_once('?')
+            && let Some(q) = replace_pair(query, name, value)
         {
-            if let Some((path, query)) = target.split_once('?') {
-                if let Some(q) = replace_pair(query, name, value) {
-                    head_out = format!("{method} {path}?{q} {version}{}", &head[line_end..]);
-                }
-            }
+            head_out = format!("{method} {path}?{q} {version}{}", &head[line_end..]);
         }
     }
     let ct = crate::util::get_header(&parts.headers, "Content-Type")
@@ -216,10 +213,11 @@ pub fn substitute_param(request: &[u8], name: &str, value: &str) -> Vec<u8> {
                 .replace(&body, |c: &regex::Captures| format!("{}{}", &c[1], quoted))
                 .into_owned();
         }
-    } else if !body.is_empty() && !ct.contains("multipart") {
-        if let Some(b) = replace_pair(&body, name, value) {
-            body = b;
-        }
+    } else if !body.is_empty()
+        && !ct.contains("multipart")
+        && let Some(b) = replace_pair(&body, name, value)
+    {
+        body = b;
     }
     let mut out = head_out.into_bytes();
     out.extend_from_slice(body.as_bytes());
@@ -263,7 +261,9 @@ mod tests {
         );
         assert!(!single[0].https && single[0].derive.is_empty());
 
-        let multi = parse("### \nGET /form HTTP/1.1\nHost: app.test\n\n### https derive=csrf,token\nPOST /login HTTP/1.1\nHost: app.test\nContent-Length: 13\n\nuser=a&csrf=x\n");
+        let multi = parse(
+            "### \nGET /form HTTP/1.1\nHost: app.test\n\n### https derive=csrf,token\nPOST /login HTTP/1.1\nHost: app.test\nContent-Length: 13\n\nuser=a&csrf=x\n",
+        );
         assert_eq!(multi.len(), 2);
         assert_eq!(
             text(&multi[0].request),
@@ -325,7 +325,10 @@ mod tests {
             "GET /p?a=1&csrf=n%20w&z=3 HTTP/1.1\r\nHost: h\r\n\r\n"
         );
         let form = substitute_param(b"POST /p HTTP/1.1\r\nHost: h\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 13\r\n\r\nuser=a&csrf=x", "csrf", "long-token");
-        assert_eq!(text(&form), "POST /p HTTP/1.1\r\nHost: h\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 22\r\n\r\nuser=a&csrf=long-token");
+        assert_eq!(
+            text(&form),
+            "POST /p HTTP/1.1\r\nHost: h\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 22\r\n\r\nuser=a&csrf=long-token"
+        );
         let json = substitute_param(b"POST /p HTTP/1.1\r\nHost: h\r\nContent-Type: application/json\r\nContent-Length: 24\r\n\r\n{\"token\": \"x\", \"n\": 1}", "token", "a\"b");
         assert!(
             text(&json).ends_with("{\"token\": \"a\\\"b\", \"n\": 1}"),

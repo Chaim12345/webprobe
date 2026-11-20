@@ -21,10 +21,10 @@
 
 use eframe::egui::{self, RichText, Ui};
 
+use crate::App;
 use crate::feedback;
 use crate::net;
 use crate::theme::{self, c};
-use crate::App;
 
 #[cfg(test)]
 use webprobe_core::setup_page::{local_response, setup_page};
@@ -238,7 +238,9 @@ pub fn sample_traffic(shared: &std::sync::Arc<net::Shared>) {
 /// upstream so they never depend on, or send traffic to, the internet).
 pub fn sample_traffic_to(shared: &std::sync::Arc<net::Shared>, host: &str) {
     let port = shared.proxy_port.load(std::sync::atomic::Ordering::SeqCst);
-    let request = format!("GET http://{host}/ HTTP/1.1\r\nHost: {host}\r\nUser-Agent: WebProbe/1.0\r\nAccept: */*\r\nConnection: close\r\n\r\n");
+    let request = format!(
+        "GET http://{host}/ HTTP/1.1\r\nHost: {host}\r\nUser-Agent: WebProbe/1.0\r\nAccept: */*\r\nConnection: close\r\n\r\n"
+    );
     let shared = shared.clone();
     webprobe_core::util::spawn_contained("onboarding", move || {
         let out = crate::send_internal_probe(port, request.as_bytes());

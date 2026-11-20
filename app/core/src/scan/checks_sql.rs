@@ -311,7 +311,7 @@ pub fn run_sql_boolean_check<F: FnMut(&str) -> Option<Vec<u8>>>(
     let sent = std::cell::RefCell::new(&mut send);
     for q in quotes {
         for shape in &shapes {
-            let gen = std::cell::RefCell::new(SqlBoolGen::new(*shape, q));
+            let generation = std::cell::RefCell::new(SqlBoolGen::new(*shape, q));
             let (fp, fnn) = (
                 std::cell::RefCell::new(None::<String>),
                 std::cell::RefCell::new(None::<String>),
@@ -320,12 +320,12 @@ pub fn run_sql_boolean_check<F: FnMut(&str) -> Option<Vec<u8>>>(
                 Some(baseline),
                 accuracy,
                 || {
-                    let p = format!("{value}{}", gen.borrow_mut().positive());
+                    let p = format!("{value}{}", generation.borrow_mut().positive());
                     fp.borrow_mut().get_or_insert_with(|| p.clone());
                     (sent.borrow_mut())(&p)
                 },
                 || {
-                    let p = format!("{value}{}", gen.borrow_mut().negative());
+                    let p = format!("{value}{}", generation.borrow_mut().negative());
                     fnn.borrow_mut().get_or_insert_with(|| p.clone());
                     (sent.borrow_mut())(&p)
                 },

@@ -227,10 +227,10 @@ fn proxy_decodes_chunked_gzip_response_for_history() {
         .set_read_timeout(Some(Duration::from_secs(5)))
         .unwrap();
     write!(
-            client,
-            "GET http://127.0.0.1:{upstream_port}/x HTTP/1.1\r\nHost: 127.0.0.1:{upstream_port}\r\n\r\n"
-        )
-        .unwrap();
+        client,
+        "GET http://127.0.0.1:{upstream_port}/x HTTP/1.1\r\nHost: 127.0.0.1:{upstream_port}\r\n\r\n"
+    )
+    .unwrap();
     let mut wire = Vec::new();
     client.read_to_end(&mut wire).unwrap();
     t.join().unwrap();
@@ -298,12 +298,13 @@ fn keep_alive_pool_reuses_upstream_socket() {
     eprintln!("one error: {:?}", one.error);
     eprintln!("two error: {:?}", two.error);
     t.join().unwrap();
-    assert!(one
-        .resp
-        .as_deref()
-        .map(|r| r.to_vec())
-        .unwrap_or_default()
-        .ends_with(b"ok0"));
+    assert!(
+        one.resp
+            .as_deref()
+            .map(|r| r.to_vec())
+            .unwrap_or_default()
+            .ends_with(b"ok0")
+    );
     assert!(two.resp.as_ref().unwrap().ends_with(b"ok1"));
     assert_eq!(
         shared.conns_opened.load(Ordering::SeqCst),
@@ -865,9 +866,9 @@ fn listener_redirect_and_non_proxy_style_requests() {
     });
     let spec = ListenerSpec::new("127.0.0.1", free_port());
     let state = Arc::new(ListenerState::new(spec.clone()));
-    let gen = shared.listener_generation.load(Ordering::SeqCst);
+    let generation = shared.listener_generation.load(Ordering::SeqCst);
     let (sh, st) = (shared.clone(), state.clone());
-    let worker = std::thread::spawn(move || listener_worker(sh, st, gen));
+    let worker = std::thread::spawn(move || listener_worker(sh, st, generation));
     let addr = format!("127.0.0.1:{}", spec.port);
     let ask = |request: String| -> String {
         let mut client = None;
@@ -933,10 +934,10 @@ fn extra_listener_serves_traffic() {
     });
     let spec = ListenerSpec::new("127.0.0.1", free_port());
     let state = Arc::new(ListenerState::new(spec.clone()));
-    let gen = shared.listener_generation.load(Ordering::SeqCst);
+    let generation = shared.listener_generation.load(Ordering::SeqCst);
     let sh = shared.clone();
     let st = state.clone();
-    let worker = std::thread::spawn(move || listener_worker(sh, st, gen));
+    let worker = std::thread::spawn(move || listener_worker(sh, st, generation));
     // Wait for the worker to bind.
     let addr = format!("127.0.0.1:{}", spec.port);
     let mut up = None;
@@ -980,14 +981,16 @@ fn listener_validation() {
     let shared = Shared::new();
     assert!(set_listeners(&shared, vec![ListenerSpec::new("", 8081)]).is_err());
     assert!(set_listeners(&shared, vec![ListenerSpec::new("127.0.0.1", 0)]).is_err());
-    assert!(set_listeners(
-        &shared,
-        vec![
-            ListenerSpec::new("127.0.0.1", 8081),
-            ListenerSpec::new("127.0.0.1", 8081),
-        ]
-    )
-    .is_err());
+    assert!(
+        set_listeners(
+            &shared,
+            vec![
+                ListenerSpec::new("127.0.0.1", 8081),
+                ListenerSpec::new("127.0.0.1", 8081),
+            ]
+        )
+        .is_err()
+    );
     assert!(set_listeners(&shared, vec![ListenerSpec::new("127.0.0.1", 8081)]).is_ok());
     let status = listener_status(&shared);
     // primary + one extra

@@ -454,10 +454,10 @@ impl Lookup {
     /// the embedded catalogue written out under the data directory.
     pub fn extensions_dir(&self) -> std::io::Result<PathBuf> {
         let mut cands: Vec<PathBuf> = self.var("WEBPROBE_EXTENSIONS_DIR").into_iter().collect();
-        if self.system {
-            if let Ok(exe) = std::env::current_exe() {
-                cands.extend(exe.parent().map(|d| d.join("extensions")));
-            }
+        if self.system
+            && let Ok(exe) = std::env::current_exe()
+        {
+            cands.extend(exe.parent().map(|d| d.join("extensions")));
         }
         if let Some(d) = cands
             .into_iter()
@@ -685,26 +685,30 @@ mod tests {
                 && kb.to_string().contains("WEBPROBE_BURP_RESOURCES"),
             "{kb}"
         );
-        assert!(lk
-            .payload_strings()
-            .unwrap_err()
-            .to_string()
-            .contains("PayloadStrings"));
-        assert!(lk
-            .retirejs_repository()
-            .unwrap_err()
-            .to_string()
-            .contains("WEBPROBE_RETIREJS"));
-        assert!(lk
-            .montoya_jar()
-            .unwrap_err()
-            .to_string()
-            .contains("montoya-api"));
-        assert!(lk
-            .chromium()
-            .unwrap_err()
-            .to_string()
-            .contains("WEBPROBE_CHROMIUM"));
+        assert!(
+            lk.payload_strings()
+                .unwrap_err()
+                .to_string()
+                .contains("PayloadStrings")
+        );
+        assert!(
+            lk.retirejs_repository()
+                .unwrap_err()
+                .to_string()
+                .contains("WEBPROBE_RETIREJS")
+        );
+        assert!(
+            lk.montoya_jar()
+                .unwrap_err()
+                .to_string()
+                .contains("montoya-api")
+        );
+        assert!(
+            lk.chromium()
+                .unwrap_err()
+                .to_string()
+                .contains("WEBPROBE_CHROMIUM")
+        );
         assert!(lk.java().unwrap_err().to_string().contains("WEBPROBE_JAVA"));
         // From the extracted resources directory.
         std::fs::create_dir_all(res.join("KnowledgeBase/Issues")).unwrap();
@@ -819,11 +823,12 @@ mod tests {
         std::fs::remove_file(out.join("MontoyaBridge.class")).unwrap();
         let _ = std::fs::remove_dir_all(&out);
         std::fs::create_dir_all(&out).unwrap();
-        assert!(lk
-            .montoya_bridge_classes(&java, &api)
-            .unwrap()
-            .join("MontoyaBridge.class")
-            .is_file());
+        assert!(
+            lk.montoya_bridge_classes(&java, &api)
+                .unwrap()
+                .join("MontoyaBridge.class")
+                .is_file()
+        );
         let _ = std::fs::remove_dir_all(data);
     }
 

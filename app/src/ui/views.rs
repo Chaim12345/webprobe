@@ -143,14 +143,14 @@ pub(crate) fn comparer(app: &mut App, ui: &mut Ui) {
                         .hint_text("file path")
                         .desired_width(btn_w),
                 );
-                if b(ui, "Remove") {
-                    if let Some(i) = app.cmp_sel1.or(app.cmp_sel2) {
-                        if i < app.cmp_items.len() {
-                            app.cmp_items.remove(i);
-                        }
-                        app.cmp_sel1 = None;
-                        app.cmp_sel2 = None;
+                if b(ui, "Remove")
+                    && let Some(i) = app.cmp_sel1.or(app.cmp_sel2)
+                {
+                    if i < app.cmp_items.len() {
+                        app.cmp_items.remove(i);
                     }
+                    app.cmp_sel1 = None;
+                    app.cmp_sel2 = None;
                 }
                 if b(ui, "Clear") {
                     app.cmp_items.clear();
@@ -705,11 +705,10 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                     ui.label(RichText::new(format!("{}  Inbox", theme::icon::TRAY)).strong().size(14.0).color(theme::ink()));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.add_space(8.0);
-                        if ui.add_enabled(app.org_sel.is_some(), egui::Button::new("Delete")).clicked() {
-                            if let Some(id) = app.org_sel.take() {
+                        if ui.add_enabled(app.org_sel.is_some(), egui::Button::new("Delete")).clicked()
+                            && let Some(id) = app.org_sel.take() {
                                 app.shared.organizer.lock().unwrap().remove(id);
                             }
-                        }
                     });
                 });
                 ui.horizontal(|ui| {

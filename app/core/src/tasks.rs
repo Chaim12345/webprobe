@@ -3,8 +3,8 @@
 //! resumed or cancelled. Unfinished tasks are saved with the project and
 //! queued again when it is opened.
 
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use std::any::Any;
@@ -159,17 +159,19 @@ pub fn ensure_runner(shared: &Arc<Shared>) {
     let shared = shared.clone();
     std::thread::Builder::new()
         .name("scan-tasks".into())
-        .spawn(move || loop {
-            let next = {
-                let tasks = shared.tasks.lock().unwrap();
-                tasks
-                    .iter()
-                    .find(|t| t.state == TaskState::Queued)
-                    .map(|t| (t.id, t.kind.clone()))
-            };
-            match next {
-                Some((id, kind)) if !shared.scan.is_busy() => run(&shared, id, kind),
-                _ => std::thread::sleep(Duration::from_millis(200)),
+        .spawn(move || {
+            loop {
+                let next = {
+                    let tasks = shared.tasks.lock().unwrap();
+                    tasks
+                        .iter()
+                        .find(|t| t.state == TaskState::Queued)
+                        .map(|t| (t.id, t.kind.clone()))
+                };
+                match next {
+                    Some((id, kind)) if !shared.scan.is_busy() => run(&shared, id, kind),
+                    _ => std::thread::sleep(Duration::from_millis(200)),
+                }
             }
         })
         .expect("scan task runner thread");

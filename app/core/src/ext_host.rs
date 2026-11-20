@@ -172,8 +172,8 @@ impl ProxyHooks for ExampleHeaderExtension {
 use crate::sync::Mutex;
 use std::io::{BufReader, Write};
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 /// How long a Montoya handler may take on one message before the bridge is
 /// stopped (its hooks then pass everything through).
@@ -1457,10 +1457,12 @@ mod tests {
             1,
             "reported once"
         );
-        assert!(events
-            .lock()
-            .unwrap()
-            .contains(&"info: stage1 event".to_string()));
+        assert!(
+            events
+                .lock()
+                .unwrap()
+                .contains(&"info: stage1 event".to_string())
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -1677,9 +1679,11 @@ mod tests {
                 "missing {want:?} in {log:#?}"
             );
         }
-        assert!(std::fs::read_to_string(prefs.join("Stage Three.json"))
-            .unwrap()
-            .contains("\"theme\":\"dark\""));
+        assert!(
+            std::fs::read_to_string(prefs.join("Stage Three.json"))
+                .unwrap()
+                .contains("\"theme\":\"dark\"")
+        );
         let _ = std::fs::remove_dir_all(dir);
         let _ = std::fs::remove_dir_all(prefs);
     }
@@ -1918,9 +1922,10 @@ mod tests {
                 Some(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\nthe secret"),
             ),
         );
-        assert!(v
-            .iter()
-            .any(|i| i.name == "Stage4 passive" && i.sev == "info"));
+        assert!(
+            v.iter()
+                .any(|i| i.name == "Stage4 passive" && i.sev == "info")
+        );
         // Engine calls.
         let ctx = MenuContext {
             tool: "Proxy".into(),
@@ -1996,18 +2001,22 @@ mod tests {
             "{:#?}",
             sc.errors()
         );
-        assert!(shared
-            .repeaters
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|t| t.name == "From Stage4" && t.request.starts_with("GET /added HTTP/1.1")));
-        assert!(shared
-            .issues
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|i| i.name == "Stage4 sitemap issue" && i.sev == "low"));
+        assert!(
+            shared
+                .repeaters
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|t| t.name == "From Stage4" && t.request.starts_with("GET /added HTTP/1.1"))
+        );
+        assert!(
+            shared
+                .issues
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|i| i.name == "Stage4 sitemap issue" && i.sev == "low")
+        );
         use webprobe_support::ext::ToolSend;
         assert_eq!(
             *shared.tool_sends.lock().unwrap(),
@@ -2126,14 +2135,16 @@ mod tests {
             true,
         );
         assert_eq!(crate::net::parse_ws_frame(&out).unwrap().2, b"hello+ext>");
-        assert!(crate::net::intercept_ws_stream(
-            &shared,
-            "ws.test",
-            &crate::net::build_ws_frame(0x81, b"please drop", false),
-            &mut st,
-            false
-        )
-        .is_empty());
+        assert!(
+            crate::net::intercept_ws_stream(
+                &shared,
+                "ws.test",
+                &crate::net::build_ws_frame(0x81, b"please drop", false),
+                &mut st,
+                false
+            )
+            .is_empty()
+        );
         let out = crate::net::intercept_ws_stream(
             &shared,
             "ws.test",
@@ -2252,9 +2263,10 @@ mod panic_policy_tests {
         let mut req = b"GET / HTTP/1.0\r\n\r\n".to_vec();
         // The panic neither fails the exchange nor stops the next extension.
         assert!(run_request_hooks(&exts, &svc, "GET", "/", &mut req));
-        assert!(req
-            .windows(b"X-Marker: ran".len())
-            .any(|w| w == b"X-Marker: ran"));
+        assert!(
+            req.windows(b"X-Marker: ran".len())
+                .any(|w| w == b"X-Marker: ran")
+        );
         let mut resp = b"HTTP/1.0 200 OK\r\n\r\n".to_vec();
         assert!(run_response_hooks(&exts, &svc, "GET", "/", &mut resp));
     }

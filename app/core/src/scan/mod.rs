@@ -2,11 +2,11 @@
 
 use crate::net::{self, HistEntry, Shared};
 use crate::util;
-pub(crate) use insertion::{audit_points, inject, inject_payload, InsertionPoint, IpKind};
+pub(crate) use insertion::{InsertionPoint, IpKind, audit_points, inject, inject_payload};
 #[cfg(test)]
-pub(crate) use insertion::{insertion_points, NameSite, SYNTH_REFERER};
-use std::sync::atomic::Ordering;
+pub(crate) use insertion::{NameSite, SYNTH_REFERER, insertion_points};
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 /// Burp active-check families ported for D-02 (PHP echo-based code
 /// injection, stored XSS, client-side template injection, the out-of-band
