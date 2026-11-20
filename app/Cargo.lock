@@ -4849,7 +4849,6 @@ dependencies = [
  "time",
  "tokio",
  "tracing",
- "tracing-subscriber",
  "webprobe-core",
  "webprobe-report",
 ]
