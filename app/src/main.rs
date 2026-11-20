@@ -1071,6 +1071,7 @@ fn main() {
     // work without net naming scan (issue #38).
     webprobe_core::scan::register_scan_hooks();
     webprobe_core::scan::register_task_ops();
+    webprobe_core::headless::register_browser_crawl();
     let shared = net::Shared::new();
     if let Some(p) = std::env::var("WEBPROBE_PORT")
         .ok()

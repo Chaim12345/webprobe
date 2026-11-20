@@ -360,6 +360,17 @@ pub fn engines() -> Vec<Box<dyn HeadlessBrowser>> {
 }
 
 /// The engine named `name` (case-insensitive), else the first installed one.
+/// Register the browser crawl driver with the scan engine (app and
+/// headless startup, next to scan::register_scan_hooks).
+pub fn register_browser_crawl() {
+    crate::scan::register_browser_crawl(crate::scan::BrowserCrawl {
+        js_crawl: |engine, shared, url| {
+            pick(Some(engine)).map(|eng| js_crawl(eng.as_ref(), shared, url))
+        },
+        engine_name: |engine| pick(Some(engine)).map(|eng| eng.name().to_string()),
+    });
+}
+
 pub fn pick(name: Option<&str>) -> Option<Box<dyn HeadlessBrowser>> {
     let all = engines();
     if let Some(n) = name.filter(|n| !n.is_empty()) {

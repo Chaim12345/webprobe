@@ -305,37 +305,35 @@ pub fn crawl_and_audit(shared: &Arc<Shared>, start_urls: &[String], audit_only: 
         if !audit_only && !engine.is_empty() && !engine.eq_ignore_ascii_case("chromium") {
             // Another headless engine (headless.rs): render through the
             // proxy, then fetch each page it found as a crawl item.
-            match crate::headless::pick(Some(&engine)) {
-                Some(eng) => match crate::headless::js_crawl(eng.as_ref(), shared, url) {
-                    Ok(urls) => {
-                        shared.log(&format!(
-                            "{} crawl of {url}: {} page(s)",
-                            eng.name(),
-                            urls.len()
-                        ));
-                        let mut keys: std::collections::BTreeSet<String> = items
-                            .iter()
-                            .map(|e| {
-                                format!("{} {}", e.method, crate::crawl::location_key(&e.path))
-                            })
-                            .collect();
-                        for u in urls {
-                            for it in crate::crawl::crawl_single(shared, &u) {
-                                if keys.insert(format!(
-                                    "{} {}",
-                                    it.method,
-                                    crate::crawl::location_key(&it.path)
-                                )) {
-                                    items.push(it);
-                                }
+            let js_crawl = crate::scan::browser_crawl()
+                .and_then(|bc| (bc.js_crawl)(&engine, shared, url).map(|r| (bc, r)));
+            match js_crawl {
+                Some((bc, Ok(urls))) => {
+                    shared.log(&format!(
+                        "{} crawl of {url}: {} page(s)",
+                        (bc.engine_name)(&engine).unwrap_or_else(|| engine.clone()),
+                        urls.len()
+                    ));
+                    let mut keys: std::collections::BTreeSet<String> = items
+                        .iter()
+                        .map(|e| format!("{} {}", e.method, crate::crawl::location_key(&e.path)))
+                        .collect();
+                    for u in urls {
+                        for it in crate::crawl::crawl_single(shared, &u) {
+                            if keys.insert(format!(
+                                "{} {}",
+                                it.method,
+                                crate::crawl::location_key(&it.path)
+                            )) {
+                                items.push(it);
                             }
                         }
                     }
-                    Err(e) => shared.log(&format!(
-                        "{} crawl unavailable ({e}); static crawl only",
-                        eng.name()
-                    )),
-                },
+                }
+                Some((bc, Err(err))) => shared.log(&format!(
+                    "{} crawl unavailable ({err}); static crawl only",
+                    (bc.engine_name)(&engine).unwrap_or_else(|| engine.clone())
+                )),
                 None => shared.log(&format!(
                     "Headless engine {engine} is not installed; static crawl only"
                 )),
