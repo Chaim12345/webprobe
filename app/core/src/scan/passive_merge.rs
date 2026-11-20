@@ -1,3 +1,4 @@
+use crate::diagnostics::Field;
 // Split from scan.rs (L5, issue #35). Bodies unchanged; visibility promoted
 // to pub(crate) where siblings across the split need access.
 
@@ -54,11 +55,15 @@ pub fn add_passive_issues(shared: &Shared, mut issues: Vec<ScanIssue>) {
         incoming += 1;
     }
     if incoming > 0 {
-        shared.log(&format!(
-            "Scanner reported {} new issue(s) ({} consolidated)",
-            incoming,
-            before - incoming
-        ));
+        shared.event(
+            crate::diagnostics::Level::Info,
+            "scan.issues.merged",
+            "Scanner reported new issues",
+            &[
+                Field::Count("new", incoming as u64),
+                Field::Count("consolidated", (before - incoming) as u64),
+            ],
+        );
     }
 }
 

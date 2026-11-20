@@ -302,6 +302,20 @@ impl Shared {
         })
     }
 
+    /// Structured, traffic-free operational event, also shown in the UI.
+    pub fn event(
+        &self,
+        level: crate::diagnostics::Level,
+        code: &'static str,
+        message: &'static str,
+        fields: &[crate::diagnostics::Field],
+    ) {
+        crate::diagnostics::emit(level, code, message, fields);
+        self.log(&crate::diagnostics::summary(code, message, fields));
+    }
+
+    /// Legacy UI-only messages. Never forward these to an external subscriber:
+    /// some callers include traffic, extension output or arbitrary error text.
     pub fn log(&self, msg: &str) {
         let ts = util::now_secs();
         {

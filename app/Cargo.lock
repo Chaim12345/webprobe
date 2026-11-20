@@ -4848,6 +4848,8 @@ dependencies = [
  "sysinfo",
  "time",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
  "webprobe-core",
  "webprobe-report",
 ]
@@ -4874,6 +4876,7 @@ dependencies = [
  "sha2",
  "thiserror 2.0.21",
  "time",
+ "tracing",
  "tungstenite",
  "webpki-roots 0.26.11",
  "webprobe-support",
@@ -4906,6 +4909,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "time",
+ "tracing",
  "webpki-roots 0.26.11",
  "x509-parser",
 ]

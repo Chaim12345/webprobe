@@ -330,11 +330,8 @@ impl Session {
             ));
         }
         if std::env::var_os("WB_INTERACTSH_DEBUG").is_some() {
-            eprintln!(
-                "interactsh poll {} -> {}",
-                self.server,
-                String::from_utf8_lossy(&resp)
-            );
+            tracing::debug!(target: "webprobe", event_code = "oast.poll.received",
+                status, response_bytes = resp.len(), "Collaborator poll received (body omitted)");
         }
         let v: serde_json::Value =
             serde_json::from_slice(&resp).map_err(|e| format!("poll json: {e}"))?;

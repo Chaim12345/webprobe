@@ -55,18 +55,11 @@ pub fn send_from(
 ) -> Upstream {
     let t0 = std::time::Instant::now();
     let r = send_inner(shared, host, port, req, sink);
-    // Debug aid: WB_TRACE=1 prints every upstream exchange slower than 2 s.
+    // Opt-in timing diagnostics, never raw request lines or error strings.
     if std::env::var_os("WB_TRACE").is_some() && t0.elapsed().as_millis() > 2000 {
-        let first = req
-            .split(|b| *b == b'\n')
-            .next()
-            .map(|l| String::from_utf8_lossy(l).into_owned())
-            .unwrap_or_default();
-        eprintln!(
-            "TRACE slow {} ms {first} -> {:?}",
-            t0.elapsed().as_millis(),
-            r.as_ref().err()
-        );
+        tracing::debug!(target: "webprobe", event_code = "net.upstream.slow",
+            elapsed_ms = t0.elapsed().as_millis() as u64, failed = r.is_err(),
+            "Slow upstream exchange (request and error text omitted)");
     }
     match r {
         Ok(resp) => Upstream {

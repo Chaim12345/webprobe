@@ -1,3 +1,4 @@
+use crate::diagnostics::Field;
 // Split from scan.rs (L5, issue #35). Bodies unchanged; visibility promoted
 // to pub(crate) where siblings across the split need access.
 
@@ -117,7 +118,12 @@ pub fn add_issues(shared: &Shared, mut issues: Vec<ScanIssue>) {
         }
         iss.push(issue.clone());
     }
-    shared.log(&format!("Scanner reported {} issue(s)", issues.len()));
+    shared.event(
+        crate::diagnostics::Level::Info,
+        "scan.issues.reported",
+        "Scanner reported issues",
+        &[Field::Count("issues", issues.len() as u64)],
+    );
 }
 
 /// Passive issues consolidated like the original (AuditDefaults.json

@@ -209,8 +209,8 @@ impl MitmAuthority {
             {
                 match Self::from_saved(&text) {
                     Ok(ca) => return Ok(ca),
-                    Err(e) => {
-                        eprintln!("webprobe: ignoring unreadable CA file {}: {e}", f.display())
+                    Err(_) => {
+                        tracing::warn!(target: "webprobe", event_code = "tls.ca.unreadable", "Ignoring unreadable CA file");
                     }
                 }
             }
@@ -233,11 +233,8 @@ impl MitmAuthority {
                 "not_after": seed.not_after,
                 "key_pkcs8": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, ca_key.serialize_der()),
             });
-            if let Err(e) = write_private(d, f, saved.to_string().as_bytes()) {
-                eprintln!(
-                    "webprobe: could not save the CA to {}: {e}; it will change on the next start",
-                    f.display()
-                );
+            if let Err(_e) = write_private(d, f, saved.to_string().as_bytes()) {
+                tracing::error!(target: "webprobe", event_code = "tls.ca.save_failed", "Could not persist CA; it will change on next start");
             }
         }
         Self::from_seed(&seed, ca_key)
