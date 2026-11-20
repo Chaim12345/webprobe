@@ -305,7 +305,7 @@ pub fn find_references(entries: &[HistEntry], origin: &str, path: &str) -> Vec<(
         // resolves them, so relative links (href="admin/") count, and any
         // link under the selected path is a reference to it.
         let resolved = if origin_of(e) == origin {
-            crate::scan::crawl_links(origin, &e.path, resp)
+            crate::crawl::crawl_links(origin, &e.path, resp)
                 .into_iter()
                 .find(|l| l.split('?').next().unwrap_or(l).starts_with(bare))
         } else {

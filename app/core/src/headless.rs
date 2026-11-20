@@ -421,7 +421,7 @@ pub fn js_crawl(
             .filter(|p| !p.is_empty())
             .unwrap_or("/");
         let as_resp = format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n{dom}");
-        for link in crate::scan::crawl_links(&origin, path, as_resp.as_bytes()) {
+        for link in crate::crawl::crawl_links(&origin, path, as_resp.as_bytes()) {
             let next = format!("{origin}{link}");
             if !seen.contains(&next) {
                 queue.push_back((next, depth + 1));
@@ -484,7 +484,7 @@ mod tests {
         }
         // A static look at the page finds no link.
         let raw = b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<script>var a=document.createElement('a');a.setAttribute('hr'+'ef',String.fromCharCode(47)+'js-'+'only');</script>";
-        assert!(crate::scan::crawl_links("http://x", "/", raw).is_empty());
+        assert!(crate::crawl::crawl_links("http://x", "/", raw).is_empty());
         let urls = js_crawl(
             engine.as_ref(),
             &shared,

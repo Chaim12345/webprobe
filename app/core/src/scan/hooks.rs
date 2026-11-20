@@ -14,7 +14,7 @@ struct LiveHooks;
 
 impl ScanHooks for LiveHooks {
     fn crawl_links(&self, origin: &str, path: &str, resp: &[u8]) -> Vec<String> {
-        crawl_links(origin, path, resp)
+        crate::crawl::crawl_links(origin, path, resp)
     }
 
     fn crawl_max_unique_locations(&self) -> usize {

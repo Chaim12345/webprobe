@@ -442,7 +442,7 @@ fn open_redirect_follows_burp_zuag() {
     // Meta refresh and script sinks are redirect targets too.
     let meta = b"HTTP/1.1 200 OK\r\n\r\n<meta http-equiv=\"refresh\" content=\"0; url=http://evil.test/\">".to_vec();
     assert_eq!(
-        redirect_targets(&meta),
+        crate::crawl::redirect_targets(&meta),
         vec!["http://evil.test".to_string()]
     );
     assert!(js_redirect_at("<script>window.location.href = 'X", 32));
@@ -3549,19 +3549,19 @@ fn burp_sniffer_binary_gate() {
 #[test]
 fn crawl_links_resolve_same_origin_paths() {
     let resp = b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<a href=\"styles.css\">x</a><a href=\"/ftp/\">f</a><a href=\"https://evil.test/\">e</a><a href=\"../up?a=1#frag\">u</a><img src=\"http://127.0.0.1:3001/logo.png\">";
-    let l = crawl_links("http://127.0.0.1:3001", "/a/b/index.html", resp);
+    let l = crate::crawl::crawl_links("http://127.0.0.1:3001", "/a/b/index.html", resp);
     assert_eq!(
         l,
         vec!["/a/b/styles.css", "/ftp/", "/a/up?a=1", "/logo.png"]
     );
     let listing = b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<a href=\"./..\">up</a><a href=\".\">here</a>";
     assert_eq!(
-        crawl_links("http://h", "/ftp/quarantine", listing),
+        crate::crawl::crawl_links("http://h", "/ftp/quarantine", listing),
         vec!["/", "/ftp/"]
     );
     let js =
         b"HTTP/1.1 200 OK\r\nContent-Type: application/javascript\r\n\r\nx.href=`a`;y.src=\"b.js\"";
-    assert!(crawl_links("http://h", "/main.js", js).is_empty());
+    assert!(crate::crawl::crawl_links("http://h", "/main.js", js).is_empty());
 }
 
 #[test]
