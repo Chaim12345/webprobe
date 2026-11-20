@@ -1819,17 +1819,24 @@ fn try_h2c_upgrade<S: Read + Write + ResponseRead>(stream: &mut S, routed: &[u8]
 
 fn response_allows_reuse(resp: &[u8]) -> bool {
     let parts = util::parse_http(resp);
+    // Reading until EOF completes a response, not a reusable connection.
+    // Check before HTTP/1.0 keep-alive too: it cannot override body framing.
+    if matches!(
+        crate::codec::response_body_kind(resp, "GET"),
+        crate::codec::BodyKind::UntilEof
+    ) || !crate::codec::body_complete(resp, "GET")
+    {
+        return false;
+    }
     if parts.first.starts_with("HTTP/1.0") {
         return util::get_header(&parts.headers, "Connection")
             .map(|v| v.to_ascii_lowercase().contains("keep-alive"))
             .unwrap_or(false);
     }
-    // UntilEof bodies cannot be delimited, so the connection must close.
-    let framed = crate::codec::body_complete(resp, "GET");
     let not_close = util::get_header(&parts.headers, "Connection")
         .map(|v| !v.to_ascii_lowercase().contains("close"))
         .unwrap_or(true);
-    framed && not_close
+    not_close
 }
 
 fn send_inner(shared: &Shared, host: &str, port: u16, req: &[u8], mut sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>) -> Result<Vec<u8>, String> {
@@ -6029,5 +6036,81 @@ mod session_rule_tests {
         let out = String::from_utf8(apply_session_rules(&shared, b"GET / HTTP/1.1\r\nHost: h.test\r\n\r\n", 80)).unwrap();
         assert!(out.contains("X-Proxy: 1") && !out.contains("X-Tools"), "{out}");
         assert_eq!(set_request_cookie(b"GET / HTTP/1.1\r\nHost: h\r\n\r\n", "a", "1"), b"GET / HTTP/1.1\r\nHost: h\r\nCookie: a=1\r\n\r\n".to_vec());
+    }
+}
+
+#[cfg(test)]
+mod response_reuse_regressions {
+    use super::*;
+
+    #[test]
+    fn complete_framed_responses_keep_existing_reuse_rules() {
+        for response in [
+            &b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\nbody"[..],
+            &b"HTTP/1.0 200 OK\r\nConnection: keep-alive\r\nContent-Length: 4\r\n\r\nbody"[..],
+            &b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nbody\r\n0\r\n\r\n"[..],
+            &b"HTTP/1.1 204 No Content\r\n\r\n"[..],
+        ] {
+            assert!(response_allows_reuse(response));
+        }
+        for response in [
+            &b"HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 4\r\n\r\nbody"[..],
+            &b"HTTP/1.0 200 OK\r\nContent-Length: 4\r\n\r\nbody"[..],
+            &b"HTTP/1.0 200 OK\r\nConnection: keep-alive\r\nContent-Length: 8\r\n\r\nbody"[..],
+            &b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nbo"[..],
+        ] {
+            assert!(!response_allows_reuse(response));
+        }
+    }
+
+    #[test]
+    fn eof_delimited_responses_are_never_reusable() {
+        for version in ["HTTP/1.0", "HTTP/1.1"] {
+            let response = format!("{version} 200 OK\r\nConnection: keep-alive\r\n\r\nbody");
+            assert!(
+                !response_allows_reuse(response.as_bytes()),
+                "{version} EOF-delimited response must close"
+            );
+        }
+    }
+
+    #[test]
+    fn declined_h2c_eof_response_does_not_enter_pool() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let mut head = Vec::new();
+            let mut byte = [0u8; 1];
+            while !head.ends_with(b"\r\n\r\n") {
+                stream.read_exact(&mut byte).unwrap();
+                head.push(byte[0]);
+            }
+            assert!(String::from_utf8_lossy(&head).contains("Upgrade: h2c"));
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\n\r\nbody terminated by EOF")
+                .unwrap();
+        });
+        let shared = Shared::new();
+        shared.h2c_upgrade.store(true, Ordering::SeqCst);
+        shared.keep_alive.store(true, Ordering::SeqCst);
+        let response = send_raw(
+            &shared,
+            "127.0.0.1",
+            port,
+            b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n",
+        );
+        server.join().unwrap();
+        assert!(response
+            .resp
+            .expect("fallback response")
+            .ends_with(b"body terminated by EOF"));
+        assert!(
+            shared.pool.lock().unwrap().is_empty(),
+            "EOF-delimited socket entered keep-alive pool"
+        );
     }
 }
