@@ -1776,7 +1776,7 @@ mod tests {
             ),
         ];
         for (c, e) in cases {
-            *shared.scan_config.lock().unwrap() = Default::default();
+            *crate::scan_config::shared_config(&shared).lock().unwrap() = Default::default();
             assert!(
                 crate::scan::passive_check_for(&shared, &e)
                     .iter()
@@ -1784,8 +1784,7 @@ mod tests {
                 "{} on",
                 c.id
             );
-            shared
-                .scan_config
+            crate::scan_config::shared_config(&shared)
                 .lock()
                 .unwrap()
                 .disabled_checks
@@ -2436,7 +2435,7 @@ mod tests {
             ),
         ];
         let check = |c: CheckDef, e: &HistEntry| {
-            *shared.scan_config.lock().unwrap() = Default::default();
+            *crate::scan_config::shared_config(&shared).lock().unwrap() = Default::default();
             assert!(
                 crate::scan::passive_check_for(&shared, e)
                     .iter()
@@ -2444,8 +2443,7 @@ mod tests {
                 "{} on",
                 c.id
             );
-            shared
-                .scan_config
+            crate::scan_config::shared_config(&shared)
                 .lock()
                 .unwrap()
                 .disabled_checks

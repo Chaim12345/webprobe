@@ -88,7 +88,17 @@ impl WsSession {
     }
 }
 
-/// A new session, listed in `Shared::ws_sessions`. `attached`: a live
+/// The live sessions (newest tab last), from `Shared::tool_state`.
+pub fn sessions(shared: &Shared) -> Vec<Arc<WsSession>> {
+    shared.tool_state.get().unwrap_or_default()
+}
+
+/// The session with this id, when it is still live.
+pub fn session_by_id(shared: &Shared, id: u64) -> Option<Arc<WsSession>> {
+    sessions(shared).into_iter().find(|s| s.id == id)
+}
+
+/// A new session, listed in `Shared::tool_state`. `attached`: a live
 /// proxied connection (`Shared::ws_live`) to send over.
 pub fn new_session(
     shared: &Shared,
@@ -117,7 +127,9 @@ pub fn new_session(
         stop: Mutex::new(None),
         generation: AtomicU64::new(0),
     });
-    shared.ws_sessions.lock().unwrap().push(Arc::clone(&s));
+    let mut all = sessions(shared);
+    all.push(Arc::clone(&s));
+    shared.tool_state.insert(all);
     s
 }
 

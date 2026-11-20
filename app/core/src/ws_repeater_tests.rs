@@ -617,10 +617,7 @@ fn clone_copies_the_handshake_and_target_but_not_the_connection() {
     *c.handshake.lock().unwrap() = "GET /other HTTP/1.1\r\n\r\n".into();
     assert!(s.handshake.lock().unwrap().contains("/edited"));
     // Both are listed, and the original is still connected.
-    let ids: Vec<u64> = shared
-        .ws_sessions
-        .lock()
-        .unwrap()
+    let ids: Vec<u64> = crate::ws_repeater::sessions(&shared)
         .iter()
         .map(|x| x.id)
         .collect();

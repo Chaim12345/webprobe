@@ -7,8 +7,8 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-use crate::net::{CONNECT_TIMEOUT_MS, DNS_TIMEOUT_MS, READ_TIMEOUT_MS};
 use crate::util;
+use webprobe_support::dns::{CONNECT_TIMEOUT_MS, DNS_TIMEOUT_MS, READ_TIMEOUT_MS};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum UpstreamKind {
@@ -61,7 +61,7 @@ pub fn choose(rules: &[UpstreamRule], default: &UpstreamConfig, host: &str) -> U
 }
 
 fn connect_socket(host: &str, port: u16) -> Result<TcpStream, String> {
-    let addrs = crate::net::resolve(host, port, DNS_TIMEOUT_MS)?;
+    let addrs = webprobe_support::dns::resolve(host, port, DNS_TIMEOUT_MS)?;
     if addrs.is_empty() {
         return Err(format!("no address for {host}:{port}"));
     }

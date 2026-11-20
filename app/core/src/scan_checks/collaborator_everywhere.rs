@@ -141,12 +141,6 @@ pub(crate) fn everywhere_probes(
     out
 }
 
-pub(crate) fn everywhere_hosts() -> &'static crate::sync::Mutex<std::collections::HashSet<String>> {
-    static H: std::sync::OnceLock<crate::sync::Mutex<std::collections::HashSet<String>>> =
-        std::sync::OnceLock::new();
-    H.get_or_init(|| crate::sync::Mutex::new(std::collections::HashSet::new()))
-}
-
 /// burp.Zc7h (APH_CollaboratorEverywhere), once per host: Collaborator
 /// names in the Host header, X-Forwarded-Host, the request line and the
 /// client-IP / Referer headers (burp.Zs61, Zcg4). Each id raises External
@@ -170,7 +164,9 @@ impl RequestCheck for CollaboratorEverywhere {
             return;
         }
         let (scheme, _) = origin_of(cx);
-        if !everywhere_hosts()
+        if !cx
+            .state()
+            .everywhere_hosts
             .lock()
             .unwrap()
             .insert(format!("{scheme}://{}:{}", cx.host, cx.port))
@@ -273,7 +269,10 @@ pub fn zibp_zu_value_ok(v: &str) -> bool {
 /// in registry order. Stops at the next point once the scan is stopped.
 pub(crate) fn run_point_checks(cx: &ScanCtx, points: &[InsertionPoint]) {
     let mut st = ScanState::default();
-    let config = cx.shared.scan_config.lock().unwrap().clone();
+    let config = crate::scan_config::shared_config(&cx.shared)
+        .lock()
+        .unwrap()
+        .clone();
     for (idx, ip) in points.iter().enumerate() {
         if cx.stopped() {
             break;
@@ -297,7 +296,7 @@ pub(crate) fn run_point_checks(cx: &ScanCtx, points: &[InsertionPoint]) {
 /// `cx.send`, so stop, pause, progress and stored-input detection apply,
 /// and a stopped scan refuses them.
 pub(crate) fn run_extension_checks(cx: &ScanCtx, points: &[InsertionPoint]) {
-    let exts = cx.shared.ext_host.lock().unwrap().active();
+    let exts = crate::ext_host::active_hooks(&cx.shared);
     let exts: Vec<_> = exts
         .into_iter()
         .filter(|e| e.ui().is_some_and(|u| u.active_checks > 0))
@@ -354,7 +353,10 @@ pub(crate) fn run_extension_checks(cx: &ScanCtx, points: &[InsertionPoint]) {
 /// The request phase: every request-level check once, honouring groups.
 pub(crate) fn run_request_checks(cx: &ScanCtx) {
     let mut open: Vec<(&'static str, bool)> = Vec::new();
-    let config = cx.shared.scan_config.lock().unwrap().clone();
+    let config = crate::scan_config::shared_config(&cx.shared)
+        .lock()
+        .unwrap()
+        .clone();
     for check in REQUEST_CHECKS {
         if !config.check_enabled(check.id()) || !cx.runs(check.issue()) {
             continue;

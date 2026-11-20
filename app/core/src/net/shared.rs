@@ -34,7 +34,7 @@ pub struct Shared {
     pub browser_port: std::sync::atomic::AtomicU16,
     /// Browsers opened from WebProbe (main pid, profile dir), closed on exit.
     pub browsers: Mutex<Vec<(u32, String)>>,
-    pub issues: Mutex<Vec<crate::scan::ScanIssue>>,
+    pub issues: Mutex<Vec<webprobe_support::issues::ScanIssue>>,
     /// The primary listener's "Support HTTP/2" (ProjectDefaults.json
     /// request_listeners[].enable_http2, default on): ALPN offers h2 to
     /// HTTPS clients. Extra listeners have their own (`ListenerState`).
@@ -48,10 +48,12 @@ pub struct Shared {
     pub organizer: Mutex<crate::organizer::Organizer>,
     /// What extensions sent to tools whose state is the desktop app's
     /// (Intruder, Comparer, Decoder); the app takes them every frame.
-    pub tool_sends: Mutex<Vec<crate::ext_calls::ToolSend>>,
+    pub tool_sends: Mutex<Vec<webprobe_support::ext::ToolSend>>,
     pub scan_enabled: AtomicBool,
     /// The active scanner's run state (claim, stop, pause, progress).
-    pub scan: crate::scan_run::ScanRun,
+    pub scan: Arc<crate::scan_run::ScanRun>,
+    /// The current scan run's dedup sets (swapped fresh at run start).
+    pub scan_state: Mutex<Arc<webprobe_support::dedup::ScanDedup>>,
     /// Collaborator ids: the payload pool, registered ids and matching.
     pub oob: crate::oob::OobState,
     /// Stored input pairing of the current scan run (D-10).
@@ -64,7 +66,7 @@ pub struct Shared {
     /// Client connections being handled right now (see `MAX_CONNECTIONS`).
     pub active_connections: AtomicUsize,
     /// The scan task queue (`tasks.rs`).
-    pub tasks: Mutex<Vec<crate::tasks::ScanTask>>,
+    pub tasks: Mutex<Vec<webprobe_support::tasks::ScanTask>>,
     pub next_task_id: AtomicU64,
     pub task_runner: AtomicBool,
     /// Called when engine state a front end shows has changed (new traffic,
@@ -74,12 +76,12 @@ pub struct Shared {
     /// Burp scan configuration "Audit speed" (burp.Zsv7): 0 fast, 1 normal, 2 thorough.
     pub scan_speed: AtomicU8,
     /// Which checks run and which insertion point types are attacked.
-    pub scan_config: Mutex<crate::scan_config::ScanConfig>,
+    // The scan configuration lives in tool_state (scan_config::shared_config).
     /// Issue selection of live passive auditing of proxied traffic: its
     /// own setting, as Burp's live passive tasks have their own
     /// configuration (None = every issue type). A scan's library
     /// selection never changes it.
-    pub live_passive_issues: Mutex<Option<crate::scan_library::IssueFilter>>,
+    pub live_passive_issues: Mutex<Option<webprobe_support::scan_filter::IssueFilter>>,
     /// Burp scan configuration "Audit accuracy" (burp.Zgnf): 0 minimise false
     /// negatives, 1 normal, 2 minimise false positives.
     pub scan_accuracy: AtomicU8,
@@ -108,11 +110,17 @@ pub struct Shared {
     /// Live proxied WebSockets by connection id (WebSocket Repeater attaches).
     pub ws_live: Mutex<HashMap<u64, LiveWs>>,
     /// WebSocket Repeater connections.
-    pub ws_sessions: Mutex<Vec<Arc<crate::ws_repeater::WsSession>>>,
+    /// State of tools net does not know (WebSocket Repeater sessions, ...):
+    /// each tool stores its own state type here (keeps `Shared` free of
+    /// tool-module types).
+    pub tool_state: ToolState,
     /// Diff-count state for the history table ("Diff count", burp.Zxwu.java:56).
     pub diff_tracker: Mutex<DiffTracker>,
     /// Extension host (Montoya-shaped, Path A): hooks run in the proxy pipeline.
-    pub ext_host: Mutex<crate::ext_host::ExtensionHost>,
+    /// The extension hook source (the extension host, once ext_store or an
+    /// extension call installs it). Trait object so net never names the
+    /// host type.
+    pub ext_hooks: Mutex<Box<dyn ExtHookSource>>,
     /// WebSocket message interception per direction. Burp's
     /// proxy.intercept_web_sockets_messages defaults both to true; messages
     /// are only held while Intercept is on (ProjectDefaults.json).
@@ -234,6 +242,7 @@ impl Shared {
             organizer: Mutex::new(crate::organizer::Organizer::new()),
             tool_sends: Mutex::new(Vec::new()),
             scan: Default::default(),
+            scan_state: Default::default(),
             oob: Default::default(),
             stored: Default::default(),
             passive: Default::default(),
@@ -244,7 +253,7 @@ impl Shared {
             next_task_id: AtomicU64::new(1),
             task_runner: AtomicBool::new(false),
             waker: Mutex::new(None),
-            scan_config: Mutex::new(crate::scan_config::ScanConfig::default()),
+
             live_passive_issues: Mutex::new(None),
             // AuditDefaults.json: scan_speed / scan_accuracy "normal"
             scan_speed: AtomicU8::new(1),
@@ -262,9 +271,9 @@ impl Shared {
             ws_intercept_in_scope: AtomicBool::new(false),
             ws_strip_extensions: AtomicBool::new(true),
             ws_live: Mutex::new(HashMap::new()),
-            ws_sessions: Mutex::new(Vec::new()),
+            tool_state: ToolState::new(),
             diff_tracker: Mutex::new(DiffTracker::default()),
-            ext_host: Mutex::new(crate::ext_host::ExtensionHost::default()),
+            ext_hooks: Mutex::new(Box::new(NoExtHooks)),
             ws_intercept_client: AtomicBool::new(true),
             ws_intercept_server: AtomicBool::new(true),
             ws_edited: Mutex::new(std::collections::HashSet::new()),
@@ -352,17 +361,18 @@ impl Shared {
     /// highlight for Proxy history).
     pub fn ext_handle_request(
         &self,
-        svc: &crate::ext_host::HttpService,
+        svc: &webprobe_support::ext::HttpService,
         method: &str,
         path: &str,
         req: &mut Vec<u8>,
-        ann: &mut crate::ext_host::Annotations,
+        ann: &mut webprobe_support::ext::Annotations,
     ) -> bool {
-        let exts = self.ext_host.lock().unwrap().active();
+        let exts = self.ext_hooks.lock().unwrap().active_hooks();
         if exts.is_empty() {
             return true;
         }
-        let pass = crate::ext_host::run_request_hooks_annotated(&exts, svc, method, path, req, ann);
+        let pass =
+            webprobe_support::ext::run_request_hooks_annotated(&exts, svc, method, path, req, ann);
         self.collect_ext_issues(&exts, &svc.host, path);
         pass
     }
@@ -371,39 +381,40 @@ impl Shared {
     /// the extensions reported are added for `host` + `path`.
     pub fn ext_handle_response(
         &self,
-        svc: &crate::ext_host::HttpService,
+        svc: &webprobe_support::ext::HttpService,
         method: &str,
         path: &str,
         req: &[u8],
         resp: &mut Vec<u8>,
-        ann: &mut crate::ext_host::Annotations,
+        ann: &mut webprobe_support::ext::Annotations,
     ) -> bool {
-        let exts = self.ext_host.lock().unwrap().active();
+        let exts = self.ext_hooks.lock().unwrap().active_hooks();
         if exts.is_empty() {
             return true;
         }
-        let pass =
-            crate::ext_host::run_response_hooks_annotated(&exts, svc, method, path, req, resp, ann);
+        let pass = webprobe_support::ext::run_response_hooks_annotated(
+            &exts, svc, method, path, req, resp, ann,
+        );
         self.collect_ext_issues(&exts, &svc.host, path);
         pass
     }
 
     fn collect_ext_issues(
         &self,
-        exts: &[Arc<dyn crate::ext_host::ProxyHooks>],
+        exts: &[Arc<dyn webprobe_support::ext::ProxyHooks>],
         host: &str,
         path: &str,
     ) {
-        let issues: Vec<crate::scan::ScanIssue> = exts
+        let issues: Vec<webprobe_support::issues::ScanIssue> = exts
             .iter()
             .flat_map(|e| e.take_issues())
-            .map(|i| crate::scan::ScanIssue {
+            .map(|i| webprobe_support::issues::ScanIssue {
                 id: 0,
                 sev: match i.severity.to_ascii_lowercase().as_str() {
                     s @ ("high" | "medium" | "low") => s.to_string(),
                     _ => "info".to_string(),
                 },
-                type_id: crate::scan::issue_type_id(&i.name),
+                type_id: scan_hooks().map(|h| h.issue_type_id(&i.name)).unwrap_or(0),
                 name: i.name,
                 host: if i.host.is_empty() {
                     host.to_string()
@@ -426,6 +437,8 @@ impl Shared {
                 ident: String::new(),
             })
             .collect();
-        crate::scan::add_issues(self, issues);
+        if let Some(hooks) = scan_hooks() {
+            hooks.add_issues(self, issues);
+        }
     }
 }

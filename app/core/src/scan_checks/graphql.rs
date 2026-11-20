@@ -157,7 +157,9 @@ impl RequestCheck for GraphqlEndpointDiscovered {
         let (scheme, _) = origin_of(cx);
         if cx.stopped()
             || !cx.runs(self.issue())
-            || !openapi_hosts()
+            || !cx
+                .state()
+                .openapi_hosts
                 .lock()
                 .unwrap()
                 .insert(format!("graphql|{scheme}://{}:{}", cx.host, cx.port))
@@ -514,7 +516,9 @@ impl RequestCheck for BackupFile {
         let Some(slash) = path.rfind('/') else { return };
         let (dir, file) = (&path[..slash + 1], &path[slash + 1..]);
         if file.is_empty()
-            || !openapi_hosts()
+            || !cx
+                .state()
+                .openapi_hosts
                 .lock()
                 .unwrap()
                 .insert(format!("backup|{}:{}{path}", cx.host, cx.port))

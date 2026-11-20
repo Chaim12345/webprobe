@@ -2525,14 +2525,7 @@ pub fn send_ws_to_repeater(shared: &std::sync::Arc<net::Shared>, e: &net::WsEntr
 pub fn ws_repeater_view(app: &mut crate::App, ui: &mut Ui, session_id: u64) {
     use webprobe_core::ws_repeater::{self as wsr, WsRepState};
     let shared = app.shared.clone();
-    let Some(session) = shared
-        .ws_sessions
-        .lock()
-        .unwrap()
-        .iter()
-        .find(|s| s.id == session_id)
-        .cloned()
-    else {
+    let Some(session) = wsr::session_by_id(&shared, session_id) else {
         ui.label("This WebSocket session is gone.");
         return;
     };

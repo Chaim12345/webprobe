@@ -1,127 +1,9 @@
 // Split from scan.rs (L5, issue #35). Bodies unchanged; visibility promoted
 // to pub(crate) where siblings across the split need access.
 
-use super::*;
-
 pub struct LinkManipHit {
     pub payload: String,
     pub target: String,
-}
-
-/// Link-attribute targets in a response: href/src/action/formaction values
-/// plus redirect targets (burp.Zpyp injects a URL and checks it becomes a
-/// link/redirect target the page points at).
-pub fn link_targets(resp: &[u8]) -> Vec<String> {
-    let mut out = redirect_targets(resp);
-    let p = crate::util::parse_http(resp);
-    let body = String::from_utf8_lossy(&resp[p.head_len.min(resp.len())..]).into_owned();
-    let low = body.to_ascii_lowercase();
-    for attr in ["href=", "src=", "action=", "formaction="] {
-        let mut i = 0;
-        while let Some(a) = low[i..].find(attr).map(|x| x + i) {
-            let vs = a + attr.len();
-            let rest = &body[vs.min(body.len())..];
-            let val = if rest.starts_with('"') || rest.starts_with('\'') {
-                let q = rest.as_bytes()[0] as char;
-                rest[1..].split(q).next().unwrap_or("").to_string()
-            } else {
-                rest.split([' ', '>', '\t', '\n'])
-                    .next()
-                    .unwrap_or("")
-                    .to_string()
-            };
-            if !val.is_empty() {
-                out.push(val);
-            }
-            i = vs;
-        }
-    }
-    out
-}
-
-/// Live passive crawl: same-origin link paths found in a response, resolved
-/// against the request path (query kept, fragment dropped).
-pub fn crawl_links(origin: &str, req_path: &str, resp: &[u8]) -> Vec<String> {
-    let base = req_path.split('?').next().unwrap_or("/");
-    let base = match base.split_once("://") {
-        Some((_, r)) => r
-            .find('/')
-            .map(|i| r[i..].to_string())
-            .unwrap_or_else(|| "/".into()),
-        None => base.to_string(),
-    };
-    let dir = &base[..=base.rfind('/').unwrap_or(0)];
-    let mut out = Vec::new();
-    // Links come from HTML documents (and redirects), as a browser sees them:
-    // href/src strings inside script bundles are not navigations.
-    let ct = util::get_header(&util::parse_http(resp).headers, "Content-Type")
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    let targets = if ct.contains("html") {
-        link_targets(resp)
-    } else {
-        redirect_targets(resp)
-    };
-    for l in targets {
-        let l = l.split('#').next().unwrap_or("").trim().to_string();
-        if l.is_empty()
-            || l.starts_with("javascript:")
-            || l.starts_with("mailto:")
-            || l.starts_with("data:")
-        {
-            continue;
-        }
-        if l.chars()
-            .any(|c| c.is_whitespace() || "`{}()<>;$\"'\\".contains(c))
-        {
-            continue;
-        }
-        let path = if let Some(rest) = l.strip_prefix(origin) {
-            if rest.is_empty() {
-                "/".to_string()
-            } else if rest.starts_with('/') {
-                rest.to_string()
-            } else {
-                continue;
-            }
-        } else if l.contains("://") || l.starts_with("//") {
-            continue;
-        } else if l.starts_with('/') {
-            l
-        } else {
-            format!("{dir}{l}")
-        };
-        // Collapse ./ and ../ segments.
-        let (p, q) = match path.split_once('?') {
-            Some((p, q)) => (p.to_string(), Some(q.to_string())),
-            None => (path.clone(), None),
-        };
-        let mut segs: Vec<&str> = Vec::new();
-        let ends_dir = p.ends_with('/') || p.ends_with("/.") || p.ends_with("/..");
-        for seg in p.split('/') {
-            match seg {
-                "." => {}
-                ".." => {
-                    segs.pop();
-                }
-                s => segs.push(s),
-            }
-        }
-        let mut joined = segs.join("/");
-        if ends_dir && !joined.ends_with('/') {
-            joined.push('/');
-        }
-        if !joined.starts_with('/') {
-            joined.insert(0, '/');
-        }
-        if let Some(q) = q {
-            joined = format!("{joined}?{q}");
-        }
-        if !out.contains(&joined) {
-            out.push(joined);
-        }
-    }
-    out
 }
 
 /// burp.Zb_5 reflected link manipulation: inject an absolute URL and report
@@ -151,9 +33,9 @@ pub fn run_link_manip_check<F: FnMut(&str) -> Option<Vec<u8>>>(
             .collect()
     };
     let resp = send(&token)?;
-    let target = link_targets(&resp)
+    let target = crate::crawl::link_targets(&resp)
         .into_iter()
-        .chain(redirect_targets(&resp))
+        .chain(crate::crawl::redirect_targets(&resp))
         .find(|t| t.contains(&token))?;
     Some(LinkManipHit {
         payload: token,

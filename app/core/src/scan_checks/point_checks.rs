@@ -191,9 +191,7 @@ impl PointCheck for JwtAttacks {
         ];
         for (name, variants, detail) in attacks {
             if !cx.runs(name)
-                || !cx
-                    .shared
-                    .scan_config
+                || !crate::scan_config::shared_config(&cx.shared)
                     .lock()
                     .unwrap()
                     .check_enabled(&jwt_issue_id(name))
@@ -228,9 +226,7 @@ impl PointCheck for JwtAttacks {
         ] {
             if cx.stopped()
                 || !cx.runs(name)
-                || !cx
-                    .shared
-                    .scan_config
+                || !crate::scan_config::shared_config(&cx.shared)
                     .lock()
                     .unwrap()
                     .check_enabled(&jwt_issue_id(name))
@@ -641,7 +637,9 @@ impl RequestCheck for HttpPutEnabled {
         let (scheme, _) = origin_of(cx);
         if cx.stopped()
             || !cx.runs(self.issue())
-            || !openapi_hosts()
+            || !cx
+                .state()
+                .openapi_hosts
                 .lock()
                 .unwrap()
                 .insert(format!("put|{scheme}://{}:{}", cx.host, cx.port))
@@ -708,7 +706,9 @@ impl RequestCheck for AspNetTracing {
         let (scheme, _) = origin_of(cx);
         if cx.stopped()
             || !cx.runs(self.issue())
-            || !openapi_hosts()
+            || !cx
+                .state()
+                .openapi_hosts
                 .lock()
                 .unwrap()
                 .insert(format!("trace.axd|{scheme}://{}:{}", cx.host, cx.port))
@@ -776,7 +776,9 @@ impl RequestCheck for AspNetDebugging {
         let (scheme, _) = origin_of(cx);
         if cx.stopped()
             || !cx.runs(self.issue())
-            || !openapi_hosts()
+            || !cx
+                .state()
+                .openapi_hosts
                 .lock()
                 .unwrap()
                 .insert(format!("aspdebug|{scheme}://{}:{}", cx.host, cx.port))

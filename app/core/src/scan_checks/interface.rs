@@ -26,13 +26,13 @@ pub(crate) trait PointCheck: Sync {
 }
 
 /// How often a request-level check runs. Check metadata: the once-per-host
-/// bookkeeping itself stays inside those checks (`openapi_hosts`).
+/// bookkeeping itself stays inside those checks (`ScanDedup::openapi_hosts`).
 #[cfg_attr(not(test), allow(dead_code))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Scope {
     /// Once per audited request.
     Request,
-    /// Once per host (and session, see `reset_openapi_hosts`).
+    /// Once per host (and scan run, see `ScanDedup`).
     Host,
 }
 

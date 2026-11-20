@@ -292,7 +292,7 @@ pub fn normalize_response(raw: &[u8]) -> Vec<u8> {
 /// read ([`crate::streaming::BodyMode`]): buffered as above, streamed to the
 /// sink as it arrives (the returned message is then the head only), or not
 /// read at all (head only, connection closed).
-pub(crate) fn read_message<R: std::io::Read + crate::net::ResponseRead>(
+pub(crate) fn read_message<R: std::io::Read + webprobe_support::io_traits::ResponseRead>(
     stream: &mut R,
     buffer: &mut Vec<u8>,
     method: &str,
@@ -397,7 +397,7 @@ pub(crate) fn read_message<R: std::io::Read + crate::net::ResponseRead>(
 /// Only a small read buffer is held. Reads wait at most the sink's idle
 /// limit (else the connection's normal read timeout) between bytes: a slow
 /// event stream lives on, a dead one ends. Returns the head.
-fn stream_body<R: std::io::Read + crate::net::ResponseRead>(
+fn stream_body<R: std::io::Read + webprobe_support::io_traits::ResponseRead>(
     stream: &mut R,
     buffer: &mut Vec<u8>,
     head_end: usize,
@@ -541,7 +541,7 @@ mod tests {
             self.0.read(&mut buf[..n])
         }
     }
-    impl crate::net::ResponseRead for Script {
+    impl webprobe_support::io_traits::ResponseRead for Script {
         fn set_read_timeout_ms(&self, _ms: u64) -> std::io::Result<()> {
             Ok(())
         }

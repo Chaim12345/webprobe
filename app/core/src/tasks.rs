@@ -7,67 +7,41 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 
+use std::any::Any;
+use std::sync::OnceLock;
+
 use crate::net::{HistEntry, Shared};
 
-#[derive(Clone)]
-pub enum TaskKind {
-    /// Actively audit these requests.
-    Audit(Vec<HistEntry>),
-    /// Actively audit one request with Collaborator payloads the caller has
-    /// already generated (per-parameter OOB slots and Burp's SMTP header
-    /// injection pairs), as the "Do active scan" action does. Saved with a
-    /// project as a plain `Audit`: payloads belong to the session.
-    Single {
-        entry: Box<HistEntry>,
-        oob: Vec<(String, String, String)>,
-        smtp: Vec<crate::scan::SmtpOob>,
-    },
-    /// Fetch the URLs, crawl from them unless `audit_only`, audit what is found.
-    CrawlAudit { urls: Vec<String>, audit_only: bool },
+use webprobe_support::tasks::SmtpOob;
+pub use webprobe_support::tasks::{ScanTask, TaskKind, TaskState};
+
+/// The scan engine's entry points the task runner drives. scan registers
+/// them (scan::register_task_ops) when the engine is linked in; with none
+/// registered the runner records the task as done without scanning, as the
+/// proxy-only build behaves.
+/// OOB payload slots pooled for one request: (point, token, host) triples.
+pub type OobSlots = Vec<(String, String, String)>;
+
+/// The start_active_scan op: one request with its prepared payloads.
+pub type StartActiveScan = fn(Arc<Shared>, HistEntry, &[(String, String, String)], &[SmtpOob]);
+
+pub struct ScanOps {
+    pub crawl_and_audit: fn(&Arc<Shared>, &[String], bool),
+    pub start_active_scan: StartActiveScan,
+    pub pooled_oob: fn(&Shared, &[u8]) -> OobSlots,
+    /// Open the stored-input batch for one task (dropped as the task ends).
+    pub open_stored_batch: fn(&Arc<Shared>) -> Box<dyn Any>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TaskState {
-    Queued,
-    Running,
-    Paused,
-    Finished,
-    Cancelled,
+static SCAN_OPS: OnceLock<ScanOps> = OnceLock::new();
+
+/// Register the scan engine's task entry points (app and headless startup).
+pub fn register_scan_ops(ops: ScanOps) {
+    let _ = SCAN_OPS.set(ops);
 }
 
-impl TaskState {
-    pub fn label(self) -> &'static str {
-        match self {
-            TaskState::Queued => "Waiting to start",
-            TaskState::Running => "Running",
-            TaskState::Paused => "Paused",
-            TaskState::Finished => "Finished",
-            TaskState::Cancelled => "Cancelled",
-        }
-    }
-
-    pub fn is_open(self) -> bool {
-        matches!(
-            self,
-            TaskState::Queued | TaskState::Running | TaskState::Paused
-        )
-    }
-}
-
-#[derive(Clone)]
-pub struct ScanTask {
-    pub id: u64,
-    pub name: String,
-    pub kind: TaskKind,
-    pub state: TaskState,
-    /// Requests audited so far and in all (Audit tasks; a crawl does not
-    /// know its total in advance).
-    pub done: usize,
-    pub total: Option<usize>,
-    /// Issues reported while the task ran.
-    pub issues_found: usize,
-    pub created: u64,
-    pub finished: Option<u64>,
+fn scan_ops() -> Option<&'static ScanOps> {
+    SCAN_OPS.get()
 }
 
 /// Add a scan to the queue and make sure the runner is going. Returns its id.
@@ -214,15 +188,17 @@ fn run(shared: &Arc<Shared>, id: u64, kind: TaskKind) {
     let _tool = crate::net::tool_scope("Scanner");
     // One stored-input store for the whole task; stage A4 runs as the
     // task ends (scan::StoredBatch).
-    let stored = crate::scan::StoredBatch::open(shared);
+    let stored = scan_ops().map(|ops| (ops.open_stored_batch)(shared));
     // One (entry, prepared payloads) item per request; plain audits draw
     // their OOB payloads from the pool when they reach it.
-    type Prepared = Option<(Vec<(String, String, String)>, Vec<crate::scan::SmtpOob>)>;
+    type Prepared = Option<(Vec<(String, String, String)>, Vec<SmtpOob>)>;
     let items: Vec<(HistEntry, Prepared)> = match kind {
         TaskKind::Audit(entries) => entries.into_iter().map(|e| (e, None)).collect(),
         TaskKind::Single { entry, oob, smtp } => vec![(*entry, Some((oob, smtp)))],
         TaskKind::CrawlAudit { urls, audit_only } => {
-            crate::scan::crawl_and_audit(shared, &urls, audit_only);
+            if let Some(ops) = scan_ops() {
+                (ops.crawl_and_audit)(shared, &urls, audit_only);
+            }
             wait_idle(shared);
             Vec::new()
         }
@@ -234,11 +210,17 @@ fn run(shared: &Arc<Shared>, id: u64, kind: TaskKind) {
             if state_of(shared, id) == Some(TaskState::Cancelled) {
                 break;
             }
-            let (oob, smtp) = prepared
-                .unwrap_or_else(|| (crate::scan::pooled_oob(shared, &e.req_raw), Vec::new()));
+            let (oob, smtp) = prepared.unwrap_or_else(|| {
+                (
+                    scan_ops().map_or_else(Vec::new, |ops| (ops.pooled_oob)(shared, &e.req_raw)),
+                    Vec::new(),
+                )
+            });
             // start_active_scan marks the scanner busy before it returns,
             // so waiting for idle cannot miss the scan it just started.
-            crate::scan::start_active_scan(shared.clone(), e, &oob, &smtp);
+            if let Some(ops) = scan_ops() {
+                (ops.start_active_scan)(shared.clone(), e, &oob, &smtp);
+            }
             wait_idle(shared);
             // Read the issue count first: `tasks` is never held while
             // `issues` is locked (one lock order everywhere).
@@ -328,6 +310,7 @@ mod tests {
 
     #[test]
     fn tasks_run_in_order_and_can_be_paused_resumed_and_cancelled() {
+        crate::scan::register_task_ops();
         let shared = Shared::new();
         let (port, hits) = origin();
         let a = enqueue(
@@ -433,6 +416,7 @@ mod tests {
     /// counted as audited and the items after it never start.
     #[test]
     fn cancel_stops_a_running_task() {
+        crate::scan::register_task_ops();
         let shared = Shared::new();
         let (port, _hits) = origin();
         let entries: Vec<HistEntry> = (0..20)
@@ -476,6 +460,7 @@ mod tests {
     /// with the project as a plain audit of that request.
     #[test]
     fn single_scan_queues_behind_a_running_task() {
+        crate::scan::register_task_ops();
         let shared = Shared::new();
         let (port, hits) = origin();
         let a = enqueue(

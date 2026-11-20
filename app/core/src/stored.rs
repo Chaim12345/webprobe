@@ -19,9 +19,9 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use crate::net::HistEntry;
-use crate::scan::InsertionPoint;
 use crate::sync::Mutex;
+use webprobe_support::hist::HistEntry;
+use webprobe_support::insertion::InsertionPoint;
 
 /// The token prefix: fixed, so one pass over a response finds every token.
 /// Burp's tokens are Collaborator ids (net.portswigger.Zwl, found with
@@ -151,7 +151,7 @@ impl StoredInputs {
         let token = loop {
             let t = format!(
                 "{TOKEN_PREFIX}{}",
-                crate::scan::active_checks::rnd_id(TOKEN_BODY)
+                webprobe_support::util::rnd_id(TOKEN_BODY)
             );
             if !g.tokens.contains_key(&t) {
                 break t;
@@ -284,7 +284,7 @@ fn find_tokens_counted(bytes: &[u8], work: &mut usize) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::scan::{InsertionPoint, IpKind};
+    use webprobe_support::insertion::{InsertionPoint, IpKind};
 
     fn item(path: &str) -> Item {
         Item {

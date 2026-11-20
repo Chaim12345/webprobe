@@ -3,19 +3,6 @@
 
 use super::*;
 
-/// Hosts already probed by the per-host OpenAPI check this session (Burp runs
-/// APH_ checks once per host).
-pub fn reset_openapi_hosts() {
-    openapi_hosts().lock().unwrap().clear();
-    checks::everywhere_hosts().lock().unwrap().clear();
-}
-
-pub fn openapi_hosts() -> &'static crate::sync::Mutex<std::collections::HashSet<String>> {
-    static H: std::sync::OnceLock<crate::sync::Mutex<std::collections::HashSet<String>>> =
-        std::sync::OnceLock::new();
-    H.get_or_init(|| crate::sync::Mutex::new(std::collections::HashSet::new()))
-}
-
 pub fn raw_header_lines(resp: &[u8]) -> Vec<String> {
     let end = resp
         .windows(4)
@@ -92,50 +79,6 @@ pub fn run_header_injection_check<F: FnMut(&str) -> Option<Vec<u8>>>(
     None
 }
 
-/// Redirect targets in a response, as Burp's redirect sinks see them:
-/// burp.Zxzj (3xx `Location`, or a `Refresh` header's `url=`), burp.Zgi5
-/// (`<meta http-equiv="refresh" content="...url=...">`). Sink literals were
-/// decoded with Burp's own string decoder.
-pub fn redirect_targets(resp: &[u8]) -> Vec<String> {
-    let p = util::parse_http(resp);
-    let mut out = Vec::new();
-    let status: u16 = p.status.trim().parse().unwrap_or(0);
-    if (300..400).contains(&status) {
-        if let Some(l) = util::get_header(&p.headers, "location") {
-            out.push(l.trim().to_string());
-        }
-    }
-    let after_url = |s: &str| -> Option<String> {
-        let low = s.to_ascii_lowercase();
-        low.find("url=").map(|i| {
-            s[i + 4..]
-                .trim()
-                .trim_matches(|c| c == '"' || c == '\'')
-                .to_string()
-        })
-    };
-    if let Some(r) = util::get_header(&p.headers, "refresh").and_then(|r| after_url(&r)) {
-        out.push(r);
-    }
-    let body = String::from_utf8_lossy(&resp[p.head_len.min(resp.len())..]).into_owned();
-    let low = body.to_ascii_lowercase();
-    let mut i = 0;
-    while let Some(m) = low[i..].find("<meta").map(|x| x + i) {
-        let end = low[m..].find('>').map(|x| x + m).unwrap_or(low.len());
-        let tag = &body[m..end];
-        let tl = &low[m..end];
-        if tl.contains("http-equiv") && tl.contains("refresh") {
-            if let Some(ci) = tl.find("content") {
-                if let Some(u) = after_url(&tag[ci..]) {
-                    out.push(u.trim_end_matches(['"', '\'', '/', ' ']).to_string());
-                }
-            }
-        }
-        i = end.max(m + 5);
-    }
-    out
-}
-
 /// burp.Zsyu: a reflection is a script redirect when the letters in the 30
 /// chars before it, lower-cased, end with one of Burp's sink names.
 pub fn js_redirect_at(body: &str, pos: usize) -> bool {
@@ -165,7 +108,7 @@ pub fn redirect_target_with(resp: &[u8], needle: &str) -> Option<(String, usize)
     // in the folded copy is an offset (and a char boundary) in the original;
     // Unicode lower-casing changes lengths ("İ" -> "i̇") and broke that.
     let nl = needle.to_ascii_lowercase();
-    for t in redirect_targets(resp) {
+    for t in crate::crawl::redirect_targets(resp) {
         if let Some(i) = t.to_ascii_lowercase().find(&nl) {
             return Some((t, i));
         }

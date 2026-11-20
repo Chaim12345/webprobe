@@ -196,7 +196,10 @@ pub fn load_project_entries(
 
 fn current(app: &App) -> (webprobe_core::scan_config::ScanConfig, u8, u8) {
     (
-        app.shared.scan_config.lock().unwrap().clone(),
+        webprobe_core::scan_config::shared_config(&app.shared)
+            .lock()
+            .unwrap()
+            .clone(),
         app.shared.scan_speed.load(Ordering::SeqCst).min(2),
         app.shared.scan_accuracy.load(Ordering::SeqCst).min(2),
     )
@@ -222,7 +225,7 @@ pub fn library_page(app: &mut App, ui: &mut Ui) {
         });
         if ui.button("New").clicked() {
             let (cur, speed, accuracy) = current(app);
-            let start = lib::config_to_tree(&cur, speed, accuracy);
+            let start = webprobe_core::scan_config::config_to_tree(&cur, speed, accuracy);
             let name = app.scan_lib.unique_name("New configuration");
             app.scan_lib.editing = Some(Editing {
                 source: Source::User,
@@ -406,7 +409,7 @@ fn editing_for(
 ) -> Editing {
     let (cur, speed, accuracy) = current(app);
     let a = lib::apply(&[c], &cur, speed, accuracy);
-    let start = lib::config_to_tree(&a.config, a.speed, a.accuracy);
+    let start = webprobe_core::scan_config::config_to_tree(&a.config, a.speed, a.accuracy);
     Editing {
         source,
         original,
@@ -525,7 +528,8 @@ fn edit_window(app: &mut App, ctx: &egui::Context) {
         });
     match (open, done) {
         (_, Some(true)) => {
-            let edited = lib::config_to_tree(&ed.config, ed.speed, ed.accuracy);
+            let edited =
+                webprobe_core::scan_config::config_to_tree(&ed.config, ed.speed, ed.accuracy);
             let tree = lib::with_settings(&ed.tree, &edited, &ed.start);
             let name = ed.name.trim().to_string();
             let clash = app.scan_lib.list(ed.source).iter().any(|c| c.name == name)
@@ -661,7 +665,9 @@ pub fn apply_launch(app: &mut App) -> Vec<String> {
     let (cur, speed, accuracy) = current(app);
     let refs: Vec<&LibraryConfig> = chosen.iter().collect();
     let a = lib::apply(&refs, &cur, speed, accuracy);
-    *app.shared.scan_config.lock().unwrap() = a.config;
+    *webprobe_core::scan_config::shared_config(&app.shared)
+        .lock()
+        .unwrap() = a.config;
     app.shared.scan_speed.store(a.speed, Ordering::SeqCst);
     app.shared.scan_accuracy.store(a.accuracy, Ordering::SeqCst);
     for l in lib::not_applied(&refs) {

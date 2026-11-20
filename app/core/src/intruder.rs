@@ -13,7 +13,6 @@
 use std::collections::HashSet;
 
 use crate::decoder_ops::{self, Op};
-use crate::net::parse_markers;
 use crate::util;
 
 pub const MARK: char = '§';
@@ -59,6 +58,33 @@ pub struct Template {
     literals: Vec<String>,
     /// The original text inside each marker pair.
     defaults: Vec<String>,
+}
+
+pub struct MarkerSeg {
+    pub text: String,
+    pub is_marker: bool,
+}
+
+pub fn parse_markers(text: &str) -> Vec<MarkerSeg> {
+    let mut segs = Vec::new();
+    let mut current = String::new();
+    let mut in_marker = false;
+    for c in text.chars() {
+        if c == '§' {
+            segs.push(MarkerSeg {
+                text: std::mem::take(&mut current),
+                is_marker: in_marker,
+            });
+            in_marker = !in_marker;
+        } else {
+            current.push(c);
+        }
+    }
+    segs.push(MarkerSeg {
+        text: current,
+        is_marker: in_marker,
+    });
+    segs
 }
 
 /// Errors from Intruder template/marker handling and payload validation

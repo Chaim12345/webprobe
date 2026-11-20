@@ -258,7 +258,7 @@ pub(crate) fn intruder(app: &mut App, ui: &mut Ui) {
                                 ui.label(RichText::new("Request count:").size(12.5).color(theme::ink()));
                                 ui.label(RichText::new(reqs).size(12.5).color(theme::ink_dim()));
                                 ui.end_row();
-                                let procs: Vec<String> = app.shared.ext_host.lock().unwrap().active().iter().filter_map(|e| e.ui()).flat_map(|u| u.processors).collect();
+                                let procs: Vec<String> = webprobe_core::ext_host::active_hooks(&app.shared).iter().filter_map(|e| e.ui()).flat_map(|u| u.processors).collect();
                                 if app.intr_ext_proc.len() <= set_n {
                                     app.intr_ext_proc.resize(set_n + 1, String::new());
                                 }

@@ -42,64 +42,11 @@ impl From<NetError> for String {
     }
 }
 
-pub const CONNECT_TIMEOUT_MS: u64 = 120000;
+pub use webprobe_support::dns::{CONNECT_TIMEOUT_MS, DNS_TIMEOUT_MS, READ_TIMEOUT_MS};
 
-pub const READ_TIMEOUT_MS: u64 = 120000;
+pub use webprobe_support::io_traits::OPEN_ENDED_RESPONSE_TIMEOUT_MS;
 
-pub const OPEN_ENDED_RESPONSE_TIMEOUT_MS: u64 = 10000;
-
-pub const DNS_TIMEOUT_MS: u64 = 300000;
-
-#[derive(Clone, Default)]
-pub struct HistEntry {
-    pub id: u64,
-    pub ts: u64,
-    pub method: String,
-    pub host: String,
-    pub port: u16,
-    pub https: bool,
-    pub path: String,
-    pub status: String,
-    pub resp_len: usize,
-    /// Request and response bytes: cheap to clone; Proxy history keeps them
-    /// in the on-disk store (`body::spill`).
-    pub req_raw: crate::body::Body,
-    pub resp_raw: Option<crate::body::Body>,
-    pub note: Option<String>,
-    /// Burp's row highlight (ui.highlight.0..8 in LightTheme.json).
-    pub highlight: Option<u8>,
-    /// The live passive audit looked at this item (Dashboard > Audit items).
-    pub audited: bool,
-    /// Derived once at insert (P-05), so a table frame never recomputes them.
-    /// Whether the request carries a query string, body parameters or cookies.
-    pub params: bool,
-    /// Whether the user edited the message (intercept, match/replace).
-    pub edited: bool,
-    /// URL file extension (lower case, no dot); empty when there is none.
-    pub extension: String,
-    /// HTML <title> text, empty for non-HTML responses.
-    pub title: String,
-    /// Cookies set by the response, "name=value" pairs joined by "; ".
-    pub cookies: String,
-    /// Listener port the request arrived on.
-    pub listener_port: u16,
-    /// Upstream IP the host resolved to (history "IP" column, live 52685:
-    /// e.g. 104.20.23.154 for example.com); empty when unresolvable.
-    pub ip: String,
-    /// How many response attributes changed vs. the previous exchange of the
-    /// same request location ("Diff count" column, burp.Zxwu.java:56).
-    pub diffs: usize,
-}
-
-impl HistEntry {
-    /// This entry with its bodies in the on-disk store, as Proxy history
-    /// keeps every entry (N-06).
-    pub fn spilled(mut self) -> Self {
-        self.req_raw = crate::body::spill(&self.req_raw);
-        self.resp_raw = self.resp_raw.as_ref().map(crate::body::spill);
-        self
-    }
-}
+pub use webprobe_support::hist::HistEntry;
 
 /// Host -> resolved-IP cache backing the history "IP" column, so repeated
 /// requests to the same host do not re-resolve.
@@ -365,6 +312,6 @@ pub struct RepTab {
     pub history: Vec<(String, Option<Vec<u8>>, String)>,
     /// Position in `history` being shown (len = the live, editable item).
     pub hist_pos: usize,
-    /// A WebSocket Repeater tab: its session (`Shared::ws_sessions`).
+    /// A WebSocket Repeater tab: its session (in `Shared::tool_state`).
     pub ws: Option<u64>,
 }

@@ -69,8 +69,7 @@ impl ScanCtx {
         smtp: Vec<SmtpOob>,
         item: usize,
     ) -> ScanCtx {
-        let stored_report = shared
-            .scan_config
+        let stored_report = crate::scan_config::shared_config(&shared)
             .lock()
             .unwrap()
             .check_enabled(STORED_INPUT_ID);
@@ -111,6 +110,11 @@ impl ScanCtx {
         bump_progress(&cx.shared);
         cx.baseline = Baseline { resp, raw, body };
         cx
+    }
+
+    /// The current run's dedup sets (#38).
+    pub(crate) fn state(&self) -> Arc<crate::scan::ScanDedup> {
+        crate::scan::scan_dedup_of(&self.shared)
     }
 
     pub(crate) fn stopped(&self) -> bool {
@@ -168,9 +172,7 @@ impl ScanCtx {
     /// default scan sends only the traffic Burp's scan would.
     pub(crate) fn runs(&self, issue: &str) -> bool {
         (is_burp_issue(issue) || self.shared.extra_checks.load(Ordering::SeqCst))
-            && self
-                .shared
-                .scan_config
+            && crate::scan_config::shared_config(&self.shared)
                 .lock()
                 .unwrap()
                 .issue_allowed(issue, true)
@@ -185,7 +187,8 @@ impl ScanCtx {
             issues.retain(|i| is_burp_issue(&i.name));
         }
         {
-            let config = self.shared.scan_config.lock().unwrap();
+            let cfg_slot = crate::scan_config::shared_config(&self.shared);
+            let config = cfg_slot.lock().unwrap();
             issues.retain(|i| config.issue_allowed(&i.name, true));
         }
         add_issues(&self.shared, issues);

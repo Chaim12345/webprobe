@@ -360,6 +360,17 @@ pub fn engines() -> Vec<Box<dyn HeadlessBrowser>> {
 }
 
 /// The engine named `name` (case-insensitive), else the first installed one.
+/// Register the browser crawl driver with the scan engine (app and
+/// headless startup, next to scan::register_scan_hooks).
+pub fn register_browser_crawl() {
+    crate::scan::register_browser_crawl(crate::scan::BrowserCrawl {
+        js_crawl: |engine, shared, url| {
+            pick(Some(engine)).map(|eng| js_crawl(eng.as_ref(), shared, url))
+        },
+        engine_name: |engine| pick(Some(engine)).map(|eng| eng.name().to_string()),
+    });
+}
+
 pub fn pick(name: Option<&str>) -> Option<Box<dyn HeadlessBrowser>> {
     let all = engines();
     if let Some(n) = name.filter(|n| !n.is_empty()) {
@@ -380,7 +391,11 @@ pub fn js_crawl(
     shared: &Arc<Shared>,
     start_url: &str,
 ) -> Result<Vec<String>, String> {
-    let limits = shared.scan_config.lock().unwrap().crawl.clone();
+    let limits = crate::scan_config::shared_config(shared)
+        .lock()
+        .unwrap()
+        .crawl
+        .clone();
     let started = std::time::Instant::now();
     let proxy_port = shared.proxy_port.load(std::sync::atomic::Ordering::SeqCst);
     let ca_file = std::env::temp_dir().join(format!("webprobe-ca-{}.pem", std::process::id()));
@@ -417,7 +432,7 @@ pub fn js_crawl(
             .filter(|p| !p.is_empty())
             .unwrap_or("/");
         let as_resp = format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n{dom}");
-        for link in crate::scan::crawl_links(&origin, path, as_resp.as_bytes()) {
+        for link in crate::crawl::crawl_links(&origin, path, as_resp.as_bytes()) {
             let next = format!("{origin}{link}");
             if !seen.contains(&next) {
                 queue.push_back((next, depth + 1));
@@ -480,7 +495,7 @@ mod tests {
         }
         // A static look at the page finds no link.
         let raw = b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<script>var a=document.createElement('a');a.setAttribute('hr'+'ef',String.fromCharCode(47)+'js-'+'only');</script>";
-        assert!(crate::scan::crawl_links("http://x", "/", raw).is_empty());
+        assert!(crate::crawl::crawl_links("http://x", "/", raw).is_empty());
         let urls = js_crawl(
             engine.as_ref(),
             &shared,

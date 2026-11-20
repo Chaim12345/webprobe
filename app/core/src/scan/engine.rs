@@ -44,7 +44,10 @@ pub fn start_active_scan(
         return;
     }
     let (host, port) = net::split_h_p(&host_header, entry.port);
-    let config = shared.scan_config.lock().unwrap().clone();
+    let config = crate::scan_config::shared_config(&shared)
+        .lock()
+        .unwrap()
+        .clone();
     let points: Vec<InsertionPoint> = audit_points(&req, &config);
     if points.is_empty() {
         // Burp still runs its per-request and per-host checks (CORS,
@@ -53,7 +56,7 @@ pub fn start_active_scan(
     }
     // Claim the scanner before touching its progress: a refused second
     // scan must not reset the running one's counters.
-    let Some(guard) = crate::scan_run::try_claim(&shared) else {
+    let Some(guard) = crate::scan_run::try_claim(&shared.scan) else {
         shared.log("Scanner: a scan is already running");
         return;
     };
@@ -225,7 +228,7 @@ pub fn run_stored_stage_claimed(shared: &Arc<Shared>) {
     if shared.stored.pairs().is_empty() {
         return;
     }
-    let Some(guard) = crate::scan_run::try_claim(shared) else {
+    let Some(guard) = crate::scan_run::try_claim(&shared.scan) else {
         return;
     };
     shared.scan.done.store(0, Ordering::SeqCst);
@@ -282,7 +285,8 @@ pub fn crawl_and_audit(shared: &Arc<Shared>, start_urls: &[String], audit_only: 
     }
     shared.oob.want(true);
     let _wanted = Wanted(shared);
-    reset_openapi_hosts();
+    // Fresh dedup sets for this run (reset by construction, #38).
+    *shared.scan_state.lock().unwrap() = Arc::new(webprobe_support::dedup::ScanDedup::default());
     for url in start_urls {
         let mut items = if audit_only {
             crate::crawl::crawl_single(shared, url)
@@ -292,41 +296,44 @@ pub fn crawl_and_audit(shared: &Arc<Shared>, start_urls: &[String], audit_only: 
         // Browser-driven crawl (Burp's crawler drives Chromium): picks up
         // client-side routes and the API calls pages make; each observed
         // same-origin request is re-issued as a crawl item.
-        let engine = shared.scan_config.lock().unwrap().crawl.engine.clone();
+        let engine = crate::scan_config::shared_config(shared)
+            .lock()
+            .unwrap()
+            .crawl
+            .engine
+            .clone();
         if !audit_only && !engine.is_empty() && !engine.eq_ignore_ascii_case("chromium") {
             // Another headless engine (headless.rs): render through the
             // proxy, then fetch each page it found as a crawl item.
-            match crate::headless::pick(Some(&engine)) {
-                Some(eng) => match crate::headless::js_crawl(eng.as_ref(), shared, url) {
-                    Ok(urls) => {
-                        shared.log(&format!(
-                            "{} crawl of {url}: {} page(s)",
-                            eng.name(),
-                            urls.len()
-                        ));
-                        let mut keys: std::collections::BTreeSet<String> = items
-                            .iter()
-                            .map(|e| {
-                                format!("{} {}", e.method, crate::crawl::location_key(&e.path))
-                            })
-                            .collect();
-                        for u in urls {
-                            for it in crate::crawl::crawl_single(shared, &u) {
-                                if keys.insert(format!(
-                                    "{} {}",
-                                    it.method,
-                                    crate::crawl::location_key(&it.path)
-                                )) {
-                                    items.push(it);
-                                }
+            let js_crawl = crate::scan::browser_crawl()
+                .and_then(|bc| (bc.js_crawl)(&engine, shared, url).map(|r| (bc, r)));
+            match js_crawl {
+                Some((bc, Ok(urls))) => {
+                    shared.log(&format!(
+                        "{} crawl of {url}: {} page(s)",
+                        (bc.engine_name)(&engine).unwrap_or_else(|| engine.clone()),
+                        urls.len()
+                    ));
+                    let mut keys: std::collections::BTreeSet<String> = items
+                        .iter()
+                        .map(|e| format!("{} {}", e.method, crate::crawl::location_key(&e.path)))
+                        .collect();
+                    for u in urls {
+                        for it in crate::crawl::crawl_single(shared, &u) {
+                            if keys.insert(format!(
+                                "{} {}",
+                                it.method,
+                                crate::crawl::location_key(&it.path)
+                            )) {
+                                items.push(it);
                             }
                         }
                     }
-                    Err(e) => shared.log(&format!(
-                        "{} crawl unavailable ({e}); static crawl only",
-                        eng.name()
-                    )),
-                },
+                }
+                Some((bc, Err(err))) => shared.log(&format!(
+                    "{} crawl unavailable ({err}); static crawl only",
+                    (bc.engine_name)(&engine).unwrap_or_else(|| engine.clone())
+                )),
                 None => shared.log(&format!(
                     "Headless engine {engine} is not installed; static crawl only"
                 )),

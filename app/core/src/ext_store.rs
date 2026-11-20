@@ -7,41 +7,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::ext_host::LoadedExtension;
 use crate::net::Shared;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Kind {
-    /// A Montoya .jar run by the sidecar JVM.
-    Java,
-    /// A WebProbe API v1 executable (ext_process).
-    Process,
-}
-
-impl Kind {
-    pub fn label(self) -> &'static str {
-        match self {
-            Kind::Java => "Java",
-            Kind::Process => "Process",
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Installed {
-    pub kind: Kind,
-    /// The .jar path (Java) or the command line (Process).
-    pub source: String,
-    #[serde(default = "yes")]
-    pub enabled: bool,
-}
-
-fn yes() -> bool {
-    true
-}
+pub use webprobe_support::ext::{Installed, Kind};
 
 /// Per-call deadline for process extensions.
 pub const HOOK_TIMEOUT: Duration = Duration::from_secs(2);
@@ -147,13 +118,9 @@ pub fn start(
 ) -> Result<LoadedExtension, String> {
     let mut loaded = match item.kind {
         Kind::Java => {
-            let data = shared
-                .ext_host
-                .lock()
-                .unwrap()
-                .saved_data
-                .get(item.source.trim())
-                .cloned();
+            let data = crate::ext_host::with_host(shared, |h| {
+                h.saved_data.get(item.source.trim()).cloned()
+            });
             let opts = crate::ext_host::SidecarOptions {
                 startup,
                 data,
@@ -161,7 +128,7 @@ pub fn start(
             };
             LoadedExtension::new(crate::ext_host::JavaSidecar::spawn_opts(
                 item.source.trim(),
-                Some(crate::ext_host::HostLink::to_shared(shared)),
+                Some(crate::ext_calls::host_link(shared)),
                 opts,
             )?)
         }
@@ -189,12 +156,14 @@ pub fn start_in_background(
 ) {
     let shared = Arc::clone(shared);
     crate::util::spawn_contained("ext_store", move || {
+        let source = item.source.clone();
         let result = start(&item, &shared, false).map(|ext| {
-            let name = ext.hooks.extension_name().to_string();
-            let mut host = shared.ext_host.lock().unwrap();
-            host.not_loaded.retain(|i| i.source != item.source);
-            host.extensions.push(ext);
-            name
+            crate::ext_host::with_host(&shared, move |host| {
+                let name = ext.hooks.extension_name().to_string();
+                host.not_loaded.retain(|i| i.source != source);
+                host.extensions.push(ext);
+                name
+            })
         });
         match &result {
             Ok(name) => shared.log(&format!(
@@ -216,19 +185,20 @@ pub fn start_in_background(
 /// The host's extensions that came from the store, in host order, with
 /// their current enabled state (what `save` should write).
 pub fn current(shared: &Shared) -> Vec<Installed> {
-    let host = shared.ext_host.lock().unwrap();
-    host.extensions
-        .iter()
-        .filter_map(|e| {
-            e.source.clone().map(|s| Installed {
-                enabled: e.enabled,
-                ..s
+    crate::ext_host::with_host(shared, |host| {
+        host.extensions
+            .iter()
+            .filter_map(|e| {
+                e.source.clone().map(|s| Installed {
+                    enabled: e.enabled,
+                    ..s
+                })
             })
-        })
-        // Entries that failed to load stay remembered: saving after any other
-        // change used to drop them from extensions.json.
-        .chain(host.not_loaded.iter().cloned())
-        .collect()
+            // Entries that failed to load stay remembered: saving after any other
+            // change used to drop them from extensions.json.
+            .chain(host.not_loaded.iter().cloned())
+            .collect()
+    })
 }
 
 /// Load every remembered extension, one after another, in order.
@@ -248,7 +218,7 @@ pub fn load_all(shared: &Arc<Shared>) {
                         item.kind.label(),
                         item.source
                     ));
-                    shared.ext_host.lock().unwrap().extensions.push(ext);
+                    crate::ext_host::with_host(&shared, |h| h.extensions.push(ext));
                 }
                 // Kept in the list: a failed load is reported, not forgotten.
                 Err(e) => {
@@ -257,12 +227,7 @@ pub fn load_all(shared: &Arc<Shared>) {
                         item.kind.label(),
                         item.source
                     ));
-                    shared
-                        .ext_host
-                        .lock()
-                        .unwrap()
-                        .not_loaded
-                        .push(item.clone());
+                    crate::ext_host::with_host(&shared, |h| h.not_loaded.push(item.clone()));
                 }
             }
             shared.wake();

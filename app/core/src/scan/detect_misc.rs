@@ -10,17 +10,6 @@ pub fn is_header_manipulation_hit(body: &str, headers: &[(String, String)], mark
     body.contains(marker) || headers.iter().any(|(_, v)| v.contains(marker))
 }
 
-/// Collaborator ids for Burp's SMTP header injection check on one
-/// parameter: `simple` and `enclosed` (burp.Zrok, Zpu2
-/// SMTP_HEADER_INJECTION_SIMPLE_PAYLOAD / _ENCLOSED_PAYLOAD), each with the
-/// public host its id lives under.
-#[derive(Clone, Debug)]
-pub struct SmtpOob {
-    pub param: String,
-    pub simple: (String, String),
-    pub enclosed: (String, String),
-}
-
 /// burp.Zrok.Zl: `String.format("%s\r\nBCC:%s\r\n%s: %s", enclosed ? ">" : "",
 /// address, rand(3), rand(1))`, appended to the base value (Ziqd mode 1).
 /// The address uses burp.Zbzl.Zm's `user@<id>.<domain>` form: a live test
@@ -212,6 +201,12 @@ pub const SECONDARY_ISSUES: &[(&str, &str)] =
 /// R-11's issue table: the WebProbe check ids that report Burp issue type
 /// `type_id` (from [`check_catalogue`] and [`SECONDARY_ISSUES`]). Empty
 /// when WebProbe has no check for it.
+/// Register the check catalogue as the lookup for selected issue types no
+/// check reports (app startup; unregistered keeps selections).
+pub fn register_type_checks() {
+    webprobe_support::scan_filter::register_type_checks(|id| !checks_for_issue_type(id).is_empty());
+}
+
 pub fn checks_for_issue_type(type_id: u32) -> Vec<&'static str> {
     let mut v: Vec<&'static str> = check_catalogue()
         .into_iter()

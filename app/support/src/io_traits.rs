@@ -1,7 +1,15 @@
 // Split from net.rs (L5, issue #35). Bodies unchanged; visibility promoted
 // to pub where siblings across the split need access.
 
-use super::*;
+use std::io::Read;
+use std::io::Write;
+use std::net::TcpStream;
+use std::time::Duration;
+
+/// A body without length information is bounded by the open-ended
+/// timeout (ProjectDefaults.json connections.timeouts). (Moved from
+/// net/types.rs with the traits that use it, L8 #38.)
+pub const OPEN_ENDED_RESPONSE_TIMEOUT_MS: u64 = 10000;
 
 pub trait ResponseRead: Read {
     /// The read timeout from now on (idle time allowed between reads).
@@ -74,11 +82,5 @@ impl ProxyIo for rustls::StreamOwned<rustls::ClientConnection, TcpStream> {
     }
     fn peer_closed(&self) -> bool {
         tcp_closed(self.get_ref())
-    }
-}
-
-impl ProxyIo for crate::h2_server::ResponseWriter {
-    fn set_nonblocking_io(&self, _: bool) -> std::io::Result<()> {
-        Ok(())
     }
 }

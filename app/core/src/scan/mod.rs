@@ -49,7 +49,11 @@ mod passive_entry;
 pub use passive_entry::*;
 
 mod engine;
+mod hooks;
+mod state;
 pub use engine::*;
+pub use hooks::*;
+pub use state::*;
 
 mod checks_header_redirect;
 pub use checks_header_redirect::*;
@@ -77,6 +81,7 @@ pub use checks_ldap_xml::*;
 
 mod detect_misc;
 pub use detect_misc::*;
+pub use webprobe_support::tasks::SmtpOob;
 
 mod request_builders;
 pub(crate) use request_builders::reflected_xss_severity;

@@ -730,8 +730,7 @@ fn passive_checks_are_registered_and_switchable() {
         live.iter().any(|n| n == "JWT private key disclosed"),
         "{live:?}"
     );
-    shared
-        .scan_config
+    crate::scan_config::shared_config(&shared)
         .lock()
         .unwrap()
         .disabled_checks
@@ -920,7 +919,8 @@ fn scan(
 ) -> (std::sync::Arc<Shared>, Vec<ScanIssue>) {
     let shared = Shared::new();
     {
-        let mut cfg = shared.scan_config.lock().unwrap();
+        let cfg_slot = crate::scan_config::shared_config(&shared);
+        let mut cfg = cfg_slot.lock().unwrap();
         for (id, _, _) in crate::scan::check_catalogue() {
             if id != "active.jwt" {
                 cfg.disabled_checks.insert(id.to_string());

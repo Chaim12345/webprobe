@@ -221,7 +221,11 @@ pub fn crawl(shared: &Arc<Shared>, start_url: &str) -> Vec<HistEntry> {
         format!("{scheme}://{host}:{port}")
     };
 
-    let limits = shared.scan_config.lock().unwrap().crawl.clone();
+    let limits = crate::scan_config::shared_config(shared)
+        .lock()
+        .unwrap()
+        .crawl
+        .clone();
     let started = std::time::Instant::now();
     let mut seen: BTreeSet<String> = BTreeSet::new();
     let mut queue: VecDeque<(String, usize)> = VecDeque::new();
@@ -304,7 +308,7 @@ pub fn crawl(shared: &Arc<Shared>, start_url: &str) -> Vec<HistEntry> {
         );
         if depth < limits.max_depth {
             if let Some(resp) = &e.resp_raw {
-                for link in crate::scan::crawl_links(&origin, &path, resp) {
+                for link in crawl_links(&origin, &path, resp) {
                     push(link, depth + 1, &mut seen, &mut queue);
                 }
             }
@@ -379,7 +383,8 @@ mod tests {
         });
         let shared = Shared::new();
         {
-            let mut c = shared.scan_config.lock().unwrap();
+            let cfg_slot = crate::scan_config::shared_config(&shared);
+            let mut c = cfg_slot.lock().unwrap();
             c.crawl = crate::scan_config::CrawlLimits {
                 max_depth: 1,
                 max_locations: 100,
@@ -868,7 +873,11 @@ pub fn browser_crawl(shared: &Arc<Shared>, start_url: &str) -> Result<Vec<SeenRe
         .map_err(|m| m.to_string())?
         .display()
         .to_string();
-    let limits = shared.scan_config.lock().unwrap().crawl.clone();
+    let limits = crate::scan_config::shared_config(shared)
+        .lock()
+        .unwrap()
+        .crawl
+        .clone();
     let started = std::time::Instant::now();
     let (scheme, rest) = start_url.split_once("://").unwrap_or(("http", start_url));
     let authority = rest.split('/').next().unwrap_or("").to_string();
@@ -1374,4 +1383,166 @@ mod live {
             }
         }
     }
+}
+
+// ------------------------------------------------------------------ links
+
+/// Redirect targets in a response, as Burp's redirect sinks see them:
+/// burp.Zxzj (3xx `Location`, or a `Refresh` header's `url=`), burp.Zgi5
+/// (`<meta http-equiv="refresh" content="...url=...">`). Sink literals were
+/// decoded with Burp's own string decoder.
+pub fn redirect_targets(resp: &[u8]) -> Vec<String> {
+    let p = crate::util::parse_http(resp);
+    let mut out = Vec::new();
+    let status: u16 = p.status.trim().parse().unwrap_or(0);
+    if (300..400).contains(&status) {
+        if let Some(l) = crate::util::get_header(&p.headers, "location") {
+            out.push(l.trim().to_string());
+        }
+    }
+    let after_url = |s: &str| -> Option<String> {
+        let low = s.to_ascii_lowercase();
+        low.find("url=").map(|i| {
+            s[i + 4..]
+                .trim()
+                .trim_matches(|c| c == '"' || c == '\'')
+                .to_string()
+        })
+    };
+    if let Some(r) = crate::util::get_header(&p.headers, "refresh").and_then(|r| after_url(&r)) {
+        out.push(r);
+    }
+    let body = String::from_utf8_lossy(&resp[p.head_len.min(resp.len())..]).into_owned();
+    let low = body.to_ascii_lowercase();
+    let mut i = 0;
+    while let Some(m) = low[i..].find("<meta").map(|x| x + i) {
+        let end = low[m..].find('>').map(|x| x + m).unwrap_or(low.len());
+        let tag = &body[m..end];
+        let tl = &low[m..end];
+        if tl.contains("http-equiv") && tl.contains("refresh") {
+            if let Some(ci) = tl.find("content") {
+                if let Some(u) = after_url(&tag[ci..]) {
+                    out.push(u.trim_end_matches(['"', '\'', '/', ' ']).to_string());
+                }
+            }
+        }
+        i = end.max(m + 5);
+    }
+    out
+}
+
+/// Link-attribute targets in a response: href/src/action/formaction values
+/// plus redirect targets (burp.Zpyp injects a URL and checks it becomes a
+/// link/redirect target the page points at).
+pub fn link_targets(resp: &[u8]) -> Vec<String> {
+    let mut out = redirect_targets(resp);
+    let p = crate::util::parse_http(resp);
+    let body = String::from_utf8_lossy(&resp[p.head_len.min(resp.len())..]).into_owned();
+    let low = body.to_ascii_lowercase();
+    for attr in ["href=", "src=", "action=", "formaction="] {
+        let mut i = 0;
+        while let Some(a) = low[i..].find(attr).map(|x| x + i) {
+            let vs = a + attr.len();
+            let rest = &body[vs.min(body.len())..];
+            let val = if rest.starts_with('"') || rest.starts_with('\'') {
+                let q = rest.as_bytes()[0] as char;
+                rest[1..].split(q).next().unwrap_or("").to_string()
+            } else {
+                rest.split([' ', '>', '\t', '\n'])
+                    .next()
+                    .unwrap_or("")
+                    .to_string()
+            };
+            if !val.is_empty() {
+                out.push(val);
+            }
+            i = vs;
+        }
+    }
+    out
+}
+
+/// Live passive crawl: same-origin link paths found in a response, resolved
+/// against the request path (query kept, fragment dropped).
+pub fn crawl_links(origin: &str, req_path: &str, resp: &[u8]) -> Vec<String> {
+    let base = req_path.split('?').next().unwrap_or("/");
+    let base = match base.split_once("://") {
+        Some((_, r)) => r
+            .find('/')
+            .map(|i| r[i..].to_string())
+            .unwrap_or_else(|| "/".into()),
+        None => base.to_string(),
+    };
+    let dir = &base[..=base.rfind('/').unwrap_or(0)];
+    let mut out = Vec::new();
+    // Links come from HTML documents (and redirects), as a browser sees them:
+    // href/src strings inside script bundles are not navigations.
+    let ct = crate::util::get_header(&crate::util::parse_http(resp).headers, "Content-Type")
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let targets = if ct.contains("html") {
+        link_targets(resp)
+    } else {
+        redirect_targets(resp)
+    };
+    for l in targets {
+        let l = l.split('#').next().unwrap_or("").trim().to_string();
+        if l.is_empty()
+            || l.starts_with("javascript:")
+            || l.starts_with("mailto:")
+            || l.starts_with("data:")
+        {
+            continue;
+        }
+        if l.chars()
+            .any(|c| c.is_whitespace() || "`{}()<>;$\"'\\".contains(c))
+        {
+            continue;
+        }
+        let path = if let Some(rest) = l.strip_prefix(origin) {
+            if rest.is_empty() {
+                "/".to_string()
+            } else if rest.starts_with('/') {
+                rest.to_string()
+            } else {
+                continue;
+            }
+        } else if l.contains("://") || l.starts_with("//") {
+            continue;
+        } else if l.starts_with('/') {
+            l
+        } else {
+            format!("{dir}{l}")
+        };
+        // Collapse ./ and ../ segments.
+        let (p, q) = match path.split_once('?') {
+            Some((p, q)) => (p.to_string(), Some(q.to_string())),
+            None => (path.clone(), None),
+        };
+        let mut segs: Vec<&str> = Vec::new();
+        let ends_dir = p.ends_with('/') || p.ends_with("/.") || p.ends_with("/..");
+        for seg in p.split('/') {
+            match seg {
+                "." => {}
+                ".." => {
+                    segs.pop();
+                }
+                s => segs.push(s),
+            }
+        }
+        let mut joined = segs.join("/");
+        if ends_dir && !joined.ends_with('/') {
+            joined.push('/');
+        }
+        if !joined.starts_with('/') {
+            joined.insert(0, '/');
+        }
+        if let Some(q) = q {
+            joined = format!("{joined}?{q}");
+        }
+        if !out.contains(&joined) {
+            out.push(joined);
+        }
+    }
+    out
 }

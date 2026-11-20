@@ -651,7 +651,7 @@ pub fn report_stream_skips(shared: &Shared, host: &str, url: &str, head: &[u8], 
     if shared.mr_response.lock().unwrap().iter().any(|r| r.enabled) {
         reasons.push("response match and replace rules");
     }
-    if !shared.ext_host.lock().unwrap().active().is_empty() {
+    if !shared.ext_hooks.lock().unwrap().active_hooks().is_empty() {
         reasons.push("extension response handlers");
     }
     for reason in reasons {
@@ -719,9 +719,9 @@ pub fn upstream_and_deliver<S: ProxyIo>(
     let mut req_out = crate::rules::apply_rules(&req_session, &shared.mr_request.lock().unwrap());
     // Extension hooks run after the built-in chain (session rules, M&R);
     // a Drop verdict closes the client connection without a response.
-    let mut ann = crate::ext_host::Annotations::default();
+    let mut ann = webprobe_support::ext::Annotations::default();
     if !shared.ext_handle_request(
-        &crate::ext_host::HttpService::new(&host, port, use_tls),
+        &webprobe_support::ext::HttpService::new(&host, port, use_tls),
         &parts.method,
         &path_of(&parts),
         &mut req_out,
@@ -776,7 +776,7 @@ pub fn upstream_and_deliver<S: ProxyIo>(
         Some(resp) => {
             let mut resp = crate::rules::apply_rules(&resp, &shared.mr_response.lock().unwrap());
             if !shared.ext_handle_response(
-                &crate::ext_host::HttpService::new(&host, port, use_tls),
+                &webprobe_support::ext::HttpService::new(&host, port, use_tls),
                 &parts.method,
                 &path_of(&parts),
                 &req_out,

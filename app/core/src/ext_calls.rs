@@ -12,23 +12,11 @@ use serde_json::{json, Value};
 use crate::net::{HistEntry, Shared};
 use crate::util;
 
-/// A message an extension sent to a tool whose state is the desktop
-/// app's; the app applies it on its next frame.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ToolSend {
-    /// The request (with § position markers) and its target origin.
-    Intruder {
-        request: String,
-        target: String,
-        https: bool,
-    },
-    Comparer(String),
-    Decoder(String),
-}
+pub use webprobe_support::ext::ToolSend;
 
 /// The Intruder payload generators of the enabled extensions, by name.
 pub fn payload_generators(shared: &Shared) -> Vec<String> {
-    let exts = shared.ext_host.lock().unwrap().active();
+    let exts = crate::ext_host::active_hooks(shared);
     let mut names: Vec<String> = exts
         .iter()
         .filter_map(|e| e.ui())
@@ -58,7 +46,7 @@ pub fn fill_extension_payloads(
         .first()
         .cloned()
         .unwrap_or_default();
-    let exts = shared.ext_host.lock().unwrap().active();
+    let exts = crate::ext_host::active_hooks(shared);
     for src in sources.iter_mut() {
         let crate::intruder::PayloadSource::Extension { provider, payloads } = src else {
             continue;
@@ -93,7 +81,7 @@ pub fn apply_extension_processors(
     if processors.iter().all(String::is_empty) {
         return Ok(());
     }
-    let exts = shared.ext_host.lock().unwrap().active();
+    let exts = crate::ext_host::active_hooks(shared);
     let bases = template.position_values();
     for (spec, name) in specs.iter_mut().zip(processors) {
         if name.is_empty() {
@@ -141,12 +129,6 @@ fn origin(v: &Value) -> (String, bool) {
     )
 }
 
-fn b64(v: &Value, k: &str) -> Option<Vec<u8>> {
-    v.get(k)
-        .and_then(|x| x.as_str())
-        .and_then(|x| util::b64_decode(x).ok())
-}
-
 fn entry_json(e: &HistEntry) -> Value {
     let mut v = json!({
         "id": e.id, "request": util::b64_encode(&e.req_raw), "host": e.host, "port": e.port, "secure": e.https,
@@ -184,66 +166,45 @@ fn entry_of(v: &Value) -> Option<HistEntry> {
     Some(e)
 }
 
-/// The issue an extension reported (Montoya AuditIssue), as WebProbe's.
-pub fn issue_of(v: &Value, extension: &str) -> crate::scan::ScanIssue {
-    let url = v["baseUrl"].as_str().unwrap_or_default();
-    let rest = url.split_once("://").map(|x| x.1).unwrap_or(url);
-    let (auth, path) = rest
-        .find('/')
-        .map(|i| (&rest[..i], &rest[i..]))
-        .unwrap_or((rest, "/"));
-    let host = auth
-        .rsplit_once(':')
-        .filter(|(_, p)| p.chars().all(|c| c.is_ascii_digit()))
-        .map(|x| x.0)
-        .unwrap_or(auth);
-    let sev = v["severity"].as_str().unwrap_or("INFORMATION");
-    let mut detail = v["detail"].as_str().unwrap_or_default().to_string();
-    if let Some(r) = v["remediation"].as_str().filter(|r| !r.is_empty()) {
-        detail.push_str(&format!("<p><b>Remediation:</b> {r}</p>"));
-    }
-    detail.push_str(&format!(
-        "<p>Reported by the extension {}.</p>",
-        util::html_encode(extension)
-    ));
-    let confidence = match v["confidence"].as_str().unwrap_or("FIRM") {
-        "CERTAIN" => "Certain",
-        "TENTATIVE" => "Tentative",
-        _ => "Firm",
-    };
-    let evidence = v["evidence"]
-        .as_array()
-        .map(|a| {
-            a.iter()
-                .filter_map(|m| {
-                    Some(crate::scan::ScanEvidence::new(
-                        &b64(m, "request")?,
-                        b64(m, "response").as_deref(),
-                    ))
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    crate::scan::ScanIssue {
-        sev: match sev {
-            "HIGH" => "high",
-            "MEDIUM" => "medium",
-            "LOW" => "low",
-            _ => "info",
-        }
-        .into(),
-        name: v["name"].as_str().unwrap_or_default().to_string(),
-        host: host.to_string(),
-        path: path.split('?').next().unwrap_or("/").to_string(),
-        detail,
-        false_positive: sev == "FALSE_POSITIVE",
-        confidence: confidence.into(),
-        ts: util::now_secs(),
-        type_id: crate::scan::issue_type_id(v["name"].as_str().unwrap_or_default()),
-        evidence,
-        ..Default::default()
-    }
+fn b64(v: &Value, k: &str) -> Option<Vec<u8>> {
+    let s = v[k].as_str()?;
+    util::b64_decode(s).ok()
 }
+
+/// The host link to a running WebProbe for a sidecar or helper process:
+/// sends with net::send_raw / send_tls_raw, events to the event log, engine
+/// calls to dispatch. Holds the engine weakly (the engine owns its
+/// extensions).
+pub fn host_link(shared: &std::sync::Arc<Shared>) -> std::sync::Arc<crate::ext_host::HostLink> {
+    let (a, b, c) = (
+        std::sync::Arc::downgrade(shared),
+        std::sync::Arc::downgrade(shared),
+        std::sync::Arc::downgrade(shared),
+    );
+    std::sync::Arc::new(crate::ext_host::HostLink {
+        send: Box::new(move |svc, req| {
+            let shared = a.upgrade().ok_or("WebProbe is shutting down")?;
+            let up = if svc.secure {
+                crate::net::send_tls_raw(&shared, &svc.host, svc.port, req)
+            } else {
+                crate::net::send_raw(&shared, &svc.host, svc.port, req)
+            };
+            up.resp
+                .ok_or_else(|| up.error.unwrap_or_else(|| "no response".into()))
+        }),
+        event: Box::new(move |level, msg| {
+            if let Some(shared) = b.upgrade() {
+                shared.log(&format!("Extension event ({level}): {msg}"));
+            }
+        }),
+        call: Box::new(move |ext, op, args| {
+            let shared = c.upgrade().ok_or("WebProbe is shutting down")?;
+            dispatch(&shared, ext, op, args)
+        }),
+    })
+}
+
+pub use crate::ext_host::issue_of;
 
 /// Answer one call from the extension `extension`.
 pub fn dispatch(shared: &Shared, extension: &str, op: &str, args: &Value) -> Result<Value, String> {
