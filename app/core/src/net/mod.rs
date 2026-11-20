@@ -98,6 +98,8 @@ pub use attack::*;
 mod intercept_all_tests;
 
 #[cfg(test)]
+mod conn_reuse_tests;
+#[cfg(test)]
 mod tests;
 
 #[cfg(test)]
