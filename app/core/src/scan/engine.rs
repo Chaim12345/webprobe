@@ -92,59 +92,68 @@ pub fn start_active_scan(
         accuracy: crate::variations::Accuracy::from_u8(shared.scan_accuracy.load(Ordering::SeqCst)),
     };
     let (oob, smtp) = (oob.to_vec(), smtp.to_vec());
-    crate::util::spawn_contained("scan", move || {
-        let _tool = crate::net::tool_scope("Scanner");
-        // The guard releases the scanner however this thread ends: a
-        // panicking check used to leave it claimed, so every later scan was
-        // refused and the task runner waited forever.
-        let _guard = guard;
-        let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let cx = checks::ScanCtx::start(
-                shared.clone(),
-                entry,
-                req,
-                parts,
-                host,
-                port,
-                settings,
-                oob,
-                smtp,
-                item,
-            );
-            checks::run_stored_seeding(&cx, &points);
-            checks::run_point_checks(&cx, &points);
-            checks::run_request_checks(&cx);
-            checks::run_extension_checks(&cx, &points);
-            // A scan on its own runs stage A4 now; a batch runs it once its
-            // last item is done (`run_stored_stage_claimed`).
-            if !shared.stored.in_batch() {
-                checks::run_stored_stage(&shared);
+    // Async Phase 1 (issue #42): the scan body is one engine task on the
+    // runtime; the blocking checks (extension hooks included) run in
+    // `spawn_blocking`, and the scanner's stop flag aborts the task — the
+    // body still ends on its own cooperative checks of the same flag.
+    let flag = shared.clone();
+    crate::rt::engine().spawn_engine(
+        "scan",
+        move || flag.scan.stop.load(Ordering::SeqCst),
+        move || {
+            let _tool = crate::net::tool_scope("Scanner");
+            // The guard releases the scanner however this thread ends: a
+            // panicking check used to leave it claimed, so every later scan was
+            // refused and the task runner waited forever.
+            let _guard = guard;
+            let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let cx = checks::ScanCtx::start(
+                    shared.clone(),
+                    entry,
+                    req,
+                    parts,
+                    host,
+                    port,
+                    settings,
+                    oob,
+                    smtp,
+                    item,
+                );
+                checks::run_stored_seeding(&cx, &points);
+                checks::run_point_checks(&cx, &points);
+                checks::run_request_checks(&cx);
+                checks::run_extension_checks(&cx, &points);
+                // A scan on its own runs stage A4 now; a batch runs it once its
+                // last item is done (`run_stored_stage_claimed`).
+                if !shared.stored.in_batch() {
+                    checks::run_stored_stage(&shared);
+                }
+            }));
+            if let Err(e) = run {
+                let why = e
+                    .downcast_ref::<&str>()
+                    .map(|s| s.to_string())
+                    .or_else(|| e.downcast_ref::<String>().cloned())
+                    .unwrap_or_default();
+                shared.log(&format!(
+                    "Scanner: the scan stopped on an internal error: {why}"
+                ));
+                crate::notice::toast(
+                    crate::notice::Level::Error,
+                    format!("Active scan stopped on an internal error: {why}"),
+                );
+                return;
             }
-        }));
-        if let Err(e) = run {
-            let why = e
-                .downcast_ref::<&str>()
-                .map(|s| s.to_string())
-                .or_else(|| e.downcast_ref::<String>().cloned())
-                .unwrap_or_default();
-            shared.log(&format!(
-                "Scanner: the scan stopped on an internal error: {why}"
-            ));
+            drop(_guard);
+            let shared = &shared;
+            shared.log("Scanner: active scan finished");
+            let found = shared.issues.lock().map(|i| i.len()).unwrap_or(0);
             crate::notice::toast(
-                crate::notice::Level::Error,
-                format!("Active scan stopped on an internal error: {why}"),
+                crate::notice::Level::Success,
+                format!("Active scan finished — {found} issue(s) in the report"),
             );
-            return;
-        }
-        drop(_guard);
-        let shared = &shared;
-        shared.log("Scanner: active scan finished");
-        let found = shared.issues.lock().map(|i| i.len()).unwrap_or(0);
-        crate::notice::toast(
-            crate::notice::Level::Success,
-            format!("Active scan finished — {found} issue(s) in the report"),
-        );
-    });
+        },
+    );
 }
 
 /// The progress bar's total for a scan: fifteen probes per insertion point,

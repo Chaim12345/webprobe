@@ -938,7 +938,7 @@ pub fn results_window(app: &mut App, ctx: &egui::Context) {
                         .on_hover_text("Write the results table to the file on the left")
                         .clicked()
                     {
-                        let mut sorted = state.rows.lock().unwrap().clone();
+                        let mut sorted = state.snapshot_rows();
                         sorted.sort_by_key(|r| r.number);
                         let text = if xml {
                             run::results_xml(&sorted, state.sets, &state.settings)
@@ -966,7 +966,7 @@ pub fn results_window(app: &mut App, ctx: &egui::Context) {
             ui.add(egui::ProgressBar::new(frac).desired_height(6.0));
         }
 
-        let rows: Vec<Arc<ResultRow>> = state.rows.lock().unwrap().clone();
+        let rows: Vec<Arc<ResultRow>> = state.snapshot_rows();
         let labels = run::result_columns(state.sets, &state.settings);
         let cols: Vec<crate::table::Column> = labels
             .iter()
