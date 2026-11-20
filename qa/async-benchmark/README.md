@@ -4,7 +4,7 @@ Baseline: PR45 `4cddee0`. Async stack: PR49 plus PR68 `7bdf2c95e7b85c12eb5b40706
 
 ## Method
 
-Rust 1.100.0, dev profile with dependency opt-level 2, local cc linker, same compiler/flags/shared dependency cache. Linux, 2 GiB RAM. Python stdlib driver and owned 960-byte loopback HTTP fixture, backlog 256. No public traffic. Each sample starts a fresh proxy, warms with 8 validated exchanges, then makes 128 new connections at concurrency 1, 16 or 64. Three repeats, alternating baseline/stack order. Every response status and complete body is checked. RSS and thread count sampled every 5 ms from the proxy process only. Table gives medians across three repeats, not pooled-request percentiles. Raw samples are in `results.json`.
+Rust 1.100.0, dev profile with dependency opt-level 2, local cc linker, same compiler/flags/shared dependency cache. Linux, 2 GiB RAM. Python stdlib driver and owned 1000-byte loopback HTTP fixture, backlog 256. No public traffic. Each sample starts a fresh proxy, warms with 8 validated exchanges, then makes 128 new connections at concurrency 1, 16 or 64. Three repeats, alternating baseline/stack order. Every response status and complete body is checked. RSS and thread count sampled every 5 ms from the proxy process only. Table gives medians across three repeats, not pooled-request percentiles. Raw samples are in `results.json`.
 
 | Concurrency | Version | Conn/s | p50 ms | p95 ms | Idle/peak RSS KiB | Idle/peak threads |
 |---|---|---:|---:|---:|---:|---:|
