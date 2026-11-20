@@ -693,3 +693,299 @@ pub(crate) fn run_malformed(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
         v.push(issue(cx, CSP_MALFORMED, "Certain", t));
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn hdr(k: &str, v: &str) -> (String, String) {
+        (k.to_string(), v.to_string())
+    }
+
+    fn parsed(policy: &str) -> Csp {
+        Csp::of(&[hdr("Content-Security-Policy", policy)], None)
+    }
+
+    fn has_err(c: &Csp, needle: &str) -> bool {
+        c.errors.iter().any(|e| e.contains(needle))
+    }
+
+    #[test]
+    fn java_split_drops_trailing_empties_like_java() {
+        assert_eq!(java_split("a;b;;", ';'), vec!["a", "b"]);
+        assert_eq!(java_split("a;;b", ';'), vec!["a", "", "b"]);
+        assert_eq!(java_split("", ';'), vec![""]);
+        // Only separators: Java returns an empty array.
+        assert!(java_split(";;;", ';').is_empty());
+    }
+
+    #[test]
+    fn host_sources() {
+        for ok in [
+            "*",
+            "example.com",
+            "*.example.com",
+            "https://cdn.example.com",
+            "wss://a.b.example.com:8443",
+            "example.com:*",
+            "example.com/path/to/file.js",
+        ] {
+            assert!(host_source(ok), "{ok}");
+        }
+        for bad in [
+            "localhost",
+            "example",
+            "http://",
+            "exa mple.com",
+            "a..b",
+            "",
+        ] {
+            assert!(!host_source(bad), "{bad}");
+        }
+    }
+
+    #[test]
+    fn scheme_sources() {
+        for ok in [
+            "https:",
+            "data:",
+            "blob:",
+            "wss:",
+            "chrome-extension:",
+            "https://*",
+        ] {
+            assert!(scheme_source(ok), "{ok}");
+        }
+        for bad in ["javascript", "x:", "ab:", "1http:", "data"] {
+            assert!(!scheme_source(bad), "{bad}");
+        }
+    }
+
+    #[test]
+    fn uri_accepts_plain_urls_and_rejects_raw_specials() {
+        assert!(uri_ok("/report?x=1&y=2"));
+        assert!(uri_ok("https://r.example.com/csp"));
+        for bad in ["/a b", "/a\"b", "/<x>", "/a\\b", "/a|b", "/{x}"] {
+            assert!(!uri_ok(bad), "{bad}");
+        }
+    }
+
+    #[test]
+    fn a_clean_policy_parses_without_errors() {
+        let c = parsed(
+            "default-src 'self'; script-src 'nonce-abc123abc123abc123' https://cdn.example.com; img-src data: *.example.com; upgrade-insecure-requests; sandbox allow-scripts allow-forms",
+        );
+        assert!(c.errors.is_empty(), "{:?}", c.errors);
+        assert_eq!(c.policies.len(), 1);
+        assert_eq!(c.policies[0].len(), 4);
+        assert!(!c.none());
+    }
+
+    #[test]
+    fn later_duplicate_directive_replaces_the_value() {
+        let c = parsed("script-src 'self'; script-src 'none'");
+        assert_eq!(c.only("script-src"), vec!["'none'"]);
+    }
+
+    #[test]
+    fn unknown_directive_is_reported_and_dropped() {
+        let c = parsed("script-src 'self'; bogus-src 'self'");
+        assert!(has_err(&c, "Invalid directive name: bogus-src"));
+        assert!(c.only("bogus-src").is_empty());
+        assert_eq!(c.only("script-src"), vec!["'self'"]);
+    }
+
+    #[test]
+    fn directive_value_rules() {
+        assert!(has_err(
+            &parsed("upgrade-insecure-requests foo"),
+            "should have no value"
+        ));
+        assert!(has_err(
+            &parsed("img-src"),
+            "Directive img-src has no value"
+        ));
+        // sandbox may be bare.
+        assert!(parsed("sandbox").errors.is_empty());
+        assert!(has_err(
+            &parsed("sandbox allow-teleport"),
+            "unrecognised value: allow-teleport"
+        ));
+        assert!(has_err(&parsed("report-uri /a b"), "invalid value"));
+        assert!(parsed("report-uri /csp-report").errors.is_empty());
+        assert!(parsed("require-trusted-types-for 'script'")
+            .errors
+            .is_empty());
+        assert!(has_err(
+            &parsed("require-trusted-types-for script"),
+            "invalid value"
+        ));
+        assert!(parsed("report-to csp-endpoint").errors.is_empty());
+        assert!(has_err(
+            &parsed("report-to bad endpoint,x"),
+            "invalid value"
+        ));
+    }
+
+    #[test]
+    fn keywords_must_be_quoted_and_quotes_must_be_well_formed() {
+        assert!(has_err(
+            &parsed("script-src self"),
+            "which should be quoted"
+        ));
+        assert!(has_err(
+            &parsed("script-src unsafe-inline"),
+            "which should be quoted"
+        ));
+        assert!(has_err(
+            &parsed("script-src nonce-abcdefgh12345"),
+            "which should be quoted"
+        ));
+        assert!(has_err(&parsed("script-src 'self"), "incorrectly quoted"));
+        assert!(has_err(&parsed("script-src ''"), "incorrectly quoted"));
+        assert!(has_err(
+            &parsed("script-src 'bogus'"),
+            "illegal value component: bogus"
+        ));
+        assert!(parsed("script-src 'sha256-AbC+/=='").errors.is_empty());
+    }
+
+    #[test]
+    fn invalid_directive_value_keeps_the_policy_but_not_the_directive() {
+        let c = parsed("img-src; script-src 'self'");
+        assert!(has_err(&c, "has no value"));
+        assert!(c.only("img-src").is_empty());
+        assert_eq!(c.only("script-src"), vec!["'self'"]);
+    }
+
+    #[test]
+    fn blank_and_report_only_headers_are_flagged_not_parsed() {
+        let c = Csp::of(&[hdr("Content-Security-Policy", "   ")], None);
+        assert!(c.blank && c.none());
+        let c = Csp::of(
+            &[hdr(
+                "content-security-policy-report-only",
+                "default-src 'self'",
+            )],
+            None,
+        );
+        assert!(c.report_only && c.none());
+    }
+
+    #[test]
+    fn x_frame_options_and_header_frame_ancestors_are_tracked() {
+        let c = Csp::of(
+            &[
+                hdr(" X-Frame-Options ", "DENY"),
+                hdr("Content-Security-Policy", "Frame-Ancestors 'none'"),
+            ],
+            None,
+        );
+        assert!(c.xfo);
+        assert!(c.frame_ancestors_in_header);
+        assert!(c.frame_ancestors_present());
+    }
+
+    #[test]
+    fn meta_tag_policy_is_read_with_its_case_and_quote_styles() {
+        let body = "<html><head><META HTTP-EQUIV=\"Content-Security-Policy\" CONTENT=\"default-src 'self'; img-src Data:\"></head></html>";
+        let low = body.to_lowercase();
+        let c = Csp::of(&[], Some((body, &low)));
+        assert_eq!(c.policies.len(), 1);
+        assert_eq!(c.only("default-src"), vec!["'self'"]);
+        // Header-only flag stays off for a meta policy.
+        assert!(!c.frame_ancestors_in_header);
+
+        let body = "<meta http-equiv='content-security-policy' content='script-src https://a.example.com'>";
+        let low = body.to_lowercase();
+        let c = Csp::of(&[], Some((body, &low)));
+        assert_eq!(c.only("script-src"), vec!["https://a.example.com"]);
+
+        // A meta tag for another http-equiv is ignored.
+        let body = "<meta http-equiv=\"refresh\" content=\"default-src 'self'\">";
+        let low = body.to_lowercase();
+        assert!(Csp::of(&[], Some((body, &low))).none());
+    }
+
+    #[test]
+    fn meta_and_header_policies_are_both_enforced() {
+        let body = "<meta http-equiv=\"Content-Security-Policy\" content=\"script-src 'self'\">";
+        let low = body.to_lowercase();
+        let c = Csp::of(
+            &[hdr(
+                "Content-Security-Policy",
+                "script-src https://a.example.com",
+            )],
+            Some((body, &low)),
+        );
+        assert_eq!(c.policies.len(), 2);
+        assert_eq!(c.only("script-src").len(), 2);
+    }
+
+    #[test]
+    fn default_src_covers_missing_directives_per_policy() {
+        let c = parsed("default-src 'unsafe-inline'");
+        assert_eq!(c.with_default("script-src"), vec!["'unsafe-inline'"]);
+        assert!(c.only("script-src").is_empty());
+        assert!(c.scripts_inline());
+        assert!(c.styles_inline());
+    }
+
+    #[test]
+    fn nonce_or_hash_mitigates_unsafe_inline() {
+        assert!(parsed("script-src 'unsafe-inline'").scripts_inline());
+        assert!(!parsed("script-src 'unsafe-inline' 'nonce-abcdefghijklmnop'").scripts_inline());
+        assert!(!parsed("script-src 'unsafe-inline' 'sha256-AAAA'").scripts_inline());
+        assert!(parsed("script-src 'unsafe-eval'").scripts_eval());
+    }
+
+    #[test]
+    fn wildcard_and_data_sources() {
+        assert!(Csp::wildcard("*"));
+        assert!(Csp::wildcard("'self' https://*"));
+        assert!(!Csp::wildcard("*.example.com"));
+        assert!(Csp::data("img-src data:"));
+        assert!(Csp::data("'self' data:image/png"));
+        assert!(!Csp::data("'self' https:"));
+        assert!(parsed("script-src *").scripts_wildcard());
+        assert!(parsed("style-src data:").styles_data());
+        assert!(!parsed("script-src 'self'").scripts_wildcard());
+    }
+
+    #[test]
+    fn allowlist_means_a_host_source_that_is_not_a_wildcard_only() {
+        assert!(Csp::allowlist("'self' https://cdn.example.com"));
+        assert!(!Csp::allowlist("'self' 'none'"));
+        assert!(parsed("script-src https://cdn.example.com").scripts_allowlist());
+        assert!(!parsed("script-src 'self'").scripts_allowlist());
+    }
+
+    #[test]
+    fn short_nonce_is_under_eight_characters() {
+        // 'nonce-' (6) plus 7 characters is 13: short. Eight is long enough.
+        assert!(parsed("script-src 'nonce-abcdefg'").short_nonce("script-src"));
+        assert!(!parsed("script-src 'nonce-abcdefgh'").short_nonce("script-src"));
+        assert!(!parsed("style-src 'nonce-abcdefg'").short_nonce("script-src"));
+    }
+
+    #[test]
+    fn no_policy_means_no_script_or_style_findings() {
+        let c = Csp::default();
+        assert!(c.none());
+        assert!(!c.scripts_wildcard() && !c.scripts_data() && !c.styles_wildcard());
+    }
+
+    #[test]
+    fn form_action_and_frame_ancestors_helpers() {
+        let c = parsed("default-src 'self'");
+        // form-action and frame-ancestors do not fall back to default-src in
+        // `only`, but `with_default` does, so form-action counts as present.
+        assert!(!c.frame_ancestors_present());
+        assert!(c.form_action_present());
+        let c = parsed("form-action *; frame-ancestors *");
+        assert!(c.form_action_wildcard() && c.frame_ancestors_wildcard());
+        let c = parsed("form-action 'self'; frame-ancestors https://a.example.com");
+        assert!(!c.form_action_wildcard() && !c.frame_ancestors_wildcard());
+        assert!(c.frame_ancestors_loose());
+    }
+}

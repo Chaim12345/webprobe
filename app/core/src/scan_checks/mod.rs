@@ -42,4 +42,6 @@ pub use request_checks::*;
 pub use stored_input::*;
 
 #[cfg(test)]
+mod graphql_tests;
+#[cfg(test)]
 mod tests;
