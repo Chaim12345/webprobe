@@ -18,6 +18,16 @@ fn hint(ui: &mut Ui, text: &str) {
     );
 }
 
+// The legacy green is designed for dark panels. Keep the status cue readable
+// on the light Collaborator settings page as well.
+fn success_color(palette: theme::Palette) -> egui::Color32 {
+    if palette == theme::Palette::Light {
+        c(0x2E681C)
+    } else {
+        c(theme::GOOD)
+    }
+}
+
 fn status_label(ui: &mut Ui, running: bool, description: &str, bound: Option<String>) {
     let (text, color) = if running {
         (
@@ -25,12 +35,12 @@ fn status_label(ui: &mut Ui, running: bool, description: &str, bound: Option<Str
                 Some(addr) => format!("listening on {addr}"),
                 None => format!("starting on {description}"),
             },
-            theme::GOOD,
+            success_color(theme::appearance().0),
         )
     } else {
-        ("stopped".to_string(), theme::MONO6)
+        ("stopped".to_string(), theme::ink_dim())
     };
-    ui.label(RichText::new(text).size(12.0).color(c(color)));
+    ui.label(RichText::new(text).size(12.0).color(color));
 }
 
 fn error_label(ui: &mut Ui, error: Option<String>) {
@@ -250,7 +260,7 @@ pub(crate) fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
 
     // ------------------------- Public server (interactsh) -------------
     ui.group(|ui| {
-        ui.label(RichText::new("Collaborator server (interactsh)").size(13.0).strong().color(c(theme::ORANGE)));
+        ui.label(RichText::new("Collaborator server (interactsh)").size(13.0).strong().color(theme::ink()));
         let active = state.remote_server();
         ui.horizontal(|ui| {
             ui.add_enabled(
@@ -315,7 +325,7 @@ pub(crate) fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
             RichText::new("HTTP listener")
                 .size(13.0)
                 .strong()
-                .color(c(theme::ORANGE)),
+                .color(theme::ink()),
         );
         let running = state.http.is_running();
         let mut want_start = false;
@@ -371,7 +381,7 @@ pub(crate) fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
             RichText::new("DNS listener")
                 .size(13.0)
                 .strong()
-                .color(c(theme::ORANGE)),
+                .color(theme::ink()),
         );
         let running = state.dns.is_running();
         let mut want_start = false;
@@ -424,7 +434,7 @@ pub(crate) fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
             RichText::new("Generated payloads")
                 .size(13.0)
                 .strong()
-                .color(c(theme::MONO7)),
+                .color(theme::ink()),
         );
         ui.horizontal(|ui| {
             if ui.button("Generate payload").clicked() {
@@ -450,7 +460,7 @@ pub(crate) fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
                             ui.monospace(
                                 RichText::new(payload.http_url.clone())
                                     .size(12.0)
-                                    .color(c(theme::ORANGE_5)),
+                                    .color(theme::Tokens::current().header_ink),
                             );
                             if ui.small_button("copy HTTP").clicked() {
                                 ui.ctx().copy_text(payload.http_url.clone());
@@ -498,13 +508,13 @@ fn http_details(ui: &mut Ui, http: &crate::collaborator::HttpInteraction) {
                     RichText::new(name.clone())
                         .monospace()
                         .size(12.0)
-                        .color(c(theme::HEADER_BLUE)),
+                        .color(theme::Tokens::current().header_ink),
                 );
                 ui.label(
                     RichText::new(value.clone())
                         .monospace()
                         .size(12.0)
-                        .color(c(theme::EDITOR_TEXT)),
+                        .color(theme::Tokens::current().editor_ink),
                 );
                 ui.end_row();
             }
@@ -518,7 +528,7 @@ fn http_details(ui: &mut Ui, http: &crate::collaborator::HttpInteraction) {
         ui.monospace(
             RichText::new(String::from_utf8_lossy(&http.body).into_owned())
                 .size(12.0)
-                .color(c(theme::EDITOR_TEXT)),
+                .color(theme::Tokens::current().editor_ink),
         );
     }
 }
@@ -528,7 +538,7 @@ fn smtp_details(ui: &mut Ui, smtp: &crate::collaborator::SmtpInteraction) {
         RichText::new(format!("MAIL FROM: {}", smtp.from))
             .monospace()
             .size(12.0)
-            .color(c(theme::EDITOR_TEXT)),
+            .color(theme::Tokens::current().editor_ink),
     );
     ui.label(
         RichText::new(&smtp.conversation)
@@ -543,7 +553,7 @@ fn dns_details(ui: &mut Ui, dns: &crate::collaborator::DnsInteraction) {
         RichText::new(format!("query: {}", dns.qname))
             .monospace()
             .size(12.0)
-            .color(c(theme::EDITOR_TEXT)),
+            .color(theme::Tokens::current().editor_ink),
     );
     ui.label(
         RichText::new(format!(
@@ -558,6 +568,59 @@ fn dns_details(ui: &mut Ui, dns: &crate::collaborator::DnsInteraction) {
     ui.label(
         RichText::new("reply: A 127.0.0.1")
             .size(12.0)
-            .color(c(theme::GOOD)),
+            .color(success_color(theme::appearance().0)),
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn luminance(color: egui::Color32) -> f64 {
+        let channel = |v: u8| {
+            let v = f64::from(v) / 255.0;
+            if v <= 0.04045 {
+                v / 12.92
+            } else {
+                ((v + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.2126 * channel(color.r()) + 0.7152 * channel(color.g()) + 0.0722 * channel(color.b())
+    }
+
+    fn contrast(a: egui::Color32, b: egui::Color32) -> f64 {
+        let (a, b) = (luminance(a), luminance(b));
+        (a.max(b) + 0.05) / (a.min(b) + 0.05)
+    }
+
+    #[test]
+    fn collaborator_text_and_status_are_readable_in_each_palette() {
+        for palette in [
+            theme::Palette::Light,
+            theme::Palette::Dark,
+            theme::Palette::HighContrast,
+        ] {
+            let tokens = theme::Tokens::for_palette(palette);
+            for ink in [
+                tokens.ink,
+                tokens.ink_dim,
+                tokens.header_ink,
+                tokens.editor_ink,
+                success_color(palette),
+            ] {
+                for background in [tokens.surface, tokens.chrome] {
+                    assert!(
+                        contrast(ink, background) >= 4.5,
+                        "{palette:?}: {ink:?} on {background:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn dark_success_status_keeps_legacy_green() {
+        assert_eq!(success_color(theme::Palette::Dark), c(theme::GOOD));
+        assert_ne!(success_color(theme::Palette::Light), c(theme::GOOD));
+    }
 }
