@@ -13,7 +13,7 @@ use crate::theme::{self, c};
 
 fn hint(ui: &mut Ui, text: &str) {
     ui.add(
-        egui::Label::new(RichText::new(text).size(12.0).color(c(theme::MONO6)))
+        egui::Label::new(RichText::new(text).size(12.0).color(theme::ink_dim()))
             .wrap_mode(egui::TextWrapMode::Wrap),
     );
 }
@@ -272,7 +272,7 @@ pub(crate) fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
                 }
                 if state.is_registering() {
                     ui.spinner();
-                    ui.label(RichText::new("Registering...").size(12.0).color(c(theme::MONO6)));
+                    ui.label(RichText::new("Registering...").size(12.0).color(theme::ink_dim()));
                 }
             } else if ui.button("Use server").clicked() {
                 let choice = state.remote_choice.clone();
@@ -280,7 +280,7 @@ pub(crate) fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
             }
         });
         ui.horizontal(|ui| {
-            ui.label(RichText::new("Auth token").size(12.0).color(c(theme::MONO6)));
+            ui.label(RichText::new("Auth token").size(12.0).color(theme::ink_dim()));
             ui.add_enabled(
                 active.is_none(),
                 egui::TextEdit::singleline(&mut state.remote_token).password(true).desired_width(200.0).hint_text("only for a private server"),
@@ -288,13 +288,13 @@ pub(crate) fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
             .on_hover_text("Sent as the Authorization header to a server started with -auth or -token");
         });
         ui.horizontal(|ui| {
-            ui.label(RichText::new("Poll every").size(12.0).color(c(theme::MONO6)));
+            ui.label(RichText::new("Poll every").size(12.0).color(theme::ink_dim()));
             let mut secs = state.poll_secs();
             if ui.add(egui::DragValue::new(&mut secs).range(1..=3600).suffix(" s")).changed() {
                 state.set_poll_secs(secs);
             }
             ui.add_space(12.0);
-            ui.label(RichText::new("Keep interactions for").size(12.0).color(c(theme::MONO6)));
+            ui.label(RichText::new("Keep interactions for").size(12.0).color(theme::ink_dim()));
             let mut mins = state.retention_secs() / 60;
             if ui
                 .add(egui::DragValue::new(&mut mins).range(0..=10_080).custom_formatter(|v, _| if v == 0.0 { "ever".into() } else { format!("{v} min") }))
@@ -321,7 +321,7 @@ pub(crate) fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
         let mut want_start = false;
         let mut want_stop = false;
         ui.horizontal(|ui| {
-            ui.label(RichText::new("port").size(12.0).color(c(theme::MONO6)));
+            ui.label(RichText::new("port").size(12.0).color(theme::ink_dim()));
             let port_response = ui.add_enabled(
                 !running,
                 egui::DragValue::new(&mut state.http.port).range(1..=65535),
@@ -377,7 +377,7 @@ pub(crate) fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
         let mut want_start = false;
         let mut want_stop = false;
         ui.horizontal(|ui| {
-            ui.label(RichText::new("port").size(12.0).color(c(theme::MONO6)));
+            ui.label(RichText::new("port").size(12.0).color(theme::ink_dim()));
             ui.add_enabled(
                 !running,
                 egui::DragValue::new(&mut state.dns.port).range(1..=65535),
@@ -434,7 +434,7 @@ pub(crate) fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
             ui.label(
                 RichText::new(format!("{count} retained (max {MAX_PAYLOADS})"))
                     .size(12.0)
-                    .color(c(theme::MONO6)),
+                    .color(theme::ink_dim()),
             );
         });
         let payloads = state.payloads().to_vec();
@@ -469,7 +469,7 @@ pub(crate) fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
                                 payload.token
                             ))
                             .size(12.0)
-                            .color(c(theme::MONO6)),
+                            .color(theme::ink_dim()),
                         );
                     }
                 });
@@ -513,7 +513,7 @@ fn http_details(ui: &mut Ui, http: &crate::collaborator::HttpInteraction) {
         ui.label(
             RichText::new(format!("body ({} bytes)", http.body.len()))
                 .size(12.0)
-                .color(c(theme::MONO6)),
+                .color(theme::ink_dim()),
         );
         ui.monospace(
             RichText::new(String::from_utf8_lossy(&http.body).into_owned())
@@ -534,7 +534,7 @@ fn smtp_details(ui: &mut Ui, smtp: &crate::collaborator::SmtpInteraction) {
         RichText::new(&smtp.conversation)
             .monospace()
             .size(12.0)
-            .color(c(theme::MONO6)),
+            .color(theme::ink_dim()),
     );
 }
 
@@ -553,7 +553,7 @@ fn dns_details(ui: &mut Ui, dns: &crate::collaborator::DnsInteraction) {
             dns.raw_query.len()
         ))
         .size(12.0)
-        .color(c(theme::MONO6)),
+        .color(theme::ink_dim()),
     );
     ui.label(
         RichText::new("reply: A 127.0.0.1")
