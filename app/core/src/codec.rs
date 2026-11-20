@@ -73,24 +73,16 @@ fn at(body: &[u8], at: usize, pat: &[u8]) -> bool {
     body.get(at..).is_some_and(|rest| rest.starts_with(pat))
 }
 
-/// The line starting at `from`: (end of its text, index after its LF). A CR
-/// right before the LF belongs to the terminator. `None` until the LF arrives.
-fn line(body: &[u8], from: usize) -> Option<(usize, usize)> {
-    let lf = from + body.get(from..)?.iter().position(|&b| b == b'\n')?;
-    let end = if lf > from && body[lf - 1] == b'\r' {
-        lf - 1
-    } else {
-        lf
-    };
-    Some((end, lf + 1))
-}
-
 /// Where an incremental chunked scan resumes: the start of the next
 /// chunk-size line. Chunks before it have been validated already, so a
-/// growing buffer is scanned once in total, not once per read.
+/// growing buffer is scanned once in total, not once per read. Reuse only
+/// with append-only buffers belonging to the same message.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ChunkCursor {
     next: usize,
+    /// Bytes already searched for the next LF, including a partial line.
+    line_from: usize,
+    trailers: bool,
 }
 
 /// Outcome of [`scan_chunked`].
@@ -111,9 +103,32 @@ pub enum Chunked {
 pub fn scan_chunked(body: &[u8], cur: &mut ChunkCursor, mut data: impl FnMut(&[u8])) -> Chunked {
     loop {
         let pos = cur.next;
-        let Some((end, after)) = line(body, pos) else {
+        let search = cur.line_from.max(pos);
+        let Some(lf) = body
+            .get(search..)
+            .and_then(|rest| rest.iter().position(|&b| b == b'\n'))
+            .map(|offset| search + offset)
+        else {
+            cur.line_from = body.len();
             return Chunked::Partial;
         };
+        let end = if lf > pos && body[lf - 1] == b'\r' {
+            lf - 1
+        } else {
+            lf
+        };
+        let after = lf + 1;
+        if cur.trailers {
+            if end == pos {
+                return Chunked::Complete(after);
+            }
+            cur.next = after;
+            cur.line_from = after;
+            continue;
+        }
+        // The line is complete, but the payload may not be. Reparse this
+        // bounded size token on the next call, not its potentially long extension.
+        cur.line_from = after - 1;
         let size_text = body[pos..end]
             .split(|&b| b == b';')
             .next()
@@ -131,17 +146,10 @@ pub fn scan_chunked(body: &[u8], cur: &mut ChunkCursor, mut data: impl FnMut(&[u
             return Chunked::Malformed;
         };
         if size == 0 {
-            // Trailer lines until a blank one.
-            let mut p = after;
-            loop {
-                let Some((e, a)) = line(body, p) else {
-                    return Chunked::Partial;
-                };
-                if e == p {
-                    return Chunked::Complete(a);
-                }
-                p = a;
-            }
+            cur.trailers = true;
+            cur.next = after;
+            cur.line_from = after;
+            continue;
         }
         let Some(stop) = after.checked_add(size) else {
             return Chunked::Malformed;
@@ -160,6 +168,7 @@ pub fn scan_chunked(body: &[u8], cur: &mut ChunkCursor, mut data: impl FnMut(&[u
         };
         data(&body[after..stop]);
         cur.next = next;
+        cur.line_from = next;
     }
 }
 
@@ -198,36 +207,34 @@ pub fn decode_content(body: &[u8], encoding: &str) -> Vec<u8> {
     current
 }
 
-fn gunzip(data: &[u8]) -> Option<Vec<u8>> {
-    use std::io::Read;
-    let d = flate2::read::GzDecoder::new(data);
-    let mut out = Vec::new();
-    d.take(MAX_BODY as u64 + 1).read_to_end(&mut out).ok()?;
-    Some(out)
-}
-
-fn inflate(data: &[u8]) -> Option<Vec<u8>> {
-    use std::io::Read;
-    // Some servers send raw deflate without the zlib wrapper; try both.
-    let d = flate2::read::ZlibDecoder::new(data);
-    let mut out = Vec::new();
-    if d.take(MAX_BODY as u64 + 1).read_to_end(&mut out).is_ok() && !out.is_empty() {
-        return Some(out);
-    }
-    let d = flate2::read::DeflateDecoder::new(data);
-    let mut raw = Vec::new();
-    d.take(MAX_BODY as u64 + 1).read_to_end(&mut raw).ok()?;
-    Some(raw)
-}
-
-fn brotli_decode(data: &[u8]) -> Option<Vec<u8>> {
+/// Read one byte past the cap to distinguish exact-fit from truncation.
+/// Never report an incomplete decoded prefix as a successful body.
+fn read_inflated(reader: impl std::io::Read) -> Option<Vec<u8>> {
     use std::io::Read;
     let mut out = Vec::new();
-    brotli::Decompressor::new(data, 4096)
+    reader
         .take(MAX_BODY as u64 + 1)
         .read_to_end(&mut out)
         .ok()?;
-    Some(out)
+    (out.len() <= MAX_BODY).then_some(out)
+}
+
+fn gunzip(data: &[u8]) -> Option<Vec<u8>> {
+    read_inflated(flate2::read::GzDecoder::new(data))
+}
+
+fn inflate(data: &[u8]) -> Option<Vec<u8>> {
+    // Some servers send raw deflate without the zlib wrapper; try both.
+    if let Some(out) = read_inflated(flate2::read::ZlibDecoder::new(data)) {
+        if !out.is_empty() {
+            return Some(out);
+        }
+    }
+    read_inflated(flate2::read::DeflateDecoder::new(data))
+}
+
+fn brotli_decode(data: &[u8]) -> Option<Vec<u8>> {
+    read_inflated(brotli::Decompressor::new(data, 4096))
 }
 
 /// Build a clean, decoded view of a response: chunked payloads reassembled,
@@ -560,6 +567,134 @@ mod tests {
 
     /// Review findings 1, 5, 6, 7: hostile chunk sizes, interim responses,
     /// HEAD framing, leftover bytes.
+    #[test]
+    fn chunked_fragmentation_emits_each_chunk_once() {
+        for wire in [
+            &b"2;ext=yes\r\nab\r\n3\r\ncde\r\n0\r\nX-One: one\r\nX-Two: two\r\n\r\n"[..],
+            &b"2;ext=yes\nab\n3\ncde\n0\nX-One: one\n\n"[..],
+        ] {
+            for step in 1..=wire.len() {
+                let mut cursor = ChunkCursor::default();
+                let mut payload = Vec::new();
+                for end in (0..wire.len()).step_by(step) {
+                    assert_eq!(
+                        scan_chunked(&wire[..end], &mut cursor, |bytes| payload
+                            .extend_from_slice(bytes)),
+                        Chunked::Partial
+                    );
+                }
+                assert_eq!(
+                    scan_chunked(wire, &mut cursor, |bytes| payload.extend_from_slice(bytes)),
+                    Chunked::Complete(wire.len())
+                );
+                assert_eq!(payload, b"abcde");
+            }
+        }
+    }
+
+    #[test]
+    fn chunked_partial_lines_keep_search_progress() {
+        // Structural complexity check, without machine-dependent timing limits.
+        for prefix in [&b"1;"[..], &b"0\r\nX-Trailer: "[..]] {
+            let mut wire = prefix.to_vec();
+            let mut cursor = ChunkCursor::default();
+            for _ in 0..4096 {
+                wire.extend_from_slice(b"a");
+                assert_eq!(scan_chunked(&wire, &mut cursor, |_| {}), Chunked::Partial);
+                assert_eq!(cursor.line_from, wire.len());
+            }
+        }
+        // Do not strip two CR bytes from a malformed blank trailer line.
+        assert_eq!(
+            scan_chunked(b"0\r\n\r\r\n", &mut ChunkCursor::default(), |_| {}),
+            Chunked::Partial
+        );
+    }
+
+    #[test]
+    fn inflated_limit_is_exact_for_all_content_codings() {
+        use std::io::{Read, Write};
+        let raw = vec![b'x'; MAX_BODY];
+        assert_eq!(read_inflated(&raw[..]).unwrap().len(), MAX_BODY);
+        assert!(read_inflated(std::io::repeat(b'x').take(MAX_BODY as u64 + 1)).is_none());
+        for zlib in [false, true] {
+            let encoded = if zlib {
+                let mut encoder =
+                    flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::fast());
+                encoder.write_all(&raw).unwrap();
+                encoder.write_all(b"x").unwrap();
+                encoder.finish().unwrap()
+            } else {
+                let mut encoder =
+                    flate2::write::DeflateEncoder::new(Vec::new(), flate2::Compression::fast());
+                encoder.write_all(&raw).unwrap();
+                encoder.write_all(b"x").unwrap();
+                encoder.finish().unwrap()
+            };
+            assert!(inflate(&encoded).is_none());
+        }
+        let mut encoded = Vec::new();
+        {
+            let mut encoder = brotli::CompressorWriter::new(&mut encoded, 4096, 1, 22);
+            encoder.write_all(&raw).unwrap();
+            encoder.write_all(b"x").unwrap();
+        }
+        assert!(brotli_decode(&encoded).is_none());
+    }
+
+    /// Repeat with --ignored --nocapture; timings are diagnostic, not a CI gate.
+    #[test]
+    #[ignore]
+    fn benchmark_incremental_chunk_lines() {
+        use std::time::Instant;
+        for (name, wire) in [
+            (
+                "extension",
+                format!("1;{}\r\nx\r\n0\r\n\r\n", "a".repeat(65536)),
+            ),
+            (
+                "trailer",
+                format!("0\r\nX-Large: {}\r\n\r\n", "a".repeat(65536)),
+            ),
+        ] {
+            let start = Instant::now();
+            for _ in 0..8 {
+                let mut cursor = ChunkCursor::default();
+                for n in 0..wire.len() {
+                    assert_eq!(
+                        scan_chunked(&wire.as_bytes()[..n], &mut cursor, |_| {}),
+                        Chunked::Partial
+                    );
+                }
+                assert_eq!(
+                    scan_chunked(wire.as_bytes(), &mut cursor, |_| {}),
+                    Chunked::Complete(wire.len())
+                );
+            }
+            eprintln!(
+                "{name}: {} us (8 messages, 1-byte arrivals)",
+                start.elapsed().as_micros()
+            );
+        }
+    }
+
+    #[test]
+    fn gzip_over_limit_preserves_original_bytes() {
+        use std::io::Read;
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+        std::io::copy(
+            &mut std::io::repeat(b'x').take(MAX_BODY as u64 + 1),
+            &mut encoder,
+        )
+        .unwrap();
+        let encoded = encoder.finish().unwrap();
+        assert_eq!(
+            decode_content(&encoded, "gzip").len(),
+            encoded.len(),
+            "oversized decode must fail instead of returning a truncated success"
+        );
+    }
+
     #[test]
     fn response_reader_survives_hostile_and_interim_messages() {
         // A chunk size that overflows usize must not panic or wrap.
