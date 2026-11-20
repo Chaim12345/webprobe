@@ -17,6 +17,8 @@
 //! queries with 127.0.0.1. Both workers share state through `Arc`, `Mutex`, and
 //! `AtomicBool`, so stopping a listener is explicit and prompt.
 
+mod polling;
+
 use crate::sync::Mutex;
 use std::collections::VecDeque;
 use std::io::{self, Read, Write};
@@ -526,7 +528,7 @@ pub struct CollaboratorState {
     pub remote_choice: String,
     /// Auth token for a private server that requires one (empty: none).
     pub remote_token: String,
-    /// Seconds between polls of the server; read by the poll thread each
+    /// Seconds between polls of the server; read by the engine task each
     /// round, so a change applies to a running session.
     poll_secs: Arc<AtomicU64>,
     /// Burp's tab starts on an onboarding screen until "Get started".
@@ -539,23 +541,11 @@ pub struct CollaboratorState {
     pub detail_tab: usize,
 }
 
-/// A registered interactsh session plus its poll thread, which records every
-/// reported interaction into the shared log.
+/// A registered interactsh session and its abortable engine scheduler.
 struct RemoteCollaborator {
     session: Arc<crate::interactsh::Session>,
-    stop: Arc<AtomicBool>,
     error: Arc<Mutex<Option<String>>>,
-    handle: Option<JoinHandle<()>>,
-}
-
-impl Drop for RemoteCollaborator {
-    fn drop(&mut self) {
-        self.stop.store(true, Ordering::SeqCst);
-        if let Some(h) = self.handle.take() {
-            let _ = h.join();
-        }
-        self.session.deregister();
-    }
+    polling: polling::PollTask,
 }
 
 /// Map one interactsh report onto the local interaction model.
@@ -689,11 +679,16 @@ impl CollaboratorState {
         self.stop_remote();
         let (tx, rx) = std::sync::mpsc::channel();
         let (server, token) = (server.to_string(), self.remote_token.clone());
-        crate::util::spawn_contained("collaborator", move || {
-            let _ = tx.send(crate::interactsh::Session::register_with(
-                &server,
-                Some(&token),
-            ));
+        crate::rt::engine().spawn(async move {
+            let _ = tokio::task::spawn_blocking(move || {
+                let outcome = crate::interactsh::Session::register_with(&server, Some(&token));
+                // A stop or replacement may discard the receiver while
+                // registration is in flight. Do not leak that remote session.
+                if let Err(std::sync::mpsc::SendError(Ok(session))) = tx.send(outcome) {
+                    session.deregister();
+                }
+            })
+            .await;
         });
         self.registering = Some(rx);
     }
@@ -720,43 +715,35 @@ impl CollaboratorState {
     fn attach_session(&mut self, session: crate::interactsh::Session) -> String {
         let session = Arc::new(session);
         let poll_secs = Arc::clone(&self.poll_secs);
-        let stop = Arc::new(AtomicBool::new(false));
         let error = Arc::new(Mutex::new(None));
-        let (s2, stop2, err2, log) = (
+        let (poll_session, cleanup_session, err, log) = (
             Arc::clone(&session),
-            Arc::clone(&stop),
+            Arc::clone(&session),
             Arc::clone(&error),
             Arc::clone(&self.log),
         );
-        let handle = crate::util::spawn_contained("collaborator", move || {
-            while !stop2.load(Ordering::SeqCst) {
-                match s2.poll() {
-                    Ok(items) => {
-                        *lock(&err2) = None;
-                        for it in items {
-                            if let Some(detail) = remote_detail(&it) {
-                                let token =
-                                    (!it.unique_id.is_empty()).then(|| it.unique_id.clone());
-                                log.record(unix_secs(), it.remote_address.clone(), token, detail);
-                            }
+        let polling = polling::PollTask::start(
+            move || Duration::from_secs(poll_secs.load(Ordering::SeqCst).clamp(1, 3600)),
+            move || poll_session.poll(),
+            move |result| match result {
+                Ok(items) => {
+                    *lock(&err) = None;
+                    for it in items {
+                        if let Some(detail) = remote_detail(&it) {
+                            let token = (!it.unique_id.is_empty()).then(|| it.unique_id.clone());
+                            log.record(unix_secs(), it.remote_address.clone(), token, detail);
                         }
                     }
-                    Err(e) => *lock(&err2) = Some(e),
                 }
-                for _ in 0..poll_secs.load(Ordering::SeqCst).clamp(1, 3600) * 10 {
-                    if stop2.load(Ordering::SeqCst) {
-                        break;
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(100));
-                }
-            }
-        });
+                Err(e) => *lock(&err) = Some(e),
+            },
+            move || cleanup_session.deregister(),
+        );
         let domain = session.server.clone();
         self.remote = Some(RemoteCollaborator {
             session,
-            stop,
             error,
-            handle: Some(handle),
+            polling,
         });
         domain
     }
@@ -773,6 +760,9 @@ impl CollaboratorState {
     /// Set the polling interval (1 s to 1 h), live for a running session.
     pub fn set_poll_secs(&self, secs: u64) {
         self.poll_secs.store(secs.clamp(1, 3600), Ordering::SeqCst);
+        if let Some(remote) = &self.remote {
+            remote.polling.interval_changed();
+        }
     }
 
     /// Interaction retention in seconds (0 = keep until the size bound).
@@ -788,18 +778,8 @@ impl CollaboratorState {
     /// Burp's "Poll now": fetch new interactions from the public server
     /// immediately instead of waiting for the next 3 s poll.
     pub fn poll_now(&self) {
-        if let Some(r) = &self.remote {
-            let (s2, log) = (Arc::clone(&r.session), Arc::clone(&self.log));
-            crate::util::spawn_contained("collaborator", move || {
-                if let Ok(items) = s2.poll() {
-                    for it in items {
-                        if let Some(detail) = remote_detail(&it) {
-                            let token = (!it.unique_id.is_empty()).then(|| it.unique_id.clone());
-                            log.record(unix_secs(), it.remote_address.clone(), token, detail);
-                        }
-                    }
-                }
-            });
+        if let Some(remote) = &self.remote {
+            remote.polling.poll_now();
         }
     }
 
