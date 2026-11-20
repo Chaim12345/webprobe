@@ -86,10 +86,12 @@ impl PollTask {
                             "Collaborator poll timed out after {} ms",
                             timeout.as_millis()
                         )));
-                        let _ = request.await;
-                        continue;
+                        request.await
                     }
                 };
+                if stop2.load(Ordering::SeqCst) {
+                    break;
+                }
                 match outcome {
                     Ok(Some(result)) => publish(result),
                     Ok(None) => break,
@@ -264,13 +266,42 @@ mod tests {
             .unwrap_err();
         assert!(error.contains("timed out"));
         assert!(started_rx.recv_timeout(Duration::from_millis(100)).is_err());
-        // Complete the timed-out operation; its late success is discarded.
+        // Complete the timed-out operation; an active session retains its data.
         release_tx.send(()).unwrap();
         started_rx.recv_timeout(Duration::from_secs(2)).unwrap();
-        assert!(result_rx.try_recv().is_err());
+        result_rx
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap()
+            .unwrap();
         // Dropping during the next I/O also suppresses its result.
         drop(task);
         release_tx.send(()).unwrap();
         assert!(result_rx.recv_timeout(Duration::from_millis(100)).is_err());
+    }
+    #[test]
+    fn active_session_publishes_interactions_after_timeout() {
+        let (tx, rx) = mpsc::channel();
+        let _task = PollTask::with_timeout(
+            || Duration::from_secs(3600),
+            || {
+                std::thread::sleep(Duration::from_millis(80));
+                Ok(vec![42])
+            },
+            move |r| {
+                tx.send(r).unwrap();
+            },
+            || {},
+            Duration::from_millis(10),
+        );
+        assert!(rx
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap()
+            .unwrap_err()
+            .contains("timed out"));
+        assert_eq!(
+            rx.recv_timeout(Duration::from_secs(2)).unwrap().unwrap(),
+            vec![42]
+        );
+        assert!(rx.try_recv().is_err());
     }
 }
