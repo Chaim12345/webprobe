@@ -522,7 +522,7 @@ pub struct CollaboratorState {
     /// enabled. Payloads then resolve on the internet like Burp's.
     remote: Option<RemoteCollaborator>,
     /// A registration running in the background (`start_remote_in_background`).
-    registering: Option<std::sync::mpsc::Receiver<Result<crate::interactsh::Session, String>>>,
+    registering: Option<std::sync::mpsc::Receiver<Result<RegisteredSession, String>>>,
     /// Server chosen in the UI for the next `start_remote`: a public
     /// default or a private `host[:port]`.
     pub remote_choice: String,
@@ -539,6 +539,21 @@ pub struct CollaboratorState {
     pub include_server: bool,
     /// Detail tab: 0 Description, 1 Request to Collaborator, 2 Response.
     pub detail_tab: usize,
+}
+
+/// Own an unattached registration even after its result enters the channel.
+/// Dropping a stopped/replaced registration must deregister off the UI thread,
+/// including the race where send succeeded just before the receiver was dropped.
+struct RegisteredSession(Option<crate::interactsh::Session>);
+
+impl Drop for RegisteredSession {
+    fn drop(&mut self) {
+        if let Some(session) = self.0.take() {
+            crate::rt::engine().spawn(async move {
+                let _ = tokio::task::spawn_blocking(move || session.deregister()).await;
+            });
+        }
+    }
 }
 
 /// A registered interactsh session and its abortable engine scheduler.
@@ -681,12 +696,9 @@ impl CollaboratorState {
         let (server, token) = (server.to_string(), self.remote_token.clone());
         crate::rt::engine().spawn(async move {
             let _ = tokio::task::spawn_blocking(move || {
-                let outcome = crate::interactsh::Session::register_with(&server, Some(&token));
-                // A stop or replacement may discard the receiver while
-                // registration is in flight. Do not leak that remote session.
-                if let Err(std::sync::mpsc::SendError(Ok(session))) = tx.send(outcome) {
-                    session.deregister();
-                }
+                let outcome = crate::interactsh::Session::register_with(&server, Some(&token))
+                    .map(|session| RegisteredSession(Some(session)));
+                let _ = tx.send(outcome);
             })
             .await;
         });
@@ -708,7 +720,14 @@ impl CollaboratorState {
             }
         };
         self.registering = None;
-        Some(outcome.map(|s| self.attach_session(s)))
+        Some(outcome.map(|mut registered| {
+            self.attach_session(
+                registered
+                    .0
+                    .take()
+                    .expect("successful registration owns its session"),
+            )
+        }))
     }
 
     /// Start polling a registered session; returns its payload domain.
