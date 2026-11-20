@@ -40,6 +40,21 @@ impl ScanHooks for LiveHooks {
 
 /// Register the scanner with net; call once at app startup before proxy
 /// traffic (the live passive crawl and audit run on proxy responses).
+/// Register the entry points the task queue runner drives (app and
+/// headless startup, next to register_scan_hooks).
+pub fn register_task_ops() {
+    crate::tasks::register_scan_ops(crate::tasks::ScanOps {
+        crawl_and_audit: |shared, urls, audit_only| {
+            crate::scan::crawl_and_audit(shared, urls, audit_only)
+        },
+        start_active_scan: |shared, entry, oob, smtp| {
+            crate::scan::start_active_scan(shared, entry, oob, smtp)
+        },
+        pooled_oob: |shared, req_raw| crate::scan::pooled_oob(shared, req_raw),
+        open_stored_batch: |shared| Box::new(crate::scan::StoredBatch::open(shared)),
+    });
+}
+
 pub fn register_scan_hooks() {
     crate::net::set_scan_hooks(Arc::new(LiveHooks));
 }

@@ -3726,6 +3726,7 @@ fn guestbook_entry(port: u16, method: &str, path: &str, body: &str) -> HistEntry
 
 /// Run the entries as one task (one stored-input batch) and wait.
 fn run_task(shared: &std::sync::Arc<Shared>, entries: Vec<HistEntry>) {
+    crate::scan::register_task_ops();
     let id = crate::tasks::enqueue(shared, "stored", crate::tasks::TaskKind::Audit(entries));
     let t0 = std::time::Instant::now();
     while t0.elapsed() < std::time::Duration::from_secs(240) {
