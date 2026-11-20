@@ -82,3 +82,59 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod subscriber_tests {
+    use super::*;
+    use std::io::Write;
+    use std::sync::{Arc, Mutex};
+
+    #[derive(Clone)]
+    struct Capture(Arc<Mutex<Vec<u8>>>);
+    impl Write for Capture {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn subscriber_receives_codes_levels_and_context_not_traffic() {
+        let bytes = Arc::new(Mutex::new(Vec::new()));
+        let sink = Capture(bytes.clone());
+        let subscriber = tracing_subscriber::fmt()
+            .without_time()
+            .with_ansi(false)
+            .with_writer(move || sink.clone())
+            .finish();
+        tracing::subscriber::with_default(subscriber, || {
+            emit(
+                Level::Info,
+                "scan.started",
+                "Active scan started",
+                &[Field::Count("points", 3)],
+            );
+            emit(Level::Warn, "scan.busy", "Scan already running", &[]);
+            emit(Level::Error, "scan.failed", "Scan failed", &[]);
+        });
+        let out = String::from_utf8(bytes.lock().unwrap().clone()).unwrap();
+        for expected in [
+            "INFO",
+            "WARN",
+            "ERROR",
+            "webprobe",
+            "event_code=",
+            "scan.started",
+            "points",
+            "3",
+            "scan.busy",
+            "scan.failed",
+        ] {
+            assert!(out.contains(expected), "missing {expected} in {out}");
+        }
+        assert_eq!(out.lines().count(), 3);
+    }
+}
