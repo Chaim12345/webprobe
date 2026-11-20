@@ -68,10 +68,7 @@ pub fn apply() {
         std::env::set_var(name, value);
     }
     if !plan.unset.is_empty() || !plan.set.is_empty() {
-        eprintln!(
-            "webprobe: renderer environment adjusted (unset {:?}, set {:?}); WEBPROBE_GL=native disables this",
-            plan.unset, plan.set
-        );
+        tracing::info!(target: "webprobe", event_code = "ui.renderer.adjusted", "Renderer environment adjusted; WEBPROBE_GL=native disables this");
     }
 }
 
@@ -107,7 +104,7 @@ pub fn reexec_with_software_gl() {
     let Ok(exe) = std::env::current_exe() else {
         return;
     };
-    eprintln!("webprobe: the window could not be created on hardware GL; restarting once with software GL (set {:?})", plan.set);
+    tracing::warn!(target: "webprobe", event_code = "ui.renderer.retry", "Window unavailable on hardware GL; restarting once with software GL");
     let mut cmd = std::process::Command::new(exe);
     cmd.args(std::env::args_os().skip(1));
     for name in &plan.unset {
@@ -116,8 +113,8 @@ pub fn reexec_with_software_gl() {
     for (name, value) in &plan.set {
         cmd.env(name, value);
     }
-    let err = cmd.exec();
-    eprintln!("webprobe: restart failed: {err}");
+    let _err = cmd.exec();
+    tracing::error!(target: "webprobe", event_code = "ui.renderer.restart_failed", "Renderer restart failed");
 }
 
 #[cfg(not(unix))]

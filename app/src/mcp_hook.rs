@@ -31,10 +31,10 @@ impl Mcp {
         );
         let client = egui_mcp_client::McpClient::new();
         let server = client.clone();
-        let path = rt.block_on(client.socket_path());
+        let _path = rt.block_on(client.socket_path());
         rt.spawn(async move {
-            if let Err(e) = egui_mcp_client::IpcServer::run(server).await {
-                eprintln!("webprobe: egui MCP unavailable on {}: {e}", path.display());
+            if egui_mcp_client::IpcServer::run(server).await.is_err() {
+                tracing::warn!(target: "webprobe", event_code = "ui.mcp.unavailable", "UI automation endpoint unavailable");
             }
         });
         Mcp {

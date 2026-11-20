@@ -226,6 +226,11 @@ fn scan_urls(mut args: Vec<String>) {
 }
 
 fn main() {
+    let _ = tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
+        .with_target(true)
+        .with_ansi(false)
+        .try_init();
     webprobe_core::scan::register_scan_hooks();
     webprobe_core::scan::register_task_ops();
     webprobe_core::scan::register_type_checks();
