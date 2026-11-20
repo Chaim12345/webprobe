@@ -7,13 +7,13 @@ use crate::theme::{self, c};
 
 fn hint(ui: &mut Ui, text: &str) {
     ui.add(
-        egui::Label::new(RichText::new(text).size(12.0).color(c(theme::MONO6)))
+        egui::Label::new(RichText::new(text).size(12.0).color(theme::ink_dim()))
             .wrap_mode(egui::TextWrapMode::Wrap),
     );
 }
 
 fn stat_row(ui: &mut Ui, key: &str, value: String) {
-    ui.label(RichText::new(key).size(12.5).color(c(theme::MONO6)));
+    ui.label(RichText::new(key).size(12.5).color(theme::ink_dim()));
     ui.monospace(value);
     ui.end_row();
 }
