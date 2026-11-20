@@ -304,4 +304,89 @@ mod tests {
         );
         assert!(rx.try_recv().is_err());
     }
+    #[test]
+    fn stopping_idle_task_cleans_up_once_without_another_poll() {
+        let (poll_tx, poll_rx) = mpsc::channel();
+        let (cleaned_tx, cleaned_rx) = mpsc::channel();
+        let task = PollTask::start(
+            || Duration::from_secs(3600),
+            move || {
+                poll_tx.send(()).unwrap();
+                Ok(())
+            },
+            |_| {},
+            move || {
+                cleaned_tx.send(()).unwrap();
+            },
+        );
+        poll_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        drop(task);
+        cleaned_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert!(poll_rx.recv_timeout(Duration::from_millis(50)).is_err());
+        assert!(cleaned_rx.recv_timeout(Duration::from_millis(50)).is_err());
+    }
+
+    #[test]
+    fn interval_change_during_io_is_applied_after_completion() {
+        let period = Arc::new(AtomicUsize::new(3600));
+        let p = period.clone();
+        let calls = AtomicUsize::new(0);
+        let (started_tx, started_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let release_rx = Mutex::new(release_rx);
+        let task = PollTask::start(
+            move || Duration::from_millis(p.load(Ordering::SeqCst) as u64),
+            move || {
+                let n = calls.fetch_add(1, Ordering::SeqCst);
+                started_tx.send(n).unwrap();
+                if n == 0 {
+                    release_rx
+                        .lock()
+                        .unwrap()
+                        .recv_timeout(Duration::from_secs(5))
+                        .unwrap();
+                }
+                Ok(())
+            },
+            |_| {},
+            || {},
+        );
+        assert_eq!(started_rx.recv_timeout(Duration::from_secs(2)).unwrap(), 0);
+        period.store(20, Ordering::SeqCst);
+        task.interval_changed();
+        // Changing settings must not launch overlapping requests.
+        assert!(started_rx.recv_timeout(Duration::from_millis(50)).is_err());
+        release_tx.send(()).unwrap();
+        assert_eq!(started_rx.recv_timeout(Duration::from_secs(1)).unwrap(), 1);
+        drop(task);
+    }
+
+    #[test]
+    fn panicking_poll_is_reported_and_next_manual_poll_recovers() {
+        let calls = AtomicUsize::new(0);
+        let (tx, rx) = mpsc::channel();
+        let task = PollTask::start(
+            || Duration::from_secs(3600),
+            move || {
+                if calls.fetch_add(1, Ordering::SeqCst) == 0 {
+                    panic!("poll worker test failure");
+                }
+                Ok(42)
+            },
+            move |result| {
+                tx.send(result).unwrap();
+            },
+            || {},
+        );
+        assert!(rx
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap()
+            .unwrap_err()
+            .contains("worker failed"));
+        task.poll_now();
+        assert_eq!(
+            rx.recv_timeout(Duration::from_secs(2)).unwrap().unwrap(),
+            42
+        );
+    }
 }
