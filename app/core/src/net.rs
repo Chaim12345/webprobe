@@ -1817,14 +1817,14 @@ fn try_h2c_upgrade<S: Read + Write + ResponseRead>(stream: &mut S, routed: &[u8]
     Ok(Some((msg, false)))
 }
 
-fn response_allows_reuse(resp: &[u8]) -> bool {
+fn response_allows_reuse(resp: &[u8], method: &str) -> bool {
     let parts = util::parse_http(resp);
     // Reading until EOF completes a response, not a reusable connection.
     // Check before HTTP/1.0 keep-alive too: it cannot override body framing.
     if matches!(
-        crate::codec::response_body_kind(resp, "GET"),
+        crate::codec::response_body_kind(resp, method),
         crate::codec::BodyKind::UntilEof
-    ) || !crate::codec::body_complete(resp, "GET")
+    ) || !crate::codec::body_complete(resp, method)
     {
         return false;
     }
@@ -1879,7 +1879,7 @@ fn send_inner(shared: &Shared, host: &str, port: u16, req: &[u8], mut sink: Opti
                 // never enter the HTTP/1.x pool. A declined upgrade is just an
                 // ordinary HTTP/1.1 reply: keep the connection reusable so a
                 // later keep-alive request can actually reuse it.
-                if !upgraded && keep_alive && response_allows_reuse(&resp) {
+                if !upgraded && keep_alive && response_allows_reuse(&resp, &util::parse_http(&routed).method) {
                     shared.pool.lock().unwrap().insert(key, stream);
                 }
                 return Ok(resp);
@@ -1914,7 +1914,7 @@ fn send_inner(shared: &Shared, host: &str, port: u16, req: &[u8], mut sink: Opti
         }
     }?;
     let (resp, reusable, stream) = result;
-    if keep_alive && reusable && response_allows_reuse(&resp) {
+    if keep_alive && reusable && response_allows_reuse(&resp, &util::parse_http(&routed).method) {
         shared.pool.lock().unwrap().insert(key, stream);
         if reused {
             shared.pool_hits.fetch_add(1, Ordering::SeqCst);
@@ -2042,7 +2042,7 @@ fn send_tls_inner(shared: &Shared, host: &str, port: u16, req: &[u8], mut sink: 
         }
     }?;
     let (result, reusable, stream) = result;
-    if keep_alive && reusable && response_allows_reuse(&result) {
+    if keep_alive && reusable && response_allows_reuse(&result, &util::parse_http(&req).method) {
         shared.tls_pool.lock().unwrap().insert(key, stream);
         if reused {
             shared.pool_hits.fetch_add(1, Ordering::SeqCst);
@@ -6044,6 +6044,44 @@ mod response_reuse_regressions {
     use super::*;
 
     #[test]
+    fn head_and_bodyless_statuses_stay_in_the_pool() {
+        for (method, status) in [
+            ("HEAD", "200 OK"),
+            ("GET", "204 No Content"),
+            ("GET", "304 Not Modified"),
+        ] {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let port = listener.local_addr().unwrap().port();
+            let server = std::thread::spawn(move || {
+                let (mut stream, _) = listener.accept().unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                let mut head = Vec::new();
+                let mut byte = [0u8; 1];
+                while !head.ends_with(b"\r\n\r\n") {
+                    stream.read_exact(&mut byte).unwrap();
+                    head.push(byte[0]);
+                }
+                stream
+                    .write_all(format!("HTTP/1.1 {status}\r\n\r\n").as_bytes())
+                    .unwrap();
+            });
+            let shared = Shared::new();
+            shared.keep_alive.store(true, Ordering::SeqCst);
+            let request = format!("{method} / HTTP/1.1\r\nHost: localhost\r\n\r\n");
+            let response = send_raw(&shared, "127.0.0.1", port, request.as_bytes());
+            server.join().unwrap();
+            assert!(response.resp.is_some());
+            assert_eq!(
+                shared.pool.lock().unwrap().len(),
+                1,
+                "{method} {status} must be reusable"
+            );
+        }
+    }
+
+    #[test]
     fn complete_framed_responses_keep_existing_reuse_rules() {
         for response in [
             &b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\nbody"[..],
@@ -6051,7 +6089,7 @@ mod response_reuse_regressions {
             &b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nbody\r\n0\r\n\r\n"[..],
             &b"HTTP/1.1 204 No Content\r\n\r\n"[..],
         ] {
-            assert!(response_allows_reuse(response));
+            assert!(response_allows_reuse(response, "GET"));
         }
         for response in [
             &b"HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 4\r\n\r\nbody"[..],
@@ -6059,7 +6097,7 @@ mod response_reuse_regressions {
             &b"HTTP/1.0 200 OK\r\nConnection: keep-alive\r\nContent-Length: 8\r\n\r\nbody"[..],
             &b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nbo"[..],
         ] {
-            assert!(!response_allows_reuse(response));
+            assert!(!response_allows_reuse(response, "GET"));
         }
     }
 
@@ -6068,7 +6106,7 @@ mod response_reuse_regressions {
         for version in ["HTTP/1.0", "HTTP/1.1"] {
             let response = format!("{version} 200 OK\r\nConnection: keep-alive\r\n\r\nbody");
             assert!(
-                !response_allows_reuse(response.as_bytes()),
+                !response_allows_reuse(response.as_bytes(), "GET"),
                 "{version} EOF-delimited response must close"
             );
         }
