@@ -1023,10 +1023,7 @@ mod tests {
             interpolatable: true,
         };
         assert_eq!(resolve_interpol(&mut cx, &s).unwrap(), "$1.bak");
-        assert!(matches!(
-            eval_expr(&mut cx, &Expr::Var("missing".into())),
-            Err(_)
-        ));
+        assert!(eval_expr(&mut cx, &Expr::Var("missing".into())).is_err());
     }
 
     #[test]

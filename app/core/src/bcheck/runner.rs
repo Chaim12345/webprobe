@@ -602,7 +602,7 @@ mod tests {
         };
         let lab = Lab {
             sent: Mutex::new(Vec::new()),
-            responder: Box::new(|req| ok200(req)),
+            responder: Box::new(ok200),
         };
         let b = base("http://lab.local/", "", 200);
         assert!(run_definition(&def, &b, None, &lab, None)
@@ -635,7 +635,7 @@ mod tests {
         };
         let lab = Lab {
             sent: Mutex::new(Vec::new()),
-            responder: Box::new(|req| ok200(req)),
+            responder: Box::new(ok200),
         };
         let b = base("http://lab.local/a", "", 200);
         let issues = run_definition(
@@ -659,7 +659,7 @@ mod tests {
 
         let lab2 = Lab {
             sent: Mutex::new(Vec::new()),
-            responder: Box::new(|req| ok200(req)),
+            responder: Box::new(ok200),
         };
         let issues2 = run_definition(
             &def,
@@ -684,7 +684,7 @@ mod tests {
         };
         let lab = Lab {
             sent: Mutex::new(Vec::new()),
-            responder: Box::new(|req| ok200(req)),
+            responder: Box::new(ok200),
         };
         let b = base("http://lab.local/calc?n=1", "1787569", 200);
         let ip = InsertionPoint {
@@ -744,7 +744,7 @@ mod tests {
         };
         let lab = Lab {
             sent: Mutex::new(Vec::new()),
-            responder: Box::new(|req| ok200(req)),
+            responder: Box::new(ok200),
         };
         let mut b = base("http://lab.local/f", "", 200);
         b.request.body = "q=base&keep=1".into();
@@ -770,7 +770,7 @@ mod tests {
         };
         let lab = Lab {
             sent: Mutex::new(Vec::new()),
-            responder: Box::new(|req| ok200(req)),
+            responder: Box::new(ok200),
         };
         let b = base("http://lab.local/", "", 200);
         let issues = run_definition(&def, &b, None, &lab, None).unwrap();
@@ -824,7 +824,7 @@ mod tests {
         };
         let lab = Lab {
             sent: Mutex::new(Vec::new()),
-            responder: Box::new(|req| ok200(req)),
+            responder: Box::new(ok200),
         };
         let b = base("https://lab.local:9443/base", "", 200);
         let _ = run_definition(&def, &b, None, &lab, None).unwrap();
@@ -841,7 +841,7 @@ mod tests {
         };
         let lab = Lab {
             sent: Mutex::new(Vec::new()),
-            responder: Box::new(|req| ok200(req)),
+            responder: Box::new(ok200),
         };
         let b = base("https://lab.local/?q=base", "", 200);
         let ip = super::InsertionPoint {
