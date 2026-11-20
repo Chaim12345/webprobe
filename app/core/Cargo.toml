@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 webprobe-support = { path = "../support" }
 thiserror = "2"
+polling = "3"
 brotli = "7"
 flate2.workspace = true
 hpack = "0.3"
