@@ -42,4 +42,3 @@ keccak = "0.1"
 time = "0.3"
 webpki-roots = "0.26"
 x509-parser = { version = "0.16", features = ["verify"] }
-
