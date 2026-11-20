@@ -639,8 +639,12 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
                             .color(theme::ink_faint()),
                         );
                         let pane = def.pane;
-                        egui::ScrollArea::vertical()
+                        // Both axes scroll and the area keeps the dialog's size,
+                        // so a wide page (Tasks) no longer stretches the window
+                        // over the whole app and pushes the page list off screen.
+                        egui::ScrollArea::both()
                             .id_salt("settings_page")
+                            .auto_shrink([false, false])
                             .show(ui, |ui| page(app, ui, pane));
                     }
                 });
