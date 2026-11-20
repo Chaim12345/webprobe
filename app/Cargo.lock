@@ -5179,6 +5179,7 @@ dependencies = [
  "time",
  "tiny-keccak",
  "tracing",
+ "tracing-subscriber",
  "webpki-roots 0.26.11",
  "whirlpool",
  "x509-parser",
