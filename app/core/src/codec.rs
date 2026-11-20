@@ -189,22 +189,24 @@ pub fn decode_chunked(body: &[u8]) -> Option<(Vec<u8>, usize)> {
 /// are returned unchanged; a codec failure yields the original bytes so a broken
 /// body still shows up in the editor rather than disappearing.
 pub fn decode_content(body: &[u8], encoding: &str) -> Vec<u8> {
+    try_decode_content(body, encoding).unwrap_or_else(|| body.to_vec())
+}
+
+/// Decode all layers or none. A partial decode cannot be advertised as an
+/// unencoded body by the response normalizer.
+fn try_decode_content(body: &[u8], encoding: &str) -> Option<Vec<u8>> {
     let mut current = body.to_vec();
     // Encodings are applied in order, so decode in reverse.
     for token in encoding.split(',').rev() {
-        let token = token.trim().to_ascii_lowercase();
-        let next = match token.as_str() {
-            "gzip" | "x-gzip" => gunzip(&current),
-            "deflate" => inflate(&current),
-            "br" => brotli_decode(&current),
-            _ => None,
+        current = match token.trim().to_ascii_lowercase().as_str() {
+            "gzip" | "x-gzip" => gunzip(&current)?,
+            "deflate" => inflate(&current)?,
+            "br" => brotli_decode(&current)?,
+            "" | "identity" => current,
+            _ => return None,
         };
-        match next {
-            Some(v) => current = v,
-            None => return current,
-        }
     }
-    current
+    Some(current)
 }
 
 /// Read one byte past the cap to distinguish exact-fit from truncation.
@@ -264,7 +266,11 @@ pub fn normalize_response(raw: &[u8]) -> Vec<u8> {
     let decoded_body = if encoding.is_empty() {
         decoded_body
     } else {
-        decode_content(&decoded_body, &encoding)
+        let Some(decoded) = try_decode_content(&decoded_body, &encoding) else {
+            // Keep the wire body and its framing/coding headers together.
+            return raw.to_vec();
+        };
+        decoded
     };
     // Never show an encoded-but-not-decoded body as if it were text.
     let mut out = String::with_capacity(parts.head_len + decoded_body.len() + 32);
@@ -676,6 +682,22 @@ mod tests {
                 start.elapsed().as_micros()
             );
         }
+    }
+
+    #[test]
+    fn failed_content_decode_preserves_wire_headers_and_all_layers() {
+        use std::io::Write;
+        for encoding in ["gzip", "br", "unknown", "unknown, gzip"] {
+            let wire = format!(
+                "HTTP/1.1 200 OK\r\nContent-Encoding: {encoding}\r\nContent-Length: 3\r\n\r\nbad"
+            );
+            assert_eq!(normalize_response(wire.as_bytes()), wire.as_bytes());
+        }
+        let inner = b"not really gzip";
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+        encoder.write_all(inner).unwrap();
+        let outer = encoder.finish().unwrap();
+        assert_eq!(decode_content(&outer, "gzip, gzip"), outer);
     }
 
     #[test]
