@@ -127,17 +127,17 @@ pub fn panel(app: &mut App, ui: &mut Ui) -> bool {
                 RichText::new("Set up WebProbe")
                     .size(14.0)
                     .strong()
-                    .color(c(theme::MONO7)),
+                    .color(theme::ink()),
             );
             ui.add_space(6.0);
             ui.label(
                 RichText::new(format!("{}/{} steps done", done, checks.len()))
                     .size(12.0)
-                    .color(c(if done == checks.len() {
-                        theme::GOOD
+                    .color(if done == checks.len() {
+                        c(theme::GOOD)
                     } else {
-                        theme::MONO6
-                    })),
+                        theme::ink_dim()
+                    }),
             );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.small_button("Hide").clicked()
@@ -149,28 +149,28 @@ pub fn panel(app: &mut App, ui: &mut Ui) -> bool {
     for check in &checks {
         ui.horizontal(|ui| {
             let (mark, colour) = if check.done {
-                ("OK", theme::GOOD)
+                ("OK", c(theme::GOOD))
             } else {
-                ("--", theme::MONO4)
+                ("--", theme::ink_faint())
             };
             ui.add_sized(
                 [26.0, 18.0],
-                egui::Label::new(RichText::new(mark).monospace().size(12.0).color(c(colour))),
+                egui::Label::new(RichText::new(mark).monospace().size(12.0).color(colour)),
             );
             ui.vertical(|ui| {
                 ui.label(
                     RichText::new(check.label.clone())
                         .size(12.0)
-                        .color(c(if check.done {
-                            theme::EDITOR_TEXT
+                        .color(if check.done {
+                            theme::ink()
                         } else {
-                            theme::MONO6
-                        })),
+                            theme::ink_dim()
+                        }),
                 );
                 ui.label(
                     RichText::new(check.detail.clone())
                         .size(12.0)
-                        .color(c(theme::MONO4)),
+                        .color(theme::ink_faint()),
                 );
             });
         });
@@ -186,7 +186,7 @@ pub fn panel(app: &mut App, ui: &mut Ui) -> bool {
             "Point your browser at 127.0.0.1:{port}, then open http://webprobe to download the CA certificate. Burp's own page is http://burpsuite; both are answered locally by the proxy."
         ))
         .size(12.0)
-        .color(c(theme::MONO6)),
+        .color(theme::ink_dim()),
     );
 
     ui.add_space(6.0);

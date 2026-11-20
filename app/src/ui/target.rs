@@ -8,7 +8,7 @@ pub(crate) fn discover(app: &mut App, ui: &mut Ui) {
     let r = ui.available_rect_before_wrap();
     let hero = egui::Rect::from_min_size(r.min, egui::vec2(r.width(), 300.0_f32.min(r.height())));
     ui.painter().rect_filled(hero, 0.0, c(0x14102A));
-    ui.scope_builder(
+    let hero_text = ui.scope_builder(
         egui::UiBuilder::new().max_rect(hero.shrink2(egui::vec2(r.width() * 0.3, 80.0))),
         |ui| {
             ui.label(
@@ -25,7 +25,9 @@ pub(crate) fn discover(app: &mut App, ui: &mut Ui) {
             );
         },
     );
-    ui.add_space(320.0);
+    // The hero is painted, not allocated: step below it from wherever the
+    // text scope ended, so the cards sit right under the banner.
+    ui.add_space((hero.bottom() - hero_text.response.rect.bottom()).max(0.0) + 24.0);
     ui.horizontal(|ui| {
         for (glyph, title, sub) in [
             (
