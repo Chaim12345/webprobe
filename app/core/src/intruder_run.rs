@@ -1768,10 +1768,14 @@ mod tests {
                     let mut buf = [0u8; 2048];
                     let _ = s.read(&mut buf);
                     std::thread::sleep(Duration::from_millis(50));
+                    // Stop counting server work before making the complete response
+                    // visible to the client. Once write_all succeeds, the client can
+                    // release its probe permit and start another request before this
+                    // server thread is scheduled again. Teardown is not in-flight work.
+                    i3.fetch_sub(1, Ordering::SeqCst);
                     let _ = s.write_all(
                         b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok",
                     );
-                    i3.fetch_sub(1, Ordering::SeqCst);
                 });
             }
         });
