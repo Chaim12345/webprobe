@@ -150,7 +150,7 @@ pub fn start_active_scan(
             let found = shared.issues.lock().map(|i| i.len()).unwrap_or(0);
             crate::notice::toast(
                 crate::notice::Level::Success,
-                format!("Active scan finished — {found} issue(s) in the report"),
+                format!("Active scan finished. The report now holds {found} issue(s) in total"),
             );
         },
     );
