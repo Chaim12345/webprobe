@@ -309,3 +309,32 @@ impl IssueFilter {
         true
     }
 }
+
+/// Whether checks for the issue named `name` may run and report under the
+/// filter. `active` says which kind of check asks, for issue types Burp does
+/// not have (WebProbe's own checks): active ones run while any active
+/// scan type is on, passive ones while passive is; an individual
+/// selection never includes them.
+pub fn filter_allows(f: &IssueFilter, name: &str, active: bool) -> bool {
+    let id = crate::issues::issue_type_id(name) as u32;
+    if id == 0 {
+        return f.selected.is_none()
+            && f.types_on & if active { CAT_ACTIVE } else { CAT_PASSIVE } != 0;
+    }
+    f.allows_type(id, if active { CAT_ACTIVE } else { CAT_PASSIVE })
+}
+
+// ------------------------------------------------------------------ check lookup
+
+static TYPE_CHECKS: std::sync::OnceLock<fn(u32) -> bool> = std::sync::OnceLock::new();
+
+/// Register the check-catalogue lookup used to flag selected issue types no
+/// check reports (called once at app startup; unregistered keeps selections).
+pub fn register_type_checks(f: fn(u32) -> bool) {
+    let _ = TYPE_CHECKS.set(f);
+}
+
+/// Whether any check reports the issue type (true while unregistered).
+pub fn type_has_checks(id: u32) -> bool {
+    TYPE_CHECKS.get().map(|f| f(id)).unwrap_or(true)
+}

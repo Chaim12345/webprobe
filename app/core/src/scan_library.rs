@@ -482,20 +482,6 @@ fn jar_files(jar: &Path, prefix: &str) -> Result<Vec<(String, Vec<u8>)>, String>
 
 // ---------------------------------------------------------------- issue selection
 
-/// Whether checks for the issue named `name` may run and report under the
-/// filter. `active` says which kind of check asks, for issue types Burp does
-/// not have (WebProbe's own checks): active ones run while any active
-/// scan type is on, passive ones while passive is; an individual
-/// selection never includes them.
-pub fn filter_allows(f: &IssueFilter, name: &str, active: bool) -> bool {
-    let id = crate::scan::issue_type_id(name) as u32;
-    if id == 0 {
-        return f.selected.is_none()
-            && f.types_on & if active { CAT_ACTIVE } else { CAT_PASSIVE } != 0;
-    }
-    f.allows_type(id, if active { CAT_ACTIVE } else { CAT_PASSIVE })
-}
-
 /// Selected, enabled issue types no WebProbe check reports (kept in the
 /// configuration, listed as not applied).
 pub fn filter_unsupported_selection(f: &IssueFilter) -> Vec<u32> {
@@ -503,32 +489,12 @@ pub fn filter_unsupported_selection(f: &IssueFilter) -> Vec<u32> {
         return Vec::new();
     };
     sel.iter()
-        .filter(|(id, on)| **on && crate::scan::checks_for_issue_type(**id).is_empty())
+        .filter(|(id, on)| **on && !webprobe_support::scan_filter::type_has_checks(**id))
         .map(|(id, _)| *id)
         .collect()
 }
 
 // ---------------------------------------------------------------- applying a configuration
-
-/// Burp's insertion point switches and WebProbe's keys for them
-/// (crate::scan_config::INSERTION_TYPES).
-const INSERTION_KEYS: [(&str, &str); 8] = [
-    ("insert_url_params", "url"),
-    ("insert_body_params", "body"),
-    ("insert_cookies", "cookie"),
-    ("insert_param_name", "param_name"),
-    ("insert_http_headers", "header"),
-    ("insert_entire_body", "entire_body"),
-    ("insert_url_path_folders", "folder"),
-    ("insert_url_path_filename", "filename"),
-];
-
-const SPEEDS: [&str; 3] = ["fast", "normal", "thorough"];
-const ACCURACIES: [&str; 3] = [
-    "minimise_false_negatives",
-    "normal",
-    "minimise_false_positives",
-];
 
 /// The settings WebProbe applies. Every other setting a configuration
 /// carries is kept and listed by [`not_applied`].
@@ -560,54 +526,6 @@ pub const APPLIED: &[&str] = &[
     "scanner.misc_insertion_point_options.use_nested_insertion_points",
 ];
 
-/// The scan settings WebProbe runs with, as Burp JSON: what a library
-/// configuration is overlaid onto (Burp loads a configuration onto the
-/// settings being edited) and what "Save" writes.
-pub fn config_to_tree(c: &crate::scan_config::ScanConfig, speed: u8, accuracy: u8) -> Value {
-    let f = c.issues.clone().unwrap_or(IssueFilter {
-        types_on: CAT_PASSIVE | CAT_ACTIVE | CAT_JAVASCRIPT,
-        selected: None,
-    });
-    let mut ipt = Map::new();
-    for (burp, key) in INSERTION_KEYS {
-        ipt.insert(burp.into(), Value::Bool(c.insertion_enabled(key)));
-    }
-    let selected: Vec<Value> = f
-        .selected
-        .iter()
-        .flatten()
-        .map(|(id, on)| serde_json::json!({"detection_methods": [], "enabled": on, "type_index": format!("0x{id:08x}")}))
-        .collect();
-    serde_json::json!({
-        "crawler": {
-            "crawl_limits": {
-                "maximum_crawl_time": c.crawl.max_minutes,
-                "maximum_request_count": c.crawl.max_requests,
-                "maximum_unique_locations": c.crawl.max_locations,
-            },
-            "crawl_optimization": {"maximum_link_depth": c.crawl.max_depth},
-            "customization": {"request_robots_txt": c.crawl.robots, "request_sitemap": c.crawl.sitemap},
-        },
-        "scanner": {
-            "audit_optimization": {
-                "scan_speed": SPEEDS[speed.min(2) as usize],
-                "scan_accuracy": ACCURACIES[accuracy.min(2) as usize],
-            },
-            "issues_reported": {
-                "scan_type_passive": f.types_on & CAT_PASSIVE != 0,
-                "scan_type_light_active": f.types_on & CAT_LIGHT != 0,
-                "scan_type_medium_active": f.types_on & CAT_MEDIUM != 0,
-                "scan_type_intrusive_active": f.types_on & CAT_INTRUSIVE != 0,
-                "scan_type_javascript_analysis": f.types_on & CAT_JAVASCRIPT != 0,
-                "select_individual_issues": f.selected.is_some(),
-                "selected_issues": selected,
-            },
-            "insertion_point_types": Value::Object(ipt),
-            "misc_insertion_point_options": {"use_nested_insertion_points": c.insertion_enabled(crate::scan_config::NESTED_KEY)},
-        },
-    })
-}
-
 /// Settings decoded from a Burp tree: the scan configuration and the
 /// audit speed / accuracy (0..=2, `Shared::scan_speed` / `scan_accuracy`).
 #[derive(Clone, Debug, PartialEq)]
@@ -617,7 +535,7 @@ pub struct Applied {
     pub accuracy: u8,
 }
 
-/// Decode `tree` (normally [`config_to_tree`] of the current settings
+/// Decode `tree` (normally [`crate::scan_config::config_to_tree`] of the current settings
 /// with library configurations overlaid). Keys WebProbe does not apply
 /// are ignored here and reported by [`not_applied`]; `base` supplies what
 /// Burp's format has no key for (switched-off WebProbe checks, the crawl
@@ -649,7 +567,7 @@ pub fn tree_to_config(tree: &Value, base: &crate::scan_config::ScanConfig) -> Ap
     if let Some(v) = flag("crawler.customization.request_sitemap") {
         c.crawl.sitemap = v;
     }
-    for (burp, key) in INSERTION_KEYS {
+    for (burp, key) in crate::scan_config::INSERTION_KEYS {
         if let Some(on) = flag(&format!("scanner.insertion_point_types.{burp}")) {
             if on {
                 c.disabled_insertion.remove(key);
@@ -675,8 +593,16 @@ pub fn tree_to_config(tree: &Value, base: &crate::scan_config::ScanConfig) -> Ap
     };
     Applied {
         config: c,
-        speed: pick("scanner.audit_optimization.scan_speed", &SPEEDS).unwrap_or(1),
-        accuracy: pick("scanner.audit_optimization.scan_accuracy", &ACCURACIES).unwrap_or(1),
+        speed: pick(
+            "scanner.audit_optimization.scan_speed",
+            &crate::scan_config::SPEEDS,
+        )
+        .unwrap_or(1),
+        accuracy: pick(
+            "scanner.audit_optimization.scan_accuracy",
+            &crate::scan_config::ACCURACIES,
+        )
+        .unwrap_or(1),
     }
 }
 
@@ -688,7 +614,7 @@ pub fn apply(
     speed: u8,
     accuracy: u8,
 ) -> Applied {
-    let mut tree = config_to_tree(current, speed, accuracy);
+    let mut tree = crate::scan_config::config_to_tree(current, speed, accuracy);
     for c in configs {
         overlay(&mut tree, &c.tree);
     }
@@ -712,8 +638,14 @@ pub fn not_applied(configs: &[&LibraryConfig]) -> Vec<String> {
             }
         }
         for (p, names) in [
-            ("scanner.audit_optimization.scan_speed", &SPEEDS),
-            ("scanner.audit_optimization.scan_accuracy", &ACCURACIES),
+            (
+                "scanner.audit_optimization.scan_speed",
+                &crate::scan_config::SPEEDS,
+            ),
+            (
+                "scanner.audit_optimization.scan_accuracy",
+                &crate::scan_config::ACCURACIES,
+            ),
         ] {
             if let Some(v) = get_path(&c.tree, p).and_then(Value::as_str) {
                 if !names.contains(&v) {
@@ -762,7 +694,7 @@ pub fn not_applied(configs: &[&LibraryConfig]) -> Vec<String> {
 
 /// Burp's name for issue type `id` (the KnowledgeBase names WebProbe knows).
 pub fn issue_type_name(id: u32) -> Option<&'static str> {
-    crate::scan::checks::KB_ISSUE_TYPES
+    webprobe_support::issues::KB_ISSUE_TYPES
         .iter()
         .find(|(_, t)| *t as u32 == id)
         .map(|(n, _)| *n)
@@ -1003,14 +935,26 @@ mod tests {
             r#"{"scanner":{"issues_reported":{"scan_type_intrusive_active":false,"scan_type_light_active":false,"scan_type_medium_active":false,"scan_type_passive":true,"scan_type_javascript_analysis":false,"select_individual_issues":false,"selected_issues":[]}}}"#,
         );
         let f = IssueFilter::from_tree(&combine(None, &[&c])).unwrap();
-        assert!(!filter_allows(&f, "SQL injection", true));
-        assert!(!filter_allows(&f, "Web cache poisoning", true));
+        assert!(!webprobe_support::scan_filter::filter_allows(
+            &f,
+            "SQL injection",
+            true
+        ));
+        assert!(!webprobe_support::scan_filter::filter_allows(
+            &f,
+            "Web cache poisoning",
+            true
+        ));
         assert!(filter_allows(
             &f,
             "Strict transport security not enforced",
             false
         ));
-        assert!(!filter_allows(&f, "Some WebProbe-only probe", true));
+        assert!(!webprobe_support::scan_filter::filter_allows(
+            &f,
+            "Some WebProbe-only probe",
+            true
+        ));
         assert_eq!(
             IssueFilter::from_tree(&combine(None, &[])),
             None,
@@ -1052,7 +996,10 @@ mod tests {
             .any(|l| l.starts_with("scanner.audit_optimization.skip_ineffective_checks")));
         assert!(!na.iter().any(|l| l.contains("maximum_crawl_time")));
         // Round trip: the current settings as a tree decode to themselves.
-        let back = tree_to_config(&config_to_tree(&a.config, a.speed, a.accuracy), &a.config);
+        let back = tree_to_config(
+            &crate::scan_config::config_to_tree(&a.config, a.speed, a.accuracy),
+            &a.config,
+        );
         assert_eq!(back, a);
     }
 
@@ -1064,11 +1011,15 @@ mod tests {
         );
         let cur = crate::scan_config::ScanConfig::default();
         let start_cfg = apply(&[&entry], &cur, 1, 1);
-        let start = config_to_tree(&start_cfg.config, 1, 1);
+        let start = crate::scan_config::config_to_tree(&start_cfg.config, 1, 1);
         let mut edited_cfg = start_cfg.config.clone();
         edited_cfg.crawl.max_minutes = 20;
         edited_cfg.disabled_insertion.insert("header".into());
-        let out = with_settings(&entry.tree, &config_to_tree(&edited_cfg, 1, 1), &start);
+        let out = with_settings(
+            &entry.tree,
+            &crate::scan_config::config_to_tree(&edited_cfg, 1, 1),
+            &start,
+        );
         assert_eq!(
             get_path(&out, "crawler.crawl_limits.maximum_crawl_time"),
             Some(&Value::from(20))

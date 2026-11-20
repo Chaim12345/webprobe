@@ -9,11 +9,7 @@ pub use webprobe_support::issues::{ScanEvidence, ScanIssue, EVIDENCE_MAX_BYTES};
 /// `typeIndex`, the names in kb_issue_names.txt), or 0 when Burp has no such
 /// issue (WebProbe's own checks).
 pub fn issue_type_id(name: &str) -> u64 {
-    checks::KB_ISSUE_TYPES
-        .iter()
-        .find(|(n, _)| *n == name)
-        .map(|(_, t)| *t)
-        .unwrap_or(0)
+    webprobe_support::issues::issue_type_id(name)
 }
 
 pub fn mk(sev: &str, name: &str, e: &HistEntry, detail: impl Into<String>) -> ScanIssue {

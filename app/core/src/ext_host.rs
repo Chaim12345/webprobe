@@ -675,7 +675,7 @@ fn ext_b64(v: &serde_json::Value, k: &str) -> Option<Vec<u8>> {
 }
 
 /// The issue an extension reported (Montoya AuditIssue), as WebProbe's.
-pub fn issue_of(v: &serde_json::Value, extension: &str) -> crate::scan::ScanIssue {
+pub fn issue_of(v: &serde_json::Value, extension: &str) -> webprobe_support::issues::ScanIssue {
     let url = v["baseUrl"].as_str().unwrap_or_default();
     let rest = url.split_once("://").map(|x| x.1).unwrap_or(url);
     let (auth, path) = rest
@@ -706,7 +706,7 @@ pub fn issue_of(v: &serde_json::Value, extension: &str) -> crate::scan::ScanIssu
         .map(|a| {
             a.iter()
                 .filter_map(|m| {
-                    Some(crate::scan::ScanEvidence::new(
+                    Some(webprobe_support::issues::ScanEvidence::new(
                         &ext_b64(m, "request")?,
                         ext_b64(m, "response").as_deref(),
                     ))
@@ -714,7 +714,7 @@ pub fn issue_of(v: &serde_json::Value, extension: &str) -> crate::scan::ScanIssu
                 .collect()
         })
         .unwrap_or_default();
-    crate::scan::ScanIssue {
+    webprobe_support::issues::ScanIssue {
         sev: match sev {
             "HIGH" => "high",
             "MEDIUM" => "medium",
@@ -729,13 +729,13 @@ pub fn issue_of(v: &serde_json::Value, extension: &str) -> crate::scan::ScanIssu
         false_positive: sev == "FALSE_POSITIVE",
         confidence: confidence.into(),
         ts: crate::util::now_secs(),
-        type_id: crate::scan::issue_type_id(v["name"].as_str().unwrap_or_default()),
+        type_id: webprobe_support::issues::issue_type_id(v["name"].as_str().unwrap_or_default()),
         evidence,
         ..Default::default()
     }
 }
 
-fn issues_of(reply: &serde_json::Value, ext: &str) -> Vec<crate::scan::ScanIssue> {
+fn issues_of(reply: &serde_json::Value, ext: &str) -> Vec<webprobe_support::issues::ScanIssue> {
     reply["issues"]
         .as_array()
         .map(|a| a.iter().map(|i| issue_of(i, ext)).collect())
@@ -934,7 +934,7 @@ impl ProxyHooks for JavaSidecar {
         &self,
         msg: &ScanMessage,
         helper: &dyn ScanHelper,
-    ) -> Vec<crate::scan::ScanIssue> {
+    ) -> Vec<webprobe_support::issues::ScanIssue> {
         if self.ui.lock().unwrap().active_checks == 0 || self.dead.load(Ordering::Relaxed) {
             return Vec::new();
         }
@@ -983,7 +983,7 @@ impl ProxyHooks for JavaSidecar {
         }
     }
 
-    fn scan_passive(&self, msg: &ScanMessage) -> Vec<crate::scan::ScanIssue> {
+    fn scan_passive(&self, msg: &ScanMessage) -> Vec<webprobe_support::issues::ScanIssue> {
         if self.ui.lock().unwrap().passive_checks == 0 {
             return Vec::new();
         }

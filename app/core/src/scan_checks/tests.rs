@@ -166,7 +166,10 @@ fn every_burp_issue_name_has_a_type() {
     for name in KB_ISSUE_NAMES.lines() {
         assert_ne!(issue_type_id(name), 0, "{name}");
     }
-    assert_eq!(KB_ISSUE_TYPES.len(), KB_ISSUE_NAMES.lines().count());
+    assert_eq!(
+        webprobe_support::issues::KB_ISSUE_TYPES.len(),
+        KB_ISSUE_NAMES.lines().count()
+    );
     assert_eq!(issue_type_id("SQL injection"), 0x0010_0200);
     assert_eq!(
         issue_type_id("External service interaction (DNS)"),

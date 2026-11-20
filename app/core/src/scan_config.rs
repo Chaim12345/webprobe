@@ -129,7 +129,7 @@ pub struct ScanConfig {
     pub crawl: CrawlLimits,
     /// "Issues reported" from the scan configuration library (R-11); None
     /// runs every check, as before the library existed.
-    pub issues: Option<crate::scan_library::IssueFilter>,
+    pub issues: Option<webprobe_support::scan_filter::IssueFilter>,
 }
 
 /// Burp's crawl settings (CrawlDefaults.json): link depth, unique locations,
@@ -183,11 +183,11 @@ impl ScanConfig {
     }
 
     /// Whether checks for issue `name` run and report (see
-    /// [`crate::scan_library::filter_allows`]).
+    /// [`webprobe_support::scan_filter::filter_allows`]).
     pub fn issue_allowed(&self, name: &str, active: bool) -> bool {
         self.issues
             .as_ref()
-            .is_none_or(|f| crate::scan_library::filter_allows(f, name, active))
+            .is_none_or(|f| webprobe_support::scan_filter::filter_allows(f, name, active))
     }
 
     pub fn insertion_enabled(&self, key: &str) -> bool {
@@ -219,7 +219,7 @@ impl ScanConfig {
                 engine: s.crawl_engine.clone().unwrap_or_default(),
             },
             issues: s.issues_reported.as_ref().and_then(|ir| {
-                crate::scan_library::IssueFilter::from_tree(
+                webprobe_support::scan_filter::IssueFilter::from_tree(
                     &serde_json::json!({"scanner": {"issues_reported": ir}}),
                 )
             }),
@@ -238,13 +238,89 @@ impl ScanConfig {
         s.crawl_max_minutes = Some(self.crawl.max_minutes);
         s.crawl_max_requests = Some(self.crawl.max_requests);
         s.issues_reported = self.issues.as_ref().and_then(|_| {
-            crate::scan_library::get_path(
-                &crate::scan_library::config_to_tree(self, 1, 1),
+            webprobe_support::scan_filter::get_path(
+                &config_to_tree(self, 1, 1),
                 "scanner.issues_reported",
             )
             .cloned()
         });
     }
+}
+
+/// Burp's insertion point switches and WebProbe's keys for them
+/// ([`INSERTION_TYPES`]).
+pub(crate) const INSERTION_KEYS: [(&str, &str); 8] = [
+    ("insert_url_params", "url"),
+    ("insert_body_params", "body"),
+    ("insert_cookies", "cookie"),
+    ("insert_param_name", "param_name"),
+    ("insert_http_headers", "header"),
+    ("insert_entire_body", "entire_body"),
+    ("insert_url_path_folders", "folder"),
+    ("insert_url_path_filename", "filename"),
+];
+
+pub(crate) const SPEEDS: [&str; 3] = ["fast", "normal", "thorough"];
+pub(crate) const ACCURACIES: [&str; 3] = [
+    "minimise_false_negatives",
+    "normal",
+    "minimise_false_positives",
+];
+
+/// The scan settings WebProbe runs with, as Burp JSON: what a library
+/// configuration is overlaid onto (Burp loads a configuration onto the
+/// settings being edited) and what "Save" writes.
+pub fn config_to_tree(c: &ScanConfig, speed: u8, accuracy: u8) -> serde_json::Value {
+    let f = c
+        .issues
+        .clone()
+        .unwrap_or(webprobe_support::scan_filter::IssueFilter {
+            types_on: webprobe_support::scan_filter::CAT_PASSIVE
+                | webprobe_support::scan_filter::CAT_ACTIVE
+                | webprobe_support::scan_filter::CAT_JAVASCRIPT,
+            selected: None,
+        });
+    let mut ipt = serde_json::Map::new();
+    for (burp, key) in INSERTION_KEYS {
+        ipt.insert(
+            burp.into(),
+            serde_json::Value::Bool(c.insertion_enabled(key)),
+        );
+    }
+    let selected: Vec<serde_json::Value> = f
+        .selected
+        .iter()
+        .flatten()
+        .map(|(id, on)| serde_json::json!({"detection_methods": [], "enabled": on, "type_index": format!("0x{id:08x}")}))
+        .collect();
+    serde_json::json!({
+        "crawler": {
+            "crawl_limits": {
+                "maximum_crawl_time": c.crawl.max_minutes,
+                "maximum_request_count": c.crawl.max_requests,
+                "maximum_unique_locations": c.crawl.max_locations,
+            },
+            "crawl_optimization": {"maximum_link_depth": c.crawl.max_depth},
+            "customization": {"request_robots_txt": c.crawl.robots, "request_sitemap": c.crawl.sitemap},
+        },
+        "scanner": {
+            "audit_optimization": {
+                "scan_speed": SPEEDS[speed.min(2) as usize],
+                "scan_accuracy": ACCURACIES[accuracy.min(2) as usize],
+            },
+            "issues_reported": {
+                "scan_type_passive": f.types_on & webprobe_support::scan_filter::CAT_PASSIVE != 0,
+                "scan_type_light_active": f.types_on & webprobe_support::scan_filter::CAT_LIGHT != 0,
+                "scan_type_medium_active": f.types_on & webprobe_support::scan_filter::CAT_MEDIUM != 0,
+                "scan_type_intrusive_active": f.types_on & webprobe_support::scan_filter::CAT_INTRUSIVE != 0,
+                "scan_type_javascript_analysis": f.types_on & webprobe_support::scan_filter::CAT_JAVASCRIPT != 0,
+                "select_individual_issues": f.selected.is_some(),
+                "selected_issues": selected,
+            },
+            "insertion_point_types": serde_json::Value::Object(ipt),
+            "misc_insertion_point_options": {"use_nested_insertion_points": c.insertion_enabled(NESTED_KEY)},
+        },
+    })
 }
 
 #[cfg(test)]

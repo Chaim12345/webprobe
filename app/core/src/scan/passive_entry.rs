@@ -32,7 +32,7 @@ pub fn passive_check_live(shared: &Shared, e: &HistEntry) -> Vec<ScanIssue> {
 pub fn passive_check_filtered(
     shared: &Shared,
     e: &HistEntry,
-    issues: Option<&crate::scan_library::IssueFilter>,
+    issues: Option<&webprobe_support::scan_filter::IssueFilter>,
 ) -> Vec<ScanIssue> {
     let config = crate::scan_config::shared_config(shared)
         .lock()
@@ -41,7 +41,7 @@ pub fn passive_check_filtered(
     let mut v = passive_check_with(e, &|id| config.check_enabled(id), Some(&shared.passive));
     // R-11: "Issues reported" (passive scan type, individual selection).
     if let Some(f) = issues {
-        v.retain(|i| crate::scan_library::filter_allows(f, &i.name, false));
+        v.retain(|i| webprobe_support::scan_filter::filter_allows(f, &i.name, false));
     }
     // Montoya extensions' passive checks (bounded by the hook timeout).
     let exts = crate::ext_host::active_hooks(shared);

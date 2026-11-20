@@ -201,6 +201,12 @@ pub const SECONDARY_ISSUES: &[(&str, &str)] =
 /// R-11's issue table: the WebProbe check ids that report Burp issue type
 /// `type_id` (from [`check_catalogue`] and [`SECONDARY_ISSUES`]). Empty
 /// when WebProbe has no check for it.
+/// Register the check catalogue as the lookup for selected issue types no
+/// check reports (app startup; unregistered keeps selections).
+pub fn register_type_checks() {
+    webprobe_support::scan_filter::register_type_checks(|id| !checks_for_issue_type(id).is_empty());
+}
+
 pub fn checks_for_issue_type(type_id: u32) -> Vec<&'static str> {
     let mut v: Vec<&'static str> = check_catalogue()
         .into_iter()
