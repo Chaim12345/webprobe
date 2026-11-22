@@ -488,6 +488,21 @@ final class Messages {
         String reason = fl.length > 2 ? fl[2] : "";
         o.on("statusCode", a -> status)
          .on("reasonPhrase", a -> reason)
+         .on("hasCookie", a -> {
+             String name = a[0] instanceof burp.api.montoya.http.message.Cookie c ? c.name() : (String) a[0];
+             for (String[] header : r.headers) {
+                 if (!header[0].equalsIgnoreCase("Set-Cookie")) continue;
+                 try {
+                     for (java.net.HttpCookie cookie : java.net.HttpCookie.parse(header[1])) {
+                         if (cookie.getName().equals(name) && (!(a[0] instanceof burp.api.montoya.http.message.Cookie c)
+                                 || cookie.getValue().equals(c.value())
+                                 && java.util.Objects.equals(cookie.getDomain(), c.domain())
+                                 && java.util.Objects.equals(cookie.getPath(), c.path()))) return true;
+                     }
+                 } catch (IllegalArgumentException invalid) { /* Ignore malformed Set-Cookie, not other headers. */ }
+             }
+             return false;
+         })
          .on("isStatusCodeClass", a -> {
              String n = ((Enum<?>) a[0]).name();
              return n.contains("_" + (status / 100) + "XX");
