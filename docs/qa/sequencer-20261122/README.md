@@ -27,6 +27,6 @@ Rust 1.100.0. Local Cargo overrides selected the installed compiler and system l
 - `cargo test --workspace`: **785 passed, 12 ignored, 0 failed** (136 app, 550 core, 12 report, 87 support).
 - `cargo fmt --all -- --check`: pass.
 - `cargo clippy --workspace --all-targets -- -D warnings`: pass, zero warnings.
-- `cargo test -p webprobe-support seq_bits:: -- --nocapture`: **8 passed**, including three new regressions. Output is in `tests.log`.
+- `cargo test -p webprobe-support seq_bits:: -- --nocapture`: **8 passed**, including three new regressions. Output is in `tests.txt`.
 
 The pre-existing tests also cover balanced-but-alternating bits, repeated four-bit patterns, counters, random binary tokens, hex encoding, fixed prefixes, exports and minimum sample handling. The existing monobit, poker, runs and approximate long-run tests are retained. Spectral, cross-bit correlation and compression testing remain unimplemented and are now explicitly disclosed in the summary. Variable-length analysis uses only the common prefix. Passing these tests does not prove unpredictability.
