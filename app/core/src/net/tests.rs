@@ -1706,7 +1706,8 @@ fn h2_pool_key_covers_route_tls_and_protocol_choice() {
     let mut shared = Shared::new();
     let config = shared.upstream_for("localhost");
     let key = |shared: &Shared, config: &crate::upstream::UpstreamConfig, want: Option<bool>| {
-        crate::net::conn_reuse::h2_pool_key(shared, "localhost", 443, config, want)
+        let policy = crate::net::tls_client::EffectiveTlsPolicy::capture(shared, "localhost");
+        crate::net::conn_reuse::h2_pool_key(&policy, "localhost", 443, config, want)
     };
     let base = key(&shared, &config, None);
     // Protocol choice.
@@ -1727,10 +1728,44 @@ fn h2_pool_key_covers_route_tls_and_protocol_choice() {
             key_pem: "not a key".into(),
         });
     assert_eq!(base, key(&shared, &config, None));
-    // A different root store is a different TLS policy.
-    let base_roots = key(&shared, &config, None);
+    // A valid matching mTLS rule is a different identity than the fallback.
+    let (cert_pem, key_pem) = shared.mitm.client_certificate("client").unwrap();
+    {
+        let mut certs = shared.client_certs.lock().unwrap();
+        certs.clear();
+        certs.push(crate::net::tls_client::ClientCertRule {
+            host_pattern: "localhost".into(),
+            cert_pem: cert_pem.clone(),
+            key_pem: key_pem.clone(),
+        });
+    }
+    let mtls = key(&shared, &config, None);
+    assert_ne!(base, mtls);
+    // Changing the rule's key is a different identity.
+    let (_cert2, key_pem2) = shared.mitm.client_certificate("client2").unwrap();
+    shared.client_certs.lock().unwrap()[0].key_pem = key_pem2;
+    assert_ne!(mtls, key(&shared, &config, None));
+    // Valid back to invalid: the rule stops building and the shared
+    // fallback identity returns, so the key matches the no-rule key again.
+    shared.client_certs.lock().unwrap()[0].cert_pem = "not a pem".into();
+    assert_eq!(base, key(&shared, &config, None));
+    shared.client_certs.lock().unwrap().clear();
+    // A constraints-only root change (same subject and SPKI, name
+    // constraints added) is a different TLS policy.
+    let original_roots = shared.tls_roots.lock().unwrap().clone();
+    let mut constrained = rustls::RootCertStore::empty();
+    for anchor in original_roots.roots.iter() {
+        let mut anchor = anchor.clone();
+        anchor.name_constraints = Some(rustls::pki_types::Der::from(vec![0x30u8, 0x00]));
+        constrained.roots.push(anchor);
+    }
+    let before_constraints = key(&shared, &config, None);
+    *shared.tls_roots.lock().unwrap() = constrained;
+    assert_ne!(before_constraints, key(&shared, &config, None));
+    // A different root store altogether is a different TLS policy.
     *shared.tls_roots.lock().unwrap() = rustls::RootCertStore::empty();
-    assert_ne!(base_roots, key(&shared, &config, None));
+    assert_ne!(before_constraints, key(&shared, &config, None));
+    *shared.tls_roots.lock().unwrap() = original_roots;
     // A different shared upstream config is a different identity.
     let ca = shared.mitm.ca_der();
     let pre_swap = key(&shared, &config, None);
@@ -2980,6 +3015,8 @@ fn hardening_pattern_matching_keeps_literal_and_regex_semantics_separate() {
     assert!(pattern_matches("^a.b$", true, "aXb"));
     assert!(!pattern_matches("[", true, "["));
     assert!(!pattern_matches("^a$", true, "ba"));
+}
+
 /// Two requests to the same h2 origin ride one pooled connection (streams 1
 /// and 3), and the counters show a single connection opened with one pool
 /// hit. Before h2 pooling, the second request opened a second connection.

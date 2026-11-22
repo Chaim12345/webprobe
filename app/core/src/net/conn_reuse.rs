@@ -293,55 +293,22 @@ pub fn send_tls_raw_with(
 pub(crate) type H2PoolKey = (String, u16, String, u64, Option<bool>);
 use crate::upstream::UpstreamConfig;
 
+/// Derive the pool key from one captured effective-policy snapshot: the
+/// caller captures the policy once and uses the same snapshot for the TLS
+/// connection's construction, so key and construction can never observe
+/// two different policy states (see EffectiveTlsPolicy).
 pub(crate) fn h2_pool_key(
-    shared: &Shared,
+    policy: &EffectiveTlsPolicy,
     host: &str,
     port: u16,
     config: &UpstreamConfig,
     want_h2: Option<bool>,
 ) -> H2PoolKey {
-    use std::hash::{Hash, Hasher};
-    let mut h = std::collections::hash_map::DefaultHasher::new();
-    // The EFFECTIVE TLS policy, mirroring tls_client::config_for: a matching
-    // client-certificate rule that builds wins with its full content (a key
-    // or cert change is a new identity); a rule that fails to build falls
-    // back to the shared upstream config, so the fallback's identity is what
-    // gets hashed. The root store feeds both paths.
-    let rule = shared
-        .client_certs
-        .lock()
-        .unwrap()
-        .iter()
-        .find(|r| host_matches(&r.host_pattern, host))
-        .cloned();
-    let roots = shared.tls_roots.lock().unwrap().clone();
-    let built = rule.and_then(|r| {
-        crate::tls::client_auth_config(&r.cert_pem, &r.key_pem, roots.clone())
-            .ok()
-            .map(|_| r)
-    });
-    match built {
-        Some(r) => {
-            r.host_pattern.hash(&mut h);
-            r.cert_pem.hash(&mut h);
-            r.key_pem.hash(&mut h);
-        }
-        None => {
-            (std::sync::Arc::as_ptr(&shared.tls_upstream) as usize).hash(&mut h);
-        }
-    }
-    let roots = shared.tls_roots.lock().unwrap();
-    roots.len().hash(&mut h);
-    for root in roots.roots.iter() {
-        root.subject.as_ref().hash(&mut h);
-        root.subject_public_key_info.as_ref().hash(&mut h);
-    }
-    drop(roots);
     (
         host.to_string(),
         port,
         format!("{config:?}"),
-        h.finish(),
+        policy.key_identity(),
         want_h2,
     )
 }
@@ -364,7 +331,10 @@ pub fn send_tls_inner(
     let key = (host.to_string(), port);
     let choice = H2_CHOICE.with(|c| c.get());
     let want_h2 = choice.and_then(|c| c.want_h2);
-    let h2key = h2_pool_key(shared, host, port, &config, want_h2);
+    // Capture the effective TLS policy once: the pool key and any fresh
+    // connection's TLS config below come from the same snapshot.
+    let policy = EffectiveTlsPolicy::capture(shared, host);
+    let h2key = h2_pool_key(&policy, host, port, &config, want_h2);
     // A pooled HTTP/2 connection answers on its next odd stream. Pooling is
     // off entirely when keep-alive is disabled or the sender pinned HTTP/1;
     // a dead socket, a GOAWAY connection or a retired connection is dropped.
@@ -429,7 +399,7 @@ pub fn send_tls_inner(
                 .ok();
             let name = rustls::pki_types::ServerName::try_from(host.to_string())
                 .map_err(|e| format!("invalid upstream TLS name {host}: {e}"))?;
-            let conn = rustls::ClientConnection::new(tls_client_config(shared, host), name)
+            let conn = rustls::ClientConnection::new(policy.config_with_sender_choice(), name)
                 .map_err(|e| format!("configure upstream TLS: {e}"))?;
             UpstreamConn::Tls(Box::new(rustls::StreamOwned::new(conn, tcp)))
         }
@@ -472,7 +442,7 @@ pub fn send_tls_inner(
                 // The server never processed the stream (GOAWAY/
                 // REFUSED_STREAM), so one retry on a fresh connection is safe.
                 shared.conns_opened.fetch_add(1, Ordering::SeqCst);
-                let fresh = new_tls_conn(shared, &config, host, port)?;
+                let fresh = new_tls_conn(&policy, &config, host, port)?;
                 let retried = match fresh {
                     UpstreamConn::Tls(mut tls) => {
                         let _ = tls.conn.complete_io(&mut tls.sock);
@@ -509,7 +479,7 @@ pub fn send_tls_inner(
 }
 
 pub fn new_tls_conn(
-    shared: &Shared,
+    policy: &EffectiveTlsPolicy,
     config: &crate::upstream::UpstreamConfig,
     host: &str,
     port: u16,
@@ -524,7 +494,7 @@ pub fn new_tls_conn(
             source,
         }
     })?;
-    let conn = rustls::ClientConnection::new(tls_client_config(shared, host), name)
+    let conn = rustls::ClientConnection::new(policy.config_with_sender_choice(), name)
         .map_err(|source| NetError::TlsConfig { source })?;
     Ok(UpstreamConn::Tls(Box::new(rustls::StreamOwned::new(
         conn, tcp,
