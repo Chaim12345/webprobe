@@ -1416,6 +1416,66 @@ mod tests {
         Some(dir)
     }
 
+    /// R-20: the public Montoya keyword analyzer, exercised by a real JVM
+    /// extension. This checks our documented behavior, not Burp parity.
+    #[test]
+    fn montoya_response_keyword_analysis() {
+        let Some(dir) = stage_extension("KeywordAnalysisExtension") else {
+            assert!(
+                std::env::var_os("WEBPROBE_REQUIRE_JAVA").is_none(),
+                "required Montoya regression cannot run: no JDK or Montoya API jar"
+            );
+            eprintln!("skipping: no JDK or Montoya API jar (set WEBPROBE_REQUIRE_JAVA=1 to fail)");
+            return;
+        };
+        let sc = JavaSidecar::spawn(dir.to_str().unwrap()).expect("keyword extension loads");
+        sc.unload();
+        let log = sc.errors();
+        assert!(
+            log.iter()
+                .any(|line| line.contains("keyword analysis regression passed")),
+            "keyword checks did not finish: {log:#?}"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// R-20: payload options round-trip through the public Montoya API.
+    #[test]
+    fn montoya_payload_without_server_location() {
+        let Some(dir) = stage_extension("PayloadOptionsExtension") else {
+            assert!(
+                std::env::var_os("WEBPROBE_REQUIRE_JAVA").is_none(),
+                "required Montoya regression cannot run: no JDK or Montoya API jar"
+            );
+            eprintln!("skipping: no JDK or Montoya API jar (set WEBPROBE_REQUIRE_JAVA=1 to fail)");
+            return;
+        };
+        let counter = AtomicU64::new(0);
+        let link = Arc::new(HostLink {
+            send: Box::new(|_, _| Err("unused".into())),
+            event: Box::new(|_, _| {}),
+            call: Box::new(move |_, op, _| {
+                assert_eq!(op, "collab.payload");
+                let n = counter.fetch_add(1, Ordering::SeqCst) + 1;
+                Ok(serde_json::json!({
+                    "id": format!("option{n}"),
+                    "payload": format!("option{n}.oast.test"),
+                    "server": "oast.test",
+                }))
+            }),
+        });
+        let sc = JavaSidecar::spawn_with(dir.to_str().unwrap(), Some(link))
+            .expect("payload options extension loads");
+        sc.unload();
+        let log = sc.errors();
+        assert!(
+            log.iter()
+                .any(|line| line.contains("payload options regression passed")),
+            "payload checks did not finish: {log:#?}"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     /// R-03 stage 1: setName, the unloading handler, every logging()
     /// channel, burpSuite(), and Unsupported for what is not bridged.
     #[test]

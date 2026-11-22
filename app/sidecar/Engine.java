@@ -762,11 +762,12 @@ final class Engine {
         boolean bare = false;
         for (Object o : Messages.many(a.length == 0 ? new Object[0] : new Object[] { a[a.length - 1] })) if (String.valueOf(o).equals("WITHOUT_SERVER_LOCATION")) bare = true;
         String text = bare ? full.split("\\.")[0] : full;
+        java.util.Optional<Object> payloadServer = bare ? java.util.Optional.empty() : java.util.Optional.of(server(domain));
         Object idObj = Api.obj().text(id).as(burp.api.montoya.collaborator.InteractionId.class);
         return Api.obj()
                 .on("id", x -> idObj)
                 .on("customData", x -> java.util.Optional.empty())
-                .on("server", x -> java.util.Optional.of(server(domain)))
+                .on("server", x -> payloadServer)
                 .text(text)
                 .as(burp.api.montoya.collaborator.CollaboratorPayload.class);
     }
