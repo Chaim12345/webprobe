@@ -357,7 +357,11 @@ pub fn handle_conn(shared: Arc<Shared>, mut stream: TcpStream) {
             handle_websocket(shared, Preloaded::new(pending, stream), req);
             return;
         }
-        upstream_and_deliver(&shared, &mut stream, req, 80, false, req_state);
+        // An extension drop page ends the exchange with Connection: close;
+        // buffered pipelined follow-ups must not be served after it.
+        if upstream_and_deliver(&shared, &mut stream, req, 80, false, req_state) {
+            return;
+        }
         // Non-pipelined traffic keeps its one-exchange lifecycle: the loop
         // continues only while the client has more requests buffered.
         if pending.is_empty() && !client_sent_more(&stream) {
@@ -570,7 +574,10 @@ fn serve_mitm_conn<S: ProxyIo>(
             let _ = tls.flush();
             return;
         }
-        upstream_and_deliver(&shared, &mut tls, req, 443, true, req_state);
+        // An extension drop page ends the connection (Connection: close).
+        if upstream_and_deliver(&shared, &mut tls, req, 443, true, req_state) {
+            break;
+        }
         // Non-pipelined traffic keeps its one-exchange lifecycle.
         if pending.is_empty() {
             break;
@@ -600,7 +607,8 @@ pub fn serve_h2_client<S: ProxyIo>(
             LISTENER_PORT.with(|p| p.set(listener));
             let (req, state) = intercept_request(&pipeline_shared, req, 443);
             let Some(req) = req else { return };
-            upstream_and_deliver(&pipeline_shared, &mut out, req, 443, true, state);
+            // h2 frames each stream independently; the close flag is h1-only.
+            let _ = upstream_and_deliver(&pipeline_shared, &mut out, req, 443, true, state);
         },
     );
     crate::h2_server::serve(&mut tls, handler);
@@ -784,7 +792,7 @@ pub fn upstream_and_deliver<S: ProxyIo>(
     default_port: u16,
     use_tls: bool,
     req_state: ReqState,
-) {
+) -> bool {
     let was_edited = req_state.edited;
     let parts = util::parse_http(&req);
     let (host, port) = host_of(&parts, default_port);
@@ -797,7 +805,7 @@ pub fn upstream_and_deliver<S: ProxyIo>(
             let _ = stream.write_all(&resp);
             let _ = stream.flush();
             shared.log(&format!("Served {} for the browser", path_of(&parts)));
-            return;
+            return false;
         }
     }
     // Burp answers `http://burpsuite` itself: the browser must already be
@@ -823,7 +831,7 @@ pub fn upstream_and_deliver<S: ProxyIo>(
         shared.log(&format!(
             "Served the local setup page for {host} -> {status}"
         ));
-        return;
+        return false;
     }
     // Session rules run before match-and-replace, matching Burp's handling chain.
     let req_session = apply_session_rules(shared, &req, default_port);
@@ -851,7 +859,7 @@ pub fn upstream_and_deliver<S: ProxyIo>(
         }
         let _ = stream.flush();
         shared.log("Request dropped by an extension hook");
-        return;
+        return true;
     }
     let (up_host, up_port) = upstream_target(shared, &host, port);
     let url = history_host(&HistEntry {
@@ -893,7 +901,7 @@ pub fn upstream_and_deliver<S: ProxyIo>(
             parts.method,
             path_of(&parts)
         ));
-        return;
+        return false;
     }
     match up.resp {
         Some(resp) => {
@@ -907,12 +915,12 @@ pub fn upstream_and_deliver<S: ProxyIo>(
                 &mut ann,
             ) {
                 shared.log("Response dropped by an extension hook");
-                return;
+                return false;
             }
             let Some(resp) =
                 intercept_response(shared, resp, &host, port, use_tls, &url, req_state)
             else {
-                return;
+                return false;
             };
             let status = util::parse_http(&resp)
                 .first
@@ -964,4 +972,5 @@ pub fn upstream_and_deliver<S: ProxyIo>(
             shared.log(&format!("Proxy error for {host}:{port}: {err}"));
         }
     }
+    false
 }
