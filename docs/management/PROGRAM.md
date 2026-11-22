@@ -8,6 +8,10 @@ This is the index for sequencing, not permission to merge or change product beha
 
 [Open the status board](KANBAN.html) or [view the share image](KANBAN.png). The HTML board has one linked card per open PR, plus program checkpoints; each shows owner, gate and next step. Snapshot data is in `kanban-data.json`. Verified checkpoints are separate from unfinished work. This is not a Monday.com account or live sync.
 
+## Acceptance blocker, CTO 23:04
+
+Selecting a stored256MiB streamed history entry aborts with a5368707940-byte allocation on a2GB host (QA reproduced2/2). Combined #125+#155 must not be accepted or shipped with the crash reachable. Lane15 is building a bounded-preview fix on a separate PR; exact code review and QA regression are required. Prior suite/JDK25 green does not clear this blocker.
+
 ## Current position
 
 - Live parity `4ad2591e61f262e36b57965139bd429b3e9f0602`; **113 open PRs**, full paginated refresh and exact ancestry recomputed. Management #160 remains open; previous 0220939 docs approval is historical once this refresh changes its head. Self-row SHA stays blank to avoid recursive staleness.
@@ -168,4 +172,4 @@ Primary evidence links: [#125](https://github.com/Chaim12345/webprobe/pull/125),
 
 - 22:57: live 113 open and source refs/parity unchanged. QA exact 2c7ccdd suite 1184/0/27 and real Java15/4/13 green 22:36; first three marker/framing/project UI checks passed 22:41-22:43. Remaining UI/final verdict held; no landing/closure permission from this milestone.
 
-- 23:05: owner-requested Monday-style kanban added:15 work items and113 individual open-PR cards, image plus filterable HTML. QA reports streaming storageON/OFF and Organizer collection persistence PASS; delete click-through remains automation-blocked. Large-body follow-up: selecting a stored256MiB entry aborts with allocation5368707940 bytes on2GB host, reproduced2/2 (QA app4.log, shots84/85). Storage/cut note correct; lazy/truncated rendering needed. Open follow-up, NOT a #155 blocker unless CTO rules so.
+- 23:05: owner-requested Monday-style kanban added:15 work items and113 individual open-PR cards, image plus filterable HTML. QA reports streaming storageON/OFF and Organizer collection persistence PASS; delete click-through remains automation-blocked. Large-body follow-up: selecting a stored256MiB entry aborts with allocation5368707940 bytes on2GB host, reproduced2/2 (QA app4.log, shots84/85). Storage/cut note correct; lazy/truncated rendering needed. SUPERSEDED23:04 by CTO: acceptance BLOCKER for the combined batch. Lane15 is preparing a bounded-preview fix on a separate PR; no batch acceptance until verified.

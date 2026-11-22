@@ -1,5 +1,5 @@
 {
-  "as_of": "2026-11-22T23:05:00+02:00",
+  "as_of": "2026-11-22T23:06:00+02:00",
   "open_pr_count": 113,
   "parity": "4ad2591e61f262e36b57965139bd429b3e9f0602",
   "candidate": "2c7ccdd87a4fe1be0ec1aea2837258932ad94474",
@@ -26,15 +26,15 @@
       "owner": "QA / release",
       "gate": "Partial UI PASS reported",
       "detail": "Storage ON/OFF and collection persistence passed. Size-cut storage/note correct; selecting huge body aborts.",
-      "next": "Delete action unverified. Large-body abort needs follow-up."
+      "next": "Delete action unverified. Rendering crash blocks batch."
     },
     {
       "column": "active",
-      "title": "#155 final candidate",
+      "title": "#155 remaining UI",
       "owner": "Request-reader + QA",
-      "gate": "Source approved; UI incomplete",
-      "detail": "2c7ccdd includes CTO B wire evidence fix. Full suite + Java green.",
-      "next": "Finish remaining UI, then final verdict."
+      "gate": "Suite green; acceptance BLOCKED",
+      "detail": "2c7ccdd includes CTO B wire evidence fix. Rendering-crash fix is a separate prerequisite.",
+      "next": "Finish UI; wait bounded-preview fix before verdict."
     },
     {
       "column": "active",
@@ -87,10 +87,10 @@
     {
       "column": "blocked",
       "title": "Large-body rendering",
-      "owner": "QA / CTO follow-up",
-      "gate": "Open follow-up; no CTO blocker ruling",
-      "detail": "Selecting a 256MiB streamed entry aborts: ~5GB allocation on a 2GB host, reproduced 2/2. Storage + cut note correct.",
-      "next": "Lazy/truncated rendering; CTO decides landing impact."
+      "owner": "Lane 15 / CTO / QA",
+      "gate": "CTO acceptance BLOCKER",
+      "detail": "Selecting a 256MiB streamed entry aborts: ~5GB allocation on a 2GB host, reproduced 2/2.",
+      "next": "Separate bounded-preview PR; verify fix before batch acceptance."
     },
     {
       "column": "blocked",
@@ -1200,10 +1200,10 @@
       "url": "https://github.com/Chaim12345/webprobe/pull/125",
       "head": "359b1395e0849db67add85cbf1b9bbf4c5a06dcf",
       "owner": "Integration + independent review",
-      "column": "active",
-      "gate": "Preservation delta code-approved",
+      "column": "blocked",
+      "gate": "CTO BLOCKED: combined batch rendering crash",
       "next": "Hold reader-free359b139; final combination is #1552c7ccdd, no local merge result promoted",
-      "blocker": "Full remaining one-build UI/workflow acceptance required; suite/JDK25 green on exact2c7ccdd, hosted CI/landing identity remain separate",
+      "blocker": "CTO23:04 ACCEPTANCE BLOCKER: selecting stored256MiB streamed history aborts (allocation5368707940 on2GB,2/2). Separate bounded-preview fix by lane15 + review/QA required; remaining UI also open.",
       "evidence": "Reviewer code-read approves 3108302..359b139, no cargo rerun by reviewer. Author reports support118/0 and app151/0, fmt/clippy clean; old core/Bambda counts not rerun. Fix moves items to Inbox and tests evidence/notes/IDs, unrelated items, repeated deletion and persistence"
     },
     {
@@ -1344,11 +1344,11 @@
       "url": "https://github.com/Chaim12345/webprobe/pull/155",
       "head": "2c7ccdd87a4fe1be0ec1aea2837258932ad94474",
       "owner": "Lane15 + integration + reviewer/CTO",
-      "column": "active",
-      "gate": "QA suite/JDK25 green; UI partial",
-      "next": "Complete streaming storageON/OFF/size-cut and cross-tool workflow UI evidence; then final QA verdict/current CI/triage landing",
-      "blocker": "Full remaining one-build UI/workflow acceptance required; suite/JDK25 green on exact2c7ccdd, hosted CI/landing identity remain separate",
-      "evidence": "Live refs/ancestry and dc170b5..2c7ccdd 3-file production/test delta (+228/-21) verified by PM. Reviewer20:10 code-read approves original pre-edit wire bytes, real status/visible note, marker edge cases and untouched streaming. Author pipeline8/8 runs with7 tests each, core845/0/13, fmt/clippy clean. QA independently pipeline7/0 on exact2c7ccdd; full gate not done. Fixture JSON ProjectHistory roundtrip is NOT full save_project/restore_project UI proof. Complete/EOF-delimited unchanged; duplicate/conflicting CL strict warning intentional.; QA22:36 verifies workspace1184/0/27 across19 result lines, fmt/clippy clean, standalone pipeline7/7, JDK25 ext_host15/15 montoya4/4 bambda13/13. UI22:41/22:43 reports visible incomplete/strict-framing notes and original bytes retained through real project create/save/quit/reopen. Rest UI pending; PM has not inspected QA screenshots or rerun tests."
+      "column": "blocked",
+      "gate": "CTO BLOCKED: large-body rendering crash",
+      "next": "Wait separate bounded-preview PR and exact fix review/QA; finish remaining UI, then combined final verdict",
+      "blocker": "CTO23:04 ACCEPTANCE BLOCKER: selecting stored256MiB streamed history aborts (allocation5368707940 on2GB,2/2). Separate bounded-preview fix by lane15 + review/QA required; remaining UI also open.",
+      "evidence": "Live refs/ancestry and dc170b5..2c7ccdd 3-file production/test delta (+228/-21) verified by PM. Reviewer20:10 code-read approves original pre-edit wire bytes, real status/visible note, marker edge cases and untouched streaming. Author pipeline8/8 runs with7 tests each, core845/0/13, fmt/clippy clean. QA independently pipeline7/0 on exact2c7ccdd; full gate not done. Fixture JSON ProjectHistory roundtrip is NOT full save_project/restore_project UI proof. Complete/EOF-delimited unchanged; duplicate/conflicting CL strict warning intentional.; QA22:36 verifies workspace1184/0/27 across19 result lines, fmt/clippy clean, standalone pipeline7/7, JDK25 ext_host15/15 montoya4/4 bambda13/13. UI22:41/22:43 reports visible incomplete/strict-framing notes and original bytes retained through real project create/save/quit/reopen. Rest UI pending; PM has not inspected QA screenshots or rerun tests.; QA23:04 large-body rendering allocation abort2/2 on2GB host, CTO23:04 acceptance BLOCKER; bounded-preview fix separate PR required; storage and cut note correct. StreamingON/OFF and collection persistence PASS, delete action automation-blocked."
     },
     {
       "number": 160,
@@ -1360,7 +1360,7 @@
       "gate": "New visual board needs docs review",
       "next": "Review current PR head; preserve timestamped inventory and source scopes",
       "blocker": "Prior cceeffd approval does not cover new refresh",
-      "evidence": "Self SHA intentionally blank; approved0220939 historical after this QA checkpoint refresh; current PR head authoritative"
+      "evidence": "Self SHA blank; new visual kanban15 work items +113 per-PR cards added at owner request; current head needs docs review"
     },
     {
       "number": 161,
@@ -1481,15 +1481,6 @@
       "next": "Author addresses review fixes first; require updated exact-head review/QA before release claims",
       "blocker": "Batch freeze; run/concurrency budget, direct-egress verification and evidence/confidence/body caps unresolved",
       "evidence": "64-request cap is per URL, not per run; request scope/session routing passed source review, speculative direct socket risk unverified. Author reports 787 core passes at 4 threads, all8 positive families across3 browser test functions plus cache test; earlier16-thread DOM lab miss unresolved; no GUI visual QA"
-    }
-  ],
-  "followups": [
-    {
-      "title": "Large-body rendering allocation abort",
-      "owner": "QA / CTO follow-up",
-      "status": "open follow-up, not #155 blocker absent CTO ruling",
-      "evidence": "QA23:04, app4.log, shots84/85; reproduced2/2 on2GB host selecting256MiB stored entry,5368707940-byte allocation",
-      "next": "Lazy/truncated body rendering; CTO decides landing impact"
     }
   ]
 }
