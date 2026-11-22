@@ -1,0 +1,7 @@
+{
+  "proxy_port": 18081,
+  "payload": "parity-ws",
+  "handshake": "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: 7WBpOhXiME9n8sjLrcsgKx7kM0c=\r\n\r\n",
+  "frame_hex": "81097061726974792d7773",
+  "echo": "parity-ws"
+}

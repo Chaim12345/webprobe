@@ -1,0 +1,151 @@
+{
+  "date": "2026-11-22",
+  "timezone": "Asia/Jerusalem",
+  "baseline": "cc7407d579046da45c84b7f2beb69982b3b388e5",
+  "report_base": "7be2efd44949006526df1ea3616290d9979e67c6",
+  "burp": "Community 2026.11.2",
+  "burp_jar_sha256": "ddd11e506bbbee7491c120901722a8bbd79d64d1298afceee1d334d27981516b",
+  "burp_java_limits": [
+    "-Xmx384m",
+    "-Xss256k"
+  ],
+  "webprobe_sidecar_limits": [
+    "-Xmx128m",
+    "-Xss256k"
+  ],
+  "listeners": {
+    "burp": "127.0.0.1:18080",
+    "webprobe": "127.0.0.1:18081",
+    "http_origin": "127.0.0.1:18765",
+    "websocket_origin": "127.0.0.1:18766"
+  },
+  "extensions": "disabled in WebProbe, none loaded in fresh Burp session",
+  "valid_ws_key_bytes": 16,
+  "files": [
+    {
+      "path": "evidence/checks.json",
+      "sha256": "2f9a1ed79c9f7de365befbc0e657e79053b2a239e2a00c865938f8a6804cf442",
+      "bytes": 347
+    },
+    {
+      "path": "evidence/http-fixture.py",
+      "sha256": "15562e0ace5e997f9ed7729ff149d99cc0b0df6d44839166a3fb84e078515a81",
+      "bytes": 1037
+    },
+    {
+      "path": "evidence/http-fixtures.json",
+      "sha256": "6b766e36bc3e028f72233f850185a9a92ee84f276476150b34a15ce96efba25a",
+      "bytes": 1173
+    },
+    {
+      "path": "evidence/intercept-drop-18081.err",
+      "sha256": "4e259361391d0599e6abafa1cc7512aa08c900f5e6044a2bee609135744e1276",
+      "bytes": 35
+    },
+    {
+      "path": "evidence/intercept-drop-burp.html",
+      "sha256": "ca3b38cc299d417fe853e28426927da566486083437eb275190eacbc43a12ea5",
+      "bytes": 1328
+    },
+    {
+      "path": "evidence/intercept-drop-webprobe.body",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "evidence/intercept-forward-18080.json",
+      "sha256": "8e00017b261108d99013b85333e9eac4461651dfcc1447c6f9caada0729663f1",
+      "bytes": 86
+    },
+    {
+      "path": "evidence/intercept-forward-18081.json",
+      "sha256": "8e00017b261108d99013b85333e9eac4461651dfcc1447c6f9caada0729663f1",
+      "bytes": 86
+    },
+    {
+      "path": "evidence/intercept-origin-extract.txt",
+      "sha256": "980035cb3e406a4c9a10a1d29e405d317200f2355014d05931507e70c8a2da86",
+      "bytes": 80
+    },
+    {
+      "path": "evidence/match-replace-18080.json",
+      "sha256": "84336b6322c1c64517a5d24f1931b79a5fb10adb057d9078ffcde96c7645f07d",
+      "bytes": 87
+    },
+    {
+      "path": "evidence/match-replace-18081.json",
+      "sha256": "84336b6322c1c64517a5d24f1931b79a5fb10adb057d9078ffcde96c7645f07d",
+      "bytes": 87
+    },
+    {
+      "path": "evidence/ws-18080.json",
+      "sha256": "67d7e0f86a126c951fb15604e0e37022711d2b36af09a3de5ac94002e838c804",
+      "bytes": 274
+    },
+    {
+      "path": "evidence/ws-18081.json",
+      "sha256": "8a0a43bee8f875f5cfdf4b7eec34ea74f7c1018039527ad63118f6777833d1ee",
+      "bytes": 274
+    },
+    {
+      "path": "evidence/ws-client.py",
+      "sha256": "0966b74d135ce31885fc70b5242e5a8edf10f832ea1ded86f4f31bdf15be87f6",
+      "bytes": 1047
+    },
+    {
+      "path": "evidence/ws-fixture.py",
+      "sha256": "bb4a4f5af19bf58af94927ff17b02ae8cfb735930a1a6bf2e7d653322ae2e198",
+      "bytes": 1463
+    },
+    {
+      "path": "screenshots/09-target.png",
+      "sha256": "1aacbe295c355f13a88e32a3690a666aa3213fab91152fba498747cb2a09ea0e",
+      "bytes": 219609
+    },
+    {
+      "path": "screenshots/10-logger.png",
+      "sha256": "c72c02ace2139412da42e491ec1b9921a8f5ee0a0d7e9f7d4c4d76fa1ae57878",
+      "bytes": 199899
+    },
+    {
+      "path": "screenshots/11-organizer.png",
+      "sha256": "6d50d89dc403882d5f05a44a950c1bc033a139d6445feedc9bf4e3e546ac82ad",
+      "bytes": 164896
+    },
+    {
+      "path": "screenshots/12-organizer-collections.png",
+      "sha256": "bd012e9ae7b0e1885af3fa0cd12a566a74b6508f10a09b0e9c87bf9f41ebe7df",
+      "bytes": 121693
+    },
+    {
+      "path": "screenshots/13-match-replace.png",
+      "sha256": "1936d5c2cb6660835621b950d9520a2ed9f14eba249a03133c7952c6a302280c",
+      "bytes": 143234
+    },
+    {
+      "path": "screenshots/14-intercept-held.png",
+      "sha256": "a6d265f1a77533894bee42c40589991947a08dd8dd904c4a968f4fa9e42c6be0",
+      "bytes": 146022
+    },
+    {
+      "path": "screenshots/15-intercept-drop.png",
+      "sha256": "79dad303f9ac4d4f6c6dab245fd7879ca42e0c95cd318e75b87f10009b4ace9d",
+      "bytes": 144337
+    },
+    {
+      "path": "screenshots/16-websockets.png",
+      "sha256": "46a9eaecfdb5072c26c51e872c213eecb8ae6500a25e533815b5e3a1680ce155",
+      "bytes": 123771
+    },
+    {
+      "path": "screenshots/17-collaborator-community-gate.png",
+      "sha256": "432abd650dd650c8402e5ed16277b61a9c87eccc3555fd5f68ea8a38b6c389dc",
+      "bytes": 95682
+    },
+    {
+      "path": "screenshots/18-scanner-community-gate.png",
+      "sha256": "4442bde241013765d74170b5213c65d1322d5ebcffa0063582f5ee908a103941",
+      "bytes": 211778
+    }
+  ]
+}

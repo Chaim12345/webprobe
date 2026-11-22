@@ -1,0 +1,12 @@
+{
+  "local_http_path_echoes": true,
+  "match_replace_18080": true,
+  "intercept_forward_18080": true,
+  "websocket_text_echo_18080": true,
+  "match_replace_18081": true,
+  "intercept_forward_18081": true,
+  "websocket_text_echo_18081": true,
+  "drop_absent_from_origin": true,
+  "both_forwarded_to_origin": true,
+  "webprobe_drop_curl_52": true
+}
