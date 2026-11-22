@@ -466,11 +466,9 @@ pub fn next_redirect(
 
 /// Outcome of a send with redirections.
 pub struct FollowResult {
-    /// Terminal wire request and target for redirect regression assertions.
-    /// Production keeps the editor unchanged even when redirects are followed.
-    #[cfg(test)]
+    /// Terminal wire request and target for response-bound redirect context.
+    /// The editor stays unchanged even when redirects are followed.
     pub request: String,
-    #[cfg(test)]
     pub service: Service,
     pub response: Option<Vec<u8>>,
     pub error: Option<String>,
@@ -546,9 +544,7 @@ pub fn send_following(
         let up = send_once(shared, &current, &mut request, cancelled, progress);
         let Some(resp) = up.resp else {
             return FollowResult {
-                #[cfg(test)]
                 request,
-                #[cfg(test)]
                 service: current,
                 response: None,
                 error: up.error,
@@ -574,9 +570,7 @@ pub fn send_following(
             }
         }
         return FollowResult {
-            #[cfg(test)]
             request,
-            #[cfg(test)]
             service: current,
             response: Some(resp),
             error: None,
@@ -1090,6 +1084,7 @@ pub fn new_tab(id: u64, host: &str, port: u16, https: bool, request: String) -> 
         response: None,
         result_line: String::new(),
         history: Vec::new(),
+        response_sources: Vec::new(),
         hist_pos: 0,
         ws: None,
     }
@@ -1105,6 +1100,7 @@ pub struct ClosedTab {
     pub response: Option<Vec<u8>>,
     pub result_line: String,
     pub history: Vec<(String, Option<Vec<u8>>, String)>,
+    pub response_sources: Vec<Option<net::RepResponseSource>>,
 }
 
 impl ClosedTab {
@@ -1118,6 +1114,7 @@ impl ClosedTab {
             response: t.response,
             result_line: t.result_line,
             history: t.history,
+            response_sources: t.response_sources,
         }
     }
 
@@ -1133,6 +1130,7 @@ impl ClosedTab {
             response: self.response,
             result_line: self.result_line,
             history: self.history,
+            response_sources: self.response_sources,
             hist_pos,
             ws: None,
         }
@@ -1798,10 +1796,33 @@ pub fn current_tab(app: &crate::App) -> Option<(String, Service, Option<Vec<u8>>
     Some((r.request.clone(), service, r.response.clone()))
 }
 
+/// The response belongs to the terminal wire hop, not necessarily the
+/// request still shown in the editor. History navigation uses the same index.
+fn redirect_source(app: &crate::App) -> Option<(String, Service, Option<Vec<u8>>)> {
+    let reps = app.shared.repeaters.lock().unwrap();
+    let r = reps.get(app.rep_sel.min(reps.len().saturating_sub(1)))?;
+    let (req, service) = if let Some(Some(source)) = r.response_sources.get(r.hist_pos) {
+        (
+            source.request.clone(),
+            Service::new(
+                &source.service.host,
+                source.service.port,
+                source.service.secure,
+            ),
+        )
+    } else {
+        (
+            r.request.clone(),
+            Service::of_tab(&r.host, r.port, r.https, &r.request)?,
+        )
+    };
+    Some((req, service, r.response.clone()))
+}
+
 /// Whether the shown response can be followed (Burp shows the "Follow
 /// redirection" button only then).
 pub fn can_follow(app: &crate::App) -> bool {
-    current_tab(app).is_some_and(|(req, svc, resp)| {
+    redirect_source(app).is_some_and(|(req, svc, resp)| {
         resp.is_some_and(|r| next_redirect(&req, &svc, &r, false).is_some())
     })
 }
@@ -1809,7 +1830,7 @@ pub fn can_follow(app: &crate::App) -> bool {
 /// "Follow redirection": load the follow-up request into the tab and point
 /// the target at it. The caller sends it.
 pub fn load_redirect(app: &mut crate::App) -> bool {
-    let Some((req, svc, Some(resp))) = current_tab(app) else {
+    let Some((req, svc, Some(resp))) = redirect_source(app) else {
         return false;
     };
     let Some((next, next_req)) = next_redirect(&req, &svc, &resp, app.rops.process_cookies) else {
@@ -2522,6 +2543,7 @@ pub fn send_ws_to_repeater(shared: &std::sync::Arc<net::Shared>, e: &net::WsEntr
         response: None,
         result_line: String::new(),
         history: Vec::new(),
+        response_sources: Vec::new(),
         hist_pos: 0,
         ws: Some(session.id),
     });
@@ -2604,6 +2626,7 @@ pub fn ws_repeater_view(app: &mut crate::App, ui: &mut Ui, session_id: u64) {
                     response: None,
                     result_line: String::new(),
                     history: Vec::new(),
+                    response_sources: Vec::new(),
                     hist_pos: 0,
                     ws: Some(copy.id),
                 });

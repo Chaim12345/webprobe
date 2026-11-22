@@ -227,6 +227,7 @@ impl Shared {
                 response: None,
                 result_line: String::new(),
                 history: Vec::new(),
+                response_sources: Vec::new(),
                 hist_pos: 0,
                 ws: None,
             }]),

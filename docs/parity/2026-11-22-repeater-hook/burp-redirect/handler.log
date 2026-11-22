@@ -1,0 +1,5 @@
+initialized
+request	id=1	tool=REPEATER	path=/start	incoming=0	outgoing=1
+response	id=1	tool=REPEATER	status=302
+request	id=2	tool=REPEATER	path=/finish	incoming=1	outgoing=2
+response	id=2	tool=REPEATER	status=200

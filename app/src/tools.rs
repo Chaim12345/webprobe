@@ -3242,6 +3242,7 @@ pub fn apply_project(app: &mut App, data: &project::ProjectData, content: bool) 
                 response: r.response_bytes(),
                 result_line: r.result_line.clone(),
                 history: Vec::new(),
+                response_sources: Vec::new(),
                 hist_pos: 0,
                 ws: None,
             })

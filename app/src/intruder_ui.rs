@@ -859,6 +859,7 @@ fn send_row_to_repeater(app: &mut App, r: &ResultRow, target: &(String, u16, boo
         response: None,
         result_line: String::new(),
         history: Vec::new(),
+        response_sources: Vec::new(),
         hist_pos: 0,
         ws: None,
     });

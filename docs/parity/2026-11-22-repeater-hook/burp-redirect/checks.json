@@ -1,0 +1,9 @@
+{
+  "origin_exactly_two_hops": true,
+  "paths": true,
+  "header_counts": true,
+  "editor_unchanged": true,
+  "editor_no_probe_header": true,
+  "editor_bytes": 648,
+  "editor_sha256": "21b5b390c8ce5f0b5d1e627bd2c53cfaf05cb34df1532c819d97c2c62fcaff8b"
+}

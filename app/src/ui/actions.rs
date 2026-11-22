@@ -230,6 +230,7 @@ pub fn send_history_to_repeater(app: &mut App) {
             response: None,
             result_line: String::new(),
             history: Vec::new(),
+            response_sources: Vec::new(),
             hist_pos: 0,
             ws: None,
         });
@@ -274,6 +275,7 @@ pub(crate) fn repeater_tab_to_new_tab(app: &mut App) {
         response: None,
         result_line: String::new(),
         history: Vec::new(),
+        response_sources: Vec::new(),
         hist_pos: 0,
         ws: None,
     });

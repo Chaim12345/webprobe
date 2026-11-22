@@ -210,6 +210,127 @@ mod repeater_fix_tests {
         assert_eq!(requests[1], requests[3]);
     }
 
+    /// Stop an automatic cross-origin chain on a relative redirect, then
+    /// exercise the real manual Follow path. Editor stays at hop 0 until clicked.
+    #[test]
+    fn repeater_manual_follow_uses_last_response_origin_and_path() {
+        use std::io::{Read, Write};
+        fn request(stream: &mut std::net::TcpStream) -> String {
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                .unwrap();
+            let mut raw = Vec::new();
+            let mut buf = [0; 2048];
+            while !raw.windows(4).any(|w| w == b"\r\n\r\n") {
+                let n = stream.read(&mut buf).unwrap();
+                assert_ne!(n, 0);
+                raw.extend_from_slice(&buf[..n]);
+            }
+            String::from_utf8(raw).unwrap()
+        }
+        fn run(mode: crate::repeater_ops::FollowMode) {
+            let a = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            let b = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            let (pa, pb) = (
+                a.local_addr().unwrap().port(),
+                b.local_addr().unwrap().port(),
+            );
+            let origin_a = std::thread::spawn(move || {
+                let (mut stream, _) = a.accept().unwrap();
+                let initial = request(&mut stream);
+                assert!(initial.starts_with("GET /a/start "));
+                assert_eq!(initial.matches("X-Parity-Probe: 1").count(), 1);
+                write!(stream, "HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:{pb}/b/step\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();
+            });
+            let origin_b = std::thread::spawn(move || {
+                let (mut stream, _) = b.accept().unwrap();
+                let middle = request(&mut stream);
+                assert!(middle.starts_with("GET /b/step "));
+                assert_eq!(middle.matches("X-Parity-Probe: 1").count(), 1);
+                stream.write_all(b"HTTP/1.1 302 Found\r\nLocation: next\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();
+                drop(stream);
+                let (mut stream, _) = b.accept().unwrap();
+                let final_request = request(&mut stream);
+                assert_eq!(final_request.matches("X-Parity-Probe: 1").count(), 2);
+                stream
+                    .write_all(
+                        b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok",
+                    )
+                    .unwrap();
+                final_request
+            });
+            let sh = net::Shared::new();
+            install_probe_header(&sh);
+            sh.scope
+                .lock()
+                .unwrap()
+                .push(net::ScopeRule::include("/b/step", false));
+            let original = format!(
+                "GET /a/start HTTP/1.1\r\nHost: 127.0.0.1:{pa}\r\nConnection: close\r\n\r\n"
+            );
+            {
+                let mut tabs = sh.repeaters.lock().unwrap();
+                tabs[0].host = "127.0.0.1".into();
+                tabs[0].port = pa;
+                tabs[0].request = original.clone();
+            }
+            let mut app = App::new(sh.clone());
+            app.rep_update_cl = false;
+            app.rops.follow = mode;
+            repeater_send(&mut app);
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+            while sh.rep.is_busy() && std::time::Instant::now() < deadline {
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+            assert!(!sh.rep.is_busy());
+            {
+                let tabs = sh.repeaters.lock().unwrap();
+                assert_eq!(tabs[0].request, original);
+                assert_eq!(tabs[0].port, pa);
+                assert!(tabs[0].result_line.starts_with("Done"));
+            }
+            assert!(crate::repeater_ops::can_follow(&app));
+            assert!(crate::repeater_ops::load_redirect(&mut app));
+            {
+                let tabs = sh.repeaters.lock().unwrap();
+                assert_eq!(tabs[0].port, pb, "manual Follow must use hop 1's origin");
+                let expected = if mode == crate::repeater_ops::FollowMode::OnSite {
+                    "/b/step"
+                } else {
+                    "/b/next"
+                };
+                assert!(
+                    tabs[0]
+                        .request
+                        .starts_with(&format!("GET {expected} HTTP/1.1\r\n")),
+                    "{}",
+                    tabs[0].request
+                );
+                if mode == crate::repeater_ops::FollowMode::OnSite {
+                    assert!(!tabs[0].request.contains("X-Parity-Probe"));
+                }
+                assert!(tabs[0]
+                    .request
+                    .contains(&format!("Host: 127.0.0.1:{pb}\r\n")));
+            }
+            let clicked_request = sh.repeaters.lock().unwrap()[0].request.clone();
+            repeater_send(&mut app);
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+            while sh.rep.is_busy() && std::time::Instant::now() < deadline {
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+            assert!(!sh.rep.is_busy());
+            assert_eq!(sh.repeaters.lock().unwrap()[0].request, clicked_request);
+            origin_a.join().unwrap();
+            assert!(origin_b
+                .join()
+                .unwrap()
+                .starts_with("GET /b/next HTTP/1.1\r\n"));
+        }
+        run(crate::repeater_ops::FollowMode::InScope);
+        run(crate::repeater_ops::FollowMode::OnSite);
+    }
+
     /// Issue #2 item 1: tab numbers are never reused, so routing by id can
     /// not hit a different tab after a close.
     #[test]

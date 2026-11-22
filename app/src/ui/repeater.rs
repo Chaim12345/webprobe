@@ -500,6 +500,14 @@ pub(crate) fn repeater_send(app: &mut App) {
             error: fr.error,
         };
         let followed = fr.followed;
+        let source = net::RepResponseSource {
+            request: fr.request,
+            service: webprobe_core::ext_host::HttpService::new(
+                &fr.service.host,
+                fr.service.port,
+                fr.service.https,
+            ),
+        };
         let protocol = net::last_protocol();
         // Burp Community 2026.11.2, measured 2026-11-22: even after
         // following redirects, Send leaves the editor byte-identical.
@@ -534,6 +542,8 @@ pub(crate) fn repeater_send(app: &mut App) {
                     }
                     None => format!("error: {}", up.error.clone().unwrap_or_default()),
                 };
+                r.response_sources.resize_with(r.history.len(), || None);
+                r.response_sources.push(Some(source));
                 r.history.push((sent_req, r.response.clone(), r.result_line.clone()));
                 r.hist_pos = r.history.len() - 1;
             }
