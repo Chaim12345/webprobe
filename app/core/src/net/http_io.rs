@@ -93,8 +93,13 @@ pub fn read_response_head<R: Read>(stream: &mut R) -> std::io::Result<Vec<u8>> {
         if n == 0 {
             break;
         }
+        // Only the new bytes (plus the 3 before them, in case a terminator
+        // straddles two reads) can hold a head end: rescanning the whole
+        // buffer on every read made a large response head quadratic.
+        let from = out.len().saturating_sub(3);
         out.extend_from_slice(&chunk[..n]);
-        if out.windows(4).any(|w| w == b"\r\n\r\n") || out.windows(2).any(|w| w == b"\n\n") {
+        let tail = &out[from..];
+        if tail.windows(4).any(|w| w == b"\r\n\r\n") || tail.windows(2).any(|w| w == b"\n\n") {
             break;
         }
         if out.len() > 64 * 1024 {
