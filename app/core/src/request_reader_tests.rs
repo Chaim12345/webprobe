@@ -973,3 +973,79 @@ fn mixed_line_endings_get_400_and_close_in_one_read_and_split_reads() {
         }
     }
 }
+
+#[test]
+fn decrypted_h1_refuses_bare_lf_heads_like_cleartext() {
+    use rustls::pki_types::ServerName;
+    for step in [1usize, 16_384] {
+        let shared = Shared::new();
+        let mut roots = rustls::RootCertStore::empty();
+        roots.add(shared.mitm.ca_der()).unwrap();
+        let mut cfg = rustls::ClientConfig::builder_with_provider(Arc::new(
+            rustls::crypto::ring::default_provider(),
+        ))
+        .with_safe_default_protocol_versions()
+        .unwrap()
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+        cfg.alpn_protocols = vec![b"http/1.1".to_vec()];
+        let mut tls = rustls::ClientConnection::new(
+            Arc::new(cfg),
+            ServerName::try_from("localhost").unwrap(),
+        )
+        .unwrap();
+        let (port, pt) = spawn_proxy(Arc::clone(&shared));
+        let mut c = client(port);
+        c.write_all(b"CONNECT localhost:443 HTTP/1.1\r\nHost: localhost:443\r\n\r\n")
+            .unwrap();
+        let head = read_head(&mut c);
+        assert!(String::from_utf8_lossy(&head).starts_with("HTTP/1.1 200"));
+        while tls.is_handshaking() {
+            tls.complete_io(&mut c).expect("handshake");
+        }
+        let wire = b"POST /x HTTP/1.1\nHost: localhost\n\nContent-Length: 5\r\nTransfer-Encoding: chunked\r\n\r\nabcde";
+        {
+            let mut s = rustls::Stream::new(&mut tls, &mut c);
+            for piece in wire.chunks(step) {
+                s.write_all(piece).unwrap();
+            }
+            let mut got = Vec::new();
+            let mut buf = [0u8; 512];
+            while !String::from_utf8_lossy(&got).contains("framing.") {
+                match s.read(&mut buf) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => got.extend_from_slice(&buf[..n]),
+                }
+            }
+            let text = String::from_utf8_lossy(&got).to_string();
+            assert!(text.starts_with("HTTP/1.1 400"), "step {step}: {text}");
+            assert!(text.contains("Connection: close"));
+        }
+        drop(c);
+        pt.join().unwrap();
+        let h = shared.history.last().expect("captured");
+        assert!(wire.starts_with(&h.req_raw), "verbatim capture");
+        assert!(h
+            .note
+            .as_deref()
+            .unwrap_or("")
+            .contains("Rejected before forwarding"));
+    }
+}
+
+#[test]
+fn crlf_requests_with_lf_bytes_in_the_body_are_unaffected() {
+    let (up_port, up) = spawn_upstream(keep_alive_reply, Duration::from_millis(800));
+    let (port, pt) = spawn_proxy(Shared::new());
+    let mut c = client(port);
+    let body = "a\n\nb\nc\r\n\r\nd";
+    let wire = format!(
+        "POST http://127.0.0.1:{up_port}/lf HTTP/1.1\r\nHost: 127.0.0.1:{up_port}\r\nContent-Length: {}\r\n\r\n{body}",
+        body.len()
+    );
+    c.write_all(wire.as_bytes()).unwrap();
+    assert_eq!(read_response(&mut c).unwrap(), "reply for /lf");
+    drop(c);
+    pt.join().unwrap();
+    assert_eq!(up.join().unwrap(), ["/lf"]);
+}

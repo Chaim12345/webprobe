@@ -140,7 +140,12 @@ pub fn session_request<'a>(
 pub fn session_after(shared: &Shared, host: &str) {
     if let Some(tool) = TOOL.with(|t| t.get()) {
         if !shared.session_rules.lock().unwrap().is_empty() {
+            // Macros send requests on this thread; each exchange rewrites the
+            // "last exchange was reusable" flag the proxy engine reads for the
+            // OUTER response. Keep the outer result across them.
+            let outer = LAST_EXCHANGE_REUSABLE.with(|c| c.get());
             run_post_request_rules(shared, tool, host);
+            LAST_EXCHANGE_REUSABLE.with(|c| c.set(outer));
         }
     }
 }

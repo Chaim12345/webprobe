@@ -997,10 +997,15 @@ pub fn upstream_and_deliver<S: ProxyIo>(
     } else {
         send_raw_with(shared, &up_host, up_port, &req_out, Some(&mut sink))
     };
+    // Freeze the outer exchange's outcome now: hooks, interception and any
+    // nested sends on this thread must not change it. (The proxy listener
+    // never sets TOOL, so post-request macros do not run on this path; the
+    // flag is also saved/restored around them in `session_after`.)
+    let exchange_reusable = LAST_EXCHANGE_REUSABLE.with(|c| c.get());
     if let Some(done) = sink.finish() {
         let reusable = client_keeps
             && done.clean
-            && LAST_EXCHANGE_REUSABLE.with(|c| c.get())
+            && exchange_reusable
             && super::conn_reuse::response_headers_allow_reuse(&done.head)
             && stream_head_reusable(&done.head, &parts.method);
         report_stream_skips(shared, &host, &url, &done.head, req_state);
@@ -1063,7 +1068,7 @@ pub fn upstream_and_deliver<S: ProxyIo>(
             // closes the client.
             let reusable = wrote
                 && client_keeps
-                && LAST_EXCHANGE_REUSABLE.with(|c| c.get())
+                && exchange_reusable
                 && super::conn_reuse::response_headers_allow_reuse(&resp)
                 && stream_head_reusable(&resp, &parts.method)
                 && crate::codec::body_complete(&resp, &parts.method);
