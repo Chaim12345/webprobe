@@ -1,6 +1,6 @@
 # WebProbe program board
 
-Snapshot: 2026-11-22 13:09 Asia/Jerusalem. Program owner: Program Manager.
+Snapshot: 2026-11-22 13:10 Asia/Jerusalem. Program owner: Program Manager.
 
 This is the index for sequencing, not permission to merge or change product behavior. Only the triage lane lands parity changes. Existing PR branches and master stay untouched. Refresh this board when a source head, landing, decision or verification result changes.
 
@@ -8,14 +8,14 @@ This is the index for sequencing, not permission to merge or change product beha
 
 - Parity snapshot: `b1ef6b4a07d384fb1a58ae145cc278328d7c2c44`, after #45, #51, #95 and #100. These landings are not a release or full parity certification.
 - Single review stack: **#125**, observed head `2b756c1b37dae00d8f790f0b1f83471838e4060a`. Its body reports 845 passing checks on an earlier tested tree. Do not attach that count to a later SHA without new evidence.
-- **108 open PRs**, retrieved across both API pages. [PR board](pr-board.csv) has one row per open PR: exact head, lane owner, status, blocker, next action and evidence scope.
+- **108 open PRs before this board PR**, retrieved across both API pages. The board PR itself is #131, bringing that snapshot to 109. [PR board](pr-board.csv) has one row per open PR: exact head, lane owner, status, blocker, next action and evidence scope.
 - **21 current open heads are ancestors of #125**, including #125 itself. This proves commit inclusion, not semantic correctness or approval to close source PRs.
 - **Latest #123 `db2cd8d` is now included in #125**, via `92c1ee5`. #125 also merged parity `b1ef6b4`. Earlier missing-head and moving-base warnings are resolved; fresh acceptance on the new combined tree remains required.
 - [Milestone register](milestones.csv) preserves all 137 tasks from parity's `tasks.json`: 114 recorded done, 21 todo, 2 rejected. These are historical repository labels, not fresh verification. Open labels can describe work already present in review PRs. Map coverage before assigning builders.
 
 ## Landing sequence and stop/start calls
 
-1. **One parity writer: triage.** Finish the already reviewed, independently tested queue. #105 needs a new resolution branch after #100; retain both test-module declarations in `net/mod.rs`. Review and test the resolved combined tree, not either source in isolation.
+1. **One parity writer: triage.** Finish the already reviewed, independently tested queue. #129 is now the new resolution PR for #105 after #100; it must retain both test-module declarations in `net/mod.rs`. Review and test the resolved combined tree, not either source in isolation.
 2. **Integration owns #125.** Base and #123 are reconciled at this snapshot. Incorporate the new hash/h2 and crawl-ID heads when ready. Maintain an exact source-head manifest. No parallel landing of the same changes through individual source PRs.
 3. **Independent reviewer owns acceptance.** Review the final SHA, not a moving branch. Require clean check/fmt/clippy/full required-Java tests and current CI, applying only the owner's explicit Kilo waiver. Test count deltas alone are not coverage proof.
 4. **Cross-tool QA owns the release candidate.** Run project create/save/reopen, Logger to tools, Repeater extension hooks, extension Drop plus pipelining, constant-token Sequencer, Intruder baseline, Decoder bytes/Gzip, and Organizer persistence on one integrated build. #128 is separate-head evidence, not an integrated pass.
@@ -26,7 +26,7 @@ This is the index for sequencing, not permission to merge or change product beha
 
 | Lane | Accountable role | State / next checkpoint | Blocker or conflict boundary |
 | --- | --- | --- | --- |
-| Parity landing and PR cleanup | PR triage | Active; #105 resolution, remaining review queue | Sole parity writer; no source-branch edits |
+| Parity landing and PR cleanup | PR triage | Active; #129 resolution review/tests, remaining review queue | Sole parity writer; no source-branch edits |
 | Review stack #125 | Integration | Active; base and latest #123 reconciled, new-head tests awaited | Conflicts with independent source landing if both proceed unchecked |
 | Independent review | Reviewer | Review exact final heads and combination fixes | Earlier approvals do not cover later diffs |
 | Hash-list and h2 multiplexing | Existing hash/h2 lane | Active per owner request; publish exact head + tests | Coordinate h2 boundaries with #124; no duplicate Decoder work |
@@ -73,3 +73,9 @@ Decision provenance: owner's authenticated WhatsApp messages were checked for AC
 - After each material change: refresh all open PR pages; pin parity and #125; recompute ancestry; record new source heads and actual test SHAs; update holds; send a short digest of changed state, remaining blocker and next checkpoint. Keep unrelated historical test counts out of a current acceptance claim.
 
 Primary evidence links: [#125](https://github.com/Chaim12345/webprobe/pull/125), [#123](https://github.com/Chaim12345/webprobe/pull/123), [#127](https://github.com/Chaim12345/webprobe/pull/127), [#128](https://github.com/Chaim12345/webprobe/pull/128). Every open PR's observed URL is in the CSV.
+
+## Management change log
+
+- 13:08: detected latest #123 missing from #125 and parallel parity movement.
+- 13:09: verified #125 `2b756c1` contains latest #123 and parity `b1ef6b4`; cleared those warnings.
+- 13:10: #129 resolution PR and #130 product-priority proposal are now in the inventory. #131 is this board. Prioritize review and verification, not duplicate implementation.
