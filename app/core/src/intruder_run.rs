@@ -568,7 +568,7 @@ pub fn parse_target(target: &str) -> Option<(String, u16, bool)> {
 /// One row of the attack results table.
 #[derive(Debug, Clone, Default)]
 pub struct ResultRow {
-    /// 1-based request number in matrix order (column "Request").
+    /// Request number in matrix order: 0 is the unmodified baseline, payloads start at 1.
     pub number: usize,
     /// The payload in each position (`None` = kept its original text).
     pub payloads: Vec<Option<String>>,
@@ -768,7 +768,7 @@ pub struct RunState {
     pub paused: AtomicBool,
     pub stop: AtomicBool,
     pub done: AtomicUsize,
-    /// Requests planned; `None` while recursive grep keeps going.
+    /// Requests planned, including the baseline; `None` while recursive grep keeps going.
     pub total: Option<usize>,
     pub rows: Mutex<Vec<Arc<ResultRow>>>,
     pub settings: AttackSettings,
@@ -877,7 +877,7 @@ pub fn start(
                     attacks,
                     next: AtomicUsize::new(0),
                 },
-                Some(total),
+                Some(total + 1),
                 workers,
             )
         }
@@ -906,24 +906,43 @@ pub fn start(
     let source = Arc::new(source);
     // Throttle: the next permitted request start time and the request count.
     let gate = Arc::new(Mutex::new((Instant::now(), 0u64, rand_seed())));
-    let alive = Arc::new(AtomicUsize::new(workers));
-    for _ in 0..workers {
-        let (shared, state, source, gate, alive) = (
-            shared.clone(),
-            state.clone(),
-            source.clone(),
-            gate.clone(),
-            alive.clone(),
-        );
-        crate::util::spawn_contained("intruder_run", move || {
-            let _tool = net::tool_scope("Intruder");
-            worker(&shared, &state, &source, &gate);
-            if alive.fetch_sub(1, Ordering::SeqCst) == 1 {
-                state.running.store(false, Ordering::SeqCst);
-                shared.log("Intruder attack finished");
-            }
-        });
-    }
+    let run = state.clone();
+    crate::util::spawn_contained("intruder_run", move || {
+        let _tool = net::tool_scope("Intruder");
+        // Finish request 0 before any payload worker starts. Merely claiming
+        // index 0 first would still allow concurrent payloads to overtake it.
+        let baseline = Attack {
+            request: run.template.render(&vec![None; run.template.positions()]),
+            payloads: vec![None; run.template.positions()],
+        };
+        if let Some(row) = execute(&shared, &run, &baseline, 0, &gate) {
+            run.rows.lock().unwrap().push(Arc::new(row));
+            run.done.fetch_add(1, Ordering::SeqCst);
+        }
+        if run.stop.load(Ordering::SeqCst) {
+            run.running.store(false, Ordering::SeqCst);
+            shared.log("Intruder attack finished");
+            return;
+        }
+        let alive = Arc::new(AtomicUsize::new(workers));
+        for _ in 0..workers {
+            let (shared, state, source, gate, alive) = (
+                shared.clone(),
+                run.clone(),
+                source.clone(),
+                gate.clone(),
+                alive.clone(),
+            );
+            crate::util::spawn_contained("intruder_run", move || {
+                let _tool = net::tool_scope("Intruder");
+                worker(&shared, &state, &source, &gate);
+                if alive.fetch_sub(1, Ordering::SeqCst) == 1 {
+                    state.running.store(false, Ordering::SeqCst);
+                    shared.log("Intruder attack finished");
+                }
+            });
+        }
+    });
     Ok(state)
 }
 
@@ -986,80 +1005,9 @@ fn worker(
                 }
             }
         };
-        // Resource pool throttle: space request starts by the computed delay.
-        let wait = {
-            let mut g = gate.lock().unwrap();
-            let now = Instant::now();
-            let r = next_rand(&mut g.2);
-            let delay = throttle_delay_ms(&state.settings.pool, g.1, r);
-            g.1 += 1;
-            let at = if g.1 == 1 {
-                now
-            } else {
-                (g.0 + Duration::from_millis(delay)).max(now)
-            };
-            g.0 = at;
-            at.saturating_duration_since(now)
-        };
-        if !wait.is_zero() {
-            nap(state, wait.as_millis() as u64);
-        }
-        if state.stop.load(Ordering::SeqCst) {
+        let Some(row) = execute(shared, state, &attack, number, gate) else {
             return;
-        }
-        let (host, port, https) = state.target.clone();
-        // Payloads URL-encoded per the encoding set, then Content-Length
-        // restamped (Burp's "Update Content-Length header", on by default):
-        // a body of another length made the server wait for missing bytes
-        // or left bytes on a pooled connection.
-        let encoded: Vec<Option<String>> = attack
-            .payloads
-            .iter()
-            .map(|p| p.as_deref().map(|v| state.settings.encoding.apply(v)))
-            .collect();
-        let request = state
-            .template
-            .render(&encoded.iter().map(|p| p.as_deref()).collect::<Vec<_>>());
-        let bytes = crate::util::update_content_length(request.as_bytes());
-        let t0 = Instant::now();
-        let (resp, attempts) = send_with_retry(
-            &state.settings.retry,
-            || {
-                let up = if https {
-                    net::send_tls_raw(shared, &host, port, &bytes)
-                } else {
-                    net::send_raw(shared, &host, port, &bytes)
-                };
-                up.resp
-            },
-            |ms| nap(state, ms),
-            || state.stop.load(Ordering::SeqCst),
-        );
-        let ms = t0.elapsed().as_millis();
-        let status = resp
-            .as_ref()
-            .map(|r| {
-                crate::util::parse_http(r)
-                    .first
-                    .split_whitespace()
-                    .nth(1)
-                    .unwrap_or("")
-                    .to_string()
-            })
-            .unwrap_or_default();
-        let mut row = ResultRow {
-            number,
-            payloads: attack.payloads.clone(),
-            status,
-            length: resp.as_ref().map_or(0, Vec::len),
-            ms,
-            error: resp.is_none(),
-            attempts,
-            request: bytes,
-            response: resp,
-            ..Default::default()
         };
-        analyse(&mut row, &state.settings);
         if let Source::Recursive { walk, .. } = source {
             let extracts = if row.extracts.is_empty() && row.response.is_some() {
                 extract_all(
@@ -1074,6 +1022,103 @@ fn worker(
         state.rows.lock().unwrap().push(Arc::new(row));
         state.done.fetch_add(1, Ordering::SeqCst);
     }
+}
+
+/// Send and analyse a baseline or payload through the same retry and throttle path.
+fn execute(
+    shared: &net::Shared,
+    state: &RunState,
+    attack: &Attack,
+    number: usize,
+    gate: &Mutex<(Instant, u64, u64)>,
+) -> Option<ResultRow> {
+    while state.paused.load(Ordering::SeqCst) && !state.stop.load(Ordering::SeqCst) {
+        std::thread::sleep(Duration::from_millis(30));
+    }
+    if state.stop.load(Ordering::SeqCst) {
+        return None;
+    }
+    // Resource pool throttle: space request starts by the computed delay.
+    let wait = {
+        let mut g = gate.lock().unwrap();
+        let now = Instant::now();
+        let r = next_rand(&mut g.2);
+        let delay = throttle_delay_ms(&state.settings.pool, g.1, r);
+        g.1 += 1;
+        let at = if g.1 == 1 {
+            now
+        } else {
+            (g.0 + Duration::from_millis(delay)).max(now)
+        };
+        g.0 = at;
+        at.saturating_duration_since(now)
+    };
+    if !wait.is_zero() {
+        nap(state, wait.as_millis() as u64);
+    }
+    if state.stop.load(Ordering::SeqCst) {
+        return None;
+    }
+    let (host, port, https) = state.target.clone();
+    // Payloads URL-encoded per the encoding set, then Content-Length
+    // restamped (Burp's "Update Content-Length header", on by default):
+    // a body of another length made the server wait for missing bytes
+    // or left bytes on a pooled connection.
+    let encoded: Vec<Option<String>> = attack
+        .payloads
+        .iter()
+        .map(|p| p.as_deref().map(|v| state.settings.encoding.apply(v)))
+        .collect();
+    let request = state
+        .template
+        .render(&encoded.iter().map(|p| p.as_deref()).collect::<Vec<_>>());
+    let bytes = if number == 0 {
+        // Keep original values and bytes (apart from removing position markers).
+        // Encoding and Content-Length repair belong to payload requests only.
+        attack.request.as_bytes().to_vec()
+    } else {
+        crate::util::update_content_length(request.as_bytes())
+    };
+    let t0 = Instant::now();
+    let (resp, attempts) = send_with_retry(
+        &state.settings.retry,
+        || {
+            let up = if https {
+                net::send_tls_raw(shared, &host, port, &bytes)
+            } else {
+                net::send_raw(shared, &host, port, &bytes)
+            };
+            up.resp
+        },
+        |ms| nap(state, ms),
+        || state.stop.load(Ordering::SeqCst),
+    );
+    let ms = t0.elapsed().as_millis();
+    let status = resp
+        .as_ref()
+        .map(|r| {
+            crate::util::parse_http(r)
+                .first
+                .split_whitespace()
+                .nth(1)
+                .unwrap_or("")
+                .to_string()
+        })
+        .unwrap_or_default();
+    let mut row = ResultRow {
+        number,
+        payloads: attack.payloads.clone(),
+        status,
+        length: resp.as_ref().map_or(0, Vec::len),
+        ms,
+        error: resp.is_none(),
+        attempts,
+        request: bytes,
+        response: resp,
+        ..Default::default()
+    };
+    analyse(&mut row, &state.settings);
+    Some(row)
 }
 
 #[cfg(test)]
@@ -1481,7 +1526,7 @@ mod tests {
         }
         assert!(!run.is_running(), "stopped");
         let (done, total) = run.progress();
-        assert_eq!(total, Some(200));
+        assert_eq!(total, Some(201));
         assert!(done < 200, "stopped early at {done}");
     }
 
@@ -1504,8 +1549,10 @@ mod tests {
                     .unwrap_or("")
                     .to_string();
                 seen2.lock().unwrap().push(head);
-                let next = if i < 2 {
-                    format!("tok{}", i + 1)
+                let next = if i == 0 {
+                    "baseline-only".into()
+                } else if i < 3 {
+                    format!("tok{i}")
                 } else {
                     "tok2".into()
                 };
@@ -1574,11 +1621,14 @@ mod tests {
         let payloads: Vec<String> = rows.iter().map(|r| r.payload_text()).collect();
         assert_eq!(
             payloads,
-            ["start", "tok1", "tok2"],
+            ["", "start", "tok1", "tok2"],
             "tok2 repeats, so the walk stops"
         );
-        assert_eq!(rows[1].extracts, [Some("tok2".to_string())]);
-        assert_eq!(seen.lock().unwrap()[1], "GET /?t=tok1 HTTP/1.1");
-        assert_eq!(run.progress(), (3, None));
+        assert_eq!(rows[0].extracts, [Some("baseline-only".to_string())]);
+        assert_eq!(rows[2].extracts, [Some("tok2".to_string())]);
+        assert_eq!(seen.lock().unwrap()[0], "GET /?t=x HTTP/1.1");
+        assert_eq!(seen.lock().unwrap()[1], "GET /?t=start HTTP/1.1");
+        assert_eq!(seen.lock().unwrap()[2], "GET /?t=tok1 HTTP/1.1");
+        assert_eq!(run.progress(), (4, None));
     }
 }
