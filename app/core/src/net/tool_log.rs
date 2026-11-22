@@ -126,14 +126,14 @@ pub fn session_request<'a>(
     port: u16,
     https: bool,
     request: std::borrow::Cow<'a, [u8]>,
-) -> std::borrow::Cow<'a, [u8]> {
+) -> Result<std::borrow::Cow<'a, [u8]>, String> {
     let Some(tool) = TOOL.with(|t| t.get()) else {
-        return request;
+        return Ok(request);
     };
     if shared.session_rules.lock().unwrap().is_empty() {
-        return request;
+        return Ok(request);
     }
-    apply_session_rules_for(shared, tool, &request, port, https).into()
+    apply_session_rules_for(shared, tool, &request, port, https).map(Into::into)
 }
 
 /// Post-request macros for the tool working on this thread.

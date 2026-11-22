@@ -2099,7 +2099,8 @@ mod tests {
             &shared,
             b"GET /sess HTTP/1.1\r\nHost: s.test\r\n\r\n",
             80,
-        );
+        )
+        .unwrap();
         assert!(
             String::from_utf8_lossy(&out).contains("X-Stage4: token-0\r\n"),
             "{}",

@@ -715,7 +715,13 @@ pub fn upstream_and_deliver<S: ProxyIo>(
         return;
     }
     // Session rules run before match-and-replace, matching Burp's handling chain.
-    let req_session = apply_session_rules(shared, &req, default_port);
+    let req_session = match apply_session_rules(shared, &req, default_port) {
+        Ok(request) => request,
+        Err(error) => {
+            shared.log(&error);
+            return;
+        }
+    };
     let mut req_out = crate::rules::apply_rules(&req_session, &shared.mr_request.lock().unwrap());
     // Extension hooks run after the built-in chain (session rules, M&R);
     // a Drop verdict closes the client connection without a response.

@@ -647,13 +647,13 @@ pub fn resource_pool_panel(ui: &mut Ui, x: &mut IntruderExtra) {
             ui.label("milliseconds");
         });
         heading(ui, "Retries");
-        note(ui, "These settings control how Intruder handles network errors during the attack.");
+        note(ui, "Automatic retries are disabled: a missing response may follow a processed request. Legacy retry settings are retained but not applied.");
         let r = &mut x.settings.retry;
         row(ui, "Number of retries on network failure:", |ui| {
-            ui.add(egui::DragValue::new(&mut r.retries).range(0..=20));
+            ui.add_enabled(false, egui::DragValue::new(&mut r.retries).range(0..=20));
         });
         row(ui, "Pause before retry (milliseconds):", |ui| {
-            ui.add(egui::DragValue::new(&mut r.pause_ms).range(0..=600_000));
+            ui.add_enabled(false, egui::DragValue::new(&mut r.pause_ms).range(0..=600_000));
         });
         ui.add_space(6.0);
         ui.label(RichText::new("The settings apply to the next attack you start.").size(12.0).color(theme::ink_hint()));

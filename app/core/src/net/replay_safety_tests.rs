@@ -183,19 +183,13 @@ impl Origin {
     }
     fn assert_counts(&self, connections: usize, requests: usize, effects: usize) {
         assert_eq!(
-            self.counts.accepted.load(Ordering::SeqCst),
-            connections,
-            "accepted connections"
-        );
-        assert_eq!(
-            self.counts.requests.load(Ordering::SeqCst),
-            requests,
-            "received request heads"
-        );
-        assert_eq!(
-            self.counts.effects.load(Ordering::SeqCst),
-            effects,
-            "committed POST effects"
+            (
+                self.counts.accepted.load(Ordering::SeqCst),
+                self.counts.requests.load(Ordering::SeqCst),
+                self.counts.effects.load(Ordering::SeqCst)
+            ),
+            (connections, requests, effects),
+            "origin (accepted connections, received request heads, committed POST effects)"
         );
         assert_eq!(
             self.shared.conns_opened.load(Ordering::SeqCst),
@@ -286,4 +280,94 @@ fn h2c_post_effect_then_lost_response_is_never_replayed_plainly() {
     origin.finish();
     origin.assert_counts(1, 1, 1);
     assert!(outcome.is_err());
+}
+
+#[test]
+fn intruder_worker_does_not_replay_a_committed_post_after_response_loss() {
+    use crate::intruder::{resolve_specs, AttackType, PayloadSource, Template};
+    use crate::intruder_run::{self, AttackSettings, RetryConfig};
+    for tls in [false, true] {
+        let mut origin = Origin::new(tls, Reply::Hold);
+        origin.warm();
+        let template =
+            "POST /effect HTTP/1.1\r\nHost: localhost\r\nContent-Length: 3\r\n\r\nx=§value§";
+        let parsed = Template::parse(template).unwrap();
+        let specs = resolve_specs(
+            &parsed,
+            AttackType::Sniper,
+            &[PayloadSource::SimpleList {
+                items: vec!["1".into()],
+            }],
+        )
+        .unwrap();
+        let mut settings = AttackSettings::default();
+        settings.pool.max_concurrent = 1;
+        // Old saved/user-selected settings cannot prove a failed send had no
+        // origin effect. Exercise the real worker with retries still requested.
+        settings.retry = RetryConfig {
+            retries: 3,
+            pause_ms: 0,
+        };
+        let run = intruder_run::start(
+            origin.shared.clone(),
+            template,
+            AttackType::Sniper,
+            specs,
+            ("localhost".into(), origin.port, tls),
+            settings,
+        )
+        .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while run.is_running() {
+            assert!(Instant::now() < deadline, "Intruder did not finish");
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        origin.finish();
+        origin.assert_counts(1, 2, 1);
+        let rows = run.rows.lock().unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].attempts, 1);
+        assert!(
+            rows[0].error,
+            "lost response must remain visible in the result"
+        );
+    }
+}
+
+#[test]
+fn failed_session_validation_does_not_resend_the_pending_effectful_request() {
+    for (tls, reply) in [
+        (false, Reply::Hold),
+        (true, Reply::Hold),
+        (false, Reply::Close),
+        (true, Reply::Close),
+    ] {
+        let mut origin = Origin::new(tls, reply);
+        origin.warm();
+        origin
+            .shared
+            .session_rules
+            .lock()
+            .unwrap()
+            .push(SessionRule {
+                name: "validate before send".into(),
+                action: "check session".into(),
+                tools: vec!["Repeater".into()],
+                ..SessionRule::new()
+            });
+        let _tool = tool_scope("Repeater");
+        let request = format!(
+            "POST /effect HTTP/1.1\r\nHost: localhost:{}\r\nContent-Length: 3\r\n\r\nx=1",
+            origin.port
+        );
+        let outcome = if tls {
+            send_tls_raw(&origin.shared, "localhost", origin.port, request.as_bytes())
+        } else {
+            send_raw(&origin.shared, "localhost", origin.port, request.as_bytes())
+        };
+        origin.finish();
+        origin.assert_counts(1, 2, 1);
+        assert!(outcome.resp.is_none());
+        assert!(outcome.error.unwrap().contains("unknown origin outcome"));
+    }
 }

@@ -253,7 +253,15 @@ pub fn send_tls_raw_with(
     sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
 ) -> Upstream {
     let request = jar_request(shared, host, true, request);
-    let request = session_request(shared, port, true, request);
+    let request = match session_request(shared, port, true, request) {
+        Ok(request) => request,
+        Err(error) => {
+            return Upstream {
+                resp: None,
+                error: Some(error),
+            }
+        }
+    };
     let mut tool_sink = tool_sink(shared, host, port, true, &request);
     let sent = match (sink, tool_sink.as_mut()) {
         (Some(s), _) => send_tls_inner(shared, host, port, &request, Some(s)),

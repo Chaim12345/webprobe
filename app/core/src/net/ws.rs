@@ -721,7 +721,13 @@ pub fn ws_setup(
 pub fn handle_websocket(shared: Arc<Shared>, mut client: TcpStream, req: Vec<u8>) {
     let parts = util::parse_http(&req);
     let (host, port) = host_of(&parts, 80);
-    let req_session = apply_session_rules(&shared, &req, 80);
+    let req_session = match apply_session_rules(&shared, &req, 80) {
+        Ok(request) => request,
+        Err(error) => {
+            shared.log(&error);
+            return;
+        }
+    };
     let mut req_out = crate::rules::apply_rules(&req_session, &shared.mr_request.lock().unwrap());
     if shared.ws_strip_extensions.load(Ordering::SeqCst) {
         req_out = ws_strip_extensions(&req_out);
@@ -924,7 +930,13 @@ pub fn handle_tls_websocket(
     port: u16,
 ) {
     let parts = util::parse_http(&req);
-    let req_session = apply_session_rules(&shared, &req, 443);
+    let req_session = match apply_session_rules(&shared, &req, 443) {
+        Ok(request) => request,
+        Err(error) => {
+            shared.log(&error);
+            return;
+        }
+    };
     let mut req_out = crate::rules::apply_rules(&req_session, &shared.mr_request.lock().unwrap());
     if shared.ws_strip_extensions.load(Ordering::SeqCst) {
         req_out = ws_strip_extensions(&req_out);
