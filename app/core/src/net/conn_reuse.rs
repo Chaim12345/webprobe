@@ -302,7 +302,34 @@ pub fn send_tls_inner(
     let key = (host.to_string(), port);
     let choice = H2_CHOICE.with(|c| c.get());
     let want_h2 = choice.and_then(|c| c.want_h2);
-    // Pooled connections are HTTP/1.x: HTTP/2 asked for needs a fresh one.
+    // A pooled HTTP/2 connection answers on its next odd stream. A dead
+    // socket, a connection that received GOAWAY, or a retryable/failed
+    // exchange all fall through to a fresh connection below.
+    let mut h2conn = shared.h2_pool.lock().unwrap().remove(&key);
+    if let Some(c) = h2conn.as_mut() {
+        if !c.idle() || !c.get_mut().writable() {
+            h2conn = None;
+        }
+    }
+    if let Some(mut conn) = h2conn {
+        LAST_PROTOCOL.with(|p| p.set("HTTP/2"));
+        let mut h2req =
+            crate::h2::request_from_raw(&req, "https").ok_or("h2: request without Host header")?;
+        if choice.is_some_and(|c| !c.strip_connection) {
+            let parts = util::parse_http(&req);
+            h2req.connection = util::get_header(&parts.headers, "Connection");
+        }
+        if let Ok(resp) = conn.exchange(&h2req, sink.as_deref_mut()) {
+            shared.pool_hits.fetch_add(1, Ordering::SeqCst);
+            if keep_alive && conn.idle() {
+                shared.h2_pool.lock().unwrap().insert(key, conn);
+            }
+            return Ok(resp);
+        }
+        // The pooled connection failed: drop it and continue fresh.
+    }
+    // Pooled HTTP/1 connections are HTTP/1.x: an HTTP/2 demand without a
+    // pooled h2 connection needs a fresh one.
     let mut pooled = if want_h2 == Some(true) {
         None
     } else {
@@ -353,31 +380,39 @@ pub fn send_tls_inner(
             let parts = util::parse_http(&req);
             h2req.connection = util::get_header(&parts.headers, "Connection");
         }
-        let first = match &mut stream {
-            UpstreamConn::Tls(tls) => crate::h2::exchange(tls, &h2req, sink.as_deref_mut()),
-            _ => return Err("h2: not a TLS connection".into()),
-        };
-        match first {
-            Ok(resp) => return Ok(resp),
-            Err(e) if crate::h2::retryable(&e) => {
-                // The server never processed stream 1 (GOAWAY/REFUSED_STREAM),
-                // so one retry on a fresh connection is safe.
+        let mut conn = crate::h2::Conn::new(stream);
+        match conn.exchange(&h2req, sink.as_deref_mut()) {
+            Ok(resp) => {
+                // Pool the connection for the next request to this origin.
+                if keep_alive && conn.idle() {
+                    shared.h2_pool.lock().unwrap().insert(key, conn);
+                }
+                return Ok(resp);
+            }
+            Err(e) if e.retryable() => {
+                // The server never processed the stream (GOAWAY/
+                // REFUSED_STREAM), so one retry on a fresh connection is safe.
                 shared.conns_opened.fetch_add(1, Ordering::SeqCst);
-                let mut fresh = new_tls_conn(shared, &config, host, port)?;
-                let retried = match &mut fresh {
-                    UpstreamConn::Tls(tls) => {
+                let fresh = new_tls_conn(shared, &config, host, port)?;
+                let retried = match fresh {
+                    UpstreamConn::Tls(mut tls) => {
                         let _ = tls.conn.complete_io(&mut tls.sock);
                         if tls.conn.alpn_protocol() == Some(b"h2".as_slice()) {
-                            crate::h2::exchange(tls, &h2req, sink.as_deref_mut())
+                            let mut retry_conn = crate::h2::Conn::new(UpstreamConn::Tls(tls));
+                            let r = retry_conn.exchange(&h2req, sink.as_deref_mut());
+                            if r.is_ok() && keep_alive && retry_conn.idle() {
+                                shared.h2_pool.lock().unwrap().insert(key, retry_conn);
+                            }
+                            r.map_err(|e2| format!("{}; retry: {}", e.message(), e2.message()))
                         } else {
-                            Err(e.clone())
+                            Err(e.message())
                         }
                     }
-                    _ => Err(e.clone()),
+                    _ => Err(e.message()),
                 };
-                return retried.map_err(|e2| format!("{e}; retry: {e2}"));
+                return retried;
             }
-            Err(e) => return Err(e),
+            Err(e) => return Err(e.message()),
         }
     }
     // HTTP/1 on the wire: a request shown as HTTP/2 goes out as HTTP/1.1.

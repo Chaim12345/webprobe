@@ -482,6 +482,11 @@ impl<S: Read + Write> Conn<S> {
         self.io
     }
 
+    /// The wrapped socket, for liveness checks before a pooled reuse.
+    pub fn get_mut(&mut self) -> &mut S {
+        &mut self.io
+    }
+
     /// No open streams and no GOAWAY: safe to reuse for another request.
     pub fn idle(&self) -> bool {
         self.streams.is_empty() && self.goaway.is_none()

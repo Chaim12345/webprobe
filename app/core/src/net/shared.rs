@@ -187,6 +187,10 @@ pub struct Shared {
     /// Idle upstream connections, one per (host, port).
     pub(crate) pool: Mutex<std::collections::HashMap<(String, u16), UpstreamConn>>,
     pub(crate) tls_pool: Mutex<std::collections::HashMap<(String, u16), UpstreamConn>>,
+    /// Idle HTTP/2 upstream connections with their protocol state, one per
+    /// (host, port): a reused h2 connection answers on its next odd stream.
+    pub(crate) h2_pool:
+        Mutex<std::collections::HashMap<(String, u16), crate::h2::Conn<UpstreamConn>>>,
     /// Extra proxy listeners beyond the primary one (bind address + port).
     pub listeners: Mutex<Vec<Arc<ListenerState>>>,
     /// Bumped whenever the listener set changes; workers watch it.
@@ -326,6 +330,7 @@ impl Shared {
             )),
             pool: Mutex::new(std::collections::HashMap::new()),
             tls_pool: Mutex::new(std::collections::HashMap::new()),
+            h2_pool: Mutex::new(std::collections::HashMap::new()),
             listeners: Mutex::new(Vec::new()),
             listener_generation: AtomicU64::new(0),
             conns_opened: AtomicUsize::new(0),

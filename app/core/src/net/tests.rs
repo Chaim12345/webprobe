@@ -986,6 +986,75 @@ fn serve_h2<S: Read + Write>(s: &mut S, upgrade: bool, expected_path: &str) {
     s.flush().unwrap();
 }
 
+/// Serve several sequential h2 requests on ONE accepted connection: streams
+/// 1, 3, 5, ... in order, each a GET for the expected path answered 200.
+/// Accepting a second TCP connection fails the test (see the callers).
+fn serve_h2_many<S: Read + Write>(s: &mut S, expected_paths: &[&str]) {
+    use hpack::{Decoder, Encoder};
+    // client preface + SETTINGS
+    let mut preface = [0u8; 24];
+    s.read_exact(&mut preface).unwrap();
+    assert_eq!(&preface, crate::h2::PREFACE);
+    let (ty, _, _, _) = read_frame(s);
+    assert_eq!(ty, 0x4);
+    // server SETTINGS
+    s.write_all(&[0, 0, 0, 0x4, 0, 0, 0, 0, 0]).unwrap();
+    let mut dec = Decoder::new();
+    let mut enc = Encoder::new();
+    for (i, expected_path) in expected_paths.iter().enumerate() {
+        let want_stream = (2 * i + 1) as u32;
+        let mut block = Vec::new();
+        loop {
+            let (ty, flags, stream, payload) = read_frame(s);
+            match ty {
+                0x1 => {
+                    assert_eq!(stream, want_stream, "request on the wrong stream");
+                    block.extend_from_slice(&payload);
+                    if flags & 0x4 != 0 {
+                        break;
+                    }
+                }
+                // ack the client's SETTINGS; ignore WINDOW_UPDATE etc.
+                0x4 if flags & 0x1 == 0 => {
+                    s.write_all(&[0, 0, 0, 0x4, 0x1, 0, 0, 0, 0]).unwrap();
+                }
+                _ => {}
+            }
+        }
+        let headers = dec.decode(&block).unwrap();
+        let path = headers
+            .iter()
+            .find(|(k, _)| k == b":path")
+            .map(|(_, v)| String::from_utf8_lossy(v).into_owned())
+            .unwrap_or_default();
+        assert_eq!(&path, expected_path);
+        let hb = enc.encode(vec![
+            (b":status".as_ref(), b"200".as_ref()),
+            (b"content-type".as_ref(), b"text/plain".as_ref()),
+        ]);
+        let body = format!("served {expected_path}").into_bytes();
+        let mut out = Vec::new();
+        out.extend_from_slice(&[
+            (hb.len() >> 16) as u8,
+            (hb.len() >> 8) as u8,
+            hb.len() as u8,
+        ]);
+        out.extend_from_slice(&[0x1, 0x4]);
+        out.extend_from_slice(&want_stream.to_be_bytes());
+        out.extend_from_slice(&hb);
+        out.extend_from_slice(&[
+            (body.len() >> 16) as u8,
+            (body.len() >> 8) as u8,
+            body.len() as u8,
+        ]);
+        out.extend_from_slice(&[0x0, 0x1]);
+        out.extend_from_slice(&want_stream.to_be_bytes());
+        out.extend_from_slice(&body);
+        s.write_all(&out).unwrap();
+        s.flush().unwrap();
+    }
+}
+
 /// Exactly one framing header and a normal HTTP/1.1 status line.
 fn assert_normalised_h2_view(resp: &[u8]) {
     let text = String::from_utf8_lossy(resp);
@@ -2321,4 +2390,64 @@ fn hardening_pattern_matching_keeps_literal_and_regex_semantics_separate() {
     assert!(pattern_matches("^a.b$", true, "aXb"));
     assert!(!pattern_matches("[", true, "["));
     assert!(!pattern_matches("^a$", true, "ba"));
+/// Two requests to the same h2 origin ride one pooled connection (streams 1
+/// and 3), and the counters show a single connection opened with one pool
+/// hit. Before h2 pooling, the second request opened a second connection.
+#[test]
+fn tls_alpn_h2_connections_are_reused_for_the_same_origin() {
+    let mut shared = Shared::new();
+    let ca = shared.mitm.ca_der();
+    let upstream_config = shared
+        .mitm
+        .server_config_with_alpn("localhost", vec![b"h2".to_vec()])
+        .unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let t = std::thread::spawn(move || {
+        // Exactly one accept: a second connection would leave the client
+        // hanging on accept #2 and fail the join/response assertions.
+        let (stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(60)))
+            .unwrap();
+        let conn = ServerConnection::new(upstream_config).unwrap();
+        let mut tls = StreamOwned::new(conn, stream);
+        serve_h2_many(&mut tls, &["/first", "/second"]);
+        // The client may keep the pooled connection open; do not read on.
+    });
+    Arc::get_mut(&mut shared).unwrap().tls_upstream = client_config(ca);
+    shared.keep_alive.store(true, Ordering::SeqCst);
+    let before = shared.conns_opened.load(Ordering::SeqCst);
+    let r1 = send_tls_raw(
+        &shared,
+        "localhost",
+        port,
+        b"GET /first HTTP/1.1\r\nHost: localhost\r\n\r\n",
+    );
+    let r2 = send_tls_raw(
+        &shared,
+        "localhost",
+        port,
+        b"GET /second HTTP/1.1\r\nHost: localhost\r\n\r\n",
+    );
+    t.join().unwrap();
+    let r1 = r1
+        .resp
+        .unwrap_or_else(|| panic!("first h2 request failed: {:?}", r1.error));
+    let r2 = r2
+        .resp
+        .unwrap_or_else(|| panic!("second h2 request failed: {:?}", r2.error));
+    assert!(
+        r1.ends_with(b"served /first"),
+        "{}",
+        String::from_utf8_lossy(&r1)
+    );
+    assert!(
+        r2.ends_with(b"served /second"),
+        "{}",
+        String::from_utf8_lossy(&r2)
+    );
+    let opened = shared.conns_opened.load(Ordering::SeqCst) - before;
+    assert_eq!(opened, 1, "two h2 requests must share one connection");
+    assert_eq!(shared.pool_hits.load(Ordering::SeqCst), 1);
 }
