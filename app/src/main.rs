@@ -6,6 +6,7 @@ use webprobe_core::ai;
 use webprobe_core::analysis;
 use webprobe_core::codec;
 mod analysis_ui;
+mod bambda_ui;
 use webprobe_core::collaborator;
 use webprobe_core::compare;
 use webprobe_core::cookie_jar;
@@ -76,6 +77,7 @@ use crate::ext_host::ProxyHooks as _;
 pub type SiteCache = (Vec<net::HistEntry>, Vec<(String, String)>);
 
 pub struct App {
+    pub bambdas: bambda_ui::State,
     pub shared: Arc<net::Shared>,
     /// Cross-tool HTTP Logger, mirrored from proxy history every frame.
     pub logger: logger::Logger,
@@ -724,6 +726,7 @@ impl App {
     pub fn new(shared: Arc<net::Shared>) -> Self {
         let port_txt = shared.proxy_port.load(Ordering::SeqCst).to_string();
         App {
+            bambdas: bambda_ui::State::default(),
             shared,
             logger: logger::Logger::new(5000),
             log_filter: logger::LogQuery::default(),

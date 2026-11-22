@@ -51,3 +51,21 @@ jobs:
           WEBPROBE_REQUIRE_JAVA: '1'
           WEBPROBE_BURP_JAR: ${{ runner.temp }}/montoya-api.jar
         run: cargo test -p webprobe-core --locked ext_host::tests::montoya_ -- --test-threads=1
+  bambda:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup update stable && rustup default stable
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Fetch pinned Montoya API
+        run: |
+          curl --fail --location --retry 3 https://repo1.maven.org/maven2/net/portswigger/burp/extensions/montoya-api/2026.7/montoya-api-2026.7.jar -o "$RUNNER_TEMP/montoya-api.jar"
+          printf '%s  %s\n' cb852b7b883290fcc1d21b13d80fa10f5b13a0f57335d710d2b1e5956ecb2a94 "$RUNNER_TEMP/montoya-api.jar" | sha256sum --check -
+      - name: Test real Java Bambda compilation and evaluation
+        run: |
+          WEBPROBE_BAMBDA_TEST_JAVA="$JAVA_HOME/bin/java" \
+          WEBPROBE_BAMBDA_TEST_API="$RUNNER_TEMP/montoya-api.jar" \
+          cargo test -p webprobe-core --test bambda --locked -- --ignored --test-threads=2

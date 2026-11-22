@@ -1945,15 +1945,7 @@ pub fn extensions(app: &mut App, ui: &mut Ui) {
             );
             ui.label(RichText::new("WebProbe's scan checks are built in (Dashboard > New scan, context menu > Scan). BCheck files are not supported.").size(12.5).color(theme::ink_dim()));
         }
-        4 => {
-            ui.label(
-                RichText::new("Bambda library")
-                    .strong()
-                    .size(14.0)
-                    .color(theme::ink()),
-            );
-            ui.label(RichText::new("Bambdas (Java filter snippets) are not supported; use the HTTP history filter settings and Logger search.").size(12.5).color(theme::ink_dim()));
-        }
+        4 => crate::bambda_ui::show(app, ui),
         _ => {
             ui.label(
                 RichText::new("Extensions settings")
