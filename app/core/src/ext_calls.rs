@@ -268,7 +268,7 @@ pub fn dispatch(shared: &Shared, extension: &str, op: &str, args: &Value) -> Res
                 response: None,
                 result_line: String::new(),
                 history: Vec::new(),
-response_sources: Vec::new(),
+                response_sources: Vec::new(),
                 hist_pos: 0,
             ws: None,
             });
