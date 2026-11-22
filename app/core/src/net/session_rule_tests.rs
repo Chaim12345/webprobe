@@ -100,7 +100,7 @@ fn browser_recovery_waits_for_the_login_and_uses_the_new_cookie() {
         crate::util::now_secs(),
     );
     shared.browser_recovery.answer(true);
-    let out = String::from_utf8(worker.join().unwrap()).unwrap();
+    let out = String::from_utf8(worker.join().unwrap().unwrap()).unwrap();
     assert!(out.contains("session=fresh"), "{out}");
     assert!(shared.browser_recovery.pending().is_none());
 }
@@ -324,11 +324,9 @@ fn proxy_rules_need_proxy_in_their_tool_scope() {
         rules.push(rule("set header", "X-Tools: 1", &["Scanner", "Repeater"]));
         rules.push(rule("set header", "X-Proxy: 1", &["Proxy"]));
     }
-    let out = String::from_utf8(apply_session_rules(
-        &shared,
-        b"GET / HTTP/1.1\r\nHost: h.test\r\n\r\n",
-        80,
-    ))
+    let out = String::from_utf8(
+        apply_session_rules(&shared, b"GET / HTTP/1.1\r\nHost: h.test\r\n\r\n", 80).unwrap(),
+    )
     .unwrap();
     assert!(
         out.contains("X-Proxy: 1") && !out.contains("X-Tools"),
