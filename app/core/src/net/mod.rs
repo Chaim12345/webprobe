@@ -23,6 +23,10 @@ thread_local! {
 
 thread_local! {
     static H2_CHOICE: std::cell::Cell<Option<Http2Choice>> = const { std::cell::Cell::new(None) };
+    /// The last upstream HTTP/1 exchange on this thread read a complete,
+    /// self-delimited response with nothing left over (the authoritative
+    /// `read_message` outcome). False until an exchange proves it.
+    static LAST_EXCHANGE_REUSABLE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     static LAST_PROTOCOL: std::cell::Cell<&'static str> = const { std::cell::Cell::new("HTTP/1.1") };
 }
 

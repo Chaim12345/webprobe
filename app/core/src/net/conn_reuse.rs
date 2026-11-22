@@ -463,5 +463,7 @@ pub fn exchange<S: Read + Write + ResponseRead>(
     let mut buffer = Vec::new();
     let (resp, reusable) = crate::codec::read_message(stream, &mut buffer, &method, sink)
         .map_err(|e| format!("read: {e}"))?;
-    Ok((resp, reusable && buffer.is_empty()))
+    let reusable = reusable && buffer.is_empty();
+    LAST_EXCHANGE_REUSABLE.with(|c| c.set(reusable));
+    Ok((resp, reusable))
 }

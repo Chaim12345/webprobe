@@ -187,14 +187,34 @@ fn decide(head: &[u8]) -> Result<RequestBody, RequestFramingError> {
 /// stays accepted as 5.
 pub fn inbound_ambiguity(raw: &[u8]) -> Option<RequestFramingError> {
     use RequestFramingError::*;
-    let end = raw
-        .windows(4)
-        .position(|w| w == b"\r\n\r\n")
-        .into_iter()
-        .chain(raw.windows(2).position(|w| w == b"\n\n"))
-        .min()
-        .unwrap_or(raw.len());
-    let head = &raw[..end];
+    // The head ends at the earliest blank line under any terminator, the
+    // same boundary the guarded reader frames, however the bytes arrive.
+    let end = earliest_head_end(raw).unwrap_or(raw.len());
+    // The bytes up to the head end a CRLFCRLF-first parser would find (what
+    // `util::find_head_end` returns) are scanned too: a header hidden after
+    // an earlier bare-LF blank line is still a header to such a parser.
+    let wide = webprobe_support::util::find_head_end(raw).unwrap_or(raw.len());
+    scan_head(&raw[..end]).or_else(|| {
+        if wide > end {
+            scan_head(&raw[..wide])
+        } else {
+            None
+        }
+    })
+}
+
+fn scan_head(head: &[u8]) -> Option<RequestFramingError> {
+    use RequestFramingError::*;
+    // Mixed line endings in one head (CRLF lines and a bare LF, including a
+    // bare-LF terminator after CRLF lines) can be split differently by two
+    // parsers: refuse. A head that uses bare LF throughout stays tolerated.
+    let bare_lf = head
+        .iter()
+        .enumerate()
+        .any(|(i, &b)| b == b'\n' && (i == 0 || head[i - 1] != b'\r'));
+    if bare_lf && head.windows(2).any(|w| w == b"\r\n") {
+        return Some(BareLineEnding);
+    }
     let (mut cl_lines, mut te_lines) = (0usize, 0usize);
     let mut cl_values: Vec<String> = Vec::new();
     for line in head
@@ -230,4 +250,18 @@ pub fn inbound_ambiguity(raw: &[u8]) -> Option<RequestFramingError> {
         return Some(BadContentLength);
     }
     None
+}
+
+/// End of the head at the earliest blank line: LF LF, or LF CRLF (which also
+/// covers CRLF CRLF). Unlike `util::find_head_end` (CRLFCRLF anywhere wins
+/// over an earlier LFLF) the answer does not depend on how the bytes were
+/// split across reads.
+pub fn earliest_head_end(raw: &[u8]) -> Option<usize> {
+    [
+        raw.windows(2).position(|w| w == b"\n\n").map(|i| i + 2),
+        raw.windows(3).position(|w| w == b"\n\r\n").map(|i| i + 3),
+    ]
+    .into_iter()
+    .flatten()
+    .min()
 }

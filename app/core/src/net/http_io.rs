@@ -78,7 +78,12 @@ pub fn read_request_outcome<R: Read>(
         // the new bytes (plus the 3 before them, in case a terminator
         // straddles two reads) can hold a head end: rescanning the whole
         // buffer on every read made a header flood quadratic.
-        if let Some(h) = head_end(&buf[from..]) {
+        let found = if guard {
+            crate::strict_request::earliest_head_end(&buf[from..])
+        } else {
+            head_end(&buf[from..])
+        };
+        if let Some(h) = found {
             head_len = Some(from + h);
             break;
         }

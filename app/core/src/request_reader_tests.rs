@@ -877,3 +877,66 @@ fn well_formed_requests_still_pass_the_guard() {
     pt.join().unwrap();
     assert_eq!(up.join().unwrap(), ["/ok"]);
 }
+
+#[test]
+fn guard_and_reader_agree_on_the_head_end_for_mixed_terminators() {
+    // Well-formed heads under each terminator: one message, same boundary.
+    for term in ["\r\n\r\n", "\n\n"] {
+        let sep = if term == "\n\n" { "\n" } else { "\r\n" };
+        let wire = format!("POST /x HTTP/1.1{sep}Host: h{sep}Content-Length: 3{term}abc");
+        assert_eq!(inbound_ambiguity(wire.as_bytes()), None, "{term:?}");
+        let mut pending = Vec::new();
+        let mut s = script(wire.as_bytes(), 7);
+        assert_eq!(
+            read_request_outcome(&mut s, &mut pending, true).unwrap(),
+            ReadOutcome::Message(wire.clone().into_bytes()),
+            "{term:?}"
+        );
+    }
+    // Mixed line endings are refused whatever the read size, and a bare-LF
+    // blank line ahead of a later CRLFCRLF ends the head there for every
+    // read size (the reader never picks the later one when more bytes
+    // happen to be in the buffer).
+    for step in [1, 3, 7, 16_384] {
+        for wire in [
+            "GET /x HTTP/1.1\r\nHost: h\n\r\nGET /y HTTP/1.1\r\nHost: h\r\n\r\n",
+            "GET /x HTTP/1.1\r\nHost: h\r\n\nGET /y HTTP/1.1\r\nHost: h\r\n\r\n",
+        ] {
+            assert_eq!(
+                inbound_ambiguity(wire.as_bytes()),
+                Some(E::BareLineEnding),
+                "{wire:?}"
+            );
+            let mut pending = Vec::new();
+            let mut s = script(wire.as_bytes(), step);
+            assert!(
+                matches!(
+                    read_request_outcome(&mut s, &mut pending, true).unwrap(),
+                    ReadOutcome::Ambiguous(E::BareLineEnding, _)
+                ),
+                "{wire:?} step {step}"
+            );
+        }
+        let wire = "GET /x HTTP/1.1\nHost: h\n\nContent-Length: 5\r\n\r\nabcde";
+        let first = "GET /x HTTP/1.1\nHost: h\n\n";
+        let mut pending = Vec::new();
+        let mut s = script(wire.as_bytes(), step);
+        assert_eq!(
+            read_request_outcome(&mut s, &mut pending, true).unwrap(),
+            ReadOutcome::Message(first.as_bytes().to_vec()),
+            "step {step}: same boundary however the bytes were read"
+        );
+        let mut rest = pending.clone();
+        s.read_to_end(&mut rest).unwrap();
+        assert_eq!(rest, wire.as_bytes()[first.len()..], "step {step}");
+    }
+}
+
+#[test]
+fn a_header_hidden_after_a_bare_lf_blank_line_is_still_checked() {
+    // A CRLFCRLF-first parser sees Content-Length and Transfer-Encoding
+    // together here; the guard must refuse it as well (reviewer's case).
+    let wire =
+        "POST / HTTP/1.1\nHost: a\n\nContent-Length: 5\r\nTransfer-Encoding: chunked\r\n\r\n";
+    assert!(inbound_ambiguity(wire.as_bytes()).is_some());
+}

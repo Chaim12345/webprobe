@@ -984,6 +984,7 @@ pub fn upstream_and_deliver<S: ProxyIo>(
     // A streaming response (Burp's rule, `streaming::decide`) goes to the
     // client as it arrives, straight from the response reader.
     let mut sink = ProxySink::new(shared, stream, &url);
+    LAST_EXCHANGE_REUSABLE.with(|c| c.set(false));
     let up = if use_tls {
         send_tls_raw_with(shared, &up_host, up_port, &req_out, Some(&mut sink))
     } else {
@@ -1044,10 +1045,18 @@ pub fn upstream_and_deliver<S: ProxyIo>(
                 .unwrap_or("")
                 .to_string();
             let wrote = stream.write_all(&resp).is_ok() && stream.flush().is_ok();
+            // The client connection stays open only when the upstream read
+            // proved a complete self-delimited response (authoritative
+            // outcome), the headers allow it, and the bytes actually sent
+            // are self-consistent too (rules or extensions may have edited
+            // them): a truncated, interim-only or read-until-close response
+            // closes the client.
             let reusable = wrote
                 && client_keeps
+                && LAST_EXCHANGE_REUSABLE.with(|c| c.get())
+                && super::conn_reuse::response_headers_allow_reuse(&resp)
                 && stream_head_reusable(&resp, &parts.method)
-                && super::conn_reuse::response_allows_reuse(&resp);
+                && crate::codec::body_complete(&resp, &parts.method);
             record(
                 shared,
                 &req_out,
