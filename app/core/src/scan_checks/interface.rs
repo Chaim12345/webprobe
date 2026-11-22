@@ -114,6 +114,7 @@ pub(crate) static REQUEST_CHECKS: &[&dyn RequestCheck] = &[
     &TraceEnabled,
     &RobotsTxt,
     &React2Shell,
+    &TlsCertificate,
     &OpenApiDefinition,
     &CollaboratorEverywhere,
     &ServerTrace,

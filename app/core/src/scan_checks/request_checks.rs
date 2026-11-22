@@ -725,3 +725,147 @@ impl RequestCheck for React2Shell {
         )])]);
     }
 }
+
+/// TLS certificate (per host), burp.Zut6's TLS half (G.13, KB 01000100):
+/// the chain captured on the host's TLS handshake is analyzed for
+/// hostname mismatch, validity dates and trust. Registered alongside
+/// Robots (Zcug.java:96-116); Burp reports through the shared
+/// Robots/TLS exchange, WebProbe captures with a recording verifier.
+pub(crate) struct TlsCertificate;
+
+/// Claim the per-run dedupe key for a host's TLS check, then capture. A
+/// capture that fails (transient handshake or network error) releases the key
+/// so a later pass of the same run can retry instead of silencing the host's
+/// TLS check for the rest of the run. `None` also when the key was already
+/// claimed.
+fn claim_and_capture(
+    seen: &crate::sync::Mutex<std::collections::HashSet<String>>,
+    key: String,
+    capture: impl FnOnce() -> Option<crate::tls_cert::TlsCapture>,
+) -> Option<crate::tls_cert::TlsCapture> {
+    if !seen.lock().unwrap().insert(key.clone()) {
+        return None;
+    }
+    let cap = capture();
+    if cap.is_none() {
+        seen.lock().unwrap().remove(&key);
+    }
+    cap
+}
+
+impl RequestCheck for TlsCertificate {
+    fn id(&self) -> &'static str {
+        "active.tls-certificate"
+    }
+    fn issue(&self) -> &'static str {
+        "TLS certificate"
+    }
+    fn scope(&self) -> Scope {
+        Scope::Host
+    }
+    fn group(&self) -> Option<&'static str> {
+        Some(BURP_GROUP)
+    }
+    fn run(&self, cx: &ScanCtx) {
+        let (scheme, _) = origin_of(cx);
+        if scheme != "https" {
+            return;
+        }
+        let key = format!("https://{}:{}|tls-cert", cx.host, cx.port);
+        if cx.stopped() {
+            return;
+        }
+        let roots = cx.shared.tls_roots.lock().unwrap().clone();
+        let Some(cap) = claim_and_capture(&cx.state().openapi_hosts, key, || {
+            crate::tls_cert::capture(
+                &cx.host,
+                cx.port,
+                &roots,
+                std::time::Duration::from_secs(10),
+            )
+        }) else {
+            return;
+        };
+        let flags = crate::tls_cert::analyze(&cap, &cx.host, std::time::SystemTime::now());
+        if flags.is_empty() {
+            return;
+        }
+        use crate::tls_cert::CertFlag as F;
+        let mut problems = Vec::new();
+        if flags.contains(&F::HostnameMismatch) {
+            problems.push("is not valid for this hostname");
+        }
+        if flags.contains(&F::Untrusted) {
+            problems.push("is not issued by a trusted authority");
+        }
+        if flags.contains(&F::NotYetValid) {
+            problems.push("is not yet valid");
+        }
+        if flags.contains(&F::Expired) {
+            problems.push("has expired");
+        }
+        if flags.contains(&F::ValidityUnknown) {
+            problems.push("is outside its validity period (the leaf could not be parsed to tell expired from not yet valid)");
+        }
+        let summary = crate::tls_cert::leaf_summary(&cap);
+        let error = cap
+            .verify_error
+            .as_deref()
+            .map(|e| format!(" Verification failed: {e}."))
+            .unwrap_or_default();
+        let desc = format!("{} The certificate {}.{error} Clients cannot rely on the server's identity or on the protection of data in transit.", summary, problems.join(" and "));
+        let e = cx.entry.clone();
+        let mut i = mk(crate::tls_cert::severity(&flags), self.issue(), &e, desc);
+        i.confidence = "Certain".into();
+        cx.report(vec![i]);
+    }
+}
+
+#[cfg(test)]
+mod tls_dedupe_tests {
+    use super::*;
+    use crate::sync::Mutex;
+    use crate::tls_cert::TlsCapture;
+    use std::collections::HashSet;
+
+    fn cap() -> TlsCapture {
+        TlsCapture {
+            chain: Vec::new(),
+            verify_error: None,
+            error_kind: None,
+        }
+    }
+
+    #[test]
+    fn failed_capture_releases_the_key_so_the_host_is_retried() {
+        let seen = Mutex::new(HashSet::new());
+        let key = "https://h:443|tls-cert".to_string();
+        let mut attempts = 0;
+        assert!(claim_and_capture(&seen, key.clone(), || {
+            attempts += 1;
+            None
+        })
+        .is_none());
+        assert!(seen.lock().unwrap().is_empty(), "key released on failure");
+        assert!(claim_and_capture(&seen, key.clone(), || {
+            attempts += 1;
+            Some(cap())
+        })
+        .is_some());
+        assert_eq!(attempts, 2, "the second pass retried the capture");
+    }
+
+    #[test]
+    fn successful_capture_keeps_the_key_and_a_repeat_does_not_capture() {
+        let seen = Mutex::new(HashSet::new());
+        let key = "https://h:443|tls-cert".to_string();
+        assert!(claim_and_capture(&seen, key.clone(), || Some(cap())).is_some());
+        let mut called = false;
+        assert!(claim_and_capture(&seen, key, || {
+            called = true;
+            Some(cap())
+        })
+        .is_none());
+        assert!(!called, "an already-claimed host is not captured again");
+    }
+}

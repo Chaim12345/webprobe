@@ -377,6 +377,7 @@ fn registry_order_is_pinned() {
             ("active.http-trace-enabled", Scope::Host, Some(BURP_GROUP)),
             ("active.robots-txt", Scope::Host, Some(BURP_GROUP)),
             ("active.react2shell", Scope::Host, Some(BURP_GROUP)),
+            ("active.tls-certificate", Scope::Host, Some(BURP_GROUP)),
             ("active.openapi-definition", Scope::Host, Some(BURP_GROUP)),
             ("active.collaborator-everywhere", Scope::Host, None),
             (
