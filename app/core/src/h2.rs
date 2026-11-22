@@ -31,6 +31,8 @@ pub(crate) const FLAG_END_HEADERS: u8 = 0x4;
 pub(crate) const FLAG_PADDED: u8 = 0x8;
 pub(crate) const FLAG_PRIORITY: u8 = 0x20;
 
+pub(crate) const SETTINGS_HEADER_TABLE_SIZE: u16 = 0x1;
+pub(crate) const SETTINGS_MAX_CONCURRENT_STREAMS: u16 = 0x3;
 pub(crate) const SETTINGS_INITIAL_WINDOW_SIZE: u16 = 0x4;
 pub(crate) const SETTINGS_MAX_FRAME_SIZE: u16 = 0x5;
 
@@ -40,6 +42,10 @@ pub(crate) const DEFAULT_MAX_FRAME: usize = 16_384;
 /// so treat it as a hard ceiling for anything we allocate.
 const MAX_FRAME: usize = 0xFF_FFFF;
 const MAX_BODY: usize = 256 * 1024 * 1024;
+/// Local cap on simultaneously open streams, applied alongside the peer's
+/// SETTINGS_MAX_CONCURRENT_STREAMS (unlimited until observed).
+const LOCAL_MAX_STREAMS: u32 = 100;
+
 /// Largest header block accepted across HEADERS + CONTINUATION frames:
 /// endless CONTINUATION frames must not grow memory without bound
 /// (the CVE-2024-27316 class).
@@ -456,6 +462,18 @@ pub struct Conn<S> {
     cont_stream: Option<u32>,
     streams: std::collections::HashMap<u32, StreamRx>,
     preface_sent: bool,
+    /// The full header block of the in-flight request has been written: the
+    /// peer may be processing it, so a failure from here on is an unknown
+    /// outcome and must not be replayed blindly.
+    committed: bool,
+    /// Connection health: set on any exchange failure or on a peer SETTINGS
+    /// change this implementation cannot honor (an HPACK table reduction,
+    /// since the hpack 0.3 encoder has no table-size control). A retired
+    /// connection finishes its in-flight exchange, takes no new streams and
+    /// is never pooled.
+    retired: bool,
+    /// Peer's SETTINGS_MAX_CONCURRENT_STREAMS once observed.
+    peer_max_streams: Option<u32>,
 }
 
 impl<S: Read + Write> Conn<S> {
@@ -473,6 +491,9 @@ impl<S: Read + Write> Conn<S> {
             cont_stream: None,
             streams: std::collections::HashMap::new(),
             preface_sent: false,
+            committed: false,
+            retired: false,
+            peer_max_streams: None,
         }
     }
 
@@ -489,7 +510,15 @@ impl<S: Read + Write> Conn<S> {
 
     /// No open streams and no GOAWAY: safe to reuse for another request.
     pub fn idle(&self) -> bool {
-        self.streams.is_empty() && self.goaway.is_none()
+        self.streams.is_empty() && self.goaway.is_none() && !self.retired
+    }
+
+    /// The in-flight (or last) request's header block was fully written:
+    /// the peer may have processed it. A failed exchange with `committed`
+    /// set has an unknown outcome and must not be replayed on another
+    /// connection.
+    pub fn committed(&self) -> bool {
+        self.committed
     }
 
     /// The preface and our SETTINGS go out once per connection.
@@ -513,6 +542,20 @@ impl<S: Read + Write> Conn<S> {
         if let Some((last, code)) = self.goaway {
             return Err(StreamError::GoAway { code, last });
         }
+        if self.retired {
+            return Err(StreamError::fatal("h2: connection retired"));
+        }
+        // Honor the peer's advertised concurrency (zero means "no streams"),
+        // plus a finite local bound so state stays small.
+        let limit = self
+            .peer_max_streams
+            .unwrap_or(u32::MAX)
+            .min(LOCAL_MAX_STREAMS);
+        if self.streams.len() as u32 >= limit {
+            return Err(StreamError::fatal(format!(
+                "h2: concurrent stream limit {limit} reached"
+            )));
+        }
         let id = self.next_id;
         self.next_id = self
             .next_id
@@ -524,6 +567,7 @@ impl<S: Read + Write> Conn<S> {
     /// Send the request headers on a fresh stream and register its state.
     pub fn start_request(&mut self, req: &H2Request) -> Result<u32, StreamError> {
         self.start()?;
+        self.committed = false;
         let id = self.alloc()?;
         let block = self.encode_headers(req);
         // A header block larger than the peer's maximum frame size must be
@@ -561,6 +605,9 @@ impl<S: Read + Write> Conn<S> {
             rest = &rest[n..];
             first = false;
         }
+        // END_HEADERS is out: the peer now has the whole request head and
+        // may act on it. A later failure has an unknown outcome.
+        self.committed = true;
         self.streams
             .insert(id, StreamRx::new(self.peer_initial_window));
         Ok(id)
@@ -585,6 +632,10 @@ impl<S: Read + Write> Conn<S> {
             return Err(StreamError::fatal("h2: stream state lost"));
         };
         if let Err(e) = outcome {
+            // Any pump failure leaves the connection in an unknown framing
+            // state: never pool it, even when the streaming sink keeps the
+            // partial response and the caller sees an Ok head.
+            self.retired = true;
             if !srx.streaming() {
                 return Err(e);
             }
@@ -601,10 +652,15 @@ impl<S: Read + Write> Conn<S> {
     /// half-closed stream.
     pub fn exchange_upgraded(&mut self) -> Result<Vec<u8>, StreamError> {
         self.start()?;
+        // Stream 1 is the HTTP/1.1 request already sent: committed by definition.
+        self.committed = true;
         self.streams
             .insert(1, StreamRx::new(self.peer_initial_window));
         self.next_id = 3;
-        self.pump(1, None, &mut None)?;
+        if let Err(e) = self.pump(1, None, &mut None) {
+            self.retired = true;
+            return Err(e);
+        }
         let Some(srx) = self.streams.remove(&1) else {
             return Err(StreamError::fatal("h2: stream state lost"));
         };
@@ -754,6 +810,21 @@ impl<S: Read + Write> Conn<S> {
                             SETTINGS_MAX_FRAME_SIZE => {
                                 self.max_frame = (val as usize).clamp(DEFAULT_MAX_FRAME, MAX_FRAME);
                             }
+                            SETTINGS_MAX_CONCURRENT_STREAMS => {
+                                self.peer_max_streams = Some(val);
+                            }
+                            SETTINGS_HEADER_TABLE_SIZE => {
+                                // The hpack 0.3 encoder cannot resize its
+                                // dynamic table, so a peer reduction below
+                                // the 4096 default cannot be honored on this
+                                // connection: finish the in-flight exchange,
+                                // then retire it (never pooled, no new
+                                // streams). A fresh connection re-encodes
+                                // with an empty dynamic table.
+                                if (val as usize) < 4096 {
+                                    self.retired = true;
+                                }
+                            }
                             _ => {}
                         }
                     }
@@ -786,14 +857,14 @@ impl<S: Read + Write> Conn<S> {
                 let code =
                     u32::from_be_bytes([f.payload[4], f.payload[5], f.payload[6], f.payload[7]]);
                 self.goaway = Some((last, code));
-                // Streams the peer never processed may be retried on a fresh
-                // connection; a REFUSED code clears the whole connection.
-                if last < active || code == REFUSED_STREAM {
+                // Retry certainty comes from stream identity, not the error
+                // code: only a stream ABOVE Last-Stream-ID was certainly
+                // never processed (RFC 9113 §6.8) and may be retried on a
+                // fresh connection. An accepted stream (at or below last) is
+                // left to drain; new streams are refused by alloc().
+                if last < active {
                     return Err(StreamError::GoAway { code, last });
                 }
-                return Err(StreamError::fatal(format!(
-                    "h2: GOAWAY: error={code} last_stream_id={last}"
-                )));
             }
             FRAME_PUSH_PROMISE => {
                 // We advertised ENABLE_PUSH=0; refuse any promised stream
@@ -966,18 +1037,25 @@ impl<S: Read + Write> Conn<S> {
                     if is_active {
                         s.end_stream(sink);
                     }
-                    // The exchange is over: replenishing now is pointless and
-                    // often fails because the peer already closed.
                     s.done = true;
-                } else if !f.payload.is_empty() {
+                }
+                if !f.payload.is_empty() {
                     // Flow control counts the whole DATA payload, padding
                     // included, and must be replenished or a body larger
-                    // than the initial window stalls.
+                    // than the initial window stalls. Connection credit is
+                    // replenished even for the stream-final DATA frame: the
+                    // connection is pooled and its receive window is shared
+                    // by every later stream, so skipping final frames would
+                    // drain it over successive requests.
                     let inc = (f.payload.len() as u32).to_be_bytes();
                     write_frame(&mut self.io, FRAME_WINDOW_UPDATE, 0, 0, &inc)
                         .map_err(|e| StreamError::fatal(format!("h2 window update: {e}")))?;
-                    write_frame(&mut self.io, FRAME_WINDOW_UPDATE, 0, f.stream, &inc)
-                        .map_err(|e| StreamError::fatal(format!("h2 window update: {e}")))?;
+                    // Stream credit is pointless after END_STREAM: the peer
+                    // already closed the stream and often the connection.
+                    if f.flags & FLAG_END_STREAM == 0 {
+                        write_frame(&mut self.io, FRAME_WINDOW_UPDATE, 0, f.stream, &inc)
+                            .map_err(|e| StreamError::fatal(format!("h2 window update: {e}")))?;
+                    }
                 }
             }
             _ => unreachable!("only stream frames reach here"),
@@ -1335,7 +1413,7 @@ mod tests {
 
     /// A real h2 server for the flow-control test: reads HEADERS, then DATA,
     /// issuing WINDOW_UPDATEs, and answers with the received length.
-    fn serve_flow_control<S: Read + Write>(s: &mut S, expected_body: usize) {
+    fn serve_flow_control(s: &mut std::net::TcpStream, expected_body: usize) {
         let mut preface = [0u8; 24];
         s.read_exact(&mut preface).unwrap();
         assert_eq!(&preface, PREFACE);
@@ -1386,6 +1464,13 @@ mod tests {
         let hb = enc.encode(vec![(b":status".as_ref(), b"200".as_ref())]);
         write_frame(s, FRAME_HEADERS, FLAG_END_HEADERS, 1, &hb).unwrap();
         write_frame(s, FRAME_DATA, FLAG_END_STREAM, 1, b"ok").unwrap();
+        // The client replenishes the connection window even for this final
+        // DATA frame; keep draining so that WINDOW_UPDATE cannot hit a
+        // closed socket (EPIPE).
+        s.set_read_timeout(Some(std::time::Duration::from_millis(300)))
+            .ok();
+        let mut buf = [0u8; 4096];
+        while s.read(&mut buf).map(|n| n > 0).unwrap_or(false) {}
     }
 
     #[test]
@@ -1686,5 +1771,180 @@ mod tests {
             "{}",
             err.message()
         );
+    }
+
+    #[test]
+    fn final_data_frames_replenish_the_connection_window() {
+        // Six 15 KB single-DATA responses: 90 KB total exceeds the 65 535
+        // connection window, so the client must keep sending connection-level
+        // WINDOW_UPDATE increments even though every DATA frame is the final
+        // frame of its stream.
+        let mut frames: Vec<(u8, u8, u32, Vec<u8>)> = vec![(FRAME_SETTINGS, 0, 0, Vec::new())];
+        for i in 0..6u32 {
+            let sid = 2 * i + 1;
+            let mut enc = Encoder::new();
+            let hb = enc.encode(vec![(b":status".as_ref(), b"200".as_ref())]);
+            frames.push((FRAME_HEADERS, FLAG_END_HEADERS, sid, hb));
+            frames.push((FRAME_DATA, FLAG_END_STREAM, sid, vec![b'x'; 15_000]));
+        }
+        let refs: Vec<(u8, u8, u32, &[u8])> = frames
+            .iter()
+            .map(|(t, f, s, p)| (*t, *f, *s, p.as_slice()))
+            .collect();
+        let mut conn = Conn::new(scripted(&refs));
+        for _ in 0..6 {
+            let resp = conn.exchange(&get_request(), None).expect("exchange");
+            assert!(resp.starts_with(b"HTTP/1.1 200"));
+            assert_eq!(
+                resp.len() - resp.windows(4).position(|w| w == b"\r\n\r\n").unwrap() - 4,
+                15_000
+            );
+        }
+        // Parse the client-written bytes: sum connection-level (stream 0)
+        // WINDOW_UPDATE increments.
+        let out = &conn.get_mut().out;
+        let mut pos = 24; // preface
+        let mut conn_wu = 0u32;
+        while pos + 9 <= out.len() {
+            let len = u32::from_be_bytes([0, out[pos], out[pos + 1], out[pos + 2]]) as usize;
+            let ty = out[pos + 3];
+            let sid = u32::from_be_bytes([
+                out[pos + 5] & 0x7f,
+                out[pos + 6],
+                out[pos + 7],
+                out[pos + 8],
+            ]);
+            if ty == FRAME_WINDOW_UPDATE && sid == 0 {
+                conn_wu += u32::from_be_bytes([
+                    out[pos + 9] & 0x7f,
+                    out[pos + 10],
+                    out[pos + 11],
+                    out[pos + 12],
+                ]);
+            }
+            pos += 9 + len;
+        }
+        assert_eq!(pos, out.len());
+        assert_eq!(
+            conn_wu, 90_000,
+            "connection window not replenished for final DATA frames"
+        );
+        assert!(conn.idle());
+    }
+
+    #[test]
+    fn goaway_at_or_above_active_streams_drains_their_responses() {
+        // GOAWAY naming the in-flight stream as processed (last >= active)
+        // means the server accepted it: the response is drained instead of
+        // retrying. This holds for NO_ERROR and for code 0x7; a refusal
+        // ("not processed") is only expressed by last < active.
+        for code in [0u32, 7] {
+            let mut go = 1u32.to_be_bytes().to_vec();
+            go.extend_from_slice(&code.to_be_bytes());
+            let mut enc = Encoder::new();
+            let hb = enc.encode(vec![(b":status".as_ref(), b"200".as_ref())]);
+            let frames: [(u8, u8, u32, &[u8]); 3] = [
+                (FRAME_SETTINGS, 0, 0, &[]),
+                (FRAME_GOAWAY, 0, 0, &go),
+                (FRAME_HEADERS, FLAG_END_HEADERS | FLAG_END_STREAM, 1, &hb),
+            ];
+            let mut conn = Conn::new(scripted(&frames));
+            let resp = conn.exchange(&get_request(), None).expect("exchange");
+            assert!(resp.starts_with(b"HTTP/1.1 200"), "code {code}");
+            // GOAWAY received: finish in-flight work but never reuse.
+            assert!(!conn.idle(), "code {code}");
+            assert!(conn.start_request(&get_request()).is_err(), "code {code}");
+        }
+    }
+
+    #[test]
+    fn concurrent_stream_limits_from_peer_settings_are_enforced() {
+        let feed = |conn: &mut Conn<Scripted>, v: u32| {
+            let mut p = 3u16.to_be_bytes().to_vec();
+            p.extend_from_slice(&v.to_be_bytes());
+            conn.handle(
+                Frame {
+                    ty: FRAME_SETTINGS,
+                    flags: 0,
+                    stream: 0,
+                    payload: p,
+                },
+                0,
+                &mut None,
+            )
+            .unwrap();
+        };
+        // MAX_CONCURRENT_STREAMS = 0: no stream may be opened.
+        let mut conn = Conn::new(scripted(&[]));
+        feed(&mut conn, 0);
+        assert!(conn.start_request(&get_request()).is_err());
+        // = 1: one open stream allowed, a second is refused until it ends.
+        let mut conn = Conn::new(scripted(&[]));
+        feed(&mut conn, 1);
+        conn.start_request(&get_request()).expect("first");
+        assert!(conn.start_request(&get_request()).is_err());
+        // A larger peer value is bounded by the local cap of 100.
+        let mut conn = Conn::new(scripted(&[]));
+        feed(&mut conn, 1_000);
+        for _ in 0..100 {
+            conn.start_request(&get_request())
+                .expect("within local cap");
+        }
+        assert!(conn.start_request(&get_request()).is_err());
+    }
+
+    #[test]
+    fn peer_hpack_table_reduction_retires_the_connection() {
+        // The encoder cannot shrink its dynamic table, so a peer table-size
+        // reduction retires the connection: in-flight exchanges complete but
+        // no new stream is admitted and the pool must not take it back.
+        let mut shrink = 1u16.to_be_bytes().to_vec();
+        shrink.extend_from_slice(&0u32.to_be_bytes());
+        let mut enc = Encoder::new();
+        let hb = enc.encode(vec![(b":status".as_ref(), b"200".as_ref())]);
+        let frames: [(u8, u8, u32, &[u8]); 3] = [
+            (FRAME_SETTINGS, 0, 0, &[]),
+            (FRAME_SETTINGS, 0, 0, &shrink),
+            (FRAME_HEADERS, FLAG_END_HEADERS | FLAG_END_STREAM, 1, &hb),
+        ];
+        let mut conn = Conn::new(scripted(&frames));
+        let resp = conn.exchange(&get_request(), None).expect("exchange");
+        assert!(resp.starts_with(b"HTTP/1.1 200"));
+        assert!(!conn.idle());
+        assert!(conn.start_request(&get_request()).is_err());
+    }
+
+    #[test]
+    fn failed_streaming_exchange_retires_the_connection() {
+        // A pump error after the head was delivered (here: DATA for an
+        // unknown stream) must not leave the connection looking idle and
+        // reusable: Ok(head) + idle would repool a broken connection.
+        struct Rec;
+        impl crate::streaming::ResponseSink for Rec {
+            fn head(&mut self, _head: &[u8]) -> crate::streaming::BodyMode {
+                crate::streaming::BodyMode::Stream
+            }
+            fn wire(&mut self, _b: &[u8]) -> std::io::Result<()> {
+                Ok(())
+            }
+            fn payload(&mut self, _b: &[u8]) {}
+            fn end(&mut self, _complete: bool) {}
+        }
+        let mut enc = Encoder::new();
+        let hb = enc.encode(vec![
+            (b":status".as_ref(), b"200".as_ref()),
+            (b"content-type".as_ref(), b"text/event-stream".as_ref()),
+        ]);
+        let frames: [(u8, u8, u32, &[u8]); 3] = [
+            (FRAME_SETTINGS, 0, 0, &[]),
+            (FRAME_HEADERS, FLAG_END_HEADERS, 1, &hb),
+            (FRAME_DATA, 0, 99, b"!"),
+        ];
+        let mut conn = Conn::new(scripted(&frames));
+        let mut sink = Rec;
+        // The head is delivered to the sink; the connection is broken.
+        let _ = conn.exchange(&get_request(), Some(&mut sink));
+        assert!(!conn.idle(), "failed connection must not look reusable");
+        assert!(conn.start_request(&get_request()).is_err());
     }
 }

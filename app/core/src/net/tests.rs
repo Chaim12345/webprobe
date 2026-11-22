@@ -877,6 +877,14 @@ fn read_frame<R: Read>(r: &mut R) -> (u8, u8, u32, Vec<u8>) {
     (head[3], head[4], stream, payload)
 }
 
+/// After a final DATA frame the client replenishes the connection window;
+/// absorb that WINDOW_UPDATE instead of dropping the socket under it
+/// (the write would otherwise race the close and surface as EPIPE).
+fn drain_final_window_update<S: Read>(s: &mut S) {
+    let mut sink = [0u8; 512];
+    let _ = s.read(&mut sink);
+}
+
 /// Speak the server side of one h2 request/response exchange on `s`.
 /// `upgrade` writes the 101 first (h2c); stream 1 is then the HTTP/1.1
 /// request already sent, so no HEADERS may follow.
@@ -984,6 +992,7 @@ fn serve_h2<S: Read + Write>(s: &mut S, upgrade: bool, expected_path: &str) {
     out.extend_from_slice(body);
     s.write_all(&out).unwrap();
     s.flush().unwrap();
+    drain_final_window_update(s);
 }
 
 /// Serve several sequential h2 requests on ONE accepted connection: streams
@@ -1053,6 +1062,7 @@ fn serve_h2_many<S: Read + Write>(s: &mut S, expected_paths: &[&str]) {
         s.write_all(&out).unwrap();
         s.flush().unwrap();
     }
+    drain_final_window_update(s);
 }
 
 /// Exactly one framing header and a normal HTTP/1.1 status line.

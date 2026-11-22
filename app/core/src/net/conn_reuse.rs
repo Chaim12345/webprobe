@@ -284,6 +284,53 @@ pub fn send_tls_raw_with(
     up
 }
 
+/// Pool identity for an HTTP/2 connection: the origin plus everything that
+/// shapes the connection, so two requests that would build different
+/// connections never share one. The effective route (direct / upstream
+/// proxy with its settings), the TLS policy (shared upstream config
+/// identity, or the matching client-certificate rule), and the sender's
+/// protocol choice (ALPN override) all discriminate.
+pub(crate) type H2PoolKey = (String, u16, String, usize, Option<u64>, Option<bool>);
+use crate::upstream::UpstreamConfig;
+
+pub(crate) fn h2_pool_key(
+    shared: &Shared,
+    host: &str,
+    port: u16,
+    config: &UpstreamConfig,
+    want_h2: Option<bool>,
+) -> H2PoolKey {
+    let cert_rule = shared
+        .client_certs
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|r| host_matches(&r.host_pattern, host))
+        .map(|r| {
+            use std::hash::{Hash, Hasher};
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            r.host_pattern.hash(&mut h);
+            r.cert_pem.hash(&mut h);
+            h.finish()
+        });
+    // With a client-certificate rule the config is built per call, so the
+    // rule's content hash is the identity; otherwise the shared upstream
+    // config's allocation identity pins the TLS policy.
+    let tls_id = if cert_rule.is_some() {
+        0
+    } else {
+        std::sync::Arc::as_ptr(&shared.tls_upstream) as usize
+    };
+    (
+        host.to_string(),
+        port,
+        format!("{config:?}"),
+        tls_id,
+        cert_rule,
+        want_h2,
+    )
+}
+
 pub fn send_tls_inner(
     shared: &Shared,
     host: &str,
@@ -302,10 +349,15 @@ pub fn send_tls_inner(
     let key = (host.to_string(), port);
     let choice = H2_CHOICE.with(|c| c.get());
     let want_h2 = choice.and_then(|c| c.want_h2);
-    // A pooled HTTP/2 connection answers on its next odd stream. A dead
-    // socket, a connection that received GOAWAY, or a retryable/failed
-    // exchange all fall through to a fresh connection below.
-    let mut h2conn = shared.h2_pool.lock().unwrap().remove(&key);
+    let h2key = h2_pool_key(shared, host, port, &config, want_h2);
+    // A pooled HTTP/2 connection answers on its next odd stream. Pooling is
+    // off entirely when keep-alive is disabled or the sender pinned HTTP/1;
+    // a dead socket, a GOAWAY connection or a retired connection is dropped.
+    let mut h2conn = if keep_alive && want_h2 != Some(false) {
+        shared.h2_pool.lock().unwrap().remove(&h2key)
+    } else {
+        None
+    };
     if let Some(c) = h2conn.as_mut() {
         if !c.idle() || !c.get_mut().writable() {
             h2conn = None;
@@ -319,14 +371,26 @@ pub fn send_tls_inner(
             let parts = util::parse_http(&req);
             h2req.connection = util::get_header(&parts.headers, "Connection");
         }
-        if let Ok(resp) = conn.exchange(&h2req, sink.as_deref_mut()) {
-            shared.pool_hits.fetch_add(1, Ordering::SeqCst);
-            if keep_alive && conn.idle() {
-                shared.h2_pool.lock().unwrap().insert(key, conn);
+        match conn.exchange(&h2req, sink.as_deref_mut()) {
+            Ok(resp) => {
+                shared.pool_hits.fetch_add(1, Ordering::SeqCst);
+                if keep_alive && conn.idle() {
+                    shared.h2_pool.lock().unwrap().insert(h2key, conn);
+                }
+                return Ok(resp);
             }
-            return Ok(resp);
+            Err(e) if e.retryable() || !conn.committed() => {
+                // Proven not processed (typed GOAWAY/REFUSED_STREAM) or the
+                // request head never fully left: a fresh send cannot
+                // duplicate anything. Fall through.
+            }
+            Err(e) => {
+                // Unknown outcome after a committed request: the peer may
+                // have processed it, and replaying could duplicate a
+                // non-idempotent request. Surface the error instead.
+                return Err(e.message());
+            }
         }
-        // The pooled connection failed: drop it and continue fresh.
     }
     // Pooled HTTP/1 connections are HTTP/1.x: an HTTP/2 demand without a
     // pooled h2 connection needs a fresh one.
@@ -385,7 +449,7 @@ pub fn send_tls_inner(
             Ok(resp) => {
                 // Pool the connection for the next request to this origin.
                 if keep_alive && conn.idle() {
-                    shared.h2_pool.lock().unwrap().insert(key, conn);
+                    shared.h2_pool.lock().unwrap().insert(h2key, conn);
                 }
                 return Ok(resp);
             }
@@ -401,7 +465,7 @@ pub fn send_tls_inner(
                             let mut retry_conn = crate::h2::Conn::new(UpstreamConn::Tls(tls));
                             let r = retry_conn.exchange(&h2req, sink.as_deref_mut());
                             if r.is_ok() && keep_alive && retry_conn.idle() {
-                                shared.h2_pool.lock().unwrap().insert(key, retry_conn);
+                                shared.h2_pool.lock().unwrap().insert(h2key, retry_conn);
                             }
                             r.map_err(|e2| format!("{}; retry: {}", e.message(), e2.message()))
                         } else {
