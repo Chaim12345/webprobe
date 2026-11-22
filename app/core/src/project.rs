@@ -552,6 +552,19 @@ pub struct ProjectOrganizerItem {
     pub request: String,
     pub response: Option<String>,
     pub comment: String,
+    /// Owning collection id; 0 (default) is the Inbox.
+    #[serde(default)]
+    pub collection: u64,
+}
+
+/// A named Organizer collection.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ProjectOrganizerCollection {
+    pub id: u64,
+    pub name: String,
+    /// About-tab description; absent in older projects.
+    #[serde(default)]
+    pub description: String,
 }
 
 /// One Intruder result row.
@@ -1036,6 +1049,8 @@ pub struct ProjectData {
     #[serde(default)]
     pub organizer: Vec<ProjectOrganizerItem>,
     #[serde(default)]
+    pub organizer_collections: Vec<ProjectOrganizerCollection>,
+    #[serde(default)]
     pub intruder: ProjectIntruder,
     #[serde(default)]
     pub decoder: ProjectDecoder,
@@ -1100,6 +1115,7 @@ impl Default for ProjectData {
             websockets: Vec::new(),
             logger: Vec::new(),
             organizer: Vec::new(),
+            organizer_collections: Vec::new(),
             intruder: ProjectIntruder::default(),
             decoder: ProjectDecoder::default(),
             target: Vec::new(),
@@ -1250,6 +1266,7 @@ pub fn settings_only(data: &ProjectData) -> ProjectData {
         websockets: Vec::new(),
         logger: Vec::new(),
         organizer: Vec::new(),
+        organizer_collections: Vec::new(),
         target: Vec::new(),
         crawl_items: Vec::new(),
         site_links: Vec::new(),
@@ -1937,7 +1954,9 @@ mod tests {
                 request: "GET /admin HTTP/1.1\r\n\r\n".into(),
                 response: Some("HTTP/1.1 403 Forbidden\r\n\r\n".into()),
                 comment: "check auth bypass".into(),
+                collection: 0,
             }],
+            organizer_collections: Vec::new(),
             intruder: ProjectIntruder {
                 attack: "cluster_bomb".into(),
                 host: "example.com".into(),

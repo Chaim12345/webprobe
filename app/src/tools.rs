@@ -2849,6 +2849,10 @@ pub fn drain_save_results(app: &mut App) {
 /// this is cheap): what a save writes and what Settings works on.
 pub fn project_snapshot(app: &mut App) -> project::ProjectData {
     let to_project_history = project::ProjectHistory::from_entry;
+    // One Organizer lock for both fields below: two lock() temporaries in a
+    // single struct expression keep the first guard alive until the end of
+    // the statement, so the second lock deadlocks the same thread.
+    let org = app.shared.organizer.lock().unwrap();
     let crawl_items: Vec<project::ProjectHistory> = app
         .shared
         .crawl_items
@@ -3069,11 +3073,7 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
                 mime: e.mime.clone(),
             })
             .collect(),
-        organizer: app
-            .shared
-            .organizer
-            .lock()
-            .unwrap()
+        organizer: org
             .items
             .iter()
             .map(|o| project::ProjectOrganizerItem {
@@ -3085,6 +3085,16 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
                 request: o.request.clone(),
                 response: Some(o.response.clone()),
                 comment: o.note.clone(),
+                collection: o.collection,
+            })
+            .collect(),
+        organizer_collections: org
+            .collections
+            .iter()
+            .map(|c| project::ProjectOrganizerCollection {
+                id: c.id,
+                name: c.name.clone(),
+                description: c.description.clone(),
             })
             .collect(),
         intruder: project::ProjectIntruder {
@@ -3537,8 +3547,20 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData, content: boo
             request: o.request.clone(),
             response: o.response.clone().unwrap_or_default(),
             created: o.timestamp,
+            collection: o.collection,
         })
         .collect();
+    org.collections = data
+        .organizer_collections
+        .iter()
+        .map(|c| crate::organizer::Collection {
+            id: c.id,
+            name: c.name.clone(),
+            description: c.description.clone(),
+        })
+        .collect();
+    org.next_collection_id = org.collections.iter().map(|c| c.id).max().unwrap_or(0) + 1;
+    org.repair_collections();
     org.next_id = org.items.iter().map(|i| i.id).max().unwrap_or(0) + 1;
     drop(org);
     app.org_sel = None;
@@ -3813,6 +3835,57 @@ mod save_restore_tests {
             .expect("save/restore finished (no deadlock)");
         assert!(checks && points, "scanner settings restored ({status})");
         assert_eq!(poll, 9, "Collaborator poll interval restored");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Organizer collections and their items survive a save/restore round
+    /// trip (review finding: no round-trip test covered them).
+    #[test]
+    fn organizer_collections_round_trip() {
+        let dir = std::env::temp_dir().join(format!("wp-org-save-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("p.json").to_string_lossy().into_owned();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let p2 = path.clone();
+        std::thread::spawn(move || {
+            let mut app = crate::App::new(net::Shared::new());
+            app.project_path = p2;
+            let (coll, kept, moved) = {
+                let mut org = app.shared.organizer.lock().unwrap();
+                let coll = org.add_collection("Auth bugs");
+                org.set_collection_description(coll, "login flow notes");
+                let kept = org.add("Login", "auth flow", "POST /login HTTP/1.1", "200 OK", 10);
+                let moved = org.add("Upload", "", "POST /up HTTP/1.1", "201", 20);
+                org.move_item(moved, coll);
+                (coll, kept, moved)
+            };
+            save_project(&mut app, true);
+            let mut fresh = crate::App::new(net::Shared::new());
+            fresh.project_path = app.project_path.clone();
+            restore_project(&mut fresh, true);
+            let org = fresh.shared.organizer.lock().unwrap();
+            let _ = tx.send((
+                org.collections
+                    .iter()
+                    .find(|c| c.id == coll)
+                    .map(|c| (c.name.clone(), c.description.clone())),
+                org.get(kept).map(|i| i.collection),
+                org.get(moved).map(|i| i.collection),
+                org.next_collection_id,
+                coll,
+            ));
+        });
+        let (meta, kept_c, moved_c, next_id, coll) = rx
+            .recv_timeout(std::time::Duration::from_secs(60))
+            .expect("save/restore finished (no deadlock)");
+        assert_eq!(
+            meta,
+            Some(("Auth bugs".to_string(), "login flow notes".to_string())),
+            "collection name + About text restored"
+        );
+        assert_eq!(kept_c, Some(0), "Inbox item stays in the Inbox");
+        assert_eq!(moved_c, Some(coll), "moved item keeps its collection");
+        assert!(next_id > coll, "next collection id survives the restore");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
