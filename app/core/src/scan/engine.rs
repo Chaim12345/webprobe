@@ -94,8 +94,8 @@ pub fn start_active_scan(
     let (oob, smtp) = (oob.to_vec(), smtp.to_vec());
     // Async Phase 1 (issue #42): the scan body is one engine task on the
     // runtime; the blocking checks (extension hooks included) run in
-    // `spawn_blocking`, and the scanner's stop flag aborts the task — the
-    // body still ends on its own cooperative checks of the same flag.
+    // `spawn_blocking`. Abort cannot interrupt a started blocking body;
+    // its cooperative stop checks end it after in-flight calls return.
     let flag = shared.clone();
     crate::rt::engine().spawn_engine(
         "scan",

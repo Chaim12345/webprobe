@@ -767,7 +767,9 @@ pub fn sort_order(
 
 /// Shared state of one running (or finished) attack.
 pub struct RunState {
+    /// Dispatcher activity only; use is_running() to include blocking probes.
     pub running: AtomicBool,
+    blocking: AtomicUsize,
     pub paused: AtomicBool,
     pub stop: AtomicBool,
     pub done: AtomicUsize,
@@ -789,7 +791,27 @@ pub struct RunState {
 
 impl RunState {
     pub fn is_running(&self) -> bool {
-        self.running.load(Ordering::SeqCst)
+        self.running.load(Ordering::SeqCst) || self.blocking.load(Ordering::SeqCst) != 0
+    }
+
+    /// UI status must not claim Stop interrupts in-flight blocking I/O.
+    pub fn status_text(&self) -> String {
+        let (done, total) = self.progress();
+        match (self.is_running(), self.paused.load(Ordering::SeqCst), total) {
+            (true, _, _) if self.stop.load(Ordering::SeqCst) => {
+                format!("Stopping: {done} requests completed; waiting for in-flight work")
+            }
+            (true, true, _) => format!(
+                "Paused: {done} of {}",
+                total.map(|t| t.to_string()).unwrap_or_else(|| "?".into())
+            ),
+            (true, false, Some(t)) => format!("Attack running: {done} of {t}"),
+            (true, false, None) => format!("Attack running: {done} requests (recursive grep)"),
+            (false, _, _) if self.stop.load(Ordering::SeqCst) => {
+                format!("Stopped: {done} requests")
+            }
+            (false, _, _) => format!("Finished: {done} requests"),
+        }
     }
 
     pub fn progress(&self) -> (usize, Option<usize>) {
@@ -911,6 +933,7 @@ pub fn start(
     let (row_tx, row_rx) = tokio::sync::mpsc::unbounded_channel();
     let state = Arc::new(RunState {
         running: AtomicBool::new(true),
+        blocking: AtomicUsize::new(0),
         paused: AtomicBool::new(false),
         stop: AtomicBool::new(false),
         done: AtomicUsize::new(0),
@@ -967,7 +990,14 @@ pub fn start(
                 }
             }
             state.running.store(false, Ordering::SeqCst);
-            shared.log("Intruder attack finished");
+            // Aborting async probe wrappers does not stop their blocking
+            // bodies. is_running() keeps the run claimed until they drain.
+            while state.blocking.load(Ordering::SeqCst) != 0 {
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+            shared.log(if state.stop.load(Ordering::SeqCst) {
+                "Intruder attack stopped after in-flight work finished"
+            } else { "Intruder attack finished" });
         });
     }
     Ok(state)
@@ -1062,6 +1092,34 @@ fn execute_probe(
     Arc::new(row)
 }
 
+/// Count a submitted blocking body before it can be detached from its async
+/// wrapper. The guard and pool permit live in that body, even after Stop.
+struct BlockingProbe(Arc<RunState>);
+impl BlockingProbe {
+    fn new(state: Arc<RunState>) -> Self {
+        state.blocking.fetch_add(1, Ordering::SeqCst);
+        Self(state)
+    }
+}
+impl Drop for BlockingProbe {
+    fn drop(&mut self) {
+        self.0.blocking.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+async fn wait_for_capacity<T: Send + 'static>(
+    probes: &mut tokio::task::JoinSet<T>,
+    limit: usize,
+    stop: &AtomicBool,
+) {
+    while probes.len() >= limit * 2 && !stop.load(Ordering::SeqCst) {
+        tokio::select! {
+            _ = probes.join_next() => {},
+            _ = tokio::time::sleep(Duration::from_millis(25)) => {},
+        }
+    }
+}
+
 /// The attack dispatcher (issue #42): one future on the engine runtime
 /// pulls attacks from the source and submits each probe as a runtime task
 /// bounded by the probe pool's `tokio::sync::Semaphore` — the semaphore
@@ -1131,9 +1189,7 @@ impl Dispatch<'_> {
                 break;
             }
             // Backpressure: bound queued probe tasks at twice the pool size.
-            while probes.len() >= self.pool.limit() * 2 && !self.state.stop.load(Ordering::SeqCst) {
-                probes.join_next().await;
-            }
+            wait_for_capacity(&mut probes, self.pool.limit(), &self.state.stop).await;
             if self.state.stop.load(Ordering::SeqCst) {
                 break;
             }
@@ -1153,8 +1209,16 @@ impl Dispatch<'_> {
             probes.spawn(async move {
                 // The abort point: a probe still waiting on the pool is
                 // cancelled before any side effect.
-                let _permit = pool.acquire().await;
+                let permit = pool.acquire().await;
+                if state.stop.load(Ordering::SeqCst) {
+                    return;
+                }
+                let outstanding = BlockingProbe::new(state.clone());
                 tokio::task::spawn_blocking(move || {
+                    let (_permit, _outstanding) = (permit, outstanding);
+                    if state.stop.load(Ordering::SeqCst) {
+                        return;
+                    }
                     let _tool = net::tool_scope("Intruder");
                     let row = execute_probe(&shared, &state, i + 1, attack);
                     // The closure delivers the row itself: aborting the
@@ -1244,6 +1308,130 @@ impl Dispatch<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn matrix_backpressure_observes_stop_without_a_probe_completion() {
+        let stop = Arc::new(AtomicBool::new(false));
+        let flag = stop.clone();
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let (ended_tx, ended_rx) = std::sync::mpsc::channel();
+        crate::rt::engine().spawn(async move {
+            let mut probes = tokio::task::JoinSet::<()>::new();
+            for _ in 0..2 {
+                let started = started_tx.clone();
+                probes.spawn(async move {
+                    started.send(()).unwrap();
+                    std::future::pending::<()>().await;
+                });
+            }
+            wait_for_capacity(&mut probes, 1, &flag).await;
+            // Neither probe can finish. Stop must end the capacity wait.
+            ended_tx.send(probes.len()).unwrap();
+        });
+        for _ in 0..2 {
+            started_rx
+                .recv_timeout(Duration::from_secs(5))
+                .expect("probe started");
+        }
+        stop.store(true, Ordering::SeqCst);
+        assert_eq!(
+            ended_rx
+                .recv_timeout(Duration::from_secs(1))
+                .expect("Stop ended backpressure"),
+            2
+        );
+    }
+
+    #[test]
+    fn stop_waits_for_started_blocking_probe_and_preserves_its_result() {
+        use std::io::{Read, Write};
+        let origin = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = origin.local_addr().unwrap().port();
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        struct Release(Option<std::sync::mpsc::Sender<()>>);
+        impl Drop for Release {
+            fn drop(&mut self) {
+                if let Some(tx) = self.0.take() {
+                    let _ = tx.send(());
+                }
+            }
+        }
+        let release = Release(Some(release_tx));
+        let server = std::thread::spawn(move || {
+            let (mut conn, _) = origin.accept().unwrap();
+            conn.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+            let mut buf = [0; 4096];
+            let received = conn.read(&mut buf).unwrap();
+            assert!(received > 0, "request began");
+            started_tx.send(()).unwrap();
+            release_rx
+                .recv_timeout(Duration::from_secs(10))
+                .expect("release response");
+            conn.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+                .unwrap();
+            origin.set_nonblocking(true).unwrap();
+            assert!(
+                origin.accept().is_err(),
+                "queued probe must not start after Stop"
+            );
+        });
+        let text = format!("GET /?n=§x§ HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
+        let template = Template::parse(&text).unwrap();
+        let specs = intruder::resolve_specs(
+            &template,
+            AttackType::Sniper,
+            &[intruder::PayloadSource::SimpleList {
+                items: (0..10).map(|i| i.to_string()).collect(),
+            }],
+        )
+        .unwrap();
+        let mut settings = AttackSettings::default();
+        settings.pool.max_concurrent = 1;
+        settings.retry = RetryConfig {
+            retries: 0,
+            pause_ms: 0,
+        };
+        let run = start(
+            net::Shared::new(),
+            &text,
+            AttackType::Sniper,
+            specs,
+            ("127.0.0.1".into(), port, false),
+            settings,
+        )
+        .unwrap();
+        started_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("blocking request started");
+        run.stop.store(true, Ordering::SeqCst);
+        let dispatch_deadline = Instant::now() + Duration::from_secs(2);
+        while run.running.load(Ordering::SeqCst) {
+            assert!(
+                Instant::now() < dispatch_deadline,
+                "Stop must end backpressure without waiting for the blocked response"
+            );
+            std::thread::yield_now();
+        }
+        assert!(
+            run.is_running(),
+            "in-flight blocking work still owns the run"
+        );
+        assert!(run.status_text().starts_with("Stopping:"));
+        assert_eq!(run.progress().0, 0);
+        drop(release);
+        server.join().unwrap();
+        let until = Instant::now() + Duration::from_secs(5);
+        while run.is_running() {
+            assert!(Instant::now() < until, "run drained");
+            std::thread::yield_now();
+        }
+        assert_eq!(run.progress(), (1, Some(10)));
+        assert_eq!(run.status_text(), "Stopped: 1 requests");
+        let rows = run.snapshot_rows();
+        assert_eq!(rows.len(), 1, "in-flight result retained");
+        assert_eq!(rows[0].status, "200");
+    }
 
     /// Second review, finding 4: payloads are URL-encoded with Burp's
     /// default set, and only those characters.

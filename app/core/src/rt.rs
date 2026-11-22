@@ -6,9 +6,9 @@
 //! - [`probe_pool`] builds a `tokio::sync::Semaphore`, the resource pool
 //!   bounding in-flight probes: it replaces the ad-hoc per-scan worker
 //!   thread counts.
-//! - Cancellation is abort-based: engine tasks are dropped /
-//!   `JoinHandle::abort`ed on scan stop, wired to the existing atomic
-//!   cancel flags.
+//! - Cancellation is cooperative for started blocking work. Abort can
+//!   prevent a queued blocking body from starting, but cannot interrupt one
+//!   already running. Existing atomic stop checks end those bodies.
 //! - Results flow back over `tokio::sync::mpsc` channels, drained per
 //!   frame by the egui side (see `intruder_run::RunState::drain_rows`).
 //!
@@ -62,9 +62,10 @@ impl EngineRt {
     /// on a runtime thread, so extension hooks (BCheck / ext_host
     /// closures) stay off the runtime too. `stop` mirrors the tool's
     /// existing cancel flag: once it reports true the task's
-    /// `JoinHandle` is aborted. The abort detaches the blocking body,
-    /// which still ends on its own cooperative checks of the same flag; a
-    /// task whose body never started ends at once. A panic is contained
+    /// `JoinHandle` is aborted. Abort may cancel a body that has not started;
+    /// it does not interrupt a running blocking body. The wrapper awaits
+    /// that body's completion, which depends on its own cooperative stop
+    /// checks and any in-flight blocking calls returning. A panic is contained
     /// and raised as a notice (panic policy "contain and continue",
     /// issue #32).
     pub fn spawn_engine<F, S>(&self, name: &'static str, stop: S, f: F)
@@ -182,34 +183,41 @@ mod tests {
         assert!(max_seen.load(Ordering::SeqCst) <= 3, "pool bound held");
     }
 
-    /// Abort-based cancellation wired to a cancel flag: once the flag is
-    /// set, the engine task's wrapper ends promptly while the detached
-    /// blocking body never reaches its late side effect.
+    /// The body has definitely started, and must return by observing Stop.
+    /// The channel acknowledgement proves early exit, not merely that a late
+    /// side effect has not happened yet. Unpark avoids timing-based setup.
     #[test]
-    fn spawn_engine_aborts_on_stop() {
+    fn started_engine_body_stops_cooperatively_before_its_deadline() {
         let stop = Arc::new(AtomicBool::new(false));
-        let finished = Arc::new(AtomicBool::new(false));
         let (started_tx, started_rx) = std::sync::mpsc::channel();
-        let (stop2, finished2) = (stop.clone(), finished.clone());
+        let (ended_tx, ended_rx) = std::sync::mpsc::channel();
+        let (poll_stop, body_stop) = (stop.clone(), stop.clone());
         engine().spawn_engine(
-            "test",
-            move || stop2.load(Ordering::SeqCst),
+            "cooperative-test",
+            move || poll_stop.load(Ordering::SeqCst),
             move || {
-                started_tx.send(()).unwrap();
-                std::thread::sleep(Duration::from_secs(2));
-                finished2.store(true, Ordering::SeqCst);
+                started_tx.send(std::thread::current()).unwrap();
+                let deadline = std::time::Instant::now() + Duration::from_secs(30);
+                while std::time::Instant::now() < deadline {
+                    if body_stop.load(Ordering::SeqCst) {
+                        ended_tx.send("cooperative stop").unwrap();
+                        return;
+                    }
+                    std::thread::park_timeout(Duration::from_secs(30));
+                }
+                let _ = ended_tx.send("natural deadline");
             },
         );
-        started_rx
+        let body_thread = started_rx
             .recv_timeout(Duration::from_secs(10))
             .expect("body started");
         stop.store(true, Ordering::SeqCst);
-        // The abort detaches the body: well before its 2 s sleep ends, the
-        // side effect has not happened (and the wrapper is gone).
-        std::thread::sleep(Duration::from_millis(400));
-        assert!(
-            !finished.load(Ordering::SeqCst),
-            "aborted body detached before its side effect"
+        body_thread.unpark();
+        assert_eq!(
+            ended_rx
+                .recv_timeout(Duration::from_secs(1))
+                .expect("started body exited early"),
+            "cooperative stop"
         );
     }
 }

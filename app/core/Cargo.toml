@@ -35,5 +35,5 @@ base64 = "0.22"
 tungstenite = { version = "0.24", default-features = false, features = ["handshake"] }
 # Async Phase 1 (issue #42): the engine runtime — scanner/intruder probes
 # as futures on a dedicated tokio thread, a semaphore probe pool and
-# abort-based cancellation (core/src/rt.rs).
+# queued-task aborts and cooperative blocking-body cancellation (core/src/rt.rs).
 tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
