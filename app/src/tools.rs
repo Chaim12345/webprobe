@@ -333,6 +333,7 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
             && after >= crate::seq_bits::MIN_SAMPLES
             && after / 100 != before / 100
         {
+            app.sequencer.bits = crate::seq_bits::analyze(&app.sequencer.samples);
             app.sequencer.stats = Some(analysis::analyze_tokens(&app.sequencer.samples));
             let tokens: Vec<String> = app
                 .sequencer
@@ -513,6 +514,7 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
                         ))
                         .clicked()
                     {
+                        app.sequencer.bits = crate::seq_bits::analyze(&app.sequencer.samples);
                         app.sequencer.stats =
                             Some(analysis::analyze_tokens(&app.sequencer.samples));
                         let tokens: Vec<String> = app
@@ -529,6 +531,7 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
                         app.sequencer.samples.clear();
                         app.sequencer.stats = None;
                         app.sequencer.report = None;
+                        app.sequencer.bits = None;
                     }
                 }
             });
@@ -723,6 +726,7 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
                     {
                         add_sequencer_sample(app, line.trim().as_bytes().to_vec());
                     }
+                    app.sequencer.bits = crate::seq_bits::analyze(&app.sequencer.samples);
                     app.sequencer.stats = Some(analysis::analyze_tokens(&app.sequencer.samples));
                     let tokens: Vec<String> = app
                         .sequencer
@@ -773,12 +777,8 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
                     ("Samples", stats.sample_count.to_string()),
                     ("Token length", stats.token_length.to_string()),
                     (
-                        "Bits per character",
+                        "Pooled byte entropy (bits/byte)",
                         format!("{:.4}", stats.bits_per_character),
-                    ),
-                    (
-                        "Total entropy (bits)",
-                        format!("{:.2}", stats.total_entropy_bits),
                     ),
                 ] {
                     ui.label(RichText::new(k).size(12.5).color(theme::ink()));
@@ -787,38 +787,37 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
                 }
             });
     }
+    if app.sequencer.stats.is_some() {
+        hint(ui, "Pooled character statistics describe the alphabet, not token unpredictability. See the bit-level result below.");
+    }
     if let Some(report) = &app.sequencer.report {
         ui.add_space(8.0);
         crate::analysis_ui::show_sequencer_report(ui, report);
     }
-    // Bit-level analysis follows the character-level one and is redone when
-    // the analysed sample count changes.
+    // Each Analyze action computes bit-level results from its exact samples;
+    // two unrelated manual batches may have the same sample count.
     match &app.sequencer.stats {
-        Some(stats) => {
-            if app.sequencer.bits.as_ref().map(|b| b.samples) != Some(stats.sample_count) {
-                app.sequencer.bits = crate::seq_bits::analyze(&app.sequencer.samples);
+        Some(_) => match &app.sequencer.bits {
+            Some(bits) => crate::analysis_ui::show_bit_report(
+                ui,
+                bits,
+                &app.sequencer.samples,
+                &mut app.sequencer.export_path,
+            ),
+            None => {
+                ui.add_space(8.0);
+                ui.label(
+                    RichText::new(format!(
+                        "Bit-level analysis needs at least {} tokens of non-zero length.",
+                        crate::seq_bits::MIN_SAMPLES
+                    ))
+                    .size(12.5)
+                    .color(theme::ink_dim()),
+                );
             }
-            match &app.sequencer.bits {
-                Some(bits) => crate::analysis_ui::show_bit_report(
-                    ui,
-                    bits,
-                    &app.sequencer.samples,
-                    &mut app.sequencer.export_path,
-                ),
-                None => {
-                    ui.add_space(8.0);
-                    ui.label(
-                        RichText::new(format!(
-                            "Bit-level analysis needs at least {} tokens of non-zero length.",
-                            crate::seq_bits::MIN_SAMPLES
-                        ))
-                        .size(12.5)
-                        .color(theme::ink_dim()),
-                    );
-                }
-            }
-        }
+        },
         None => app.sequencer.bits = None,
+    }
     }
 }
 
