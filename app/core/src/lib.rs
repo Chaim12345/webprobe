@@ -29,6 +29,7 @@ pub mod intruder;
 pub mod intruder_run;
 #[cfg(test)]
 mod jwt_tests;
+pub mod strict_chunked;
 pub mod strict_request;
 // Stage A (#37): acyclic leaf modules extracted to the webprobe-support crate.
 // Re-exported so `webprobe_core::<module>` paths are unchanged.
@@ -44,6 +45,7 @@ pub mod passive_state;
 pub mod project;
 pub mod project_files;
 pub mod repeater_run;
+pub mod rt;
 pub mod scan;
 pub mod scan_config;
 pub mod scan_library;
@@ -72,5 +74,7 @@ mod framing_keepalive_tests;
 mod fuzz_tests;
 #[cfg(test)]
 mod parser_fuzz_tests;
+#[cfg(test)]
+mod strict_chunked_tests;
 #[cfg(test)]
 mod strict_request_tests;

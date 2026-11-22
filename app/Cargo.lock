@@ -4886,6 +4886,7 @@ dependencies = [
  "sha2",
  "thiserror 2.0.21",
  "time",
+ "tokio",
  "tungstenite",
  "webpki-roots 0.26.11",
  "webprobe-support",

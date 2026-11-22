@@ -2,7 +2,10 @@
 //!
 //! The pure parts (throttle delay, retry loop, Grep - Match / Extract /
 //! Payloads, CSV and curl rendering, result sorting) are free functions with
-//! unit tests; `start` only wires them to worker threads and `net::send_raw`.
+//! unit tests; `start` submits the attack to the engine runtime (issue #42):
+//! one dispatcher future pulls attacks and spawns each probe as a runtime
+//! task bounded by a `tokio::sync::Semaphore` probe pool, results flow back
+//! over a channel, and Stop aborts the queued probe tasks.
 //!
 //! Burp sources followed:
 //! - resource pool delay: burp.Zf29.ZS (fixed / random x[0.5,1.5) / increment),
@@ -568,7 +571,7 @@ pub fn parse_target(target: &str) -> Option<(String, u16, bool)> {
 /// One row of the attack results table.
 #[derive(Debug, Clone, Default)]
 pub struct ResultRow {
-    /// Request number in matrix order: 0 is the unmodified baseline, payloads start at 1.
+    /// 1-based request number in matrix order (column "Request").
     pub number: usize,
     /// The payload in each position (`None` = kept its original text).
     pub payloads: Vec<Option<String>>,
@@ -764,13 +767,18 @@ pub fn sort_order(
 
 /// Shared state of one running (or finished) attack.
 pub struct RunState {
+    /// Dispatcher activity only; use is_running() to include blocking probes.
     pub running: AtomicBool,
+    blocking: AtomicUsize,
     pub paused: AtomicBool,
     pub stop: AtomicBool,
     pub done: AtomicUsize,
-    /// Requests planned, including the baseline; `None` while recursive grep keeps going.
+    /// Requests planned; `None` while recursive grep keeps going.
     pub total: Option<usize>,
     pub rows: Mutex<Vec<Arc<ResultRow>>>,
+    /// Probe tasks deliver their rows over this channel (issue #42);
+    /// [`RunState::drain_rows`] moves them into `rows`.
+    row_rx: Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<Arc<ResultRow>>>>,
     pub settings: AttackSettings,
     pub sets: usize,
     pub kind: AttackType,
@@ -783,11 +791,51 @@ pub struct RunState {
 
 impl RunState {
     pub fn is_running(&self) -> bool {
-        self.running.load(Ordering::SeqCst)
+        self.running.load(Ordering::SeqCst) || self.blocking.load(Ordering::SeqCst) != 0
+    }
+
+    /// UI status must not claim Stop interrupts in-flight blocking I/O.
+    pub fn status_text(&self) -> String {
+        let (done, total) = self.progress();
+        match (self.is_running(), self.paused.load(Ordering::SeqCst), total) {
+            (true, _, _) if self.stop.load(Ordering::SeqCst) => {
+                format!("Stopping: {done} requests completed; waiting for in-flight work")
+            }
+            (true, true, _) => format!(
+                "Paused: {done} of {}",
+                total.map(|t| t.to_string()).unwrap_or_else(|| "?".into())
+            ),
+            (true, false, Some(t)) => format!("Attack running: {done} of {t}"),
+            (true, false, None) => format!("Attack running: {done} requests (recursive grep)"),
+            (false, _, _) if self.stop.load(Ordering::SeqCst) => {
+                format!("Stopped: {done} requests")
+            }
+            (false, _, _) => format!("Finished: {done} requests"),
+        }
     }
 
     pub fn progress(&self) -> (usize, Option<usize>) {
         (self.done.load(Ordering::SeqCst), self.total)
+    }
+
+    /// Move the rows probe tasks delivered into `rows` (issue #42:
+    /// results flow back over a channel; the egui side drains it once per
+    /// frame, tests and headless callers drain on demand).
+    pub fn drain_rows(&self) {
+        let mut guard = self.row_rx.lock().unwrap();
+        let Some(rx) = guard.as_mut() else {
+            return;
+        };
+        let mut rows = self.rows.lock().unwrap();
+        while let Ok(row) = rx.try_recv() {
+            rows.push(row);
+        }
+    }
+
+    /// The result rows, drained first.
+    pub fn snapshot_rows(&self) -> Vec<Arc<ResultRow>> {
+        self.drain_rows();
+        self.rows.lock().unwrap().clone()
     }
 }
 
@@ -877,18 +925,21 @@ pub fn start(
                     attacks,
                     next: AtomicUsize::new(0),
                 },
-                Some(total + 1),
+                Some(total),
                 workers,
             )
         }
     };
+    let (row_tx, row_rx) = tokio::sync::mpsc::unbounded_channel();
     let state = Arc::new(RunState {
         running: AtomicBool::new(true),
+        blocking: AtomicUsize::new(0),
         paused: AtomicBool::new(false),
         stop: AtomicBool::new(false),
         done: AtomicUsize::new(0),
         total,
         rows: Mutex::new(Vec::new()),
+        row_rx: Mutex::new(Some(row_rx)),
         settings,
         sets,
         kind,
@@ -897,7 +948,7 @@ pub fn start(
         template: state_template,
     });
     shared.log(&format!(
-        "Intruder attack started: {} x {} request(s), {workers} thread(s)",
+        "Intruder attack started: {} x {} request(s), {workers} probe slot(s)",
         kind.label(),
         total
             .map(|t| t.to_string())
@@ -906,43 +957,49 @@ pub fn start(
     let source = Arc::new(source);
     // Throttle: the next permitted request start time and the request count.
     let gate = Arc::new(Mutex::new((Instant::now(), 0u64, rand_seed())));
-    let run = state.clone();
-    crate::util::spawn_contained("intruder_run", move || {
-        let _tool = net::tool_scope("Intruder");
-        // Finish request 0 before any payload worker starts. Merely claiming
-        // index 0 first would still allow concurrent payloads to overtake it.
-        let baseline = Attack {
-            request: run.template.render(&vec![None; run.template.positions()]),
-            payloads: vec![None; run.template.positions()],
-        };
-        if let Some(row) = execute(&shared, &run, &baseline, 0, &gate) {
-            run.rows.lock().unwrap().push(Arc::new(row));
-            run.done.fetch_add(1, Ordering::SeqCst);
-        }
-        if run.stop.load(Ordering::SeqCst) {
-            run.running.store(false, Ordering::SeqCst);
-            shared.log("Intruder attack finished");
-            return;
-        }
-        let alive = Arc::new(AtomicUsize::new(workers));
-        for _ in 0..workers {
-            let (shared, state, source, gate, alive) = (
-                shared.clone(),
-                run.clone(),
-                source.clone(),
-                gate.clone(),
-                alive.clone(),
-            );
-            crate::util::spawn_contained("intruder_run", move || {
-                let _tool = net::tool_scope("Intruder");
-                worker(&shared, &state, &source, &gate);
-                if alive.fetch_sub(1, Ordering::SeqCst) == 1 {
-                    state.running.store(false, Ordering::SeqCst);
-                    shared.log("Intruder attack finished");
+    // Async Phase 1 (issue #42): one dispatcher future on the engine
+    // runtime pulls attacks and spawns each probe as a runtime task; the
+    // probe pool's semaphore is the resource pool (`workers` slots).
+    let pool = crate::rt::probe_pool(workers);
+    let dispatcher = {
+        let (shared, state, source, gate) =
+            (shared.clone(), state.clone(), source.clone(), gate.clone());
+        crate::rt::engine().spawn(async move {
+            Dispatch {
+                shared: &shared,
+                state: &state,
+                gate: &gate,
+                pool: &pool,
+                tx: &row_tx,
+            }
+            .run(&source)
+            .await;
+        })
+    };
+    // Contain-and-continue (panic policy, issue #32): the monitor ends the
+    // attack however the dispatcher task ends, loudly on a panic.
+    {
+        let (shared, state) = (shared.clone(), state.clone());
+        crate::rt::engine().spawn(async move {
+            if let Err(e) = dispatcher.await {
+                if e.is_panic() {
+                    crate::notice::toast(
+                        crate::notice::Level::Warn,
+                        "engine task 'intruder_run' panicked; the attack ended, the session continues",
+                    );
                 }
-            });
-        }
-    });
+            }
+            state.running.store(false, Ordering::SeqCst);
+            // Aborting async probe wrappers does not stop their blocking
+            // bodies. is_running() keeps the run claimed until they drain.
+            while state.blocking.load(Ordering::SeqCst) != 0 {
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+            shared.log(if state.stop.load(Ordering::SeqCst) {
+                "Intruder attack stopped after in-flight work finished"
+            } else { "Intruder attack finished" });
+        });
+    }
     Ok(state)
 }
 
@@ -970,95 +1027,15 @@ fn nap(state: &RunState, ms: u64) {
     }
 }
 
-fn worker(
+/// One probe: render the attack's request, send it with the configured
+/// retries and build its result row. Blocking; runs in a `spawn_blocking`
+/// closure, never on a runtime thread (issue #42).
+fn execute_probe(
     shared: &net::Shared,
     state: &RunState,
-    source: &Source,
-    gate: &Mutex<(Instant, u64, u64)>,
-) {
-    loop {
-        while state.paused.load(Ordering::SeqCst) && !state.stop.load(Ordering::SeqCst) {
-            std::thread::sleep(Duration::from_millis(30));
-        }
-        if state.stop.load(Ordering::SeqCst) {
-            return;
-        }
-        let (number, attack) = match source {
-            Source::Matrix { attacks, next } => {
-                let i = next.fetch_add(1, Ordering::SeqCst);
-                match attacks.get(i) {
-                    Some(a) => (i + 1, a.clone()),
-                    None => return,
-                }
-            }
-            Source::Recursive {
-                template,
-                walk,
-                made,
-            } => {
-                if made.load(Ordering::SeqCst) >= RECURSIVE_LIMIT {
-                    return;
-                }
-                match walk.lock().unwrap().next_attack(template) {
-                    Some(a) => (made.fetch_add(1, Ordering::SeqCst) + 1, a),
-                    None => return,
-                }
-            }
-        };
-        let Some(row) = execute(shared, state, &attack, number, gate) else {
-            return;
-        };
-        if let Source::Recursive { walk, .. } = source {
-            let extracts = if row.extracts.is_empty() && row.response.is_some() {
-                extract_all(
-                    &state.settings.grep_extract,
-                    row.response.as_deref().unwrap_or(&[]),
-                )
-            } else {
-                row.extracts.clone()
-            };
-            walk.lock().unwrap().feed(&extracts);
-        }
-        state.rows.lock().unwrap().push(Arc::new(row));
-        state.done.fetch_add(1, Ordering::SeqCst);
-    }
-}
-
-/// Send and analyse a baseline or payload through the same retry and throttle path.
-fn execute(
-    shared: &net::Shared,
-    state: &RunState,
-    attack: &Attack,
     number: usize,
-    gate: &Mutex<(Instant, u64, u64)>,
-) -> Option<ResultRow> {
-    while state.paused.load(Ordering::SeqCst) && !state.stop.load(Ordering::SeqCst) {
-        std::thread::sleep(Duration::from_millis(30));
-    }
-    if state.stop.load(Ordering::SeqCst) {
-        return None;
-    }
-    // Resource pool throttle: space request starts by the computed delay.
-    let wait = {
-        let mut g = gate.lock().unwrap();
-        let now = Instant::now();
-        let r = next_rand(&mut g.2);
-        let delay = throttle_delay_ms(&state.settings.pool, g.1, r);
-        g.1 += 1;
-        let at = if g.1 == 1 {
-            now
-        } else {
-            (g.0 + Duration::from_millis(delay)).max(now)
-        };
-        g.0 = at;
-        at.saturating_duration_since(now)
-    };
-    if !wait.is_zero() {
-        nap(state, wait.as_millis() as u64);
-    }
-    if state.stop.load(Ordering::SeqCst) {
-        return None;
-    }
+    attack: Attack,
+) -> Arc<ResultRow> {
     let (host, port, https) = state.target.clone();
     // Payloads URL-encoded per the encoding set, then Content-Length
     // restamped (Burp's "Update Content-Length header", on by default):
@@ -1072,13 +1049,7 @@ fn execute(
     let request = state
         .template
         .render(&encoded.iter().map(|p| p.as_deref()).collect::<Vec<_>>());
-    let bytes = if number == 0 {
-        // Keep original values and bytes (apart from removing position markers).
-        // Encoding and Content-Length repair belong to payload requests only.
-        attack.request.as_bytes().to_vec()
-    } else {
-        crate::util::update_content_length(request.as_bytes())
-    };
+    let bytes = crate::util::update_content_length(request.as_bytes());
     let t0 = Instant::now();
     let (resp, attempts) = send_with_retry(
         &state.settings.retry,
@@ -1118,12 +1089,381 @@ fn execute(
         ..Default::default()
     };
     analyse(&mut row, &state.settings);
-    Some(row)
+    Arc::new(row)
+}
+
+/// Count a submitted blocking body before it can be detached from its async
+/// wrapper. The guard and pool permit live in that body, even after Stop.
+struct BlockingProbe(Arc<RunState>);
+impl BlockingProbe {
+    fn new(state: Arc<RunState>) -> Self {
+        state.blocking.fetch_add(1, Ordering::SeqCst);
+        Self(state)
+    }
+}
+impl Drop for BlockingProbe {
+    fn drop(&mut self) {
+        self.0.blocking.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+async fn wait_for_capacity<T: Send + 'static>(
+    probes: &mut tokio::task::JoinSet<T>,
+    limit: usize,
+    stop: &AtomicBool,
+) {
+    while probes.len() >= limit * 2 && !stop.load(Ordering::SeqCst) {
+        tokio::select! {
+            _ = probes.join_next() => {},
+            _ = tokio::time::sleep(Duration::from_millis(25)) => {},
+        }
+    }
+}
+
+/// The attack dispatcher (issue #42): one future on the engine runtime
+/// pulls attacks from the source and submits each probe as a runtime task
+/// bounded by the probe pool's `tokio::sync::Semaphore` — the semaphore
+/// is the resource pool, replacing the per-attack worker threads.
+struct Dispatch<'a> {
+    shared: &'a Arc<net::Shared>,
+    state: &'a Arc<RunState>,
+    gate: &'a Mutex<(Instant, u64, u64)>,
+    pool: &'a crate::rt::ProbePool,
+    tx: &'a tokio::sync::mpsc::UnboundedSender<Arc<ResultRow>>,
+}
+
+impl Dispatch<'_> {
+    async fn run(&self, source: &Source) {
+        // Request 0 is the unmodified baseline: finish it before any payload
+        // probe starts, so concurrent payloads cannot overtake it (#117).
+        if self.paused_out().await {
+            return;
+        }
+        if self.napped(self.throttle_wait()).await {
+            return;
+        }
+        let _permit = self.pool.acquire().await;
+        if self.state.stop.load(Ordering::SeqCst) {
+            return;
+        }
+        let positions = self.state.template.positions();
+        let baseline = Attack {
+            request: self.state.template.render(&vec![None; positions]),
+            payloads: vec![None; positions],
+        };
+        let (shared, state, tx) = (self.shared.clone(), self.state.clone(), self.tx.clone());
+        let row = tokio::task::spawn_blocking(move || {
+            let _tool = net::tool_scope("Intruder");
+            execute_probe(&shared, &state, 0, baseline)
+        })
+        .await;
+        let Ok(row) = row else {
+            crate::notice::toast(
+                crate::notice::Level::Warn,
+                "engine task 'intruder baseline' panicked; the attack ended, the session continues",
+            );
+            return;
+        };
+        let _ = tx.send(row);
+        state.done.fetch_add(1, Ordering::SeqCst);
+        match source {
+            Source::Matrix { attacks, next } => self.matrix(attacks, next).await,
+            Source::Recursive {
+                template,
+                walk,
+                made,
+            } => self.recursive(template, walk, made).await,
+        }
+    }
+
+    /// Wait out a pause in short slices; true when Stop ended the wait.
+    async fn paused_out(&self) -> bool {
+        while self.state.paused.load(Ordering::SeqCst) && !self.state.stop.load(Ordering::SeqCst) {
+            tokio::time::sleep(Duration::from_millis(30)).await;
+        }
+        self.state.stop.load(Ordering::SeqCst)
+    }
+
+    /// The resource pool throttle: the next request's start delay
+    /// (burp.Zf29.ZS). A short critical section, never held across an
+    /// `.await` (issue #42 constraint).
+    fn throttle_wait(&self) -> Duration {
+        let mut g = self.gate.lock().unwrap();
+        let now = Instant::now();
+        let r = next_rand(&mut g.2);
+        let delay = throttle_delay_ms(&self.state.settings.pool, g.1, r);
+        g.1 += 1;
+        let at = if g.1 == 1 {
+            now
+        } else {
+            (g.0 + Duration::from_millis(delay)).max(now)
+        };
+        g.0 = at;
+        at.saturating_duration_since(now)
+    }
+
+    /// Sleep in short slices so Stop takes effect promptly; true when stopped.
+    async fn napped(&self, wait: Duration) -> bool {
+        if wait.is_zero() {
+            return false;
+        }
+        let until = Instant::now() + wait;
+        while Instant::now() < until && !self.state.stop.load(Ordering::SeqCst) {
+            tokio::time::sleep((until - Instant::now()).min(Duration::from_millis(25))).await;
+        }
+        self.state.stop.load(Ordering::SeqCst)
+    }
+
+    async fn matrix(&self, attacks: &[Attack], next: &AtomicUsize) {
+        let mut probes = tokio::task::JoinSet::new();
+        loop {
+            if self.paused_out().await {
+                break;
+            }
+            // Backpressure: bound queued probe tasks at twice the pool size.
+            wait_for_capacity(&mut probes, self.pool.limit(), &self.state.stop).await;
+            if self.state.stop.load(Ordering::SeqCst) {
+                break;
+            }
+            let i = next.fetch_add(1, Ordering::SeqCst);
+            let Some(attack) = attacks.get(i).cloned() else {
+                break;
+            };
+            if self.napped(self.throttle_wait()).await {
+                break;
+            }
+            let (shared, state, tx, pool) = (
+                self.shared.clone(),
+                self.state.clone(),
+                self.tx.clone(),
+                self.pool.clone(),
+            );
+            probes.spawn(async move {
+                // The abort point: a probe still waiting on the pool is
+                // cancelled before any side effect.
+                let permit = pool.acquire().await;
+                if state.stop.load(Ordering::SeqCst) {
+                    return;
+                }
+                let outstanding = BlockingProbe::new(state.clone());
+                tokio::task::spawn_blocking(move || {
+                    let (_permit, _outstanding) = (permit, outstanding);
+                    if state.stop.load(Ordering::SeqCst) {
+                        return;
+                    }
+                    let _tool = net::tool_scope("Intruder");
+                    let row = execute_probe(&shared, &state, i + 1, attack);
+                    // The closure delivers the row itself: aborting the
+                    // probe task never loses an in-flight request's result.
+                    let _ = tx.send(row);
+                    state.done.fetch_add(1, Ordering::SeqCst);
+                })
+                .await
+                .unwrap_or_else(|e| {
+                    if e.is_panic() {
+                        crate::notice::toast(
+                            crate::notice::Level::Warn,
+                            "engine task 'intruder probe' panicked; the attack continues",
+                        );
+                    }
+                });
+            });
+        }
+        // Abort-based cancellation (issue #42): on Stop the queued probe
+        // tasks are aborted; in-flight probes deliver their rows from
+        // inside their blocking closures, so nothing in flight is lost.
+        if self.state.stop.load(Ordering::SeqCst) {
+            probes.abort_all();
+        }
+        while probes.join_next().await.is_some() {}
+    }
+
+    /// Recursive grep runs one request at a time: the walk needs a
+    /// response's extracts before it makes the next attack, so the probe
+    /// is awaited inline (still inside the probe pool, still off the
+    /// runtime thread).
+    async fn recursive(
+        &self,
+        template: &Template,
+        walk: &Mutex<RecursiveWalk>,
+        made: &AtomicUsize,
+    ) {
+        loop {
+            if self.paused_out().await {
+                return;
+            }
+            if made.load(Ordering::SeqCst) >= RECURSIVE_LIMIT {
+                return;
+            }
+            // A short critical section, never held across an `.await`.
+            let attack = walk.lock().unwrap().next_attack(template);
+            let Some(attack) = attack else {
+                return;
+            };
+            let number = made.fetch_add(1, Ordering::SeqCst) + 1;
+            if self.napped(self.throttle_wait()).await {
+                return;
+            }
+            let _permit = self.pool.acquire().await;
+            if self.state.stop.load(Ordering::SeqCst) {
+                return;
+            }
+            let (shared, state, state_done) =
+                (self.shared.clone(), self.state.clone(), self.state.clone());
+            let row = tokio::task::spawn_blocking(move || {
+                let _tool = net::tool_scope("Intruder");
+                execute_probe(&shared, &state, number, attack)
+            })
+            .await;
+            let Ok(row) = row else {
+                crate::notice::toast(
+                    crate::notice::Level::Warn,
+                    "engine task 'intruder probe' panicked; the attack ended, the session continues",
+                );
+                return;
+            };
+            let extracts = if row.extracts.is_empty() && row.response.is_some() {
+                extract_all(
+                    &self.state.settings.grep_extract,
+                    row.response.as_deref().unwrap_or(&[]),
+                )
+            } else {
+                row.extracts.clone()
+            };
+            let _ = self.tx.send(row);
+            state_done.done.fetch_add(1, Ordering::SeqCst);
+            walk.lock().unwrap().feed(&extracts);
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn matrix_backpressure_observes_stop_without_a_probe_completion() {
+        let stop = Arc::new(AtomicBool::new(false));
+        let flag = stop.clone();
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let (ended_tx, ended_rx) = std::sync::mpsc::channel();
+        crate::rt::engine().spawn(async move {
+            let mut probes = tokio::task::JoinSet::<()>::new();
+            for _ in 0..2 {
+                let started = started_tx.clone();
+                probes.spawn(async move {
+                    started.send(()).unwrap();
+                    std::future::pending::<()>().await;
+                });
+            }
+            wait_for_capacity(&mut probes, 1, &flag).await;
+            // Neither probe can finish. Stop must end the capacity wait.
+            ended_tx.send(probes.len()).unwrap();
+        });
+        for _ in 0..2 {
+            started_rx
+                .recv_timeout(Duration::from_secs(5))
+                .expect("probe started");
+        }
+        stop.store(true, Ordering::SeqCst);
+        assert_eq!(
+            ended_rx
+                .recv_timeout(Duration::from_secs(1))
+                .expect("Stop ended backpressure"),
+            2
+        );
+    }
+
+    #[test]
+    fn stop_waits_for_started_blocking_probe_and_preserves_its_result() {
+        use std::io::{Read, Write};
+        let origin = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = origin.local_addr().unwrap().port();
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        struct Release(Option<std::sync::mpsc::Sender<()>>);
+        impl Drop for Release {
+            fn drop(&mut self) {
+                if let Some(tx) = self.0.take() {
+                    let _ = tx.send(());
+                }
+            }
+        }
+        let release = Release(Some(release_tx));
+        let server = std::thread::spawn(move || {
+            let (mut conn, _) = origin.accept().unwrap();
+            conn.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+            let mut buf = [0; 4096];
+            let received = conn.read(&mut buf).unwrap();
+            assert!(received > 0, "request began");
+            started_tx.send(()).unwrap();
+            release_rx
+                .recv_timeout(Duration::from_secs(10))
+                .expect("release response");
+            conn.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+                .unwrap();
+            origin.set_nonblocking(true).unwrap();
+            assert!(
+                origin.accept().is_err(),
+                "queued probe must not start after Stop"
+            );
+        });
+        let text = format!("GET /?n=§x§ HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
+        let template = Template::parse(&text).unwrap();
+        let specs = intruder::resolve_specs(
+            &template,
+            AttackType::Sniper,
+            &[intruder::PayloadSource::SimpleList {
+                items: (0..10).map(|i| i.to_string()).collect(),
+            }],
+        )
+        .unwrap();
+        let mut settings = AttackSettings::default();
+        settings.pool.max_concurrent = 1;
+        settings.retry = RetryConfig {
+            retries: 0,
+            pause_ms: 0,
+        };
+        let run = start(
+            net::Shared::new(),
+            &text,
+            AttackType::Sniper,
+            specs,
+            ("127.0.0.1".into(), port, false),
+            settings,
+        )
+        .unwrap();
+        started_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("blocking request started");
+        run.stop.store(true, Ordering::SeqCst);
+        let dispatch_deadline = Instant::now() + Duration::from_secs(2);
+        while run.running.load(Ordering::SeqCst) {
+            assert!(
+                Instant::now() < dispatch_deadline,
+                "Stop must end backpressure without waiting for the blocked response"
+            );
+            std::thread::yield_now();
+        }
+        assert!(
+            run.is_running(),
+            "in-flight blocking work still owns the run"
+        );
+        assert!(run.status_text().starts_with("Stopping:"));
+        assert_eq!(run.progress().0, 0);
+        drop(release);
+        server.join().unwrap();
+        let until = Instant::now() + Duration::from_secs(5);
+        while run.is_running() {
+            assert!(Instant::now() < until, "run drained");
+            std::thread::yield_now();
+        }
+        assert_eq!(run.progress(), (1, Some(10)));
+        assert_eq!(run.status_text(), "Stopped: 1 requests");
+        let rows = run.snapshot_rows();
+        assert_eq!(rows.len(), 1, "in-flight result retained");
+        assert_eq!(rows[0].status, "200");
+    }
 
     /// Second review, finding 4: payloads are URL-encoded with Burp's
     /// default set, and only those characters.
@@ -1526,7 +1866,7 @@ mod tests {
         }
         assert!(!run.is_running(), "stopped");
         let (done, total) = run.progress();
-        assert_eq!(total, Some(201));
+        assert_eq!(total, Some(200));
         assert!(done < 200, "stopped early at {done}");
     }
 
@@ -1549,10 +1889,8 @@ mod tests {
                     .unwrap_or("")
                     .to_string();
                 seen2.lock().unwrap().push(head);
-                let next = if i == 0 {
-                    "baseline-only".into()
-                } else if i < 3 {
-                    format!("tok{i}")
+                let next = if i < 2 {
+                    format!("tok{}", i + 1)
                 } else {
                     "tok2".into()
                 };
@@ -1617,18 +1955,88 @@ mod tests {
             std::thread::sleep(Duration::from_millis(10));
         }
         assert!(!run.is_running());
-        let rows = run.rows.lock().unwrap().clone();
+        let rows = run.snapshot_rows();
         let payloads: Vec<String> = rows.iter().map(|r| r.payload_text()).collect();
         assert_eq!(
             payloads,
-            ["", "start", "tok1", "tok2"],
+            ["start", "tok1", "tok2"],
             "tok2 repeats, so the walk stops"
         );
-        assert_eq!(rows[0].extracts, [Some("baseline-only".to_string())]);
-        assert_eq!(rows[2].extracts, [Some("tok2".to_string())]);
-        assert_eq!(seen.lock().unwrap()[0], "GET /?t=x HTTP/1.1");
-        assert_eq!(seen.lock().unwrap()[1], "GET /?t=start HTTP/1.1");
-        assert_eq!(seen.lock().unwrap()[2], "GET /?t=tok1 HTTP/1.1");
-        assert_eq!(run.progress(), (4, None));
+        assert_eq!(rows[1].extracts, [Some("tok2".to_string())]);
+        assert_eq!(seen.lock().unwrap()[1], "GET /?t=tok1 HTTP/1.1");
+        assert_eq!(run.progress(), (3, None));
+    }
+
+    /// Issue #42: the probe pool bounds in-flight requests at
+    /// `max_concurrent`, every delivered row drains through the channel,
+    /// and Stop ends the attack early with the requests so far.
+    #[test]
+    fn probe_pool_bounds_concurrency_and_rows_drain() {
+        use std::io::{Read, Write};
+        let origin = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = origin.local_addr().unwrap().port();
+        let in_flight = Arc::new(AtomicUsize::new(0));
+        let max_seen = Arc::new(AtomicUsize::new(0));
+        let (i2, m2) = (in_flight.clone(), max_seen.clone());
+        std::thread::spawn(move || {
+            for conn in origin.incoming() {
+                let Ok(mut s) = conn else { break };
+                let (i3, m3) = (i2.clone(), m2.clone());
+                std::thread::spawn(move || {
+                    let n = i3.fetch_add(1, Ordering::SeqCst) + 1;
+                    m3.fetch_max(n, Ordering::SeqCst);
+                    let mut buf = [0u8; 2048];
+                    let _ = s.read(&mut buf);
+                    std::thread::sleep(Duration::from_millis(50));
+                    let _ = s.write_all(
+                        b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok",
+                    );
+                    i3.fetch_sub(1, Ordering::SeqCst);
+                });
+            }
+        });
+        let template = format!("GET /?n=§x§ HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
+        let parsed = Template::parse(&template).unwrap();
+        let items: Vec<String> = (0..60).map(|i| i.to_string()).collect();
+        let specs = intruder::resolve_specs(
+            &parsed,
+            AttackType::Sniper,
+            &[intruder::PayloadSource::SimpleList { items }],
+        )
+        .unwrap();
+        let mut settings = AttackSettings::default();
+        settings.pool.max_concurrent = 3;
+        settings.retry = RetryConfig {
+            retries: 0,
+            pause_ms: 0,
+        };
+        let run = start(
+            net::Shared::new(),
+            &template,
+            AttackType::Sniper,
+            specs,
+            ("127.0.0.1".into(), port, false),
+            settings,
+        )
+        .unwrap();
+        for _ in 0..1500 {
+            if !run.is_running() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(!run.is_running(), "attack finished");
+        let (done, total) = run.progress();
+        assert_eq!((done, total), (60, Some(60)));
+        assert!(
+            max_seen.load(Ordering::SeqCst) <= 3,
+            "probe pool bound held: max in-flight {}",
+            max_seen.load(Ordering::SeqCst)
+        );
+        let rows = run.snapshot_rows();
+        assert_eq!(rows.len(), 60, "every row drained through the channel");
+        let mut numbers: Vec<usize> = rows.iter().map(|r| r.number).collect();
+        numbers.sort_unstable();
+        assert_eq!(numbers, (1..=60).collect::<Vec<_>>(), "no row lost");
     }
 }
