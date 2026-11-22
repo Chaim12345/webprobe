@@ -7,7 +7,10 @@ Base: PR #99, `cc7407d`.
 An extension request-hook Drop now returns a local HTTP 200 HTML error page,
 with UTF-8 Content-Type, byte-accurate Content-Length, no-store, and connection
 close. The fixed body says an extension dropped the request and that it was
-not sent to the destination server. No request data or extension text is
+not sent to the destination server. HEAD returns these same response headers,
+including the Content-Length of the would-be GET body, but sends no body. This
+follows HTTP HEAD semantics; Burp's HEAD-specific behavior was not measured.
+No request data or extension text is
 reflected into HTML. This 200 is a local diagnostic, not an origin success;
 it does not create an origin-response history entry. The return remains before
 upstream target selection and forwarding. Response drops, manual-intercept
@@ -18,7 +21,8 @@ They assert the response status, content type, body length, diagnostic wording,
 no reflected request HTML, no origin connection, and no history entry. The
 HTTP/1 fixture includes a buffered follow-up and verifies only one response is
 served after Connection: close. HTTP/2 is tested using real ALPN negotiation
-and two successive streams; ResponseWriter converts internal HTTP/1.1-shaped
+and GET/HEAD/GET streams on one connection; HEAD carries no DATA body.
+ResponseWriter converts internal HTTP/1.1-shaped
 output to HEADERS/DATA, and the connection remains usable for another stream.
 
 Integration note for PR #110: its new buffered-request loop must stop after a

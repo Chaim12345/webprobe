@@ -730,10 +730,14 @@ pub fn upstream_and_deliver<S: ProxyIo>(
     ) {
         let body = "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>WebProbe: request dropped</title></head><body><h1>Request dropped</h1><p>An extension dropped the request. It was not sent to the destination server.</p></body></html>";
         let response = format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n{body}",
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
             body.len()
         );
         let _ = stream.write_all(response.as_bytes());
+        // HEAD carries the same representation metadata as GET, but no body.
+        if !parts.method.eq_ignore_ascii_case("HEAD") {
+            let _ = stream.write_all(body.as_bytes());
+        }
         let _ = stream.flush();
         shared.log("Request dropped by an extension hook");
         return;

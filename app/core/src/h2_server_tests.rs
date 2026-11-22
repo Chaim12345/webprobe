@@ -333,10 +333,14 @@ fn extension_drop_is_framed_as_h2_html_and_keeps_other_streams_usable() {
     let authority = format!("localhost:{port}");
     // ResponseWriter accepts HTTP/1.1-shaped bytes internally and turns them
     // into HEADERS/DATA. A raw HTTP/1.1 wire reply would fail frame decoding.
-    for stream in [1, 3] {
-        client.request(stream, "GET", "/admin-drop", &authority, None);
+    for (stream, method) in [(1, "GET"), (3, "HEAD"), (5, "GET")] {
+        client.request(stream, method, "/admin-drop", &authority, None);
         let response = client.responses(&[stream], |_, _| {});
         assert_eq!(response[0].0, "200");
+        if method == "HEAD" {
+            assert!(response[0].1.is_empty(), "HEAD must not carry DATA bytes");
+            continue;
+        }
         let html = std::str::from_utf8(&response[0].1).unwrap();
         assert!(html.starts_with("<!doctype html>"));
         assert!(html.contains("An extension dropped the request."));
