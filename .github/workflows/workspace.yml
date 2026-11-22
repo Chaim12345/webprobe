@@ -19,6 +19,7 @@ env:
   RUSTFLAGS: ""
   CARGO_TERM_COLOR: never
   CARGO_BUILD_JOBS: '2'
+  RUSTUP_TOOLCHAIN: '1.100.0'
 
 defaults:
   run:
@@ -40,8 +41,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes pkg-config libx11-dev libxi-dev libxcursor-dev libxrandr-dev libgl1-mesa-dev
-      - name: Install stable Rust and checks
-        run: rustup update stable && rustup default stable && rustup component add clippy rustfmt
+      - name: Install pinned Rust and checks
+        run: rustup toolchain install 1.100.0 --profile minimal --component clippy,rustfmt
       - uses: actions/cache@v4
         with:
           path: |
@@ -69,7 +70,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - run: rustup update stable && rustup default stable
+      - run: rustup toolchain install 1.100.0 --profile minimal
       - uses: actions/cache@v4
         with:
           path: |

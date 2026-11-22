@@ -17,7 +17,15 @@ The new Workspace acceptance workflow adds two independent, bounded jobs:
   A missing tool/jar, Cargo failure, prerequisite-skip diagnostic, ignored tests,
   absent/duplicate result summary, or fewer than five passing tests fails the job.
   This closes the existing tests' early-return-as-pass loophole without editing
-  shared extension source. The guard itself has nine unit checks.
+  shared extension source. The guard checks all five exact test names as well as the passing count; its
+  failure detection has twelve unit checks.
+
+Both jobs pin Rust 1.100.0 through RUSTUP_TOOLCHAIN and explicit installation,
+matching the repository's documented compiler generation. The stable manifest at
+https://static.rust-lang.org/dist/channel-rust-stable.toml reported Rust 1.100.0
+(release date 2026-11-12) when checked on 2026-11-22. Upgrade this workflow pin in
+a reviewed PR with fresh workspace and JVM evidence, not an automatic stable
+roll-forward. Existing workflows are not changed by this pin.
 
 Both jobs check out the PR's exact head SHA (or pushed SHA), print it and use
 read-only repository permissions. No path filters or continue-on-error apply.
@@ -78,7 +86,7 @@ acceptance.
 
 ## Evidence limits
 
-Local validation includes workflow structure, nine Python guard tests, Python
+Local validation includes workflow structure, twelve Python guard tests, Python
 compilation, whitespace checks and a fresh Maven artifact checksum. No local
 Rust/JDK 21 build is claimed. Hosted run URLs and exact-head results belong in the
 PR/board when available; queued, skipped or quota-blocked jobs are not passes.

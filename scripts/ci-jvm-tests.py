@@ -10,9 +10,22 @@ import subprocess
 import sys
 
 
+EXPECTED_TESTS = {
+    "ext_host::tests::stage1_extension_loads_logs_and_unloads",
+    "ext_host::tests::stage2_http_handler_edits_annotates_and_sends",
+    "ext_host::tests::stage3_ui_headless_menus_editors_and_utilities",
+    "ext_host::tests::stage3_extension_data_round_trips_through_a_project_file",
+    "ext_host::tests::stage4_scan_checks_and_engine_calls",
+}
+
+
 def validate_log(text):
     if re.search(r"\bskipping\s*:", text, re.IGNORECASE):
         raise ValueError("a required JVM test skipped its prerequisites")
+    executed = set(re.findall(r"^test (\S+) \.\.\.", text, re.MULTILINE))
+    missing = EXPECTED_TESTS - executed
+    if missing:
+        raise ValueError(f"required JVM contracts absent: {sorted(missing)}")
     results = re.findall(
         r"test result: ok\. (\d+) passed; (\d+) failed; (\d+) ignored;", text
     )
