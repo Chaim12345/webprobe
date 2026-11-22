@@ -238,11 +238,35 @@ fn read_request_collects_a_body_split_across_reads() {
 }
 
 #[test]
-fn read_request_stops_at_the_declared_length_of_a_pipelined_stream() {
-    let raw = b"POST /p HTTP/1.1\r\nContent-Length: 2\r\n\r\nabGET /next HTTP/1.1\r\n\r\n";
-    let got = read_request(&mut Cursor::new(&raw[..])).unwrap();
-    assert!(got.starts_with(b"POST /p"));
-    assert!(got.len() >= raw.len() - "GET /next HTTP/1.1\r\n\r\n".len());
+fn read_request_returns_read_ahead_including_the_next_pipelined_request() {
+    let first = b"POST /p HTTP/1.1\r\nContent-Length: 2\r\n\r\nab";
+    let second = b"GET /next HTTP/1.1\r\n\r\n";
+    let raw = [first.as_slice(), second.as_slice()].concat();
+    let mut stream = Cursor::new(raw.as_slice());
+
+    // read_request returns whole reads, not just the declared body. A reader
+    // that supplies both requests at once has its second request consumed too.
+    let got = read_request(&mut stream).unwrap();
+    assert_eq!(&got[..first.len()], first);
+    assert_eq!(&got[first.len()..], second);
+    assert_eq!(got, raw);
+    assert_eq!(stream.position(), raw.len() as u64);
+    assert!(read_request(&mut stream).unwrap().is_empty());
+}
+
+#[test]
+fn read_request_leaves_the_next_request_when_a_read_ends_at_the_body_boundary() {
+    let first = b"POST /p HTTP/1.1\r\nContent-Length: 2\r\n\r\nab";
+    let second = b"GET /next HTTP/1.1\r\n\r\n";
+    let raw = [first.as_slice(), second.as_slice()].concat();
+    let mut stream = Trickle(&raw, 1);
+
+    // Single-byte reads prevent read-ahead. The declared body length must
+    // stop this call exactly, leaving the full next request for the next call.
+    assert_eq!(read_request(&mut stream).unwrap(), first);
+    assert_eq!(stream.0, second);
+    assert_eq!(read_request(&mut stream).unwrap(), second);
+    assert!(stream.0.is_empty());
 }
 
 #[test]
