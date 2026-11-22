@@ -1,0 +1,9 @@
+{
+  "three_requests": true,
+  "hosts_correct": true,
+  "paths_correct": true,
+  "ports_correct": true,
+  "editor_is_middle": true,
+  "editor_host_is_b": true,
+  "editor_has_no_probe": true
+}

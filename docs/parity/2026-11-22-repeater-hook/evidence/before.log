@@ -1,0 +1,23 @@
+   Compiling webprobe v0.1.0 (/home/sandbox/repeater-hook/app)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.64s
+     Running unittests src/main.rs (target/debug/build/webprobe/4632cd8b251e34da/out/webprobe-4632cd8b251e34da)
+
+running 1 test
+origin hop 0: 0 probe headers, proxy-only=false
+origin hop 1: 0 probe headers, proxy-only=false
+
+thread 'repeater_ops::tests::repeater_montoya_http_handlers_reach_origin_and_response' (16822) panicked at src/repeater_ops.rs:3000:9:
+assertion `left == right` failed
+  left: 0
+ right: 1
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test repeater_ops::tests::repeater_montoya_http_handlers_reach_origin_and_response ... FAILED
+
+failures:
+
+failures:
+    repeater_ops::tests::repeater_montoya_http_handlers_reach_origin_and_response
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 137 filtered out; finished in 1.21s
+
+error: test failed, to rerun pass `-p webprobe --bin webprobe`

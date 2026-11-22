@@ -591,6 +591,7 @@ impl JavaSidecar {
     fn run(
         &self,
         kind: &str,
+        tool: &str,
         svc: &HttpService,
         msg: &mut Vec<u8>,
         req: Option<&[u8]>,
@@ -607,7 +608,7 @@ impl JavaSidecar {
             "host": svc.host,
             "port": svc.port,
             "secure": svc.secure,
-            "tool": "Proxy",
+            "tool": tool,
             "notes": ann.notes,
             "highlight": ann.colour_name(),
         });
@@ -1113,6 +1114,27 @@ impl ProxyHooks for JavaSidecar {
         self.tell(serde_json::json!({"type": "restore", "data": data}).to_string());
     }
 
+    fn handle_http_request(
+        &self,
+        tool: &str,
+        svc: &HttpService,
+        req: &mut Vec<u8>,
+        ann: &mut Annotations,
+    ) -> ProxyAction {
+        self.run("request", tool, svc, req, None, ann)
+    }
+
+    fn handle_http_response(
+        &self,
+        tool: &str,
+        svc: &HttpService,
+        req: &[u8],
+        resp: &mut Vec<u8>,
+        ann: &mut Annotations,
+    ) -> ProxyAction {
+        self.run("response", tool, svc, resp, Some(req), ann)
+    }
+
     fn handle_response_received(
         &self,
         svc: &crate::ext_host::HttpService,
@@ -1131,7 +1153,7 @@ impl ProxyHooks for JavaSidecar {
         req: &mut Vec<u8>,
         ann: &mut Annotations,
     ) -> ProxyAction {
-        self.run("request", svc, req, None, ann)
+        self.run("request", "Proxy", svc, req, None, ann)
     }
 
     fn handle_response(
@@ -1143,7 +1165,7 @@ impl ProxyHooks for JavaSidecar {
         resp: &mut Vec<u8>,
         ann: &mut Annotations,
     ) -> ProxyAction {
-        self.run("response", svc, resp, Some(req), ann)
+        self.run("response", "Proxy", svc, resp, Some(req), ann)
     }
 }
 

@@ -98,6 +98,28 @@ pub trait ProxyHooks: Send + Sync {
     ) -> ProxyAction {
         self.handle_response_received(svc, method, path, resp)
     }
+    /// HTTP handlers for tool sends, separate from proxy-only hooks.
+    /// Defaults intentionally do not call `handle_request`: Repeater must
+    /// not invoke a ProxyRequestHandler (nor a process extension's proxy hook).
+    fn handle_http_request(
+        &self,
+        _tool: &str,
+        _svc: &HttpService,
+        _req: &mut Vec<u8>,
+        _ann: &mut Annotations,
+    ) -> ProxyAction {
+        ProxyAction::Continue
+    }
+    fn handle_http_response(
+        &self,
+        _tool: &str,
+        _svc: &HttpService,
+        _req: &[u8],
+        _resp: &mut Vec<u8>,
+        _ann: &mut Annotations,
+    ) -> ProxyAction {
+        ProxyAction::Continue
+    }
     /// Issue types the extension can report (Burp's custom issue
     /// definitions), shown in the Extensions tab.
     fn issue_definitions(&self) -> Vec<IssueDefinition> {
@@ -553,6 +575,61 @@ pub fn run_response_hooks_annotated(
                     crate::notice::Level::Warn,
                     format!(
                         "response hook of extension '{}' panicked; the hook was skipped",
+                        e.extension_name()
+                    ),
+                );
+                true
+            }
+        }
+    })
+}
+
+/// Run only HTTP handlers, not proxy handlers, on an outgoing tool request.
+pub fn run_http_request_hooks(
+    exts: &[Arc<dyn ProxyHooks>],
+    tool: &str,
+    svc: &HttpService,
+    req: &mut Vec<u8>,
+    ann: &mut Annotations,
+) -> bool {
+    exts.iter().all(|e| {
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            e.handle_http_request(tool, svc, req, ann)
+        })) {
+            Ok(action) => !matches!(action, ProxyAction::Drop),
+            Err(_) => {
+                crate::notice::toast(
+                    crate::notice::Level::Warn,
+                    format!(
+                        "HTTP request hook of extension '{}' panicked; the hook was skipped",
+                        e.extension_name()
+                    ),
+                );
+                true
+            }
+        }
+    })
+}
+
+/// Run only HTTP handlers on a tool response, with its initiating request.
+pub fn run_http_response_hooks(
+    exts: &[Arc<dyn ProxyHooks>],
+    tool: &str,
+    svc: &HttpService,
+    req: &[u8],
+    resp: &mut Vec<u8>,
+    ann: &mut Annotations,
+) -> bool {
+    exts.iter().all(|e| {
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            e.handle_http_response(tool, svc, req, resp, ann)
+        })) {
+            Ok(action) => !matches!(action, ProxyAction::Drop),
+            Err(_) => {
+                crate::notice::toast(
+                    crate::notice::Level::Warn,
+                    format!(
+                        "HTTP response hook of extension '{}' panicked; the hook was skipped",
                         e.extension_name()
                     ),
                 );
