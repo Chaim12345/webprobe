@@ -1435,6 +1435,39 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    /// R-20: payload options round-trip through the public Montoya API.
+    #[test]
+    fn montoya_payload_without_server_location() {
+        let Some(dir) = stage_extension("PayloadOptionsExtension") else {
+            eprintln!("skipping: no JDK or Montoya API jar");
+            return;
+        };
+        let counter = AtomicU64::new(0);
+        let link = Arc::new(HostLink {
+            send: Box::new(|_, _| Err("unused".into())),
+            event: Box::new(|_, _| {}),
+            call: Box::new(move |_, op, _| {
+                assert_eq!(op, "collab.payload");
+                let n = counter.fetch_add(1, Ordering::SeqCst) + 1;
+                Ok(serde_json::json!({
+                    "id": format!("option{n}"),
+                    "payload": format!("option{n}.oast.test"),
+                    "server": "oast.test",
+                }))
+            }),
+        });
+        let sc = JavaSidecar::spawn_with(dir.to_str().unwrap(), Some(link))
+            .expect("payload options extension loads");
+        sc.unload();
+        let log = sc.errors();
+        assert!(
+            log.iter()
+                .any(|line| line.contains("payload options regression passed")),
+            "payload checks did not finish: {log:#?}"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     /// R-03 stage 1: setName, the unloading handler, every logging()
     /// channel, burpSuite(), and Unsupported for what is not bridged.
     #[test]

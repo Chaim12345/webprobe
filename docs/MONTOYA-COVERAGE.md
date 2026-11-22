@@ -67,3 +67,10 @@ independent analyzers, immutable snapshots, and invalid inputs. This establishes
 WebProbe's behavior, not parity against a running Burp installation. The ten
 additional unmodified BApps required by R-20 have not been checked in this slice;
 R-20 remains open. Response variation analysis remains unsupported.
+
+`CollaboratorPayload.server()` now returns an empty Optional when
+`WITHOUT_SERVER_LOCATION` was requested, matching the API contract. This applies
+to both a client and the default payload generator. A second purpose-built
+extension checks the default and bare forms, their ids, and independent metadata
+with deterministic host-provided payloads. It fails before the fix and passes
+after it on JDK 25 with Montoya 2026.7. No live Collaborator server is needed.
