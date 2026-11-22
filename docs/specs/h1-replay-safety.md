@@ -29,8 +29,8 @@ send an 8 MiB body while the origin closes after its first byte, and assert an
 actual write error, one received prefix, no completed effect and no replacement
 connection. A bounded listener check also observes queued replacement sends.
 
-Base: parity commit a2fd3d2fc709994ad48e649a4198eace4a7226b3, after
-PR #154 landed the #151 behavior. Rebased from pinned #151 bf306bd. The only
+Base: parity commit cd1e5f1a22f064e0eb3ec865b7089136cb0da809, after
+PRs #154, #140 and #150 landed. PR #154 carries the #151 behavior. Rebased from pinned #151 bf306bd. The only
 textual conflict was the test-module registration in net/mod.rs; both existing
 wake_tests and new replay_safety_tests are preserved. Pool-admission behavior
 from #151 is unchanged. This is not based on the integration stack #125.
