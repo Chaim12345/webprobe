@@ -119,7 +119,36 @@ pub fn record_entry(
     scan: bool,
 ) {
     let req = crate::codec::normalize_request(req);
-    let req = req.as_slice();
+    record_entry_verbatim(
+        shared,
+        &req,
+        resp,
+        note,
+        default_port,
+        https,
+        listener_port,
+        edited,
+        ann,
+        scan,
+    );
+}
+
+/// Like [`record_entry`] but stores the request bytes exactly as captured
+/// (no chunked reassembly, no Content-Length rewrite). Used for requests
+/// rejected as ambiguous, whose original framing is the evidence.
+#[allow(clippy::too_many_arguments)]
+pub fn record_entry_verbatim(
+    shared: &Shared,
+    req: &[u8],
+    resp: Option<crate::body::Body>,
+    note: Option<String>,
+    default_port: u16,
+    https: bool,
+    listener_port: u16,
+    edited: bool,
+    ann: &webprobe_support::ext::Annotations,
+    scan: bool,
+) {
     let parts = util::parse_http(req);
     let (host, port) = host_of(&parts, default_port);
     // Proxied responses feed the session-handling cookie jar (Burp's default).

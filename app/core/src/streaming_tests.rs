@@ -267,6 +267,8 @@ fn other_content_with_intercept_on_stays_buffered_and_editable() {
     };
     let mut c = client(&shared, port, "/page");
     let mut all = String::new();
+    // The proxy keeps the connection open for the next request; half-close ends it.
+    c.get_ref().shutdown(std::net::Shutdown::Write).unwrap();
     c.read_to_string(&mut all).unwrap();
     editor.join().unwrap();
     assert!(done.recv_timeout(Duration::from_secs(30)).unwrap());

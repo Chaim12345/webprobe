@@ -416,6 +416,8 @@ fn proxy_decodes_chunked_gzip_response_for_history() {
         )
         .unwrap();
     let mut wire = Vec::new();
+    // The proxy keeps the connection open for the next request; half-close ends it.
+    client.shutdown(std::net::Shutdown::Write).unwrap();
     client.read_to_end(&mut wire).unwrap();
     t.join().unwrap();
     pt.join().unwrap();
@@ -1145,6 +1147,8 @@ fn extra_listener_serves_traffic() {
     )
     .unwrap();
     let mut resp = Vec::new();
+    // The proxy keeps the connection open for the next request; half-close ends it.
+    client.shutdown(std::net::Shutdown::Write).unwrap();
     client.read_to_end(&mut resp).unwrap();
     assert!(
         String::from_utf8_lossy(&resp).starts_with("HTTP/1.1 200"),
@@ -1857,6 +1861,8 @@ fn absolute_form_forwarded_as_origin_form() {
     )
     .unwrap();
     let mut resp = Vec::new();
+    // The proxy keeps the connection open for the next request; half-close ends it.
+    client.shutdown(std::net::Shutdown::Write).unwrap();
     client.read_to_end(&mut resp).unwrap();
     assert!(String::from_utf8_lossy(&resp).starts_with("HTTP/1.1 200"));
     let upstream_req = ot.join().unwrap();
@@ -1939,7 +1945,7 @@ fn pipelined_requests_are_separate_exchanges() {
             seen_t.lock().unwrap().push(req);
             s.write_all(
                 format!(
-                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",
                     body.len(),
                     String::from_utf8_lossy(body)
                 )
@@ -2022,7 +2028,7 @@ fn pipelined_post_body_does_not_swallow_next_request() {
             s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
             let req = read_request(&mut s).unwrap();
             seen_t.lock().unwrap().push(req);
-            s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+            s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
                 .unwrap();
         }
     });
@@ -2137,14 +2143,14 @@ fn pipelined_request_arriving_in_a_later_packet_is_served() {
         let req = read_request(&mut s).unwrap();
         assert!(req.starts_with(b"GET /first HTTP/1.1\r\n"));
         std::thread::sleep(Duration::from_millis(300));
-        s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 3\r\nConnection: close\r\n\r\none")
+        s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\none")
             .unwrap();
         // Second exchange on a fresh connection (keep-alive is off).
         let (mut s, _) = upstream.accept().unwrap();
         s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
         let req = read_request(&mut s).unwrap();
         assert!(req.starts_with(b"GET /second HTTP/1.1\r\n"));
-        s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 3\r\nConnection: close\r\n\r\ntwo")
+        s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\ntwo")
             .unwrap();
     });
 

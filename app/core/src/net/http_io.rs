@@ -34,6 +34,41 @@ pub fn read_request_pending<R: Read>(
     stream: &mut R,
     pending: &mut Vec<u8>,
 ) -> std::io::Result<Vec<u8>> {
+    Ok(match read_request_outcome(stream, pending, false)? {
+        ReadOutcome::Message(m)
+        | ReadOutcome::Incomplete(m)
+        | ReadOutcome::Malformed(m)
+        | ReadOutcome::Ambiguous(_, m) => m,
+        ReadOutcome::Eof => Vec::new(),
+    })
+}
+
+/// What [`read_request_outcome`] found.
+#[derive(Debug, PartialEq, Eq)]
+pub enum ReadOutcome {
+    /// One complete framed request.
+    Message(Vec<u8>),
+    /// The client closed with nothing buffered.
+    Eof,
+    /// The client closed inside a message: the bytes received so far.
+    Incomplete(Vec<u8>),
+    /// The chunked body is malformed: the bytes received so far.
+    Malformed(Vec<u8>),
+    /// The head is ambiguously framed (guarded reads only): everything
+    /// received so far, untouched, and why. Never forwarded.
+    Ambiguous(crate::strict_request::RequestFramingError, Vec<u8>),
+}
+
+/// [`read_request_pending`] with a typed outcome. Only `Message` is a
+/// request to forward; the others carry the captured bytes for history.
+/// With `guard`, a head that `strict_request::inbound_ambiguity` refuses is
+/// returned as `Ambiguous` as soon as it is complete, before any body is
+/// waited for or framed.
+pub fn read_request_outcome<R: Read>(
+    stream: &mut R,
+    pending: &mut Vec<u8>,
+    guard: bool,
+) -> std::io::Result<ReadOutcome> {
     let mut buf: Vec<u8> = std::mem::take(pending);
     let mut chunk = [0u8; 8192];
     let head_len;
@@ -63,10 +98,20 @@ pub fn read_request_pending<R: Read>(
     }
     let head_len = match head_len {
         Some(h) => h,
-        // EOF before a complete head: everything read is the (partial)
-        // request, as before.
-        None => return Ok(buf),
+        // EOF before a complete head.
+        None => {
+            return Ok(if buf.is_empty() {
+                ReadOutcome::Eof
+            } else {
+                ReadOutcome::Incomplete(buf)
+            })
+        }
     };
+    if guard {
+        if let Some(why) = crate::strict_request::inbound_ambiguity(&buf[..head_len]) {
+            return Ok(ReadOutcome::Ambiguous(why, buf));
+        }
+    }
     let too_large =
         || std::io::Error::new(std::io::ErrorKind::InvalidData, "request body too large");
     // Transfer-Encoding wins over Content-Length (RFC 9112 §6.3). A chunked
@@ -86,19 +131,14 @@ pub fn read_request_pending<R: Read>(
                     break;
                 }
                 // Undelimitable framing: forward everything read, as before.
-                crate::codec::Chunked::Malformed => {
-                    req_end = buf.len();
-                    break;
-                }
+                crate::codec::Chunked::Malformed => return Ok(ReadOutcome::Malformed(buf)),
                 crate::codec::Chunked::Partial => {
                     if buf.len() - head_len > crate::codec::MAX_BODY {
                         return Err(too_large());
                     }
                     let n = stream.read(&mut chunk)?;
                     if n == 0 {
-                        // EOF mid-body: forward what arrived, as before.
-                        req_end = buf.len();
-                        break;
+                        return Ok(ReadOutcome::Incomplete(buf));
                     }
                     buf.extend_from_slice(&chunk[..n]);
                 }
@@ -111,18 +151,17 @@ pub fn read_request_pending<R: Read>(
         while buf.len() < head_len + len {
             let n = stream.read(&mut chunk)?;
             if n == 0 {
-                break;
+                return Ok(ReadOutcome::Incomplete(buf));
             }
             buf.extend_from_slice(&chunk[..n]);
         }
-        // A short EOF body forwards what arrived, as before.
-        req_end = (head_len + len).min(buf.len());
+        req_end = head_len + len;
     } else {
         req_end = head_len;
     }
     let rest = buf.split_off(req_end);
     *pending = rest;
-    Ok(buf)
+    Ok(ReadOutcome::Message(buf))
 }
 
 pub fn read_response_head<R: Read>(stream: &mut R) -> std::io::Result<Vec<u8>> {

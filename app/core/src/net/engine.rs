@@ -327,6 +327,75 @@ pub fn upstream_target(shared: &Shared, host: &str, port: u16) -> (String, u16) 
         .unwrap_or_else(|| (host.to_string(), port))
 }
 
+/// The narrow inbound guard at the forwarding boundary. A request whose
+/// framing is ambiguous (see `strict_request::inbound_ambiguity`) gets
+/// 400 and the connection closes before any upstream bytes are sent. The
+/// bytes received go to history verbatim with the reason as the note.
+fn refuse_ambiguous<W: Write>(
+    shared: &Shared,
+    client: &mut W,
+    captured: &[u8],
+    why: crate::strict_request::RequestFramingError,
+    default_port: u16,
+    https: bool,
+) {
+    let body = "WebProbe: ambiguous request framing.";
+    let resp = format!(
+        "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    )
+    .into_bytes();
+    let _ = client.write_all(&resp);
+    let _ = client.flush();
+    let ann = webprobe_support::ext::Annotations::default();
+    super::hist::record_entry_verbatim(
+        shared,
+        captured,
+        Some(crate::body::Body::from(resp)),
+        Some(format!("Rejected before forwarding: {why:?}")),
+        default_port,
+        https,
+        listener_port(shared),
+        false,
+        &ann,
+        false,
+    );
+    shared.log(&format!("Refused ambiguous request framing: {why:?}"));
+}
+
+/// An incomplete or malformed request is captured for history exactly as
+/// received, with the reason, and never forwarded.
+fn capture_unforwardable(shared: &Shared, bytes: &[u8], default_port: u16, https: bool, why: &str) {
+    if bytes.is_empty() {
+        return;
+    }
+    let ann = webprobe_support::ext::Annotations::default();
+    super::hist::record_entry_verbatim(
+        shared,
+        bytes,
+        None,
+        Some(why.to_string()),
+        default_port,
+        https,
+        listener_port(shared),
+        false,
+        &ann,
+        false,
+    );
+    shared.log(&format!("Not forwarded: {why}"));
+}
+
+const INCOMPLETE: &str = "Incomplete request: the client closed before the message ended";
+const MALFORMED: &str = "Malformed chunked request body";
+
+/// Drop leftovers that are only CR, LF or space (a harmless trailing CRLF
+/// after a body); they are not a request.
+fn discard_blank(pending: &mut Vec<u8>) {
+    if !pending.is_empty() && pending.iter().all(|b| matches!(b, b'\r' | b'\n' | b' ')) {
+        pending.clear();
+    }
+}
+
 pub fn handle_conn(shared: Arc<Shared>, mut stream: TcpStream) {
     LISTENER_PORT.with(|p| p.set(stream.local_addr().ok().map(|a| a.port())));
     let _ = stream.set_write_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)));
@@ -335,9 +404,22 @@ pub fn handle_conn(shared: Arc<Shared>, mut stream: TcpStream) {
     // are carried into the next read, not dropped or forwarded unmanaged.
     let mut pending: Vec<u8> = Vec::new();
     loop {
-        let req = match read_request_pending(&mut stream, &mut pending) {
-            Ok(r) if !r.is_empty() => r,
-            _ => return,
+        discard_blank(&mut pending);
+        let req = match read_request_outcome(&mut stream, &mut pending, true) {
+            Ok(ReadOutcome::Message(r)) => r,
+            Ok(ReadOutcome::Ambiguous(why, b)) => {
+                refuse_ambiguous(&shared, &mut stream, &b, why, 80, false);
+                return;
+            }
+            Ok(ReadOutcome::Incomplete(b)) => {
+                capture_unforwardable(&shared, &b, 80, false, INCOMPLETE);
+                return;
+            }
+            Ok(ReadOutcome::Malformed(b)) => {
+                capture_unforwardable(&shared, &b, 80, false, MALFORMED);
+                return;
+            }
+            Ok(ReadOutcome::Eof) | Err(_) => return,
         };
         let parts = util::parse_http(&req);
 
@@ -371,11 +453,9 @@ pub fn handle_conn(shared: Arc<Shared>, mut stream: TcpStream) {
             while stream.read(&mut sink).map(|n| n > 0).unwrap_or(false) {}
             return;
         }
-        // Non-pipelined traffic keeps its one-exchange lifecycle: the loop
-        // continues only while the client has more requests buffered.
-        if pending.is_empty() && !client_sent_more(&stream) {
-            return;
-        }
+        // Persistent connection: the response was complete and self-delimited
+        // and both sides allow reuse, so the next request is read (bounded by
+        // the idle read timeout), however the client segmented them.
     }
 }
 
@@ -394,32 +474,6 @@ fn drain_tls_plaintext<S: Read + Write>(
             Ok(n) => pending.extend_from_slice(&chunk[..n]),
             Err(_) => break,
         }
-    }
-}
-
-/// Pipelined bytes that arrived in a later packet than the first request: a
-/// non-blocking peek, so a single-request connection closes exactly as before.
-fn client_sent_more(stream: &TcpStream) -> bool {
-    let Some(_guard) = BlockingGuard::new(stream) else {
-        return false;
-    };
-    let mut b = [0u8; 1];
-    matches!(stream.peek(&mut b), Ok(n) if n > 0)
-}
-
-/// Puts the socket in non-blocking mode for a peek and restores blocking mode
-/// on drop, on every exit path including panics.
-struct BlockingGuard<'a>(&'a TcpStream);
-
-impl<'a> BlockingGuard<'a> {
-    fn new(stream: &'a TcpStream) -> Option<Self> {
-        stream.set_nonblocking(true).ok().map(|_| Self(stream))
-    }
-}
-
-impl Drop for BlockingGuard<'_> {
-    fn drop(&mut self) {
-        let _ = self.0.set_nonblocking(false);
     }
 }
 
@@ -556,17 +610,37 @@ fn serve_mitm_conn<S: ProxyIo>(
     // fills the last read exactly, and without the drain the next request
     // would sit inside rustls while the connection closes.
     let mut pending: Vec<u8> = Vec::new();
+    let mut first_request = true;
     loop {
-        let req = match read_request_pending(&mut tls, &mut pending) {
-            Ok(req) if !req.is_empty() => req,
-            Ok(_) => return,
+        discard_blank(&mut pending);
+        let req = match read_request_outcome(&mut tls, &mut pending, true) {
+            Ok(ReadOutcome::Message(req)) => req,
+            Ok(ReadOutcome::Eof) => return,
+            Ok(ReadOutcome::Ambiguous(why, b)) => {
+                refuse_ambiguous(&shared, &mut tls, &b, why, 443, true);
+                tls.conn.send_close_notify();
+                let _ = tls.flush();
+                return;
+            }
+            Ok(ReadOutcome::Incomplete(b)) => {
+                capture_unforwardable(&shared, &b, 443, true, INCOMPLETE);
+                return;
+            }
+            Ok(ReadOutcome::Malformed(b)) => {
+                capture_unforwardable(&shared, &b, 443, true, MALFORMED);
+                return;
+            }
             Err(e) => {
-                shared.log(&format!(
-                    "HTTPS client handshake/request for {host}:{port} failed: {e}"
-                ));
+                // An idle persistent connection timing out is not a failure.
+                if first_request {
+                    shared.log(&format!(
+                        "HTTPS client handshake/request for {host}:{port} failed: {e}"
+                    ));
+                }
                 return;
             }
         };
+        first_request = false;
         drain_tls_plaintext(&mut tls, &mut pending);
         let (req, req_state) = intercept_request(&shared, req, 443);
         let Some(req) = req else { return };
@@ -585,10 +659,6 @@ fn serve_mitm_conn<S: ProxyIo>(
         }
         // An extension drop page ends the connection (Connection: close).
         if upstream_and_deliver(&shared, &mut tls, req, 443, true, req_state) {
-            break;
-        }
-        // Non-pipelined traffic keeps its one-exchange lifecycle.
-        if pending.is_empty() {
             break;
         }
     }
@@ -660,6 +730,8 @@ pub struct Streamed {
     message: crate::body::Body,
     note: String,
     stored: bool,
+    /// The whole response reached the client intact.
+    clean: bool,
 }
 
 impl<'a, W: Write> ProxySink<'a, W> {
@@ -706,6 +778,7 @@ impl<'a, W: Write> ProxySink<'a, W> {
             message,
             note,
             stored,
+            clean: self.complete && !self.client_gone,
         })
     }
 }
@@ -794,6 +867,36 @@ pub fn report_stream_skips(shared: &Shared, host: &str, url: &str, head: &[u8], 
     }
 }
 
+/// Whether the client's request leaves the connection open (RFC 9112 §9.3).
+fn request_keeps_alive(req: &[u8]) -> bool {
+    let parts = util::parse_http(req);
+    let conn = util::get_header(&parts.headers, "Connection")
+        .map(|v| v.to_ascii_lowercase())
+        .unwrap_or_default();
+    if parts.first.trim_end().ends_with("HTTP/1.0") {
+        conn.contains("keep-alive")
+    } else {
+        !conn.contains("close")
+    }
+}
+
+/// A streamed response's head allows more requests after it: HTTP/1.1,
+/// self-delimited (not read-until-close), no `Connection: close`.
+fn stream_head_reusable(head: &[u8], method: &str) -> bool {
+    let parts = util::parse_http(head);
+    if !parts.first.starts_with("HTTP/1.1") {
+        return false;
+    }
+    let close = util::get_header(&parts.headers, "Connection")
+        .map(|v| v.to_ascii_lowercase().contains("close"))
+        .unwrap_or(false);
+    !close
+        && !matches!(
+            crate::codec::response_body_kind(head, method),
+            crate::codec::BodyKind::UntilEof
+        )
+}
+
 pub fn upstream_and_deliver<S: ProxyIo>(
     shared: &Shared,
     stream: &mut S,
@@ -803,6 +906,7 @@ pub fn upstream_and_deliver<S: ProxyIo>(
     req_state: ReqState,
 ) -> bool {
     let was_edited = req_state.edited;
+    let client_keeps = request_keeps_alive(&req);
     let parts = util::parse_http(&req);
     let (host, port) = host_of(&parts, default_port);
 
@@ -814,7 +918,7 @@ pub fn upstream_and_deliver<S: ProxyIo>(
             let _ = stream.write_all(&resp);
             let _ = stream.flush();
             shared.log(&format!("Served {} for the browser", path_of(&parts)));
-            return false;
+            return true;
         }
     }
     // Burp answers `http://burpsuite` itself: the browser must already be
@@ -840,7 +944,7 @@ pub fn upstream_and_deliver<S: ProxyIo>(
         shared.log(&format!(
             "Served the local setup page for {host} -> {status}"
         ));
-        return false;
+        return true;
     }
     // Session rules run before match-and-replace, matching Burp's handling chain.
     let req_session = apply_session_rules(shared, &req, default_port);
@@ -886,6 +990,8 @@ pub fn upstream_and_deliver<S: ProxyIo>(
         send_raw_with(shared, &up_host, up_port, &req_out, Some(&mut sink))
     };
     if let Some(done) = sink.finish() {
+        let reusable =
+            client_keeps && done.clean && stream_head_reusable(&done.head, &parts.method);
         report_stream_skips(shared, &host, &url, &done.head, req_state);
         let status = util::parse_http(&done.head)
             .first
@@ -910,7 +1016,7 @@ pub fn upstream_and_deliver<S: ProxyIo>(
             parts.method,
             path_of(&parts)
         ));
-        return false;
+        return !reusable;
     }
     match up.resp {
         Some(resp) => {
@@ -924,12 +1030,12 @@ pub fn upstream_and_deliver<S: ProxyIo>(
                 &mut ann,
             ) {
                 shared.log("Response dropped by an extension hook");
-                return false;
+                return true;
             }
             let Some(resp) =
                 intercept_response(shared, resp, &host, port, use_tls, &url, req_state)
             else {
-                return false;
+                return true;
             };
             let status = util::parse_http(&resp)
                 .first
@@ -937,8 +1043,11 @@ pub fn upstream_and_deliver<S: ProxyIo>(
                 .nth(1)
                 .unwrap_or("")
                 .to_string();
-            let _ = stream.write_all(&resp);
-            let _ = stream.flush();
+            let wrote = stream.write_all(&resp).is_ok() && stream.flush().is_ok();
+            let reusable = wrote
+                && client_keeps
+                && stream_head_reusable(&resp, &parts.method)
+                && super::conn_reuse::response_allows_reuse(&resp);
             record(
                 shared,
                 &req_out,
@@ -961,6 +1070,7 @@ pub fn upstream_and_deliver<S: ProxyIo>(
                     ""
                 }
             ));
+            return !reusable;
         }
         None => {
             let err = up.error.clone().unwrap_or_default();
@@ -981,5 +1091,5 @@ pub fn upstream_and_deliver<S: ProxyIo>(
             shared.log(&format!("Proxy error for {host}:{port}: {err}"));
         }
     }
-    false
+    true
 }
