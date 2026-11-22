@@ -577,7 +577,14 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
                 }
                 ui.add_space(16.0);
                 // Burp's settings menu: save, load and restore defaults.
-                ui.menu_button("Manage settings", |ui| manage_menu(app, ui));
+                // Editing the path is not a menu selection. The default
+                // close-on-any-click behavior dismisses the menu on focus.
+                egui::containers::menu::MenuButton::new("Manage settings")
+                    .config(
+                        egui::containers::menu::MenuConfig::new()
+                            .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside),
+                    )
+                    .ui(ui, |ui| manage_menu(app, ui));
             });
             ui.separator();
             let pages = visible_pages(&query, pill);
