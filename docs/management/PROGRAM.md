@@ -1,44 +1,43 @@
 # WebProbe program board
 
-Snapshot: 2026-11-22 14:25 Asia/Jerusalem. Program owner: Program Manager. [Canonical release checklist](RELEASE-CHECKLIST.md). [Review and decision ledger](REVIEW-LEDGER.md). [Role charters](ROLES.md). [HR staffing register, PR #137](https://github.com/Chaim12345/webprobe/pull/137), proposed file `docs/management/STAFFING.md`.
+Snapshot: 2026-11-22 14:46 Asia/Jerusalem. Program owner: Program Manager. [Canonical release checklist](RELEASE-CHECKLIST.md). [Review and decision ledger](REVIEW-LEDGER.md). [Role charters](ROLES.md). [HR staffing register, PR #137](https://github.com/Chaim12345/webprobe/pull/137), proposed file `docs/management/STAFFING.md`.
 
 This is the index for sequencing, not permission to merge or change product behavior. Only the triage lane lands parity changes. Existing PR branches and master stay untouched. Refresh this board when a source head, landing, decision or verification result changes.
 
 ## Current position
 
-- Live parity `cd1e5f1a22f064e0eb3ec865b7089136cb0da809`; repaired Decoder #150 is now landed. Its GZIP/base64 UTF-8 UI remains a documented departure from raw-byte parity.
-- Canonical #125 is `3ebbd6ba195d00c5d403215b00a981bb30941b97`. Re-pin final acceptance on that current tree; prior da15eb9 counts are historical. Request-reader #155 remains after canonical #125, not a competing #148 landing.
-- **113 open PRs**, full live refresh at 14:22. Self-row #131 has no recursive stale SHA; its PR link supplies current head.
-- Browser-crawl #156 `6cc9be9`, h1 replay #153 `010de0e`, h2 reuse #145 `5588537`, 101 stream-head #157 `3601cd3` and Hash replacement #158 `c014c96` are reviewer **APPROVED by code read** at those exact heads. Reviewer checked clean merges against parity cd1e5f1. **Executed final-tree gates remain unchecked.**
-- CTO separately reports #145 TLS-policy source items closed. CTO's design approval is conditional on sequential exclusive h2 reuse, not concurrent multiplexing. Reviewer's code-read approval is plain and separate; its Arc-address fallback identity and per-request client-auth-build notes remain.
-- PR #155 `90173f7` remains **CHANGES NEEDED** for unsafe reuse and mixed-terminator guard/reader disagreement. Its trailing-CRLF fix does not clear these blockers. It follows canonical #125, not a competing #148 landing.
-- Canonical crawler checklist keeps missing response metadata as incomplete evidence, never an automatic resend. Origin-counter and full exact-tree acceptance remain unchecked. Hash #158 avoids defective #124 Decoder ancestry; do not split overlapping #124 h2 work while #145 is active.
-- Historical milestones are in [milestones.csv](milestones.csv); live acceptance is governed by the release checklist and exact-head ledger.
+- Live parity `2ea9447f461f01d7288e46b73f15e4978bba790b`; **108 open PRs**, full paginated refresh and exact ancestry recomputed. The prior board PR #131 landed at this parity. This is its management-only successor snapshot, not a change to that merged branch.
+- Since the previous snapshot, #157, #156, #153, #158, #136 and #131 landed. Triage reports exact tested/remote tree equality and required gates for each. Latest landing #131 has triage-reported 1009 combined passes /13 ignored. This is not final #125 acceptance or PM test execution.
+- Canonical #125 is `c39439946b31f2358e9770df12c94feabb596079`. It includes the earlier #140/#154 refresh, but needs the CTO's Intruder baseline-policy correction and newer parity reconciliation. Automatic baseline only for GET/HEAD; skip effectful/unknown methods visibly, leaving baseline comparison unavailable. Attack rows stay unchanged. Planned preflight and error retry are distinct, but neither justifies an implicit extra POST effect.
+- H2 #145 is `a88dfe91feb7410d5ea8983da06823a9c5b9483e`, reviewer code-read APPROVED. The resolved h1 tail preserves landed #153 no-replay behavior; h2 typed retry uses the same policy snapshot. Exact-head QA is underway, not complete. CTO conditional design approval remains sequential exclusive reuse, not concurrent multiplexing; reviewer Arc-address identity and per-request client-auth-build notes remain.
+- Request-reader #155 is `73ff441abd8c1dc2af6bfb0e4c093d11846eefcd`. CTO R1 source issue is closed and its design acceptance is conditional; reviewer approves the new own commit, not the full carried #125 stack. Current remote head conflicts with newer parity. Local resolved ae88b49 is unpushed, unreviewed, and has a baseline-related replay fixture failure. Fix #125 baseline policy first, then publish/review/QA the resolved combination. No ordinary-listener macro exploit reachability claim.
+- Approved independent code-read queue: #70 `092d890`, #68 `1a30bf8`, #64 `8078183` (library-only), and #159 `49769d4` tests replacement. Triage is testing these. #64 needs nesting-limit hardening before loading/UI exposure. Old #67 and #139 stay open until complete replacement proof, not merely a matching title or cherry-pick.
+- Old-stack repairs #83/#69/#71/#84/#86 have fix-commit approvals only. Read-only feature-slice audits must identify unique missing contributions; no merge from fix-only review and no title-only closure. Lane A reports 31 audited, zero closure-ready. These audit findings are not executed tests.
+- Historical milestones remain in [milestones.csv](milestones.csv). The checklist distinguishes scoped landed execution from still-unchecked final integrated acceptance.
 
 ## Landing sequence and stop/start calls
 
-1. **One parity writer: triage.** Finish the already reviewed, independently tested queue. #129/#105 has landed. Triage reports 832 passing tests on the exact merged resolution tree with both header-scan test modules preserved. The #149 replacement is landed and #126 closed. PR #141/#152 is landed. Repaired #150 is landed; advance reviewed docs and accepted replacement heads under their own gates while current safety changes are reviewed.
-2. **Integration owns #125.** Latest #123 and HPACK fix are included and defective Decoder ops are removed. Preserve the source manifest, refresh from newer parity, preserve the cleared yaml lock, preserve already-landed #154 adaptations, and use canonical-first #155 reconciliation rather than racing #148. Incorporate the new hash/h2 and crawl-ID heads when ready. Maintain an exact source-head manifest. No parallel landing of the same changes through individual source PRs.
-3. **Independent reviewer owns acceptance.** Review the final SHA, not a moving branch. Require clean check/fmt/clippy/full required-Java tests and current CI, applying only the owner's explicit Kilo waiver. Test count deltas alone are not coverage proof.
-4. **Cross-tool QA owns the release candidate.** Run project create/save/reopen, Logger to tools, Repeater extension hooks, extension Drop plus pipelining, constant-token Sequencer, Intruder baseline, Decoder bytes/Gzip, and Organizer persistence on one integrated build. #128 is separate-head evidence, not an integrated pass.
-5. **Only then clean up source PRs.** Triage may close exact-proof superseded PRs with approved wording. Commit ancestry alone does not choose between sequential landing and closing a historical milestone. The #103 MIME decision is settled; #97 closure still needs exact-proof checks.
-6. **Start only non-overlapping new work.** Hash-list/h2 and crawl selection-key work continue in their existing lanes. Stop duplicate R-16/R-18/R-20 implementations; those have reviewed source work already. ARTEX isolated kernel/mock work is approved on a new private artex-rs branch after CTO contract corrections. No WebProbe linking or combined distribution before a reasoned license position is recorded. No new broad refactor during the integration freeze.
+1. **Triage alone writes parity.** Advance the independently reviewed #70/#68/#64/#159 queue only after exact combined gates; preserve #64's unwired boundary. No edits to source authors' existing branches.
+2. **QA owns #145 acceptance.** Pin a88dfe9, execute full required-Java and named replay/policy fixtures, then let triage verify the final merged tree. Do not restore h1 error replay.
+3. **Integration corrects #125 baseline policy.** GET/HEAD-only automatic baseline; skipped effectful/unknown baselines are visible and comparison fields unavailable. Prove one requested POST effect after response loss, effectful attack-row-only sends, GET baseline, Stop/channel delivery and pool-permit behavior.
+4. **Request-reader lane follows that corrected canonical stack.** Reconcile parity Result handling in ws.rs, test-module keep-both and engine close-return polarity. Publish a final resolved SHA for independent whole-stack review and QA. Reject bare-LF/mixed heads on guarded ingress while preserving raw testing traffic and LF body bytes; h2-upstream downstream-close fallback remains conservative.
+5. **Only after actual #125+#155 landing**, verify pipeline/drop-close/nonblocking-drain preservation and then propose #148 supersession/#110 integration closure. #67/#139 need full cherry-pick replacement proof after the replacement lands. No blanket closure based on an audit summary.
+6. **Read-only audits precede fresh old-stack slices.** Preserve source branches. Triage owns preparation/landing; reviewer accepts the whole proposed stack, not only a repair commit. Stop duplicate feature implementations and broad refactors during integration.
+7. **Release QA remains separate.** One pinned combined build must pass project save/reopen, history-to-tools, Repeater extensions/Drop/pipelining, Intruder baseline and replay, Sequencer, Decoder and Organizer workflows with evidence. Prior separate-head counts do not tick this gate.
 
 ## Lane ownership
 
-| Lane | Accountable role | State / next checkpoint | Blocker or conflict boundary |
+| Lane | Accountable role | Current next checkpoint | Boundary |
 | --- | --- | --- | --- |
-| Parity landing and PR cleanup | PR triage | Active; #141/#152 and #151/#154 landed; #140/#150/docs and #153 rebase next | Sole parity writer; no source-branch edits |
-| Review stack #125 | Integration | Active at 3ebbd6b; final exact-tree gates; #155 follows canonical stack | Conflicts with independent source landing if both proceed unchecked |
-| Independent review | Reviewer | Review exact final heads and combination fixes | Earlier approvals do not cover later diffs |
-| Hash-list and h2 multiplexing | Existing hash/h2 lane | Active per owner request; publish exact head + tests | Coordinate h2 boundaries with #124; no duplicate Decoder work |
-| Crawl counter and selection keys | Existing UI QA B lane | Active follow-up; use `(kind,id)` identity before separate counters | Shared history/crawl selection is load-bearing; #108 project-isolation work is separate |
-| Integrated workflow QA | QA / release | Started; accept only a pinned integrated candidate | Must not reuse separate-head #128 results as final acceptance |
-| ARTEX kernel / license | CTO to assign | Isolated kernel/mock authorized after CTO contract corrections | License choice gates WebProbe linkage; one manifest owner per wave |
-| Priorities / owner choices | CEO + owner | Decide only unresolved product/license questions | No implied approval from a PR description |
-| Board and dependencies | Program Manager | Maintain these registers and short change digests | Route cross-lane changes through agreed leads |
-
-These are responsibility assignments, not a claim that every proposed lane has started.
+| Parity landing / cleanup | Triage | Execute approved independent queue; land exact accepted trees | Sole parity writer; no title-only closure |
+| Canonical #125 | Integration | Implement baseline ruling, reconcile latest parity, publish pinned review tree | No hidden effectful baseline; preserve landed safety fixes |
+| #155 request boundary | Request-reader lane + CTO/reviewer/QA | Follow corrected #125; publish resolved whole-stack head | No approval transfer from local ae88b49 or own-commit review |
+| #145 h2 | Existing h2 lane + QA | Execute a88dfe9 acceptance matrix | Sequential exclusive reuse; preserve h1 no-replay |
+| Independent queue | Existing authors + reviewer/triage | #70/#68/#64/#159 combined gates | #64 library-only until nesting hardening |
+| Old-stack feature audits | Read-only audit lanes | Unique retained/missing feature slices | No pushes/comments/closure in audit lane |
+| Integrated workflow QA | QA / release | Pinned final integrated candidate | No separate-head acceptance transfer |
+| ARTEX | CTO / isolated builder; CEO license scope | Last recorded isolated kernel/mock scope, recheck before effects | D-CEO-05 private/local/separate-process only |
+| Program board | Program Manager | Publish management-only successor; gated refresh | Timestamped evidence, no source mutations |
 
 ## Decision register
 
@@ -62,7 +61,7 @@ Decision provenance: owner's authenticated WhatsApp messages were checked for AC
 | Program milestone | Exit evidence | Current state |
 | --- | --- | --- |
 | P0: recover and stabilize foundation | Exact merged tree and full required-Java suite per landing | #96 now landed too; #138 and remaining lane gates continue |
-| P1: one reviewable integrated candidate | #125 manifest matches latest intended source heads; clean combined checks + independent review | 3ebbd6b current; final exact-tree/reviewer acceptance remains |
+| P1: one reviewable integrated candidate | #125 manifest matches latest intended source heads; clean combined checks + independent review | c394399 current; baseline-policy correction and newer parity reconciliation required |
 | P2: integrated workflow acceptance | One pinned build passes cross-tool regression with screenshots and traceable fixtures | Not established by separate-head reports |
 | P3: reconcile old roadmap | Each of 21 recorded todo tasks mapped to integrated code, residual gap or owner hold | PR board ready; avoid reopening already implemented milestones |
 | P4: close measured parity gaps | #128 priorities translated into owned byte-safe Decoder, h2, Sequencer, variation-analysis and workflow fixtures | Hash/h2 lane active; do not claim Burp Pro parity |
@@ -108,3 +107,5 @@ Primary evidence links: [#125](https://github.com/Chaim12345/webprobe/pull/125),
 - 14:18: follow-up to reviewer-approved #131 5dc587c records the four requested accuracy corrections; see ledger and checklist. Own board-row SHA is intentionally blank because committing a claimed self-SHA would make it stale again; its PR link is the current-head source.
 
 - 14:22: requested follow-up adds canonical crawler wording and tracks #156 6cc9be9, #157 3601cd3, #158 c014c96. Live heads #153 010de0e, #145 5588537, #125 3ebbd6b and parity cd1e5f1 recorded. CTO TLS-policy items closed by source inspection; new-head independent and executed gates remain separate.
+
+- 14:46: successor snapshot after #131 landing; 108 open PRs, parity 2ea9447. Six recent landings recorded, #145 a88dfe9 QA pending, #125 c394399 baseline-policy correction and #155 73ff441 resolved-stack re-review required. Fix-only approvals do not certify carried old stacks.
