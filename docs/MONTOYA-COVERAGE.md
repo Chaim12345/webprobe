@@ -74,3 +74,17 @@ to both a client and the default payload generator. A second purpose-built
 extension checks the default and bare forms, their ids, and independent metadata
 with deterministic host-provided payloads. It fails before the fix and passes
 after it on JDK 25 with Montoya 2026.7. No live Collaborator server is needed.
+
+CI now sets up Temurin 21, downloads the pinned Montoya 2026.7 jar with a SHA-256
+check, and runs both new regressions with `WEBPROBE_REQUIRE_JAVA=1`. When that
+variable is set, a missing JDK or API jar fails these tests instead of silently
+skipping. For a local required run, set `WEBPROBE_JAVA` and `WEBPROBE_BURP_JAR`
+to the JDK's `bin/java` and API jar paths, then run:
+
+```
+WEBPROBE_REQUIRE_JAVA=1 cargo test -p webprobe-core --locked ext_host::tests::montoya_ -- --test-threads=1
+```
+
+The API jar is downloaded only into the runner's temporary directory, not
+vendored or shipped in WebProbe. The older checked-in demo extension jar needs
+Java 25; the two new regressions compile from source and work on Java 21.

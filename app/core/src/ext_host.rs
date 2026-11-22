@@ -1421,7 +1421,11 @@ mod tests {
     #[test]
     fn montoya_response_keyword_analysis() {
         let Some(dir) = stage_extension("KeywordAnalysisExtension") else {
-            eprintln!("skipping: no JDK or Montoya API jar");
+            assert!(
+                std::env::var_os("WEBPROBE_REQUIRE_JAVA").is_none(),
+                "required Montoya regression cannot run: no JDK or Montoya API jar"
+            );
+            eprintln!("skipping: no JDK or Montoya API jar (set WEBPROBE_REQUIRE_JAVA=1 to fail)");
             return;
         };
         let sc = JavaSidecar::spawn(dir.to_str().unwrap()).expect("keyword extension loads");
@@ -1439,7 +1443,11 @@ mod tests {
     #[test]
     fn montoya_payload_without_server_location() {
         let Some(dir) = stage_extension("PayloadOptionsExtension") else {
-            eprintln!("skipping: no JDK or Montoya API jar");
+            assert!(
+                std::env::var_os("WEBPROBE_REQUIRE_JAVA").is_none(),
+                "required Montoya regression cannot run: no JDK or Montoya API jar"
+            );
+            eprintln!("skipping: no JDK or Montoya API jar (set WEBPROBE_REQUIRE_JAVA=1 to fail)");
             return;
         };
         let counter = AtomicU64::new(0);
