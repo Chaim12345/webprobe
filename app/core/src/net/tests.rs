@@ -402,6 +402,72 @@ Host: x
     }
 }
 
+/// Valid bodyless responses keep the connection reusable; an interim 100
+/// is skipped and only the final response decides.
+#[test]
+fn head_204_304_and_interim_100_keep_the_connection_reusable() {
+    let shared = Shared::new();
+    shared.keep_alive.store(true, Ordering::SeqCst);
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let t = std::thread::spawn(move || {
+        let (mut s, _) = listener.accept().unwrap();
+        s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        let replies: [&[u8]; 4] = [
+            b"HTTP/1.1 200 OK
+Content-Length: 5
+
+", // HEAD: no body follows
+            b"HTTP/1.1 204 No Content
+
+",
+            b"HTTP/1.1 304 Not Modified
+
+",
+            b"HTTP/1.1 100 Continue
+
+HTTP/1.1 200 OK
+Content-Length: 2
+
+ok",
+        ];
+        for reply in replies {
+            let _ = read_request_head(&mut s);
+            s.write_all(reply).unwrap();
+        }
+    });
+    let reqs: [&[u8]; 4] = [
+        b"HEAD /h HTTP/1.1
+Host: x
+
+",
+        b"GET /n HTTP/1.1
+Host: x
+
+",
+        b"GET /m HTTP/1.1
+Host: x
+
+",
+        b"GET /c HTTP/1.1
+Host: x
+
+",
+    ];
+    let mut last = None;
+    for req in reqs {
+        let r = send_raw(&shared, "127.0.0.1", port, req);
+        last = Some(
+            r.resp
+                .unwrap_or_else(|| panic!("request failed: {:?}", r.error)),
+        );
+    }
+    t.join().unwrap();
+    assert!(last.unwrap().ends_with(b"ok"));
+    // One connection carried all four exchanges.
+    assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 1);
+}
+
 /// Regression guard (fails on the old head-only heuristic): a 101
 /// Switching Protocols reply upgrades the socket; it must never be pooled,
 /// or a later Repeater send would talk HTTP/1.1 into an upgraded socket.
