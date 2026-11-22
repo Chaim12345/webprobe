@@ -144,11 +144,25 @@ pub fn extract_value(response: &[u8], name: &str) -> Option<String> {
         let mut field_name = None;
         let mut field_value = None;
         for attr in attrs.captures_iter(input.as_str()) {
-            let value = attr.get(2).or_else(|| attr.get(3)).or_else(|| attr.get(4));
+            let value = attr
+                .get(2)
+                .or_else(|| attr.get(3))
+                .map(|v| v.as_str())
+                .or_else(|| {
+                    attr.get(4).map(|v| {
+                        // A slash immediately before the tag's closing bracket is
+                        // the self-closing marker, not part of an unquoted value.
+                        if v.end() + 1 == input.as_str().len() {
+                            v.as_str().strip_suffix('/').unwrap_or(v.as_str())
+                        } else {
+                            v.as_str()
+                        }
+                    })
+                });
             if attr[1].eq_ignore_ascii_case("name") && field_name.is_none() {
-                field_name = value.map(|v| v.as_str());
+                field_name = value;
             } else if attr[1].eq_ignore_ascii_case("value") && field_value.is_none() {
-                field_value = value.map(|v| v.as_str());
+                field_value = value;
             }
         }
         if field_name.is_some_and(|n| n == name) {
@@ -198,14 +212,19 @@ fn replace_pair(pairs: &str, name: &str, value: &str) -> Option<String> {
 }
 
 /// The request with parameter `name` set to `value`: in the query string, a
-/// form-encoded body or a JSON body, wherever it occurs. Content-Length is
-/// corrected. Unchanged when the request has no such parameter.
+/// form-encoded body or a JSON body, wherever it occurs. Body substitution
+/// requires application/x-www-form-urlencoded, application/json or an
+/// application/*+json media type (parameters and case are ignored).
+/// Content-Length is corrected only when the body changes. Non-UTF-8 headers
+/// or eligible bodies are preserved, with a diagnostic on stderr.
+/// Unchanged when the request has no such parameter.
 pub fn substitute_param(request: &[u8], name: &str, value: &str) -> Vec<u8> {
     let parts = crate::util::parse_http(request);
     let head_len = parts.head_len.min(request.len());
     let Ok(head) = std::str::from_utf8(&request[..head_len]) else {
         // These bytes may be intentional in a security testing tool. Never
         // silently replace them with UTF-8 replacement characters.
+        eprintln!("macro substitution skipped: request headers are not UTF-8");
         return request.to_vec();
     };
     let original_body = &request[head_len..];
@@ -225,29 +244,46 @@ pub fn substitute_param(request: &[u8], name: &str, value: &str) -> Vec<u8> {
             }
         }
     }
-    let ct = crate::util::get_header(&parts.headers, "Content-Type")
+    let ct = crate::util::get_header(&parts.headers, "Content-Type").unwrap_or_default();
+    let media_type = ct
+        .split(';')
+        .next()
         .unwrap_or_default()
+        .trim()
         .to_ascii_lowercase();
-    if let Ok(body_text) = std::str::from_utf8(original_body) {
-        if ct.contains("json") {
-            let n = regex::escape(name);
-            if let Ok(re) = regex::Regex::new(&format!(
-                r#"("{n}"\s*:\s*)("(?:[^"\\]|\\.)*"|-?[0-9][0-9.eE+-]*|true|false|null)"#
-            )) {
-                let quoted =
-                    serde_json::to_string(value).unwrap_or_else(|_| format!("\"{value}\""));
-                if let std::borrow::Cow::Owned(replaced) = re
-                    .replace(body_text, |c: &regex::Captures| {
-                        format!("{}{}", &c[1], quoted)
-                    })
-                {
+    let is_form = media_type == "application/x-www-form-urlencoded";
+    let is_json = media_type == "application/json"
+        || media_type
+            .strip_prefix("application/")
+            .is_some_and(|subtype| {
+                subtype
+                    .strip_suffix("+json")
+                    .is_some_and(|prefix| !prefix.is_empty())
+            });
+    if is_form || is_json {
+        if let Ok(body_text) = std::str::from_utf8(original_body) {
+            if is_json {
+                let n = regex::escape(name);
+                if let Ok(re) = regex::Regex::new(&format!(
+                    r#"("{n}"\s*:\s*)("(?:[^"\\]|\\.)*"|-?[0-9][0-9.eE+-]*|true|false|null)"#
+                )) {
+                    let quoted =
+                        serde_json::to_string(value).unwrap_or_else(|_| format!("\"{value}\""));
+                    if let std::borrow::Cow::Owned(replaced) = re
+                        .replace(body_text, |c: &regex::Captures| {
+                            format!("{}{}", &c[1], quoted)
+                        })
+                    {
+                        body = std::borrow::Cow::Owned(replaced.into_bytes());
+                    }
+                }
+            } else if !body_text.is_empty() {
+                if let Some(replaced) = replace_pair(body_text, name, value) {
                     body = std::borrow::Cow::Owned(replaced.into_bytes());
                 }
             }
-        } else if !body_text.is_empty() && !ct.contains("multipart") {
-            if let Some(replaced) = replace_pair(body_text, name, value) {
-                body = std::borrow::Cow::Owned(replaced.into_bytes());
-            }
+        } else {
+            eprintln!("macro body substitution skipped: eligible request body is not UTF-8");
         }
     }
     let body_changed = body.as_ref() != original_body;
@@ -375,7 +411,7 @@ mod tests {
     #[test]
     fn prepare_derives_from_the_previous_response_only() {
         let step = Step {
-            request: b"POST /login HTTP/1.1\r\nHost: h\r\nContent-Length: 13\r\n\r\nuser=a&csrf=x"
+            request: b"POST /login HTTP/1.1\r\nHost: h\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 13\r\n\r\nuser=a&csrf=x"
                 .to_vec(),
             https: false,
             derive: vec!["csrf".into(), "absent".into()],
