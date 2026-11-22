@@ -153,6 +153,7 @@ final class Bridge {
                 .on("registerHttpHandler", a -> register(HTTP_HANDLERS, (HttpHandler) a[0]))
                 .on("cookieJar", a -> Engine.cookieJar())
                 .on("createResponseKeywordsAnalyzer", a -> keywordAnalyzer(a[0]))
+                .on("createResponseVariationsAnalyzer", a -> new VariationAnalysis())
                 .on("registerSessionHandlingAction", a -> Engine.reg(Engine.SESSION_ACTIONS, (burp.api.montoya.http.sessions.SessionHandlingAction) a[0]))
                 .on("sendRequest", a -> send((HttpRequest) a[0]))
                 .on("sendRequests", a -> {

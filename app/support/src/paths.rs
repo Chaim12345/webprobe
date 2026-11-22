@@ -608,7 +608,7 @@ fn first_dir_with(cands: &[PathBuf], ok: impl Fn(&Path) -> bool) -> Option<PathB
 /// The Montoya bridge's source (WebProbe's own), compiled into the binary.
 /// The Montoya bridge sources (one per API area; Java's multi-file source
 /// launcher compiles them together from `MontoyaBridge.java`).
-pub const MONTOYA_BRIDGE_SOURCES: [(&str, &str); 12] = [
+pub const MONTOYA_BRIDGE_SOURCES: [(&str, &str); 13] = [
     (
         "MontoyaBridge.java",
         include_str!("../../sidecar/MontoyaBridge.java"),
@@ -626,6 +626,10 @@ pub const MONTOYA_BRIDGE_SOURCES: [(&str, &str); 12] = [
     (
         "KeywordAnalysis.java",
         include_str!("../../sidecar/KeywordAnalysis.java"),
+    ),
+    (
+        "VariationAnalysis.java",
+        include_str!("../../sidecar/VariationAnalysis.java"),
     ),
 ];
 const DEMO_EXT_JAR: &[u8] = include_bytes!("../../sidecar/demo-ext/demo-ext.jar");

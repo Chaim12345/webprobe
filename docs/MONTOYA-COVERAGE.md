@@ -53,20 +53,34 @@ The sample is four BApps, three of them JWT tools. Other BApps may hit the unsup
 
 ## R-20 keyword analysis slice (2026-11-22)
 
-`http().createResponseKeywordsAnalyzer` now tracks literal, case-sensitive,
-non-overlapping keyword counts across the complete response (headers and body).
-Before the first response, both result sets are empty. The first response seeds
-invariant keywords, including keywords with zero occurrences. Once a count
-changes, that keyword remains variant. Result sets are immutable snapshots and
-analyzers do not retain response bodies. Empty keywords are rejected.
+`http().createResponseKeywordsAnalyzer` tracks case-insensitive (Locale.ROOT
+folding), non-overlapping keyword counts across the complete response (headers
+and body), matching real Burp 2026.11.2 as measured in
+docs/parity/2026-11-22-real-burp. Before the first response, both result sets
+are empty. The first response seeds invariant keywords, including keywords
+with zero occurrences. Once a count changes, that keyword remains variant.
+Result sets are immutable snapshots and analyzers do not retain response
+bodies. Empty keywords are accepted, as in Burp; an empty keyword counts
+length + 1 positions, so it tracks response length changes.
 
-A purpose-built extension exercises the public Montoya API, loaded by the real
-sidecar JVM with JDK 21 and the published Montoya 2026.7 API jar. It checks count
-changes, absent keywords, headers, case sensitivity, repeated keywords,
-independent analyzers, immutable snapshots, and invalid inputs. This establishes
-WebProbe's behavior, not parity against a running Burp installation. The ten
-additional unmodified BApps required by R-20 have not been checked in this slice;
-R-20 remains open. Response variation analysis remains unsupported.
+`http().createResponseVariationsAnalyzer` returns an analyzer over every
+Montoya `AttributeType` (the factory previously threw
+UnsupportedOperationException; real Burp 2026.11.2 returns an object). The
+first response seeds each attribute's extracted value; a later difference
+marks the attribute variant permanently. Header, status and body metrics are
+direct; HTML-derived attributes come from a small deterministic tag scan.
+INITIAL_CONTENT (256 chars) and LIMITED_BODY_CONTENT (4096 chars) prefixes
+are WebProbe's documented choices, not measured Burp constants.
+
+Purpose-built extensions exercise both analyzers through the public Montoya
+API, loaded by the real sidecar JVM with JDK 21 and the published Montoya
+2026.7 API jar. They check case-insensitive counts, absent keywords, headers,
+repeated keywords, empty keywords, independent analyzers, immutable
+snapshots, invalid inputs, per-attribute variation and variant persistence.
+This establishes WebProbe's behavior against the measured Burp fixture, not
+full parity against a running Burp installation. The ten additional
+unmodified BApps required by R-20 have not been checked in this slice; R-20
+remains open.
 
 `CollaboratorPayload.server()` now returns an empty Optional when
 `WITHOUT_SERVER_LOCATION` was requested, matching the API contract. This applies
