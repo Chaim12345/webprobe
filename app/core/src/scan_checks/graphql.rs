@@ -1318,6 +1318,8 @@ impl StoredCheck for StoredXss {
 /// (comment fields, profiles and the like), as every stored-input
 /// scanner does; the probes are inert tokens and URLs, but operators
 /// should expect them to persist where the application stores input.
+/// No cleanup is attempted. Only GET/HEAD retrieval is replayed, and a
+/// first G.11 hit stops later G.11 families for this pair.
 macro_rules! g11_stored_check {
     ($name:ident, $id:literal, $issue:literal, $severity:literal, $confidence:literal, $probes:expr, $hit:expr, $doc:literal) => {
         #[doc = $doc]
@@ -1353,7 +1355,7 @@ macro_rules! g11_stored_check {
                 false
             }
             fn run(&self, cx: &PairCtx) {
-                if cx.stopped() {
+                if cx.stopped() || !cx.g11_allowed() {
                     return;
                 }
                 let pair = &cx.pair;
@@ -1378,6 +1380,7 @@ macro_rules! g11_stored_check {
                     resp
                 };
                 if let Some((probe, what)) = crate::scan::run_g11_stored(&$probes, send, retrieve, $hit) {
+                    cx.note_g11_hit();
                     let log = log.borrow();
                     let ev: Vec<ScanEvidence> = log.iter().rev().take(2).rev().cloned().collect();
                     cx.report(vec![mk_point(

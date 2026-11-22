@@ -3845,15 +3845,6 @@ fn stored_input_pairs_across_items_and_stage_a4_finds_stored_xss() {
 /// stage A4's stored CSS, HPP, form-action and link-manipulation checks.
 #[test]
 fn stage_a4_finds_the_stored_g11_families() {
-    let (port, _) = guestbook(false);
-    let shared = Shared::new();
-    run_task(
-        &shared,
-        vec![
-            guestbook_entry(port, "POST", "/comment", "c=hi"),
-            guestbook_entry(port, "GET", "/embed", ""),
-        ],
-    );
     let expect = [
         ("Link manipulation (stored)", "info", "Firm"),
         ("CSS injection (stored)", "medium", "Tentative"),
@@ -3865,6 +3856,31 @@ fn stage_a4_finds_the_stored_g11_families() {
         ("Form action hijacking (stored)", "medium", "Tentative"),
     ];
     for (name, sev, confidence) in expect {
+        let (port, _) = guestbook(false);
+        let shared = Shared::new();
+        let item = |method: &str, path: &str, body: &str| {
+            let entry = guestbook_entry(port, method, path, body);
+            crate::stored::Item {
+                req: String::from_utf8_lossy(&entry.req_raw).into_owned(),
+                entry,
+                host: "127.0.0.1".into(),
+                port,
+                https: false,
+            }
+        };
+        let pair = crate::stored::Pair {
+            item: item("POST", "/comment", "c=hi"),
+            point: InsertionPoint::new(IpKind::Body, "c", "hi"),
+            retrieval: item("GET", "/embed", ""),
+            injection: (vec![], None),
+        };
+        let cx = checks::PairCtx::new(shared.clone(), pair);
+        checks::STORED_CHECKS
+            .iter()
+            .find(|c| c.issue() == name)
+            .unwrap()
+            .run(&cx);
+
         let hits = issues_named(&shared, name);
         let h = hits
             .iter()
@@ -3882,6 +3898,52 @@ fn stage_a4_finds_the_stored_g11_families() {
         );
         assert!(h.detail.contains("GET /embed"), "{name}: {}", h.detail);
     }
+}
+
+#[test]
+fn stored_g11_skips_unsafe_retrieval_and_stops_after_first_family_hit() {
+    let (port, hits) = guestbook(false);
+    let item = |method: &str, path: &str, body: &str| {
+        let entry = guestbook_entry(port, method, path, body);
+        crate::stored::Item {
+            req: String::from_utf8_lossy(&entry.req_raw).into_owned(),
+            entry,
+            host: "127.0.0.1".into(),
+            port,
+            https: false,
+        }
+    };
+    let shared = Shared::new();
+    let pair = |method: &str| crate::stored::Pair {
+        item: item("POST", "/comment", "c=hi"),
+        point: InsertionPoint::new(IpKind::Body, "c", "hi"),
+        retrieval: item(method, "/embed", ""),
+        injection: (vec![], None),
+    };
+    for method in ["POST", "PUT", "DELETE"] {
+        let cx = checks::PairCtx::new(shared.clone(), pair(method));
+        for check in checks::STORED_CHECKS.iter().skip(1) {
+            check.run(&cx);
+        }
+        assert_eq!(
+            hits.load(Ordering::SeqCst),
+            0,
+            "{method} retrieval sends nothing"
+        );
+    }
+    let cx = checks::PairCtx::new(shared.clone(), pair("GET"));
+    for check in checks::STORED_CHECKS.iter().skip(1) {
+        check.run(&cx);
+    }
+    assert_eq!(
+        hits.load(Ordering::SeqCst),
+        2,
+        "one injection and retrieval, no later families"
+    );
+    assert_eq!(shared.issues.lock().unwrap().len(), 1);
+    assert!(!cx.g11_allowed());
+    let head = checks::PairCtx::new(shared, pair("HEAD"));
+    assert!(head.g11_allowed(), "HEAD retrieval is a safe method");
 }
 
 /// The retrieval item may be a POST: only POST /search shows the stored
