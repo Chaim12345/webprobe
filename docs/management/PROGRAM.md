@@ -1,24 +1,24 @@
 # WebProbe program board
 
-Snapshot: 2026-11-22 14:15 Asia/Jerusalem. Program owner: Program Manager. [Canonical release checklist](RELEASE-CHECKLIST.md). [Review and decision ledger](REVIEW-LEDGER.md). [Role charters](ROLES.md). [HR staffing register, PR #137](https://github.com/Chaim12345/webprobe/pull/137), proposed file `docs/management/STAFFING.md`.
+Snapshot: 2026-11-22 14:22 Asia/Jerusalem. Program owner: Program Manager. [Canonical release checklist](RELEASE-CHECKLIST.md). [Review and decision ledger](REVIEW-LEDGER.md). [Role charters](ROLES.md). [HR staffing register, PR #137](https://github.com/Chaim12345/webprobe/pull/137), proposed file `docs/management/STAFFING.md`.
 
 This is the index for sequencing, not permission to merge or change product behavior. Only the triage lane lands parity changes. Existing PR branches and master stay untouched. Refresh this board when a source head, landing, decision or verification result changes.
 
 ## Current position
 
-- Live parity `a2fd3d2fc709994ad48e649a4198eace4a7226b3`. Live API confirms #141/#152 and #151/#154 are merged; #154 preserves authoritative response reuse plus fixture adaptations. #149 already replaced #126.
-- Single review stack #125 is `da15eb96a3192da2d05205ae4c33aa53680a5920`, from parity c25056d, not current a2fd3d2. Integration reports 987 workspace + 13 real-Java tests on da15eb9. Refresh after #154 and repeat exact-head gates; keep its adapted framing expectations intact. Earlier Decoder rejection is resolved and yaml_serde dependency review is CLEAR.
-- **113 open WebProbe PRs**, all pages checked at 14:15. The CSV contains open PRs; landed history and scoped verdicts remain in the ledger.
-- **New browser-crawl release gate:** crawl.rs::replay_seen may resend an already browser-observed request when response metadata is missing. Lane 5 is assigned the focused fix. Fix it or disable automatic fallback before shipping/enabling that flow. #153 must not be described as removing every application-level replay; negotiated-h2 replay is #145's scope. See the canonical release checklist.
-- H1 safety #153 19dc879 is reviewer-approved (ca5048f superseded) and CTO accepts its bounded caller audit. Rebase on actual #154 parity and rerun gates. It can land independently of #125 and the crawler follow-up.
-- H2 #145 f2d966f is reviewer-approved, but CTO still blocks on complete TLS-policy identity (including root name constraints), adequate valid-mTLS/key/fallback fixtures and one effective-policy snapshot for key and connection. The primed stream-3 POST/commitment proofs are now source-reviewed, no longer missing.
-- Request reconciliation #155 current 90173f7 follows #125, replacing #148, but reviewer verdict is CHANGES NEEDED: old unsafe reuse heuristic plus guard/reader mixed-CRLF/LF boundary mismatch. Trailing-CRLF discard supplied by #155 addresses #148 reviewer condition but does not clear these new blockers.
-- Decoder #150 2efa9e2 is code-read approved, with combined/UI landing gates remaining. Its GZIP/base64 UTF-8 panel is a labeled departure from arbitrary-byte Burp behavior. #139 rebases after accepted repair.
-- [Milestone register](milestones.csv) preserves historical tasks; do not start duplicate work based on old todo labels.
+- Live parity `cd1e5f1a22f064e0eb3ec865b7089136cb0da809`; repaired Decoder #150 is now landed. Its GZIP/base64 UTF-8 UI remains a documented departure from raw-byte parity.
+- Canonical #125 is `3ebbd6ba195d00c5d403215b00a981bb30941b97`. Re-pin final acceptance on that current tree; prior da15eb9 counts are historical. Request-reader #155 remains after canonical #125, not a competing #148 landing.
+- **113 open PRs**, full live refresh at 14:22. Self-row #131 has no recursive stale SHA; its PR link supplies current head.
+- Browser-crawl fix #156 `6cc9be9` is rebased, removed the duplicate root checklist and needs exact-head re-review. The canonical checklist now contains the requested no-implicit-replay text, origin-counter command and explicit **unchecked until exact-tree full run** rule.
+- H1 replay #153 is now `010de0e`, rebased on cd1e5f1. Author reports 989 workspace passes /13 ignored and seven live replay fixtures. Current delta needs re-review; older 19dc879 approval is not automatically current approval.
+- H2 #145 is `5588537`. CTO closed the remaining root name-constraints, valid-mTLS fixture and EffectiveTlsPolicy snapshot items by source inspection. Conditional sequential-reuse design approval is not executed reviewer/QA/combined acceptance; those current-head gates remain.
+- PR #155 `90173f7` remains **CHANGES NEEDED** for unsafe reuse decision and mixed-terminator guard/reader disagreement. #148 trailing-CRLF condition is supplied by #155, but these new blockers prevent accepting it as finished.
+- PR #157 `3601cd3` fixes 101 Stream-sink head wiring and is ready for review. #158 `c014c96` is the Hash-menu replacement on repaired parity, ready for exact-head review; it avoids defective #124 Decoder ancestry. #124 h2-only changes are not independently split while #145 overlaps that file.
+- Historical milestones are in [milestones.csv](milestones.csv); live acceptance is governed by the release checklist and exact-head ledger.
 
 ## Landing sequence and stop/start calls
 
-1. **One parity writer: triage.** Finish the already reviewed, independently tested queue. #129/#105 has landed. Triage reports 832 passing tests on the exact merged resolution tree with both header-scan test modules preserved. The #149 replacement is landed and #126 closed. PR #141/#152 is landed. Advance reviewed #140/#150/docs independently while the #153 rebase and crawler/h2 fixes proceed.
+1. **One parity writer: triage.** Finish the already reviewed, independently tested queue. #129/#105 has landed. Triage reports 832 passing tests on the exact merged resolution tree with both header-scan test modules preserved. The #149 replacement is landed and #126 closed. PR #141/#152 is landed. Repaired #150 is landed; advance reviewed docs and accepted replacement heads under their own gates while current safety changes are reviewed.
 2. **Integration owns #125.** Latest #123 and HPACK fix are included and defective Decoder ops are removed. Preserve the source manifest, refresh from newer parity, preserve the cleared yaml lock, take #154 adaptations, and use canonical-first #155 reconciliation rather than racing #148. Incorporate the new hash/h2 and crawl-ID heads when ready. Maintain an exact source-head manifest. No parallel landing of the same changes through individual source PRs.
 3. **Independent reviewer owns acceptance.** Review the final SHA, not a moving branch. Require clean check/fmt/clippy/full required-Java tests and current CI, applying only the owner's explicit Kilo waiver. Test count deltas alone are not coverage proof.
 4. **Cross-tool QA owns the release candidate.** Run project create/save/reopen, Logger to tools, Repeater extension hooks, extension Drop plus pipelining, constant-token Sequencer, Intruder baseline, Decoder bytes/Gzip, and Organizer persistence on one integrated build. #128 is separate-head evidence, not an integrated pass.
@@ -30,7 +30,7 @@ This is the index for sequencing, not permission to merge or change product beha
 | Lane | Accountable role | State / next checkpoint | Blocker or conflict boundary |
 | --- | --- | --- | --- |
 | Parity landing and PR cleanup | PR triage | Active; #141/#152 and #151/#154 landed; #140/#150/docs and #153 rebase next | Sole parity writer; no source-branch edits |
-| Review stack #125 | Integration | Active at da15eb9; refresh with #154, then exact-tree gates; #155 follows canonical stack | Conflicts with independent source landing if both proceed unchecked |
+| Review stack #125 | Integration | Active at 3ebbd6b; final exact-tree gates; #155 follows canonical stack | Conflicts with independent source landing if both proceed unchecked |
 | Independent review | Reviewer | Review exact final heads and combination fixes | Earlier approvals do not cover later diffs |
 | Hash-list and h2 multiplexing | Existing hash/h2 lane | Active per owner request; publish exact head + tests | Coordinate h2 boundaries with #124; no duplicate Decoder work |
 | Crawl counter and selection keys | Existing UI QA B lane | Active follow-up; use `(kind,id)` identity before separate counters | Shared history/crawl selection is load-bearing; #108 project-isolation work is separate |
@@ -63,7 +63,7 @@ Decision provenance: owner's authenticated WhatsApp messages were checked for AC
 | Program milestone | Exit evidence | Current state |
 | --- | --- | --- |
 | P0: recover and stabilize foundation | Exact merged tree and full required-Java suite per landing | #96 now landed too; #138 and remaining lane gates continue |
-| P1: one reviewable integrated candidate | #125 manifest matches latest intended source heads; clean combined checks + independent review | da15eb9 checked; yaml clear; #154 refresh and final exact-tree acceptance remain |
+| P1: one reviewable integrated candidate | #125 manifest matches latest intended source heads; clean combined checks + independent review | 3ebbd6b current; final exact-tree/reviewer acceptance remains |
 | P2: integrated workflow acceptance | One pinned build passes cross-tool regression with screenshots and traceable fixtures | Not established by separate-head reports |
 | P3: reconcile old roadmap | Each of 21 recorded todo tasks mapped to integrated code, residual gap or owner hold | PR board ready; avoid reopening already implemented milestones |
 | P4: close measured parity gaps | #128 priorities translated into owned byte-safe Decoder, h2, Sequencer, variation-analysis and workflow fixtures | Hash/h2 lane active; do not claim Burp Pro parity |
@@ -107,3 +107,5 @@ Primary evidence links: [#125](https://github.com/Chaim12345/webprobe/pull/125),
 - 14:15: live parity a2fd3d2 carries #141/#152 and #151/#154. #125 da15eb9 must refresh; #153 ca5048f h1 safety can land independently after real parity rebase, while #155 follows the canonical #125 tree. #145 f2d966f replay proof reviewed, TLS-policy constraints/snapshot gate remains. Added canonical RELEASE-CHECKLIST.md with lane-5 crawler no-implicit-resend release gate. #150 code-read approved and yaml dependency review CLEAR.
 
 - 14:18: follow-up to reviewer-approved #131 5dc587c records the four requested accuracy corrections; see ledger and checklist. Own board-row SHA is intentionally blank because committing a claimed self-SHA would make it stale again; its PR link is the current-head source.
+
+- 14:22: requested follow-up adds canonical crawler wording and tracks #156 6cc9be9, #157 3601cd3, #158 c014c96. Live heads #153 010de0e, #145 5588537, #125 3ebbd6b and parity cd1e5f1 recorded. CTO TLS-policy items closed by source inspection; new-head independent and executed gates remain separate.
