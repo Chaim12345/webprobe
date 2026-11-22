@@ -259,6 +259,233 @@ fn proxy_decodes_chunked_gzip_response_for_history() {
     );
 }
 
+/// Reuse-correctness (CTO ruling): pooling follows the authoritative
+/// method-aware read_message outcome plus the connection headers, never a
+/// head-only heuristic.
+#[test]
+fn pool_retires_connection_close_responses() {
+    let shared = Shared::new();
+    shared.keep_alive.store(true, Ordering::SeqCst);
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let t = std::thread::spawn(move || {
+        for i in 0..2 {
+            let (mut s, _) = listener.accept().unwrap();
+            s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+            let _ = read_request_head(&mut s);
+            if i == 0 {
+                s.write_all(
+                    b"HTTP/1.1 200 OK
+Content-Length: 2
+Connection: close
+
+ok",
+                )
+                .unwrap();
+            } else {
+                s.write_all(
+                    b"HTTP/1.1 200 OK
+Content-Length: 2
+
+hi",
+                )
+                .unwrap();
+            }
+        }
+    });
+    let one = send_raw(
+        &shared,
+        "127.0.0.1",
+        port,
+        b"GET /a HTTP/1.1
+Host: x
+
+",
+    );
+    let two = send_raw(
+        &shared,
+        "127.0.0.1",
+        port,
+        b"GET /b HTTP/1.1
+Host: x
+
+",
+    );
+    t.join().unwrap();
+    assert!(
+        one.resp.as_deref().unwrap_or_default().ends_with(b"ok"),
+        "{:?}",
+        one.error
+    );
+    assert!(
+        two.resp.as_deref().unwrap_or_default().ends_with(b"hi"),
+        "{:?}",
+        two.error
+    );
+    // A self-delimited response that says Connection: close is complete but
+    // must NOT be pooled: the second request needs a fresh connection.
+    assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 2);
+}
+
+#[test]
+fn pool_retires_until_eof_and_leftover_bytes() {
+    for with_leftover in [false, true] {
+        let shared = Shared::new();
+        shared.keep_alive.store(true, Ordering::SeqCst);
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let t = std::thread::spawn(move || {
+            for i in 0..2 {
+                let (mut s, _) = listener.accept().unwrap();
+                s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+                let _ = read_request_head(&mut s);
+                if i == 0 && !with_leftover {
+                    // UntilEof: no framing, body ends with the close.
+                    s.write_all(
+                        b"HTTP/1.1 200 OK
+Content-Type: text/plain
+
+hello",
+                    )
+                    .unwrap();
+                } else if i == 0 {
+                    // Self-delimited, but the server already sent bytes past
+                    // the response: the pool cannot own what it cannot see.
+                    s.write_all(
+                        b"HTTP/1.1 200 OK
+Content-Length: 2
+
+okXX",
+                    )
+                    .unwrap();
+                } else {
+                    s.write_all(
+                        b"HTTP/1.1 200 OK
+Content-Length: 2
+
+hi",
+                    )
+                    .unwrap();
+                }
+            }
+        });
+        let one = send_raw(
+            &shared,
+            "127.0.0.1",
+            port,
+            b"GET /a HTTP/1.1
+Host: x
+
+",
+        );
+        let two = send_raw(
+            &shared,
+            "127.0.0.1",
+            port,
+            b"GET /b HTTP/1.1
+Host: x
+
+",
+        );
+        t.join().unwrap();
+        assert!(one.resp.is_some(), "{:?}", one.error);
+        assert!(
+            two.resp.as_deref().unwrap_or_default().ends_with(b"hi"),
+            "{:?}",
+            two.error
+        );
+        assert_eq!(
+            shared.conns_opened.load(Ordering::SeqCst),
+            2,
+            "with_leftover={with_leftover}"
+        );
+    }
+}
+
+#[test]
+fn declined_h2c_upgrade_is_not_pooled() {
+    let shared = Shared::new();
+    shared.keep_alive.store(true, Ordering::SeqCst);
+    shared.h2c_upgrade.store(true, Ordering::SeqCst);
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let t = std::thread::spawn(move || {
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        let mut served = 0usize;
+        while std::time::Instant::now() < deadline && served < 8 {
+            match listener.accept() {
+                Ok((mut s, _)) => {
+                    s.set_nonblocking(false).unwrap();
+                    s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+                    let req = read_request_head(&mut s);
+                    if req.is_empty() {
+                        continue;
+                    }
+                    served += 1;
+                    s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+                        .unwrap();
+                    // Let the client finish reading before the close.
+                    std::thread::sleep(Duration::from_millis(100));
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                Err(_) => break,
+            }
+        }
+        served
+    });
+    for _ in 0..2 {
+        let r = send_raw(
+            &shared,
+            "127.0.0.1",
+            port,
+            b"GET /a HTTP/1.1\r\nHost: x\r\n\r\n",
+        );
+        assert!(
+            r.resp.as_deref().unwrap_or_default().ends_with(b"ok"),
+            "{:?}",
+            r.error
+        );
+    }
+    let served = t.join().unwrap();
+    assert!(served >= 2, "server saw {served} connections");
+    // The declined-upgrade reply is read without the authoritative
+    // read_message outcome, so the connection must NOT enter the pool.
+    assert_eq!(shared.pool_hits.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn response_headers_allow_reuse_covers_http10_and_connection_close() {
+    assert!(!crate::net::conn_reuse::response_headers_allow_reuse(
+        b"HTTP/1.0 200 OK
+Content-Length: 2
+
+ok"
+    ));
+    assert!(crate::net::conn_reuse::response_headers_allow_reuse(
+        b"HTTP/1.0 200 OK
+Content-Length: 2
+Connection: keep-alive
+
+ok"
+    ));
+    assert!(!crate::net::conn_reuse::response_headers_allow_reuse(
+        b"HTTP/1.1 200 OK
+Content-Length: 2
+Connection: close
+
+ok"
+    ));
+    assert!(crate::net::conn_reuse::response_headers_allow_reuse(
+        b"HTTP/1.1 200 OK
+Content-Length: 2
+
+ok"
+    ));
+}
+
 /// A-03: with keep-alive on, two requests reuse one upstream connection.
 #[test]
 fn keep_alive_pool_reuses_upstream_socket() {
