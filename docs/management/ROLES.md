@@ -23,7 +23,7 @@ Updated 2026-11-22 13:13 Asia/Jerusalem. The owner delegated routine project dec
 2. PM records the choice, its scope, evidence and remaining gate, then sends a one-line decision digest.
 3. Engineering Manager assigns one author per shared-file boundary. Review and QA remain independent of authorship.
 4. Triage alone lands parity. Integration and triage agree which route carries each change so it cannot land twice.
-5. Master stays untouched. Do not print or commit secrets. No combined ARTEX distribution or linking before a reasoned license position is recorded. Separate-process work in private repositories can proceed within those limits.
+5. Master stays untouched. Do not print or commit secrets. D-CEO-04 permits private local separate-process ARTEX work only. No linking, combined distribution or remote exposure before dependency/rights review.
 6. A failed exact-tree check stops the affected landing, not unrelated author work. A new material risk reopens the affected decision instead of being hidden by a prior approval.
 
 ## Work in progress now

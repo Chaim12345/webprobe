@@ -8,7 +8,7 @@ This is the index for sequencing, not permission to merge or change product beha
 
 - Parity snapshot: `d0e56832150334854665269fb9e2c27dc8c23058`, after #45, #51, #95, #100 and #129/#105. These landings are not a release or full parity certification.
 - Single review stack: **#125**, observed head `2b756c1b37dae00d8f790f0b1f83471838e4060a`. Its body reports 845 passing checks on an earlier tested tree. Do not attach that count to a later SHA without new evidence.
-- **107 open PRs**, retrieved across both API pages, including this board #131 and CTO rulings #132. [PR board](pr-board.csv) has one row per open PR: exact head, lane owner, status, blocker, next action and evidence scope.
+- **107 open PRs** in the 13:13 paginated snapshot; the register additionally includes newly opened CEO decision PR #133 from the 13:14 delta (108 rows). [PR board](pr-board.csv) has one row per open PR: exact head, lane owner, status, blocker, next action and evidence scope.
 - **21 current open heads are ancestors of #125**, including #125 itself. This proves commit inclusion, not semantic correctness or approval to close source PRs.
 - **Latest #123 `db2cd8d` is now included in #125**, via `92c1ee5`. #125 merged parity `b1ef6b4`, but parity has since advanced to `d0e5683` with #129/#105. Latest-UI inclusion is resolved; reconcile the newly moved base and repeat exact-tree acceptance.
 - [Milestone register](milestones.csv) preserves all 137 tasks from parity's `tasks.json`: 114 recorded done, 21 todo, 2 rejected. These are historical repository labels, not fresh verification. Open labels can describe work already present in review PRs. Map coverage before assigning builders.
@@ -44,7 +44,7 @@ These are responsibility assignments, not a claim that every proposed lane has s
 | --- | --- | --- |
 | #103 Content-Type handling | Decided: urlencoded form, application/json and application/*+json only; other body bytes preserved | Triage completes review/test gates; #97 supersession closure needs exact proof |
 | #96 parser strictness | Decided: bounded property/fuzz coverage only; no broad strictness change without framing fixtures | Keep behavior changes separate and fixture-backed |
-| ARTEX / WebProbe license | CEO owns a reasoned license position; no linking or combined distribution yet | Isolated private artex-rs kernel/mock work may proceed after CTO corrections; process separation is not automatic legal clearance |
+| ARTEX / WebProbe license | D-CEO-04: private local separate-process only; no linking, combined distribution or remote exposure before dependency/rights review | Isolated private artex-rs kernel/mock work may proceed after CTO corrections; process separation is not automatic legal clearance |
 | Organizer deletion | Decided: deleting a collection moves its items to Inbox, with confirmation | Author implements and QA tests non-destructive persistence/migration behavior |
 | Agent safety rails | Decided: typed tools, bounded budgets, scope-limited sends, no shell, no unknown-outcome replay | Implement and test at the kernel/transport boundary, with no per-step approvals |
 | Active smuggling workflow | Decided: no timing-based active workflow | Do not start timing-based probes; framing fixtures remain separate |
@@ -84,3 +84,5 @@ Primary evidence links: [#125](https://github.com/Chaim12345/webprobe/pull/125),
 - 13:10: #129 resolution PR and #130 product-priority proposal are now in the inventory. #131 is this board. Prioritize review and verification, not duplicate implementation.
 
 - 13:13: #129/#105 landed; #102 awaits exact-head review, #49 needs author follow-up. Owner delegated routine decisions. CEO/CTO settled MIME, bounded parser scope, non-destructive Organizer delete, agent rails, no timing-based smuggling, and isolated ARTEX builder start. QA/release, security/compliance, engineering management and DevOps roles started. #132 supplies technical rulings.
+
+- 13:14: CEO recorded D-CEO-01..04 in [#133](https://github.com/Chaim12345/webprobe/pull/133): MIME gate, delete-to-Inbox, private fresh-branch ARTEX kernel/mock, and private local separate-process boundary pending dependency/rights review. These are recorded management decisions under the autonomy delegation, not new requests for owner approval.
