@@ -1,6 +1,6 @@
 # Canonical release acceptance checklist
 
-Owner: QA / release. Program Manager maintains this index. Snapshot: 2026-11-22 18:26 Asia/Jerusalem. Checked items below record scoped landed evidence reported by triage, not PM execution or final release approval. Organizer preservation fix is published; final acceptance remains held on exact 85bd159 review/QA/UI gates.
+Owner: QA / release. Program Manager maintains this index. Snapshot: 2026-11-22 18:51 Asia/Jerusalem. Checked items below record scoped landed evidence reported by triage, not PM execution or final release approval. Organizer preservation fix is published; final acceptance remains held on exact 85bd159 independent QA/JDK25/CI/UI gates.
 
 ## Safety and compatibility gates
 
@@ -9,7 +9,7 @@ Owner: QA / release. Program Manager maintains this index. Snapshot: 2026-11-22 
 - [x] Stream-mode 101 head fix #157 3601cd3 landed at a6d2ce0; triage reports 983 combined passes. Preserve exact head-before-relay behavior in later integration.
 - [x] H2 #145 a88dfe9 landed 4ad2591. Independent QA accepted exact 1017/0/13 plus 19/19 executed unique fixtures and merged tree 1105/0/14; triage confirms exact tested/remote tree identity and required JDK25 gates/non-Kilo CI clean. The former 24-selector list had 5 wrong-namespace duplicates; corrected runner requires an actual executed pass and fails zero matches. This is scoped landed execution, not final #125/#155 acceptance. Preserve h1 no-replay/h2 typed retry, policy snapshot identity and Decoder repair.
 - [ ] Intruder automatic baseline: reviewer source-approved GET/HEAD-only baseline in #125 3108302, visible skip for effectful/unknown methods, unchanged attack rows and unavailable baseline-derived fields. New effectful-template fixture asserts only 3 POST attack rows and no request 0; failure-path tests align attempts=1. Author execution is reported; independent combined #155 85bd159 baseline/replay/GET/Stop/channel/pool-permit gates remain unchecked. No implicit extra effectful preflight and no unknown-outcome retry.
-- [ ] Final #155 85bd159 combination: includes fixed #125 359b139 and final parity 4ad2591, live ancestry verified. Whole c6d0cae code-read is complete and the exact Organizer fix delta is approved by code read. New-head fix/merge review and independent QA/JDK25/UI remain required. Preserve request-boundary/R1/no-replay fixes.
+- [ ] Final #155 85bd159 combination: includes fixed #125 359b139 and final parity 4ad2591, live ancestry verified. Whole c6d0cae code-read is complete and the exact Organizer fix delta is approved by code read. Exact new-head code-read coverage is now confirmed; independent QA/JDK25/UI remain required. Preserve request-boundary/R1/no-replay fixes.
 - [ ] Compatibility release note: guarded normal cleartext and decrypted-h1 ingress refuses bare-LF/mixed request heads with 400 + close, verbatim capture and zero upstream bytes. One-write/split-read behavior must agree. Keep valid CRLF and LF body bytes unchanged, raw Repeater/testing traffic outside this guard, successful CONNECT/Upgrade leftovers owned by the protocol. Conservative downstream close after h2-upstream response is safe, not h2 keep-alive parity. Full strict response/chunked global setting stays unwired.
 
 - [ ] New slice exposure notes: #164/#166 remain library-only until source-size and Transport destination-scope gates are tested. Retain 64 recursive frames/64 condition nodes (about 32 atoms in flat binary chains) and request/combination budgets. TLS #163 direct TCP bypasses configured upstream proxy/SOCKS and Logger/history/rate/scope throttle. BAC #165 is GET-only; POST/HEAD regressions prove no BAC replays, but GET still has 16 comparisons and may be effectful. Reflected #167 caps classification at first32 contexts, intentionally missing later hits; #168 18e12d6 is now code-read approved with GET/HEAD retrieval guard and first-hit stop; injection still uses its original method, no-hit volume can reach 7 injections +7 retrievals per pair, and tokens may persist without cleanup. Existing StoredXss is unchanged. Do not describe these as unrestricted raw-byte or traffic-equivalent parity.
@@ -19,7 +19,7 @@ Owner: QA / release. Program Manager maintains this index. Snapshot: 2026-11-22 
 ## Combined-tree and workflow gates
 
 - [ ] Pin final source manifest and verify tested/remote identity at landing. Current parity 4ad2591, #125 359b139 and #155 85bd159; live refs/ancestry verified. Prior pass counts certify only reported trees, not final independent acceptance.
-- [ ] Reviewer accepts exact 85bd159 fix/merge scope. Whole c6d0cae five-slice code-read and 3108302..359b139 fix-delta approval are complete scoped evidence, not automatic acceptance of the new combination.
+- [x] Reviewer confirms exact 85bd159 code-read coverage at 18:28: whole c6d0cae five-slice review plus independently verified byte-identical approved Organizer delta. No cargo rerun or fresh merge check by reviewer; independent QA/JDK25/UI gates stay unchecked.
 - [ ] Execute full workspace, required-Java/Bambda/Repeater checks, no-run/fmt/clippy and current hosted CI on the actual final SHA. Keep only the explicit Kilo waiver; explain ignored tests. Reviewer code-read approval is not execution.
 - [ ] Independent Organizer policy gate on 85bd159: collection deletion preserves IDs, evidence and notes in Inbox; unrelated items and repeated deletion stay safe; save/reload retains content and modal describes the result. #125 359b139 implements this with author regression execution and reviewer code-read approval. Item deletion stays separately named.
 - [ ] On one combined build verify project save/reopen, history-to-tools, Repeater extension hooks/Drop/pipelining, Intruder baseline/replay, constant-token Sequencer/statistics, Decoder and Organizer persistence. Attach decisive screenshots/fixture output. Separate-head #128 results are not this gate.
@@ -35,10 +35,12 @@ Owner: QA / release. Program Manager maintains this index. Snapshot: 2026-11-22 
 | H1 / 101 / Hash | #153/#157/#158 landed at ee1af5c/a6d2ce0/ef4054e | Preserve through canonical integration; final workflow checks |
 | H2 | #145 landed 4ad2591; independent exact 1017/0/13,19 fixtures; merged 1105/0/14 | Preserve in final candidate; scoped gate complete |
 | Intruder baseline | Source-approved baseline and attempts=1 carried in 359b139; old author 1162 aggregate scoped | Independent 85bd159 baseline/replay workflow acceptance |
-| Request reader | 85bd159 includes approved Organizer fix delta; old whole-stack code-read complete | Exact final fix/merge review, QA/JDK25/UI |
+| Request reader | 85bd159 includes approved Organizer fix delta; old whole-stack code-read complete | Exact final code-read covered; independent QA/JDK25/UI |
 | Landed queue | #70/#68/#159 landed; #67 proof/closure done | Preserve through integration; #139 replacement proof separate |
 | Library slices | #164 bb3de82 and stacked #166 a303848 approved library-only | Hold after batch; cap source size/scope-gate Transport before loading |
 | Other slices | #161/#163/#165/#167/#168/#169 code-read approved; #170 core design with unresolved should-fixes | Hold unrelated landings until #125 batch; no approval transfer across heads |
-| Final release | HELD on exact 85bd159 acceptance; preservation fix published | Independent suite/UI and tested/remote landing proof |
+| Final release | Exact85bd159 code-read covered; independent execution/UI pending | Independent suite/JDK25/CI/UI and tested/remote landing proof |
 
 This checklist records project dispositions recorded by the PM; reviewer approvals are code-read only. It does not grant deployment, account, spending, publication or license-change authority.
+
+Cleanup uses CTO routing in PROGRAM.md, not the superseded expert proposals. Only #91 has closed in this pass; every conditional closure requires actual landed replacement/carrier proof and fresh state under the batch freeze.
