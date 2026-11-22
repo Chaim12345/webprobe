@@ -595,24 +595,43 @@ impl RequestCheck for RobotsTxt {
     fn run(&self, cx: &ScanCtx) {
         let (scheme, _) = origin_of(cx);
         let key = format!("{scheme}://{}:{}|robots", cx.host, cx.port);
-        if !openapi_hosts().lock().unwrap().insert(key) || cx.stopped() {
+        if cx.stopped() || !cx.state().openapi_hosts.lock().unwrap().insert(key.clone()) {
             return;
         }
-        let probe = format!("GET /robots.txt HTTP/1.1\r\nHost: {}\r\nAccept: */*\r\nConnection: close\r\n\r\n", server_host_hdr(cx));
-        let Some(resp) = burp_send(cx, probe.as_bytes()) else { return };
+        let probe = format!(
+            "GET /robots.txt HTTP/1.1\r\nHost: {}\r\nAccept: */*\r\nConnection: close\r\n\r\n",
+            server_host_hdr(cx)
+        );
+        let Some(resp) = burp_send(cx, probe.as_bytes()) else {
+            cx.state().openapi_hosts.lock().unwrap().remove(&key);
+            return;
+        };
         let parsed = util::parse_http(&resp);
         let status = parsed.first.split_whitespace().nth(1).unwrap_or("");
-        let body = String::from_utf8_lossy(&resp[parsed.head_len.min(resp.len())..]).to_ascii_lowercase();
-        let ctype = util::get_header(&parsed.headers, "Content-Type").unwrap_or_default().to_ascii_lowercase();
-        let looks_html = ctype.contains("html") || body.trim_start().starts_with("<!doctype html") || body.trim_start().starts_with("<html");
-        if status != "200" || looks_html || !body.contains("user-agent:") || !body.contains("allow:") {
+        let body =
+            String::from_utf8_lossy(&resp[parsed.head_len.min(resp.len())..]).to_ascii_lowercase();
+        let ctype = util::get_header(&parsed.headers, "Content-Type")
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        let looks_html = ctype.contains("html")
+            || body.trim_start().starts_with("<!doctype html")
+            || body.trim_start().starts_with("<html");
+        if status != "200"
+            || looks_html
+            || !body.contains("user-agent:")
+            || !body.contains("allow:")
+        {
             return;
         }
         let mut e = cx.entry.clone();
+        e.method = "GET".into();
         e.path = "/robots.txt".to_string();
         let mut i = mk("info", self.issue(), &e, "The site publishes a /robots.txt file. Its entries may reveal paths the site does not want indexed.".to_string());
         i.confidence = "Certain".into();
-        cx.report(vec![i.with_evidence(vec![ScanEvidence::new(probe.as_bytes(), Some(&resp[..]))])]);
+        cx.report(vec![i.with_evidence(vec![ScanEvidence::new(
+            probe.as_bytes(),
+            Some(&resp[..]),
+        )])]);
     }
 }
 
@@ -641,13 +660,17 @@ impl RequestCheck for React2Shell {
     fn run(&self, cx: &ScanCtx) {
         let (scheme, _) = origin_of(cx);
         let key = format!("{scheme}://{}:{}|react2shell", cx.host, cx.port);
-        if !openapi_hosts().lock().unwrap().insert(key) || cx.stopped() {
+        if cx.stopped() || !cx.state().openapi_hosts.lock().unwrap().insert(key.clone()) {
             return;
         }
         let (action, req_id, boundary) = {
             use rand::Rng;
             let mut rng = rand::thread_rng();
-            let mut t = |n: usize| (0..n).map(|_| format!("{:x}", rng.gen_range(0..16u8))).collect::<String>();
+            let mut t = |n: usize| {
+                (0..n)
+                    .map(|_| format!("{:x}", rng.gen_range(0..16u8)))
+                    .collect::<String>()
+            };
             (t(32), t(32), format!("----WebProbeBoundary{}", t(16)))
         };
         let body = format!(
@@ -659,21 +682,29 @@ impl RequestCheck for React2Shell {
             server_host_hdr(cx),
             body.len()
         );
-        let Some(resp) = burp_send(cx, probe.as_bytes()) else { return };
+        let Some(resp) = burp_send(cx, probe.as_bytes()) else {
+            cx.state().openapi_hosts.lock().unwrap().remove(&key);
+            return;
+        };
         let parsed = util::parse_http(&resp);
         let status = parsed.first.split_whitespace().nth(1).unwrap_or("");
         let text = String::from_utf8_lossy(&resp[parsed.head_len.min(resp.len())..]);
         if !react2shell_hit(status, &text) {
             return;
         }
+        let mut e = cx.entry.clone();
+        e.method = "POST".into();
+        e.path = "/".into();
         let mut i = mk(
             "high",
             self.issue(),
-            &cx.entry,
+            &e,
             "The server answered the React Server Components probe with status 500 and a flight-protocol error digest, the React2Shell signature (CVE-2025-55182 class).".to_string(),
         );
         i.confidence = "Firm".into();
-        cx.report(vec![i.with_evidence(vec![ScanEvidence::new(probe.as_bytes(), Some(&resp[..]))])]);
+        cx.report(vec![i.with_evidence(vec![ScanEvidence::new(
+            probe.as_bytes(),
+            Some(&resp[..]),
+        )])]);
     }
 }
-
