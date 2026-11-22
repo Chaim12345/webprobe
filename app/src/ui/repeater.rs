@@ -501,10 +501,9 @@ pub(crate) fn repeater_send(app: &mut App) {
         };
         let followed = fr.followed;
         let protocol = net::last_protocol();
-        // After followed redirections the tab shows the last request sent
-        // and its target, as Burp's item does (Zrr5.ZA), so the history
-        // entry and "Follow redirection" continue from the last hop.
-        let last = (followed > 0).then_some((fr.request, fr.service));
+        // Burp Community 2026.11.2, measured 2026-11-22: even after
+        // following redirects, Send leaves the editor byte-identical.
+        // Keep handler edits and redirect targets local to the send worker.
         let ms = t0.elapsed().as_millis();
         // Cancelled (or superseded) while in flight: nothing is written. The
         // check and the tab write happen under one lock (finish_with), so a
@@ -515,14 +514,7 @@ pub(crate) fn repeater_send(app: &mut App) {
             let target = reps.iter_mut().find(|r| r.id == tab_id);
             if let Some(r) = target {
                 r.response = up.resp.clone();
-                let mut sent_req = request.clone();
-                if let Some((req, svc)) = last {
-                    sent_req = req.clone();
-                    r.request = req;
-                    r.host = svc.host;
-                    r.port = svc.port;
-                    r.https = svc.https;
-                }
+                let sent_req = request.clone();
                 r.result_line = match &up.resp {
                     Some(resp) => {
                         // Burp's Repeater status line: "Done" ... "1,976 bytes | 21 millis".

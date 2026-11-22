@@ -1,7 +1,7 @@
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.18s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.19s
      Running unittests src/main.rs (target/debug/build/webprobe/4632cd8b251e34da/out/webprobe-4632cd8b251e34da)
 
-running 29 tests
+running 30 tests
 test repeater_ops::protocol_tests::protocol_control_rewrites_the_version_and_picks_the_send_mode ... ok
 test repeater_ops::tests::body_encoding_toggles_between_urlencoded_and_multipart ... ok
 test repeater_ops::tests::change_method_get_to_post_moves_query_to_body ... ok
@@ -39,8 +39,9 @@ test repeater_ops::tests::url_encode_as_you_type_encodes_typed_key_characters ..
 test repeater_ops::tests::ws_filter_by_direction_and_search ... ok
 test ui::tests::repeater_fix_tests::cancel_abandons_the_in_flight_send ... ok
 test ui::tests::repeater_fix_tests::links_in_response_walks_every_link ... ok
+test ui::tests::repeater_fix_tests::repeater_follow_always_keeps_editor_unchanged_and_inherits_handler_headers ... ok
 test ui::tests::repeater_fix_tests::repeater_repeat_send_keeps_editor_and_wire_headers_stable ... ok
 test ui::tests::repeater_fix_tests::repeater_tab_ids_are_never_reused ... ok
 test ui::tests::suite::repeater_updates_content_length ... ok
 
-test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 110 filtered out; finished in 1.26s
+test result: ok. 30 passed; 0 failed; 0 ignored; 0 measured; 110 filtered out; finished in 1.34s

@@ -466,9 +466,11 @@ pub fn next_redirect(
 
 /// Outcome of a send with redirections.
 pub struct FollowResult {
-    /// Last request sent and where: the tab shows these after a followed
-    /// chain (Burp's Zrr5 replaces the item's request with each hop).
+    /// Terminal wire request and target for redirect regression assertions.
+    /// Production keeps the editor unchanged even when redirects are followed.
+    #[cfg(test)]
     pub request: String,
+    #[cfg(test)]
     pub service: Service,
     pub response: Option<Vec<u8>>,
     pub error: Option<String>,
@@ -544,7 +546,9 @@ pub fn send_following(
         let up = send_once(shared, &current, &mut request, cancelled, progress);
         let Some(resp) = up.resp else {
             return FollowResult {
+                #[cfg(test)]
                 request,
+                #[cfg(test)]
                 service: current,
                 response: None,
                 error: up.error,
@@ -570,7 +574,9 @@ pub fn send_following(
             }
         }
         return FollowResult {
+            #[cfg(test)]
             request,
+            #[cfg(test)]
             service: current,
             response: Some(resp),
             error: None,

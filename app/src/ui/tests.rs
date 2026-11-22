@@ -43,11 +43,7 @@ mod repeater_fix_tests {
         assert_eq!(sh.rep.result(), "Request cancelled");
     }
 
-    /// A handler must not rewrite the editor and feed its own edits back
-    /// into the next Send. Exercise the actual asynchronous UI action twice.
-    #[test]
-    fn repeater_repeat_send_keeps_editor_and_wire_headers_stable() {
-        use std::io::{Read, Write};
+    fn install_probe_header(sh: &std::sync::Arc<net::Shared>) {
         use webprobe_core::ext_host::{
             self, Annotations, HttpService, LoadedExtension, ProxyAction, ProxyHooks,
         };
@@ -68,6 +64,14 @@ mod repeater_fix_tests {
                 ProxyAction::Continue
             }
         }
+        ext_host::with_host(sh, |h| h.extensions.push(LoadedExtension::new(AddHeader)));
+    }
+
+    /// A handler must not rewrite the editor and feed its own edits back
+    /// into the next Send. Exercise the actual asynchronous UI action twice.
+    #[test]
+    fn repeater_repeat_send_keeps_editor_and_wire_headers_stable() {
+        use std::io::{Read, Write};
         let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = l.local_addr().unwrap().port();
         let origin = std::thread::spawn(move || {
@@ -94,7 +98,7 @@ mod repeater_fix_tests {
             requests
         });
         let sh = net::Shared::new();
-        ext_host::with_host(&sh, |h| h.extensions.push(LoadedExtension::new(AddHeader)));
+        install_probe_header(&sh);
         let request =
             format!("GET /repeat HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n");
         {
@@ -129,6 +133,81 @@ mod repeater_fix_tests {
             assert_eq!(req.matches("X-Parity-Probe: 1").count(), 1, "{req}");
         }
         assert_eq!(requests[0], requests[1]);
+    }
+
+    /// Real Burp's Follow Always measurement: header counts are 1 then 2,
+    /// but the editor stays on the original request, including on re-send.
+    #[test]
+    fn repeater_follow_always_keeps_editor_unchanged_and_inherits_handler_headers() {
+        use std::io::{Read, Write};
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        let origin = std::thread::spawn(move || {
+            let mut requests = Vec::new();
+            for hop in 0..4 {
+                let (mut stream, _) = l.accept().unwrap();
+                stream
+                    .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                    .unwrap();
+                let mut req = Vec::new();
+                let mut buf = [0; 2048];
+                while !req.windows(4).any(|w| w == b"\r\n\r\n") {
+                    let n = stream.read(&mut buf).unwrap();
+                    assert_ne!(n, 0);
+                    req.extend_from_slice(&buf[..n]);
+                }
+                requests.push(String::from_utf8(req).unwrap());
+                let response: &[u8] = if hop % 2 == 0 {
+                    b"HTTP/1.1 302 Found\r\nLocation: /finish\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                } else {
+                    b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok"
+                };
+                stream.write_all(response).unwrap();
+            }
+            requests
+        });
+        let sh = net::Shared::new();
+        install_probe_header(&sh);
+        let request =
+            format!("GET /start HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n");
+        {
+            let mut tabs = sh.repeaters.lock().unwrap();
+            tabs[0].request = request.clone();
+            tabs[0].host = "127.0.0.1".into();
+            tabs[0].port = port;
+        }
+        let mut app = App::new(sh.clone());
+        app.rep_update_cl = false;
+        app.rops.follow = crate::repeater_ops::FollowMode::Always;
+        for _ in 0..2 {
+            repeater_send(&mut app);
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+            while sh.rep.is_busy() && std::time::Instant::now() < deadline {
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+            assert!(!sh.rep.is_busy(), "Repeater send timed out");
+            let tabs = sh.repeaters.lock().unwrap();
+            assert!(
+                tabs[0]
+                    .result_line
+                    .starts_with("Done (followed 1 redirection)"),
+                "{}",
+                tabs[0].result_line
+            );
+            assert_eq!(tabs[0].request.as_bytes(), request.as_bytes());
+            assert_eq!((tabs[0].host.as_str(), tabs[0].port), ("127.0.0.1", port));
+        }
+        let requests = origin.join().unwrap();
+        for (i, req) in requests.iter().enumerate() {
+            let expected_path = if i % 2 == 0 { "/start" } else { "/finish" };
+            assert!(
+                req.starts_with(&format!("GET {expected_path} HTTP/1.1\r\n")),
+                "{req}"
+            );
+            assert_eq!(req.matches("X-Parity-Probe: 1").count(), 1 + i % 2, "{req}");
+        }
+        assert_eq!(requests[0], requests[2]);
+        assert_eq!(requests[1], requests[3]);
     }
 
     /// Issue #2 item 1: tab numbers are never reused, so routing by id can

@@ -1,4 +1,4 @@
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.18s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
   Executable unittests src/main.rs (target/debug/build/webprobe/4632cd8b251e34da/out/webprobe-4632cd8b251e34da)
   Executable unittests src/bin/webprobe-headless.rs (target/debug/build/webprobe/3117b55a033560a5/out/webprobe_headless-3117b55a033560a5)
   Executable unittests src/lib.rs (target/debug/build/webprobe-core/03e7d4a1fc9f39b2/out/webprobe_core-03e7d4a1fc9f39b2)
