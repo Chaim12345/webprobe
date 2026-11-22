@@ -287,19 +287,18 @@ fn request_reader_reads_exactly_the_framed_body_for_every_read_size() {
 }
 
 #[test]
-fn request_reader_overreads_a_pipelined_request_in_one_read() {
-    // Pinned hazard for wiring: with a large first read the returned buffer
-    // holds both requests, so a strict caller must split by scan_request_head
-    // (head_len + exact body), not by what read_request returns.
+fn single_shot_read_request_returns_exactly_one_message() {
+    // Behaviour change (was: the whole first read came back as one request).
+    // The single-shot wrapper now returns the framed message only; callers
+    // that may see more bytes use `RequestReader` and keep the leftovers
+    // (tests in request_reader_tests).
     let a = b"POST /a HTTP/1.1\r\nHost: h\r\nContent-Length: 3\r\n\r\nabc";
     let b = b"GET /b HTTP/1.1\r\nHost: h\r\n\r\n";
     let mut wire = a.to_vec();
     wire.extend_from_slice(b);
-    let got = req(&wire, 16_384);
-    assert_eq!(got, wire, "both requests come back together");
-    // One byte at a time stops exactly at the first request.
-    assert_eq!(req(&wire, 1), a.to_vec());
-    // The strict scan splits it correctly either way.
+    for step in [1, 3, 7, 16_384] {
+        assert_eq!(req(&wire, step), a.to_vec(), "step {step}");
+    }
     let S::Framed { head_len, .. } = scan_request_head(&wire) else {
         panic!()
     };
@@ -307,13 +306,14 @@ fn request_reader_overreads_a_pipelined_request_in_one_read() {
 }
 
 #[test]
-fn request_reader_chunked_with_trailing_pipelined_bytes_keeps_them() {
+fn single_shot_chunked_request_stops_at_the_last_chunk() {
     let a = b"POST /a HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n1\r\nx\r\n0\r\n\r\n";
     let b = b"GET /b HTTP/1.1\r\n\r\n";
     let mut wire = a.to_vec();
     wire.extend_from_slice(b);
-    assert_eq!(req(&wire, 16_384), wire);
-    assert_eq!(req(&wire, 1), a.to_vec());
+    for step in [1, 3, 7, 16_384] {
+        assert_eq!(req(&wire, step), a.to_vec(), "step {step}");
+    }
 }
 
 #[test]
@@ -355,11 +355,11 @@ fn connect_head_and_tunnel_bytes_are_not_framed_as_a_body() {
     let head = b"CONNECT a.test:443 HTTP/1.1\r\nHost: a.test:443\r\n\r\n";
     let mut wire = head.to_vec();
     wire.extend_from_slice(b"\x16\x03\x01\x00\x05hello");
-    // One byte at a time: exactly the head, tunnel bytes untouched.
-    assert_eq!(req(&wire, 1), head.to_vec());
-    // A large first read includes the first tunnel bytes (callers that
-    // CONNECT must forward them; pinned).
-    assert_eq!(req(&wire, 16_384), wire);
+    // Behaviour change: every read size returns exactly the CONNECT head.
+    // The coalesced tunnel bytes stay in the reader (request_reader_tests).
+    for step in [1, 3, 7, 16_384] {
+        assert_eq!(req(&wire, step), head.to_vec(), "step {step}");
+    }
     assert!(matches!(
         scan_request_head(&wire),
         S::Framed { head_len, body: crate::strict_request::RequestBody::None } if head_len == head.len()

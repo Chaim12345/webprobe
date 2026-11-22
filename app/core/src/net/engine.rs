@@ -331,28 +331,40 @@ pub fn handle_conn(shared: Arc<Shared>, mut stream: TcpStream) {
     LISTENER_PORT.with(|p| p.set(stream.local_addr().ok().map(|a| a.port())));
     let _ = stream.set_write_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)));
     let _ = stream.set_read_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)));
-    let req = match read_request(&mut stream) {
-        Ok(r) if !r.is_empty() => r,
-        _ => return,
-    };
-    let parts = util::parse_http(&req);
+    // The reader owns whatever the client sent past each request. Requests
+    // already received are served in order (pipelining); after the last one
+    // the connection closes as before. A CONNECT or WebSocket upgrade hands
+    // the leftovers to the tunnel or relay only once it is set up.
+    let mut reader = RequestReader::new();
+    let mut served_one = false;
+    loop {
+        if served_one && reader.leftovers().is_empty() {
+            return;
+        }
+        served_one = true;
+        let req = match reader.read_next(&mut stream) {
+            Ok(r) if !r.is_empty() => r,
+            _ => return,
+        };
+        let parts = util::parse_http(&req);
 
-    if parts.method.eq_ignore_ascii_case("CONNECT") {
-        let (host, port) = split_host_port(parts.path.trim(), 443);
-        handle_connect(shared, stream, host, port);
-        return;
-    }
+        if parts.method.eq_ignore_ascii_case("CONNECT") {
+            let (host, port) = split_host_port(parts.path.trim(), 443);
+            handle_connect(shared, stream, host, port, reader.take_leftovers());
+            return;
+        }
 
-    let (req, req_state) = intercept_request(&shared, req, 80);
-    let Some(req) = req else { return };
-    let is_ws = util::get_header(&parts.headers, "Upgrade")
-        .map(|v| v.eq_ignore_ascii_case("websocket"))
-        .unwrap_or(false);
-    if is_ws {
-        handle_websocket(shared, stream, req);
-        return;
+        let (req, req_state) = intercept_request(&shared, req, 80);
+        let Some(req) = req else { return };
+        let is_ws = util::get_header(&parts.headers, "Upgrade")
+            .map(|v| v.eq_ignore_ascii_case("websocket"))
+            .unwrap_or(false);
+        if is_ws {
+            handle_websocket(shared, stream, req, reader.take_leftovers());
+            return;
+        }
+        upstream_and_deliver(&shared, &mut stream, req, 80, false, req_state);
     }
-    upstream_and_deliver(&shared, &mut stream, req, 80, false, req_state);
 }
 
 /// Copy bytes both ways until either direction closes (SSL pass-through tunnel).
@@ -383,7 +395,17 @@ pub fn relay_tunnel(client: &TcpStream, upstream: &mut TcpStream) {
     let _ = client.shutdown(std::net::Shutdown::Both);
 }
 
-pub fn handle_connect(shared: Arc<Shared>, mut stream: TcpStream, host: String, port: u16) {
+/// `leftover`: client bytes read together with the CONNECT head (normally the
+/// start of the TLS ClientHello). They belong to the tunnel and are handed to
+/// it only after it is established: sent upstream in pass-through, fed to the
+/// TLS server in MITM. A failed setup drops them with the connection.
+pub fn handle_connect(
+    shared: Arc<Shared>,
+    mut stream: TcpStream,
+    host: String,
+    port: u16,
+    leftover: Vec<u8>,
+) {
     // SSL pass-through: matching hosts get a byte-relay tunnel, not MITM.
     let bypassed = shared
         .tls_bypass
@@ -410,6 +432,9 @@ pub fn handle_connect(shared: Arc<Shared>, mut stream: TcpStream, host: String, 
             return;
         }
         shared.log(&format!("TLS pass-through tunnel to {host}:{port}"));
+        if !leftover.is_empty() && upstream.write_all(&leftover).is_err() {
+            return;
+        }
         relay_tunnel(&stream, &mut upstream);
         return;
     }
@@ -438,33 +463,57 @@ pub fn handle_connect(shared: Arc<Shared>, mut stream: TcpStream, host: String, 
         }
     };
     let mut tls = rustls::StreamOwned::new(conn, stream);
+    if !leftover.is_empty() {
+        // ClientHello bytes that arrived with the CONNECT head: fed to the
+        // TLS server in as many steps as it takes, none dropped.
+        let mut fed = std::io::Cursor::new(&leftover);
+        while (fed.position() as usize) < leftover.len() {
+            match tls.conn.read_tls(&mut fed) {
+                Ok(0) | Err(_) => return,
+                Ok(_) => {}
+            }
+            if tls.conn.process_new_packets().is_err() {
+                return;
+            }
+        }
+    }
     // The client chose HTTP/2 by ALPN: serve the connection's streams.
     let _ = tls.conn.complete_io(&mut tls.sock);
     if tls.conn.alpn_protocol() == Some(b"h2".as_slice()) {
         serve_h2_client(shared, tls, host, port);
         return;
     }
-    let req = match read_request(&mut tls) {
-        Ok(req) if !req.is_empty() => req,
-        Ok(_) => return,
-        Err(e) => {
-            shared.log(&format!(
-                "HTTPS client handshake/request for {host}:{port} failed: {e}"
-            ));
+    // Decrypted HTTP/1: the same reader, so pipelined requests inside the
+    // tunnel are served in order and never merged or dropped.
+    let mut reader = RequestReader::new();
+    let mut served_one = false;
+    loop {
+        if served_one && reader.leftovers().is_empty() {
+            break;
+        }
+        served_one = true;
+        let req = match reader.read_next(&mut tls) {
+            Ok(req) if !req.is_empty() => req,
+            Ok(_) => return,
+            Err(e) => {
+                shared.log(&format!(
+                    "HTTPS client handshake/request for {host}:{port} failed: {e}"
+                ));
+                return;
+            }
+        };
+        let (req, req_state) = intercept_request(&shared, req, 443);
+        let Some(req) = req else { return };
+        let ws_parts = util::parse_http(&req);
+        let is_ws = util::get_header(&ws_parts.headers, "Upgrade")
+            .map(|v| v.eq_ignore_ascii_case("websocket"))
+            .unwrap_or(false);
+        if is_ws {
+            handle_tls_websocket(shared, tls, req, host, port, reader.take_leftovers());
             return;
         }
-    };
-    let (req, req_state) = intercept_request(&shared, req, 443);
-    let Some(req) = req else { return };
-    let ws_parts = util::parse_http(&req);
-    let is_ws = util::get_header(&ws_parts.headers, "Upgrade")
-        .map(|v| v.eq_ignore_ascii_case("websocket"))
-        .unwrap_or(false);
-    if is_ws {
-        handle_tls_websocket(shared, tls, req, host, port);
-        return;
+        upstream_and_deliver(&shared, &mut tls, req, 443, true, req_state);
     }
-    upstream_and_deliver(&shared, &mut tls, req, 443, true, req_state);
     tls.conn.send_close_notify();
     let _ = tls.flush();
 }

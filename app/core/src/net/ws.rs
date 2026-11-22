@@ -663,6 +663,9 @@ pub struct WsSetup {
     pub(crate) socket: u64,
     pub(crate) deflate: Option<(bool, bool)>,
     pub(crate) inject: Option<mpsc::Receiver<(bool, Vec<u8>)>>,
+    /// Client bytes read together with the upgrade request: the first frames,
+    /// relayed once the upgrade succeeded (never before).
+    pub(crate) client_leftover: Vec<u8>,
 }
 
 impl WsSetup {
@@ -713,12 +716,18 @@ pub fn ws_setup(
         socket,
         deflate: ws_deflate_agreed(response),
         inject: Some(rx),
+        client_leftover: Vec::new(),
     }
 }
 
 /// Capture and relay a plain-HTTP WebSocket upgrade; frames are recorded and
 /// held by `intercept_ws_stream` (the TLS path is `handle_tls_websocket`).
-pub fn handle_websocket(shared: Arc<Shared>, mut client: TcpStream, req: Vec<u8>) {
+pub fn handle_websocket(
+    shared: Arc<Shared>,
+    mut client: TcpStream,
+    req: Vec<u8>,
+    client_leftover: Vec<u8>,
+) {
     let parts = util::parse_http(&req);
     let (host, port) = host_of(&parts, 80);
     let req_session = apply_session_rules(&shared, &req, 80);
@@ -789,7 +798,8 @@ pub fn handle_websocket(shared: Arc<Shared>, mut client: TcpStream, req: Vec<u8>
     shared.log(&format!(
         "WebSocket upgraded for {host}:{port}; capturing frames"
     ));
-    let setup = ws_setup(&shared, socket, &host, port, false, &req_out, &response);
+    let mut setup = ws_setup(&shared, socket, &host, port, false, &req_out, &response);
+    setup.client_leftover = client_leftover;
     let (mut client, mut upstream) = (client, upstream);
     relay_ws_tls(&shared, &mut client, &mut upstream, host, setup);
 }
@@ -834,8 +844,26 @@ pub fn relay_ws_tls<C: ProxyIo, U: ProxyIo>(
     let mut upstream_open = true;
     let (mut client_pending, mut upstream_pending) = setup.streams();
     let (socket, inject) = (setup.socket, setup.inject);
+    let client_leftover = setup.client_leftover;
     drop(setup.watch);
     let mut chunk = [0u8; 16384];
+    if !client_leftover.is_empty() {
+        // Frames the client sent in the same read as the upgrade request.
+        let out = ws_relay_chunk_alive(
+            shared,
+            &host,
+            &client_leftover,
+            &mut client_pending,
+            true,
+            &|| true,
+        );
+        if !out.forward.is_empty() {
+            let _ = write_nonblocking(upstream, &out.forward);
+        }
+        if !out.back.is_empty() {
+            let _ = write_nonblocking(client, &out.back);
+        }
+    }
     while client_open || upstream_open {
         let mut progressed = false;
         // Messages WebSocket Repeater sends over this connection.
@@ -922,6 +950,7 @@ pub fn handle_tls_websocket(
     req: Vec<u8>,
     host: String,
     port: u16,
+    client_leftover: Vec<u8>,
 ) {
     let parts = util::parse_http(&req);
     let req_session = apply_session_rules(&shared, &req, 443);
@@ -997,7 +1026,8 @@ pub fn handle_tls_websocket(
     shared.log(&format!(
         "TLS WebSocket upgraded for {host}:{port}; capturing frames"
     ));
-    let setup = ws_setup(&shared, socket, &host, port, true, &req_out, &response);
+    let mut setup = ws_setup(&shared, socket, &host, port, true, &req_out, &response);
+    setup.client_leftover = client_leftover;
     relay_ws_tls(&shared, &mut client, &mut upstream, host, setup);
     client.conn.send_close_notify();
     upstream.conn.send_close_notify();

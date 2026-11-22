@@ -71,4 +71,6 @@ mod fuzz_tests;
 #[cfg(test)]
 mod parser_fuzz_tests;
 #[cfg(test)]
+mod request_reader_tests;
+#[cfg(test)]
 mod strict_request_tests;
