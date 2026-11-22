@@ -83,8 +83,10 @@ pub struct Shared {
     /// a held message, a log line): lets a UI redraw on events instead of
     /// polling. Calls are coalesced: see [`Shared::wake`].
     pub waker: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
-    /// When the waker last ran, on the [`wake_clock_ms`] clock (0: never).
-    pub last_wake_ms: AtomicU64,
+    /// When the waker last ran, on the [`wake_clock_ms`] clock. `None` means
+    /// it has never run: a separate state, because clock value 0 is a real
+    /// reading (the first wake can land in the clock's first millisecond).
+    pub last_wake_ms: Mutex<Option<u64>>,
     /// Wake-ups skipped inside the coalescing window (tests, diagnostics).
     pub wakes_coalesced: AtomicU64,
     /// Burp scan configuration "Audit speed" (burp.Zsv7): 0 fast, 1 normal, 2 thorough.
@@ -280,7 +282,7 @@ impl Shared {
             next_task_id: AtomicU64::new(1),
             task_runner: AtomicBool::new(false),
             waker: Mutex::new(None),
-            last_wake_ms: AtomicU64::new(0),
+            last_wake_ms: Mutex::new(None),
             wakes_coalesced: AtomicU64::new(0),
 
             live_passive_issues: Mutex::new(None),
@@ -378,23 +380,25 @@ impl Shared {
     /// skipped: the frame already on its way shows their state, and the
     /// front end's periodic repaint covers the tail of a burst.
     pub fn wake(&self) {
+        self.wake_at(wake_clock_ms());
+    }
+
+    /// [`Shared::wake`] with the clock reading supplied by the caller, so
+    /// tests can pin the clock instead of sleeping.
+    pub(crate) fn wake_at(&self, now: u64) {
         let f = self.waker.lock().unwrap().clone();
         let Some(f) = f else { return };
-        let now = wake_clock_ms();
-        let last = self.last_wake_ms.load(Ordering::SeqCst);
-        if last != 0 && now.saturating_sub(last) < WAKE_COALESCE_MS {
-            self.wakes_coalesced.fetch_add(1, Ordering::SeqCst);
-            return;
-        }
-        // Claim the window: when two threads race, the loser's event is
-        // already visible to the winner's frame.
-        if self
-            .last_wake_ms
-            .compare_exchange(last, now, Ordering::SeqCst, Ordering::SeqCst)
-            .is_err()
         {
-            self.wakes_coalesced.fetch_add(1, Ordering::SeqCst);
-            return;
+            // Claim the window under the lock: when two threads race, the
+            // loser's event is already visible to the winner's frame.
+            let mut last = self.last_wake_ms.lock().unwrap();
+            if let Some(prev) = *last {
+                if now.saturating_sub(prev) < WAKE_COALESCE_MS {
+                    self.wakes_coalesced.fetch_add(1, Ordering::SeqCst);
+                    return;
+                }
+            }
+            *last = Some(now);
         }
         f();
     }
