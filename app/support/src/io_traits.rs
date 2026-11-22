@@ -67,12 +67,12 @@ impl ProxyIo for TcpStream {
     }
 }
 
-impl ProxyIo for rustls::StreamOwned<rustls::ServerConnection, TcpStream> {
+impl<S: ProxyIo> ProxyIo for rustls::StreamOwned<rustls::ServerConnection, S> {
     fn set_nonblocking_io(&self, nonblocking: bool) -> std::io::Result<()> {
-        self.get_ref().set_nonblocking(nonblocking)
+        self.get_ref().set_nonblocking_io(nonblocking)
     }
     fn peer_closed(&self) -> bool {
-        tcp_closed(self.get_ref())
+        self.get_ref().peer_closed()
     }
 }
 
@@ -82,5 +82,67 @@ impl ProxyIo for rustls::StreamOwned<rustls::ClientConnection, TcpStream> {
     }
     fn peer_closed(&self) -> bool {
         tcp_closed(self.get_ref())
+    }
+}
+
+/// Bytes read past the end of one exchange belong to the next one on the
+/// connection. `Preloaded` replays them before touching the inner stream, so
+/// a coalesced write (a request plus the next pipelined request, or CONNECT
+/// plus the TLS ClientHello) is never dropped or forwarded unmanaged.
+pub struct Preloaded<S> {
+    pending: std::collections::VecDeque<u8>,
+    inner: S,
+}
+
+impl<S> Preloaded<S> {
+    pub fn new(pending: Vec<u8>, inner: S) -> Self {
+        Self {
+            pending: pending.into(),
+            inner,
+        }
+    }
+
+    /// The wrapped stream once every preloaded byte has been read.
+    pub fn into_inner(self) -> S {
+        self.inner
+    }
+
+    pub fn get_ref(&self) -> &S {
+        &self.inner
+    }
+}
+
+impl<S: Read> Read for Preloaded<S> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        if !self.pending.is_empty() {
+            let n = buf.len().min(self.pending.len());
+            let (a, b) = self.pending.as_slices();
+            let from_a = n.min(a.len());
+            buf[..from_a].copy_from_slice(&a[..from_a]);
+            if n > from_a {
+                buf[from_a..n].copy_from_slice(&b[..n - from_a]);
+            }
+            self.pending.drain(..n);
+            return Ok(n);
+        }
+        self.inner.read(buf)
+    }
+}
+
+impl<S: Write> Write for Preloaded<S> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.inner.write(buf)
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+impl<S: ProxyIo> ProxyIo for Preloaded<S> {
+    fn set_nonblocking_io(&self, nonblocking: bool) -> std::io::Result<()> {
+        self.inner.set_nonblocking_io(nonblocking)
+    }
+    fn peer_closed(&self) -> bool {
+        self.pending.is_empty() && self.inner.peer_closed()
     }
 }

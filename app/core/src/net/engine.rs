@@ -331,28 +331,51 @@ pub fn handle_conn(shared: Arc<Shared>, mut stream: TcpStream) {
     LISTENER_PORT.with(|p| p.set(stream.local_addr().ok().map(|a| a.port())));
     let _ = stream.set_write_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)));
     let _ = stream.set_read_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)));
-    let req = match read_request(&mut stream) {
-        Ok(r) if !r.is_empty() => r,
-        _ => return,
-    };
-    let parts = util::parse_http(&req);
+    // Bytes read past one request belong to the next pipelined request: they
+    // are carried into the next read, not dropped or forwarded unmanaged.
+    let mut pending: Vec<u8> = Vec::new();
+    loop {
+        let req = match read_request_pending(&mut stream, &mut pending) {
+            Ok(r) if !r.is_empty() => r,
+            _ => return,
+        };
+        let parts = util::parse_http(&req);
 
-    if parts.method.eq_ignore_ascii_case("CONNECT") {
-        let (host, port) = split_host_port(parts.path.trim(), 443);
-        handle_connect(shared, stream, host, port);
-        return;
-    }
+        if parts.method.eq_ignore_ascii_case("CONNECT") {
+            let (host, port) = split_host_port(parts.path.trim(), 443);
+            handle_connect_pending(shared, stream, host, port, pending);
+            return;
+        }
 
-    let (req, req_state) = intercept_request(&shared, req, 80);
-    let Some(req) = req else { return };
-    let is_ws = util::get_header(&parts.headers, "Upgrade")
-        .map(|v| v.eq_ignore_ascii_case("websocket"))
-        .unwrap_or(false);
-    if is_ws {
-        handle_websocket(shared, stream, req);
-        return;
+        let (req, req_state) = intercept_request(&shared, req, 80);
+        let Some(req) = req else { return };
+        let is_ws = util::get_header(&parts.headers, "Upgrade")
+            .map(|v| v.eq_ignore_ascii_case("websocket"))
+            .unwrap_or(false);
+        if is_ws {
+            // Early frames read past the upgrade head replay before the relay.
+            handle_websocket(shared, Preloaded::new(pending, stream), req);
+            return;
+        }
+        upstream_and_deliver(&shared, &mut stream, req, 80, false, req_state);
+        // Non-pipelined traffic keeps its one-exchange lifecycle: the loop
+        // continues only while the client has more requests buffered.
+        if pending.is_empty() && !client_sent_more(&stream) {
+            return;
+        }
     }
-    upstream_and_deliver(&shared, &mut stream, req, 80, false, req_state);
+}
+
+/// Pipelined bytes that arrived in a later packet than the first request: a
+/// non-blocking peek, so a single-request connection closes exactly as before.
+fn client_sent_more(stream: &TcpStream) -> bool {
+    if stream.set_nonblocking(true).is_err() {
+        return false;
+    }
+    let mut b = [0u8; 1];
+    let more = matches!(stream.peek(&mut b), Ok(n) if n > 0);
+    let _ = stream.set_nonblocking(false);
+    more
 }
 
 /// Copy bytes both ways until either direction closes (SSL pass-through tunnel).
@@ -383,7 +406,19 @@ pub fn relay_tunnel(client: &TcpStream, upstream: &mut TcpStream) {
     let _ = client.shutdown(std::net::Shutdown::Both);
 }
 
-pub fn handle_connect(shared: Arc<Shared>, mut stream: TcpStream, host: String, port: u16) {
+pub fn handle_connect(shared: Arc<Shared>, stream: TcpStream, host: String, port: u16) {
+    handle_connect_pending(shared, stream, host, port, Vec::new());
+}
+
+/// [`handle_connect`] with bytes already read past the CONNECT head (the
+/// start of the TLS handshake when the client did not wait for the 200).
+pub fn handle_connect_pending(
+    shared: Arc<Shared>,
+    mut stream: TcpStream,
+    host: String,
+    port: u16,
+    pending: Vec<u8>,
+) {
     // SSL pass-through: matching hosts get a byte-relay tunnel, not MITM.
     let bypassed = shared
         .tls_bypass
@@ -408,6 +443,12 @@ pub fn handle_connect(shared: Arc<Shared>, mut stream: TcpStream, host: String, 
             .is_err()
         {
             return;
+        }
+        if !pending.is_empty() {
+            // The client already sent the start of the TLS handshake.
+            if upstream.write_all(&pending).is_err() {
+                return;
+            }
         }
         shared.log(&format!("TLS pass-through tunnel to {host}:{port}"));
         relay_tunnel(&stream, &mut upstream);
@@ -437,34 +478,65 @@ pub fn handle_connect(shared: Arc<Shared>, mut stream: TcpStream, host: String, 
             return;
         }
     };
-    let mut tls = rustls::StreamOwned::new(conn, stream);
+    if pending.is_empty() {
+        serve_mitm_conn(shared, conn, stream, &host, port);
+    } else {
+        // Handshake bytes read ahead replay before the socket is touched.
+        serve_mitm_conn(shared, conn, Preloaded::new(pending, stream), &host, port);
+    }
+}
+
+/// HTTPS interception over the negotiated TLS connection: HTTP/2 when the
+/// client picked it by ALPN, otherwise one exchange per request, pipelined
+/// requests included.
+fn serve_mitm_conn<S: ProxyIo>(
+    shared: Arc<Shared>,
+    conn: rustls::ServerConnection,
+    sock: S,
+    host: &str,
+    port: u16,
+) {
+    let mut tls = rustls::StreamOwned::new(conn, sock);
     // The client chose HTTP/2 by ALPN: serve the connection's streams.
     let _ = tls.conn.complete_io(&mut tls.sock);
     if tls.conn.alpn_protocol() == Some(b"h2".as_slice()) {
-        serve_h2_client(shared, tls, host, port);
+        serve_h2_client(shared, tls, host.to_string(), port);
         return;
     }
-    let req = match read_request(&mut tls) {
-        Ok(req) if !req.is_empty() => req,
-        Ok(_) => return,
-        Err(e) => {
-            shared.log(&format!(
-                "HTTPS client handshake/request for {host}:{port} failed: {e}"
-            ));
+    // Pipelined HTTPS requests: bytes past one request carry into the next.
+    let mut pending: Vec<u8> = Vec::new();
+    loop {
+        let req = match read_request_pending(&mut tls, &mut pending) {
+            Ok(req) if !req.is_empty() => req,
+            Ok(_) => return,
+            Err(e) => {
+                shared.log(&format!(
+                    "HTTPS client handshake/request for {host}:{port} failed: {e}"
+                ));
+                return;
+            }
+        };
+        let (req, req_state) = intercept_request(&shared, req, 443);
+        let Some(req) = req else { return };
+        let ws_parts = util::parse_http(&req);
+        let is_ws = util::get_header(&ws_parts.headers, "Upgrade")
+            .map(|v| v.eq_ignore_ascii_case("websocket"))
+            .unwrap_or(false);
+        if is_ws {
+            // Frames read past the upgrade head replay before the relay.
+            let mut client = Preloaded::new(std::mem::take(&mut pending), tls);
+            handle_tls_websocket(&shared, &mut client, req, host.to_string(), port);
+            let mut tls = client.into_inner();
+            tls.conn.send_close_notify();
+            let _ = tls.flush();
             return;
         }
-    };
-    let (req, req_state) = intercept_request(&shared, req, 443);
-    let Some(req) = req else { return };
-    let ws_parts = util::parse_http(&req);
-    let is_ws = util::get_header(&ws_parts.headers, "Upgrade")
-        .map(|v| v.eq_ignore_ascii_case("websocket"))
-        .unwrap_or(false);
-    if is_ws {
-        handle_tls_websocket(shared, tls, req, host, port);
-        return;
+        upstream_and_deliver(&shared, &mut tls, req, 443, true, req_state);
+        // Non-pipelined traffic keeps its one-exchange lifecycle.
+        if pending.is_empty() {
+            break;
+        }
     }
-    upstream_and_deliver(&shared, &mut tls, req, 443, true, req_state);
     tls.conn.send_close_notify();
     let _ = tls.flush();
 }
@@ -472,13 +544,13 @@ pub fn handle_connect(shared: Arc<Shared>, mut stream: TcpStream, host: String, 
 /// An HTTPS client that negotiated h2: every stream runs the proxy's
 /// per-request pipeline (intercept, match and replace, extensions,
 /// history, streaming) on its own thread; `h2_server` frames the results.
-pub fn serve_h2_client(
+pub fn serve_h2_client<S: ProxyIo>(
     shared: Arc<Shared>,
-    mut tls: rustls::StreamOwned<rustls::ServerConnection, TcpStream>,
+    mut tls: rustls::StreamOwned<rustls::ServerConnection, S>,
     host: String,
     port: u16,
 ) {
-    if tls.get_ref().set_nonblocking(true).is_err() {
+    if tls.get_ref().set_nonblocking_io(true).is_err() {
         return;
     }
     shared.log(&format!("HTTP/2 client connection for {host}:{port}"));
@@ -494,7 +566,7 @@ pub fn serve_h2_client(
     );
     crate::h2_server::serve(&mut tls, handler);
     tls.conn.send_close_notify();
-    let _ = tls.get_ref().set_nonblocking(false);
+    let _ = tls.get_ref().set_nonblocking_io(false);
     let _ = tls.flush();
 }
 
