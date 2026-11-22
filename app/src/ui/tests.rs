@@ -220,7 +220,8 @@ mod logger_menu_tests {
             id: 7,
             method: "GET".into(),
             host: "example.test".into(),
-            port: 443,
+            port: 8443,
+            https: true,
             path: "/a?x=1".into(),
             tool: "Repeater".into(),
             request: Some(std::sync::Arc::from(
@@ -254,7 +255,8 @@ mod logger_menu_tests {
         let mut app = App::new(net::Shared::new());
         let row = tool_row();
         let e = log_row_entry(&app.shared, &row).expect("tool row keeps its message");
-        assert!(e.https);
+        assert!(e.https, "TLS on a non-443 port is kept");
+        assert_eq!(e.port, 8443);
         assert_eq!(e.host, "example.test");
         let before = app.shared.organizer.lock().unwrap().len();
         logger_command(&mut app, &e, "organizer");
@@ -304,7 +306,10 @@ mod logger_menu_tests {
             for cs in &out.shapes {
                 if let egui::epaint::Shape::Text(t) = &cs.shape {
                     if t.galley.text() == "GET" {
-                        texts.push_str(&format!("@GET {} {}\n", t.pos.x, t.pos.y));
+                        texts.push_str(&{
+                            let c = t.visual_bounding_rect().center();
+                            format!("@GET {} {}\n", c.x, c.y)
+                        });
                     }
                     texts.push_str(t.galley.text());
                     texts.push('\n');
@@ -313,7 +318,6 @@ mod logger_menu_tests {
             out.drop_without_applying_deltas();
         };
         frame(vec![], &mut app, &mut texts);
-        let mut opened = false;
         for _ in 0..3 {
             frame(vec![], &mut app, &mut texts);
         }
@@ -323,9 +327,10 @@ mod logger_menu_tests {
             .expect("row painted")
             .split_whitespace();
         let x: f32 = it.next().unwrap().parse().unwrap();
-        let y0: f32 = it.next().unwrap().parse().unwrap();
-        for y in [y0 + 3.0, y0 + 6.0, y0 + 9.0] {
-            let at = egui::pos2(x + 5.0, y);
+        let y: f32 = it.next().unwrap().parse().unwrap();
+        // Click the centre of the painted "GET" cell: the row's own spot.
+        {
+            let at = egui::pos2(x, y);
             frame(vec![egui::Event::PointerMoved(at)], &mut app, &mut texts);
             let btn = |pressed| egui::Event::PointerButton {
                 pos: at,
@@ -338,16 +343,12 @@ mod logger_menu_tests {
             for _ in 0..3 {
                 frame(vec![], &mut app, &mut texts);
             }
-            if texts.contains("Send to Organizer") {
-                opened = true;
-                break;
-            }
+            assert!(
+                texts.contains("Send to Organizer"),
+                "right-click opens the Logger menu; sel {:?}",
+                app.log_sel
+            );
         }
-        assert!(
-            opened,
-            "right-click opens the Logger menu; sel {:?}",
-            app.log_sel
-        );
         assert!(texts.contains("Send to Repeater"));
         assert!(texts.contains("Copy URL"));
         assert_eq!(app.log_sel, Some(1), "right-click selects the row");

@@ -336,7 +336,7 @@ pub(crate) fn log_row_entry(
         method: r.method.clone(),
         host: r.host.clone(),
         port: r.port,
-        https: r.port == 443,
+        https: r.https,
         path: r.path.clone(),
         status: r.status.clone(),
         resp_len: r.resp_len,

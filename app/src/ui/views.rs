@@ -484,8 +484,6 @@ pub(crate) fn burp_ai(app: &mut App, ui: &mut Ui) {
     });
 }
 
-/// Burp-style HTTP Logger view over the bounded `logger` engine. The tab name
-/// is jar-grounded: build 52685 `burp.Zi96` addTab("Logger", ...) (Zi96.java:16).
 /// Logger right-click menu: label and command; an empty label is a separator.
 pub(crate) const LOGGER_MENU: &[(&str, &str)] = &[
     ("Add to scope", "scope"),
@@ -501,6 +499,8 @@ pub(crate) const LOGGER_MENU: &[(&str, &str)] = &[
     ("", ""),
 ];
 
+/// Burp-style HTTP Logger view over the bounded `logger` engine. The tab name
+/// is jar-grounded: build 52685 `burp.Zi96` addTab("Logger", ...) (Zi96.java:16).
 pub(crate) fn logger_view(app: &mut App, ui: &mut Ui) {
     // Burp's Logger (live 52685): a capture-filter bar with the "Logging on"
     // switch, then the log table and the message panes.
