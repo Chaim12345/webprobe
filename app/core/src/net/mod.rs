@@ -108,3 +108,6 @@ mod cookie_jar_tests;
 
 #[cfg(test)]
 mod session_rule_tests;
+
+#[cfg(test)]
+mod url_scope_tests;
