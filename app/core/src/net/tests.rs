@@ -1233,6 +1233,182 @@ data",
     );
 }
 
+/// CTO fixture (c): keep-alive off pools nothing, even when ALPN
+/// negotiated h2.
+#[test]
+fn keep_alive_off_pools_no_h2_connection() {
+    let mut shared = Shared::new();
+    let ca = shared.mitm.ca_der();
+    let upstream_config = shared
+        .mitm
+        .server_config_with_alpn("localhost", vec![b"h2".to_vec()])
+        .unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let t = std::thread::spawn(move || {
+        for path in ["/a", "/b"] {
+            let (stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(10)))
+                .unwrap();
+            let conn = ServerConnection::new(upstream_config.clone()).unwrap();
+            let mut tls = StreamOwned::new(conn, stream);
+            serve_h2_many(&mut tls, &[path]);
+        }
+    });
+    Arc::get_mut(&mut shared).unwrap().tls_upstream = client_config(ca);
+    // keep_alive defaults off: nothing may be pooled.
+    let before = shared.conns_opened.load(Ordering::SeqCst);
+    for path in ["/a", "/b"] {
+        let req = format!("GET {path} HTTP/1.1\r\nHost: localhost\r\n\r\n");
+        let r = send_tls_raw(&shared, "localhost", port, req.as_bytes());
+        assert!(r.resp.is_some(), "{:?}", r.error);
+    }
+    t.join().unwrap();
+    assert_eq!(shared.conns_opened.load(Ordering::SeqCst) - before, 2);
+    assert_eq!(shared.pool_hits.load(Ordering::SeqCst), 0);
+}
+
+/// CTO fixture (c): a forced-HTTP/1.1 request never takes a pooled h2
+/// connection, and later h2 requests still reuse it.
+#[test]
+fn forced_http1_bypasses_the_pooled_h2_connection() {
+    let mut shared = Shared::new();
+    let ca = shared.mitm.ca_der();
+    let upstream_config = shared
+        .mitm
+        .server_config_with_alpn("localhost", vec![b"h2".to_vec(), b"http/1.1".to_vec()])
+        .unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let t = std::thread::spawn(move || {
+        for _ in 0..2 {
+            let (stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(10)))
+                .unwrap();
+            let cfg = upstream_config.clone();
+            std::thread::spawn(move || {
+                let conn = ServerConnection::new(cfg).unwrap();
+                let mut tls = StreamOwned::new(conn, stream);
+                tls.conn.complete_io(&mut tls.sock).unwrap();
+                match tls.conn.alpn_protocol() {
+                    Some(b"h2") => serve_h2_many(&mut tls, &["/a", "/c"]),
+                    Some(b"http/1.1") => {
+                        let _ = read_request_head(&mut tls);
+                        tls.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nh1-ok")
+                            .unwrap();
+                    }
+                    other => panic!("unexpected ALPN: {other:?}"),
+                }
+            });
+        }
+    });
+    Arc::get_mut(&mut shared).unwrap().tls_upstream = client_config(ca);
+    shared.keep_alive.store(true, Ordering::SeqCst);
+    let before = shared.conns_opened.load(Ordering::SeqCst);
+    let send = |path: &str, want: Option<bool>| {
+        let _scope = crate::net::http2_scope(crate::net::Http2Choice {
+            want_h2: want,
+            strip_connection: true,
+        });
+        let req = format!("GET {path} HTTP/1.1\r\nHost: localhost\r\n\r\n");
+        send_tls_raw(&shared, "localhost", port, req.as_bytes())
+    };
+    let ra = send("/a", None);
+    let rb = send("/b", Some(false));
+    let rc = send("/c", None);
+    drop(t);
+    for (r, want) in [(&ra, "served /a"), (&rb, "h1-ok"), (&rc, "served /c")] {
+        let body = r.resp.as_deref().unwrap_or_default();
+        assert!(
+            body.ends_with(want.as_bytes()),
+            "want {want}: {:?}",
+            r.error
+        );
+    }
+    // Two connections total: the pooled h2 one (/a, /c) and the forced-h1 one.
+    assert_eq!(shared.conns_opened.load(Ordering::SeqCst) - before, 2);
+}
+
+/// CTO fixture (b): same host and port but a changed TLS policy is a
+/// different pool identity: no reuse across the change, reuse after it.
+#[test]
+fn tls_policy_change_uses_a_fresh_h2_connection() {
+    let mut shared = Shared::new();
+    let ca = shared.mitm.ca_der();
+    let upstream_config = shared
+        .mitm
+        .server_config_with_alpn("localhost", vec![b"h2".to_vec()])
+        .unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let t = std::thread::spawn(move || {
+        let batches: [&[&str]; 2] = [&["/a"], &["/b", "/c"]];
+        for paths in batches {
+            let (stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(10)))
+                .unwrap();
+            let cfg = upstream_config.clone();
+            std::thread::spawn(move || {
+                let conn = ServerConnection::new(cfg).unwrap();
+                let mut tls = StreamOwned::new(conn, stream);
+                serve_h2_many(&mut tls, paths);
+            });
+        }
+    });
+    Arc::get_mut(&mut shared).unwrap().tls_upstream = client_config(ca.clone());
+    shared.keep_alive.store(true, Ordering::SeqCst);
+    let before = shared.conns_opened.load(Ordering::SeqCst);
+    let req = |path: &str| format!("GET {path} HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    let ra = send_tls_raw(&shared, "localhost", port, req("/a").as_bytes());
+    // TLS policy change: a fresh client config is a new pool identity.
+    Arc::get_mut(&mut shared).unwrap().tls_upstream = client_config(ca);
+    let rb = send_tls_raw(&shared, "localhost", port, req("/b").as_bytes());
+    let rc = send_tls_raw(&shared, "localhost", port, req("/c").as_bytes());
+    drop(t);
+    for (r, want) in [(&ra, "served /a"), (&rb, "served /b"), (&rc, "served /c")] {
+        let body = r.resp.as_deref().unwrap_or_default();
+        assert!(
+            body.ends_with(want.as_bytes()),
+            "want {want}: {:?}",
+            r.error
+        );
+    }
+    // /a on conn 1; the policy change forces conn 2 for /b; /c reuses conn 2.
+    assert_eq!(shared.conns_opened.load(Ordering::SeqCst) - before, 2);
+}
+
+/// CTO fixture (b), key level: route, TLS identity and protocol choice all
+/// discriminate the pool key.
+#[test]
+fn h2_pool_key_covers_route_tls_and_protocol_choice() {
+    let shared = Shared::new();
+    let config = shared.upstream_for("localhost");
+    let base = crate::net::conn_reuse::h2_pool_key(&shared, "localhost", 443, &config, None);
+    // Protocol choice.
+    let h1 = crate::net::conn_reuse::h2_pool_key(&shared, "localhost", 443, &config, Some(false));
+    assert_ne!(base, h1);
+    // Route change (effective upstream config).
+    let mut proxied = config.clone();
+    proxied.kind = crate::upstream::UpstreamKind::Http;
+    let via_proxy = crate::net::conn_reuse::h2_pool_key(&shared, "localhost", 443, &proxied, None);
+    assert_ne!(base, via_proxy);
+    // TLS identity: a matching client-certificate rule.
+    shared
+        .client_certs
+        .lock()
+        .unwrap()
+        .push(crate::net::tls_client::ClientCertRule {
+            host_pattern: "localhost".into(),
+            cert_pem: "pem".into(),
+            key_pem: "key".into(),
+        });
+    let with_cert = crate::net::conn_reuse::h2_pool_key(&shared, "localhost", 443, &config, None);
+    assert_ne!(base, with_cert);
+}
+
 /// A-05 end to end: a browser-style CONNECT + MITM request through the
 /// proxy listener reaches an upstream that negotiated h2 via ALPN, and the
 /// client still receives a normal HTTP/1.1 response.
