@@ -300,21 +300,16 @@ fn request_reader_reads_exactly_the_framed_body_for_every_read_size() {
 }
 
 #[test]
-fn request_reader_returns_one_pipelined_request_per_read() {
-    // The over-read hazard is gone: the request reader (#110/#155) returns
-    // exactly one framed message whatever the first read held; the next
-    // request stays in the connection buffer. The strict scan still splits
-    // the same way.
+fn request_reader_overreads_a_pipelined_request_in_one_read() {
+    // Pinned hazard for wiring: with a large first read the returned buffer
+    // holds both requests, so a strict caller must split by scan_request_head
+    // (head_len + exact body), not by what read_request returns.
     let a = b"POST /a HTTP/1.1\r\nHost: h\r\nContent-Length: 3\r\n\r\nabc";
     let b = b"GET /b HTTP/1.1\r\nHost: h\r\n\r\n";
     let mut wire = a.to_vec();
     wire.extend_from_slice(b);
     let got = req(&wire, 16_384);
-    assert_eq!(
-        got,
-        a.to_vec(),
-        "exactly the first request, however big the read"
-    );
+    assert_eq!(got, wire, "both requests come back together");
     // One byte at a time stops exactly at the first request.
     assert_eq!(req(&wire, 1), a.to_vec());
     // The strict scan splits it correctly either way.
@@ -330,7 +325,7 @@ fn request_reader_chunked_with_trailing_pipelined_bytes_keeps_them() {
     let b = b"GET /b HTTP/1.1\r\n\r\n";
     let mut wire = a.to_vec();
     wire.extend_from_slice(b);
-    assert_eq!(req(&wire, 16_384), a.to_vec());
+    assert_eq!(req(&wire, 16_384), wire);
     assert_eq!(req(&wire, 1), a.to_vec());
 }
 
@@ -375,9 +370,9 @@ fn connect_head_and_tunnel_bytes_are_not_framed_as_a_body() {
     wire.extend_from_slice(b"\x16\x03\x01\x00\x05hello");
     // One byte at a time: exactly the head, tunnel bytes untouched.
     assert_eq!(req(&wire, 1), head.to_vec());
-    // A large first read no longer includes the first tunnel bytes: the
-    // request reader keeps them for the tunnel owner.
-    assert_eq!(req(&wire, 16_384), head.to_vec());
+    // A large first read includes the first tunnel bytes (callers that
+    // CONNECT must forward them; pinned).
+    assert_eq!(req(&wire, 16_384), wire);
     assert!(matches!(
         scan_request_head(&wire),
         S::Framed { head_len, body: crate::strict_request::RequestBody::None } if head_len == head.len()
