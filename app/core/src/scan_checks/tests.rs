@@ -626,17 +626,31 @@ fn r10_broken_access_control_against_a_live_lab() {
     let req = format!("GET /open HTTP/1.1\r\nHost: {host}\r\n\r\n");
     let got = lab_scan(port, &["active.broken-access-control"], "GET", "/open", req);
     assert!(got.is_empty(), "{got:?}");
-    // A non-GET/POST audit is skipped: the replay models GET/POST
-    // semantics only.
-    let req = format!("HEAD /open HTTP/1.1\r\nHost: {host}\r\nCookie: sid=abc\r\n\r\n");
-    let got = lab_scan(
-        port,
-        &["active.broken-access-control"],
-        "HEAD",
-        "/open",
-        req,
+}
+
+#[test]
+fn bac_post_sends_no_requests_beyond_the_scanner_baseline() {
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    let requests = Arc::new(AtomicUsize::new(0));
+    let seen = requests.clone();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(listener, move |_, _, _| {
+        seen.fetch_add(1, Ordering::SeqCst);
+        "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok".into()
+    });
+    let req = format!(
+        "POST / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nCookie: sid=abc\r\nContent-Length: 0\r\n\r\n"
     );
-    assert!(got.is_empty(), "HEAD audit must be skipped: {got:?}");
+    let issues = lab_scan(port, &["active.broken-access-control"], "POST", "/", req);
+    assert!(issues.is_empty());
+    assert_eq!(
+        requests.load(Ordering::SeqCst),
+        1,
+        "only the scanner baseline is allowed"
+    );
 }
 
 /// R-10 web cache poisoning (Zp22 / Zg1g rule): reported only when a

@@ -449,6 +449,7 @@ impl RequestCheck for SpoofableClientIp {
 /// Remove `authorization`, `cookie` and `x-*` headers — except
 /// `x-requested-with` — from a raw request (burp.Zii_.java:25-64),
 /// returning the rewritten request and the names removed.
+/// Bare-LF headers are not stripped; this helper expects CRLF.
 fn strip_auth_headers(raw: &[u8]) -> (Vec<u8>, Vec<String>) {
     let Some(end) = util::find_head_end(raw) else {
         return (raw.to_vec(), Vec::new());
@@ -465,8 +466,7 @@ fn strip_auth_headers(raw: &[u8]) -> (Vec<u8>, Vec<String>) {
                 let k = k.trim();
                 let drop = k.eq_ignore_ascii_case("authorization")
                     || k.eq_ignore_ascii_case("cookie")
-                    || (k.len() > 2
-                        && k[..2].eq_ignore_ascii_case("x-")
+                    || (k.get(..2).is_some_and(|p| p.eq_ignore_ascii_case("x-"))
                         && !k.eq_ignore_ascii_case("x-requested-with"));
                 if drop {
                     removed.push(k.to_string());
@@ -573,11 +573,10 @@ impl RequestCheck for BrokenAccessControl {
         if cx.stopped() || !cx.runs(self.issue()) || cx.baseline.raw.is_empty() {
             return;
         }
-        // The replay only models GET/POST semantics (query marker, header
-        // strip). HEAD/PUT/DELETE change response semantics the
-        // equivalence test does not capture, so skip them.
+        // Replay safe methods only. POST and other potentially mutating
+        // methods are skipped to avoid repeating application side effects.
         let method = cx.req.split_whitespace().next().unwrap_or("");
-        if !method.eq_ignore_ascii_case("GET") && !method.eq_ignore_ascii_case("POST") {
+        if !method.eq_ignore_ascii_case("GET") && !method.eq_ignore_ascii_case("HEAD") {
             return;
         }
         let base = util::parse_http(&cx.baseline.raw);
@@ -2315,6 +2314,16 @@ impl PointCheck for StoredEcho {
 #[cfg(test)]
 mod bac_helper_tests {
     use super::*;
+
+    #[test]
+    fn strip_auth_headers_handles_non_ascii_names_without_panicking() {
+        let raw = "GET / HTTP/1.1\r\nHost: h\r\n�name: v\r\néname: v\r\nCookie: s\r\n\r\n";
+        let (out, removed) = strip_auth_headers(raw.as_bytes());
+        assert_eq!(removed, ["Cookie"]);
+        let out = String::from_utf8(out).unwrap();
+        assert!(out.contains("�name: v"));
+        assert!(out.contains("éname: v"));
+    }
 
     #[test]
     fn strip_auth_headers_drops_cookie_authorization_and_x_headers_only() {
