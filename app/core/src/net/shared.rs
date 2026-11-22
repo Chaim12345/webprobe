@@ -34,6 +34,9 @@ pub struct Shared {
     pub next_issue_id: AtomicU64,
     /// Held intercept items (requests/responses waiting in the queue).
     pub next_queue_id: AtomicU64,
+    /// Crawler / site-map-only items: they are not Proxy history rows, so they
+    /// number on their own. The Target site map keys rows by (kind, id).
+    pub next_crawl_id: AtomicU64,
     /// WebSocket sockets and messages: the WebSockets history has its own #.
     pub next_ws_id: AtomicU64,
     pub proxy_port: std::sync::atomic::AtomicU16,
@@ -255,6 +258,7 @@ impl Shared {
             next_id: AtomicU64::new(1),
             next_issue_id: AtomicU64::new(1),
             next_queue_id: AtomicU64::new(1),
+            next_crawl_id: AtomicU64::new(1),
             next_ws_id: AtomicU64::new(1),
             proxy_port: std::sync::atomic::AtomicU16::new(8080),
             browser_port: std::sync::atomic::AtomicU16::new(0),

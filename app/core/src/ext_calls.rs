@@ -235,7 +235,7 @@ pub fn dispatch(shared: &Shared, extension: &str, op: &str, args: &Value) -> Res
         }
         "sitemap.add" => {
             let mut e = entry_of(args).ok_or("no request")?;
-            e.id = shared.next_id.fetch_add(1, Ordering::SeqCst);
+            e.id = shared.next_crawl_id.fetch_add(1, Ordering::SeqCst);
             shared.crawl_items.push(e);
             shared.wake();
             Ok(Value::Null)

@@ -74,7 +74,9 @@ use eframe::egui::{self, ViewportCommand};
 use crate::ext_host::ProxyHooks as _;
 
 /// The history and issue rows the site map tree is built from.
-pub type SiteCache = (Vec<net::HistEntry>, Vec<(String, String)>);
+/// The third member says, per entry, whether it is a crawler item (its id comes
+/// from the crawl counter, so selection keys on (is_crawl, id)).
+pub type SiteCache = (Vec<net::HistEntry>, Vec<(String, String)>, Vec<bool>);
 
 pub struct App {
     pub bambdas: bambda_ui::State,
@@ -254,7 +256,8 @@ pub struct App {
     /// Indices into `site_cache` for the selected site map node.
     pub site_rows: Arc<Vec<usize>>,
     pub site_rows_key: String,
-    pub target_entry: Option<u64>,
+    /// Selected site map row as (is_crawl, id).
+    pub target_entry: Option<(bool, u64)>,
     pub site_req_pane: msgpane::PaneState,
     pub site_resp_pane: msgpane::PaneState,
     /// Dashboard: selected task (0 crawl, 1 live audit, 2 active scan), task
@@ -887,7 +890,7 @@ impl App {
             target_view: 0,
             target_node: None,
             site_filter: site_map::SiteFilter::default(),
-            site_cache: Arc::new((Vec::new(), Vec::new())),
+            site_cache: Arc::new((Vec::new(), Vec::new(), Vec::new())),
             site_cache_key: String::new(),
             site_tree: Default::default(),
             site_tree_key: String::new(),

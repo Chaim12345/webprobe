@@ -994,20 +994,33 @@ pub(crate) fn target(app: &mut App, ui: &mut Ui) {
         app.site_filter.text, app.site_filter.in_scope_only, app.site_filter.hide_unrequested
     );
     if key != app.site_cache_key {
-        let mut all: Vec<net::HistEntry> = app.shared.history.snapshot();
+        let mut all: Vec<(bool, net::HistEntry)> = app
+            .shared
+            .history
+            .snapshot()
+            .into_iter()
+            .map(|e| (false, e))
+            .collect();
         // Crawler requests are site-map contents too (Burp keeps them out of
         // Proxy history but in the site map).
-        all.extend(app.shared.crawl_items.snapshot().iter().cloned());
+        all.extend(
+            app.shared
+                .crawl_items
+                .snapshot()
+                .iter()
+                .cloned()
+                .map(|e| (true, e)),
+        );
         let shared = app.shared.clone();
         let filter = app.site_filter.clone();
-        let kept: Vec<net::HistEntry> = all
+        let (kept_flags, kept): (Vec<bool>, Vec<net::HistEntry>) = all
             .into_iter()
-            .filter(|e| {
+            .filter(|(_, e)| {
                 filter.keeps(&history_host(e), &e.path, || {
                     net::in_scope(&shared, &history_url(e))
                 })
             })
-            .collect();
+            .unzip();
         let links: Vec<(String, String)> = if filter.hide_unrequested {
             Vec::new()
         } else {
@@ -1020,12 +1033,13 @@ pub(crate) fn target(app: &mut App, ui: &mut Ui) {
                 .cloned()
                 .collect()
         };
-        app.site_cache = std::sync::Arc::new((kept, links));
+        app.site_cache = std::sync::Arc::new((kept, links, kept_flags));
         app.site_cache_key = key;
     }
     let cache = app.site_cache.clone();
     let entries: &Vec<net::HistEntry> = &cache.0;
     let links: &Vec<(String, String)> = &cache.1;
+    let crawl_flags: &Vec<bool> = &cache.2;
     // Issue markers: the most severe issue under each node gets a dot.
     let issue_marks: Vec<(String, String, usize)> = app
         .shared
@@ -1215,7 +1229,10 @@ pub(crate) fn target(app: &mut App, ui: &mut Ui) {
                     app.site_rows_key = rows_key;
                 }
                 let row_idx = app.site_rows.clone();
-                let rows: Vec<&net::HistEntry> = row_idx.iter().filter_map(|&i| entries.get(i)).collect();
+                let rows: Vec<(bool, &net::HistEntry)> = row_idx
+                    .iter()
+                    .filter_map(|&i| entries.get(i).map(|e| (crawl_flags.get(i).copied().unwrap_or(false), e)))
+                    .collect();
                 let full_h = ui.available_height();
                 egui_extras::StripBuilder::new(ui)
                     .size(egui_extras::Size::relative(0.45))
@@ -1237,9 +1254,9 @@ pub(crate) fn target(app: &mut App, ui: &mut Ui) {
                             let mut pick = None;
                             let h = ui.available_height();
                             let sel = app.target_entry;
-                            table::table_body(ui, "site_contents", &cols, &rows, &mut st, 19.0, h, &mut |e, ui| {
+                            table::table_body(ui, "site_contents", &cols, &rows, &mut st, 19.0, h, &mut |&(is_crawl, e), ui| {
                                 let rr = egui::Rect::from_min_size(ui.cursor().min, egui::vec2(ui.available_width(), 19.0));
-                                if sel == Some(e.id) {
+                                if sel == Some((is_crawl, e.id)) {
                                     ui.painter().rect_filled(rr, 0.0, theme::selection_bg());
                                 }
                                 let row = ui.horizontal(|ui| {
@@ -1256,7 +1273,7 @@ pub(crate) fn target(app: &mut App, ui: &mut Ui) {
                                     ]);
                                 }).response.interact(egui::Sense::click());
                                 if row.clicked() {
-                                    pick = Some(e.id);
+                                    pick = Some((is_crawl, e.id));
                                 }
                             });
                             app.target_table = st;
@@ -1265,7 +1282,7 @@ pub(crate) fn target(app: &mut App, ui: &mut Ui) {
                             }
                         });
                         col.cell(|ui| {
-                            let e = app.target_entry.and_then(|id| entries.iter().find(|e| e.id == id).cloned());
+                            let e = app.target_entry.and_then(|key| find_site_entry(entries, crawl_flags, key).cloned());
                             let req = e.as_ref().map(|e| util::origin_form(&e.req_raw));
                             let resp = e.as_ref().and_then(|e| e.resp_raw.clone());
                             let h = ui.available_height().max(full_h * 0.5);
@@ -1292,4 +1309,47 @@ pub(crate) fn target(app: &mut App, ui: &mut Ui) {
         &mut app.map_split,
         map_w,
     );
+}
+
+/// The site map row a selection key points at. Proxy history and crawler items
+/// number independently, so the id alone is ambiguous: the key is (is_crawl, id).
+pub(crate) fn find_site_entry<'a>(
+    entries: &'a [net::HistEntry],
+    crawl_flags: &[bool],
+    key: (bool, u64),
+) -> Option<&'a net::HistEntry> {
+    entries
+        .iter()
+        .enumerate()
+        .find(|(i, e)| e.id == key.1 && crawl_flags.get(*i).copied().unwrap_or(false) == key.0)
+        .map(|(_, e)| e)
+}
+
+#[cfg(test)]
+mod site_selection_tests {
+    use super::*;
+
+    #[test]
+    fn selection_distinguishes_history_and_crawl_rows_with_the_same_id() {
+        let entry = |id, path: &str| net::HistEntry {
+            id,
+            path: path.into(),
+            ..Default::default()
+        };
+        let entries = vec![
+            entry(1, "/history"),
+            entry(1, "/crawled"),
+            entry(2, "/other"),
+        ];
+        let flags = vec![false, true, false];
+        assert_eq!(
+            find_site_entry(&entries, &flags, (false, 1)).unwrap().path,
+            "/history"
+        );
+        assert_eq!(
+            find_site_entry(&entries, &flags, (true, 1)).unwrap().path,
+            "/crawled"
+        );
+        assert!(find_site_entry(&entries, &flags, (true, 2)).is_none());
+    }
 }

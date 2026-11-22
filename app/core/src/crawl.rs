@@ -195,7 +195,7 @@ pub fn crawl_single(shared: &Arc<Shared>, url: &str) -> Vec<HistEntry> {
         port,
         authority,
         path,
-        shared.next_id.fetch_add(1, Ordering::SeqCst),
+        shared.next_crawl_id.fetch_add(1, Ordering::SeqCst),
     )]
 }
 
@@ -256,7 +256,7 @@ pub fn crawl(shared: &Arc<Shared>, start_url: &str) -> Vec<HistEntry> {
             port,
             authority,
             extra,
-            shared.next_id.fetch_add(1, Ordering::SeqCst),
+            shared.next_crawl_id.fetch_add(1, Ordering::SeqCst),
         );
         let ok = e.status.starts_with('2');
         let body = e
@@ -304,7 +304,7 @@ pub fn crawl(shared: &Arc<Shared>, start_url: &str) -> Vec<HistEntry> {
             port,
             authority,
             &path,
-            shared.next_id.fetch_add(1, Ordering::SeqCst),
+            shared.next_crawl_id.fetch_add(1, Ordering::SeqCst),
         );
         if depth < limits.max_depth {
             if let Some(resp) = &e.resp_raw {
@@ -1180,7 +1180,7 @@ pub fn replay_seen(shared: &Arc<Shared>, r: &SeenRequest) -> HistEntry {
         })
         .unwrap_or_default();
     let mut e = HistEntry {
-        id: shared.next_id.fetch_add(1, Ordering::SeqCst),
+        id: shared.next_crawl_id.fetch_add(1, Ordering::SeqCst),
         ts: util::now_secs(),
         method: r.method.clone(),
         host: host.clone(),
