@@ -57,7 +57,8 @@ impl Default for PoolConfig {
     }
 }
 
-/// "Number of retries on network failure" / "Pause before retry".
+/// Legacy retry settings, retained for project compatibility. Automatic
+/// retries are disabled because transport errors have unknown outcomes.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RetryConfig {
     pub retries: u32,
@@ -67,7 +68,7 @@ pub struct RetryConfig {
 impl Default for RetryConfig {
     fn default() -> Self {
         Self {
-            retries: 3,
+            retries: 0,
             pause_ms: 2000,
         }
     }
@@ -284,29 +285,16 @@ pub fn throttle_delay_ms(pool: &PoolConfig, n: u64, rand01: f64) -> u64 {
     delay
 }
 
-/// Send once, then retry up to `retry.retries` times on a network failure
-/// (`send` returning `None`), pausing `pause_ms` before each retry. Returns
-/// the response and the number of attempts. `stopped` aborts the waiting.
+/// Make one attempt. A missing response is possibly-processed, not proof of
+/// a pre-send failure. Legacy retry settings and callback arguments remain for
+/// API/project compatibility but cannot authorize resending an unknown outcome.
 pub fn send_with_retry(
-    retry: &RetryConfig,
+    _retry: &RetryConfig,
     mut send: impl FnMut() -> Option<Vec<u8>>,
-    mut pause: impl FnMut(u64),
-    stopped: impl Fn() -> bool,
+    _pause: impl FnMut(u64),
+    _stopped: impl Fn() -> bool,
 ) -> (Option<Vec<u8>>, u32) {
-    let mut attempts = 0;
-    loop {
-        attempts += 1;
-        if let Some(resp) = send() {
-            return (Some(resp), attempts);
-        }
-        if attempts > retry.retries || stopped() {
-            return (None, attempts);
-        }
-        pause(retry.pause_ms);
-        if stopped() {
-            return (None, attempts);
-        }
-    }
+    (send(), 1)
 }
 
 /// Offset of the response body (after the blank line), or the end.
@@ -578,7 +566,7 @@ pub struct ResultRow {
     pub status: String,
     pub length: usize,
     pub ms: u128,
-    /// Network failure after all retries.
+    /// No response from the single send attempt; the origin may have processed it.
     pub error: bool,
     pub attempts: u32,
     pub request: Vec<u8>,
@@ -878,6 +866,16 @@ fn analyse(row: &mut ResultRow, settings: &AttackSettings) {
     }
 }
 
+/// Replay safety (CTO ruling): the automatic unmodified-template baseline
+/// runs only for safe methods. For POST/PUT/PATCH/DELETE and anything else
+/// the baseline is skipped, so an attack never issues an effect the operator
+/// did not ask for; attack rows keep their 1-based numbering either way.
+fn baseline_allowed(template: &Template) -> bool {
+    let request = template.render(&vec![None; template.positions()]);
+    let method = request.split_whitespace().next().unwrap_or("");
+    matches!(method, "GET" | "HEAD")
+}
+
 /// Start an attack against `target` (host, port, https). `specs` come from
 /// `intruder::resolve_specs`. Recursive grep runs one request at a time.
 pub fn start(
@@ -925,8 +923,13 @@ pub fn start(
                     attacks,
                     next: AtomicUsize::new(0),
                 },
-                // Requests planned, including the baseline (request 0).
-                Some(total + 1),
+                // Requests planned, including the baseline (request 0) when
+                // the template's method allows one.
+                Some(if baseline_allowed(&template) {
+                    total + 1
+                } else {
+                    total
+                }),
                 workers,
             )
         }
@@ -1137,6 +1140,26 @@ impl Dispatch<'_> {
     async fn run(&self, source: &Source) {
         // Request 0 is the unmodified baseline: finish it before any payload
         // probe starts, so concurrent payloads cannot overtake it (#117).
+        // Effectful methods skip it entirely (replay safety ruling).
+        if !baseline_allowed(&self.state.template) {
+            let request = self
+                .state
+                .template
+                .render(&vec![None; self.state.template.positions()]);
+            let method = request.split_whitespace().next().unwrap_or("").to_string();
+            self.shared.log(&format!(
+                "Intruder baseline skipped for {method}: effectful methods are not replayed"
+            ));
+            match source {
+                Source::Matrix { attacks, next } => self.matrix(attacks, next).await,
+                Source::Recursive {
+                    template,
+                    walk,
+                    made,
+                } => self.recursive(template, walk, made).await,
+            }
+            return;
+        }
         if self.paused_out().await {
             return;
         }
@@ -1530,10 +1553,12 @@ mod tests {
     }
 
     #[test]
-    fn retries_pause_between_attempts_and_give_up() {
-        let retry = RetryConfig::default();
-        assert_eq!((retry.retries, retry.pause_ms), (3, 2000));
-        let mut pauses = Vec::new();
+    fn missing_response_never_retries_even_with_legacy_retry_settings() {
+        assert_eq!(RetryConfig::default().retries, 0);
+        let retry = RetryConfig {
+            retries: 20,
+            pause_ms: 0,
+        };
         let mut calls = 0;
         let (resp, attempts) = send_with_retry(
             &retry,
@@ -1541,28 +1566,12 @@ mod tests {
                 calls += 1;
                 None
             },
-            |ms| pauses.push(ms),
+            |_| panic!("unknown outcomes must not schedule another send"),
             || false,
         );
-        assert_eq!((resp, attempts, calls), (None, 4, 4));
-        assert_eq!(pauses, [2000, 2000, 2000]);
-        let mut calls = 0;
-        let (resp, attempts) = send_with_retry(
-            &retry,
-            || {
-                calls += 1;
-                if calls == 2 {
-                    Some(b"ok".to_vec())
-                } else {
-                    None
-                }
-            },
-            |_| {},
-            || false,
-        );
-        assert_eq!((resp.as_deref(), attempts), (Some(&b"ok"[..]), 2));
-        let (_, attempts) = send_with_retry(&retry, || None, |_| {}, || true);
-        assert_eq!(attempts, 1, "stop aborts the retries");
+        assert_eq!((resp, attempts, calls), (None, 1, 1));
+        let (resp, attempts) = send_with_retry(&retry, || Some(b"ok".to_vec()), |_| {}, || false);
+        assert_eq!((resp.as_deref(), attempts), (Some(&b"ok"[..]), 1));
     }
 
     const RESP: &[u8] = b"HTTP/1.1 500 Internal Server Error\r\nX-Error: header-only\r\nSet-Cookie: s=1\r\n\r\n<p>SQL syntax Error near 'x'</p><input name=\"csrf\" value=\"tok123\">";

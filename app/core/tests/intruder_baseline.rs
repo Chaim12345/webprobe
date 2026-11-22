@@ -101,9 +101,9 @@ fn request_zero_precedes_all_four_payload_matrices_and_is_exported() {
         (ClusterBomb, 2, 4),
     ] {
         let (port, seen, server) = origin(payload_count + 1, 0);
-        // A body containing encoding-set characters must stay untouched in
-        // the baseline, including header order and Content-Length spelling.
-        let text = format!("POST /echo HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 7\r\nX-Keep: exact\r\nConnection: close\r\n\r\n§a&b§=§c/d§");
+        // Encoding-set characters must stay untouched in the baseline,
+        // including header order; GET/HEAD are the only baselined methods.
+        let text = format!("GET /echo?q=§a&b§&r=§c/d§ HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nX-Keep: exact\r\nConnection: close\r\n\r\n");
         let text = if positions == 1 {
             text.replace("§c/d§", "c/d")
         } else {
@@ -164,8 +164,84 @@ fn request_zero_precedes_all_four_payload_matrices_and_is_exported() {
     }
 }
 
+/// Replay-safety ruling: an effectful template sends only its attack rows;
+/// the unmodified-template baseline is skipped for non-GET/HEAD methods, so
+/// the origin sees exactly the requested effects and no reference row exists.
 #[test]
-fn failed_baseline_is_reported_and_payload_still_runs_after_its_retries() {
+fn effectful_methods_skip_the_baseline_and_send_only_attack_rows() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let seen: Capture = Arc::new(Mutex::new(Vec::new()));
+    let copy = seen.clone();
+    let server = std::thread::spawn(move || {
+        for _ in 0..3 {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let mut request = Vec::new();
+            let mut buf = [0; 2048];
+            loop {
+                let n = stream.read(&mut buf).unwrap();
+                assert_ne!(n, 0, "request truncated");
+                request.extend_from_slice(&buf[..n]);
+                if let Some(end) = request.windows(4).position(|w| w == b"\r\n\r\n") {
+                    let head = String::from_utf8_lossy(&request[..end]);
+                    let length = head
+                        .lines()
+                        .find_map(|line| line.strip_prefix("Content-Length: "))
+                        .map(|v| v.parse::<usize>().unwrap())
+                        .unwrap_or(0);
+                    if request.len() >= end + 4 + length {
+                        break;
+                    }
+                }
+            }
+            copy.lock().unwrap().push(request);
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+                .unwrap();
+        }
+    });
+    let text = format!("POST /submit HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 5\r\nConnection: close\r\n\r\nv=§1§");
+    let parsed = intruder::Template::parse(&text).unwrap();
+    let specs = intruder::resolve_specs(
+        &parsed,
+        intruder::AttackType::Sniper,
+        &[intruder::PayloadSource::SimpleList {
+            items: vec!["a".into(), "b".into(), "c".into()],
+        }],
+    )
+    .unwrap();
+    let state = run::start(
+        net::Shared::new(),
+        &text,
+        intruder::AttackType::Sniper,
+        specs,
+        ("127.0.0.1".into(), port, false),
+        settings(),
+    )
+    .unwrap();
+    wait_finished(&state);
+    server.join().unwrap();
+    let seen = seen.lock().unwrap();
+    // Exactly the three attack requests reached the origin: no baseline POST.
+    assert_eq!(seen.len(), 3);
+    assert!(seen.iter().all(|r| r.starts_with(b"POST /submit")));
+    let mut rows = state.snapshot_rows();
+    rows.sort_by_key(|r| r.number);
+    assert_eq!(rows.len(), 3);
+    for (i, row) in rows.iter().enumerate() {
+        assert_eq!(row.number, i + 1, "attack rows keep 1-based numbering");
+        assert_eq!(row.status, "200");
+    }
+    assert_eq!(state.progress(), (3, Some(3)));
+    let csv = run::results_csv(&rows, state.sets, &state.settings);
+    assert!(!csv.lines().nth(1).unwrap().starts_with("0,,"));
+}
+
+#[test]
+fn failed_baseline_is_reported_and_payload_still_runs_after_its_send() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     drop(listener); // Both requests fail fast with connection refused.
@@ -193,13 +269,15 @@ fn failed_baseline_is_reported_and_payload_still_runs_after_its_retries() {
     wait_finished(&state);
     let rows = state.snapshot_rows();
     assert_eq!(rows.len(), 2);
+    // Replay safety: a send that gets no response is not silently replayed,
+    // so each row records exactly one attempt.
     assert_eq!(
         (rows[0].number, rows[0].error, rows[0].attempts),
-        (0, true, 2)
+        (0, true, 1)
     );
     assert_eq!(
         (rows[1].number, rows[1].error, rows[1].attempts),
-        (1, true, 2)
+        (1, true, 1)
     );
     assert!(String::from_utf8_lossy(&rows[0].request).starts_with("GET /?q=base "));
     assert!(String::from_utf8_lossy(&rows[1].request).starts_with("GET /?q=one "));

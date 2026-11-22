@@ -22,7 +22,15 @@ pub fn send_raw_with(
     sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
 ) -> Upstream {
     let request = jar_request(shared, host, false, request);
-    let request = session_request(shared, port, false, request);
+    let request = match session_request(shared, port, false, request) {
+        Ok(request) => request,
+        Err(error) => {
+            return Upstream {
+                resp: None,
+                error: Some(error),
+            }
+        }
+    };
     let mut tool_sink = tool_sink(shared, host, port, false, &request);
     let up = match (sink, tool_sink.as_mut()) {
         (Some(s), _) => send_from(shared, host, port, &request, Some(s)),

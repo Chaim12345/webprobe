@@ -256,7 +256,11 @@ pub fn run_macro(shared: &Shared, name: &str) -> Option<Vec<u8>> {
 }
 
 /// Apply the proxy's session rules to a request before it is sent upstream.
-pub fn apply_session_rules(shared: &Shared, req: &[u8], default_port: u16) -> Vec<u8> {
+pub fn apply_session_rules(
+    shared: &Shared,
+    req: &[u8],
+    default_port: u16,
+) -> Result<Vec<u8>, String> {
     apply_session_rules_for(shared, "Proxy", req, default_port, default_port == 443)
 }
 
@@ -278,13 +282,13 @@ pub fn apply_session_rules_for(
     req: &[u8],
     default_port: u16,
     https: bool,
-) -> Vec<u8> {
+) -> Result<Vec<u8>, String> {
     if IN_SESSION.with(|s| s.get()) {
-        return req.to_vec();
+        return Ok(req.to_vec());
     }
     let rules = shared.session_rules.lock().unwrap().clone();
     if rules.is_empty() {
-        return req.to_vec();
+        return Ok(req.to_vec());
     }
     let parts = util::parse_http(req);
     let (host, port) = host_of(&parts, default_port);
@@ -385,8 +389,22 @@ pub fn apply_session_rules_for(
                         "Session rule '{}': validation request failed",
                         rule.name
                     ));
-                    continue;
+                    return Err(format!(
+                        "session validation failed with an unknown origin outcome: {}",
+                        probe.error.as_deref().unwrap_or("missing response")
+                    ));
                 };
+                if util::find_head_end(&resp).is_none()
+                    || !util::parse_http(&resp)
+                        .status
+                        .parse::<u16>()
+                        .is_ok_and(|s| s >= 200)
+                {
+                    return Err(
+                        "session validation returned no final response; unknown origin outcome"
+                            .into(),
+                    );
+                }
                 let found = !rule.check.is_empty()
                     && String::from_utf8_lossy(&resp)
                         .to_ascii_lowercase()
@@ -420,7 +438,7 @@ pub fn apply_session_rules_for(
             _ => {}
         }
     }
-    out
+    Ok(out)
 }
 
 /// Run the "post-request macro" rules for a request that was just sent.
