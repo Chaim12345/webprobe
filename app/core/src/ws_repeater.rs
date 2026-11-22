@@ -114,7 +114,7 @@ pub fn new_session(
         WsRepState::Disconnected
     };
     let s = Arc::new(WsSession {
-        id: shared.next_id.fetch_add(1, Ordering::SeqCst),
+        id: shared.next_ws_id.fetch_add(1, Ordering::SeqCst),
         host: host.to_string(),
         port,
         tls,

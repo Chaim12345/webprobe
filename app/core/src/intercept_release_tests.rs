@@ -280,6 +280,39 @@ fn release_all_releases_held_http_and_websocket_items() {
 }
 
 #[test]
+fn held_http_and_websocket_items_get_distinct_ids_and_release_the_right_one() {
+    let shared = held_shared();
+    let (tx, http_rx) = mpsc::channel();
+    let http_id = shared.next_queue_item_id();
+    shared.queue.lock().unwrap().push(InterceptItem::new(
+        http_id,
+        "h",
+        80,
+        "GET / HTTP/1.1\r\n\r\n".into(),
+        tx,
+        InterceptKind::Request { https: false },
+    ));
+    let wire = build_ws_frame(0x81, b"ws", false);
+    let ws_rx = relay(&shared, wire, false, always());
+    wait_queue(&shared, 2);
+    let ids: Vec<u64> = shared.queue.lock().unwrap().iter().map(|i| i.id).collect();
+    assert_eq!(ids.len(), 2);
+    assert_ne!(ids[0], ids[1], "one queue, one id sequence: {ids:?}");
+    let ws_id = *ids.iter().find(|&&i| i != http_id).unwrap();
+    // Dropping the WebSocket frame must leave the HTTP request held.
+    assert!(net::intercept_release(&shared, ws_id, true, None));
+    assert!(out_of(&ws_rx).forward.is_empty());
+    assert!(http_rx.try_recv().is_err(), "HTTP item still held");
+    assert_eq!(shared.queue.lock().unwrap().len(), 1);
+    // Forwarding the HTTP request releases only that one.
+    assert!(net::intercept_release(&shared, http_id, false, None));
+    assert_eq!(
+        http_rx.recv_timeout(DEADLINE).unwrap().as_deref(),
+        Some("GET / HTTP/1.1\r\n\r\n")
+    );
+}
+
+#[test]
 fn turning_interception_off_forwards_a_held_http_request_through_the_proxy() {
     // A held request goes on to the origin when the toggle goes off.
     let origin = TcpListener::bind("127.0.0.1:0").unwrap();

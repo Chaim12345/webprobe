@@ -3296,8 +3296,10 @@ pub fn apply_project(app: &mut App, data: &project::ProjectData, content: bool) 
         crate::feedback::toast(crate::feedback::Level::Info, msg);
     }
     // Ids handed out after the restore must not collide with restored ones.
+    // Each list has its own counter; older project files kept one shared
+    // counter, so every list is recounted from its own rows (migration).
     {
-        let max_id = app
+        let history_max = app
             .shared
             .history
             .with_rows(|h| h.iter().map(|e| e.id).max())
@@ -3307,15 +3309,31 @@ pub fn apply_project(app: &mut App, data: &project::ProjectData, content: bool) 
                     .crawl_items
                     .with_rows(|h| h.iter().map(|e| e.id).max()),
             )
-            .chain(app.shared.issues.lock().unwrap().iter().map(|i| i.id))
-            .chain(
-                app.shared
-                    .ws_history
-                    .with_rows(|rows| rows.iter().map(|w| w.id).collect::<Vec<_>>()),
-            )
             .max()
             .unwrap_or(0);
-        app.shared.next_id.fetch_max(max_id + 1, Ordering::SeqCst);
+        app.shared
+            .next_id
+            .fetch_max(history_max + 1, Ordering::SeqCst);
+        let issue_max = app
+            .shared
+            .issues
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|i| i.id)
+            .max()
+            .unwrap_or(0);
+        app.shared
+            .next_issue_id
+            .fetch_max(issue_max + 1, Ordering::SeqCst);
+        let ws_max = app
+            .shared
+            .ws_history
+            .with_rows(|rows| rows.iter().map(|w| w.id).max())
+            .unwrap_or(0);
+        app.shared
+            .next_ws_id
+            .fetch_max(ws_max + 1, Ordering::SeqCst);
     }
     app.map_cache_len = usize::MAX;
 }

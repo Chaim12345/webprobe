@@ -29,6 +29,13 @@ pub struct Shared {
     pub attack: Mutex<Arc<Attack>>,
     pub repeaters: Mutex<Vec<RepTab>>,
     pub next_id: AtomicU64,
+    /// Scan issue numbers: their own sequence, so passive findings do not leave
+    /// gaps in the HTTP history numbering (Burp numbers each list from 1).
+    pub next_issue_id: AtomicU64,
+    /// Held intercept items (requests/responses waiting in the queue).
+    pub next_queue_id: AtomicU64,
+    /// WebSocket sockets and messages: the WebSockets history has its own #.
+    pub next_ws_id: AtomicU64,
     pub proxy_port: std::sync::atomic::AtomicU16,
     /// The private listener of the embedded browser (0 until first opened).
     pub browser_port: std::sync::atomic::AtomicU16,
@@ -232,6 +239,9 @@ impl Shared {
             }]),
             messages: std::sync::atomic::AtomicUsize::new(0),
             next_id: AtomicU64::new(1),
+            next_issue_id: AtomicU64::new(1),
+            next_queue_id: AtomicU64::new(1),
+            next_ws_id: AtomicU64::new(1),
             proxy_port: std::sync::atomic::AtomicU16::new(8080),
             browser_port: std::sync::atomic::AtomicU16::new(0),
             browsers: Mutex::new(Vec::new()),
@@ -333,6 +343,13 @@ impl Shared {
     }
 
     /// Tell the front end that something it shows has changed.
+    /// The next id for a held intercept item. HTTP requests, responses and
+    /// WebSocket frames share one queue, so they share this one sequence:
+    /// forward and drop find an item by id alone.
+    pub fn next_queue_item_id(&self) -> u64 {
+        self.next_queue_id.fetch_add(1, Ordering::SeqCst)
+    }
+
     pub fn wake(&self) {
         let f = self.waker.lock().unwrap().clone();
         if let Some(f) = f {

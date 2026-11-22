@@ -370,7 +370,13 @@ fn table_body_inner<R, F>(
     egui::ScrollArea::vertical()
         .id_salt(("table", id))
         .auto_shrink([false, false])
-        .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
+        // An empty table has nothing to scroll: an always-visible bar would
+        // draw a full-height thumb (Burp shows none).
+        .scroll_bar_visibility(if rows.is_empty() {
+            egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded
+        } else {
+            egui::scroll_area::ScrollBarVisibility::AlwaysVisible
+        })
         .max_height(body_height.min(pane_height))
         .show_viewport(ui, |ui, viewport| {
             // Rows sit flush, like a Swing JTable.

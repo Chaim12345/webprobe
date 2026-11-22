@@ -49,7 +49,7 @@ pub fn add_passive_issues(shared: &Shared, mut issues: Vec<ScanIssue>) {
         if pervasive_merge(&mut iss, &issue) {
             continue;
         }
-        issue.id = shared.next_id.fetch_add(1, Ordering::SeqCst);
+        issue.id = shared.next_issue_id.fetch_add(1, Ordering::SeqCst);
         iss.push(issue);
         incoming += 1;
     }
@@ -133,4 +133,28 @@ pub fn pervasive_merge(iss: &mut Vec<ScanIssue>, new: &ScanIssue) -> bool {
     }
     iss[first] = rep;
     true
+}
+
+#[cfg(test)]
+mod id_sequence_tests {
+    use super::*;
+
+    #[test]
+    fn issue_ids_do_not_consume_history_numbers() {
+        let shared = Shared::new();
+        let issue = |host: &str| ScanIssue {
+            name: "Source code disclosure".into(),
+            host: host.into(),
+            path: "/a".into(),
+            ..Default::default()
+        };
+        add_passive_issues(&shared, vec![issue("one.test"), issue("two.test")]);
+        let ids: Vec<u64> = shared.issues.lock().unwrap().iter().map(|i| i.id).collect();
+        assert_eq!(ids, vec![1, 2], "issues number from 1 on their own");
+        // The next proxy history row is still #1: no gaps from findings.
+        assert_eq!(shared.next_id.load(Ordering::SeqCst), 1);
+        // Held intercept items and WebSocket frames have their own sequences.
+        assert_eq!(shared.next_queue_id.load(Ordering::SeqCst), 1);
+        assert_eq!(shared.next_ws_id.load(Ordering::SeqCst), 1);
+    }
 }
