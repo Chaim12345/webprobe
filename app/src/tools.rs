@@ -2838,6 +2838,10 @@ pub fn drain_save_results(app: &mut App) {
 /// this is cheap): what a save writes and what Settings works on.
 pub fn project_snapshot(app: &mut App) -> project::ProjectData {
     let to_project_history = project::ProjectHistory::from_entry;
+    // One Organizer lock for both fields below: two lock() temporaries in a
+    // single struct expression keep the first guard alive until the end of
+    // the statement, so the second lock deadlocks the same thread.
+    let org = app.shared.organizer.lock().unwrap();
     let crawl_items: Vec<project::ProjectHistory> = app
         .shared
         .crawl_items
@@ -3058,11 +3062,7 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
                 mime: e.mime.clone(),
             })
             .collect(),
-        organizer: app
-            .shared
-            .organizer
-            .lock()
-            .unwrap()
+        organizer: org
             .items
             .iter()
             .map(|o| project::ProjectOrganizerItem {
@@ -3077,11 +3077,7 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
                 collection: o.collection,
             })
             .collect(),
-        organizer_collections: app
-            .shared
-            .organizer
-            .lock()
-            .unwrap()
+        organizer_collections: org
             .collections
             .iter()
             .map(|c| project::ProjectOrganizerCollection {
