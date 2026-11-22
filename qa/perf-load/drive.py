@@ -22,9 +22,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 BODY = b"x" * 1000
 ORIGIN_PORT = 19099
 PROXY_PORT = 18080
-REQUESTS = 2048
-CONCURRENCIES = [16, 64, 128]
-REPEATS = 3
+REQUESTS = int(os.environ.get("PERF_REQUESTS", "2048"))
+CONCURRENCIES = [int(c) for c in os.environ.get("PERF_CONC", "16,64,128").split(",")]
+REPEATS = int(os.environ.get("PERF_REPEATS", "3"))
 WARMUP = 288
 
 
