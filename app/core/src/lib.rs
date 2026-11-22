@@ -27,6 +27,7 @@ pub mod intruder;
 pub mod intruder_run;
 #[cfg(test)]
 mod jwt_tests;
+pub mod strict_request;
 // Stage A (#37): acyclic leaf modules extracted to the webprobe-support crate.
 // Re-exported so `webprobe_core::<module>` paths are unchanged.
 pub use webprobe_support::{
@@ -67,3 +68,5 @@ mod framing_fixtures_tests;
 mod fuzz_tests;
 #[cfg(test)]
 mod parser_fuzz_tests;
+#[cfg(test)]
+mod strict_request_tests;
