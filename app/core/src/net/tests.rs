@@ -178,11 +178,20 @@ fn extension_drop_returns_html_without_contacting_origin() {
         client
             .set_read_timeout(Some(Duration::from_secs(5)))
             .unwrap();
-        write!(client, "{method} http://127.0.0.1:{port}/admin-drop?<script> HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 4\r\nConnection: close\r\n\r\ntest").unwrap();
+        // A buffered follow-up must not be served after this local response's
+        // Connection: close. This also guards future HTTP/1 pipelining work.
+        write!(client, "{method} http://127.0.0.1:{port}/admin-drop?<script> HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 4\r\nConnection: close\r\n\r\ntestGET http://127.0.0.1:{port}/after-drop HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n").unwrap();
         let mut response = Vec::new();
         client.read_to_end(&mut response).unwrap();
         worker.join().unwrap();
         assert_extension_drop_page(&response);
+        assert_eq!(
+            String::from_utf8_lossy(&response)
+                .matches("HTTP/1.1")
+                .count(),
+            1,
+            "the pipelined follow-up must not be served after Connection: close"
+        );
         assert_eq!(
             origin.accept().unwrap_err().kind(),
             std::io::ErrorKind::WouldBlock

@@ -15,7 +15,16 @@ drops and WebSocket drops are unchanged.
 
 Regression tests use real TCP sockets for GET and POST, plus TLS over CONNECT.
 They assert the response status, content type, body length, diagnostic wording,
-no reflected request HTML, no origin connection, and no history entry.
+no reflected request HTML, no origin connection, and no history entry. The
+HTTP/1 fixture includes a buffered follow-up and verifies only one response is
+served after Connection: close. HTTP/2 is tested using real ALPN negotiation
+and two successive streams; ResponseWriter converts internal HTTP/1.1-shaped
+output to HEADERS/DATA, and the connection remains usable for another stream.
+
+Integration note for PR #110: its new buffered-request loop must stop after a
+local dropped-request response with Connection: close. This branch deliberately
+stays based on #99, does not modify #110, and must have this regression re-run
+when combined with that pipelining change.
 
 `curl-proof.txt` records a separate curl request through the real proxy handler,
 with a request-dropping Rust extension registered and an origin listener
