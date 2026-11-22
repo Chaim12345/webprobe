@@ -59,10 +59,10 @@ The host has two visible CPUs and about 2 GiB RAM, shared by the Python origin/c
 
 ## Verification
 
-- Core `cargo test --no-run`: passes.
-- Core tests: 560 passed, 11 ignored, zero failures.
-- Support/report tests: 96 passed, 1 ignored, zero failures.
-- Core `cargo clippy --all-targets -- -D warnings`: passes.
+- Full workspace `cargo test --workspace --no-run`: passes.
+- Full workspace `cargo test --workspace`: 792 passed, 12 ignored, zero failures (desktop 136, core 560, report 12, support 84).
+- Full workspace `cargo clippy --workspace --all-targets -- -D warnings`: passes with zero warnings.
 - Workspace formatting: passes after sorting the new module declaration.
 - Python harness syntax check: passes on Python 3.10.
-- Full desktop/workspace test build is tracked separately in the PR/report; do not equate core-only counts with the full PR45 baseline count of 782.
+
+The workspace count is distinct from the earlier core-only checks and includes all executable non-ignored tests. The ignored tests were not run. No UI visual validation is claimed for this non-UI change.
