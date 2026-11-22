@@ -847,7 +847,9 @@ pub fn upstream_and_deliver<S: ProxyIo>(
         Ok(request) => request,
         Err(error) => {
             shared.log(&error);
-            return false;
+            // The request never went upstream; close rather than keep a
+            // possibly desynced connection alive for pipelined follow-ups.
+            return true;
         }
     };
     let mut req_out = crate::rules::apply_rules(&req_session, &shared.mr_request.lock().unwrap());

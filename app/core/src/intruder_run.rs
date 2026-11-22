@@ -866,6 +866,16 @@ fn analyse(row: &mut ResultRow, settings: &AttackSettings) {
     }
 }
 
+/// Replay safety (CTO ruling): the automatic unmodified-template baseline
+/// runs only for safe methods. For POST/PUT/PATCH/DELETE and anything else
+/// the baseline is skipped, so an attack never issues an effect the operator
+/// did not ask for; attack rows keep their 1-based numbering either way.
+fn baseline_allowed(template: &Template) -> bool {
+    let request = template.render(&vec![None; template.positions()]);
+    let method = request.split_whitespace().next().unwrap_or("");
+    matches!(method, "GET" | "HEAD")
+}
+
 /// Start an attack against `target` (host, port, https). `specs` come from
 /// `intruder::resolve_specs`. Recursive grep runs one request at a time.
 pub fn start(
@@ -913,8 +923,13 @@ pub fn start(
                     attacks,
                     next: AtomicUsize::new(0),
                 },
-                // Requests planned, including the baseline (request 0).
-                Some(total + 1),
+                // Requests planned, including the baseline (request 0) when
+                // the template's method allows one.
+                Some(if baseline_allowed(&template) {
+                    total + 1
+                } else {
+                    total
+                }),
                 workers,
             )
         }
@@ -1125,6 +1140,26 @@ impl Dispatch<'_> {
     async fn run(&self, source: &Source) {
         // Request 0 is the unmodified baseline: finish it before any payload
         // probe starts, so concurrent payloads cannot overtake it (#117).
+        // Effectful methods skip it entirely (replay safety ruling).
+        if !baseline_allowed(&self.state.template) {
+            let request = self
+                .state
+                .template
+                .render(&vec![None; self.state.template.positions()]);
+            let method = request.split_whitespace().next().unwrap_or("").to_string();
+            self.shared.log(&format!(
+                "Intruder baseline skipped for {method}: effectful methods are not replayed"
+            ));
+            match source {
+                Source::Matrix { attacks, next } => self.matrix(attacks, next).await,
+                Source::Recursive {
+                    template,
+                    walk,
+                    made,
+                } => self.recursive(template, walk, made).await,
+            }
+            return;
+        }
         if self.paused_out().await {
             return;
         }
