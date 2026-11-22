@@ -3303,17 +3303,18 @@ pub fn apply_project(app: &mut App, data: &project::ProjectData, content: bool) 
             .shared
             .history
             .with_rows(|h| h.iter().map(|e| e.id).max())
-            .into_iter()
-            .chain(
-                app.shared
-                    .crawl_items
-                    .with_rows(|h| h.iter().map(|e| e.id).max()),
-            )
-            .max()
             .unwrap_or(0);
         app.shared
             .next_id
             .fetch_max(history_max + 1, Ordering::SeqCst);
+        let crawl_max = app
+            .shared
+            .crawl_items
+            .with_rows(|h| h.iter().map(|e| e.id).max())
+            .unwrap_or(0);
+        app.shared
+            .next_crawl_id
+            .fetch_max(crawl_max + 1, Ordering::SeqCst);
         let issue_max = app
             .shared
             .issues
@@ -3763,6 +3764,45 @@ mod save_restore_tests {
             "issues kept"
         );
         assert!(!std::path::Path::new("/nonexistent/should-not-be-written.json").exists());
+    }
+
+    /// Older project files numbered history, crawl items and issues from one
+    /// shared counter (ids 5,6 / 7 / 8 here). Loading one gives each list its
+    /// own next id, taken from that list alone, and keeps the stored ids.
+    #[test]
+    fn old_shared_counter_project_loads_with_per_list_counters() {
+        let mut old = crate::App::new(net::Shared::new());
+        for id in [5, 6] {
+            old.shared.push_history(net::HistEntry {
+                id,
+                host: "h.test".into(),
+                ..Default::default()
+            });
+        }
+        old.shared.add_crawl_items([net::HistEntry {
+            id: 7,
+            host: "c.test".into(),
+            ..Default::default()
+        }]);
+        old.shared
+            .issues
+            .lock()
+            .unwrap()
+            .push(crate::scan::ScanIssue {
+                id: 8,
+                name: "old".into(),
+                ..Default::default()
+            });
+        let data = project_snapshot(&mut old);
+
+        let mut app = crate::App::new(net::Shared::new());
+        apply_project(&mut app, &data, true);
+        assert_eq!(app.shared.next_id.load(Ordering::SeqCst), 7, "history");
+        assert_eq!(app.shared.next_crawl_id.load(Ordering::SeqCst), 8, "crawl");
+        assert_eq!(app.shared.next_issue_id.load(Ordering::SeqCst), 9, "issues");
+        let ids: Vec<u64> = app.shared.history.snapshot().iter().map(|e| e.id).collect();
+        assert_eq!(ids, vec![5, 6]);
+        assert_eq!(app.shared.crawl_items.snapshot()[0].id, 7);
     }
 
     /// Saving must not deadlock (two locks of one mutex in a single statement

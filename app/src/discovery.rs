@@ -758,7 +758,7 @@ fn add_new_to_site_map(app: &mut crate::App) {
     let mut items = Vec::new();
     for f in &found[app.eng.discovery.added..] {
         let mut e = crate::net::HistEntry {
-            id: app.shared.next_id.fetch_add(1, Ordering::SeqCst),
+            id: app.shared.next_crawl_id.fetch_add(1, Ordering::SeqCst),
             ts: crate::util::now_secs(),
             method: "GET".into(),
             host: host.clone(),
