@@ -823,6 +823,49 @@ mod g11_tests {
     }
 
     #[test]
+    fn stored_rounds_continue_after_send_and_retrieval_failures() {
+        let probes: Vec<String> = ["send-fails", "retrieve-fails", "hit"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
+        let mut retrieved = 0;
+        let hit = run_g11_stored(
+            &probes,
+            |p| {
+                if p == "send-fails" {
+                    None
+                } else {
+                    Some(vec![])
+                }
+            },
+            || {
+                retrieved += 1;
+                if retrieved == 1 {
+                    None
+                } else {
+                    Some(resp("<style>hit</style>"))
+                }
+            },
+            |r, p| g11_stored_context_hit(r, p, g11_css_match),
+        );
+        assert_eq!(retrieved, 2);
+        assert_eq!(hit.unwrap().0, "hit");
+    }
+
+    #[test]
+    fn stylesheet_selector_requires_an_exact_rel_token() {
+        for (rel, expected) in [
+            ("preload-stylesheet", false),
+            ("stylesheet-extra", false),
+            ("alternate STYLESHEET", true),
+        ] {
+            let response = resp(&format!("<link rel='{rel}' href='PROBEBODY'>"));
+            let hit = g11_stored_context_hit(&response, "PROBEBODY", g11_css_match);
+            assert_eq!(hit.is_some(), expected, "{rel}");
+        }
+    }
+
+    #[test]
     fn link_probes_cover_the_four_zpyp_prefixes() {
         let probes = g11_link_probes();
         assert_eq!(probes.len(), 4);
