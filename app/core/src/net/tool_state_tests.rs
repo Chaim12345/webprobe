@@ -162,7 +162,8 @@ fn jar_and_session_hooks_pass_through_without_a_tool() {
         jar_request(&shared, "h", false, req),
         std::borrow::Cow::Borrowed(_)
     ));
-    let same = session_request(&shared, 80, false, std::borrow::Cow::Borrowed(&req[..]));
+    let same = session_request(&shared, 80, false, std::borrow::Cow::Borrowed(&req[..]))
+        .expect("no tool scope: passthrough cannot fail");
     assert_eq!(&same[..], &req[..]);
     session_after(&shared, "h");
     jar_response(
