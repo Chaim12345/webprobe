@@ -925,7 +925,8 @@ pub fn start(
                     attacks,
                     next: AtomicUsize::new(0),
                 },
-                Some(total),
+                // Requests planned, including the baseline (request 0).
+                Some(total + 1),
                 workers,
             )
         }
@@ -1142,7 +1143,9 @@ impl Dispatch<'_> {
         if self.napped(self.throttle_wait()).await {
             return;
         }
-        let _permit = self.pool.acquire().await;
+        // The baseline's permit is released before payload probes start;
+        // holding it across the match would starve a size-1 pool.
+        let permit = self.pool.acquire().await;
         if self.state.stop.load(Ordering::SeqCst) {
             return;
         }
@@ -1152,20 +1155,40 @@ impl Dispatch<'_> {
             payloads: vec![None; positions],
         };
         let (shared, state, tx) = (self.shared.clone(), self.state.clone(), self.tx.clone());
-        let row = tokio::task::spawn_blocking(move || {
+        let mut handle = tokio::task::spawn_blocking(move || {
             let _tool = net::tool_scope("Intruder");
-            execute_probe(&shared, &state, 0, baseline)
-        })
-        .await;
-        let Ok(row) = row else {
-            crate::notice::toast(
-                crate::notice::Level::Warn,
-                "engine task 'intruder baseline' panicked; the attack ended, the session continues",
-            );
-            return;
-        };
-        let _ = tx.send(row);
-        self.state.done.fetch_add(1, Ordering::SeqCst);
+            // The guard keeps the run claimed while the baseline's blocking
+            // I/O is in flight, even after Stop detaches the async wait.
+            let _outstanding = BlockingProbe::new(state.clone());
+            let row = execute_probe(&shared, &state, 0, baseline);
+            // Deliver inside the closure: aborting the wait never loses an
+            // in-flight baseline's result (issue #42 contract).
+            let _ = tx.send(row);
+            state.done.fetch_add(1, Ordering::SeqCst);
+        });
+        // Request 0 finishes before any payload probe starts, but Stop
+        // abandons the wait: queued payloads are aborted on Stop anyway.
+        loop {
+            if self.state.stop.load(Ordering::SeqCst) {
+                return;
+            }
+            tokio::select! {
+                r = &mut handle => {
+                    if let Err(e) = r {
+                        if e.is_panic() {
+                            crate::notice::toast(
+                                crate::notice::Level::Warn,
+                                "engine task 'intruder baseline' panicked; the attack ended, the session continues",
+                            );
+                        }
+                        return;
+                    }
+                    break;
+                }
+                _ = tokio::time::sleep(Duration::from_millis(25)) => {}
+            }
+        }
+        drop(permit);
         match source {
             Source::Matrix { attacks, next } => self.matrix(attacks, next).await,
             Source::Recursive {
@@ -1458,7 +1481,7 @@ mod tests {
             assert!(Instant::now() < until, "run drained");
             std::thread::yield_now();
         }
-        assert_eq!(run.progress(), (1, Some(10)));
+        assert_eq!(run.progress(), (1, Some(11)));
         assert_eq!(run.status_text(), "Stopped: 1 requests");
         let rows = run.snapshot_rows();
         assert_eq!(rows.len(), 1, "in-flight result retained");
@@ -1866,8 +1889,8 @@ mod tests {
         }
         assert!(!run.is_running(), "stopped");
         let (done, total) = run.progress();
-        assert_eq!(total, Some(200));
-        assert!(done < 200, "stopped early at {done}");
+        assert_eq!(total, Some(201));
+        assert!(done < 201, "stopped early at {done}");
     }
 
     #[test]
@@ -1889,8 +1912,10 @@ mod tests {
                     .unwrap_or("")
                     .to_string();
                 seen2.lock().unwrap().push(head);
-                let next = if i < 2 {
-                    format!("tok{}", i + 1)
+                let next = if i == 0 {
+                    "baseline-only".into()
+                } else if i < 3 {
+                    format!("tok{i}")
                 } else {
                     "tok2".into()
                 };
@@ -1959,12 +1984,15 @@ mod tests {
         let payloads: Vec<String> = rows.iter().map(|r| r.payload_text()).collect();
         assert_eq!(
             payloads,
-            ["start", "tok1", "tok2"],
+            ["", "start", "tok1", "tok2"],
             "tok2 repeats, so the walk stops"
         );
-        assert_eq!(rows[1].extracts, [Some("tok2".to_string())]);
-        assert_eq!(seen.lock().unwrap()[1], "GET /?t=tok1 HTTP/1.1");
-        assert_eq!(run.progress(), (3, None));
+        assert_eq!(rows[0].extracts, [Some("baseline-only".to_string())]);
+        assert_eq!(rows[2].extracts, [Some("tok2".to_string())]);
+        assert_eq!(seen.lock().unwrap()[0], "GET /?t=x HTTP/1.1");
+        assert_eq!(seen.lock().unwrap()[1], "GET /?t=start HTTP/1.1");
+        assert_eq!(seen.lock().unwrap()[2], "GET /?t=tok1 HTTP/1.1");
+        assert_eq!(run.progress(), (4, None));
     }
 
     /// Issue #42: the probe pool bounds in-flight requests at
@@ -2027,16 +2055,16 @@ mod tests {
         }
         assert!(!run.is_running(), "attack finished");
         let (done, total) = run.progress();
-        assert_eq!((done, total), (60, Some(60)));
+        assert_eq!((done, total), (61, Some(61)));
         assert!(
             max_seen.load(Ordering::SeqCst) <= 3,
             "probe pool bound held: max in-flight {}",
             max_seen.load(Ordering::SeqCst)
         );
         let rows = run.snapshot_rows();
-        assert_eq!(rows.len(), 60, "every row drained through the channel");
+        assert_eq!(rows.len(), 61, "every row drained through the channel");
         let mut numbers: Vec<usize> = rows.iter().map(|r| r.number).collect();
         numbers.sort_unstable();
-        assert_eq!(numbers, (1..=60).collect::<Vec<_>>(), "no row lost");
+        assert_eq!(numbers, (0..=60).collect::<Vec<_>>(), "no row lost");
     }
 }

@@ -6,7 +6,7 @@
 //! tolerant path would keep or misframe.
 
 use crate::codec::read_message;
-use crate::net::{exchange, read_request, response_headers_allow_reuse};
+use crate::net::{exchange, read_request, read_request_pending, response_headers_allow_reuse};
 use crate::strict_request::{scan_request_head, RequestFramingError as E, StrictRequest as S};
 use std::io::{Cursor, Read, Write};
 
@@ -300,22 +300,27 @@ fn request_reader_reads_exactly_the_framed_body_for_every_read_size() {
 }
 
 #[test]
-fn request_reader_returns_one_pipelined_request_per_read() {
-    // Pinned hazard for wiring: with a large first read the returned buffer
-    // holds both requests, so a strict caller must split by scan_request_head
-    // (head_len + exact body), not by what read_request returns.
+fn request_reader_overreads_a_pipelined_request_in_one_read() {
+    // #110 contract: the reader consumes exactly one request (head plus its
+    // framed body) at every read size. Pipelined bytes caught in the same
+    // large read stay in `pending` for the next call instead of riding into
+    // the returned buffer. A strict caller holding a combined wire image can
+    // still split it with scan_request_head (head_len + exact body).
     let a = b"POST /a HTTP/1.1\r\nHost: h\r\nContent-Length: 3\r\n\r\nabc";
     let b = b"GET /b HTTP/1.1\r\nHost: h\r\n\r\n";
     let mut wire = a.to_vec();
     wire.extend_from_slice(b);
-    let got = req(&wire, 16_384);
-    assert_eq!(
-        got,
-        a.to_vec(),
-        "exactly the first request, however big the read"
-    );
-    // One byte at a time stops exactly at the first request.
-    assert_eq!(req(&wire, 1), a.to_vec());
+    for step in [1, 16_384] {
+        let mut pending = Vec::new();
+        let mut s = Script::new(&wire, step);
+        let first = read_request_pending(&mut s, &mut pending).unwrap();
+        assert_eq!(first, a.to_vec(), "first request exact, step {step}");
+        if step == 16_384 {
+            assert_eq!(pending, b.to_vec(), "second request stashed in pending");
+        }
+        let second = read_request_pending(&mut s, &mut pending).unwrap();
+        assert_eq!(second, b.to_vec(), "second request intact, step {step}");
+    }
     // The strict scan splits it correctly either way.
     let S::Framed { head_len, .. } = scan_request_head(&wire) else {
         panic!()
@@ -329,8 +334,23 @@ fn request_reader_chunked_with_trailing_pipelined_bytes_keeps_them() {
     let b = b"GET /b HTTP/1.1\r\n\r\n";
     let mut wire = a.to_vec();
     wire.extend_from_slice(b);
-    assert_eq!(req(&wire, 16_384), a.to_vec());
-    assert_eq!(req(&wire, 1), a.to_vec());
+    for step in [1, 16_384] {
+        let mut pending = Vec::new();
+        let mut s = Script::new(&wire, step);
+        assert_eq!(
+            read_request_pending(&mut s, &mut pending).unwrap(),
+            a.to_vec(),
+            "chunked request consumed exactly, step {step}"
+        );
+        if step == 16_384 {
+            assert_eq!(pending, b.to_vec(), "trailing bytes kept in pending");
+        }
+        assert_eq!(
+            read_request_pending(&mut s, &mut pending).unwrap(),
+            b.to_vec(),
+            "trailing request served next, step {step}"
+        );
+    }
 }
 
 #[test]
@@ -372,11 +392,21 @@ fn connect_head_and_tunnel_bytes_are_not_framed_as_a_body() {
     let head = b"CONNECT a.test:443 HTTP/1.1\r\nHost: a.test:443\r\n\r\n";
     let mut wire = head.to_vec();
     wire.extend_from_slice(b"\x16\x03\x01\x00\x05hello");
-    // One byte at a time: exactly the head, tunnel bytes untouched.
-    assert_eq!(req(&wire, 1), head.to_vec());
-    // A large first read no longer includes the first tunnel bytes: the
-    // request reader keeps them for the tunnel owner.
-    assert_eq!(req(&wire, 16_384), head.to_vec());
+    // Exactly the head at every read size: tunnel bytes are never framed as
+    // a body. Bytes read past the head stay in `pending` for the caller's
+    // tunnel loop to forward (engine.rs keeps that buffer across reads).
+    for step in [1, 16_384] {
+        let mut pending = Vec::new();
+        let mut s = Script::new(&wire, step);
+        assert_eq!(
+            read_request_pending(&mut s, &mut pending).unwrap(),
+            head.to_vec(),
+            "step {step}"
+        );
+        if step == 16_384 {
+            assert_eq!(pending, b"\x16\x03\x01\x00\x05hello".to_vec());
+        }
+    }
     assert!(matches!(
         scan_request_head(&wire),
         S::Framed { head_len, body: crate::strict_request::RequestBody::None } if head_len == head.len()
