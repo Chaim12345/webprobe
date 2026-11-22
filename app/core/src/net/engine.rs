@@ -1052,6 +1052,9 @@ pub fn upstream_and_deliver<S: ProxyIo>(
             } else {
                 crate::codec::response_incompleteness(&resp, &parts.method)
             };
+            // Rules, hooks and interception may edit what the client gets;
+            // the incomplete record keeps the bytes as received.
+            let received = incomplete_note.is_some().then(|| resp.clone());
             let mut resp = crate::rules::apply_rules(&resp, &shared.mr_response.lock().unwrap());
             if !shared.ext_handle_response(
                 &webprobe_support::ext::HttpService::new(&host, port, use_tls),
@@ -1088,11 +1091,11 @@ pub fn upstream_and_deliver<S: ProxyIo>(
                 && super::conn_reuse::response_headers_allow_reuse(&resp)
                 && stream_head_reusable(&resp, &parts.method)
                 && crate::codec::body_complete(&resp, &parts.method);
-            if incomplete_note.is_some() {
+            if let Some(received) = received {
                 record_entry(
                     shared,
                     &req_out,
-                    Some(crate::body::Body::from(resp)),
+                    Some(crate::body::Body::from(received)),
                     incomplete_note,
                     default_port,
                     use_tls,

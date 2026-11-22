@@ -477,3 +477,63 @@ fn buffered_request_after_an_incomplete_response_is_not_served() {
         }
     }
 }
+
+/// A response rule that rewrites the length and body of a truncated response
+/// changes what the client gets, never the evidence: history keeps the bytes
+/// as received (original declared length), and the note survives reload.
+#[test]
+fn response_edits_do_not_rewrite_incomplete_response_evidence() {
+    use webprobe_core::rules::{MrRule, MrScope};
+    let reply: &'static [u8] = b"HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\nabc";
+    let shared = Shared::new();
+    shared.intercept_on.store(false, Ordering::SeqCst);
+    shared.response_rules.lock().unwrap().enabled = true;
+    shared.response_rules.lock().unwrap().content_type_on = false;
+    for (scope, from, to) in [
+        (
+            MrScope::ResponseHeader,
+            "Content-Length: 10",
+            "Content-Length: 99",
+        ),
+        (MrScope::ResponseBody, "abc", "EDITED-BODY"),
+    ] {
+        let mut rule = MrRule::new(scope);
+        (rule.match_, rule.replacement) = (from.into(), to.into());
+        shared.mr_response.lock().unwrap().push(rule);
+    }
+    let (port, upstream) = one_shot_upstream(reply);
+    let (pp, worker) = proxy(shared.clone());
+    let mut c = client(pp);
+    c.write_all(&pipelined_gets(port)).unwrap();
+    c.shutdown(Shutdown::Write).unwrap();
+    let mut response = vec![];
+    let _ = c.read_to_end(&mut response);
+    worker.join().unwrap();
+    assert_eq!(upstream.join().unwrap(), 1);
+    let text = String::from_utf8_lossy(&response).into_owned();
+    assert!(
+        text.contains("EDITED-BODY"),
+        "the edit reached the client: {text}"
+    );
+    let history = shared.history.snapshot();
+    assert_eq!(history.len(), 1);
+    let e = &history[0];
+    assert_eq!(
+        &e.resp_raw.as_ref().unwrap()[..],
+        reply,
+        "received bytes, original declaration"
+    );
+    let note = e.note.as_deref().unwrap_or("");
+    assert!(
+        note.starts_with("Incomplete response: Content-Length declared 10, received 3 body bytes"),
+        "{note:?}"
+    );
+    let json =
+        serde_json::to_string(&webprobe_core::project::ProjectHistory::from_entry(e)).unwrap();
+    let back: webprobe_core::project::ProjectHistory = serde_json::from_str(&json).unwrap();
+    let back = back.to_entry();
+    assert_eq!(
+        (back.note, back.resp_raw),
+        (e.note.clone(), e.resp_raw.clone())
+    );
+}
