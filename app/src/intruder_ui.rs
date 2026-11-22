@@ -907,20 +907,9 @@ pub fn results_window(app: &mut App, ctx: &egui::Context) {
         let paused = state.paused.load(Ordering::SeqCst);
         let (done, total) = state.progress();
         ui.horizontal(|ui| {
-            let text = match (running, paused, total) {
-                (true, true, _) => format!(
-                    "Paused: {done} of {}",
-                    total.map(|t| t.to_string()).unwrap_or_else(|| "?".into())
-                ),
-                (true, false, Some(t)) => format!("Attack running: {done} of {t}"),
-                (true, false, None) => format!("Attack running: {done} requests (recursive grep)"),
-                (false, _, _) if state.stop.load(Ordering::SeqCst) => {
-                    format!("Stopped: {done} requests")
-                }
-                (false, _, _) => format!("Finished: {done} requests"),
-            };
+            let text = state.status_text();
             ui.label(RichText::new(text).size(12.5).color(theme::ink_dim()));
-            if running {
+            if running && !state.stop.load(Ordering::SeqCst) {
                 if ui.button(if paused { "Resume" } else { "Pause" }).clicked() {
                     state.paused.store(!paused, Ordering::SeqCst);
                 }
@@ -938,7 +927,7 @@ pub fn results_window(app: &mut App, ctx: &egui::Context) {
                         .on_hover_text("Write the results table to the file on the left")
                         .clicked()
                     {
-                        let mut sorted = state.rows.lock().unwrap().clone();
+                        let mut sorted = state.snapshot_rows();
                         sorted.sort_by_key(|r| r.number);
                         let text = if xml {
                             run::results_xml(&sorted, state.sets, &state.settings)
@@ -966,7 +955,7 @@ pub fn results_window(app: &mut App, ctx: &egui::Context) {
             ui.add(egui::ProgressBar::new(frac).desired_height(6.0));
         }
 
-        let rows: Vec<Arc<ResultRow>> = state.rows.lock().unwrap().clone();
+        let rows: Vec<Arc<ResultRow>> = state.snapshot_rows();
         let labels = run::result_columns(state.sets, &state.settings);
         let cols: Vec<crate::table::Column> = labels
             .iter()
