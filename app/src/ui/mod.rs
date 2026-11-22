@@ -482,13 +482,22 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                         );
                         ui.add_space(12.0);
                     }
+                    let listening = app.shared.listener_running.load(Ordering::SeqCst);
                     ui.label(
-                        RichText::new(format!(
-                            "Proxy 127.0.0.1:{port} \u{00B7} intercept {}",
-                            if on { "on" } else { "off" }
-                        ))
+                        RichText::new(if listening {
+                            format!(
+                                "Proxy 127.0.0.1:{port} \u{00B7} intercept {}",
+                                if on { "on" } else { "off" }
+                            )
+                        } else {
+                            // The listener failed to bind (port in use) or is
+                            // restarting: do not claim the address is live.
+                            format!("Proxy 127.0.0.1:{port} \u{00B7} not listening")
+                        })
                         .size(12.0)
-                        .color(if on {
+                        .color(if !listening {
+                            c(theme::WARN)
+                        } else if on {
                             c(theme::ORANGE)
                         } else {
                             theme::ink_hint()

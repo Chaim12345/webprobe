@@ -107,7 +107,7 @@ pub fn add_issues(shared: &Shared, mut issues: Vec<ScanIssue>) {
     }
     let mut iss = shared.issues.lock().unwrap();
     for issue in issues.iter_mut() {
-        issue.id = shared.next_id.fetch_add(1, Ordering::SeqCst);
+        issue.id = shared.next_issue_id.fetch_add(1, Ordering::SeqCst);
         // Issues renamed after construction (the Collaborator matcher)
         // get their type from the final name. Every issue is kept, as in
         // Burp: the list used to drop the oldest past 500, triaged High

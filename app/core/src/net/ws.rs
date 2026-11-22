@@ -298,7 +298,7 @@ impl WsWatch {
         if exts.is_empty() {
             return None;
         }
-        let socket = shared.next_id.fetch_add(1, Ordering::SeqCst);
+        let socket = shared.next_ws_id.fetch_add(1, Ordering::SeqCst);
         let svc = webprobe_support::ext::HttpService::new(host, port, secure);
         let hooks: Vec<_> = exts
             .into_iter()
@@ -589,7 +589,7 @@ pub fn ws_message(
         }
     }
     if hold {
-        let id = shared.next_id.fetch_add(1, Ordering::SeqCst);
+        let id = shared.next_ws_id.fetch_add(1, Ordering::SeqCst);
         let (tx, rx) = mpsc::channel::<Option<String>>();
         shared.queue.lock().unwrap().push(InterceptItem::new(
             id,
@@ -766,7 +766,7 @@ pub fn handle_websocket<C: ProxyIo>(shared: Arc<Shared>, mut client: C, req: Vec
     if client.write_all(&response).is_err() {
         return;
     }
-    let socket = shared.next_id.fetch_add(1, Ordering::SeqCst);
+    let socket = shared.next_ws_id.fetch_add(1, Ordering::SeqCst);
     push_ws_in(&shared, socket, &host, "handshake", "request", &req_out);
     push_ws_in(&shared, socket, &host, "handshake", "response", &response);
     record(
@@ -980,7 +980,7 @@ pub fn handle_tls_websocket<C: ProxyIo>(
     if client.write_all(&response).is_err() {
         return;
     }
-    let socket = shared.next_id.fetch_add(1, Ordering::SeqCst);
+    let socket = shared.next_ws_id.fetch_add(1, Ordering::SeqCst);
     push_ws_in(shared, socket, &host, "handshake", "request", &req_out);
     push_ws_in(shared, socket, &host, "handshake", "response", &response);
     record(
