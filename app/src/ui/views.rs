@@ -486,6 +486,21 @@ pub(crate) fn burp_ai(app: &mut App, ui: &mut Ui) {
 
 /// Burp-style HTTP Logger view over the bounded `logger` engine. The tab name
 /// is jar-grounded: build 52685 `burp.Zi96` addTab("Logger", ...) (Zi96.java:16).
+/// Logger right-click menu: label and command; an empty label is a separator.
+pub(crate) const LOGGER_MENU: &[(&str, &str)] = &[
+    ("Add to scope", "scope"),
+    ("Scan", "scan"),
+    ("Passive scan selected message", "passive"),
+    ("", ""),
+    ("Send to Intruder\tCtrl+I", "intruder"),
+    ("Send to Repeater\tCtrl+R", "repeater"),
+    ("Send to Sequencer", "sequencer"),
+    ("Send to Organizer\tCtrl+O", "organizer"),
+    ("Send to Comparer (request)", "cmp_req"),
+    ("Send to Comparer (response)", "cmp_resp"),
+    ("", ""),
+];
+
 pub(crate) fn logger_view(app: &mut App, ui: &mut Ui) {
     // Burp's Logger (live 52685): a capture-filter bar with the "Logging on"
     // switch, then the log table and the message panes.
@@ -567,6 +582,7 @@ pub(crate) fn logger_view(app: &mut App, ui: &mut Ui) {
             col.cell(|ui| {
                 let mut st = app.log_table.clone();
                 let mut pick = None;
+                let mut menu: Option<(u64, &'static str)> = None;
                 let sel = app.log_sel;
                 let h = ui.available_height();
                 table::table_body(
@@ -607,14 +623,51 @@ pub(crate) fn logger_view(app: &mut App, ui: &mut Ui) {
                             })
                             .response
                             .interact(egui::Sense::click());
-                        if row.clicked() {
+                        if row.clicked() || row.secondary_clicked() {
                             pick = Some(e.id);
                         }
+                        // Burp's Logger right-click menu: the same Send to /
+                        // scan / scope / copy commands as Proxy history.
+                        row.context_menu(|ui| {
+                            ui.set_min_width(260.0);
+                            ui.spacing_mut().item_spacing.y = 0.0;
+                            ui.spacing_mut().button_padding.y = 4.0;
+                            for (label, cmd) in LOGGER_MENU {
+                                if label.is_empty() {
+                                    ui.separator();
+                                } else if menu_action(ui, label) {
+                                    menu = Some((e.id, *cmd));
+                                }
+                            }
+                            if menu_action(ui, "Copy URL") {
+                                menu = Some((e.id, "copy_url"));
+                            }
+                            if menu_action(ui, "Copy as curl command (bash)") {
+                                menu = Some((e.id, "copy_curl"));
+                            }
+                        });
                     },
                 );
                 app.log_table = st;
                 if pick.is_some() {
                     app.log_sel = pick;
+                }
+                if let Some((id, cmd)) = menu {
+                    app.log_sel = Some(id);
+                    let entry = app
+                        .logger
+                        .get(id)
+                        .cloned()
+                        .and_then(|r| log_row_entry(&app.shared, &r));
+                    match entry {
+                        Some(en) if cmd == "copy_url" => ui.ctx().copy_text(history_url(&en)),
+                        Some(en) if cmd == "copy_curl" => ui.ctx().copy_text(curl_command_of(&en)),
+                        Some(en) => logger_command(app, &en, cmd),
+                        None => feedback::toast(
+                            feedback::Level::Warn,
+                            "The message of this Logger row is no longer retained",
+                        ),
+                    }
                 }
             });
             col.cell(|ui| {
