@@ -573,10 +573,10 @@ impl RequestCheck for BrokenAccessControl {
         if cx.stopped() || !cx.runs(self.issue()) || cx.baseline.raw.is_empty() {
             return;
         }
-        // Replay safe methods only. POST and other potentially mutating
-        // methods are skipped to avoid repeating application side effects.
+        // Replay GET only. HEAD has no body for equivalence checks, and
+        // POST or other methods could repeat application side effects.
         let method = cx.req.split_whitespace().next().unwrap_or("");
-        if !method.eq_ignore_ascii_case("GET") && !method.eq_ignore_ascii_case("HEAD") {
+        if !method.eq_ignore_ascii_case("GET") {
             return;
         }
         let base = util::parse_http(&cx.baseline.raw);

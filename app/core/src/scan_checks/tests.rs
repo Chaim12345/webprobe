@@ -629,7 +629,7 @@ fn r10_broken_access_control_against_a_live_lab() {
 }
 
 #[test]
-fn bac_post_sends_no_requests_beyond_the_scanner_baseline() {
+fn bac_non_get_sends_no_requests_beyond_the_scanner_baseline() {
     use std::sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
@@ -641,16 +641,19 @@ fn bac_post_sends_no_requests_beyond_the_scanner_baseline() {
         seen.fetch_add(1, Ordering::SeqCst);
         "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok".into()
     });
-    let req = format!(
-        "POST / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nCookie: sid=abc\r\nContent-Length: 0\r\n\r\n"
-    );
-    let issues = lab_scan(port, &["active.broken-access-control"], "POST", "/", req);
-    assert!(issues.is_empty());
-    assert_eq!(
-        requests.load(Ordering::SeqCst),
-        1,
-        "only the scanner baseline is allowed"
-    );
+    for method in ["POST", "HEAD"] {
+        requests.store(0, Ordering::SeqCst);
+        let req = format!(
+            "{method} / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nCookie: sid=abc\r\nContent-Length: 0\r\n\r\n"
+        );
+        let issues = lab_scan(port, &["active.broken-access-control"], method, "/", req);
+        assert!(issues.is_empty(), "{method} must be skipped");
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            1,
+            "{method}: only the scanner baseline is allowed"
+        );
+    }
 }
 
 /// R-10 web cache poisoning (Zp22 / Zg1g rule): reported only when a
