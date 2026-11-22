@@ -284,6 +284,35 @@ pub fn send_tls_raw_with(
     up
 }
 
+/// Pool identity for an HTTP/2 connection: the origin plus everything that
+/// shapes the connection, so two requests that would build different
+/// connections never share one. The effective route (direct / upstream
+/// proxy with its settings), the TLS policy (shared upstream config
+/// identity, or the matching client-certificate rule), and the sender's
+/// protocol choice (ALPN override) all discriminate.
+pub(crate) type H2PoolKey = (String, u16, String, u64, Option<bool>);
+use crate::upstream::UpstreamConfig;
+
+/// Derive the pool key from one captured effective-policy snapshot: the
+/// caller captures the policy once and uses the same snapshot for the TLS
+/// connection's construction, so key and construction can never observe
+/// two different policy states (see EffectiveTlsPolicy).
+pub(crate) fn h2_pool_key(
+    policy: &EffectiveTlsPolicy,
+    host: &str,
+    port: u16,
+    config: &UpstreamConfig,
+    want_h2: Option<bool>,
+) -> H2PoolKey {
+    (
+        host.to_string(),
+        port,
+        format!("{config:?}"),
+        policy.key_identity(),
+        want_h2,
+    )
+}
+
 pub fn send_tls_inner(
     shared: &Shared,
     host: &str,
@@ -302,7 +331,54 @@ pub fn send_tls_inner(
     let key = (host.to_string(), port);
     let choice = H2_CHOICE.with(|c| c.get());
     let want_h2 = choice.and_then(|c| c.want_h2);
-    // Pooled connections are HTTP/1.x: HTTP/2 asked for needs a fresh one.
+    // Capture the effective TLS policy once: the pool key and any fresh
+    // connection's TLS config below come from the same snapshot.
+    let policy = EffectiveTlsPolicy::capture(shared, host);
+    let h2key = h2_pool_key(&policy, host, port, &config, want_h2);
+    // A pooled HTTP/2 connection answers on its next odd stream. Pooling is
+    // off entirely when keep-alive is disabled or the sender pinned HTTP/1;
+    // a dead socket, a GOAWAY connection or a retired connection is dropped.
+    let mut h2conn = if keep_alive && want_h2 != Some(false) {
+        shared.h2_pool.lock().unwrap().remove(&h2key)
+    } else {
+        None
+    };
+    if let Some(c) = h2conn.as_mut() {
+        if !c.idle() || !c.get_mut().writable() {
+            h2conn = None;
+        }
+    }
+    if let Some(mut conn) = h2conn {
+        LAST_PROTOCOL.with(|p| p.set("HTTP/2"));
+        let mut h2req =
+            crate::h2::request_from_raw(&req, "https").ok_or("h2: request without Host header")?;
+        if choice.is_some_and(|c| !c.strip_connection) {
+            let parts = util::parse_http(&req);
+            h2req.connection = util::get_header(&parts.headers, "Connection");
+        }
+        match conn.exchange(&h2req, sink.as_deref_mut()) {
+            Ok(resp) => {
+                shared.pool_hits.fetch_add(1, Ordering::SeqCst);
+                if keep_alive && conn.idle() {
+                    shared.h2_pool.lock().unwrap().insert(h2key, conn);
+                }
+                return Ok(resp);
+            }
+            Err(e) if e.retryable() || !conn.committed() => {
+                // Proven not processed (typed GOAWAY/REFUSED_STREAM) or the
+                // request head never fully left: a fresh send cannot
+                // duplicate anything. Fall through.
+            }
+            Err(e) => {
+                // Unknown outcome after a committed request: the peer may
+                // have processed it, and replaying could duplicate a
+                // non-idempotent request. Surface the error instead.
+                return Err(e.message());
+            }
+        }
+    }
+    // Pooled HTTP/1 connections are HTTP/1.x: an HTTP/2 demand without a
+    // pooled h2 connection needs a fresh one.
     let mut pooled = if want_h2 == Some(true) {
         None
     } else {
@@ -323,7 +399,7 @@ pub fn send_tls_inner(
                 .ok();
             let name = rustls::pki_types::ServerName::try_from(host.to_string())
                 .map_err(|e| format!("invalid upstream TLS name {host}: {e}"))?;
-            let conn = rustls::ClientConnection::new(tls_client_config(shared, host), name)
+            let conn = rustls::ClientConnection::new(policy.config_with_sender_choice(), name)
                 .map_err(|e| format!("configure upstream TLS: {e}"))?;
             UpstreamConn::Tls(Box::new(rustls::StreamOwned::new(conn, tcp)))
         }
@@ -353,31 +429,39 @@ pub fn send_tls_inner(
             let parts = util::parse_http(&req);
             h2req.connection = util::get_header(&parts.headers, "Connection");
         }
-        let first = match &mut stream {
-            UpstreamConn::Tls(tls) => crate::h2::exchange(tls, &h2req, sink.as_deref_mut()),
-            _ => return Err("h2: not a TLS connection".into()),
-        };
-        match first {
-            Ok(resp) => return Ok(resp),
-            Err(e) if crate::h2::retryable(&e) => {
-                // The server never processed stream 1 (GOAWAY/REFUSED_STREAM),
-                // so one retry on a fresh connection is safe.
+        let mut conn = crate::h2::Conn::new(stream);
+        match conn.exchange(&h2req, sink.as_deref_mut()) {
+            Ok(resp) => {
+                // Pool the connection for the next request to this origin.
+                if keep_alive && conn.idle() {
+                    shared.h2_pool.lock().unwrap().insert(h2key, conn);
+                }
+                return Ok(resp);
+            }
+            Err(e) if e.retryable() => {
+                // The server never processed the stream (GOAWAY/
+                // REFUSED_STREAM), so one retry on a fresh connection is safe.
                 shared.conns_opened.fetch_add(1, Ordering::SeqCst);
-                let mut fresh = new_tls_conn(shared, &config, host, port)?;
-                let retried = match &mut fresh {
-                    UpstreamConn::Tls(tls) => {
+                let fresh = new_tls_conn(&policy, &config, host, port)?;
+                let retried = match fresh {
+                    UpstreamConn::Tls(mut tls) => {
                         let _ = tls.conn.complete_io(&mut tls.sock);
                         if tls.conn.alpn_protocol() == Some(b"h2".as_slice()) {
-                            crate::h2::exchange(tls, &h2req, sink.as_deref_mut())
+                            let mut retry_conn = crate::h2::Conn::new(UpstreamConn::Tls(tls));
+                            let r = retry_conn.exchange(&h2req, sink.as_deref_mut());
+                            if r.is_ok() && keep_alive && retry_conn.idle() {
+                                shared.h2_pool.lock().unwrap().insert(h2key, retry_conn);
+                            }
+                            r.map_err(|e2| format!("{}; retry: {}", e.message(), e2.message()))
                         } else {
-                            Err(e.clone())
+                            Err(e.message())
                         }
                     }
-                    _ => Err(e.clone()),
+                    _ => Err(e.message()),
                 };
-                return retried.map_err(|e2| format!("{e}; retry: {e2}"));
+                return retried;
             }
-            Err(e) => return Err(e),
+            Err(e) => return Err(e.message()),
         }
     }
     // HTTP/1 on the wire: a request shown as HTTP/2 goes out as HTTP/1.1.
@@ -395,7 +479,7 @@ pub fn send_tls_inner(
 }
 
 pub fn new_tls_conn(
-    shared: &Shared,
+    policy: &EffectiveTlsPolicy,
     config: &crate::upstream::UpstreamConfig,
     host: &str,
     port: u16,
@@ -410,7 +494,7 @@ pub fn new_tls_conn(
             source,
         }
     })?;
-    let conn = rustls::ClientConnection::new(tls_client_config(shared, host), name)
+    let conn = rustls::ClientConnection::new(policy.config_with_sender_choice(), name)
         .map_err(|source| NetError::TlsConfig { source })?;
     Ok(UpstreamConn::Tls(Box::new(rustls::StreamOwned::new(
         conn, tcp,
