@@ -3945,6 +3945,57 @@ mod save_restore_tests {
         assert!(next_id > coll, "next collection id survives the restore");
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    /// D-CEO-02: deleting a collection moves its items to the Inbox, and
+    /// the moved items (id, note, request/response evidence) survive a
+    /// save/restore round trip.
+    #[test]
+    fn organizer_delete_moves_items_to_inbox_and_they_persist() {
+        let dir = std::env::temp_dir().join(format!("wp-org-del-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("p.json").to_string_lossy().into_owned();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let p2 = path.clone();
+        std::thread::spawn(move || {
+            let mut app = crate::App::new(net::Shared::new());
+            app.project_path = p2;
+            let item_id = {
+                let mut org = app.shared.organizer.lock().unwrap();
+                let coll = org.add_collection("Auth bugs");
+                let id = org.add("Login", "auth flow", "POST /login HTTP/1.1", "200 OK", 10);
+                org.move_item(id, coll);
+                assert!(org.remove_collection(coll));
+                assert_eq!(org.get(id).unwrap().collection, 0);
+                id
+            };
+            save_project(&mut app, true);
+            let mut fresh = crate::App::new(net::Shared::new());
+            fresh.project_path = app.project_path.clone();
+            restore_project(&mut fresh, true);
+            let org = fresh.shared.organizer.lock().unwrap();
+            let _ = tx.send(org.get(item_id).map(|i| {
+                (
+                    i.collection,
+                    i.note.clone(),
+                    i.request.clone(),
+                    i.response.clone(),
+                )
+            }));
+        });
+        let item = rx
+            .recv_timeout(std::time::Duration::from_secs(60))
+            .expect("save/restore finished (no deadlock)");
+        let _ = std::fs::remove_dir_all(&dir);
+        let (collection, note, request, response) =
+            item.expect("item survives collection deletion and reload");
+        assert_eq!(collection, 0, "reloaded into the Inbox");
+        assert_eq!(note, "auth flow", "note preserved");
+        assert_eq!(
+            request, "POST /login HTTP/1.1",
+            "request evidence preserved"
+        );
+        assert_eq!(response, "200 OK", "response evidence preserved");
+    }
 }
 
 /// The Montoya extension's own UI in the Extensions tab: its registered

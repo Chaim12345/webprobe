@@ -1309,7 +1309,7 @@ fn organizer_modals(app: &mut App, ctx: &egui::Context) {
                         .color(theme::ink()),
                 );
                 ui.label(
-                    RichText::new("This cannot be undone.")
+                    RichText::new("Its items move to the Inbox.")
                         .size(12.5)
                         .color(theme::ink_dim()),
                 );
@@ -1326,8 +1326,8 @@ fn organizer_modals(app: &mut App, ctx: &egui::Context) {
                 });
             });
         if done {
-            // Burp deletes the collection's items with it; the modal's
-            // "This cannot be undone" is therefore literal.
+            // The collection goes; its items move to the Inbox (D-CEO-02),
+            // they are not deleted.
             app.shared.organizer.lock().unwrap().remove_collection(id);
             if app.org_coll == id {
                 app.org_coll = 0;
