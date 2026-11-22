@@ -68,6 +68,88 @@ pub fn response_body_kind(head: &[u8], method: &str) -> BodyKind {
     }
 }
 
+/// Why a message head has no trustworthy body framing (strict mode only).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FramingError {
+    /// Whitespace between a framing header's name and its colon.
+    SpaceBeforeColon,
+    /// A line ends in a bare LF instead of CRLF.
+    BareLf,
+    /// `Content-Length` is not plain digits, or repeated with other values.
+    BadContentLength,
+    /// `Transfer-Encoding` does not end in `chunked`, or lists it twice.
+    BadTransferEncoding,
+}
+
+/// Strict RFC 9112 §6.3 framing for a message head: the same decision as
+/// [`response_body_kind`], but anything a stricter peer would reject (and so
+/// could parse differently, the request-smuggling differential) is an error
+/// instead of a guess. Opt-in: the proxy path keeps using the tolerant
+/// [`response_body_kind`], so Burp-compatible behaviour is unchanged.
+pub fn response_body_kind_strict(head: &[u8], method: &str) -> Result<BodyKind, FramingError> {
+    let text = String::from_utf8_lossy(head);
+    let bytes = text.as_bytes();
+    if bytes
+        .iter()
+        .enumerate()
+        .any(|(i, &b)| b == b'\n' && (i == 0 || bytes[i - 1] != b'\r'))
+    {
+        return Err(FramingError::BareLf);
+    }
+    let (mut cl, mut te): (Vec<&str>, Vec<&str>) = (Vec::new(), Vec::new());
+    for l in text.lines().skip(1) {
+        let Some((name, value)) = l.split_once(':') else {
+            continue;
+        };
+        let lower = name.trim().to_ascii_lowercase();
+        if lower != "content-length" && lower != "transfer-encoding" {
+            continue;
+        }
+        if name.len() != name.trim().len() {
+            return Err(FramingError::SpaceBeforeColon);
+        }
+        if lower == "content-length" {
+            cl.push(value.trim());
+        } else {
+            te.push(value.trim());
+        }
+    }
+    let lenient = response_body_kind(head, method);
+    if lenient == BodyKind::None {
+        return Ok(lenient);
+    }
+    if !te.is_empty() {
+        let codings: Vec<String> = te
+            .iter()
+            .flat_map(|v| v.split(','))
+            .map(|c| c.trim().to_ascii_lowercase())
+            .collect();
+        let chunked = codings.iter().filter(|c| *c == "chunked").count();
+        if chunked != 1 || codings.last().map(String::as_str) != Some("chunked") {
+            return Err(FramingError::BadTransferEncoding);
+        }
+        return Ok(BodyKind::Chunked);
+    }
+    if cl.is_empty() {
+        return Ok(BodyKind::UntilEof);
+    }
+    let mut n: Option<usize> = None;
+    for v in cl.iter().flat_map(|v| v.split(',')).map(str::trim) {
+        if v.is_empty() || !v.bytes().all(|b| b.is_ascii_digit()) {
+            return Err(FramingError::BadContentLength);
+        }
+        let parsed = v
+            .parse::<usize>()
+            .map_err(|_| FramingError::BadContentLength)?;
+        if n.is_some_and(|prev| prev != parsed) {
+            return Err(FramingError::BadContentLength);
+        }
+        n = Some(parsed);
+    }
+    n.map(BodyKind::Length)
+        .ok_or(FramingError::BadContentLength)
+}
+
 /// True when `body[at..]` starts with `pat`.
 fn at(body: &[u8], at: usize, pat: &[u8]) -> bool {
     body.get(at..).is_some_and(|rest| rest.starts_with(pat))
