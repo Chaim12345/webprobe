@@ -3006,6 +3006,8 @@ mod tests {
         let seen = origin.join().unwrap();
         // Same-site redirects retain custom headers, so the second hop
         // should have one inherited and one newly added probe header.
+        // Independently measured in Burp Community 2026.11.2 on 2026-11-22:
+        // one callback per hop, with probe counts 1 then 2.
         assert_eq!(seen[0].matches("X-Parity-Probe: 1").count(), 1);
         assert_eq!(seen[1].matches("X-Parity-Probe: 1").count(), 2);
         assert!(seen.iter().all(|q| !q.contains("X-Proxy-Only")));

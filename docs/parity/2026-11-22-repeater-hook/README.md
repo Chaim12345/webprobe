@@ -4,7 +4,7 @@
 
 ## Contract and change
 
-The real-Burp comparison in [PR #112](https://github.com/Chaim12345/webprobe/pull/112) observed that a registered Montoya HTTP handler adds the probe header to Burp Repeater sends, but not to WebProbe Repeater sends. This fix addresses that measured gap. The Burp comparison was not rerun for this change.
+The real-Burp comparison in [PR #112](https://github.com/Chaim12345/webprobe/pull/112) observed that a registered Montoya HTTP handler adds the probe header to Burp Repeater sends, but not to WebProbe Repeater sends. This fix addresses that measured gap. The original full comparison was not rerun for this change. An independent redirect-only follow-up on 2026-11-22 used real Burp Community 2026.11.2 with Follow redirections set to Always: the origin saw one probe header on `/start` and two on the next hop, and both HTTP callbacks ran once per hop with tool `REPEATER`. This confirms the inherited-header behavior tested here. That follow-up also found byte-identical editor text after Send, including after following the redirect; the existing WebProbe redirect editor write-back remains a separate mismatch pending adjustment.
 
 Repeater now dispatches HTTP request and response handlers for each send, including redirect hops. The bridge receives `Repeater` as the tool instead of the proxy path's hardcoded `Proxy`. Proxy-only handlers and process-extension proxy hooks remain excluded. Direct `api.http().sendRequest(...)` behavior is unchanged because dispatch is added to Repeater, not the shared raw sender.
 
