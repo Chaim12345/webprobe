@@ -1,22 +1,22 @@
 # WebProbe program board
 
-Snapshot: 2026-11-22 13:27 Asia/Jerusalem. Program owner: Program Manager. [Review and decision ledger](REVIEW-LEDGER.md). [Role charters](ROLES.md). [HR staffing register, PR #137](https://github.com/Chaim12345/webprobe/pull/137), proposed file `docs/management/STAFFING.md`.
+Snapshot: 2026-11-22 13:44 Asia/Jerusalem. Program owner: Program Manager. [Review and decision ledger](REVIEW-LEDGER.md). [Role charters](ROLES.md). [HR staffing register, PR #137](https://github.com/Chaim12345/webprobe/pull/137), proposed file `docs/management/STAFFING.md`.
 
 This is the index for sequencing, not permission to merge or change product behavior. Only the triage lane lands parity changes. Existing PR branches and master stay untouched. Refresh this board when a source head, landing, decision or verification result changes.
 
 ## Current position
 
-- Parity snapshot: `8beefa2c1fd8395431230eab5b660fd69fb7bab6`; #96 now landed with triage-reported 901 combined tests passed. Earlier foundation and header-scan fixes are also landed. These landings are not a release or full parity certification.
-- Single review stack: **#125**, observed head `2b756c1b37dae00d8f790f0b1f83471838e4060a`. Its body reports 845 passing checks on an earlier tested tree. Do not attach that count to a later SHA without new evidence.
-- **115 open WebProbe PRs**, all pages checked at 13:27. The register contains current exact heads; cross-repository ARTEX #2 is tracked in the review ledger.
-- **Latest #123 `f22016f` is absent from #125**, which still contains the earlier `db2cd8d` version. The queue-ID follow-up reopened the inclusion gap after the earlier warning was resolved.
-- PR #125 also trails parity `8beefa2`. Reconcile current parity and source heads before final acceptance. Current-head and review-state details for #134/#136/#139-#144 and artex-rs #2 are in the review ledger.
-- [Milestone register](milestones.csv) preserves all 137 tasks from parity's `tasks.json`: 114 recorded done, 21 todo, 2 rejected. These are historical repository labels, not fresh verification. Open labels can describe work already present in review PRs. Map coverage before assigning builders.
+- Live parity: `7f2ab33d4cc95bee9f05167c202ec1a723396891`. #123 latest `f22016f`, #134 and its resolution #147 are now merged, independently verified through the live PR API. Triage reports 911 passing tests on #147's exact merged tree.
+- Single review stack #125: `52ba16b6b86ec2d4ab2d8cd8a42261a0ee5b34f7`. Git ancestry confirms current parity, #123 and #134 are included. Earlier inclusion warnings are resolved. Exact-head acceptance for this latest revision remains separate from prior integration counts.
+- **113 open WebProbe PRs**, all pages checked. Closed/landed work remains in the review ledger; the CSV tracks open PRs only.
+- **Known acceptance blocker: #124's new Decoder operations corrupt Unicode and cannot round-trip their lossy GZIP output.** Triage reproduced both failures. #139 depends on #124; #125 contains #124, so its passing tests cannot override this known defect. Bounded Decoder replacement is assigned; h2 fragmentation can split independently.
+- PR #145 is now `ecc4debbc777dcb6705d5e63ec197a6a72eef837`. Old `8a95d0d` had replay/pool/window blockers; the new head requires fresh verification, not automatic approval.
+- [Milestone register](milestones.csv) preserves all 137 historical tasks. These repository labels are not fresh acceptance evidence; map existing PR work before opening duplicate implementations.
 
 ## Landing sequence and stop/start calls
 
-1. **One parity writer: triage.** Finish the already reviewed, independently tested queue. #129/#105 has landed. Triage reports 832 passing tests on the exact merged resolution tree with both header-scan test modules preserved. The refreshed next queue is #138 after #96, #124 before #139, latest #123 before #134, then #126/docs/#140; each still needs its current combined gates.
-2. **Integration owns #125.** Latest #123 has changed again to f22016f; include it and reconcile current parity. Incorporate the new hash/h2 and crawl-ID heads when ready. Maintain an exact source-head manifest. No parallel landing of the same changes through individual source PRs.
+1. **One parity writer: triage.** Finish the already reviewed, independently tested queue. #129/#105 has landed. Triage reports 832 passing tests on the exact merged resolution tree with both header-scan test modules preserved. Current queue can advance #126/docs/#140 while #124/#139 wait for the Decoder replacement; h2 work follows its own review and #146 reuse prerequisites.
+2. **Integration owns #125.** Current parity and latest #123/#134 are included. Preserve that source manifest while applying the Decoder repair. Incorporate the new hash/h2 and crawl-ID heads when ready. Maintain an exact source-head manifest. No parallel landing of the same changes through individual source PRs.
 3. **Independent reviewer owns acceptance.** Review the final SHA, not a moving branch. Require clean check/fmt/clippy/full required-Java tests and current CI, applying only the owner's explicit Kilo waiver. Test count deltas alone are not coverage proof.
 4. **Cross-tool QA owns the release candidate.** Run project create/save/reopen, Logger to tools, Repeater extension hooks, extension Drop plus pipelining, constant-token Sequencer, Intruder baseline, Decoder bytes/Gzip, and Organizer persistence on one integrated build. #128 is separate-head evidence, not an integrated pass.
 5. **Only then clean up source PRs.** Triage may close exact-proof superseded PRs with approved wording. Commit ancestry alone does not choose between sequential landing and closing a historical milestone. The #103 MIME decision is settled; #97 closure still needs exact-proof checks.
@@ -26,8 +26,8 @@ This is the index for sequencing, not permission to merge or change product beha
 
 | Lane | Accountable role | State / next checkpoint | Blocker or conflict boundary |
 | --- | --- | --- | --- |
-| Parity landing and PR cleanup | PR triage | Active; #96 landed; #138 next; #49 replaced only after #140 lands | Sole parity writer; no source-branch edits |
-| Review stack #125 | Integration | Active; latest #123 absent; reconcile parity 8beefa2 | Conflicts with independent source landing if both proceed unchecked |
+| Parity landing and PR cleanup | PR triage | Active; #123/#147 landed; #124/#139 blocked; independent queue continues | Sole parity writer; no source-branch edits |
+| Review stack #125 | Integration | Active; parity/UI reconciled at 52ba16b; known Decoder defect gates acceptance | Conflicts with independent source landing if both proceed unchecked |
 | Independent review | Reviewer | Review exact final heads and combination fixes | Earlier approvals do not cover later diffs |
 | Hash-list and h2 multiplexing | Existing hash/h2 lane | Active per owner request; publish exact head + tests | Coordinate h2 boundaries with #124; no duplicate Decoder work |
 | Crawl counter and selection keys | Existing UI QA B lane | Active follow-up; use `(kind,id)` identity before separate counters | Shared history/crawl selection is load-bearing; #108 project-isolation work is separate |
@@ -60,7 +60,7 @@ Decision provenance: owner's authenticated WhatsApp messages were checked for AC
 | Program milestone | Exit evidence | Current state |
 | --- | --- | --- |
 | P0: recover and stabilize foundation | Exact merged tree and full required-Java suite per landing | #96 now landed too; #138 and remaining lane gates continue |
-| P1: one reviewable integrated candidate | #125 manifest matches latest intended source heads; clean combined checks + independent review | In progress; latest #123 f22016f and current parity still needed |
+| P1: one reviewable integrated candidate | #125 manifest matches latest intended source heads; clean combined checks + independent review | Source ancestry reconciled; Decoder replacement and current exact-tree acceptance still needed |
 | P2: integrated workflow acceptance | One pinned build passes cross-tool regression with screenshots and traceable fixtures | Not established by separate-head reports |
 | P3: reconcile old roadmap | Each of 21 recorded todo tasks mapped to integrated code, residual gap or owner hold | PR board ready; avoid reopening already implemented milestones |
 | P4: close measured parity gaps | #128 priorities translated into owned byte-safe Decoder, h2, Sequencer, variation-analysis and workflow fixtures | Hash/h2 lane active; do not claim Burp Pro parity |
@@ -96,3 +96,5 @@ Primary evidence links: [#125](https://github.com/Chaim12345/webprobe/pull/125),
 - 13:34: #145 sequential h2 reuse added as CHANGES NEEDED for duplicate-send replay, pool identity/policy and connection receive-window credit. #139 is an independent sibling after #124 and need not wait for h2 repair. #141 54d6068 and #142 2178122 approved after parity retargeting; #141 cursor nit resolved. #134 reviewer store() correction conflicts with PM exact-head file-API evidence showing fetch_max; returned for source reconciliation. Inventory delta adds #145 to the prior snapshot rather than claiming a new full census.
 
 - 13:37: #146 2a08ffe reviewer-approved as fixtures only. CTO assigns lane 15 to (2) message/leftovers ownership, then (1)+(4) narrow 400+close inbound framing guards; h2 lane owns (3) authoritative method-aware reuse and declined-h2c pooling disablement before rebasing #145. These are approved fixes, not owner questions. Full strict response/chunked setting stays unwired. #134 source discrepancy resolved: reviewer had read older 586c980; current 4e1be6a uses fetch_max.
+
+- 13:44: full live refresh finds 113 open PRs, parity 7f2ab33, #125 52ba16b with current parity/#123/#134 included. #134 and #147 confirmed merged. Reproduced #124 Unicode/GZIP defects block #139 and #125 acceptance; reassigned Decoder author is working on a bounded replacement. #145 advanced to ecc4deb; renewed review required.
