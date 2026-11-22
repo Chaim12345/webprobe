@@ -1158,6 +1158,81 @@ fn tls_alpn_h2_roundtrip() {
     assert_normalised_h2_view(&resp);
 }
 
+/// CTO fixture (a): a pooled-h2 POST whose response is lost AFTER the
+/// request was committed (head + body fully written) is never replayed:
+/// the origin sees exactly one request and the caller gets the error.
+#[test]
+fn pooled_h2_post_with_lost_response_is_never_replayed() {
+    let mut shared = Shared::new();
+    let ca = shared.mitm.ca_der();
+    let upstream_config = shared
+        .mitm
+        .server_config_with_alpn("localhost", vec![b"h2".to_vec()])
+        .unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let posts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let posts_srv = posts.clone();
+    let t = std::thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
+        let conn = ServerConnection::new(upstream_config).unwrap();
+        let mut tls = StreamOwned::new(conn, stream);
+        let mut preface = [0u8; 24];
+        tls.read_exact(&mut preface).unwrap();
+        let (ty, _, _, _) = read_frame(&mut tls);
+        assert_eq!(ty, 0x4);
+        tls.write_all(&[0, 0, 0, 0x4, 0, 0, 0, 0, 0]).unwrap();
+        // Read until the request body is fully committed (DATA END_STREAM),
+        // then drop the socket WITHOUT any response.
+        loop {
+            let (ty, flags, stream, _) = read_frame(&mut tls);
+            match ty {
+                0x0 if stream == 1 && flags & 0x1 != 0 => {
+                    posts_srv.fetch_add(1, Ordering::SeqCst);
+                    break;
+                }
+                0x4 if flags & 0x1 == 0 => {
+                    tls.write_all(&[0, 0, 0, 0x4, 0x1, 0, 0, 0, 0]).unwrap();
+                }
+                _ => {}
+            }
+        }
+        drop(tls);
+        // No second connection may be attempted for the replay.
+        listener.set_nonblocking(true).unwrap();
+        std::thread::sleep(Duration::from_millis(400));
+        assert!(
+            listener.accept().unwrap_err().kind() == std::io::ErrorKind::WouldBlock,
+            "a replay opened a second origin connection"
+        );
+    });
+    Arc::get_mut(&mut shared).unwrap().tls_upstream = client_config(ca);
+    shared.keep_alive.store(true, Ordering::SeqCst);
+    let before = shared.conns_opened.load(Ordering::SeqCst);
+    let r = send_tls_raw(
+        &shared,
+        "localhost",
+        port,
+        b"POST /submit HTTP/1.1
+Host: localhost
+Content-Length: 4
+
+data",
+    );
+    t.join().unwrap();
+    assert!(r.resp.is_none(), "expected an error, got {:?}", r.resp);
+    assert!(r.error.is_some());
+    assert_eq!(posts.load(Ordering::SeqCst), 1, "origin request count");
+    assert_eq!(
+        shared.conns_opened.load(Ordering::SeqCst) - before,
+        1,
+        "no fresh connection for a committed POST"
+    );
+}
+
 /// A-05 end to end: a browser-style CONNECT + MITM request through the
 /// proxy listener reaches an upstream that negotiated h2 via ALPN, and the
 /// client still receives a normal HTTP/1.1 response.
