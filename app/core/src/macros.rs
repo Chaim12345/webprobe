@@ -134,14 +134,31 @@ pub fn extract_value(response: &[u8], name: &str) -> Option<String> {
     }
     let body =
         String::from_utf8_lossy(&response[parts.head_len.min(response.len())..]).into_owned();
+    // Match complete attributes, not suffixes such as data-name or field-name
+    // prefixes such as csrf_backup. Consume quoted values as a whole so an
+    // attribute-looking string inside another value is never a field name.
+    let inputs = regex::Regex::new(r#"(?is)<input(?:\s(?:[^>"']|"[^"]*"|'[^']*')*|/?)>"#).ok()?;
+    let attrs =
+        regex::Regex::new(r#"(?is)([^\s=<>/]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))"#).ok()?;
+    for input in inputs.find_iter(&body) {
+        let mut field_name = None;
+        let mut field_value = None;
+        for attr in attrs.captures_iter(input.as_str()) {
+            let value = attr.get(2).or_else(|| attr.get(3)).or_else(|| attr.get(4));
+            if attr[1].eq_ignore_ascii_case("name") && field_name.is_none() {
+                field_name = value.map(|v| v.as_str());
+            } else if attr[1].eq_ignore_ascii_case("value") && field_value.is_none() {
+                field_value = value.map(|v| v.as_str());
+            }
+        }
+        if field_name.is_some_and(|n| n == name) {
+            if let Some(value) = field_value {
+                return Some(value.to_string());
+            }
+        }
+    }
     let n = regex::escape(name);
     let patterns = [
-        format!(
-            r#"(?is)<input\b[^>]*\bname\s*=\s*["']?{n}["']?[^>]*\bvalue\s*=\s*["']([^"']*)["']"#
-        ),
-        format!(
-            r#"(?is)<input\b[^>]*\bvalue\s*=\s*["']([^"']*)["'][^>]*\bname\s*=\s*["']?{n}["']?[\s/>]"#
-        ),
         format!(r#""{n}"\s*:\s*"((?:[^"\\]|\\.)*)""#),
         format!(r#""{n}"\s*:\s*(-?[0-9][0-9.eE+-]*|true|false)"#),
     ];
@@ -186,9 +203,14 @@ fn replace_pair(pairs: &str, name: &str, value: &str) -> Option<String> {
 pub fn substitute_param(request: &[u8], name: &str, value: &str) -> Vec<u8> {
     let parts = crate::util::parse_http(request);
     let head_len = parts.head_len.min(request.len());
-    let head = String::from_utf8_lossy(&request[..head_len]).into_owned();
-    let mut body = String::from_utf8_lossy(&request[head_len..]).into_owned();
-    let mut head_out = head.clone();
+    let Ok(head) = std::str::from_utf8(&request[..head_len]) else {
+        // These bytes may be intentional in a security testing tool. Never
+        // silently replace them with UTF-8 replacement characters.
+        return request.to_vec();
+    };
+    let original_body = &request[head_len..];
+    let mut body = std::borrow::Cow::Borrowed(original_body);
+    let mut head_out = head.to_string();
     // Query string in the request line.
     if let Some(line_end) = head.find("\r\n") {
         let line = &head[..line_end];
@@ -206,24 +228,32 @@ pub fn substitute_param(request: &[u8], name: &str, value: &str) -> Vec<u8> {
     let ct = crate::util::get_header(&parts.headers, "Content-Type")
         .unwrap_or_default()
         .to_ascii_lowercase();
-    if ct.contains("json") {
-        let n = regex::escape(name);
-        if let Ok(re) = regex::Regex::new(&format!(
-            r#"("{n}"\s*:\s*)("(?:[^"\\]|\\.)*"|-?[0-9][0-9.eE+-]*|true|false|null)"#
-        )) {
-            let quoted = serde_json::to_string(value).unwrap_or_else(|_| format!("\"{value}\""));
-            body = re
-                .replace(&body, |c: &regex::Captures| format!("{}{}", &c[1], quoted))
-                .into_owned();
-        }
-    } else if !body.is_empty() && !ct.contains("multipart") {
-        if let Some(b) = replace_pair(&body, name, value) {
-            body = b;
+    if let Ok(body_text) = std::str::from_utf8(original_body) {
+        if ct.contains("json") {
+            let n = regex::escape(name);
+            if let Ok(re) = regex::Regex::new(&format!(
+                r#"("{n}"\s*:\s*)("(?:[^"\\]|\\.)*"|-?[0-9][0-9.eE+-]*|true|false|null)"#
+            )) {
+                let quoted =
+                    serde_json::to_string(value).unwrap_or_else(|_| format!("\"{value}\""));
+                if let std::borrow::Cow::Owned(replaced) = re
+                    .replace(body_text, |c: &regex::Captures| {
+                        format!("{}{}", &c[1], quoted)
+                    })
+                {
+                    body = std::borrow::Cow::Owned(replaced.into_bytes());
+                }
+            }
+        } else if !body_text.is_empty() && !ct.contains("multipart") {
+            if let Some(replaced) = replace_pair(body_text, name, value) {
+                body = std::borrow::Cow::Owned(replaced.into_bytes());
+            }
         }
     }
+    let body_changed = body.as_ref() != original_body;
     let mut out = head_out.into_bytes();
-    out.extend_from_slice(body.as_bytes());
-    if crate::util::get_header(&parts.headers, "Content-Length").is_some() {
+    out.extend_from_slice(&body);
+    if body_changed && crate::util::get_header(&parts.headers, "Content-Length").is_some() {
         out = crate::util::replace_or_add_header(&out, "Content-Length", &body.len().to_string());
     }
     out
@@ -360,3 +390,7 @@ mod tests {
         assert!(none.is_empty());
     }
 }
+
+#[cfg(test)]
+#[path = "macro_safety_tests.rs"]
+mod safety_tests;
