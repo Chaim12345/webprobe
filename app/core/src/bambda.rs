@@ -8,14 +8,18 @@ use std::{
     io::Read,
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    sync::atomic::{AtomicU64, Ordering},
+    sync::{
+        atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc,
+    },
     time::{Duration, Instant},
 };
 
 const MAX_OUTPUT: usize = 8 * 1024 * 1024;
 const MAX_INPUT: usize = 16 * 1024 * 1024;
 const MAX_SOURCE: usize = 128 * 1024;
-const MAX_RAW: usize = 1024 * 1024;
+/// Maximum aggregate raw bytes passed to one JVM batch.
+pub const MAX_RAW_BATCH_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone, Copy, Debug)]
 pub enum Kind {
@@ -62,8 +66,16 @@ pub enum Error {
     Execution(String),
     #[error("Bambda deadline exceeded")]
     Timeout,
+    #[error("Bambda job cancelled")]
+    Cancelled,
     #[error("Bambda limit exceeded: {0}")]
     Limit(&'static str),
+}
+
+#[derive(Debug)]
+pub struct ChunkedResults {
+    pub rows: Vec<RowResult>,
+    pub skipped_ids: Vec<u64>,
 }
 
 #[derive(Debug)]
@@ -106,6 +118,7 @@ pub struct Program {
     java: PathBuf,
     classpath: std::ffi::OsString,
     _classes: Scratch,
+    cancelled: Arc<AtomicBool>,
 }
 
 impl Program {
@@ -118,6 +131,29 @@ impl Program {
         source: &str,
         deadline: Duration,
     ) -> Result<Self, Error> {
+        Self::compile_cancellable(
+            java,
+            api,
+            kind,
+            source,
+            deadline,
+            Arc::new(AtomicBool::new(false)),
+        )
+    }
+
+    /// Like compile, with a shared cancellation flag checked during compilation
+    /// and every evaluation. Set it when a preview is cancelled or its UI closes.
+    pub fn compile_cancellable(
+        java: &Path,
+        api: &Path,
+        kind: Kind,
+        source: &str,
+        deadline: Duration,
+        cancelled: Arc<AtomicBool>,
+    ) -> Result<Self, Error> {
+        if cancelled.load(Ordering::Relaxed) {
+            return Err(Error::Cancelled);
+        }
         if source.len() > MAX_SOURCE {
             return Err(Error::Limit("source exceeds 128 KiB"));
         }
@@ -157,7 +193,7 @@ impl Program {
         .arg(&classes.0)
         .arg(source_path)
         .args(sources);
-        let (status, _, stderr) = run(cmd, deadline)?;
+        let (status, _, stderr) = run(cmd, deadline, &cancelled)?;
         if !status.success() {
             return Err(Error::Compile(
                 String::from_utf8_lossy(&stderr).into_owned(),
@@ -167,7 +203,49 @@ impl Program {
             java,
             classpath,
             _classes: classes,
+            cancelled,
         })
+    }
+
+    /// Evaluate at most five rows / 1 MiB per JVM batch. The deadline is per
+    /// batch; any failed batch returns an error, never a partial success.
+    /// Individually oversized rows are reported explicitly in skipped_ids.
+    pub fn evaluate_chunked(
+        &self,
+        rows: &[Exchange],
+        deadline: Duration,
+    ) -> Result<ChunkedResults, Error> {
+        if rows.len() > 10_000 {
+            return Err(Error::Limit("more than 10000 rows"));
+        }
+        let mut result = ChunkedResults {
+            rows: Vec::new(),
+            skipped_ids: Vec::new(),
+        };
+        let mut batch = Vec::new();
+        let mut raw_bytes = 0;
+        for row in rows {
+            let size = row
+                .request
+                .len()
+                .saturating_add(row.response.as_ref().map_or(0, Vec::len))
+                .saturating_add(row.host.len());
+            if size > MAX_RAW_BATCH_BYTES {
+                result.skipped_ids.push(row.id);
+                continue;
+            }
+            if !batch.is_empty() && (batch.len() == 5 || raw_bytes + size > MAX_RAW_BATCH_BYTES) {
+                result.rows.extend(self.evaluate(&batch, deadline)?);
+                batch.clear();
+                raw_bytes = 0;
+            }
+            raw_bytes += size;
+            batch.push(row.clone());
+        }
+        if !batch.is_empty() {
+            result.rows.extend(self.evaluate(&batch, deadline)?);
+        }
+        Ok(result)
     }
 
     /// Evaluate a snapshot in a separate JVM, returning one result per row.
@@ -189,7 +267,7 @@ impl Program {
             })
             .try_fold(0usize, |a, b| a.checked_add(b))
             .ok_or(Error::Limit("input size overflow"))?;
-        if raw > MAX_RAW {
+        if raw > MAX_RAW_BATCH_BYTES {
             return Err(Error::Limit("batch too large"));
         }
         let input = serde_json::to_vec(rows).map_err(|e| Error::Execution(e.to_string()))?;
@@ -204,7 +282,7 @@ impl Program {
             .arg(&self.classpath)
             .arg("BambdaRunner")
             .arg(path);
-        let (status, out, stderr) = run(cmd, deadline)?;
+        let (status, out, stderr) = run(cmd, deadline, &self.cancelled)?;
         if !status.success() {
             return Err(Error::Execution(format!(
                 "JVM exited with {status}: {}",
@@ -228,7 +306,11 @@ impl Program {
 fn run(
     mut cmd: Command,
     deadline: Duration,
+    cancelled: &AtomicBool,
 ) -> Result<(std::process::ExitStatus, Vec<u8>, Vec<u8>), Error> {
+    if cancelled.load(Ordering::Relaxed) {
+        return Err(Error::Cancelled);
+    }
     crate::util::own_process_group(&mut cmd);
     let mut child = cmd
         .stdin(Stdio::null())
@@ -278,6 +360,9 @@ fn run(
                     return Err(e.into());
                 }
             }
+        }
+        if cancelled.load(Ordering::Relaxed) {
+            break Err(Error::Cancelled);
         }
         if too_large {
             break Err(Error::Limit("JVM output exceeds 8 MiB"));

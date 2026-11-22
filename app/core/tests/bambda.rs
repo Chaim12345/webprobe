@@ -213,3 +213,64 @@ fn raw_batch_limit_is_conservative_for_the_256_mib_heap() {
     let out = p.evaluate(&input, LIMIT).unwrap();
     assert_eq!(out[0].value, Some(serde_json::json!(1024 * 1024 - 1024)));
 }
+
+#[test]
+#[ignore = "requires JDK 17+ and a Montoya API jar; see docs/specs/R-16-bambda-backend.md"]
+fn chunked_snapshots_do_not_discard_rows_that_only_exceed_the_combined_cap() {
+    let (java, api) = runtime();
+    let p = Program::compile(
+        &java,
+        &api,
+        Kind::Column,
+        "return requestResponse.request().body().length();",
+        LIMIT,
+    )
+    .unwrap();
+    let mut input = rows();
+    for row in &mut input {
+        row.response = None;
+        row.request = b"POST / HTTP/1.1\r\nHost: example.test\r\n\r\n".to_vec();
+        row.request.extend(vec![255; 600_000]);
+    }
+    let mut too_large = input[0].clone();
+    too_large.id = 999;
+    too_large.request.extend(vec![0; 600_000]);
+    input.push(too_large);
+    let out = p.evaluate_chunked(&input, LIMIT).unwrap();
+    assert_eq!(out.rows.len(), 2);
+    assert_eq!(out.skipped_ids, vec![999]);
+    assert_eq!(out.rows[0].value, Some(serde_json::json!(600_000)));
+    assert_eq!(out.rows[1].value, Some(serde_json::json!(600_000)));
+}
+
+#[test]
+#[ignore = "requires JDK 17+ and a Montoya API jar; see docs/specs/R-16-bambda-backend.md"]
+fn preview_cancellation_stops_a_looping_jvm_before_its_deadline() {
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    };
+    let (java, api) = runtime();
+    let cancel = Arc::new(AtomicBool::new(false));
+    let p = Program::compile_cancellable(
+        &java,
+        &api,
+        Kind::Column,
+        "while (true) {}",
+        LIMIT,
+        cancel.clone(),
+    )
+    .unwrap();
+    let trigger = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(250));
+        cancel.store(true, Ordering::Relaxed);
+    });
+    let start = std::time::Instant::now();
+    let result = p.evaluate(&rows(), LIMIT);
+    trigger.join().unwrap();
+    assert!(matches!(
+        result,
+        Err(webprobe_core::bambda::Error::Cancelled)
+    ));
+    assert!(start.elapsed() < Duration::from_secs(3));
+}

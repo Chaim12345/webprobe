@@ -33,3 +33,4 @@ ctr = "0.9"
 base64 = "0.22"
 # Browser-driven crawl: Chrome DevTools Protocol over WebSocket.
 tungstenite = { version = "0.24", default-features = false, features = ["handshake"] }
+yaml_serde = "0.10.7"

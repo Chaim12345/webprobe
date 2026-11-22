@@ -2,7 +2,7 @@
 
 ## Status
 
-Backend milestone only. This does not add the HTTP-history script editor, custom-column widgets, library import/export, or automatic application to new traffic. R-16 remains open until those are wired and tested.
+This file describes the evaluator backend. The next milestone adds a library/editor and explicit preview, documented in [R-16-bambda-library-preview.md](R-16-bambda-library-preview.md). History-table application and automatic execution on new traffic are still not implemented; R-16 remains open.
 
 ## Contract
 
