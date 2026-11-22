@@ -1,40 +1,40 @@
 {
-  "as_of": "2026-11-22T23:28:00+02:00",
-  "open_pr_count": 114,
-  "parity": "4ad2591e61f262e36b57965139bd429b3e9f0602",
-  "candidate": "2c7ccdd87a4fe1be0ec1aea2837258932ad94474",
+  "as_of": "2026-11-22T23:59:00+02:00",
+  "open_pr_count": 113,
+  "parity": "2c2aa124d4365e3edc0f8768634be5aa562935f2",
+  "candidate": "d405f33006c852a4ba59c364e0f21d294e56a180",
   "work_items": [
     {
       "column": "verified",
-      "title": "Workspace + real Java",
+      "title": "Prior suite + real Java",
       "owner": "QA / release",
-      "gate": "Execution verified by QA",
-      "detail": "1184 passed, 0 failed, 27 ignored. JDK25: 15 / 4 / 13.",
-      "next": "Keep exact 2c7ccdd pinned."
+      "gate": "Verified on old 2c7ccdd only",
+      "detail": "1184 / 0 / 27 ignored; Java15 / 4 / 13. Final d405f33 rerun is NOT complete.",
+      "next": "Do not transfer old-head acceptance."
     },
     {
       "column": "verified",
       "title": "Marker + project reopen",
       "owner": "QA / release",
-      "gate": "UI PASS reported by QA",
-      "detail": "Incomplete note, original bytes, strict CL warning and real save/reopen passed.",
-      "next": "Retain screenshots with final report."
+      "gate": "PASS on old 2c7ccdd only",
+      "detail": "Incomplete note, original bytes, strict CL warning and real save/reopen passed on the prior head.",
+      "next": "Repeat on d405f33."
     },
     {
       "column": "verified",
-      "title": "Streaming + Organizer",
+      "title": "Prior workflow proofs",
       "owner": "QA / release",
-      "gate": "Partial UI PASS reported",
-      "detail": "Storage ON/OFF and collection persistence passed. Size-cut storage/note correct; selecting huge body aborts.",
-      "next": "Delete action unverified. Rendering crash blocks batch."
+      "gate": "PASS on old heads only",
+      "detail": "Streaming ON/OFF, collection persistence and later delete click-through passed on 2c7ccdd.",
+      "next": "Repeat final tree; click-scale issue solved."
     },
     {
       "column": "active",
       "title": "#155 remaining UI",
       "owner": "Request-reader + QA",
-      "gate": "Suite green; acceptance BLOCKED",
-      "detail": "2c7ccdd includes CTO B wire evidence fix. Rendering-crash fix is a separate prerequisite.",
-      "next": "Finish UI; wait bounded-preview fix before verdict."
+      "gate": "Exact source approved; gates running",
+      "detail": "d405f33 contains refreshed125 plus landed171. Pipeline7/7 is an early signal only.",
+      "next": "Finish whole-suite/Java and entire UI rerun."
     },
     {
       "column": "active",
@@ -49,7 +49,7 @@
       "title": "PM board + cleanup plan",
       "owner": "Program Manager / Git expert",
       "gate": "Management work only",
-      "detail": "114 open PRs mapped. No mass close or source rewrite approved.",
+      "detail": "113 open PRs mapped. No mass close or source rewrite approved.",
       "next": "Keep exact-head gates and source accounting current."
     },
     {
@@ -57,7 +57,7 @@
       "title": "#125 preservation source",
       "owner": "Integration / reviewer",
       "gate": "Exact delta approved, code read",
-      "detail": "359b139 remains reader-free. Delete-to-Inbox fix carried by #155.",
+      "detail": "fb3d89f remains reader-free. Delete-to-Inbox fix carried by #155.",
       "next": "Wait final combined workflow verdict."
     },
     {
@@ -78,19 +78,19 @@
     },
     {
       "column": "blocked",
-      "title": "Organizer delete action",
+      "title": "Final UI repeat",
       "owner": "QA / release",
-      "gate": "Automation blocked, not PASS",
-      "detail": "Confirm buttons ignore synthetic clicks. X11 panic observed during window operations.",
-      "next": "Complete click-through or get explicit disposition."
+      "gate": "Pending on d405f33",
+      "detail": "Old-head Organizer delete, Logger and Sequencer passed after click-scale correction.",
+      "next": "Repeat entire UI on changed rendering tree."
     },
     {
       "column": "blocked",
-      "title": "Large-body rendering",
-      "owner": "Lane 15 / CTO / QA",
-      "gate": "CTO acceptance BLOCKER",
-      "detail": "Crash reproduced 2/2. #171 caps previews at 1MiB and removes Logger response copy; GUI verification pending.",
-      "next": "#1711bb384a source approved; QA actual repro before clearance."
+      "title": "Final rendering smoke",
+      "owner": "QA / triage",
+      "gate": "Fix landed; final-tree proof pending",
+      "detail": "#171 actual 256MiB GUI PASS, landed2c2aa12. Both refreshed heads include it.",
+      "next": "Test select/switch/save-reload on d405f33."
     },
     {
       "column": "blocked",
@@ -1068,8 +1068,8 @@
       "url": "https://github.com/Chaim12345/webprobe/pull/113",
       "head": "e071a1f8b8401d30d18e0c75c1eda1af0bcfc778",
       "owner": "PR triage",
-      "column": "blocked",
-      "gate": "Held pending complete proof / remainder",
+      "column": "queued",
+      "gate": "Consolidation plan only",
       "next": "After applicable reports/management batch lands, prove complete documents, decisions, evidence and supersession order retained",
       "blocker": "No license/Organizer/transport/safety decision may disappear in batching",
       "evidence": "Git ancestry checked; prior triage results are source-head evidence, not final combined-tree acceptance; CTO18:34 routing/correction adopted18:35; full own-plus-inherited proof and fresh live state required before triage closure"
@@ -1080,8 +1080,8 @@
       "url": "https://github.com/Chaim12345/webprobe/pull/114",
       "head": "10dece9f11b94e36703bd3348ca3797890185528",
       "owner": "Integration + independent review",
-      "column": "queued",
-      "gate": "Consolidation plan only",
+      "column": "blocked",
+      "gate": "Held pending complete proof / remainder",
       "next": "After actual #125+#155 landing, map complete source to landed SHAs; keep any remainder open",
       "blocker": "Batch freeze; carrier title/manifest is a lead, not complete equivalence proof",
       "evidence": "Git ancestry checked; prior triage results are source-head evidence, not final combined-tree acceptance; CTO18:34 routing/correction adopted18:35; full own-plus-inherited proof and fresh live state required before triage closure"
@@ -1198,12 +1198,12 @@
       "number": 125,
       "title": "Integration: reviewed 2026-11-22 fix lanes (#99, #109, #110, #111, #114-#120) on the #45 stack",
       "url": "https://github.com/Chaim12345/webprobe/pull/125",
-      "head": "359b1395e0849db67add85cbf1b9bbf4c5a06dcf",
+      "head": "fb3d89f4d7a43fbd8c15d2beaf08f9c14165b3db",
       "owner": "Integration + independent review",
       "column": "blocked",
-      "gate": "CTO BLOCKED: combined batch rendering crash",
-      "next": "Hold reader-free359b139; final combination is #1552c7ccdd, no local merge result promoted",
-      "blocker": "CTO acceptance BLOCKER remains: bounded-preview #1711bb384a source-approved, actual256MiB GUI repro and integration/landing validation pending; remaining workflow UI open",
+      "gate": "Refreshed source approved; final gates pending",
+      "next": "Hold refreshed pin; QA accepts final d405f33 whole tree including rendering/switch/save-reload",
+      "blocker": "Final d405f33 independent suite/JDK25 and entire UI rerun pending; #171 crash fixed/landed but final rendering smoke still required. Hosted-CI exception covered only #171, not this batch.",
       "evidence": "Reviewer code-read approves 3108302..359b139, no cargo rerun by reviewer. Author reports support118/0 and app151/0, fmt/clippy clean; old core/Bambda counts not rerun. Fix moves items to Inbox and tests evidence/notes/IDs, unrelated items, repeated deletion and persistence"
     },
     {
@@ -1335,32 +1335,32 @@
       "column": "blocked",
       "gate": "Held pending complete proof / remainder",
       "next": "After actual #155 landing prove all own/inherited source and R1-R4/boundary/persistence/tunnel/drop/FIN retained",
-      "blocker": "Wait remaining UI/final verdict/current CI, actual2c7ccdd landing and full source preservation proof",
+      "blocker": "Wait final d405f33 exact review/QA/UI and actual batch landing, then full own/inherited proof",
       "evidence": "CTO source acceptance for #155 73ff441 is conditional on exact resolved-tree review/QA; not closure permission by itself; CTO18:34 routing/correction adopted18:35; full own-plus-inherited proof and fresh live state required before triage closure"
     },
     {
       "number": 155,
       "title": "Request reader reconcile on #125: typed outcomes, delivery lifecycle, persistence policy, inbound ambiguity guard",
       "url": "https://github.com/Chaim12345/webprobe/pull/155",
-      "head": "2c7ccdd87a4fe1be0ec1aea2837258932ad94474",
+      "head": "d405f33006c852a4ba59c364e0f21d294e56a180",
       "owner": "Lane15 + integration + reviewer/CTO",
       "column": "blocked",
-      "gate": "CTO BLOCKED: large-body rendering crash",
-      "next": "Wait separate bounded-preview PR and exact fix review/QA; finish remaining UI, then combined final verdict",
-      "blocker": "CTO acceptance BLOCKER remains: bounded-preview #1711bb384a source-approved, actual256MiB GUI repro and integration/landing validation pending; remaining workflow UI open",
-      "evidence": "Live refs/ancestry and dc170b5..2c7ccdd 3-file production/test delta (+228/-21) verified by PM. Reviewer20:10 code-read approves original pre-edit wire bytes, real status/visible note, marker edge cases and untouched streaming. Author pipeline8/8 runs with7 tests each, core845/0/13, fmt/clippy clean. QA independently pipeline7/0 on exact2c7ccdd; full gate not done. Fixture JSON ProjectHistory roundtrip is NOT full save_project/restore_project UI proof. Complete/EOF-delimited unchanged; duplicate/conflicting CL strict warning intentional.; QA22:36 verifies workspace1184/0/27 across19 result lines, fmt/clippy clean, standalone pipeline7/7, JDK25 ext_host15/15 montoya4/4 bambda13/13. UI22:41/22:43 reports visible incomplete/strict-framing notes and original bytes retained through real project create/save/quit/reopen. Rest UI pending; PM has not inspected QA screenshots or rerun tests.; QA23:04 large-body rendering allocation abort2/2 on2GB host, CTO23:04 acceptance BLOCKER; bounded-preview fix separate PR required; storage and cut note correct. StreamingON/OFF and collection persistence PASS, delete action automation-blocked."
+      "gate": "Refreshed source approved; final gates pending",
+      "next": "Finish exact d405f33 suite/JDK25 and entire UI sweep, including large-entry/select-switch-save-reload; old2c7ccdd passes remain historical",
+      "blocker": "Final d405f33 independent suite/JDK25 and entire UI rerun pending; #171 crash fixed/landed but final rendering smoke still required. Hosted-CI exception covered only #171, not this batch.",
+      "evidence": "Live ancestry: parity2c2aa12 -> #125fb3d89f -> #155d405f33. Reviewer23:39 code-only: both refresh deltas exactly msgpane.rs + views.rs +145/-7, approved171 changes retained, append-only conflict resolution keeps both sides. Author final1200/0 incl13 Bambda, fmt/clippy; not independent final acceptance. QA23:40 standalone pipeline7/7, full gate in progress; entire UI to rerun. Earlier2c7ccdd suite1184/0/27 Java15/4/13 and workflow passes are old-head evidence.171 actual256MiB GUI PASS/landed2c2aa12, not final combined rendering smoke."
     },
     {
       "number": 160,
       "title": "Refresh program board after safety landings",
       "url": "https://github.com/Chaim12345/webprobe/pull/160",
-      "head": "8a55f0f772071ab710992f61d291f895f04c06e2",
+      "head": "0ca52bc2a98030edb660a7e03de6761d46529a61",
       "owner": "Program Manager",
       "column": "active",
       "gate": "New visual board needs docs review",
       "next": "Review current PR head; preserve timestamped inventory and source scopes",
       "blocker": "Prior cceeffd approval does not cover new refresh",
-      "evidence": "Self SHA blank; approved8a55f0f historical after #171 inventory/kanban refresh; current PR head authoritative"
+      "evidence": "Self SHA blank; previous0ca52bc needs superseded-head treatment after this landing/refresh update; current PR head authoritative"
     },
     {
       "number": 161,
@@ -1481,18 +1481,6 @@
       "next": "Author addresses review fixes first; require updated exact-head review/QA before release claims",
       "blocker": "Batch freeze; run/concurrency budget, direct-egress verification and evidence/confidence/body caps unresolved",
       "evidence": "64-request cap is per URL, not per run; request scope/session routing passed source review, speculative direct socket risk unverified. Author reports 787 core passes at 4 threads, all8 positive families across3 browser test functions plus cache test; earlier16-thread DOM lab miss unresolved; no GUI visual QA"
-    },
-    {
-      "number": 171,
-      "title": "History panes: bounded labeled preview for huge messages (fixes abort on 256 MiB entry)",
-      "url": "https://github.com/Chaim12345/webprobe/pull/171",
-      "head": "1bb384ae78258b3309224a25c77cfadb2a0e98ca",
-      "owner": "Lane15 / reviewer / QA",
-      "column": "review",
-      "gate": "Source APPROVE; actual crash repro QA pending",
-      "next": "QA retests actual256MiB stored history and Logger selection, preview banner and export fidelity; triage preserves batch freeze",
-      "blocker": "Combined batch CTO crash blocker remains until actual repro QA and final integration/landing proof",
-      "evidence": "Reviewer23:17 code-only approval and clean parity4ad2591 merge check.1MiB preview slice before pane views/hash/Inspector; Logger response borrowed Body/Arc, no full response clone. Small messages unchanged; full storage/capture/export retained. Author141 bin tests/0 failed fmt/clippy clean; headless96MiB smoke not actual GUI reproduction. Explicit whole-body Organizer/Comparer/AI actions remain copy-heavy and out of scope."
     }
   ]
 }
