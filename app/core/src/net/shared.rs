@@ -347,6 +347,13 @@ impl Shared {
     }
 
     /// Tell the front end that something it shows has changed.
+    /// The next id for a held intercept item. HTTP requests, responses and
+    /// WebSocket frames share one queue, so they share this one sequence:
+    /// forward and drop find an item by id alone.
+    pub fn next_queue_item_id(&self) -> u64 {
+        self.next_queue_id.fetch_add(1, Ordering::SeqCst)
+    }
+
     pub fn wake(&self) {
         let f = self.waker.lock().unwrap().clone();
         if let Some(f) = f {

@@ -589,7 +589,7 @@ pub fn ws_message(
         }
     }
     if hold {
-        let id = shared.next_ws_id.fetch_add(1, Ordering::SeqCst);
+        let id = shared.next_queue_item_id();
         let (tx, rx) = mpsc::channel::<Option<String>>();
         shared.queue.lock().unwrap().push(InterceptItem::new(
             id,
