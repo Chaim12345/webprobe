@@ -4,6 +4,7 @@
 // codecs — one implementation to keep correct); URL, ASCII hex, ROT13, the digests
 // and SmartDecode live here because nothing else needed them.
 
+use crate::hash_list::{self, HashSpec};
 use crate::util;
 
 /// One Decoder operation.
@@ -39,6 +40,9 @@ pub enum Op {
     Sha1,
     Sha256,
     Sha512,
+    /// One of the 82 entries of Burp's Decoder Hash menu (parity with real
+    /// Burp Community 2026.11.2); see `hash_list::MENU`.
+    Hash(&'static HashSpec),
     /// Guess which single encoding layer was applied and undo it.
     SmartDecode,
 }
@@ -63,6 +67,7 @@ pub fn apply(op: Op, input: &str) -> Result<String, String> {
         Op::GzipEncode => gzip_encode(input),
         Op::GzipDecode => gzip_decode(input),
         Op::Rot13 => Ok(rot13(input)),
+        Op::Hash(spec) => hash_list::digest_hex(spec, input.as_bytes()),
         Op::Md5 => Ok(md5_hex(input)),
         Op::Sha1 => Ok(sha1_hex(input)),
         Op::Sha256 => Ok(sha256_hex(input)),
@@ -79,6 +84,11 @@ pub fn pipeline(input: &str, ops: &[Op]) -> Result<String, String> {
         current = apply(*op, &current).map_err(|e| format!("step {} ({op:?}): {e}", idx + 1))?;
     }
     Ok(current)
+}
+
+/// The Decoder's Hash dropdown in Burp's measured order (82 entries).
+pub fn hash_menu_ops() -> Vec<Op> {
+    hash_list::MENU.iter().map(Op::Hash).collect()
 }
 
 // ---------- URL ----------
