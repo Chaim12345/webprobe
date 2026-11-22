@@ -458,8 +458,13 @@ fn g11_body_context(body: &str, pos: usize) -> G11Context {
     }
 }
 
-/// Every occurrence of `probe` in `resp`, classified (burp.Zcpt).
+/// Classify at most 32 occurrences of `probe` (burp.Zcpt).
+/// Each body classification scans its prefix, so bound target-controlled work.
+/// Later reflections may be missed rather than allowing quadratic amplification.
 pub(crate) fn g11_contexts(resp: &[u8], probe: &str) -> Vec<G11Context> {
+    if probe.is_empty() {
+        return Vec::new();
+    }
     let text = String::from_utf8_lossy(resp);
     // Locate the head/body split in the lossy string, not the raw bytes:
     // invalid UTF-8 before it would otherwise shift every body offset.
@@ -472,7 +477,7 @@ pub(crate) fn g11_contexts(resp: &[u8], probe: &str) -> Vec<G11Context> {
         .unwrap_or(0);
     let mut out = Vec::new();
     let mut start = 0;
-    while start + probe.len() <= text.len() {
+    while out.len() < 32 && start + probe.len() <= text.len() {
         let Some(at) = text[start..].find(probe).map(|p| p + start) else {
             break;
         };
@@ -718,6 +723,16 @@ mod g11_tests {
             body.len()
         )
         .into_bytes()
+    }
+
+    #[test]
+    fn many_reflections_have_bounded_classification_work() {
+        let response = resp(&"<p>PROBEBODY</p>".repeat(20_000));
+        let start = std::time::Instant::now();
+        let contexts = g11_contexts(&response, "PROBEBODY");
+        assert_eq!(contexts.len(), 32);
+        assert!(start.elapsed() < std::time::Duration::from_secs(2));
+        assert!(g11_contexts(&response, "").is_empty());
     }
 
     #[test]
