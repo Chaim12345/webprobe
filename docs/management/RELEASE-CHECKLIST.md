@@ -45,3 +45,7 @@ Owner: QA / release. Program Manager maintains this index. Snapshot: 2026-11-22 
 This checklist records project dispositions recorded by the PM; reviewer approvals are code-read only. It does not grant deployment, account, spending, publication or license-change authority.
 
 Cleanup uses CTO routing in PROGRAM.md, not the superseded expert proposals. Only #91 has closed in this pass; every conditional closure requires actual landed replacement/carrier proof and fresh state under the batch freeze.
+
+### UI follow-up, not an automatic landing blocker
+
+QA23:04 reports selecting a stored256MiB streamed response aborts with a5368707940-byte allocation failure on a2GB host, reproduced2/2. Storage and size-cut note are correct; rendering needs a lazy/truncated path. Evidence: QA app4.log and shots84/85. Track as an open follow-up, not a #155 blocker unless CTO rules so. Streaming storageON/OFF and Organizer collection persistence passed per QA22:57; delete-collection click-through is still automation-blocked, not passed.
