@@ -129,3 +129,9 @@ mod replay_safety_tests;
 
 #[cfg(test)]
 mod url_scope_tests;
+
+#[cfg(test)]
+mod hist_tests;
+
+#[cfg(test)]
+mod tool_state_tests;
