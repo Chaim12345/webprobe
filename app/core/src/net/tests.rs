@@ -1733,3 +1733,267 @@ fn setup_host_is_served_locally_instead_of_upstream() {
     assert_eq!(shared.history.len(), 0);
     t.join().unwrap();
 }
+
+/// PIPELINE-FIX: two requests coalesced in one client write are two separate
+/// exchanges: each is rewritten to origin form, forwarded on its own and
+/// recorded in history. Before the fix, read_request returned both requests
+/// as one buffer: the upstream got them concatenated (only the first request
+/// line rewritten), the client received only the first response and history
+/// recorded a single row.
+#[test]
+fn pipelined_requests_are_separate_exchanges() {
+    let shared = Shared::new();
+    let upstream = TcpListener::bind("127.0.0.1:0").unwrap();
+    let upstream_port = upstream.local_addr().unwrap().port();
+    let seen = Arc::new(std::sync::Mutex::new(Vec::<Vec<u8>>::new()));
+    let seen_t = seen.clone();
+    let t = std::thread::spawn(move || {
+        for body in [b"one".as_slice(), b"two".as_slice()] {
+            let (mut s, _) = upstream.accept().unwrap();
+            s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+            let req = read_request(&mut s).unwrap();
+            seen_t.lock().unwrap().push(req);
+            s.write_all(
+                format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    String::from_utf8_lossy(body)
+                )
+                .as_bytes(),
+            )
+            .unwrap();
+        }
+    });
+
+    let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+    let proxy_port = proxy.local_addr().unwrap().port();
+    let sh = shared.clone();
+    let pt = std::thread::spawn(move || {
+        let (s, _) = proxy.accept().unwrap();
+        handle_conn(sh, s);
+    });
+
+    let mut client = TcpStream::connect(("127.0.0.1", proxy_port)).unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    let first = format!(
+        "GET http://127.0.0.1:{upstream_port}/first HTTP/1.1\r\nHost: 127.0.0.1:{upstream_port}\r\n\r\n"
+    );
+    let second = format!(
+        "GET http://127.0.0.1:{upstream_port}/second HTTP/1.1\r\nHost: 127.0.0.1:{upstream_port}\r\nConnection: close\r\n\r\n"
+    );
+    client
+        .write_all([first.as_bytes(), second.as_bytes()].concat().as_slice())
+        .unwrap();
+    client.shutdown(std::net::Shutdown::Write).unwrap();
+    let mut wire = Vec::new();
+    client.read_to_end(&mut wire).unwrap();
+    t.join().unwrap();
+    pt.join().unwrap();
+
+    let seen = seen.lock().unwrap();
+    assert_eq!(
+        seen.len(),
+        2,
+        "each pipelined request reaches upstream once, on its own: {seen:?}"
+    );
+    assert!(
+        seen[0].starts_with(b"GET /first HTTP/1.1\r\n"),
+        "first request rewritten to origin form: {}",
+        String::from_utf8_lossy(&seen[0])
+    );
+    assert!(
+        seen[1].starts_with(b"GET /second HTTP/1.1\r\n"),
+        "second request rewritten to origin form: {}",
+        String::from_utf8_lossy(&seen[1])
+    );
+    assert!(
+        !seen[0].windows(7).any(|w| w == b"/second"),
+        "the pipelined next request must not ride into the first exchange unmanaged"
+    );
+    let text = String::from_utf8_lossy(&wire);
+    let one = text.find("one").expect("first response delivered");
+    let two = text.find("two").expect("second response delivered");
+    assert!(one < two, "responses arrive in request order: {text}");
+    let hist = shared.history.snapshot();
+    assert_eq!(hist.len(), 2, "one history row per exchange");
+    assert_eq!(hist[0].path, "/first");
+    assert_eq!(hist[1].path, "/second");
+}
+
+/// PIPELINE-FIX: a pipelined request with a Content-Length body ends at the
+/// body; the next request coalesced in the same write is the next exchange,
+/// not tail bytes of the first one.
+#[test]
+fn pipelined_post_body_does_not_swallow_next_request() {
+    let shared = Shared::new();
+    let upstream = TcpListener::bind("127.0.0.1:0").unwrap();
+    let upstream_port = upstream.local_addr().unwrap().port();
+    let seen = Arc::new(std::sync::Mutex::new(Vec::<Vec<u8>>::new()));
+    let seen_t = seen.clone();
+    let t = std::thread::spawn(move || {
+        for _ in 0..2 {
+            let (mut s, _) = upstream.accept().unwrap();
+            s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+            let req = read_request(&mut s).unwrap();
+            seen_t.lock().unwrap().push(req);
+            s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+                .unwrap();
+        }
+    });
+
+    let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+    let proxy_port = proxy.local_addr().unwrap().port();
+    let sh = shared.clone();
+    let pt = std::thread::spawn(move || {
+        let (s, _) = proxy.accept().unwrap();
+        handle_conn(sh, s);
+    });
+
+    let mut client = TcpStream::connect(("127.0.0.1", proxy_port)).unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    let first = format!(
+        "POST http://127.0.0.1:{upstream_port}/submit HTTP/1.1\r\nHost: 127.0.0.1:{upstream_port}\r\nContent-Length: 5\r\n\r\nhello"
+    );
+    let second = format!(
+        "GET http://127.0.0.1:{upstream_port}/after HTTP/1.1\r\nHost: 127.0.0.1:{upstream_port}\r\nConnection: close\r\n\r\n"
+    );
+    client
+        .write_all([first.as_bytes(), second.as_bytes()].concat().as_slice())
+        .unwrap();
+    client.shutdown(std::net::Shutdown::Write).unwrap();
+    let mut wire = Vec::new();
+    client.read_to_end(&mut wire).unwrap();
+    t.join().unwrap();
+    pt.join().unwrap();
+
+    let seen = seen.lock().unwrap();
+    assert_eq!(seen.len(), 2, "two exchanges: {seen:?}");
+    assert!(
+        seen[0].starts_with(b"POST /submit HTTP/1.1\r\n"),
+        "origin form: {}",
+        String::from_utf8_lossy(&seen[0])
+    );
+    assert!(
+        seen[0].ends_with(b"\r\n\r\nhello"),
+        "the first exchange is exactly head + 5 body bytes: {}",
+        String::from_utf8_lossy(&seen[0])
+    );
+    assert!(
+        seen[1].starts_with(b"GET /after HTTP/1.1\r\n"),
+        "second request forwarded on its own: {}",
+        String::from_utf8_lossy(&seen[1])
+    );
+    assert_eq!(shared.history.snapshot().len(), 2);
+}
+
+/// PIPELINE-FIX: the read_request_pending split itself, over an in-memory
+/// stream: head-only, Content-Length and chunked boundaries, with leftover
+/// bytes carried into the next call.
+#[test]
+fn read_request_pending_splits_at_exact_boundaries() {
+    // Two head-only requests in one buffer.
+    let mut pending: Vec<u8> = Vec::new();
+    let mut cur = std::io::Cursor::new(
+        b"GET /a HTTP/1.1\r\nHost: x\r\n\r\nGET /b HTTP/1.1\r\nHost: x\r\n\r\n".to_vec(),
+    );
+    let one = read_request_pending(&mut cur, &mut pending).unwrap();
+    assert_eq!(one, b"GET /a HTTP/1.1\r\nHost: x\r\n\r\n");
+    let two = read_request_pending(&mut cur, &mut pending).unwrap();
+    assert_eq!(two, b"GET /b HTTP/1.1\r\nHost: x\r\n\r\n");
+    assert!(pending.is_empty());
+
+    // A Content-Length body followed by the next request.
+    let mut cur = std::io::Cursor::new(
+        b"POST /p HTTP/1.1\r\nHost: x\r\nContent-Length: 4\r\n\r\nbodyGET /n HTTP/1.1\r\nHost: x\r\n\r\n".to_vec(),
+    );
+    let one = read_request_pending(&mut cur, &mut pending).unwrap();
+    assert_eq!(
+        one,
+        b"POST /p HTTP/1.1\r\nHost: x\r\nContent-Length: 4\r\n\r\nbody"
+    );
+    let two = read_request_pending(&mut cur, &mut pending).unwrap();
+    assert_eq!(two, b"GET /n HTTP/1.1\r\nHost: x\r\n\r\n");
+
+    // A chunked body followed by the next request.
+    let mut cur = std::io::Cursor::new(
+        b"POST /c HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r\n0\r\n\r\nGET /d HTTP/1.1\r\nHost: x\r\n\r\n".to_vec(),
+    );
+    let one = read_request_pending(&mut cur, &mut pending).unwrap();
+    assert_eq!(
+        one,
+        b"POST /c HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r\n0\r\n\r\n"
+    );
+    let two = read_request_pending(&mut cur, &mut pending).unwrap();
+    assert_eq!(two, b"GET /d HTTP/1.1\r\nHost: x\r\n\r\n");
+
+    // EOF before a head completes: everything read is the (partial) request.
+    let mut cur = std::io::Cursor::new(b"GET /partial HTTP/1.1\r\nHost:".to_vec());
+    let partial = read_request_pending(&mut cur, &mut pending).unwrap();
+    assert_eq!(partial, b"GET /partial HTTP/1.1\r\nHost:");
+    assert!(pending.is_empty());
+}
+
+/// PIPELINE-FIX: a second request that arrives in its own packet while the
+/// first exchange is still running is served too (the non-blocking peek in
+/// handle_conn, with blocking mode restored by the guard afterwards).
+#[test]
+fn pipelined_request_arriving_in_a_later_packet_is_served() {
+    let shared = Shared::new();
+    let upstream = TcpListener::bind("127.0.0.1:0").unwrap();
+    let upstream_port = upstream.local_addr().unwrap().port();
+    let t = std::thread::spawn(move || {
+        // The first exchange is slow, so the client's second request lands
+        // while the proxy is still waiting on this response.
+        let (mut s, _) = upstream.accept().unwrap();
+        s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        let req = read_request(&mut s).unwrap();
+        assert!(req.starts_with(b"GET /first HTTP/1.1\r\n"));
+        std::thread::sleep(Duration::from_millis(300));
+        s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 3\r\nConnection: close\r\n\r\none")
+            .unwrap();
+        // Second exchange on a fresh connection (keep-alive is off).
+        let (mut s, _) = upstream.accept().unwrap();
+        s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        let req = read_request(&mut s).unwrap();
+        assert!(req.starts_with(b"GET /second HTTP/1.1\r\n"));
+        s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 3\r\nConnection: close\r\n\r\ntwo")
+            .unwrap();
+    });
+
+    let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+    let proxy_port = proxy.local_addr().unwrap().port();
+    let sh = shared.clone();
+    let pt = std::thread::spawn(move || {
+        let (s, _) = proxy.accept().unwrap();
+        handle_conn(sh, s);
+    });
+
+    let mut client = TcpStream::connect(("127.0.0.1", proxy_port)).unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    let first = format!(
+        "GET http://127.0.0.1:{upstream_port}/first HTTP/1.1\r\nHost: 127.0.0.1:{upstream_port}\r\n\r\n"
+    );
+    client.write_all(first.as_bytes()).unwrap();
+    std::thread::sleep(Duration::from_millis(100));
+    let second = format!(
+        "GET http://127.0.0.1:{upstream_port}/second HTTP/1.1\r\nHost: 127.0.0.1:{upstream_port}\r\nConnection: close\r\n\r\n"
+    );
+    client.write_all(second.as_bytes()).unwrap();
+    client.shutdown(std::net::Shutdown::Write).unwrap();
+    let mut wire = Vec::new();
+    client.read_to_end(&mut wire).unwrap();
+    t.join().unwrap();
+    pt.join().unwrap();
+
+    let text = String::from_utf8_lossy(&wire);
+    let one = text.find("one").expect("first response delivered");
+    let two = text.find("two").expect("second response delivered");
+    assert!(one < two, "responses in request order: {text}");
+    assert_eq!(shared.history.snapshot().len(), 2);
+}

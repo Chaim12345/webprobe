@@ -21,16 +21,23 @@ pub fn content_length(head: &[u8]) -> Option<usize> {
 }
 
 pub fn read_request<R: Read>(stream: &mut R) -> std::io::Result<Vec<u8>> {
-    let mut buf: Vec<u8> = Vec::with_capacity(4096);
+    let mut pending = Vec::new();
+    read_request_pending(stream, &mut pending)
+}
+
+/// One request read from `stream`, starting with bytes already read ahead
+/// into `pending`. The request is consumed exactly: head plus its framed
+/// body. Bytes past it stay in `pending` for the next call, so a client that
+/// pipelines several requests into one write gets one exchange per request
+/// and no bytes ride into a request they do not belong to.
+pub fn read_request_pending<R: Read>(
+    stream: &mut R,
+    pending: &mut Vec<u8>,
+) -> std::io::Result<Vec<u8>> {
+    let mut buf: Vec<u8> = std::mem::take(pending);
     let mut chunk = [0u8; 8192];
     let head_len;
     loop {
-        let n = stream.read(&mut chunk)?;
-        if n == 0 {
-            head_len = None;
-            break;
-        }
-        buf.extend_from_slice(&chunk[..n]);
         if let Some(h) = head_end(&buf) {
             head_len = Some(h);
             break;
@@ -41,9 +48,17 @@ pub fn read_request<R: Read>(stream: &mut R) -> std::io::Result<Vec<u8>> {
                 "request too large",
             ));
         }
+        let n = stream.read(&mut chunk)?;
+        if n == 0 {
+            head_len = None;
+            break;
+        }
+        buf.extend_from_slice(&chunk[..n]);
     }
     let head_len = match head_len {
         Some(h) => h,
+        // EOF before a complete head: everything read is the (partial)
+        // request, as before.
         None => return Ok(buf),
     };
     let too_large =
@@ -55,19 +70,33 @@ pub fn read_request<R: Read>(stream: &mut R) -> std::io::Result<Vec<u8>> {
     let chunked = head
         .lines()
         .any(|l| l.starts_with("transfer-encoding:") && l.contains("chunked"));
+    let req_end;
     if chunked {
         let mut cur = crate::codec::ChunkCursor::default();
-        while crate::codec::scan_chunked(&buf[head_len..], &mut cur, |_| {})
-            == crate::codec::Chunked::Partial
-        {
-            if buf.len() - head_len > crate::codec::MAX_BODY {
-                return Err(too_large());
+        loop {
+            match crate::codec::scan_chunked(&buf[head_len..], &mut cur, |_| {}) {
+                crate::codec::Chunked::Complete(end) => {
+                    req_end = head_len + end;
+                    break;
+                }
+                // Undelimitable framing: forward everything read, as before.
+                crate::codec::Chunked::Malformed => {
+                    req_end = buf.len();
+                    break;
+                }
+                crate::codec::Chunked::Partial => {
+                    if buf.len() - head_len > crate::codec::MAX_BODY {
+                        return Err(too_large());
+                    }
+                    let n = stream.read(&mut chunk)?;
+                    if n == 0 {
+                        // EOF mid-body: forward what arrived, as before.
+                        req_end = buf.len();
+                        break;
+                    }
+                    buf.extend_from_slice(&chunk[..n]);
+                }
             }
-            let n = stream.read(&mut chunk)?;
-            if n == 0 {
-                break;
-            }
-            buf.extend_from_slice(&chunk[..n]);
         }
     } else if let Some(len) = content_length(&buf[..head_len]) {
         if len > crate::codec::MAX_BODY {
@@ -80,7 +109,13 @@ pub fn read_request<R: Read>(stream: &mut R) -> std::io::Result<Vec<u8>> {
             }
             buf.extend_from_slice(&chunk[..n]);
         }
+        // A short EOF body forwards what arrived, as before.
+        req_end = (head_len + len).min(buf.len());
+    } else {
+        req_end = head_len;
     }
+    let rest = buf.split_off(req_end);
+    *pending = rest;
     Ok(buf)
 }
 
