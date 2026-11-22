@@ -29,6 +29,9 @@ pub struct Organizer {
     pub next_id: u64,
     pub collections: Vec<Collection>,
     pub next_collection_id: u64,
+    /// Collection that `add` files new items into (0 = Inbox); the UI keeps it
+    /// in sync with the selected collection.
+    pub target_collection: u64,
 }
 
 impl Organizer {
@@ -38,14 +41,11 @@ impl Organizer {
             next_id: 1,
             collections: Vec::new(),
             next_collection_id: 1,
+            target_collection: 0,
         }
     }
 
-    /// Create a named collection and return its id. A blank name becomes
-    /// "Collection N"; a duplicate name gets " 2", " 3", ... appended.
-    pub fn add_collection(&mut self, name: &str) -> u64 {
-        let id = self.next_collection_id;
-        self.next_collection_id = self.next_collection_id.saturating_add(1);
+    fn unique_name(&self, name: &str, except: u64) -> String {
         let base = match name.trim() {
             "" => format!("Collection {}", self.collections.len() + 1),
             n => n.to_string(),
@@ -53,31 +53,57 @@ impl Organizer {
         let mut unique = base.clone();
         let mut n = 2;
         while unique.eq_ignore_ascii_case("Inbox")
-            || self.collections.iter().any(|c| c.name == unique)
+            || self
+                .collections
+                .iter()
+                .any(|c| c.id != except && c.name == unique)
         {
             unique = format!("{base} {n}");
             n += 1;
         }
-        self.collections.push(Collection { id, name: unique });
+        unique
+    }
+
+    /// Create a named collection and return its id. A blank name becomes
+    /// "Collection N"; a duplicate name (or "Inbox") gets " 2", " 3", ... appended.
+    pub fn add_collection(&mut self, name: &str) -> u64 {
+        let id = self.next_collection_id;
+        self.next_collection_id = self.next_collection_id.saturating_add(1);
+        let name = self.unique_name(name, 0);
+        self.collections.push(Collection { id, name });
         id
     }
 
+    /// Rename with the same uniqueness rules; blank names are rejected.
     pub fn rename_collection(&mut self, id: u64, name: &str) -> bool {
-        match self.collections.iter_mut().find(|c| c.id == id) {
-            Some(c) if !name.trim().is_empty() => {
-                c.name = name.trim().to_string();
-                true
-            }
-            _ => false,
+        if name.trim().is_empty() || !self.collections.iter().any(|c| c.id == id) {
+            return false;
         }
+        let name = self.unique_name(name, id);
+        if let Some(c) = self.collections.iter_mut().find(|c| c.id == id) {
+            c.name = name;
+        }
+        true
     }
 
-    /// Delete a collection and its items; false when it does not exist.
+    /// Delete a collection; its items move back to the Inbox, nothing is lost.
     pub fn remove_collection(&mut self, id: u64) -> bool {
         let before = self.collections.len();
         self.collections.retain(|c| c.id != id);
-        self.items.retain(|i| i.collection != id);
+        for i in self.items.iter_mut().filter(|i| i.collection == id) {
+            i.collection = 0;
+        }
         self.collections.len() != before
+    }
+
+    /// Point every item whose collection no longer exists back at the Inbox.
+    pub fn repair_collections(&mut self) {
+        let ids: Vec<u64> = self.collections.iter().map(|c| c.id).collect();
+        for i in self.items.iter_mut() {
+            if i.collection != 0 && !ids.contains(&i.collection) {
+                i.collection = 0;
+            }
+        }
     }
 
     pub fn collection_len(&self, id: u64) -> usize {
@@ -96,7 +122,15 @@ impl Organizer {
             request: request.to_string(),
             response: response.to_string(),
             created: now,
-            collection: 0,
+            collection: if self
+                .collections
+                .iter()
+                .any(|c| c.id == self.target_collection)
+            {
+                self.target_collection
+            } else {
+                0
+            },
         });
         id
     }
@@ -239,8 +273,30 @@ mod tests {
         assert!(!o.move_item(1, 99));
         assert_eq!(o.collection_len(b), 1);
         assert_eq!(o.collection_len(0), items_before - 1);
+        assert!(o.rename_collection(b, "Collection 1"));
+        assert_eq!(o.collections[1].name, "Collection 1 2", "rename dedupes");
+        assert!(o.rename_collection(b, "inbox"));
+        assert_eq!(o.collections[1].name, "inbox 2");
+        o.target_collection = b;
+        let filed = o.add("sent", "", "GET /", "", 50);
+        assert_eq!(
+            o.get(filed).unwrap().collection,
+            b,
+            "send targets selected collection"
+        );
+        o.target_collection = 99;
+        let stray = o.add("stray", "", "GET /", "", 51);
+        assert_eq!(
+            o.get(stray).unwrap().collection,
+            0,
+            "missing target falls back to Inbox"
+        );
         assert!(o.remove_collection(b));
-        assert!(o.get(1).is_none());
+        assert_eq!(o.get(1).unwrap().collection, 0, "items return to Inbox");
+        assert_eq!(o.get(filed).unwrap().collection, 0);
+        o.items[0].collection = 77;
+        o.repair_collections();
+        assert_eq!(o.items[0].collection, 0, "orphans remapped");
         assert!(!o.remove_collection(b));
         assert_eq!(o.add_collection("Inbox"), 4);
         assert_eq!(o.collections.last().unwrap().name, "Inbox 2");

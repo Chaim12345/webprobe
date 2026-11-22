@@ -3550,6 +3550,7 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData, content: boo
         })
         .collect();
     org.next_collection_id = org.collections.iter().map(|c| c.id).max().unwrap_or(0) + 1;
+    org.repair_collections();
     org.next_id = org.items.iter().map(|i| i.id).max().unwrap_or(0) + 1;
     drop(org);
     app.org_sel = None;
