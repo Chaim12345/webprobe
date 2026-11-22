@@ -43,16 +43,24 @@ pub fn response_body_kind(head: &[u8], method: &str) -> BodyKind {
         .and_then(|l| l.split_whitespace().nth(1))
         .unwrap_or("");
     let code: u16 = status.parse().unwrap_or(200);
-    if method.eq_ignore_ascii_case("HEAD") || code == 204 || code == 304 || (100..200).contains(&code) {
+    if method.eq_ignore_ascii_case("HEAD")
+        || code == 204
+        || code == 304
+        || (100..200).contains(&code)
+    {
         return BodyKind::None;
     }
     // Transfer-Encoding wins over Content-Length (smuggling defence).
-    let chunked = header_values(&head, "Transfer-Encoding")
-        .any(|v| v.to_ascii_lowercase().split(',').any(|t| t.trim() == "chunked"));
+    let chunked = header_values(&head, "Transfer-Encoding").any(|v| {
+        v.to_ascii_lowercase()
+            .split(',')
+            .any(|t| t.trim() == "chunked")
+    });
     if chunked {
         return BodyKind::Chunked;
     }
-    let mut lengths = header_values(&head, "Content-Length").filter_map(|v| v.parse::<usize>().ok());
+    let mut lengths =
+        header_values(&head, "Content-Length").filter_map(|v| v.parse::<usize>().ok());
     match (lengths.next(), lengths.next()) {
         (Some(first), None) => BodyKind::Length(first),
         // duplicate or conflicting Content-Length values: no usable length
@@ -69,7 +77,11 @@ fn at(body: &[u8], at: usize, pat: &[u8]) -> bool {
 /// right before the LF belongs to the terminator. `None` until the LF arrives.
 fn line(body: &[u8], from: usize) -> Option<(usize, usize)> {
     let lf = from + body.get(from..)?.iter().position(|&b| b == b'\n')?;
-    let end = if lf > from && body[lf - 1] == b'\r' { lf - 1 } else { lf };
+    let end = if lf > from && body[lf - 1] == b'\r' {
+        lf - 1
+    } else {
+        lf
+    };
     Some((end, lf + 1))
 }
 
@@ -99,27 +111,41 @@ pub enum Chunked {
 pub fn scan_chunked(body: &[u8], cur: &mut ChunkCursor, mut data: impl FnMut(&[u8])) -> Chunked {
     loop {
         let pos = cur.next;
-        let Some((end, after)) = line(body, pos) else { return Chunked::Partial };
-        let size_text = body[pos..end].split(|&b| b == b';').next().unwrap_or_default().trim_ascii();
-        if size_text.is_empty() || size_text.len() > 16 || !size_text.iter().all(u8::is_ascii_hexdigit) {
+        let Some((end, after)) = line(body, pos) else {
+            return Chunked::Partial;
+        };
+        let size_text = body[pos..end]
+            .split(|&b| b == b';')
+            .next()
+            .unwrap_or_default()
+            .trim_ascii();
+        if size_text.is_empty()
+            || size_text.len() > 16
+            || !size_text.iter().all(u8::is_ascii_hexdigit)
+        {
             return Chunked::Malformed;
         }
         // ASCII hex digits only, so the conversion cannot fail.
-        let Ok(size) = usize::from_str_radix(std::str::from_utf8(size_text).unwrap_or("x"), 16) else {
+        let Ok(size) = usize::from_str_radix(std::str::from_utf8(size_text).unwrap_or("x"), 16)
+        else {
             return Chunked::Malformed;
         };
         if size == 0 {
             // Trailer lines until a blank one.
             let mut p = after;
             loop {
-                let Some((e, a)) = line(body, p) else { return Chunked::Partial };
+                let Some((e, a)) = line(body, p) else {
+                    return Chunked::Partial;
+                };
                 if e == p {
                     return Chunked::Complete(a);
                 }
                 p = a;
             }
         }
-        let Some(stop) = after.checked_add(size) else { return Chunked::Malformed };
+        let Some(stop) = after.checked_add(size) else {
+            return Chunked::Malformed;
+        };
         if body.len() < stop {
             return Chunked::Partial;
         }
@@ -142,7 +168,9 @@ pub fn scan_chunked(body: &[u8], cur: &mut ChunkCursor, mut data: impl FnMut(&[u
 /// incomplete or the framing is invalid.
 pub fn decode_chunked(body: &[u8]) -> Option<(Vec<u8>, usize)> {
     let mut out = Vec::new();
-    match scan_chunked(body, &mut ChunkCursor::default(), |d| out.extend_from_slice(d)) {
+    match scan_chunked(body, &mut ChunkCursor::default(), |d| {
+        out.extend_from_slice(d)
+    }) {
         Chunked::Complete(n) => Some((out, n)),
         _ => None,
     }
@@ -210,7 +238,11 @@ pub fn normalize_response(raw: &[u8]) -> Vec<u8> {
     if parts.head_len == 0 || parts.head_len >= raw.len() {
         return raw.to_vec();
     }
-    let method = if parts.method == "RESPONSE" { "GET" } else { parts.method.as_str() };
+    let method = if parts.method == "RESPONSE" {
+        "GET"
+    } else {
+        parts.method.as_str()
+    };
     let body = &raw[parts.head_len..];
     let kind = response_body_kind(&raw[..parts.head_len], method);
     let decoded_body: Vec<u8> = match kind {
@@ -233,7 +265,8 @@ pub fn normalize_response(raw: &[u8]) -> Vec<u8> {
     out.push_str("\r\n");
     for (k, v) in &parts.headers {
         let lower = k.to_ascii_lowercase();
-        if lower == "content-length" || lower == "transfer-encoding" || lower == "content-encoding" {
+        if lower == "content-length" || lower == "transfer-encoding" || lower == "content-encoding"
+        {
             continue;
         }
         out.push_str(k);
@@ -259,7 +292,7 @@ pub fn normalize_response(raw: &[u8]) -> Vec<u8> {
 /// read ([`crate::streaming::BodyMode`]): buffered as above, streamed to the
 /// sink as it arrives (the returned message is then the head only), or not
 /// read at all (head only, connection closed).
-pub(crate) fn read_message<R: std::io::Read + crate::net::ResponseRead>(
+pub(crate) fn read_message<R: std::io::Read + webprobe_support::io_traits::ResponseRead>(
     stream: &mut R,
     buffer: &mut Vec<u8>,
     method: &str,
@@ -286,7 +319,10 @@ pub(crate) fn read_message<R: std::io::Read + crate::net::ResponseRead>(
                 return Ok((std::mem::take(buffer), false));
             }
             if buffer.len() > MAX_BODY {
-                return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "response headers too large"));
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "response headers too large",
+                ));
             }
         };
         let code = status_code(&buffer[..head_end]);
@@ -329,7 +365,9 @@ pub(crate) fn read_message<R: std::io::Read + crate::net::ResponseRead>(
             let mut cur = ChunkCursor::default();
             loop {
                 match scan_chunked(&buffer[body_start..], &mut cur, |_| {}) {
-                    Chunked::Complete(consumed) => return Ok((buffer.drain(..body_start + consumed).collect(), true)),
+                    Chunked::Complete(consumed) => {
+                        return Ok((buffer.drain(..body_start + consumed).collect(), true))
+                    }
                     Chunked::Malformed => return Ok((std::mem::take(buffer), false)),
                     Chunked::Partial => {}
                 }
@@ -359,7 +397,7 @@ pub(crate) fn read_message<R: std::io::Read + crate::net::ResponseRead>(
 /// Only a small read buffer is held. Reads wait at most the sink's idle
 /// limit (else the connection's normal read timeout) between bytes: a slow
 /// event stream lives on, a dead one ends. Returns the head.
-fn stream_body<R: std::io::Read + crate::net::ResponseRead>(
+fn stream_body<R: std::io::Read + webprobe_support::io_traits::ResponseRead>(
     stream: &mut R,
     buffer: &mut Vec<u8>,
     head_end: usize,
@@ -371,7 +409,7 @@ fn stream_body<R: std::io::Read + crate::net::ResponseRead>(
     if let Some(ms) = sink.idle_timeout_ms() {
         stream.set_read_timeout_ms(ms)?;
     }
-    let mut pending: Vec<u8> = buffer.drain(..).collect();
+    let mut pending: Vec<u8> = std::mem::take(buffer);
     let mut sent_head = false;
     let mut left: Option<u64> = match kind {
         BodyKind::Length(n) => Some(n as u64),
@@ -434,7 +472,11 @@ fn stream_body<R: std::io::Read + crate::net::ResponseRead>(
 /// The status code of a response head (0 when it has none).
 fn status_code(head: &[u8]) -> u16 {
     let first = head.split(|&b| b == b'\n').next().unwrap_or_default();
-    String::from_utf8_lossy(first).split_whitespace().nth(1).and_then(|c| c.parse().ok()).unwrap_or(0)
+    String::from_utf8_lossy(first)
+        .split_whitespace()
+        .nth(1)
+        .and_then(|c| c.parse().ok())
+        .unwrap_or(0)
 }
 
 /// Normalised view of a request: chunked bodies reassembled, `Content-Length`
@@ -451,7 +493,9 @@ pub fn normalize_request(raw: &[u8]) -> Vec<u8> {
         return raw.to_vec();
     }
     let body = &raw[parts.head_len..];
-    let Some((decoded, _)) = decode_chunked(body) else { return raw.to_vec() };
+    let Some((decoded, _)) = decode_chunked(body) else {
+        return raw.to_vec();
+    };
     let mut out = String::with_capacity(parts.head_len + decoded.len() + 32);
     out.push_str(parts.first.trim_end());
     out.push('\n');
@@ -497,14 +541,20 @@ mod tests {
             self.0.read(&mut buf[..n])
         }
     }
-    impl crate::net::ResponseRead for Script {
+    impl webprobe_support::io_traits::ResponseRead for Script {
         fn set_read_timeout_ms(&self, _ms: u64) -> std::io::Result<()> {
             Ok(())
         }
     }
     fn read_all(wire: &[u8], method: &str) -> (Vec<u8>, bool, Vec<u8>) {
         let mut buffer = Vec::new();
-        let (resp, reusable) = read_message(&mut Script(std::io::Cursor::new(wire.to_vec())), &mut buffer, method, None).unwrap();
+        let (resp, reusable) = read_message(
+            &mut Script(std::io::Cursor::new(wire.to_vec())),
+            &mut buffer,
+            method,
+            None,
+        )
+        .unwrap();
         (resp, reusable, buffer)
     }
 
@@ -513,7 +563,11 @@ mod tests {
     #[test]
     fn response_reader_survives_hostile_and_interim_messages() {
         // A chunk size that overflows usize must not panic or wrap.
-        for size in ["ffffffffffffffff", "fffffffffffffffff0", "10000000000000000"] {
+        for size in [
+            "ffffffffffffffff",
+            "fffffffffffffffff0",
+            "10000000000000000",
+        ] {
             let body = format!("{size}\r\nabc\r\n0\r\n\r\n");
             assert!(decode_chunked(body.as_bytes()).is_none(), "{size}");
             let wire = format!("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n{body}");
@@ -524,19 +578,42 @@ mod tests {
         assert_eq!(decode_chunked(b"5\nhello\n0\n\n").unwrap().0, b"hello");
         // 100 Continue and 103 Early Hints are skipped; the final response is returned.
         let (resp, reusable, rest) = read_all(b"HTTP/1.1 100 Continue\r\n\r\nHTTP/1.1 103 Early Hints\r\nLink: </a.css>\r\n\r\nHTTP/1.1 201 Created\r\nContent-Length: 2\r\n\r\nok", "POST");
-        assert!(resp.starts_with(b"HTTP/1.1 201") && resp.ends_with(b"ok") && reusable && rest.is_empty(), "{}", String::from_utf8_lossy(&resp));
+        assert!(
+            resp.starts_with(b"HTTP/1.1 201")
+                && resp.ends_with(b"ok")
+                && reusable
+                && rest.is_empty(),
+            "{}",
+            String::from_utf8_lossy(&resp)
+        );
         // HEAD: Content-Length describes the GET body, none follows.
-        let (resp, reusable, _) = read_all(b"HTTP/1.1 200 OK\r\nContent-Length: 5000\r\n\r\n", "HEAD");
+        let (resp, reusable, _) =
+            read_all(b"HTTP/1.1 200 OK\r\nContent-Length: 5000\r\n\r\n", "HEAD");
         assert!(resp.ends_with(b"\r\n\r\n") && reusable);
         // Reading stops at the end of the framed body; bytes past it that were
         // already read stay in the buffer (the caller refuses to pool), the
         // rest stay in the socket (the pool's idle check refuses it).
-        let (resp, _, rest) = read_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nokEXTRA", "GET");
-        assert!(resp.ends_with(b"ok") && b"EXTRA".starts_with(&rest[..]), "{rest:?}");
+        let (resp, _, rest) = read_all(
+            b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nokEXTRA",
+            "GET",
+        );
+        assert!(
+            resp.ends_with(b"ok") && b"EXTRA".starts_with(&rest[..]),
+            "{rest:?}"
+        );
         // EOF-delimited bodies are never reusable; a huge Content-Length does not overflow.
         assert!(!read_all(b"HTTP/1.1 200 OK\r\n\r\nbody", "GET").1);
-        assert!(!read_all(b"HTTP/1.1 200 OK\r\nContent-Length: 18446744073709551615\r\n\r\nx", "GET").1);
-        assert!(body_complete(b"HTTP/1.1 200 OK\r\nContent-Length: 18446744073709551615\r\n\r\nx", "GET") == false);
+        assert!(
+            !read_all(
+                b"HTTP/1.1 200 OK\r\nContent-Length: 18446744073709551615\r\n\r\nx",
+                "GET"
+            )
+            .1
+        );
+        assert!(!body_complete(
+            b"HTTP/1.1 200 OK\r\nContent-Length: 18446744073709551615\r\n\r\nx",
+            "GET"
+        ));
     }
 
     /// Review finding 7: a large chunked body is scanned once, not once per read.
@@ -552,7 +629,11 @@ mod tests {
         let t0 = std::time::Instant::now();
         let (resp, reusable, _) = read_all(&wire, "GET");
         assert!(reusable && resp.len() == wire.len());
-        assert!(t0.elapsed() < std::time::Duration::from_secs(10), "{:?}", t0.elapsed());
+        assert!(
+            t0.elapsed() < std::time::Duration::from_secs(10),
+            "{:?}",
+            t0.elapsed()
+        );
     }
 
     #[test]
@@ -606,8 +687,10 @@ mod tests {
         let mut enc = Vec::new();
         {
             use std::io::Write;
-            let mut params = brotli::enc::BrotliEncoderParams::default();
-            params.quality = 5;
+            let params = brotli::enc::BrotliEncoderParams {
+                quality: 5,
+                ..Default::default()
+            };
             let mut e = brotli::CompressorWriter::new(&mut enc, 4096, 5, 22);
             e.write_all(raw).unwrap();
             let _ = params;
@@ -625,7 +708,8 @@ mod tests {
     #[test]
     fn normalize_rewrites_chunked_and_encoding() {
         let body = b"5\r\nhello\r\n0\r\n\r\n";
-        let raw = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nContent-Type: text/plain\r\n\r\n";
+        let raw =
+            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nContent-Type: text/plain\r\n\r\n";
         let mut full = raw.to_vec();
         full.extend_from_slice(body);
         let out = normalize_response(&full);
@@ -643,9 +727,18 @@ mod tests {
 
     #[test]
     fn no_body_statuses() {
-        assert_eq!(response_body_kind(b"HTTP/1.1 204 No Content\r\n\r\n", "GET"), BodyKind::None);
-        assert_eq!(response_body_kind(b"HTTP/1.1 304 Not Modified\r\n\r\n", "GET"), BodyKind::None);
-        assert_eq!(response_body_kind(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n", "HEAD"), BodyKind::None);
+        assert_eq!(
+            response_body_kind(b"HTTP/1.1 204 No Content\r\n\r\n", "GET"),
+            BodyKind::None
+        );
+        assert_eq!(
+            response_body_kind(b"HTTP/1.1 304 Not Modified\r\n\r\n", "GET"),
+            BodyKind::None
+        );
+        assert_eq!(
+            response_body_kind(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n", "HEAD"),
+            BodyKind::None
+        );
     }
 
     /// A-04: a 4 MiB chunked body decodes intact and byte counts stay exact.

@@ -45,15 +45,45 @@ const fn a(
     default: &'static str,
     support: Support,
 ) -> ActionDef {
-    ActionDef { id, label, category, default: Some(default), support }
+    ActionDef {
+        id,
+        label,
+        category,
+        default: Some(default),
+        support,
+    }
 }
 
 /// Burp's 50 default hotkeys, in the order the reference file lists them.
 pub const ACTIONS: &[ActionDef] = &[
-    a("send_to_repeater", "Send to Repeater", "Send", "Ctrl+R", Support::Wired),
-    a("send_to_intruder", "Send to Intruder", "Send", "Ctrl+I", Support::Wired),
-    a("send_to_organizer", "Send to Organizer", "Send", "Ctrl+O", Support::Missing),
-    a("explain_this", "Explain selected text", "Burp AI", "Ctrl+E", Support::Missing),
+    a(
+        "send_to_repeater",
+        "Send to Repeater",
+        "Send",
+        "Ctrl+R",
+        Support::Wired,
+    ),
+    a(
+        "send_to_intruder",
+        "Send to Intruder",
+        "Send",
+        "Ctrl+I",
+        Support::Wired,
+    ),
+    a(
+        "send_to_organizer",
+        "Send to Organizer",
+        "Send",
+        "Ctrl+O",
+        Support::Missing,
+    ),
+    a(
+        "explain_this",
+        "Explain selected text",
+        "Burp AI",
+        "Ctrl+E",
+        Support::Missing,
+    ),
     a(
         "forward_intercepted_proxy_message",
         "Forward intercepted message",
@@ -68,25 +98,133 @@ pub const ACTIONS: &[ActionDef] = &[
         "Ctrl+T",
         Support::Wired,
     ),
-    a("issue_repeater_request", "Send Repeater request", "Repeater", "Ctrl+Space", Support::Wired),
-    a("switch_to_dashboard", "Go to Dashboard", "Switch tab", "Ctrl+Shift+D", Support::Wired),
-    a("switch_to_target", "Go to Target", "Switch tab", "Ctrl+Shift+T", Support::Wired),
-    a("switch_to_proxy", "Go to Proxy", "Switch tab", "Ctrl+Shift+P", Support::Wired),
-    a("switch_to_intruder", "Go to Intruder", "Switch tab", "Ctrl+Shift+I", Support::Wired),
-    a("switch_to_repeater", "Go to Repeater", "Switch tab", "Ctrl+Shift+R", Support::Wired),
-    a("switch_to_logger", "Go to Logger", "Switch tab", "Ctrl+Shift+L", Support::Missing),
-    a("switch_to_organizer", "Go to Organizer", "Switch tab", "Ctrl+Shift+O", Support::Missing),
-    a("go_to_previous_tab", "Go to previous tab", "Tabs", "Ctrl+Minus", Support::Wired),
-    a("go_to_next_tab", "Go to next tab", "Tabs", "Ctrl+Equals", Support::Wired),
-    a("open_command_palette", "Open command palette", "Open", "Ctrl+K", Support::Wired),
+    a(
+        "issue_repeater_request",
+        "Send Repeater request",
+        "Repeater",
+        "Ctrl+Space",
+        Support::Wired,
+    ),
+    a(
+        "switch_to_dashboard",
+        "Go to Dashboard",
+        "Switch tab",
+        "Ctrl+Shift+D",
+        Support::Wired,
+    ),
+    a(
+        "switch_to_target",
+        "Go to Target",
+        "Switch tab",
+        "Ctrl+Shift+T",
+        Support::Wired,
+    ),
+    a(
+        "switch_to_proxy",
+        "Go to Proxy",
+        "Switch tab",
+        "Ctrl+Shift+P",
+        Support::Wired,
+    ),
+    a(
+        "switch_to_intruder",
+        "Go to Intruder",
+        "Switch tab",
+        "Ctrl+Shift+I",
+        Support::Wired,
+    ),
+    a(
+        "switch_to_repeater",
+        "Go to Repeater",
+        "Switch tab",
+        "Ctrl+Shift+R",
+        Support::Wired,
+    ),
+    a(
+        "switch_to_logger",
+        "Go to Logger",
+        "Switch tab",
+        "Ctrl+Shift+L",
+        Support::Missing,
+    ),
+    a(
+        "switch_to_organizer",
+        "Go to Organizer",
+        "Switch tab",
+        "Ctrl+Shift+O",
+        Support::Missing,
+    ),
+    a(
+        "go_to_previous_tab",
+        "Go to previous tab",
+        "Tabs",
+        "Ctrl+Minus",
+        Support::Wired,
+    ),
+    a(
+        "go_to_next_tab",
+        "Go to next tab",
+        "Tabs",
+        "Ctrl+Equals",
+        Support::Wired,
+    ),
+    a(
+        "open_command_palette",
+        "Open command palette",
+        "Open",
+        "Ctrl+K",
+        Support::Wired,
+    ),
     a("editor_cut", "Cut", "Edit", "Ctrl+X", Support::EditorNative),
-    a("editor_copy", "Copy", "Edit", "Ctrl+C", Support::EditorNative),
-    a("editor_copy_prettified", "Copy prettified", "Edit", "Ctrl+Alt+C", Support::Missing),
-    a("editor_paste", "Paste", "Edit", "Ctrl+V", Support::EditorNative),
-    a("editor_undo", "Undo", "Edit", "Ctrl+Z", Support::EditorNative),
-    a("editor_redo", "Redo", "Edit", "Ctrl+Y", Support::EditorNative),
-    a("editor_select_all", "Select all", "Edit", "Ctrl+A", Support::EditorNative),
-    a("editor_search", "Search in editor", "Search text", "Ctrl+S", Support::Missing),
+    a(
+        "editor_copy",
+        "Copy",
+        "Edit",
+        "Ctrl+C",
+        Support::EditorNative,
+    ),
+    a(
+        "editor_copy_prettified",
+        "Copy prettified",
+        "Edit",
+        "Ctrl+Alt+C",
+        Support::Missing,
+    ),
+    a(
+        "editor_paste",
+        "Paste",
+        "Edit",
+        "Ctrl+V",
+        Support::EditorNative,
+    ),
+    a(
+        "editor_undo",
+        "Undo",
+        "Edit",
+        "Ctrl+Z",
+        Support::EditorNative,
+    ),
+    a(
+        "editor_redo",
+        "Redo",
+        "Edit",
+        "Ctrl+Y",
+        Support::EditorNative,
+    ),
+    a(
+        "editor_select_all",
+        "Select all",
+        "Edit",
+        "Ctrl+A",
+        Support::EditorNative,
+    ),
+    a(
+        "editor_search",
+        "Search in editor",
+        "Search text",
+        "Ctrl+S",
+        Support::Missing,
+    ),
     a(
         "editor_go_to_previous_search_match",
         "Previous search result in editor",
@@ -101,7 +239,13 @@ pub const ACTIONS: &[ActionDef] = &[
         "Ctrl+Period",
         Support::Missing,
     ),
-    a("editor_url_decode", "URL-decode", "Decode", "Ctrl+Shift+U", Support::Missing),
+    a(
+        "editor_url_decode",
+        "URL-decode",
+        "Decode",
+        "Ctrl+Shift+U",
+        Support::Missing,
+    ),
     a(
         "editor_url_encode_key_characters",
         "URL-encode key characters",
@@ -109,7 +253,13 @@ pub const ACTIONS: &[ActionDef] = &[
         "Ctrl+U",
         Support::Missing,
     ),
-    a("editor_html_decode", "HTML-decode", "Decode", "Ctrl+Shift+H", Support::Missing),
+    a(
+        "editor_html_decode",
+        "HTML-decode",
+        "Decode",
+        "Ctrl+Shift+H",
+        Support::Missing,
+    ),
     a(
         "editor_html_encode_key_characters",
         "HTML-encode key characters",
@@ -117,11 +267,41 @@ pub const ACTIONS: &[ActionDef] = &[
         "Ctrl+H",
         Support::Missing,
     ),
-    a("editor_base64_decode", "Base64-decode", "Decode", "Ctrl+Shift+B", Support::Missing),
-    a("editor_base64_encode", "Base64-encode", "Encode", "Ctrl+B", Support::Missing),
-    a("editor_backspace_word", "Backspace word", "Edit", "Ctrl+Backspace", Support::EditorNative),
-    a("editor_delete_word", "Delete word", "Edit", "Ctrl+Delete", Support::EditorNative),
-    a("editor_delete_line", "Delete line", "Edit", "Ctrl+D", Support::Missing),
+    a(
+        "editor_base64_decode",
+        "Base64-decode",
+        "Decode",
+        "Ctrl+Shift+B",
+        Support::Missing,
+    ),
+    a(
+        "editor_base64_encode",
+        "Base64-encode",
+        "Encode",
+        "Ctrl+B",
+        Support::Missing,
+    ),
+    a(
+        "editor_backspace_word",
+        "Backspace word",
+        "Edit",
+        "Ctrl+Backspace",
+        Support::EditorNative,
+    ),
+    a(
+        "editor_delete_word",
+        "Delete word",
+        "Edit",
+        "Ctrl+Delete",
+        Support::EditorNative,
+    ),
+    a(
+        "editor_delete_line",
+        "Delete line",
+        "Edit",
+        "Ctrl+D",
+        Support::Missing,
+    ),
     a(
         "editor_go_to_previous_word",
         "Go to previous word",
@@ -136,7 +316,13 @@ pub const ACTIONS: &[ActionDef] = &[
         "Ctrl+Shift+Left",
         Support::EditorNative,
     ),
-    a("editor_go_to_next_word", "Go to next word", "Navigate text", "Ctrl+Right", Support::EditorNative),
+    a(
+        "editor_go_to_next_word",
+        "Go to next word",
+        "Navigate text",
+        "Ctrl+Right",
+        Support::EditorNative,
+    ),
     a(
         "editor_go_to_next_word_extend_selection",
         "Go to next word (with text selection)",
@@ -200,8 +386,20 @@ pub const ACTIONS: &[ActionDef] = &[
         "Ctrl+Shift+End",
         Support::EditorNative,
     ),
-    a("send_to_burp_at", "Send to Burp AI", "Burp AI", "Ctrl+G", Support::Missing),
-    a("open_burp_at", "Send to Burp AI", "Burp AI", "Ctrl+Shift+G", Support::Missing),
+    a(
+        "send_to_burp_at",
+        "Send to Burp AI",
+        "Burp AI",
+        "Ctrl+G",
+        Support::Missing,
+    ),
+    a(
+        "open_burp_at",
+        "Send to Burp AI",
+        "Burp AI",
+        "Ctrl+Shift+G",
+        Support::Missing,
+    ),
 ];
 
 /// Everything the app may need to know about a key, independent of egui.
@@ -234,12 +432,21 @@ impl Chord {
     /// Parse Burp's display spelling. Rejects chords without Ctrl (Burp's docs
     /// state every hotkey must use Cmd/Ctrl) and unknown key names.
     pub fn parse(text: &str) -> Result<Self, String> {
-        let parts: Vec<&str> = text.split('+').map(|p| p.trim()).filter(|p| !p.is_empty()).collect();
+        let parts: Vec<&str> = text
+            .split('+')
+            .map(|p| p.trim())
+            .filter(|p| !p.is_empty())
+            .collect();
         if parts.is_empty() {
             return Err("empty hotkey".to_string());
         }
         let (key, mods) = parts.split_last().unwrap();
-        let mut chord = Chord { ctrl: false, shift: false, alt: false, key: String::new() };
+        let mut chord = Chord {
+            ctrl: false,
+            shift: false,
+            alt: false,
+            key: String::new(),
+        };
         for m in mods {
             match m.to_ascii_lowercase().as_str() {
                 "ctrl" | "cmd" | "command" | "control" => chord.ctrl = true,
@@ -476,7 +683,10 @@ impl Shortcuts {
             .iter()
             .map(|a| a.default.and_then(|d| Chord::parse(d).ok()))
             .collect();
-        Self { bindings, recents: Vec::new() }
+        Self {
+            bindings,
+            recents: Vec::new(),
+        }
     }
 
     pub fn chord_for(&self, idx: usize) -> Option<&Chord> {
@@ -492,7 +702,11 @@ impl Shortcuts {
         if let Some(c) = &chord {
             for (i, b) in self.bindings.iter().enumerate() {
                 if i != idx && b.as_ref() == Some(c) {
-                    return Err(format!("{} is already used by {}", c.format(), ACTIONS[i].label));
+                    return Err(format!(
+                        "{} is already used by {}",
+                        c.format(),
+                        ACTIONS[i].label
+                    ));
                 }
             }
         }
@@ -524,12 +738,25 @@ impl Shortcuts {
         ctx.input_mut(|input| {
             let mut taken = Vec::new();
             for (ev_idx, ev) in input.events.iter().enumerate() {
-                let egui::Event::Key { key, pressed: true, modifiers, .. } = ev else { continue };
-                let Some(chord) = Chord::from_egui(*key, modifiers) else { continue };
+                let egui::Event::Key {
+                    key,
+                    pressed: true,
+                    modifiers,
+                    ..
+                } = ev
+                else {
+                    continue;
+                };
+                let Some(chord) = Chord::from_egui(*key, modifiers) else {
+                    continue;
+                };
                 if !chord.ctrl {
                     continue;
                 }
-                if let Some(&action) = wired.iter().find(|&&i| self.bindings[i].as_ref() == Some(&chord)) {
+                if let Some(&action) = wired
+                    .iter()
+                    .find(|&&i| self.bindings[i].as_ref() == Some(&chord))
+                {
                     taken.push(ev_idx);
                     out.push(action);
                 }
@@ -580,7 +807,10 @@ impl Shortcuts {
             .iter()
             .enumerate()
             .map(|(i, a)| {
-                let text = self.bindings[i].as_ref().map(|c| c.format()).unwrap_or_default();
+                let text = self.bindings[i]
+                    .as_ref()
+                    .map(|c| c.format())
+                    .unwrap_or_default();
                 (a.id.to_string(), text)
             })
             .collect();
@@ -597,15 +827,22 @@ impl Shortcuts {
     /// way in `burp.Zfhv.Zh`) and the later one is left unbound rather than
     /// stealing a binding.
     pub fn from_json(text: &str) -> Self {
-        let mut s = Self { bindings: vec![None; ACTIONS.len()], recents: Vec::new() };
-        let Ok(saved) = serde_json::from_str::<Saved>(text) else { return s };
+        let mut s = Self {
+            bindings: vec![None; ACTIONS.len()],
+            recents: Vec::new(),
+        };
+        let Ok(saved) = serde_json::from_str::<Saved>(text) else {
+            return s;
+        };
         for (id, chord) in saved.hotkeys {
             let Some(idx) = index_of(&id) else { continue };
             if chord.trim().is_empty() {
                 s.bindings[idx] = None;
                 continue;
             }
-            let Ok(parsed) = Chord::parse(&chord) else { continue };
+            let Ok(parsed) = Chord::parse(&chord) else {
+                continue;
+            };
             if s.set(idx, Some(parsed)).is_err() {
                 s.bindings[idx] = None;
             }
@@ -616,7 +853,9 @@ impl Shortcuts {
     pub fn config_path() -> std::path::PathBuf {
         let base = std::env::var_os("XDG_CONFIG_HOME")
             .map(std::path::PathBuf::from)
-            .or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".config")))
+            .or_else(|| {
+                std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".config"))
+            })
             .unwrap_or_else(|| std::path::PathBuf::from("."));
         base.join("webprobe").join("hotkeys.json")
     }
@@ -666,7 +905,13 @@ pub fn capture(ctx: &egui::Context) -> Capture {
     ctx.input_mut(|input| {
         let mut idx = None;
         for (i, ev) in input.events.iter().enumerate() {
-            if let egui::Event::Key { key, pressed: true, modifiers, .. } = ev {
+            if let egui::Event::Key {
+                key,
+                pressed: true,
+                modifiers,
+                ..
+            } = ev
+            {
                 if *key == Key::Escape {
                     input.events.remove(i);
                     return Capture::Cancelled;
@@ -707,7 +952,11 @@ pub fn palette_ui(
             close = true;
         }
         if i.consume_key(Modifiers::NONE, Key::ArrowDown) {
-            palette.sel = if rows.is_empty() { 0 } else { (palette.sel + 1).min(rows.len() - 1) };
+            palette.sel = if rows.is_empty() {
+                0
+            } else {
+                (palette.sel + 1).min(rows.len() - 1)
+            };
         }
         if i.consume_key(Modifiers::NONE, Key::ArrowUp) {
             palette.sel = palette.sel.saturating_sub(1);
@@ -738,44 +987,51 @@ pub fn palette_ui(
                         edit.request_focus();
                     }
                     ui.add_space(theme::SPACE_XS);
-                    egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
-                        if rows.is_empty() {
-                            ui.label(
-                                RichText::new("no matching commands")
-                                    .size(12.0)
-                                    .color(theme::ink_faint()),
-                            );
-                        }
-                        for (row_i, &a) in rows.iter().enumerate() {
-                            let def = &ACTIONS[a];
-                            let selected = row_i == palette.sel;
-                            let hotkey = shortcuts
-                                .chord_for(a)
-                                .map(|ch| ch.format())
-                                .unwrap_or_default();
-                            let text = format!("{}  ·  {}", def.label, def.category);
-                            let resp = ui.horizontal(|ui| {
-                                let r = ui.selectable_label(
-                                    selected,
-                                    RichText::new(text)
-                                        .size(12.5)
-                                        .color(if selected { theme::ink() } else { theme::ink_dim() }),
+                    egui::ScrollArea::vertical()
+                        .max_height(320.0)
+                        .show(ui, |ui| {
+                            if rows.is_empty() {
+                                ui.label(
+                                    RichText::new("no matching commands")
+                                        .size(12.0)
+                                        .color(theme::ink_faint()),
                                 );
-                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                    ui.label(
-                                        RichText::new(hotkey)
-                                            .monospace()
-                                            .size(12.0)
-                                            .color(theme::ink_faint()),
-                                    );
-                                });
-                                r
-                            });
-                            if resp.inner.clicked() {
-                                chosen = Some(a);
                             }
-                        }
-                    });
+                            for (row_i, &a) in rows.iter().enumerate() {
+                                let def = &ACTIONS[a];
+                                let selected = row_i == palette.sel;
+                                let hotkey = shortcuts
+                                    .chord_for(a)
+                                    .map(|ch| ch.format())
+                                    .unwrap_or_default();
+                                let text = format!("{}  ·  {}", def.label, def.category);
+                                let resp = ui.horizontal(|ui| {
+                                    let r = ui.selectable_label(
+                                        selected,
+                                        RichText::new(text).size(12.5).color(if selected {
+                                            theme::ink()
+                                        } else {
+                                            theme::ink_dim()
+                                        }),
+                                    );
+                                    ui.with_layout(
+                                        egui::Layout::right_to_left(egui::Align::Center),
+                                        |ui| {
+                                            ui.label(
+                                                RichText::new(hotkey)
+                                                    .monospace()
+                                                    .size(12.0)
+                                                    .color(theme::ink_faint()),
+                                            );
+                                        },
+                                    );
+                                    r
+                                });
+                                if resp.inner.clicked() {
+                                    chosen = Some(a);
+                                }
+                            }
+                        });
                 });
         });
 
@@ -801,9 +1057,11 @@ pub fn settings_panel(app: &mut crate::App, ui: &mut Ui) {
     if let Some(idx) = app.hotkey_capture {
         let label = ACTIONS.get(idx).map(|d| d.label).unwrap_or("command");
         ui.label(
-            RichText::new(format!("Press a new hotkey for \u{201c}{label}\u{201d} — Esc cancels."))
-                .size(12.0)
-                .color(c(theme::ORANGE)),
+            RichText::new(format!(
+                "Press a new hotkey for \u{201c}{label}\u{201d} — Esc cancels."
+            ))
+            .size(12.0)
+            .color(c(theme::ORANGE)),
         );
     }
     let mut notice = app.hotkey_notice.clone();
@@ -821,7 +1079,11 @@ pub fn settings_panel(app: &mut crate::App, ui: &mut Ui) {
 
 /// Hotkey settings table, grouped by command category. Returns an action index
 /// the caller should put into key-capture mode.
-pub fn settings_ui(ui: &mut Ui, shortcuts: &mut Shortcuts, notice: &mut Option<String>) -> Option<usize> {
+pub fn settings_ui(
+    ui: &mut Ui,
+    shortcuts: &mut Shortcuts,
+    notice: &mut Option<String>,
+) -> Option<usize> {
     let mut capturing = None;
     ui.label(
         RichText::new("Hotkeys")
@@ -856,13 +1118,21 @@ pub fn settings_ui(ui: &mut Ui, shortcuts: &mut Shortcuts, notice: &mut Option<S
                         if def.category != category {
                             category = def.category;
                             ui.add_space(theme::SPACE_XS);
-                            ui.label(RichText::new(category).size(12.0).strong().color(theme::ink_faint()));
+                            ui.label(
+                                RichText::new(category)
+                                    .size(12.0)
+                                    .strong()
+                                    .color(theme::ink_faint()),
+                            );
                         }
                         ui.horizontal(|ui| {
-                            let label = RichText::new(def.label).size(12.0).color(match def.support {
-                                Support::Missing => theme::ink_hint(),
-                                _ => theme::ink_dim(),
-                            });
+                            let label =
+                                RichText::new(def.label)
+                                    .size(12.0)
+                                    .color(match def.support {
+                                        Support::Missing => theme::ink_hint(),
+                                        _ => theme::ink_dim(),
+                                    });
                             ui.add_sized([300.0, 20.0], egui::Label::new(label).truncate());
                             let shown = shortcuts
                                 .chord_for(idx)
@@ -880,7 +1150,10 @@ pub fn settings_ui(ui: &mut Ui, shortcuts: &mut Shortcuts, notice: &mut Option<S
                             // Plain "Clear": the default egui font has no
                             // "✕" glyph, so it would draw as a missing-glyph box.
                             if shortcuts.chord_for(idx).is_some()
-                                && ui.small_button("Clear").on_hover_text("Remove this hotkey").clicked()
+                                && ui
+                                    .small_button("Clear")
+                                    .on_hover_text("Remove this hotkey")
+                                    .clicked()
                             {
                                 shortcuts.bindings[idx] = None;
                                 *notice = None;
@@ -896,7 +1169,11 @@ pub fn settings_ui(ui: &mut Ui, shortcuts: &mut Shortcuts, notice: &mut Option<S
                                 }
                             }
                             if def.support == Support::Missing {
-                                ui.label(RichText::new(SUPPORT_HINT).size(12.0).color(theme::ink_hint()));
+                                ui.label(
+                                    RichText::new(SUPPORT_HINT)
+                                        .size(12.0)
+                                        .color(theme::ink_hint()),
+                                );
                             }
                         });
                     }
@@ -948,7 +1225,12 @@ mod tests {
         assert!(Chord::parse("Ctrl+Nope").is_err());
         assert_eq!(
             Chord::parse("cmd+shift+p").unwrap(),
-            Chord { ctrl: true, shift: true, alt: false, key: "P".into() }
+            Chord {
+                ctrl: true,
+                shift: true,
+                alt: false,
+                key: "P".into()
+            }
         );
     }
 
@@ -958,20 +1240,25 @@ mod tests {
         let mut s = Shortcuts::with_defaults();
         let intruder = index_of("send_to_intruder").unwrap();
         let repeater = index_of("send_to_repeater").unwrap();
-        let err = s.set(intruder, Some(Chord::parse("Ctrl+R").unwrap())).unwrap_err();
+        let err = s
+            .set(intruder, Some(Chord::parse("Ctrl+R").unwrap()))
+            .unwrap_err();
         assert!(err.contains("Send to Repeater"), "{err}");
         assert_eq!(s.chord_for(intruder).unwrap().format(), "Ctrl+I");
 
         // Freeing the chord first makes the move legal, and it leaves exactly
         // one owner.
         s.set(repeater, None).unwrap();
-        s.set(intruder, Some(Chord::parse("Ctrl+R").unwrap())).unwrap();
+        s.set(intruder, Some(Chord::parse("Ctrl+R").unwrap()))
+            .unwrap();
         assert_eq!(s.chord_for(intruder).unwrap().format(), "Ctrl+R");
         assert_eq!(s.chord_for(repeater), None);
 
         // The other direction: one action cannot hold two chords.
         let other = index_of("switch_to_proxy").unwrap();
-        assert!(s.set(intruder, Some(Chord::parse("Ctrl+P").unwrap())).is_ok());
+        assert!(s
+            .set(intruder, Some(Chord::parse("Ctrl+P").unwrap()))
+            .is_ok());
         assert_eq!(s.chord_for(intruder).unwrap().format(), "Ctrl+P");
         assert!(ACTIONS[other].default.is_some());
     }
@@ -980,12 +1267,15 @@ mod tests {
     fn json_round_trip_keeps_custom_bindings() {
         let mut s = Shortcuts::with_defaults();
         let idx = index_of("switch_to_proxy").unwrap();
-        s.set(idx, Some(Chord::parse("Ctrl+Alt+P").unwrap())).unwrap();
+        s.set(idx, Some(Chord::parse("Ctrl+Alt+P").unwrap()))
+            .unwrap();
         let back = Shortcuts::from_json(&s.to_json());
         assert_eq!(back.chord_for(idx).unwrap().format(), "Ctrl+Alt+P");
         // Defaults survive too.
         assert_eq!(
-            back.chord_for(index_of("send_to_repeater").unwrap()).unwrap().format(),
+            back.chord_for(index_of("send_to_repeater").unwrap())
+                .unwrap()
+                .format(),
             "Ctrl+R"
         );
     }
@@ -996,7 +1286,9 @@ mod tests {
         let json = r#"{"hotkeys":[["send_to_repeater","Ctrl+R"],["send_to_intruder","Ctrl+R"]]}"#;
         let s = Shortcuts::from_json(json);
         assert_eq!(
-            s.chord_for(index_of("send_to_repeater").unwrap()).unwrap().format(),
+            s.chord_for(index_of("send_to_repeater").unwrap())
+                .unwrap()
+                .format(),
             "Ctrl+R"
         );
         assert_eq!(s.chord_for(index_of("send_to_intruder").unwrap()), None);
@@ -1012,7 +1304,9 @@ mod tests {
         let back = Shortcuts::from_json(&s.to_json());
         assert_eq!(back.chord_for(idx), None);
         assert_eq!(
-            back.chord_for(index_of("send_to_repeater").unwrap()).unwrap().format(),
+            back.chord_for(index_of("send_to_repeater").unwrap())
+                .unwrap()
+                .format(),
             "Ctrl+R"
         );
     }
@@ -1040,7 +1334,8 @@ mod tests {
     fn reset_restores_the_burp_default() {
         let mut s = Shortcuts::with_defaults();
         let idx = index_of("toggle_proxy_interception").unwrap();
-        s.set(idx, Some(Chord::parse("Ctrl+Alt+T").unwrap())).unwrap();
+        s.set(idx, Some(Chord::parse("Ctrl+Alt+T").unwrap()))
+            .unwrap();
         assert!(!s.is_default(idx));
         s.reset(idx);
         assert!(s.is_default(idx));

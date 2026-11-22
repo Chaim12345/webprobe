@@ -46,7 +46,11 @@ pub fn parse(text: &str) -> Vec<Step> {
         if let Some(rest) = line.strip_prefix(STEP_MARK) {
             if let Some((https, derive, body)) = current.take() {
                 if !body.trim().is_empty() {
-                    steps.push(Step { request: normalise(&body), https, derive });
+                    steps.push(Step {
+                        request: normalise(&body),
+                        https,
+                        derive,
+                    });
                 }
             }
             let mut https = false;
@@ -55,7 +59,12 @@ pub fn parse(text: &str) -> Vec<Step> {
                 if word.eq_ignore_ascii_case("https") {
                     https = true;
                 } else if let Some(list) = word.strip_prefix("derive=") {
-                    derive = list.split(',').map(str::trim).filter(|n| !n.is_empty()).map(str::to_string).collect();
+                    derive = list
+                        .split(',')
+                        .map(str::trim)
+                        .filter(|n| !n.is_empty())
+                        .map(str::to_string)
+                        .collect();
                 }
             }
             current = Some((https, derive, String::new()));
@@ -69,14 +78,29 @@ pub fn parse(text: &str) -> Vec<Step> {
     }
     if let Some((https, derive, body)) = current {
         if !body.trim().is_empty() {
-            steps.push(Step { request: normalise(&body), https, derive });
+            steps.push(Step {
+                request: normalise(&body),
+                https,
+                derive,
+            });
         }
     }
     if steps.is_empty() && !plain.trim().is_empty() {
-        steps.push(Step { request: normalise(&plain), https: false, derive: Vec::new() });
+        steps.push(Step {
+            request: normalise(&plain),
+            https: false,
+            derive: Vec::new(),
+        });
     } else if !plain.trim().is_empty() {
         // Text before the first step line is the first step.
-        steps.insert(0, Step { request: normalise(&plain), https: false, derive: Vec::new() });
+        steps.insert(
+            0,
+            Step {
+                request: normalise(&plain),
+                https: false,
+                derive: Vec::new(),
+            },
+        );
     }
     steps
 }
@@ -108,11 +132,16 @@ pub fn extract_value(response: &[u8], name: &str) -> Option<String> {
             }
         }
     }
-    let body = String::from_utf8_lossy(&response[parts.head_len.min(response.len())..]).into_owned();
+    let body =
+        String::from_utf8_lossy(&response[parts.head_len.min(response.len())..]).into_owned();
     let n = regex::escape(name);
     let patterns = [
-        format!(r#"(?is)<input\b[^>]*\bname\s*=\s*["']?{n}["']?[^>]*\bvalue\s*=\s*["']([^"']*)["']"#),
-        format!(r#"(?is)<input\b[^>]*\bvalue\s*=\s*["']([^"']*)["'][^>]*\bname\s*=\s*["']?{n}["']?[\s/>]"#),
+        format!(
+            r#"(?is)<input\b[^>]*\bname\s*=\s*["']?{n}["']?[^>]*\bvalue\s*=\s*["']([^"']*)["']"#
+        ),
+        format!(
+            r#"(?is)<input\b[^>]*\bvalue\s*=\s*["']([^"']*)["'][^>]*\bname\s*=\s*["']?{n}["']?[\s/>]"#
+        ),
         format!(r#""{n}"\s*:\s*"((?:[^"\\]|\\.)*)""#),
         format!(r#""{n}"\s*:\s*(-?[0-9][0-9.eE+-]*|true|false)"#),
     ];
@@ -164,7 +193,9 @@ pub fn substitute_param(request: &[u8], name: &str, value: &str) -> Vec<u8> {
     if let Some(line_end) = head.find("\r\n") {
         let line = &head[..line_end];
         let mut words = line.splitn(3, ' ');
-        if let (Some(method), Some(target), Some(version)) = (words.next(), words.next(), words.next()) {
+        if let (Some(method), Some(target), Some(version)) =
+            (words.next(), words.next(), words.next())
+        {
             if let Some((path, query)) = target.split_once('?') {
                 if let Some(q) = replace_pair(query, name, value) {
                     head_out = format!("{method} {path}?{q} {version}{}", &head[line_end..]);
@@ -172,12 +203,18 @@ pub fn substitute_param(request: &[u8], name: &str, value: &str) -> Vec<u8> {
             }
         }
     }
-    let ct = crate::util::get_header(&parts.headers, "Content-Type").unwrap_or_default().to_ascii_lowercase();
+    let ct = crate::util::get_header(&parts.headers, "Content-Type")
+        .unwrap_or_default()
+        .to_ascii_lowercase();
     if ct.contains("json") {
         let n = regex::escape(name);
-        if let Ok(re) = regex::Regex::new(&format!(r#"("{n}"\s*:\s*)("(?:[^"\\]|\\.)*"|-?[0-9][0-9.eE+-]*|true|false|null)"#)) {
+        if let Ok(re) = regex::Regex::new(&format!(
+            r#"("{n}"\s*:\s*)("(?:[^"\\]|\\.)*"|-?[0-9][0-9.eE+-]*|true|false|null)"#
+        )) {
             let quoted = serde_json::to_string(value).unwrap_or_else(|_| format!("\"{value}\""));
-            body = re.replace(&body, |c: &regex::Captures| format!("{}{}", &c[1], quoted)).into_owned();
+            body = re
+                .replace(&body, |c: &regex::Captures| format!("{}{}", &c[1], quoted))
+                .into_owned();
         }
     } else if !body.is_empty() && !ct.contains("multipart") {
         if let Some(b) = replace_pair(&body, name, value) {
@@ -187,7 +224,7 @@ pub fn substitute_param(request: &[u8], name: &str, value: &str) -> Vec<u8> {
     let mut out = head_out.into_bytes();
     out.extend_from_slice(body.as_bytes());
     if crate::util::get_header(&parts.headers, "Content-Length").is_some() {
-        out = crate::net::replace_or_add_header(&out, "Content-Length", &body.len().to_string());
+        out = crate::util::replace_or_add_header(&out, "Content-Length", &body.len().to_string());
     }
     out
 }
@@ -220,15 +257,24 @@ mod tests {
     fn plain_text_is_one_step_and_marked_text_splits() {
         let single = parse("GET /login HTTP/1.1\nHost: app.test\n");
         assert_eq!(single.len(), 1);
-        assert_eq!(text(&single[0].request), "GET /login HTTP/1.1\r\nHost: app.test\r\n\r\n");
+        assert_eq!(
+            text(&single[0].request),
+            "GET /login HTTP/1.1\r\nHost: app.test\r\n\r\n"
+        );
         assert!(!single[0].https && single[0].derive.is_empty());
 
         let multi = parse("### \nGET /form HTTP/1.1\nHost: app.test\n\n### https derive=csrf,token\nPOST /login HTTP/1.1\nHost: app.test\nContent-Length: 13\n\nuser=a&csrf=x\n");
         assert_eq!(multi.len(), 2);
-        assert_eq!(text(&multi[0].request), "GET /form HTTP/1.1\r\nHost: app.test\r\n\r\n");
+        assert_eq!(
+            text(&multi[0].request),
+            "GET /form HTTP/1.1\r\nHost: app.test\r\n\r\n"
+        );
         assert!(multi[1].https);
         assert_eq!(multi[1].derive, ["csrf", "token"]);
-        assert_eq!(text(&multi[1].request), "POST /login HTTP/1.1\r\nHost: app.test\r\nContent-Length: 13\r\n\r\nuser=a&csrf=x");
+        assert_eq!(
+            text(&multi[1].request),
+            "POST /login HTTP/1.1\r\nHost: app.test\r\nContent-Length: 13\r\n\r\nuser=a&csrf=x"
+        );
         assert!(parse("  \n\n").is_empty());
     }
 
@@ -236,11 +282,22 @@ mod tests {
     fn recorded_steps_round_trip_through_the_text_form() {
         let req = b"POST /a?x=1 HTTP/1.1\r\nHost: h.test\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 3\r\n\r\nb=2";
         let mut macro_text = String::new();
-        macro_text.push_str(&step_text(b"GET / HTTP/1.1\r\nHost: h.test\r\n\r\n", false, &[]));
+        macro_text.push_str(&step_text(
+            b"GET / HTTP/1.1\r\nHost: h.test\r\n\r\n",
+            false,
+            &[],
+        ));
         macro_text.push_str(&step_text(req, true, &["b".to_string()]));
         let steps = parse(&macro_text);
         assert_eq!(steps.len(), 2);
-        assert_eq!(steps[1], Step { request: req.to_vec(), https: true, derive: vec!["b".into()] });
+        assert_eq!(
+            steps[1],
+            Step {
+                request: req.to_vec(),
+                https: true,
+                derive: vec!["b".into()]
+            }
+        );
     }
 
     #[test]
@@ -258,13 +315,28 @@ mod tests {
 
     #[test]
     fn substitution_covers_query_form_and_json_and_fixes_the_length() {
-        let get = substitute_param(b"GET /p?a=1&csrf=old&z=3 HTTP/1.1\r\nHost: h\r\n\r\n", "csrf", "n w");
-        assert_eq!(text(&get), "GET /p?a=1&csrf=n%20w&z=3 HTTP/1.1\r\nHost: h\r\n\r\n");
+        let get = substitute_param(
+            b"GET /p?a=1&csrf=old&z=3 HTTP/1.1\r\nHost: h\r\n\r\n",
+            "csrf",
+            "n w",
+        );
+        assert_eq!(
+            text(&get),
+            "GET /p?a=1&csrf=n%20w&z=3 HTTP/1.1\r\nHost: h\r\n\r\n"
+        );
         let form = substitute_param(b"POST /p HTTP/1.1\r\nHost: h\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 13\r\n\r\nuser=a&csrf=x", "csrf", "long-token");
         assert_eq!(text(&form), "POST /p HTTP/1.1\r\nHost: h\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 22\r\n\r\nuser=a&csrf=long-token");
         let json = substitute_param(b"POST /p HTTP/1.1\r\nHost: h\r\nContent-Type: application/json\r\nContent-Length: 24\r\n\r\n{\"token\": \"x\", \"n\": 1}", "token", "a\"b");
-        assert!(text(&json).ends_with("{\"token\": \"a\\\"b\", \"n\": 1}"), "{}", text(&json));
-        assert!(text(&json).contains("Content-Length: 25\r\n"), "{}", text(&json));
+        assert!(
+            text(&json).ends_with("{\"token\": \"a\\\"b\", \"n\": 1}"),
+            "{}",
+            text(&json)
+        );
+        assert!(
+            text(&json).contains("Content-Length: 25\r\n"),
+            "{}",
+            text(&json)
+        );
         // A request without the parameter is returned as it was.
         let same = b"GET /p?a=1 HTTP/1.1\r\nHost: h\r\n\r\n";
         assert_eq!(substitute_param(same, "csrf", "v"), same.to_vec());
@@ -272,7 +344,12 @@ mod tests {
 
     #[test]
     fn prepare_derives_from_the_previous_response_only() {
-        let step = Step { request: b"POST /login HTTP/1.1\r\nHost: h\r\nContent-Length: 13\r\n\r\nuser=a&csrf=x".to_vec(), https: false, derive: vec!["csrf".into(), "absent".into()] };
+        let step = Step {
+            request: b"POST /login HTTP/1.1\r\nHost: h\r\nContent-Length: 13\r\n\r\nuser=a&csrf=x"
+                .to_vec(),
+            https: false,
+            derive: vec!["csrf".into(), "absent".into()],
+        };
         let prev = b"HTTP/1.1 200 OK\r\n\r\n<input name=\"csrf\" value=\"fresh\">";
         let (req, derived) = prepare(&step, Some(prev));
         assert!(text(&req).ends_with("user=a&csrf=fresh"));

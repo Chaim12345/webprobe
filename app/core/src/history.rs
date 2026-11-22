@@ -6,8 +6,8 @@
 //! (`with_rows`, `get`, `snapshot`) and never hold the lock while doing UI or
 //! network work.
 
-use crate::net::HistEntry;
 use crate::sync::Mutex;
+use webprobe_support::hist::HistEntry;
 
 #[derive(Default)]
 pub struct ProxyHistory {
@@ -54,7 +54,12 @@ impl ProxyHistory {
 
     /// The entry with `id`.
     pub fn get(&self, id: u64) -> Option<HistEntry> {
-        self.rows.lock().unwrap().iter().find(|e| e.id == id).cloned()
+        self.rows
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|e| e.id == id)
+            .cloned()
     }
 
     /// The newest entry.
@@ -85,14 +90,20 @@ impl ProxyHistory {
     /// there is none. Bodies set by `f` are spilled.
     pub fn update(&self, id: u64, f: impl FnOnce(&mut HistEntry)) -> bool {
         let mut rows = self.rows.lock().unwrap();
-        let Some(e) = rows.iter_mut().find(|e| e.id == id) else { return false };
+        let Some(e) = rows.iter_mut().find(|e| e.id == id) else {
+            return false;
+        };
         f(e);
         *e = std::mem::take(e).spilled();
         true
     }
 
     /// Change every entry `pick` selects; returns how many.
-    pub fn update_where(&self, mut pick: impl FnMut(&HistEntry) -> bool, mut f: impl FnMut(&mut HistEntry)) -> usize {
+    pub fn update_where(
+        &self,
+        mut pick: impl FnMut(&HistEntry) -> bool,
+        mut f: impl FnMut(&mut HistEntry),
+    ) -> usize {
         let mut rows = self.rows.lock().unwrap();
         let mut n = 0;
         for e in rows.iter_mut().filter(|e| pick(e)) {
@@ -112,19 +123,41 @@ mod tests {
     fn writes_spill_and_reads_are_scoped() {
         let h = ProxyHistory::default();
         let big = vec![b'x'; 4096];
-        h.push(HistEntry { id: 1, resp_raw: Some(big.clone().into()), ..Default::default() });
-        h.extend([HistEntry { id: 2, ..Default::default() }, HistEntry { id: 3, ..Default::default() }]);
+        h.push(HistEntry {
+            id: 1,
+            resp_raw: Some(big.clone().into()),
+            ..Default::default()
+        });
+        h.extend([
+            HistEntry {
+                id: 2,
+                ..Default::default()
+            },
+            HistEntry {
+                id: 3,
+                ..Default::default()
+            },
+        ]);
         assert_eq!(h.stamp(), (3, 3));
         if cfg!(unix) {
-            assert!(h.get(1).unwrap().resp_raw.unwrap().is_stored(), "pushed bodies are spilled");
+            assert!(
+                h.get(1).unwrap().resp_raw.unwrap().is_stored(),
+                "pushed bodies are spilled"
+            );
         }
         assert!(h.update(2, |e| e.note = Some("n".into())));
         assert!(!h.update(9, |_| {}));
         assert_eq!(h.get(2).unwrap().note.as_deref(), Some("n"));
         assert_eq!(h.update_where(|e| e.id >= 2, |e| e.highlight = Some(1)), 2);
         assert_eq!(h.retain(|e| e.id != 3), 1);
-        assert_eq!(h.with_rows(|r| r.iter().map(|e| e.id).collect::<Vec<_>>()), [1, 2]);
-        h.replace_all([HistEntry { id: 7, ..Default::default() }]);
+        assert_eq!(
+            h.with_rows(|r| r.iter().map(|e| e.id).collect::<Vec<_>>()),
+            [1, 2]
+        );
+        h.replace_all([HistEntry {
+            id: 7,
+            ..Default::default()
+        }]);
         assert_eq!((h.len(), h.last().map(|e| e.id)), (1, Some(7)));
         h.clear();
         assert!(h.is_empty());

@@ -75,9 +75,17 @@ impl Default for DiscoveryConfig {
             max_depth: 16,
             file_words: Vec::new(),
             dir_words: Vec::new(),
-            extensions: ["php", "asp", "aspx", "jsp", "html", "txt", "js", "json", "bak"].iter().map(|s| s.to_string()).collect(),
+            extensions: [
+                "php", "asp", "aspx", "jsp", "html", "txt", "js", "json", "bak",
+            ]
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
             test_no_extension: true,
-            variant_extensions: ["bak", "old", "orig", "~", "1", "txt"].iter().map(|s| s.to_string()).collect(),
+            variant_extensions: ["bak", "old", "orig", "~", "1", "txt"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
             test_variants: true,
             case: CaseMode::AutoDetect,
             threads: 4,
@@ -88,25 +96,129 @@ impl Default for DiscoveryConfig {
 
 /// Small built-in fallback lists (WebProbe's own).
 pub const BUILTIN_FILES: &[&str] = &[
-    "index", "default", "home", "login", "logout", "admin", "config", "configuration", "settings", "backup", "test", "debug", "info",
-    "phpinfo", "readme", "README", "changelog", "CHANGELOG", "license", "robots", "sitemap", "web", "server-status", "console", "api",
-    "swagger", "openapi", "package", "composer", "Dockerfile", ".env", ".htaccess", ".git/config", ".DS_Store", "crossdomain",
-    "clientaccesspolicy", "status", "health", "metrics", "version", "upload", "download", "register", "signup", "user", "users",
-    "account", "profile", "search", "error", "dump", "db", "database", "old", "temp", "tmp",
+    "index",
+    "default",
+    "home",
+    "login",
+    "logout",
+    "admin",
+    "config",
+    "configuration",
+    "settings",
+    "backup",
+    "test",
+    "debug",
+    "info",
+    "phpinfo",
+    "readme",
+    "README",
+    "changelog",
+    "CHANGELOG",
+    "license",
+    "robots",
+    "sitemap",
+    "web",
+    "server-status",
+    "console",
+    "api",
+    "swagger",
+    "openapi",
+    "package",
+    "composer",
+    "Dockerfile",
+    ".env",
+    ".htaccess",
+    ".git/config",
+    ".DS_Store",
+    "crossdomain",
+    "clientaccesspolicy",
+    "status",
+    "health",
+    "metrics",
+    "version",
+    "upload",
+    "download",
+    "register",
+    "signup",
+    "user",
+    "users",
+    "account",
+    "profile",
+    "search",
+    "error",
+    "dump",
+    "db",
+    "database",
+    "old",
+    "temp",
+    "tmp",
 ];
 
 pub const BUILTIN_DIRS: &[&str] = &[
-    "admin", "administrator", "api", "app", "assets", "backup", "backups", "bin", "cgi-bin", "config", "css", "data", "db", "debug",
-    "dev", "docs", "download", "downloads", "files", "ftp", "images", "img", "include", "includes", "js", "lib", "log", "logs",
-    "old", "private", "public", "rest", "scripts", "secret", "server", "static", "test", "tests", "tmp", "upload", "uploads", "user",
-    "users", "v1", "v2", "vendor", "web", "webadmin", ".git", ".svn", "console", "manage", "management", "portal", "internal",
+    "admin",
+    "administrator",
+    "api",
+    "app",
+    "assets",
+    "backup",
+    "backups",
+    "bin",
+    "cgi-bin",
+    "config",
+    "css",
+    "data",
+    "db",
+    "debug",
+    "dev",
+    "docs",
+    "download",
+    "downloads",
+    "files",
+    "ftp",
+    "images",
+    "img",
+    "include",
+    "includes",
+    "js",
+    "lib",
+    "log",
+    "logs",
+    "old",
+    "private",
+    "public",
+    "rest",
+    "scripts",
+    "secret",
+    "server",
+    "static",
+    "test",
+    "tests",
+    "tmp",
+    "upload",
+    "uploads",
+    "user",
+    "users",
+    "v1",
+    "v2",
+    "vendor",
+    "web",
+    "webadmin",
+    ".git",
+    ".svn",
+    "console",
+    "manage",
+    "management",
+    "portal",
+    "internal",
 ];
-
-
 
 /// One-entry-per-line list, blank lines and `#` comments dropped.
 pub fn parse_wordlist(text: &str) -> Vec<String> {
-    text.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')).map(str::to_string).collect()
+    text.lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .map(str::to_string)
+        .collect()
 }
 
 /// Burp's named list ("Filenames - short", ...) from the directory
@@ -161,7 +273,11 @@ pub struct Sig {
 
 fn status_of(resp: &[u8]) -> u16 {
     let line = resp.split(|b| *b == b'\n').next().unwrap_or(&[]);
-    String::from_utf8_lossy(line).split_whitespace().nth(1).and_then(|s| s.parse().ok()).unwrap_or(0)
+    String::from_utf8_lossy(line)
+        .split_whitespace()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0)
 }
 
 fn body_len(resp: &[u8]) -> usize {
@@ -187,7 +303,13 @@ pub fn is_like_baseline(r: Sig, baseline: Option<Sig>) -> bool {
 
 /// Candidates for one directory: (path, is_dir).
 pub fn candidates(dir: &str, cfg: &DiscoveryConfig, case_insensitive: bool) -> Vec<(String, bool)> {
-    let norm = |w: &str| if case_insensitive { w.to_lowercase() } else { w.to_string() };
+    let norm = |w: &str| {
+        if case_insensitive {
+            w.to_lowercase()
+        } else {
+            w.to_string()
+        }
+    };
     let mut seen = BTreeSet::new();
     let mut out = Vec::new();
     if cfg.mode != DiscoverMode::FilesOnly {
@@ -223,20 +345,31 @@ pub fn variants(path: &str, cfg: &DiscoveryConfig) -> Vec<String> {
     }
     cfg.variant_extensions
         .iter()
-        .map(|v| if v.starts_with('~') { format!("{path}{v}") } else { format!("{path}.{}", v.trim_start_matches('.')) })
+        .map(|v| {
+            if v.starts_with('~') {
+                format!("{path}{v}")
+            } else {
+                format!("{path}.{}", v.trim_start_matches('.'))
+            }
+        })
         .collect()
 }
 
 fn random_name() -> String {
     use rand::Rng;
     let mut r = rand::thread_rng();
-    (0..12).map(|_| (b'a' + r.gen_range(0..26)) as char).collect()
+    (0..12)
+        .map(|_| (b'a' + r.gen_range(0..26)) as char)
+        .collect()
 }
 
 /// `GET <path>` for the target authority.
 pub fn build_request(host_header: &str, path: &str) -> Vec<u8> {
     format!("GET {path} HTTP/1.1\r\nHost: {host_header}\r\nUser-Agent: Mozilla/5.0 (WebProbe content discovery)\r\nAccept: */*\r\nConnection: close\r\n\r\n").into_bytes()
 }
+
+/// (path, checked, signature, request, response) of one probe hit.
+type ProbeHit = (String, bool, Sig, Vec<u8>, Vec<u8>);
 
 struct Run {
     cfg: DiscoveryConfig,
@@ -255,18 +388,33 @@ impl Run {
         if n >= self.cfg.max_requests {
             self.prog.sent.fetch_sub(1, Ordering::SeqCst);
             self.prog.stop.store(true, Ordering::SeqCst);
-            *self.prog.error.lock().unwrap() = Some(format!("Request cap of {} reached", self.cfg.max_requests));
+            *self.prog.error.lock().unwrap() =
+                Some(format!("Request cap of {} reached", self.cfg.max_requests));
             return None;
         }
         let req = build_request(&self.host_header, path);
         match (self.send)(&req) {
-            Ok(resp) => Some((Sig { status: status_of(&resp), length: body_len(&resp) }, req, resp)),
-            Err(_) => Some((Sig { status: 0, length: 0 }, req, Vec::new())),
+            Ok(resp) => Some((
+                Sig {
+                    status: status_of(&resp),
+                    length: body_len(&resp),
+                },
+                req,
+                resp,
+            )),
+            Err(_) => Some((
+                Sig {
+                    status: 0,
+                    length: 0,
+                },
+                req,
+                Vec::new(),
+            )),
         }
     }
 
     /// Probe `paths` with the configured thread count.
-    fn probe_all(&self, paths: &[(String, bool)]) -> Vec<(String, bool, Sig, Vec<u8>, Vec<u8>)> {
+    fn probe_all(&self, paths: &[(String, bool)]) -> Vec<ProbeHit> {
         let next = AtomicUsize::new(0);
         let out = Mutex::new(Vec::new());
         std::thread::scope(|s| {
@@ -275,7 +423,9 @@ impl Run {
                     let _tool = crate::net::tool_scope("Target");
                     let i = next.fetch_add(1, Ordering::SeqCst);
                     let Some((p, d)) = paths.get(i) else { break };
-                    let Some((sig, req, resp)) = self.probe(p) else { break };
+                    let Some((sig, req, resp)) = self.probe(p) else {
+                        break;
+                    };
                     out.lock().unwrap().push((p.clone(), *d, sig, req, resp));
                 });
             }
@@ -290,7 +440,14 @@ impl Run {
         if f.iter().any(|x| x.path == path) {
             return false;
         }
-        f.push(Found { path: path.to_string(), status: sig.status, length: sig.length, is_dir, request: req, response: resp });
+        f.push(Found {
+            path: path.to_string(),
+            status: sig.status,
+            length: sig.length,
+            is_dir,
+            request: req,
+            response: resp,
+        });
         true
     }
 
@@ -315,8 +472,12 @@ impl Run {
             }
             *self.prog.current.lock().unwrap() = dir.clone();
             let rnd = random_name();
-            let Some((file_base, _, _)) = self.probe(&format!("{dir}{rnd}.html")) else { break };
-            let Some((dir_base, _, _)) = self.probe(&format!("{dir}{rnd}/")) else { break };
+            let Some((file_base, _, _)) = self.probe(&format!("{dir}{rnd}.html")) else {
+                break;
+            };
+            let Some((dir_base, _, _)) = self.probe(&format!("{dir}{rnd}/")) else {
+                break;
+            };
             let todo = candidates(&dir, &self.cfg, case_insensitive);
             let mut found_files = Vec::new();
             for (path, is_dir, sig, req, resp) in self.probe_all(&todo) {
@@ -345,7 +506,11 @@ impl Run {
                     }
                 }
             }
-            let vars: Vec<(String, bool)> = found_files.iter().flat_map(|f| variants(f, &self.cfg)).map(|p| (p, false)).collect();
+            let vars: Vec<(String, bool)> = found_files
+                .iter()
+                .flat_map(|f| variants(f, &self.cfg))
+                .map(|p| (p, false))
+                .collect();
             for (path, is_dir, sig, req, resp) in self.probe_all(&vars) {
                 if !is_like_baseline(sig, Some(file_base)) {
                     self.record(&path, is_dir, sig, req, resp);
@@ -369,9 +534,14 @@ fn flip_case(path: &str) -> String {
 pub fn start(cfg: DiscoveryConfig, host_header: String, send: Sender) -> Arc<Progress> {
     let prog = Arc::new(Progress::default());
     let p = prog.clone();
-    std::thread::spawn(move || {
+    webprobe_core::util::spawn_contained("discovery", move || {
         let _tool = crate::net::tool_scope("Target");
-        let run = Run { cfg, host_header, send, prog: p.clone() };
+        let run = Run {
+            cfg,
+            host_header,
+            send,
+            prog: p.clone(),
+        };
         run.run();
         p.done.store(true, Ordering::SeqCst);
     });
@@ -448,15 +618,25 @@ impl DiscoveryUi {
 }
 
 fn split_list(s: &str) -> Vec<String> {
-    s.split([',', ' ', '\n']).map(str::trim).filter(|x| !x.is_empty()).map(str::to_string).collect()
+    s.split([',', ' ', '\n'])
+        .map(str::trim)
+        .filter(|x| !x.is_empty())
+        .map(str::to_string)
+        .collect()
 }
 
 /// Names observed in use under `origin`: path segments of stored items, split
 /// into directory names and file stems.
-pub fn observed_names(entries: &[crate::net::HistEntry], origin: &str) -> (Vec<String>, Vec<String>) {
+pub fn observed_names(
+    entries: &[crate::net::HistEntry],
+    origin: &str,
+) -> (Vec<String>, Vec<String>) {
     let mut files = BTreeSet::new();
     let mut dirs = BTreeSet::new();
-    for e in entries.iter().filter(|e| crate::ui::history_host(e) == origin) {
+    for e in entries
+        .iter()
+        .filter(|e| crate::ui::history_host(e) == origin)
+    {
         let p = e.path.split(['?', '#']).next().unwrap_or("");
         let segs: Vec<&str> = p.split('/').filter(|s| !s.is_empty()).collect();
         for (i, s) in segs.iter().enumerate() {
@@ -503,17 +683,28 @@ fn start_from_ui(app: &mut crate::App) {
         if on {
             let (w, src) = load_named_list(name, fb);
             sources.push(format!("{name}: {src}"));
-            if files_side { files.extend(w) } else { dirs.extend(w) }
+            if files_side {
+                files.extend(w)
+            } else {
+                dirs.extend(w)
+            }
         }
     }
-    for (path, files_side) in [(d.custom_files.clone(), true), (d.custom_dirs.clone(), false)] {
+    for (path, files_side) in [
+        (d.custom_files.clone(), true),
+        (d.custom_dirs.clone(), false),
+    ] {
         if path.trim().is_empty() {
             continue;
         }
         match std::fs::read_to_string(path.trim()) {
             Ok(t) => {
                 let w = parse_wordlist(&t);
-                if files_side { files.extend(w) } else { dirs.extend(w) }
+                if files_side {
+                    files.extend(w)
+                } else {
+                    dirs.extend(w)
+                }
             }
             Err(e) => {
                 d.status = format!("Failed to open file {}: {e}", path.trim());
@@ -533,10 +724,18 @@ fn start_from_ui(app: &mut crate::App) {
     cfg.dir_words = dirs;
     let shared = app.shared.clone();
     let send: Sender = Arc::new(move |req: &[u8]| {
-        let up = if https { crate::net::send_tls_raw(&shared, &host, port, req) } else { crate::net::send_raw(&shared, &host, port, req) };
+        let up = if https {
+            crate::net::send_tls_raw(&shared, &host, port, req)
+        } else {
+            crate::net::send_raw(&shared, &host, port, req)
+        };
         up.resp.ok_or_else(|| up.error.unwrap_or_default())
     });
-    d.status = format!("Started on {origin}{} ({})", cfg.start_dir, sources.join("; "));
+    d.status = format!(
+        "Started on {origin}{} ({})",
+        cfg.start_dir,
+        sources.join("; ")
+    );
     d.cfg = cfg.clone();
     d.added = 0;
     d.sel = None;
@@ -546,8 +745,12 @@ fn start_from_ui(app: &mut crate::App) {
 /// Copy new results into the site map (Burp: "Add discovered content to
 /// suite site map").
 fn add_new_to_site_map(app: &mut crate::App) {
-    let Some(run) = app.eng.discovery.run.clone() else { return };
-    let Some((https, host, port, _)) = parse_origin(&app.eng.discovery.origin) else { return };
+    let Some(run) = app.eng.discovery.run.clone() else {
+        return;
+    };
+    let Some((https, host, port, _)) = parse_origin(&app.eng.discovery.origin) else {
+        return;
+    };
     let found = run.found.lock().unwrap().clone();
     if found.len() <= app.eng.discovery.added {
         return;
@@ -592,9 +795,12 @@ pub fn discovery_window(app: &mut crate::App, ctx: &egui::Context) {
     let mut start_now = false;
     let title = format!("Discover content | {}", app.eng.discovery.origin);
     // burp.Zrf3 asks before discovering outside the target scope.
-    let target_url = format!("{}{}", app.eng.discovery.origin, app.eng.discovery.cfg.start_dir);
+    let target_url = format!(
+        "{}{}",
+        app.eng.discovery.origin, app.eng.discovery.cfg.start_dir
+    );
     let out_of_scope = !crate::net::in_scope(&app.shared, &target_url);
-    egui::Window::new(title).default_pos(crate::theme::window_pos(&ctx))
+    egui::Window::new(title).default_pos(crate::theme::window_pos(ctx))
         .id(egui::Id::unique("discover_content"))
         .open(&mut open)
         .resizable(true)
@@ -752,7 +958,11 @@ mod tests {
                     let req = String::from_utf8_lossy(&buf[..n]).into_owned();
                     let path = req.split_whitespace().nth(1).unwrap_or("/").to_string();
                     let (st, body) = handler(&path);
-                    let _ = write!(s, "HTTP/1.1 {st} X\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+                    let _ = write!(
+                        s,
+                        "HTTP/1.1 {st} X\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    );
                 });
             }
         });
@@ -761,7 +971,8 @@ mod tests {
 
     fn tcp_sender(port: u16) -> Sender {
         Arc::new(move |req: &[u8]| {
-            let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).map_err(|e| e.to_string())?;
+            let mut s =
+                std::net::TcpStream::connect(("127.0.0.1", port)).map_err(|e| e.to_string())?;
             s.write_all(req).map_err(|e| e.to_string())?;
             let mut out = Vec::new();
             s.read_to_end(&mut out).map_err(|e| e.to_string())?;
@@ -814,21 +1025,66 @@ mod tests {
         );
         assert_eq!(candidates("/x/", &c, true).len(), 3);
         c.mode = DiscoverMode::DirectoriesOnly;
-        assert_eq!(candidates("/", &c, false), vec![("/Files/".to_string(), true)]);
+        assert_eq!(
+            candidates("/", &c, false),
+            vec![("/Files/".to_string(), true)]
+        );
         c.mode = DiscoverMode::FilesOnly;
         c.test_no_extension = false;
-        assert_eq!(candidates("/", &c, true), vec![("/admin.php".to_string(), false)]);
-        assert_eq!(variants("/a.php", &DiscoveryConfig::default())[..2], ["/a.php.bak".to_string(), "/a.php.old".to_string()]);
+        assert_eq!(
+            candidates("/", &c, true),
+            vec![("/admin.php".to_string(), false)]
+        );
+        assert_eq!(
+            variants("/a.php", &DiscoveryConfig::default())[..2],
+            ["/a.php.bak".to_string(), "/a.php.old".to_string()]
+        );
     }
 
     #[test]
     fn soft_404_baseline_comparison() {
-        let b = Some(Sig { status: 200, length: 1000 });
-        assert!(is_like_baseline(Sig { status: 200, length: 1040 }, b));
-        assert!(!is_like_baseline(Sig { status: 200, length: 3000 }, b));
-        assert!(!is_like_baseline(Sig { status: 403, length: 1000 }, b));
-        assert!(is_like_baseline(Sig { status: 404, length: 5 }, None));
-        assert!(!is_like_baseline(Sig { status: 301, length: 0 }, Some(Sig { status: 404, length: 9 })));
+        let b = Some(Sig {
+            status: 200,
+            length: 1000,
+        });
+        assert!(is_like_baseline(
+            Sig {
+                status: 200,
+                length: 1040
+            },
+            b
+        ));
+        assert!(!is_like_baseline(
+            Sig {
+                status: 200,
+                length: 3000
+            },
+            b
+        ));
+        assert!(!is_like_baseline(
+            Sig {
+                status: 403,
+                length: 1000
+            },
+            b
+        ));
+        assert!(is_like_baseline(
+            Sig {
+                status: 404,
+                length: 5
+            },
+            None
+        ));
+        assert!(!is_like_baseline(
+            Sig {
+                status: 301,
+                length: 0
+            },
+            Some(Sig {
+                status: 404,
+                length: 9
+            })
+        ));
     }
 
     #[test]
@@ -840,9 +1096,19 @@ mod tests {
             "/login.php" => (200, "login form".into()),
             _ => (404, "nope".into()),
         });
-        let p = start(cfg(&["login", "config"], &["admin", "static"]), format!("127.0.0.1:{port}"), tcp_sender(port));
+        let p = start(
+            cfg(&["login", "config"], &["admin", "static"]),
+            format!("127.0.0.1:{port}"),
+            tcp_sender(port),
+        );
         wait(&p);
-        let found: Vec<(String, bool)> = p.found.lock().unwrap().iter().map(|f| (f.path.clone(), f.is_dir)).collect();
+        let found: Vec<(String, bool)> = p
+            .found
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|f| (f.path.clone(), f.is_dir))
+            .collect();
         assert_eq!(
             found,
             vec![
@@ -853,7 +1119,9 @@ mod tests {
             ]
         );
         let f = &p.found.lock().unwrap()[0];
-        assert!(String::from_utf8_lossy(&f.request).starts_with(&format!("GET /admin/ HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n")));
+        assert!(String::from_utf8_lossy(&f.request).starts_with(&format!(
+            "GET /admin/ HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
+        )));
         assert_eq!(f.status, 200);
     }
 
@@ -861,33 +1129,66 @@ mod tests {
     fn catch_all_server_reports_nothing() {
         // Every path answers 200 with the same page (Juice Shop style SPA).
         let port = serve(|_| (200, "<html>app shell</html>".into()));
-        let p = start(cfg(&["login", "config"], &["admin"]), format!("127.0.0.1:{port}"), tcp_sender(port));
+        let p = start(
+            cfg(&["login", "config"], &["admin"]),
+            format!("127.0.0.1:{port}"),
+            tcp_sender(port),
+        );
         wait(&p);
         assert!(p.found.lock().unwrap().is_empty());
     }
 
     #[test]
     fn request_cap_and_depth_limit_bound_the_run() {
-        let port = serve(|p| if p.ends_with("/a/") { (200, "dir".into()) } else { (404, String::new()) });
+        let port = serve(|p| {
+            if p.ends_with("/a/") {
+                (200, "dir".into())
+            } else {
+                (404, String::new())
+            }
+        });
         let mut c = cfg(&[], &["a"]);
         c.max_depth = 3;
         let p = start(c.clone(), format!("127.0.0.1:{port}"), tcp_sender(port));
         wait(&p);
-        let paths: Vec<String> = p.found.lock().unwrap().iter().map(|f| f.path.clone()).collect();
+        let paths: Vec<String> = p
+            .found
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|f| f.path.clone())
+            .collect();
         assert_eq!(paths, vec!["/a/", "/a/a/", "/a/a/a/"]);
         c.max_depth = 16;
         c.max_requests = 7;
         let p = start(c, format!("127.0.0.1:{port}"), tcp_sender(port));
         wait(&p);
         assert_eq!(p.sent.load(Ordering::SeqCst), 7);
-        assert!(p.error.lock().unwrap().as_deref().unwrap_or("").contains("cap"));
+        assert!(p
+            .error
+            .lock()
+            .unwrap()
+            .as_deref()
+            .unwrap_or("")
+            .contains("cap"));
     }
 
     #[test]
     fn origin_parsing_and_observed_names() {
-        assert_eq!(parse_origin("https://shop.local:8443"), Some((true, "shop.local".into(), 8443, "shop.local:8443".into())));
-        assert_eq!(parse_origin("http://a.b"), Some((false, "a.b".into(), 80, "a.b".into())));
-        let e = crate::net::HistEntry { host: "a.b".into(), port: 80, path: "/api/v1/users.json?x=1".into(), ..Default::default() };
+        assert_eq!(
+            parse_origin("https://shop.local:8443"),
+            Some((true, "shop.local".into(), 8443, "shop.local:8443".into()))
+        );
+        assert_eq!(
+            parse_origin("http://a.b"),
+            Some((false, "a.b".into(), 80, "a.b".into()))
+        );
+        let e = crate::net::HistEntry {
+            host: "a.b".into(),
+            port: 80,
+            path: "/api/v1/users.json?x=1".into(),
+            ..Default::default()
+        };
         let (files, dirs) = observed_names(&[e], "http://a.b");
         assert_eq!(files, vec!["users"]);
         assert_eq!(dirs, vec!["api", "v1"]);

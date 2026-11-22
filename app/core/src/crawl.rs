@@ -14,7 +14,6 @@ use std::sync::Arc;
 use crate::net::{self, HistEntry, Shared};
 use crate::util;
 
-
 /// Paths named by robots.txt Allow/Disallow lines (wildcards dropped).
 pub fn robots_paths(body: &str) -> Vec<String> {
     let mut out = Vec::new();
@@ -28,7 +27,12 @@ pub fn robots_paths(body: &str) -> Vec<String> {
         } else {
             continue;
         };
-        let p = rest.trim().split(['*', '$', '#']).next().unwrap_or("").trim();
+        let p = rest
+            .trim()
+            .split(['*', '$', '#'])
+            .next()
+            .unwrap_or("")
+            .trim();
         if p.starts_with('/') && !out.contains(&p.to_string()) {
             out.push(p.to_string());
         }
@@ -54,7 +58,10 @@ pub fn sitemap_locs(body: &str) -> Vec<String> {
 pub fn location_key(path: &str) -> String {
     match path.split_once('?') {
         Some((p, q)) => {
-            let mut names: Vec<&str> = q.split('&').map(|kv| kv.split('=').next().unwrap_or("")).collect();
+            let mut names: Vec<&str> = q
+                .split('&')
+                .map(|kv| kv.split('=').next().unwrap_or(""))
+                .collect();
             names.sort_unstable();
             names.dedup();
             format!("{p}?{}", names.join("&"))
@@ -67,9 +74,22 @@ pub fn location_key(path: &str) -> String {
 /// audited (Burp's crawl of Juice Shop audited scripts, styles and documents
 /// but not the favicon).
 pub fn auditable(e: &HistEntry) -> bool {
-    let mime = crate::mime::burp_mime_of(e);
+    let mime = crate::net::burp_mime_of(e);
     !matches!(mime, "PNG" | "JPEG" | "GIF" | "ICO" | "image")
-        && !matches!(e.extension.as_str(), "woff" | "woff2" | "ttf" | "eot" | "ico" | "png" | "jpg" | "jpeg" | "gif" | "svg" | "webp")
+        && !matches!(
+            e.extension.as_str(),
+            "woff"
+                | "woff2"
+                | "ttf"
+                | "eot"
+                | "ico"
+                | "png"
+                | "jpg"
+                | "jpeg"
+                | "gif"
+                | "svg"
+                | "webp"
+        )
 }
 
 /// The text of the site's own scripts and style sheets (and HTML) seen in the
@@ -78,7 +98,7 @@ pub fn static_reference_corpus(items: &[HistEntry]) -> String {
     let mut out = String::new();
     for e in items {
         let ext = e.extension.as_str();
-        let mime = crate::mime::burp_mime_of(e);
+        let mime = crate::net::burp_mime_of(e);
         if matches!(ext, "js" | "mjs" | "css") || matches!(mime, "script" | "CSS" | "HTML") {
             if let Some(r) = &e.resp_raw {
                 let p = util::parse_http(r);
@@ -104,13 +124,32 @@ pub fn referenced_static(e: &HistEntry, corpus: &str) -> bool {
     !rel.is_empty() && rel.contains('.') && corpus.contains(rel)
 }
 
-fn fetch(shared: &Arc<Shared>, https: bool, host: &str, port: u16, authority: &str, path: &str, id: u64) -> HistEntry {
+fn fetch(
+    shared: &Arc<Shared>,
+    https: bool,
+    host: &str,
+    port: u16,
+    authority: &str,
+    path: &str,
+    id: u64,
+) -> HistEntry {
     let raw = format!("GET {path} HTTP/1.1\r\nHost: {authority}\r\nAccept: */*\r\nUser-Agent: Mozilla/5.0\r\nConnection: close\r\n\r\n");
-    let up = if https { net::send_tls_raw(shared, host, port, raw.as_bytes()) } else { net::send_raw(shared, host, port, raw.as_bytes()) };
+    let up = if https {
+        net::send_tls_raw(shared, host, port, raw.as_bytes())
+    } else {
+        net::send_raw(shared, host, port, raw.as_bytes())
+    };
     let status = up
         .resp
         .as_ref()
-        .map(|r| util::parse_http(r).first.split_whitespace().nth(1).unwrap_or("").to_string())
+        .map(|r| {
+            util::parse_http(r)
+                .first
+                .split_whitespace()
+                .nth(1)
+                .unwrap_or("")
+                .to_string()
+        })
         .unwrap_or_default();
     let mut e = HistEntry {
         id,
@@ -137,10 +176,27 @@ fn fetch(shared: &Arc<Shared>, https: bool, host: &str, port: u16, authority: &s
 
 /// "Audit selected items": just the URL itself.
 pub fn crawl_single(shared: &Arc<Shared>, url: &str) -> Vec<HistEntry> {
-    let (https, rest) = if let Some(r) = url.strip_prefix("https://") { (true, r) } else if let Some(r) = url.strip_prefix("http://") { (false, r) } else { (false, url) };
-    let (authority, path) = match rest.find('/') { Some(i) => (&rest[..i], &rest[i..]), None => (rest, "/") };
+    let (https, rest) = if let Some(r) = url.strip_prefix("https://") {
+        (true, r)
+    } else if let Some(r) = url.strip_prefix("http://") {
+        (false, r)
+    } else {
+        (false, url)
+    };
+    let (authority, path) = match rest.find('/') {
+        Some(i) => (&rest[..i], &rest[i..]),
+        None => (rest, "/"),
+    };
     let (host, port) = net::split_h_p(authority, if https { 443 } else { 80 });
-    vec![fetch(shared, https, &host, port, authority, path, shared.next_id.fetch_add(1, Ordering::SeqCst))]
+    vec![fetch(
+        shared,
+        https,
+        &host,
+        port,
+        authority,
+        path,
+        shared.next_id.fetch_add(1, Ordering::SeqCst),
+    )]
 }
 
 /// Crawl from `start_url`; every fetched item is returned in discovery order.
@@ -159,13 +215,24 @@ pub fn crawl(shared: &Arc<Shared>, start_url: &str) -> Vec<HistEntry> {
     let (host, port) = net::split_h_p(authority, if https { 443 } else { 80 });
     let scheme = if https { "https" } else { "http" };
     let default_port = if https { 443 } else { 80 };
-    let origin = if port == default_port { format!("{scheme}://{host}") } else { format!("{scheme}://{host}:{port}") };
+    let origin = if port == default_port {
+        format!("{scheme}://{host}")
+    } else {
+        format!("{scheme}://{host}:{port}")
+    };
 
-    let limits = shared.scan_config.lock().unwrap().crawl.clone();
+    let limits = crate::scan_config::shared_config(shared)
+        .lock()
+        .unwrap()
+        .crawl
+        .clone();
     let started = std::time::Instant::now();
     let mut seen: BTreeSet<String> = BTreeSet::new();
     let mut queue: VecDeque<(String, usize)> = VecDeque::new();
-    let push = |p: String, d: usize, seen: &mut BTreeSet<String>, queue: &mut VecDeque<(String, usize)>| {
+    let push = |p: String,
+                d: usize,
+                seen: &mut BTreeSet<String>,
+                queue: &mut VecDeque<(String, usize)>| {
         if seen.len() < limits.max_locations && seen.insert(location_key(&p)) {
             queue.push_back((p, d));
         }
@@ -173,14 +240,33 @@ pub fn crawl(shared: &Arc<Shared>, start_url: &str) -> Vec<HistEntry> {
     push(start_path.to_string(), 0, &mut seen, &mut queue);
     let mut out = Vec::new();
     // request_robots_txt / request_sitemap
-    let extras: Vec<&str> = [("/robots.txt", limits.robots), ("/sitemap.xml", limits.sitemap)].into_iter().filter(|(_, on)| *on).map(|(p, _)| p).collect();
+    let extras: Vec<&str> = [
+        ("/robots.txt", limits.robots),
+        ("/sitemap.xml", limits.sitemap),
+    ]
+    .into_iter()
+    .filter(|(_, on)| *on)
+    .map(|(p, _)| p)
+    .collect();
     for extra in extras {
-        let e = fetch(shared, https, &host, port, authority, extra, shared.next_id.fetch_add(1, Ordering::SeqCst));
+        let e = fetch(
+            shared,
+            https,
+            &host,
+            port,
+            authority,
+            extra,
+            shared.next_id.fetch_add(1, Ordering::SeqCst),
+        );
         let ok = e.status.starts_with('2');
-        let body = e.resp_raw.as_ref().map(|r| {
-            let p = util::parse_http(r);
-            String::from_utf8_lossy(&r[p.head_len.min(r.len())..]).into_owned()
-        }).unwrap_or_default();
+        let body = e
+            .resp_raw
+            .as_ref()
+            .map(|r| {
+                let p = util::parse_http(r);
+                String::from_utf8_lossy(&r[p.head_len.min(r.len())..]).into_owned()
+            })
+            .unwrap_or_default();
         if extra == "/robots.txt" && ok {
             for p in robots_paths(&body) {
                 push(p, 1, &mut seen, &mut queue);
@@ -190,7 +276,16 @@ pub fn crawl(shared: &Arc<Shared>, start_url: &str) -> Vec<HistEntry> {
         } else if extra == "/sitemap.xml" && ok && body.contains("<urlset") {
             for loc in sitemap_locs(&body) {
                 if let Some(p) = loc.strip_prefix(&origin) {
-                    push(if p.is_empty() { "/".into() } else { p.to_string() }, 1, &mut seen, &mut queue);
+                    push(
+                        if p.is_empty() {
+                            "/".into()
+                        } else {
+                            p.to_string()
+                        },
+                        1,
+                        &mut seen,
+                        &mut queue,
+                    );
                 }
             }
             seen.insert(location_key(extra));
@@ -202,10 +297,18 @@ pub fn crawl(shared: &Arc<Shared>, start_url: &str) -> Vec<HistEntry> {
         if shared.scan.stop.load(Ordering::SeqCst) || limits.exhausted(started, out.len()) {
             break;
         }
-        let e = fetch(shared, https, &host, port, authority, &path, shared.next_id.fetch_add(1, Ordering::SeqCst));
+        let e = fetch(
+            shared,
+            https,
+            &host,
+            port,
+            authority,
+            &path,
+            shared.next_id.fetch_add(1, Ordering::SeqCst),
+        );
         if depth < limits.max_depth {
             if let Some(resp) = &e.resp_raw {
-                for link in crate::scan::crawl_links(&origin, &path, resp) {
+                for link in crawl_links(&origin, &path, resp) {
                     push(link, depth + 1, &mut seen, &mut queue);
                 }
             }
@@ -224,14 +327,30 @@ mod tests {
     #[test]
     fn same_origin_is_exact() {
         let o = "http://example.com";
-        for ok in ["http://example.com", "http://example.com/", "http://example.com/a?b#c", "HTTP://EXAMPLE.COM/x", "http://example.com?x"] {
+        for ok in [
+            "http://example.com",
+            "http://example.com/",
+            "http://example.com/a?b#c",
+            "HTTP://EXAMPLE.COM/x",
+            "http://example.com?x",
+        ] {
             assert!(same_origin(ok, o), "{ok}");
         }
-        for bad in ["http://example.com.evil.tld/x", "http://example.com:8080/", "https://example.com/", "http://example.community/", "//example.com/", "example.com/"] {
+        for bad in [
+            "http://example.com.evil.tld/x",
+            "http://example.com:8080/",
+            "https://example.com/",
+            "http://example.community/",
+            "//example.com/",
+            "example.com/",
+        ] {
             assert!(!same_origin(bad, o), "{bad}");
         }
         assert!(!same_origin("http://127.0.0.1:8080/", "http://127.0.0.1"));
-        assert!(same_origin("http://127.0.0.1:18782/a", "http://127.0.0.1:18782"));
+        assert!(same_origin(
+            "http://127.0.0.1:18782/a",
+            "http://127.0.0.1:18782"
+        ));
     }
 
     /// The crawl follows the configured limits: depth 1 stops after the
@@ -241,13 +360,17 @@ mod tests {
         use std::io::{Read, Write};
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
-        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let seen = Arc::new(crate::sync::Mutex::new(Vec::new()));
         let s2 = seen.clone();
         std::thread::spawn(move || {
             for mut s in listener.incoming().flatten() {
                 let mut buf = [0u8; 2048];
                 let n = s.read(&mut buf).unwrap_or(0);
-                let line = String::from_utf8_lossy(&buf[..n]).lines().next().unwrap_or("").to_string();
+                let line = String::from_utf8_lossy(&buf[..n])
+                    .lines()
+                    .next()
+                    .unwrap_or("")
+                    .to_string();
                 let path = line.split_whitespace().nth(1).unwrap_or("/").to_string();
                 s2.lock().unwrap().push(path.clone());
                 let body = match path.as_str() {
@@ -260,19 +383,40 @@ mod tests {
         });
         let shared = Shared::new();
         {
-            let mut c = shared.scan_config.lock().unwrap();
-            c.crawl = crate::scan_config::CrawlLimits { max_depth: 1, max_locations: 100, robots: false, sitemap: false, ..Default::default() };
+            let cfg_slot = crate::scan_config::shared_config(&shared);
+            let mut c = cfg_slot.lock().unwrap();
+            c.crawl = crate::scan_config::CrawlLimits {
+                max_depth: 1,
+                max_locations: 100,
+                robots: false,
+                sitemap: false,
+                ..Default::default()
+            };
         }
         let _ = crawl(&shared, &format!("http://127.0.0.1:{port}/"));
         let paths = seen.lock().unwrap().clone();
-        assert!(paths.contains(&"/".to_string()) && paths.contains(&"/a".to_string()), "{paths:?}");
-        assert!(!paths.contains(&"/b".to_string()), "depth 1 stops at /a's links: {paths:?}");
-        assert!(!paths.iter().any(|p| p == "/robots.txt" || p == "/sitemap.xml"), "{paths:?}");
+        assert!(
+            paths.contains(&"/".to_string()) && paths.contains(&"/a".to_string()),
+            "{paths:?}"
+        );
+        assert!(
+            !paths.contains(&"/b".to_string()),
+            "depth 1 stops at /a's links: {paths:?}"
+        );
+        assert!(
+            !paths
+                .iter()
+                .any(|p| p == "/robots.txt" || p == "/sitemap.xml"),
+            "{paths:?}"
+        );
     }
 
     #[test]
     fn robots_and_sitemap_parsing() {
-        assert_eq!(robots_paths("User-agent: *\nDisallow: /ftp\nAllow: /pub/*.css\n# x\nDisallow:"), vec!["/ftp", "/pub/"]);
+        assert_eq!(
+            robots_paths("User-agent: *\nDisallow: /ftp\nAllow: /pub/*.css\n# x\nDisallow:"),
+            vec!["/ftp", "/pub/"]
+        );
         assert_eq!(sitemap_locs("<urlset><url><loc> http://a/x </loc></url><url><loc>http://a/y</loc></url></urlset>"), vec!["http://a/x", "http://a/y"]);
     }
 
@@ -293,7 +437,9 @@ mod tests {
 /// Locate a Chromium/Chrome binary (the real one, not a wrapper script that
 /// forces a shared profile).
 pub fn chromium_binary() -> Option<String> {
-    crate::paths::chromium().ok().map(|p| p.display().to_string())
+    crate::paths::chromium()
+        .ok()
+        .map(|p| p.display().to_string())
 }
 
 /// A request the page made, as reported by DevTools.
@@ -324,8 +470,17 @@ pub fn browser_response(head: &str, body: &[u8]) -> Vec<u8> {
     let mut lines = head.trim_end_matches("\r\n").split("\r\n");
     let mut out = format!("{}\r\n", lines.next().unwrap_or("HTTP/1.1 200 OK"));
     for l in lines {
-        let n = l.split(':').next().unwrap_or("").trim().to_ascii_lowercase();
-        if matches!(n.as_str(), "content-encoding" | "transfer-encoding" | "content-length") || l.is_empty() {
+        let n = l
+            .split(':')
+            .next()
+            .unwrap_or("")
+            .trim()
+            .to_ascii_lowercase();
+        if matches!(
+            n.as_str(),
+            "content-encoding" | "transfer-encoding" | "content-length"
+        ) || l.is_empty()
+        {
             continue;
         }
         out.push_str(l);
@@ -342,9 +497,14 @@ impl Cdp {
         let rest = ws_url.strip_prefix("ws://").ok_or("not a ws:// url")?;
         let authority = rest.split('/').next().unwrap_or("");
         let tcp = std::net::TcpStream::connect(authority).map_err(|e| e.to_string())?;
-        tcp.set_read_timeout(Some(std::time::Duration::from_millis(200))).ok();
+        tcp.set_read_timeout(Some(std::time::Duration::from_millis(200)))
+            .ok();
         let (ws, _) = tungstenite::client(ws_url, tcp).map_err(|e| e.to_string())?;
-        Ok(Cdp { ws, next: 1, seen: Vec::new() })
+        Ok(Cdp {
+            ws,
+            next: 1,
+            seen: Vec::new(),
+        })
     }
 
     fn handle_event(&mut self, v: &serde_json::Value) {
@@ -352,7 +512,11 @@ impl Cdp {
             let r = &v["params"]["request"];
             let headers = r["headers"]
                 .as_object()
-                .map(|m| m.iter().map(|(k, x)| (k.clone(), x.as_str().unwrap_or("").to_string())).collect())
+                .map(|m| {
+                    m.iter()
+                        .map(|(k, x)| (k.clone(), x.as_str().unwrap_or("").to_string()))
+                        .collect()
+                })
                 .unwrap_or_default();
             self.seen.push(SeenRequest {
                 method: r["method"].as_str().unwrap_or("GET").to_string(),
@@ -366,7 +530,10 @@ impl Cdp {
             });
         } else if v["method"] == "Network.responseReceivedExtraInfo" {
             let id = v["params"]["requestId"].as_str().unwrap_or("");
-            if let (Some(t), Some(r)) = (v["params"]["headersText"].as_str(), self.seen.iter_mut().rev().find(|r| r.id == id)) {
+            if let (Some(t), Some(r)) = (
+                v["params"]["headersText"].as_str(),
+                self.seen.iter_mut().rev().find(|r| r.id == id),
+            ) {
                 r.resp_head = Some(t.to_string());
             }
         } else if v["method"] == "Network.loadingFinished" {
@@ -384,20 +551,31 @@ impl Cdp {
         let ids: Vec<String> = self
             .seen
             .iter()
-            .filter(|r| r.finished && r.resp_body.is_none() && r.resp_head.is_some() && same_origin(&r.url, origin))
+            .filter(|r| {
+                r.finished
+                    && r.resp_body.is_none()
+                    && r.resp_head.is_some()
+                    && same_origin(&r.url, origin)
+            })
             .filter(|r| self.seen.iter().filter(|o| o.id == r.id).count() == 1)
             .map(|r| r.id.clone())
             .collect();
         for id in ids {
-            let body = self.call("Network.getResponseBody", serde_json::json!({"requestId": id})).ok().and_then(|b| {
-                let text = b["body"].as_str()?.to_string();
-                if b["base64Encoded"].as_bool().unwrap_or(false) {
-                    use base64::Engine;
-                    base64::engine::general_purpose::STANDARD.decode(text).ok()
-                } else {
-                    Some(text.into_bytes())
-                }
-            });
+            let body = self
+                .call(
+                    "Network.getResponseBody",
+                    serde_json::json!({"requestId": id}),
+                )
+                .ok()
+                .and_then(|b| {
+                    let text = b["body"].as_str()?.to_string();
+                    if b["base64Encoded"].as_bool().unwrap_or(false) {
+                        use base64::Engine;
+                        base64::engine::general_purpose::STANDARD.decode(text).ok()
+                    } else {
+                        Some(text.into_bytes())
+                    }
+                });
             if let Some(r) = self.seen.iter_mut().find(|r| r.id == id) {
                 match body {
                     Some(b) => r.resp_body = Some(b),
@@ -415,11 +593,17 @@ impl Cdp {
         }
     }
 
-    fn call(&mut self, method: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
+    fn call(
+        &mut self,
+        method: &str,
+        params: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
         let id = self.next;
         self.next += 1;
         let msg = serde_json::json!({"id": id, "method": method, "params": params}).to_string();
-        self.ws.send(tungstenite::Message::text(msg)).map_err(|e| e.to_string())?;
+        self.ws
+            .send(tungstenite::Message::text(msg))
+            .map_err(|e| e.to_string())?;
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
         while std::time::Instant::now() < deadline {
             if let Some(v) = self.read_one() {
@@ -501,7 +685,12 @@ pub struct FormSpec {
 fn rand_letters(n: usize) -> String {
     use rand::Rng;
     let mut g = rand::thread_rng();
-    (0..n).map(|_| { let c = g.gen_range(0..52u8); (if c < 26 { b'a' + c } else { b'A' + c - 26 }) as char }).collect()
+    (0..n)
+        .map(|_| {
+            let c = g.gen_range(0..52u8);
+            (if c < 26 { b'a' + c } else { b'A' + c - 26 }) as char
+        })
+        .collect()
 }
 
 /// The value Burp's crawler fills into an empty control (observed on build
@@ -522,7 +711,17 @@ fn fill_value(kind: &str, origin: &str) -> String {
             let l = |g: &mut rand::rngs::ThreadRng| (b'a' + g.gen_range(0..26)) as char;
             let u = |g: &mut rand::rngs::ThreadRng| (b'A' + g.gen_range(0..26)) as char;
             let d = |g: &mut rand::rngs::ThreadRng| (b'0' + g.gen_range(0..10)) as char;
-            format!("{}{}{}!{}{}{}!{}{}", l(&mut g), d(&mut g), u(&mut g), l(&mut g), d(&mut g), l(&mut g), u(&mut g), d(&mut g))
+            format!(
+                "{}{}{}!{}{}{}!{}{}",
+                l(&mut g),
+                d(&mut g),
+                u(&mut g),
+                l(&mut g),
+                d(&mut g),
+                l(&mut g),
+                u(&mut g),
+                d(&mut g)
+            )
         }
         _ => rand_letters(8),
     }
@@ -622,8 +821,13 @@ const MAX_CLICKS_PER_PAGE: usize = 12;
 fn http_get_local(port: u16, path: &str) -> Option<String> {
     use std::io::{Read, Write};
     let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).ok()?;
-    s.set_read_timeout(Some(std::time::Duration::from_secs(5))).ok();
-    write!(s, "GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n").ok()?;
+    s.set_read_timeout(Some(std::time::Duration::from_secs(5)))
+        .ok();
+    write!(
+        s,
+        "GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n"
+    )
+    .ok()?;
     // DevTools keeps the connection open: read up to Content-Length.
     let mut buf = Vec::new();
     let mut chunk = [0u8; 8192];
@@ -634,7 +838,11 @@ fn http_get_local(port: u16, path: &str) -> Option<String> {
         }
         let t = String::from_utf8_lossy(&buf);
         if let Some((head, body)) = t.split_once("\r\n\r\n") {
-            let cl = head.lines().find_map(|l| l.to_ascii_lowercase().strip_prefix("content-length:").and_then(|v| v.trim().parse::<usize>().ok()));
+            let cl = head.lines().find_map(|l| {
+                l.to_ascii_lowercase()
+                    .strip_prefix("content-length:")
+                    .and_then(|v| v.trim().parse::<usize>().ok())
+            });
             if cl.map(|n| body.len() >= n).unwrap_or(false) {
                 break;
             }
@@ -646,7 +854,12 @@ fn http_get_local(port: u16, path: &str) -> Option<String> {
 
 /// Evaluate a script that returns a JSON string and decode it.
 fn eval_json<T: serde::de::DeserializeOwned>(cdp: &mut Cdp, js: &str) -> Option<T> {
-    let v = cdp.call("Runtime.evaluate", serde_json::json!({"expression": js, "returnByValue": true})).ok()?;
+    let v = cdp
+        .call(
+            "Runtime.evaluate",
+            serde_json::json!({"expression": js, "returnByValue": true}),
+        )
+        .ok()?;
     serde_json::from_str(v.pointer("/result/value")?.as_str()?).ok()
 }
 
@@ -656,15 +869,31 @@ fn eval_json<T: serde::de::DeserializeOwned>(cdp: &mut Cdp, js: &str) -> Option<
 /// (--host-resolver-rules) and its background services are off, so nothing
 /// leaves for other hosts.
 pub fn browser_crawl(shared: &Arc<Shared>, start_url: &str) -> Result<Vec<SeenRequest>, String> {
-    let bin = crate::paths::chromium().map_err(|m| m.to_string())?.display().to_string();
-    let limits = shared.scan_config.lock().unwrap().crawl.clone();
+    let bin = crate::paths::chromium()
+        .map_err(|m| m.to_string())?
+        .display()
+        .to_string();
+    let limits = crate::scan_config::shared_config(shared)
+        .lock()
+        .unwrap()
+        .crawl
+        .clone();
     let started = std::time::Instant::now();
     let (scheme, rest) = start_url.split_once("://").unwrap_or(("http", start_url));
     let authority = rest.split('/').next().unwrap_or("").to_string();
     let origin = format!("{scheme}://{authority}");
-    let target_host = authority.rsplit_once(':').map(|x| x.0).unwrap_or(&authority).to_string();
-    let dport = std::net::TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?.local_addr().map_err(|e| e.to_string())?.port();
-    let profile = std::env::temp_dir().join(format!("webprobe-crawl-{}-{dport}", std::process::id()));
+    let target_host = authority
+        .rsplit_once(':')
+        .map(|x| x.0)
+        .unwrap_or(&authority)
+        .to_string();
+    let dport = std::net::TcpListener::bind("127.0.0.1:0")
+        .map_err(|e| e.to_string())?
+        .local_addr()
+        .map_err(|e| e.to_string())?
+        .port();
+    let profile =
+        std::env::temp_dir().join(format!("webprobe-crawl-{}-{dport}", std::process::id()));
     let mut cmd = std::process::Command::new(&bin);
     crate::util::own_process_group(&mut cmd);
     let mut child = cmd
@@ -698,7 +927,10 @@ pub fn browser_crawl(shared: &Arc<Shared>, start_url: &str) -> Result<Vec<SeenRe
         for _ in 0..75 {
             if let Some(list) = http_get_local(dport, "/json/list") {
                 let v: serde_json::Value = serde_json::from_str(&list).unwrap_or_default();
-                ws_url = v.as_array().and_then(|a| a.iter().find(|t| t["type"] == "page")).and_then(|t| t["webSocketDebuggerUrl"].as_str().map(str::to_string));
+                ws_url = v
+                    .as_array()
+                    .and_then(|a| a.iter().find(|t| t["type"] == "page"))
+                    .and_then(|t| t["webSocketDebuggerUrl"].as_str().map(str::to_string));
                 if ws_url.is_some() {
                     break;
                 }
@@ -716,10 +948,16 @@ pub fn browser_crawl(shared: &Arc<Shared>, start_url: &str) -> Result<Vec<SeenRe
         let mut form_keys: BTreeSet<String> = BTreeSet::new();
         let mut clicked: BTreeSet<String> = BTreeSet::new();
         while let Some((url, depth)) = queue.pop_front() {
-            if shared.scan.stop.load(Ordering::SeqCst) || pages >= limits.max_locations || limits.exhausted(started, pages) {
+            if shared.scan.stop.load(Ordering::SeqCst)
+                || pages >= limits.max_locations
+                || limits.exhausted(started, pages)
+            {
                 break;
             }
-            if cdp.call("Page.navigate", serde_json::json!({"url": url})).is_err() {
+            if cdp
+                .call("Page.navigate", serde_json::json!({"url": url}))
+                .is_err()
+            {
                 continue;
             }
             cdp.pump(2500);
@@ -728,35 +966,64 @@ pub fn browser_crawl(shared: &Arc<Shared>, start_url: &str) -> Result<Vec<SeenRe
             if depth >= limits.max_depth {
                 continue;
             }
-            let r = cdp.call("Runtime.evaluate", serde_json::json!({"expression": LINKS_JS, "returnByValue": true}));
+            let r = cdp.call(
+                "Runtime.evaluate",
+                serde_json::json!({"expression": LINKS_JS, "returnByValue": true}),
+            );
             let links: Vec<String> = r
                 .ok()
-                .and_then(|v| v.pointer("/result/value").and_then(|x| x.as_str()).map(str::to_string))
+                .and_then(|v| {
+                    v.pointer("/result/value")
+                        .and_then(|x| x.as_str())
+                        .map(str::to_string)
+                })
                 .and_then(|s| serde_json::from_str(&s).ok())
                 .unwrap_or_default();
             for l in links {
                 let l = l.trim_end_matches('#').to_string();
-                if same_origin(&l, &origin) && seen.len() < limits.max_locations && seen.insert(l.clone()) {
+                if same_origin(&l, &origin)
+                    && seen.len() < limits.max_locations
+                    && seen.insert(l.clone())
+                {
                     queue.push_back((l, depth + 1));
                 }
             }
             // Forms: submitted like Burp's crawler (filled and as-is), once per
             // action + method + field set.
-            let r = cdp.call("Runtime.evaluate", serde_json::json!({"expression": FORMS_JS, "returnByValue": true}));
+            let r = cdp.call(
+                "Runtime.evaluate",
+                serde_json::json!({"expression": FORMS_JS, "returnByValue": true}),
+            );
             let specs: Vec<FormSpec> = r
                 .ok()
-                .and_then(|v| v.pointer("/result/value").and_then(|x| x.as_str()).map(str::to_string))
+                .and_then(|v| {
+                    v.pointer("/result/value")
+                        .and_then(|x| x.as_str())
+                        .map(str::to_string)
+                })
                 .and_then(|s| serde_json::from_str(&s).ok())
                 .unwrap_or_default();
             for f in specs {
-                let key = format!("{} {} {}", f.method, f.action, f.fields.iter().map(|x| x.name.as_str()).collect::<Vec<_>>().join(","));
+                let key = format!(
+                    "{} {} {}",
+                    f.method,
+                    f.action,
+                    f.fields
+                        .iter()
+                        .map(|x| x.name.as_str())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                );
                 if !same_origin(&f.action, &origin) || !form_keys.insert(key) {
                     continue;
                 }
                 // Burp's crawler fills and submits in the browser, twice
                 // (filled, then as-is), each on a fresh load of the page.
                 for filled in [true, false] {
-                    if cdp.call("Page.navigate", serde_json::json!({"url": url})).is_err() {
+                    if cdp
+                        .call("Page.navigate", serde_json::json!({"url": url}))
+                        .is_err()
+                    {
                         continue;
                     }
                     cdp.pump(1500);
@@ -780,7 +1047,10 @@ pub fn browser_crawl(shared: &Arc<Shared>, start_url: &str) -> Result<Vec<SeenRe
                     continue;
                 }
                 done += 1;
-                if cdp.call("Page.navigate", serde_json::json!({"url": url})).is_err() {
+                if cdp
+                    .call("Page.navigate", serde_json::json!({"url": url}))
+                    .is_err()
+                {
                     continue;
                 }
                 cdp.pump(1500);
@@ -790,27 +1060,49 @@ pub fn browser_crawl(shared: &Arc<Shared>, start_url: &str) -> Result<Vec<SeenRe
                 if now.get(idx) != Some(sig) {
                     continue;
                 }
-                let _ = cdp.call("Runtime.evaluate", serde_json::json!({"expression": format!("window.__wpClick[{idx}].click()")}));
+                let _ = cdp.call(
+                    "Runtime.evaluate",
+                    serde_json::json!({"expression": format!("window.__wpClick[{idx}].click()")}),
+                );
                 cdp.pump(1500);
                 cdp.collect_bodies(&origin);
                 let here: Option<String> = cdp
-                    .call("Runtime.evaluate", serde_json::json!({"expression": "location.href", "returnByValue": true}))
+                    .call(
+                        "Runtime.evaluate",
+                        serde_json::json!({"expression": "location.href", "returnByValue": true}),
+                    )
                     .ok()
-                    .and_then(|v| v.pointer("/result/value").and_then(|x| x.as_str()).map(str::to_string));
+                    .and_then(|v| {
+                        v.pointer("/result/value")
+                            .and_then(|x| x.as_str())
+                            .map(str::to_string)
+                    });
                 let revealed: Vec<String> = eval_json(&mut cdp, LINKS_JS).unwrap_or_default();
                 for l in here.into_iter().chain(revealed) {
                     let l = l.trim_end_matches('#').to_string();
-                    if same_origin(&l, &origin) && seen.len() < limits.max_locations && seen.insert(l.clone()) {
+                    if same_origin(&l, &origin)
+                        && seen.len() < limits.max_locations
+                        && seen.insert(l.clone())
+                    {
                         queue.push_back((l, depth + 1));
                     }
                 }
             }
         }
-        let out: Vec<SeenRequest> = cdp.seen.iter().filter(|r| same_origin(&r.url, &origin)).cloned().collect();
+        let out: Vec<SeenRequest> = cdp
+            .seen
+            .iter()
+            .filter(|r| same_origin(&r.url, &origin))
+            .cloned()
+            .collect();
         Ok(out)
     })();
     // The whole browser tree, not just its main process (see kill_process_tree).
-    crate::util::kill_process_tree(child.id(), Some(&profile.display().to_string()), std::time::Duration::from_secs(2));
+    crate::util::kill_process_tree(
+        child.id(),
+        Some(&profile.display().to_string()),
+        std::time::Duration::from_secs(2),
+    );
     let _ = child.wait();
     let _ = std::fs::remove_dir_all(&profile);
     result
@@ -820,7 +1112,13 @@ pub fn browser_crawl(shared: &Arc<Shared>, start_url: &str) -> Result<Vec<SeenRe
 pub fn origin_of(url: &str) -> Option<String> {
     let (scheme, rest) = url.split_once("://")?;
     let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
-    (end > 0).then(|| format!("{}://{}", scheme.to_ascii_lowercase(), rest[..end].to_ascii_lowercase()))
+    (end > 0).then(|| {
+        format!(
+            "{}://{}",
+            scheme.to_ascii_lowercase(),
+            rest[..end].to_ascii_lowercase()
+        )
+    })
 }
 
 /// True when `url` is on exactly `origin` (`scheme://host[:port]`). A plain
@@ -846,7 +1144,11 @@ pub fn replay_seen(shared: &Arc<Shared>, r: &SeenRequest) -> HistEntry {
     let mut raw = format!("{} {path} HTTP/1.1\r\nHost: {authority}\r\n", r.method);
     for (k, v) in &r.headers {
         let kl = k.to_ascii_lowercase();
-        if matches!(kl.as_str(), "host" | "connection" | "content-length" | "accept-encoding") || kl.starts_with(':') {
+        if matches!(
+            kl.as_str(),
+            "host" | "connection" | "content-length" | "accept-encoding"
+        ) || kl.starts_with(':')
+        {
             continue;
         }
         raw.push_str(&format!("{k}: {v}\r\n"));
@@ -858,11 +1160,25 @@ pub fn replay_seen(shared: &Arc<Shared>, r: &SeenRequest) -> HistEntry {
     raw.push_str("Connection: close\r\n\r\n");
     raw.push_str(&body);
     let up = match (&r.resp_head, &r.resp_body) {
-        (Some(h), Some(b)) => net::Upstream { resp: Some(browser_response(h, b)), error: None },
+        (Some(h), Some(b)) => net::Upstream {
+            resp: Some(browser_response(h, b)),
+            error: None,
+        },
         _ if https => net::send_tls_raw(shared, &host, port, raw.as_bytes()),
         _ => net::send_raw(shared, &host, port, raw.as_bytes()),
     };
-    let status = up.resp.as_ref().map(|x| util::parse_http(x).first.split_whitespace().nth(1).unwrap_or("").to_string()).unwrap_or_default();
+    let status = up
+        .resp
+        .as_ref()
+        .map(|x| {
+            util::parse_http(x)
+                .first
+                .split_whitespace()
+                .nth(1)
+                .unwrap_or("")
+                .to_string()
+        })
+        .unwrap_or_default();
     let mut e = HistEntry {
         id: shared.next_id.fetch_add(1, Ordering::SeqCst),
         ts: util::now_secs(),
@@ -891,7 +1207,12 @@ mod browser_resp_tests {
     use super::*;
 
     fn field(name: &str, kind: &str, value: &str) -> FormField {
-        FormField { name: name.into(), kind: kind.into(), value: value.into(), opts: vec![] }
+        FormField {
+            name: name.into(),
+            kind: kind.into(),
+            value: value.into(),
+            opts: vec![],
+        }
     }
 
     #[test]
@@ -937,20 +1258,47 @@ mod browser_resp_tests {
         let mk = |path: &str, ext: &str, ct: &str, body: &str| HistEntry {
             path: path.into(),
             extension: ext.into(),
-            resp_raw: Some(format!("HTTP/1.1 200 OK\r\nContent-Type: {ct}\r\n\r\n{body}").into_bytes().into()),
+            resp_raw: Some(
+                format!("HTTP/1.1 200 OK\r\nContent-Type: {ct}\r\n\r\n{body}")
+                    .into_bytes()
+                    .into(),
+            ),
             ..Default::default()
         };
         let items = vec![
-            mk("/main.js", "js", "application/javascript", "logoSrc=`assets/public/images/JuiceShop_Logo.png`"),
-            mk("/styles.css", "css", "text/css", ".fi-cn{background-image:url(\"./media/cn-P7M3XOME.svg\")}"),
+            mk(
+                "/main.js",
+                "js",
+                "application/javascript",
+                "logoSrc=`assets/public/images/JuiceShop_Logo.png`",
+            ),
+            mk(
+                "/styles.css",
+                "css",
+                "text/css",
+                ".fi-cn{background-image:url(\"./media/cn-P7M3XOME.svg\")}",
+            ),
         ];
         let corpus = static_reference_corpus(&items);
-        let logo = mk("/assets/public/images/JuiceShop_Logo.png", "png", "image/png", "");
+        let logo = mk(
+            "/assets/public/images/JuiceShop_Logo.png",
+            "png",
+            "image/png",
+            "",
+        );
         let flag = mk("/media/cn-P7M3XOME.svg", "svg", "image/svg+xml", "");
-        let product = mk("/assets/public/images/products/apple_juice-1x.avif", "avif", "image/avif", "");
+        let product = mk(
+            "/assets/public/images/products/apple_juice-1x.avif",
+            "avif",
+            "image/avif",
+            "",
+        );
         assert!(!auditable(&logo) && referenced_static(&logo, &corpus));
         assert!(referenced_static(&flag, &corpus));
-        assert!(!referenced_static(&product, &corpus), "API-data images are not audit items");
+        assert!(
+            !referenced_static(&product, &corpus),
+            "API-data images are not audit items"
+        );
     }
 
     #[test]
@@ -973,14 +1321,45 @@ mod live {
         let target = std::env::var("WB_JUICE").unwrap_or_else(|_| "127.0.0.1:3001".into());
         let shared = net::Shared::new();
         let seen = browser_crawl(&shared, &format!("http://{target}/")).unwrap();
-        for r in seen.iter().filter(|r| r.url.contains("main.js") || r.url.contains("styles.css") || r.url.contains("Logo") || r.url.contains("socket.io") || r.url.contains("woff")) {
-            eprintln!("SEEN {} {} id={} head={} body={:?} finished={}", r.method, r.url, r.id, r.resp_head.is_some(), r.resp_body.as_ref().map(|b| b.len()), r.finished);
+        for r in seen.iter().filter(|r| {
+            r.url.contains("main.js")
+                || r.url.contains("styles.css")
+                || r.url.contains("Logo")
+                || r.url.contains("socket.io")
+                || r.url.contains("woff")
+        }) {
+            eprintln!(
+                "SEEN {} {} id={} head={} body={:?} finished={}",
+                r.method,
+                r.url,
+                r.id,
+                r.resp_head.is_some(),
+                r.resp_body.as_ref().map(|b| b.len()),
+                r.finished
+            );
         }
-        let items: Vec<HistEntry> = seen.iter().filter(|r| r.url.contains("main.js") || r.url.contains("styles.css") || r.url.contains("Logo") || r.url.contains("woff")).map(|r| replay_seen(&shared, r)).collect();
+        let items: Vec<HistEntry> = seen
+            .iter()
+            .filter(|r| {
+                r.url.contains("main.js")
+                    || r.url.contains("styles.css")
+                    || r.url.contains("Logo")
+                    || r.url.contains("woff")
+            })
+            .map(|r| replay_seen(&shared, r))
+            .collect();
         let corpus = static_reference_corpus(&items);
         eprintln!("CORPUS {} bytes", corpus.len());
         for e in &items {
-            eprintln!("ITEM {} ext={} mime={} len={} auditable={} referenced={}", e.path, e.extension, crate::mime::burp_mime_of(e), e.resp_len, auditable(e), referenced_static(e, &corpus));
+            eprintln!(
+                "ITEM {} ext={} mime={} len={} auditable={} referenced={}",
+                e.path,
+                e.extension,
+                crate::net::burp_mime_of(e),
+                e.resp_len,
+                auditable(e),
+                referenced_static(e, &corpus)
+            );
         }
     }
 
@@ -989,11 +1368,181 @@ mod live {
     fn live_browser_crawl_debug() {
         let shared = net::Shared::new();
         let r = browser_crawl(&shared, "http://127.0.0.1:3001/");
-        eprintln!("RESULT {:?}", r.as_ref().map(|v| v.len()).map_err(|e| e.clone()));
+        eprintln!(
+            "RESULT {:?}",
+            r.as_ref().map(|v| v.len()).map_err(|e| e.clone())
+        );
         if let Ok(v) = &r {
             for u in v {
-                eprintln!("SEEN {} {} body={:?}", u.method, u.url, u.body.as_deref().map(|b| b.len()));
+                eprintln!(
+                    "SEEN {} {} body={:?}",
+                    u.method,
+                    u.url,
+                    u.body.as_deref().map(|b| b.len())
+                );
             }
         }
     }
+}
+
+// ------------------------------------------------------------------ links
+
+/// Redirect targets in a response, as Burp's redirect sinks see them:
+/// burp.Zxzj (3xx `Location`, or a `Refresh` header's `url=`), burp.Zgi5
+/// (`<meta http-equiv="refresh" content="...url=...">`). Sink literals were
+/// decoded with Burp's own string decoder.
+pub fn redirect_targets(resp: &[u8]) -> Vec<String> {
+    let p = crate::util::parse_http(resp);
+    let mut out = Vec::new();
+    let status: u16 = p.status.trim().parse().unwrap_or(0);
+    if (300..400).contains(&status) {
+        if let Some(l) = crate::util::get_header(&p.headers, "location") {
+            out.push(l.trim().to_string());
+        }
+    }
+    let after_url = |s: &str| -> Option<String> {
+        let low = s.to_ascii_lowercase();
+        low.find("url=").map(|i| {
+            s[i + 4..]
+                .trim()
+                .trim_matches(|c| c == '"' || c == '\'')
+                .to_string()
+        })
+    };
+    if let Some(r) = crate::util::get_header(&p.headers, "refresh").and_then(|r| after_url(&r)) {
+        out.push(r);
+    }
+    let body = String::from_utf8_lossy(&resp[p.head_len.min(resp.len())..]).into_owned();
+    let low = body.to_ascii_lowercase();
+    let mut i = 0;
+    while let Some(m) = low[i..].find("<meta").map(|x| x + i) {
+        let end = low[m..].find('>').map(|x| x + m).unwrap_or(low.len());
+        let tag = &body[m..end];
+        let tl = &low[m..end];
+        if tl.contains("http-equiv") && tl.contains("refresh") {
+            if let Some(ci) = tl.find("content") {
+                if let Some(u) = after_url(&tag[ci..]) {
+                    out.push(u.trim_end_matches(['"', '\'', '/', ' ']).to_string());
+                }
+            }
+        }
+        i = end.max(m + 5);
+    }
+    out
+}
+
+/// Link-attribute targets in a response: href/src/action/formaction values
+/// plus redirect targets (burp.Zpyp injects a URL and checks it becomes a
+/// link/redirect target the page points at).
+pub fn link_targets(resp: &[u8]) -> Vec<String> {
+    let mut out = redirect_targets(resp);
+    let p = crate::util::parse_http(resp);
+    let body = String::from_utf8_lossy(&resp[p.head_len.min(resp.len())..]).into_owned();
+    let low = body.to_ascii_lowercase();
+    for attr in ["href=", "src=", "action=", "formaction="] {
+        let mut i = 0;
+        while let Some(a) = low[i..].find(attr).map(|x| x + i) {
+            let vs = a + attr.len();
+            let rest = &body[vs.min(body.len())..];
+            let val = if rest.starts_with('"') || rest.starts_with('\'') {
+                let q = rest.as_bytes()[0] as char;
+                rest[1..].split(q).next().unwrap_or("").to_string()
+            } else {
+                rest.split([' ', '>', '\t', '\n'])
+                    .next()
+                    .unwrap_or("")
+                    .to_string()
+            };
+            if !val.is_empty() {
+                out.push(val);
+            }
+            i = vs;
+        }
+    }
+    out
+}
+
+/// Live passive crawl: same-origin link paths found in a response, resolved
+/// against the request path (query kept, fragment dropped).
+pub fn crawl_links(origin: &str, req_path: &str, resp: &[u8]) -> Vec<String> {
+    let base = req_path.split('?').next().unwrap_or("/");
+    let base = match base.split_once("://") {
+        Some((_, r)) => r
+            .find('/')
+            .map(|i| r[i..].to_string())
+            .unwrap_or_else(|| "/".into()),
+        None => base.to_string(),
+    };
+    let dir = &base[..=base.rfind('/').unwrap_or(0)];
+    let mut out = Vec::new();
+    // Links come from HTML documents (and redirects), as a browser sees them:
+    // href/src strings inside script bundles are not navigations.
+    let ct = crate::util::get_header(&crate::util::parse_http(resp).headers, "Content-Type")
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let targets = if ct.contains("html") {
+        link_targets(resp)
+    } else {
+        redirect_targets(resp)
+    };
+    for l in targets {
+        let l = l.split('#').next().unwrap_or("").trim().to_string();
+        if l.is_empty()
+            || l.starts_with("javascript:")
+            || l.starts_with("mailto:")
+            || l.starts_with("data:")
+        {
+            continue;
+        }
+        if l.chars()
+            .any(|c| c.is_whitespace() || "`{}()<>;$\"'\\".contains(c))
+        {
+            continue;
+        }
+        let path = if let Some(rest) = l.strip_prefix(origin) {
+            if rest.is_empty() {
+                "/".to_string()
+            } else if rest.starts_with('/') {
+                rest.to_string()
+            } else {
+                continue;
+            }
+        } else if l.contains("://") || l.starts_with("//") {
+            continue;
+        } else if l.starts_with('/') {
+            l
+        } else {
+            format!("{dir}{l}")
+        };
+        // Collapse ./ and ../ segments.
+        let (p, q) = match path.split_once('?') {
+            Some((p, q)) => (p.to_string(), Some(q.to_string())),
+            None => (path.clone(), None),
+        };
+        let mut segs: Vec<&str> = Vec::new();
+        let ends_dir = p.ends_with('/') || p.ends_with("/.") || p.ends_with("/..");
+        for seg in p.split('/') {
+            match seg {
+                "." => {}
+                ".." => {
+                    segs.pop();
+                }
+                s => segs.push(s),
+            }
+        }
+        let mut joined = segs.join("/");
+        if ends_dir && !joined.ends_with('/') {
+            joined.push('/');
+        }
+        if !joined.starts_with('/') {
+            joined.insert(0, '/');
+        }
+        if let Some(q) = q {
+            joined = format!("{joined}?{q}");
+        }
+        if !out.contains(&joined) {
+            out.push(joined);
+        }
+    }
+    out
 }

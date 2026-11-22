@@ -61,13 +61,24 @@ pub fn url_of(e: &HistEntry) -> String {
 /// Items in the branch `prefix` of `origin` (an empty prefix or "/" = the
 /// whole host).
 pub fn in_branch<'a>(entries: &'a [HistEntry], origin: &str, prefix: &str) -> Vec<&'a HistEntry> {
-    entries.iter().filter(|e| is_in_branch(e, origin, prefix)).collect()
+    entries
+        .iter()
+        .filter(|e| is_in_branch(e, origin, prefix))
+        .collect()
 }
 
 /// "Copy URLs in this host / branch": every requested item plus every
 /// unrequested link the passive crawl found, deduplicated and sorted.
-pub fn urls_in_branch(entries: &[HistEntry], links: &[(String, String)], origin: &str, prefix: &str) -> Vec<String> {
-    let mut set: BTreeSet<String> = in_branch(entries, origin, prefix).into_iter().map(url_of).collect();
+pub fn urls_in_branch(
+    entries: &[HistEntry],
+    links: &[(String, String)],
+    origin: &str,
+    prefix: &str,
+) -> Vec<String> {
+    let mut set: BTreeSet<String> = in_branch(entries, origin, prefix)
+        .into_iter()
+        .map(url_of)
+        .collect();
     for (o, p) in links {
         if o == origin && webprobe_core::sitemap_compare::path_in_branch(p, prefix) {
             set.insert(format!("{o}{p}"));
@@ -80,18 +91,25 @@ pub fn urls_in_branch(entries: &[HistEntry], links: &[(String, String)], origin:
 pub fn response_text(resp: &[u8]) -> (String, String) {
     let norm = crate::codec::normalize_response(resp);
     let parts = crate::util::parse_http(&norm);
-    let ct = crate::util::get_header(&parts.headers, "Content-Type").unwrap_or_default().to_ascii_lowercase();
+    let ct = crate::util::get_header(&parts.headers, "Content-Type")
+        .unwrap_or_default()
+        .to_ascii_lowercase();
     let body = &norm[parts.head_len.min(norm.len())..];
     (ct, String::from_utf8_lossy(body).into_owned())
 }
 
 fn is_script(ct: &str, path: &str) -> bool {
     let p = path.split('?').next().unwrap_or("").to_ascii_lowercase();
-    ct.contains("javascript") || ct.contains("ecmascript") || p.ends_with(".js") || p.ends_with(".mjs")
+    ct.contains("javascript")
+        || ct.contains("ecmascript")
+        || p.ends_with(".js")
+        || p.ends_with(".mjs")
 }
 
 fn is_html(ct: &str, body: &str) -> bool {
-    ct.contains("html") || ct.contains("xml") || (ct.is_empty() && body.trim_start().starts_with('<'))
+    ct.contains("html")
+        || ct.contains("xml")
+        || (ct.is_empty() && body.trim_start().starts_with('<'))
 }
 
 /// `//` and `/* */` comments in JavaScript source. String and template
@@ -123,7 +141,10 @@ pub fn js_comments(src: &str) -> Vec<String> {
                 i = end;
             }
             b'/' if b.get(i + 1) == Some(&b'*') => {
-                let end = src[i + 2..].find("*/").map(|n| i + 2 + n + 2).unwrap_or(b.len());
+                let end = src[i + 2..]
+                    .find("*/")
+                    .map(|n| i + 2 + n + 2)
+                    .unwrap_or(b.len());
                 out.push(src[i..end].to_string());
                 i = end;
             }
@@ -141,10 +162,15 @@ fn script_blocks(html: &str) -> Vec<(Option<String>, String)> {
     let mut pos = 0;
     while let Some(at) = lower[pos..].find("<script") {
         let start = pos + at;
-        let Some(gt) = lower[start..].find('>') else { break };
+        let Some(gt) = lower[start..].find('>') else {
+            break;
+        };
         let tag = &html[start..start + gt + 1];
         let body_start = start + gt + 1;
-        let body_end = lower[body_start..].find("</script").map(|n| body_start + n).unwrap_or(html.len());
+        let body_end = lower[body_start..]
+            .find("</script")
+            .map(|n| body_start + n)
+            .unwrap_or(html.len());
         let src = attr_value(tag, "src");
         out.push((src, html[body_start..body_end].to_string()));
         pos = body_end.max(body_start);
@@ -171,7 +197,11 @@ fn attr_value(tag: &str, name: &str) -> Option<String> {
         let v = tag[vstart..].trim_start();
         return Some(match v.chars().next() {
             Some(q @ ('"' | '\'')) => v[1..].split(q).next().unwrap_or("").to_string(),
-            _ => v.split(|c: char| c.is_whitespace() || c == '>').next().unwrap_or("").to_string(),
+            _ => v
+                .split(|c: char| c.is_whitespace() || c == '>')
+                .next()
+                .unwrap_or("")
+                .to_string(),
         });
     }
     None
@@ -190,7 +220,10 @@ pub fn find_comments(ct: &str, path: &str, body: &str) -> Vec<String> {
     let mut pos = 0;
     while let Some(at) = body[pos..].find("<!--") {
         let start = pos + at;
-        let end = body[start + 4..].find("-->").map(|n| start + 4 + n + 3).unwrap_or(body.len());
+        let end = body[start + 4..]
+            .find("-->")
+            .map(|n| start + 4 + n + 3)
+            .unwrap_or(body.len());
         out.push(body[start..end].to_string());
         pos = end;
     }
@@ -206,7 +239,11 @@ pub fn find_comments(ct: &str, path: &str, body: &str) -> Vec<String> {
 /// blocks of HTML responses; a script response is itself one script.
 pub fn find_scripts(ct: &str, path: &str, body: &str) -> Vec<String> {
     if is_script(ct, path) {
-        return if body.trim().is_empty() { Vec::new() } else { vec![body.trim().to_string()] };
+        return if body.trim().is_empty() {
+            Vec::new()
+        } else {
+            vec![body.trim().to_string()]
+        };
     }
     if !is_html(ct, body) {
         return Vec::new();
@@ -222,13 +259,22 @@ pub fn find_scripts(ct: &str, path: &str, body: &str) -> Vec<String> {
 }
 
 /// Run Find comments / Find scripts over the items of a branch.
-pub fn find_in_branch(entries: &[HistEntry], origin: &str, prefix: &str, scripts: bool) -> Vec<(String, String)> {
+pub fn find_in_branch(
+    entries: &[HistEntry],
+    origin: &str,
+    prefix: &str,
+    scripts: bool,
+) -> Vec<(String, String)> {
     let mut rows = Vec::new();
     let mut seen = BTreeSet::new();
     for e in in_branch(entries, origin, prefix) {
         let Some(resp) = &e.resp_raw else { continue };
         let (ct, body) = response_text(resp);
-        let found = if scripts { find_scripts(&ct, &e.path, &body) } else { find_comments(&ct, &e.path, &body) };
+        let found = if scripts {
+            find_scripts(&ct, &e.path, &body)
+        } else {
+            find_comments(&ct, &e.path, &body)
+        };
         let url = url_of(e);
         for f in found {
             if seen.insert((url.clone(), f.clone())) {
@@ -259,7 +305,9 @@ pub fn find_references(entries: &[HistEntry], origin: &str, path: &str) -> Vec<(
         // resolves them, so relative links (href="admin/") count, and any
         // link under the selected path is a reference to it.
         let resolved = if origin_of(e) == origin {
-            crate::scan::crawl_links(origin, &e.path, resp).into_iter().find(|l| l.split('?').next().unwrap_or(l).starts_with(bare))
+            crate::crawl::crawl_links(origin, &e.path, resp)
+                .into_iter()
+                .find(|l| l.split('?').next().unwrap_or(l).starts_with(bare))
         } else {
             None
         };
@@ -305,7 +353,11 @@ pub fn origin_host(origin: &str) -> &str {
 /// Ids of the issues located in a branch of the site map.
 pub fn issues_in_branch(issues: &[crate::scan::ScanIssue], origin: &str, prefix: &str) -> Vec<u64> {
     let host = origin_host(origin);
-    issues.iter().filter(|i| i.host == host && i.path.starts_with(prefix)).map(|i| i.id).collect()
+    issues
+        .iter()
+        .filter(|i| i.host == host && i.path.starts_with(prefix))
+        .map(|i| i.id)
+        .collect()
 }
 
 /// Whether `e` lies in the branch `prefix` of `origin`.
@@ -323,27 +375,58 @@ pub fn site_map_menu(ui: &mut egui::Ui, app: &mut crate::App, origin: &str, bran
     ui.label(egui::RichText::new(&location).strong().size(12.5));
     ui.separator();
     if ui.button("Add to scope").clicked() {
-        app.shared.scope.lock().unwrap().push(crate::net::ScopeRule::include(location.clone(), false));
-        crate::feedback::toast(crate::feedback::Level::Success, format!("Added {location} to target scope"));
+        app.shared
+            .scope
+            .lock()
+            .unwrap()
+            .push(crate::net::ScopeRule::include(location.clone(), false));
+        crate::feedback::toast(
+            crate::feedback::Level::Success,
+            format!("Added {location} to target scope"),
+        );
         ui.close();
     }
     if ui.button("Remove from scope").clicked() {
-        app.shared.scope.lock().unwrap().push(crate::net::ScopeRule { enabled: true, include: false, pattern: location.clone(), is_regex: false });
-        crate::feedback::toast(crate::feedback::Level::Success, format!("Excluded {location} from target scope"));
+        app.shared
+            .scope
+            .lock()
+            .unwrap()
+            .push(crate::net::ScopeRule {
+                enabled: true,
+                include: false,
+                pattern: location.clone(),
+                is_regex: false,
+            });
+        crate::feedback::toast(
+            crate::feedback::Level::Success,
+            format!("Excluded {location} from target scope"),
+        );
         ui.close();
     }
     ui.separator();
     let scan = |ui: &mut egui::Ui, app: &mut crate::App, prefix: &str, active: bool| {
-        let entries: Vec<HistEntry> = in_branch(&site_entries(app), origin, prefix).into_iter().cloned().collect();
+        let entries: Vec<HistEntry> = in_branch(&site_entries(app), origin, prefix)
+            .into_iter()
+            .cloned()
+            .collect();
         let n = entries.len();
         if active {
             crate::scan::audit_entries(app.shared.clone(), entries);
-            crate::feedback::toast(crate::feedback::Level::Info, format!("Active scan of {n} item(s) started"));
+            crate::feedback::toast(
+                crate::feedback::Level::Info,
+                format!("Active scan of {n} item(s) started"),
+            );
         } else {
             for e in &entries {
-                crate::scan::add_passive_issues(&app.shared, crate::scan::passive_check_for(&app.shared, e));
+                crate::scan::add_passive_issues(
+                    &app.shared,
+                    crate::scan::passive_check_for(&app.shared, e),
+                );
             }
-            crate::feedback::toast(crate::feedback::Level::Success, format!("Passive scan of {n} item(s) done"));
+            crate::feedback::toast(
+                crate::feedback::Level::Success,
+                format!("Passive scan of {n} item(s) done"),
+            );
         }
         ui.close();
     };
@@ -366,7 +449,10 @@ pub fn site_map_menu(ui: &mut egui::Ui, app: &mut crate::App, origin: &str, bran
         if ui.button("Report issues").clicked() {
             let ids = issues_in_branch(&app.shared.issues.lock().unwrap(), origin, branch);
             if ids.is_empty() {
-                crate::feedback::toast(crate::feedback::Level::Info, "No issues in this part of the site map");
+                crate::feedback::toast(
+                    crate::feedback::Level::Info,
+                    "No issues in this part of the site map",
+                );
             } else {
                 app.eng.report.open_for(ids);
             }
@@ -376,25 +462,59 @@ pub fn site_map_menu(ui: &mut egui::Ui, app: &mut crate::App, origin: &str, bran
             let mut issues = app.shared.issues.lock().unwrap();
             let ids = issues_in_branch(&issues, origin, branch);
             issues.retain(|i| !ids.contains(&i.id));
-            crate::feedback::toast(crate::feedback::Level::Success, format!("Deleted {} issue(s)", ids.len()));
+            crate::feedback::toast(
+                crate::feedback::Level::Success,
+                format!("Deleted {} issue(s)", ids.len()),
+            );
             ui.close();
         }
     });
-    if ui.button(if whole_host { "Delete host" } else { "Delete branch" }).clicked() {
-        let removed = app.shared.history.retain(|e| !is_in_branch(e, origin, branch)) + app.shared.crawl_items.retain(|e| !is_in_branch(e, origin, branch));
-        app.shared.site_links.lock().unwrap().retain(|(o, p)| !(o == origin && p.starts_with(branch)));
+    if ui
+        .button(if whole_host {
+            "Delete host"
+        } else {
+            "Delete branch"
+        })
+        .clicked()
+    {
+        let removed = app
+            .shared
+            .history
+            .retain(|e| !is_in_branch(e, origin, branch))
+            + app
+                .shared
+                .crawl_items
+                .retain(|e| !is_in_branch(e, origin, branch));
+        app.shared
+            .site_links
+            .lock()
+            .unwrap()
+            .retain(|(o, p)| !(o == origin && p.starts_with(branch)));
         app.hist_cache_key.clear();
-        crate::feedback::toast(crate::feedback::Level::Success, format!("Deleted {removed} item(s)"));
+        crate::feedback::toast(
+            crate::feedback::Level::Success,
+            format!("Deleted {removed} item(s)"),
+        );
         ui.close();
     }
     ui.separator();
     let copy = |ui: &mut egui::Ui, app: &crate::App, prefix: &str| {
         let entries = site_entries(app);
-        let links: Vec<(String, String)> = app.shared.site_links.lock().unwrap().iter().cloned().collect();
+        let links: Vec<(String, String)> = app
+            .shared
+            .site_links
+            .lock()
+            .unwrap()
+            .iter()
+            .cloned()
+            .collect();
         let urls = urls_in_branch(&entries, &links, origin, prefix);
         let n = urls.len();
         ui.ctx().copy_text(urls.join("\n"));
-        crate::feedback::toast(crate::feedback::Level::Success, format!("Copied {n} URL(s)"));
+        crate::feedback::toast(
+            crate::feedback::Level::Success,
+            format!("Copied {n} URL(s)"),
+        );
     };
     if ui.button("Copy URLs in this host").clicked() {
         copy(ui, app, "/");
@@ -408,17 +528,32 @@ pub fn site_map_menu(ui: &mut egui::Ui, app: &mut crate::App, origin: &str, bran
     ui.menu_button("Engagement tools", |ui| {
         if ui.button("Find comments").clicked() {
             let rows = find_in_branch(&site_entries(app), origin, branch, false);
-            app.eng.find = Some(FindResults { title: format!("Comments search | {origin}{branch}"), column: "Comment", rows, sel: None });
+            app.eng.find = Some(FindResults {
+                title: format!("Comments search | {origin}{branch}"),
+                column: "Comment",
+                rows,
+                sel: None,
+            });
             ui.close();
         }
         if ui.button("Find scripts").clicked() {
             let rows = find_in_branch(&site_entries(app), origin, branch, true);
-            app.eng.find = Some(FindResults { title: format!("Scripts search | {origin}{branch}"), column: "Script", rows, sel: None });
+            app.eng.find = Some(FindResults {
+                title: format!("Scripts search | {origin}{branch}"),
+                column: "Script",
+                rows,
+                sel: None,
+            });
             ui.close();
         }
         if ui.button("Find references").clicked() {
             let rows = find_references(&site_entries(app), origin, branch);
-            app.eng.find = Some(FindResults { title: format!("References to {origin}{branch}"), column: "Reference", rows, sel: None });
+            app.eng.find = Some(FindResults {
+                title: format!("References to {origin}{branch}"),
+                column: "Reference",
+                rows,
+                sel: None,
+            });
             ui.close();
         }
         if ui.button("Discover content").clicked() {
@@ -436,9 +571,12 @@ pub fn site_map_menu(ui: &mut egui::Ui, app: &mut crate::App, origin: &str, bran
 
 /// The Find comments / scripts / references results window.
 fn find_window(app: &mut crate::App, ctx: &egui::Context) {
-    let Some(f) = app.eng.find.as_mut() else { return };
+    let Some(f) = app.eng.find.as_mut() else {
+        return;
+    };
     let mut open = true;
-    egui::Window::new(f.title.clone()).default_pos(crate::theme::window_pos(&ctx))
+    egui::Window::new(f.title.clone())
+        .default_pos(crate::theme::window_pos(ctx))
         .id(egui::Id::unique("engagement_find"))
         .open(&mut open)
         .resizable(true)
@@ -448,32 +586,54 @@ fn find_window(app: &mut crate::App, ctx: &egui::Context) {
             ui.horizontal(|ui| {
                 ui.label(format!("{} results", f.rows.len()));
                 if ui.button("Copy all").clicked() {
-                    let text: Vec<String> = f.rows.iter().map(|(u, t)| format!("{u}\t{}", t.replace('\n', " "))).collect();
+                    let text: Vec<String> = f
+                        .rows
+                        .iter()
+                        .map(|(u, t)| format!("{u}\t{}", t.replace('\n', " ")))
+                        .collect();
                     ui.ctx().copy_text(text.join("\n"));
                 }
             });
             ui.separator();
-            egui::ScrollArea::vertical().id_salt("find_rows").max_height(220.0).show(ui, |ui| {
-                egui::Grid::new("find_grid").striped(true).num_columns(2).show(ui, |ui| {
-                    ui.strong("URL");
-                    ui.strong(f.column);
-                    ui.end_row();
-                    for (n, (url, text)) in f.rows.iter().enumerate() {
-                        let first: String = text.lines().next().unwrap_or("").chars().take(120).collect();
-                        if ui.selectable_label(f.sel == Some(n), url).clicked() {
-                            f.sel = Some(n);
-                        }
-                        ui.label(first);
-                        ui.end_row();
-                    }
+            egui::ScrollArea::vertical()
+                .id_salt("find_rows")
+                .max_height(220.0)
+                .show(ui, |ui| {
+                    egui::Grid::new("find_grid")
+                        .striped(true)
+                        .num_columns(2)
+                        .show(ui, |ui| {
+                            ui.strong("URL");
+                            ui.strong(f.column);
+                            ui.end_row();
+                            for (n, (url, text)) in f.rows.iter().enumerate() {
+                                let first: String = text
+                                    .lines()
+                                    .next()
+                                    .unwrap_or("")
+                                    .chars()
+                                    .take(120)
+                                    .collect();
+                                if ui.selectable_label(f.sel == Some(n), url).clicked() {
+                                    f.sel = Some(n);
+                                }
+                                ui.label(first);
+                                ui.end_row();
+                            }
+                        });
                 });
-            });
             ui.separator();
             if let Some((_, text)) = f.sel.and_then(|n| f.rows.get(n)) {
                 let mut t = text.clone();
-                egui::ScrollArea::vertical().id_salt("find_text").show(ui, |ui| {
-                    ui.add(egui::TextEdit::multiline(&mut t).code_editor().desired_width(f32::INFINITY));
-                });
+                egui::ScrollArea::vertical()
+                    .id_salt("find_text")
+                    .show(ui, |ui| {
+                        ui.add(
+                            egui::TextEdit::multiline(&mut t)
+                                .code_editor()
+                                .desired_width(f32::INFINITY),
+                        );
+                    });
             }
         });
     if !open {
@@ -496,7 +656,9 @@ pub fn windows(app: &mut crate::App, ctx: &egui::Context) {
 /// the session invalid and a request is waiting while the user logs in
 /// again through the proxied browser.
 fn browser_recovery_window(app: &mut crate::App, ctx: &egui::Context) {
-    let Some(p) = app.shared.browser_recovery.pending() else { return };
+    let Some(p) = app.shared.browser_recovery.pending() else {
+        return;
+    };
     egui::Window::new("Session recovery")
         .id(egui::Id::unique(("browser_recovery", p.id)))
         .default_pos(crate::theme::window_pos(ctx))
@@ -529,19 +691,55 @@ mod tests {
 
     #[test]
     fn branch_helpers_select_issues_and_remove_items() {
-        assert_eq!([origin_host("http://app.local"), origin_host("https://app.local:8443"), origin_host("app.local")], ["app.local", "app.local", "app.local"]);
-        let issue = |id: u64, host: &str, path: &str| crate::scan::ScanIssue { id, host: host.into(), path: path.into(), ..Default::default() };
-        let issues = vec![issue(1, "app.local", "/admin/users"), issue(2, "app.local", "/"), issue(3, "other.local", "/admin"), issue(4, "app.local", "/admin")];
-        assert_eq!(issues_in_branch(&issues, "http://app.local", "/admin"), vec![1, 4]);
-        assert_eq!(issues_in_branch(&issues, "http://app.local:80", "/"), vec![1, 2, 4]);
+        assert_eq!(
+            [
+                origin_host("http://app.local"),
+                origin_host("https://app.local:8443"),
+                origin_host("app.local")
+            ],
+            ["app.local", "app.local", "app.local"]
+        );
+        let issue = |id: u64, host: &str, path: &str| crate::scan::ScanIssue {
+            id,
+            host: host.into(),
+            path: path.into(),
+            ..Default::default()
+        };
+        let issues = vec![
+            issue(1, "app.local", "/admin/users"),
+            issue(2, "app.local", "/"),
+            issue(3, "other.local", "/admin"),
+            issue(4, "app.local", "/admin"),
+        ];
+        assert_eq!(
+            issues_in_branch(&issues, "http://app.local", "/admin"),
+            vec![1, 4]
+        );
+        assert_eq!(
+            issues_in_branch(&issues, "http://app.local:80", "/"),
+            vec![1, 2, 4]
+        );
         assert!(issues_in_branch(&issues, "http://none.local", "/").is_empty());
 
         let items = webprobe_core::history::ProxyHistory::default();
-        items.extend([entry(1, "/admin/a", ""), entry(2, "/public", ""), entry(3, "/admin", "")]);
-        assert_eq!(items.retain(|e| !is_in_branch(e, "http://app.local", "/admin")), 2);
-        assert_eq!(items.with_rows(|r| r.iter().map(|e| e.id).collect::<Vec<_>>()), vec![2]);
+        items.extend([
+            entry(1, "/admin/a", ""),
+            entry(2, "/public", ""),
+            entry(3, "/admin", ""),
+        ]);
+        assert_eq!(
+            items.retain(|e| !is_in_branch(e, "http://app.local", "/admin")),
+            2
+        );
+        assert_eq!(
+            items.with_rows(|r| r.iter().map(|e| e.id).collect::<Vec<_>>()),
+            vec![2]
+        );
         // Another origin's items are left alone.
-        assert_eq!(items.retain(|e| !is_in_branch(e, "http://other.local", "/")), 0);
+        assert_eq!(
+            items.retain(|e| !is_in_branch(e, "http://other.local", "/")),
+            0
+        );
         assert_eq!(items.len(), 1);
     }
 
@@ -560,66 +758,138 @@ mod tests {
     #[test]
     fn js_comments_skip_strings_and_urls() {
         let src = "var u = \"http://x/y\"; // real comment\nlet t = `a // not ${b}`; /* block\n two */ x = '/*no*/';";
-        assert_eq!(js_comments(src), vec!["// real comment".to_string(), "/* block\n two */".to_string()]);
+        assert_eq!(
+            js_comments(src),
+            vec![
+                "// real comment".to_string(),
+                "/* block\n two */".to_string()
+            ]
+        );
     }
 
     #[test]
     fn comments_in_html_and_inline_scripts() {
         let html = "<html><!-- TODO: remove admin link --><script>// debug only\nvar a=1;</script><script src=\"/x.js\">// ignored</script></html>";
         let c = find_comments("text/html", "/", html);
-        assert_eq!(c, vec!["<!-- TODO: remove admin link -->".to_string(), "// debug only".to_string()]);
+        assert_eq!(
+            c,
+            vec![
+                "<!-- TODO: remove admin link -->".to_string(),
+                "// debug only".to_string()
+            ]
+        );
         // Script responses are scanned as JavaScript; other types are skipped.
-        assert_eq!(find_comments("application/javascript", "/a.js", "x=1;/*k*/"), vec!["/*k*/".to_string()]);
+        assert_eq!(
+            find_comments("application/javascript", "/a.js", "x=1;/*k*/"),
+            vec!["/*k*/".to_string()]
+        );
         assert!(find_comments("image/png", "/a.png", "<!-- no -->").is_empty());
     }
 
     #[test]
     fn scripts_lists_src_and_inline_blocks() {
         let html = "<SCRIPT type=text/javascript SRC='/main.js'></SCRIPT><script>\n alert(1)\n</script><script> </script>";
-        assert_eq!(find_scripts("text/html", "/", html), vec!["<script src=\"/main.js\">".to_string(), "alert(1)".to_string()]);
+        assert_eq!(
+            find_scripts("text/html", "/", html),
+            vec![
+                "<script src=\"/main.js\">".to_string(),
+                "alert(1)".to_string()
+            ]
+        );
         assert_eq!(find_scripts("", "/app.js", "f()"), vec!["f()".to_string()]);
     }
 
     #[test]
     fn branch_urls_are_deduped_sorted_and_include_unrequested_links() {
-        let e = vec![entry(1, "/b/2", ""), entry(2, "/a", ""), entry(3, "/b/1?x=1", ""), entry(4, "/b/2", "")];
-        let links = vec![("http://app.local".to_string(), "/b/3".to_string()), ("http://other".to_string(), "/b/9".to_string())];
+        let e = vec![
+            entry(1, "/b/2", ""),
+            entry(2, "/a", ""),
+            entry(3, "/b/1?x=1", ""),
+            entry(4, "/b/2", ""),
+        ];
+        let links = vec![
+            ("http://app.local".to_string(), "/b/3".to_string()),
+            ("http://other".to_string(), "/b/9".to_string()),
+        ];
         assert_eq!(
             urls_in_branch(&e, &links, "http://app.local", "/"),
-            vec!["http://app.local/a", "http://app.local/b/1?x=1", "http://app.local/b/2", "http://app.local/b/3"]
+            vec![
+                "http://app.local/a",
+                "http://app.local/b/1?x=1",
+                "http://app.local/b/2",
+                "http://app.local/b/3"
+            ]
         );
-        assert_eq!(urls_in_branch(&e, &links, "http://app.local", "/b/1"), vec!["http://app.local/b/1?x=1"]);
+        assert_eq!(
+            urls_in_branch(&e, &links, "http://app.local", "/b/1"),
+            vec!["http://app.local/b/1?x=1"]
+        );
     }
 
     #[test]
     fn find_in_branch_reports_each_hit_once() {
         let html = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<!-- c1 --><p>x</p>";
-        let e = vec![entry(1, "/p", html), entry(2, "/p", html), entry(3, "/q", "HTTP/1.1 200 OK\r\n\r\nnone")];
-        assert_eq!(find_in_branch(&e, "http://app.local", "/", false), vec![("http://app.local/p".to_string(), "<!-- c1 -->".to_string())]);
+        let e = vec![
+            entry(1, "/p", html),
+            entry(2, "/p", html),
+            entry(3, "/q", "HTTP/1.1 200 OK\r\n\r\nnone"),
+        ];
+        assert_eq!(
+            find_in_branch(&e, "http://app.local", "/", false),
+            vec![("http://app.local/p".to_string(), "<!-- c1 -->".to_string())]
+        );
     }
 
     #[test]
     fn references_resolve_relative_links() {
         let listing = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<a href=\"admin/\">admin/</a><a href=\"login.php\">l</a>";
-        let e = vec![entry(1, "/", listing), entry(2, "/x", "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<a href=\"../other\">o</a>")];
+        let e = vec![
+            entry(1, "/", listing),
+            entry(
+                2,
+                "/x",
+                "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<a href=\"../other\">o</a>",
+            ),
+        ];
         let r = find_references(&e, "http://app.local", "/admin/");
-        assert_eq!(r, vec![("http://app.local/".to_string(), "/admin/".to_string())]);
-        assert_eq!(find_references(&e, "http://app.local", "/").len(), 2, "the whole host: both pages link inside it");
+        assert_eq!(
+            r,
+            vec![("http://app.local/".to_string(), "/admin/".to_string())]
+        );
+        assert_eq!(
+            find_references(&e, "http://app.local", "/").len(),
+            2,
+            "the whole host: both pages link inside it"
+        );
     }
 
     #[test]
     fn references_match_absolute_and_same_origin_paths() {
         let e = vec![
-            entry(1, "/index", "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<a href=\"/admin/panel\">x</a>"),
-            entry(2, "/other", "HTTP/1.1 200 OK\r\n\r\nsee http://app.local/admin/panel now"),
+            entry(
+                1,
+                "/index",
+                "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<a href=\"/admin/panel\">x</a>",
+            ),
+            entry(
+                2,
+                "/other",
+                "HTTP/1.1 200 OK\r\n\r\nsee http://app.local/admin/panel now",
+            ),
             entry(3, "/none", "HTTP/1.1 200 OK\r\n\r\n/adminx"),
         ];
         let r = find_references(&e, "http://app.local", "/admin/panel");
         assert_eq!(
             r,
             vec![
-                ("http://app.local/index".to_string(), "/admin/panel".to_string()),
-                ("http://app.local/other".to_string(), "http://app.local/admin/panel".to_string()),
+                (
+                    "http://app.local/index".to_string(),
+                    "/admin/panel".to_string()
+                ),
+                (
+                    "http://app.local/other".to_string(),
+                    "http://app.local/admin/panel".to_string()
+                ),
             ]
         );
     }

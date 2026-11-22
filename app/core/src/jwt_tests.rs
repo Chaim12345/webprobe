@@ -26,7 +26,10 @@ fn unb64(s: &str) -> Vec<u8> {
 }
 
 fn hex(s: &str) -> Vec<u8> {
-    (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap()).collect()
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
+        .collect()
 }
 
 /// A compact JWS signed with `ring` (independent of the code under test).
@@ -37,7 +40,11 @@ fn sign_hs(alg: &str, key: &[u8], payload: &str) -> String {
         "HS512" => ring::hmac::HMAC_SHA512,
         _ => panic!("alg"),
     };
-    let input = format!("{}.{}", b64(format!("{{\"alg\":\"{alg}\",\"typ\":\"JWT\"}}")), b64(payload));
+    let input = format!(
+        "{}.{}",
+        b64(format!("{{\"alg\":\"{alg}\",\"typ\":\"JWT\"}}")),
+        b64(payload)
+    );
     let sig = ring::hmac::sign(&ring::hmac::Key::new(algo, key), input.as_bytes());
     format!("{input}.{}", b64(sig.as_ref()))
 }
@@ -52,7 +59,10 @@ fn parse_reads_the_jwt_io_example() {
     assert_eq!(t.alg(), "HS256");
     assert_eq!(t.header.get("typ").and_then(|v| v.as_str()), Some("JWT"));
     assert_eq!(t.signing_input(), JWT_IO.rsplit_once('.').unwrap().0);
-    assert_eq!(String::from_utf8(t.payload()).unwrap(), r#"{"sub":"1234567890","name":"John Doe","iat":1516239022}"#);
+    assert_eq!(
+        String::from_utf8(t.payload()).unwrap(),
+        r#"{"sub":"1234567890","name":"John Doe","iat":1516239022}"#
+    );
     assert_eq!(t.raw, JWT_IO);
     // Surrounding whitespace is trimmed.
     assert_eq!(Jwt::parse(&format!("  {JWT_IO}\r\n")).unwrap().raw, JWT_IO);
@@ -91,14 +101,22 @@ fn parse_rejects_garbage_without_panicking() {
         format!("{json_header}.{}.!!!!", b64("{}")),
         format!("e!!!.{}.AAAAAAAAAAAAAAAAAAAAAAAA", b64("{}")),
         // header decodes but is not JSON ("x" encodes to a leading "e")
-        format!("{}.{}.AAAAAAAAAAAAAAAA", b64("xyz not json at all"), b64("{}")),
+        format!(
+            "{}.{}.AAAAAAAAAAAAAAAA",
+            b64("xyz not json at all"),
+            b64("{}")
+        ),
         // header is JSON but not an object (starts with "e" only for an object, so use a long array token)
         format!("{}.{}.AAAAAAAAAAAAAAAA", b64("[1,2,3]"), b64("{}")),
         // empty header part
         format!(".{}.AAAAAAAAAAAAAAAAAAAAAAAAAAAA", b64("{}")),
         // non-ASCII input
         format!("e{}", "\u{e9}".repeat(30)),
-        format!("e{}.{}.\u{1F600}\u{1F600}\u{1F600}\u{1F600}\u{1F600}\u{1F600}", b64("{}"), b64("{}")),
+        format!(
+            "e{}.{}.\u{1F600}\u{1F600}\u{1F600}\u{1F600}\u{1F600}\u{1F600}",
+            b64("{}"),
+            b64("{}")
+        ),
         "e\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0".into(),
     ];
     for c in &cases {
@@ -148,7 +166,11 @@ fn none_variants_are_three_unsigned_tokens() {
             assert!(s.ends_with('.'), "empty signature: {s}");
             let parts: Vec<&str> = s.split('.').collect();
             assert_eq!(parts.len(), 3);
-            assert_eq!(parts[1], JWT_IO.split('.').nth(1).unwrap(), "payload untouched");
+            assert_eq!(
+                parts[1],
+                JWT_IO.split('.').nth(1).unwrap(),
+                "payload untouched"
+            );
             assert_eq!(parts[2], "");
             let h: serde_json::Value = serde_json::from_slice(&unb64(parts[0])).unwrap();
             assert_eq!(h["typ"], "JWT", "other header members kept");
@@ -164,12 +186,24 @@ fn control_token_blanks_the_payload_to_the_same_length() {
     let c = jwt::control_token(&t);
     let parts: Vec<&str> = c.split('.').collect();
     assert_eq!(parts[0], JWT_IO.split('.').next().unwrap());
-    assert_eq!(parts[2], JWT_IO.split('.').nth(2).unwrap(), "signature unchanged");
+    assert_eq!(
+        parts[2],
+        JWT_IO.split('.').nth(2).unwrap(),
+        "signature unchanged"
+    );
     let p = String::from_utf8(unb64(parts[1])).unwrap();
     assert_eq!(p.len(), t.payload().len());
-    assert!(p.starts_with('{') && p.ends_with('}') && p[1..p.len() - 1].chars().all(|c| c == ' '), "{p:?}");
+    assert!(
+        p.starts_with('{') && p.ends_with('}') && p[1..p.len() - 1].chars().all(|c| c == ' '),
+        "{p:?}"
+    );
     // Tiny payloads still give "{}"-shaped output and a parseable token.
-    let tiny = format!("{}.{}.{}", b64(r#"{"alg":"HS256"}"#), b64("1"), "AAAAAAAAAAAAAAAAAAAAAA");
+    let tiny = format!(
+        "{}.{}.{}",
+        b64(r#"{"alg":"HS256"}"#),
+        b64("1"),
+        "AAAAAAAAAAAAAAAAAAAAAA"
+    );
     let tiny = Jwt::parse(&tiny).unwrap();
     let c = jwt::control_token(&tiny);
     let p = String::from_utf8(unb64(c.split('.').nth(1).unwrap())).unwrap();
@@ -229,33 +263,67 @@ fn jwk_variant_is_signed_with_the_key_in_its_own_header() {
     let v = jwt::jwk_variant(&t).expect("the embedded RSA key loads in ring");
     let back = Jwt::parse(&v).expect("the variant is a well-formed token");
     assert_eq!(back.alg(), "RS256");
-    let jwk = back.header.get("jwk").and_then(|j| j.as_object()).expect("jwk in the header");
-    assert!(jwk.get("n").and_then(|n| n.as_str()).is_some_and(|n| !n.is_empty()), "jwk.n");
+    let jwk = back
+        .header
+        .get("jwk")
+        .and_then(|j| j.as_object())
+        .expect("jwk in the header");
+    assert!(
+        jwk.get("n")
+            .and_then(|n| n.as_str())
+            .is_some_and(|n| !n.is_empty()),
+        "jwk.n"
+    );
     assert_eq!(jwk.get("e").and_then(|e| e.as_str()), Some("AQAB"));
     assert_eq!(jwk.get("kty").and_then(|e| e.as_str()), Some("RSA"));
-    assert_eq!(back.header.get("kid").and_then(|k| k.as_str()), Some(jwt::JWK_KID), "kid set when the token had none");
-    assert_eq!(back.header.get("typ").and_then(|k| k.as_str()), Some("JWT"), "other header members kept");
-    assert_eq!(back.payload_b64, JWT_IO.split('.').nth(1).unwrap(), "payload untouched");
-    assert!(!back.jwk_has_private_key(), "only the public key is embedded");
+    assert_eq!(
+        back.header.get("kid").and_then(|k| k.as_str()),
+        Some(jwt::JWK_KID),
+        "kid set when the token had none"
+    );
+    assert_eq!(
+        back.header.get("typ").and_then(|k| k.as_str()),
+        Some("JWT"),
+        "other header members kept"
+    );
+    assert_eq!(
+        back.payload_b64,
+        JWT_IO.split('.').nth(1).unwrap(),
+        "payload untouched"
+    );
+    assert!(
+        !back.jwk_has_private_key(),
+        "only the public key is embedded"
+    );
 
     let n = unb64(jwk["n"].as_str().unwrap());
     let e = unb64(jwk["e"].as_str().unwrap());
     let der = rsa_public_der(&n, &e);
-    let pk = ring::signature::UnparsedPublicKey::new(&ring::signature::RSA_PKCS1_2048_8192_SHA256, der);
-    pk.verify(back.signing_input().as_bytes(), &back.signature()).expect("signature verifies with the header's public key");
+    let pk =
+        ring::signature::UnparsedPublicKey::new(&ring::signature::RSA_PKCS1_2048_8192_SHA256, der);
+    pk.verify(back.signing_input().as_bytes(), &back.signature())
+        .expect("signature verifies with the header's public key");
     // And a changed payload does not verify (the check is not vacuous).
     let tampered = format!("{}.{}", back.header_b64, b64("{}"));
     let der = rsa_public_der(&n, &e);
-    let pk = ring::signature::UnparsedPublicKey::new(&ring::signature::RSA_PKCS1_2048_8192_SHA256, der);
+    let pk =
+        ring::signature::UnparsedPublicKey::new(&ring::signature::RSA_PKCS1_2048_8192_SHA256, der);
     assert!(pk.verify(tampered.as_bytes(), &back.signature()).is_err());
 }
 
 #[test]
 fn jwk_variant_keeps_an_existing_kid() {
     let h = b64(r#"{"alg":"HS256","kid":"mine"}"#);
-    let t = Jwt::parse(&format!("{h}.{}.AAAAAAAAAAAAAAAAAAAAAAAA", b64(r#"{"a":1}"#))).unwrap();
+    let t = Jwt::parse(&format!(
+        "{h}.{}.AAAAAAAAAAAAAAAAAAAAAAAA",
+        b64(r#"{"a":1}"#)
+    ))
+    .unwrap();
     let back = Jwt::parse(&jwt::jwk_variant(&t).unwrap()).unwrap();
-    assert_eq!(back.header.get("kid").and_then(|k| k.as_str()), Some("mine"));
+    assert_eq!(
+        back.header.get("kid").and_then(|k| k.as_str()),
+        Some("mine")
+    );
 }
 
 // ------------------------------------------------------------------ HMAC
@@ -264,7 +332,14 @@ fn jwk_variant_keeps_an_existing_kid() {
 fn hmac_matches_rfc_4231_vectors() {
     // (key, data, SHA-256, SHA-384, SHA-512): RFC 4231 test cases 1, 2 and 6
     // (case 6: a 131-byte key, longer than both block sizes).
-    let cases: Vec<(Vec<u8>, &[u8], &str, &str, &str)> = vec![
+    type HmacCase = (
+        Vec<u8>,
+        &'static [u8],
+        &'static str,
+        &'static str,
+        &'static str,
+    );
+    let cases: Vec<HmacCase> = vec![
         (
             vec![0x0b; 20],
             b"Hi There",
@@ -288,9 +363,21 @@ fn hmac_matches_rfc_4231_vectors() {
         ),
     ];
     for (i, (key, data, h256, h384, h512)) in cases.iter().enumerate() {
-        assert_eq!(jwt::hmac_for("HS256", key, data).unwrap(), hex(h256), "case {i} HS256");
-        assert_eq!(jwt::hmac_for("HS384", key, data).unwrap(), hex(h384), "case {i} HS384");
-        assert_eq!(jwt::hmac_for("HS512", key, data).unwrap(), hex(h512), "case {i} HS512");
+        assert_eq!(
+            jwt::hmac_for("HS256", key, data).unwrap(),
+            hex(h256),
+            "case {i} HS256"
+        );
+        assert_eq!(
+            jwt::hmac_for("HS384", key, data).unwrap(),
+            hex(h384),
+            "case {i} HS384"
+        );
+        assert_eq!(
+            jwt::hmac_for("HS512", key, data).unwrap(),
+            hex(h512),
+            "case {i} HS512"
+        );
     }
 }
 
@@ -300,9 +387,17 @@ fn hmac_agrees_with_ring_around_the_block_sizes() {
         let key: Vec<u8> = (0..key_len).map(|i| (i * 7 + 3) as u8).collect();
         for data_len in [0usize, 1, 55, 56, 64, 111, 112, 128, 500] {
             let data: Vec<u8> = (0..data_len).map(|i| (i * 13 + 1) as u8).collect();
-            for (alg, a) in [("HS256", ring::hmac::HMAC_SHA256), ("HS384", ring::hmac::HMAC_SHA384), ("HS512", ring::hmac::HMAC_SHA512)] {
+            for (alg, a) in [
+                ("HS256", ring::hmac::HMAC_SHA256),
+                ("HS384", ring::hmac::HMAC_SHA384),
+                ("HS512", ring::hmac::HMAC_SHA512),
+            ] {
                 let want = ring::hmac::sign(&ring::hmac::Key::new(a, &key), &data);
-                assert_eq!(jwt::hmac_for(alg, &key, &data).unwrap(), want.as_ref(), "{alg} key {key_len} data {data_len}");
+                assert_eq!(
+                    jwt::hmac_for(alg, &key, &data).unwrap(),
+                    want.as_ref(),
+                    "{alg} key {key_len} data {data_len}"
+                );
             }
         }
     }
@@ -318,9 +413,23 @@ fn hmac_for_only_knows_the_three_hs_algorithms() {
 #[test]
 fn jwt_io_example_verifies_against_its_published_secret() {
     let t = Jwt::parse(JWT_IO).unwrap();
-    assert_eq!(t.signature(), unb64("SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"));
-    assert_eq!(jwt::hmac_for("HS256", b"your-256-bit-secret", t.signing_input().as_bytes()).unwrap(), t.signature());
-    assert_eq!(jwt::weak_secret(&t, ["nope", "your-256-bit-secret"]), Some("your-256-bit-secret".to_string()));
+    assert_eq!(
+        t.signature(),
+        unb64("SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c")
+    );
+    assert_eq!(
+        jwt::hmac_for(
+            "HS256",
+            b"your-256-bit-secret",
+            t.signing_input().as_bytes()
+        )
+        .unwrap(),
+        t.signature()
+    );
+    assert_eq!(
+        jwt::weak_secret(&t, ["nope", "your-256-bit-secret"]),
+        Some("your-256-bit-secret".to_string())
+    );
     assert_eq!(jwt::weak_secret(&t, ["nope", "your-256-bit-secreT"]), None);
 }
 
@@ -329,12 +438,19 @@ fn jwt_io_example_verifies_against_its_published_secret() {
 #[test]
 fn weak_secret_finds_the_signing_candidate() {
     let t = Jwt::parse(&sign_hs("HS256", b"secret", r#"{"user":"a"}"#)).unwrap();
-    assert_eq!(jwt::weak_secret(&t, ["a", "secret"]), Some("secret".to_string()));
+    assert_eq!(
+        jwt::weak_secret(&t, ["a", "secret"]),
+        Some("secret".to_string())
+    );
     assert_eq!(jwt::weak_secret(&t, ["a", "b"]), None);
     assert_eq!(jwt::weak_secret(&t, Vec::<&str>::new()), None);
     for alg in ["HS384", "HS512"] {
         let t = Jwt::parse(&sign_hs(alg, b"hunter2", r#"{"user":"a"}"#)).unwrap();
-        assert_eq!(jwt::weak_secret(&t, ["x", "hunter2"]), Some("hunter2".to_string()), "{alg}");
+        assert_eq!(
+            jwt::weak_secret(&t, ["x", "hunter2"]),
+            Some("hunter2".to_string()),
+            "{alg}"
+        );
     }
     // Block-size edge: a secret longer than the block is hashed first.
     let long = "k".repeat(200);
@@ -356,11 +472,17 @@ fn weak_secret_ignores_non_hmac_algorithms() {
     // A token that claims RS256 but carries an HMAC signature made with "secret".
     let h = b64(r#"{"alg":"RS256"}"#);
     let input = format!("{h}.{}", b64("{}"));
-    let sig = ring::hmac::sign(&ring::hmac::Key::new(ring::hmac::HMAC_SHA256, b"secret"), input.as_bytes());
+    let sig = ring::hmac::sign(
+        &ring::hmac::Key::new(ring::hmac::HMAC_SHA256, b"secret"),
+        input.as_bytes(),
+    );
     let t = Jwt::parse(&format!("{input}.{}", b64(sig.as_ref()))).unwrap();
     assert_eq!(jwt::weak_secret(&t, ["secret"]), None);
     for t in jwt::none_variants(&Jwt::parse(JWT_IO).unwrap()) {
-        assert_eq!(jwt::weak_secret(&Jwt::parse(&t).unwrap(), ["", "secret"]), None);
+        assert_eq!(
+            jwt::weak_secret(&Jwt::parse(&t).unwrap(), ["", "secret"]),
+            None
+        );
     }
 }
 
@@ -375,7 +497,10 @@ fn secrets_list_loads_without_panicking() {
 
 fn tokens_of(raw: &str) -> Vec<String> {
     let parts = crate::util::parse_http(raw.as_bytes());
-    jwt::tokens_in_request(&parts, raw.as_bytes()).into_iter().map(|t| t.raw).collect()
+    jwt::tokens_in_request(&parts, raw.as_bytes())
+        .into_iter()
+        .map(|t| t.raw)
+        .collect()
 }
 
 fn tok(n: u32) -> String {
@@ -385,31 +510,54 @@ fn tok(n: u32) -> String {
 #[test]
 fn tokens_are_found_in_headers_cookies_query_and_form() {
     let (a, b, c, d, e) = (tok(1), tok(2), tok(3), tok(4), tok(5));
-    let found = tokens_of(&format!("GET /x HTTP/1.1\r\nHost: h\r\nAuthorization: Bearer {a}\r\n\r\n"));
-    assert_eq!(found, [a.clone()], "Authorization: Bearer");
-    let found = tokens_of(&format!("GET /x HTTP/1.1\r\nHost: h\r\nAuthorization: {a}\r\n\r\n"));
-    assert_eq!(found, [a.clone()], "Authorization without the scheme");
-    let found = tokens_of(&format!("GET /x HTTP/1.1\r\nHost: h\r\nCookie: theme=dark; session={b}; lang=en\r\n\r\n"));
-    assert_eq!(found, [b.clone()], "cookie");
-    let found = tokens_of(&format!("GET /x?lang=en&jwt={c}&z=1 HTTP/1.1\r\nHost: h\r\n\r\n"));
-    assert_eq!(found, [c.clone()], "query parameter");
+    let found = tokens_of(&format!(
+        "GET /x HTTP/1.1\r\nHost: h\r\nAuthorization: Bearer {a}\r\n\r\n"
+    ));
+    assert_eq!(found, std::slice::from_ref(&a), "Authorization: Bearer");
+    let found = tokens_of(&format!(
+        "GET /x HTTP/1.1\r\nHost: h\r\nAuthorization: {a}\r\n\r\n"
+    ));
+    assert_eq!(
+        found,
+        std::slice::from_ref(&a),
+        "Authorization without the scheme"
+    );
+    let found = tokens_of(&format!(
+        "GET /x HTTP/1.1\r\nHost: h\r\nCookie: theme=dark; session={b}; lang=en\r\n\r\n"
+    ));
+    assert_eq!(found, std::slice::from_ref(&b), "cookie");
+    let found = tokens_of(&format!(
+        "GET /x?lang=en&jwt={c}&z=1 HTTP/1.1\r\nHost: h\r\n\r\n"
+    ));
+    assert_eq!(found, std::slice::from_ref(&c), "query parameter");
     let body = format!("user=bob&t={d}");
     let found = tokens_of(&format!("POST /x HTTP/1.1\r\nHost: h\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {}\r\n\r\n{body}", body.len()));
-    assert_eq!(found, [d.clone()], "form body");
+    assert_eq!(found, std::slice::from_ref(&d), "form body");
     let found = tokens_of(&format!("GET /x?a={c} HTTP/1.1\r\nHost: h\r\nX-Custom: {e}\r\nCookie: s={b}\r\nAuthorization: Bearer {a}\r\n\r\n"));
     assert_eq!(found.len(), 4);
     for t in [&a, &b, &c, &e] {
         assert!(found.contains(t));
     }
     // The same token twice is reported once.
-    let found = tokens_of(&format!("GET /x?a={a} HTTP/1.1\r\nHost: h\r\nAuthorization: Bearer {a}\r\n\r\n"));
+    let found = tokens_of(&format!(
+        "GET /x?a={a} HTTP/1.1\r\nHost: h\r\nAuthorization: Bearer {a}\r\n\r\n"
+    ));
     assert_eq!(found, [a]);
 }
 
 #[test]
 fn tokens_are_url_decoded_in_parameter_values() {
     let a = tok(7);
-    let encoded: String = a.chars().map(|c| if c == '.' { "%2E".to_string() } else { c.to_string() }).collect();
+    let encoded: String = a
+        .chars()
+        .map(|c| {
+            if c == '.' {
+                "%2E".to_string()
+            } else {
+                c.to_string()
+            }
+        })
+        .collect();
     let found = tokens_of(&format!("GET /x?t={encoded} HTTP/1.1\r\nHost: h\r\n\r\n"));
     assert_eq!(found, [a]);
 }
@@ -429,7 +577,17 @@ fn ordinary_values_are_not_tokens() {
 // ------------------------------------------------------------------ passive checks
 
 fn entry(req: &str, resp: &str) -> HistEntry {
-    HistEntry { id: 1, method: "GET".into(), host: "app.test".into(), port: 80, path: "/x".into(), status: "200".into(), req_raw: req.as_bytes().to_vec().into(), resp_raw: Some(resp.as_bytes().to_vec().into()), ..Default::default() }
+    HistEntry {
+        id: 1,
+        method: "GET".into(),
+        host: "app.test".into(),
+        port: 80,
+        path: "/x".into(),
+        status: "200".into(),
+        req_raw: req.as_bytes().to_vec().into(),
+        resp_raw: Some(resp.as_bytes().to_vec().into()),
+        ..Default::default()
+    }
 }
 
 const OK_RESP: &str = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 2\r\n\r\nok";
@@ -440,7 +598,12 @@ fn weak(req: &str, candidates: &[&str], dedupe: bool) -> Vec<ScanIssue> {
     let all = |_: &str| true;
     let cx = crate::scan::passive_checks::PassiveCtx::new(&e, &resp, None, &all);
     let mut v = Vec::new();
-    crate::scan::passive_checks::jwt_weak_secret_with(&cx, &mut v, candidates.iter().copied(), dedupe);
+    crate::scan::passive_checks::jwt_weak_secret_with(
+        &cx,
+        &mut v,
+        candidates.iter().copied(),
+        dedupe,
+    );
     v
 }
 
@@ -449,24 +612,45 @@ fn passive_weak_secret_reports_a_token_signed_with_a_listed_secret() {
     let t = sign_hs("HS256", b"secret", r#"{"user":"a"}"#);
     let req = format!("GET /x HTTP/1.1\r\nHost: app.test\r\nAuthorization: Bearer {t}\r\n\r\n");
     let v = weak(&req, &["a", "secret"], false);
-    assert_eq!(v.len(), 1, "{:?}", v.iter().map(|i| &i.name).collect::<Vec<_>>());
+    assert_eq!(
+        v.len(),
+        1,
+        "{:?}",
+        v.iter().map(|i| &i.name).collect::<Vec<_>>()
+    );
     assert_eq!(v[0].name, "JWT weak HMAC secret");
     assert_eq!(v[0].sev, "high");
     assert_eq!(v[0].confidence, "Certain");
     assert!(v[0].detail.contains("<b>secret</b>"), "{}", v[0].detail);
     // Burp reads cookies and parameters too.
     let req = format!("GET /x?t={t} HTTP/1.1\r\nHost: app.test\r\nCookie: s={t}\r\n\r\n");
-    assert_eq!(weak(&req, &["secret"], false).len(), 1, "the same token in two places is one issue");
+    assert_eq!(
+        weak(&req, &["secret"], false).len(),
+        1,
+        "the same token in two places is one issue"
+    );
 }
 
 #[test]
 fn passive_weak_secret_negatives() {
     let t = sign_hs("HS256", b"correct horse battery staple", r#"{"user":"a"}"#);
     let req = format!("GET /x HTTP/1.1\r\nHost: app.test\r\nAuthorization: Bearer {t}\r\n\r\n");
-    assert!(weak(&req, &["a", "secret", "password"], false).is_empty(), "secret not in the list");
-    assert!(weak("GET /x HTTP/1.1\r\nHost: app.test\r\n\r\n", &["secret"], false).is_empty(), "no token");
+    assert!(
+        weak(&req, &["a", "secret", "password"], false).is_empty(),
+        "secret not in the list"
+    );
+    assert!(
+        weak(
+            "GET /x HTTP/1.1\r\nHost: app.test\r\n\r\n",
+            &["secret"],
+            false
+        )
+        .is_empty(),
+        "no token"
+    );
     // An unsigned token is not an HMAC token.
-    let none = jwt::none_variants(&Jwt::parse(&sign_hs("HS256", b"secret", "{}")).unwrap()).remove(2);
+    let none =
+        jwt::none_variants(&Jwt::parse(&sign_hs("HS256", b"secret", "{}")).unwrap()).remove(2);
     let req = format!("GET /x HTTP/1.1\r\nHost: app.test\r\nAuthorization: Bearer {none}\r\n\r\n");
     assert!(weak(&req, &["secret", ""], false).is_empty());
 }
@@ -485,17 +669,34 @@ fn passive_weak_secret_html_encodes_the_key() {
 fn passive_weak_secret_dedupe_skips_a_token_already_tried() {
     let t = sign_hs("HS256", b"secret", r#"{"user":"dedupe-test-unique-9f3a"}"#);
     let req = format!("GET /x HTTP/1.1\r\nHost: app.test\r\nAuthorization: Bearer {t}\r\n\r\n");
-    assert_eq!(weak(&req, &["secret"], true).len(), 1, "first sighting is checked");
-    assert!(weak(&req, &["secret"], true).is_empty(), "second sighting is skipped");
-    assert_eq!(weak(&req, &["secret"], false).len(), 1, "without dedupe it is checked again");
+    assert_eq!(
+        weak(&req, &["secret"], true).len(),
+        1,
+        "first sighting is checked"
+    );
+    assert!(
+        weak(&req, &["secret"], true).is_empty(),
+        "second sighting is skipped"
+    );
+    assert_eq!(
+        weak(&req, &["secret"], false).len(),
+        1,
+        "without dedupe it is checked again"
+    );
 }
 
 #[test]
 fn passive_checks_are_registered_and_switchable() {
-    use crate::scan::passive_checks::{PASSIVE_CHECKS, run_passive};
-    for id in ["passive.jwt-weak-hmac-secret", "passive.jwt-private-key-disclosed"] {
+    use crate::scan::passive_checks::{run_passive, PASSIVE_CHECKS};
+    for id in [
+        "passive.jwt-weak-hmac-secret",
+        "passive.jwt-private-key-disclosed",
+    ] {
         assert!(PASSIVE_CHECKS.iter().any(|c| c.id == id), "{id} registered");
-        assert!(crate::scan::check_catalogue().iter().any(|c| c.0 == id), "{id} in the scan configuration catalogue");
+        assert!(
+            crate::scan::check_catalogue().iter().any(|c| c.0 == id),
+            "{id} in the scan configuration catalogue"
+        );
     }
     // The private-key check needs no secret list, so it exercises the
     // scan-configuration switch end to end. (The weak-secret check reads the
@@ -504,20 +705,41 @@ fn passive_checks_are_registered_and_switchable() {
     let h = b64(r#"{"alg":"HS256","jwk":{"kty":"RSA","n":"abc","e":"AQAB","d":"privatepart"}}"#);
     let t = format!("{h}.{}.AAAAAAAAAAAAAAAAAAAAAAAAAAAA", b64(r#"{"u":1}"#));
     let req = format!("GET /x HTTP/1.1\r\nHost: app.test\r\nAuthorization: Bearer {t}\r\n\r\n");
-    let echoed = format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{t}", t.len());
+    let echoed = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{t}",
+        t.len()
+    );
     let e = entry(&req, &echoed);
     let names = |v: Vec<ScanIssue>| -> Vec<String> { v.into_iter().map(|i| i.name).collect() };
     let on = names(run_passive(&e, &|_| true));
-    assert!(on.iter().any(|n| n == "JWT private key disclosed"), "{on:?}");
-    let off = names(run_passive(&e, &|id| id != "passive.jwt-private-key-disclosed"));
-    assert!(!off.iter().any(|n| n == "JWT private key disclosed"), "{off:?}");
+    assert!(
+        on.iter().any(|n| n == "JWT private key disclosed"),
+        "{on:?}"
+    );
+    let off = names(run_passive(&e, &|id| {
+        id != "passive.jwt-private-key-disclosed"
+    }));
+    assert!(
+        !off.iter().any(|n| n == "JWT private key disclosed"),
+        "{off:?}"
+    );
     // Through the scan configuration the way the live audit does it.
     let shared = Shared::new();
     let live = names(crate::scan::passive_check_for(&shared, &e));
-    assert!(live.iter().any(|n| n == "JWT private key disclosed"), "{live:?}");
-    shared.scan_config.lock().unwrap().disabled_checks.insert("passive.jwt-private-key-disclosed".into());
+    assert!(
+        live.iter().any(|n| n == "JWT private key disclosed"),
+        "{live:?}"
+    );
+    crate::scan_config::shared_config(&shared)
+        .lock()
+        .unwrap()
+        .disabled_checks
+        .insert("passive.jwt-private-key-disclosed".into());
     let live = names(crate::scan::passive_check_for(&shared, &e));
-    assert!(!live.iter().any(|n| n == "JWT private key disclosed"), "{live:?}");
+    assert!(
+        !live.iter().any(|n| n == "JWT private key disclosed"),
+        "{live:?}"
+    );
 }
 
 #[test]
@@ -530,14 +752,21 @@ fn passive_private_key_needs_the_token_echoed_and_a_private_jwk() {
     };
     let run = |t: &str, body: &str| {
         let req = format!("GET /x HTTP/1.1\r\nHost: app.test\r\nAuthorization: Bearer {t}\r\n\r\n");
-        let resp = format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{body}", body.len());
+        let resp = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{body}",
+            body.len()
+        );
         run_passive(&entry(&req, &resp), &only).len()
     };
     let private = mk(r#"{"kty":"RSA","n":"abc","e":"AQAB","d":"x"}"#);
     let public = mk(r#"{"kty":"RSA","n":"abc","e":"AQAB"}"#);
     assert_eq!(run(&private, &format!("echo: {private}")), 1);
     assert_eq!(run(&private, "no token here"), 0, "private key not echoed");
-    assert_eq!(run(&public, &format!("echo: {public}")), 0, "public key only");
+    assert_eq!(
+        run(&public, &format!("echo: {public}")),
+        0,
+        "public key only"
+    );
 }
 
 // ------------------------------------------------------------------ active check
@@ -572,16 +801,33 @@ fn verdict(app: App, token: Option<&str>) -> (u16, String) {
     if parts.len() != 3 {
         return denied;
     }
-    let (Ok(h), Ok(p)) = (B64.decode(parts[0]), B64.decode(parts[1])) else { return denied };
-    let (Ok(h), Ok(p)) = (serde_json::from_slice::<serde_json::Value>(&h), serde_json::from_slice::<serde_json::Value>(&p)) else { return denied };
+    let (Ok(h), Ok(p)) = (B64.decode(parts[0]), B64.decode(parts[1])) else {
+        return denied;
+    };
+    let (Ok(h), Ok(p)) = (
+        serde_json::from_slice::<serde_json::Value>(&h),
+        serde_json::from_slice::<serde_json::Value>(&p),
+    ) else {
+        return denied;
+    };
     let alg = h["alg"].as_str().unwrap_or("").to_string();
     let verified_hs = || {
-        alg == "HS256" && B64.decode(parts[2]).is_ok_and(|sig| ring::hmac::verify(&ring::hmac::Key::new(ring::hmac::HMAC_SHA256, APP_SECRET), format!("{}.{}", parts[0], parts[1]).as_bytes(), &sig).is_ok())
+        alg == "HS256"
+            && B64.decode(parts[2]).is_ok_and(|sig| {
+                ring::hmac::verify(
+                    &ring::hmac::Key::new(ring::hmac::HMAC_SHA256, APP_SECRET),
+                    format!("{}.{}", parts[0], parts[1]).as_bytes(),
+                    &sig,
+                )
+                .is_ok()
+            })
     };
     let ok = match app {
         App::Proper => verified_hs(),
         App::IgnoresSignature => true,
-        App::AcceptsNone => verified_hs() || (alg.eq_ignore_ascii_case("none") && parts[2].is_empty()),
+        App::AcceptsNone => {
+            verified_hs() || (alg.eq_ignore_ascii_case("none") && parts[2].is_empty())
+        }
         App::Unused => unreachable!(),
     };
     match (ok, p["sub"].as_str()) {
@@ -593,10 +839,21 @@ fn verdict(app: App, token: Option<&str>) -> (u16, String) {
 /// The token a request carries: cookie `tok`, query `t`, or a Bearer header.
 fn presented(head: &str) -> Option<String> {
     let line = head.lines().next().unwrap_or("");
-    if let Some(q) = line.split(' ').nth(1).and_then(|p| p.split_once('?')).map(|x| x.1) {
+    if let Some(q) = line
+        .split(' ')
+        .nth(1)
+        .and_then(|p| p.split_once('?'))
+        .map(|x| x.1)
+    {
         for kv in q.split('&') {
             if let Some(v) = kv.strip_prefix("t=") {
-                return Some(crate::util::url_decode(v).trim().strip_prefix("Bearer ").map(str::to_string).unwrap_or_else(|| crate::util::url_decode(v)));
+                return Some(
+                    crate::util::url_decode(v)
+                        .trim()
+                        .strip_prefix("Bearer ")
+                        .map(str::to_string)
+                        .unwrap_or_else(|| crate::util::url_decode(v)),
+                );
             }
         }
     }
@@ -653,10 +910,17 @@ fn responder(app: App) -> (u16, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
 }
 
 /// Run an active scan restricted to the JWT check; the issues it raised.
-fn scan(port: u16, request_tail: &str, path: &str, disabled: &[&str], oob: Vec<(String, String, String)>) -> (std::sync::Arc<Shared>, Vec<ScanIssue>) {
+fn scan(
+    port: u16,
+    request_tail: &str,
+    path: &str,
+    disabled: &[&str],
+    oob: Vec<(String, String, String)>,
+) -> (std::sync::Arc<Shared>, Vec<ScanIssue>) {
     let shared = Shared::new();
     {
-        let mut cfg = shared.scan_config.lock().unwrap();
+        let cfg_slot = crate::scan_config::shared_config(&shared);
+        let mut cfg = cfg_slot.lock().unwrap();
         for (id, _, _) in crate::scan::check_catalogue() {
             if id != "active.jwt" {
                 cfg.disabled_checks.insert(id.to_string());
@@ -670,11 +934,16 @@ fn scan(port: u16, request_tail: &str, path: &str, disabled: &[&str], oob: Vec<(
     e.host = "127.0.0.1".into();
     e.port = port;
     e.path = path.into();
-    e.req_raw = format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{request_tail}\r\n").into_bytes().into();
+    e.req_raw = format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{request_tail}\r\n")
+        .into_bytes()
+        .into();
     crate::scan::start_active_scan(shared.clone(), e, &oob, &[]);
     let t0 = Instant::now();
     while shared.scan.is_busy() {
-        assert!(t0.elapsed() < Duration::from_secs(120), "scan did not finish");
+        assert!(
+            t0.elapsed() < Duration::from_secs(120),
+            "scan did not finish"
+        );
         std::thread::sleep(Duration::from_millis(20));
     }
     let issues = shared.issues.lock().unwrap().clone();
@@ -682,14 +951,25 @@ fn scan(port: u16, request_tail: &str, path: &str, disabled: &[&str], oob: Vec<(
 }
 
 fn jwt_issue_names(issues: &[ScanIssue]) -> Vec<String> {
-    let mut n: Vec<String> = issues.iter().filter(|i| i.name.starts_with("JWT ")).map(|i| i.name.clone()).collect();
+    let mut n: Vec<String> = issues
+        .iter()
+        .filter(|i| i.name.starts_with("JWT "))
+        .map(|i| i.name.clone())
+        .collect();
     n.sort();
     n
 }
 
 fn cookie_scan(app: App, disabled: &[&str]) -> Vec<ScanIssue> {
     let (port, _) = responder(app);
-    scan(port, &format!("Cookie: tok={}\r\n", app_token()), "/me", disabled, Vec::new()).1
+    scan(
+        port,
+        &format!("Cookie: tok={}\r\n", app_token()),
+        "/me",
+        disabled,
+        Vec::new(),
+    )
+    .1
 }
 
 #[test]
@@ -697,48 +977,129 @@ fn responder_self_check() {
     // The fixtures behave as described, so the scan tests mean something.
     let t = app_token();
     assert_eq!(verdict(App::Proper, Some(&t)).0, 200);
-    assert_eq!(verdict(App::Proper, Some(&jwt::corrupt_signature(&Jwt::parse(&t).unwrap()))).0, 401);
-    assert_eq!(verdict(App::Proper, Some(&jwt::control_token(&Jwt::parse(&t).unwrap()))).0, 401);
-    assert_eq!(verdict(App::IgnoresSignature, Some(&jwt::corrupt_signature(&Jwt::parse(&t).unwrap()))).0, 200);
-    assert_eq!(verdict(App::IgnoresSignature, Some(&jwt::control_token(&Jwt::parse(&t).unwrap()))).0, 401);
-    assert_eq!(verdict(App::AcceptsNone, Some(&jwt::none_variants(&Jwt::parse(&t).unwrap())[2])).0, 200);
-    assert_eq!(verdict(App::Proper, Some(&jwt::none_variants(&Jwt::parse(&t).unwrap())[2])).0, 401);
+    assert_eq!(
+        verdict(
+            App::Proper,
+            Some(&jwt::corrupt_signature(&Jwt::parse(&t).unwrap()))
+        )
+        .0,
+        401
+    );
+    assert_eq!(
+        verdict(
+            App::Proper,
+            Some(&jwt::control_token(&Jwt::parse(&t).unwrap()))
+        )
+        .0,
+        401
+    );
+    assert_eq!(
+        verdict(
+            App::IgnoresSignature,
+            Some(&jwt::corrupt_signature(&Jwt::parse(&t).unwrap()))
+        )
+        .0,
+        200
+    );
+    assert_eq!(
+        verdict(
+            App::IgnoresSignature,
+            Some(&jwt::control_token(&Jwt::parse(&t).unwrap()))
+        )
+        .0,
+        401
+    );
+    assert_eq!(
+        verdict(
+            App::AcceptsNone,
+            Some(&jwt::none_variants(&Jwt::parse(&t).unwrap())[2])
+        )
+        .0,
+        200
+    );
+    assert_eq!(
+        verdict(
+            App::Proper,
+            Some(&jwt::none_variants(&Jwt::parse(&t).unwrap())[2])
+        )
+        .0,
+        401
+    );
 }
 
 #[test]
 fn active_jwt_app_that_verifies_signatures_reports_nothing() {
     let issues = cookie_scan(App::Proper, &[]);
-    assert!(jwt_issue_names(&issues).is_empty(), "{:?}", jwt_issue_names(&issues));
+    assert!(
+        jwt_issue_names(&issues).is_empty(),
+        "{:?}",
+        jwt_issue_names(&issues)
+    );
 }
 
 #[test]
 fn active_jwt_app_that_does_not_use_the_token_reports_nothing() {
     // The control token cannot be told from the original: no verdict possible.
     let issues = cookie_scan(App::Unused, &[]);
-    assert!(jwt_issue_names(&issues).is_empty(), "{:?}", jwt_issue_names(&issues));
+    assert!(
+        jwt_issue_names(&issues).is_empty(),
+        "{:?}",
+        jwt_issue_names(&issues)
+    );
 }
 
 #[test]
 fn active_jwt_signature_not_verified_is_reported_with_burps_name() {
     let issues = cookie_scan(App::IgnoresSignature, &[]);
     let names = jwt_issue_names(&issues);
-    assert!(names.iter().any(|n| n == "JWT signature not verified"), "{names:?}");
-    let i = issues.iter().find(|i| i.name == "JWT signature not verified").unwrap();
+    assert!(
+        names.iter().any(|n| n == "JWT signature not verified"),
+        "{names:?}"
+    );
+    let i = issues
+        .iter()
+        .find(|i| i.name == "JWT signature not verified")
+        .unwrap();
     assert_eq!(i.sev, "high");
     assert_eq!(i.confidence, "Tentative");
-    assert!(i.detail.contains("signature of the JWT within the"), "{}", i.detail);
-    assert_eq!(i.evidence.len(), 3, "attack, original and control exchanges");
+    assert!(
+        i.detail.contains("signature of the JWT within the"),
+        "{}",
+        i.detail
+    );
+    assert_eq!(
+        i.evidence.len(),
+        3,
+        "attack, original and control exchanges"
+    );
     // An app that never checks the signature also trusts none and a foreign JWK.
-    assert!(names.iter().any(|n| n == "JWT none algorithm supported"), "{names:?}");
-    assert!(names.iter().any(|n| n == "JWT self-signed JWK header supported"), "{names:?}");
+    assert!(
+        names.iter().any(|n| n == "JWT none algorithm supported"),
+        "{names:?}"
+    );
+    assert!(
+        names
+            .iter()
+            .any(|n| n == "JWT self-signed JWK header supported"),
+        "{names:?}"
+    );
 }
 
 #[test]
 fn active_jwt_issue_is_switchable_by_its_id() {
-    let issues = cookie_scan(App::IgnoresSignature, &["active.jwt.jwt-signature-not-verified"]);
+    let issues = cookie_scan(
+        App::IgnoresSignature,
+        &["active.jwt.jwt-signature-not-verified"],
+    );
     let names = jwt_issue_names(&issues);
-    assert!(!names.iter().any(|n| n == "JWT signature not verified"), "{names:?}");
-    assert!(names.iter().any(|n| n == "JWT none algorithm supported"), "the other issues stay on: {names:?}");
+    assert!(
+        !names.iter().any(|n| n == "JWT signature not verified"),
+        "{names:?}"
+    );
+    assert!(
+        names.iter().any(|n| n == "JWT none algorithm supported"),
+        "the other issues stay on: {names:?}"
+    );
     let issues = cookie_scan(App::IgnoresSignature, &["active.jwt"]);
     assert!(jwt_issue_names(&issues).is_empty(), "the whole check off");
 }
@@ -747,10 +1108,24 @@ fn active_jwt_issue_is_switchable_by_its_id() {
 fn active_jwt_none_algorithm_is_reported_and_only_that() {
     let issues = cookie_scan(App::AcceptsNone, &[]);
     let names = jwt_issue_names(&issues);
-    assert!(names.iter().any(|n| n == "JWT none algorithm supported"), "{names:?}");
-    assert!(!names.iter().any(|n| n == "JWT signature not verified"), "{names:?}");
-    assert!(!names.iter().any(|n| n == "JWT self-signed JWK header supported"), "{names:?}");
-    let issues = cookie_scan(App::AcceptsNone, &["active.jwt.jwt-none-algorithm-supported"]);
+    assert!(
+        names.iter().any(|n| n == "JWT none algorithm supported"),
+        "{names:?}"
+    );
+    assert!(
+        !names.iter().any(|n| n == "JWT signature not verified"),
+        "{names:?}"
+    );
+    assert!(
+        !names
+            .iter()
+            .any(|n| n == "JWT self-signed JWK header supported"),
+        "{names:?}"
+    );
+    let issues = cookie_scan(
+        App::AcceptsNone,
+        &["active.jwt.jwt-none-algorithm-supported"],
+    );
     assert!(jwt_issue_names(&issues).is_empty());
 }
 
@@ -761,19 +1136,44 @@ fn active_jwt_attacks_a_bearer_token_in_a_query_parameter() {
     let t = app_token();
     let (_, issues) = scan(port, "", &format!("/me?t=Bearer%20{t}"), &[], Vec::new());
     let names = jwt_issue_names(&issues);
-    assert!(names.iter().any(|n| n == "JWT signature not verified"), "{names:?}");
+    assert!(
+        names.iter().any(|n| n == "JWT signature not verified"),
+        "{names:?}"
+    );
     // The attack kept the prefix.
-    assert!(seen.lock().unwrap().iter().any(|h| h.contains("t=Bearer%20") && h.contains(&format!("{}.", Jwt::parse(&t).unwrap().header_b64))), "requests carried 'Bearer <token>'");
+    assert!(
+        seen.lock()
+            .unwrap()
+            .iter()
+            .any(|h| h.contains("t=Bearer%20")
+                && h.contains(&format!("{}.", Jwt::parse(&t).unwrap().header_b64))),
+        "requests carried 'Bearer <token>'"
+    );
 }
 
 #[test]
 fn active_jwt_attacks_a_bearer_token_in_an_x_header() {
     // Header insertion points are the X-* headers, User-Agent and Referer.
     let (port, seen) = responder(App::IgnoresSignature);
-    let (_, issues) = scan(port, &format!("X-Auth-Token: Bearer {}\r\n", app_token()), "/me", &[], Vec::new());
+    let (_, issues) = scan(
+        port,
+        &format!("X-Auth-Token: Bearer {}\r\n", app_token()),
+        "/me",
+        &[],
+        Vec::new(),
+    );
     let names = jwt_issue_names(&issues);
-    assert!(names.iter().any(|n| n == "JWT signature not verified"), "{names:?}");
-    assert!(seen.lock().unwrap().iter().any(|h| h.to_ascii_lowercase().contains("x-auth-token: bearer ")), "requests keep the Bearer prefix");
+    assert!(
+        names.iter().any(|n| n == "JWT signature not verified"),
+        "{names:?}"
+    );
+    assert!(
+        seen.lock()
+            .unwrap()
+            .iter()
+            .any(|h| h.to_ascii_lowercase().contains("x-auth-token: bearer ")),
+        "requests keep the Bearer prefix"
+    );
 }
 
 #[test]
@@ -782,12 +1182,27 @@ fn active_jwt_applies_only_to_points_holding_a_token() {
     let cfg = crate::scan_config::ScanConfig::default();
     let check = crate::scan::checks::JwtAttacks;
     use crate::scan::checks::PointCheck;
-    let applies = |req: &str| -> Vec<bool> { crate::scan::insertion::audit_points(req, &cfg).iter().map(|ip| check.applies_to(ip)).collect() };
-    let q = applies(&format!("GET /x?a=1&t={t}&b=eyJ HTTP/1.1\r\nHost: h\r\n\r\n"));
+    let applies = |req: &str| -> Vec<bool> {
+        crate::scan::insertion::audit_points(req, &cfg)
+            .iter()
+            .map(|ip| check.applies_to(ip))
+            .collect()
+    };
+    let q = applies(&format!(
+        "GET /x?a=1&t={t}&b=eyJ HTTP/1.1\r\nHost: h\r\n\r\n"
+    ));
     assert_eq!(q.iter().filter(|b| **b).count(), 1, "{q:?}");
-    let q = applies(&format!("GET /x?t=Bearer%20{t} HTTP/1.1\r\nHost: h\r\n\r\n"));
-    assert_eq!(q.iter().filter(|b| **b).count(), 1, "Bearer-prefixed value: {q:?}");
-    let q = applies(&format!("GET /x HTTP/1.1\r\nHost: h\r\nCookie: tok={t}\r\n\r\n"));
+    let q = applies(&format!(
+        "GET /x?t=Bearer%20{t} HTTP/1.1\r\nHost: h\r\n\r\n"
+    ));
+    assert_eq!(
+        q.iter().filter(|b| **b).count(),
+        1,
+        "Bearer-prefixed value: {q:?}"
+    );
+    let q = applies(&format!(
+        "GET /x HTTP/1.1\r\nHost: h\r\nCookie: tok={t}\r\n\r\n"
+    ));
     assert_eq!(q.iter().filter(|b| **b).count(), 1, "cookie: {q:?}");
     let body = format!("{{\"token\":\"{t}\",\"x\":1}}");
     let q = applies(&format!("POST /x HTTP/1.1\r\nHost: h\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}", body.len()));
@@ -799,17 +1214,44 @@ fn active_jwt_applies_only_to_points_holding_a_token() {
 // ------------------------------------------------------------------ jku / x5u
 
 fn jwt_point_index(req: &str, name: &str) -> usize {
-    crate::scan::insertion::audit_points(req, &Default::default()).iter().position(|ip| ip.name == name).expect("insertion point")
+    crate::scan::insertion::audit_points(req, &Default::default())
+        .iter()
+        .position(|ip| ip.name == name)
+        .expect("insertion point")
 }
 
 #[test]
 fn active_jwt_jku_and_x5u_send_a_collaborator_url_and_register_the_id() {
     let (port, seen) = responder(App::Proper);
-    let req = format!("GET /me HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nCookie: tok={}\r\n\r\n", app_token());
+    let req = format!(
+        "GET /me HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nCookie: tok={}\r\n\r\n",
+        app_token()
+    );
     let k = jwt_point_index(&req, "tok");
-    let oob = vec![(format!("#{k}:jku"), "jkuid".to_string(), "jkuid.oast.test".to_string()), (format!("#{k}:x5u"), "x5uid".to_string(), "x5uid.oast.test".to_string())];
-    let (shared, issues) = scan(port, &format!("Cookie: tok={}\r\n", app_token()), "/me", &[], oob);
-    assert!(jwt_issue_names(&issues).is_empty(), "nothing reported before an interaction: {:?}", jwt_issue_names(&issues));
+    let oob = vec![
+        (
+            format!("#{k}:jku"),
+            "jkuid".to_string(),
+            "jkuid.oast.test".to_string(),
+        ),
+        (
+            format!("#{k}:x5u"),
+            "x5uid".to_string(),
+            "x5uid.oast.test".to_string(),
+        ),
+    ];
+    let (shared, issues) = scan(
+        port,
+        &format!("Cookie: tok={}\r\n", app_token()),
+        "/me",
+        &[],
+        oob,
+    );
+    assert!(
+        jwt_issue_names(&issues).is_empty(),
+        "nothing reported before an interaction: {:?}",
+        jwt_issue_names(&issues)
+    );
     let heads = seen.lock().unwrap().clone();
     let header_of = |name: &str| -> Option<serde_json::Value> {
         heads.iter().find_map(|h| {
@@ -818,21 +1260,46 @@ fn active_jwt_jku_and_x5u_send_a_collaborator_url_and_register_the_id() {
             j.header.get(name).cloned()
         })
     };
-    assert_eq!(header_of("jku"), Some(serde_json::json!("https://jkuid.oast.test/")));
-    assert_eq!(header_of("x5u"), Some(serde_json::json!("https://x5uid.oast.test/")));
+    assert_eq!(
+        header_of("jku"),
+        Some(serde_json::json!("https://jkuid.oast.test/"))
+    );
+    assert_eq!(
+        header_of("x5u"),
+        Some(serde_json::json!("https://x5uid.oast.test/"))
+    );
     let pending = shared.oob.pending();
-    for (id, name) in [("jkuid", "JWT arbitrary jku header supported"), ("x5uid", "JWT arbitrary x5u header supported")] {
-        let p = pending.iter().find(|p| p.0 == id).unwrap_or_else(|| panic!("{id} registered"));
+    for (id, name) in [
+        ("jkuid", "JWT arbitrary jku header supported"),
+        ("x5uid", "JWT arbitrary x5u header supported"),
+    ] {
+        let p = pending
+            .iter()
+            .find(|p| p.0 == id)
+            .unwrap_or_else(|| panic!("{id} registered"));
         assert_eq!(p.2.name, name);
         assert_eq!(p.2.sev, "high");
         assert_eq!(p.2.confidence, "Certain");
     }
     // The per-issue switch keeps the id from being sent.
     let (port, seen) = responder(App::Proper);
-    let oob = vec![(format!("#{k}:jku"), "jkuid".to_string(), "jkuid.oast.test".to_string())];
-    let (shared, _) = scan(port, &format!("Cookie: tok={}\r\n", app_token()), "/me", &["active.jwt.jwt-arbitrary-jku-header-supported"], oob);
+    let oob = vec![(
+        format!("#{k}:jku"),
+        "jkuid".to_string(),
+        "jkuid.oast.test".to_string(),
+    )];
+    let (shared, _) = scan(
+        port,
+        &format!("Cookie: tok={}\r\n", app_token()),
+        "/me",
+        &["active.jwt.jwt-arbitrary-jku-header-supported"],
+        oob,
+    );
     assert!(shared.oob.pending().is_empty());
-    assert!(!seen.lock().unwrap().iter().any(|h| h.contains("oast")), "no jku request when switched off");
+    assert!(
+        !seen.lock().unwrap().iter().any(|h| h.contains("oast")),
+        "no jku request when switched off"
+    );
 }
 
 fn http_interaction(token: &str) -> crate::collaborator::Interaction {
@@ -842,20 +1309,43 @@ fn http_interaction(token: &str) -> crate::collaborator::Interaction {
         at: 0,
         source: "192.0.2.1".into(),
         token: Some(token.into()),
-        detail: InteractionDetail::Http(HttpInteraction { method: "GET".into(), target: "/".into(), version: "HTTP/1.1".into(), headers: vec![], body: vec![] }),
+        detail: InteractionDetail::Http(HttpInteraction {
+            method: "GET".into(),
+            target: "/".into(),
+            version: "HTTP/1.1".into(),
+            headers: vec![],
+            body: vec![],
+        }),
     }
 }
 
 #[test]
 fn active_jwt_jku_interaction_raises_the_jwt_issue() {
     let (port, _) = responder(App::Proper);
-    let req = format!("GET /me HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nCookie: tok={}\r\n\r\n", app_token());
+    let req = format!(
+        "GET /me HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nCookie: tok={}\r\n\r\n",
+        app_token()
+    );
     let k = jwt_point_index(&req, "tok");
-    let oob = vec![(format!("#{k}:jku"), "jkuid2".to_string(), "jkuid2.oast.test".to_string())];
-    let (shared, _) = scan(port, &format!("Cookie: tok={}\r\n", app_token()), "/me", &[], oob);
+    let oob = vec![(
+        format!("#{k}:jku"),
+        "jkuid2".to_string(),
+        "jkuid2.oast.test".to_string(),
+    )];
+    let (shared, _) = scan(
+        port,
+        &format!("Cookie: tok={}\r\n", app_token()),
+        "/me",
+        &[],
+        oob,
+    );
     let got = shared.oob.match_interactions(&[http_interaction("jkuid2")]);
     let names: Vec<&str> = got.iter().map(|i| i.name.as_str()).collect();
-    assert_eq!(names, ["JWT arbitrary jku header supported"], "the interaction must raise the JWT issue");
+    assert_eq!(
+        names,
+        ["JWT arbitrary jku header supported"],
+        "the interaction must raise the JWT issue"
+    );
     assert_eq!(got[0].sev, "high");
 }
 
@@ -864,12 +1354,25 @@ fn active_jwt_scan_requests_jku_and_x5u_collaborator_slots() {
     let t = app_token();
     let req = format!("GET /me HTTP/1.1\r\nHost: h\r\nCookie: tok={t}\r\n\r\n");
     let k = jwt_point_index(&req, "tok");
-    let slots = crate::scan::slots_for(req.as_bytes(), crate::scan::ScanSpeed::Normal, &Default::default());
+    let slots = crate::scan::slots_for(
+        req.as_bytes(),
+        crate::scan::ScanSpeed::Normal,
+        &Default::default(),
+    );
     for kind in ["jku", "x5u"] {
         assert!(slots.contains(&format!("#{k}:{kind}")), "no #{k}:{kind} slot, so a real scan never gets a Collaborator payload for it: {slots:?}");
     }
     // A point that holds no token gets none.
     let req = "GET /me?a=1 HTTP/1.1\r\nHost: h\r\n\r\n";
-    let slots = crate::scan::slots_for(req.as_bytes(), crate::scan::ScanSpeed::Normal, &Default::default());
-    assert!(!slots.iter().any(|s| s.ends_with(":jku") || s.ends_with(":x5u")), "{slots:?}");
+    let slots = crate::scan::slots_for(
+        req.as_bytes(),
+        crate::scan::ScanSpeed::Normal,
+        &Default::default(),
+    );
+    assert!(
+        !slots
+            .iter()
+            .any(|s| s.ends_with(":jku") || s.ends_with(":x5u")),
+        "{slots:?}"
+    );
 }

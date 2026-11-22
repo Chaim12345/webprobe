@@ -9,8 +9,8 @@
 // registered too and stay hidden unless "WebProbe extra checks" is on
 // (`scan::add_passive_issues`).
 
-use super::*;
 use super::pack;
+use super::*;
 
 /// One response being checked, with what every unit needs computed once.
 pub(crate) struct PassiveCtx<'a> {
@@ -38,7 +38,12 @@ pub(crate) struct PassiveCtx<'a> {
 }
 
 impl<'a> PassiveCtx<'a> {
-    pub(crate) fn new(e: &'a HistEntry, resp: &'a [u8], state: Option<&'a crate::passive_state::PassiveState>, enabled: &'a dyn Fn(&str) -> bool) -> Self {
+    pub(crate) fn new(
+        e: &'a HistEntry,
+        resp: &'a [u8],
+        state: Option<&'a crate::passive_state::PassiveState>,
+        enabled: &'a dyn Fn(&str) -> bool,
+    ) -> Self {
         let p = util::parse_http(resp);
         let req = util::parse_http(&e.req_raw);
         let ok_status = p.status.starts_with('2') || p.status.starts_with('3');
@@ -46,9 +51,28 @@ impl<'a> PassiveCtx<'a> {
         let body = body_slice(resp, p.head_len);
         let binary = is_binary(&ct, body);
         let html = is_document(&ct) && !binary;
-        let text = if binary { String::new() } else { String::from_utf8_lossy(body).into_owned() };
+        let text = if binary {
+            String::new()
+        } else {
+            String::from_utf8_lossy(body).into_owned()
+        };
         let low = text.to_ascii_lowercase();
-        PassiveCtx { e, resp, p, req, ok_status, ct, body, binary, html, text, low, state, enabled, password: std::cell::OnceCell::new() }
+        PassiveCtx {
+            e,
+            resp,
+            p,
+            req,
+            ok_status,
+            ct,
+            body,
+            binary,
+            html,
+            text,
+            low,
+            state,
+            enabled,
+            password: std::cell::OnceCell::new(),
+        }
     }
 }
 
@@ -64,7 +88,11 @@ pub(crate) struct PassiveCheck {
 
 macro_rules! unit {
     ($c:expr, $run:expr) => {
-        PassiveCheck { id: $c.id, issue: $c.name, run: $run }
+        PassiveCheck {
+            id: $c.id,
+            issue: $c.name,
+            run: $run,
+        }
     };
 }
 
@@ -74,7 +102,11 @@ pub(crate) static PASSIVE_CHECKS: &[PassiveCheck] = &[
     unit!(CH_CT_MISSING, |cx, v| mime(cx, v, CH_CT_MISSING)),
     unit!(CH_CT_MULTI, |cx, v| mime(cx, v, CH_CT_MULTI)),
     unit!(CH_HTML_NO_CHARSET, |cx, v| mime(cx, v, CH_HTML_NO_CHARSET)),
-    unit!(CH_HTML_BAD_CHARSET, |cx, v| mime(cx, v, CH_HTML_BAD_CHARSET)),
+    unit!(CH_HTML_BAD_CHARSET, |cx, v| mime(
+        cx,
+        v,
+        CH_HTML_BAD_CHARSET
+    )),
     unit!(CH_OPENAPI_PASSIVE, openapi),
     unit!(CH_GRAPHQL_ENDPOINT_FOUND, graphql_endpoint_found),
     unit!(CH_CLEARTEXT, unencrypted),
@@ -89,17 +121,37 @@ pub(crate) static PASSIVE_CHECKS: &[PassiveCheck] = &[
     unit!(CH_ASPNET, aspnet_version),
     unit!(CH_COOKIE_SECURE, |cx, v| pack::cookie_flag(cx, v, true)),
     unit!(CH_COOKIE_HTTPONLY, |cx, v| pack::cookie_flag(cx, v, false)),
-    unit!(CH_COOKIE_SAMESITE, |cx, v| cookie_flags(cx, v, CH_COOKIE_SAMESITE)),
-    unit!(CH_COOKIE_SAMESITE_NONE, |cx, v| cookie_flags(cx, v, CH_COOKIE_SAMESITE_NONE)),
-    unit!(CH_CORS_WILDCARD_CREDS, |cx, v| cors(cx, v, CH_CORS_WILDCARD_CREDS)),
+    unit!(CH_COOKIE_SAMESITE, |cx, v| cookie_flags(
+        cx,
+        v,
+        CH_COOKIE_SAMESITE
+    )),
+    unit!(CH_COOKIE_SAMESITE_NONE, |cx, v| cookie_flags(
+        cx,
+        v,
+        CH_COOKIE_SAMESITE_NONE
+    )),
+    unit!(CH_CORS_WILDCARD_CREDS, |cx, v| cors(
+        cx,
+        v,
+        CH_CORS_WILDCARD_CREDS
+    )),
     unit!(CH_CORS_WILDCARD, |cx, v| cors(cx, v, CH_CORS_WILDCARD)),
     unit!(CH_CORS_NULL, |cx, v| cors(cx, v, CH_CORS_NULL)),
     unit!(CH_CORS_CREDS, |cx, v| cors(cx, v, CH_CORS_CREDS)),
     unit!(CH_CORS_REFLECT, |cx, v| cors(cx, v, CH_CORS_REFLECT)),
     unit!(CH_REDIRECT_COOKIE, redirect_cookie),
     unit!(CH_CACHE, cacheable_https),
-    PassiveCheck { id: "passive.error-signatures", issue: "Error message or stack trace in response (WebProbe)", run: error_signatures },
-    PassiveCheck { id: "passive.html-comment-secrets", issue: "Secret reference in HTML comment (WebProbe)", run: comment_secrets },
+    PassiveCheck {
+        id: "passive.error-signatures",
+        issue: "Error message or stack trace in response (WebProbe)",
+        run: error_signatures,
+    },
+    PassiveCheck {
+        id: "passive.html-comment-secrets",
+        issue: "Secret reference in HTML comment (WebProbe)",
+        run: comment_secrets,
+    },
     unit!(CH_GIT, git_exposed),
     unit!(CH_ENV, env_exposed),
     unit!(CH_DIR_LISTING, directory_listing),
@@ -111,28 +163,64 @@ pub(crate) static PASSIVE_CHECKS: &[PassiveCheck] = &[
     unit!(CH_LOGIN_HTTP, cleartext_password),
     unit!(CH_AUTOCOMPLETE, password_autocomplete),
     // R-04: Burp ports.
-    unit!(crate::scan::csp::CSP_NOT_ENFORCED, crate::scan::csp::run_not_enforced),
-    unit!(crate::scan::csp::CSP_UNTRUSTED_SCRIPTS, crate::scan::csp::run_untrusted_scripts),
-    unit!(crate::scan::csp::CSP_UNTRUSTED_STYLES, crate::scan::csp::run_untrusted_styles),
-    unit!(crate::scan::csp::CSP_ALLOWLISTED_SCRIPTS, crate::scan::csp::run_allowlisted_scripts),
-    unit!(crate::scan::csp::CSP_CLICKJACKING, crate::scan::csp::run_clickjacking),
-    unit!(crate::scan::csp::CSP_FORM_HIJACKING, crate::scan::csp::run_form_hijacking),
-    unit!(crate::scan::csp::CSP_MALFORMED, crate::scan::csp::run_malformed),
+    unit!(
+        crate::scan::csp::CSP_NOT_ENFORCED,
+        crate::scan::csp::run_not_enforced
+    ),
+    unit!(
+        crate::scan::csp::CSP_UNTRUSTED_SCRIPTS,
+        crate::scan::csp::run_untrusted_scripts
+    ),
+    unit!(
+        crate::scan::csp::CSP_UNTRUSTED_STYLES,
+        crate::scan::csp::run_untrusted_styles
+    ),
+    unit!(
+        crate::scan::csp::CSP_ALLOWLISTED_SCRIPTS,
+        crate::scan::csp::run_allowlisted_scripts
+    ),
+    unit!(
+        crate::scan::csp::CSP_CLICKJACKING,
+        crate::scan::csp::run_clickjacking
+    ),
+    unit!(
+        crate::scan::csp::CSP_FORM_HIJACKING,
+        crate::scan::csp::run_form_hijacking
+    ),
+    unit!(
+        crate::scan::csp::CSP_MALFORMED,
+        crate::scan::csp::run_malformed
+    ),
     unit!(CH_PASSWORD_GET, password_get),
     unit!(CH_PRIVATE_KEY, private_key),
     // R-09: Burp's passive JWT checks.
     unit!(CH_JWT_WEAK_SECRET, jwt_weak_secret),
     unit!(CH_JWT_PRIVATE_KEY, jwt_private_key),
     unit!(CH_SSN, ssn),
-    unit!(crate::scan::retirejs::CH_VULNERABLE_JS, crate::scan::retirejs::run),
+    unit!(
+        crate::scan::retirejs::CH_VULNERABLE_JS,
+        crate::scan::retirejs::run
+    ),
     // R-04 second pass.
     unit!(pack::CH_SESSION_TOKEN_URL, pack::session_token_in_url),
     unit!(pack::CH_DUPLICATE_COOKIES, pack::duplicate_cookies),
     unit!(pack::CH_CROSS_DOMAIN_SCRIPT, pack::cross_domain_script),
     unit!(pack::CH_COOKIE_PARENT_DOMAIN, pack::cookie_parent_domain),
-    unit!(pack::CH_PASSWORD_URL_QUERY, |cx, v| pack::passwords(cx, v, pack::CH_PASSWORD_URL_QUERY)),
-    unit!(pack::CH_PASSWORD_LATER, |cx, v| pack::passwords(cx, v, pack::CH_PASSWORD_LATER)),
-    unit!(pack::CH_PASSWORD_COOKIE, |cx, v| pack::passwords(cx, v, pack::CH_PASSWORD_COOKIE)),
+    unit!(pack::CH_PASSWORD_URL_QUERY, |cx, v| pack::passwords(
+        cx,
+        v,
+        pack::CH_PASSWORD_URL_QUERY
+    )),
+    unit!(pack::CH_PASSWORD_LATER, |cx, v| pack::passwords(
+        cx,
+        v,
+        pack::CH_PASSWORD_LATER
+    )),
+    unit!(pack::CH_PASSWORD_COOKIE, |cx, v| pack::passwords(
+        cx,
+        v,
+        pack::CH_PASSWORD_COOKIE
+    )),
     unit!(pack::CH_SOURCE_CODE, pack::source_code),
     unit!(pack::CH_SERIALIZED, pack::serialized_object),
     unit!(pack::CH_DB_CONNECTION, pack::db_connection_string),
@@ -145,7 +233,11 @@ pub(crate) fn run_passive(e: &HistEntry, enabled: &dyn Fn(&str) -> bool) -> Vec<
 }
 
 /// [`run_passive`] with the project's cross-response state.
-pub(crate) fn run_passive_in(e: &HistEntry, enabled: &dyn Fn(&str) -> bool, state: Option<&crate::passive_state::PassiveState>) -> Vec<ScanIssue> {
+pub(crate) fn run_passive_in(
+    e: &HistEntry,
+    enabled: &dyn Fn(&str) -> bool,
+    state: Option<&crate::passive_state::PassiveState>,
+) -> Vec<ScanIssue> {
     let mut v: Vec<ScanIssue> = Vec::new();
     let Some(resp) = &e.resp_raw else { return v };
     let cx = PassiveCtx::new(e, resp, state, enabled);
@@ -161,7 +253,12 @@ pub(crate) fn run_passive_in(e: &HistEntry, enabled: &dyn Fn(&str) -> bool, stat
 
 /// burp.Zgo1 (PASSWORD_SUBMITTED_USING_GET_METHOD): Certain, Low (Zrh
 /// bytes 3 / 2).
-pub(crate) const CH_PASSWORD_GET: CheckDef = CheckDef { id: "passive.password-get", name: "Password submitted using GET method", sev: "low", confidence: "Certain" };
+pub(crate) const CH_PASSWORD_GET: CheckDef = CheckDef {
+    id: "passive.password-get",
+    name: "Password submitted using GET method",
+    sev: "low",
+    confidence: "Certain",
+};
 
 /// One form of an HTML page: method, action, and its named password fields.
 pub(crate) struct Form {
@@ -183,9 +280,15 @@ pub(crate) fn attr(low_tag: &str, tag: &str, name: &str) -> Option<String> {
             let rest = tag[start..].trim_start();
             let q = rest.chars().next()?;
             return Some(if q == '"' || q == '\'' {
-                rest[1..].find(q).map(|e| rest[1..1 + e].to_string()).unwrap_or_else(|| rest[1..].to_string())
+                rest[1..]
+                    .find(q)
+                    .map(|e| rest[1..1 + e].to_string())
+                    .unwrap_or_else(|| rest[1..].to_string())
             } else {
-                rest.split(|c: char| c.is_whitespace() || c == '>').next().unwrap_or("").to_string()
+                rest.split(|c: char| c.is_whitespace() || c == '>')
+                    .next()
+                    .unwrap_or("")
+                    .to_string()
             });
         }
         from = at + name.len();
@@ -201,18 +304,32 @@ pub(crate) fn forms(text: &str, low: &str) -> Vec<Form> {
     let mut i = 0;
     while let Some(off) = low[i..].find("<form") {
         let start = i + off;
-        let tag_end = low[start..].find('>').map(|e| start + e + 1).unwrap_or(low.len());
-        let next_form = low[tag_end..].find("<form").map(|e| tag_end + e).unwrap_or(low.len());
-        let end = low[tag_end..].find("</form").map(|e| tag_end + e).unwrap_or(low.len()).min(next_form);
+        let tag_end = low[start..]
+            .find('>')
+            .map(|e| start + e + 1)
+            .unwrap_or(low.len());
+        let next_form = low[tag_end..]
+            .find("<form")
+            .map(|e| tag_end + e)
+            .unwrap_or(low.len());
+        let end = low[tag_end..]
+            .find("</form")
+            .map(|e| tag_end + e)
+            .unwrap_or(low.len())
+            .min(next_form);
         let (low_tag, tag) = (&low[start..tag_end], &text[start..tag_end]);
-        let method_get = attr(low_tag, tag, "method").is_none_or(|m| m.trim().eq_ignore_ascii_case("get"));
+        let method_get =
+            attr(low_tag, tag, "method").is_none_or(|m| m.trim().eq_ignore_ascii_case("get"));
         let action = attr(low_tag, tag, "action").unwrap_or_default();
         let mut passwords = Vec::new();
         let (body_low, body) = (&low[tag_end..end], &text[tag_end..end]);
         let mut j = 0;
         while let Some(o) = body_low[j..].find("<input") {
             let s = j + o;
-            let e = body_low[s..].find('>').map(|x| s + x + 1).unwrap_or(body_low.len());
+            let e = body_low[s..]
+                .find('>')
+                .map(|x| s + x + 1)
+                .unwrap_or(body_low.len());
             let (lt, t) = (&body_low[s..e], &body[s..e]);
             if attr(lt, t, "type").is_some_and(|ty| ty.trim().eq_ignore_ascii_case("password")) {
                 if let Some(n) = attr(lt, t, "name") {
@@ -221,7 +338,11 @@ pub(crate) fn forms(text: &str, low: &str) -> Vec<Form> {
             }
             j = e;
         }
-        out.push(Form { method_get, action, passwords });
+        out.push(Form {
+            method_get,
+            action,
+            passwords,
+        });
         i = end.max(tag_end);
     }
     out
@@ -231,7 +352,11 @@ pub(crate) fn forms(text: &str, low: &str) -> Vec<Form> {
 pub(crate) fn page_url(e: &HistEntry) -> String {
     let scheme = if e.https { "https" } else { "http" };
     let default = if e.https { 443 } else { 80 };
-    let host = if e.port == default || e.port == 0 { e.host.clone() } else { format!("{}:{}", e.host, e.port) };
+    let host = if e.port == default || e.port == 0 {
+        e.host.clone()
+    } else {
+        format!("{}:{}", e.host, e.port)
+    };
     if e.path.contains("://") {
         e.path.clone()
     } else {
@@ -253,7 +378,10 @@ pub(crate) fn resolve(base: &str, action: &str) -> String {
     if a.contains("://") {
         return a.to_string();
     }
-    let (origin, path) = match base.split_once("://").and_then(|(s, r)| r.find('/').map(|i| (format!("{s}://{}", &r[..i]), &r[i..]))) {
+    let (origin, path) = match base
+        .split_once("://")
+        .and_then(|(s, r)| r.find('/').map(|i| (format!("{s}://{}", &r[..i]), &r[i..])))
+    {
         Some((o, p)) => (o, p.to_string()),
         None => (base.to_string(), "/".to_string()),
     };
@@ -270,9 +398,19 @@ pub(crate) fn resolve(base: &str, action: &str) -> String {
 }
 
 /// burp.Zum_ (PRIVATE_KEY_DISCLOSED): Certain, Info.
-pub(crate) const CH_PRIVATE_KEY: CheckDef = CheckDef { id: "passive.private-key-disclosed", name: "Private key disclosed", sev: "info", confidence: "Certain" };
+pub(crate) const CH_PRIVATE_KEY: CheckDef = CheckDef {
+    id: "passive.private-key-disclosed",
+    name: "Private key disclosed",
+    sev: "info",
+    confidence: "Certain",
+};
 /// burp.Zcuc (SOCIAL_SECURITY_NUMBERS_DISCLOSED): Tentative, Info.
-pub(crate) const CH_SSN: CheckDef = CheckDef { id: "passive.ssn-disclosed", name: "Social security numbers disclosed", sev: "info", confidence: "Tentative" };
+pub(crate) const CH_SSN: CheckDef = CheckDef {
+    id: "passive.ssn-disclosed",
+    name: "Social security numbers disclosed",
+    sev: "info",
+    confidence: "Tentative",
+};
 
 /// Case-insensitive search for lowercase `needle` in `hay[from..to]`.
 fn find_ci(hay: &[u8], needle: &[u8], from: usize, to: usize) -> Option<usize> {
@@ -280,7 +418,12 @@ fn find_ci(hay: &[u8], needle: &[u8], from: usize, to: usize) -> Option<usize> {
     if from >= to || to - from < needle.len() {
         return None;
     }
-    (from..=to - needle.len()).find(|&i| hay[i..i + needle.len()].iter().zip(needle).all(|(a, b)| a.to_ascii_lowercase() == *b))
+    (from..=to - needle.len()).find(|&i| {
+        hay[i..i + needle.len()]
+            .iter()
+            .zip(needle)
+            .all(|(a, b)| a.to_ascii_lowercase() == *b)
+    })
 }
 
 /// burp.Zsdw.ZT: the words of a marker in order, the first anywhere from
@@ -300,7 +443,8 @@ fn pem_marker(hay: &[u8], words: &[&[u8]], from: usize) -> Option<(usize, usize)
 fn base64_run(hay: &[u8], a: usize, b: usize) -> bool {
     (a..b).all(|i| {
         let c = hay[i];
-        !(c == b'=' && i + 2 < b) && (c.is_ascii_alphanumeric() || c == b'+' || c == b'/' || c == b'=')
+        !(c == b'=' && i + 2 < b)
+            && (c.is_ascii_alphanumeric() || c == b'+' || c == b'/' || c == b'=')
     })
 }
 
@@ -336,38 +480,68 @@ fn private_key(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
     let mut at = 0;
     let mut found = false;
     while at < hay.len() {
-        let Some((_, begin_end)) = pem_marker(hay, &[b"begin", b"private", b"key"], at) else { break };
-        let Some((end_start, end_end)) = pem_marker(hay, &[b"end", b"private", b"key"], begin_end) else { break };
+        let Some((_, begin_end)) = pem_marker(hay, &[b"begin", b"private", b"key"], at) else {
+            break;
+        };
+        let Some((end_start, end_end)) = pem_marker(hay, &[b"end", b"private", b"key"], begin_end)
+        else {
+            break;
+        };
         found |= pem_body(hay, begin_end, end_start);
         at = end_end;
     }
     if found {
-        v.push(mk_check(CH_PRIVATE_KEY, cx.e, "The response appears to contain a cryptographic private key."));
+        v.push(mk_check(
+            CH_PRIVATE_KEY,
+            cx.e,
+            "The response appears to contain a cryptographic private key.",
+        ));
     }
 }
 
 /// burp.Zwg_: the existing exchange carries a GraphQL query and a parsed
 /// GraphQL response. No probe is sent (Information, Certain).
-pub(crate) const CH_GRAPHQL_ENDPOINT_FOUND: CheckDef = CheckDef { id: "passive.graphql-endpoint-found", name: "GraphQL endpoint found", sev: "info", confidence: "Certain" };
+pub(crate) const CH_GRAPHQL_ENDPOINT_FOUND: CheckDef = CheckDef {
+    id: "passive.graphql-endpoint-found",
+    name: "GraphQL endpoint found",
+    sev: "info",
+    confidence: "Certain",
+};
 
 fn graphql_endpoint_found(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
-    if crate::scan::checks::graphql_query(&cx.e.req_raw).is_some() && crate::scan::checks::graphql_response(cx.resp).is_some() {
-        v.push(mk_check(CH_GRAPHQL_ENDPOINT_FOUND, cx.e, "The request and response identify a GraphQL endpoint."));
+    if crate::scan::checks::graphql_query(&cx.e.req_raw).is_some()
+        && crate::scan::checks::graphql_response(cx.resp).is_some()
+    {
+        v.push(mk_check(
+            CH_GRAPHQL_ENDPOINT_FOUND,
+            cx.e,
+            "The request and response identify a GraphQL endpoint.",
+        ));
     }
 }
 
 /// burp.Zblw (PPR_JwtWeakHmacSecret; Zmir.Zn: Certain, High): an HS256/384/
 /// 512 JWT in the request signed with a key from Burp's secret list.
-pub(crate) const CH_JWT_WEAK_SECRET: CheckDef = CheckDef { id: "passive.jwt-weak-hmac-secret", name: "JWT weak HMAC secret", sev: "high", confidence: "Certain" };
+pub(crate) const CH_JWT_WEAK_SECRET: CheckDef = CheckDef {
+    id: "passive.jwt-weak-hmac-secret",
+    name: "JWT weak HMAC secret",
+    sev: "high",
+    confidence: "Certain",
+};
 /// burp.Zs73 (PPR_JwtPrivateKeyDisclosure; Zmir.ZK: Certain, High): a request
 /// JWT whose "jwk" header holds a private key, echoed in the response.
-pub(crate) const CH_JWT_PRIVATE_KEY: CheckDef = CheckDef { id: "passive.jwt-private-key-disclosed", name: "JWT private key disclosed", sev: "high", confidence: "Certain" };
+pub(crate) const CH_JWT_PRIVATE_KEY: CheckDef = CheckDef {
+    id: "passive.jwt-private-key-disclosed",
+    name: "JWT private key disclosed",
+    sev: "high",
+    confidence: "Certain",
+};
 
 /// Tokens already tried against the secret list (Burp's Zbpi dedupe), so
 /// one token seen in many requests is brute-forced once.
 fn jwt_tried(raw: &str) -> bool {
-    static TRIED: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
-    let mut t = TRIED.lock().unwrap_or_else(|p| p.into_inner());
+    static TRIED: crate::sync::Mutex<Vec<String>> = crate::sync::Mutex::new(Vec::new());
+    let mut t = TRIED.lock().unwrap();
     if t.iter().any(|x| x == raw) {
         return true;
     }
@@ -384,9 +558,15 @@ fn jwt_weak_secret(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
 }
 
 /// The weak-secret check with a given candidate list (the seam tests use).
-pub(crate) fn jwt_weak_secret_with<'a>(cx: &PassiveCtx, v: &mut Vec<ScanIssue>, candidates: impl Iterator<Item = &'a str> + Clone, dedupe: bool) {
+pub(crate) fn jwt_weak_secret_with<'a>(
+    cx: &PassiveCtx,
+    v: &mut Vec<ScanIssue>,
+    candidates: impl Iterator<Item = &'a str> + Clone,
+    dedupe: bool,
+) {
     for t in crate::jwt::tokens_in_request(&cx.req, &cx.e.req_raw) {
-        if !matches!(t.alg().as_str(), "HS256" | "HS384" | "HS512") || (dedupe && jwt_tried(&t.raw)) {
+        if !matches!(t.alg().as_str(), "HS256" | "HS384" | "HS512") || (dedupe && jwt_tried(&t.raw))
+        {
             continue;
         }
         if let Some(secret) = crate::jwt::weak_secret(&t, candidates.clone()) {
@@ -421,7 +601,12 @@ fn find_ssns(b: &[u8]) -> Vec<String> {
     let n = b.len();
     let digit = |i: usize| i < n && b[i].is_ascii_digit();
     let sep = |i: usize| i < n && (b[i] == b' ' || b[i] == b'-');
-    let num = |a: usize, l: usize| std::str::from_utf8(&b[a..a + l]).ok().and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
+    let num = |a: usize, l: usize| {
+        std::str::from_utf8(&b[a..a + l])
+            .ok()
+            .and_then(|s| s.parse::<u32>().ok())
+            .unwrap_or(0)
+    };
     let mut out: Vec<String> = Vec::new();
     let mut boundary = true;
     let mut i = 0;
@@ -447,7 +632,12 @@ fn find_ssns(b: &[u8]) -> Vec<String> {
                     && !(n > i + 12 && b[i + 11] == s && b[i + 12].is_ascii_digit())
                     && {
                         let (area, group, serial) = (num(i, 3), num(i + 4, 2), num(i + 7, 4));
-                        area > 0 && area < 900 && area != 666 && group > 0 && serial > 0 && (area, group, serial) != (78, 5, 1120)
+                        area > 0
+                            && area < 900
+                            && area != 666
+                            && group > 0
+                            && serial > 0
+                            && (area, group, serial) != (78, 5, 1120)
                     };
                 if ok {
                     let v = String::from_utf8_lossy(&b[i..j]).into_owned();
@@ -492,7 +682,11 @@ fn password_get(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
         let mut t = String::from("The page contains a form with the following action URL, which is submitted using the GET method:<ul><li>");
         t.push_str(&util::html_encode(&resolve(&base, &f.action)));
         t.push_str("</li></ul>The form contains the following password ");
-        t.push_str(if f.passwords.len() == 1 { "field" } else { "fields" });
+        t.push_str(if f.passwords.len() == 1 {
+            "field"
+        } else {
+            "fields"
+        });
         t.push_str(":<ul>");
         let mut seen: Vec<&String> = Vec::new();
         for p in &f.passwords {
@@ -510,10 +704,19 @@ fn password_get(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
 /// (burp.Zbjf SCANNER_ACTIVE_CHECKS_CSRF; passive variant of the family).
 fn csrf_form_token(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
     let e = cx.e;
-    let req_body = String::from_utf8_lossy(body_slice(&e.req_raw, cx.req.head_len.min(e.req_raw.len()))).to_lowercase();
-    let method_post = cx.req.first.trim_start().to_ascii_uppercase().starts_with("POST");
+    let req_body =
+        String::from_utf8_lossy(body_slice(&e.req_raw, cx.req.head_len.min(e.req_raw.len())))
+            .to_lowercase();
+    let method_post = cx
+        .req
+        .first
+        .trim_start()
+        .to_ascii_uppercase()
+        .starts_with("POST");
     if method_post && req_body.contains("password") {
-        let has_token = ["csrf", "token", "nonce", "authenticity"].iter().any(|t| req_body.contains(t));
+        let has_token = ["csrf", "token", "nonce", "authenticity"]
+            .iter()
+            .any(|t| req_body.contains(t));
         if !has_token {
             v.push(mk_check(CH_CSRF, e, "POST body carries a password field but no anti-CSRF token field name (csrf/token/nonce/authenticity)."));
         }
@@ -524,7 +727,10 @@ fn csrf_form_token(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
 /// redirects; known charsets are Zf9p.ZY (runtime-dumped). One unit per
 /// issue, each in mime_issues' own order.
 fn mime(cx: &PassiveCtx, v: &mut Vec<ScanIssue>, which: CheckDef) {
-    for i in mime_issues(cx.resp).into_iter().filter(|i| i.id == which.id) {
+    for i in mime_issues(cx.resp)
+        .into_iter()
+        .filter(|i| i.id == which.id)
+    {
         let mut issue = mk_check(i, cx.e, match i.id {
             "passive.html-no-charset" => "The response states the content type as HTML but does not specify a character set.",
             "passive.html-unrecognized-charset" => "The response specifies a character set that is not a recognized standard one.",
@@ -539,9 +745,17 @@ fn mime(cx: &PassiveCtx, v: &mut Vec<ScanIssue>, which: CheckDef) {
 /// OpenAPI definition found (passive scan check), burp.Zge_.
 fn openapi(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
     let e = cx.e;
-    let path = e.path.split_once("://").and_then(|(_, r)| r.find('/').map(|i| r[i..].to_string())).unwrap_or_else(|| e.path.clone());
+    let path = e
+        .path
+        .split_once("://")
+        .and_then(|(_, r)| r.find('/').map(|i| r[i..].to_string()))
+        .unwrap_or_else(|| e.path.clone());
     if crate::burp_checks::openapi_passive(&path, cx.resp) {
-        v.push(mk_check(CH_OPENAPI_PASSIVE, e, "The response contains an OpenAPI definition."));
+        v.push(mk_check(
+            CH_OPENAPI_PASSIVE,
+            e,
+            "The response contains an OpenAPI definition.",
+        ));
     }
 }
 
@@ -550,7 +764,11 @@ fn openapi(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
 /// against the root path.
 fn unencrypted(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
     if !cx.e.https {
-        let mut i = mk_check(CH_CLEARTEXT, cx.e, "The site communicates over plain HTTP; traffic can be read or modified in transit.");
+        let mut i = mk_check(
+            CH_CLEARTEXT,
+            cx.e,
+            "The site communicates over plain HTTP; traffic can be read or modified in transit.",
+        );
         i.path = "/".into();
         v.push(i);
     }
@@ -561,12 +779,28 @@ fn unencrypted(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
 /// one URL-bearing element (burp.Zeyc) and no X-Frame-Options DENY or
 /// SAMEORIGIN. A CSP frame-ancestors policy does not suppress it.
 fn frameable(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
-    let get = cx.req.first.trim_start().to_ascii_uppercase().starts_with("GET ");
+    let get = cx
+        .req
+        .first
+        .trim_start()
+        .to_ascii_uppercase()
+        .starts_with("GET ");
     let redirect = cx.p.status.starts_with('3');
     let xfo = util::get_header(&cx.p.headers, "X-Frame-Options").unwrap_or_default();
-    let blocked = xfo.trim().eq_ignore_ascii_case("deny") || xfo.trim().eq_ignore_ascii_case("sameorigin");
-    if get && !redirect && cx.html && !blocked && !burp_sniff_unknown(cx.resp, cx.p.head_len) && has_url_element(&cx.low) {
-        v.push(mk_check(CH_FRAME, cx.e, "The response may be framed by another site (clickjacking risk)."));
+    let blocked =
+        xfo.trim().eq_ignore_ascii_case("deny") || xfo.trim().eq_ignore_ascii_case("sameorigin");
+    if get
+        && !redirect
+        && cx.html
+        && !blocked
+        && !burp_sniff_unknown(cx.resp, cx.p.head_len)
+        && has_url_element(&cx.low)
+    {
+        v.push(mk_check(
+            CH_FRAME,
+            cx.e,
+            "The response may be framed by another site (clickjacking risk).",
+        ));
     }
 }
 
@@ -578,25 +812,42 @@ fn hsts(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
 }
 
 fn csp_missing(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
-    if cx.ok_status && cx.html && util::get_header(&cx.p.headers, "Content-Security-Policy").unwrap_or_default().is_empty() {
+    if cx.ok_status
+        && cx.html
+        && util::get_header(&cx.p.headers, "Content-Security-Policy")
+            .unwrap_or_default()
+            .is_empty()
+    {
         v.push(mk_check(CH_CSP, cx.e, "No Content-Security-Policy, so injected scripts are not restricted by a content policy."));
     }
 }
 
 fn xcto(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
     if cx.ok_status && cx.html && !has_header(&cx.p.headers, "X-Content-Type-Options") {
-        v.push(mk_check(CH_XCTO, cx.e, "No nosniff directive; browsers may guess the content type."));
+        v.push(mk_check(
+            CH_XCTO,
+            cx.e,
+            "No nosniff directive; browsers may guess the content type.",
+        ));
     }
 }
 
 fn referrer_policy(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
     if cx.ok_status && cx.html && !has_header(&cx.p.headers, "Referrer-Policy") {
-        v.push(mk_check(CH_REFERRER, cx.e, "No Referrer-Policy, so URLs (possibly with tokens) leak in the Referer header."));
+        v.push(mk_check(
+            CH_REFERRER,
+            cx.e,
+            "No Referrer-Policy, so URLs (possibly with tokens) leak in the Referer header.",
+        ));
     }
 }
 
 fn permissions_policy(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
-    if cx.ok_status && cx.html && !has_header(&cx.p.headers, "Permissions-Policy") && !has_header(&cx.p.headers, "Feature-Policy") {
+    if cx.ok_status
+        && cx.html
+        && !has_header(&cx.p.headers, "Permissions-Policy")
+        && !has_header(&cx.p.headers, "Feature-Policy")
+    {
         v.push(mk_check(CH_PERMISSIONS, cx.e, "No Permissions-Policy; powerful browser features are left enabled for embedded content."));
     }
 }
@@ -606,9 +857,14 @@ fn server_version(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
         return;
     }
     if let Some(server) = util::get_header(&cx.p.headers, "Server") {
-        let discloses = server.contains('/') || !server.split_whitespace().nth(1).unwrap_or("").is_empty();
+        let discloses =
+            server.contains('/') || !server.split_whitespace().nth(1).unwrap_or("").is_empty();
         if discloses {
-            v.push(mk_check(CH_SERVER, cx.e, format!("Server header: {server}")));
+            v.push(mk_check(
+                CH_SERVER,
+                cx.e,
+                format!("Server header: {server}"),
+            ));
         }
     }
 }
@@ -616,7 +872,11 @@ fn server_version(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
 fn x_powered_by(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
     if cx.ok_status && cx.html {
         if let Some(xpb) = util::get_header(&cx.p.headers, "X-Powered-By") {
-            v.push(mk_check(CH_XPB, cx.e, format!("X-Powered-By header: {xpb}")));
+            v.push(mk_check(
+                CH_XPB,
+                cx.e,
+                format!("X-Powered-By header: {xpb}"),
+            ));
         }
     }
 }
@@ -663,19 +923,37 @@ fn cors(cx: &PassiveCtx, v: &mut Vec<ScanIssue>, which: CheckDef) {
     }
     let p = &cx.p;
     let acao = util::get_header(&p.headers, "Access-Control-Allow-Origin").unwrap_or_default();
-    let acac = util::get_header(&p.headers, "Access-Control-Allow-Credentials").map(|v| v.eq_ignore_ascii_case("true")).unwrap_or(false);
+    let acac = util::get_header(&p.headers, "Access-Control-Allow-Credentials")
+        .map(|v| v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
     let found: Option<(CheckDef, String)> = if acao == "*" && acac {
         Some((CH_CORS_WILDCARD_CREDS, "Access-Control-Allow-Origin: * with credentials (browsers reject it, but the policy is broken).".into()))
     } else if acao == "*" {
-        Some((CH_CORS_WILDCARD, "Access-Control-Allow-Origin: * lets any site read the response.".into()))
+        Some((
+            CH_CORS_WILDCARD,
+            "Access-Control-Allow-Origin: * lets any site read the response.".into(),
+        ))
     } else if acao.eq_ignore_ascii_case("null") {
-        Some((CH_CORS_NULL, "Access-Control-Allow-Origin: null trusts sandboxed/data: origins.".into()))
+        Some((
+            CH_CORS_NULL,
+            "Access-Control-Allow-Origin: null trusts sandboxed/data: origins.".into(),
+        ))
     } else if let Some(origin) = util::get_header(&cx.req.headers, "Origin") {
         if !acao.is_empty() && acao.eq_ignore_ascii_case(&origin) {
             if acac {
-                Some((CH_CORS_CREDS, format!("Access-Control-Allow-Origin reflects {origin} and allows credentials.")))
+                Some((
+                    CH_CORS_CREDS,
+                    format!(
+                        "Access-Control-Allow-Origin reflects {origin} and allows credentials."
+                    ),
+                ))
             } else {
-                Some((CH_CORS_REFLECT, format!("Access-Control-Allow-Origin reflects the caller-supplied origin {origin}.")))
+                Some((
+                    CH_CORS_REFLECT,
+                    format!(
+                        "Access-Control-Allow-Origin reflects the caller-supplied origin {origin}."
+                    ),
+                ))
             }
         } else {
             None
@@ -696,13 +974,25 @@ fn redirect_cookie(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
         return;
     }
     if let Some(loc) = util::get_header(&cx.p.headers, "Location") {
-        let same_host = location_host(&loc).map(|h| h == cx.e.host.to_ascii_lowercase()).unwrap_or(true);
-        let session_cookie = cx.p.headers.iter().filter(|(k, _)| k.eq_ignore_ascii_case("Set-Cookie")).any(|(_, val)| {
-            let c = parse_cookie(val);
-            looks_session_cookie(c.name, c.value)
-        });
+        let same_host = location_host(&loc)
+            .map(|h| h == cx.e.host.to_ascii_lowercase())
+            .unwrap_or(true);
+        let session_cookie =
+            cx.p.headers
+                .iter()
+                .filter(|(k, _)| k.eq_ignore_ascii_case("Set-Cookie"))
+                .any(|(_, val)| {
+                    let c = parse_cookie(val);
+                    looks_session_cookie(c.name, c.value)
+                });
         if !same_host && session_cookie {
-            v.push(mk_check(CH_REDIRECT_COOKIE, cx.e, format!("302 to {loc} sets a session cookie that is not scoped to the target host.")));
+            v.push(mk_check(
+                CH_REDIRECT_COOKIE,
+                cx.e,
+                format!(
+                    "302 to {loc} sets a session cookie that is not scoped to the target host."
+                ),
+            ));
         }
     }
 }
@@ -712,13 +1002,25 @@ fn cacheable_https(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
     if !(cx.ok_status && cx.e.https) {
         return;
     }
-    let cc = util::get_header(&cx.p.headers, "Cache-Control").unwrap_or_default().to_ascii_lowercase();
-    let set_cookie = cx.p.headers.iter().any(|(k, _)| k.eq_ignore_ascii_case("Set-Cookie"));
+    let cc = util::get_header(&cx.p.headers, "Cache-Control")
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let set_cookie =
+        cx.p.headers
+            .iter()
+            .any(|(k, _)| k.eq_ignore_ascii_case("Set-Cookie"));
     let low = &cx.low;
-    let sensitive = set_cookie || low.contains("\"token\"") || low.contains("password") || low.contains("api_key");
+    let sensitive = set_cookie
+        || low.contains("\"token\"")
+        || low.contains("password")
+        || low.contains("api_key");
     let cacheable = cc.is_empty() || (cc.contains("public") && !cc.contains("no-store"));
     if sensitive && cacheable {
-        v.push(mk_check(CH_CACHE, cx.e, "Sensitive HTTPS response without Cache-Control: no-store/private."));
+        v.push(mk_check(
+            CH_CACHE,
+            cx.e,
+            "Sensitive HTTPS response without Cache-Control: no-store/private.",
+        ));
     }
 }
 
@@ -728,8 +1030,17 @@ fn error_signatures(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
         return;
     }
     for (sig, name) in ERROR_SIGNATURES {
-        if cx.body.windows(sig.len()).any(|w| w.eq_ignore_ascii_case(sig.as_bytes())) {
-            v.push(mk("medium", name, cx.e, format!("Signature matched: {sig}")));
+        if cx
+            .body
+            .windows(sig.len())
+            .any(|w| w.eq_ignore_ascii_case(sig.as_bytes()))
+        {
+            v.push(mk(
+                "medium",
+                name,
+                cx.e,
+                format!("Signature matched: {sig}"),
+            ));
         }
     }
 }
@@ -743,11 +1054,21 @@ fn comment_secrets(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
     let mut start = 0;
     while let Some(copen) = text[start..].find("<!--") {
         let cstart = start + copen + 4;
-        let Some(cend) = text[cstart..].find("-->") else { break };
+        let Some(cend) = text[cstart..].find("-->") else {
+            break;
+        };
         let comment = &text[cstart..cstart + cend];
         for (kw, name) in SECRET_KEYWORDS {
-            if comment.to_ascii_lowercase().contains(&kw.to_ascii_lowercase()) {
-                v.push(mk("info", name, cx.e, comment.trim().chars().take(120).collect::<String>()));
+            if comment
+                .to_ascii_lowercase()
+                .contains(&kw.to_ascii_lowercase())
+            {
+                v.push(mk(
+                    "info",
+                    name,
+                    cx.e,
+                    comment.trim().chars().take(120).collect::<String>(),
+                ));
             }
         }
         start = cstart + cend + 3;
@@ -759,8 +1080,14 @@ fn git_exposed(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
         return;
     }
     let path = cx.e.path.to_ascii_lowercase();
-    if (path.contains("/.git/") || path.ends_with("/.git")) && (cx.text.contains("[core]") || cx.text.contains("ref: refs/")) {
-        v.push(mk_check(CH_GIT, cx.e, "Git metadata served by the web root (repository layout and history are exposed)."));
+    if (path.contains("/.git/") || path.ends_with("/.git"))
+        && (cx.text.contains("[core]") || cx.text.contains("ref: refs/"))
+    {
+        v.push(mk_check(
+            CH_GIT,
+            cx.e,
+            "Git metadata served by the web root (repository layout and history are exposed).",
+        ));
     }
 }
 
@@ -771,8 +1098,14 @@ fn env_exposed(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
     let path = cx.e.path.to_ascii_lowercase();
     let env_path = path.ends_with("/.env") || path.contains("/.env?");
     let t = &cx.text;
-    if env_path && (t.contains("APP_KEY=") || t.contains("DB_PASSWORD=") || t.contains("SECRET_KEY=")) {
-        v.push(mk_check(CH_ENV, cx.e, "Environment file served by the web root (secrets and credentials are exposed)."));
+    if env_path
+        && (t.contains("APP_KEY=") || t.contains("DB_PASSWORD=") || t.contains("SECRET_KEY="))
+    {
+        v.push(mk_check(
+            CH_ENV,
+            cx.e,
+            "Environment file served by the web root (secrets and credentials are exposed).",
+        ));
     }
 }
 
@@ -781,8 +1114,16 @@ fn directory_listing(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
         return;
     }
     let low = &cx.low;
-    if cx.html && (low.contains("<title>index of") || low.contains("<h1>index of") || low.contains("directory listing for")) {
-        v.push(mk_check(CH_DIR_LISTING, cx.e, "The server returns a directory index instead of refusing the request."));
+    if cx.html
+        && (low.contains("<title>index of")
+            || low.contains("<h1>index of")
+            || low.contains("directory listing for"))
+    {
+        v.push(mk_check(
+            CH_DIR_LISTING,
+            cx.e,
+            "The server returns a directory index instead of refusing the request.",
+        ));
     }
 }
 
@@ -791,7 +1132,11 @@ fn robots(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
         return;
     }
     if cx.e.path.to_ascii_lowercase().ends_with("/robots.txt") {
-        v.push(mk_check(CH_ROBOTS, cx.e, "robots.txt is reachable; its Disallow entries map the hidden parts of the site."));
+        v.push(mk_check(
+            CH_ROBOTS,
+            cx.e,
+            "robots.txt is reachable; its Disallow entries map the hidden parts of the site.",
+        ));
     }
 }
 
@@ -809,22 +1154,36 @@ pub(crate) fn disclosure_text(cx: &PassiveCtx) -> Option<String> {
 }
 
 fn disclosure(cx: &PassiveCtx, v: &mut Vec<ScanIssue>, which: CheckDef) {
-    let Some(text) = disclosure_text(cx) else { return };
+    let Some(text) = disclosure_text(cx) else {
+        return;
+    };
     let e = cx.e;
     match which.id {
         "passive.email-disclosed" => {
             if let Some(addr) = find_email_excluding(&text, &String::from_utf8_lossy(&e.req_raw)) {
-                v.push(mk_check(CH_EMAIL, e, format!("Address found in the response: {addr}")));
+                v.push(mk_check(
+                    CH_EMAIL,
+                    e,
+                    format!("Address found in the response: {addr}"),
+                ));
             }
         }
         "passive.private-ip-disclosed" => {
             if let Some(ip) = find_private_ip(&text) {
-                v.push(mk_check(CH_PRIVATE_IP, e, format!("Address found in the response: {ip}")));
+                v.push(mk_check(
+                    CH_PRIVATE_IP,
+                    e,
+                    format!("Address found in the response: {ip}"),
+                ));
             }
         }
         _ => {
             if let Some(card) = find_card(&text) {
-                v.push(mk_check(CH_CREDIT_CARD, e, format!("Luhn-valid number found in the response: {card}")));
+                v.push(mk_check(
+                    CH_CREDIT_CARD,
+                    e,
+                    format!("Luhn-valid number found in the response: {card}"),
+                ));
             }
         }
     }
@@ -836,10 +1195,19 @@ fn mixed_content(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
         return;
     }
     let low = &cx.low;
-    let mixed = ["script", "iframe", "img", "source", "video", "audio"].iter().flat_map(|t| tags(low, t)).find(|t| t.contains("http://"));
-    let mixed_link = tags(low, "link").into_iter().find(|t| t.contains("stylesheet") && t.contains("http://"));
+    let mixed = ["script", "iframe", "img", "source", "video", "audio"]
+        .iter()
+        .flat_map(|t| tags(low, t))
+        .find(|t| t.contains("http://"));
+    let mixed_link = tags(low, "link")
+        .into_iter()
+        .find(|t| t.contains("stylesheet") && t.contains("http://"));
     if let Some(tag) = mixed.or(mixed_link) {
-        v.push(mk_check(CH_MIXED, cx.e, format!("HTTPS page loads a subresource over HTTP: {}", tag.trim())));
+        v.push(mk_check(
+            CH_MIXED,
+            cx.e,
+            format!("HTTPS page loads a subresource over HTTP: {}", tag.trim()),
+        ));
     }
 }
 
@@ -849,12 +1217,25 @@ fn cleartext_password(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
         return;
     }
     let forms = tags(&cx.low, "form");
-    let http_action = forms.iter().find(|t| t.contains("action=\"http://") || t.contains("action='http://"));
-    let relative_action = !cx.e.https && forms.iter().any(|t| !t.contains("action=\"http") && !t.contains("action='http"));
+    let http_action = forms
+        .iter()
+        .find(|t| t.contains("action=\"http://") || t.contains("action='http://"));
+    let relative_action = !cx.e.https
+        && forms
+            .iter()
+            .any(|t| !t.contains("action=\"http") && !t.contains("action='http"));
     if let Some(tag) = http_action {
-        v.push(mk_check(CH_LOGIN_HTTP, cx.e, format!("Password form submits over HTTP: {}", tag.trim())));
+        v.push(mk_check(
+            CH_LOGIN_HTTP,
+            cx.e,
+            format!("Password form submits over HTTP: {}", tag.trim()),
+        ));
     } else if relative_action {
-        v.push(mk_check(CH_LOGIN_HTTP, cx.e, "Password form on a plain-HTTP page submits its credentials unencrypted."));
+        v.push(mk_check(
+            CH_LOGIN_HTTP,
+            cx.e,
+            "Password form on a plain-HTTP page submits its credentials unencrypted.",
+        ));
     }
 }
 
@@ -865,7 +1246,10 @@ fn password_autocomplete(cx: &PassiveCtx, v: &mut Vec<ScanIssue>) {
     }
     let weak = tags(&cx.low, "input").into_iter().find(|t| {
         (t.contains("type=\"password\"") || t.contains("type='password'"))
-            && !(t.contains("autocomplete=\"off\"") || t.contains("autocomplete='off'") || t.contains("autocomplete=\"new-password\"") || t.contains("autocomplete='new-password'"))
+            && !(t.contains("autocomplete=\"off\"")
+                || t.contains("autocomplete='off'")
+                || t.contains("autocomplete=\"new-password\"")
+                || t.contains("autocomplete='new-password'"))
     });
     if let Some(tag) = weak {
         v.push(mk_check(CH_AUTOCOMPLETE, cx.e, tag.trim().to_string()));
@@ -879,7 +1263,10 @@ mod tests {
     use crate::scan::retirejs;
 
     fn ex(path: &str, https: bool, headers: &str, body: &str) -> HistEntry {
-        let resp = format!("HTTP/1.1 200 OK\r\n{headers}Content-Length: {}\r\n\r\n{body}", body.len());
+        let resp = format!(
+            "HTTP/1.1 200 OK\r\n{headers}Content-Length: {}\r\n\r\n{body}",
+            body.len()
+        );
         HistEntry {
             id: 1,
             ts: 0,
@@ -890,7 +1277,9 @@ mod tests {
             path: path.into(),
             status: "200".into(),
             resp_len: resp.len(),
-            req_raw: format!("GET {path} HTTP/1.1\r\nHost: example.com\r\n\r\n").into_bytes().into(),
+            req_raw: format!("GET {path} HTTP/1.1\r\nHost: example.com\r\n\r\n")
+                .into_bytes()
+                .into(),
             resp_raw: Some(resp.into_bytes().into()),
             note: None,
             highlight: None,
@@ -909,7 +1298,12 @@ mod tests {
     const HTML: &str = "Content-Type: text/html; charset=utf-8\r\n";
 
     fn page(csp: &str) -> HistEntry {
-        ex("/", true, &format!("{HTML}Content-Security-Policy: {csp}\r\n"), "<html><body>hi</body></html>")
+        ex(
+            "/",
+            true,
+            &format!("{HTML}Content-Security-Policy: {csp}\r\n"),
+            "<html><body>hi</body></html>",
+        )
     }
 
     /// The issues one check raises on its own.
@@ -925,12 +1319,44 @@ mod tests {
         for c in PASSIVE_CHECKS {
             assert_eq!(cat.iter().filter(|x| x.0 == c.id).count(), 1, "{}", c.id);
         }
-        for id in ["passive.csp-untrusted-scripts", "passive.password-get", "passive.private-key-disclosed", "passive.ssn-disclosed", "passive.vulnerable-js-dependency"] {
-            assert!(cat.iter().any(|x| x.0 == id && x.2 == "passive, per response"), "{id}");
+        for id in [
+            "passive.csp-untrusted-scripts",
+            "passive.password-get",
+            "passive.private-key-disclosed",
+            "passive.ssn-disclosed",
+            "passive.vulnerable-js-dependency",
+        ] {
+            assert!(
+                cat.iter()
+                    .any(|x| x.0 == id && x.2 == "passive, per response"),
+                "{id}"
+            );
         }
         // The Burp ports report KnowledgeBase names, so they are shown by
         // default.
-        for c in [csp::CSP_NOT_ENFORCED, csp::CSP_UNTRUSTED_SCRIPTS, csp::CSP_UNTRUSTED_STYLES, csp::CSP_ALLOWLISTED_SCRIPTS, csp::CSP_CLICKJACKING, csp::CSP_FORM_HIJACKING, csp::CSP_MALFORMED, CH_PASSWORD_GET, CH_PRIVATE_KEY, CH_SSN, retirejs::CH_VULNERABLE_JS, pack::CH_SESSION_TOKEN_URL, pack::CH_DUPLICATE_COOKIES, pack::CH_CROSS_DOMAIN_SCRIPT, pack::CH_COOKIE_PARENT_DOMAIN, pack::CH_PASSWORD_URL_QUERY, pack::CH_PASSWORD_LATER, pack::CH_PASSWORD_COOKIE, pack::CH_SOURCE_CODE, pack::CH_SERIALIZED, pack::CH_DB_CONNECTION] {
+        for c in [
+            csp::CSP_NOT_ENFORCED,
+            csp::CSP_UNTRUSTED_SCRIPTS,
+            csp::CSP_UNTRUSTED_STYLES,
+            csp::CSP_ALLOWLISTED_SCRIPTS,
+            csp::CSP_CLICKJACKING,
+            csp::CSP_FORM_HIJACKING,
+            csp::CSP_MALFORMED,
+            CH_PASSWORD_GET,
+            CH_PRIVATE_KEY,
+            CH_SSN,
+            retirejs::CH_VULNERABLE_JS,
+            pack::CH_SESSION_TOKEN_URL,
+            pack::CH_DUPLICATE_COOKIES,
+            pack::CH_CROSS_DOMAIN_SCRIPT,
+            pack::CH_COOKIE_PARENT_DOMAIN,
+            pack::CH_PASSWORD_URL_QUERY,
+            pack::CH_PASSWORD_LATER,
+            pack::CH_PASSWORD_COOKIE,
+            pack::CH_SOURCE_CODE,
+            pack::CH_SERIALIZED,
+            pack::CH_DB_CONNECTION,
+        ] {
             assert!(crate::scan::is_burp_issue(c.name), "{}", c.name);
         }
     }
@@ -938,16 +1364,31 @@ mod tests {
     #[test]
     fn strict_policy_raises_no_csp_issue() {
         let e = page(STRICT);
-        let names: Vec<String> = run_passive(&e, &|id| id.starts_with("passive.csp-") && id != "passive.csp-missing").into_iter().map(|i| i.name).collect();
+        let names: Vec<String> = run_passive(&e, &|id| {
+            id.starts_with("passive.csp-") && id != "passive.csp-missing"
+        })
+        .into_iter()
+        .map(|i| i.name)
+        .collect();
         assert!(names.is_empty(), "{names:?}");
     }
 
     #[test]
     fn csp_not_enforced() {
-        let e = ex("/", true, &format!("{HTML}Content-Security-Policy-Report-Only: {STRICT}\r\n"), "<html></html>");
+        let e = ex(
+            "/",
+            true,
+            &format!("{HTML}Content-Security-Policy-Report-Only: {STRICT}\r\n"),
+            "<html></html>",
+        );
         let v = only(&e, csp::CSP_NOT_ENFORCED);
         assert_eq!(v.len(), 1);
-        assert!(v[0].detail.contains("Content-Security-Policy-Report-Only header"), "{}", v[0].detail);
+        assert!(
+            v[0].detail
+                .contains("Content-Security-Policy-Report-Only header"),
+            "{}",
+            v[0].detail
+        );
         assert!(only(&page(STRICT), csp::CSP_NOT_ENFORCED).is_empty());
         // No policy at all: "header not set" covers it, not this issue.
         assert!(only(&ex("/", true, HTML, "<html></html>"), csp::CSP_NOT_ENFORCED).is_empty());
@@ -957,15 +1398,28 @@ mod tests {
     fn csp_untrusted_scripts() {
         let v = only(&page("default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; frame-ancestors 'none'"), csp::CSP_UNTRUSTED_SCRIPTS);
         assert_eq!(v.len(), 1);
-        assert!(v[0].detail.contains("unsafe-inline which can allow arbitrary scripts") && v[0].detail.contains("unsafe-eval"), "{}", v[0].detail);
+        assert!(
+            v[0].detail
+                .contains("unsafe-inline which can allow arbitrary scripts")
+                && v[0].detail.contains("unsafe-eval"),
+            "{}",
+            v[0].detail
+        );
         let v = only(&page("script-src 'nonce-abc'"), csp::CSP_UNTRUSTED_SCRIPTS);
-        assert!(v[0].detail.contains("nonce is under 8 characters"), "{}", v[0].detail);
+        assert!(
+            v[0].detail.contains("nonce is under 8 characters"),
+            "{}",
+            v[0].detail
+        );
         assert!(only(&page(STRICT), csp::CSP_UNTRUSTED_SCRIPTS).is_empty());
     }
 
     #[test]
     fn csp_untrusted_styles() {
-        let v = only(&page("default-src 'self'; style-src 'unsafe-inline'"), csp::CSP_UNTRUSTED_STYLES);
+        let v = only(
+            &page("default-src 'self'; style-src 'unsafe-inline'"),
+            csp::CSP_UNTRUSTED_STYLES,
+        );
         assert_eq!(v.len(), 1);
         assert!(v[0].detail.contains("arbitrary styles"), "{}", v[0].detail);
         assert!(only(&page(STRICT), csp::CSP_UNTRUSTED_STYLES).is_empty());
@@ -973,7 +1427,14 @@ mod tests {
 
     #[test]
     fn csp_allowlisted_scripts() {
-        assert_eq!(only(&page("default-src 'self'; script-src https://cdn.example.net"), csp::CSP_ALLOWLISTED_SCRIPTS).len(), 1);
+        assert_eq!(
+            only(
+                &page("default-src 'self'; script-src https://cdn.example.net"),
+                csp::CSP_ALLOWLISTED_SCRIPTS
+            )
+            .len(),
+            1
+        );
         assert!(only(&page(STRICT), csp::CSP_ALLOWLISTED_SCRIPTS).is_empty());
         // A global wildcard is the untrusted-scripts issue, not this one.
         assert!(only(&page("script-src *"), csp::CSP_ALLOWLISTED_SCRIPTS).is_empty());
@@ -984,25 +1445,50 @@ mod tests {
         let v = only(&page("default-src 'self'"), csp::CSP_CLICKJACKING);
         assert_eq!(v.len(), 1);
         assert_eq!(v[0].confidence, "Certain");
-        assert!(v[0].detail.contains("frame-ancestors directive is not present"), "{}", v[0].detail);
+        assert!(
+            v[0].detail
+                .contains("frame-ancestors directive is not present"),
+            "{}",
+            v[0].detail
+        );
         assert!(only(&page(STRICT), csp::CSP_CLICKJACKING).is_empty());
         // X-Frame-Options covers framing.
-        let e = ex("/", true, &format!("{HTML}X-Frame-Options: DENY\r\nContent-Security-Policy: default-src 'self'\r\n"), "<html></html>");
+        let e = ex(
+            "/",
+            true,
+            &format!(
+                "{HTML}X-Frame-Options: DENY\r\nContent-Security-Policy: default-src 'self'\r\n"
+            ),
+            "<html></html>",
+        );
         assert!(only(&e, csp::CSP_CLICKJACKING).is_empty());
     }
 
     #[test]
     fn csp_form_hijacking() {
-        assert_eq!(only(&page("script-src 'self'; frame-ancestors 'none'"), csp::CSP_FORM_HIJACKING).len(), 1);
+        assert_eq!(
+            only(
+                &page("script-src 'self'; frame-ancestors 'none'"),
+                csp::CSP_FORM_HIJACKING
+            )
+            .len(),
+            1
+        );
         // Burp lets default-src stand in for form-action (Zupz.Zw).
         assert!(only(&page("default-src 'self'"), csp::CSP_FORM_HIJACKING).is_empty());
-        assert_eq!(only(&page("form-action *"), csp::CSP_FORM_HIJACKING).len(), 1);
+        assert_eq!(
+            only(&page("form-action *"), csp::CSP_FORM_HIJACKING).len(),
+            1
+        );
         assert!(only(&page(STRICT), csp::CSP_FORM_HIJACKING).is_empty());
     }
 
     #[test]
     fn csp_malformed() {
-        let v = only(&page("default-src 'self'; bogus-directive x"), csp::CSP_MALFORMED);
+        let v = only(
+            &page("default-src 'self'; bogus-directive x"),
+            csp::CSP_MALFORMED,
+        );
         assert_eq!(v.len(), 1);
         assert!(v[0].detail.contains("bogus-directive"), "{}", v[0].detail);
         assert!(only(&page(STRICT), csp::CSP_MALFORMED).is_empty());
@@ -1025,28 +1511,68 @@ mod tests {
 
     fn pem(kind: &str, lines: usize) -> String {
         let line = "MIIBOgIBAAJBAKj34GkxFhD90vcNLYLInFEX6Ppy1tPf9Cnzj4p4WGeKLs1Pt8Qu\n";
-        format!("<pre>-----BEGIN {kind}-----\n{}-----END {kind}-----</pre>", line.repeat(lines))
+        format!(
+            "<pre>-----BEGIN {kind}-----\n{}-----END {kind}-----</pre>",
+            line.repeat(lines)
+        )
     }
 
     #[test]
     fn private_key_disclosed() {
-        let v = only(&ex("/k", true, HTML, &pem("RSA PRIVATE KEY", 4)), CH_PRIVATE_KEY);
+        let v = only(
+            &ex("/k", true, HTML, &pem("RSA PRIVATE KEY", 4)),
+            CH_PRIVATE_KEY,
+        );
         assert_eq!(v.len(), 1);
-        assert_eq!(v[0].detail, "The response appears to contain a cryptographic private key.");
-        assert_eq!((v[0].sev.as_str(), v[0].confidence.as_str()), ("info", "Certain"));
+        assert_eq!(
+            v[0].detail,
+            "The response appears to contain a cryptographic private key."
+        );
+        assert_eq!(
+            (v[0].sev.as_str(), v[0].confidence.as_str()),
+            ("info", "Certain")
+        );
         // Under 200 base64 characters, or not a private key.
-        assert!(only(&ex("/k", true, HTML, &pem("RSA PRIVATE KEY", 2)), CH_PRIVATE_KEY).is_empty());
+        assert!(only(
+            &ex("/k", true, HTML, &pem("RSA PRIVATE KEY", 2)),
+            CH_PRIVATE_KEY
+        )
+        .is_empty());
         assert!(only(&ex("/k", true, HTML, &pem("PUBLIC KEY", 4)), CH_PRIVATE_KEY).is_empty());
     }
 
     #[test]
     fn social_security_numbers_disclosed() {
         // One issue per number (Zcuc.Zm keys on it), repeats folded.
-        let v = only(&ex("/u", true, HTML, "<p>SSN: 123-45-6789, again 123-45-6789; spouse 234 56 7890.</p>"), CH_SSN);
-        assert_eq!(v.iter().map(|i| i.ident.as_str()).collect::<Vec<_>>(), ["123-45-6789", "234 56 7890"]);
+        let v = only(
+            &ex(
+                "/u",
+                true,
+                HTML,
+                "<p>SSN: 123-45-6789, again 123-45-6789; spouse 234 56 7890.</p>",
+            ),
+            CH_SSN,
+        );
+        assert_eq!(
+            v.iter().map(|i| i.ident.as_str()).collect::<Vec<_>>(),
+            ["123-45-6789", "234 56 7890"]
+        );
         assert_eq!(v[0].detail, "The following social security number was disclosed in the response:<ul><li>123-45-6789</li></ul>");
-        for neg in ["078-05-1120", "666-12-3456", "900-12-3456", "123-00-4567", "123-45 6789", "x123-45-6789", "123-45-67890", "99-123-45-6789", "123-45-6789-12"] {
-            assert!(only(&ex("/u", true, HTML, &format!("<p>{neg} </p>")), CH_SSN).is_empty(), "{neg}");
+        for neg in [
+            "078-05-1120",
+            "666-12-3456",
+            "900-12-3456",
+            "123-00-4567",
+            "123-45 6789",
+            "x123-45-6789",
+            "123-45-67890",
+            "99-123-45-6789",
+            "123-45-6789-12",
+        ] {
+            assert!(
+                only(&ex("/u", true, HTML, &format!("<p>{neg} </p>")), CH_SSN).is_empty(),
+                "{neg}"
+            );
         }
     }
 
@@ -1055,16 +1581,52 @@ mod tests {
     #[test]
     fn merge_key_keeps_values_apart_and_scopes_by_origin() {
         let shared = crate::net::Shared::new();
-        let a = only(&ex("/a", true, HTML, "<p>123-45-6789 and 234-56-7890 </p>"), CH_SSN);
+        let a = only(
+            &ex("/a", true, HTML, "<p>123-45-6789 and 234-56-7890 </p>"),
+            CH_SSN,
+        );
         let b = only(&ex("/b", true, HTML, "<p>123-45-6789 </p>"), CH_SSN);
         crate::scan::add_passive_issues(&shared, a);
         crate::scan::add_passive_issues(&shared, b);
-        assert_eq!(shared.issues.lock().unwrap().len(), 2, "two numbers; the second path repeats one (SSNs key by origin)");
-        let mut c = only(&ex("/a", true, &format!("{HTML}Set-Cookie: k=1\r\nSet-Cookie: k=2\r\n"), "x"), pack::CH_DUPLICATE_COOKIES);
-        c.extend(only(&ex("/b", true, &format!("{HTML}Set-Cookie: k=1\r\nSet-Cookie: k=2\r\n"), "x"), pack::CH_DUPLICATE_COOKIES));
+        assert_eq!(
+            shared.issues.lock().unwrap().len(),
+            2,
+            "two numbers; the second path repeats one (SSNs key by origin)"
+        );
+        let mut c = only(
+            &ex(
+                "/a",
+                true,
+                &format!("{HTML}Set-Cookie: k=1\r\nSet-Cookie: k=2\r\n"),
+                "x",
+            ),
+            pack::CH_DUPLICATE_COOKIES,
+        );
+        c.extend(only(
+            &ex(
+                "/b",
+                true,
+                &format!("{HTML}Set-Cookie: k=1\r\nSet-Cookie: k=2\r\n"),
+                "x",
+            ),
+            pack::CH_DUPLICATE_COOKIES,
+        ));
         crate::scan::add_passive_issues(&shared, c);
-        assert_eq!(shared.issues.lock().unwrap().iter().filter(|i| i.name == "Duplicate cookies set").count(), 2, "path-scoped");
-        assert_eq!(crate::scan::passive_merge_key(&shared.issues.lock().unwrap()[0]), "Social security numbers disclosed|example.com||123-45-6789");
+        assert_eq!(
+            shared
+                .issues
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|i| i.name == "Duplicate cookies set")
+                .count(),
+            2,
+            "path-scoped"
+        );
+        assert_eq!(
+            crate::scan::passive_merge_key(&shared.issues.lock().unwrap()[0]),
+            "Social security numbers disclosed|example.com||123-45-6789"
+        );
     }
 
     const REPO: &str = r#"{
@@ -1084,7 +1646,13 @@ mod tests {
     }"#;
 
     fn repo() -> retirejs::Repository {
-        retirejs::Repository::parse(REPO, ["https://example.invalid/dead".to_string()].into_iter().collect()).unwrap()
+        retirejs::Repository::parse(
+            REPO,
+            ["https://example.invalid/dead".to_string()]
+                .into_iter()
+                .collect(),
+        )
+        .unwrap()
     }
 
     fn vuln_js(e: &HistEntry) -> Vec<ScanIssue> {
@@ -1100,19 +1668,41 @@ mod tests {
     #[test]
     fn vulnerable_js_dependency_by_url_content_and_script_tag() {
         let r = repo();
-        assert_eq!(r.skipped.len(), 1, "the look-behind extractor is reported, not guessed");
+        assert_eq!(
+            r.skipped.len(),
+            1,
+            "the look-behind extractor is reported, not guessed"
+        );
         // URL extractor: 1.2.3 has both vulnerabilities.
-        let v = vuln_js(&ex("/static/wpfixture/1.2.3/wpfixture.min.js", true, JS, "x"));
+        let v = vuln_js(&ex(
+            "/static/wpfixture/1.2.3/wpfixture.min.js",
+            true,
+            JS,
+            "x",
+        ));
         assert_eq!(v.len(), 1);
         let d = &v[0].detail;
         assert!(d.starts_with("<p>We observed a vulnerable JavaScript library.</p>\n<p>We detected <strong>wpfixture</strong> version <strong>1.2.3</strong>, which has the following vulnerabilities:</p>\n<ul>\n<li>\n<a href='https://nvd.nist.gov/vuln/detail/CVE-2099-0001'>CVE-2099-0001</a>: XSS in render<br/>\n</li>\n"), "{d}");
         assert!(d.contains("<li>\nPrototype pollution<br/>\n<a href='https://example.invalid/pp'>https://example.invalid/pp</a><br/>\n</li>\n</ul><br/>\n"), "{d}");
-        assert_eq!((v[0].sev.as_str(), v[0].confidence.as_str()), ("low", "Tentative"));
+        assert_eq!(
+            (v[0].sev.as_str(), v[0].confidence.as_str()),
+            ("low", "Tentative")
+        );
         // Content extractor when the URL says nothing: 1.3.9 has only the
         // first one.
-        let v = vuln_js(&ex("/app/bundle.js", true, JS, "/*! wpfixture v1.3.9 */ var a;"));
+        let v = vuln_js(&ex(
+            "/app/bundle.js",
+            true,
+            JS,
+            "/*! wpfixture v1.3.9 */ var a;",
+        ));
         assert_eq!(v.len(), 1);
-        assert!(v[0].detail.contains("version <strong>1.3.9</strong>, which has the following vulnerability:"), "{}", v[0].detail);
+        assert!(
+            v[0].detail
+                .contains("version <strong>1.3.9</strong>, which has the following vulnerability:"),
+            "{}",
+            v[0].detail
+        );
         // HTML page: the script tags' src.
         let v = vuln_js(&ex("/", true, HTML, "<html><script src=\"/js/wpfixture-1.0.0.js\"></script><script src='/js/safelib-0.1.js'></script></html>"));
         assert_eq!(v.len(), 1);
@@ -1124,9 +1714,19 @@ mod tests {
         // Fixed version, a library without vulnerabilities, no scripts.
         assert!(vuln_js(&ex("/static/wpfixture/1.4.0/wpfixture.js", true, JS, "x")).is_empty());
         assert!(vuln_js(&ex("/app/bundle.js", true, JS, "/*! wpfixture v2.0.0 */")).is_empty());
-        assert!(vuln_js(&ex("/", true, HTML, "<script src=/js/safelib-0.1.js></script><script>var x</script>")).is_empty());
+        assert!(vuln_js(&ex(
+            "/",
+            true,
+            HTML,
+            "<script src=/js/safelib-0.1.js></script><script>var x</script>"
+        ))
+        .is_empty());
         // A library without extractors makes the repository invalid.
-        assert!(retirejs::Repository::parse(r#"{"x": {"vulnerabilities": [{"below": "1"}]}}"#, Default::default()).is_err());
+        assert!(retirejs::Repository::parse(
+            r#"{"x": {"vulnerabilities": [{"below": "1"}]}}"#,
+            Default::default()
+        )
+        .is_err());
     }
 
     /// Each new check stops when the scan configuration switches it off.
@@ -1135,48 +1735,129 @@ mod tests {
         retirejs::set_repository(repo());
         let shared = crate::net::Shared::new();
         let cases: Vec<(CheckDef, HistEntry)> = vec![
-            (csp::CSP_NOT_ENFORCED, ex("/", true, &format!("{HTML}Content-Security-Policy-Report-Only: {STRICT}\r\n"), "<html></html>")),
-            (csp::CSP_UNTRUSTED_SCRIPTS, page("script-src 'unsafe-inline'")),
+            (
+                csp::CSP_NOT_ENFORCED,
+                ex(
+                    "/",
+                    true,
+                    &format!("{HTML}Content-Security-Policy-Report-Only: {STRICT}\r\n"),
+                    "<html></html>",
+                ),
+            ),
+            (
+                csp::CSP_UNTRUSTED_SCRIPTS,
+                page("script-src 'unsafe-inline'"),
+            ),
             (csp::CSP_UNTRUSTED_STYLES, page("style-src 'unsafe-inline'")),
-            (csp::CSP_ALLOWLISTED_SCRIPTS, page("script-src https://cdn.example.net")),
+            (
+                csp::CSP_ALLOWLISTED_SCRIPTS,
+                page("script-src https://cdn.example.net"),
+            ),
             (csp::CSP_CLICKJACKING, page("default-src 'self'")),
             (csp::CSP_FORM_HIJACKING, page("script-src 'self'")),
-            (csp::CSP_MALFORMED, page("default-src 'self'; bogus-directive x")),
-            (CH_PASSWORD_GET, ex("/", false, HTML, "<form><input type=password name=p></form>")),
+            (
+                csp::CSP_MALFORMED,
+                page("default-src 'self'; bogus-directive x"),
+            ),
+            (
+                CH_PASSWORD_GET,
+                ex(
+                    "/",
+                    false,
+                    HTML,
+                    "<form><input type=password name=p></form>",
+                ),
+            ),
             (CH_PRIVATE_KEY, ex("/k", true, HTML, &pem("PRIVATE KEY", 4))),
             (CH_SSN, ex("/u", true, HTML, "ssn 123-45-6789 ")),
-            (retirejs::CH_VULNERABLE_JS, ex("/static/wpfixture/1.2.3/wpfixture.js", true, JS, "x")),
+            (
+                retirejs::CH_VULNERABLE_JS,
+                ex("/static/wpfixture/1.2.3/wpfixture.js", true, JS, "x"),
+            ),
         ];
         for (c, e) in cases {
-            *shared.scan_config.lock().unwrap() = Default::default();
-            assert!(crate::scan::passive_check_for(&shared, &e).iter().any(|i| i.name == c.name), "{} on", c.id);
-            shared.scan_config.lock().unwrap().disabled_checks.insert(c.id.to_string());
-            assert!(!crate::scan::passive_check_for(&shared, &e).iter().any(|i| i.name == c.name), "{} off", c.id);
+            *crate::scan_config::shared_config(&shared).lock().unwrap() = Default::default();
+            assert!(
+                crate::scan::passive_check_for(&shared, &e)
+                    .iter()
+                    .any(|i| i.name == c.name),
+                "{} on",
+                c.id
+            );
+            crate::scan_config::shared_config(&shared)
+                .lock()
+                .unwrap()
+                .disabled_checks
+                .insert(c.id.to_string());
+            assert!(
+                !crate::scan::passive_check_for(&shared, &e)
+                    .iter()
+                    .any(|i| i.name == c.name),
+                "{} off",
+                c.id
+            );
         }
-        assert_eq!(crate::scan::check_note(retirejs::CH_VULNERABLE_JS.id).as_deref().map(|n| n.contains("skipped")), Some(true));
+        assert_eq!(
+            crate::scan::check_note(retirejs::CH_VULNERABLE_JS.id)
+                .as_deref()
+                .map(|n| n.contains("skipped")),
+            Some(true)
+        );
     }
 
     /// The real repository (`WEBPROBE_RETIREJS`), when given, loads; its
     /// unsupported extractors are listed rather than guessed at.
     #[test]
     fn real_repository_loads_when_given() {
-        let Ok(path) = std::env::var("WEBPROBE_RETIREJS") else { return };
+        let Ok(path) = std::env::var("WEBPROBE_RETIREJS") else {
+            return;
+        };
         let r = retirejs::Repository::load(std::path::Path::new(&path)).unwrap();
         eprintln!("{} libraries, skipped: {:?}", r.libs_len(), r.skipped);
         assert!(r.libs_len() > 10);
-        assert!(r.skipped.is_empty(), "jquery's back-reference and lodash's look-behind are rewritten: {:?}", r.skipped);
+        assert!(
+            r.skipped.is_empty(),
+            "jquery's back-reference and lodash's look-behind are rewritten: {:?}",
+            r.skipped
+        );
     }
 
     #[test]
     fn cookie_flags_one_issue_per_cookie() {
         let h = format!("{HTML}Set-Cookie: sessionid=abcdef; Path=/\r\nSet-Cookie: theme=darkmode\r\nSet-Cookie: x=ab\r\n");
         let sec = only(&ex("/", true, &h, "x"), CH_COOKIE_SECURE);
-        assert_eq!(names(&sec), [("TLS cookie without secure flag set".to_string(), "Session: sessionid".to_string()), ("TLS cookie without secure flag set".to_string(), "Other: theme".to_string())]);
-        assert_eq!((sec[0].sev.as_str(), sec[0].confidence.as_str(), sec[1].sev.as_str(), sec[1].confidence.as_str()), ("medium", "Firm", "info", "Certain"));
+        assert_eq!(
+            names(&sec),
+            [
+                (
+                    "TLS cookie without secure flag set".to_string(),
+                    "Session: sessionid".to_string()
+                ),
+                (
+                    "TLS cookie without secure flag set".to_string(),
+                    "Other: theme".to_string()
+                )
+            ]
+        );
+        assert_eq!(
+            (
+                sec[0].sev.as_str(),
+                sec[0].confidence.as_str(),
+                sec[1].sev.as_str(),
+                sec[1].confidence.as_str()
+            ),
+            ("medium", "Firm", "info", "Certain")
+        );
         assert_eq!(sec[1].detail, "The following cookie was issued by the application and does not have the secure flag set:<ul><li>theme</li></ul>The cookie does not appear to contain a session token, which may reduce the risk associated with this issue. You should review the contents of the cookie to determine its function.");
         let ho = only(&ex("/", true, &h, "x"), CH_COOKIE_HTTPONLY);
-        assert_eq!((ho.len(), ho[0].sev.as_str(), ho[0].confidence.as_str()), (2, "low", "Firm"));
-        assert!(only(&ex("/", false, &h, "x"), CH_COOKIE_SECURE).is_empty(), "plain HTTP");
+        assert_eq!(
+            (ho.len(), ho[0].sev.as_str(), ho[0].confidence.as_str()),
+            (2, "low", "Firm")
+        );
+        assert!(
+            only(&ex("/", false, &h, "x"), CH_COOKIE_SECURE).is_empty(),
+            "plain HTTP"
+        );
         // Two cookies on one path stay two issues after merging.
         let shared = crate::net::Shared::new();
         crate::scan::add_passive_issues(&shared, ho);
@@ -1192,18 +1873,58 @@ mod tests {
         let shared = crate::net::Shared::new();
         let dup = format!("{HTML}Set-Cookie: k=1\r\nSet-Cookie: k=2\r\n");
         for n in 0..9 {
-            crate::scan::add_passive_issues(&shared, only(&ex(&format!("/shop/item{n}"), true, &dup, "x"), pack::CH_DUPLICATE_COOKIES));
+            crate::scan::add_passive_issues(
+                &shared,
+                only(
+                    &ex(&format!("/shop/item{n}"), true, &dup, "x"),
+                    pack::CH_DUPLICATE_COOKIES,
+                ),
+            );
         }
-        assert_eq!(shared.issues.lock().unwrap().len(), 9, "nine locations stay apart");
-        crate::scan::add_passive_issues(&shared, only(&ex("/shop/cart/view", true, &dup, "x"), pack::CH_DUPLICATE_COOKIES));
+        assert_eq!(
+            shared.issues.lock().unwrap().len(),
+            9,
+            "nine locations stay apart"
+        );
+        crate::scan::add_passive_issues(
+            &shared,
+            only(
+                &ex("/shop/cart/view", true, &dup, "x"),
+                pack::CH_DUPLICATE_COOKIES,
+            ),
+        );
         let iss = shared.issues.lock().unwrap().clone();
         assert_eq!(iss.len(), 1);
         assert_eq!(iss[0].path, "/shop");
-        assert!(iss[0].detail.ends_with("</ul>This issue was found in multiple locations under the reported path."), "{}", iss[0].detail);
-        crate::scan::add_passive_issues(&shared, only(&ex("/other", true, &dup, "x"), pack::CH_DUPLICATE_COOKIES));
-        assert_eq!(shared.issues.lock().unwrap().len(), 1, "later locations add nothing");
+        assert!(
+            iss[0].detail.ends_with(
+                "</ul>This issue was found in multiple locations under the reported path."
+            ),
+            "{}",
+            iss[0].detail
+        );
+        crate::scan::add_passive_issues(
+            &shared,
+            only(&ex("/other", true, &dup, "x"), pack::CH_DUPLICATE_COOKIES),
+        );
+        assert_eq!(
+            shared.issues.lock().unwrap().len(),
+            1,
+            "later locations add nothing"
+        );
         // A different identifier is its own group.
-        crate::scan::add_passive_issues(&shared, only(&ex("/other", true, &format!("{HTML}Set-Cookie: j=1\r\nSet-Cookie: j=2\r\n"), "x"), pack::CH_DUPLICATE_COOKIES));
+        crate::scan::add_passive_issues(
+            &shared,
+            only(
+                &ex(
+                    "/other",
+                    true,
+                    &format!("{HTML}Set-Cookie: j=1\r\nSet-Cookie: j=2\r\n"),
+                    "x",
+                ),
+                pack::CH_DUPLICATE_COOKIES,
+            ),
+        );
         assert_eq!(shared.issues.lock().unwrap().len(), 2);
     }
 
@@ -1217,31 +1938,98 @@ mod tests {
     }
 
     fn names(v: &[ScanIssue]) -> Vec<(String, String)> {
-        v.iter().map(|i| (i.name.clone(), i.ident.clone())).collect()
+        v.iter()
+            .map(|i| (i.name.clone(), i.ident.clone()))
+            .collect()
     }
 
     #[test]
     fn session_token_in_url() {
-        let v = only(&ex("/app?sessionid=abc123&x=1", true, HTML, "<html></html>"), pack::CH_SESSION_TOKEN_URL);
-        assert_eq!(names(&v), [("Session token in URL".to_string(), "1|sessionid".to_string())]);
+        let v = only(
+            &ex("/app?sessionid=abc123&x=1", true, HTML, "<html></html>"),
+            pack::CH_SESSION_TOKEN_URL,
+        );
+        assert_eq!(
+            names(&v),
+            [(
+                "Session token in URL".to_string(),
+                "1|sessionid".to_string()
+            )]
+        );
         assert_eq!(v[0].detail, "The URL in the request appears to contain a session token within the query string:<ul><li>https://example.com/app?sessionid=abc123&amp;x=1</li></ul>");
-        assert_eq!((v[0].sev.as_str(), v[0].confidence.as_str()), ("medium", "Firm"));
+        assert_eq!(
+            (v[0].sev.as_str(), v[0].confidence.as_str()),
+            ("medium", "Firm")
+        );
         // Links in the response (variant 2).
-        let v = only(&ex("/", true, HTML, "<a href=\"/next?JSESSIONID=XYZ123\">n</a><a href='/b?jsessionid=XYZ123'>b</a>"), pack::CH_SESSION_TOKEN_URL);
-        assert_eq!(names(&v), [("Session token in URL".to_string(), "2|JSESSIONID".to_string()), ("Session token in URL".to_string(), "2|jsessionid".to_string())]);
+        let v = only(
+            &ex(
+                "/",
+                true,
+                HTML,
+                "<a href=\"/next?JSESSIONID=XYZ123\">n</a><a href='/b?jsessionid=XYZ123'>b</a>",
+            ),
+            pack::CH_SESSION_TOKEN_URL,
+        );
+        assert_eq!(
+            names(&v),
+            [
+                (
+                    "Session token in URL".to_string(),
+                    "2|JSESSIONID".to_string()
+                ),
+                (
+                    "Session token in URL".to_string(),
+                    "2|jsessionid".to_string()
+                )
+            ]
+        );
         assert_eq!(v[0].detail, "The response contains the following links that appear to contain session tokens:<ul><li>https://example.com/next?JSESSIONID=XYZ123</li></ul>");
-        for neg in ["/app?q=abc123", "/app?token=ab", "/app?org.apache.struts.taglib.html.TOKEN=abcdef"] {
-            assert!(only(&ex(neg, true, HTML, "<a href=/x?id=1>x</a>"), pack::CH_SESSION_TOKEN_URL).is_empty(), "{neg}");
+        for neg in [
+            "/app?q=abc123",
+            "/app?token=ab",
+            "/app?org.apache.struts.taglib.html.TOKEN=abcdef",
+        ] {
+            assert!(
+                only(
+                    &ex(neg, true, HTML, "<a href=/x?id=1>x</a>"),
+                    pack::CH_SESSION_TOKEN_URL
+                )
+                .is_empty(),
+                "{neg}"
+            );
         }
     }
 
     #[test]
     fn duplicate_cookies_set() {
-        let v = only(&ex("/", true, &format!("{HTML}Set-Cookie: sid=1; Path=/\r\nSet-Cookie: sid=2\r\n"), "x"), pack::CH_DUPLICATE_COOKIES);
-        assert_eq!(names(&v), [("Duplicate cookies set".to_string(), "sid".to_string())]);
+        let v = only(
+            &ex(
+                "/",
+                true,
+                &format!("{HTML}Set-Cookie: sid=1; Path=/\r\nSet-Cookie: sid=2\r\n"),
+                "x",
+            ),
+            pack::CH_DUPLICATE_COOKIES,
+        );
+        assert_eq!(
+            names(&v),
+            [("Duplicate cookies set".to_string(), "sid".to_string())]
+        );
         assert_eq!(v[0].detail, "The application attempted to set the following cookie to multiple values:<ul><li><b>sid</b></li></ul>");
-        for neg in ["Set-Cookie: sid=1\r\nSet-Cookie: sid=1\r\n", "Set-Cookie: a=1\r\nSet-Cookie: b=2\r\n", "Set-Cookie: sid=\r\nSet-Cookie: sid=2\r\n"] {
-            assert!(only(&ex("/", true, &format!("{HTML}{neg}"), "x"), pack::CH_DUPLICATE_COOKIES).is_empty(), "{neg}");
+        for neg in [
+            "Set-Cookie: sid=1\r\nSet-Cookie: sid=1\r\n",
+            "Set-Cookie: a=1\r\nSet-Cookie: b=2\r\n",
+            "Set-Cookie: sid=\r\nSet-Cookie: sid=2\r\n",
+        ] {
+            assert!(
+                only(
+                    &ex("/", true, &format!("{HTML}{neg}"), "x"),
+                    pack::CH_DUPLICATE_COOKIES
+                )
+                .is_empty(),
+                "{neg}"
+            );
         }
     }
 
@@ -1250,11 +2038,29 @@ mod tests {
         let body = "<script src=\"https://cdn.other.net/b.js\"></script><script src=\"//cdn.other.net/a.js\"></script>\
                     <script src=\"https://static.example.com/y.js\"></script><img src=\"https://img.other.net/p.png\"><!-- <script src=https://c.evil.org/x.js></script> -->";
         let v = only(&ex("/", true, HTML, body), pack::CH_CROSS_DOMAIN_SCRIPT);
-        assert_eq!(names(&v), [("Cross-domain script include".to_string(), "cdn.other.net".to_string())]);
+        assert_eq!(
+            names(&v),
+            [(
+                "Cross-domain script include".to_string(),
+                "cdn.other.net".to_string()
+            )]
+        );
         assert_eq!(v[0].detail, "The response dynamically includes the following scripts from other domains:<ul><li>https://cdn.other.net/a.js</li><li>https://cdn.other.net/b.js</li></ul>");
-        assert!(only(&ex("/", true, HTML, "<script src=/local.js></script><script src=https://www.example.com/a.js></script>"), pack::CH_CROSS_DOMAIN_SCRIPT).is_empty());
+        assert!(only(
+            &ex(
+                "/",
+                true,
+                HTML,
+                "<script src=/local.js></script><script src=https://www.example.com/a.js></script>"
+            ),
+            pack::CH_CROSS_DOMAIN_SCRIPT
+        )
+        .is_empty());
         // burp.Zw4k.ZU compares the label left of the public suffix.
-        assert!(!pack::other_domain("www.example.co.uk", "cdn.example.co.uk"));
+        assert!(!pack::other_domain(
+            "www.example.co.uk",
+            "cdn.example.co.uk"
+        ));
         assert!(!pack::other_domain("example.com", "example.org"));
         assert!(pack::other_domain("example.com", "evil.com"));
         assert!(pack::other_domain("localhost", "127.0.0.1"));
@@ -1265,17 +2071,44 @@ mod tests {
         let mut e = ex("/", true, &format!("{HTML}Set-Cookie: sessionid=abcdef; Domain=example.com\r\nSet-Cookie: pref=dark-mode; Domain=.example.com\r\n"), "x");
         e.host = "www.example.com".into();
         let v = only(&e, pack::CH_COOKIE_PARENT_DOMAIN);
-        assert_eq!(names(&v), [("Cookie scoped to parent domain".to_string(), "Session: sessionid".to_string()), ("Cookie scoped to parent domain".to_string(), "Other: pref".to_string())]);
-        assert_eq!((v[0].sev.as_str(), v[0].confidence.as_str(), v[1].sev.as_str(), v[1].confidence.as_str()), ("low", "Firm", "info", "Certain"));
+        assert_eq!(
+            names(&v),
+            [
+                (
+                    "Cookie scoped to parent domain".to_string(),
+                    "Session: sessionid".to_string()
+                ),
+                (
+                    "Cookie scoped to parent domain".to_string(),
+                    "Other: pref".to_string()
+                )
+            ]
+        );
+        assert_eq!(
+            (
+                v[0].sev.as_str(),
+                v[0].confidence.as_str(),
+                v[1].sev.as_str(),
+                v[1].confidence.as_str()
+            ),
+            ("low", "Firm", "info", "Certain")
+        );
         assert_eq!(v[0].detail, "The following cookie was issued by the application and is scoped to a parent of the issuing domain:<ul><li><b>sessionid</b></li></ul>The cookie appears to contain a session token, which may increase the risk associated with this issue. You should review the contents of the cookie to determine its function.");
-        for neg in ["sessionid=abcdef; Domain=www.example.com", "sessionid=ab; Domain=example.com", "sessionid=abcdef; Domain=example.com; Expires=Thu, 01 Jan 1970 00:00:00 GMT", "sessionid=abcdef; Domain=example.com; Max-Age=0", "sessionid=abcdef"] {
+        for neg in [
+            "sessionid=abcdef; Domain=www.example.com",
+            "sessionid=ab; Domain=example.com",
+            "sessionid=abcdef; Domain=example.com; Expires=Thu, 01 Jan 1970 00:00:00 GMT",
+            "sessionid=abcdef; Domain=example.com; Max-Age=0",
+            "sessionid=abcdef",
+        ] {
             let mut e = ex("/", true, &format!("{HTML}Set-Cookie: {neg}\r\n"), "x");
             e.host = "www.example.com".into();
             assert!(only(&e, pack::CH_COOKIE_PARENT_DOMAIN).is_empty(), "{neg}");
         }
     }
 
-    const LOGIN: &str = "<form method=post action=\"/login\"><input name=user><input type=password name=pw></form>";
+    const LOGIN: &str =
+        "<form method=post action=\"/login\"><input name=user><input type=password name=pw></form>";
 
     fn post_login(pw: &str, headers: &str, body: &str) -> HistEntry {
         let form = format!("user=bob&pw={pw}");
@@ -1291,12 +2124,38 @@ mod tests {
         let st = crate::passive_state::PassiveState::default();
         assert!(with_state(&ex("/", true, HTML, LOGIN), &st).is_empty());
         // The response to the login sets the password in a cookie.
-        let v = with_state(&post_login("S3cretPass", &format!("{HTML}Set-Cookie: remember=S3cretPass\r\n"), "ok"), &st);
-        assert_eq!(names(&v), [("Password value set in cookie".to_string(), String::new())]);
+        let v = with_state(
+            &post_login(
+                "S3cretPass",
+                &format!("{HTML}Set-Cookie: remember=S3cretPass\r\n"),
+                "ok",
+            ),
+            &st,
+        );
+        assert_eq!(
+            names(&v),
+            [("Password value set in cookie".to_string(), String::new())]
+        );
         // ... or in a link's query string.
-        let v = with_state(&post_login("S3cretPass", HTML, "<a href=\"/welcome?pw=S3cretPass\">go</a>"), &st);
-        assert_eq!(names(&v), [("Password returned in URL query string".to_string(), String::new())]);
-        assert_eq!((v[0].sev.as_str(), v[0].confidence.as_str()), ("low", "Firm"));
+        let v = with_state(
+            &post_login(
+                "S3cretPass",
+                HTML,
+                "<a href=\"/welcome?pw=S3cretPass\">go</a>",
+            ),
+            &st,
+        );
+        assert_eq!(
+            names(&v),
+            [(
+                "Password returned in URL query string".to_string(),
+                String::new()
+            )]
+        );
+        assert_eq!(
+            (v[0].sev.as_str(), v[0].confidence.as_str()),
+            ("low", "Firm")
+        );
         // A plain echo in the login response is not reported (burp.Zcn0.ZO
         // stops for the submitting response).
         assert!(with_state(&post_login("S3cretPass", HTML, "<p>S3cretPass</p>"), &st).is_empty());
@@ -1304,71 +2163,199 @@ mod tests {
         // standalone occurrence (Tentative), a glued one (nothing).
         let later = |body: &str| with_state(&ex("/profile", true, HTML, body), &st);
         let v = later("<input name=p value=\"S3cretPass\">");
-        assert_eq!((v[0].name.as_str(), v[0].confidence.as_str(), v[0].evidence.len()), ("Password returned in later response", "Firm", 2));
-        assert_eq!(later("<p>your password is S3cretPass.</p>")[0].confidence, "Tentative");
+        assert_eq!(
+            (
+                v[0].name.as_str(),
+                v[0].confidence.as_str(),
+                v[0].evidence.len()
+            ),
+            ("Password returned in later response", "Firm", 2)
+        );
+        assert_eq!(
+            later("<p>your password is S3cretPass.</p>")[0].confidence,
+            "Tentative"
+        );
         assert!(later("<p>xS3cretPassx</p>").is_empty());
         assert!(later("<p>nothing</p>").is_empty());
         // Another host knows nothing; no state, no check.
         let mut other = ex("/profile", true, HTML, "<p> S3cretPass </p>");
         other.host = "other.com".into();
         assert!(with_state(&other, &st).is_empty());
-        assert!(only(&ex("/profile", true, HTML, "<p> S3cretPass </p>"), pack::CH_PASSWORD_LATER).is_empty());
+        assert!(only(
+            &ex("/profile", true, HTML, "<p> S3cretPass </p>"),
+            pack::CH_PASSWORD_LATER
+        )
+        .is_empty());
         // A placeholder value is not tracked.
         let st2 = crate::passive_state::PassiveState::default();
         with_state(&ex("/", true, HTML, LOGIN), &st2);
-        assert!(with_state(&post_login("password", &format!("{HTML}Set-Cookie: c=password\r\n"), "ok"), &st2).is_empty());
+        assert!(with_state(
+            &post_login(
+                "password",
+                &format!("{HTML}Set-Cookie: c=password\r\n"),
+                "ok"
+            ),
+            &st2
+        )
+        .is_empty());
     }
 
     #[test]
     fn source_code_disclosure() {
-        let v = only(&ex("/p", true, HTML, "<p>x</p><?php echo $secret; ?> and <% Response.Write(x) %>"), pack::CH_SOURCE_CODE);
+        let v = only(
+            &ex(
+                "/p",
+                true,
+                HTML,
+                "<p>x</p><?php echo $secret; ?> and <% Response.Write(x) %>",
+            ),
+            pack::CH_SOURCE_CODE,
+        );
         assert_eq!(v.len(), 1);
         assert_eq!(v[0].detail, "The application appears to disclose some server-side source code written in PHP and ASP.");
-        assert_eq!((v[0].sev.as_str(), v[0].confidence.as_str()), ("low", "Tentative"));
+        assert_eq!(
+            (v[0].sev.as_str(), v[0].confidence.as_str()),
+            ("low", "Tentative")
+        );
         assert_eq!(pack::code_blocks(b"<jsp:include page=\"x\"/>"), (1, 4));
-        for neg in ["<?xml version='1.0'?><a/>", "<% %>", "<?= 1 ?>", "a < b and c > d"] {
-            assert!(only(&ex("/p", true, HTML, neg), pack::CH_SOURCE_CODE).is_empty(), "{neg}");
+        for neg in [
+            "<?xml version='1.0'?><a/>",
+            "<% %>",
+            "<?= 1 ?>",
+            "a < b and c > d",
+        ] {
+            assert!(
+                only(&ex("/p", true, HTML, neg), pack::CH_SOURCE_CODE).is_empty(),
+                "{neg}"
+            );
         }
         // Burp asks whether the stated OR the sniffed type is text
         // (Zgph.ZX), so a text body under an image type still counts.
-        assert_eq!(only(&ex("/p", true, "Content-Type: image/png\r\n", "<?php echo $a; ?>"), pack::CH_SOURCE_CODE).len(), 1);
+        assert_eq!(
+            only(
+                &ex(
+                    "/p",
+                    true,
+                    "Content-Type: image/png\r\n",
+                    "<?php echo $a; ?>"
+                ),
+                pack::CH_SOURCE_CODE
+            )
+            .len(),
+            1
+        );
     }
 
     #[test]
     fn serialized_object_in_http_message() {
         // Java (Base64 of AC ED 00 05 ...) in a query parameter.
-        let v = only(&ex("/?data=rO0ABXQAA2FiYw%3D%3D", true, HTML, "x"), pack::CH_SERIALIZED);
-        assert_eq!(names(&v), [("Serialized object in HTTP message".to_string(), "0|data".to_string())]);
-        assert_eq!(v[0].detail, "The parameter <b>data</b> appears to contain a serialized <b>Java object</b>.");
-        assert_eq!((v[0].sev.as_str(), v[0].confidence.as_str()), ("high", "Firm"));
+        let v = only(
+            &ex("/?data=rO0ABXQAA2FiYw%3D%3D", true, HTML, "x"),
+            pack::CH_SERIALIZED,
+        );
+        assert_eq!(
+            names(&v),
+            [(
+                "Serialized object in HTTP message".to_string(),
+                "0|data".to_string()
+            )]
+        );
+        assert_eq!(
+            v[0].detail,
+            "The parameter <b>data</b> appears to contain a serialized <b>Java object</b>."
+        );
+        assert_eq!(
+            (v[0].sev.as_str(), v[0].confidence.as_str()),
+            ("high", "Firm")
+        );
         // PHP in a cookie, Python 3 pickle in a link.
         let req = "GET / HTTP/1.1\r\nHost: example.com\r\nCookie: cart=a%3A1%3A%7Bs%3A1%3A%22a%22%3Bi%3A1%3B%7D\r\n\r\n";
-        let v = only(&ex_req("/", req, HTML, "<a href=\"/x?obj=gAN9cQAu\">x</a>"), pack::CH_SERIALIZED);
-        assert_eq!(v.iter().map(|i| i.detail.as_str()).collect::<Vec<_>>(), ["The parameter <b>cart</b> appears to contain a serialized <b>PHP object</b>.", "The parameter <b>obj</b> appears to contain a serialized <b>Python 3 object</b>."]);
-        assert!(only(&ex("/?data=hello&n=12345", true, HTML, "<a href=/x?q=abcd>x</a>"), pack::CH_SERIALIZED).is_empty());
+        let v = only(
+            &ex_req("/", req, HTML, "<a href=\"/x?obj=gAN9cQAu\">x</a>"),
+            pack::CH_SERIALIZED,
+        );
+        assert_eq!(
+            v.iter().map(|i| i.detail.as_str()).collect::<Vec<_>>(),
+            [
+                "The parameter <b>cart</b> appears to contain a serialized <b>PHP object</b>.",
+                "The parameter <b>obj</b> appears to contain a serialized <b>Python 3 object</b>."
+            ]
+        );
+        assert!(only(
+            &ex(
+                "/?data=hello&n=12345",
+                true,
+                HTML,
+                "<a href=/x?q=abcd>x</a>"
+            ),
+            pack::CH_SERIALIZED
+        )
+        .is_empty());
         // burp.Zb0_ shapes.
         use pack::php::serialized;
-        for ok in [&b"a:2:{s:1:\"a\";i:1;s:1:\"b\";b:0;}"[..], b"O:8:\"stdClass\":1:{s:1:\"x\";N;}", b"i:12;", b"s:0:\"\";"] {
+        for ok in [
+            &b"a:2:{s:1:\"a\";i:1;s:1:\"b\";b:0;}"[..],
+            b"O:8:\"stdClass\":1:{s:1:\"x\";N;}",
+            b"i:12;",
+            b"s:0:\"\";",
+        ] {
             assert!(serialized(ok), "{}", String::from_utf8_lossy(ok));
         }
-        for bad in [&b"s:3:\"ab\";"[..], b"hello", b"d:1.5;", b"a:1:{i:1;", b"b:2;"] {
+        for bad in [
+            &b"s:3:\"ab\";"[..],
+            b"hello",
+            b"d:1.5;",
+            b"a:1:{i:1;",
+            b"b:2;",
+        ] {
             assert!(!serialized(bad), "{}", String::from_utf8_lossy(bad));
         }
-        assert_eq!(pack::serialized_kind(b"--- !ruby/object:Gem\nfoo: 1\n..."), Some(5));
+        assert_eq!(
+            pack::serialized_kind(b"--- !ruby/object:Gem\nfoo: 1\n..."),
+            Some(5)
+        );
         assert_eq!(pack::serialized_kind(&[4, 8, b'o', b'\n']), Some(4));
     }
 
     #[test]
     fn database_connection_string_disclosed() {
-        let v = only(&ex("/e", true, HTML, "<pre>Server=db01;Database=shop;User Id=sa;Password=hunter2;</pre>"), pack::CH_DB_CONNECTION);
-        assert_eq!(names(&v), [("Database connection string disclosed".to_string(), "server=db01;database=shop;userid=sa;password=hunter2;".to_string())]);
+        let v = only(
+            &ex(
+                "/e",
+                true,
+                HTML,
+                "<pre>Server=db01;Database=shop;User Id=sa;Password=hunter2;</pre>",
+            ),
+            pack::CH_DB_CONNECTION,
+        );
+        assert_eq!(
+            names(&v),
+            [(
+                "Database connection string disclosed".to_string(),
+                "server=db01;database=shop;userid=sa;password=hunter2;".to_string()
+            )]
+        );
         assert_eq!(v[0].sev, "medium");
         assert_eq!(v[0].detail, "The following database connection string was disclosed in the response:<ul><li>server=db01;database=shop;userid=sa;password=hunter2;</li></ul>The connection string appears to contain:<ul><li>Database name or location</li><li>Username</li><li>Password</li></ul>");
         // Only an unvalued known key: info.
-        let v = only(&ex("/e", true, HTML, "<pre>Data Source=x;Integrated Security=;    </pre>"), pack::CH_DB_CONNECTION);
+        let v = only(
+            &ex(
+                "/e",
+                true,
+                HTML,
+                "<pre>Data Source=x;Integrated Security=;    </pre>",
+            ),
+            pack::CH_DB_CONNECTION,
+        );
         assert_eq!((v.len(), v[0].sev.as_str()), (1, "info"));
-        for neg in ["<p>server=nginx and more text here</p>", "<p>Driver=x;Color=blue;Size=2 padding padding</p>"] {
-            assert!(only(&ex("/e", true, HTML, neg), pack::CH_DB_CONNECTION).is_empty(), "{neg}");
+        for neg in [
+            "<p>server=nginx and more text here</p>",
+            "<p>Driver=x;Color=blue;Size=2 padding padding</p>",
+        ] {
+            assert!(
+                only(&ex("/e", true, HTML, neg), pack::CH_DB_CONNECTION).is_empty(),
+                "{neg}"
+            );
         }
         assert_eq!(pack::db_strings(b"provider=sqloledb;data source=srv;initial catalog=x;uid=u;pwd= ;'....................").1, 2 | 4, "the first pair (provider=) is skipped; an empty pwd counts but adds no flag");
     }
@@ -1376,11 +2363,26 @@ mod tests {
     #[test]
     fn graphql_endpoint_found_requires_query_and_graphql_response() {
         let req = "POST /graphql HTTP/1.1\r\nHost: example.com\r\nContent-Type: application/json\r\nContent-Length: 27\r\n\r\n{\"query\":\"query{__typename}\"}";
-        let found = ex_req("/graphql", req, "Content-Type: application/json\r\n", r#"{"data":{"__typename":"Query"}}"#);
+        let found = ex_req(
+            "/graphql",
+            req,
+            "Content-Type: application/json\r\n",
+            r#"{"data":{"__typename":"Query"}}"#,
+        );
         assert_eq!(only(&found, CH_GRAPHQL_ENDPOINT_FOUND).len(), 1);
-        let ordinary = ex_req("/graphql", req, "Content-Type: application/json\r\n", r#"{"ordinary":true}"#);
+        let ordinary = ex_req(
+            "/graphql",
+            req,
+            "Content-Type: application/json\r\n",
+            r#"{"ordinary":true}"#,
+        );
         assert!(only(&ordinary, CH_GRAPHQL_ENDPOINT_FOUND).is_empty());
-        let no_query = ex_req("/graphql", "POST /graphql HTTP/1.1\r\nHost: example.com\r\nContent-Length: 2\r\n\r\n{}", "Content-Type: application/json\r\n", r#"{"data":{}}"#);
+        let no_query = ex_req(
+            "/graphql",
+            "POST /graphql HTTP/1.1\r\nHost: example.com\r\nContent-Length: 2\r\n\r\n{}",
+            "Content-Type: application/json\r\n",
+            r#"{"data":{}}"#,
+        );
         assert!(only(&no_query, CH_GRAPHQL_ENDPOINT_FOUND).is_empty());
     }
 
@@ -1388,30 +2390,92 @@ mod tests {
     #[test]
     fn switching_off_the_second_pass() {
         let shared = crate::net::Shared::new();
-        let mut parent = ex("/", true, &format!("{HTML}Set-Cookie: sessionid=abcdef; Domain=example.com\r\n"), "x");
+        let mut parent = ex(
+            "/",
+            true,
+            &format!("{HTML}Set-Cookie: sessionid=abcdef; Domain=example.com\r\n"),
+            "x",
+        );
         parent.host = "www.example.com".into();
         let cases: Vec<(CheckDef, HistEntry)> = vec![
-            (pack::CH_SESSION_TOKEN_URL, ex("/app?sessionid=abc123", true, HTML, "x")),
-            (pack::CH_DUPLICATE_COOKIES, ex("/", true, &format!("{HTML}Set-Cookie: a=1\r\nSet-Cookie: a=2\r\n"), "x")),
-            (pack::CH_CROSS_DOMAIN_SCRIPT, ex("/", true, HTML, "<script src=https://evil.net/a.js></script>")),
+            (
+                pack::CH_SESSION_TOKEN_URL,
+                ex("/app?sessionid=abc123", true, HTML, "x"),
+            ),
+            (
+                pack::CH_DUPLICATE_COOKIES,
+                ex(
+                    "/",
+                    true,
+                    &format!("{HTML}Set-Cookie: a=1\r\nSet-Cookie: a=2\r\n"),
+                    "x",
+                ),
+            ),
+            (
+                pack::CH_CROSS_DOMAIN_SCRIPT,
+                ex(
+                    "/",
+                    true,
+                    HTML,
+                    "<script src=https://evil.net/a.js></script>",
+                ),
+            ),
             (pack::CH_COOKIE_PARENT_DOMAIN, parent),
-            (pack::CH_SOURCE_CODE, ex("/", true, HTML, "<?php echo $a; ?>")),
-            (pack::CH_SERIALIZED, ex("/?d=rO0ABXQAA2FiYw%3D%3D", true, HTML, "x")),
-            (pack::CH_DB_CONNECTION, ex("/", true, HTML, "<p>Server=a;Database=b;Uid=c;Pwd=d;</p>")),
+            (
+                pack::CH_SOURCE_CODE,
+                ex("/", true, HTML, "<?php echo $a; ?>"),
+            ),
+            (
+                pack::CH_SERIALIZED,
+                ex("/?d=rO0ABXQAA2FiYw%3D%3D", true, HTML, "x"),
+            ),
+            (
+                pack::CH_DB_CONNECTION,
+                ex("/", true, HTML, "<p>Server=a;Database=b;Uid=c;Pwd=d;</p>"),
+            ),
         ];
         let check = |c: CheckDef, e: &HistEntry| {
-            *shared.scan_config.lock().unwrap() = Default::default();
-            assert!(crate::scan::passive_check_for(&shared, e).iter().any(|i| i.name == c.name), "{} on", c.id);
-            shared.scan_config.lock().unwrap().disabled_checks.insert(c.id.to_string());
-            assert!(!crate::scan::passive_check_for(&shared, e).iter().any(|i| i.name == c.name), "{} off", c.id);
+            *crate::scan_config::shared_config(&shared).lock().unwrap() = Default::default();
+            assert!(
+                crate::scan::passive_check_for(&shared, e)
+                    .iter()
+                    .any(|i| i.name == c.name),
+                "{} on",
+                c.id
+            );
+            crate::scan_config::shared_config(&shared)
+                .lock()
+                .unwrap()
+                .disabled_checks
+                .insert(c.id.to_string());
+            assert!(
+                !crate::scan::passive_check_for(&shared, e)
+                    .iter()
+                    .any(|i| i.name == c.name),
+                "{} off",
+                c.id
+            );
         };
         for (c, e) in &cases {
             check(*c, e);
         }
         // The password trio share project state on `Shared::passive`.
         crate::scan::passive_check_for(&shared, &ex("/", true, HTML, LOGIN));
-        check(pack::CH_PASSWORD_COOKIE, &post_login("S3cretPass", &format!("{HTML}Set-Cookie: r=S3cretPass\r\n"), "ok"));
-        check(pack::CH_PASSWORD_URL_QUERY, &post_login("S3cretPass", HTML, "<a href=/w?pw=S3cretPass>w</a>"));
-        check(pack::CH_PASSWORD_LATER, &ex("/profile", true, HTML, "<input value=S3cretPass>"));
+        check(
+            pack::CH_PASSWORD_COOKIE,
+            &post_login(
+                "S3cretPass",
+                &format!("{HTML}Set-Cookie: r=S3cretPass\r\n"),
+                "ok",
+            ),
+        );
+        check(
+            pack::CH_PASSWORD_URL_QUERY,
+            &post_login("S3cretPass", HTML, "<a href=/w?pw=S3cretPass>w</a>"),
+        );
+        check(
+            pack::CH_PASSWORD_LATER,
+            &ex("/profile", true, HTML, "<input value=S3cretPass>"),
+        );
     }
 }

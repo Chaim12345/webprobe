@@ -32,7 +32,12 @@ impl WsRule {
     pub fn new(to_server: bool, string_match: &str, string_replace: &str) -> Self {
         WsRule {
             enabled: true,
-            rule_type: if to_server { "client_to_server" } else { "server_to_client" }.into(),
+            rule_type: if to_server {
+                "client_to_server"
+            } else {
+                "server_to_client"
+            }
+            .into(),
             string_match: string_match.into(),
             string_replace: string_replace.into(),
             is_simple_match: true,
@@ -64,7 +69,10 @@ impl WsRule {
 /// end, as Burp's HTTP rules add a header.
 pub fn apply(rules: &[WsRule], to_server: bool, binary: bool, payload: &[u8]) -> Option<Vec<u8>> {
     let mut cur = payload.to_vec();
-    for r in rules.iter().filter(|r| r.enabled && r.applies_to(to_server)) {
+    for r in rules
+        .iter()
+        .filter(|r| r.enabled && r.applies_to(to_server))
+    {
         cur = if r.string_match.is_empty() {
             let mut v = cur;
             v.extend_from_slice(r.string_replace.as_bytes());
@@ -73,12 +81,17 @@ pub fn apply(rules: &[WsRule], to_server: bool, binary: bool, payload: &[u8]) ->
             replace_bytes(&cur, r.string_match.as_bytes(), r.string_replace.as_bytes())
         } else if binary {
             match regex::bytes::Regex::new(&r.string_match) {
-                Ok(re) => re.replace_all(&cur, r.string_replace.as_bytes()).into_owned(),
+                Ok(re) => re
+                    .replace_all(&cur, r.string_replace.as_bytes())
+                    .into_owned(),
                 Err(_) => cur,
             }
         } else {
             match regex::Regex::new(&r.string_match) {
-                Ok(re) => re.replace_all(&String::from_utf8_lossy(&cur), r.string_replace.as_str()).into_owned().into_bytes(),
+                Ok(re) => re
+                    .replace_all(&String::from_utf8_lossy(&cur), r.string_replace.as_str())
+                    .into_owned()
+                    .into_bytes(),
                 Err(_) => cur,
             }
         };
@@ -109,20 +122,47 @@ mod tests {
     fn rules_apply_per_direction_to_text_and_binary() {
         let mut rx = WsRule::new(true, r"id=(\d+)", "id=9$1");
         rx.is_simple_match = false;
-        let rules = vec![WsRule::new(true, "hello", "HELLO"), WsRule::new(false, "x", "y"), rx];
-        assert_eq!(apply(&rules, true, false, b"hello id=1").unwrap(), b"HELLO id=91");
-        assert_eq!(apply(&rules, false, false, b"hello"), None, "other direction only");
-        let both = vec![WsRule { rule_type: "both".into(), ..WsRule::new(true, "hello", "HELLO") }];
+        let rules = vec![
+            WsRule::new(true, "hello", "HELLO"),
+            WsRule::new(false, "x", "y"),
+            rx,
+        ];
+        assert_eq!(
+            apply(&rules, true, false, b"hello id=1").unwrap(),
+            b"HELLO id=91"
+        );
+        assert_eq!(
+            apply(&rules, false, false, b"hello"),
+            None,
+            "other direction only"
+        );
+        let both = vec![WsRule {
+            rule_type: "both".into(),
+            ..WsRule::new(true, "hello", "HELLO")
+        }];
         assert_eq!(apply(&both, true, false, b"hello"), Some(b"HELLO".to_vec()));
-        assert_eq!(apply(&both, false, false, b"hello"), Some(b"HELLO".to_vec()));
+        assert_eq!(
+            apply(&both, false, false, b"hello"),
+            Some(b"HELLO".to_vec())
+        );
         // Binary: bytes around the match survive, invalid UTF-8 included.
         let bin = [0xff, b'h', b'e', b'l', b'l', b'o', 0x80, 0x00];
-        assert_eq!(apply(&rules, true, true, &bin).unwrap(), [0xff, b'H', b'E', b'L', b'L', b'O', 0x80, 0x00]);
+        assert_eq!(
+            apply(&rules, true, true, &bin).unwrap(),
+            [0xff, b'H', b'E', b'L', b'L', b'O', 0x80, 0x00]
+        );
         let mut off = rules.clone();
         off.iter_mut().for_each(|r| r.enabled = false);
         assert_eq!(apply(&off, true, false, b"hello"), None);
         let v = serde_json::to_value(&rules[0]).unwrap();
-        for k in ["enabled", "rule_type", "string_match", "string_replace", "is_simple_match", "comment"] {
+        for k in [
+            "enabled",
+            "rule_type",
+            "string_match",
+            "string_replace",
+            "is_simple_match",
+            "comment",
+        ] {
             assert!(v.get(k).is_some(), "{k}");
         }
     }

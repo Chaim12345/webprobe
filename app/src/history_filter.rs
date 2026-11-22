@@ -76,12 +76,12 @@ impl Default for HistoryFilter {
 }
 
 #[cfg(test)]
-use crate::mime::burp_mime;
+use webprobe_core::mime::burp_mime;
 
 impl HistoryFilter {
     /// Burp's MIME family of an entry, for the column and the MIME filter.
     pub fn burp_mime_of(entry: &HistEntry) -> &'static str {
-        crate::mime::burp_mime_of(entry)
+        crate::net::burp_mime_of(entry)
     }
 
     /// The one-line summary Burp prints after "Filter settings:".
@@ -169,11 +169,21 @@ impl HistoryFilter {
         }
         if self.hide_specific && !entry.extension.is_empty() {
             let ext = entry.extension.trim_start_matches('.').to_ascii_lowercase();
-            if self.hide_items.split(',').any(|x| x.trim().eq_ignore_ascii_case(&ext)) {
+            if self
+                .hide_items
+                .split(',')
+                .any(|x| x.trim().eq_ignore_ascii_case(&ext))
+            {
                 return false;
             }
         }
-        if let Some(d) = entry.status.trim().chars().next().and_then(|c| c.to_digit(10)) {
+        if let Some(d) = entry
+            .status
+            .trim()
+            .chars()
+            .next()
+            .and_then(|c| c.to_digit(10))
+        {
             if (2..=5).contains(&d) && !self.show_status[(d - 2) as usize] {
                 return false;
             }
@@ -191,10 +201,28 @@ impl HistoryFilter {
     pub fn key(&self) -> String {
         format!(
             "{}|{}|{}|{}|{}|{}|{}|{:?}|{}|{}|{}|{}|{:?}",
-            self.text.trim(), self.regex, self.method.trim(), self.status.trim(), self.mime.trim(),
-            self.in_scope_only, self.enabled,
-            [self.show_html, self.show_script, self.show_xml, self.show_css, self.show_other_text, self.show_images, self.show_flash, self.show_other_binary],
-            self.hide_specific, self.hide_items, self.hide_without_response, self.only_parameterized, self.show_status,
+            self.text.trim(),
+            self.regex,
+            self.method.trim(),
+            self.status.trim(),
+            self.mime.trim(),
+            self.in_scope_only,
+            self.enabled,
+            [
+                self.show_html,
+                self.show_script,
+                self.show_xml,
+                self.show_css,
+                self.show_other_text,
+                self.show_images,
+                self.show_flash,
+                self.show_other_binary
+            ],
+            self.hide_specific,
+            self.hide_items,
+            self.hide_without_response,
+            self.only_parameterized,
+            self.show_status,
         )
     }
 
@@ -209,7 +237,9 @@ impl HistoryFilter {
     /// The Content-Type of the recorded response, reduced to `type/subtype`
     /// (so "json" matches `application/json; charset=utf-8`).
     pub fn mime_of(entry: &HistEntry) -> String {
-        let Some(resp) = &entry.resp_raw else { return String::new() };
+        let Some(resp) = &entry.resp_raw else {
+            return String::new();
+        };
         let parts = crate::util::parse_http(resp);
         let value = crate::util::get_header(&parts.headers, "Content-Type").unwrap_or_default();
         let essence = value.split(';').next().unwrap_or("").trim().to_lowercase();
@@ -220,21 +250,18 @@ impl HistoryFilter {
         if !self.burp_rules_pass(entry) {
             return false;
         }
-        if !self.method.trim().is_empty()
-            && !entry.method.eq_ignore_ascii_case(self.method.trim())
+        if !self.method.trim().is_empty() && !entry.method.eq_ignore_ascii_case(self.method.trim())
         {
             return false;
         }
-        if !self.status.trim().is_empty()
-            && !entry.status.trim().starts_with(self.status.trim())
-        {
+        if !self.status.trim().is_empty() && !entry.status.trim().starts_with(self.status.trim()) {
             return false;
         }
         if !self.mime.trim().is_empty() {
             let needle = self.mime.trim().to_lowercase();
             let mime = Self::mime_of(entry);
             let hit = if self.regex {
-                regex::RegexBuilder::new(&self.mime.trim())
+                regex::RegexBuilder::new(self.mime.trim())
                     .case_insensitive(true)
                     .build()
                     .map(|re| re.is_match(&mime))
@@ -247,7 +274,12 @@ impl HistoryFilter {
             }
         }
         if self.in_scope_only {
-            let url = format!("{}://{}{}", if entry.https { "https" } else { "http" }, entry.host, entry.path);
+            let url = format!(
+                "{}://{}{}",
+                if entry.https { "https" } else { "http" },
+                entry.host,
+                entry.path
+            );
             if !net::in_scope(shared, &url) {
                 return false;
             }
@@ -263,7 +295,10 @@ impl HistoryFilter {
         if self.regex {
             // A half-typed expression must not empty the table: an invalid
             // pattern matches nothing and says so instead.
-            match regex::RegexBuilder::new(needle).case_insensitive(true).build() {
+            match regex::RegexBuilder::new(needle)
+                .case_insensitive(true)
+                .build()
+            {
                 Ok(re) => re.is_match(&haystack),
                 Err(_) => false,
             }
@@ -275,7 +310,13 @@ impl HistoryFilter {
     /// Burp's filter bar: one clickable "Filter settings: ..." strip, the
     /// search box and the "Filter on" switch. Clicking the strip opens the
     /// settings popup. Returns true when the search text is a broken regex.
-    pub fn ui(&mut self, ui: &mut Ui, shared: &std::sync::Arc<net::Shared>, shown: usize, total: usize) -> bool {
+    pub fn ui(
+        &mut self,
+        ui: &mut Ui,
+        shared: &std::sync::Arc<net::Shared>,
+        shown: usize,
+        total: usize,
+    ) -> bool {
         let mut broken = false;
         if self.regex && !self.text.trim().is_empty() {
             broken = regex::Regex::new(self.text.trim()).is_err();
@@ -285,8 +326,16 @@ impl HistoryFilter {
             let right_w = 400.0;
             let w = (ui.available_width() - right_w).max(200.0);
             let (rect, resp) = ui.allocate_exact_size(egui::vec2(w, 20.0), egui::Sense::click());
-            resp.widget_info(|| egui::WidgetInfo::labeled(egui::accesskit::Role::Button, true, "Filter settings"));
-            ui.painter().rect(rect, 2.0, theme::header_bg(), egui::Stroke::new(1.0, theme::line()), egui::StrokeKind::Outside);
+            resp.widget_info(|| {
+                egui::WidgetInfo::labeled(egui::accesskit::Role::Button, true, "Filter settings")
+            });
+            ui.painter().rect(
+                rect,
+                2.0,
+                theme::header_bg(),
+                egui::Stroke::new(1.0, theme::line()),
+                egui::StrokeKind::Outside,
+            );
             let label = format!("\u{25BD}  Filter settings: {}", self.summary());
             ui.painter().with_clip_rect(rect.shrink(2.0)).text(
                 egui::pos2(rect.left() + 8.0, rect.center().y),
@@ -295,7 +344,9 @@ impl HistoryFilter {
                 egui::FontId::proportional(12.5),
                 theme::ink_dim(),
             );
-            let resp = resp.on_hover_text(format!("{shown} of {total} items shown. Click to change the filter."));
+            let resp = resp.on_hover_text(format!(
+                "{shown} of {total} items shown. Click to change the filter."
+            ));
             if resp.clicked() {
                 self.open = !self.open;
             }
@@ -307,11 +358,16 @@ impl HistoryFilter {
             );
             ui.add_space(8.0);
             ui.add(toggle(&mut self.enabled));
-            ui.label(RichText::new("Filter on").size(12.5).color(theme::ink_dim()));
+            ui.label(
+                RichText::new("Filter on")
+                    .size(12.5)
+                    .color(theme::ink_dim()),
+            );
         });
         if self.open {
             let mut open = self.open;
-            egui::Window::new("HTTP history filter").default_pos(crate::theme::window_pos(ui.ctx()))
+            egui::Window::new("HTTP history filter")
+                .default_pos(crate::theme::window_pos(ui.ctx()))
                 .open(&mut open)
                 .collapsible(false)
                 .resizable(false)
@@ -323,16 +379,37 @@ impl HistoryFilter {
     }
 
     fn settings_ui(&mut self, ui: &mut Ui, shared: &std::sync::Arc<net::Shared>) {
-        let scope_rules = shared.scope.lock().map(|r| r.iter().filter(|r| r.enabled).count()).unwrap_or(0);
+        let scope_rules = shared
+            .scope
+            .lock()
+            .map(|r| r.iter().filter(|r| r.enabled).count())
+            .unwrap_or(0);
         ui.horizontal_top(|ui| {
             ui.vertical(|ui| {
                 ui.label(RichText::new("Filter by request type").strong());
-                ui.checkbox(&mut self.in_scope_only, format!("Show only in-scope items ({scope_rules} rules)"));
-                ui.checkbox(&mut self.hide_without_response, "Hide items without responses");
-                ui.checkbox(&mut self.only_parameterized, "Show only parameterized requests");
+                ui.checkbox(
+                    &mut self.in_scope_only,
+                    format!("Show only in-scope items ({scope_rules} rules)"),
+                );
+                ui.checkbox(
+                    &mut self.hide_without_response,
+                    "Hide items without responses",
+                );
+                ui.checkbox(
+                    &mut self.only_parameterized,
+                    "Show only parameterized requests",
+                );
                 ui.add_space(8.0);
                 ui.label(RichText::new("Filter by status code").strong());
-                for (i, l) in ["2xx [success]", "3xx [redirection]", "4xx [request error]", "5xx [server error]"].iter().enumerate() {
+                for (i, l) in [
+                    "2xx [success]",
+                    "3xx [redirection]",
+                    "4xx [request error]",
+                    "5xx [server error]",
+                ]
+                .iter()
+                .enumerate()
+                {
                     ui.checkbox(&mut self.show_status[i], *l);
                 }
             });
@@ -360,9 +437,21 @@ impl HistoryFilter {
                 ui.add_space(8.0);
                 ui.label(RichText::new("Method / status / MIME contains").strong());
                 ui.horizontal(|ui| {
-                    ui.add(egui::TextEdit::singleline(&mut self.method).desired_width(56.0).hint_text("method"));
-                    ui.add(egui::TextEdit::singleline(&mut self.status).desired_width(48.0).hint_text("status"));
-                    ui.add(egui::TextEdit::singleline(&mut self.mime).desired_width(64.0).hint_text("MIME"));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.method)
+                            .desired_width(56.0)
+                            .hint_text("method"),
+                    );
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.status)
+                            .desired_width(48.0)
+                            .hint_text("status"),
+                    );
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.mime)
+                            .desired_width(64.0)
+                            .hint_text("MIME"),
+                    );
                 });
             });
         });
@@ -370,7 +459,14 @@ impl HistoryFilter {
         ui.horizontal(|ui| {
             if ui.button("Show all").clicked() {
                 let open = self.open;
-                *self = Self { enabled: true, show_css: true, show_images: true, hide_specific: false, open, ..Default::default() };
+                *self = Self {
+                    enabled: true,
+                    show_css: true,
+                    show_images: true,
+                    hide_specific: false,
+                    open,
+                    ..Default::default()
+                };
             }
             if ui.button("Hide all").clicked() {
                 self.show_html = false;
@@ -383,7 +479,10 @@ impl HistoryFilter {
                 self.show_other_binary = false;
             }
             if ui.button("Revert changes").clicked() {
-                *self = Self { open: true, ..Default::default() };
+                *self = Self {
+                    open: true,
+                    ..Default::default()
+                };
             }
         });
     }
@@ -399,12 +498,19 @@ pub fn toggle(on: &mut bool) -> impl egui::Widget + '_ {
             resp.mark_changed();
         }
         let state = *on;
-        resp.widget_info(|| egui::WidgetInfo::selected(egui::accesskit::Role::Switch, true, state, "Toggle"));
+        resp.widget_info(|| {
+            egui::WidgetInfo::selected(egui::accesskit::Role::Switch, true, state, "Toggle")
+        });
         let t = ui.ctx().animate_bool(resp.id, *on);
-        let bg = if *on { c(0x26649D) } else { theme::line_strong() };
+        let bg = if *on {
+            c(0x26649D)
+        } else {
+            theme::line_strong()
+        };
         ui.painter().rect_filled(rect, rect.height() / 2.0, bg);
         let x = egui::lerp((rect.left() + 6.5)..=(rect.right() - 6.5), t);
-        ui.painter().circle_filled(egui::pos2(x, rect.center().y), 4.5, egui::Color32::WHITE);
+        ui.painter()
+            .circle_filled(egui::pos2(x, rect.center().y), 4.5, egui::Color32::WHITE);
         resp
     }
 }
@@ -413,11 +519,18 @@ pub fn toggle(on: &mut bool) -> impl egui::Widget + '_ {
 mod tests {
     use super::*;
 
-    fn entry(method: &str, host: &str, path: &str, status: &str, content_type: Option<&str>) -> HistEntry {
+    fn entry(
+        method: &str,
+        host: &str,
+        path: &str,
+        status: &str,
+        content_type: Option<&str>,
+    ) -> HistEntry {
         let mut resp = Vec::new();
         if let Some(ct) = content_type {
             resp.extend_from_slice(
-                format!("HTTP/1.1 {status} OK\r\nContent-Type: {ct}\r\nContent-Length: 0\r\n\r\n").as_bytes(),
+                format!("HTTP/1.1 {status} OK\r\nContent-Type: {ct}\r\nContent-Length: 0\r\n\r\n")
+                    .as_bytes(),
             );
         }
         HistEntry {
@@ -430,7 +543,11 @@ mod tests {
             status: status.into(),
             resp_len: 0,
             req_raw: Vec::new().into(),
-            resp_raw: if resp.is_empty() { None } else { Some(resp.into()) },
+            resp_raw: if resp.is_empty() {
+                None
+            } else {
+                Some(resp.into())
+            },
             https: false,
             note: None,
             highlight: None,
@@ -452,7 +569,13 @@ mod tests {
 
     #[test]
     fn mime_is_taken_from_the_recorded_response() {
-        let e = entry("GET", "a", "/", "200", Some("application/json; charset=utf-8"));
+        let e = entry(
+            "GET",
+            "a",
+            "/",
+            "200",
+            Some("application/json; charset=utf-8"),
+        );
         assert_eq!(HistoryFilter::mime_of(&e), "application/json");
         let none = entry("GET", "a", "/", "200", None);
         assert_eq!(HistoryFilter::mime_of(&none), "");
@@ -462,7 +585,10 @@ mod tests {
     fn method_and_status_filters_match_substrings() {
         let shared = shared();
         let e = entry("GET", "example.com", "/x", "404", Some("text/html"));
-        let mut f = HistoryFilter { method: "get".into(), ..Default::default() };
+        let mut f = HistoryFilter {
+            method: "get".into(),
+            ..Default::default()
+        };
         assert!(f.matches(&e, &shared));
         f.method = "POST".into();
         assert!(!f.matches(&e, &shared));
@@ -476,8 +602,17 @@ mod tests {
     #[test]
     fn mime_filter_matches_the_essence_not_the_parameters() {
         let shared = shared();
-        let e = entry("GET", "a", "/", "200", Some("application/json; charset=utf-8"));
-        let mut f = HistoryFilter { mime: "json".into(), ..Default::default() };
+        let e = entry(
+            "GET",
+            "a",
+            "/",
+            "200",
+            Some("application/json; charset=utf-8"),
+        );
+        let mut f = HistoryFilter {
+            mime: "json".into(),
+            ..Default::default()
+        };
         assert!(f.matches(&e, &shared));
         f.mime = "text/html".into();
         assert!(!f.matches(&e, &shared));
@@ -493,17 +628,23 @@ mod tests {
     fn text_filter_can_be_literal_or_regex() {
         let shared = shared();
         let e = entry("GET", "api.example.com", "/v1/users", "200", None);
-        let mut f = HistoryFilter { text: "users".into(), ..Default::default() };
+        let mut f = HistoryFilter {
+            text: "users".into(),
+            ..Default::default()
+        };
         assert!(f.matches(&e, &shared));
         f.text = "/v1/users".into();
         assert!(f.matches(&e, &shared)); // literal substring
-        // The haystack is "id method host port path status", so an anchor that
-        // only fits the path does not match it.
+                                         // The haystack is "id method host port path status", so an anchor that
+                                         // only fits the path does not match it.
         f.text = "^/v1/".into();
         f.regex = true;
         assert!(!f.matches(&e, &shared));
         f.text = "/v1/users$".into();
-        assert!(!f.matches(&e, &shared), "the haystack ends with the status code");
+        assert!(
+            !f.matches(&e, &shared),
+            "the haystack ends with the status code"
+        );
         f.text = "users\\b".into();
         assert!(f.matches(&e, &shared));
         f.text = "(".into();
@@ -515,7 +656,10 @@ mod tests {
         let shared = shared();
         let e = entry("GET", "api.example.com", "/v1", "200", None);
         // An empty scope means "everything is in scope", as in the original.
-        let f = HistoryFilter { in_scope_only: true, ..Default::default() };
+        let f = HistoryFilter {
+            in_scope_only: true,
+            ..Default::default()
+        };
         assert!(f.matches(&e, &shared));
 
         // With an include rule, only matching URLs pass.
@@ -534,15 +678,24 @@ mod tests {
     fn burp_default_filter_hides_css_images_and_listed_extensions() {
         let sh = shared();
         let f = HistoryFilter::default();
-        assert_eq!(f.summary(), "Hiding CSS and image content; hiding specific extensions");
+        assert_eq!(
+            f.summary(),
+            "Hiding CSS and image content; hiding specific extensions"
+        );
         assert!(!f.matches(&entry("GET", "a", "/s.css", "200", Some("text/css")), &sh));
         assert!(!f.matches(&entry("GET", "a", "/i", "200", Some("image/png")), &sh));
         let mut js = entry("GET", "a", "/app.js", "200", Some("application/javascript"));
         js.extension = "js".into();
-        assert!(!f.matches(&js, &sh), "js is in Burp's default hidden extensions");
+        assert!(
+            !f.matches(&js, &sh),
+            "js is in Burp's default hidden extensions"
+        );
         assert!(f.matches(&entry("GET", "a", "/", "200", Some("text/html")), &sh));
         // Filter off shows everything.
-        let off = HistoryFilter { enabled: false, ..Default::default() };
+        let off = HistoryFilter {
+            enabled: false,
+            ..Default::default()
+        };
         assert!(off.matches(&js, &sh));
         assert_eq!(off.summary(), "Showing all items");
     }

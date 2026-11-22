@@ -55,8 +55,14 @@ pub fn real_https_count(history: &[net::HistEntry]) -> usize {
 }
 
 pub fn checks(app: &App) -> Vec<Check> {
-    let port = app.shared.proxy_port.load(std::sync::atomic::Ordering::SeqCst);
-    let listening = app.shared.listener_running.load(std::sync::atomic::Ordering::SeqCst);
+    let port = app
+        .shared
+        .proxy_port
+        .load(std::sync::atomic::Ordering::SeqCst);
+    let listening = app
+        .shared
+        .listener_running
+        .load(std::sync::atomic::Ordering::SeqCst);
     let history: Vec<net::HistEntry> = app.shared.history.snapshot();
     let https = real_https_count(&history);
     let waiting = app.shared.count_waiting();
@@ -93,12 +99,19 @@ pub fn checks(app: &App) -> Vec<Check> {
         },
         Check {
             label: "Intercept holds messages".into(),
-            detail: if app.shared.intercept_on.load(std::sync::atomic::Ordering::SeqCst) {
+            detail: if app
+                .shared
+                .intercept_on
+                .load(std::sync::atomic::Ordering::SeqCst)
+            {
                 format!("on; {waiting} held")
             } else {
                 "off (Ctrl+T toggles)".into()
             },
-            done: app.shared.intercept_on.load(std::sync::atomic::Ordering::SeqCst),
+            done: app
+                .shared
+                .intercept_on
+                .load(std::sync::atomic::Ordering::SeqCst),
         },
     ]
 }
@@ -108,46 +121,66 @@ pub fn panel(app: &mut App, ui: &mut Ui) -> bool {
     let checks = checks(app);
     let done = checks.iter().filter(|c| c.done).count();
 
-    let hide = ui.horizontal(|ui| {
-        ui.label(
-            RichText::new("Set up WebProbe")
-                .size(14.0)
-                .strong()
-                .color(c(theme::MONO7)),
-        );
-        ui.add_space(6.0);
-        ui.label(
-            RichText::new(format!("{}/{} steps done", done, checks.len()))
-                .size(12.0)
-                .color(c(if done == checks.len() { theme::GOOD } else { theme::MONO6 })),
-        );
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.small_button("Hide").clicked() {
-                return true;
-            }
-            false
+    let hide = ui
+        .horizontal(|ui| {
+            ui.label(
+                RichText::new("Set up WebProbe")
+                    .size(14.0)
+                    .strong()
+                    .color(c(theme::MONO7)),
+            );
+            ui.add_space(6.0);
+            ui.label(
+                RichText::new(format!("{}/{} steps done", done, checks.len()))
+                    .size(12.0)
+                    .color(c(if done == checks.len() {
+                        theme::GOOD
+                    } else {
+                        theme::MONO6
+                    })),
+            );
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.small_button("Hide").clicked()
+            })
+            .inner
         })
-        .inner
-    })
-    .inner;
+        .inner;
 
     for check in &checks {
         ui.horizontal(|ui| {
-            let (mark, colour) = if check.done { ("OK", theme::GOOD) } else { ("--", theme::MONO4) };
-            ui.add_sized([26.0, 18.0], egui::Label::new(RichText::new(mark).monospace().size(12.0).color(c(colour))));
+            let (mark, colour) = if check.done {
+                ("OK", theme::GOOD)
+            } else {
+                ("--", theme::MONO4)
+            };
+            ui.add_sized(
+                [26.0, 18.0],
+                egui::Label::new(RichText::new(mark).monospace().size(12.0).color(c(colour))),
+            );
             ui.vertical(|ui| {
                 ui.label(
                     RichText::new(check.label.clone())
                         .size(12.0)
-                        .color(c(if check.done { theme::EDITOR_TEXT } else { theme::MONO6 })),
+                        .color(c(if check.done {
+                            theme::EDITOR_TEXT
+                        } else {
+                            theme::MONO6
+                        })),
                 );
-                ui.label(RichText::new(check.detail.clone()).size(12.0).color(c(theme::MONO4)));
+                ui.label(
+                    RichText::new(check.detail.clone())
+                        .size(12.0)
+                        .color(c(theme::MONO4)),
+                );
             });
         });
     }
 
     ui.add_space(6.0);
-    let port = app.shared.proxy_port.load(std::sync::atomic::Ordering::SeqCst);
+    let port = app
+        .shared
+        .proxy_port
+        .load(std::sync::atomic::Ordering::SeqCst);
     ui.label(
         RichText::new(format!(
             "Point your browser at 127.0.0.1:{port}, then open http://webprobe to download the CA certificate. Burp's own page is http://burpsuite; both are answered locally by the proxy."
@@ -183,8 +216,12 @@ fn export_ca(app: &App) {
     let path = dir.join("webprobe-ca.pem");
     match std::fs::write(&path, app.shared.mitm.ca_pem()) {
         Ok(()) => {
-            app.shared.log(&format!("CA certificate exported to {}", path.display()));
-            feedback::toast(feedback::Level::Success, format!("CA written to {}", path.display()));
+            app.shared
+                .log(&format!("CA certificate exported to {}", path.display()));
+            feedback::toast(
+                feedback::Level::Success,
+                format!("CA written to {}", path.display()),
+            );
         }
         Err(e) => feedback::toast(feedback::Level::Error, format!("CA export failed: {e}")),
     }
@@ -203,10 +240,12 @@ pub fn sample_traffic_to(shared: &std::sync::Arc<net::Shared>, host: &str) {
     let port = shared.proxy_port.load(std::sync::atomic::Ordering::SeqCst);
     let request = format!("GET http://{host}/ HTTP/1.1\r\nHost: {host}\r\nUser-Agent: WebProbe/1.0\r\nAccept: */*\r\nConnection: close\r\n\r\n");
     let shared = shared.clone();
-    std::thread::spawn(move || {
+    webprobe_core::util::spawn_contained("onboarding", move || {
         let out = crate::send_internal_probe(port, request.as_bytes());
         if out.is_empty() {
-            shared.log(&format!("Sample traffic failed: no response from the proxy on 127.0.0.1:{port}"));
+            shared.log(&format!(
+                "Sample traffic failed: no response from the proxy on 127.0.0.1:{port}"
+            ));
             feedback::toast(
                 feedback::Level::Error,
                 format!("No response from 127.0.0.1:{port}; start the listener first"),
@@ -220,7 +259,10 @@ pub fn sample_traffic_to(shared: &std::sync::Arc<net::Shared>, host: &str) {
             .trim()
             .to_string();
         shared.log(&format!("Sample traffic: {status}"));
-        feedback::toast(feedback::Level::Success, format!("Sample traffic: {status}"));
+        feedback::toast(
+            feedback::Level::Success,
+            format!("Sample traffic: {status}"),
+        );
     });
 }
 
@@ -230,9 +272,19 @@ mod tests {
 
     #[test]
     fn seeded_rows_do_not_count_as_traffic() {
-        let row = |ts: u64, https: bool| net::HistEntry { ts, https, ..Default::default() };
+        let row = |ts: u64, https: bool| net::HistEntry {
+            ts,
+            https,
+            ..Default::default()
+        };
         // The seed hook stamps rows 0, 1, 2, ...; real rows carry unix time.
-        let history = vec![row(0, true), row(7, true), row(29, false), row(1_794_000_000, false), row(1_794_000_001, true)];
+        let history = vec![
+            row(0, true),
+            row(7, true),
+            row(29, false),
+            row(1_794_000_000, false),
+            row(1_794_000_001, true),
+        ];
         assert_eq!(super::real_count(&history), 2);
         assert_eq!(super::real_https_count(&history), 1);
         assert_eq!(super::real_https_count(&history[..3]), 0);
@@ -272,46 +324,53 @@ mod tests {
         // be the listener's, not a hard-coded 8080.
         assert!(setup_page(9090).contains("127.0.0.1:9090"));
     }
-#[test]
-fn sample_traffic_populates_history_through_the_listener() {
-    use std::sync::atomic::Ordering;
+    #[test]
+    fn sample_traffic_populates_history_through_the_listener() {
+        use std::sync::atomic::Ordering;
 
-    let shared = net::Shared::new(); // already an Arc<Shared>
-    let probe = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let port = probe.local_addr().unwrap().port();
-    drop(probe);
-    shared.proxy_port.store(port, Ordering::SeqCst);
-    net::start_proxy(shared.clone());
-    for _ in 0..100 {
-        if shared.listener_running.load(Ordering::SeqCst) {
-            break;
+        let shared = net::Shared::new(); // already an Arc<Shared>
+        let probe = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = probe.local_addr().unwrap().port();
+        drop(probe);
+        shared.proxy_port.store(port, Ordering::SeqCst);
+        net::start_proxy(shared.clone());
+        for _ in 0..100 {
+            if shared.listener_running.load(Ordering::SeqCst) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
         }
-        std::thread::sleep(std::time::Duration::from_millis(50));
+        assert!(
+            shared.listener_running.load(Ordering::SeqCst),
+            "listener never started"
+        );
+
+        // A local upstream: the test must not depend on the internet.
+        let upstream = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let up_port = upstream.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            use std::io::{Read, Write};
+            if let Ok((mut s, _)) = upstream.accept() {
+                let mut buf = [0u8; 4096];
+                let _ = s.read(&mut buf);
+                let _ = s.write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok",
+                );
+            }
+        });
+        sample_traffic_to(&shared, &format!("127.0.0.1:{up_port}"));
+        for _ in 0..100 {
+            if !shared.history.is_empty() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        let history = shared.history.snapshot();
+        assert!(
+            !history.is_empty(),
+            "sample traffic never reached the proxy"
+        );
+        assert_eq!(history[0].host, "127.0.0.1");
+        assert_eq!(history[0].status, "200");
     }
-    assert!(shared.listener_running.load(Ordering::SeqCst), "listener never started");
-
-    // A local upstream: the test must not depend on the internet.
-    let upstream = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let up_port = upstream.local_addr().unwrap().port();
-    std::thread::spawn(move || {
-        use std::io::{Read, Write};
-        if let Ok((mut s, _)) = upstream.accept() {
-            let mut buf = [0u8; 4096];
-            let _ = s.read(&mut buf);
-            let _ = s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok");
-        }
-    });
-    sample_traffic_to(&shared, &format!("127.0.0.1:{up_port}"));
-    for _ in 0..100 {
-        if !shared.history.is_empty() {
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(50));
-    }
-    let history = shared.history.snapshot();
-    assert!(!history.is_empty(), "sample traffic never reached the proxy");
-    assert_eq!(history[0].host, "127.0.0.1");
-    assert_eq!(history[0].status, "200");
-}
-
 }

@@ -12,20 +12,16 @@ use serde_json::{json, Value};
 use crate::net::{HistEntry, Shared};
 use crate::util;
 
-/// A message an extension sent to a tool whose state is the desktop
-/// app's; the app applies it on its next frame.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ToolSend {
-    /// The request (with § position markers) and its target origin.
-    Intruder { request: String, target: String, https: bool },
-    Comparer(String),
-    Decoder(String),
-}
+pub use webprobe_support::ext::ToolSend;
 
 /// The Intruder payload generators of the enabled extensions, by name.
 pub fn payload_generators(shared: &Shared) -> Vec<String> {
-    let exts = shared.ext_host.lock().unwrap().active();
-    let mut names: Vec<String> = exts.iter().filter_map(|e| e.ui()).flat_map(|u| u.generators).collect();
+    let exts = crate::ext_host::active_hooks(shared);
+    let mut names: Vec<String> = exts
+        .iter()
+        .filter_map(|e| e.ui())
+        .flat_map(|u| u.generators)
+        .collect();
     names.dedup();
     names
 }
@@ -33,19 +29,37 @@ pub fn payload_generators(shared: &Shared) -> Vec<String> {
 /// Fetch the payloads of every "Extension-generated" set of an attack on
 /// `request` (Burp asks the generator when the attack starts; it gets the
 /// base value of the first position).
-pub fn fill_extension_payloads(shared: &Shared, request: &str, sources: &mut [crate::intruder::PayloadSource]) -> Result<(), String> {
-    if !sources.iter().any(|s| matches!(s, crate::intruder::PayloadSource::Extension { .. })) {
+pub fn fill_extension_payloads(
+    shared: &Shared,
+    request: &str,
+    sources: &mut [crate::intruder::PayloadSource],
+) -> Result<(), String> {
+    if !sources
+        .iter()
+        .any(|s| matches!(s, crate::intruder::PayloadSource::Extension { .. }))
+    {
         return Ok(());
     }
     let template = crate::intruder::Template::parse(request)?;
-    let base = template.position_values().first().cloned().unwrap_or_default();
-    let exts = shared.ext_host.lock().unwrap().active();
+    let base = template
+        .position_values()
+        .first()
+        .cloned()
+        .unwrap_or_default();
+    let exts = crate::ext_host::active_hooks(shared);
     for src in sources.iter_mut() {
-        let crate::intruder::PayloadSource::Extension { provider, payloads } = src else { continue };
+        let crate::intruder::PayloadSource::Extension { provider, payloads } = src else {
+            continue;
+        };
         let ext = exts
             .iter()
-            .find(|e| e.ui().is_some_and(|u| u.generators.iter().any(|g| g == provider)))
-            .ok_or_else(|| format!("No loaded extension provides the payload generator {provider}"))?;
+            .find(|e| {
+                e.ui()
+                    .is_some_and(|u| u.generators.iter().any(|g| g == provider))
+            })
+            .ok_or_else(|| {
+                format!("No loaded extension provides the payload generator {provider}")
+            })?;
         *payloads = ext.generate_payloads(provider, request.as_bytes(), &base)?;
     }
     Ok(())
@@ -57,12 +71,17 @@ pub fn fill_extension_payloads(shared: &Shared, request: &str, sources: &mut [cr
 /// base value of its position and may change or skip it. Copy-other and
 /// recursive-grep sets are made while the attack runs and are not
 /// processed.
-pub fn apply_extension_processors(shared: &Shared, template: &crate::intruder::Template, specs: &mut [crate::intruder::SetSpec], processors: &[String]) -> Result<(), String> {
+pub fn apply_extension_processors(
+    shared: &Shared,
+    template: &crate::intruder::Template,
+    specs: &mut [crate::intruder::SetSpec],
+    processors: &[String],
+) -> Result<(), String> {
     use crate::intruder::SetSpec;
     if processors.iter().all(String::is_empty) {
         return Ok(());
     }
-    let exts = shared.ext_host.lock().unwrap().active();
+    let exts = crate::ext_host::active_hooks(shared);
     let bases = template.position_values();
     for (spec, name) in specs.iter_mut().zip(processors) {
         if name.is_empty() {
@@ -70,13 +89,20 @@ pub fn apply_extension_processors(shared: &Shared, template: &crate::intruder::T
         }
         let ext = exts
             .iter()
-            .find(|e| e.ui().is_some_and(|u| u.processors.iter().any(|p| p == name)))
+            .find(|e| {
+                e.ui()
+                    .is_some_and(|u| u.processors.iter().any(|p| p == name))
+            })
             .ok_or_else(|| format!("No loaded extension provides the payload processor {name}"))?;
         match spec {
-            SetSpec::List(list) => *list = ext.process_payloads(name, list, bases.first().map_or("", String::as_str))?,
+            SetSpec::List(list) => {
+                *list =
+                    ext.process_payloads(name, list, bases.first().map_or("", String::as_str))?
+            }
             SetSpec::PerPosition(lists) => {
                 for (k, list) in lists.iter_mut().enumerate() {
-                    *list = ext.process_payloads(name, list, bases.get(k).map_or("", String::as_str))?;
+                    *list =
+                        ext.process_payloads(name, list, bases.get(k).map_or("", String::as_str))?;
                 }
             }
             SetSpec::Copy(_) | SetSpec::Recursive { .. } => {}
@@ -91,11 +117,16 @@ fn origin(v: &Value) -> (String, bool) {
     let port = v["port"].as_u64().unwrap_or(if https { 443 } else { 80 });
     let dflt = port == if https { 443 } else { 80 };
     let scheme = if https { "https" } else { "http" };
-    (if host.is_empty() { String::new() } else if dflt { format!("{scheme}://{host}") } else { format!("{scheme}://{host}:{port}") }, https)
-}
-
-fn b64(v: &Value, k: &str) -> Option<Vec<u8>> {
-    v.get(k).and_then(|x| x.as_str()).and_then(|x| util::b64_decode(x).ok())
+    (
+        if host.is_empty() {
+            String::new()
+        } else if dflt {
+            format!("{scheme}://{host}")
+        } else {
+            format!("{scheme}://{host}:{port}")
+        },
+        https,
+    )
 }
 
 fn entry_json(e: &HistEntry) -> Value {
@@ -121,7 +152,10 @@ fn entry_of(v: &Value) -> Option<HistEntry> {
         port: v["port"].as_u64().unwrap_or(80) as u16,
         https: v["secure"].as_bool().unwrap_or(false),
         path: parts.path.clone(),
-        status: resp.as_ref().map(|r| util::parse_http(r).status).unwrap_or_default(),
+        status: resp
+            .as_ref()
+            .map(|r| util::parse_http(r).status)
+            .unwrap_or_default(),
         resp_len: resp.as_ref().map_or(0, Vec::len),
         req_raw: req.into(),
         resp_raw: resp.map(Into::into),
@@ -132,47 +166,45 @@ fn entry_of(v: &Value) -> Option<HistEntry> {
     Some(e)
 }
 
-/// The issue an extension reported (Montoya AuditIssue), as WebProbe's.
-pub fn issue_of(v: &Value, extension: &str) -> crate::scan::ScanIssue {
-    let url = v["baseUrl"].as_str().unwrap_or_default();
-    let rest = url.split_once("://").map(|x| x.1).unwrap_or(url);
-    let (auth, path) = rest.find('/').map(|i| (&rest[..i], &rest[i..])).unwrap_or((rest, "/"));
-    let host = auth.rsplit_once(':').filter(|(_, p)| p.chars().all(|c| c.is_ascii_digit())).map(|x| x.0).unwrap_or(auth);
-    let sev = v["severity"].as_str().unwrap_or("INFORMATION");
-    let mut detail = v["detail"].as_str().unwrap_or_default().to_string();
-    if let Some(r) = v["remediation"].as_str().filter(|r| !r.is_empty()) {
-        detail.push_str(&format!("<p><b>Remediation:</b> {r}</p>"));
-    }
-    detail.push_str(&format!("<p>Reported by the extension {}.</p>", util::html_encode(extension)));
-    let confidence = match v["confidence"].as_str().unwrap_or("FIRM") {
-        "CERTAIN" => "Certain",
-        "TENTATIVE" => "Tentative",
-        _ => "Firm",
-    };
-    let evidence = v["evidence"]
-        .as_array()
-        .map(|a| a.iter().filter_map(|m| Some(crate::scan::ScanEvidence::new(&b64(m, "request")?, b64(m, "response").as_deref()))).collect())
-        .unwrap_or_default();
-    crate::scan::ScanIssue {
-        sev: match sev {
-            "HIGH" => "high",
-            "MEDIUM" => "medium",
-            "LOW" => "low",
-            _ => "info",
-        }
-        .into(),
-        name: v["name"].as_str().unwrap_or_default().to_string(),
-        host: host.to_string(),
-        path: path.split('?').next().unwrap_or("/").to_string(),
-        detail,
-        false_positive: sev == "FALSE_POSITIVE",
-        confidence: confidence.into(),
-        ts: util::now_secs(),
-        type_id: crate::scan::issue_type_id(v["name"].as_str().unwrap_or_default()),
-        evidence,
-        ..Default::default()
-    }
+fn b64(v: &Value, k: &str) -> Option<Vec<u8>> {
+    let s = v[k].as_str()?;
+    util::b64_decode(s).ok()
 }
+
+/// The host link to a running WebProbe for a sidecar or helper process:
+/// sends with net::send_raw / send_tls_raw, events to the event log, engine
+/// calls to dispatch. Holds the engine weakly (the engine owns its
+/// extensions).
+pub fn host_link(shared: &std::sync::Arc<Shared>) -> std::sync::Arc<crate::ext_host::HostLink> {
+    let (a, b, c) = (
+        std::sync::Arc::downgrade(shared),
+        std::sync::Arc::downgrade(shared),
+        std::sync::Arc::downgrade(shared),
+    );
+    std::sync::Arc::new(crate::ext_host::HostLink {
+        send: Box::new(move |svc, req| {
+            let shared = a.upgrade().ok_or("WebProbe is shutting down")?;
+            let up = if svc.secure {
+                crate::net::send_tls_raw(&shared, &svc.host, svc.port, req)
+            } else {
+                crate::net::send_raw(&shared, &svc.host, svc.port, req)
+            };
+            up.resp
+                .ok_or_else(|| up.error.unwrap_or_else(|| "no response".into()))
+        }),
+        event: Box::new(move |level, msg| {
+            if let Some(shared) = b.upgrade() {
+                shared.log(&format!("Extension event ({level}): {msg}"));
+            }
+        }),
+        call: Box::new(move |ext, op, args| {
+            let shared = c.upgrade().ok_or("WebProbe is shutting down")?;
+            dispatch(&shared, ext, op, args)
+        }),
+    })
+}
+
+pub use crate::ext_host::issue_of;
 
 /// Answer one call from the extension `extension`.
 pub fn dispatch(shared: &Shared, extension: &str, op: &str, args: &Value) -> Result<Value, String> {
@@ -354,22 +386,86 @@ mod tests {
     fn calls_reach_the_engine() {
         let shared = crate::net::Shared::new();
         dispatch(&shared, "x", "proxy.intercept", &json!({"on": true})).unwrap();
-        assert_eq!(dispatch(&shared, "x", "proxy.intercept-state", &json!({})).unwrap(), json!(true));
-        dispatch(&shared, "x", "scope.include", &json!({"url": "http://in.test/"})).unwrap();
-        assert_eq!(dispatch(&shared, "x", "scope.in", &json!({"url": "http://in.test/a"})).unwrap(), json!(true));
-        assert_eq!(dispatch(&shared, "x", "scope.in", &json!({"url": "http://out.test/a"})).unwrap(), json!(false));
+        assert_eq!(
+            dispatch(&shared, "x", "proxy.intercept-state", &json!({})).unwrap(),
+            json!(true)
+        );
+        dispatch(
+            &shared,
+            "x",
+            "scope.include",
+            &json!({"url": "http://in.test/"}),
+        )
+        .unwrap();
+        assert_eq!(
+            dispatch(
+                &shared,
+                "x",
+                "scope.in",
+                &json!({"url": "http://in.test/a"})
+            )
+            .unwrap(),
+            json!(true)
+        );
+        assert_eq!(
+            dispatch(
+                &shared,
+                "x",
+                "scope.in",
+                &json!({"url": "http://out.test/a"})
+            )
+            .unwrap(),
+            json!(false)
+        );
         let req = util::b64_encode(b"GET /r HTTP/1.1\r\nHost: r.test\r\n\r\n");
         dispatch(&shared, "x", "repeater.send", &json!({"request": req, "host": "r.test", "port": 80, "secure": false, "name": "From ext"})).unwrap();
-        assert_eq!(shared.repeaters.lock().unwrap().last().unwrap().name, "From ext");
-        dispatch(&shared, "x", "sitemap.add", &json!({"request": req, "host": "r.test", "port": 80, "secure": false})).unwrap();
-        assert_eq!(dispatch(&shared, "x", "sitemap.items", &json!({})).unwrap().as_array().unwrap().len(), 1);
+        assert_eq!(
+            shared.repeaters.lock().unwrap().last().unwrap().name,
+            "From ext"
+        );
+        dispatch(
+            &shared,
+            "x",
+            "sitemap.add",
+            &json!({"request": req, "host": "r.test", "port": 80, "secure": false}),
+        )
+        .unwrap();
+        assert_eq!(
+            dispatch(&shared, "x", "sitemap.items", &json!({}))
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
         let issue = json!({"name": "Ext issue", "detail": "d", "remediation": "", "baseUrl": "https://r.test:8443/p?q", "severity": "HIGH", "confidence": "CERTAIN", "evidence": []});
-        dispatch(&shared, "Ext One", "scanner.add-issues", &json!({"issues": [issue]})).unwrap();
+        dispatch(
+            &shared,
+            "Ext One",
+            "scanner.add-issues",
+            &json!({"issues": [issue]}),
+        )
+        .unwrap();
         let i = shared.issues.lock().unwrap()[0].clone();
-        assert_eq!((i.host.as_str(), i.path.as_str(), i.sev.as_str(), i.confidence.as_str()), ("r.test", "/p", "high", "Certain"));
-        assert!(i.detail.ends_with("<p>Reported by the extension Ext One.</p>"));
+        assert_eq!(
+            (
+                i.host.as_str(),
+                i.path.as_str(),
+                i.sev.as_str(),
+                i.confidence.as_str()
+            ),
+            ("r.test", "/p", "high", "Certain")
+        );
+        assert!(i
+            .detail
+            .ends_with("<p>Reported by the extension Ext One.</p>"));
         dispatch(&shared, "x", "cookiejar.set", &json!({"name": "sid", "value": "1", "domain": ".r.test", "path": "/", "expires": null})).unwrap();
-        assert_eq!(dispatch(&shared, "x", "cookiejar.cookies", &json!({})).unwrap()[0]["domain"], "r.test");
-        assert!(dispatch(&shared, "x", "nope", &json!({})).unwrap_err().contains("not supported by WebProbe"));
+        assert_eq!(
+            dispatch(&shared, "x", "cookiejar.cookies", &json!({})).unwrap()[0]["domain"],
+            "r.test"
+        );
+        assert!(dispatch(&shared, "x", "nope", &json!({}))
+            .unwrap_err()
+            .contains("not supported by WebProbe"));
     }
 }

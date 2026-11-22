@@ -24,8 +24,8 @@ use std::time::Duration;
 
 use base64::Engine as _;
 
-use crate::ext_host::{ExtIssue, IssueDefinition, ProxyAction, ProxyHooks};
 use crate::sync::Mutex;
+use webprobe_support::ext::{ExtIssue, IssueDefinition, ProxyAction, ProxyHooks};
 
 pub const API_VERSION: u64 = 1;
 const B64: base64::engine::GeneralPurpose = base64::engine::general_purpose::STANDARD;
@@ -77,9 +77,21 @@ fn push_error(errors: &Mutex<VecDeque<String>>, line: String) {
 }
 
 fn parse_issue(v: &serde_json::Value) -> Option<ExtIssue> {
-    let s = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or_default().to_string();
+    let s = |k: &str| {
+        v.get(k)
+            .and_then(|x| x.as_str())
+            .unwrap_or_default()
+            .to_string()
+    };
     let name = s("name");
-    (!name.is_empty()).then(|| ExtIssue { name, severity: s("severity"), confidence: s("confidence"), detail: s("detail"), host: s("host"), path: s("path") })
+    (!name.is_empty()).then(|| ExtIssue {
+        name,
+        severity: s("severity"),
+        confidence: s("confidence"),
+        detail: s("detail"),
+        host: s("host"),
+        path: s("path"),
+    })
 }
 
 impl ProcessExtension {
@@ -89,13 +101,21 @@ impl ProcessExtension {
     /// working directory.
     pub fn spawn(program: &str, args: &[String], timeout: Duration) -> Result<Self, String> {
         let mut cmd = Command::new(program);
-        cmd.args(args).env_clear().env("WEBPROBE_EXT_API", API_VERSION.to_string()).current_dir(std::env::temp_dir());
+        cmd.args(args)
+            .env_clear()
+            .env("WEBPROBE_EXT_API", API_VERSION.to_string())
+            .current_dir(std::env::temp_dir());
         for k in ["PATH", "HOME", "LANG", "SYSTEMROOT"] {
             if let Some(v) = std::env::var_os(k) {
                 cmd.env(k, v);
             }
         }
-        let mut child = cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| format!("cannot start {program}: {e}"))?;
+        let mut child = cmd
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("cannot start {program}: {e}"))?;
         let mut pipe = child.stdin.take().ok_or("extension stdin unavailable")?;
         let (stdin, to_write) = mpsc::channel::<String>();
         std::thread::Builder::new()
@@ -119,7 +139,10 @@ impl ProcessExtension {
                 let mut reader = BufReader::new(stdout);
                 loop {
                     let mut buf = Vec::new();
-                    match (&mut reader).take(MAX_LINE as u64).read_until(b'\n', &mut buf) {
+                    match (&mut reader)
+                        .take(MAX_LINE as u64)
+                        .read_until(b'\n', &mut buf)
+                    {
                         Ok(0) | Err(_) => break,
                         Ok(_) => {}
                     }
@@ -127,7 +150,9 @@ impl ProcessExtension {
                         // Skip the rest of an oversized line.
                         let _ = reader.skip_until(b'\n');
                     }
-                    let line = String::from_utf8_lossy(&buf).trim_end_matches(['\r', '\n']).to_string();
+                    let line = String::from_utf8_lossy(&buf)
+                        .trim_end_matches(['\r', '\n'])
+                        .to_string();
                     if tx.send(line).is_err() {
                         break;
                     }
@@ -163,27 +188,66 @@ impl ProcessExtension {
             issues: Mutex::new(std::collections::HashMap::new()),
             tab_text: Mutex::new(String::new()),
         };
-        let reg = ext.call_within(serde_json::json!({ "type": "hello", "api": API_VERSION }), None, REGISTER_TIMEOUT.max(timeout))?;
+        let reg = ext.call_within(
+            serde_json::json!({ "type": "hello", "api": API_VERSION }),
+            None,
+            REGISTER_TIMEOUT.max(timeout),
+        )?;
         if reg.get("type").and_then(|t| t.as_str()) != Some("register") {
             return Err(format!("expected a register message, got {reg}"));
         }
-        let api = reg.get("api").and_then(|a| a.as_u64()).unwrap_or(API_VERSION);
+        let api = reg
+            .get("api")
+            .and_then(|a| a.as_u64())
+            .unwrap_or(API_VERSION);
         if api != API_VERSION {
-            return Err(format!("extension wants API {api}; this WebProbe speaks {API_VERSION}"));
+            return Err(format!(
+                "extension wants API {api}; this WebProbe speaks {API_VERSION}"
+            ));
         }
-        let fallback = std::path::Path::new(program).file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default();
-        ext.name = reg.get("name").and_then(|n| n.as_str()).filter(|n| !n.trim().is_empty()).map(str::to_string).unwrap_or(fallback);
-        ext.hooks = reg.get("hooks").and_then(|h| h.as_array()).map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect()).unwrap_or_default();
-        ext.tab = reg.get("tab").and_then(|t| t.as_str()).filter(|t| !t.is_empty()).map(str::to_string);
+        let fallback = std::path::Path::new(program)
+            .file_name()
+            .map(|f| f.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        ext.name = reg
+            .get("name")
+            .and_then(|n| n.as_str())
+            .filter(|n| !n.trim().is_empty())
+            .map(str::to_string)
+            .unwrap_or(fallback);
+        ext.hooks = reg
+            .get("hooks")
+            .and_then(|h| h.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
+        ext.tab = reg
+            .get("tab")
+            .and_then(|t| t.as_str())
+            .filter(|t| !t.is_empty())
+            .map(str::to_string);
         ext.definitions = reg
             .get("issues")
             .and_then(|i| i.as_array())
             .map(|a| {
                 a.iter()
                     .filter_map(|d| {
-                        let s = |k: &str| d.get(k).and_then(|x| x.as_str()).unwrap_or_default().to_string();
+                        let s = |k: &str| {
+                            d.get(k)
+                                .and_then(|x| x.as_str())
+                                .unwrap_or_default()
+                                .to_string()
+                        };
                         let name = s("name");
-                        (!name.is_empty()).then(|| IssueDefinition { name, severity: s("severity"), description: s("description"), remediation: s("remediation") })
+                        (!name.is_empty()).then(|| IssueDefinition {
+                            name,
+                            severity: s("severity"),
+                            description: s("description"),
+                            remediation: s("remediation"),
+                        })
                     })
                     .collect()
             })
@@ -207,7 +271,12 @@ impl ProcessExtension {
         self.call_within(msg, id, self.timeout)
     }
 
-    fn call_within(&self, msg: serde_json::Value, id: Option<u64>, timeout: Duration) -> Result<serde_json::Value, String> {
+    fn call_within(
+        &self,
+        msg: serde_json::Value,
+        id: Option<u64>,
+        timeout: Duration,
+    ) -> Result<serde_json::Value, String> {
         let _io = self.io.lock().unwrap();
         if self.dead.load(Ordering::SeqCst) {
             return Err("extension stopped".into());
@@ -216,7 +285,8 @@ impl ProcessExtension {
             {
                 let stdin = self.stdin.lock().unwrap();
                 let w = stdin.as_ref().ok_or("stdin closed")?;
-                w.send(msg.to_string()).map_err(|_| "write failed: extension input closed".to_string())?;
+                w.send(msg.to_string())
+                    .map_err(|_| "write failed: extension input closed".to_string())?;
             }
             let deadline = std::time::Instant::now() + timeout;
             let rx = self.lines.lock().unwrap();
@@ -224,13 +294,18 @@ impl ProcessExtension {
                 let left = deadline.saturating_duration_since(std::time::Instant::now());
                 let line = match rx.recv_timeout(left) {
                     Ok(l) => l,
-                    Err(RecvTimeoutError::Timeout) => return Err(format!("no reply within {} ms", timeout.as_millis())),
-                    Err(RecvTimeoutError::Disconnected) => return Err("extension exited".to_string()),
+                    Err(RecvTimeoutError::Timeout) => {
+                        return Err(format!("no reply within {} ms", timeout.as_millis()))
+                    }
+                    Err(RecvTimeoutError::Disconnected) => {
+                        return Err("extension exited".to_string())
+                    }
                 };
                 if line.trim().is_empty() {
                     continue;
                 }
-                let v: serde_json::Value = serde_json::from_str(&line).map_err(|e| format!("bad reply {line:?}: {e}"))?;
+                let v: serde_json::Value =
+                    serde_json::from_str(&line).map_err(|e| format!("bad reply {line:?}: {e}"))?;
                 // A late reply to an earlier (timed-out) call is skipped.
                 match (id, v.get("id").and_then(|x| x.as_u64())) {
                     (Some(want), Some(got)) if got != want => continue,
@@ -241,11 +316,26 @@ impl ProcessExtension {
         match &result {
             Ok(_) => self.failures.store(0, Ordering::SeqCst),
             Err(e) => {
-                push_error(&self.errors, format!("{}: {e}", msg.get("type").and_then(|t| t.as_str()).unwrap_or("call")));
-                let exited = e == "extension exited" || self.child.lock().unwrap().as_mut().is_some_and(|c| matches!(c.try_wait(), Ok(Some(_))));
+                push_error(
+                    &self.errors,
+                    format!(
+                        "{}: {e}",
+                        msg.get("type").and_then(|t| t.as_str()).unwrap_or("call")
+                    ),
+                );
+                let exited = e == "extension exited"
+                    || self
+                        .child
+                        .lock()
+                        .unwrap()
+                        .as_mut()
+                        .is_some_and(|c| matches!(c.try_wait(), Ok(Some(_))));
                 if exited || self.failures.fetch_add(1, Ordering::SeqCst) + 1 >= MAX_FAILURES {
                     self.dead.store(true, Ordering::SeqCst);
-                    push_error(&self.errors, "extension stopped; its hooks now let everything through".into());
+                    push_error(
+                        &self.errors,
+                        "extension stopped; its hooks now let everything through".into(),
+                    );
                     self.kill();
                 }
             }
@@ -263,7 +353,12 @@ impl ProcessExtension {
             return ProxyAction::Continue;
         };
         if let Some(found) = reply.get("issues").and_then(|i| i.as_array()) {
-            self.issues.lock().unwrap().entry(std::thread::current().id()).or_default().extend(found.iter().filter_map(parse_issue));
+            self.issues
+                .lock()
+                .unwrap()
+                .entry(std::thread::current().id())
+                .or_default()
+                .extend(found.iter().filter_map(parse_issue));
         }
         if let Some(raw) = reply.get("raw").and_then(|r| r.as_str()) {
             match B64.decode(raw) {
@@ -284,7 +379,11 @@ impl ProcessExtension {
         }
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         if let Ok(reply) = self.call(serde_json::json!({ "type": "tab", "id": id }), Some(id)) {
-            *self.tab_text.lock().unwrap() = reply.get("text").and_then(|t| t.as_str()).unwrap_or_default().to_string();
+            *self.tab_text.lock().unwrap() = reply
+                .get("text")
+                .and_then(|t| t.as_str())
+                .unwrap_or_default()
+                .to_string();
         }
     }
 
@@ -310,17 +409,33 @@ impl ProxyHooks for ProcessExtension {
     fn hooks_registered(&self) -> &'static str {
         "WebProbe extension API v1 (process)"
     }
-    fn handle_request_received(&self, _svc: &crate::ext_host::HttpService, method: &str, path: &str, req: &mut Vec<u8>) -> ProxyAction {
+    fn handle_request_received(
+        &self,
+        _svc: &webprobe_support::ext::HttpService,
+        method: &str,
+        path: &str,
+        req: &mut Vec<u8>,
+    ) -> ProxyAction {
         self.hook("request", method, path, req)
     }
-    fn handle_response_received(&self, _svc: &crate::ext_host::HttpService, method: &str, path: &str, resp: &mut Vec<u8>) -> ProxyAction {
+    fn handle_response_received(
+        &self,
+        _svc: &webprobe_support::ext::HttpService,
+        method: &str,
+        path: &str,
+        resp: &mut Vec<u8>,
+    ) -> ProxyAction {
         self.hook("response", method, path, resp)
     }
     fn issue_definitions(&self) -> Vec<IssueDefinition> {
         self.definitions.clone()
     }
     fn take_issues(&self) -> Vec<ExtIssue> {
-        self.issues.lock().unwrap().remove(&std::thread::current().id()).unwrap_or_default()
+        self.issues
+            .lock()
+            .unwrap()
+            .remove(&std::thread::current().id())
+            .unwrap_or_default()
     }
     fn tab_title(&self) -> Option<String> {
         self.tab.clone()
@@ -344,11 +459,23 @@ mod tests {
     use super::*;
 
     fn example() -> String {
-        concat!(env!("CARGO_MANIFEST_DIR"), "/../extensions/examples/marker_reflection.py").to_string()
+        concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../extensions/examples/marker_reflection.py"
+        )
+        .to_string()
     }
 
     fn python() -> Option<String> {
-        ["python3", "python"].iter().find(|p| Command::new(p).arg("-V").output().is_ok_and(|o| o.status.success())).map(|p| p.to_string())
+        ["python3", "python"]
+            .iter()
+            .find(|p| {
+                Command::new(p)
+                    .arg("-V")
+                    .output()
+                    .is_ok_and(|o| o.status.success())
+            })
+            .map(|p| p.to_string())
     }
 
     #[test]
@@ -357,26 +484,65 @@ mod tests {
             eprintln!("python not installed; skipping");
             return;
         };
-        let ext = ProcessExtension::spawn(&py, &["-I".into(), example()], Duration::from_secs(10)).expect("example registers");
+        let ext = ProcessExtension::spawn(&py, &["-I".into(), example()], Duration::from_secs(10))
+            .expect("example registers");
         assert_eq!(ext.extension_name(), "Marker reflection (example)");
         assert_eq!(ext.tab_title().as_deref(), Some("Markers"));
-        assert_eq!(ext.issue_definitions()[0].name, "Marker reflected in response");
+        assert_eq!(
+            ext.issue_definitions()[0].name,
+            "Marker reflected in response"
+        );
         // The request hook adds the marker header.
         let mut req = b"GET /a HTTP/1.1\r\nHost: h\r\n\r\n".to_vec();
-        assert!(matches!(ext.handle_request_received(&crate::ext_host::HttpService::new("qa.test", 80, false), "GET", "/a", &mut req), ProxyAction::Continue));
-        assert!(String::from_utf8_lossy(&req).contains("X-Marker: wpx1"), "{}", String::from_utf8_lossy(&req));
+        assert!(matches!(
+            ext.handle_request_received(
+                &crate::ext_host::HttpService::new("qa.test", 80, false),
+                "GET",
+                "/a",
+                &mut req
+            ),
+            ProxyAction::Continue
+        ));
+        assert!(
+            String::from_utf8_lossy(&req).contains("X-Marker: wpx1"),
+            "{}",
+            String::from_utf8_lossy(&req)
+        );
         // A response echoing the marker yields an issue.
         let mut resp = b"HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\nhi wpx1 !".to_vec();
-        assert!(matches!(ext.handle_response_received(&crate::ext_host::HttpService::new("qa.test", 80, false), "GET", "/a", &mut resp), ProxyAction::Continue));
+        assert!(matches!(
+            ext.handle_response_received(
+                &crate::ext_host::HttpService::new("qa.test", 80, false),
+                "GET",
+                "/a",
+                &mut resp
+            ),
+            ProxyAction::Continue
+        ));
         let issues = ext.take_issues();
         assert_eq!(issues.len(), 1);
-        assert_eq!((issues[0].name.as_str(), issues[0].severity.as_str()), ("Marker reflected in response", "info"));
+        assert_eq!(
+            (issues[0].name.as_str(), issues[0].severity.as_str()),
+            ("Marker reflected in response", "info")
+        );
         assert!(ext.take_issues().is_empty(), "issues are handed over once");
         // Requests to /blocked are dropped.
         let mut blocked = b"GET /blocked HTTP/1.1\r\nHost: h\r\n\r\n".to_vec();
-        assert!(matches!(ext.handle_request_received(&crate::ext_host::HttpService::new("qa.test", 80, false), "GET", "/blocked", &mut blocked), ProxyAction::Drop));
+        assert!(matches!(
+            ext.handle_request_received(
+                &crate::ext_host::HttpService::new("qa.test", 80, false),
+                "GET",
+                "/blocked",
+                &mut blocked
+            ),
+            ProxyAction::Drop
+        ));
         ext.refresh_tab();
-        assert!(ext.tab_content().contains("requests seen: 2"), "{}", ext.tab_content());
+        assert!(
+            ext.tab_content().contains("requests seen: 2"),
+            "{}",
+            ext.tab_content()
+        );
         assert!(ext.healthy());
     }
 
@@ -385,31 +551,78 @@ mod tests {
         let Some(py) = python() else { return };
         // Registers, then never answers a hook.
         let hang = "import sys,json\nprint(json.dumps({'type':'register','name':'hang','hooks':['request']}),flush=True)\nimport time\nwhile True: time.sleep(1)\n";
-        let ext = ProcessExtension::spawn(&py, &["-I".into(), "-c".into(), hang.into()], Duration::from_millis(300)).unwrap();
+        let ext = ProcessExtension::spawn(
+            &py,
+            &["-I".into(), "-c".into(), hang.into()],
+            Duration::from_millis(300),
+        )
+        .unwrap();
         let mut req = b"GET / HTTP/1.1\r\n\r\n".to_vec();
         let before = req.clone();
         for _ in 0..MAX_FAILURES {
-            assert!(matches!(ext.handle_request_received(&crate::ext_host::HttpService::new("qa.test", 80, false), "GET", "/", &mut req), ProxyAction::Continue));
+            assert!(matches!(
+                ext.handle_request_received(
+                    &crate::ext_host::HttpService::new("qa.test", 80, false),
+                    "GET",
+                    "/",
+                    &mut req
+                ),
+                ProxyAction::Continue
+            ));
         }
         assert_eq!(req, before);
         assert!(!ext.healthy(), "stopped after repeated timeouts");
-        assert!(ext.errors().iter().any(|e| e.contains("no reply within 300 ms")), "{:?}", ext.errors());
+        assert!(
+            ext.errors()
+                .iter()
+                .any(|e| e.contains("no reply within 300 ms")),
+            "{:?}",
+            ext.errors()
+        );
         // Exits right after registering: the first hook notices.
         let crash = "import json,sys\nprint(json.dumps({'type':'register','name':'crash','hooks':['request']}),flush=True)\nsys.stderr.write('boom\\n')\n";
-        let ext = ProcessExtension::spawn(&py, &["-I".into(), "-c".into(), crash.into()], Duration::from_secs(5)).unwrap();
+        let ext = ProcessExtension::spawn(
+            &py,
+            &["-I".into(), "-c".into(), crash.into()],
+            Duration::from_secs(5),
+        )
+        .unwrap();
         std::thread::sleep(Duration::from_millis(300));
-        assert!(matches!(ext.handle_request_received(&crate::ext_host::HttpService::new("qa.test", 80, false), "GET", "/", &mut req), ProxyAction::Continue));
+        assert!(matches!(
+            ext.handle_request_received(
+                &crate::ext_host::HttpService::new("qa.test", 80, false),
+                "GET",
+                "/",
+                &mut req
+            ),
+            ProxyAction::Continue
+        ));
         assert!(!ext.healthy());
         std::thread::sleep(Duration::from_millis(100));
-        assert!(ext.errors().iter().any(|e| e == "stderr: boom"), "{:?}", ext.errors());
+        assert!(
+            ext.errors().iter().any(|e| e == "stderr: boom"),
+            "{:?}",
+            ext.errors()
+        );
     }
 
     #[test]
     fn version_mismatch_and_bad_programs_are_refused() {
-        assert!(ProcessExtension::spawn("/nonexistent/ext", &[], Duration::from_secs(1)).err().unwrap().contains("cannot start"));
+        assert!(
+            ProcessExtension::spawn("/nonexistent/ext", &[], Duration::from_secs(1))
+                .err()
+                .unwrap()
+                .contains("cannot start")
+        );
         let Some(py) = python() else { return };
         let v2 = "import json\nprint(json.dumps({'type':'register','api':2,'name':'future'}),flush=True)\ninput()\n";
-        let err = ProcessExtension::spawn(&py, &["-I".into(), "-c".into(), v2.into()], Duration::from_secs(5)).err().unwrap();
+        let err = ProcessExtension::spawn(
+            &py,
+            &["-I".into(), "-c".into(), v2.into()],
+            Duration::from_secs(5),
+        )
+        .err()
+        .unwrap();
         assert!(err.contains("wants API 2"), "{err}");
     }
 }

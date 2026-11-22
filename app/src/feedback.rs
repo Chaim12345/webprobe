@@ -19,12 +19,12 @@ pub use crate::notice::{toast, Level};
 
 /// The colour a notice level is drawn in (the level itself is engine data).
 pub fn level_colour(level: Level) -> egui::Color32 {
-        match level {
-            Level::Info => theme::ink_faint(),
-            Level::Success => c(theme::GOOD),
-            Level::Warn => c(theme::WARN),
-            Level::Error => c(theme::BAD),
-        }
+    match level {
+        Level::Info => theme::ink_faint(),
+        Level::Success => c(theme::GOOD),
+        Level::Warn => c(theme::WARN),
+        Level::Error => c(theme::BAD),
+    }
 }
 
 pub struct Toast {
@@ -45,7 +45,11 @@ impl Toasts {
     }
 
     pub fn push(&mut self, level: Level, text: impl Into<String>) {
-        self.items.push(Toast { text: text.into(), level, created: Instant::now() });
+        self.items.push(Toast {
+            text: text.into(),
+            level,
+            created: Instant::now(),
+        });
         if self.items.len() > TOAST_MAX {
             self.items.remove(0);
         }
@@ -53,7 +57,8 @@ impl Toasts {
 
     /// Drop expired toasts. Called once per frame.
     pub fn tick(&mut self, now: Instant) {
-        self.items.retain(|t| now.duration_since(t.created) < TOAST_TTL);
+        self.items
+            .retain(|t| now.duration_since(t.created) < TOAST_TTL);
     }
 
     pub fn len(&self) -> usize {
@@ -79,7 +84,11 @@ impl Toasts {
                         .stroke(egui::Stroke::new(1.0, level_colour(t.level)))
                         .show(ui, |ui| {
                             ui.horizontal(|ui| {
-                                ui.label(RichText::new(t.text.clone()).size(12.0).color(level_colour(t.level)));
+                                ui.label(
+                                    RichText::new(t.text.clone())
+                                        .size(12.0)
+                                        .color(level_colour(t.level)),
+                                );
                                 if ui.small_button("\u{00D7}").clicked() {
                                     dismiss = Some(i);
                                 }
@@ -108,11 +117,17 @@ pub fn drain(toasts: &mut Toasts) -> usize {
 pub fn progress(ui: &mut Ui, done: usize, total: usize, cancel: bool) -> bool {
     let mut cancelled = false;
     ui.horizontal(|ui| {
-        let frac = if total == 0 { 0.0 } else { (done as f32 / total as f32).clamp(0.0, 1.0) };
+        let frac = if total == 0 {
+            0.0
+        } else {
+            (done as f32 / total as f32).clamp(0.0, 1.0)
+        };
         ui.add(
-            egui::ProgressBar::new(frac)
-                .desired_width(160.0)
-                .text(RichText::new(format!("{done}/{total}")).size(12.0).color(theme::ink_faint())),
+            egui::ProgressBar::new(frac).desired_width(160.0).text(
+                RichText::new(format!("{done}/{total}"))
+                    .size(12.0)
+                    .color(theme::ink_faint()),
+            ),
         );
         if cancel && ui.button("Cancel").clicked() {
             cancelled = true;
@@ -125,8 +140,16 @@ pub fn progress(ui: &mut Ui, done: usize, total: usize, cancel: bool) -> bool {
 pub fn empty_state(ui: &mut Ui, title: &str, detail: &str) {
     ui.add_space(18.0);
     ui.vertical_centered(|ui| {
-        ui.label(RichText::new(title.to_string()).size(13.0).color(theme::ink_faint()));
-        ui.label(RichText::new(detail.to_string()).size(12.0).color(theme::ink_hint()));
+        ui.label(
+            RichText::new(title.to_string())
+                .size(13.0)
+                .color(theme::ink_faint()),
+        );
+        ui.label(
+            RichText::new(detail.to_string())
+                .size(12.0)
+                .color(theme::ink_hint()),
+        );
     });
     ui.add_space(18.0);
 }

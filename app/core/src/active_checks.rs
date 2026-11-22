@@ -20,7 +20,9 @@ use crate::util;
 fn rnd_from(alphabet: &[u8], n: usize) -> String {
     use rand::Rng;
     let mut g = rand::thread_rng();
-    (0..n).map(|_| alphabet[g.gen_range(0..alphabet.len())] as char).collect()
+    (0..n)
+        .map(|_| alphabet[g.gen_range(0..alphabet.len())] as char)
+        .collect()
 }
 
 /// Random lowercase letters (Burp's Zo1 random strings).
@@ -33,9 +35,7 @@ const ALNUM36: &str = "abcdefghijklmnopqrstuvwxyz0123456789";
 
 /// A random id in the a-z0-9 alphabet (the id Burp's Zie.ZS hands out when
 /// no Collaborator rewrites it).
-pub(crate) fn rnd_id(n: usize) -> String {
-    rnd_from(ALNUM36.as_bytes(), n)
-}
+pub(crate) use webprobe_support::util::rnd_id;
 
 fn body_of(resp: &[u8]) -> String {
     let p = util::parse_http(resp);
@@ -49,7 +49,11 @@ fn contains(hay: &[u8], needle: &str) -> bool {
 /// The Location target of a 3xx response.
 pub(crate) fn redirect_location(resp: &[u8]) -> Option<String> {
     let p = util::parse_http(resp);
-    let status: u16 = p.first.split_whitespace().nth(1).and_then(|s| s.parse().ok())?;
+    let status: u16 = p
+        .first
+        .split_whitespace()
+        .nth(1)
+        .and_then(|s| s.parse().ok())?;
     if !(300..400).contains(&status) {
         return None;
     }
@@ -84,7 +88,11 @@ pub(crate) fn php_marker(token: &str, shift: usize) -> String {
 /// burp.Zg1y.ZH: what an evaluating PHP interpreter prints, ONE + "42" + TWO
 /// ("42" is Zg1y.a, decoded from Zg1y.<clinit>).
 pub(crate) fn php_echo_expected(token: &str) -> String {
-    format!("{}42{}", php_marker(token, PHP_SHIFT_ONE), php_marker(token, PHP_SHIFT_TWO))
+    format!(
+        "{}42{}",
+        php_marker(token, PHP_SHIFT_ONE),
+        php_marker(token, PHP_SHIFT_TWO)
+    )
 }
 
 /// burp.Zxvv.Zg (echo half only): `<?php printf("ONE".(7*6)."TWO");?>`.
@@ -100,7 +108,9 @@ pub(crate) fn php_payload(token: &str, collaborator: Option<&str>) -> String {
         "<?php printf(\"{}\".(7*6).\"{}\");{}?>",
         php_marker(token, PHP_SHIFT_ONE),
         php_marker(token, PHP_SHIFT_TWO),
-        collaborator.map(|c| format!("gethostbyname(\"{c}\");")).unwrap_or_default()
+        collaborator
+            .map(|c| format!("gethostbyname(\"{c}\");"))
+            .unwrap_or_default()
     )
 }
 
@@ -112,7 +122,10 @@ pub(crate) fn php_payload(token: &str, collaborator: Option<&str>) -> String {
 /// (fsockopen to the server address) does not apply to DNS payloads.
 pub(crate) fn php_collaborator_host(id: &str, dns_name: &str) -> String {
     let domain = dns_name.strip_prefix(&format!("{id}.")).unwrap_or(dns_name);
-    let half = (0..=domain.len() / 2).rev().find(|&i| domain.is_char_boundary(i)).unwrap_or(0);
+    let half = (0..=domain.len() / 2)
+        .rev()
+        .find(|&i| domain.is_char_boundary(i))
+        .unwrap_or(0);
     format!("{id}.{}\".\"{}", &domain[..half], &domain[half..])
 }
 
@@ -141,7 +154,13 @@ const PHP_MAX_REDIRECTS: usize = 5;
 /// evaluated ONE42TWO in the response and along its redirect chain
 /// (Zcgg.ZI -> Zd / ZF). The raw payload contains `"ONE".(7*6)."TWO"`, so an
 /// echo of the upload never matches; only evaluation does.
-pub(crate) fn run_php_echo_check<S, F>(original_filename: &str, token: &str, collaborator: Option<&str>, mut send: S, mut follow: F) -> Option<PhpHit>
+pub(crate) fn run_php_echo_check<S, F>(
+    original_filename: &str,
+    token: &str,
+    collaborator: Option<&str>,
+    mut send: S,
+    mut follow: F,
+) -> Option<PhpHit>
 where
     S: FnMut(&str, &str, &str) -> Option<Vec<u8>>,
     F: FnMut(&str) -> Option<Vec<u8>>,
@@ -152,7 +171,12 @@ where
     let mut resp = send(&filename, "text/plain", &payload)?;
     for hop in 0..=PHP_MAX_REDIRECTS {
         if contains(&resp, &expected) {
-            return Some(PhpHit { filename, payload, expected, hop });
+            return Some(PhpHit {
+                filename,
+                payload,
+                expected,
+                hop,
+            });
         }
         let loc = redirect_location(&resp)?;
         resp = follow(&loc)?;
@@ -178,7 +202,12 @@ pub(crate) struct StoredXssHit {
 /// (stored input, Burp's INPUT_RETRIEVAL_STORED pairing); only that
 /// retrieval request is used for the breakout attempts.
 /// `retrieve(i)` must only replay safe (GET) requests.
-pub(crate) fn run_stored_xss_check<S, R>(value: &str, retrievals: usize, mut send: S, mut retrieve: R) -> Option<StoredXssHit>
+pub(crate) fn run_stored_xss_check<S, R>(
+    value: &str,
+    retrievals: usize,
+    mut send: S,
+    mut retrieve: R,
+) -> Option<StoredXssHit>
 where
     S: FnMut(&str) -> Option<Vec<u8>>,
     R: FnMut(usize) -> Option<Vec<u8>>,
@@ -193,7 +222,11 @@ where
         send(p)?;
         retrieve(at)
     })?;
-    Some(StoredXssHit { payload: hit.payload, context: hit.context, retrieval: at })
+    Some(StoredXssHit {
+        payload: hit.payload,
+        context: hit.context,
+        retrieval: at,
+    })
 }
 
 // ============ Client-side template injection (burp.Zrmh) ============
@@ -207,7 +240,10 @@ fn csti_context_ok(ctx: u8) -> bool {
     matches!(ctx, 4..=15 | 19..=22)
 }
 
-const VOID_ELEMENTS: [&str; 14] = ["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"];
+const VOID_ELEMENTS: [&str; 14] = [
+    "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source",
+    "track", "wbr",
+];
 
 /// burp.Zg1t.ZW / ZY: the body ranges inside `ng-app` elements (from the end
 /// of the ng-app start tag to the start of its end tag) and inside
@@ -215,7 +251,9 @@ const VOID_ELEMENTS: [&str; 14] = ["area", "base", "br", "col", "embed", "hr", "
 /// start/end stack (names are not matched) and a scope that never closes is
 /// not recorded. Comments, void elements and `/>` tags do not count, and
 /// script/style contents are skipped.
-pub(crate) fn angular_scopes(body: &str) -> (Vec<(usize, usize)>, Vec<(usize, usize)>) {
+type ScopeSpans = (Vec<(usize, usize)>, Vec<(usize, usize)>);
+
+pub(crate) fn angular_scopes(body: &str) -> ScopeSpans {
     let lower = body.to_ascii_lowercase();
     let b = body.as_bytes();
     let mut scopes = Vec::new();
@@ -227,10 +265,15 @@ pub(crate) fn angular_scopes(body: &str) -> (Vec<(usize, usize)>, Vec<(usize, us
     while let Some(off) = body[i..].find('<') {
         let lt = i + off;
         if lower[lt..].starts_with("<!--") {
-            i = lower[lt + 4..].find("-->").map(|e| lt + 4 + e + 3).unwrap_or(b.len());
+            i = lower[lt + 4..]
+                .find("-->")
+                .map(|e| lt + 4 + e + 3)
+                .unwrap_or(b.len());
             continue;
         }
-        let Some(gt_off) = body[lt..].find('>') else { break };
+        let Some(gt_off) = body[lt..].find('>') else {
+            break;
+        };
         let gt = lt + gt_off;
         let inner = &lower[lt + 1..gt];
         i = gt + 1;
@@ -238,7 +281,11 @@ pub(crate) fn angular_scopes(body: &str) -> (Vec<(usize, usize)>, Vec<(usize, us
             continue;
         }
         let closing = inner.starts_with('/');
-        let name: String = inner.trim_start_matches('/').chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '-').collect();
+        let name: String = inner
+            .trim_start_matches('/')
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == '-')
+            .collect();
         if name.is_empty() {
             continue;
         }
@@ -256,7 +303,10 @@ pub(crate) fn angular_scopes(body: &str) -> (Vec<(usize, usize)>, Vec<(usize, us
             continue;
         }
         let has_attr = |attr: &str| {
-            inner.split(|c: char| c.is_ascii_whitespace() || c == '/').skip(1).any(|a| a.split('=').next() == Some(attr))
+            inner
+                .split(|c: char| c.is_ascii_whitespace() || c == '/')
+                .skip(1)
+                .any(|a| a.split('=').next() == Some(attr))
         };
         // Zg1t: an element carrying the attribute always pushes; any other
         // start tag pushes only inside an open scope.
@@ -286,7 +336,11 @@ fn scoped_reflections(body: &str, marker: &str) -> Vec<usize> {
     }
     body.match_indices(marker)
         .map(|(p, _)| p)
-        .filter(|&p| in_ranges(p, &scopes) && !in_ranges(p, &nonbind) && csti_context_ok(crate::xss::classify(body, p)))
+        .filter(|&p| {
+            in_ranges(p, &scopes)
+                && !in_ranges(p, &nonbind)
+                && csti_context_ok(crate::xss::classify(body, p))
+        })
         .collect()
 }
 
@@ -296,7 +350,9 @@ pub(crate) fn angular_version_in(script: &str) -> Option<String> {
     while let Some(i) = script[from..].find("AngularJS v") {
         let at = from + i;
         let rest = &script[at + 11..];
-        let n = rest.find(|c: char| !(c.is_ascii_digit() || c == '.')).unwrap_or(rest.len());
+        let n = rest
+            .find(|c: char| !(c.is_ascii_digit() || c == '.'))
+            .unwrap_or(rest.len());
         if n > 0 {
             return Some(script[at..at + 11 + n].to_string());
         }
@@ -319,7 +375,10 @@ pub(crate) fn script_srcs(body: &str) -> Vec<String> {
             let v = &tag[s + 4..];
             let src = match v.chars().next() {
                 Some(q @ ('"' | '\'')) => v[1..].split(q).next().unwrap_or(""),
-                _ => v.split(|c: char| c.is_ascii_whitespace()).next().unwrap_or(""),
+                _ => v
+                    .split(|c: char| c.is_ascii_whitespace())
+                    .next()
+                    .unwrap_or(""),
             };
             if !src.trim().is_empty() {
                 out.push(src.trim().to_string());
@@ -364,22 +423,38 @@ where
 {
     for append in [false, true] {
         let marker = rnd_lower(10);
-        let plain = if append { format!("{value}{marker}") } else { marker.clone() };
+        let plain = if append {
+            format!("{value}{marker}")
+        } else {
+            marker.clone()
+        };
         let Some(resp) = send(&plain) else { continue };
         if scoped_reflections(&body_of(&resp), &marker).is_empty() {
             continue;
         }
         let (m1, m2) = (rnd_lower(5), rnd_lower(5));
         let payload = format!("{m1}{CSTI_EXPR}{m2}");
-        let probe = if append { format!("{value}{payload}") } else { payload };
+        let probe = if append {
+            format!("{value}{payload}")
+        } else {
+            payload
+        };
         let Some(resp) = send(&probe) else { continue };
         let body = body_of(&resp);
         for pos in scoped_reflections(&body, &m1) {
-            let Some(end) = body[pos..].find(&m2) else { continue };
+            let Some(end) = body[pos..].find(&m2) else {
+                continue;
+            };
             let span = util::html_decode(&body[pos..pos + end + m2.len()]);
             if span.contains(CSTI_EXPR) {
-                let angular_version = script_srcs(&body).iter().find_map(|src| fetch_script(src).and_then(|s| angular_version_in(&String::from_utf8_lossy(&s))));
-                return Some(CstiHit { payload: probe, reflection: span, angular_version });
+                let angular_version = script_srcs(&body).iter().find_map(|src| {
+                    fetch_script(src).and_then(|s| angular_version_in(&String::from_utf8_lossy(&s)))
+                });
+                return Some(CstiHit {
+                    payload: probe,
+                    reflection: span,
+                    angular_version,
+                });
             }
         }
     }
@@ -429,7 +504,13 @@ pub(crate) fn xml_oob_xinclude_payload(tag: &str, host: &str) -> String {
 /// pairs sent; the caller registers each id so a later interaction raises
 /// "XML injection" (Zh9s -> Zc3f -> Zs_g.XML_INJECTION -> Zuzl -> Zp9s.ZC:
 /// medium severity, certain confidence).
-pub(crate) fn run_xml_oob_check<S>(kind: &IpKind, value: &str, xsd: Option<(&str, &str)>, xi: Option<(&str, &str)>, mut send: S) -> Vec<(String, String)>
+pub(crate) fn run_xml_oob_check<S>(
+    kind: &IpKind,
+    value: &str,
+    xsd: Option<(&str, &str)>,
+    xi: Option<(&str, &str)>,
+    mut send: S,
+) -> Vec<(String, String)>
 where
     S: FnMut(&str) -> Option<Vec<u8>>,
 {
@@ -456,14 +537,25 @@ where
 /// pipe and the ampersand payloads (mode 1, appended) run, then, as at fast
 /// speed, the combined payload (Zwyn falls through from cases 1-2 to 3).
 /// Returns (slot, payload with `%s`/`%1$s` = domain + ".", append?).
-pub(crate) fn os_cmd_payloads(speed: crate::scan::ScanSpeed, mut domain_for: impl FnMut(&str) -> Option<String>) -> Vec<(&'static str, String, bool)> {
+pub(crate) fn os_cmd_payloads(
+    speed: crate::scan::ScanSpeed,
+    mut domain_for: impl FnMut(&str) -> Option<String>,
+) -> Vec<(&'static str, String, bool)> {
     const ALL: [(&str, &str, bool); 4] = [
         ("cmd0", "nslookup -q=cname %s&", false),
         ("cmd1", "|nslookup -q=cname %s&", true),
         ("cmd2", "'\"`0&nslookup -q=cname %s&`'", true),
-        ("cmd3", "&nslookup -q=cname %s&'\\\"`0&nslookup -q=cname %1$s&`'", true),
+        (
+            "cmd3",
+            "&nslookup -q=cname %s&'\\\"`0&nslookup -q=cname %1$s&`'",
+            true,
+        ),
     ];
-    let from = if matches!(speed, crate::scan::ScanSpeed::Fast) { 3 } else { 0 };
+    let from = if matches!(speed, crate::scan::ScanSpeed::Fast) {
+        3
+    } else {
+        0
+    };
     ALL[from..]
         .iter()
         .filter_map(|(slot, fmt, append)| {
@@ -480,7 +572,10 @@ mod tests {
         use crate::scan::ScanSpeed;
         let d = |slot: &str| Some(format!("{slot}.oob.invalid"));
         let normal = os_cmd_payloads(ScanSpeed::Normal, d);
-        let got: Vec<(&str, &str, bool)> = normal.iter().map(|(s, p, a)| (*s, p.as_str(), *a)).collect();
+        let got: Vec<(&str, &str, bool)> = normal
+            .iter()
+            .map(|(s, p, a)| (*s, p.as_str(), *a))
+            .collect();
         assert_eq!(
             got,
             [
@@ -492,7 +587,10 @@ mod tests {
         );
         let fast = os_cmd_payloads(ScanSpeed::Fast, d);
         assert_eq!(fast.iter().map(|f| f.0).collect::<Vec<_>>(), ["cmd3"]);
-        assert!(os_cmd_payloads(ScanSpeed::Thorough, |_| None).is_empty(), "no Collaborator, no probe");
+        assert!(
+            os_cmd_payloads(ScanSpeed::Thorough, |_| None).is_empty(),
+            "no Collaborator, no probe"
+        );
     }
 
     use super::*;
@@ -504,10 +602,26 @@ mod tests {
 
     /// A toy PHP interpreter for `printf("A".(7*6)."B");` inside `<?php ?>`.
     fn eval_php(src: &str) -> String {
-        let Some(code) = src.strip_prefix("<?php ").and_then(|s| s.strip_suffix("?>")) else { return src.to_string() };
-        let Some(args) = code.strip_prefix("printf(").and_then(|s| s.strip_suffix(");")) else { return src.to_string() };
+        let Some(code) = src
+            .strip_prefix("<?php ")
+            .and_then(|s| s.strip_suffix("?>"))
+        else {
+            return src.to_string();
+        };
+        let Some(args) = code
+            .strip_prefix("printf(")
+            .and_then(|s| s.strip_suffix(");"))
+        else {
+            return src.to_string();
+        };
         args.split('.')
-            .map(|t| if t == "(7*6)" { "42".to_string() } else { t.trim_matches('"').to_string() })
+            .map(|t| {
+                if t == "(7*6)" {
+                    "42".to_string()
+                } else {
+                    t.trim_matches('"').to_string()
+                }
+            })
             .collect()
     }
 
@@ -515,18 +629,42 @@ mod tests {
     fn php_markers_follow_zcub_and_zg1y() {
         assert_eq!(zcub_shift("abc", PHP_SHIFT_ONE), "rst");
         assert_eq!(zcub_shift("9", PHP_SHIFT_ONE), "q", "35+17 wraps to 16");
-        assert_eq!(zcub_shift("-", PHP_SHIFT_TWO), "r", "a char outside a-z0-9 indexes as -1");
+        assert_eq!(
+            zcub_shift("-", PHP_SHIFT_TWO),
+            "r",
+            "a char outside a-z0-9 indexes as -1"
+        );
         let token = "abcdefghijklmnopqrst";
-        assert_eq!(php_marker(token, PHP_SHIFT_ONE), zcub_shift("klmnopqrst", PHP_SHIFT_ONE));
-        assert_eq!(php_echo_payload(token), format!("<?php printf(\"{}\".(7*6).\"{}\");?>", php_marker(token, 17), php_marker(token, 18)));
+        assert_eq!(
+            php_marker(token, PHP_SHIFT_ONE),
+            zcub_shift("klmnopqrst", PHP_SHIFT_ONE)
+        );
+        assert_eq!(
+            php_echo_payload(token),
+            format!(
+                "<?php printf(\"{}\".(7*6).\"{}\");?>",
+                php_marker(token, 17),
+                php_marker(token, 18)
+            )
+        );
         // burp.Zxvv.ZQ / Zuxr.ZJ: the Collaborator name split by `"."` so it
         // only exists once PHP evaluates it.
-        assert_eq!(php_collaborator_host("abc123", "abc123.oast.fun"), "abc123.oast\".\".fun");
+        assert_eq!(
+            php_collaborator_host("abc123", "abc123.oast.fun"),
+            "abc123.oast\".\".fun"
+        );
         assert_eq!(
             php_payload(token, Some("abc123.oast\".\".fun")),
-            format!("<?php printf(\"{}\".(7*6).\"{}\");gethostbyname(\"abc123.oast\".\".fun\");?>", php_marker(token, 17), php_marker(token, 18))
+            format!(
+                "<?php printf(\"{}\".(7*6).\"{}\");gethostbyname(\"abc123.oast\".\".fun\");?>",
+                php_marker(token, 17),
+                php_marker(token, 18)
+            )
         );
-        assert_eq!(php_echo_expected(token), format!("{}42{}", php_marker(token, 17), php_marker(token, 18)));
+        assert_eq!(
+            php_echo_expected(token),
+            format!("{}42{}", php_marker(token, 17), php_marker(token, 18))
+        );
         assert_eq!(php_upload_filename("cv.pdf", token), "cv.pdfcdefghijkl.php");
     }
 
@@ -538,7 +676,8 @@ mod tests {
             assert!(name.ends_with(".php") && ct == "text/plain");
             ok(&format!("<p>uploaded: {}</p>", eval_php(content)))
         };
-        let hit = run_php_echo_check("a.txt", &token, None, evaluates, |_| None).expect("evaluated printf is PHP code injection");
+        let hit = run_php_echo_check("a.txt", &token, None, evaluates, |_| None)
+            .expect("evaluated printf is PHP code injection");
         assert_eq!(hit.hop, 0);
         assert!(hit.payload.contains("(7*6)") && !hit.payload.contains(&hit.expected));
         // Handler that only echoes the upload back: no evaluation, no issue.
@@ -547,14 +686,26 @@ mod tests {
         // The evaluated output only appears after the post-upload redirect.
         let redirects = |_: &str, _: &str, content: &str| {
             let out = eval_php(content);
-            Some(format!("HTTP/1.1 302 Found\r\nLocation: /uploads/view?o={out}\r\n\r\n").into_bytes())
+            Some(
+                format!("HTTP/1.1 302 Found\r\nLocation: /uploads/view?o={out}\r\n\r\n")
+                    .into_bytes(),
+            )
         };
         let follow = |loc: &str| ok(&format!("view {}", loc.split("o=").nth(1).unwrap_or("")));
-        assert_eq!(run_php_echo_check("a.txt", &token, None, redirects, follow).map(|h| h.hop), Some(0), "the Location header itself carries the output");
-        let redirects_clean = |_: &str, _: &str, _: &str| Some(b"HTTP/1.1 303 See Other\r\nLocation: /done\r\n\r\n".to_vec());
+        assert_eq!(
+            run_php_echo_check("a.txt", &token, None, redirects, follow).map(|h| h.hop),
+            Some(0),
+            "the Location header itself carries the output"
+        );
+        let redirects_clean = |_: &str, _: &str, _: &str| {
+            Some(b"HTTP/1.1 303 See Other\r\nLocation: /done\r\n\r\n".to_vec())
+        };
         let token2 = token.clone();
         let follow_eval = move |_: &str| ok(&eval_php(&php_echo_payload(&token2)));
-        assert_eq!(run_php_echo_check("a.txt", &token, None, redirects_clean, follow_eval).map(|h| h.hop), Some(1));
+        assert_eq!(
+            run_php_echo_check("a.txt", &token, None, redirects_clean, follow_eval).map(|h| h.hop),
+            Some(1)
+        );
     }
 
     #[test]
@@ -565,8 +716,14 @@ mod tests {
             *store.borrow_mut() = v.to_string();
             ok("thanks")
         };
-        let page = |_: usize| ok(&format!("<html><body><p>{}</p></body></html>", store.borrow()));
-        let hit = run_stored_xss_check("hello", 1, send, page).expect("stored unencoded comment is stored XSS");
+        let page = |_: usize| {
+            ok(&format!(
+                "<html><body><p>{}</p></body></html>",
+                store.borrow()
+            ))
+        };
+        let hit = run_stored_xss_check("hello", 1, send, page)
+            .expect("stored unencoded comment is stored XSS");
         assert_eq!(hit.retrieval, 0);
         assert_eq!(hit.context, 19);
         // The page HTML-encodes the stored comment: stored, but not XSS.
@@ -575,7 +732,12 @@ mod tests {
             *store.borrow_mut() = v.to_string();
             ok("thanks")
         };
-        let encoded = |_: usize| ok(&format!("<p>{}</p>", store.borrow().replace('<', "&lt;").replace('>', "&gt;")));
+        let encoded = |_: usize| {
+            ok(&format!(
+                "<p>{}</p>",
+                store.borrow().replace('<', "&lt;").replace('>', "&gt;")
+            ))
+        };
         assert!(run_stored_xss_check("hello", 1, send, encoded).is_none());
         // Reflected only, never stored: one injection, no breakout attempts.
         let sends = RefCell::new(0);
@@ -591,7 +753,13 @@ mod tests {
             *store.borrow_mut() = v.to_string();
             ok("")
         };
-        let pages = |i: usize| if i == 1 { ok(&format!("<div title=\"{}\">x</div>", store.borrow())) } else { ok("home") };
+        let pages = |i: usize| {
+            if i == 1 {
+                ok(&format!("<div title=\"{}\">x</div>", store.borrow()))
+            } else {
+                ok("home")
+            }
+        };
         let hit = run_stored_xss_check("hello", 2, send, pages).unwrap();
         assert_eq!((hit.retrieval, hit.context), (1, 4));
     }
@@ -602,29 +770,52 @@ mod tests {
         let (scopes, nb) = angular_scopes(body);
         assert_eq!(scopes.len(), 1);
         let (s, e) = scopes[0];
-        assert!(body[s..e].contains("in") && body[s..e].contains("tail") && !body[s..e].contains("out"));
+        assert!(
+            body[s..e].contains("in") && body[s..e].contains("tail") && !body[s..e].contains("out")
+        );
         assert_eq!(nb.len(), 1);
         assert_eq!(&body[nb[0].0..nb[0].1], "raw");
         // No ng-app attribute (a class name is not enough): no scope.
         assert!(angular_scopes("<div class=\"ng-app\">x</div>").0.is_empty());
         // An unclosed scope is not recorded, as in Zg1t.
         assert!(angular_scopes("<div ng-app><p>x</p>").0.is_empty());
-        assert_eq!(angular_version_in("/*\n @license AngularJS v1.4.7\n*/"), Some("AngularJS v1.4.7".into()));
+        assert_eq!(
+            angular_version_in("/*\n @license AngularJS v1.4.7\n*/"),
+            Some("AngularJS v1.4.7".into())
+        );
         assert_eq!(angular_version_in("AngularJS vX"), None);
-        assert_eq!(script_srcs("<script src=\"/a.js\"></script><SCRIPT src='b.js'></SCRIPT><script>x</script>"), vec!["/a.js", "b.js"]);
+        assert_eq!(
+            script_srcs(
+                "<script src=\"/a.js\"></script><SCRIPT src='b.js'></SCRIPT><script>x</script>"
+            ),
+            vec!["/a.js", "b.js"]
+        );
     }
 
     #[test]
     fn csti_check_follows_zrmh() {
-        let page = |v: &str| ok(&format!("<html ng-app><body><p>Hello {v}</p><script src=\"/js/angular.min.js\"></script></body></html>"));
-        let hit = run_csti_check("bob", page, |_| None).expect("unencoded expression inside ng-app");
+        let page = |v: &str| {
+            ok(&format!("<html ng-app><body><p>Hello {v}</p><script src=\"/js/angular.min.js\"></script></body></html>"))
+        };
+        let hit =
+            run_csti_check("bob", page, |_| None).expect("unencoded expression inside ng-app");
         assert!(hit.reflection.contains(CSTI_EXPR));
         assert_eq!(hit.confidence(), "Tentative");
-        let fetch = |src: &str| (src == "/js/angular.min.js").then(|| b"/* AngularJS v1.5.0 (c) Google */".to_vec());
+        let fetch = |src: &str| {
+            (src == "/js/angular.min.js").then(|| b"/* AngularJS v1.5.0 (c) Google */".to_vec())
+        };
         let hit = run_csti_check("bob", page, fetch).unwrap();
-        assert_eq!((hit.angular_version.as_deref(), hit.confidence()), (Some("AngularJS v1.5.0"), "Firm"));
+        assert_eq!(
+            (hit.angular_version.as_deref(), hit.confidence()),
+            (Some("AngularJS v1.5.0"), "Firm")
+        );
         // HTML-escaped braces still decode to the expression (Zsh.Zz first).
-        let escaped = |v: &str| ok(&format!("<div ng-app><p>{}</p></div>", v.replace('{', "&#123;").replace('}', "&#125;")));
+        let escaped = |v: &str| {
+            ok(&format!(
+                "<div ng-app><p>{}</p></div>",
+                v.replace('{', "&#123;").replace('}', "&#125;")
+            ))
+        };
         assert!(run_csti_check("bob", escaped, |_| None).is_some());
         // Negative cases: no Angular scope, a non-bindable region, or the
         // template characters stripped by the application.
@@ -632,7 +823,12 @@ mod tests {
         assert!(run_csti_check("bob", plain, |_| None).is_none());
         let nonbind = |v: &str| ok(&format!("<div ng-app><p ng-non-bindable>{v}</p></div>"));
         assert!(run_csti_check("bob", nonbind, |_| None).is_none());
-        let stripped = |v: &str| ok(&format!("<div ng-app><p>{}</p></div>", v.replace(['{', '}'], "")));
+        let stripped = |v: &str| {
+            ok(&format!(
+                "<div ng-app><p>{}</p></div>",
+                v.replace(['{', '}'], "")
+            ))
+        };
         assert!(run_csti_check("bob", stripped, |_| None).is_none());
     }
 
@@ -645,7 +841,12 @@ mod tests {
             let i = xml.find("xsi:schemaLocation=\"")?;
             xml[i + 20..].split_whitespace().nth(1)?
         };
-        Some(url.trim_start_matches("http://").split('/').next()?.to_string())
+        Some(
+            url.trim_start_matches("http://")
+                .split('/')
+                .next()?
+                .to_string(),
+        )
     }
 
     #[test]
@@ -659,8 +860,14 @@ mod tests {
             "<abc xmlns=\"http://a.b/\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:schemaLocation=\"http://a.b/ http://id2.oast.example/abc.xsd\">abc</abc>"
         );
         assert!(xml_oob_applies(&IpKind::Query, "bob"));
-        assert!(!xml_oob_applies(&IpKind::Header, "bob"), "Zxmw.Zl: no header points");
-        assert!(!xml_oob_applies(&IpKind::Body, "<a>b</a>"), "Zp7s.ZQ: no values with markup");
+        assert!(
+            !xml_oob_applies(&IpKind::Header, "bob"),
+            "Zxmw.Zl: no header points"
+        );
+        assert!(
+            !xml_oob_applies(&IpKind::Body, "<a>b</a>"),
+            "Zp7s.ZQ: no values with markup"
+        );
     }
 
     #[test]
@@ -677,8 +884,15 @@ mod tests {
             ok("ok")
         };
         let sent = run_xml_oob_check(&IpKind::Body, "bob", Some(xsd), Some(xi), parse);
-        assert_eq!(sent.iter().map(|(id, _)| id.as_str()).collect::<Vec<_>>(), vec!["id-xsd", "id-xi"], "schema first, then XInclude");
-        assert_eq!(*contacted.borrow(), vec![xsd.1.to_string(), xi.1.to_string()]);
+        assert_eq!(
+            sent.iter().map(|(id, _)| id.as_str()).collect::<Vec<_>>(),
+            vec!["id-xsd", "id-xi"],
+            "schema first, then XInclude"
+        );
+        assert_eq!(
+            *contacted.borrow(),
+            vec![xsd.1.to_string(), xi.1.to_string()]
+        );
         // Safe: the value is stored as text, nothing is contacted.
         let contacted = RefCell::new(Vec::<String>::new());
         let text = |_: &str| ok("ok");
@@ -686,6 +900,11 @@ mod tests {
         assert_eq!(sent.len(), 2);
         assert!(contacted.borrow().is_empty());
         // Not applicable: header points send nothing.
-        assert!(run_xml_oob_check(&IpKind::Header, "bob", Some(xsd), Some(xi), |_| panic!("no probe on a header point")).is_empty());
+        assert!(
+            run_xml_oob_check(&IpKind::Header, "bob", Some(xsd), Some(xi), |_| panic!(
+                "no probe on a header point"
+            ))
+            .is_empty()
+        );
     }
 }

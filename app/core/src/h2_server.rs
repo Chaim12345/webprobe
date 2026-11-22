@@ -22,9 +22,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
 
 use crate::h2::{
-    data_payload, header_fragment, is_connection_header, parse_frame, write_frame, DEFAULT_MAX_FRAME, DEFAULT_WINDOW, FLAG_ACK, FLAG_END_HEADERS,
-    FLAG_END_STREAM, FRAME_CONTINUATION, FRAME_DATA, FRAME_GOAWAY, FRAME_HEADERS, FRAME_PING, FRAME_PRIORITY, FRAME_PUSH_PROMISE, FRAME_RST_STREAM,
-    FRAME_SETTINGS, FRAME_WINDOW_UPDATE, PREFACE,
+    data_payload, header_fragment, is_connection_header, parse_frame, write_frame,
+    DEFAULT_MAX_FRAME, DEFAULT_WINDOW, FLAG_ACK, FLAG_END_HEADERS, FLAG_END_STREAM,
+    FRAME_CONTINUATION, FRAME_DATA, FRAME_GOAWAY, FRAME_HEADERS, FRAME_PING, FRAME_PRIORITY,
+    FRAME_PUSH_PROMISE, FRAME_RST_STREAM, FRAME_SETTINGS, FRAME_WINDOW_UPDATE, PREFACE,
 };
 use crate::streaming::{Dechunker, Fed};
 
@@ -72,10 +73,15 @@ pub struct ResponseWriter {
 impl Write for ResponseWriter {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         if self.closed.load(Ordering::SeqCst) {
-            return Err(std::io::Error::new(ErrorKind::BrokenPipe, "the HTTP/2 stream was closed"));
+            return Err(std::io::Error::new(
+                ErrorKind::BrokenPipe,
+                "the HTTP/2 stream was closed",
+            ));
         }
         if !buf.is_empty() {
-            self.tx.send(buf.to_vec()).map_err(|_| std::io::Error::new(ErrorKind::BrokenPipe, "the HTTP/2 connection closed"))?;
+            self.tx.send(buf.to_vec()).map_err(|_| {
+                std::io::Error::new(ErrorKind::BrokenPipe, "the HTTP/2 connection closed")
+            })?;
         }
         Ok(buf.len())
     }
@@ -165,7 +171,11 @@ pub fn serve<S: Read + Write>(io: &mut S, handler: Handler) {
     conn.dec.set_max_table_size(HEADER_TABLE_SIZE);
     // Our SETTINGS: MAX_CONCURRENT_STREAMS, MAX_HEADER_LIST_SIZE, ENABLE_PUSH 0.
     let mut settings = Vec::new();
-    for (id, v) in [(0x2u16, 0u32), (0x3, MAX_CONCURRENT_STREAMS as u32), (0x6, MAX_HEADER_LIST as u32)] {
+    for (id, v) in [
+        (0x2u16, 0u32),
+        (0x3, MAX_CONCURRENT_STREAMS as u32),
+        (0x6, MAX_HEADER_LIST as u32),
+    ] {
         settings.extend_from_slice(&id.to_be_bytes());
         settings.extend_from_slice(&v.to_be_bytes());
     }
@@ -181,12 +191,19 @@ pub fn serve<S: Read + Write>(io: &mut S, handler: Handler) {
                 inbuf.extend_from_slice(&chunk[..n]);
                 progressed = true;
             }
-            Err(e) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut | ErrorKind::Interrupted) => {}
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    ErrorKind::WouldBlock | ErrorKind::TimedOut | ErrorKind::Interrupted
+                ) => {}
             Err(_) => break Ok(()),
         }
         if !preface_done && inbuf.len() >= PREFACE.len() {
             if &inbuf[..PREFACE.len()] != PREFACE {
-                break Err(ConnError(PROTOCOL_ERROR, "no HTTP/2 connection preface".into()));
+                break Err(ConnError(
+                    PROTOCOL_ERROR,
+                    "no HTTP/2 connection preface".into(),
+                ));
             }
             inbuf.drain(..PREFACE.len());
             preface_done = true;
@@ -212,7 +229,10 @@ pub fn serve<S: Read + Write>(io: &mut S, handler: Handler) {
         }
         progressed |= conn.pump_responses();
         if conn.out.len() > MAX_OUTPUT {
-            break Err(ConnError(ENHANCE_YOUR_CALM, "the peer does not read what it asks for".into()));
+            break Err(ConnError(
+                ENHANCE_YOUR_CALM,
+                "the peer does not read what it asks for".into(),
+            ));
         }
         if !conn.out.is_empty() {
             match io.write(&conn.out) {
@@ -220,7 +240,11 @@ pub fn serve<S: Read + Write>(io: &mut S, handler: Handler) {
                     conn.out.drain(..n);
                     progressed = true;
                 }
-                Err(e) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut | ErrorKind::Interrupted) => {}
+                Err(e)
+                    if matches!(
+                        e.kind(),
+                        ErrorKind::WouldBlock | ErrorKind::TimedOut | ErrorKind::Interrupted
+                    ) => {}
                 Err(_) => break Ok(()),
             }
         }
@@ -247,7 +271,9 @@ pub fn serve<S: Read + Write>(io: &mut S, handler: Handler) {
                     }
                 }
                 Ok(_) => break,
-                Err(e) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::Interrupted) => std::thread::sleep(std::time::Duration::from_millis(2)),
+                Err(e) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::Interrupted) => {
+                    std::thread::sleep(std::time::Duration::from_millis(2))
+                }
                 Err(_) => break,
             }
         }
@@ -312,7 +338,9 @@ fn check_hpack_block(block: &[u8]) -> Result<(), String> {
                 return Err("hpack: dynamic table size update after a field".into());
             }
             if int(block, &mut i, 5)? > HEADER_TABLE_SIZE {
-                return Err("hpack: dynamic table size update above SETTINGS_HEADER_TABLE_SIZE".into());
+                return Err(
+                    "hpack: dynamic table size update above SETTINGS_HEADER_TABLE_SIZE".into(),
+                );
             }
         } else {
             if int(block, &mut i, 4)? == 0 {
@@ -373,12 +401,16 @@ impl Conn {
                     return err(PROTOCOL_ERROR, "SETTINGS on a stream");
                 }
                 if f.flags & FLAG_ACK != 0 {
-                    return if f.payload.is_empty() { Ok(()) } else { err(FRAME_SIZE_ERROR, "SETTINGS ACK with a payload") };
+                    return if f.payload.is_empty() {
+                        Ok(())
+                    } else {
+                        err(FRAME_SIZE_ERROR, "SETTINGS ACK with a payload")
+                    };
                 }
-                if f.payload.len() % 6 != 0 {
+                if !f.payload.len().is_multiple_of(6) {
                     return err(FRAME_SIZE_ERROR, "SETTINGS length");
                 }
-                for p in f.payload.chunks_exact(6) {
+                for p in f.payload.as_chunks::<6>().0 {
                     let id = u16::from_be_bytes([p[0], p[1]]);
                     let v = u32::from_be_bytes([p[2], p[3], p[4], p[5]]);
                     match id {
@@ -432,7 +464,9 @@ impl Conn {
                 if f.payload.len() != 4 {
                     return err(FRAME_SIZE_ERROR, "WINDOW_UPDATE length");
                 }
-                let inc = (u32::from_be_bytes([f.payload[0], f.payload[1], f.payload[2], f.payload[3]]) & 0x7fff_ffff) as i64;
+                let inc =
+                    (u32::from_be_bytes([f.payload[0], f.payload[1], f.payload[2], f.payload[3]])
+                        & 0x7fff_ffff) as i64;
                 if f.stream == 0 {
                     if inc == 0 {
                         return err(PROTOCOL_ERROR, "zero WINDOW_UPDATE");
@@ -483,10 +517,12 @@ impl Conn {
             }
             FRAME_PUSH_PROMISE => err(PROTOCOL_ERROR, "a client cannot push"),
             FRAME_HEADERS => {
-                if f.stream == 0 || f.stream % 2 == 0 {
+                if f.stream == 0 || f.stream.is_multiple_of(2) {
                     return err(PROTOCOL_ERROR, "HEADERS on stream 0 or an even stream");
                 }
-                let frag = header_fragment(f.flags, &f.payload).map_err(|e| ConnError(PROTOCOL_ERROR, e))?.to_vec();
+                let frag = header_fragment(f.flags, &f.payload)
+                    .map_err(|e| ConnError(PROTOCOL_ERROR, e))?
+                    .to_vec();
                 if frag.len() > MAX_HEADER_BLOCK {
                     return err(COMPRESSION_ERROR, "header block too large");
                 }
@@ -501,7 +537,9 @@ impl Conn {
                 let Some((sid, end_stream, mut block, frames)) = self.block.take() else {
                     return err(PROTOCOL_ERROR, "CONTINUATION without HEADERS");
                 };
-                if frames + 1 > MAX_CONTINUATIONS || block.len() + f.payload.len() > MAX_HEADER_BLOCK {
+                if frames + 1 > MAX_CONTINUATIONS
+                    || block.len() + f.payload.len() > MAX_HEADER_BLOCK
+                {
                     return err(ENHANCE_YOUR_CALM, "CONTINUATION flood");
                 }
                 block.extend_from_slice(&f.payload);
@@ -526,10 +564,18 @@ impl Conn {
                 // Give the connection window back at once (a dropped stream's
                 // DATA counts too); the stream's only while it reads.
                 if len > 0 {
-                    let _ = write_frame(&mut self.out, FRAME_WINDOW_UPDATE, 0, 0, &(len as u32).to_be_bytes());
+                    let _ = write_frame(
+                        &mut self.out,
+                        FRAME_WINDOW_UPDATE,
+                        0,
+                        0,
+                        &(len as u32).to_be_bytes(),
+                    );
                     self.recv_window += len;
                 }
-                let payload = data_payload(f.flags, &f.payload).map_err(|e| ConnError(PROTOCOL_ERROR, e))?.to_vec();
+                let payload = data_payload(f.flags, &f.payload)
+                    .map_err(|e| ConnError(PROTOCOL_ERROR, e))?
+                    .to_vec();
                 let Some(s) = self.streams.get_mut(&f.stream) else {
                     self.stream_reset(f.stream, STREAM_CLOSED);
                     return Ok(());
@@ -551,7 +597,13 @@ impl Conn {
                 if f.flags & FLAG_END_STREAM != 0 {
                     self.dispatch(f.stream);
                 } else if len > 0 {
-                    let _ = write_frame(&mut self.out, FRAME_WINDOW_UPDATE, 0, f.stream, &(len as u32).to_be_bytes());
+                    let _ = write_frame(
+                        &mut self.out,
+                        FRAME_WINDOW_UPDATE,
+                        0,
+                        f.stream,
+                        &(len as u32).to_be_bytes(),
+                    );
                     if let Some(s) = self.streams.get_mut(&f.stream) {
                         s.recv_window += len;
                     }
@@ -565,9 +617,10 @@ impl Conn {
     /// A complete header block for stream `id`.
     fn headers(&mut self, id: u32, end_stream: bool, block: Vec<u8>) -> Result<(), ConnError> {
         check_hpack_block(&block).map_err(|e| ConnError(COMPRESSION_ERROR, e))?;
-        let decoded = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.dec.decode(&block)))
-            .map_err(|_| ConnError(COMPRESSION_ERROR, "malformed header block".into()))?
-            .map_err(|e| ConnError(COMPRESSION_ERROR, format!("{e:?}")))?;
+        let decoded =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.dec.decode(&block)))
+                .map_err(|_| ConnError(COMPRESSION_ERROR, "malformed header block".into()))?
+                .map_err(|e| ConnError(COMPRESSION_ERROR, format!("{e:?}")))?;
         if let Some(s) = self.streams.get_mut(&id) {
             // Trailers: they must end the stream; their fields are dropped.
             if s.req_done || !end_stream {
@@ -578,7 +631,10 @@ impl Conn {
             return Ok(());
         }
         if id <= self.last_stream {
-            return Err(ConnError(STREAM_CLOSED, "HEADERS on a closed stream".into()));
+            return Err(ConnError(
+                STREAM_CLOSED,
+                "HEADERS on a closed stream".into(),
+            ));
         }
         self.last_stream = id;
         self.opened += 1;
@@ -587,7 +643,10 @@ impl Conn {
             return Ok(());
         }
         let list: usize = decoded.iter().map(|(n, v)| n.len() + v.len() + 32).sum();
-        let Some((method, head)) = (list <= MAX_HEADER_LIST).then(|| request_head(&decoded)).flatten() else {
+        let Some((method, head)) = (list <= MAX_HEADER_LIST)
+            .then(|| request_head(&decoded))
+            .flatten()
+        else {
             self.stream_reset(id, PROTOCOL_ERROR);
             return Ok(());
         };
@@ -618,19 +677,28 @@ impl Conn {
 
     /// The request of stream `id` is complete: run it.
     fn dispatch(&mut self, id: u32) {
-        let Some(s) = self.streams.get_mut(&id) else { return };
+        let Some(s) = self.streams.get_mut(&id) else {
+            return;
+        };
         s.req_done = true;
         let mut raw = std::mem::take(&mut s.head);
-        if !s.body.is_empty() && !String::from_utf8_lossy(&raw).to_ascii_lowercase().contains("\r\ncontent-length:") {
+        if !s.body.is_empty()
+            && !String::from_utf8_lossy(&raw)
+                .to_ascii_lowercase()
+                .contains("\r\ncontent-length:")
+        {
             raw.truncate(raw.len() - 2);
             raw.extend_from_slice(format!("Content-Length: {}\r\n\r\n", s.body.len()).as_bytes());
         }
         raw.append(&mut s.body);
         let (tx, rx) = mpsc::sync_channel::<Vec<u8>>(16);
         s.rx = Some(rx);
-        let writer = ResponseWriter { tx, closed: Arc::clone(&s.closed) };
+        let writer = ResponseWriter {
+            tx,
+            closed: Arc::clone(&s.closed),
+        };
         let handler = Arc::clone(&self.handler);
-        std::thread::spawn(move || handler(raw, writer));
+        crate::util::spawn_contained("h2_server", move || handler(raw, writer));
     }
 
     /// Move handler output into frames: HEADERS as soon as the head is in,
@@ -639,7 +707,9 @@ impl Conn {
         let mut moved = false;
         let ids: Vec<u32> = self.streams.keys().copied().collect();
         for id in ids {
-            let Some(s) = self.streams.get_mut(&id) else { continue };
+            let Some(s) = self.streams.get_mut(&id) else {
+                continue;
+            };
             // Pull from the handler while there is room (bounded memory).
             let mut gone = false;
             while !s.finished && !s.ending && s.pending.len() < PENDING_LIMIT {
@@ -668,9 +738,18 @@ impl Conn {
             }
             // DATA within the windows.
             while !s.pending.is_empty() && self.send_window > 0 && s.send_window > 0 {
-                let n = (s.pending.len() as i64).min(self.send_window).min(s.send_window).min(self.peer_max_frame as i64) as usize;
+                let n = (s.pending.len() as i64)
+                    .min(self.send_window)
+                    .min(s.send_window)
+                    .min(self.peer_max_frame as i64) as usize;
                 let last = s.ending && n == s.pending.len();
-                let _ = write_frame(&mut self.out, FRAME_DATA, if last { FLAG_END_STREAM } else { 0 }, id, &s.pending[..n]);
+                let _ = write_frame(
+                    &mut self.out,
+                    FRAME_DATA,
+                    if last { FLAG_END_STREAM } else { 0 },
+                    id,
+                    &s.pending[..n],
+                );
                 s.pending.drain(..n);
                 self.send_window -= n as i64;
                 s.send_window -= n as i64;
@@ -696,7 +775,9 @@ impl Conn {
 fn feed_response(s: &mut Stream, bytes: &[u8], out: &mut Vec<u8>) {
     if let Resp::Head(buf) = &mut s.resp {
         buf.extend_from_slice(bytes);
-        let Some(end) = crate::util::find_head_end(buf) else { return };
+        let Some(end) = crate::util::find_head_end(buf) else {
+            return;
+        };
         let head = buf[..end].to_vec();
         let rest = buf[end..].to_vec();
         let kind = crate::codec::response_body_kind(&head, &s.method);
@@ -707,7 +788,13 @@ fn feed_response(s: &mut Stream, bytes: &[u8], out: &mut Vec<u8>) {
             crate::codec::BodyKind::UntilEof => Some(BodyLeft::Close),
         };
         let block = response_block(&head);
-        let _ = write_frame(out, FRAME_HEADERS, FLAG_END_HEADERS | if left.is_none() { FLAG_END_STREAM } else { 0 }, s.id, &block);
+        let _ = write_frame(
+            out,
+            FRAME_HEADERS,
+            FLAG_END_HEADERS | if left.is_none() { FLAG_END_STREAM } else { 0 },
+            s.id,
+            &block,
+        );
         match left {
             None => {
                 s.resp = Resp::Done;
@@ -723,7 +810,9 @@ fn feed_response(s: &mut Stream, bytes: &[u8], out: &mut Vec<u8>) {
 }
 
 fn feed_body(s: &mut Stream, input: &[u8]) {
-    let Resp::Body(left) = &mut s.resp else { return };
+    let Resp::Body(left) = &mut s.resp else {
+        return;
+    };
     match left {
         BodyLeft::Close => s.pending.extend_from_slice(input),
         BodyLeft::Length(n) => {
@@ -753,11 +842,20 @@ fn feed_body(s: &mut Stream, input: &[u8]) {
 fn response_block(head: &[u8]) -> Vec<u8> {
     let text = String::from_utf8_lossy(head);
     let mut lines = text.split("\r\n");
-    let status = lines.next().unwrap_or("").split_whitespace().nth(1).filter(|c| c.len() == 3).unwrap_or("502").to_string();
+    let status = lines
+        .next()
+        .unwrap_or("")
+        .split_whitespace()
+        .nth(1)
+        .filter(|c| c.len() == 3)
+        .unwrap_or("502")
+        .to_string();
     let mut block = Vec::new();
     encode_field(&mut block, ":status", &status);
     for line in lines.take_while(|l| !l.is_empty()) {
-        let Some((k, v)) = line.split_once(':') else { continue };
+        let Some((k, v)) = line.split_once(':') else {
+            continue;
+        };
         let name = k.trim().to_ascii_lowercase();
         if name.is_empty() || is_connection_header(&name) || name == "host" {
             continue;
@@ -777,7 +875,14 @@ fn request_head(fields: &[(Vec<u8>, Vec<u8>)]) -> Option<(String, Vec<u8>)> {
     for (n, v) in fields {
         let name = std::str::from_utf8(n).ok()?;
         let value = String::from_utf8_lossy(v).into_owned();
-        if value.bytes().any(|b| b == b'\r' || b == b'\n' || b == 0) || name.bytes().any(|b| b.is_ascii_uppercase() || b == b'\r' || b == b'\n' || b == b':' && !name.starts_with(':')) {
+        if value.bytes().any(|b| b == b'\r' || b == b'\n' || b == 0)
+            || name.bytes().any(|b| {
+                b.is_ascii_uppercase()
+                    || b == b'\r'
+                    || b == b'\n'
+                    || b == b':' && !name.starts_with(':')
+            })
+        {
             return None;
         }
         if let Some(p) = name.strip_prefix(':') {
@@ -812,7 +917,12 @@ fn request_head(fields: &[(Vec<u8>, Vec<u8>)]) -> Option<(String, Vec<u8>)> {
     let method = method?;
     let path = path.filter(|p| !p.is_empty())?;
     scheme?;
-    let host = authority.or_else(|| headers.iter().find(|(k, _)| k == "host").map(|(_, v)| v.clone()))?;
+    let host = authority.or_else(|| {
+        headers
+            .iter()
+            .find(|(k, _)| k == "host")
+            .map(|(_, v)| v.clone())
+    })?;
     // Shown as Burp shows an HTTP/2 request: HTTP/1-style text, version
     // HTTP/2 (an HTTP/1 upstream gets HTTP/1.1, see net::as_http1).
     let mut out = format!("{method} {path} HTTP/2\r\nHost: {host}\r\n");
@@ -824,4 +934,11 @@ fn request_head(fields: &[(Vec<u8>, Vec<u8>)]) -> Option<(String, Vec<u8>)> {
     }
     out.push_str("\r\n");
     Some((method, out.into_bytes()))
+}
+
+// Local-type impl of the support-crate trait (moved with io_traits in L8, #38).
+impl webprobe_support::io_traits::ProxyIo for ResponseWriter {
+    fn set_nonblocking_io(&self, _: bool) -> std::io::Result<()> {
+        Ok(())
+    }
 }

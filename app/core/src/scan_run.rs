@@ -2,11 +2,10 @@
 //! released only through [`ScanGuard`], with idle waits that block on a
 //! condition variable instead of polling.
 
+use crate::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar};
 use std::time::{Duration, Instant};
-
-use crate::net::Shared;
 
 #[derive(Default)]
 pub struct ScanRun {
@@ -28,13 +27,13 @@ pub struct ScanRun {
 
 impl ScanRun {
     pub fn is_busy(&self) -> bool {
-        *self.busy.lock().unwrap_or_else(|p| p.into_inner())
+        *self.busy.lock().unwrap()
     }
 
     /// Block until no scan runs, or until `timeout` passes. True when idle.
     pub fn wait_idle(&self, timeout: Option<Duration>) -> bool {
         let deadline = timeout.map(|t| Instant::now() + t);
-        let mut busy = self.busy.lock().unwrap_or_else(|p| p.into_inner());
+        let mut busy = self.busy.lock().unwrap();
         while *busy {
             match deadline {
                 None => busy = self.idle.wait(busy).unwrap_or_else(|p| p.into_inner()),
@@ -43,7 +42,11 @@ impl ScanRun {
                     if left.is_zero() {
                         return false;
                     }
-                    busy = self.idle.wait_timeout(busy, left).unwrap_or_else(|p| p.into_inner()).0;
+                    busy = self
+                        .idle
+                        .wait_timeout(busy, left)
+                        .unwrap_or_else(|p| p.into_inner())
+                        .0;
                 }
             }
         }
@@ -51,7 +54,7 @@ impl ScanRun {
     }
 
     fn claim(&self) -> bool {
-        let mut busy = self.busy.lock().unwrap_or_else(|p| p.into_inner());
+        let mut busy = self.busy.lock().unwrap();
         if *busy {
             return false;
         }
@@ -61,8 +64,9 @@ impl ScanRun {
 
     fn release(&self) {
         // The planned total assumes every check runs; settle it at the end.
-        self.total.store(self.done.load(Ordering::SeqCst), Ordering::SeqCst);
-        *self.busy.lock().unwrap_or_else(|p| p.into_inner()) = false;
+        self.total
+            .store(self.done.load(Ordering::SeqCst), Ordering::SeqCst);
+        *self.busy.lock().unwrap() = false;
         self.idle.notify_all();
     }
 }
@@ -70,18 +74,20 @@ impl ScanRun {
 /// Holds the scanner; dropping it (however the scan ends, a panic included)
 /// releases it and wakes everyone waiting for idle.
 pub struct ScanGuard {
-    shared: Arc<Shared>,
+    scan: Arc<ScanRun>,
 }
 
 impl Drop for ScanGuard {
     fn drop(&mut self) {
-        self.shared.scan.release();
+        self.scan.release();
     }
 }
 
 /// Claim the scanner, or `None` when a scan is already running.
-pub fn try_claim(shared: &Arc<Shared>) -> Option<ScanGuard> {
-    shared.scan.claim().then(|| ScanGuard { shared: Arc::clone(shared) })
+pub fn try_claim(scan: &Arc<ScanRun>) -> Option<ScanGuard> {
+    scan.claim().then(|| ScanGuard {
+        scan: Arc::clone(scan),
+    })
 }
 
 #[cfg(test)]
@@ -90,25 +96,28 @@ mod tests {
 
     #[test]
     fn one_claim_at_a_time_and_idle_waits_wake() {
-        let shared = Shared::new();
-        let g = try_claim(&shared).expect("first claim");
-        assert!(try_claim(&shared).is_none(), "second claim refused");
-        assert!(shared.scan.is_busy());
-        assert!(!shared.scan.wait_idle(Some(Duration::from_millis(50))), "still busy");
-        let s2 = Arc::clone(&shared);
-        let waiter = std::thread::spawn(move || s2.scan.wait_idle(Some(Duration::from_secs(10))));
+        let scan = Arc::new(ScanRun::default());
+        let g = try_claim(&scan).expect("first claim");
+        assert!(try_claim(&scan).is_none(), "second claim refused");
+        assert!(scan.is_busy());
+        assert!(
+            !scan.wait_idle(Some(Duration::from_millis(50))),
+            "still busy"
+        );
+        let s2 = Arc::clone(&scan);
+        let waiter = std::thread::spawn(move || s2.wait_idle(Some(Duration::from_secs(10))));
         std::thread::sleep(Duration::from_millis(50));
-        shared.scan.done.store(7, Ordering::SeqCst);
+        scan.done.store(7, Ordering::SeqCst);
         drop(g);
         assert!(waiter.join().unwrap(), "waiter woken by the release");
-        assert_eq!(shared.scan.total.load(Ordering::SeqCst), 7, "total settled");
+        assert_eq!(scan.total.load(Ordering::SeqCst), 7, "total settled");
         // Released by a panic too.
-        let s3 = Arc::clone(&shared);
+        let s3 = Arc::clone(&scan);
         let _ = std::thread::spawn(move || {
             let _g = try_claim(&s3).unwrap();
             panic!("check failed");
         })
         .join();
-        assert!(!shared.scan.is_busy());
+        assert!(!scan.is_busy());
     }
 }

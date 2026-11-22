@@ -8,10 +8,7 @@
 
 use eframe::egui::{self, RichText, Ui};
 
-use crate::collaborator::{
-    CollaboratorState, InteractionDetail, Interaction,
-    MAX_PAYLOADS,
-};
+use crate::collaborator::{CollaboratorState, Interaction, InteractionDetail, MAX_PAYLOADS};
 use crate::theme::{self, c};
 
 fn hint(ui: &mut Ui, text: &str) {
@@ -95,31 +92,59 @@ pub fn show(state: &mut CollaboratorState, ui: &mut egui::Ui) {
     }
     let interactions: Vec<Interaction> = state.interactions();
     ui.horizontal(|ui| {
-        let copy = egui::Button::new(RichText::new("Copy to clipboard").strong().color(egui::Color32::WHITE)).fill(c(theme::ORANGE_1)).min_size(egui::vec2(140.0, 24.0));
-        if ui.add(copy).on_hover_text("Generate a new payload and copy it").clicked() {
+        let copy = egui::Button::new(
+            RichText::new("Copy to clipboard")
+                .strong()
+                .color(egui::Color32::WHITE),
+        )
+        .fill(c(theme::ORANGE_1))
+        .min_size(egui::vec2(140.0, 24.0));
+        if ui
+            .add(copy)
+            .on_hover_text("Generate a new payload and copy it")
+            .clicked()
+        {
             let p = state.generate_payload();
             let text = crate::collaborator::payload_text(&p.dns_name, state.include_server);
             ui.ctx().copy_text(text.clone());
             crate::feedback::toast(crate::feedback::Level::Success, format!("Copied {text}"));
         }
-        ui.checkbox(&mut state.include_server, "Include Collaborator server location");
+        ui.checkbox(
+            &mut state.include_server,
+            "Include Collaborator server location",
+        );
         if ui.button("Poll now").clicked() {
             state.poll_now();
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.add_space(8.0);
-            if ui.add(egui::Button::new(RichText::new(theme::icon::GEAR).size(16.0)).frame(false)).on_hover_text("Collaborator server and listeners").clicked() {
+            if ui
+                .add(egui::Button::new(RichText::new(theme::icon::GEAR).size(16.0)).frame(false))
+                .on_hover_text("Collaborator server and listeners")
+                .clicked()
+            {
                 state.ui_settings = !state.ui_settings;
             }
-            let server = crate::collaborator::server_label(state.remote_server().as_deref(), state.http.is_running() || state.dns.is_running());
-            ui.label(RichText::new(format!("Collaborator server: {server}")).size(12.5).color(theme::ink_dim()));
+            let server = crate::collaborator::server_label(
+                state.remote_server().as_deref(),
+                state.http.is_running() || state.dns.is_running(),
+            );
+            ui.label(
+                RichText::new(format!("Collaborator server: {server}"))
+                    .size(12.5)
+                    .color(theme::ink_dim()),
+            );
         });
     });
     ui.add_space(6.0);
     if state.ui_settings {
-        egui::Frame::NONE.fill(theme::chrome()).stroke(egui::Stroke::new(1.0, theme::line())).inner_margin(egui::Margin::same(8)).show(ui, |ui| {
-            settings_panel(state, ui);
-        });
+        egui::Frame::NONE
+            .fill(theme::chrome())
+            .stroke(egui::Stroke::new(1.0, theme::line()))
+            .inner_margin(egui::Margin::same(8))
+            .show(ui, |ui| {
+                settings_panel(state, ui);
+            });
         ui.add_space(6.0);
     }
     let cols = [
@@ -200,9 +225,17 @@ pub fn show(state: &mut CollaboratorState, ui: &mut egui::Ui) {
 /// Report a finished background registration (called by both views).
 fn poll_registration(state: &mut CollaboratorState, ui: &egui::Ui) {
     match state.finish_registration() {
-        Some(Ok(d)) => crate::feedback::toast(crate::feedback::Level::Info, format!("Collaborator registered on {d}")),
-        Some(Err(e)) => crate::feedback::toast(crate::feedback::Level::Error, format!("Collaborator server: {e}")),
-        None if state.is_registering() => ui.ctx().request_repaint_after(std::time::Duration::from_millis(200)),
+        Some(Ok(d)) => crate::feedback::toast(
+            crate::feedback::Level::Info,
+            format!("Collaborator registered on {d}"),
+        ),
+        Some(Err(e)) => crate::feedback::toast(
+            crate::feedback::Level::Error,
+            format!("Collaborator server: {e}"),
+        ),
+        None if state.is_registering() => ui
+            .ctx()
+            .request_repaint_after(std::time::Duration::from_millis(200)),
         None => {}
     }
 }
@@ -288,13 +321,11 @@ pub(crate) fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
         let mut want_start = false;
         let mut want_stop = false;
         ui.horizontal(|ui| {
-            ui.label(
-                RichText::new("port")
-                    .size(12.0)
-                    .color(c(theme::MONO6)),
+            ui.label(RichText::new("port").size(12.0).color(c(theme::MONO6)));
+            let port_response = ui.add_enabled(
+                !running,
+                egui::DragValue::new(&mut state.http.port).range(1..=65535),
             );
-            let port_response = ui
-                .add_enabled(!running, egui::DragValue::new(&mut state.http.port).range(1..=65535));
             if port_response.changed() {
                 state.refresh_payload_urls();
             }
@@ -311,8 +342,14 @@ pub(crate) fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
         }
         if want_start {
             match state.start_http() {
-                Ok(_) => crate::feedback::toast(crate::feedback::Level::Success, "Collaborator HTTP listener started"),
-                Err(e) => crate::feedback::toast(crate::feedback::Level::Error, format!("Collaborator HTTP listener failed: {e}")),
+                Ok(_) => crate::feedback::toast(
+                    crate::feedback::Level::Success,
+                    "Collaborator HTTP listener started",
+                ),
+                Err(e) => crate::feedback::toast(
+                    crate::feedback::Level::Error,
+                    format!("Collaborator HTTP listener failed: {e}"),
+                ),
             }
         }
         let running_now = state.http.is_running();
@@ -340,12 +377,11 @@ pub(crate) fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
         let mut want_start = false;
         let mut want_stop = false;
         ui.horizontal(|ui| {
-            ui.label(
-                RichText::new("port")
-                    .size(12.0)
-                    .color(c(theme::MONO6)),
+            ui.label(RichText::new("port").size(12.0).color(c(theme::MONO6)));
+            ui.add_enabled(
+                !running,
+                egui::DragValue::new(&mut state.dns.port).range(1..=65535),
             );
-            ui.add_enabled(!running, egui::DragValue::new(&mut state.dns.port).range(1..=65535));
             if running {
                 if ui.button("Stop DNS").clicked() {
                     want_stop = true;
@@ -359,8 +395,14 @@ pub(crate) fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
         }
         if want_start {
             match state.start_dns() {
-                Ok(_) => crate::feedback::toast(crate::feedback::Level::Success, "Collaborator DNS listener started"),
-                Err(e) => crate::feedback::toast(crate::feedback::Level::Error, format!("Collaborator DNS listener failed: {e}")),
+                Ok(_) => crate::feedback::toast(
+                    crate::feedback::Level::Success,
+                    "Collaborator DNS listener started",
+                ),
+                Err(e) => crate::feedback::toast(
+                    crate::feedback::Level::Error,
+                    format!("Collaborator DNS listener failed: {e}"),
+                ),
             }
         }
         let running_now = state.dns.is_running();
@@ -439,22 +481,18 @@ pub(crate) fn settings_panel(state: &mut CollaboratorState, ui: &mut egui::Ui) {
     });
 
     ui.add_space(6.0);
-
 }
 
 fn http_details(ui: &mut Ui, http: &crate::collaborator::HttpInteraction) {
     ui.label(
-        RichText::new(format!(
-            "{} {} {}",
-            http.method, http.target, http.version
-        ))
-        .monospace()
-        .size(12.0)
-        .color(theme::method_color(&http.method)),
+        RichText::new(format!("{} {} {}", http.method, http.target, http.version))
+            .monospace()
+            .size(12.0)
+            .color(theme::method_color(&http.method)),
     );
-    egui::Grid::new("collab_http_headers").num_columns(2).show(
-        ui,
-        |ui| {
+    egui::Grid::new("collab_http_headers")
+        .num_columns(2)
+        .show(ui, |ui| {
             for (name, value) in &http.headers {
                 ui.label(
                     RichText::new(name.clone())
@@ -470,8 +508,7 @@ fn http_details(ui: &mut Ui, http: &crate::collaborator::HttpInteraction) {
                 );
                 ui.end_row();
             }
-        },
-    );
+        });
     if !http.body.is_empty() {
         ui.label(
             RichText::new(format!("body ({} bytes)", http.body.len()))
@@ -487,8 +524,18 @@ fn http_details(ui: &mut Ui, http: &crate::collaborator::HttpInteraction) {
 }
 
 fn smtp_details(ui: &mut Ui, smtp: &crate::collaborator::SmtpInteraction) {
-    ui.label(RichText::new(format!("MAIL FROM: {}", smtp.from)).monospace().size(12.0).color(c(theme::EDITOR_TEXT)));
-    ui.label(RichText::new(&smtp.conversation).monospace().size(12.0).color(c(theme::MONO6)));
+    ui.label(
+        RichText::new(format!("MAIL FROM: {}", smtp.from))
+            .monospace()
+            .size(12.0)
+            .color(c(theme::EDITOR_TEXT)),
+    );
+    ui.label(
+        RichText::new(&smtp.conversation)
+            .monospace()
+            .size(12.0)
+            .color(c(theme::MONO6)),
+    );
 }
 
 fn dns_details(ui: &mut Ui, dns: &crate::collaborator::DnsInteraction) {

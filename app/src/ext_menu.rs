@@ -4,7 +4,8 @@
 //! editors" hand-off of a message to extension-provided editors.
 
 use std::cell::RefCell;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use webprobe_core::sync::Mutex;
 
 use eframe::egui;
 use webprobe_core::ext_host::{MenuContext, MenuItem, MenuMessage, MenuOutcome, ProxyHooks};
@@ -26,20 +27,20 @@ static EDITS: Mutex<Vec<(String, Vec<u8>)>> = Mutex::new(Vec::new());
 
 /// The request an extension produced for `target`, if one arrived.
 pub fn take_edit(target: &str) -> Option<Vec<u8>> {
-    let mut edits = EDITS.lock().unwrap_or_else(|p| p.into_inner());
+    let mut edits = EDITS.lock().unwrap();
     let at = edits.iter().position(|(t, _)| t == target)?;
     Some(edits.remove(at).1)
 }
 
 fn put_edit(target: &str, request: Vec<u8>) {
-    EDITS.lock().unwrap_or_else(|p| p.into_inner()).push((target.to_string(), request));
+    EDITS.lock().unwrap().push((target.to_string(), request));
 }
 
 /// Run `work` (calls into extension JVMs) off the UI thread and repaint
 /// when it is done: the UI never waits on a sidecar.
 fn off_ui(ctx: &egui::Context, work: impl FnOnce() + Send + 'static) {
     let ctx = ctx.clone();
-    std::thread::spawn(move || {
+    webprobe_core::util::spawn_contained("ext_menu", move || {
         work();
         ctx.request_repaint();
     });
@@ -61,33 +62,51 @@ fn key(ctx: &MenuContext) -> String {
         m.request.hash(&mut h);
         m.response.hash(&mut h);
     }
-    format!("{}|{}|{:?}|{}", ctx.tool, ctx.invocation, ctx.editor, h.finish())
+    format!(
+        "{}|{}|{:?}|{}",
+        ctx.tool,
+        ctx.invocation,
+        ctx.editor,
+        h.finish()
+    )
 }
 
 /// The extensions' items for this menu (asked once per opened menu, on a
 /// worker thread); `None` while they are on their way.
 fn items(ui: &egui::Ui, shared: &Shared, ctx: &MenuContext) -> Option<Found> {
     let k = key(ctx);
-    let slot = CACHE.with(|c| c.borrow().as_ref().filter(|(ck, _)| *ck == k).map(|(_, s)| Arc::clone(s)));
+    let slot = CACHE.with(|c| {
+        c.borrow()
+            .as_ref()
+            .filter(|(ck, _)| *ck == k)
+            .map(|(_, s)| Arc::clone(s))
+    });
     if let Some(slot) = slot {
-        return slot.lock().unwrap_or_else(|p| p.into_inner()).clone();
+        return slot.lock().unwrap().clone();
     }
-    let exts: Vec<_> = shared.ext_host.lock().unwrap().active().into_iter().filter(|e| e.ui().is_some_and(|u| u.menu_providers > 0)).collect();
+    let exts: Vec<_> = webprobe_core::ext_host::active_hooks(shared)
+        .into_iter()
+        .filter(|e| e.ui().is_some_and(|u| u.menu_providers > 0))
+        .collect();
     let slot: Slot = Arc::new(Mutex::new(None));
     if exts.is_empty() {
         *slot.lock().unwrap() = Some(Vec::new());
     } else {
         let (fill, ctx) = (Arc::clone(&slot), ctx.clone());
         off_ui(ui.ctx(), move || {
-            let found: Found = exts.into_iter().map(|e| {
-                let items = e.menu_items(&ctx);
-                (e, items)
-            }).filter(|(_, items)| !items.is_empty()).collect();
-            *fill.lock().unwrap_or_else(|p| p.into_inner()) = Some(found);
+            let found: Found = exts
+                .into_iter()
+                .map(|e| {
+                    let items = e.menu_items(&ctx);
+                    (e, items)
+                })
+                .filter(|(_, items)| !items.is_empty())
+                .collect();
+            *fill.lock().unwrap() = Some(found);
         });
     }
     CACHE.with(|c| *c.borrow_mut() = Some((k, Arc::clone(&slot))));
-    let ready = slot.lock().unwrap_or_else(|p| p.into_inner()).clone();
+    let ready = slot.lock().unwrap().clone();
     ready
 }
 
@@ -110,7 +129,8 @@ pub fn submenu(ui: &mut egui::Ui, shared: &Shared, ctx: &MenuContext, target: Op
             ui.menu_button(ext.extension_name(), |ui| {
                 for it in items {
                     if ui.button(&it.label).clicked() {
-                        let (ext, id, target) = (Arc::clone(ext), it.id.clone(), target.map(str::to_string));
+                        let (ext, id, target) =
+                            (Arc::clone(ext), it.id.clone(), target.map(str::to_string));
                         off_ui(ui.ctx(), move || {
                             let outcome: MenuOutcome = ext.invoke_menu_item(&id);
                             if let (Some(t), Some(r)) = (target, outcome.request) {
@@ -130,22 +150,47 @@ pub fn submenu(ui: &mut egui::Ui, shared: &Shared, ctx: &MenuContext, target: Op
 /// extension provides editors: send the message to them (they show in the
 /// extension's window), or take back the request one changed (it arrives
 /// through [`take_edit`] for `target`).
-pub fn editor_items(ui: &mut egui::Ui, shared: &Arc<Shared>, msg: &MenuMessage, tool: &str, target: &str) {
-    let any = shared.ext_host.lock().unwrap().active().iter().any(|e| e.ui().is_some_and(|u| u.request_editors + u.response_editors > 0));
+pub fn editor_items(
+    ui: &mut egui::Ui,
+    shared: &Arc<Shared>,
+    msg: &MenuMessage,
+    tool: &str,
+    target: &str,
+) {
+    let any = webprobe_core::ext_host::active_hooks(shared)
+        .iter()
+        .any(|e| {
+            e.ui()
+                .is_some_and(|u| u.request_editors + u.response_editors > 0)
+        });
     if !any {
         return;
     }
     ui.menu_button("Extension editors", |ui| {
-        if ui.button("Open this message in extension editors").clicked() {
+        if ui
+            .button("Open this message in extension editors")
+            .clicked()
+        {
             let (shared, msg, tool) = (Arc::clone(shared), msg.clone(), tool.to_string());
-            off_ui(ui.ctx(), move || crate::feedback::toast(crate::feedback::Level::Info, open_in_editors(&shared, &msg, &tool)));
+            off_ui(ui.ctx(), move || {
+                crate::feedback::toast(
+                    crate::feedback::Level::Info,
+                    open_in_editors(&shared, &msg, &tool),
+                )
+            });
             ui.close();
         }
-        if ui.button("Use the request edited in an extension editor").clicked() {
+        if ui
+            .button("Use the request edited in an extension editor")
+            .clicked()
+        {
             let (shared, target) = (Arc::clone(shared), target.to_string());
             off_ui(ui.ctx(), move || match edited_request(&shared) {
                 Some(r) => put_edit(&target, r),
-                None => crate::feedback::toast(crate::feedback::Level::Info, "No extension editor has changed the request."),
+                None => crate::feedback::toast(
+                    crate::feedback::Level::Info,
+                    "No extension editor has changed the request.",
+                ),
             });
             ui.close();
         }
@@ -154,7 +199,7 @@ pub fn editor_items(ui: &mut egui::Ui, shared: &Arc<Shared>, msg: &MenuMessage, 
 
 /// Offer a message to every extension editor; a summary for a toast.
 pub fn open_in_editors(shared: &Shared, msg: &MenuMessage, tool: &str) -> String {
-    let exts = shared.ext_host.lock().unwrap().active();
+    let exts = webprobe_core::ext_host::active_hooks(shared);
     let mut shown = Vec::new();
     let mut idle = 0;
     for e in exts {
@@ -170,7 +215,8 @@ pub fn open_in_editors(shared: &Shared, msg: &MenuMessage, tool: &str) -> String
                 }
             }
             if u.headless {
-                return "The extension editors cannot be shown: its JVM runs without a display.".into();
+                return "The extension editors cannot be shown: its JVM runs without a display."
+                    .into();
             }
         }
     }
@@ -183,6 +229,8 @@ pub fn open_in_editors(shared: &Shared, msg: &MenuMessage, tool: &str) -> String
 
 /// The first request an extension editor changed.
 pub fn edited_request(shared: &Shared) -> Option<Vec<u8>> {
-    let exts = shared.ext_host.lock().unwrap().active();
-    exts.iter().filter(|e| e.ui().is_some_and(|u| u.request_editors > 0)).find_map(|e| e.edited_request())
+    let exts = webprobe_core::ext_host::active_hooks(shared);
+    exts.iter()
+        .filter(|e| e.ui().is_some_and(|u| u.request_editors > 0))
+        .find_map(|e| e.edited_request())
 }
