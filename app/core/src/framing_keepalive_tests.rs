@@ -1,14 +1,14 @@
 //! Keep-alive and pipeline fixtures for the tolerant framing callers
-//! (`net::read_request`, `codec::read_message`, `conn_reuse::response_allows_reuse`)
+//! (`net::read_request`, `codec::read_message`, `net::exchange`)
 //! beside the strict verdicts. They pin TODAY's behaviour so that wiring
 //! strict mode in (gated on these fixtures) changes only what is intended.
 //! Cases marked DIVERGES are where strict will close a connection the
 //! tolerant path would keep or misframe.
 
 use crate::codec::read_message;
-use crate::net::{read_request, response_allows_reuse};
+use crate::net::{exchange, read_request, response_headers_allow_reuse};
 use crate::strict_request::{scan_request_head, RequestFramingError as E, StrictRequest as S};
-use std::io::{Cursor, Read};
+use std::io::{Cursor, Read, Write};
 
 /// Delivers the script in reads of at most `step` bytes, as a socket would.
 struct Script {
@@ -27,6 +27,15 @@ impl Read for Script {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let n = buf.len().min(self.step);
         self.data.read(&mut buf[..n])
+    }
+}
+// The fixture accepts the outbound request while scripting the response.
+impl Write for Script {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
     }
 }
 impl webprobe_support::io_traits::ResponseRead for Script {
@@ -180,8 +189,8 @@ fn tolerant_response_framing_where_strict_will_close() {
 }
 
 #[test]
-fn reuse_decision_pins() {
-    // (name, wire, reusable today)
+fn authoritative_reuse_decision_pins() {
+    // Pooling requires the method-aware read outcome AND connection headers.
     let cases: &[(&str, &[u8], bool)] = &[
         (
             "length complete",
@@ -224,40 +233,44 @@ fn reuse_decision_pins() {
             true,
         ),
         ("204", b"HTTP/1.1 204 No Content\r\n\r\n", true),
-        ("100 continue alone", b"HTTP/1.1 100 Continue\r\n\r\n", true),
-        // DIVERGES / known quirks, pinned so a change is deliberate:
-        // a read-until-close response is "reusable" here (body_complete is
-        // true for UntilEof), contradicting the comment in the function.
-        // Safe today on the main paths because `read_message` also returns
-        // reusable=false for it and both are required; the h2c-declined
-        // path in `try_h2c_upgrade` checks only this function.
-        ("until eof", b"HTTP/1.1 200 OK\r\n\r\nxyz", true),
+        (
+            "100 continue alone",
+            b"HTTP/1.1 100 Continue\r\n\r\n",
+            false,
+        ),
+        // Previously the heuristic called these reusable. The authoritative
+        // read outcome retires EOF-delimited, truncated and over-read replies.
+        ("until eof", b"HTTP/1.1 200 OK\r\n\r\nxyz", false),
         (
             "conflicting CL (until eof)",
             b"HTTP/1.1 200 OK\r\nContent-Length: 1\r\nContent-Length: 2\r\n\r\nabc",
-            true,
+            false,
         ),
-        // trailing bytes after a complete message do not stop reuse.
         (
             "length plus trailing bytes",
             b"HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nabcEXTRA",
-            true,
+            false,
         ),
-        // a head with a Content-Length and no body bytes at all counts as complete.
         (
             "length, head only",
             b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\n",
-            true,
+            false,
         ),
-        // HTTP/1.0 keep-alive is trusted whatever the framing.
         (
             "http/1.0 keep-alive until eof",
             b"HTTP/1.0 200 OK\r\nConnection: keep-alive\r\n\r\nxyz",
-            true,
+            false,
         ),
     ];
     for (name, wire, want) in cases {
-        assert_eq!(response_allows_reuse(wire), *want, "{name}");
+        let reuse = exchange(
+            &mut Script::new(wire, 16_384),
+            b"GET / HTTP/1.1\r\nHost: fixture\r\n\r\n",
+            None,
+        )
+        .map(|(response, complete)| complete && response_headers_allow_reuse(&response))
+        .unwrap_or(false);
+        assert_eq!(reuse, *want, "{name}");
     }
 }
 
