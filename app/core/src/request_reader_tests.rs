@@ -965,8 +965,9 @@ fn mixed_line_endings_get_400_and_close_in_one_read_and_split_reads() {
                 "{wire:?} step {step}: nothing upstream"
             );
             let h = shared.history.last().expect("captured");
+            let captured = h.req_raw.to_vec();
             assert!(
-                bytes.starts_with(&h.req_raw.to_vec()),
+                bytes.starts_with(&captured),
                 "{wire:?} step {step}: captured bytes are a verbatim prefix of what was sent"
             );
         }

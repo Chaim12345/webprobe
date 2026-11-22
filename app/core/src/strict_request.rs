@@ -186,7 +186,6 @@ fn decide(head: &[u8]) -> Result<RequestBody, RequestFramingError> {
 /// Content-Length (even when they agree). One header `Content-Length: 5, 5`
 /// stays accepted as 5.
 pub fn inbound_ambiguity(raw: &[u8]) -> Option<RequestFramingError> {
-    use RequestFramingError::*;
     // The head ends at the earliest blank line under any terminator, the
     // same boundary the guarded reader frames, however the bytes arrive.
     let end = earliest_head_end(raw).unwrap_or(raw.len());
