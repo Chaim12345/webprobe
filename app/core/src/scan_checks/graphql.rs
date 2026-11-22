@@ -446,35 +446,13 @@ impl RequestCheck for SpoofableClientIp {
     }
 }
 
-/// Add a query parameter to a raw request's target (before any fragment
-/// would be — HTTP request targets do not carry one).
-fn with_query_param(raw: &[u8], name: &str, value: &str) -> Vec<u8> {
-    let Some(end) = util::find_head_end(raw) else { return raw.to_vec() };
-    let head = String::from_utf8_lossy(&raw[..end]);
-    let mut lines = head.split("\r\n");
-    let Some(first) = lines.next() else { return raw.to_vec() };
-    let mut parts = first.split_whitespace();
-    let (Some(method), Some(target), Some(version)) = (parts.next(), parts.next(), parts.next()) else { return raw.to_vec() };
-    let sep = if target.contains('?') { "&" } else { "?" };
-    let mut out = format!("{method} {target}{sep}{name}={value} {version}\r\n");
-    for line in lines {
-        if line.is_empty() {
-            continue;
-        }
-        out.push_str(line);
-        out.push_str("\r\n");
-    }
-    out.push_str("\r\n");
-    let mut v = out.into_bytes();
-    v.extend_from_slice(&raw[end..]);
-    v
-}
-
 /// Remove `authorization`, `cookie` and `x-*` headers — except
 /// `x-requested-with` — from a raw request (burp.Zii_.java:25-64),
 /// returning the rewritten request and the names removed.
 fn strip_auth_headers(raw: &[u8]) -> (Vec<u8>, Vec<String>) {
-    let Some(end) = util::find_head_end(raw) else { return (raw.to_vec(), Vec::new()) };
+    let Some(end) = util::find_head_end(raw) else {
+        return (raw.to_vec(), Vec::new());
+    };
     let head = String::from_utf8_lossy(&raw[..end]);
     let mut out = String::new();
     let mut removed = Vec::new();
@@ -487,7 +465,9 @@ fn strip_auth_headers(raw: &[u8]) -> (Vec<u8>, Vec<String>) {
                 let k = k.trim();
                 let drop = k.eq_ignore_ascii_case("authorization")
                     || k.eq_ignore_ascii_case("cookie")
-                    || (k.len() > 2 && k[..2].eq_ignore_ascii_case("x-") && !k.eq_ignore_ascii_case("x-requested-with"));
+                    || (k.len() > 2
+                        && k[..2].eq_ignore_ascii_case("x-")
+                        && !k.eq_ignore_ascii_case("x-requested-with"));
                 if drop {
                     removed.push(k.to_string());
                     continue;
@@ -513,17 +493,25 @@ fn json_node_count(body: &[u8]) -> i64 {
             _ => 0,
         }
     }
-    serde_json::from_slice::<serde_json::Value>(body).map(|v| count(&v)).unwrap_or(0)
+    serde_json::from_slice::<serde_json::Value>(body)
+        .map(|v| count(&v))
+        .unwrap_or(0)
 }
 
 /// The text of the first <title> element, trimmed ("" when none).
 fn page_title(body: &[u8]) -> String {
     let text = String::from_utf8_lossy(body);
     let lower = text.to_lowercase();
-    let Some(s) = lower.find("<title") else { return String::new() };
-    let Some(gt) = lower[s..].find('>') else { return String::new() };
+    let Some(s) = lower.find("<title") else {
+        return String::new();
+    };
+    let Some(gt) = lower[s..].find('>') else {
+        return String::new();
+    };
     let start = s + gt + 1;
-    let Some(e) = lower[start..].find("</title") else { return String::new() };
+    let Some(e) = lower[start..].find("</title") else {
+        return String::new();
+    };
     text[start..start + e].trim().to_string()
 }
 
@@ -543,11 +531,15 @@ fn bac_equivalent(reference: &[u8], candidate: &[u8]) -> bool {
     if json_node_count(body_a) != json_node_count(body_b) {
         return false;
     }
-    let html = util::get_header(&pa.headers, "Content-Type").unwrap_or_default().to_ascii_lowercase().contains("html");
+    let html = util::get_header(&pa.headers, "Content-Type")
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+        .contains("html");
     if html {
         page_title(body_a) == page_title(body_b)
     } else {
-        body_a.iter().filter(|b| **b == b'\n').count() == body_b.iter().filter(|b| **b == b'\n').count()
+        body_a.iter().filter(|b| **b == b'\n').count()
+            == body_b.iter().filter(|b| **b == b'\n').count()
     }
 }
 
@@ -589,7 +581,12 @@ impl RequestCheck for BrokenAccessControl {
             return;
         }
         let base = util::parse_http(&cx.baseline.raw);
-        let status: u16 = base.first.split_whitespace().nth(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+        let status: u16 = base
+            .first
+            .split_whitespace()
+            .nth(1)
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
         if !(200..300).contains(&status) {
             return;
         }
@@ -600,12 +597,14 @@ impl RequestCheck for BrokenAccessControl {
                 return;
             }
             let marker = rnd_letters(8);
-            let full = with_query_param(cx.req.as_bytes(), &marker, &marker);
+            let full = super::cache::with_query_param(cx.req.as_bytes(), &marker, &marker);
             let (stripped, removed) = strip_auth_headers(&full);
             if removed.is_empty() {
                 return;
             }
-            let (Some(a), Some(b)) = (burp_send(cx, &full), burp_send(cx, &stripped)) else { return };
+            let (Some(a), Some(b)) = (burp_send(cx, &full), burp_send(cx, &stripped)) else {
+                return;
+            };
             if !bac_equivalent(&a, &b) {
                 return;
             }
@@ -614,7 +613,9 @@ impl RequestCheck for BrokenAccessControl {
                 removed_names = removed;
             }
         }
-        let Some((full, stripped, a, b)) = pair else { return };
+        let Some((full, stripped, a, b)) = pair else {
+            return;
+        };
         let mut i = mk(
             "info",
             self.issue(),
@@ -2308,5 +2309,53 @@ impl PointCheck for StoredEcho {
         }
         cx.progress();
         cx.pace(50);
+    }
+}
+
+#[cfg(test)]
+mod bac_helper_tests {
+    use super::*;
+
+    #[test]
+    fn strip_auth_headers_drops_cookie_authorization_and_x_headers_only() {
+        let raw = b"POST /a?b=1 HTTP/1.1\r\nHost: h\r\nCookie: s=1\r\nAuthorization: Bearer t\r\nX-Csrf: c\r\nX-Requested-With: XMLHttpRequest\r\nAccept: */*\r\nContent-Length: 3\r\n\r\nabc";
+        let (out, removed) = strip_auth_headers(raw);
+        assert_eq!(removed, ["Cookie", "Authorization", "X-Csrf"]);
+        let text = String::from_utf8(out).unwrap();
+        assert!(text.contains("X-Requested-With: XMLHttpRequest\r\n"));
+        assert!(text.contains("Host: h\r\n") && text.contains("Accept: */*\r\n"));
+        assert!(!text.to_lowercase().contains("cookie"));
+        assert!(text.ends_with("\r\n\r\nabc"), "body kept: {text:?}");
+    }
+
+    #[test]
+    fn marker_then_strip_keeps_query_body_and_request_line_for_get_and_post() {
+        use super::super::cache::with_query_param;
+        let get = b"GET /p HTTP/1.1\r\nHost: h\r\nCookie: s=1\r\n\r\n";
+        let (s, r) = strip_auth_headers(&with_query_param(get, "mk", "mk"));
+        assert_eq!(r, ["Cookie"]);
+        assert!(String::from_utf8(s)
+            .unwrap()
+            .starts_with("GET /p?mk=mk HTTP/1.1\r\n"));
+        let post = b"POST /p?x=1 HTTP/1.1\r\nHost: h\r\nCookie: s=1\r\nContent-Length: 2\r\n\r\nhi";
+        let (s, _) = strip_auth_headers(&with_query_param(post, "mk", "mk"));
+        let s = String::from_utf8(s).unwrap();
+        assert!(s.starts_with("POST /p?x=1&mk=mk HTTP/1.1\r\n"));
+        assert!(s.ends_with("\r\n\r\nhi"));
+        let trailing = b"GET /p? HTTP/1.1\r\nHost: h\r\n\r\n";
+        assert!(String::from_utf8(with_query_param(trailing, "mk", "mk"))
+            .unwrap()
+            .starts_with("GET /p?mk=mk HTTP/1.1"));
+    }
+
+    #[test]
+    fn json_node_count_and_page_title_follow_the_equivalence_metric() {
+        assert_eq!(json_node_count(br#"{"a":[1,2],"b":{"c":null}}"#), 6);
+        assert_eq!(json_node_count(b"<html>"), 0);
+        assert_eq!(
+            page_title(b"<HTML><head><TITLE> Acct </TITLE></head>"),
+            "Acct"
+        );
+        assert_eq!(page_title(b"no title here"), "");
     }
 }

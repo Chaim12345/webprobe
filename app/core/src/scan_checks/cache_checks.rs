@@ -112,7 +112,7 @@ fn cache_buster() -> String {
 }
 
 /// `raw` with `name=value` appended to the request-target query string.
-fn with_query_param(raw: &[u8], name: &str, value: &str) -> Vec<u8> {
+pub(super) fn with_query_param(raw: &[u8], name: &str, value: &str) -> Vec<u8> {
     let end = raw
         .windows(2)
         .position(|w| w == b"\r\n")
