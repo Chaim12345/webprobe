@@ -108,7 +108,7 @@ mod repeater_fix_tests {
             tabs[0].port = port;
         }
         let mut app = App::new(sh.clone());
-        app.rep_update_cl = false;
+        app.repeater.update_cl = false;
         app.rops.follow = crate::repeater_ops::FollowMode::Never;
         for _ in 0..2 {
             repeater_send(&mut app);
@@ -177,7 +177,7 @@ mod repeater_fix_tests {
             tabs[0].port = port;
         }
         let mut app = App::new(sh.clone());
-        app.rep_update_cl = false;
+        app.repeater.update_cl = false;
         app.rops.follow = crate::repeater_ops::FollowMode::Always;
         for _ in 0..2 {
             repeater_send(&mut app);
@@ -275,7 +275,7 @@ mod repeater_fix_tests {
                 tabs[0].request = original.clone();
             }
             let mut app = App::new(sh.clone());
-            app.rep_update_cl = false;
+            app.repeater.update_cl = false;
             app.rops.follow = mode;
             repeater_send(&mut app);
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
@@ -557,7 +557,7 @@ mod logger_menu_tests {
         assert!(app.intr_req.starts_with("GET /a?x=1"));
         assert!(app.tab == Tab::Intruder);
         logger_command(&mut app, &e, "cmp_resp");
-        assert!(app.cmp_items.last().unwrap().ends_with("hi"));
+        assert!(app.comparer.items.last().unwrap().ends_with("hi"));
     }
 
     #[test]

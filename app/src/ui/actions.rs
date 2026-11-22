@@ -220,8 +220,6 @@ pub fn send_history_to_repeater(app: &mut App) {
         send_entry_to_repeater(app, &e);
     }
 }
-    }
-}
 
 /// Open a new Repeater tab holding `e`'s request (history and Logger menus).
 pub(crate) fn send_entry_to_repeater(app: &mut App, e: &net::HistEntry) {
@@ -379,16 +377,16 @@ pub(crate) fn logger_command(app: &mut App, e: &net::HistEntry, cmd: &str) {
         "repeater" => send_entry_to_repeater(app, e),
         "organizer" => send_entry_to_organizer(app, e),
         "sequencer" => {
-            app.seq_requests.push(e.clone());
-            app.seq_req_sel = Some(app.seq_requests.len() - 1);
+            app.sequencer.requests.push(e.clone());
+            app.sequencer.req_sel = Some(app.sequencer.requests.len() - 1);
             app.tab = Tab::Sequencer;
         }
         "cmp_req" => {
-            app.cmp_items.push(request_for_tools(&e.req_raw));
+            app.comparer.items.push(request_for_tools(&e.req_raw));
             app.tab = Tab::Comparer;
         }
         "cmp_resp" => {
-            app.cmp_items.push(
+            app.comparer.items.push(
                 e.resp_raw
                     .as_ref()
                     .map(|r| String::from_utf8_lossy(r).into_owned())

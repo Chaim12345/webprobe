@@ -1800,7 +1800,7 @@ pub fn current_tab(app: &crate::App) -> Option<(String, Service, Option<Vec<u8>>
 /// request still shown in the editor. History navigation uses the same index.
 fn redirect_source(app: &crate::App) -> Option<(String, Service, Option<Vec<u8>>)> {
     let reps = app.shared.repeaters.lock().unwrap();
-    let r = reps.get(app.rep_sel.min(reps.len().saturating_sub(1)))?;
+    let r = reps.get(app.repeater.sel.min(reps.len().saturating_sub(1)))?;
     let (req, service) = if let Some(Some(source)) = r.response_sources.get(r.hist_pos) {
         (
             source.request.clone(),

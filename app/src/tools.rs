@@ -818,7 +818,6 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
         },
         None => app.sequencer.bits = None,
     }
-    }
 }
 
 /// Burp's live capture: re-issue the request in the background and collect
