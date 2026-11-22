@@ -1165,7 +1165,7 @@ impl Dispatch<'_> {
             return;
         };
         let _ = tx.send(row);
-        state.done.fetch_add(1, Ordering::SeqCst);
+        self.state.done.fetch_add(1, Ordering::SeqCst);
         match source {
             Source::Matrix { attacks, next } => self.matrix(attacks, next).await,
             Source::Recursive {
