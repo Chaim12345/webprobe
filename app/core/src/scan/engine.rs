@@ -599,7 +599,9 @@ where
 /// reflection): the injected URL must come back as a link or redirect
 /// target of the retrieval response.
 pub(crate) fn g11_link_stored_hit(resp: &[u8], probe: &str) -> Option<String> {
-    let target = crate::crawl::link_targets(resp).into_iter().find(|t| t.contains(probe))?;
+    let target = crate::crawl::link_targets(resp)
+        .into_iter()
+        .find(|t| t.contains(probe))?;
     Some(format!("the link/redirect target {target:?}"))
 }
 
