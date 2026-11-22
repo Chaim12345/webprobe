@@ -748,6 +748,68 @@ Host: x
     assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 2);
 }
 
+/// A streaming sink receives every response head on the wire (stream_body
+/// sends the head first); the 101 head is the whole upgraded message, so a
+/// Stream-mode sink must get it via wire before end.
+#[test]
+fn switching_protocols_streams_the_head_to_a_stream_sink() {
+    struct Rec {
+        wired: Vec<u8>,
+        events: Vec<&'static str>,
+    }
+    impl crate::streaming::ResponseSink for Rec {
+        fn head(&mut self, _head: &[u8]) -> crate::streaming::BodyMode {
+            self.events.push("head");
+            crate::streaming::BodyMode::Stream
+        }
+        fn wire(&mut self, b: &[u8]) -> std::io::Result<()> {
+            self.events.push("wire");
+            self.wired.extend_from_slice(b);
+            Ok(())
+        }
+        fn payload(&mut self, _b: &[u8]) {}
+        fn end(&mut self, complete: bool) {
+            assert!(complete, "a complete 101 ends complete");
+            self.events.push("end");
+        }
+    }
+    let shared = Shared::new();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let t = std::thread::spawn(move || {
+        let (mut s, _) = listener.accept().unwrap();
+        s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        let _ = read_request_head(&mut s);
+        s.write_all(
+            b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n",
+        )
+        .unwrap();
+    });
+    let mut sink = Rec {
+        wired: Vec::new(),
+        events: Vec::new(),
+    };
+    let one = crate::net::send_raw_with(
+        &shared,
+        "127.0.0.1",
+        port,
+        b"GET /ws HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n",
+        Some(&mut sink),
+    );
+    t.join().unwrap();
+    assert!(one
+        .resp
+        .as_deref()
+        .unwrap_or_default()
+        .starts_with(b"HTTP/1.1 101"));
+    assert_eq!(
+        sink.wired,
+        b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n",
+        "the stream sink got the 101 head on the wire"
+    );
+    assert_eq!(sink.events, ["head", "wire", "end"]);
+}
+
 /// Regression guard (fails on the old head-only heuristic): a 101
 /// Switching Protocols reply upgrades the socket; it must never be pooled,
 /// or a later Repeater send would talk HTTP/1.1 into an upgraded socket.

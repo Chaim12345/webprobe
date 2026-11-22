@@ -1130,8 +1130,16 @@ pub fn same_origin(url: &str, origin: &str) -> bool {
     origin_of(url).is_some_and(|o| o.eq_ignore_ascii_case(origin.trim_end_matches('/')))
 }
 
-/// Re-issue a browser-observed request through WebProbe and record it as a
-/// crawl item (fragment dropped; hop-by-hop headers left out).
+/// Prefix of the history note on a crawl item whose browser response was not
+/// fully captured (see [`replay_seen`]).
+pub const INCOMPLETE_CAPTURE_NOTE: &str = "Incomplete browser capture";
+
+/// Record a browser-observed request as a crawl item (fragment dropped;
+/// hop-by-hop headers left out). This sends nothing: the item carries the
+/// request as captured and the response the browser received. When the
+/// response head or body was not captured the item has no response and an
+/// [`INCOMPLETE_CAPTURE_NOTE`] note; an explicit user replay is a separate
+/// operation (Repeater).
 pub fn replay_seen(shared: &Arc<Shared>, r: &SeenRequest) -> HistEntry {
     let (scheme, rest) = r.url.split_once("://").unwrap_or(("http", &r.url));
     let https = scheme == "https";
@@ -1159,13 +1167,28 @@ pub fn replay_seen(shared: &Arc<Shared>, r: &SeenRequest) -> HistEntry {
     }
     raw.push_str("Connection: close\r\n\r\n");
     raw.push_str(&body);
+    // Never send the request again: the browser already did, and a replay
+    // repeats its effect at the origin (a POST would run twice). Missing
+    // response metadata is recorded as incomplete evidence instead. A body
+    // of zero bytes (`Some(vec![])`) is a captured body, not a missing one.
     let up = match (&r.resp_head, &r.resp_body) {
         (Some(h), Some(b)) => net::Upstream {
             resp: Some(browser_response(h, b)),
             error: None,
         },
-        _ if https => net::send_tls_raw(shared, &host, port, raw.as_bytes()),
-        _ => net::send_raw(shared, &host, port, raw.as_bytes()),
+        (head, body) => {
+            let missing = match (head.is_some(), body.is_some()) {
+                (false, false) => "response head and body",
+                (false, true) => "response head",
+                _ => "response body",
+            };
+            net::Upstream {
+                resp: None,
+                error: Some(format!(
+                    "{INCOMPLETE_CAPTURE_NOTE}: {missing} not captured; request kept, not resent"
+                )),
+            }
+        }
     };
     let status = up
         .resp
@@ -1545,4 +1568,157 @@ pub fn crawl_links(origin: &str, req_path: &str, resp: &[u8]) -> Vec<String> {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod no_implicit_replay_tests {
+    use super::*;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::sync::atomic::AtomicUsize;
+
+    /// A real origin on loopback that counts every request that reaches it.
+    struct Origin {
+        port: u16,
+        hits: Arc<AtomicUsize>,
+    }
+
+    fn origin() -> Origin {
+        let l = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        let hits = Arc::new(AtomicUsize::new(0));
+        let h = hits.clone();
+        std::thread::spawn(move || {
+            for s in l.incoming() {
+                let Ok(mut s) = s else { break };
+                let mut buf = [0u8; 4096];
+                let n = s.read(&mut buf).unwrap_or(0);
+                if n > 0 {
+                    h.fetch_add(1, Ordering::SeqCst);
+                    let _ = s.write_all(
+                        b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok",
+                    );
+                }
+            }
+        });
+        Origin { port, hits }
+    }
+
+    fn seen(o: &Origin, head: Option<&str>, body: Option<Vec<u8>>) -> SeenRequest {
+        SeenRequest {
+            method: "POST".into(),
+            url: format!("http://127.0.0.1:{}/order?id=7", o.port),
+            headers: vec![(
+                "Content-Type".into(),
+                "application/x-www-form-urlencoded".into(),
+            )],
+            body: Some("item=1&qty=2".into()),
+            id: "req-1".into(),
+            resp_head: head.map(str::to_string),
+            resp_body: body,
+            finished: true,
+        }
+    }
+
+    const HEAD: &str = "HTTP/1.1 201 Created\r\nContent-Type: text/plain\r\n\r\n";
+
+    fn assert_request_kept(o: &Origin, e: &HistEntry) {
+        let raw = String::from_utf8(e.req_raw.to_vec()).unwrap();
+        assert!(raw.starts_with("POST /order?id=7 HTTP/1.1\r\n"), "{raw}");
+        assert!(raw.contains(&format!("Host: 127.0.0.1:{}\r\n", o.port)));
+        assert!(raw.contains("Content-Type: application/x-www-form-urlencoded\r\n"));
+        assert!(raw.contains("Content-Length: 12\r\n"));
+        assert!(raw.ends_with("\r\n\r\nitem=1&qty=2"), "{raw}");
+        assert_eq!(e.method, "POST");
+        assert_eq!(e.host, "127.0.0.1");
+        assert_eq!(e.port, o.port);
+        assert_eq!(e.path, "/order?id=7");
+    }
+
+    fn assert_incomplete(e: &HistEntry, what: &str) {
+        assert!(e.resp_raw.is_none(), "no response may be manufactured");
+        assert_eq!(e.resp_len, 0);
+        assert_eq!(e.status, "");
+        let note = e.note.as_deref().unwrap_or("");
+        assert!(note.starts_with(INCOMPLETE_CAPTURE_NOTE), "{note}");
+        assert!(note.contains(what), "{note}");
+    }
+
+    /// Give a stray resend time to arrive before counting.
+    fn settle(o: &Origin) -> usize {
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        o.hits.load(Ordering::SeqCst)
+    }
+
+    #[test]
+    fn missing_head_and_body_makes_no_network_request() {
+        let o = origin();
+        let shared = Shared::new();
+        let e = replay_seen(&shared, &seen(&o, None, None));
+        assert_eq!(settle(&o), 0, "browser-observed POST must not be resent");
+        assert_request_kept(&o, &e);
+        assert_incomplete(&e, "response head and body");
+    }
+
+    #[test]
+    fn missing_head_only_makes_no_network_request() {
+        let o = origin();
+        let shared = Shared::new();
+        let e = replay_seen(&shared, &seen(&o, None, Some(b"ok".to_vec())));
+        assert_eq!(settle(&o), 0);
+        assert_request_kept(&o, &e);
+        assert_incomplete(&e, "response head");
+    }
+
+    #[test]
+    fn missing_body_only_makes_no_network_request() {
+        let o = origin();
+        let shared = Shared::new();
+        let e = replay_seen(&shared, &seen(&o, Some(HEAD), None));
+        assert_eq!(settle(&o), 0);
+        assert_request_kept(&o, &e);
+        assert_incomplete(&e, "response body");
+    }
+
+    #[test]
+    fn completed_post_with_missing_metadata_has_exactly_one_origin_effect() {
+        let o = origin();
+        let shared = Shared::new();
+        // The browser's own completed POST: one effect at the origin.
+        let mut s = std::net::TcpStream::connect(("127.0.0.1", o.port)).unwrap();
+        s.write_all(
+            b"POST /order?id=7 HTTP/1.1\r\nHost: x\r\nContent-Length: 12\r\n\r\nitem=1&qty=2",
+        )
+        .unwrap();
+        let mut sink = Vec::new();
+        let _ = s.read_to_end(&mut sink);
+        // The crawler then records it with its response metadata missing.
+        let e = replay_seen(&shared, &seen(&o, None, None));
+        assert_eq!(settle(&o), 1, "exactly one total origin effect");
+        assert_incomplete(&e, "response head and body");
+    }
+
+    #[test]
+    fn complete_capture_records_browser_response_without_traffic() {
+        let o = origin();
+        let shared = Shared::new();
+        let e = replay_seen(&shared, &seen(&o, Some(HEAD), Some(b"made".to_vec())));
+        assert_eq!(settle(&o), 0, "complete capture needs no traffic");
+        assert_request_kept(&o, &e);
+        assert_eq!(e.status, "201");
+        assert!(e.note.is_none());
+        assert!(e.resp_raw.as_ref().unwrap().to_vec().ends_with(b"made"));
+    }
+
+    #[test]
+    fn zero_length_body_is_a_complete_capture_not_missing() {
+        let o = origin();
+        let shared = Shared::new();
+        let head = "HTTP/1.1 204 No Content\r\n\r\n";
+        let e = replay_seen(&shared, &seen(&o, Some(head), Some(Vec::new())));
+        assert_eq!(settle(&o), 0);
+        assert_eq!(e.status, "204");
+        assert!(e.note.is_none(), "an empty body is not incomplete evidence");
+        assert!(e.resp_raw.is_some());
+    }
 }

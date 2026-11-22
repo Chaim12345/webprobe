@@ -426,7 +426,12 @@ pub(crate) fn read_message<R: std::io::Read + webprobe_support::io_traits::Respo
             // it back.
             let head: Vec<u8> = buffer.drain(..head_end).collect();
             if let Some(s) = sink.as_deref_mut() {
-                s.head(&head);
+                if s.head(&head) == crate::streaming::BodyMode::Stream {
+                    // A streaming sink gets every response head on the wire
+                    // (see stream_body); the 101 head is the whole message,
+                    // so it goes out before the end.
+                    let _ = s.wire(&head);
+                }
                 s.end(true);
             }
             return Ok((head, false));

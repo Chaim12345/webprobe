@@ -22,7 +22,7 @@ fn rule(action: &str, value: &str) -> SessionRule {
 }
 
 fn apply(shared: &Shared) -> Vec<u8> {
-    apply_session_rules_for(shared, "Repeater", REQUEST, 80, false)
+    apply_session_rules_for(shared, "Repeater", REQUEST, 80, false).unwrap()
 }
 
 #[test]
