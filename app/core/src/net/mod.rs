@@ -126,3 +126,6 @@ mod wake_tests;
 
 #[cfg(test)]
 mod replay_safety_tests;
+
+#[cfg(test)]
+mod url_scope_tests;
