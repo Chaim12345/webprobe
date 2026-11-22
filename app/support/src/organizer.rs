@@ -149,13 +149,18 @@ impl Organizer {
         true
     }
 
-    /// Delete a collection and every item in it (Burp's "This cannot be
-    /// undone"); the Inbox is unaffected. False when the id does not exist.
+    /// Delete a collection; its items move to the Inbox (collection 0),
+    /// they are not deleted (policy D-CEO-02). False when the id does not
+    /// exist.
     pub fn remove_collection(&mut self, id: u64) -> bool {
         let before = self.collections.len();
         self.collections.retain(|c| c.id != id);
         if self.collections.len() != before {
-            self.items.retain(|i| i.collection != id);
+            for i in self.items.iter_mut() {
+                if i.collection == id {
+                    i.collection = 0;
+                }
+            }
             true
         } else {
             false
@@ -355,10 +360,30 @@ mod tests {
         );
         o.move_item(filed, b);
         assert_eq!(o.get(filed).unwrap().collection, b);
+        o.move_item(3, c);
+        let before_1 = o.get(1).unwrap().clone();
+        let before_filed = o.get(filed).unwrap().clone();
         assert!(o.remove_collection(b));
-        assert!(o.get(1).is_none(), "delete removes the items");
-        assert!(o.get(filed).is_none(), "delete removes the items");
-        assert!(!o.remove_collection(b));
+        for (id, before) in [(1, before_1), (filed, before_filed)] {
+            let after = o.get(id).expect("items survive the delete");
+            assert_eq!(after.id, before.id, "id preserved");
+            assert_eq!(after.name, before.name, "name preserved");
+            assert_eq!(after.note, before.note, "note preserved");
+            assert_eq!(after.request, before.request, "request evidence preserved");
+            assert_eq!(
+                after.response, before.response,
+                "response evidence preserved"
+            );
+            assert_eq!(after.created, before.created, "timestamp preserved");
+            assert_eq!(after.collection, 0, "moved to the Inbox (D-CEO-02)");
+        }
+        assert_eq!(
+            o.get(3).unwrap().collection,
+            c,
+            "unrelated collections untouched"
+        );
+        assert!(!o.remove_collection(b), "repeated deletion is a no-op");
+        assert_eq!(o.get(1).unwrap().collection, 0, "still in the Inbox");
         o.items[0].collection = 77;
         o.repair_collections();
         assert_eq!(o.items[0].collection, 0, "orphans remapped");
