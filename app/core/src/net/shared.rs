@@ -81,8 +81,14 @@ pub struct Shared {
     pub task_runner: AtomicBool,
     /// Called when engine state a front end shows has changed (new traffic,
     /// a held message, a log line): lets a UI redraw on events instead of
-    /// polling.
+    /// polling. Calls are coalesced: see [`Shared::wake`].
     pub waker: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
+    /// When the waker last ran, on the [`wake_clock_ms`] clock. `None` means
+    /// it has never run: a separate state, because clock value 0 is a real
+    /// reading (the first wake can land in the clock's first millisecond).
+    pub last_wake_ms: Mutex<Option<u64>>,
+    /// Wake-ups skipped inside the coalescing window (tests, diagnostics).
+    pub wakes_coalesced: AtomicU64,
     /// Burp scan configuration "Audit speed" (burp.Zsv7): 0 fast, 1 normal, 2 thorough.
     pub scan_speed: AtomicU8,
     /// Which checks run and which insertion point types are attacked.
@@ -189,6 +195,15 @@ pub struct Shared {
     pub pool_hits: AtomicUsize,
 }
 
+/// Minimum gap between front-end wake-ups (see [`Shared::wake`]).
+pub const WAKE_COALESCE_MS: u64 = 50;
+
+/// Milliseconds on a process-local monotonic clock, for wake coalescing.
+pub fn wake_clock_ms() -> u64 {
+    static START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+    START.get_or_init(Instant::now).elapsed().as_millis() as u64
+}
+
 impl Shared {
     pub fn new() -> Arc<Self> {
         let mitm = crate::tls::MitmAuthority::new().expect("failed to initialize local HTTPS CA");
@@ -267,6 +282,8 @@ impl Shared {
             next_task_id: AtomicU64::new(1),
             task_runner: AtomicBool::new(false),
             waker: Mutex::new(None),
+            last_wake_ms: Mutex::new(None),
+            wakes_coalesced: AtomicU64::new(0),
 
             live_passive_issues: Mutex::new(None),
             // AuditDefaults.json: scan_speed / scan_accuracy "normal"
@@ -346,7 +363,6 @@ impl Shared {
         *self.waker.lock().unwrap() = Some(f);
     }
 
-    /// Tell the front end that something it shows has changed.
     /// The next id for a held intercept item. HTTP requests, responses and
     /// WebSocket frames share one queue, so they share this one sequence:
     /// forward and drop find an item by id alone.
@@ -354,11 +370,37 @@ impl Shared {
         self.next_queue_id.fetch_add(1, Ordering::SeqCst)
     }
 
+    /// Tell the front end that something it shows has changed.
+    ///
+    /// Every proxied exchange wakes twice (its log line and its history
+    /// entry), so at thousands of requests per second the front end was
+    /// asked to repaint thousands of times per second; each repaint rebuilt
+    /// the UI and stalled the proxy threads on the locks the frame took.
+    /// Calls inside [`WAKE_COALESCE_MS`] of the last delivered wake are
+    /// skipped: the frame already on its way shows their state, and the
+    /// front end's periodic repaint covers the tail of a burst.
     pub fn wake(&self) {
+        self.wake_at(wake_clock_ms());
+    }
+
+    /// [`Shared::wake`] with the clock reading supplied by the caller, so
+    /// tests can pin the clock instead of sleeping.
+    pub(crate) fn wake_at(&self, now: u64) {
         let f = self.waker.lock().unwrap().clone();
-        if let Some(f) = f {
-            f();
+        let Some(f) = f else { return };
+        {
+            // Claim the window under the lock: when two threads race, the
+            // loser's event is already visible to the winner's frame.
+            let mut last = self.last_wake_ms.lock().unwrap();
+            if let Some(prev) = *last {
+                if now.saturating_sub(prev) < WAKE_COALESCE_MS {
+                    self.wakes_coalesced.fetch_add(1, Ordering::SeqCst);
+                    return;
+                }
+            }
+            *last = Some(now);
         }
+        f();
     }
 
     pub fn count_waiting(&self) -> usize {
