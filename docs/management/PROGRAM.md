@@ -8,7 +8,7 @@ This is the index for sequencing, not permission to merge or change product beha
 
 - Parity snapshot: `b1ef6b4a07d384fb1a58ae145cc278328d7c2c44`, after #45, #51, #95 and #100. These landings are not a release or full parity certification.
 - Single review stack: **#125**, observed head `2b756c1b37dae00d8f790f0b1f83471838e4060a`. Its body reports 845 passing checks on an earlier tested tree. Do not attach that count to a later SHA without new evidence.
-- **106 open PRs**, retrieved across both API pages. [PR board](pr-board.csv) has one row per open PR: exact head, lane owner, status, blocker, next action and evidence scope.
+- **108 open PRs**, retrieved across both API pages. [PR board](pr-board.csv) has one row per open PR: exact head, lane owner, status, blocker, next action and evidence scope.
 - **21 current open heads are ancestors of #125**, including #125 itself. This proves commit inclusion, not semantic correctness or approval to close source PRs.
 - **Latest #123 `db2cd8d` is now included in #125**, via `92c1ee5`. #125 also merged parity `b1ef6b4`. Earlier missing-head and moving-base warnings are resolved; fresh acceptance on the new combined tree remains required.
 - [Milestone register](milestones.csv) preserves all 137 tasks from parity's `tasks.json`: 114 recorded done, 21 todo, 2 rejected. These are historical repository labels, not fresh verification. Open labels can describe work already present in review PRs. Map coverage before assigning builders.
