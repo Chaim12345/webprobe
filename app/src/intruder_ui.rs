@@ -863,7 +863,7 @@ fn send_row_to_repeater(app: &mut App, r: &ResultRow, target: &(String, u16, boo
         hist_pos: 0,
         ws: None,
     });
-    app.rep_sel = reps.len() - 1;
+    app.repeater.sel = reps.len() - 1;
     crate::feedback::toast(
         crate::feedback::Level::Success,
         format!("Sent request {} to Repeater tab {id}", r.number),
@@ -1077,7 +1077,8 @@ pub fn results_window(app: &mut App, ctx: &egui::Context) {
                 match code {
                     0 => send_row_to_repeater(app, &r, &state.target),
                     1 => {
-                        app.cmp_items
+                        app.comparer
+                            .items
                             .push(String::from_utf8_lossy(&r.request).into_owned());
                         crate::feedback::toast(
                             crate::feedback::Level::Success,
@@ -1085,7 +1086,7 @@ pub fn results_window(app: &mut App, ctx: &egui::Context) {
                         );
                     }
                     2 => {
-                        app.cmp_items.push(
+                        app.comparer.items.push(
                             r.response
                                 .as_ref()
                                 .map(|b| String::from_utf8_lossy(b).into_owned())

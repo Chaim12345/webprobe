@@ -234,7 +234,7 @@ pub fn send_history_to_repeater(app: &mut App) {
             hist_pos: 0,
             ws: None,
         });
-        app.rep_sel = reps.len() - 1;
+        app.repeater.sel = reps.len() - 1;
         app.tab = Tab::Repeater;
     }
 }
@@ -242,7 +242,7 @@ pub fn send_history_to_repeater(app: &mut App) {
 /// The selected Repeater tab's (request, https, host, port).
 pub(crate) fn current_repeater(app: &App) -> Option<(String, bool, String, u16)> {
     let reps = app.shared.repeaters.lock().unwrap();
-    let r = reps.get(app.rep_sel.min(reps.len().saturating_sub(1)))?;
+    let r = reps.get(app.repeater.sel.min(reps.len().saturating_sub(1)))?;
     Some((r.request.clone(), r.https, r.host.clone(), r.port))
 }
 
@@ -279,7 +279,7 @@ pub(crate) fn repeater_tab_to_new_tab(app: &mut App) {
         hist_pos: 0,
         ws: None,
     });
-    app.rep_sel = reps.len() - 1;
+    app.repeater.sel = reps.len() - 1;
 }
 
 pub fn send_history_to_intruder(app: &mut App) {

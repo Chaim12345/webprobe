@@ -8,16 +8,16 @@ pub(crate) fn decoder(app: &mut App, ui: &mut Ui) {
     // Burp's Decoder (live 52685): a stack of stages; each is a text area
     // with Text/Hex, Decode as / Encode as / Hash and Smart decode on the
     // right. Applying an operation replaces every stage below with its result.
-    let stages = 1 + app.dec_chain.len();
+    let stages = 1 + app.decoder.chain.len();
     let mut apply: Option<(usize, Op)> = None;
     egui::ScrollArea::vertical().id_salt("decoder_stages").auto_shrink([false, false]).show(ui, |ui| {
         for k in 0..stages {
             ui.horizontal_top(|ui| {
                 let w = (ui.available_width() - 230.0).max(200.0);
-                let hex = if k == 0 { app.dec_hex } else { app.dec_chain[k - 1].1 };
+                let hex = if k == 0 { app.decoder.hex } else { app.decoder.chain[k - 1].1 };
                 egui::Frame::NONE.stroke(egui::Stroke::new(1.0, theme::line())).fill(theme::surface()).show(ui, |ui| {
                     ui.set_width(w);
-                    let text: &mut String = if k == 0 { &mut app.dec_input } else { &mut app.dec_chain[k - 1].0 };
+                    let text: &mut String = if k == 0 { &mut app.decoder.input } else { &mut app.decoder.chain[k - 1].0 };
                     if hex {
                         let mut shown = util::hex_view(text.as_bytes(), 65536);
                         ui.add(egui::TextEdit::multiline(&mut shown).font(egui::TextStyle::Monospace).desired_rows(6).desired_width(w - 8.0).frame(egui::Frame::NONE.inner_margin(egui::Margin::symmetric(4, 2))).interactive(false));
@@ -32,7 +32,7 @@ pub(crate) fn decoder(app: &mut App, ui: &mut Ui) {
                         let mut h = hex;
                         if ui.radio(!h, "Text").clicked() { h = false; }
                         if ui.radio(h, "Hex").clicked() { h = true; }
-                        if k == 0 { app.dec_hex = h; } else { app.dec_chain[k - 1].1 = h; }
+                        if k == 0 { app.decoder.hex = h; } else { app.decoder.chain[k - 1].1 = h; }
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             let _ = ui.add(egui::Button::new(RichText::new(theme::icon::QUESTION).size(15.0)).frame(false)).on_hover_text("Transform the data with the menus below; each result opens a new panel underneath.");
                         });
@@ -60,14 +60,14 @@ pub(crate) fn decoder(app: &mut App, ui: &mut Ui) {
     });
     if let Some((k, op)) = apply {
         let src = if k == 0 {
-            app.dec_input.clone()
+            app.decoder.input.clone()
         } else {
-            app.dec_chain[k - 1].0.clone()
+            app.decoder.chain[k - 1].0.clone()
         };
         let out = crate::decoder_ops::apply(op, &src).unwrap_or_else(|e| format!("<error: {e}>"));
-        app.dec_chain.truncate(k);
-        app.dec_chain.push((out.clone(), false));
-        app.dec_output = out;
+        app.decoder.chain.truncate(k);
+        app.decoder.chain.push((out.clone(), false));
+        app.decoder.output = out;
     }
 }
 
