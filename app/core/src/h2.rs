@@ -1148,3 +1148,7 @@ mod tests {
         assert!(resp.ends_with(b"ok"));
     }
 }
+
+#[cfg(test)]
+#[path = "h2_coverage_tests.rs"]
+mod coverage_tests;
