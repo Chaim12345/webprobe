@@ -1076,7 +1076,8 @@ pub fn results_window(app: &mut App, ctx: &egui::Context) {
                 match code {
                     0 => send_row_to_repeater(app, &r, &state.target),
                     1 => {
-                        app.cmp_items
+                        app.comparer
+                            .items
                             .push(String::from_utf8_lossy(&r.request).into_owned());
                         crate::feedback::toast(
                             crate::feedback::Level::Success,
@@ -1084,7 +1085,7 @@ pub fn results_window(app: &mut App, ctx: &egui::Context) {
                         );
                     }
                     2 => {
-                        app.cmp_items.push(
+                        app.comparer.items.push(
                             r.response
                                 .as_ref()
                                 .map(|b| String::from_utf8_lossy(b).into_owned())

@@ -1867,21 +1867,21 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
         }
         RepAction::ToSequencer => {
             if let Some(e) = tab_entry(app) {
-                app.seq_requests.push(e);
-                app.seq_req_sel = Some(app.seq_requests.len() - 1);
+                app.sequencer.requests.push(e);
+                app.sequencer.req_sel = Some(app.sequencer.requests.len() - 1);
                 app.tab = Tab::Sequencer;
             }
         }
         RepAction::ToComparerRequest => {
-            app.cmp_items.push(req);
+            app.comparer.items.push(req);
             toast(Level::Success, "Sent to Comparer");
         }
         RepAction::ToComparerResponse => {
-            app.cmp_items.push(resp_text);
+            app.comparer.items.push(resp_text);
             toast(Level::Success, "Sent to Comparer");
         }
         RepAction::ToDecoder => {
-            app.dec_input = req;
+            app.decoder.input = req;
             app.tab = Tab::Decoder;
         }
         RepAction::ToOrganizer => {
@@ -1936,8 +1936,8 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
         }
         RepAction::CopyRaw => ctx.copy_text(req.clone()),
         RepAction::BothToComparer => {
-            app.cmp_items.push(req.clone());
-            app.cmp_items.push(resp_text);
+            app.comparer.items.push(req.clone());
+            app.comparer.items.push(resp_text);
             toast(Level::Success, "Request and response sent to Comparer");
         }
         RepAction::CompareWithPrevious => {
@@ -1952,9 +1952,10 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
                 .and_then(|t| previous_response(&t.history));
             match previous {
                 Some(prev) => {
-                    app.cmp_items
+                    app.comparer
+                        .items
                         .push(String::from_utf8_lossy(&prev).into_owned());
-                    app.cmp_items.push(resp_text);
+                    app.comparer.items.push(resp_text);
                     app.tab = Tab::Comparer;
                     toast(
                         Level::Success,
@@ -1977,8 +1978,8 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
                 .and_then(|t| previous_request(&t.history));
             match previous {
                 Some(prev) => {
-                    app.cmp_items.push(prev);
-                    app.cmp_items.push(req.clone());
+                    app.comparer.items.push(prev);
+                    app.comparer.items.push(req.clone());
                     app.tab = Tab::Comparer;
                     toast(
                         Level::Success,

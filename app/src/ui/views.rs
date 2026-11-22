@@ -28,7 +28,7 @@ pub(crate) fn comparer(app: &mut App, ui: &mut Ui) {
     });
     ui.label(RichText::new("This function lets you do a word- or byte-level comparison between different data. You can load, paste, or send data here from other tools and then select the comparison you want to perform.").size(12.5).color(theme::ink_dim()));
     ui.add_space(8.0);
-    let items = app.cmp_items.clone();
+    let items = app.comparer.items.clone();
     let cols = [
         table::Column::new("#", 70.0),
         table::Column::new("Length", 70.0),
@@ -44,11 +44,15 @@ pub(crate) fn comparer(app: &mut App, ui: &mut Ui) {
                 for (k, label) in ["Select item 1:", "Select item 2:"].iter().enumerate() {
                     ui.label(RichText::new(*label).size(12.5).color(theme::ink()));
                     let mut st = if k == 0 {
-                        app.cmp_table1.clone()
+                        app.comparer.table1.clone()
                     } else {
-                        app.cmp_table2.clone()
+                        app.comparer.table2.clone()
                     };
-                    let sel = if k == 0 { app.cmp_sel1 } else { app.cmp_sel2 };
+                    let sel = if k == 0 {
+                        app.comparer.sel1
+                    } else {
+                        app.comparer.sel2
+                    };
                     let mut pick = None;
                     let rows: Vec<(usize, String)> = items.iter().cloned().enumerate().collect();
                     let h = (full_h / 2.0 - 70.0).max(100.0);
@@ -104,14 +108,14 @@ pub(crate) fn comparer(app: &mut App, ui: &mut Ui) {
                         );
                     });
                     if k == 0 {
-                        app.cmp_table1 = st;
+                        app.comparer.table1 = st;
                         if pick.is_some() {
-                            app.cmp_sel1 = pick;
+                            app.comparer.sel1 = pick;
                         }
                     } else {
-                        app.cmp_table2 = st;
+                        app.comparer.table2 = st;
                         if pick.is_some() {
-                            app.cmp_sel2 = pick;
+                            app.comparer.sel2 = pick;
                         }
                     }
                     ui.add_space(8.0);
@@ -124,13 +128,15 @@ pub(crate) fn comparer(app: &mut App, ui: &mut Ui) {
                         .clicked()
                 };
                 if b(ui, "Paste") {
-                    app.cmp_paste_pending = true;
+                    app.comparer.paste_pending = true;
                     ui.ctx()
                         .send_viewport_cmd(egui::ViewportCommand::RequestPaste);
                 }
                 if b(ui, "Load") {
-                    if let Ok(t) = std::fs::read(app.cmp_load_path.trim()) {
-                        app.cmp_items.push(String::from_utf8_lossy(&t).into_owned());
+                    if let Ok(t) = std::fs::read(app.comparer.load_path.trim()) {
+                        app.comparer
+                            .items
+                            .push(String::from_utf8_lossy(&t).into_owned());
                     } else {
                         feedback::toast(
                             feedback::Level::Error,
@@ -139,27 +145,27 @@ pub(crate) fn comparer(app: &mut App, ui: &mut Ui) {
                     }
                 }
                 ui.add(
-                    egui::TextEdit::singleline(&mut app.cmp_load_path)
+                    egui::TextEdit::singleline(&mut app.comparer.load_path)
                         .hint_text("file path")
                         .desired_width(btn_w),
                 );
                 if b(ui, "Remove") {
-                    if let Some(i) = app.cmp_sel1.or(app.cmp_sel2) {
-                        if i < app.cmp_items.len() {
-                            app.cmp_items.remove(i);
+                    if let Some(i) = app.comparer.sel1.or(app.comparer.sel2) {
+                        if i < app.comparer.items.len() {
+                            app.comparer.items.remove(i);
                         }
-                        app.cmp_sel1 = None;
-                        app.cmp_sel2 = None;
+                        app.comparer.sel1 = None;
+                        app.comparer.sel2 = None;
                     }
                 }
                 if b(ui, "Clear") {
-                    app.cmp_items.clear();
-                    app.cmp_sel1 = None;
-                    app.cmp_sel2 = None;
+                    app.comparer.items.clear();
+                    app.comparer.sel1 = None;
+                    app.comparer.sel2 = None;
                 }
                 ui.add_space((ui.available_height() - 108.0).max(10.0));
                 ui.label(RichText::new("Compare ...").size(12.5).color(theme::ink()));
-                let ready = app.cmp_sel1.is_some() && app.cmp_sel2.is_some();
+                let ready = app.comparer.sel1.is_some() && app.comparer.sel2.is_some();
                 for (label, bytes) in [("Words", false), ("Bytes", true), ("Characters", false)] {
                     if ui
                         .add_enabled(
@@ -169,30 +175,31 @@ pub(crate) fn comparer(app: &mut App, ui: &mut Ui) {
                         )
                         .clicked()
                     {
-                        let (a, b) = (app.cmp_sel1.unwrap(), app.cmp_sel2.unwrap());
-                        app.comparer_state.left = app.cmp_items.get(a).cloned().unwrap_or_default();
+                        let (a, b) = (app.comparer.sel1.unwrap(), app.comparer.sel2.unwrap());
+                        app.comparer_state.left =
+                            app.comparer.items.get(a).cloned().unwrap_or_default();
                         app.comparer_state.right =
-                            app.cmp_items.get(b).cloned().unwrap_or_default();
+                            app.comparer.items.get(b).cloned().unwrap_or_default();
                         app.comparer_state.recompute();
                         let unit = match label {
                             "Bytes" => crate::compare::Unit::Bytes,
                             "Characters" => crate::compare::Unit::Chars,
                             _ => crate::compare::Unit::Words,
                         };
-                        app.cmp_unit_label = label;
-                        app.cmp_result = Some(crate::compare::compare(
+                        app.comparer.unit_label = label;
+                        app.comparer.result = Some(crate::compare::compare(
                             app.comparer_state.left.as_bytes(),
                             app.comparer_state.right.as_bytes(),
                             unit,
                         ));
-                        app.cmp_window = Some((a, b, bytes));
-                        app.cmp_hex = bytes;
-                        app.cmp_scroll = egui::Vec2::ZERO;
+                        app.comparer.window = Some((a, b, bytes));
+                        app.comparer.hex = bytes;
+                        app.comparer.scroll = egui::Vec2::ZERO;
                     }
                 }
             });
         });
-    if app.cmp_paste_pending {
+    if app.comparer.paste_pending {
         let pasted: Option<String> = ui.input(|i| {
             i.events.iter().find_map(|e| {
                 if let egui::Event::Paste(t) = e {
@@ -203,17 +210,17 @@ pub(crate) fn comparer(app: &mut App, ui: &mut Ui) {
             })
         });
         if let Some(t) = pasted {
-            app.cmp_items.push(t);
-            app.cmp_paste_pending = false;
+            app.comparer.items.push(t);
+            app.comparer.paste_pending = false;
         }
     }
-    if let Some((a, b, bytes)) = app.cmp_window {
+    if let Some((a, b, bytes)) = app.comparer.window {
         let mut open = true;
-        let Some(result) = app.cmp_result.clone() else {
-            app.cmp_window = None;
+        let Some(result) = app.comparer.result.clone() else {
+            app.comparer.window = None;
             return;
         };
-        let unit_name = match app.cmp_unit_label {
+        let unit_name = match app.comparer.unit_label {
             "Bytes" => "Byte",
             "Characters" => "Character",
             _ => "Word",
@@ -254,10 +261,10 @@ pub(crate) fn comparer(app: &mut App, ui: &mut Ui) {
                     }
                     // Burp's result window: Text | Hex view and Sync views.
                     ui.add_space(16.0);
-                    ui.radio_value(&mut app.cmp_hex, false, "Text");
-                    ui.radio_value(&mut app.cmp_hex, true, "Hex");
+                    ui.radio_value(&mut app.comparer.hex, false, "Text");
+                    ui.radio_value(&mut app.comparer.hex, true, "Hex");
                     ui.add_space(8.0);
-                    ui.checkbox(&mut app.cmp_sync, "Sync views");
+                    ui.checkbox(&mut app.comparer.sync, "Sync views");
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui
                             .button("Export")
@@ -266,7 +273,7 @@ pub(crate) fn comparer(app: &mut App, ui: &mut Ui) {
                             )
                             .clicked()
                         {
-                            let path = app.cmp_export_path.trim().to_string();
+                            let path = app.comparer.export_path.trim().to_string();
                             match std::fs::write(
                                 &path,
                                 crate::compare::export_html(&result, &title),
@@ -282,7 +289,7 @@ pub(crate) fn comparer(app: &mut App, ui: &mut Ui) {
                             }
                         }
                         ui.add(
-                            egui::TextEdit::singleline(&mut app.cmp_export_path)
+                            egui::TextEdit::singleline(&mut app.comparer.export_path)
                                 .desired_width(220.0),
                         );
                     });
@@ -305,8 +312,8 @@ pub(crate) fn comparer(app: &mut App, ui: &mut Ui) {
                         t.to_string()
                     }
                 };
-                let (hex, sync) = (app.cmp_hex, app.cmp_sync);
-                let mut scroll = app.cmp_scroll;
+                let (hex, sync) = (app.comparer.hex, app.comparer.sync);
+                let mut scroll = app.comparer.scroll;
                 ui.columns(2, |cols2| {
                     for (side, col) in cols2.iter_mut().enumerate() {
                         let raw = if side == 0 {
@@ -382,10 +389,10 @@ pub(crate) fn comparer(app: &mut App, ui: &mut Ui) {
                         }
                     }
                 });
-                app.cmp_scroll = scroll;
+                app.comparer.scroll = scroll;
             });
         if !open {
-            app.cmp_window = None;
+            app.comparer.window = None;
         }
     }
 }

@@ -338,7 +338,7 @@ pub(crate) fn bulk_history_command(app: &mut App, entries: &[net::HistEntry], cm
         }
         "cmp_req" | "cmp_resp" => {
             for e in entries {
-                app.cmp_items.push(if cmd == "cmp_req" {
+                app.comparer.items.push(if cmd == "cmp_req" {
                     request_for_tools(&e.req_raw)
                 } else {
                     e.resp_raw
@@ -847,11 +847,11 @@ pub(crate) fn proxy_history(app: &mut App, ui: &mut Ui) {
                 feedback::toast(feedback::Level::Success, "Sent to Organizer");
             }
             "cmp_req" => {
-                app.cmp_items.push(request_for_tools(&e.req_raw));
+                app.comparer.items.push(request_for_tools(&e.req_raw));
                 app.tab = Tab::Comparer;
             }
             "cmp_resp" => {
-                app.cmp_items.push(
+                app.comparer.items.push(
                     e.resp_raw
                         .as_ref()
                         .map(|r| String::from_utf8_lossy(r).into_owned())
@@ -918,8 +918,8 @@ pub(crate) fn proxy_history(app: &mut App, ui: &mut Ui) {
             "csrf_poc" => app.csrf_poc = Some(csrf_poc_html(&e)),
             "sequencer" => {
                 app.history_sel = Some(e.id);
-                app.seq_requests.push(e.clone());
-                app.seq_req_sel = Some(app.seq_requests.len() - 1);
+                app.sequencer.requests.push(e.clone());
+                app.sequencer.req_sel = Some(app.sequencer.requests.len() - 1);
                 app.tab = Tab::Sequencer;
             }
             "notes" => {
