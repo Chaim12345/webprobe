@@ -3311,7 +3311,9 @@ pub fn apply_project(app: &mut App, data: &project::ProjectData, content: bool) 
             )
             .max()
             .unwrap_or(0);
-        app.shared.next_id.store(history_max + 1, Ordering::SeqCst);
+        app.shared
+            .next_id
+            .fetch_max(history_max + 1, Ordering::SeqCst);
         let issue_max = app
             .shared
             .issues
@@ -3323,13 +3325,15 @@ pub fn apply_project(app: &mut App, data: &project::ProjectData, content: bool) 
             .unwrap_or(0);
         app.shared
             .next_issue_id
-            .store(issue_max + 1, Ordering::SeqCst);
+            .fetch_max(issue_max + 1, Ordering::SeqCst);
         let ws_max = app
             .shared
             .ws_history
             .with_rows(|rows| rows.iter().map(|w| w.id).max())
             .unwrap_or(0);
-        app.shared.next_ws_id.store(ws_max + 1, Ordering::SeqCst);
+        app.shared
+            .next_ws_id
+            .fetch_max(ws_max + 1, Ordering::SeqCst);
     }
     app.map_cache_len = usize::MAX;
 }
