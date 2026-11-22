@@ -4,6 +4,7 @@
 //! server can be another.
 
 pub mod ai;
+pub mod bambda;
 pub mod burp_checks;
 pub mod codec;
 pub mod collaborator;
