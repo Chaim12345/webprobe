@@ -146,19 +146,22 @@ pub fn try_h2c_upgrade<S: Read + Write + ResponseRead>(
     Ok(Some((msg, false)))
 }
 
-pub fn response_allows_reuse(resp: &[u8]) -> bool {
+/// The connection-level headers' say on reuse: an HTTP/1.0 response must
+/// explicitly keep the connection alive, and a `Connection: close` response
+/// always retires the socket. Body framing is NOT judged here: pooling
+/// decisions combine this with the authoritative `read_message` outcome
+/// (complete, self-delimited or valid bodyless; UntilEof, truncation, error
+/// and head-only streaming reads all retire the connection).
+pub fn response_headers_allow_reuse(resp: &[u8]) -> bool {
     let parts = util::parse_http(resp);
     if parts.first.starts_with("HTTP/1.0") {
         return util::get_header(&parts.headers, "Connection")
             .map(|v| v.to_ascii_lowercase().contains("keep-alive"))
             .unwrap_or(false);
     }
-    // UntilEof bodies cannot be delimited, so the connection must close.
-    let framed = crate::codec::body_complete(resp, "GET");
-    let not_close = util::get_header(&parts.headers, "Connection")
+    util::get_header(&parts.headers, "Connection")
         .map(|v| !v.to_ascii_lowercase().contains("close"))
-        .unwrap_or(true);
-    framed && not_close
+        .unwrap_or(true)
 }
 
 pub fn send_inner(
@@ -207,14 +210,12 @@ pub fn send_inner(
     let h2c = shared.h2c_upgrade.load(Ordering::SeqCst);
     if h2c && !reused && config.kind == crate::upstream::UpstreamKind::None {
         match try_h2c_upgrade(&mut stream, &routed) {
-            Ok(Some((resp, upgraded))) => {
+            Ok(Some((resp, _upgraded))) => {
                 // A real upgrade leaves the socket speaking HTTP/2, so it must
-                // never enter the HTTP/1.x pool. A declined upgrade is just an
-                // ordinary HTTP/1.1 reply: keep the connection reusable so a
-                // later keep-alive request can actually reuse it.
-                if !upgraded && keep_alive && response_allows_reuse(&resp) {
-                    shared.pool.lock().unwrap().insert(key, stream);
-                }
+                // never enter the HTTP/1.x pool. A declined upgrade is not
+                // pooled either: its reply was read without the authoritative
+                // method-aware read_message outcome, so completeness is
+                // unproven. A fresh connection costs one handshake.
                 return Ok(resp);
             }
             Ok(None) => {}
@@ -251,7 +252,7 @@ pub fn send_inner(
         }
     }?;
     let (resp, reusable, stream) = result;
-    if keep_alive && reusable && response_allows_reuse(&resp) {
+    if keep_alive && reusable && response_headers_allow_reuse(&resp) {
         shared.pool.lock().unwrap().insert(key, stream);
         if reused {
             shared.pool_hits.fetch_add(1, Ordering::SeqCst);
@@ -410,7 +411,7 @@ pub fn send_tls_inner(
         }
     }?;
     let (result, reusable, stream) = result;
-    if keep_alive && reusable && response_allows_reuse(&result) {
+    if keep_alive && reusable && response_headers_allow_reuse(&result) {
         shared.tls_pool.lock().unwrap().insert(key, stream);
         if reused {
             shared.pool_hits.fetch_add(1, Ordering::SeqCst);
