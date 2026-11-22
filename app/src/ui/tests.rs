@@ -498,3 +498,147 @@ mod suite {
         assert_eq!(rows[0].id, 1, "the sort must see the whole list");
     }
 }
+
+#[cfg(test)]
+mod logger_menu_tests {
+    use super::*;
+
+    fn tool_row() -> crate::logger::LogEntry {
+        crate::logger::LogEntry {
+            id: 7,
+            method: "GET".into(),
+            host: "example.test".into(),
+            port: 8443,
+            https: true,
+            path: "/a?x=1".into(),
+            tool: "Repeater".into(),
+            request: Some(std::sync::Arc::from(
+                &b"GET /a?x=1 HTTP/1.1\r\nHost: example.test\r\n\r\n"[..],
+            )),
+            response: Some(std::sync::Arc::from(&b"HTTP/1.1 200 OK\r\n\r\nhi"[..])),
+            ..Default::default()
+        }
+    }
+
+    /// Logger rows offer the Proxy history Send-to commands (Burp parity).
+    #[test]
+    fn logger_menu_lists_burp_send_to_actions() {
+        let labels: Vec<&str> = LOGGER_MENU.iter().map(|(l, _)| *l).collect();
+        for want in [
+            "Send to Organizer\tCtrl+O",
+            "Send to Repeater\tCtrl+R",
+            "Send to Intruder\tCtrl+I",
+            "Send to Sequencer",
+            "Send to Comparer (request)",
+            "Send to Comparer (response)",
+            "Add to scope",
+            "Scan",
+        ] {
+            assert!(labels.contains(&want), "missing {want}");
+        }
+    }
+
+    #[test]
+    fn logger_tool_row_sends_to_organizer_repeater_intruder() {
+        let mut app = App::new(net::Shared::new());
+        let row = tool_row();
+        let e = log_row_entry(&app.shared, &row).expect("tool row keeps its message");
+        assert!(e.https, "TLS on a non-443 port is kept");
+        assert_eq!(e.port, 8443);
+        assert_eq!(e.host, "example.test");
+        let before = app.shared.organizer.lock().unwrap().len();
+        logger_command(&mut app, &e, "organizer");
+        assert_eq!(app.shared.organizer.lock().unwrap().len(), before + 1);
+        let reps_before = app.shared.repeaters.lock().unwrap().len();
+        logger_command(&mut app, &e, "repeater");
+        assert_eq!(app.shared.repeaters.lock().unwrap().len(), reps_before + 1);
+        assert!(app.tab == Tab::Repeater);
+        logger_command(&mut app, &e, "intruder");
+        assert!(app.intr_req.starts_with("GET /a?x=1"));
+        assert!(app.tab == Tab::Intruder);
+        logger_command(&mut app, &e, "cmp_resp");
+        assert!(app.cmp_items.last().unwrap().ends_with("hi"));
+    }
+
+    #[test]
+    fn logger_row_without_retained_message_has_no_entry() {
+        let shared = net::Shared::new();
+        let mut row = crate::logger::LogEntry {
+            hist_id: Some(999_999),
+            ..Default::default()
+        };
+        assert!(log_row_entry(&shared, &row).is_none());
+        row.hist_id = None;
+        assert!(log_row_entry(&shared, &row).is_none());
+    }
+
+    /// Real egui frames: right-click a Logger row and the menu opens with
+    /// Burp's Send to Organizer / Repeater entries.
+    #[test]
+    fn right_click_on_logger_row_opens_the_menu() {
+        let mut app = App::new(net::Shared::new());
+        app.logger.push(tool_row());
+        let ctx = egui::Context::default();
+        let screen = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(1200.0, 800.0));
+        let mut texts = String::new();
+        let frame = |events: Vec<egui::Event>, app: &mut App, texts: &mut String| {
+            let raw = egui::RawInput {
+                screen_rect: Some(screen),
+                events,
+                ..Default::default()
+            };
+            let out = ctx.run_ui(raw, |ui| {
+                egui::CentralPanel::default().show(ui, |ui| logger_view(app, ui));
+            });
+            texts.clear();
+            for cs in &out.shapes {
+                if let egui::epaint::Shape::Text(t) = &cs.shape {
+                    if t.galley.text() == "GET" {
+                        texts.push_str(&{
+                            let c = t.visual_bounding_rect().center();
+                            format!("@GET {} {}\n", c.x, c.y)
+                        });
+                    }
+                    texts.push_str(t.galley.text());
+                    texts.push('\n');
+                }
+            }
+            out.drop_without_applying_deltas();
+        };
+        frame(vec![], &mut app, &mut texts);
+        for _ in 0..3 {
+            frame(vec![], &mut app, &mut texts);
+        }
+        let mut it = texts
+            .split("@GET ")
+            .nth(1)
+            .expect("row painted")
+            .split_whitespace();
+        let x: f32 = it.next().unwrap().parse().unwrap();
+        let y: f32 = it.next().unwrap().parse().unwrap();
+        // Click the centre of the painted "GET" cell: the row's own spot.
+        {
+            let at = egui::pos2(x, y);
+            frame(vec![egui::Event::PointerMoved(at)], &mut app, &mut texts);
+            let btn = |pressed| egui::Event::PointerButton {
+                pos: at,
+                button: egui::PointerButton::Secondary,
+                pressed,
+                modifiers: Default::default(),
+            };
+            frame(vec![btn(true)], &mut app, &mut texts);
+            frame(vec![btn(false)], &mut app, &mut texts);
+            for _ in 0..3 {
+                frame(vec![], &mut app, &mut texts);
+            }
+            assert!(
+                texts.contains("Send to Organizer"),
+                "right-click opens the Logger menu; sel {:?}",
+                app.log_sel
+            );
+        }
+        assert!(texts.contains("Send to Repeater"));
+        assert!(texts.contains("Copy URL"));
+        assert_eq!(app.log_sel, Some(1), "right-click selects the row");
+    }
+}

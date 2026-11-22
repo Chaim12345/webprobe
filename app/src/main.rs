@@ -399,6 +399,7 @@ fn mirror_tool_log(logger: &mut logger::Logger, sent: Vec<net::ToolExchange>) {
             method: t.method,
             host: t.host,
             port: t.port,
+            https: t.https,
             path: t.path,
             status: t.status,
             req_len: t.req_len,

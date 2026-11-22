@@ -828,24 +828,7 @@ pub(crate) fn proxy_history(app: &mut App, ui: &mut Ui) {
                 send_history_to_repeater(app);
                 app.tab = Tab::Repeater;
             }
-            "organizer" => {
-                let req_text = String::from_utf8_lossy(&e.req_raw).into_owned();
-                let resp_text = e
-                    .resp_raw
-                    .as_ref()
-                    .map(|r| String::from_utf8_lossy(r).into_owned())
-                    .unwrap_or_default();
-                app.shared.organizer.lock().unwrap().add(
-                    &format!("{} {}", e.method, e.path),
-                    "",
-                    &req_text,
-                    &resp_text,
-                    util::now_secs(),
-                );
-                app.shared
-                    .log(&format!("Sent {} {} to Organizer", e.method, e.path));
-                feedback::toast(feedback::Level::Success, "Sent to Organizer");
-            }
+            "organizer" => send_entry_to_organizer(app, &e),
             "cmp_req" => {
                 app.comparer.items.push(request_for_tools(&e.req_raw));
                 app.tab = Tab::Comparer;
