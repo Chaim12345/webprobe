@@ -504,7 +504,7 @@ pub(crate) fn repeater_send(app: &mut App) {
         // After followed redirections the tab shows the last request sent
         // and its target, as Burp's item does (Zrr5.ZA), so the history
         // entry and "Follow redirection" continue from the last hop.
-        let last = (followed > 0 || fr.request != request).then_some((fr.request, fr.service));
+        let last = (followed > 0).then_some((fr.request, fr.service));
         let ms = t0.elapsed().as_millis();
         // Cancelled (or superseded) while in flight: nothing is written. The
         // check and the tab write happen under one lock (finish_with), so a

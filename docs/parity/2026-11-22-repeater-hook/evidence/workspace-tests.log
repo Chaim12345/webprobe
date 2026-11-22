@@ -1,14 +1,12 @@
-   Compiling webprobe-report v0.1.0 (/home/sandbox/repeater-hook/app/report)
-   Compiling webprobe-support v0.1.0 (/home/sandbox/repeater-hook/app/support)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.35s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.20s
      Running unittests src/main.rs (target/debug/build/webprobe/4632cd8b251e34da/out/webprobe-4632cd8b251e34da)
 
-running 138 tests
+running 139 tests
 test discovery::tests::candidates_respect_mode_extensions_and_case ... ok
 test discovery::tests::defaults_follow_burp_dialog ... ok
-test discovery::tests::discovers_files_dirs_variants_and_recurses_on_local_server ... ok
 test discovery::tests::catch_all_server_reports_nothing ... ok
 test discovery::tests::origin_parsing_and_observed_names ... ok
+test discovery::tests::discovers_files_dirs_variants_and_recurses_on_local_server ... ok
 test discovery::tests::soft_404_baseline_comparison ... ok
 test discovery::tests::wordlist_parsing_drops_blanks_and_comments ... ok
 test engagement::tests::branch_helpers_select_issues_and_remove_items ... ok
@@ -59,7 +57,7 @@ test msgpane::tests::url_encode_as_you_type_in_editable_pane ... ok
 test msgpane::tests::xml_is_indented_and_other_text_is_left_alone ... ok
 test onboarding::tests::ca_downloads_have_the_right_content_type ... ok
 test onboarding::tests::page_documents_both_paths_and_the_verification_step ... ok
-test onboarding::tests::sample_traffic_populates_history_through_the_listener ... ok
+test discovery::tests::request_cap_and_depth_limit_bound_the_run ... ok
 test onboarding::tests::seeded_rows_do_not_count_as_traffic ... ok
 test onboarding::tests::setup_hosts_are_answered_locally ... ok
 test proxy_settings::tests::redirect_targets_need_a_host_and_a_port ... ok
@@ -88,7 +86,7 @@ test repeater_ops::tests::python_script_repeats_the_request ... ok
 test repeater_ops::tests::redirect_detection_needs_3xx_and_location ... ok
 test repeater_ops::tests::redirects_change_method_except_307_and_308 ... ok
 test repeater_ops::tests::repeater_http_drop_stops_before_origin ... ok
-test discovery::tests::request_cap_and_depth_limit_bound_the_run ... ok
+test onboarding::tests::sample_traffic_populates_history_through_the_listener ... ok
 test repeater_ops::tests::send_following_walks_a_local_redirect_chain ... ok
 test repeater_ops::tests::tab_close_variants_and_reopen ... ok
 test repeater_ops::tests::tab_duplicate_move_rename ... ok
@@ -133,6 +131,7 @@ test tools::tests::browser_launch_configuration_is_grounded ... ok
 test tools::tests::profile_pinning_wrappers_and_stale_locks ... ok
 test ui::tests::repeater_fix_tests::cancel_abandons_the_in_flight_send ... ok
 test ui::tests::repeater_fix_tests::links_in_response_walks_every_link ... ok
+test ui::tests::repeater_fix_tests::repeater_repeat_send_keeps_editor_and_wire_headers_stable ... ok
 test ui::tests::repeater_fix_tests::repeater_tab_ids_are_never_reused ... ok
 test ui::tests::suite::a_sort_sees_the_whole_history ... ok
 test ui::tests::suite::add_marker_wraps_the_selection ... ok
@@ -143,7 +142,7 @@ test ui::tests::suite::repeater_updates_content_length ... ok
 test ui::tests::suite::tools_get_origin_form_without_proxy_connection ... ok
 test repeater_ops::tests::repeater_montoya_http_handlers_reach_origin_and_response ... ok
 
-test result: ok. 138 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.53s
+test result: ok. 139 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.82s
 
      Running unittests src/bin/webprobe-headless.rs (target/debug/build/webprobe/3117b55a033560a5/out/webprobe_headless-3117b55a033560a5)
 
@@ -161,12 +160,12 @@ test burp_checks::tests::no_acao_means_no_cors_issue ... ok
 test burp_checks::tests::openapi_detection ... ok
 test burp_checks::tests::origin_parsing_follows_zwo8 ... ok
 test burp_checks::tests::origin_variants_follow_zu8t ... ok
-test ai::tests::chat_against_a_local_server ... ok
 test burp_checks::tests::prssi_follows_zwza ... ok
-test burp_checks::tests::strict_allowlist_raises_nothing_but_generic ... ok
 test burp_checks::tests::reflected_origin_with_credentials_is_high ... ok
-test burp_checks::trace_tests::trace_probe_and_detection_follow_zs6x ... ok
+test ai::tests::chat_against_a_local_server ... ok
 test burp_checks::tests::wildcard_acao_matches_the_live_burp_result ... ok
+test burp_checks::trace_tests::trace_probe_and_detection_follow_zs6x ... ok
+test burp_checks::tests::strict_allowlist_raises_nothing_but_generic ... ok
 test codec::tests::brotli_roundtrip ... ok
 test codec::tests::chunked_incomplete_is_none ... ok
 test codec::tests::chunked_body_of_four_mib ... ok
@@ -256,13 +255,13 @@ test h2::tests::split_header_block_is_reassembled ... ok
 test h2::tests::streaming_response_passes_data_frames_to_the_sink ... ok
 test h2::tests::window_update_overflow_is_rejected_without_changing_state ... ok
 test h2_server_tests::a_header_list_above_the_limit_resets_its_stream ... ok
-test fuzz_tests::proxy_survives_malformed_connections ... ok
 test h2_server_tests::a_large_body_flows_under_flow_control ... ok
+test fuzz_tests::proxy_survives_malformed_connections ... ok
+test h2_server_tests::an_h2_request_from_the_listener_reaches_an_http1_upstream_as_http1 ... ok
 test h2_server_tests::alpn_negotiates_h2_and_streams_are_multiplexed ... ok
-test h2_server_tests::an_h2_response_can_be_intercepted_and_edited ... ok
 test h2_server_tests::hostile_frames_close_the_connection_with_goaway ... ok
 test h2_server_tests::rapid_reset_is_cut_off ... ok
-test h2_server_tests::an_h2_request_from_the_listener_reaches_an_http1_upstream_as_http1 ... ok
+test h2_server_tests::an_h2_response_can_be_intercepted_and_edited ... ok
 test h2_server_tests::repeater_sends_with_the_protocol_the_request_asks_for ... ok
 test h2_server_tests::server_sent_events_stream_over_h2 ... ok
 test h2_server_tests::the_listener_option_off_keeps_https_clients_on_http1 ... ok
@@ -284,8 +283,8 @@ test interactsh::tests::payload_ids_follow_the_interactsh_layout ... ok
 test interactsh::tests::server_settings_parse_host_and_port ... ok
 test intercept_release_tests::a_held_message_is_dropped_and_dequeued_when_the_connection_is_gone ... ok
 test intercept_release_tests::intercept_wait_gives_up_when_the_sender_is_gone ... ok
-test intercept_release_tests::intercept_wait_keeps_waiting_while_the_connection_lives_and_a_release_arrives_later ... ok
 test h2_server_tests::streams_beyond_the_limit_are_refused_and_oversized_header_lists_reset ... ok
+test intercept_release_tests::intercept_wait_keeps_waiting_while_the_connection_lives_and_a_release_arrives_later ... ok
 test intercept_release_tests::intercept_wait_returns_the_verdict ... ok
 test intercept_release_tests::intercept_wait_removes_its_item_when_the_connection_is_gone ... ok
 test intercept_release_tests::intercept_wait_wakes_the_ui_when_it_removes_an_item ... ok
@@ -425,11 +424,11 @@ test net::tests::connect_intercepts_https_with_a_ca_signed_host_certificate ... 
 test net::tests::connections_beyond_the_limit_get_a_503_and_slots_are_returned ... ok
 test net::tests::diff_counts_changed_attributes_per_location ... ok
 test net::tests::extension_comes_from_the_last_path_segment_of_absolute_form ... ok
-test net::tests::extra_listener_serves_traffic ... ok
+test intruder_run::tests::attack_pauses_resumes_and_stops ... ok
 test net::tests::host_matching_exact_and_wildcard ... ok
 test net::tests::http2c_declined_falls_back_to_http1 ... ok
-test intruder_run::tests::attack_pauses_resumes_and_stops ... ok
 test net::tests::http2c_end_to_end_through_proxy_listener ... ok
+test net::tests::extra_listener_serves_traffic ... ok
 test net::tests::http2c_upgrade_roundtrip ... ok
 test net::tests::invisible_proxying_uses_host_header ... ok
 test net::tests::keep_alive_pool_reuses_upstream_socket ... ok
@@ -503,10 +502,10 @@ test scan::checks::tests::every_burp_issue_name_has_a_type ... ok
 test scan::checks::tests::inband_oob_resource_load_uses_burps_text ... ok
 test scan::checks::tests::kind_applicability ... ok
 test scan::checks::tests::point_rules_follow_the_burp_check_classes ... ok
-test net::tests::tls_ws_messages_are_held_edited_and_forwarded_end_to_end ... ok
-test scan::checks::tests::r10_el_and_xpath_against_a_live_lab ... ok
 test scan::checks::tests::r10_cache_poisoning_needs_a_clean_retrieval ... ok
+test scan::checks::tests::r10_el_and_xpath_against_a_live_lab ... ok
 test scan::checks::tests::r10_graphql_checks_against_a_live_lab ... ok
+test net::tests::tls_ws_messages_are_held_edited_and_forwarded_end_to_end ... ok
 test scan::checks::tests::r10_host_checks_against_a_live_lab ... ok
 test scan::checks::tests::recorder_picks_probe_and_control ... ok
 test scan::checks::tests::registry_order_is_pinned ... ok
@@ -727,7 +726,7 @@ test ws_tests::out_of_place_fragments_and_oversize_frames_close_cleanly ... ok
 test ws_tests::permessage_deflate_is_inflated_for_history_and_forwarded_plain ... ok
 test util_tests::tests::a_headless_browser_leaves_no_processes_behind ... ok
 
-test result: ok. 552 passed; 0 failed; 11 ignored; 0 measured; 0 filtered out; finished in 31.69s
+test result: ok. 552 passed; 0 failed; 11 ignored; 0 measured; 0 filtered out; finished in 31.74s
 
      Running unittests src/lib.rs (target/debug/build/webprobe-report/494056cf90153203/out/webprobe_report-494056cf90153203)
 
@@ -752,11 +751,11 @@ test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 running 85 tests
 test analysis::tests::empty_token_input_has_zero_stats ... ok
 test analysis::tests::incomplete_gamma_matches_known_values ... ok
-test analysis::tests::case_insensitive_excerpt_survives_lowercase_expansion ... ok
 test analysis::tests::repeated_analysis_is_deterministic ... ok
+test analysis::tests::case_insensitive_excerpt_survives_lowercase_expansion ... ok
 test analysis::tests::search_excerpt_is_bounded_and_contains_match ... ok
-test analysis::tests::search_falls_back_to_title_and_tool ... ok
 test analysis::tests::search_handles_unicode_without_panicking ... ok
+test analysis::tests::search_falls_back_to_title_and_tool ... ok
 test analysis::tests::search_respects_case_and_empty_query ... ok
 test analysis::tests::token_entropy_matches_byte_frequencies ... ok
 test body::tests::concurrent_spills_do_not_overlap ... ok
@@ -837,7 +836,7 @@ test xss::tests::xss_check_reports_only_real_breakouts ... ok
 test xss::tests::xss_templates_cover_the_main_contexts ... ok
 test paths::tests::bridge_classes_are_compiled_once_and_old_ones_pruned ... ok
 
-test result: ok. 84 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 4.21s
+test result: ok. 84 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 4.47s
 
    Doc-tests webprobe_core
 

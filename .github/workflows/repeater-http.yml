@@ -3,6 +3,9 @@ name: Repeater Montoya regression
 on:
   pull_request:
 
+permissions:
+  contents: read
+
 env:
   CARGO_BUILD_RUSTC: rustc
   CARGO_BUILD_RUSTC_WRAPPER: ""
