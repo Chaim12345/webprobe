@@ -373,25 +373,46 @@ fn buffered_request_after_a_complete_close_response_is_not_served() {
     let text = String::from_utf8_lossy(&response).into_owned();
     assert_eq!(text.matches("HTTP/1.").count(), 1, "{text}");
     assert!(text.ends_with("one"), "{text}");
-    assert_eq!(shared.history.snapshot().len(), 1);
+    let history = shared.history.snapshot();
+    assert_eq!(history.len(), 1);
+    assert_eq!(
+        history[0].note, None,
+        "complete response history is unchanged"
+    );
+    assert_eq!(history[0].status, "200");
 }
 
-/// Truncated, malformed and read-until-close first responses: terminal close,
-/// no continuation into the buffered request, no synthetic response, no replay.
+/// Incomplete first responses: terminal close, no continuation into the
+/// buffered request, no synthetic response, no replay, and the one history
+/// entry keeps the wire bytes (original framing declaration) with a visible
+/// note saying why it is incomplete. Read-until-close is a complete message.
 #[test]
 fn buffered_request_after_an_incomplete_response_is_not_served() {
-    let cases: [(&str, &'static [u8]); 3] = [
+    // (name, upstream reply, expected note prefix, client gets the reply)
+    let cases: [(&str, &'static [u8], Option<&str>); 5] = [
         (
             "truncated",
             b"HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\nabc",
+            Some("Incomplete response: Content-Length declared 10, received 3 body bytes"),
         ),
         (
             "malformed",
             b"HTTP/1.1 200 OK\r\nContent-Length: abc\r\n\r\nxyz",
+            Some("Response framing not trusted: Content-Length \"abc\" unusable"),
         ),
-        ("read-until-close", b"HTTP/1.1 200 OK\r\n\r\nbody"),
+        (
+            "chunked-unterminated",
+            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r\n",
+            Some("Incomplete response: chunked body did not end"),
+        ),
+        (
+            "interim-only",
+            b"HTTP/1.1 100 Continue\r\n\r\n",
+            Some("No final response"),
+        ),
+        ("read-until-close", b"HTTP/1.1 200 OK\r\n\r\nbody", None),
     ];
-    for (name, reply) in cases {
+    for (name, reply, expect) in cases {
         let shared = Shared::new();
         shared.intercept_on.store(false, Ordering::SeqCst);
         let (port, upstream) = one_shot_upstream(reply);
@@ -413,12 +434,46 @@ fn buffered_request_after_an_incomplete_response_is_not_served() {
             !text.contains("HTTP/1.1 400") && !text.contains("HTTP/1.1 502"),
             "{name}: {text}"
         );
+        assert!(!text.contains("/second"), "{name}");
         let history = shared.history.snapshot();
-        assert!(history.len() <= 1, "{name}: second request recorded");
-        println!(
-            "{name}: history={} client_bytes={}",
+        assert_eq!(
             history.len(),
-            response.len()
+            1,
+            "{name}: exactly the first request is recorded"
         );
+        let e = &history[0];
+        assert_eq!(e.path, "/first", "{name}");
+        match expect {
+            Some(prefix) => {
+                let note = e.note.as_deref().unwrap_or("");
+                assert!(note.starts_with(prefix), "{name}: note {note:?}");
+                let raw = e.resp_raw.as_ref().expect("received bytes are kept");
+                if name == "interim-only" {
+                    assert!(
+                        response.is_empty(),
+                        "{name}: nothing synthetic for the client"
+                    );
+                    assert_eq!(e.status, "", "{name}: no fabricated status");
+                } else {
+                    // Wire evidence: the original framing declaration survives.
+                    assert_eq!(&raw[..], reply, "{name}: stored bytes are the wire bytes");
+                    assert_eq!(e.status, "200", "{name}: real status kept");
+                    assert_eq!(
+                        response, reply,
+                        "{name}: client got the original partial response"
+                    );
+                }
+                // The note and the bytes survive save and reload.
+                let json =
+                    serde_json::to_string(&webprobe_core::project::ProjectHistory::from_entry(e))
+                        .unwrap();
+                let back: webprobe_core::project::ProjectHistory =
+                    serde_json::from_str(&json).unwrap();
+                let back = back.to_entry();
+                assert_eq!(back.note, e.note, "{name}: note survives reload");
+                assert_eq!(back.resp_raw, e.resp_raw, "{name}: bytes survive reload");
+            }
+            None => assert_eq!(e.note, None, "{name}: a complete message gets no marker"),
+        }
     }
 }

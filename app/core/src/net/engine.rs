@@ -1044,6 +1044,14 @@ pub fn upstream_and_deliver<S: ProxyIo>(
     }
     match up.resp {
         Some(resp) => {
+            // Authoritative outcome says the exchange did not end cleanly:
+            // say why in the history note, and keep the wire bytes (original
+            // framing declaration) instead of the normalized display copy.
+            let incomplete_note = if exchange_reusable {
+                None
+            } else {
+                crate::codec::response_incompleteness(&resp, &parts.method)
+            };
             let mut resp = crate::rules::apply_rules(&resp, &shared.mr_response.lock().unwrap());
             if !shared.ext_handle_response(
                 &webprobe_support::ext::HttpService::new(&host, port, use_tls),
@@ -1080,17 +1088,32 @@ pub fn upstream_and_deliver<S: ProxyIo>(
                 && super::conn_reuse::response_headers_allow_reuse(&resp)
                 && stream_head_reusable(&resp, &parts.method)
                 && crate::codec::body_complete(&resp, &parts.method);
-            record(
-                shared,
-                &req_out,
-                Some(resp),
-                None,
-                default_port,
-                use_tls,
-                listener_port(shared),
-                was_edited,
-                &ann,
-            );
+            if incomplete_note.is_some() {
+                record_entry(
+                    shared,
+                    &req_out,
+                    Some(crate::body::Body::from(resp)),
+                    incomplete_note,
+                    default_port,
+                    use_tls,
+                    listener_port(shared),
+                    was_edited,
+                    &ann,
+                    true,
+                );
+            } else {
+                record(
+                    shared,
+                    &req_out,
+                    Some(resp),
+                    None,
+                    default_port,
+                    use_tls,
+                    listener_port(shared),
+                    was_edited,
+                    &ann,
+                );
+            }
             shared.log(&format!(
                 "Proxied {} {host}:{port}{} -> {}{}",
                 parts.method,
