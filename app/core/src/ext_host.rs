@@ -2193,6 +2193,7 @@ mod tests {
         assert_eq!(
             got,
             [
+                "GET /i?q=base HTTP/1.1",
                 "GET /i?q=base-1-1-pbase HTTP/1.1",
                 "GET /i?q=base-3-1-pbase HTTP/1.1"
             ],
