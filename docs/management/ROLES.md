@@ -15,6 +15,7 @@ Updated 2026-11-22 13:13 Asia/Jerusalem. The owner delegated routine project dec
 | Integration | Assemble the single review stack #125 with source-head manifest and conflict resolutions | Active | Reconcile with triage before landing, preserve source branches, send final SHA to QA/reviewer |
 | Independent reviewer | Review exact diffs, semantics and regression proof | Active | Findings go to authors via engineering manager; approval does not certify tests not run |
 | Feature and fix authors | Implement bounded, non-overlapping changes on new branches | Existing lanes | No edits to others' PR branches; no duplicate R-16/R-18/R-20 work already in review |
+| HR / staffing | Maintain staffing register, identify gaps and write role specs | Active; staffing register in PR #137 | Request must name uncovered outcome, approving manager and gap evidence; accepting manager approves before role creation |
 | Documentation | PM owns index; source authors own technical docs | Covered, no separate hire now | Add a dedicated docs role only if the queue measurably blocks code/release acceptance |
 
 ## Decision and change protocol
@@ -33,3 +34,5 @@ Updated 2026-11-22 13:13 Asia/Jerusalem. The owner delegated routine project dec
 - DevOps owns the full workspace execution gap identified in #132, with QA verifying the resulting job behavior.
 - ARTEX isolated kernel/mock work starts only after CTO contract corrections. No WebProbe linking or combined distribution in that builder task.
 - No extra marketing, sales, finance or people-operations roles are needed to ship this private technical milestone. Add roles for a concrete blocked outcome, not a title count.
+
+Staffing source: [HR register PR #137](https://github.com/Chaim12345/webprobe/pull/137), containing `docs/management/STAFFING.md`. The link targets the PR until its file lands.
