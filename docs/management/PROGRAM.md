@@ -1,22 +1,24 @@
 # WebProbe program board
 
-Snapshot: 2026-11-22 13:44 Asia/Jerusalem. Program owner: Program Manager. [Review and decision ledger](REVIEW-LEDGER.md). [Role charters](ROLES.md). [HR staffing register, PR #137](https://github.com/Chaim12345/webprobe/pull/137), proposed file `docs/management/STAFFING.md`.
+Snapshot: 2026-11-22 13:56 Asia/Jerusalem. Program owner: Program Manager. [Review and decision ledger](REVIEW-LEDGER.md). [Role charters](ROLES.md). [HR staffing register, PR #137](https://github.com/Chaim12345/webprobe/pull/137), proposed file `docs/management/STAFFING.md`.
 
 This is the index for sequencing, not permission to merge or change product behavior. Only the triage lane lands parity changes. Existing PR branches and master stay untouched. Refresh this board when a source head, landing, decision or verification result changes.
 
 ## Current position
 
-- Live parity: `7f2ab33d4cc95bee9f05167c202ec1a723396891`. #123 latest `f22016f`, #134 and its resolution #147 are now merged, independently verified through the live PR API. Triage reports 911 passing tests on #147's exact merged tree.
-- Single review stack #125: `52ba16b6b86ec2d4ab2d8cd8a42261a0ee5b34f7`. Git ancestry confirms current parity, #123 and #134 are included. Earlier inclusion warnings are resolved. Exact-head acceptance for this latest revision remains separate from prior integration counts.
-- **113 open WebProbe PRs**, all pages checked. Closed/landed work remains in the review ledger; the CSV tracks open PRs only.
-- **Known acceptance blocker: #124's new Decoder operations corrupt Unicode and cannot round-trip their lossy GZIP output.** Triage reproduced both failures. #139 depends on #124; #125 contains #124, so its passing tests cannot override this known defect. Bounded Decoder replacement is assigned; h2 fragmentation can split independently.
-- PR #145 is now `ecc4debbc777dcb6705d5e63ec197a6a72eef837`. Old `8a95d0d` had replay/pool/window blockers; the new head requires fresh verification, not automatic approval.
-- [Milestone register](milestones.csv) preserves all 137 historical tasks. These repository labels are not fresh acceptance evidence; map existing PR work before opening duplicate implementations.
+- Live parity: `c25056d3591b4d1cdc9877a37c80d13561fb52b8`, including #142, #146 and #149 since the previous snapshot. Triage reports 943 passing / 0 failed / 13 ignored at that landed checkpoint. #126 is closed as superseded by #149 after patch-retention proof.
+- Single review stack #125: `ad4aa05c7da3a7ce2c97e5bc74db6fdf3bead4df`, containing earlier parity `7bb9868` and latest queue-ID/HPACK fixes. The defective #124 Decoder operations were removed; PM independently checked decoder_ops.rs is byte-identical to current parity. Do not retain the obsolete claim that this head contains those broken operations.
+- Reviewer's earlier #125 rejection is cleared for #123/#74/#124 reasons, **not a full 143-file or landing approval**. Open gates: yaml_serde dependency/license review, #148 request-path conflict, refreshed final parity and exact-tree acceptance. QA is running a pinned-head gate on ad4aa05; results from another head do not substitute.
+- **112 open WebProbe PRs**, all pages checked at 13:56. Closed/landed work remains in the review ledger; the CSV contains only open PRs.
+- PR #145 `1a9f334` has reviewer code-read APPROVE. Origin-counter replay fixture and pool-key tests remain open for CTO disposition. This is sequential reuse, not concurrent production multiplexing.
+- PR #148 `f19e8b9` is blocked by CTO R1-R4 despite the reviewer's approve-with-fix stance. It overlaps #125's request/pipeline path and must be reconciled, not blindly stacked.
+- Decoder repair #150 `2efa9e2` is in review. #139 waits for an accepted repair/rebase. Reviewer #124 approval is scoped to its h2 fragmentation part only; its original Decoder defects are not cleared.
+- [Milestone register](milestones.csv) preserves 137 historical records; do not treat their labels as current acceptance proof or start duplicate implementations.
 
 ## Landing sequence and stop/start calls
 
-1. **One parity writer: triage.** Finish the already reviewed, independently tested queue. #129/#105 has landed. Triage reports 832 passing tests on the exact merged resolution tree with both header-scan test modules preserved. Current queue can advance #126/docs/#140 while #124/#139 wait for the Decoder replacement; h2 work follows its own review and #146 reuse prerequisites.
-2. **Integration owns #125.** Current parity and latest #123/#134 are included. Preserve that source manifest while applying the Decoder repair. Incorporate the new hash/h2 and crawl-ID heads when ready. Maintain an exact source-head manifest. No parallel landing of the same changes through individual source PRs.
+1. **One parity writer: triage.** Finish the already reviewed, independently tested queue. #129/#105 has landed. Triage reports 832 passing tests on the exact merged resolution tree with both header-scan test modules preserved. The #149 replacement is landed and #126 closed. Queue can advance independently reviewed #141/#140/docs while #150 is reviewed and #148 fixes proceed.
+2. **Integration owns #125.** Latest #123 and HPACK fix are included and defective Decoder ops are removed. Preserve the source manifest, refresh from newer parity, review yaml_serde, and coordinate #148 path conflicts. Incorporate the new hash/h2 and crawl-ID heads when ready. Maintain an exact source-head manifest. No parallel landing of the same changes through individual source PRs.
 3. **Independent reviewer owns acceptance.** Review the final SHA, not a moving branch. Require clean check/fmt/clippy/full required-Java tests and current CI, applying only the owner's explicit Kilo waiver. Test count deltas alone are not coverage proof.
 4. **Cross-tool QA owns the release candidate.** Run project create/save/reopen, Logger to tools, Repeater extension hooks, extension Drop plus pipelining, constant-token Sequencer, Intruder baseline, Decoder bytes/Gzip, and Organizer persistence on one integrated build. #128 is separate-head evidence, not an integrated pass.
 5. **Only then clean up source PRs.** Triage may close exact-proof superseded PRs with approved wording. Commit ancestry alone does not choose between sequential landing and closing a historical milestone. The #103 MIME decision is settled; #97 closure still needs exact-proof checks.
@@ -26,8 +28,8 @@ This is the index for sequencing, not permission to merge or change product beha
 
 | Lane | Accountable role | State / next checkpoint | Blocker or conflict boundary |
 | --- | --- | --- | --- |
-| Parity landing and PR cleanup | PR triage | Active; #123/#147 landed; #124/#139 blocked; independent queue continues | Sole parity writer; no source-branch edits |
-| Review stack #125 | Integration | Active; parity/UI reconciled at 52ba16b; known Decoder defect gates acceptance | Conflicts with independent source landing if both proceed unchecked |
+| Parity landing and PR cleanup | PR triage | Active; #149 landed, #126 superseded; #141/#140/docs next; #150 in review | Sole parity writer; no source-branch edits |
+| Review stack #125 | Integration | Active at ad4aa05; obsolete Decoder rejection cleared, yaml_serde/#148/final gates open | Conflicts with independent source landing if both proceed unchecked |
 | Independent review | Reviewer | Review exact final heads and combination fixes | Earlier approvals do not cover later diffs |
 | Hash-list and h2 multiplexing | Existing hash/h2 lane | Active per owner request; publish exact head + tests | Coordinate h2 boundaries with #124; no duplicate Decoder work |
 | Crawl counter and selection keys | Existing UI QA B lane | Active follow-up; use `(kind,id)` identity before separate counters | Shared history/crawl selection is load-bearing; #108 project-isolation work is separate |
@@ -60,7 +62,7 @@ Decision provenance: owner's authenticated WhatsApp messages were checked for AC
 | Program milestone | Exit evidence | Current state |
 | --- | --- | --- |
 | P0: recover and stabilize foundation | Exact merged tree and full required-Java suite per landing | #96 now landed too; #138 and remaining lane gates continue |
-| P1: one reviewable integrated candidate | #125 manifest matches latest intended source heads; clean combined checks + independent review | Source ancestry reconciled; Decoder replacement and current exact-tree acceptance still needed |
+| P1: one reviewable integrated candidate | #125 manifest matches latest intended source heads; clean combined checks + independent review | ad4aa05 source fixes checked; yaml_serde/#148/final exact-tree acceptance remain |
 | P2: integrated workflow acceptance | One pinned build passes cross-tool regression with screenshots and traceable fixtures | Not established by separate-head reports |
 | P3: reconcile old roadmap | Each of 21 recorded todo tasks mapped to integrated code, residual gap or owner hold | PR board ready; avoid reopening already implemented milestones |
 | P4: close measured parity gaps | #128 priorities translated into owned byte-safe Decoder, h2, Sequencer, variation-analysis and workflow fixtures | Hash/h2 lane active; do not claim Burp Pro parity |
@@ -98,3 +100,5 @@ Primary evidence links: [#125](https://github.com/Chaim12345/webprobe/pull/125),
 - 13:37: #146 2a08ffe reviewer-approved as fixtures only. CTO assigns lane 15 to (2) message/leftovers ownership, then (1)+(4) narrow 400+close inbound framing guards; h2 lane owns (3) authoritative method-aware reuse and declined-h2c pooling disablement before rebasing #145. These are approved fixes, not owner questions. Full strict response/chunked setting stays unwired. #134 source discrepancy resolved: reviewer had read older 586c980; current 4e1be6a uses fetch_max.
 
 - 13:44: full live refresh finds 113 open PRs, parity 7f2ab33, #125 52ba16b with current parity/#123/#134 included. #134 and #147 confirmed merged. Reproduced #124 Unicode/GZIP defects block #139 and #125 acceptance; reassigned Decoder author is working on a bounded replacement. #145 advanced to ecc4deb; renewed review required.
+
+- 13:56: refreshed 112-PR open inventory and parity c25056d. #125 ad4aa05 drops defective Decoder ops; earlier reviewer rejection cleared only for specified reasons. #145 1a9f334 code-approved with replay/pool-key test gaps. #148 f19e8b9 CTO R1-R4 remains blocked; #149 landed and superseded #126; #150 2efa9e2 Decoder repair is in review. Reviewer scopes #124 approval to h2 fragmentation only.
