@@ -385,7 +385,7 @@ pub(crate) fn read_message<R: std::io::Read + webprobe_support::io_traits::Respo
     stream: &mut R,
     buffer: &mut Vec<u8>,
     method: &str,
-    sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
+    mut sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
 ) -> std::io::Result<(Vec<u8>, bool)> {
     let read_more = |stream: &mut R, buffer: &mut Vec<u8>| -> std::io::Result<usize> {
         let mut chunk = [0u8; 16384];
@@ -421,8 +421,15 @@ pub(crate) fn read_message<R: std::io::Read + webprobe_support::io_traits::Respo
         }
         if code == 101 {
             // Switching Protocols: the socket now speaks the upgraded
-            // protocol. It must never re-enter the HTTP/1.x pool.
-            return Ok((buffer.drain(..head_end).collect(), false));
+            // protocol and must never re-enter the HTTP/1.x pool. The
+            // caller's sink still receives the 101 head before we hand
+            // it back.
+            let head: Vec<u8> = buffer.drain(..head_end).collect();
+            if let Some(s) = sink.as_deref_mut() {
+                s.head(&head);
+                s.end(true);
+            }
+            return Ok((head, false));
         }
         break head_end;
     };

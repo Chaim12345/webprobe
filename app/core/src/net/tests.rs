@@ -262,6 +262,7 @@ fn proxy_decodes_chunked_gzip_response_for_history() {
 /// Reuse-correctness (CTO ruling): pooling follows the authoritative
 /// method-aware read_message outcome plus the connection headers, never a
 /// head-only heuristic.
+// Regression guard for the CTO reuse-correctness ruling.
 #[test]
 fn pool_retires_connection_close_responses() {
     let shared = Shared::new();
@@ -327,6 +328,7 @@ Host: x
     assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 2);
 }
 
+// Regression guard for the CTO reuse-correctness ruling.
 #[test]
 fn pool_retires_until_eof_and_leftover_bytes() {
     for with_leftover in [false, true] {
@@ -466,6 +468,100 @@ Host: x
     assert!(last.unwrap().ends_with(b"ok"));
     // One connection carried all four exchanges.
     assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 1);
+}
+
+/// With a streaming sink attached, the 101 head is still delivered to the
+/// sink (head + end) before the socket leaves the pool's reach.
+#[test]
+fn switching_protocols_reaches_the_sink() {
+    struct Rec {
+        head: Vec<u8>,
+        ended: Option<bool>,
+    }
+    impl crate::streaming::ResponseSink for Rec {
+        fn head(&mut self, head: &[u8]) -> crate::streaming::BodyMode {
+            self.head = head.to_vec();
+            crate::streaming::BodyMode::Buffer
+        }
+        fn wire(&mut self, _b: &[u8]) -> std::io::Result<()> {
+            Ok(())
+        }
+        fn payload(&mut self, _b: &[u8]) {}
+        fn end(&mut self, complete: bool) {
+            self.ended = Some(complete);
+        }
+    }
+    let shared = Shared::new();
+    shared.keep_alive.store(true, Ordering::SeqCst);
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let t = std::thread::spawn(move || {
+        for i in 0..2 {
+            let (mut s, _) = listener.accept().unwrap();
+            s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+            let _ = read_request_head(&mut s);
+            if i == 0 {
+                s.write_all(
+                    b"HTTP/1.1 101 Switching Protocols
+Upgrade: websocket
+Connection: Upgrade
+
+",
+                )
+                .unwrap();
+            } else {
+                s.write_all(
+                    b"HTTP/1.1 200 OK
+Content-Length: 2
+
+hi",
+                )
+                .unwrap();
+            }
+        }
+    });
+    let mut sink = Rec {
+        head: Vec::new(),
+        ended: None,
+    };
+    let one = crate::net::send_raw_with(
+        &shared,
+        "127.0.0.1",
+        port,
+        b"GET /ws HTTP/1.1
+Host: x
+Upgrade: websocket
+Connection: Upgrade
+
+",
+        Some(&mut sink),
+    );
+    let two = send_raw(
+        &shared,
+        "127.0.0.1",
+        port,
+        b"GET /b HTTP/1.1
+Host: x
+
+",
+    );
+    t.join().unwrap();
+    assert!(
+        sink.head.starts_with(b"HTTP/1.1 101"),
+        "sink saw no 101 head"
+    );
+    assert_eq!(sink.ended, Some(true));
+    assert!(one
+        .resp
+        .as_deref()
+        .unwrap_or_default()
+        .starts_with(b"HTTP/1.1 101"));
+    assert!(
+        two.resp.as_deref().unwrap_or_default().ends_with(b"hi"),
+        "{:?}",
+        two.error
+    );
+    assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 2);
 }
 
 /// Regression guard (fails on the old head-only heuristic): a 101
