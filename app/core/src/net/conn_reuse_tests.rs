@@ -36,38 +36,46 @@ fn set_connection_does_not_touch_similarly_named_headers() {
 
 #[test]
 fn http_1_0_reuse_needs_an_explicit_keep_alive() {
-    assert!(!response_allows_reuse(
+    assert!(!response_headers_allow_reuse(
         b"HTTP/1.0 200 OK\r\nContent-Length: 2\r\n\r\nhi"
     ));
-    assert!(response_allows_reuse(
+    assert!(response_headers_allow_reuse(
         b"HTTP/1.0 200 OK\r\nConnection: Keep-Alive\r\nContent-Length: 2\r\n\r\nhi"
     ));
 }
 
 #[test]
-fn http_1_1_reuse_needs_a_framed_body_and_no_close() {
-    assert!(response_allows_reuse(
+fn http_1_1_reuse_is_allowed_unless_the_response_says_close() {
+    assert!(response_headers_allow_reuse(
         b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi"
     ));
-    assert!(!response_allows_reuse(
+    assert!(!response_headers_allow_reuse(
         b"HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 2\r\n\r\nhi"
     ));
-    // Chunked and complete.
-    assert!(response_allows_reuse(
-        b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nhi\r\n0\r\n\r\n"
+    assert!(!response_headers_allow_reuse(
+        b"HTTP/1.1 200 OK\r\nconnection: Close\r\nContent-Length: 2\r\n\r\nhi"
     ));
-    // Chunked but cut short.
-    assert!(!response_allows_reuse(
+}
+
+#[test]
+fn header_check_does_not_judge_body_framing() {
+    // Body framing is decided by the authoritative read_message outcome, not
+    // here: a short chunked body or a too-long Content-Length is still
+    // "headers allow reuse".
+    assert!(response_headers_allow_reuse(
         b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nhi\r\n"
     ));
-    // Declared length longer than what arrived.
-    assert!(!response_allows_reuse(
+    assert!(response_headers_allow_reuse(
         b"HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\nhi"
     ));
 }
 
 #[test]
-fn bodyless_statuses_can_be_reused() {
-    assert!(response_allows_reuse(b"HTTP/1.1 204 No Content\r\n\r\n"));
-    assert!(response_allows_reuse(b"HTTP/1.1 304 Not Modified\r\n\r\n"));
+fn bodyless_statuses_pass_the_header_check() {
+    assert!(response_headers_allow_reuse(
+        b"HTTP/1.1 204 No Content\r\n\r\n"
+    ));
+    assert!(response_headers_allow_reuse(
+        b"HTTP/1.1 304 Not Modified\r\n\r\n"
+    ));
 }
