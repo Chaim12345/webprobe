@@ -281,7 +281,8 @@ impl Program {
         cmd.args(["-Xmx256m", "-Djava.awt.headless=true", "-cp"])
             .arg(&self.classpath)
             .arg("BambdaRunner")
-            .arg(path);
+            .arg(path)
+            .arg(std::process::id().to_string());
         let (status, out, stderr) = run(cmd, deadline, &self.cancelled)?;
         if !status.success() {
             return Err(Error::Execution(format!(

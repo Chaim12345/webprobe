@@ -274,3 +274,100 @@ fn preview_cancellation_stops_a_looping_jvm_before_its_deadline() {
     ));
     assert!(start.elapsed() < Duration::from_secs(3));
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "requires JDK 17+ and a Montoya API jar; see docs/specs/R-16-bambda-backend.md"]
+fn parent_loss_watchdog_stops_an_orphaned_looping_jvm() {
+    use std::process::{Command, Stdio};
+    const MARKER: &str = "WEBPROBE_BAMBDA_ORPHAN_TEST_MARKER";
+    if std::env::var_os(MARKER).is_some() {
+        let (java, api) = runtime();
+        let p = Program::compile(&java, &api, Kind::Column,
+            "java.nio.file.Files.writeString(java.nio.file.Path.of(System.getenv(\"WEBPROBE_BAMBDA_ORPHAN_TEST_MARKER\")), Long.toString(ProcessHandle.current().pid())); while (true) {}", LIMIT).unwrap();
+        let _ = p.evaluate(&rows(), Duration::from_secs(60));
+        panic!("surrogate parent should be killed while evaluating");
+    }
+    let dir = std::env::temp_dir().join(format!(
+        "wp-orphan-test-{}-{}",
+        std::process::id(),
+        rand::random::<u64>()
+    ));
+    std::fs::create_dir(&dir).unwrap();
+    let marker = dir.join("java-pid");
+    struct Cleanup {
+        child: std::process::Child,
+        dir: PathBuf,
+        java_pid: Option<u32>,
+    }
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+            if let Some(pid) = self.java_pid {
+                let _ = Command::new("kill")
+                    .args(["-KILL", &pid.to_string()])
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status();
+            }
+            let _ = std::fs::remove_dir_all(&self.dir);
+        }
+    }
+    let child = Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "parent_loss_watchdog_stops_an_orphaned_looping_jvm",
+            "--ignored",
+            "--nocapture",
+        ])
+        .env(MARKER, &marker)
+        .env("TMPDIR", &dir)
+        .spawn()
+        .unwrap();
+    let mut cleanup = Cleanup {
+        child,
+        dir,
+        java_pid: None,
+    };
+    let start = std::time::Instant::now();
+    let pid = loop {
+        if let Ok(text) = std::fs::read_to_string(&marker) {
+            if let Ok(pid) = text.trim().parse::<u32>() {
+                break pid;
+            }
+        }
+        assert!(
+            cleanup.child.try_wait().unwrap().is_none(),
+            "surrogate parent exited before running Java"
+        );
+        assert!(
+            start.elapsed() < Duration::from_secs(25),
+            "JVM marker was not written"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    cleanup.java_pid = Some(pid);
+    cleanup.child.kill().unwrap();
+    cleanup.child.wait().unwrap();
+    let start = std::time::Instant::now();
+    loop {
+        match std::fs::read_to_string(format!("/proc/{pid}/stat")) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => break,
+            Ok(stat)
+                if stat
+                    .rsplit_once(") ")
+                    .is_some_and(|(_, rest)| rest.starts_with('Z') || rest.starts_with('X')) =>
+            {
+                break
+            }
+            _ => {}
+        }
+        assert!(
+            start.elapsed() < Duration::from_secs(5),
+            "orphaned JVM remained running after parent loss"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    cleanup.java_pid = None;
+}

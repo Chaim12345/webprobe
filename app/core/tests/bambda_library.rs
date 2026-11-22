@@ -77,3 +77,36 @@ fn exported_files_preserve_id_and_never_overwrite_an_existing_destination() {
     );
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[cfg(unix)]
+#[test]
+fn fifo_paths_are_rejected_before_any_blocking_open() {
+    use webprobe_core::bambda_library::Store;
+    let script = Script::new("FIFO".into(), Function::ViewFilter, "return true;".into());
+    let dir = std::env::temp_dir().join(format!("wp-fifo-test-{}", script.id));
+    std::fs::create_dir_all(&dir).unwrap();
+    let fifo = dir.join(format!("{}.bambda", script.id));
+    assert!(std::process::Command::new("mkfifo")
+        .arg(&fifo)
+        .status()
+        .unwrap()
+        .success());
+    let (tx, rx) = std::sync::mpsc::channel();
+    let path = fifo.clone();
+    let worker = std::thread::spawn(move || {
+        let _ = tx.send(Script::load(&path).is_err());
+    });
+    assert!(rx
+        .recv_timeout(std::time::Duration::from_secs(1))
+        .expect("FIFO import must not block"));
+    worker.join().unwrap();
+    assert!(script.export(&fifo).is_err());
+    let store = Store::new(dir.clone());
+    assert!(store.save(&script, true).is_err());
+    assert!(store.delete(&script).is_err());
+    assert!(!std::fs::symlink_metadata(&fifo)
+        .unwrap()
+        .file_type()
+        .is_file());
+    std::fs::remove_dir_all(dir).unwrap();
+}

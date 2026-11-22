@@ -12,6 +12,8 @@ Importing, loading, saving, exporting and deleting never compile or evaluate sou
 
 File input/output is capped at 256 KiB, source at 128 KiB and names at 200 characters. The local library lives under `bambda-library` in WebProbe's data directory. Loads report malformed entries individually and stop after 1000 files. New library directories/files use owner-only permissions on Unix. Saves and exports write and sync a temporary file before atomically publishing it. A new destination is claimed with a non-overwriting hard link; overwriting a saved ID uses rename. Unsupported filesystem operations return an error rather than falling back to a partial copy. Temporary files are removed on error. Export never overwrites an existing destination. These operations do not promise crash durability of the containing directory.
 
+Caller-selected paths must be regular files; devices, FIFOs, sockets, directories and symlinks are rejected before opening. File operations are still synchronous. This check is not a defense against a concurrent local filesystem swap or a slow regular file on a network filesystem. Atomic exports never open an existing destination. A FIFO regression covers import, save, export and delete rejection.
+
 The editor guards unsaved text when creating, selecting or importing another script. Delete requires its own confirmation and removes the saved copy, not the editor text.
 
 ## Worker and result state
@@ -20,7 +22,7 @@ Compilation runs off the UI thread with a 15-second process deadline. After comp
 
 Each row shows its recorded ID and either its typed JSON value or row exception. Null is shown as null, distinct from a missing error value. A failed compile, cancelled job, process failure, timeout, incomplete batch or output-limit failure leaves the last successful preview rows, script label and skip count unchanged, with a visible diagnostic. Partial successful batches are never published after a later batch fails. Row exceptions are results, not batch failures.
 
-Cancel signals the active compile/evaluation process. Closing/dropping the page's owner signals cancellation and joins the worker. Unix cleanup kills the process group; Windows descendant-process cleanup is not verified. A deliberately escaping trusted Java program is outside that guarantee. No background process runs just because a library file was imported.
+Cancel signals the active compile/evaluation process. Closing/dropping the page's owner signals cancellation and joins the worker. Unix cleanup kills the process group; Windows descendant-process cleanup is not verified. A deliberately escaping trusted Java program is outside that guarantee. Before loading user code, the evaluator starts a daemon watchdog bound to the expected Rust parent PID. If that parent exits, the JVM halts, including when its script loops. A Linux regression kills a surrogate parent and verifies the evaluator exits without relying on the Rust cleanup path. This is a trusted-code lifecycle guard, not a defense against Java deliberately disabling it. No background process runs just because a library file was imported.
 
 ## Verification
 

@@ -188,21 +188,26 @@ impl Store {
         }
         builder.create(&self.dir)?;
         let destination = self.dir.join(format!("{}.bambda", script.id));
+        regular_if_exists(&destination)?;
         atomic_write(&destination, yaml.as_bytes(), overwrite)
     }
     pub fn delete(&self, script: &Script) -> Result<(), Error> {
         script.validate()?;
-        std::fs::remove_file(self.dir.join(format!("{}.bambda", script.id)))?;
+        let path = self.dir.join(format!("{}.bambda", script.id));
+        regular_if_exists(&path)?;
+        std::fs::remove_file(path)?;
         Ok(())
     }
 }
 impl Script {
     pub fn load(path: &std::path::Path) -> Result<Self, Error> {
+        regular_if_exists(path)?;
         let text = crate::util::read_text_file_capped(path, MAX_FILE_BYTES)?;
         Self::from_yaml(&text)
     }
     /// Export never replaces an existing destination silently.
     pub fn export(&self, path: &std::path::Path) -> Result<(), Error> {
+        regular_if_exists(path)?;
         match atomic_write(path, self.to_yaml()?.as_bytes(), false) {
             Err(Error::Conflict) => Err(Error::ExportExists),
             other => other,
@@ -249,4 +254,17 @@ fn atomic_write(destination: &std::path::Path, bytes: &[u8], overwrite: bool) ->
         }
     }
     Ok(())
+}
+
+// Reject devices, FIFOs, sockets, directories and symlinks before opening a
+// caller-selected path. This is not a defense against a local filesystem race.
+fn regular_if_exists(path: &std::path::Path) -> Result<bool, Error> {
+    match std::fs::symlink_metadata(path) {
+        Ok(meta) if meta.is_file() => Ok(true),
+        Ok(_) => Err(Error::Invalid(
+            "path must be a regular file, not a device, pipe, directory or symlink",
+        )),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(e) => Err(e.into()),
+    }
 }

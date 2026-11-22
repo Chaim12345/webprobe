@@ -44,7 +44,19 @@ public final class BambdaRunner {
             })
             .as(ProxyHttpRequestResponse.class);
     }
+    private static void watchParent(long expectedPid) {
+        ProcessHandle parent = ProcessHandle.current().parent().orElse(null);
+        if (parent == null || parent.pid() != expectedPid || !parent.isAlive())
+            Runtime.getRuntime().halt(72);
+        Thread guard = new Thread(() -> {
+            try { parent.onExit().join(); }
+            finally { Runtime.getRuntime().halt(72); }
+        }, "bambda-parent-watchdog");
+        guard.setDaemon(true);
+        guard.start();
+    }
     public static void main(String[] args) throws Exception {
+        watchParent(Long.parseLong(args[1]));
         PrintStream protocol = System.out;
         // A user println must not corrupt the row-result protocol or fill a pipe.
         System.setOut(new PrintStream(java.io.OutputStream.nullOutputStream()));
