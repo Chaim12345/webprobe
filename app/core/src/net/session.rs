@@ -459,7 +459,7 @@ pub fn push_ws_in(
     opcode: &str,
     payload: &[u8],
 ) -> u64 {
-    let id = shared.next_id.fetch_add(1, Ordering::SeqCst);
+    let id = shared.next_ws_id.fetch_add(1, Ordering::SeqCst);
     shared.ws_history.push(WsEntry {
         id,
         ts: util::now_secs(),
