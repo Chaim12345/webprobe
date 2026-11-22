@@ -2,7 +2,10 @@
 //! side by side and back-to-back (pipelined) messages.
 
 use crate::codec::{scan_chunked, ChunkCursor, Chunked};
-use crate::strict_chunked::{scan_chunked_strict as strict, StrictChunkLimits, StrictChunked as S};
+use crate::strict_chunked::{
+    scan_chunked_strict as strict, scan_chunked_strict_from, StrictChunkCursor, StrictChunkLimits,
+    StrictChunked as S,
+};
 
 fn run(b: &[u8]) -> (S, Vec<u8>) {
     let mut out = Vec::new();
@@ -247,4 +250,75 @@ fn random_input_is_bounded_and_consistent_with_the_tolerant_scanner() {
             assert_eq!(sd, td);
         }
     }
+}
+
+/// Feed a body in pieces of every size: the incremental scan must give the
+/// same verdict and the same data as the one-shot scan, with each chunk
+/// handed over exactly once.
+#[test]
+fn incremental_scan_matches_one_shot_for_every_split_size() {
+    let raws: &[&[u8]] = &[
+        b"4;x=1\r\nWiki\r\n5\r\npedia\r\n0\r\nT: v\r\nU: w\r\n\r\nGET /next",
+        b"0\r\n\r\n",
+        b"3\r\nabc\r\n3\r\nxyz\r\n0\r\n\r\n",
+        b"3\r\nabc\nxyz",
+        b"3\r\nabc\r\nzz\r\n",
+    ];
+    for raw in raws {
+        let (want, want_data) = run(raw);
+        for step in 1..=raw.len() {
+            let limits = StrictChunkLimits::default();
+            let mut cur = StrictChunkCursor::default();
+            let mut got_data = Vec::new();
+            let mut at = step;
+            let last = loop {
+                let end = at.min(raw.len());
+                let r = scan_chunked_strict_from(&raw[..end], &mut cur, &limits, |d| {
+                    got_data.extend_from_slice(d)
+                });
+                if r != S::Incomplete || end == raw.len() {
+                    break r;
+                }
+                at += step;
+            };
+            assert_eq!(last, want, "step {step} of {:?}", raw);
+            assert_eq!(got_data, want_data, "data, step {step} of {:?}", raw);
+        }
+    }
+}
+
+#[test]
+fn the_cursor_does_not_rescan_validated_chunks() {
+    let limits = StrictChunkLimits::default();
+    let mut cur = StrictChunkCursor::default();
+    let mut calls = 0;
+    let first = b"3\r\nabc\r\n3\r\nxy";
+    assert_eq!(
+        scan_chunked_strict_from(first, &mut cur, &limits, |_| calls += 1),
+        S::Incomplete
+    );
+    assert_eq!(calls, 1);
+    let full = b"3\r\nabc\r\n3\r\nxyz\r\n0\r\n\r\n";
+    assert_eq!(
+        scan_chunked_strict_from(full, &mut cur, &limits, |_| calls += 1),
+        S::Complete(full.len())
+    );
+    assert_eq!(calls, 2, "first chunk must not be handed over twice");
+}
+
+#[test]
+fn the_body_limit_spans_cursor_resumes() {
+    let limits = StrictChunkLimits {
+        max_body: 5,
+        ..StrictChunkLimits::default()
+    };
+    let mut cur = StrictChunkCursor::default();
+    assert_eq!(
+        scan_chunked_strict_from(b"3\r\nabc\r\n", &mut cur, &limits, |_| {}),
+        S::Incomplete
+    );
+    assert_eq!(
+        scan_chunked_strict_from(b"3\r\nabc\r\n3\r\nxyz\r\n", &mut cur, &limits, |_| {}),
+        S::Malformed
+    );
 }

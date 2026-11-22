@@ -82,14 +82,37 @@ fn crlf_line(body: &[u8], from: usize, max: usize) -> Result<(usize, usize), Str
     }
 }
 
+/// Where an incremental scan resumes: the start of the next chunk-size
+/// line, plus the decoded bytes so far (for the body limit). Chunks before
+/// it were validated and handed to `data` already, so a growing buffer is
+/// scanned once in total. After the zero chunk only the (bounded) trailer
+/// block is rescanned per call.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct StrictChunkCursor {
+    pos: usize,
+    total: usize,
+}
+
 /// Scan `body` from its first byte, handing each validated chunk to `data`.
 pub fn scan_chunked_strict(
     body: &[u8],
     limits: &StrictChunkLimits,
+    data: impl FnMut(&[u8]),
+) -> StrictChunked {
+    scan_chunked_strict_from(body, &mut StrictChunkCursor::default(), limits, data)
+}
+
+/// Resume a scan at `cur` over the same, grown buffer. `data` sees each
+/// chunk exactly once across calls. The cursor only advances past fully
+/// validated chunks, so `Incomplete` and `Malformed` leave it usable.
+pub fn scan_chunked_strict_from(
+    body: &[u8],
+    cur: &mut StrictChunkCursor,
+    limits: &StrictChunkLimits,
     mut data: impl FnMut(&[u8]),
 ) -> StrictChunked {
-    let mut pos = 0usize;
-    let mut total = 0usize;
+    let mut pos = cur.pos;
+    let mut total = cur.total;
     loop {
         let (end, after) = match crlf_line(body, pos, limits.max_size_line) {
             Ok(v) => v,
@@ -136,6 +159,8 @@ pub fn scan_chunked_strict(
         }
         data(&body[after..stop]);
         pos = stop + 2;
+        cur.pos = pos;
+        cur.total = total;
     }
 }
 
