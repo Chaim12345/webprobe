@@ -970,6 +970,16 @@ mod tests {
         assert_eq!((rec.2, rec.3 >= 2), (Some(true), true));
     }
 
+    #[test]
+    fn hpack_dependency_rejects_truncated_table_updates_without_panicking() {
+        // Exercise the dependency directly, without our production panic guard.
+        for malformed in [&[0x3f][..], &[0x3f, 0x80][..], &[0x3f, 0xff][..]] {
+            let result = std::panic::catch_unwind(|| Decoder::new().decode(malformed));
+            assert!(result.is_ok(), "HPACK decoder panicked on {malformed:?}");
+            assert!(result.unwrap().is_err());
+        }
+    }
+
     /// Review finding 3: a hostile server cannot panic the HPACK decoder,
     /// grow a header block without bound, or send oversized frames.
     #[test]

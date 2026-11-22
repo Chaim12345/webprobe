@@ -64,4 +64,8 @@ pub mod ws_rules;
 mod ws_tests;
 
 #[cfg(test)]
+mod framing_fixtures_tests;
+#[cfg(test)]
 mod fuzz_tests;
+#[cfg(test)]
+mod parser_fuzz_tests;

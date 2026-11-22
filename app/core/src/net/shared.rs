@@ -358,6 +358,13 @@ impl Shared {
         *self.waker.lock().unwrap() = Some(f);
     }
 
+    /// The next id for a held intercept item. HTTP requests, responses and
+    /// WebSocket frames share one queue, so they share this one sequence:
+    /// forward and drop find an item by id alone.
+    pub fn next_queue_item_id(&self) -> u64 {
+        self.next_queue_id.fetch_add(1, Ordering::SeqCst)
+    }
+
     /// Tell the front end that something it shows has changed.
     ///
     /// Every proxied exchange wakes twice (its log line and its history

@@ -8,7 +8,8 @@ webprobe-support = { path = "../support" }
 thiserror = "2"
 brotli = "7"
 flate2.workspace = true
-hpack = "0.3"
+# RustSec RUSTSEC-2023-0085: same API, fallible dynamic table updates.
+hpack = { package = "hpack-patched", version = "=0.3.0" }
 regex.workspace = true
 # x509-parser: read an imported CA certificate (Proxy settings > Import).
 rcgen = { version = "0.13", features = ["x509-parser"] }

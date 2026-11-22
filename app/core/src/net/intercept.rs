@@ -39,7 +39,7 @@ pub fn intercept_request(
         }
     }
     let (tx, rx) = mpsc::channel::<Option<String>>();
-    let id = shared.next_queue_id.fetch_add(1, Ordering::SeqCst);
+    let id = shared.next_queue_item_id();
     let shown = String::from_utf8_lossy(&req).into_owned();
     shared.queue.lock().unwrap().push(InterceptItem::new(
         id,
@@ -105,7 +105,7 @@ pub fn intercept_response(
         return Some(resp);
     }
     let (tx, rx) = mpsc::channel::<Option<String>>();
-    let id = shared.next_queue_id.fetch_add(1, Ordering::SeqCst);
+    let id = shared.next_queue_item_id();
     let shown = String::from_utf8_lossy(&resp).into_owned();
     shared.queue.lock().unwrap().push(InterceptItem::new(
         id,
