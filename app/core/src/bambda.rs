@@ -15,6 +15,7 @@ use std::{
 const MAX_OUTPUT: usize = 8 * 1024 * 1024;
 const MAX_INPUT: usize = 16 * 1024 * 1024;
 const MAX_SOURCE: usize = 128 * 1024;
+const MAX_RAW: usize = 1024 * 1024;
 
 #[derive(Clone, Copy, Debug)]
 pub enum Kind {
@@ -172,6 +173,7 @@ impl Program {
     /// Evaluate a snapshot in a separate JVM, returning one result per row.
     /// The program may be reused across batches. Concurrent calls use separate
     /// input directories and JVMs, so user static state is not shared.
+    /// The deadline covers the entire JVM batch, not each individual row.
     pub fn evaluate(&self, rows: &[Exchange], deadline: Duration) -> Result<Vec<RowResult>, Error> {
         if rows.len() > 10_000 {
             return Err(Error::Limit("more than 10000 rows"));
@@ -187,7 +189,7 @@ impl Program {
             })
             .try_fold(0usize, |a, b| a.checked_add(b))
             .ok_or(Error::Limit("input size overflow"))?;
-        if raw > MAX_INPUT / 4 {
+        if raw > MAX_RAW {
             return Err(Error::Limit("batch too large"));
         }
         let input = serde_json::to_vec(rows).map_err(|e| Error::Execution(e.to_string()))?;

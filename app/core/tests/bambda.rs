@@ -186,3 +186,30 @@ fn successful_null_column_is_distinct_from_a_missing_error_value() {
     assert!(out[1].value.is_none());
     assert!(out[1].error.is_some());
 }
+
+#[test]
+#[ignore = "requires JDK 17+ and a Montoya API jar; see docs/specs/R-16-bambda-backend.md"]
+fn raw_batch_limit_is_conservative_for_the_256_mib_heap() {
+    let (java, api) = runtime();
+    let p = Program::compile(
+        &java,
+        &api,
+        Kind::Column,
+        "return requestResponse.request().body().length();",
+        LIMIT,
+    )
+    .unwrap();
+    let mut input = rows();
+    input.truncate(1);
+    input[0].response = None;
+    input[0].request = b"POST / HTTP/1.1\r\nHost: example.test\r\n\r\n".to_vec();
+    input[0].request.extend(vec![255; 1024 * 1024]);
+    assert!(matches!(
+        p.evaluate(&input, LIMIT),
+        Err(webprobe_core::bambda::Error::Limit(_))
+    ));
+    input[0].request = b"POST / HTTP/1.1\r\nHost: example.test\r\n\r\n".to_vec();
+    input[0].request.extend(vec![255; 1024 * 1024 - 1024]);
+    let out = p.evaluate(&input, LIMIT).unwrap();
+    assert_eq!(out[0].value, Some(serde_json::json!(1024 * 1024 - 1024)));
+}
