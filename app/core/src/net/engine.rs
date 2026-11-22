@@ -409,6 +409,13 @@ pub fn handle_conn(shared: Arc<Shared>, mut stream: TcpStream) {
             Ok(ReadOutcome::Message(r)) => r,
             Ok(ReadOutcome::Ambiguous(why, b)) => {
                 refuse_ambiguous(&shared, &mut stream, &b, why, 80, false);
+                // Unread request bytes would turn the close into a RST that
+                // can cost the client the 400: FIN first, drain what is
+                // already in flight, do not wait for more.
+                let _ = stream.shutdown(std::net::Shutdown::Write);
+                let _ = stream.set_nonblocking(true);
+                let mut sink = [0u8; 8192];
+                while stream.read(&mut sink).map(|n| n > 0).unwrap_or(false) {}
                 return;
             }
             Ok(ReadOutcome::Incomplete(b)) => {
@@ -991,8 +998,11 @@ pub fn upstream_and_deliver<S: ProxyIo>(
         send_raw_with(shared, &up_host, up_port, &req_out, Some(&mut sink))
     };
     if let Some(done) = sink.finish() {
-        let reusable =
-            client_keeps && done.clean && stream_head_reusable(&done.head, &parts.method);
+        let reusable = client_keeps
+            && done.clean
+            && LAST_EXCHANGE_REUSABLE.with(|c| c.get())
+            && super::conn_reuse::response_headers_allow_reuse(&done.head)
+            && stream_head_reusable(&done.head, &parts.method);
         report_stream_skips(shared, &host, &url, &done.head, req_state);
         let status = util::parse_http(&done.head)
             .first

@@ -879,28 +879,27 @@ fn well_formed_requests_still_pass_the_guard() {
 }
 
 #[test]
-fn guard_and_reader_agree_on_the_head_end_for_mixed_terminators() {
-    // Well-formed heads under each terminator: one message, same boundary.
-    for term in ["\r\n\r\n", "\n\n"] {
-        let sep = if term == "\n\n" { "\n" } else { "\r\n" };
-        let wire = format!("POST /x HTTP/1.1{sep}Host: h{sep}Content-Length: 3{term}abc");
-        assert_eq!(inbound_ambiguity(wire.as_bytes()), None, "{term:?}");
+fn guard_and_reader_agree_on_the_head_end_and_refuse_any_bare_lf() {
+    // CRLF heads: one message, same boundary, every read size.
+    let ok = "POST /x HTTP/1.1\r\nHost: h\r\nContent-Length: 3\r\n\r\nabc";
+    assert_eq!(inbound_ambiguity(ok.as_bytes()), None);
+    for step in [1, 3, 7, 16_384] {
         let mut pending = Vec::new();
-        let mut s = script(wire.as_bytes(), 7);
+        let mut s = script(ok.as_bytes(), step);
         assert_eq!(
             read_request_outcome(&mut s, &mut pending, true).unwrap(),
-            ReadOutcome::Message(wire.clone().into_bytes()),
-            "{term:?}"
+            ReadOutcome::Message(ok.as_bytes().to_vec()),
+            "step {step}"
         );
     }
-    // Mixed line endings are refused whatever the read size, and a bare-LF
-    // blank line ahead of a later CRLFCRLF ends the head there for every
-    // read size (the reader never picks the later one when more bytes
-    // happen to be in the buffer).
+    // Bare LF anywhere in the head (LF-only, LF CRLF, CRLF LF, a hidden
+    // header after an LF blank line): refused for every read size.
     for step in [1, 3, 7, 16_384] {
         for wire in [
+            "POST /x HTTP/1.1\nHost: h\n\nabc",
             "GET /x HTTP/1.1\r\nHost: h\n\r\nGET /y HTTP/1.1\r\nHost: h\r\n\r\n",
             "GET /x HTTP/1.1\r\nHost: h\r\n\nGET /y HTTP/1.1\r\nHost: h\r\n\r\n",
+            "POST / HTTP/1.1\nHost: a\n\nContent-Length: 5\r\nTransfer-Encoding: chunked\r\n\r\n",
         ] {
             assert_eq!(
                 inbound_ambiguity(wire.as_bytes()),
@@ -917,18 +916,6 @@ fn guard_and_reader_agree_on_the_head_end_for_mixed_terminators() {
                 "{wire:?} step {step}"
             );
         }
-        let wire = "GET /x HTTP/1.1\nHost: h\n\nContent-Length: 5\r\n\r\nabcde";
-        let first = "GET /x HTTP/1.1\nHost: h\n\n";
-        let mut pending = Vec::new();
-        let mut s = script(wire.as_bytes(), step);
-        assert_eq!(
-            read_request_outcome(&mut s, &mut pending, true).unwrap(),
-            ReadOutcome::Message(first.as_bytes().to_vec()),
-            "step {step}: same boundary however the bytes were read"
-        );
-        let mut rest = pending.clone();
-        s.read_to_end(&mut rest).unwrap();
-        assert_eq!(rest, wire.as_bytes()[first.len()..], "step {step}");
     }
 }
 
@@ -939,4 +926,49 @@ fn a_header_hidden_after_a_bare_lf_blank_line_is_still_checked() {
     let wire =
         "POST / HTTP/1.1\nHost: a\n\nContent-Length: 5\r\nTransfer-Encoding: chunked\r\n\r\n";
     assert!(inbound_ambiguity(wire.as_bytes()).is_some());
+}
+
+#[test]
+fn mixed_line_endings_get_400_and_close_in_one_read_and_split_reads() {
+    let wires = [
+        "POST /x HTTP/1.1\r\nHost: h\n\r\nContent-Length: 5\r\n\r\nabcde",
+        "POST /x HTTP/1.1\r\nHost: h\r\n\nContent-Length: 5\r\n\r\nabcde",
+        "POST /x HTTP/1.1\nHost: h\n\nContent-Length: 5\r\nTransfer-Encoding: chunked\r\n\r\nabcde",
+    ];
+    for wire in wires {
+        for step in [1, 3, 7, 16_384] {
+            let (up_port, up) = spawn_upstream(keep_alive_reply, Duration::from_millis(400));
+            let shared = Shared::new();
+            let (port, pt) = spawn_proxy(Arc::clone(&shared));
+            let mut c = client(port);
+            let bytes = wire
+                .replace("/x", &format!("http://127.0.0.1:{up_port}/x"))
+                .into_bytes();
+            for piece in bytes.chunks(step) {
+                c.write_all(piece).unwrap();
+                c.flush().unwrap();
+                if step < 16_384 {
+                    std::thread::sleep(Duration::from_millis(1));
+                }
+            }
+            let mut got = Vec::new();
+            c.read_to_end(&mut got).unwrap();
+            pt.join().unwrap();
+            let text = String::from_utf8_lossy(&got).to_string();
+            assert!(
+                text.starts_with("HTTP/1.1 400"),
+                "{wire:?} step {step}: {text}"
+            );
+            assert!(text.contains("Connection: close"));
+            assert!(
+                up.join().unwrap().is_empty(),
+                "{wire:?} step {step}: nothing upstream"
+            );
+            let h = shared.history.last().expect("captured");
+            assert!(
+                bytes.starts_with(&h.req_raw.to_vec()),
+                "{wire:?} step {step}: captured bytes are a verbatim prefix of what was sent"
+            );
+        }
+    }
 }

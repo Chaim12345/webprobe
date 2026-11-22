@@ -205,14 +205,18 @@ pub fn inbound_ambiguity(raw: &[u8]) -> Option<RequestFramingError> {
 
 fn scan_head(head: &[u8]) -> Option<RequestFramingError> {
     use RequestFramingError::*;
-    // Mixed line endings in one head (CRLF lines and a bare LF, including a
-    // bare-LF terminator after CRLF lines) can be split differently by two
-    // parsers: refuse. A head that uses bare LF throughout stays tolerated.
+    // A bare LF anywhere in the head is refused at ingress, whatever the
+    // terminator and however the bytes were split across reads: a head that
+    // ends at a bare-LF blank line and is followed by CRLF header lines
+    // parses differently in a CRLFCRLF-first parser, and which one the
+    // reader picks would otherwise depend on read boundaries. LF-only
+    // requests are therefore not accepted through the guarded boundary
+    // (raw Repeater/test traffic does not use it).
     let bare_lf = head
         .iter()
         .enumerate()
         .any(|(i, &b)| b == b'\n' && (i == 0 || head[i - 1] != b'\r'));
-    if bare_lf && head.windows(2).any(|w| w == b"\r\n") {
+    if bare_lf {
         return Some(BareLineEnding);
     }
     let (mut cl_lines, mut te_lines) = (0usize, 0usize);
