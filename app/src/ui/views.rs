@@ -972,7 +972,7 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                         ui.add_space(6.0);
                         ui.label(
                             RichText::new(if is_inbox {
-                                "To get started, send a message to Organizer from anywhere in Burp."
+                                "To get started, send a message to Organizer from anywhere in WebProbe (Ctrl+O)."
                             } else {
                                 "Move or copy messages to this collection from the inbox."
                             })
