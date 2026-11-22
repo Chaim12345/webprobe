@@ -20,6 +20,8 @@ pub struct OrganizerItem {
 pub struct Collection {
     pub id: u64,
     pub name: String,
+    /// Free-text description shown on the collection's About tab.
+    pub description: String,
 }
 
 /// Ordered-by-id item store. Ids are monotonic and never reused.
@@ -47,7 +49,7 @@ impl Organizer {
 
     fn unique_name(&self, name: &str, except: u64) -> String {
         let base = match name.trim() {
-            "" => format!("Collection {}", self.collections.len() + 1),
+            "" => "New collection".to_string(),
             n => n.to_string(),
         };
         let mut unique = base.clone();
@@ -58,20 +60,81 @@ impl Organizer {
                 .iter()
                 .any(|c| c.id != except && c.name == unique)
         {
-            unique = format!("{base} {n}");
+            unique = format!("{base} ({n})");
             n += 1;
         }
         unique
     }
 
     /// Create a named collection and return its id. A blank name becomes
-    /// "Collection N"; a duplicate name (or "Inbox") gets " 2", " 3", ... appended.
+    /// "New collection"; a duplicate name (or "Inbox") gets " (2)", " (3)", ...
+    /// appended, as Burp does.
     pub fn add_collection(&mut self, name: &str) -> u64 {
         let id = self.next_collection_id;
         self.next_collection_id = self.next_collection_id.saturating_add(1);
         let name = self.unique_name(name, 0);
-        self.collections.push(Collection { id, name });
+        self.collections.push(Collection {
+            id,
+            name,
+            description: String::new(),
+        });
         id
+    }
+
+    /// Copy a collection and its items under a deduplicated name; returns the
+    /// new collection id, or None when `id` does not exist.
+    pub fn duplicate_collection(&mut self, id: u64) -> Option<u64> {
+        let (name, description) = {
+            let c = self.collections.iter().find(|c| c.id == id)?;
+            (c.name.clone(), c.description.clone())
+        };
+        let new_id = self.add_collection(&name);
+        if let Some(c) = self.collections.iter_mut().find(|c| c.id == new_id) {
+            c.description = description;
+        }
+        let items: Vec<OrganizerItem> = self
+            .items
+            .iter()
+            .filter(|i| i.collection == id)
+            .cloned()
+            .collect();
+        for i in items {
+            let nid = self.next_id;
+            self.next_id = self.next_id.saturating_add(1);
+            self.items.push(OrganizerItem {
+                id: nid,
+                collection: new_id,
+                ..i
+            });
+        }
+        Some(new_id)
+    }
+
+    /// Copy an item into a collection (0 = Inbox) and return the copy's id.
+    pub fn copy_item(&mut self, id: u64, collection: u64) -> Option<u64> {
+        if collection != 0 && !self.collections.iter().any(|c| c.id == collection) {
+            return None;
+        }
+        let item = self.items.iter().find(|i| i.id == id)?.clone();
+        let nid = self.next_id;
+        self.next_id = self.next_id.saturating_add(1);
+        self.items.push(OrganizerItem {
+            id: nid,
+            collection,
+            ..item
+        });
+        Some(nid)
+    }
+
+    /// Set a collection's About-tab description; false when it does not exist.
+    pub fn set_collection_description(&mut self, id: u64, text: &str) -> bool {
+        match self.collections.iter_mut().find(|c| c.id == id) {
+            Some(c) => {
+                c.description = text.to_string();
+                true
+            }
+            None => false,
+        }
     }
 
     /// Rename with the same uniqueness rules; blank names are rejected.
@@ -86,14 +149,17 @@ impl Organizer {
         true
     }
 
-    /// Delete a collection; its items move back to the Inbox, nothing is lost.
+    /// Delete a collection and every item in it (Burp's "This cannot be
+    /// undone"); the Inbox is unaffected. False when the id does not exist.
     pub fn remove_collection(&mut self, id: u64) -> bool {
         let before = self.collections.len();
         self.collections.retain(|c| c.id != id);
-        for i in self.items.iter_mut().filter(|i| i.collection == id) {
-            i.collection = 0;
+        if self.collections.len() != before {
+            self.items.retain(|i| i.collection != id);
+            true
+        } else {
+            false
         }
-        self.collections.len() != before
     }
 
     /// Point every item whose collection no longer exists back at the Inbox.
@@ -108,6 +174,17 @@ impl Organizer {
 
     pub fn collection_len(&self, id: u64) -> usize {
         self.items.iter().filter(|i| i.collection == id).count()
+    }
+
+    /// Select the collection that new items are sent to. An id that does not
+    /// exist falls back to the Inbox; returns the effective selection.
+    pub fn select_collection(&mut self, id: u64) -> u64 {
+        self.target_collection = if id != 0 && self.collections.iter().any(|c| c.id == id) {
+            id
+        } else {
+            0
+        };
+        self.target_collection
     }
 
     /// Store a new item and return its id. `now` is the creation timestamp
@@ -261,9 +338,9 @@ mod tests {
         assert_eq!(o.len(), items_before, "+ New must not add an item");
         assert!(o.items.iter().all(|i| i.name != "New item"));
         assert_eq!(o.collections.len(), 3);
-        assert_eq!(o.collections[0].name, "Collection 1");
+        assert_eq!(o.collections[0].name, "New collection");
         assert_eq!(o.collections[1].name, "Auth bugs");
-        assert_eq!(o.collections[2].name, "Auth bugs 2");
+        assert_eq!(o.collections[2].name, "Auth bugs (2)", "Burp dedupe suffix");
         assert!(a != b && b != c);
         assert!(o.rename_collection(b, "Renamed"));
         assert!(!o.rename_collection(b, "  "));
@@ -273,10 +350,13 @@ mod tests {
         assert!(!o.move_item(1, 99));
         assert_eq!(o.collection_len(b), 1);
         assert_eq!(o.collection_len(0), items_before - 1);
-        assert!(o.rename_collection(b, "Collection 1"));
-        assert_eq!(o.collections[1].name, "Collection 1 2", "rename dedupes");
+        assert!(o.rename_collection(b, "New collection"));
+        assert_eq!(
+            o.collections[1].name, "New collection (2)",
+            "rename dedupes"
+        );
         assert!(o.rename_collection(b, "inbox"));
-        assert_eq!(o.collections[1].name, "inbox 2");
+        assert_eq!(o.collections[1].name, "inbox (2)");
         o.target_collection = b;
         let filed = o.add("sent", "", "GET /", "", 50);
         assert_eq!(
@@ -292,14 +372,88 @@ mod tests {
             "missing target falls back to Inbox"
         );
         assert!(o.remove_collection(b));
-        assert_eq!(o.get(1).unwrap().collection, 0, "items return to Inbox");
-        assert_eq!(o.get(filed).unwrap().collection, 0);
+        assert!(o.get(1).is_none(), "delete removes the items");
+        assert!(o.get(filed).is_none(), "delete removes the items");
+        assert!(!o.remove_collection(b));
         o.items[0].collection = 77;
         o.repair_collections();
         assert_eq!(o.items[0].collection, 0, "orphans remapped");
-        assert!(!o.remove_collection(b));
         assert_eq!(o.add_collection("Inbox"), 4);
-        assert_eq!(o.collections.last().unwrap().name, "Inbox 2");
+        assert_eq!(o.collections.last().unwrap().name, "Inbox (2)");
+    }
+
+    #[test]
+    fn duplicate_collection_copies_items_under_a_deduped_name() {
+        let mut o = org();
+        let b = o.add_collection("Auth bugs");
+        o.move_item(1, b);
+        o.move_item(2, b);
+        let copy = o.duplicate_collection(b).expect("duplicate");
+        assert!(copy != b);
+        let name = o
+            .collections
+            .iter()
+            .find(|c| c.id == copy)
+            .unwrap()
+            .name
+            .clone();
+        assert_eq!(name, "Auth bugs (2)");
+        assert_eq!(o.collection_len(copy), 2, "items copied");
+        assert_eq!(o.collection_len(b), 2, "originals kept");
+        let new_ids: Vec<u64> = o
+            .items
+            .iter()
+            .filter(|i| i.collection == copy)
+            .map(|i| i.id)
+            .collect();
+        assert!(new_ids.iter().all(|id| *id > 3), "copies get fresh ids");
+        assert!(o.duplicate_collection(99).is_none());
+    }
+
+    #[test]
+    fn copy_item_clones_into_the_target_collection() {
+        let mut o = org();
+        let b = o.add_collection("Auth bugs");
+        let nid = o.copy_item(1, b).expect("copy");
+        assert!(nid > 3, "fresh id");
+        let item = o.get(nid).unwrap();
+        assert_eq!(item.name, "Login");
+        assert_eq!(item.note, "auth flow");
+        assert_eq!(item.collection, b);
+        assert_eq!(o.get(1).unwrap().collection, 0, "original stays in Inbox");
+        assert!(o.copy_item(1, 99).is_none());
+        assert!(o.copy_item(99, b).is_none());
+        assert!(o.set_collection_description(b, "about this"));
+        assert!(!o.set_collection_description(99, "nope"));
+        assert_eq!(
+            o.collections
+                .iter()
+                .find(|c| c.id == b)
+                .unwrap()
+                .description,
+            "about this"
+        );
+    }
+
+    #[test]
+    fn select_collection_controls_where_sends_land() {
+        let mut o = Organizer::new();
+        assert_eq!(o.select_collection(7), 0, "missing id falls back to Inbox");
+        let a = o.add_collection("Auth");
+        assert_eq!(o.select_collection(a), a);
+        let sent = o.add("sent", "", "GET /", "", 1);
+        assert_eq!(
+            o.get(sent).unwrap().collection,
+            a,
+            "sends land in the selection"
+        );
+        assert_eq!(o.select_collection(0), 0);
+        let inbox = o.add("inbox", "", "GET /", "", 2);
+        assert_eq!(o.get(inbox).unwrap().collection, 0);
+        // The add-time fallback still holds when the field is set directly.
+        o.target_collection = 99;
+        let stray = o.add("stray", "", "GET /", "", 3);
+        assert_eq!(o.get(stray).unwrap().collection, 0);
     }
 
     #[test]

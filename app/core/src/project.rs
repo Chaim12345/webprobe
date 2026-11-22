@@ -562,6 +562,9 @@ pub struct ProjectOrganizerItem {
 pub struct ProjectOrganizerCollection {
     pub id: u64,
     pub name: String,
+    /// About-tab description; absent in older projects.
+    #[serde(default)]
+    pub description: String,
 }
 
 /// One Intruder result row.

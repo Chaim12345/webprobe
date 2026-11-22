@@ -236,6 +236,17 @@ pub struct App {
     pub org_table: table::TableState,
     pub org_req_pane: msgpane::PaneState,
     pub org_resp_pane: msgpane::PaneState,
+    /// Organizer right-pane tab (Inbox: 0 = Contents; custom: 0 = About,
+    /// 1 = Contents) and the collection it belongs to.
+    pub org_tab: usize,
+    pub org_tab_coll: u64,
+    /// Collection being renamed inline in the rail, with the edit buffer.
+    pub org_renaming: Option<u64>,
+    pub org_rename_buf: String,
+    /// Rename / delete-confirmation / share modal target collection.
+    pub org_rename_modal: Option<u64>,
+    pub org_delete_modal: Option<u64>,
+    pub org_share_modal: Option<u64>,
     /// Intruder (Burp 2026 layout): target, Host update, editor pane, right
     /// dock (0 Payloads, 1 Resource pool, 2 Settings, 3 closed), selected
     /// payload set, add/load fields, results window.
@@ -916,6 +927,13 @@ impl App {
             org_table: table::TableState::default(),
             org_req_pane: msgpane::PaneState::default(),
             org_resp_pane: msgpane::PaneState::default(),
+            org_tab: 0,
+            org_tab_coll: u64::MAX,
+            org_renaming: None,
+            org_rename_buf: String::new(),
+            org_rename_modal: None,
+            org_delete_modal: None,
+            org_share_modal: None,
             intr_target: String::new(),
             intr_update_host: true,
             intr_pane: msgpane::PaneState {
