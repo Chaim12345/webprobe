@@ -169,7 +169,7 @@ pub fn send_inner(
     host: &str,
     port: u16,
     req: &[u8],
-    mut sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
+    sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
 ) -> Result<Vec<u8>, String> {
     let config = shared.upstream_for(host);
     let req = util::origin_form(req);
@@ -219,39 +219,18 @@ pub fn send_inner(
                 return Ok(resp);
             }
             Ok(None) => {}
-            Err(_) => {
-                // The server hung up on the upgrade: retry plainly on a new socket.
-                let tcp = crate::upstream::connect_target(&config, host, port)?;
-                tcp.set_read_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)))
-                    .ok();
-                shared.conns_opened.fetch_add(1, Ordering::SeqCst);
-                stream = UpstreamConn::Plain(tcp);
-            }
+            // The upgrade includes the full request, potentially with effects.
+            // A missing reply does not prove that the origin did not process it.
+            Err(e) => return Err(e),
         }
     }
     // Cleartext is HTTP/1 here: a request shown as HTTP/2 goes as HTTP/1.1.
     let routed = as_http1(&routed).into_owned();
     LAST_PROTOCOL.with(|p| p.set("HTTP/1.1"));
-    let result = match exchange(&mut stream, &routed, sink.as_deref_mut()) {
-        Ok((r, reusable)) => Ok((r, reusable, stream)),
-        Err(e) => {
-            if reused {
-                let mut fresh = UpstreamConn::Plain({
-                    let tcp = crate::upstream::connect_target(&config, host, port)?;
-                    tcp.set_read_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)))
-                        .ok();
-                    tcp
-                });
-                shared.conns_opened.fetch_add(1, Ordering::SeqCst);
-                exchange(&mut fresh, &routed, sink)
-                    .map(|(r, reusable)| (r, reusable, fresh))
-                    .map_err(|e2| format!("{e}; retry: {e2}"))
-            } else {
-                Err(e)
-            }
-        }
-    }?;
-    let (resp, reusable, stream) = result;
+    // A failed exchange may already have committed the request at the origin.
+    // Neither a pooled socket nor an idempotent method proves it was not sent.
+    // Retire on error and let the caller decide whether another send is safe.
+    let (resp, reusable) = exchange(&mut stream, &routed, sink)?;
     if keep_alive && reusable && response_headers_allow_reuse(&resp) {
         shared.pool.lock().unwrap().insert(key, stream);
         if reused {
@@ -395,22 +374,9 @@ pub fn send_tls_inner(
     }
     // HTTP/1 on the wire: a request shown as HTTP/2 goes out as HTTP/1.1.
     let req = as_http1(&req).into_owned();
-    let result = match exchange(&mut stream, &req, sink.as_deref_mut()) {
-        Ok((r, reusable)) => Ok((r, reusable, stream)),
-        Err(e) => {
-            // A reused connection may have been closed by the peer; try once more
-            // on a fresh one before reporting the failure.
-            if reused {
-                let mut fresh = new_tls_conn(shared, &config, host, port)?;
-                exchange(&mut fresh, &req, sink)
-                    .map(|(r, reusable)| (r, reusable, fresh))
-                    .map_err(|e2| format!("{e}; retry: {e2}"))
-            } else {
-                Err(e)
-            }
-        }
-    }?;
-    let (result, reusable, stream) = result;
+    // The same unknown-outcome rule applies to HTTP/1 over TLS: never replay
+    // after a write/read error, even when the socket came from the pool.
+    let (result, reusable) = exchange(&mut stream, &req, sink)?;
     if keep_alive && reusable && response_headers_allow_reuse(&result) {
         shared.tls_pool.lock().unwrap().insert(key, stream);
         if reused {

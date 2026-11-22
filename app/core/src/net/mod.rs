@@ -117,3 +117,6 @@ mod read_response_head_tests;
 
 #[cfg(test)]
 mod wake_tests;
+
+#[cfg(test)]
+mod replay_safety_tests;
