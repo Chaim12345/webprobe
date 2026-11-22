@@ -366,6 +366,24 @@ pub fn handle_conn(shared: Arc<Shared>, mut stream: TcpStream) {
     }
 }
 
+/// Plaintext rustls has decrypted but not yet handed out belongs to the next
+/// pipelined request: move it into `pending` so the exchange loop sees it.
+/// The reader only drains the internal buffer; it never touches the socket.
+fn drain_tls_plaintext<S: Read + Write>(
+    tls: &mut rustls::StreamOwned<rustls::ServerConnection, S>,
+    pending: &mut Vec<u8>,
+) {
+    let mut reader = tls.conn.reader();
+    let mut chunk = [0u8; 8192];
+    loop {
+        match reader.read(&mut chunk) {
+            Ok(0) => break,
+            Ok(n) => pending.extend_from_slice(&chunk[..n]),
+            Err(_) => break,
+        }
+    }
+}
+
 /// Pipelined bytes that arrived in a later packet than the first request: a
 /// non-blocking peek, so a single-request connection closes exactly as before.
 fn client_sent_more(stream: &TcpStream) -> bool {
@@ -518,10 +536,12 @@ fn serve_mitm_conn<S: ProxyIo>(
         return;
     }
     // Pipelined HTTPS requests: bytes past one request carry into the next.
-    // Unlike handle_conn there is no peek for later packets here: rustls
-    // buffers decrypted plaintext internally with no public way to inspect
-    // it, and a non-blocking probe read could consume a partially arrived
-    // request. Requests pipelined into one TLS flight still land in `pending`.
+    // Unlike handle_conn there is no peek for later packets here: a
+    // non-blocking probe read could consume a partially arrived request.
+    // Plaintext rustls has already decrypted is drained into `pending` after
+    // every read instead: at the 8192-byte chunk boundary the first request
+    // fills the last read exactly, and without the drain the next request
+    // would sit inside rustls while the connection closes.
     let mut pending: Vec<u8> = Vec::new();
     loop {
         let req = match read_request_pending(&mut tls, &mut pending) {
@@ -534,6 +554,7 @@ fn serve_mitm_conn<S: ProxyIo>(
                 return;
             }
         };
+        drain_tls_plaintext(&mut tls, &mut pending);
         let (req, req_state) = intercept_request(&shared, req, 443);
         let Some(req) = req else { return };
         let ws_parts = util::parse_http(&req);
