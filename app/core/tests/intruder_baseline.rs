@@ -129,7 +129,7 @@ fn request_zero_precedes_all_four_payload_matrices_and_is_exported() {
         wait_finished(&state);
         server.join().unwrap();
         let seen = seen.lock().unwrap();
-        let mut rows = state.rows.lock().unwrap().clone();
+        let mut rows = state.snapshot_rows();
         assert_eq!(rows[0].number, 0);
         rows.sort_by_key(|r| r.number);
         assert_eq!(rows.len(), payload_count + 1);
@@ -191,7 +191,7 @@ fn failed_baseline_is_reported_and_payload_still_runs_after_its_retries() {
     )
     .unwrap();
     wait_finished(&state);
-    let rows = state.rows.lock().unwrap();
+    let rows = state.snapshot_rows();
     assert_eq!(rows.len(), 2);
     assert_eq!(
         (rows[0].number, rows[0].error, rows[0].attempts),
@@ -252,7 +252,7 @@ fn stop_during_baseline_does_not_launch_payloads() {
     wait_finished(&state);
     server.join().unwrap();
     assert_eq!(state.progress(), (1, Some(3)));
-    let rows = state.rows.lock().unwrap();
+    let rows = state.snapshot_rows();
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].number, 0);
 }
