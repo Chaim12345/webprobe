@@ -1048,8 +1048,17 @@ impl<S: Read + Write> Conn<S> {
                     // by every later stream, so skipping final frames would
                     // drain it over successive requests.
                     let inc = (f.payload.len() as u32).to_be_bytes();
-                    write_frame(&mut self.io, FRAME_WINDOW_UPDATE, 0, 0, &inc)
-                        .map_err(|e| StreamError::fatal(format!("h2 window update: {e}")))?;
+                    if let Err(e) = write_frame(&mut self.io, FRAME_WINDOW_UPDATE, 0, 0, &inc) {
+                        if f.flags & FLAG_END_STREAM != 0 {
+                            // The response is complete; the peer closed the
+                            // connection underneath the final WINDOW_UPDATE.
+                            // The exchange stands, but the connection is
+                            // dead: never reuse it.
+                            self.retired = true;
+                            return Ok(());
+                        }
+                        return Err(StreamError::fatal(format!("h2 window update: {e}")));
+                    }
                     // Stream credit is pointless after END_STREAM: the peer
                     // already closed the stream and often the connection.
                     if f.flags & FLAG_END_STREAM == 0 {
