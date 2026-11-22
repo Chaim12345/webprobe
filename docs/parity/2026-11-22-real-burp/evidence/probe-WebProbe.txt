@@ -1,0 +1,16 @@
+product=WebProbe
+before.variant=[]
+before.invariant=[]
+first.variant=[]
+first.invariant=[TOKEN, X-Flag, absent, token]
+second.variant=[token]
+second.invariant=[TOKEN, X-Flag, absent]
+third.variant=[X-Flag, token]
+third.invariant=[TOKEN, absent]
+overlap.variant=[]
+overlap.invariant=[aa]
+emptyKeyword=IllegalArgumentException
+variations=UnsupportedOperationException
+sendRequest.status=200
+sendRequest.body={"method": "GET", "path": "/echo?value=probe", "probe_header": ""}
+toolsPopulated=true
