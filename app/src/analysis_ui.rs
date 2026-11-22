@@ -42,7 +42,7 @@ pub fn show_sequencer_report(ui: &mut Ui, report: &analysis::SequencerReport) {
             stat_row(ui, "total characters", report.total_characters.to_string());
             stat_row(
                 ui,
-                "entropy (bits/char)",
+                "pooled character entropy (bits/char)",
                 format!(
                     "{:.4} (effective alphabet {:.2})",
                     report.entropy_bits_per_character, report.effective_alphabet
@@ -141,7 +141,7 @@ pub fn show_bit_report(
     ui.add_space(6.0);
     ui.label(
         egui::RichText::new(
-            "Bit-level results (one bar per bit position; taller is more random, red fails at 1%)",
+            "Bit-level results (one bar per variable bit position; higher test p-value, red fails at 1%)",
         )
         .size(12.5)
         .color(theme::ink()),
