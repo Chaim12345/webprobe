@@ -129,7 +129,7 @@ fn page(app: &mut App, ui: &mut Ui, pane: SettingsPane) {
         }
         SettingsPane::Repeater => {
             title(ui, "Repeater");
-            ui.checkbox(&mut app.rep_update_cl, "Update Content-Length");
+            ui.checkbox(&mut app.repeater.update_cl, "Update Content-Length");
             ui.horizontal(|ui| {
                 ui.label(
                     RichText::new("Follow redirections:")

@@ -3126,9 +3126,9 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
             dashboard_task: Some(app.dash_task),
             dock: Some(app.dock_sel),
             split_detail: Some(app.split_detail),
-            rep_split: Some(app.rep_split),
+            rep_split: Some(app.repeater.split),
             map_split: Some(app.map_split),
-            repeater_tab: Some(app.rep_sel),
+            repeater_tab: Some(app.repeater.sel),
         },
         editors: project::ProjectEditors {
             intruder_target: app.intr_target.clone(),
@@ -3501,13 +3501,13 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData, content: boo
         app.split_detail = v.clamp(80.0, 2000.0);
     }
     if let Some(v) = l.rep_split {
-        app.rep_split = v.clamp(0.15, 0.85);
+        app.repeater.split = v.clamp(0.15, 0.85);
     }
     if let Some(v) = l.map_split {
         app.map_split = v.clamp(0.15, 0.85);
     }
     if let Some(v) = l.repeater_tab {
-        app.rep_sel = v;
+        app.repeater.sel = v;
     }
     let ed = &data.editors;
     app.intr_target = ed.intruder_target.clone();

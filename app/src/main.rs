@@ -106,8 +106,6 @@ pub struct App {
     pub mcp: mcp_hook::Mcp,
     /// Height of the Proxy message pane, dragged by the splitter (B-05).
     pub split_detail: f32,
-    /// Repeater request pane's share of the request|response width.
-    pub rep_split: f32,
     /// Site map tree's share of the Target width.
     pub map_split: f32,
     pub target_host_sel: Option<String>,
@@ -248,11 +246,6 @@ pub struct App {
     pub new_scan_type: usize,
     /// R-11: the scan configuration library and the New scan selection.
     pub scan_lib: scan_library_ui::LibraryState,
-    /// Repeater: message panes and the Configure-target dialog.
-    pub rep_req_pane: msgpane::PaneState,
-    pub rep_resp_pane: msgpane::PaneState,
-    pub rep_target_edit: bool,
-    pub rep_update_cl: bool,
     /// Burp's Search window and Event log window.
     pub search_open: bool,
     pub event_log_open: bool,
@@ -287,13 +280,8 @@ pub struct App {
     pub collab_state: collaborator::CollaboratorState,
     pub macro_name: String,
     pub macro_request: String,
-    pub rep_sel: usize,
     /// Repeater/intercept/WebSockets state (E-02..E-06, P-06, B-09).
     pub rops: repeater_ops::State,
-    /// Repeater response view: 0 Raw, 1 Hex, 2 Pretty (P-04).
-    pub rep_view: usize,
-    /// Repeater request view: 0 Pretty, 1 Raw, 2 Hex (P-04).
-    pub rep_req_view: usize,
     pub port_txt: String,
     pub frames: usize,
     pub saved: bool,
@@ -303,6 +291,7 @@ pub struct App {
     pub screenshot: Option<PathBuf>,
     /// Reporting, engagement tools, content discovery, crash recovery.
     pub eng: engagement::State,
+    pub repeater: tool_state::RepeaterState,
     pub comparer: tool_state::ComparerState,
     pub decoder: tool_state::DecoderState,
     pub sequencer: tool_state::SequencerState,
@@ -760,7 +749,6 @@ impl App {
             waker_installed: false,
             mcp: mcp_hook::Mcp::start(),
             split_detail: 260.0,
-            rep_split: 0.5,
             map_split: 0.24,
             target_host_sel: None,
             target_hosts: Vec::new(),
@@ -870,13 +858,6 @@ impl App {
             new_scan_urls: String::new(),
             new_scan_type: 0,
             scan_lib: Default::default(),
-            rep_req_pane: msgpane::PaneState {
-                view: 1,
-                ..Default::default()
-            },
-            rep_resp_pane: msgpane::PaneState::default(),
-            rep_target_edit: false,
-            rep_update_cl: true,
             search_open: false,
             event_log_open: false,
             event_log_table: table::TableState::default(),
@@ -906,10 +887,7 @@ impl App {
             macro_name: "Macro 1".to_string(),
             // Empty: a prefilled example host would get real traffic from Test macro.
             macro_request: String::new(),
-            rep_sel: 0,
             rops: repeater_ops::State::default(),
-            rep_view: 0,
-            rep_req_view: 1,
             port_txt,
             frames: 0,
             saved: false,
@@ -918,6 +896,7 @@ impl App {
             grab_done: None,
             screenshot: None,
             eng: engagement::State::default(),
+            repeater: tool_state::RepeaterState::default(),
             comparer: tool_state::ComparerState::default(),
             decoder: tool_state::DecoderState::default(),
             sequencer: tool_state::SequencerState::default(),

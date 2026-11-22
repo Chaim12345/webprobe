@@ -123,3 +123,52 @@ impl Default for SequencerState {
         }
     }
 }
+
+/// Repeater UI only. The separate repeater_ops::State also owns Intercept and
+/// WebSocket behavior and is deliberately not folded into this view state.
+pub struct RepeaterState {
+    pub split: f32,
+    pub req_pane: crate::msgpane::PaneState,
+    pub resp_pane: crate::msgpane::PaneState,
+    pub target_edit: bool,
+    pub update_cl: bool,
+    pub sel: usize,
+    /// Legacy response/request view choices. Kept even though current panes
+    /// store their own views, so this structural change removes no state.
+    pub view: usize,
+    pub req_view: usize,
+}
+impl Default for RepeaterState {
+    fn default() -> Self {
+        Self {
+            split: 0.5,
+            req_pane: crate::msgpane::PaneState {
+                view: 1,
+                ..Default::default()
+            },
+            resp_pane: crate::msgpane::PaneState::default(),
+            target_edit: false,
+            update_cl: true,
+            sel: 0,
+            view: 0,
+            req_view: 1,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RepeaterState;
+    #[test]
+    fn repeater_defaults_preserve_the_original_app_constructor() {
+        let state = RepeaterState::default();
+        assert_eq!(state.split, 0.5);
+        assert_eq!(state.req_pane.view, 1);
+        assert_eq!(state.resp_pane.view, 0);
+        assert!(!state.target_edit);
+        assert!(state.update_cl);
+        assert_eq!(state.sel, 0);
+        assert_eq!(state.view, 0);
+        assert_eq!(state.req_view, 1);
+    }
+}

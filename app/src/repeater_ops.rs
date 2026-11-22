@@ -1604,7 +1604,7 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
         for (i, (id, name)) in tabs.iter().enumerate() {
-            let sel = app.rep_sel == i;
+            let sel = app.repeater.sel == i;
             let dragging_this = app.rops.drag_from == Some(i);
             let frame = egui::Frame::NONE
                 .fill(if sel {
@@ -1650,7 +1650,7 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
                             .sense(egui::Sense::click_and_drag()),
                         );
                         // A tab to accessibility / UI automation, not a plain label.
-                        let selected = app.rep_sel == i;
+                        let selected = app.repeater.sel == i;
                         l.widget_info(|| {
                             egui::WidgetInfo::selected(
                                 egui::accesskit::Role::Tab,
@@ -1660,7 +1660,7 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
                             )
                         });
                         if l.clicked() {
-                            app.rep_sel = i;
+                            app.repeater.sel = i;
                         }
                         if l.double_clicked() {
                             app.rops.renaming = Some((*id, name.clone()));
@@ -1702,7 +1702,7 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
             let id = app.shared.rep.new_tab_id();
             let mut reps = app.shared.repeaters.lock().unwrap();
             reps.push(new_tab(id, "", 80, false, String::new()));
-            app.rep_sel = reps.len() - 1;
+            app.repeater.sel = reps.len() - 1;
         }
     });
     if cancel_rename {
@@ -1739,9 +1739,9 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
             app.rops.drag_from = None;
             if let Some(t) = target.filter(|t| *t != from) {
                 let mut reps = app.shared.repeaters.lock().unwrap();
-                let sel_id = reps.get(app.rep_sel).map(|r| r.id);
+                let sel_id = reps.get(app.repeater.sel).map(|r| r.id);
                 move_tab(&mut reps, from, t);
-                app.rep_sel = sel_id
+                app.repeater.sel = sel_id
                     .and_then(|id| reps.iter().position(|r| r.id == id))
                     .unwrap_or(t);
             }
@@ -1751,7 +1751,7 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
         if c == TabCommand::Rename {
             app.rops.rename_focus = true;
         }
-        app.rep_sel = apply_tab_command(&app.shared, &mut app.rops, i, app.rep_sel, c);
+        app.repeater.sel = apply_tab_command(&app.shared, &mut app.rops, i, app.repeater.sel, c);
     }
 }
 
@@ -1760,7 +1760,7 @@ pub fn settings_menu(ui: &mut Ui, app: &mut crate::App) {
     ui.set_min_width(300.0);
     ui.label(RichText::new("Repeater settings").strong().size(13.0));
     ui.separator();
-    ui.checkbox(&mut app.rep_update_cl, "Update Content-Length");
+    ui.checkbox(&mut app.repeater.update_cl, "Update Content-Length");
     ui.menu_button("Follow redirections", |ui| {
         for m in FollowMode::ALL {
             if ui.radio(app.rops.follow == m, m.label()).clicked() {
@@ -1778,7 +1778,7 @@ pub fn settings_menu(ui: &mut Ui, app: &mut crate::App) {
 /// The selected tab's request, target service and response.
 pub fn current_tab(app: &crate::App) -> Option<(String, Service, Option<Vec<u8>>)> {
     let reps = app.shared.repeaters.lock().unwrap();
-    let r = reps.get(app.rep_sel.min(reps.len().saturating_sub(1)))?;
+    let r = reps.get(app.repeater.sel.min(reps.len().saturating_sub(1)))?;
     let service = Service::of_tab(&r.host, r.port, r.https, &r.request)?;
     Some((r.request.clone(), service, r.response.clone()))
 }
@@ -1801,7 +1801,7 @@ pub fn load_redirect(app: &mut crate::App) -> bool {
         return false;
     };
     let mut reps = app.shared.repeaters.lock().unwrap();
-    let i = app.rep_sel.min(reps.len().saturating_sub(1));
+    let i = app.repeater.sel.min(reps.len().saturating_sub(1));
     let t = &mut reps[i];
     t.request = next_req;
     t.host = next.host;
@@ -1897,7 +1897,7 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
         }
         RepAction::ChangeMethod => {
             let mut reps = app.shared.repeaters.lock().unwrap();
-            let i = app.rep_sel.min(reps.len().saturating_sub(1));
+            let i = app.repeater.sel.min(reps.len().saturating_sub(1));
             let changed = toggle_request_method(&reps[i].request);
             reps[i].request = changed;
         }
@@ -1913,7 +1913,7 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
                 format!("----WebKitFormBoundary{tail}")
             };
             let mut reps = app.shared.repeaters.lock().unwrap();
-            let i = app.rep_sel.min(reps.len().saturating_sub(1));
+            let i = app.repeater.sel.min(reps.len().saturating_sub(1));
             let changed = toggle_body_encoding(&reps[i].request, &boundary);
             if changed == reps[i].request {
                 toast(
@@ -1948,7 +1948,7 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
                 .repeaters
                 .lock()
                 .unwrap()
-                .get(app.rep_sel)
+                .get(app.repeater.sel)
                 .and_then(|t| previous_response(&t.history));
             match previous {
                 Some(prev) => {
@@ -1974,7 +1974,7 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
                 .repeaters
                 .lock()
                 .unwrap()
-                .get(app.rep_sel)
+                .get(app.repeater.sel)
                 .and_then(|t| previous_request(&t.history));
             match previous {
                 Some(prev) => {
@@ -2002,7 +2002,7 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
                 .repeaters
                 .lock()
                 .unwrap()
-                .get(app.rep_sel)
+                .get(app.repeater.sel)
                 .map(|t| t.id)
                 .unwrap_or(0);
             let path = dir.join(format!("repeater-{id}-{}.http", util::now_secs()));
@@ -2055,7 +2055,7 @@ pub fn poll_paste_url(app: &mut crate::App, ui: &mut Ui) {
     match paste_url_as_request(&text, keep_alive) {
         Ok((svc, req)) => {
             let mut reps = app.shared.repeaters.lock().unwrap();
-            let i = app.rep_sel.min(reps.len().saturating_sub(1));
+            let i = app.repeater.sel.min(reps.len().saturating_sub(1));
             let t = &mut reps[i];
             t.request = req;
             t.host = svc.host;
@@ -2531,7 +2531,8 @@ pub fn ws_repeater_view(app: &mut crate::App, ui: &mut Ui, session_id: u64) {
         return;
     };
     let i = app
-        .rep_sel
+        .repeater
+        .sel
         .min(shared.repeaters.lock().unwrap().len().saturating_sub(1));
     let ui_state_id = ui.scope_id().with(("ws_rep_ui", session_id));
     // (to_server, binary)
