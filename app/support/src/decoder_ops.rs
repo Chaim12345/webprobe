@@ -21,19 +21,6 @@ pub enum Op {
     AsciiHexDecode,
     HexEncode,
     HexDecode,
-    /// Decimal number tokens rewritten in octal (Burp's "Octal", a numeric
-    /// radix conversion measured on 2026.11.2: "72 105" -> "110 151").
-    OctalEncode,
-    OctalDecode,
-    /// Decimal number tokens rewritten in binary (Burp's "Binary":
-    /// "72 105" -> "1001000 1101001").
-    BinaryEncode,
-    BinaryDecode,
-    /// GZIP compression (Burp's "GZIP"). The compressed bytes are binary and
-    /// the Decoder panel is UTF-8 text, so the displayed result is lossy
-    /// (same class as a hex decode that yields non-UTF-8 bytes).
-    GzipEncode,
-    GzipDecode,
     Rot13,
     Md5,
     Sha1,
@@ -56,12 +43,6 @@ pub fn apply(op: Op, input: &str) -> Result<String, String> {
         Op::AsciiHexDecode => ascii_hex_decode(input),
         Op::HexEncode => Ok(util::hex_encode(input.as_bytes())),
         Op::HexDecode => util::hex_decode(input).map(|b| String::from_utf8_lossy(&b).into_owned()),
-        Op::OctalEncode => Ok(octal_encode(input)),
-        Op::OctalDecode => octal_decode(input),
-        Op::BinaryEncode => Ok(binary_encode(input)),
-        Op::BinaryDecode => binary_decode(input),
-        Op::GzipEncode => Ok(gzip_encode(input)),
-        Op::GzipDecode => gzip_decode(input),
         Op::Rot13 => Ok(rot13(input)),
         Op::Md5 => Ok(md5_hex(input)),
         Op::Sha1 => Ok(sha1_hex(input)),
@@ -192,100 +173,6 @@ fn ascii_hex_decode(input: &str) -> Result<String, String> {
     if out.is_empty() {
         return Err("no \\xNN escapes found".into());
     }
-    Ok(String::from_utf8_lossy(&out).into_owned())
-}
-
-// ---------- Octal / Binary ----------
-// Measured against real Burp Community 2026.11.2: these are NUMERIC radix
-// conversions over runs of digits in the text, not byte encoders. Everything
-// outside a matching digit run is preserved verbatim ("Hi" encodes to "Hi";
-// decoding "\\110\\151" keeps the slashes: "\\72\\105").
-
-/// Rewrite every maximal run of digits valid in `radix_in`, converting each
-/// run's value to `radix_out` (no padding, no separators). A run whose value
-/// overflows u128 is left unchanged, as is all non-run text.
-fn convert_digit_runs(input: &str, radix_in: u32, radix_out: u32) -> String {
-    let bytes = input.as_bytes();
-    let valid = |b: u8| (b as char).is_digit(radix_in);
-    let mut out = String::with_capacity(input.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        if !valid(bytes[i]) {
-            out.push(bytes[i] as char);
-            i += 1;
-            continue;
-        }
-        let start = i;
-        while i < bytes.len() && valid(bytes[i]) {
-            i += 1;
-        }
-        let run = &input[start..i];
-        match u128::from_str_radix(run, radix_in) {
-            Ok(value) => {
-                let converted = match radix_out {
-                    2 => format!("{value:b}"),
-                    8 => format!("{value:o}"),
-                    _ => value.to_string(),
-                };
-                out.push_str(&converted);
-            }
-            Err(_) => out.push_str(run),
-        }
-    }
-    out
-}
-
-fn octal_encode(input: &str) -> String {
-    convert_digit_runs(input, 10, 8)
-}
-
-fn octal_decode(input: &str) -> Result<String, String> {
-    Ok(convert_digit_runs(input, 8, 10))
-}
-
-fn binary_encode(input: &str) -> String {
-    convert_digit_runs(input, 10, 2)
-}
-
-fn binary_decode(input: &str) -> Result<String, String> {
-    Ok(convert_digit_runs(input, 2, 10))
-}
-
-// ---------- GZIP ----------
-
-/// Largest output a GZIP decode may produce (a zip bomb must not grow without
-/// bound; matches the proxy codec's per-body cap of 64 MiB).
-const MAX_GZIP_DECODE: u64 = 64 * 1024 * 1024;
-
-fn gzip_compress(data: &[u8]) -> Vec<u8> {
-    use std::io::Write;
-    let mut e = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
-    // Writing to a Vec cannot fail.
-    let _ = e.write_all(data);
-    e.finish().unwrap_or_default()
-}
-
-fn gzip_encode(input: &str) -> String {
-    String::from_utf8_lossy(&gzip_compress(input.as_bytes())).into_owned()
-}
-
-fn gzip_decompress(data: &[u8]) -> Result<Vec<u8>, String> {
-    use std::io::Read;
-    let mut out = Vec::new();
-    let n = flate2::read::GzDecoder::new(data)
-        .take(MAX_GZIP_DECODE + 1)
-        .read_to_end(&mut out)
-        .map_err(|e| format!("not gzip data: {e}"))?;
-    if n as u64 > MAX_GZIP_DECODE {
-        return Err("gzip output too large".into());
-    }
-    Ok(out)
-}
-
-/// Inflate a gzipped panel. A decode failure says so instead of passing the
-/// input through.
-fn gzip_decode(input: &str) -> Result<String, String> {
-    let out = gzip_decompress(input.as_bytes())?;
     Ok(String::from_utf8_lossy(&out).into_owned())
 }
 
@@ -623,34 +510,27 @@ fn sha512_hex(input: &str) -> String {
 
 // ---------- Smart decode ----------
 
-/// Undo the one encoding layer Smart Decode guesses at. Real Burp 2026.11.2
-/// was measured doing exactly one layer per click (a nested input URL-decodes
-/// only its outer layer into a new panel), so this must not loop.
+/// Undo the one encoding layer Smart Decode guesses at.
 ///
-/// Fixed order - URL, HTML, Base64, hex - and a candidate is accepted only when it
+/// Fixed order — URL, HTML, Base64, hex — and a candidate is accepted only when it
 /// (a) changes the input and (b) re-encodes to exactly that input, so a plain word
 /// is never turned into noise and the input must already be canonical (`a+b` is
-/// left alone: URL encoding would have produced `a%20b`). Hex and Base64
+/// left alone: URL encoding would have produced `a%20b`).  Hex and Base64
 /// candidates must also decode to valid, non-empty UTF-8, which rejects inputs
 /// such as `deadbeef` (valid hex, non-text bytes).
 fn smart_decode(input: &str) -> Result<String, String> {
     if input.is_empty() {
         return Err("nothing to decode".into());
     }
-    smart_layer(input).ok_or_else(|| format!("no decoder layer recognised in {input:?}"))
-}
 
-/// One Smart Decode layer: the first of URL, HTML, Base64, hex that undoes
-/// cleanly, or `None` when nothing is recognised.
-fn smart_layer(input: &str) -> Option<String> {
     let url = url_decode(input);
     if url != input && url_encode(&url) == input {
-        return Some(url);
+        return Ok(url);
     }
 
     let html = util::html_decode(input);
     if html != input && util::html_encode(&html) == input {
-        return Some(html);
+        return Ok(html);
     }
 
     let cleaned: String = input.chars().filter(|c| !c.is_ascii_whitespace()).collect();
@@ -663,7 +543,7 @@ fn smart_layer(input: &str) -> Option<String> {
         if let Ok(bytes) = util::b64_decode(&cleaned) {
             if let Ok(text) = String::from_utf8(bytes.clone()) {
                 if !text.is_empty() && text != input && util::b64_encode(&bytes) == cleaned {
-                    return Some(text);
+                    return Ok(text);
                 }
             }
         }
@@ -679,13 +559,13 @@ fn smart_layer(input: &str) -> Option<String> {
                     && text != input
                     && util::hex_encode(&bytes) == input.to_ascii_lowercase()
                 {
-                    return Some(text);
+                    return Ok(text);
                 }
             }
         }
     }
 
-    None
+    Err(format!("no decoder layer recognised in {input:?}"))
 }
 
 #[cfg(test)]
@@ -815,24 +695,6 @@ mod tests {
             "not canonical URL encoding"
         );
         assert!(apply(Op::SmartDecode, "").is_err());
-    }
-
-    /// Measured Burp 2026.11.2: one Smart decode click, one layer.
-    #[test]
-    fn smart_decode_is_one_layer_per_click() {
-        // Real Burp 2026.11.2: Smart decode undoes exactly one layer per
-        // click. On the nested input below it URL-decodes only the outer
-        // layer and leaves the Base64 text for later.
-        let inner = apply(Op::Base64Encode, "https://example.com").unwrap();
-        let nested = apply(Op::UrlEncode, &inner).unwrap();
-        assert_eq!(nested, "aHR0cHM6Ly9leGFtcGxlLmNvbQ%3D%3D");
-        assert_eq!(apply(Op::SmartDecode, &nested).unwrap(), inner);
-        assert_eq!(
-            apply(Op::SmartDecode, &inner).unwrap(),
-            "https://example.com"
-        );
-        assert_eq!(apply(Op::SmartDecode, "SGVsbG8=").unwrap(), "Hello");
-        assert!(apply(Op::SmartDecode, "plain text").is_err());
     }
 
     #[test]

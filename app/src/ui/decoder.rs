@@ -38,8 +38,8 @@ pub(crate) fn decoder(app: &mut App, ui: &mut Ui) {
                         });
                     });
                     for (label, ops) in [
-                        ("Decode as ...", vec![Op::UrlDecode, Op::HtmlDecode, Op::Base64Decode, Op::AsciiHexDecode, Op::HexDecode, Op::OctalDecode, Op::BinaryDecode, Op::GzipDecode]),
-                        ("Encode as ...", vec![Op::UrlEncode, Op::HtmlEncode, Op::Base64Encode, Op::AsciiHexEncode, Op::HexEncode, Op::OctalEncode, Op::BinaryEncode, Op::GzipEncode]),
+                        ("Decode as ...", vec![Op::UrlDecode, Op::HtmlDecode, Op::Base64Decode, Op::AsciiHexDecode, Op::HexDecode]),
+                        ("Encode as ...", vec![Op::UrlEncode, Op::HtmlEncode, Op::Base64Encode, Op::AsciiHexEncode, Op::HexEncode]),
                         ("Hash ...", vec![Op::Md5, Op::Sha1, Op::Sha256, Op::Sha512]),
                     ] {
                         egui::ComboBox::from_id_salt((label, k)).width(200.0).selected_text(label).show_ui(ui, |ui| {
@@ -84,12 +84,6 @@ pub(crate) fn op_label(op: crate::decoder_ops::Op) -> &'static str {
         AsciiHexDecode => "ASCII hex decode",
         HexEncode => "Hex encode",
         HexDecode => "Hex decode",
-        OctalEncode => "Octal encode",
-        OctalDecode => "Octal decode",
-        BinaryEncode => "Binary encode",
-        BinaryDecode => "Binary decode",
-        GzipEncode => "GZIP encode",
-        GzipDecode => "GZIP decode",
         Rot13 => "ROT13",
         Md5 => "MD5",
         Sha1 => "SHA-1",
