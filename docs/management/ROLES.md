@@ -1,6 +1,6 @@
 # WebProbe company roles and operating boundaries
 
-Updated 2026-11-22 13:13 Asia/Jerusalem. The owner delegated routine project decisions to management at 13:12. This roster assigns responsibility; it does not expand repository access, spending authority or distribution rights.
+Updated 2026-11-22 18:26 Asia/Jerusalem. The owner delegated routine project decisions to management at 13:12. This roster assigns responsibility; it does not expand repository access, spending authority or distribution rights.
 
 | Role | Charter | Start/state | Escalation and handoff |
 | --- | --- | --- | --- |
@@ -16,6 +16,7 @@ Updated 2026-11-22 13:13 Asia/Jerusalem. The owner delegated routine project dec
 | Independent reviewer | Review exact diffs, semantics and regression proof | Active | Findings go to authors via engineering manager; approval does not certify tests not run |
 | Feature and fix authors | Implement bounded, non-overlapping changes on new branches | Existing lanes | No edits to others' PR branches; no duplicate R-16/R-18/R-20 work already in review |
 | HR / staffing | Maintain staffing register, identify gaps and write role specs | Active; staffing register in PR #137 | Request must name uncovered outcome, approving manager and gap evidence; accepting manager approves before role creation |
+| Git expert / requirements cleanup | Full PR disposition ledger, requirements coverage and prioritized cleanup proposal | Active, owner request 18:18 | Propose proof-based closure/docs batching and artifacts-branch extraction; no closes, merges, pushes or history rewrite without routed approval |
 | Documentation | PM owns index; source authors own technical docs | Covered, no separate hire now | Add a dedicated docs role only if the queue measurably blocks code/release acceptance |
 
 ## Decision and change protocol
@@ -27,7 +28,9 @@ Updated 2026-11-22 13:13 Asia/Jerusalem. The owner delegated routine project dec
 5. Master stays untouched. Do not print or commit secrets. D-CEO-04 permits private local separate-process ARTEX work only. No linking, combined distribution or remote exposure before dependency/rights review.
 6. A failed exact-tree check stops the affected landing, not unrelated author work. A new material risk reopens the affected decision instead of being hidden by a prior approval.
 
-## Work in progress now
+## Initial assignments (historical, 13:13)
+
+Use PROGRAM.md for current status and stop/start calls.
 
 - Existing hash/h2 and UI crawl-selection lanes continue.
 - Engineering Manager routes #49's cancellation proof/wording follow-up to an author; triage can review other independent PRs meanwhile.
