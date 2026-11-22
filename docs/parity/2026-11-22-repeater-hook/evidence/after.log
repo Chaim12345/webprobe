@@ -43,4 +43,3 @@ test ui::tests::repeater_fix_tests::repeater_tab_ids_are_never_reused ... ok
 test ui::tests::suite::repeater_updates_content_length ... ok
 
 test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 110 filtered out; finished in 1.28s
-
