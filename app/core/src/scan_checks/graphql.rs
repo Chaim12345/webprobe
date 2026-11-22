@@ -573,6 +573,215 @@ impl RequestCheck for BackupFile {
     }
 }
 
+/// Dynamic DOM analysis, R-13 option (b) (burp.Zel5's runAnalysis shape;
+/// the injected script body is not established, so WebProbe's
+/// instrumentation is its own): each HTML page is opened once in a
+/// headless browser with a canary in location.hash, the wrapped sinks are
+/// the families of burp.Zcwh's dynamic decoder (docs/specs/R-13), and a
+/// canary reaching a sink is reported under the sink's family. One
+/// browser run per URL serves every family check; hits are kept only on
+/// the probed origin (the browser's own chrome-error pages run the
+/// wrapped sinks too) and merged per sink (burp.Zwf8.identityOf).
+/// Skipped when no Chromium is available.
+/// Results belong to the current run's ScanDedup. A per-URL OnceLock
+/// shares one browser probe across the eight families and concurrent callers.
+fn dom_analysis_hits(cx: &ScanCtx) -> Vec<crate::crawl::DomHit> {
+    // Only GET history can be navigated faithfully as a browser GET.
+    if !matches!(cx.req.split_whitespace().next(), Some("GET")) {
+        return Vec::new();
+    }
+    // Dynamic analysis runs on pages: the baseline must be HTML.
+    let rp = util::parse_http(&cx.baseline.raw);
+    let ct = util::get_header(&rp.headers, "Content-Type").unwrap_or_default();
+    if !ct.to_ascii_lowercase().contains("html") {
+        return Vec::new();
+    }
+    // No dynamic source can run in a page with no script, inline handler
+    // or javascript: URL. Avoid launching Chromium for inert HTML.
+    static EXECUTABLE_HTML: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    if !EXECUTABLE_HTML
+        .get_or_init(|| regex::Regex::new(r"(?i)<script\b|\bon[a-z]+\s*=|javascript:").unwrap())
+        .is_match(&cx.baseline.body)
+    {
+        return Vec::new();
+    }
+    let scheme = if cx.entry.https { "https" } else { "http" };
+    let default = if cx.entry.https { 443 } else { 80 };
+    let port = if cx.port == default {
+        String::new()
+    } else {
+        format!(":{}", cx.port)
+    };
+    let path = cx.parts.path.split('#').next().unwrap_or("/");
+    if !path.starts_with('/') || path.starts_with("//") {
+        return Vec::new();
+    }
+    let host = if cx.host.contains(':') {
+        format!("[{}]", cx.host)
+    } else {
+        cx.host.clone()
+    };
+    let url = format!("{scheme}://{host}{port}{path}");
+    let state = cx.state();
+    let cell = state
+        .dom_hits
+        .lock()
+        .unwrap()
+        .entry(url.clone())
+        .or_default()
+        .clone();
+    cell.get_or_init(|| {
+        let canary = format!("wp{}", rnd_letters(10));
+        let origin = crate::crawl::origin_of(&url).unwrap_or_default();
+        crate::crawl::dom_analysis_probe(
+            &cx.shared,
+            &url,
+            &canary,
+            &cx.req,
+            &cx.host,
+            cx.port,
+            cx.entry.https,
+        )
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|h| crate::crawl::same_origin(&h.page_url, &origin))
+        .collect()
+    })
+    .clone()
+}
+
+/// One DOM family check: the sinks of one burp.Zcwh family, the issue it
+/// maps to, and burp.Zwf8's severity/confidence for it.
+macro_rules! dom_family_check {
+    ($name:ident, $id:literal, $issue:literal, $severity:literal, $confidence:literal, $family:literal, $sinks:expr, $doc:literal) => {
+        #[doc = $doc]
+        pub(crate) struct $name;
+
+        impl RequestCheck for $name {
+            fn id(&self) -> &'static str {
+                $id
+            }
+            fn issue(&self) -> &'static str {
+                $issue
+            }
+            fn scope(&self) -> Scope {
+                Scope::Request
+            }
+            fn group(&self) -> Option<&'static str> {
+                Some(BURP_GROUP)
+            }
+            fn run(&self, cx: &ScanCtx) {
+                if cx.stopped() || !cx.runs(self.issue()) {
+                    return;
+                }
+                let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
+                for hit in dom_analysis_hits(cx).iter().filter(|h| $sinks.contains(&h.sink.as_str())) {
+                    if !seen.insert(hit.sink.as_str()) {
+                        continue;
+                    }
+                    let mut i = mk(
+                        $severity,
+                        self.issue(),
+                        &cx.entry,
+                        format!(
+                            "The application may be vulnerable to {}. Data is read from <b>{}</b> and passed to <b>{}</b>.<br><br>The source value <b>{}</b> reached the sink as <b>{}</b>.",
+                            $family,
+                            util::html_encode(&hit.source),
+                            util::html_encode(&hit.sink),
+                            util::html_encode(&hit.source_value),
+                            util::html_encode(&hit.sink_value)
+                        ),
+                    );
+                    i.confidence = $confidence.into();
+                    cx.report(vec![i]);
+                }
+            }
+        }
+    };
+}
+
+dom_family_check!(
+    DomXss,
+    "active.dom-xss",
+    "Cross-site scripting (DOM-based)",
+    "high",
+    "Firm",
+    "DOM-based cross-site scripting",
+    &["document.write", "document.writeln", "element.innerHTML", "element.outerHTML", "element.insertAdjacentHTML"][..],
+    "Cross-site scripting (DOM-based), KB 00200310, High: the HTML-writing sinks of burp.Zcwh's XSS family (first slice: document.write/writeln, inner/outerHTML, insertAdjacentHTML; jQuery groups not yet). Confidence Firm (burp.Zwf8.Zd: no Tentative rule covers a location.hash source)."
+);
+dom_family_check!(
+    DomJsInjection,
+    "active.dom-javascript-injection",
+    "JavaScript injection (DOM-based)",
+    "high",
+    "Firm",
+    "DOM-based JavaScript injection",
+    &["eval", "Function", "setTimeout", "setInterval"][..],
+    "JavaScript injection (DOM-based), KB 00200320, High: the JavaScript-execution sinks of burp.Zcwh's family (eval, Function, setTimeout/setInterval string handlers; execScript and javascript: URLs are not wrappable, not established here). Confidence Firm (burp.Zwf8.Zd)."
+);
+dom_family_check!(
+    DomOpenRedirection,
+    "active.dom-open-redirection",
+    "Open redirection (DOM-based)",
+    "low",
+    "Tentative",
+    "DOM-based open redirection",
+    &["window.open"][..],
+    "Open redirection (DOM-based), KB 00500110, Low: window.open, the only wrappable navigation sink of burp.Zcwh's family - the Location members (href, assign, replace, host, hostname, protocol) are LegacyUnforgeable in Chromium. Confidence Tentative (burp.Zwf8.Zd: every open-redirection variant is Tentative)."
+);
+dom_family_check!(
+    DomStorageManipulation,
+    "active.dom-storage-manipulation",
+    "HTML5 storage manipulation (DOM-based)",
+    "info",
+    "Firm",
+    "DOM-based HTML5 storage manipulation",
+    &["localStorage.setItem.name", "localStorage.setItem.value", "sessionStorage.setItem.name", "sessionStorage.setItem.value"][..],
+    "HTML5 storage manipulation (DOM-based), KB 00500f00, Information: the localStorage/sessionStorage setItem name and value sinks of burp.Zcwh's storage family. Confidence Firm (burp.Zwf8.Zd)."
+);
+dom_family_check!(
+    DomJsonInjection,
+    "active.dom-json-injection",
+    "Client-side JSON injection (DOM-based)",
+    "low",
+    "Firm",
+    "DOM-based client-side JSON injection",
+    &["JSON.parse"][..],
+    "Client-side JSON injection (DOM-based), KB 00200370, Low: JSON.parse, burp.Zcwh's client-side JSON injection sink. Confidence Firm (burp.Zwf8.Zd)."
+);
+dom_family_check!(
+    DomXpathInjection,
+    "active.dom-xpath-injection",
+    "Client-side XPath injection (DOM-based)",
+    "low",
+    "Firm",
+    "DOM-based client-side XPath injection",
+    &["document.evaluate"][..],
+    "Client-side XPath injection (DOM-based), KB 00200360, Low: document.evaluate (jQuery.parseXML not yet), burp.Zcwh's XPath family. Confidence Firm (burp.Zwf8.Zd)."
+);
+dom_family_check!(
+    DomDocumentDomain,
+    "active.dom-document-domain",
+    "Document domain manipulation (DOM-based)",
+    "medium",
+    "Firm",
+    "DOM-based document domain manipulation",
+    &["document.domain"][..],
+    "Document domain manipulation (DOM-based), KB 00501100, Medium: the document.domain setter (configurable in Chromium, wrapped). Confidence Firm (burp.Zwf8.Zd)."
+);
+
+dom_family_check!(
+    DomCookieManipulation,
+    "active.dom-cookie-manipulation",
+    "Cookie manipulation (DOM-based)",
+    "low",
+    "Firm",
+    "DOM-based cookie manipulation",
+    &["document.cookie"][..],
+    "Cookie manipulation (DOM-based), KB 00500b00, Low: the document.cookie setter (burp.Zcwh's cookie family). Confidence Firm (burp.Zwf8.Zd)."
+);
+
 /// WebProbe's own reflected-DOM canary (Burp finds DOM issues by analysing
 /// JavaScript, which is not this): a plain canary reflected unencoded into
 /// script data or an attribute value of an HTML response. Also seeds the
