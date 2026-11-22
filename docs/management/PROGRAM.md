@@ -1,14 +1,14 @@
 # WebProbe program board
 
-Snapshot: 2026-11-22 20:24 Asia/Jerusalem. Program owner: Program Manager. [Canonical release checklist](RELEASE-CHECKLIST.md). [Review and decision ledger](REVIEW-LEDGER.md). [Role charters](ROLES.md). [HR staffing register, PR #137](https://github.com/Chaim12345/webprobe/pull/137), proposed file `docs/management/STAFFING.md`.
+Snapshot: 2026-11-22 22:57 Asia/Jerusalem. Program owner: Program Manager. [Canonical release checklist](RELEASE-CHECKLIST.md). [Review and decision ledger](REVIEW-LEDGER.md). [Role charters](ROLES.md). [HR staffing register, PR #137](https://github.com/Chaim12345/webprobe/pull/137), proposed file `docs/management/STAFFING.md`.
 
 This is the index for sequencing, not permission to merge or change product behavior. Only the triage lane lands parity changes. Existing PR branches and master stay untouched. Refresh this board when a source head, landing, decision or verification result changes.
 
 ## Current position
 
-- Live parity `4ad2591e61f262e36b57965139bd429b3e9f0602`; **113 open PRs**, full paginated refresh and exact ancestry recomputed. Management #160 remains open; previous e4b6dbb docs approval is historical once this refresh changes its head. Self-row SHA stays blank to avoid recursive staleness.
+- Live parity `4ad2591e61f262e36b57965139bd429b3e9f0602`; **113 open PRs**, full paginated refresh and exact ancestry recomputed. Management #160 remains open; previous 0220939 docs approval is historical once this refresh changes its head. Self-row SHA stays blank to avoid recursive staleness.
 - PR #70 landed at 0c0dee7, #68 at f297951 and #159 at 5c15280. Live API confirms merges. Triage reports 1084 combined passes /14 ignored for #159. PR #67 is now closed after complete source-to-successor proof; this was not a title/ancestry-only closure. Original #139 remains open pending its own complete replacement proof.
-- **Final acceptance held on independent execution/UI.** #155 `2c7ccdd87a4fe1be0ec1aea2837258932ad94474` implements CTO B history marking and pre-edit received-wire preservation. Reviewer 20:10 approves exact source delta by code read; independent QA 20:09 passes pipeline_matrix 7/0 on this head. Full suite/JDK25/CI and one-build UI remain incomplete. This is a source change, so no test-only carry-over plan applies. Unrelated landings stay frozen.
+- **Final acceptance held on remaining UI/workflow gates.** QA 22:36 reports exact #155 2c7ccdd suite 1184 passed/0 failed/27 ignored, fmt/clippy clean and real-JDK25 ext_host 15/15, montoya 4/4, bambda 13/13. Standalone pipeline 7/7 is separate, not added again. Visible incomplete/strict-framing notes and real project save/quit/reopen retaining note/original bytes passed UI 22:41-22:43. Remaining streaming/storage/cross-tool UI and final verdict are open; unrelated landings stay frozen.
 - H2 #145 `a88dfe91feb7410d5ea8983da06823a9c5b9483e` **landed at 4ad2591**. Live API and exact ancestry confirm it. Independent QA accepted exact head1017/0/13 and 19/19 executed unique fixtures, then merged tree 1105/0/14, matching triage. Triage reports remote/local merged trees identical to saved tested tree, JDK25 no-run/fmt/clippy clean and non-Kilo CI green. The old24-selector list had 5 wrong-namespace duplicates; zero-match now fails. This closes the #145 semantic-overlap gate, not final #125/#155 release acceptance.
 - Canonical #125 `359b1395e0849db67add85cbf1b9bbf4c5a06dcf` implements preserve-to-Inbox collection deletion. Regression covers stable IDs/evidence/notes, unrelated collection items, safe repeated deletion and save/restore; modal describes moving items. Reviewer code-read approves exactly 3108302..359b139, not execution. Author reports support 118/0 and app 151/0, fmt/clippy clean; prior core/Bambda aggregate remains old-head evidence.
 - Candidate #155 `2c7ccdd87a4fe1be0ec1aea2837258932ad94474` includes #125 359b139 and parity 4ad2591, verified live. Delta from dc170b5 is codec.rs, net/engine.rs and pipeline_matrix.rs (+228/-21). Buffered incomplete history retains received bytes before rules/hooks/interception, original framing, real status and note; client receives the edited copy. Complete responses/streaming are unchanged. Author reports 8/8 pipeline runs (7 tests each), core 845/0/13 and fmt/clippy clean. Author mutation check 20:08 demonstrated the edit-gap fixture fails without freezing the original bytes, then restored the clean head. Independent pipeline 7/0 is an early signal, not the full release gate.
@@ -26,7 +26,7 @@ This is the index for sequencing, not permission to merge or change product beha
 
 1. **Preserve the completed policy fix.** D-CEO-02 remains in force. #125 359b139 moves collection items to Inbox, with evidence/notes/IDs, repeat-delete safety, save/reload regression and correct modal. Exact delta has reviewer code-read approval; author test counts are not independent acceptance.
 2. **Hold source-changing final 2c7ccdd.** #125 remains reader-free 359b139; discarded local integration merge/counts do not change that ref. #155 carries its source plus the reader and CTO B work. No old-head approval/result transfers without explicit verification.
-3. **Finish 2c7ccdd acceptance.** Exact source-review approval and independent pipeline 7/0 are complete, scoped evidence. QA runs the full suite/JDK25/Java/CI, then one-build cross-tool UI. Prove real project save/close/reopen of marker and original bytes, strict duplicate/conflicting-CL note, and truncated streaming with storage ON/OFF and size-cut. Fixture serde roundtrips alone do not prove the full project workflow.
+3. **Finish 2c7ccdd UI acceptance.** Full suite/JDK25 execution is green per QA 22:36, not a final release verdict. Marker, strict conflicting-CL wording and real project persistence passed per QA reports. Complete truncated streaming storageON/OFF/size-cut and the cross-tool workflow list with screenshots. Current hosted CI and tested/remote identity at landing remain separate.
 4. **Then land and prove cleanup.** Triage verifies final tested/remote identity. Only after actual combined landing and pipeline/drop-close/nonblocking-drain preservation propose #148/#110 cleanup. PR #139 needs its own complete replacement proof; #67 is already closed with proof.
 5. **Git expert owns requirements/cleanup priorities.** Reconcile source-to-requirement coverage and propose the smallest safe closure batches. Preserve source branches, evidence and history unless a separately grounded cleanup plan permits a change. Do not turn old-stack fix approvals into full-stack acceptance.
 6. **Resume slice queue after the batch.** Retain #164 -> #166 and #167 -> #168, source-size/destination-scope loader gates, traffic/privacy notes and #170 unresolved should-fixes. Library/core-design approval is not unrestricted exposure permission.
@@ -54,16 +54,16 @@ CTO Option A 19:48 keeps R1 terminal behavior after forwarding Connection: close
 
 21712de's first marker attempt could still store post-edit bytes beside a note about original framing. Final 2c7ccdd freezes bytes before rules/hooks/interception. Reviewer 20:10 approves the source fix and marker edge cases: short CL, unterminated chunked, untrusted malformed/duplicate CL and no final response; HEAD/204/304 and complete EOF-delimited messages are not spuriously incomplete. Complete responses use the old path. Streaming keeps existing sink-generated notes, not this new buffered classifier.
 
-QA independently passed all 7 pipeline fixtures, including the edit-after-incomplete discriminator. Still open: full exact-head suite/JDK25/CI, actual save_project/restore_project UI cycle preserving note/original bytes, visible strict-framing warning, and truncated streaming storage ON/OFF/size-cut. Current fixtures only serialize ProjectHistory to JSON and back. Duplicate/conflicting CL can correctly show a strict framing warning even when all bytes arrived. Do not broaden the early pipeline result or reviewer code read into final acceptance.
+QA independently passed all 7 pipeline fixtures, including the edit-after-incomplete discriminator. QA 22:36 completes full suite/JDK25. QA 22:41/22:43 reports visible incomplete and strict-framing notes, original response bytes, and the real save_project/quit/restore_project cycle passed. PM retains this as QA-reported visual evidence, not a PM screenshot inspection. Remaining streaming storage ON/OFF/size-cut and cross-tool workflow checks stay open; current hosted CI remains separate. Duplicate/conflicting CL can correctly show a strict framing warning even when all bytes arrived. Do not broaden the early pipeline result or reviewer code read into final acceptance.
 
 ## Lane ownership
 
 | Lane | Accountable role | Current next checkpoint | Boundary |
 | --- | --- | --- | --- |
-| Parity landing | Triage | Held on 2c7ccdd full independent suite/JDK25/CI/UI | No other landings during batch |
+| Parity landing | Triage | Wait remaining UI/final QA verdict/current CI, then tested-remote identity | No other landings during batch |
 | #145 acceptance | QA/reviewer/triage | DONE: exact 1017/0/13,19 fixtures; merged 1105/0/14; landed 4ad2591 | Not final #125/#155 acceptance |
 | Canonical #125 | Integration | Reader-free359b139 preservation delta approved | Hold source; final combination #155 2c7ccdd |
-| #155 request boundary | Request-reader + reviewer/QA | 2c7ccdd source approved; independent pipeline 7/0 | Full suite/Java/CI and real save/reopen + streaming/UI gates |
+| #155 request boundary | Request-reader + reviewer/QA | 2c7ccdd suite/JDK25 green; marker/save-reopen UI passed | Remaining streaming/storage and cross-tool UI; final verdict |
 | Parser / BCheck exec | Triage slice author + reviewer | Hold #164/#166 until batch done; loader gates before wiring | Source size, destination scope, bounded complexity/budgets |
 | Other slices | Existing slice authors + reviewer | #161/#163/#165/#167/#168/#169 approved; #170 core design approved with should-fixes | Freeze applies; #168 carries #167 |
 | Integrated workflow QA | QA / release | Pinned final combined build | Final release gates still unchecked |
@@ -93,7 +93,7 @@ Decision provenance: owner's authenticated WhatsApp messages were checked for AC
 | Program milestone | Exit evidence | Current state |
 | --- | --- | --- |
 | P0: recover and stabilize foundation | Exact merged tree and full required-Java suite per landing | #96 now landed too; #138 and remaining lane gates continue |
-| P1: one reviewable integrated candidate | Manifest and exact combined review/execution | #125 359b139/#155 2c7ccdd; exact source approved, independent pipeline 7/0; full gate/UI pending |
+| P1: one reviewable integrated candidate | Manifest and exact combined review/execution | #155 2c7ccdd source approved and suite/JDK25 green; remaining workflow UI/final verdict pending |
 | P2: integrated workflow acceptance | One pinned build passes cross-tool regression with screenshots and traceable fixtures | Not established by separate-head reports |
 | P3: reconcile old roadmap | Each of 21 recorded todo tasks mapped to integrated code, residual gap or owner hold | PR board ready; avoid reopening already implemented milestones |
 | P4: close measured parity gaps | #128 priorities translated into owned byte-safe Decoder, h2, Sequencer, variation-analysis and workflow fixtures | Hash/h2 lane active; do not claim Burp Pro parity |
@@ -161,3 +161,5 @@ Primary evidence links: [#125](https://github.com/Chaim12345/webprobe/pull/125),
 - 19:56: reviewer signs off exact dc170b5 fixtures by code read 19:53; no cargo execution. CTO incomplete/error-history criterion remains open independently; strengthened test follow-up requested, no new head assumed. Full QA continues on dc170b5.
 
 - 20:24: 113 open, parity 4ad2591/#125 359b139 unchanged; final #155 2c7ccdd source delta verified. CTO B implemented and reviewer 20:10 approved; independent pipeline 7/0 at 20:09. Full gate/UI remain open; prior 21712de/dc170b5/85bd159 results stay historical.
+
+- 22:57: live 113 open and source refs/parity unchanged. QA exact 2c7ccdd suite 1184/0/27 and real Java15/4/13 green 22:36; first three marker/framing/project UI checks passed 22:41-22:43. Remaining UI/final verdict held; no landing/closure permission from this milestone.
