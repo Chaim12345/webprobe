@@ -1,6 +1,15 @@
 # WebProbe program board
 
-Snapshot: 2026-11-22 23:59 Asia/Jerusalem. Program owner: Program Manager. [Canonical release checklist](RELEASE-CHECKLIST.md). [Review and decision ledger](REVIEW-LEDGER.md). [Role charters](ROLES.md). [HR staffing register, PR #137](https://github.com/Chaim12345/webprobe/pull/137), proposed file `docs/management/STAFFING.md`.
+## EINTR acceptance blocker, CTO 01:15 Nov23
+
+The d405f33 workspace run failed: 1029 passed / 1 failed, then remaining targets aborted. The evidence-edit fixture received a synthetic 502 after upstream ErrorKind::Interrupted. Later standalone passes and separately completed targets do not erase this failed run. Reviewer01:14 diagnosed a real pre-existing read-path bug: buffered reads can fail, streaming/EOF reads can truncate. CTO01:15 makes this an acceptance blocker for #125+#155, not unrelated work. No network replay is authorized.
+
+[PR #172](https://github.com/Chaim12345/webprobe/pull/172), exact head `0d2528e8f0283183f2a7d5f23d6830b135340c34`, is separate on parity2c2aa12, not included in #125fb3d89f/#155d405f33. Reviewer01:19 source APPROVE only. Triage01:22 reports standalone and clean parity merge each1111/0/14, required-Java no-run/fmt/clippy clean and tested tree saved. Hosted core/workspace/JVM jobs did not start due account billing/spending limits. #172 is NOT landed and needs its own landing authority; #171-only exception does not transfer. Include the fix, refresh affected candidates and rerun evidence-edit plus full exact combined-tree gates before acceptance.
+
+QA d405f33 scoped results01:13-01:26: fmt/clippy clean; standalone pipeline7/7 twice; JDK25 ext_host15/15, Montoya4/4, Bambda13/13. Aborted targets separately passed session25/support115/report12. No clean full workspace run yet. Actual final-head UI PASS reports: incomplete marker/strict-framing wording, real project save/reopen with notes and wire bytes, streaming store ON/OFF plus256MiB size cap, Organizer full cycle/delete-to-Inbox, Sequencer constant-token, live Logger-to-Repeater and Repeater extension hooks. Drop/pipelining, Intruder, Decoder and large-entry select/switch/save-reload remain uncompleted at this snapshot. These mechanics results do not certify a future refreshed tree. PM records attributed QA reports, not independently inspected QA screenshots.
+
+
+Snapshot: 2026-11-23 01:29 Asia/Jerusalem. Program owner: Program Manager. [Canonical release checklist](RELEASE-CHECKLIST.md). [Review and decision ledger](REVIEW-LEDGER.md). [Role charters](ROLES.md). [HR staffing register, PR #137](https://github.com/Chaim12345/webprobe/pull/137), proposed file `docs/management/STAFFING.md`.
 
 This is the index for sequencing, not permission to merge or change product behavior. Only the triage lane lands parity changes. Existing PR branches and master stay untouched. Refresh this board when a source head, landing, decision or verification result changes.
 
@@ -14,9 +23,9 @@ This is the index for sequencing, not permission to merge or change product beha
 
 Final #125 fb3d89f and #155 d405f33 now include the fix and have reviewer 23:39 code-read approval. Full independent exact-head execution/UI reruns remain required, including large-entry selection, switching and save/reload on the final tree.804MB observed peak remains a memory-reduction follow-up; explicit whole-body actions remain copy-heavy and outside the bounded selection fix.
 
-## Current position
+## Prior position, superseded by EINTR blocker above
 
-- Live parity `2c2aa124d4365e3edc0f8768634be5aa562935f2`; **113 open PRs**, full paginated refresh and exact ancestry recomputed. Management #160 remains open; previous 0ca52bc snapshot is historical once this refresh changes its head. Self-row SHA stays blank to avoid recursive staleness.
+- Live parity `2c2aa124d4365e3edc0f8768634be5aa562935f2`; **114 open PRs**, full paginated refresh and exact ancestry recomputed. Management #160 remains open; previous 0ca52bc snapshot is historical once this refresh changes its head. Self-row SHA stays blank to avoid recursive staleness.
 - PR #70 landed at 0c0dee7, #68 at f297951 and #159 at 5c15280. Live API confirms merges. Triage reports 1084 combined passes /14 ignored for #159. PR #67 is now closed after complete source-to-successor proof; this was not a title/ancestry-only closure. Original #139 remains open pending its own complete replacement proof.
 - **Final acceptance held on new final-head gates.** #171 is landed and both refreshed candidates carry it. #125 `fb3d89f4d7a43fbd8c15d2beaf08f9c14165b3db`; #155 `d405f33006c852a4ba59c364e0f21d294e56a180`. Reviewer 23:39 approves exact refresh resolution; QA23:40 pipeline 7/7 is an early signal, full suite/JDK25 and entire one-build UI sweep rerun are in progress. Old 2c7ccdd suite/Java/UI results do not certify d405f33. All unrelated landing/closure freezes remain.
 - H2 #145 `a88dfe91feb7410d5ea8983da06823a9c5b9483e` **landed at 4ad2591**. Live API and exact ancestry confirm it. Independent QA accepted exact head1017/0/13 and 19/19 executed unique fixtures, then merged tree 1105/0/14, matching triage. Triage reports remote/local merged trees identical to saved tested tree, JDK25 no-run/fmt/clippy clean and non-Kilo CI green. The old24-selector list had 5 wrong-namespace duplicates; zero-match now fails. This closes the #145 semantic-overlap gate, not final #125/#155 release acceptance.
@@ -32,7 +41,7 @@ Final #125 fb3d89f and #155 d405f33 now include the fix and have reviewer 23:39 
 - Owner asked at 18:18 for a dedicated Git expert on requirements, repository cleanup and priorities; the role is assigned. Cleanup priorities: protect the final candidate/policy fix, map requirements and exact retained-source proof, then measured closure/cleanup. Reviewer notes about evidence bloat are recommendations only, not permission for history rewriting or deleting evidence. The Git expert delivered the disposition ledger and draft artifacts/docs grouping; triage and CTO corrections below override its earlier proposals. No extraction push is authorized or reported. PR count is not a completion metric. The active candidate must not move merely to extract evidence while exact-head QA is running.
 - All 93 original audit rows are reported audited by triage, with later landings tracked. Audit completion is not permission to close unresolved sources. Old-stack fix-only approvals cannot certify carried features. Historical milestones remain in [milestones.csv](milestones.csv); final integrated gates remain unchecked.
 
-## Landing sequence and stop/start calls
+## Earlier landing sequence, #172 inclusion now required before acceptance
 
 1. **Preserve the completed policy fix.** D-CEO-02 remains in force. #125 359b139 moves collection items to Inbox, with evidence/notes/IDs, repeat-delete safety, save/reload regression and correct modal. Exact delta has reviewer code-read approval; author test counts are not independent acceptance.
 2. **Hold refreshed final pins.** Parity2c2aa12 includes landed #171; #125 fb3d89f and #155 d405f33 include parity and keep all prior safety work. Reviewer approves both exact deltas. No unrelated landing until final independent execution/workflow gates complete.

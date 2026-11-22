@@ -1,5 +1,14 @@
 # Review and decision ledger
 
+## EINTR acceptance blocker, CTO 01:15 Nov23
+
+The d405f33 workspace run failed: 1029 passed / 1 failed, then remaining targets aborted. The evidence-edit fixture received a synthetic 502 after upstream ErrorKind::Interrupted. Later standalone passes and separately completed targets do not erase this failed run. Reviewer01:14 diagnosed a real pre-existing read-path bug: buffered reads can fail, streaming/EOF reads can truncate. CTO01:15 makes this an acceptance blocker for #125+#155, not unrelated work. No network replay is authorized.
+
+[PR #172](https://github.com/Chaim12345/webprobe/pull/172), exact head `0d2528e8f0283183f2a7d5f23d6830b135340c34`, is separate on parity2c2aa12, not included in #125fb3d89f/#155d405f33. Reviewer01:19 source APPROVE only. Triage01:22 reports standalone and clean parity merge each1111/0/14, required-Java no-run/fmt/clippy clean and tested tree saved. Hosted core/workspace/JVM jobs did not start due account billing/spending limits. #172 is NOT landed and needs its own landing authority; #171-only exception does not transfer. Include the fix, refresh affected candidates and rerun evidence-edit plus full exact combined-tree gates before acceptance.
+
+QA d405f33 scoped results01:13-01:26: fmt/clippy clean; standalone pipeline7/7 twice; JDK25 ext_host15/15, Montoya4/4, Bambda13/13. Aborted targets separately passed session25/support115/report12. No clean full workspace run yet. Actual final-head UI PASS reports: incomplete marker/strict-framing wording, real project save/reopen with notes and wire bytes, streaming store ON/OFF plus256MiB size cap, Organizer full cycle/delete-to-Inbox, Sequencer constant-token, live Logger-to-Repeater and Repeater extension hooks. Drop/pipelining, Intruder, Decoder and large-entry select/switch/save-reload remain uncompleted at this snapshot. These mechanics results do not certify a future refreshed tree. PM records attributed QA reports, not independently inspected QA screenshots.
+
+
 Snapshot: 2026-11-22 22:57 Asia/Jerusalem. Exact live heads were checked; verdicts below retain their reported scope. PM did not rerun Rust tests or certify an implementation. An approval from an earlier head is not silently transferred to a later head.
 
 | Work | Current head | Review state | Verification and next gate |
