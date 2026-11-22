@@ -1,0 +1,4 @@
+    Checking webprobe v0.1.0 (/home/sandbox/repeater-hook/app)
+    Checking webprobe-report v0.1.0 (/home/sandbox/repeater-hook/app/report)
+    Checking webprobe-support v0.1.0 (/home/sandbox/repeater-hook/app/support)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.16s

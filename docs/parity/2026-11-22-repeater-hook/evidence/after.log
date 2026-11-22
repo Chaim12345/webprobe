@@ -1,0 +1,46 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.18s
+     Running unittests src/main.rs (target/debug/build/webprobe/4632cd8b251e34da/out/webprobe-4632cd8b251e34da)
+
+running 28 tests
+test repeater_ops::protocol_tests::protocol_control_rewrites_the_version_and_picks_the_send_mode ... ok
+test repeater_ops::tests::body_encoding_toggles_between_urlencoded_and_multipart ... ok
+test repeater_ops::tests::change_method_get_to_post_moves_query_to_body ... ok
+test repeater_ops::tests::change_method_post_to_get_moves_body_to_query ... ok
+test repeater_ops::tests::cross_site_redirects_strip_headers_and_rewrite_host ... ok
+test repeater_ops::tests::curl_command_matches_burp_shape ... ok
+test repeater_ops::tests::follow_policy_and_hop_cap ... ok
+test repeater_ops::tests::follow_stops_and_the_button_continues_from_the_last_hop ... ok
+test repeater_ops::tests::location_resolution_matches_burp ... ok
+test repeater_ops::tests::paste_keeps_crlf_messages_crlf ... ok
+test repeater_ops::tests::paste_url_builds_a_get_request ... ok
+test repeater_ops::tests::previous_response_is_the_one_before_the_latest ... ok
+test repeater_ops::tests::process_cookies_merges_set_cookie_on_same_site_hops ... ok
+test repeater_ops::tests::project_file_keeps_tab_order_names_and_contents ... ok
+test repeater_ops::tests::python_script_repeats_the_request ... ok
+test repeater_ops::tests::redirect_detection_needs_3xx_and_location ... ok
+test repeater_ops::tests::redirects_change_method_except_307_and_308 ... ok
+test repeater_ops::tests::repeater_http_drop_stops_before_origin ... ok
+test repeater_ops::tests::repeater_montoya_http_handlers_reach_origin_and_response ... origin hop 0: 1 probe headers, proxy-only=false
+origin hop 1: 2 probe headers, proxy-only=false
+real JVM logs: [
+    "Picked up JAVA_TOOL_OPTIONS: -Xmx128m -Xss256k",
+    "[out] [bridge] initializing RepeaterHttpExtension",
+    "[out] [bridge] ready: 1 HTTP handler(s), 1 proxy request handler(s), 1 proxy response handler(s)",
+    "[out] request Repeater /start",
+    "[out] response Repeater /start",
+    "[out] request Repeater /final",
+    "[out] response Repeater /final",
+]
+ok
+test repeater_ops::tests::send_following_walks_a_local_redirect_chain ... ok
+test repeater_ops::tests::tab_close_variants_and_reopen ... ok
+test repeater_ops::tests::tab_duplicate_move_rename ... ok
+test repeater_ops::tests::url_encode_as_you_type_encodes_typed_key_characters ... ok
+test repeater_ops::tests::ws_filter_by_direction_and_search ... ok
+test ui::tests::repeater_fix_tests::cancel_abandons_the_in_flight_send ... ok
+test ui::tests::repeater_fix_tests::links_in_response_walks_every_link ... ok
+test ui::tests::repeater_fix_tests::repeater_tab_ids_are_never_reused ... ok
+test ui::tests::suite::repeater_updates_content_length ... ok
+
+test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 110 filtered out; finished in 1.28s
+

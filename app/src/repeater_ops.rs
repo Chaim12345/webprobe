@@ -482,10 +482,25 @@ pub struct FollowResult {
 fn send_once(
     shared: &net::Shared,
     service: &Service,
-    req: &str,
+    req: &mut String,
     cancelled: &dyn Fn() -> bool,
     progress: &dyn Fn(&[u8], bool),
 ) -> net::Upstream {
+    use webprobe_core::ext_host::{self, Annotations, HttpService};
+    // Snapshot without holding the registry while the extension runs.
+    let exts = ext_host::active_hooks(shared);
+    let svc = HttpService::new(&service.host, service.port, service.https);
+    let mut ann = Annotations::default();
+    let mut bytes = req.as_bytes().to_vec();
+    if !ext_host::run_http_request_hooks(&exts, "Repeater", &svc, &mut bytes, &mut ann) {
+        return net::Upstream {
+            resp: None,
+            error: Some("request dropped by extension".into()),
+        };
+    }
+    // Keep the exact bytes for transport and initiatingRequest, including
+    // binary bodies an extension might produce. The editor is text-based.
+    *req = String::from_utf8_lossy(&bytes).into_owned();
     let url = format!(
         "{}{}",
         service.origin(),
@@ -494,25 +509,19 @@ fn send_once(
     let settings = shared.streaming.lock().unwrap().clone();
     let mut sink = webprobe_core::streaming::LiveSink::new(&url, settings, cancelled, progress);
     let mut up = if service.https {
-        net::send_tls_raw_with(
-            shared,
-            &service.host,
-            service.port,
-            req.as_bytes(),
-            Some(&mut sink),
-        )
+        net::send_tls_raw_with(shared, &service.host, service.port, &bytes, Some(&mut sink))
     } else {
-        net::send_raw_with(
-            shared,
-            &service.host,
-            service.port,
-            req.as_bytes(),
-            Some(&mut sink),
-        )
+        net::send_raw_with(shared, &service.host, service.port, &bytes, Some(&mut sink))
     };
     if let Some(whole) = sink.into_response() {
         up.resp = Some(whole);
         up.error = None;
+    }
+    if let Some(resp) = up.resp.as_mut() {
+        if !ext_host::run_http_response_hooks(&exts, "Repeater", &svc, &bytes, resp, &mut ann) {
+            up.resp = None;
+            up.error = Some("response dropped by extension".into());
+        }
     }
     up
 }
@@ -532,7 +541,7 @@ pub fn send_following(
     let mut current = service.clone();
     let mut followed = 0;
     loop {
-        let up = send_once(shared, &current, &request, cancelled, progress);
+        let up = send_once(shared, &current, &mut request, cancelled, progress);
         let Some(resp) = up.resp else {
             return FollowResult {
                 request,
@@ -2884,6 +2893,202 @@ mod tests {
         assert!(
             !should_follow(FollowMode::Always, MAX_REDIRECTS, &a, &b, true),
             "Burp stops at 10"
+        );
+    }
+
+    /// Real Montoya extension, actual Repeater send path and TCP origin.
+    /// Also checks redirect hops and that proxy-only handlers stay excluded.
+    #[test]
+    fn repeater_montoya_http_handlers_reach_origin_and_response() {
+        use std::io::{Read, Write};
+        use std::sync::Arc;
+        use webprobe_core::ext_host::{self, JavaSidecar, LoadedExtension, ProxyHooks};
+        let api = webprobe_core::paths::montoya_jar();
+        let java = webprobe_core::paths::java();
+        let (Ok(api), Ok(java)) = (api, java) else {
+            assert!(
+                std::env::var_os("WEBPROBE_REQUIRE_JAVA").is_none(),
+                "required Repeater regression needs a JDK and Montoya API jar"
+            );
+            eprintln!(
+                "skipping: no JDK or Montoya API jar (WEBPROBE_REQUIRE_JAVA=1 makes this fatal)"
+            );
+            return;
+        };
+        let javac = std::fs::canonicalize(java).unwrap().with_file_name("javac");
+        let dir = std::env::temp_dir().join(format!("wp-repeater-http-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("META-INF/services")).unwrap();
+        std::fs::write(
+            dir.join("META-INF/services/burp.api.montoya.BurpExtension"),
+            "RepeaterHttpExtension\n",
+        )
+        .unwrap();
+        let out = std::process::Command::new(javac)
+            .args(["-nowarn", "-cp"])
+            .arg(api)
+            .arg("-d")
+            .arg(&dir)
+            .arg(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/sidecar/stage-tests/RepeaterHttpExtension.java"
+            ))
+            .output()
+            .expect("javac launches");
+        assert!(
+            out.status.success(),
+            "javac: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let shared = net::Shared::new();
+        let sc = Arc::new(
+            JavaSidecar::spawn_with(
+                dir.to_str().unwrap(),
+                Some(webprobe_core::ext_calls::host_link(&shared)),
+            )
+            .unwrap(),
+        );
+        ext_host::with_host(&shared, |h| {
+            h.extensions.push(LoadedExtension {
+                enabled: true,
+                hooks: sc.clone(),
+                source: None,
+            })
+        });
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        let origin = std::thread::spawn(move || {
+            let mut seen = Vec::new();
+            for hop in 0..2 {
+                let (mut stream, _) = l.accept().unwrap();
+                stream
+                    .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                    .unwrap();
+                let mut raw = Vec::new();
+                let mut buf = [0; 4096];
+                while !raw.windows(4).any(|w| w == b"\r\n\r\n") {
+                    let n = stream.read(&mut buf).unwrap();
+                    assert_ne!(n, 0);
+                    raw.extend_from_slice(&buf[..n]);
+                }
+                let req = String::from_utf8(raw).unwrap();
+                eprintln!(
+                    "origin hop {hop}: {} probe headers, proxy-only={}",
+                    req.matches("X-Parity-Probe: 1").count(),
+                    req.contains("X-Proxy-Only")
+                );
+                let resp = if hop == 0 {
+                    "HTTP/1.1 302 Found\r\nLocation: /final\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_string()
+                } else {
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        req.len(),
+                        req
+                    )
+                };
+                stream.write_all(resp.as_bytes()).unwrap();
+                seen.push(req);
+            }
+            seen
+        });
+        let req =
+            format!("GET /start HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n");
+        let result = send_following(
+            &shared,
+            &req,
+            &svc("127.0.0.1", port, false),
+            FollowMode::Always,
+            false,
+            &|| false,
+            &|_, _| {},
+        );
+        assert_eq!(result.error, None);
+        assert_eq!(result.followed, 1);
+        let seen = origin.join().unwrap();
+        // Same-site redirects retain custom headers, so the second hop
+        // should have one inherited and one newly added probe header.
+        assert_eq!(seen[0].matches("X-Parity-Probe: 1").count(), 1);
+        assert_eq!(seen[1].matches("X-Parity-Probe: 1").count(), 2);
+        assert!(seen.iter().all(|q| !q.contains("X-Proxy-Only")));
+        assert_eq!(result.request, seen[1]);
+        let response = String::from_utf8(result.response.unwrap()).unwrap();
+        assert!(
+            response.contains("X-Handler-Tool: Repeater\r\n"),
+            "{response}"
+        );
+        assert!(response.contains("X-Initiating-Probe: 1\r\n"), "{response}");
+        sc.unload();
+        let log = sc.errors();
+        eprintln!("real JVM logs: {log:#?}");
+        for expected in [
+            "request Repeater /start",
+            "response Repeater /start",
+            "request Repeater /final",
+            "response Repeater /final",
+        ] {
+            assert_eq!(
+                log.iter().filter(|line| line.ends_with(expected)).count(),
+                1,
+                "{log:#?}"
+            );
+        }
+        assert!(
+            !log.iter()
+                .any(|line| line.contains("HANDLER RAN") || line.starts_with("[error]")),
+            "{log:#?}"
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn repeater_http_drop_stops_before_origin() {
+        use webprobe_core::ext_host::{
+            self, Annotations, HttpService, LoadedExtension, ProxyAction, ProxyHooks,
+        };
+        struct Dropper;
+        impl ProxyHooks for Dropper {
+            fn extension_name(&self) -> &str {
+                "drop tool send"
+            }
+            fn handle_http_request(
+                &self,
+                tool: &str,
+                _: &HttpService,
+                _: &mut Vec<u8>,
+                _: &mut Annotations,
+            ) -> ProxyAction {
+                assert_eq!(tool, "Repeater");
+                ProxyAction::Drop
+            }
+            fn handle_request_received(
+                &self,
+                _: &HttpService,
+                _: &str,
+                _: &str,
+                _: &mut Vec<u8>,
+            ) -> ProxyAction {
+                panic!("Repeater must not call proxy-only hooks")
+            }
+        }
+        let shared = net::Shared::new();
+        ext_host::with_host(&shared, |h| {
+            h.extensions.push(LoadedExtension::new(Dropper))
+        });
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        l.set_nonblocking(true).unwrap();
+        let r = send_following(
+            &shared,
+            "GET / HTTP/1.1\r\nHost: localhost\r\n\r\n",
+            &svc("127.0.0.1", l.local_addr().unwrap().port(), false),
+            FollowMode::Never,
+            false,
+            &|| false,
+            &|_, _| {},
+        );
+        assert!(r.response.is_none());
+        assert_eq!(r.error.as_deref(), Some("request dropped by extension"));
+        assert_eq!(
+            l.accept().unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
         );
     }
 
