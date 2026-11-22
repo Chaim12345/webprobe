@@ -1061,6 +1061,14 @@ fn read_frame<R: Read>(r: &mut R) -> (u8, u8, u32, Vec<u8>) {
     (head[3], head[4], stream, payload)
 }
 
+/// After a final DATA frame the client replenishes the connection window;
+/// absorb that WINDOW_UPDATE instead of dropping the socket under it
+/// (the write would otherwise race the close and surface as EPIPE).
+fn drain_final_window_update<S: Read>(s: &mut S) {
+    let mut sink = [0u8; 512];
+    let _ = s.read(&mut sink);
+}
+
 /// Speak the server side of one h2 request/response exchange on `s`.
 /// `upgrade` writes the 101 first (h2c); stream 1 is then the HTTP/1.1
 /// request already sent, so no HEADERS may follow.
@@ -1168,6 +1176,77 @@ fn serve_h2<S: Read + Write>(s: &mut S, upgrade: bool, expected_path: &str) {
     out.extend_from_slice(body);
     s.write_all(&out).unwrap();
     s.flush().unwrap();
+    drain_final_window_update(s);
+}
+
+/// Serve several sequential h2 requests on ONE accepted connection: streams
+/// 1, 3, 5, ... in order, each a GET for the expected path answered 200.
+/// Accepting a second TCP connection fails the test (see the callers).
+fn serve_h2_many<S: Read + Write>(s: &mut S, expected_paths: &[&str]) {
+    use hpack::{Decoder, Encoder};
+    // client preface + SETTINGS
+    let mut preface = [0u8; 24];
+    s.read_exact(&mut preface).unwrap();
+    assert_eq!(&preface, crate::h2::PREFACE);
+    let (ty, _, _, _) = read_frame(s);
+    assert_eq!(ty, 0x4);
+    // server SETTINGS
+    s.write_all(&[0, 0, 0, 0x4, 0, 0, 0, 0, 0]).unwrap();
+    let mut dec = Decoder::new();
+    let mut enc = Encoder::new();
+    for (i, expected_path) in expected_paths.iter().enumerate() {
+        let want_stream = (2 * i + 1) as u32;
+        let mut block = Vec::new();
+        loop {
+            let (ty, flags, stream, payload) = read_frame(s);
+            match ty {
+                0x1 => {
+                    assert_eq!(stream, want_stream, "request on the wrong stream");
+                    block.extend_from_slice(&payload);
+                    if flags & 0x4 != 0 {
+                        break;
+                    }
+                }
+                // ack the client's SETTINGS; ignore WINDOW_UPDATE etc.
+                0x4 if flags & 0x1 == 0 => {
+                    s.write_all(&[0, 0, 0, 0x4, 0x1, 0, 0, 0, 0]).unwrap();
+                }
+                _ => {}
+            }
+        }
+        let headers = dec.decode(&block).unwrap();
+        let path = headers
+            .iter()
+            .find(|(k, _)| k == b":path")
+            .map(|(_, v)| String::from_utf8_lossy(v).into_owned())
+            .unwrap_or_default();
+        assert_eq!(&path, expected_path);
+        let hb = enc.encode(vec![
+            (b":status".as_ref(), b"200".as_ref()),
+            (b"content-type".as_ref(), b"text/plain".as_ref()),
+        ]);
+        let body = format!("served {expected_path}").into_bytes();
+        let mut out = Vec::new();
+        out.extend_from_slice(&[
+            (hb.len() >> 16) as u8,
+            (hb.len() >> 8) as u8,
+            hb.len() as u8,
+        ]);
+        out.extend_from_slice(&[0x1, 0x4]);
+        out.extend_from_slice(&want_stream.to_be_bytes());
+        out.extend_from_slice(&hb);
+        out.extend_from_slice(&[
+            (body.len() >> 16) as u8,
+            (body.len() >> 8) as u8,
+            body.len() as u8,
+        ]);
+        out.extend_from_slice(&[0x0, 0x1]);
+        out.extend_from_slice(&want_stream.to_be_bytes());
+        out.extend_from_slice(&body);
+        s.write_all(&out).unwrap();
+        s.flush().unwrap();
+    }
+    drain_final_window_update(s);
 }
 
 /// Exactly one framing header and a normal HTTP/1.1 status line.
@@ -1261,6 +1340,621 @@ fn tls_alpn_h2_roundtrip() {
         .resp
         .unwrap_or_else(|| panic!("h2 over TLS failed: {:?}", resp.error));
     assert_normalised_h2_view(&resp);
+}
+
+/// CTO fixture (a): on a REUSED pooled-h2 connection, a POST whose response
+/// is lost AFTER the request was committed (head + body fully written) is
+/// never replayed: the origin sees exactly one request, the caller gets the
+/// error, and no fresh connection is opened.
+#[test]
+fn pooled_h2_post_on_a_reused_connection_is_never_replayed() {
+    use hpack::Encoder;
+    let mut shared = Shared::new();
+    let ca = shared.mitm.ca_der();
+    let upstream_config = shared
+        .mitm
+        .server_config_with_alpn("localhost", vec![b"h2".to_vec()])
+        .unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let posts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let posts_srv = posts.clone();
+    let t = std::thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
+        let conn = ServerConnection::new(upstream_config).unwrap();
+        let mut tls = StreamOwned::new(conn, stream);
+        let mut preface = [0u8; 24];
+        tls.read_exact(&mut preface).unwrap();
+        let (ty, _, _, _) = read_frame(&mut tls);
+        assert_eq!(ty, 0x4);
+        tls.write_all(&[0, 0, 0, 0x4, 0, 0, 0, 0, 0]).unwrap();
+        let mut enc = Encoder::new();
+        let mut primed = false;
+        loop {
+            let (ty, flags, stream, payload) = read_frame(&mut tls);
+            match ty {
+                0x1 if stream == 1 && flags & 0x4 != 0 => {
+                    // GET /prime: respond so the connection enters the pool.
+                    let hb = enc.encode(vec![(b":status".as_ref(), b"200".as_ref())]);
+                    let body = b"served /prime";
+                    let mut out = Vec::new();
+                    for (ty, flags, sid, data) in
+                        [(0x1u8, 0x4u8, 1u32, &hb[..]), (0x0, 0x1, 1, &body[..])]
+                    {
+                        let len = data.len();
+                        out.extend_from_slice(&[
+                            (len >> 16) as u8,
+                            (len >> 8) as u8,
+                            len as u8,
+                            ty,
+                            flags,
+                        ]);
+                        out.extend_from_slice(&sid.to_be_bytes());
+                        out.extend_from_slice(data);
+                    }
+                    tls.write_all(&out).unwrap();
+                    tls.flush().unwrap();
+                    primed = true;
+                }
+                0x0 if stream == 3 && flags & 0x1 != 0 => {
+                    assert!(primed, "POST arrived before the prime exchange");
+                    posts_srv.fetch_add(1, Ordering::SeqCst);
+                    // Request fully committed: drop the socket with no response.
+                    break;
+                }
+                0x4 if flags & 0x1 == 0 => {
+                    tls.write_all(&[0, 0, 0, 0x4, 0x1, 0, 0, 0, 0]).unwrap();
+                }
+                _ => {}
+            }
+            let _ = payload;
+        }
+        drop(tls);
+        // No second connection may be attempted for a replay.
+        listener.set_nonblocking(true).unwrap();
+        std::thread::sleep(Duration::from_millis(400));
+        assert!(
+            listener.accept().unwrap_err().kind() == std::io::ErrorKind::WouldBlock,
+            "a replay opened a second origin connection"
+        );
+    });
+    Arc::get_mut(&mut shared).unwrap().tls_upstream = client_config(ca);
+    shared.keep_alive.store(true, Ordering::SeqCst);
+    let before = shared.conns_opened.load(Ordering::SeqCst);
+    let prime = send_tls_raw(
+        &shared,
+        "localhost",
+        port,
+        b"GET /prime HTTP/1.1
+Host: localhost
+
+",
+    );
+    assert!(prime.resp.is_some(), "{:?}", prime.error);
+    // The connection is pooled before the effectful POST.
+    assert_eq!(shared.h2_pool.lock().unwrap().len(), 1, "pool not primed");
+    let r = send_tls_raw(
+        &shared,
+        "localhost",
+        port,
+        b"POST /submit HTTP/1.1
+Host: localhost
+Content-Length: 4
+
+data",
+    );
+    t.join().unwrap();
+    assert!(r.resp.is_none(), "expected an error, got {:?}", r.resp);
+    assert!(r.error.is_some());
+    assert_eq!(posts.load(Ordering::SeqCst), 1, "origin request count");
+    assert_eq!(
+        shared.conns_opened.load(Ordering::SeqCst) - before,
+        1,
+        "no fresh connection for a committed POST"
+    );
+}
+
+/// Net-level companion to the h2 GOAWAY units: a GOAWAY that names the
+/// completed exchange (last=1) retires the pooled connection; the next
+/// effectful POST runs exactly once, on a fresh connection.
+#[test]
+fn goaway_after_a_completed_effect_retires_the_pooled_connection() {
+    use hpack::Encoder;
+    let mut shared = Shared::new();
+    let ca = shared.mitm.ca_der();
+    let upstream_config = shared
+        .mitm
+        .server_config_with_alpn("localhost", vec![b"h2".to_vec()])
+        .unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let effects = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let effects_srv = effects.clone();
+    let t = std::thread::spawn(move || {
+        // Conn 1: serve GET /a, then GOAWAY(last_stream_id=1) and linger.
+        let (stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
+        let conn = ServerConnection::new(upstream_config.clone()).unwrap();
+        let mut tls = StreamOwned::new(conn, stream);
+        let mut preface = [0u8; 24];
+        tls.read_exact(&mut preface).unwrap();
+        let (ty, _, _, _) = read_frame(&mut tls);
+        assert_eq!(ty, 0x4);
+        tls.write_all(&[0, 0, 0, 0x4, 0, 0, 0, 0, 0]).unwrap();
+        let mut enc = Encoder::new();
+        loop {
+            let (ty, flags, stream, _) = read_frame(&mut tls);
+            if ty == 0x1 && stream == 1 && flags & 0x4 != 0 {
+                break;
+            }
+            if ty == 0x4 && flags & 0x1 == 0 {
+                tls.write_all(&[0, 0, 0, 0x4, 0x1, 0, 0, 0, 0]).unwrap();
+            }
+        }
+        let hb = enc.encode(vec![(b":status".as_ref(), b"200".as_ref())]);
+        let body = b"served /a";
+        let mut out = Vec::new();
+        for (ty, flags, sid, data) in [(0x1u8, 0x4u8, 1u32, &hb[..]), (0x0, 0x1, 1, &body[..])] {
+            let len = data.len();
+            out.extend_from_slice(&[(len >> 16) as u8, (len >> 8) as u8, len as u8, ty, flags]);
+            out.extend_from_slice(&sid.to_be_bytes());
+            out.extend_from_slice(data);
+        }
+        // GOAWAY naming stream 1 (the completed one) only.
+        let mut go = 1u32.to_be_bytes().to_vec();
+        go.extend_from_slice(&0u32.to_be_bytes());
+        let l = go.len();
+        out.extend_from_slice(&[(l >> 16) as u8, (l >> 8) as u8, l as u8, 0x7, 0]);
+        out.extend_from_slice(&0u32.to_be_bytes());
+        out.extend_from_slice(&go);
+        tls.write_all(&out).unwrap();
+        tls.flush().unwrap();
+        std::thread::sleep(Duration::from_millis(800));
+        drop(tls);
+        // Conn 2: the POST arrives here, exactly once; count and respond.
+        let (stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
+        let conn = ServerConnection::new(upstream_config).unwrap();
+        let mut tls = StreamOwned::new(conn, stream);
+        let mut preface = [0u8; 24];
+        tls.read_exact(&mut preface).unwrap();
+        let (ty, _, _, _) = read_frame(&mut tls);
+        assert_eq!(ty, 0x4);
+        tls.write_all(&[0, 0, 0, 0x4, 0, 0, 0, 0, 0]).unwrap();
+        let mut enc = Encoder::new();
+        loop {
+            let (ty, flags, stream, _) = read_frame(&mut tls);
+            match ty {
+                0x0 if stream == 1 && flags & 0x1 != 0 => {
+                    effects_srv.fetch_add(1, Ordering::SeqCst);
+                    let hb = enc.encode(vec![(b":status".as_ref(), b"200".as_ref())]);
+                    let body = b"effected";
+                    let mut out = Vec::new();
+                    for (ty, flags, sid, data) in
+                        [(0x1u8, 0x4u8, 1u32, &hb[..]), (0x0, 0x1, 1, &body[..])]
+                    {
+                        let len = data.len();
+                        out.extend_from_slice(&[
+                            (len >> 16) as u8,
+                            (len >> 8) as u8,
+                            len as u8,
+                            ty,
+                            flags,
+                        ]);
+                        out.extend_from_slice(&sid.to_be_bytes());
+                        out.extend_from_slice(data);
+                    }
+                    tls.write_all(&out).unwrap();
+                    tls.flush().unwrap();
+                    break;
+                }
+                0x4 if flags & 0x1 == 0 => {
+                    tls.write_all(&[0, 0, 0, 0x4, 0x1, 0, 0, 0, 0]).unwrap();
+                }
+                _ => {}
+            }
+        }
+        std::thread::sleep(Duration::from_millis(300));
+    });
+    Arc::get_mut(&mut shared).unwrap().tls_upstream = client_config(ca);
+    shared.keep_alive.store(true, Ordering::SeqCst);
+    let before = shared.conns_opened.load(Ordering::SeqCst);
+    let ra = send_tls_raw(
+        &shared,
+        "localhost",
+        port,
+        b"GET /a HTTP/1.1
+Host: localhost
+
+",
+    );
+    assert!(ra.resp.is_some(), "{:?}", ra.error);
+    assert_eq!(shared.h2_pool.lock().unwrap().len(), 1, "pool not primed");
+    let rb = send_tls_raw(
+        &shared,
+        "localhost",
+        port,
+        b"POST /effect HTTP/1.1
+Host: localhost
+Content-Length: 2
+
+ok",
+    );
+    t.join().unwrap();
+    assert!(
+        rb.resp
+            .as_deref()
+            .unwrap_or_default()
+            .ends_with(b"effected"),
+        "{:?}",
+        rb.error
+    );
+    assert_eq!(
+        effects.load(Ordering::SeqCst),
+        1,
+        "effect ran more than once"
+    );
+    assert_eq!(shared.conns_opened.load(Ordering::SeqCst) - before, 2);
+}
+
+/// Net-level companion to the concurrent-limit units: a pooled connection
+/// whose peer advertised MAX_CONCURRENT_STREAMS=0 admits no new stream, so
+/// the next request falls back to a fresh connection before any write.
+#[test]
+fn peer_zero_concurrent_streams_forces_a_fresh_connection() {
+    use hpack::Encoder;
+    let mut shared = Shared::new();
+    let ca = shared.mitm.ca_der();
+    let upstream_config = shared
+        .mitm
+        .server_config_with_alpn("localhost", vec![b"h2".to_vec()])
+        .unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let t = std::thread::spawn(move || {
+        // Conn 1: SETTINGS with MAX_CONCURRENT_STREAMS=0, then serve /a.
+        let (stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
+        let conn = ServerConnection::new(upstream_config.clone()).unwrap();
+        let mut tls = StreamOwned::new(conn, stream);
+        let mut preface = [0u8; 24];
+        tls.read_exact(&mut preface).unwrap();
+        let (ty, _, _, _) = read_frame(&mut tls);
+        assert_eq!(ty, 0x4);
+        // SETTINGS_MAX_CONCURRENT_STREAMS (0x3) = 0
+        tls.write_all(&[0, 0, 6, 0x4, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0])
+            .unwrap();
+        let mut enc = Encoder::new();
+        loop {
+            let (ty, flags, stream, _) = read_frame(&mut tls);
+            if ty == 0x1 && stream == 1 && flags & 0x4 != 0 {
+                break;
+            }
+            if ty == 0x4 && flags & 0x1 == 0 {
+                tls.write_all(&[0, 0, 0, 0x4, 0x1, 0, 0, 0, 0]).unwrap();
+            }
+        }
+        let hb = enc.encode(vec![(b":status".as_ref(), b"200".as_ref())]);
+        let body = b"served /a";
+        let mut out = Vec::new();
+        for (ty, flags, sid, data) in [(0x1u8, 0x4u8, 1u32, &hb[..]), (0x0, 0x1, 1, &body[..])] {
+            let len = data.len();
+            out.extend_from_slice(&[(len >> 16) as u8, (len >> 8) as u8, len as u8, ty, flags]);
+            out.extend_from_slice(&sid.to_be_bytes());
+            out.extend_from_slice(data);
+        }
+        tls.write_all(&out).unwrap();
+        tls.flush().unwrap();
+        std::thread::sleep(Duration::from_millis(800));
+        drop(tls);
+        // Conn 2: ordinary SETTINGS, serve /b.
+        let (stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
+        let conn = ServerConnection::new(upstream_config).unwrap();
+        let mut tls = StreamOwned::new(conn, stream);
+        serve_h2_many(&mut tls, &["/b"]);
+    });
+    Arc::get_mut(&mut shared).unwrap().tls_upstream = client_config(ca);
+    shared.keep_alive.store(true, Ordering::SeqCst);
+    let before = shared.conns_opened.load(Ordering::SeqCst);
+    let ra = send_tls_raw(
+        &shared,
+        "localhost",
+        port,
+        b"GET /a HTTP/1.1
+Host: localhost
+
+",
+    );
+    assert!(ra.resp.is_some(), "{:?}", ra.error);
+    assert_eq!(shared.h2_pool.lock().unwrap().len(), 1, "pool not primed");
+    let rb = send_tls_raw(
+        &shared,
+        "localhost",
+        port,
+        b"GET /b HTTP/1.1
+Host: localhost
+
+",
+    );
+    t.join().unwrap();
+    assert!(
+        rb.resp
+            .as_deref()
+            .unwrap_or_default()
+            .ends_with(b"served /b"),
+        "{:?}",
+        rb.error
+    );
+    assert_eq!(shared.conns_opened.load(Ordering::SeqCst) - before, 2);
+}
+
+/// CTO fixture (c): keep-alive off pools nothing — proven by priming the
+/// pool WITH keep-alive on, then turning it off: the next request opens a
+/// second connection instead of taking the pooled one.
+#[test]
+fn keep_alive_off_pools_no_h2_connection() {
+    let mut shared = Shared::new();
+    let ca = shared.mitm.ca_der();
+    let upstream_config = shared
+        .mitm
+        .server_config_with_alpn("localhost", vec![b"h2".to_vec()])
+        .unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let t = std::thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
+        let conn = ServerConnection::new(upstream_config.clone()).unwrap();
+        let mut tls = StreamOwned::new(conn, stream);
+        serve_h2_many(&mut tls, &["/a"]);
+        // Keep the pooled connection genuinely alive: the second request
+        // could reuse it if keep-alive were still on.
+        std::thread::sleep(Duration::from_millis(800));
+        drop(tls);
+        let (stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .unwrap();
+        let conn = ServerConnection::new(upstream_config).unwrap();
+        let mut tls = StreamOwned::new(conn, stream);
+        serve_h2_many(&mut tls, &["/b"]);
+    });
+    Arc::get_mut(&mut shared).unwrap().tls_upstream = client_config(ca);
+    shared.keep_alive.store(true, Ordering::SeqCst);
+    let before = shared.conns_opened.load(Ordering::SeqCst);
+    let ra = send_tls_raw(
+        &shared,
+        "localhost",
+        port,
+        b"GET /a HTTP/1.1
+Host: localhost
+
+",
+    );
+    assert!(ra.resp.is_some(), "{:?}", ra.error);
+    assert_eq!(shared.h2_pool.lock().unwrap().len(), 1, "pool not primed");
+    // With keep-alive now off, /b must not take the pooled connection.
+    shared.keep_alive.store(false, Ordering::SeqCst);
+    let rb = send_tls_raw(
+        &shared,
+        "localhost",
+        port,
+        b"GET /b HTTP/1.1
+Host: localhost
+
+",
+    );
+    t.join().unwrap();
+    assert!(rb.resp.is_some(), "{:?}", rb.error);
+    assert_eq!(shared.conns_opened.load(Ordering::SeqCst) - before, 2);
+}
+
+/// CTO fixture (c): a forced-HTTP/1.1 request never takes a pooled h2
+/// connection, and later h2 requests still reuse it.
+#[test]
+fn forced_http1_bypasses_the_pooled_h2_connection() {
+    let mut shared = Shared::new();
+    let ca = shared.mitm.ca_der();
+    let upstream_config = shared
+        .mitm
+        .server_config_with_alpn("localhost", vec![b"h2".to_vec(), b"http/1.1".to_vec()])
+        .unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let t = std::thread::spawn(move || {
+        let mut handlers = Vec::new();
+        for _ in 0..2 {
+            let (stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(10)))
+                .unwrap();
+            let cfg = upstream_config.clone();
+            handlers.push(std::thread::spawn(move || {
+                let conn = ServerConnection::new(cfg).unwrap();
+                let mut tls = StreamOwned::new(conn, stream);
+                tls.conn.complete_io(&mut tls.sock).unwrap();
+                match tls.conn.alpn_protocol() {
+                    Some(b"h2") => serve_h2_many(&mut tls, &["/a", "/c"]),
+                    Some(b"http/1.1") => {
+                        let _ = read_request_head(&mut tls);
+                        tls.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nh1-ok")
+                            .unwrap();
+                    }
+                    other => panic!("unexpected ALPN: {other:?}"),
+                }
+            }));
+        }
+        for h in handlers {
+            h.join().unwrap();
+        }
+    });
+    Arc::get_mut(&mut shared).unwrap().tls_upstream = client_config(ca);
+    shared.keep_alive.store(true, Ordering::SeqCst);
+    let before = shared.conns_opened.load(Ordering::SeqCst);
+    let send = |path: &str, want: Option<bool>| {
+        let _scope = crate::net::http2_scope(crate::net::Http2Choice {
+            want_h2: want,
+            strip_connection: true,
+        });
+        let req = format!("GET {path} HTTP/1.1\r\nHost: localhost\r\n\r\n");
+        send_tls_raw(&shared, "localhost", port, req.as_bytes())
+    };
+    let ra = send("/a", None);
+    let rb = send("/b", Some(false));
+    let rc = send("/c", None);
+    t.join().unwrap();
+    for (r, want) in [(&ra, "served /a"), (&rb, "h1-ok"), (&rc, "served /c")] {
+        let body = r.resp.as_deref().unwrap_or_default();
+        assert!(
+            body.ends_with(want.as_bytes()),
+            "want {want}: {:?}",
+            r.error
+        );
+    }
+    // Two connections total: the pooled h2 one (/a, /c) and the forced-h1 one.
+    assert_eq!(shared.conns_opened.load(Ordering::SeqCst) - before, 2);
+}
+
+/// CTO fixture (b): same host and port but a changed TLS policy is a
+/// different pool identity: no reuse across the change, reuse after it.
+#[test]
+fn tls_policy_change_uses_a_fresh_h2_connection() {
+    let mut shared = Shared::new();
+    let ca = shared.mitm.ca_der();
+    let upstream_config = shared
+        .mitm
+        .server_config_with_alpn("localhost", vec![b"h2".to_vec()])
+        .unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let t = std::thread::spawn(move || {
+        let batches: [&[&str]; 2] = [&["/a"], &["/b", "/c"]];
+        let mut handlers = Vec::new();
+        for paths in batches {
+            let (stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(10)))
+                .unwrap();
+            let cfg = upstream_config.clone();
+            handlers.push(std::thread::spawn(move || {
+                let conn = ServerConnection::new(cfg).unwrap();
+                let mut tls = StreamOwned::new(conn, stream);
+                serve_h2_many(&mut tls, paths);
+            }));
+        }
+        for h in handlers {
+            h.join().unwrap();
+        }
+    });
+    Arc::get_mut(&mut shared).unwrap().tls_upstream = client_config(ca.clone());
+    shared.keep_alive.store(true, Ordering::SeqCst);
+    let before = shared.conns_opened.load(Ordering::SeqCst);
+    let req = |path: &str| format!("GET {path} HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    let ra = send_tls_raw(&shared, "localhost", port, req("/a").as_bytes());
+    // TLS policy change: a fresh client config is a new pool identity.
+    Arc::get_mut(&mut shared).unwrap().tls_upstream = client_config(ca);
+    let rb = send_tls_raw(&shared, "localhost", port, req("/b").as_bytes());
+    let rc = send_tls_raw(&shared, "localhost", port, req("/c").as_bytes());
+    t.join().unwrap();
+    for (r, want) in [(&ra, "served /a"), (&rb, "served /b"), (&rc, "served /c")] {
+        let body = r.resp.as_deref().unwrap_or_default();
+        assert!(
+            body.ends_with(want.as_bytes()),
+            "want {want}: {:?}",
+            r.error
+        );
+    }
+    // /a on conn 1; the policy change forces conn 2 for /b; /c reuses conn 2.
+    assert_eq!(shared.conns_opened.load(Ordering::SeqCst) - before, 2);
+}
+
+/// CTO fixture (b), key level: route, TLS identity and protocol choice all
+/// discriminate the pool key, and a client-cert rule that cannot build
+/// falls back to the shared TLS identity.
+#[test]
+fn h2_pool_key_covers_route_tls_and_protocol_choice() {
+    let mut shared = Shared::new();
+    let config = shared.upstream_for("localhost");
+    let key = |shared: &Shared, config: &crate::upstream::UpstreamConfig, want: Option<bool>| {
+        let policy = crate::net::tls_client::EffectiveTlsPolicy::capture(shared, "localhost");
+        crate::net::conn_reuse::h2_pool_key(&policy, "localhost", 443, config, want)
+    };
+    let base = key(&shared, &config, None);
+    // Protocol choice.
+    assert_ne!(base, key(&shared, &config, Some(false)));
+    // Route change (effective upstream config).
+    let mut proxied = config.clone();
+    proxied.kind = crate::upstream::UpstreamKind::Http;
+    assert_ne!(base, key(&shared, &proxied, None));
+    // A matching client-cert rule that cannot build (bad PEM) falls back to
+    // the shared upstream identity: same effective policy, same key.
+    shared
+        .client_certs
+        .lock()
+        .unwrap()
+        .push(crate::net::tls_client::ClientCertRule {
+            host_pattern: "localhost".into(),
+            cert_pem: "not a pem".into(),
+            key_pem: "not a key".into(),
+        });
+    assert_eq!(base, key(&shared, &config, None));
+    // A valid matching mTLS rule is a different identity than the fallback.
+    let (cert_pem, key_pem) = shared.mitm.client_certificate("client").unwrap();
+    {
+        let mut certs = shared.client_certs.lock().unwrap();
+        certs.clear();
+        certs.push(crate::net::tls_client::ClientCertRule {
+            host_pattern: "localhost".into(),
+            cert_pem: cert_pem.clone(),
+            key_pem: key_pem.clone(),
+        });
+    }
+    let mtls = key(&shared, &config, None);
+    assert_ne!(base, mtls);
+    // Changing the rule's key is a different identity.
+    let (_cert2, key_pem2) = shared.mitm.client_certificate("client2").unwrap();
+    shared.client_certs.lock().unwrap()[0].key_pem = key_pem2;
+    assert_ne!(mtls, key(&shared, &config, None));
+    // Valid back to invalid: the rule stops building and the shared
+    // fallback identity returns, so the key matches the no-rule key again.
+    shared.client_certs.lock().unwrap()[0].cert_pem = "not a pem".into();
+    assert_eq!(base, key(&shared, &config, None));
+    shared.client_certs.lock().unwrap().clear();
+    // A constraints-only root change (same subject and SPKI, name
+    // constraints added) is a different TLS policy.
+    let original_roots = shared.tls_roots.lock().unwrap().clone();
+    let mut constrained = rustls::RootCertStore::empty();
+    for anchor in original_roots.roots.iter() {
+        let mut anchor = anchor.clone();
+        anchor.name_constraints = Some(rustls::pki_types::Der::from(vec![0x30u8, 0x00]));
+        constrained.roots.push(anchor);
+    }
+    let before_constraints = key(&shared, &config, None);
+    *shared.tls_roots.lock().unwrap() = constrained;
+    assert_ne!(before_constraints, key(&shared, &config, None));
+    // A different root store altogether is a different TLS policy.
+    *shared.tls_roots.lock().unwrap() = rustls::RootCertStore::empty();
+    assert_ne!(before_constraints, key(&shared, &config, None));
+    *shared.tls_roots.lock().unwrap() = original_roots;
+    // A different shared upstream config is a different identity.
+    let ca = shared.mitm.ca_der();
+    let pre_swap = key(&shared, &config, None);
+    Arc::get_mut(&mut shared).unwrap().tls_upstream = client_config(ca);
+    assert_ne!(pre_swap, key(&shared, &config, None));
 }
 
 /// A-05 end to end: a browser-style CONNECT + MITM request through the
@@ -2769,4 +3463,66 @@ fn hardening_pattern_matching_keeps_literal_and_regex_semantics_separate() {
     assert!(pattern_matches("^a.b$", true, "aXb"));
     assert!(!pattern_matches("[", true, "["));
     assert!(!pattern_matches("^a$", true, "ba"));
+}
+
+/// Two requests to the same h2 origin ride one pooled connection (streams 1
+/// and 3), and the counters show a single connection opened with one pool
+/// hit. Before h2 pooling, the second request opened a second connection.
+#[test]
+fn tls_alpn_h2_connections_are_reused_for_the_same_origin() {
+    let mut shared = Shared::new();
+    let ca = shared.mitm.ca_der();
+    let upstream_config = shared
+        .mitm
+        .server_config_with_alpn("localhost", vec![b"h2".to_vec()])
+        .unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let t = std::thread::spawn(move || {
+        // Exactly one accept: a second connection would leave the client
+        // hanging on accept #2 and fail the join/response assertions.
+        let (stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(60)))
+            .unwrap();
+        let conn = ServerConnection::new(upstream_config).unwrap();
+        let mut tls = StreamOwned::new(conn, stream);
+        serve_h2_many(&mut tls, &["/first", "/second"]);
+        // The client may keep the pooled connection open; do not read on.
+    });
+    Arc::get_mut(&mut shared).unwrap().tls_upstream = client_config(ca);
+    shared.keep_alive.store(true, Ordering::SeqCst);
+    let before = shared.conns_opened.load(Ordering::SeqCst);
+    let r1 = send_tls_raw(
+        &shared,
+        "localhost",
+        port,
+        b"GET /first HTTP/1.1\r\nHost: localhost\r\n\r\n",
+    );
+    let r2 = send_tls_raw(
+        &shared,
+        "localhost",
+        port,
+        b"GET /second HTTP/1.1\r\nHost: localhost\r\n\r\n",
+    );
+    t.join().unwrap();
+    let r1 = r1
+        .resp
+        .unwrap_or_else(|| panic!("first h2 request failed: {:?}", r1.error));
+    let r2 = r2
+        .resp
+        .unwrap_or_else(|| panic!("second h2 request failed: {:?}", r2.error));
+    assert!(
+        r1.ends_with(b"served /first"),
+        "{}",
+        String::from_utf8_lossy(&r1)
+    );
+    assert!(
+        r2.ends_with(b"served /second"),
+        "{}",
+        String::from_utf8_lossy(&r2)
+    );
+    let opened = shared.conns_opened.load(Ordering::SeqCst) - before;
+    assert_eq!(opened, 1, "two h2 requests must share one connection");
+    assert_eq!(shared.pool_hits.load(Ordering::SeqCst), 1);
 }
