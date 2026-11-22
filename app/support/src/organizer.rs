@@ -11,6 +11,15 @@ pub struct OrganizerItem {
     pub request: String,
     pub response: String,
     pub created: u64,
+    /// Owning collection id; 0 is the built-in Inbox.
+    pub collection: u64,
+}
+
+/// A named user collection (Burp's Organizer "New collection").
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Collection {
+    pub id: u64,
+    pub name: String,
 }
 
 /// Ordered-by-id item store. Ids are monotonic and never reused.
@@ -18,6 +27,8 @@ pub struct OrganizerItem {
 pub struct Organizer {
     pub items: Vec<OrganizerItem>,
     pub next_id: u64,
+    pub collections: Vec<Collection>,
+    pub next_collection_id: u64,
 }
 
 impl Organizer {
@@ -25,7 +36,52 @@ impl Organizer {
         Self {
             items: Vec::new(),
             next_id: 1,
+            collections: Vec::new(),
+            next_collection_id: 1,
         }
+    }
+
+    /// Create a named collection and return its id. A blank name becomes
+    /// "Collection N"; a duplicate name gets " 2", " 3", ... appended.
+    pub fn add_collection(&mut self, name: &str) -> u64 {
+        let id = self.next_collection_id;
+        self.next_collection_id = self.next_collection_id.saturating_add(1);
+        let base = match name.trim() {
+            "" => format!("Collection {}", self.collections.len() + 1),
+            n => n.to_string(),
+        };
+        let mut unique = base.clone();
+        let mut n = 2;
+        while unique.eq_ignore_ascii_case("Inbox")
+            || self.collections.iter().any(|c| c.name == unique)
+        {
+            unique = format!("{base} {n}");
+            n += 1;
+        }
+        self.collections.push(Collection { id, name: unique });
+        id
+    }
+
+    pub fn rename_collection(&mut self, id: u64, name: &str) -> bool {
+        match self.collections.iter_mut().find(|c| c.id == id) {
+            Some(c) if !name.trim().is_empty() => {
+                c.name = name.trim().to_string();
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Delete a collection and its items; false when it does not exist.
+    pub fn remove_collection(&mut self, id: u64) -> bool {
+        let before = self.collections.len();
+        self.collections.retain(|c| c.id != id);
+        self.items.retain(|i| i.collection != id);
+        self.collections.len() != before
+    }
+
+    pub fn collection_len(&self, id: u64) -> usize {
+        self.items.iter().filter(|i| i.collection == id).count()
     }
 
     /// Store a new item and return its id. `now` is the creation timestamp
@@ -40,6 +96,7 @@ impl Organizer {
             request: request.to_string(),
             response: response.to_string(),
             created: now,
+            collection: 0,
         });
         id
     }
@@ -100,6 +157,20 @@ impl Organizer {
         out
     }
 
+    /// Move an item into a collection (0 = Inbox).
+    pub fn move_item(&mut self, id: u64, collection: u64) -> bool {
+        if collection != 0 && !self.collections.iter().any(|c| c.id == collection) {
+            return false;
+        }
+        match self.items.iter_mut().find(|i| i.id == id) {
+            Some(i) => {
+                i.collection = collection;
+                true
+            }
+            None => false,
+        }
+    }
+
     pub fn len(&self) -> usize {
         self.items.len()
     }
@@ -144,6 +215,35 @@ mod tests {
         assert_eq!(item.response, "201 Created");
         assert_eq!(item.created, 20);
         assert!(o.get(99).is_none());
+    }
+
+    #[test]
+    fn new_collection_is_named_and_not_an_inbox_item() {
+        let mut o = org();
+        let items_before = o.len();
+        let a = o.add_collection("");
+        let b = o.add_collection("Auth bugs");
+        let c = o.add_collection("Auth bugs");
+        assert_eq!(o.len(), items_before, "+ New must not add an item");
+        assert!(o.items.iter().all(|i| i.name != "New item"));
+        assert_eq!(o.collections.len(), 3);
+        assert_eq!(o.collections[0].name, "Collection 1");
+        assert_eq!(o.collections[1].name, "Auth bugs");
+        assert_eq!(o.collections[2].name, "Auth bugs 2");
+        assert!(a != b && b != c);
+        assert!(o.rename_collection(b, "Renamed"));
+        assert!(!o.rename_collection(b, "  "));
+        assert!(!o.rename_collection(99, "x"));
+        assert_eq!(o.collection_len(0), items_before);
+        assert!(o.move_item(1, b));
+        assert!(!o.move_item(1, 99));
+        assert_eq!(o.collection_len(b), 1);
+        assert_eq!(o.collection_len(0), items_before - 1);
+        assert!(o.remove_collection(b));
+        assert!(o.get(1).is_none());
+        assert!(!o.remove_collection(b));
+        assert_eq!(o.add_collection("Inbox"), 4);
+        assert_eq!(o.collections.last().unwrap().name, "Inbox 2");
     }
 
     #[test]

@@ -685,9 +685,9 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                     ui.label(RichText::new("Collections").strong().size(14.0).color(theme::ink()));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.add_space(8.0);
-                        if ui.button(format!("{} New", theme::icon::PLUS)).on_hover_text("New item in the Inbox").clicked() {
-                            let id = app.shared.organizer.lock().unwrap().add("New item", "", "", "", util::now_secs());
-                            app.org_sel = Some(id);
+                        if ui.button(format!("{} New", theme::icon::PLUS)).on_hover_text("New collection").clicked() {
+                            app.org_coll = app.shared.organizer.lock().unwrap().add_collection("");
+                            app.org_sel = None;
                         }
                     });
                 });
@@ -697,14 +697,44 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                     ui.add(egui::TextEdit::singleline(&mut app.org_search).hint_text("Search").desired_width(250.0));
                 });
                 ui.add_space(6.0);
-                let _ = ui.selectable_label(true, RichText::new(format!("{}  Inbox ({})", theme::icon::TRAY, app.shared.organizer.lock().unwrap().len())).size(12.5));
+                let rail: Vec<(u64, String, usize)> = {
+                    let org = app.shared.organizer.lock().unwrap();
+                    std::iter::once((0, "Inbox".to_string(), org.collection_len(0)))
+                        .chain(org.collections.iter().map(|c| (c.id, c.name.clone(), org.collection_len(c.id))))
+                        .collect()
+                };
+                for (id, name, n) in rail {
+                    let icon = if id == 0 { theme::icon::TRAY } else { theme::icon::CLIPBOARD_TEXT };
+                    if ui.selectable_label(app.org_coll == id, RichText::new(format!("{icon}  {name} ({n})")).size(12.5)).clicked() {
+                        app.org_coll = id;
+                        app.org_sel = None;
+                    }
+                }
             });
             strip.cell(|ui| {
                 ui.horizontal(|ui| {
                     ui.add_space(10.0);
-                    ui.label(RichText::new(format!("{}  Inbox", theme::icon::TRAY)).strong().size(14.0).color(theme::ink()));
+                    let cur = app.shared.organizer.lock().unwrap().collections.iter().find(|c| c.id == app.org_coll).map(|c| c.name.clone());
+                    if app.org_coll != 0 && cur.is_none() {
+                        app.org_coll = 0;
+                    }
+                    match cur {
+                        None => {
+                            ui.label(RichText::new(format!("{}  Inbox", theme::icon::TRAY)).strong().size(14.0).color(theme::ink()));
+                        }
+                        Some(mut name) => {
+                            if ui.add(egui::TextEdit::singleline(&mut name).desired_width(200.0)).changed() {
+                                app.shared.organizer.lock().unwrap().rename_collection(app.org_coll, &name);
+                            }
+                        }
+                    }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.add_space(8.0);
+                        if app.org_coll != 0 && ui.button("Delete collection").clicked() {
+                            app.shared.organizer.lock().unwrap().remove_collection(app.org_coll);
+                            app.org_coll = 0;
+                            app.org_sel = None;
+                        }
                         if ui.add_enabled(app.org_sel.is_some(), egui::Button::new("Delete")).clicked() {
                             if let Some(id) = app.org_sel.take() {
                                 app.shared.organizer.lock().unwrap().remove(id);
@@ -727,6 +757,7 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                     .unwrap()
                     .list()
                     .into_iter()
+                    .filter(|i| i.collection == app.org_coll)
                     .filter(|i| q.is_empty() || i.name.to_ascii_lowercase().contains(&q) || i.note.to_ascii_lowercase().contains(&q))
                     .cloned()
                     .collect();
@@ -735,7 +766,7 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                     ui.vertical_centered(|ui| {
                         ui.label(RichText::new(theme::icon::CLIPBOARD_TEXT).size(52.0).color(c(0x26649D)));
                         ui.add_space(6.0);
-                        ui.label(RichText::new("Organizer inbox is empty").strong().size(16.0).color(theme::ink()));
+                        ui.label(RichText::new(if app.org_coll == 0 { "Organizer inbox is empty" } else { "Collection is empty" }).strong().size(16.0).color(theme::ink()));
                         ui.add_space(6.0);
                         ui.label(RichText::new("To get started, send a message to Organizer from anywhere in WebProbe (Ctrl+O).").size(12.5).color(theme::ink_dim()));
                     });

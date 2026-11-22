@@ -3074,6 +3074,19 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
                 request: o.request.clone(),
                 response: Some(o.response.clone()),
                 comment: o.note.clone(),
+                collection: o.collection,
+            })
+            .collect(),
+        organizer_collections: app
+            .shared
+            .organizer
+            .lock()
+            .unwrap()
+            .collections
+            .iter()
+            .map(|c| project::ProjectOrganizerCollection {
+                id: c.id,
+                name: c.name.clone(),
             })
             .collect(),
         intruder: project::ProjectIntruder {
@@ -3525,8 +3538,18 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData, content: boo
             request: o.request.clone(),
             response: o.response.clone().unwrap_or_default(),
             created: o.timestamp,
+            collection: o.collection,
         })
         .collect();
+    org.collections = data
+        .organizer_collections
+        .iter()
+        .map(|c| crate::organizer::Collection {
+            id: c.id,
+            name: c.name.clone(),
+        })
+        .collect();
+    org.next_collection_id = org.collections.iter().map(|c| c.id).max().unwrap_or(0) + 1;
     org.next_id = org.items.iter().map(|i| i.id).max().unwrap_or(0) + 1;
     drop(org);
     app.org_sel = None;

@@ -86,6 +86,8 @@ pub struct App {
     pub log_sel: Option<u64>,
     /// Selected Organizer item.
     pub org_sel: Option<u64>,
+    /// Selected Organizer collection; 0 is the Inbox.
+    pub org_coll: u64,
     /// Intruder sub-tab (0 = Positions, 1 = Payloads).
     pub intr_sub: usize,
     /// Intercept split buttons (burp.Zub8 / Zubj): true = "Forward all" /
@@ -793,6 +795,7 @@ impl App {
             log_seen: 0,
             log_sel: None,
             org_sel: None,
+            org_coll: 0,
             intr_sub: 0,
             intercept_fwd_all: false,
             intercept_drop_all: false,
