@@ -31,9 +31,9 @@ pub struct Organizer {
     pub next_id: u64,
     pub collections: Vec<Collection>,
     pub next_collection_id: u64,
-    /// Collection that `add` files new items into (0 = Inbox); the UI keeps it
-    /// in sync with the selected collection.
-    pub target_collection: u64,
+    /// Items added to the Inbox since the UI last saw it; drives the rail's
+    /// orange new-item dot.
+    pub inbox_new: u64,
 }
 
 impl Organizer {
@@ -43,7 +43,7 @@ impl Organizer {
             next_id: 1,
             collections: Vec::new(),
             next_collection_id: 1,
-            target_collection: 0,
+            inbox_new: 0,
         }
     }
 
@@ -176,22 +176,15 @@ impl Organizer {
         self.items.iter().filter(|i| i.collection == id).count()
     }
 
-    /// Select the collection that new items are sent to. An id that does not
-    /// exist falls back to the Inbox; returns the effective selection.
-    pub fn select_collection(&mut self, id: u64) -> u64 {
-        self.target_collection = if id != 0 && self.collections.iter().any(|c| c.id == id) {
-            id
-        } else {
-            0
-        };
-        self.target_collection
-    }
-
-    /// Store a new item and return its id. `now` is the creation timestamp
-    /// supplied by the caller (epoch seconds or millis).
+    /// Store a new item in the Inbox and return its id. `now` is the
+    /// creation timestamp supplied by the caller (epoch seconds or millis).
+    /// Measured Burp Community 2026.11.2: Send to Organizer always lands in
+    /// the Inbox, even with a custom collection selected; items move into
+    /// collections only via move/copy.
     pub fn add(&mut self, name: &str, note: &str, request: &str, response: &str, now: u64) -> u64 {
         let id = self.next_id;
         self.next_id = self.next_id.saturating_add(1);
+        self.inbox_new = self.inbox_new.saturating_add(1);
         self.items.push(OrganizerItem {
             id,
             name: name.to_string(),
@@ -199,17 +192,14 @@ impl Organizer {
             request: request.to_string(),
             response: response.to_string(),
             created: now,
-            collection: if self
-                .collections
-                .iter()
-                .any(|c| c.id == self.target_collection)
-            {
-                self.target_collection
-            } else {
-                0
-            },
+            collection: 0,
         });
         id
+    }
+
+    /// Note that the UI is showing the Inbox; clears the new-item dot.
+    pub fn mark_inbox_seen(&mut self) {
+        self.inbox_new = 0;
     }
 
     /// Remove the item with `id`; false when it does not exist.
@@ -357,20 +347,14 @@ mod tests {
         );
         assert!(o.rename_collection(b, "inbox"));
         assert_eq!(o.collections[1].name, "inbox (2)");
-        o.target_collection = b;
         let filed = o.add("sent", "", "GET /", "", 50);
         assert_eq!(
             o.get(filed).unwrap().collection,
-            b,
-            "send targets selected collection"
-        );
-        o.target_collection = 99;
-        let stray = o.add("stray", "", "GET /", "", 51);
-        assert_eq!(
-            o.get(stray).unwrap().collection,
             0,
-            "missing target falls back to Inbox"
+            "sends always land in the Inbox (measured Burp 2026.11.2)"
         );
+        o.move_item(filed, b);
+        assert_eq!(o.get(filed).unwrap().collection, b);
         assert!(o.remove_collection(b));
         assert!(o.get(1).is_none(), "delete removes the items");
         assert!(o.get(filed).is_none(), "delete removes the items");
@@ -436,24 +420,18 @@ mod tests {
     }
 
     #[test]
-    fn select_collection_controls_where_sends_land() {
+    fn sends_always_land_in_the_inbox() {
+        // Measured Burp Community 2026.11.2: Send to Organizer (Ctrl+O) always
+        // lands in the Inbox, even with a custom collection selected.
         let mut o = Organizer::new();
-        assert_eq!(o.select_collection(7), 0, "missing id falls back to Inbox");
-        let a = o.add_collection("Auth");
-        assert_eq!(o.select_collection(a), a);
+        o.add_collection("Auth");
         let sent = o.add("sent", "", "GET /", "", 1);
-        assert_eq!(
-            o.get(sent).unwrap().collection,
-            a,
-            "sends land in the selection"
-        );
-        assert_eq!(o.select_collection(0), 0);
-        let inbox = o.add("inbox", "", "GET /", "", 2);
-        assert_eq!(o.get(inbox).unwrap().collection, 0);
-        // The add-time fallback still holds when the field is set directly.
-        o.target_collection = 99;
-        let stray = o.add("stray", "", "GET /", "", 3);
-        assert_eq!(o.get(stray).unwrap().collection, 0);
+        assert_eq!(o.get(sent).unwrap().collection, 0);
+        assert_eq!(o.inbox_new, 1, "new-item dot count grows");
+        o.mark_inbox_seen();
+        assert_eq!(o.inbox_new, 0);
+        o.add("again", "", "GET /", "", 2);
+        assert_eq!(o.inbox_new, 1);
     }
 
     #[test]

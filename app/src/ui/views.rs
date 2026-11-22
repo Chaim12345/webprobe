@@ -731,9 +731,11 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                 });
                 ui.add_space(6.0);
                 // Inbox on top, then a separator, then custom collections
-                // (newest first), matching Burp's rail.
+                // (newest first), matching Burp's rail. The Inbox shows an
+                // orange dot when items arrived while it was not selected.
                 let sel = app.org_coll == 0;
-                if rail_row(ui, theme::icon::TRAY, "Inbox", sel).clicked() {
+                let inbox_new = app.shared.organizer.lock().unwrap().inbox_new;
+                if rail_row(ui, theme::icon::TRAY, "Inbox", sel, inbox_new > 0 && !sel).clicked() {
                     app.org_coll = 0;
                     app.org_sel = None;
                 }
@@ -779,7 +781,7 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                         continue;
                     }
                     let sel = app.org_coll == id;
-                    let resp = rail_row(ui, theme::icon::STACK_SIMPLE, &name, sel);
+                    let resp = rail_row(ui, theme::icon::STACK_SIMPLE, &name, sel, false);
                     if resp.clicked() {
                         app.org_coll = id;
                         app.org_sel = None;
@@ -841,13 +843,10 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                 if app.org_coll != 0 && cur.is_none() {
                     app.org_coll = 0;
                 }
+                if app.org_coll == 0 {
+                    app.shared.organizer.lock().unwrap().mark_inbox_seen();
+                }
                 // Send to Organizer files into the selected collection.
-                app.org_coll = app
-                    .shared
-                    .organizer
-                    .lock()
-                    .unwrap()
-                    .select_collection(app.org_coll);
                 if app.org_tab_coll != app.org_coll {
                     app.org_tab_coll = app.org_coll;
                     app.org_tab = if app.org_coll == 0 { 0 } else { 1 };
@@ -1145,7 +1144,8 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
 }
 
 /// One row in the Organizer's left rail: icon plus name, no count badge.
-fn rail_row(ui: &mut Ui, icon: &str, name: &str, sel: bool) -> egui::Response {
+/// `dot` draws Burp's orange new-item marker on the right.
+fn rail_row(ui: &mut Ui, icon: &str, name: &str, sel: bool, dot: bool) -> egui::Response {
     let w = ui.available_width();
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(w, 22.0), egui::Sense::click());
     if sel {
@@ -1158,6 +1158,13 @@ fn rail_row(ui: &mut Ui, icon: &str, name: &str, sel: bool) -> egui::Response {
         egui::FontId::proportional(12.5),
         theme::ink(),
     );
+    if dot {
+        ui.painter().circle_filled(
+            rect.right_center() - egui::vec2(14.0, 0.0),
+            3.5,
+            c(theme::ORANGE),
+        );
+    }
     resp
 }
 
