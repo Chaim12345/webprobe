@@ -1417,7 +1417,9 @@ mod tests {
     }
 
     /// R-20: the public Montoya keyword analyzer, exercised by a real JVM
-    /// extension. This checks our documented behavior, not Burp parity.
+    /// extension. Case-insensitive counts and empty keywords follow real Burp
+    /// 2026.11.2 (docs/parity/2026-11-22-real-burp); the extension asserts
+    /// that behavior.
     #[test]
     fn montoya_response_keyword_analysis() {
         let Some(dir) = stage_extension("KeywordAnalysisExtension") else {
@@ -1435,6 +1437,31 @@ mod tests {
             log.iter()
                 .any(|line| line.contains("keyword analysis regression passed")),
             "keyword checks did not finish: {log:#?}"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// R-20: the public Montoya response-variations analyzer, exercised by a
+    /// real JVM extension. The factory used to throw
+    /// UnsupportedOperationException; real Burp 2026.11.2 returns an analyzer
+    /// (docs/parity/2026-11-22-real-burp).
+    #[test]
+    fn montoya_response_variation_analysis() {
+        let Some(dir) = stage_extension("VariationAnalysisExtension") else {
+            assert!(
+                std::env::var_os("WEBPROBE_REQUIRE_JAVA").is_none(),
+                "required Montoya regression cannot run: no JDK or Montoya API jar"
+            );
+            eprintln!("skipping: no JDK or Montoya API jar (set WEBPROBE_REQUIRE_JAVA=1 to fail)");
+            return;
+        };
+        let sc = JavaSidecar::spawn(dir.to_str().unwrap()).expect("variation extension loads");
+        sc.unload();
+        let log = sc.errors();
+        assert!(
+            log.iter()
+                .any(|line| line.contains("variation analysis regression passed")),
+            "variation checks did not finish: {log:#?}"
         );
         let _ = std::fs::remove_dir_all(dir);
     }
