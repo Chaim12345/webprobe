@@ -84,6 +84,14 @@ pub struct App {
     pub log_filter: logger::LogQuery,
     /// Highest proxy history id already mirrored into `logger`.
     pub log_seen: u64,
+    /// Logger mirror cursor into proxy history (row count, and the id of the
+    /// row before it), for the incremental [`App::sync_logger`].
+    pub log_cursor: usize,
+    pub log_cursor_id: u64,
+    /// Proxied-message counter seen at the last frame: a change means live
+    /// traffic, which keeps the periodic repaint at the busy cadence so the
+    /// tail of a coalesced wake burst shows without waiting for the idle tick.
+    pub last_messages: usize,
     /// Selected Logger row.
     pub log_sel: Option<u64>,
     /// Selected Organizer item.
@@ -412,42 +420,44 @@ impl App {
     fn sync_logger(&mut self) {
         // Logger's "Logging on" switch: while off, new traffic is not mirrored.
         if !self.log_on {
-            self.log_seen = self
-                .shared
-                .history
-                .with_rows(|h| h.iter().map(|e| e.id).max())
-                .unwrap_or(self.log_seen);
+            let (len, last) = self.shared.history.stamp();
+            if len > 0 {
+                self.log_cursor = len;
+                self.log_cursor_id = last;
+                self.log_seen = self.shared.history.max_id();
+            }
             return;
         }
-        let seen = self.log_seen;
-        let mut newest = 0u64;
-        let mut rows: Vec<HistRow> = Vec::new();
-        // Rows are copied out under the lock and the Logger is touched after
-        // it is released.
-        self.shared.history.with_rows(|hist| {
-            for e in hist.iter() {
-                newest = newest.max(e.id);
-            }
-            // Loading a project replaces history with ids that can be lower
-            // than what was already mirrored; resync rather than go dark.
-            let resync = newest < seen;
-            for e in hist.iter().filter(|e| resync || e.id > seen) {
-                rows.push((
-                    e.id,
-                    e.ts,
-                    e.method.clone(),
-                    e.host.clone(),
-                    e.port,
-                    e.path.clone(),
-                    e.status.clone(),
-                    e.req_raw.len(),
-                    e.resp_raw.as_ref().map(|r| r.len()).unwrap_or(e.resp_len),
-                    response_mime(e),
-                ));
-            }
-        });
-        if newest < seen {
+        // Incremental: rows_since returns only rows added since the last
+        // pass (resyncing when earlier rows changed), so a frame costs
+        // O(new rows), not O(history). The old whole-history scan ran on
+        // every frame under the history lock and stalled the proxy threads
+        // waiting to record traffic.
+        let (entries, cursor, cursor_id, _resynced) = self
+            .shared
+            .history
+            .rows_since(self.log_cursor, self.log_cursor_id);
+        self.log_cursor = cursor;
+        self.log_cursor_id = cursor_id;
+        // Loading a project replaces history with ids that can be lower
+        // than what was already mirrored; resync rather than go dark.
+        if self.shared.history.max_id() < self.log_seen {
             self.log_seen = 0;
+        }
+        let mut rows: Vec<HistRow> = Vec::new();
+        for e in &entries {
+            rows.push((
+                e.id,
+                e.ts,
+                e.method.clone(),
+                e.host.clone(),
+                e.port,
+                e.path.clone(),
+                e.status.clone(),
+                e.req_raw.len(),
+                e.resp_raw.as_ref().map(|r| r.len()).unwrap_or(e.resp_len),
+                response_mime(e),
+            ));
         }
         mirror_history(&mut self.logger, &mut self.log_seen, &rows);
         let sent = std::mem::take(&mut *self.shared.tool_log.lock().unwrap());
@@ -608,9 +618,17 @@ impl eframe::App for App {
             notice::set_waker(Arc::new(move || c.request_repaint()));
             self.waker_installed = true;
         }
+        // Live proxy traffic counts as busy: Shared::wake coalesces bursts,
+        // so the events at the tail of a burst rely on the periodic repaint;
+        // the busy cadence (200 ms) shows them promptly instead of the idle
+        // one (1 s).
+        let messages = self.shared.messages.load(Ordering::SeqCst);
+        let fresh_traffic = messages != self.last_messages;
+        self.last_messages = messages;
         let busy = self.shared.scan.is_busy()
             || self.shared.rep.is_busy()
             || crate::intruder_ui::is_running(self)
+            || fresh_traffic
             || self
                 .seq_live_stop
                 .as_ref()
@@ -794,6 +812,9 @@ impl App {
             logger: logger::Logger::new(5000),
             log_filter: logger::LogQuery::default(),
             log_seen: 0,
+            log_cursor: 0,
+            log_cursor_id: 0,
+            last_messages: 0,
             log_sel: None,
             org_sel: None,
             intr_sub: 0,
