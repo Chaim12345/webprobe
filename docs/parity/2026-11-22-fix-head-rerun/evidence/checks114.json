@@ -1,0 +1,11 @@
+{
+  "head": "10dece9f11b94e36703bd3348ca3797890185528",
+  "drop_origin_delta": 0,
+  "demo": {
+    "demo_header": "1",
+    "method": "GET",
+    "path": "/echo?value=demo",
+    "probe_header": ""
+  },
+  "drop_status": "HTTP/1.1 200 OK"
+}
