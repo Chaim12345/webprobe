@@ -1,0 +1,16 @@
+product=WebProbe
+before.variant=[]
+before.invariant=[]
+first.variant=[]
+first.invariant=[TOKEN, X-Flag, absent, token]
+second.variant=[TOKEN, token]
+second.invariant=[X-Flag, absent]
+third.variant=[TOKEN, X-Flag, token]
+third.invariant=[absent]
+overlap.variant=[]
+overlap.invariant=[aa]
+emptyKeyword=accepted
+variations=VariationAnalysis
+sendRequest.status=200
+sendRequest.body={"demo_header": "", "method": "GET", "path": "/echo?value=probe", "probe_header": ""}
+toolsPopulated=true

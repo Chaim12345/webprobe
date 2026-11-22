@@ -1,0 +1,8 @@
+HTTP/1.1 200 OK
+Server: BaseHTTP/0.6 Python/3.10.12
+Date: Sun, 22 Nov 2026 10:40:22 GMT
+Content-Type: application/json
+Content-Length: 85
+X-Parity-Fixture: loopback-only
+X-Montoya-Seen: 1
+
