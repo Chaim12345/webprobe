@@ -1936,3 +1936,64 @@ fn read_request_pending_splits_at_exact_boundaries() {
     assert_eq!(partial, b"GET /partial HTTP/1.1\r\nHost:");
     assert!(pending.is_empty());
 }
+
+/// PIPELINE-FIX: a second request that arrives in its own packet while the
+/// first exchange is still running is served too (the non-blocking peek in
+/// handle_conn, with blocking mode restored by the guard afterwards).
+#[test]
+fn pipelined_request_arriving_in_a_later_packet_is_served() {
+    let shared = Shared::new();
+    let upstream = TcpListener::bind("127.0.0.1:0").unwrap();
+    let upstream_port = upstream.local_addr().unwrap().port();
+    let t = std::thread::spawn(move || {
+        // The first exchange is slow, so the client's second request lands
+        // while the proxy is still waiting on this response.
+        let (mut s, _) = upstream.accept().unwrap();
+        s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        let req = read_request(&mut s).unwrap();
+        assert!(req.starts_with(b"GET /first HTTP/1.1\r\n"));
+        std::thread::sleep(Duration::from_millis(300));
+        s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 3\r\nConnection: close\r\n\r\none")
+            .unwrap();
+        // Second exchange on a fresh connection (keep-alive is off).
+        let (mut s, _) = upstream.accept().unwrap();
+        s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        let req = read_request(&mut s).unwrap();
+        assert!(req.starts_with(b"GET /second HTTP/1.1\r\n"));
+        s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 3\r\nConnection: close\r\n\r\ntwo")
+            .unwrap();
+    });
+
+    let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+    let proxy_port = proxy.local_addr().unwrap().port();
+    let sh = shared.clone();
+    let pt = std::thread::spawn(move || {
+        let (s, _) = proxy.accept().unwrap();
+        handle_conn(sh, s);
+    });
+
+    let mut client = TcpStream::connect(("127.0.0.1", proxy_port)).unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    let first = format!(
+        "GET http://127.0.0.1:{upstream_port}/first HTTP/1.1\r\nHost: 127.0.0.1:{upstream_port}\r\n\r\n"
+    );
+    client.write_all(first.as_bytes()).unwrap();
+    std::thread::sleep(Duration::from_millis(100));
+    let second = format!(
+        "GET http://127.0.0.1:{upstream_port}/second HTTP/1.1\r\nHost: 127.0.0.1:{upstream_port}\r\nConnection: close\r\n\r\n"
+    );
+    client.write_all(second.as_bytes()).unwrap();
+    client.shutdown(std::net::Shutdown::Write).unwrap();
+    let mut wire = Vec::new();
+    client.read_to_end(&mut wire).unwrap();
+    t.join().unwrap();
+    pt.join().unwrap();
+
+    let text = String::from_utf8_lossy(&wire);
+    let one = text.find("one").expect("first response delivered");
+    let two = text.find("two").expect("second response delivered");
+    assert!(one < two, "responses in request order: {text}");
+    assert_eq!(shared.history.snapshot().len(), 2);
+}

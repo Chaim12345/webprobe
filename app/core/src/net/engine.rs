@@ -369,13 +369,27 @@ pub fn handle_conn(shared: Arc<Shared>, mut stream: TcpStream) {
 /// Pipelined bytes that arrived in a later packet than the first request: a
 /// non-blocking peek, so a single-request connection closes exactly as before.
 fn client_sent_more(stream: &TcpStream) -> bool {
-    if stream.set_nonblocking(true).is_err() {
+    let Some(_guard) = BlockingGuard::new(stream) else {
         return false;
-    }
+    };
     let mut b = [0u8; 1];
-    let more = matches!(stream.peek(&mut b), Ok(n) if n > 0);
-    let _ = stream.set_nonblocking(false);
-    more
+    matches!(stream.peek(&mut b), Ok(n) if n > 0)
+}
+
+/// Puts the socket in non-blocking mode for a peek and restores blocking mode
+/// on drop, on every exit path including panics.
+struct BlockingGuard<'a>(&'a TcpStream);
+
+impl<'a> BlockingGuard<'a> {
+    fn new(stream: &'a TcpStream) -> Option<Self> {
+        stream.set_nonblocking(true).ok().map(|_| Self(stream))
+    }
+}
+
+impl Drop for BlockingGuard<'_> {
+    fn drop(&mut self) {
+        let _ = self.0.set_nonblocking(false);
+    }
 }
 
 /// Copy bytes both ways until either direction closes (SSL pass-through tunnel).
@@ -504,6 +518,10 @@ fn serve_mitm_conn<S: ProxyIo>(
         return;
     }
     // Pipelined HTTPS requests: bytes past one request carry into the next.
+    // Unlike handle_conn there is no peek for later packets here: rustls
+    // buffers decrypted plaintext internally with no public way to inspect
+    // it, and a non-blocking probe read could consume a partially arrived
+    // request. Requests pipelined into one TLS flight still land in `pending`.
     let mut pending: Vec<u8> = Vec::new();
     loop {
         let req = match read_request_pending(&mut tls, &mut pending) {
