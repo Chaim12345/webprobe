@@ -30,32 +30,57 @@ fn reviewer_live_get_post_chunked_and_single_request_matrix() {
         let port = up.local_addr().unwrap().port();
         up.set_nonblocking(true).unwrap();
         let count = if mode == "single" { 1 } else { 2 };
+        // Each accepted connection serves requests until it closes. The first
+        // reply is a complete keep-alive Content-Length response; only the
+        // final exchange says "Connection: close".
         let upstream = std::thread::spawn(move || {
-            let mut seen = vec![];
+            let seen: Arc<std::sync::Mutex<Vec<Vec<u8>>>> = Default::default();
             let deadline = Instant::now() + Duration::from_secs(5);
-            while seen.len() < count && Instant::now() < deadline {
+            let mut handlers = vec![];
+            while seen.lock().unwrap().len() < count && Instant::now() < deadline {
                 let Ok((mut s, _)) = up.accept() else {
                     std::thread::sleep(Duration::from_millis(5));
                     continue;
                 };
-                s.set_read_timeout(Some(Duration::from_millis(50))).unwrap();
-                let mut bytes = vec![];
-                let mut buf = [0; 8192];
-                loop {
-                    match s.read(&mut buf) {
-                        Ok(0) | Err(_) => break,
-                        Ok(n) => bytes.extend_from_slice(&buf[..n]),
+                let seen = seen.clone();
+                handlers.push(std::thread::spawn(move || loop {
+                    s.set_read_timeout(Some(Duration::from_millis(1500)))
+                        .unwrap();
+                    let mut bytes = vec![];
+                    let mut buf = [0; 8192];
+                    loop {
+                        match s.read(&mut buf) {
+                            Ok(0) | Err(_) => break,
+                            Ok(n) => {
+                                bytes.extend_from_slice(&buf[..n]);
+                                s.set_read_timeout(Some(Duration::from_millis(50))).unwrap();
+                            }
+                        }
                     }
-                }
-                let b = if seen.is_empty() { "one" } else { "two" };
-                s.write_all(
-                    format!("HTTP/1.1 200 OK\r\nContent-Length: 3\r\nConnection: close\r\n\r\n{b}")
-                        .as_bytes(),
-                )
-                .unwrap();
-                seen.push(bytes);
+                    if bytes.is_empty() {
+                        return;
+                    }
+                    let (n, last) = {
+                        let mut g = seen.lock().unwrap();
+                        g.push(bytes);
+                        (g.len(), g.len() >= count)
+                    };
+                    let b = if n == 1 { "one" } else { "two" };
+                    let conn = if last { "Connection: close\r\n" } else { "" };
+                    s.write_all(
+                        format!("HTTP/1.1 200 OK\r\nContent-Length: 3\r\n{conn}\r\n{b}").as_bytes(),
+                    )
+                    .unwrap();
+                    if last {
+                        return;
+                    }
+                }));
             }
-            seen
+            for h in handlers {
+                h.join().unwrap();
+            }
+            let out = seen.lock().unwrap().clone();
+            out
         });
         let (pp, worker) = proxy(shared.clone());
         let mut c = client(pp);
@@ -225,12 +250,28 @@ fn reviewer_tls_pipeline_when_first_request_is_exactly_8192_bytes() {
             };
             s.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
             let mut tls = StreamOwned::new(ServerConnection::new(servercfg.clone()).unwrap(), s);
-            let _request = webprobe_core::net::read_request(&mut tls).unwrap();
-            seen += 1;
-            tls.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
-                .unwrap();
-            tls.conn.send_close_notify();
-            tls.flush().unwrap();
+            while seen < 2 {
+                let Ok(request) = webprobe_core::net::read_request(&mut tls) else {
+                    break;
+                };
+                if request.is_empty() {
+                    break;
+                }
+                seen += 1;
+                if seen == 1 {
+                    // Complete keep-alive reply: the buffered second request follows.
+                    tls.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+                        .unwrap();
+                    tls.flush().unwrap();
+                } else {
+                    tls.write_all(
+                        b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok",
+                    )
+                    .unwrap();
+                    tls.conn.send_close_notify();
+                    tls.flush().unwrap();
+                }
+            }
         }
         seen
     });
@@ -266,4 +307,118 @@ fn reviewer_tls_pipeline_when_first_request_is_exactly_8192_bytes() {
         "second pipelined request remains inside rustls at the 8192-byte boundary"
     );
     assert_eq!(shared.history.snapshot().len(), 2);
+}
+
+/// Upstream that answers each accepted connection once with `reply`, closes
+/// it, and counts every request head it received across all connections.
+fn one_shot_upstream(reply: &'static [u8]) -> (u16, std::thread::JoinHandle<usize>) {
+    let up = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = up.local_addr().unwrap().port();
+    up.set_nonblocking(true).unwrap();
+    let handle = std::thread::spawn(move || {
+        let end = Instant::now() + Duration::from_millis(1500);
+        let mut heads = 0;
+        let mut live = vec![];
+        while Instant::now() < end {
+            if let Ok((mut s, _)) = up.accept() {
+                s.set_read_timeout(Some(Duration::from_millis(50))).unwrap();
+                let mut buf = [0; 8192];
+                let mut got = vec![];
+                while let Ok(n) = s.read(&mut buf) {
+                    if n == 0 {
+                        break;
+                    }
+                    got.extend_from_slice(&buf[..n]);
+                }
+                heads += got.windows(4).filter(|w| *w == b"\r\n\r\n").count();
+                let _ = s.write_all(reply);
+                live.push(s);
+            } else {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        }
+        heads
+    });
+    (port, handle)
+}
+
+fn pipelined_gets(port: u16) -> Vec<u8> {
+    format!(
+        "GET http://127.0.0.1:{port}/first HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\nGET http://127.0.0.1:{port}/second HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n"
+    )
+    .into_bytes()
+}
+
+/// A complete response that announces `Connection: close` ends the client
+/// connection: the already-buffered second request is not sent upstream, not
+/// recorded as an exchange, and nothing is invented for it.
+#[test]
+fn buffered_request_after_a_complete_close_response_is_not_served() {
+    let shared = Shared::new();
+    shared.intercept_on.store(false, Ordering::SeqCst);
+    let (port, upstream) =
+        one_shot_upstream(b"HTTP/1.1 200 OK\r\nContent-Length: 3\r\nConnection: close\r\n\r\none");
+    let (pp, worker) = proxy(shared.clone());
+    let mut c = client(pp);
+    c.write_all(&pipelined_gets(port)).unwrap();
+    c.shutdown(Shutdown::Write).unwrap();
+    let mut response = vec![];
+    c.read_to_end(&mut response).unwrap();
+    worker.join().unwrap();
+    assert_eq!(
+        upstream.join().unwrap(),
+        1,
+        "second request must not reach upstream"
+    );
+    let text = String::from_utf8_lossy(&response).into_owned();
+    assert_eq!(text.matches("HTTP/1.").count(), 1, "{text}");
+    assert!(text.ends_with("one"), "{text}");
+    assert_eq!(shared.history.snapshot().len(), 1);
+}
+
+/// Truncated, malformed and read-until-close first responses: terminal close,
+/// no continuation into the buffered request, no synthetic response, no replay.
+#[test]
+fn buffered_request_after_an_incomplete_response_is_not_served() {
+    let cases: [(&str, &'static [u8]); 3] = [
+        (
+            "truncated",
+            b"HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\nabc",
+        ),
+        (
+            "malformed",
+            b"HTTP/1.1 200 OK\r\nContent-Length: abc\r\n\r\nxyz",
+        ),
+        ("read-until-close", b"HTTP/1.1 200 OK\r\n\r\nbody"),
+    ];
+    for (name, reply) in cases {
+        let shared = Shared::new();
+        shared.intercept_on.store(false, Ordering::SeqCst);
+        let (port, upstream) = one_shot_upstream(reply);
+        let (pp, worker) = proxy(shared.clone());
+        let mut c = client(pp);
+        c.write_all(&pipelined_gets(port)).unwrap();
+        c.shutdown(Shutdown::Write).unwrap();
+        let mut response = vec![];
+        let _ = c.read_to_end(&mut response);
+        worker.join().unwrap();
+        assert_eq!(
+            upstream.join().unwrap(),
+            1,
+            "{name}: no second request upstream"
+        );
+        let text = String::from_utf8_lossy(&response).into_owned();
+        assert!(text.matches("HTTP/1.").count() <= 1, "{name}: {text}");
+        assert!(
+            !text.contains("HTTP/1.1 400") && !text.contains("HTTP/1.1 502"),
+            "{name}: {text}"
+        );
+        let history = shared.history.snapshot();
+        assert!(history.len() <= 1, "{name}: second request recorded");
+        println!(
+            "{name}: history={} client_bytes={}",
+            history.len(),
+            response.len()
+        );
+    }
 }
