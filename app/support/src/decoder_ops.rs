@@ -21,6 +21,19 @@ pub enum Op {
     AsciiHexDecode,
     HexEncode,
     HexDecode,
+    /// Decimal number tokens rewritten in octal (Burp's "Octal", a numeric
+    /// radix conversion measured on 2026.11.2: "72 105" -> "110 151").
+    OctalEncode,
+    OctalDecode,
+    /// Decimal number tokens rewritten in binary (Burp's "Binary":
+    /// "72 105" -> "1001000 1101001").
+    BinaryEncode,
+    BinaryDecode,
+    /// UTF-8 text -> GZIP bytes -> standard padded base64 text.
+    /// Decode expects that base64 representation and rejects non-UTF-8 output.
+    /// Raw compressed text from older versions is deliberately not accepted.
+    GzipEncode,
+    GzipDecode,
     Rot13,
     Md5,
     Sha1,
@@ -43,6 +56,12 @@ pub fn apply(op: Op, input: &str) -> Result<String, String> {
         Op::AsciiHexDecode => ascii_hex_decode(input),
         Op::HexEncode => Ok(util::hex_encode(input.as_bytes())),
         Op::HexDecode => util::hex_decode(input).map(|b| String::from_utf8_lossy(&b).into_owned()),
+        Op::OctalEncode => Ok(octal_encode(input)),
+        Op::OctalDecode => octal_decode(input),
+        Op::BinaryEncode => Ok(binary_encode(input)),
+        Op::BinaryDecode => binary_decode(input),
+        Op::GzipEncode => gzip_encode(input),
+        Op::GzipDecode => gzip_decode(input),
         Op::Rot13 => Ok(rot13(input)),
         Op::Md5 => Ok(md5_hex(input)),
         Op::Sha1 => Ok(sha1_hex(input)),
@@ -174,6 +193,117 @@ fn ascii_hex_decode(input: &str) -> Result<String, String> {
         return Err("no \\xNN escapes found".into());
     }
     Ok(String::from_utf8_lossy(&out).into_owned())
+}
+
+// ---------- Octal / Binary ----------
+// Measured against real Burp Community 2026.11.2: these are NUMERIC radix
+// conversions over runs of digits in the text, not byte encoders. Everything
+// outside a matching digit run is preserved verbatim ("Hi" encodes to "Hi";
+// decoding "\\110\\151" keeps the slashes: "\\72\\105").
+
+/// Rewrite every maximal run of digits valid in `radix_in`, converting each
+/// run's value to `radix_out` (no padding, no separators). A run whose value
+/// overflows u128 is left unchanged, as is all non-run text.
+fn convert_digit_runs(input: &str, radix_in: u32, radix_out: u32) -> String {
+    let bytes = input.as_bytes();
+    let valid = |b: u8| b.is_ascii_digit() && u32::from(b - b'0') < radix_in;
+    let mut out = String::with_capacity(input.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if !valid(bytes[i]) {
+            let start = i;
+            while i < bytes.len() && !valid(bytes[i]) {
+                i += 1;
+            }
+            // ASCII digit boundaries are also UTF-8 boundaries. Copy the
+            // original slice, never reinterpret individual UTF-8 bytes.
+            out.push_str(&input[start..i]);
+            continue;
+        }
+        let start = i;
+        while i < bytes.len() && valid(bytes[i]) {
+            i += 1;
+        }
+        let run = &input[start..i];
+        match u128::from_str_radix(run, radix_in) {
+            Ok(value) => {
+                let converted = match radix_out {
+                    2 => format!("{value:b}"),
+                    8 => format!("{value:o}"),
+                    _ => value.to_string(),
+                };
+                out.push_str(&converted);
+            }
+            Err(_) => out.push_str(run),
+        }
+    }
+    out
+}
+
+fn octal_encode(input: &str) -> String {
+    convert_digit_runs(input, 10, 8)
+}
+
+fn octal_decode(input: &str) -> Result<String, String> {
+    Ok(convert_digit_runs(input, 8, 10))
+}
+
+fn binary_encode(input: &str) -> String {
+    convert_digit_runs(input, 10, 2)
+}
+
+fn binary_decode(input: &str) -> Result<String, String> {
+    Ok(convert_digit_runs(input, 2, 10))
+}
+
+// ---------- GZIP ----------
+
+/// Largest output a GZIP decode may produce (a zip bomb must not grow without
+/// bound; matches the proxy codec's per-body cap of 64 MiB).
+const MAX_GZIP_DECODE: u64 = 64 * 1024 * 1024;
+
+fn gzip_compress(data: &[u8]) -> Result<Vec<u8>, String> {
+    use std::io::Write;
+    let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    encoder
+        .write_all(data)
+        .map_err(|e| format!("gzip encode failed: {e}"))?;
+    encoder
+        .finish()
+        .map_err(|e| format!("gzip encode failed: {e}"))
+}
+
+fn gzip_encode(input: &str) -> Result<String, String> {
+    gzip_compress(input.as_bytes()).map(|compressed| util::b64_encode(&compressed))
+}
+
+fn gzip_decompress(data: &[u8]) -> Result<Vec<u8>, String> {
+    gzip_decompress_limited(data, MAX_GZIP_DECODE)
+}
+
+fn gzip_decompress_limited(data: &[u8], limit: u64) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+    let mut out = Vec::new();
+    let n = flate2::read::GzDecoder::new(data)
+        .take(limit + 1)
+        .read_to_end(&mut out)
+        .map_err(|e| format!("not gzip data: {e}"))?;
+    if n as u64 > limit {
+        return Err("gzip output too large".into());
+    }
+    Ok(out)
+}
+
+/// Decode only standard base64-wrapped GZIP, never legacy lossy binary text.
+/// The text panel cannot represent arbitrary bytes, so invalid UTF-8 is an
+/// explicit error. The byte codec above remains lossless for arbitrary bytes.
+fn gzip_decode(input: &str) -> Result<String, String> {
+    use base64::Engine;
+    let compressed = base64::engine::general_purpose::STANDARD
+        .decode(input)
+        .map_err(|e| format!("expected base64-encoded GZIP: {e}"))?;
+    let out = gzip_decompress(&compressed)?;
+    String::from_utf8(out).map_err(|_| "GZIP output is not UTF-8 text".into())
 }
 
 // ---------- ROT13 ----------
@@ -723,5 +853,150 @@ mod tests {
         );
         let err = pipeline("Hello", &[Op::Base64Encode, Op::HexDecode]).unwrap_err();
         assert!(err.starts_with("step 2 ("), "{err}");
+    }
+}
+
+#[cfg(test)]
+mod byte_safe_tests {
+    use super::*;
+
+    #[test]
+    fn octal_preserves_mixed_utf8() {
+        assert_eq!(
+            apply(Op::OctalEncode, "שלום 72 café 105 🦀").unwrap(),
+            "שלום 110 café 151 🦀"
+        );
+        assert_eq!(
+            apply(Op::OctalDecode, "שלום 110 café 151 🦀").unwrap(),
+            "שלום 72 café 105 🦀"
+        );
+    }
+
+    #[test]
+    fn binary_preserves_mixed_utf8() {
+        assert_eq!(
+            apply(Op::BinaryEncode, "שלום 72 café 105 🦀").unwrap(),
+            "שלום 1001000 café 1101001 🦀"
+        );
+        assert_eq!(
+            apply(Op::BinaryDecode, "שלום 1001000 café 1101001 🦀").unwrap(),
+            "שלום 72 café 105 🦀"
+        );
+    }
+
+    #[test]
+    fn untouched_utf8_is_byte_identical_for_all_numeric_operations() {
+        let text = "שלום café e\u{301} 🦀 ٧٢ １２\0\n";
+        for op in [
+            Op::OctalEncode,
+            Op::OctalDecode,
+            Op::BinaryEncode,
+            Op::BinaryDecode,
+        ] {
+            assert_eq!(
+                apply(op, text).unwrap().as_bytes(),
+                text.as_bytes(),
+                "{op:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn ascii_radix_compatibility() {
+        for (encode, decode, encoded) in [
+            (Op::OctalEncode, Op::OctalDecode, "Hi 110\\151-0 377"),
+            (
+                Op::BinaryEncode,
+                Op::BinaryDecode,
+                "Hi 1001000\\1101001-0 11111111",
+            ),
+        ] {
+            assert_eq!(apply(encode, "Hi 72\\105-0 255").unwrap(), encoded);
+            assert_eq!(apply(decode, encoded).unwrap(), "Hi 72\\105-0 255");
+        }
+        assert_eq!(apply(Op::OctalDecode, "1789").unwrap(), "1589");
+        assert_eq!(apply(Op::BinaryDecode, "10211").unwrap(), "223");
+    }
+
+    #[test]
+    fn overflowing_digit_runs_and_surrounding_utf8_are_untouched() {
+        let text = format!("é{}🦀", "9".repeat(100));
+        assert_eq!(apply(Op::OctalEncode, &text).unwrap(), text);
+        assert_eq!(apply(Op::BinaryEncode, &text).unwrap(), text);
+    }
+
+    #[test]
+    fn gzip_codec_roundtrips_empty_non_ascii_and_every_byte() {
+        for bytes in [
+            Vec::new(),
+            "שלום café 🦀".as_bytes().to_vec(),
+            (0..=255).collect(),
+        ] {
+            let compressed = gzip_compress(&bytes).unwrap();
+            assert_eq!(gzip_decompress(&compressed).unwrap(), bytes);
+        }
+    }
+
+    #[test]
+    fn gzip_ui_roundtrip_uses_base64_not_lossy_binary_text() {
+        for text in ["", "ASCII\0\n", "שלום café 🦀"] {
+            let encoded = apply(Op::GzipEncode, text).unwrap();
+            let raw = util::b64_decode(&encoded).expect("GZIP UI output must be base64");
+            assert_eq!(&raw[..3], &[0x1f, 0x8b, 8]);
+            assert_eq!(gzip_decompress(&raw).unwrap(), text.as_bytes());
+            assert_eq!(apply(Op::GzipDecode, &encoded).unwrap(), text);
+        }
+    }
+
+    #[test]
+    fn gzip_rejects_invalid_and_truncated_input() {
+        assert!(apply(Op::GzipDecode, "%%%not base64%%%").is_err());
+        assert!(apply(Op::GzipDecode, &util::b64_encode(b"not gzip")).is_err());
+        assert!(apply(Op::GzipDecode, "").is_err());
+        let compressed = gzip_compress(b"payload").unwrap();
+        assert!(gzip_decompress(&compressed[..compressed.len() - 4]).is_err());
+        let mut corrupt = compressed;
+        let last = corrupt.len() - 8;
+        corrupt[last] ^= 1;
+        assert!(gzip_decompress(&corrupt).is_err());
+    }
+
+    #[test]
+    fn gzip_ui_rejects_non_utf8_instead_of_silently_replacing_bytes() {
+        let encoded = util::b64_encode(&gzip_compress(&[0xff, 0xfe, 0]).unwrap());
+        assert!(apply(Op::GzipDecode, &encoded).is_err());
+    }
+}
+
+#[cfg(test)]
+mod gzip_contract_tests {
+    use super::*;
+
+    #[test]
+    fn output_limit_accepts_exact_limit_and_rejects_one_extra_byte() {
+        let encoded = gzip_compress(b"12345").unwrap();
+        assert_eq!(gzip_decompress_limited(&encoded, 5).unwrap(), b"12345");
+        assert_eq!(
+            gzip_decompress_limited(&encoded, 4).unwrap_err(),
+            "gzip output too large"
+        );
+        assert_eq!(MAX_GZIP_DECODE, 64 * 1024 * 1024);
+    }
+
+    #[test]
+    fn externally_encoded_gzip_decodes_and_non_utf8_has_an_explicit_error() {
+        use base64::Engine;
+        let external = base64::engine::general_purpose::STANDARD
+            .encode(gzip_compress("café".as_bytes()).unwrap());
+        assert_eq!(apply(Op::GzipDecode, &external).unwrap(), "café");
+        let binary = util::b64_encode(&gzip_compress(&[0xff]).unwrap());
+        assert_eq!(
+            apply(Op::GzipDecode, &binary).unwrap_err(),
+            "GZIP output is not UTF-8 text"
+        );
+        let legacy = String::from_utf8_lossy(&gzip_compress(b"legacy").unwrap()).into_owned();
+        assert!(apply(Op::GzipDecode, &legacy)
+            .unwrap_err()
+            .starts_with("expected base64-encoded GZIP:"));
     }
 }
