@@ -20,6 +20,23 @@ use crate::util;
 /// Most lines a pane lays out per frame; the rest is summarised.
 const MAX_LINES: usize = 4000;
 
+/// Most bytes of one message the panes and the Inspector look at. Selecting a
+/// huge stored entry must not copy, hash, pretty-print or parse the whole
+/// body: the view works on this prefix and says so. The stored capture is
+/// never changed.
+pub const PREVIEW_MAX_BYTES: usize = 1 << 20;
+
+/// The part of `bytes` that is previewed: the prefix up to
+/// [`PREVIEW_MAX_BYTES`] and whether bytes were left out. Slicing does not
+/// read or copy the rest.
+pub fn preview_of(bytes: &[u8]) -> (&[u8], bool) {
+    if bytes.len() > PREVIEW_MAX_BYTES {
+        (&bytes[..PREVIEW_MAX_BYTES], true)
+    } else {
+        (bytes, false)
+    }
+}
+
 /// (fingerprint, view, rendered lines) of the message pane cache.
 pub(crate) type LinesCache = (u64, bool, std::sync::Arc<Vec<(LineKind, String)>>);
 
@@ -589,19 +606,33 @@ pub fn message_pane(
             let body_h = (ui.available_height() - search_h).max(40.0);
             let font = FontId::monospace(theme::FONT_MONO);
             let mut highlights = 0usize;
-            let Some(bytes) = bytes else {
+            let Some(full_bytes) = bytes else {
                 ui.allocate_ui(egui::vec2(width, body_h), |ui| {
                     ui.set_min_height(body_h);
                 });
                 search_row(ui, id, st, 0);
                 return;
             };
+            let total_len = full_bytes.len();
+            let (bytes, clipped) = preview_of(full_bytes);
             egui::ScrollArea::both()
                 .id_salt(id)
                 .max_height(body_h)
                 .min_scrolled_height(body_h)
                 .auto_shrink([false, false])
-                .show(ui, |ui| match st.view {
+                .show(ui, |ui| {
+                    if clipped {
+                        ui.label(
+                            RichText::new(format!(
+                                "Preview only: the first {} of {} bytes are shown. The stored capture is complete; Save item exports all of it.",
+                                bytes.len(),
+                                total_len
+                            ))
+                            .size(12.0)
+                            .color(c(theme::ORANGE_1)),
+                        );
+                    }
+                    match st.view {
                     2 => {
                         let hex = util::hex_view(bytes, 65536);
                         highlights = match_ranges_cs(&hex, &st.search, st.case_sensitive).len();
@@ -609,6 +640,13 @@ pub fn message_pane(
                             RichText::new(hex)
                                 .font(font.clone())
                                 .color(theme::editor_colours().text),
+                        );
+                    }
+                    3 if clipped => {
+                        ui.label(
+                            RichText::new("Render is not available for a truncated preview; use Raw or Hex.")
+                                .size(12.5)
+                                .color(theme::ink_dim()),
                         );
                     }
                     3 if image_kind(body_of(bytes)).is_some() => {
@@ -762,6 +800,7 @@ pub fn message_pane(
                             ui.min_rect().y_range(),
                             egui::Stroke::new(1.0, ec.gutter_border),
                         );
+                    }
                     }
                 });
             search_row(ui, id, st, highlights);
@@ -1235,6 +1274,9 @@ pub fn inspector_ex(
         );
     });
     ui.add_space(6.0);
+    // The Inspector parses the message every frame: a huge response is
+    // looked at through its preview prefix only.
+    let resp = resp.map(|r| preview_of(r).0);
     let Some(req) = req else {
         ui.label(
             RichText::new("Select a message to inspect it.")
@@ -1506,6 +1548,70 @@ mod tests {
         assert!(!set_hex_byte(&mut t, 1, "zz"));
         assert!(!set_hex_byte(&mut t, 9, "41"), "no gaps");
         assert_eq!(t, "PET /A");
+    }
+
+    #[test]
+    fn preview_is_bounded_and_leaves_small_messages_alone() {
+        let small = vec![b'a'; 1000];
+        assert_eq!(preview_of(&small), (&small[..], false));
+        let exact = vec![b'a'; PREVIEW_MAX_BYTES];
+        assert!(!preview_of(&exact).1);
+        let big = vec![b'a'; PREVIEW_MAX_BYTES + 1];
+        let (p, clipped) = preview_of(&big);
+        assert!(clipped && p.len() == PREVIEW_MAX_BYTES);
+    }
+
+    /// A very large stored response selected in History: every view and the
+    /// Inspector work on the preview only (no whole-body copy, hash, pretty
+    /// print or parse), so a frame stays fast and the pane's line cache stays
+    /// small. Small bodies keep their full text.
+    #[test]
+    fn huge_response_selection_is_previewed_not_expanded() {
+        let mut msg = b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n".to_vec();
+        let line = b"{\"k\":\"0123456789abcdef0123456789abcdef\"}\n";
+        while msg.len() < 96 * 1024 * 1024 {
+            msg.extend_from_slice(line);
+        }
+        let ctx = egui::Context::default();
+        let screen = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(900.0, 600.0));
+        let started = std::time::Instant::now();
+        for view in 0..4 {
+            let mut st = PaneState {
+                view,
+                ..Default::default()
+            };
+            let raw = egui::RawInput {
+                screen_rect: Some(screen),
+                ..Default::default()
+            };
+            ctx.run_ui(raw, |ui| {
+                egui::CentralPanel::default().show(ui, |ui| {
+                    message_pane(ui, "huge", "Response", Some(&msg), &mut st, true, 500.0);
+                });
+            })
+            .drop_without_applying_deltas();
+            if let Some((_, _, lines)) = &st.lines_cache {
+                let held: usize = lines.iter().map(|(_, l)| l.len()).sum();
+                assert!(held <= 3 << 20, "view {view} held {held} bytes of lines");
+            }
+        }
+        let mut insp = InspectorState::default();
+        let raw = egui::RawInput {
+            screen_rect: Some(screen),
+            ..Default::default()
+        };
+        let req = b"GET / HTTP/1.1\r\nHost: h\r\n\r\n".to_vec();
+        ctx.run_ui(raw, |ui| {
+            egui::CentralPanel::default().show(ui, |ui| {
+                inspector(ui, "huge_insp", Some(&req), Some(&msg), &mut insp);
+            });
+        })
+        .drop_without_applying_deltas();
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(20),
+            "huge selection took {:?}",
+            started.elapsed()
+        );
     }
 
     /// UAT-06, headless: click into the Repeater-style editor, then Ctrl+V
