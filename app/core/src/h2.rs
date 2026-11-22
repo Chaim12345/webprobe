@@ -243,13 +243,37 @@ fn encode_headers(req: &H2Request) -> Vec<u8> {
 
 fn send_request_headers<S: Read + Write>(stream: &mut S, req: &H2Request) -> Result<(), String> {
     let block = encode_headers(req);
-    let flags = FLAG_END_HEADERS
-        | if req.body.is_empty() {
-            FLAG_END_STREAM
+    // A header block larger than the peer's maximum frame size must be split
+    // across HEADERS + CONTINUATION frames (RFC 9113 §6.2, §6.10): one
+    // oversized HEADERS frame is a FRAME_SIZE_ERROR and strict servers reset
+    // the connection. The request goes out before the server's SETTINGS, so
+    // the default 16 KiB (RFC 9113 §6.5.2) is the only safe bound — a large
+    // Cookie header would otherwise kill every exchange.
+    let end_stream = if req.body.is_empty() {
+        FLAG_END_STREAM
+    } else {
+        0
+    };
+    let mut rest = block.as_slice();
+    let mut first = true;
+    loop {
+        let n = rest.len().min(DEFAULT_MAX_FRAME);
+        let last = n == rest.len();
+        let (ty, mut flags) = if first {
+            (FRAME_HEADERS, end_stream)
         } else {
-            0
+            (FRAME_CONTINUATION, 0)
         };
-    write_frame(stream, FRAME_HEADERS, flags, 1, &block).map_err(|e| format!("h2 headers: {e}"))
+        if last {
+            flags |= FLAG_END_HEADERS;
+        }
+        write_frame(stream, ty, flags, 1, &rest[..n]).map_err(|e| format!("h2 headers: {e}"))?;
+        if last {
+            return Ok(());
+        }
+        rest = &rest[n..];
+        first = false;
+    }
 }
 
 /// Response assembly plus outbound flow-control accounting.
@@ -1146,5 +1170,84 @@ mod tests {
         t.join().unwrap();
         assert!(String::from_utf8_lossy(&resp).starts_with("HTTP/1.1 200"));
         assert!(resp.ends_with(b"ok"));
+    }
+
+    /// A header block larger than the default max frame size must go out as
+    /// HEADERS + CONTINUATION frames, each within the limit (RFC 9113
+    /// §6.2/§6.10); one oversized HEADERS frame is a FRAME_SIZE_ERROR.
+    #[test]
+    fn oversized_header_block_is_fragmented() {
+        struct Sink(Vec<u8>);
+        impl std::io::Read for Sink {
+            fn read(&mut self, _b: &mut [u8]) -> std::io::Result<usize> {
+                Ok(0)
+            }
+        }
+        impl std::io::Write for Sink {
+            fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
+                self.0.extend_from_slice(b);
+                Ok(b.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let big = "a".repeat(3 * DEFAULT_MAX_FRAME);
+        let req = H2Request {
+            method: "GET".into(),
+            scheme: "https".into(),
+            authority: "example.com".into(),
+            path: "/".into(),
+            headers: vec![("cookie".to_string(), big)],
+            body: vec![],
+            connection: None,
+        };
+        let want = encode_headers(&req);
+        assert!(
+            want.len() > DEFAULT_MAX_FRAME,
+            "fixture must overflow one frame"
+        );
+        let mut sink = Sink(Vec::new());
+        send_request_headers(&mut sink, &req).unwrap();
+        // Replay the frames: HEADERS, then CONTINUATIONs, all on stream 1,
+        // every payload within the peer's limit, END_HEADERS on the last only.
+        let mut buf = sink.0.as_slice();
+        let mut got = Vec::new();
+        let mut frames = 0;
+        loop {
+            let (frame, used) = parse_frame(buf, DEFAULT_MAX_FRAME)
+                .expect("frame within the advertised limit")
+                .expect("a whole frame");
+            frames += 1;
+            assert_eq!(frame.stream, 1);
+            let expect_ty = if frames == 1 {
+                FRAME_HEADERS
+            } else {
+                FRAME_CONTINUATION
+            };
+            assert_eq!(frame.ty, expect_ty);
+            assert!(frame.payload.len() <= DEFAULT_MAX_FRAME);
+            let last = used == buf.len();
+            assert_eq!(
+                frame.flags & FLAG_END_HEADERS != 0,
+                last,
+                "END_HEADERS on the last only"
+            );
+            assert_eq!(
+                frame.flags & FLAG_END_STREAM != 0,
+                frames == 1,
+                "bodyless GET: END_STREAM on HEADERS"
+            );
+            got.extend_from_slice(&frame.payload);
+            buf = &buf[used..];
+            if last {
+                break;
+            }
+        }
+        assert!(
+            frames >= 3,
+            "48 KiB of headers needs at least 3 frames, got {frames}"
+        );
+        assert_eq!(got, want, "fragments reassemble into the original block");
     }
 }
