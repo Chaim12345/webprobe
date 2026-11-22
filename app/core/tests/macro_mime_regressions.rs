@@ -92,11 +92,12 @@ fn eligible_non_utf8_bodies_are_preserved_while_query_changes() {
 }
 
 #[test]
-fn self_closing_input_slash_is_not_an_unquoted_value() {
+fn self_closing_slash_after_whitespace_or_quote_is_not_part_of_value() {
     for html in [
-        "<input name=csrf value=fresh/>",
-        "<input value=fresh name=csrf/>",
         "<input name=csrf value=fresh />",
+        "<input name=csrf value='fresh'/>",
+        "<input name=\"csrf\" value=\"fresh\"/>",
+        "<input value=fresh name=csrf />",
     ] {
         let response = format!("HTTP/1.1 200 OK\r\n\r\n{html}");
         assert_eq!(
@@ -104,6 +105,17 @@ fn self_closing_input_slash_is_not_an_unquoted_value() {
             Some("fresh")
         );
     }
+}
+
+#[test]
+fn unquoted_slash_before_close_is_part_of_value_per_whatwg() {
+    let r = b"HTTP/1.1 200 OK\r\n\r\n<input name=csrf value=path/>";
+    assert_eq!(extract_value(r, "csrf").as_deref(), Some("path/"));
+    let r = b"HTTP/1.1 200 OK\r\n\r\n<input name=csrf value=fresh/>";
+    assert_eq!(extract_value(r, "csrf").as_deref(), Some("fresh/"));
+    // name=csrf/> is the name "csrf/", so it must not match "csrf".
+    let r = b"HTTP/1.1 200 OK\r\n\r\n<input value=fresh name=csrf/>";
+    assert_eq!(extract_value(r, "csrf"), None);
 }
 
 #[test]

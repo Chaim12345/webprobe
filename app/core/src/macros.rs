@@ -149,15 +149,8 @@ pub fn extract_value(response: &[u8], name: &str) -> Option<String> {
                 .or_else(|| attr.get(3))
                 .map(|v| v.as_str())
                 .or_else(|| {
-                    attr.get(4).map(|v| {
-                        // A slash immediately before the tag's closing bracket is
-                        // the self-closing marker, not part of an unquoted value.
-                        if v.end() + 1 == input.as_str().len() {
-                            v.as_str().strip_suffix('/').unwrap_or(v.as_str())
-                        } else {
-                            v.as_str()
-                        }
-                    })
+                    // WHATWG: a slash before `>` in an unquoted value is part of it.
+                    attr.get(4).map(|v| v.as_str())
                 });
             if attr[1].eq_ignore_ascii_case("name") && field_name.is_none() {
                 field_name = value;
