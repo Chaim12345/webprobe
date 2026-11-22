@@ -88,6 +88,8 @@ pub(crate) use request_builders::reflected_xss_severity;
 pub use request_builders::*;
 
 #[cfg(test)]
+mod passive_helpers_tests;
+#[cfg(test)]
 mod tests;
 
 #[cfg(test)]
