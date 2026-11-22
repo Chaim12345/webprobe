@@ -778,3 +778,65 @@ fn inband_oob_resource_load_uses_burps_text() {
     );
     assert_eq!(i.evidence.len(), 1);
 }
+
+#[test]
+fn hardening_recorder_missing_keys_have_no_implicit_evidence() {
+    let recorder = Recorder::default();
+    recorder.note("present", b"request", None);
+    assert!(recorder.last("absent").is_none());
+    assert!(recorder.next_after("absent").is_none());
+    assert!(recorder.since_last("absent").is_empty());
+}
+
+#[test]
+fn hardening_recorder_repeated_payload_selects_latest_probe_and_followups() {
+    let recorder = Recorder::default();
+    recorder.note("probe", b"old", Some(b"old response"));
+    recorder.note("control", b"old control", None);
+    recorder.note("probe", b"new", None);
+    recorder.note("control", b"new control", Some(b"negative"));
+    recorder.note("retrieve", b"retrieve", Some(b"stored"));
+    let exchanges = recorder.since_last("probe");
+    assert_eq!(
+        exchanges
+            .iter()
+            .map(|e| e.request.as_ref())
+            .collect::<Vec<_>>(),
+        [
+            b"new".as_slice(),
+            b"new control".as_slice(),
+            b"retrieve".as_slice()
+        ]
+    );
+    assert_eq!(recorder.last("probe"), Some(exchanges[0].clone()));
+    assert_eq!(recorder.next_after("probe"), Some(exchanges[1].clone()));
+    assert!(exchanges[0].response.is_none());
+    assert!(recorder.next_after("retrieve").is_none());
+}
+
+#[test]
+fn hardening_recorder_owns_bounded_snapshot_of_exchange() {
+    let recorder = Recorder::default();
+    let mut request = vec![b'q'; EVIDENCE_MAX_BYTES + 10];
+    let mut response = vec![b'r'; EVIDENCE_MAX_BYTES + 10];
+    recorder.note("payload", &request, Some(&response));
+    request.fill(b'x');
+    response.fill(b'y');
+    let saved = recorder.last("payload").unwrap();
+    assert_eq!(saved.request.len(), EVIDENCE_MAX_BYTES);
+    assert!(saved.request.iter().all(|b| *b == b'q'));
+    let saved_response = saved.response.unwrap();
+    assert_eq!(saved_response.len(), EVIDENCE_MAX_BYTES);
+    assert!(saved_response.iter().all(|b| *b == b'r'));
+}
+
+#[test]
+fn hardening_evidence_filter_preserves_order_and_empty_responses() {
+    let first = ScanEvidence::new(b"first", None);
+    let second = ScanEvidence::new(b"second", Some(b""));
+    assert_eq!(
+        evidence([None, Some(first.clone()), None, Some(second.clone())]),
+        [first, second]
+    );
+    assert!(evidence([None, None]).is_empty());
+}

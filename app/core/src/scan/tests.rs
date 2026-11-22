@@ -3923,3 +3923,88 @@ fn stop_ends_the_stored_stage() {
         "the stage kept sending after stop: {after} request(s) after it"
     );
 }
+
+// Characterization of the helper boundaries extracted by the hardening lanes.
+#[test]
+fn hardening_same_origin_rejects_cross_origin_and_non_network_links() {
+    for url in [
+        "",
+        " #anchor ",
+        "https://other.test/x",
+        "http://h.test/x",
+        "//h.test.evil/x",
+        "javascript:alert(1)",
+        "DATA:text/plain,x",
+    ] {
+        assert_eq!(
+            same_origin_path(url, true, "h.test", "/dir/page"),
+            None,
+            "{url}"
+        );
+    }
+    for (url, expected) in [
+        (" HTTPS://H.TEST/a?q=1 ", "/a?q=1"),
+        ("//h.test", "/"),
+        ("child?q=2", "/dir/child?q=2"),
+        ("/root", "/root"),
+    ] {
+        assert_eq!(
+            same_origin_path(url, true, "h.test", "/dir/page?q=old").as_deref(),
+            Some(expected),
+            "{url}"
+        );
+    }
+}
+
+#[test]
+fn hardening_get_request_keeps_session_but_removes_all_body_framing() {
+    let req = "POST /old HTTP/1.0\r\nHost: h.test\r\nCookie: sid=abc\r\nAuthorization: Bearer token\r\ncOnTeNt-LeNgTh: 99\r\nCONTENT-TYPE: text/plain\r\ntransfer-encoding: chunked\r\nX-Custom: yes\r\n\r\nsecret-body";
+    assert_eq!(get_request_like(req, "/next?q=1"), "GET /next?q=1 HTTP/1.1\r\nHost: h.test\r\nCookie: sid=abc\r\nAuthorization: Bearer token\r\nX-Custom: yes\r\n\r\n");
+}
+
+#[test]
+fn hardening_evidence_caps_each_message_and_clone_shares_storage() {
+    let request = vec![b'q'; EVIDENCE_MAX_BYTES + 1];
+    let response = vec![b'r'; EVIDENCE_MAX_BYTES + 7];
+    let evidence = ScanEvidence::new(&request, Some(&response));
+    assert_eq!(evidence.request.as_ref(), &request[..EVIDENCE_MAX_BYTES]);
+    assert_eq!(
+        evidence.response.as_deref(),
+        Some(&response[..EVIDENCE_MAX_BYTES])
+    );
+    let cloned = evidence.clone();
+    assert!(Arc::ptr_eq(&evidence.request, &cloned.request));
+    assert!(Arc::ptr_eq(
+        evidence.response.as_ref().unwrap(),
+        cloned.response.as_ref().unwrap()
+    ));
+}
+
+#[test]
+fn hardening_evidence_distinguishes_missing_and_empty_response() {
+    let missing = ScanEvidence::new(b"req", None);
+    let empty = ScanEvidence::new(b"req", Some(b""));
+    assert!(missing.response.is_none());
+    assert_eq!(empty.response.as_deref(), Some(&b""[..]));
+    assert_ne!(missing, empty);
+}
+
+#[test]
+fn hardening_passive_body_slice_respects_header_boundary_and_cap() {
+    let mut raw = b"HEAD".to_vec();
+    raw.extend(vec![b'x'; MAX_BODY_SCAN + 20]);
+    assert_eq!(body_slice(&raw, 4), &raw[4..4 + MAX_BODY_SCAN]);
+    assert!(body_slice(&raw, raw.len() + 1).is_empty());
+    assert!(body_slice(b"", 0).is_empty());
+}
+
+#[test]
+fn hardening_binary_sniff_preserves_text_and_nul_window_contract() {
+    assert!(!is_binary("Application/JSON; charset=utf-8", b"{\"a\":1}"));
+    assert!(is_binary("image/png", b"text-like bytes"));
+    let mut body = vec![b'a'; 1025];
+    body[1024] = 0;
+    assert!(!is_binary("text/plain", &body));
+    body[1023] = 0;
+    assert!(is_binary("text/plain", &body));
+}
