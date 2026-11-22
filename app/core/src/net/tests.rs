@@ -109,6 +109,190 @@ fn connect_intercepts_https_with_a_ca_signed_host_certificate() {
     assert_eq!(history[0].status, "200");
 }
 
+struct DropRequest;
+impl crate::ext_host::ProxyHooks for DropRequest {
+    fn extension_name(&self) -> &str {
+        "Drop regression"
+    }
+    fn handle_request_received(
+        &self,
+        _: &crate::ext_host::HttpService,
+        _: &str,
+        _: &str,
+        _: &mut Vec<u8>,
+    ) -> crate::ext_host::ProxyAction {
+        crate::ext_host::ProxyAction::Drop
+    }
+}
+
+fn extension_drop_shared() -> Arc<Shared> {
+    let shared = Shared::new();
+    crate::ext_host::with_host(&shared, |host| {
+        host.extensions
+            .push(crate::ext_host::LoadedExtension::new(DropRequest));
+    });
+    shared
+}
+
+fn assert_extension_drop_page(response: &[u8]) {
+    let parsed = util::parse_http(response);
+    assert_eq!(parsed.first, "HTTP/1.1 200 OK");
+    assert_eq!(
+        util::get_header(&parsed.headers, "Content-Type").as_deref(),
+        Some("text/html; charset=utf-8")
+    );
+    let body_start = response.windows(4).position(|w| w == b"\r\n\r\n").unwrap() + 4;
+    let body = &response[body_start..];
+    assert_eq!(
+        util::get_header(&parsed.headers, "Content-Length")
+            .unwrap()
+            .parse::<usize>()
+            .unwrap(),
+        body.len()
+    );
+    let html = std::str::from_utf8(body).unwrap();
+    assert!(html.starts_with("<!doctype html>"));
+    assert!(html.contains("An extension dropped the request."));
+    assert!(html.contains("not sent to the destination server"));
+    assert!(
+        !html.contains("<script>"),
+        "request content must not be reflected"
+    );
+}
+
+#[test]
+fn extension_drop_returns_html_without_contacting_origin() {
+    for method in ["GET", "POST"] {
+        let shared = extension_drop_shared();
+        let origin = TcpListener::bind("127.0.0.1:0").unwrap();
+        origin.set_nonblocking(true).unwrap();
+        let port = origin.local_addr().unwrap().port();
+        let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = proxy.local_addr().unwrap();
+        let proxy_shared = shared.clone();
+        let worker = std::thread::spawn(move || {
+            let (stream, _) = proxy.accept().unwrap();
+            handle_conn(proxy_shared, stream);
+        });
+        let mut client = TcpStream::connect(address).unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        // A buffered follow-up must not be served after this local response's
+        // Connection: close. This also guards future HTTP/1 pipelining work.
+        write!(client, "{method} http://127.0.0.1:{port}/admin-drop?<script> HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 4\r\nConnection: close\r\n\r\ntestGET http://127.0.0.1:{port}/after-drop HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n").unwrap();
+        let mut response = Vec::new();
+        client.read_to_end(&mut response).unwrap();
+        worker.join().unwrap();
+        assert_extension_drop_page(&response);
+        assert_eq!(
+            String::from_utf8_lossy(&response)
+                .matches("HTTP/1.1")
+                .count(),
+            1,
+            "the pipelined follow-up must not be served after Connection: close"
+        );
+        assert_eq!(
+            origin.accept().unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
+        assert!(
+            shared.history.snapshot().is_empty(),
+            "not an origin response"
+        );
+    }
+}
+
+#[test]
+fn extension_drop_head_returns_get_metadata_without_a_body_or_origin_connection() {
+    let shared = extension_drop_shared();
+    let origin = TcpListener::bind("127.0.0.1:0").unwrap();
+    origin.set_nonblocking(true).unwrap();
+    let port = origin.local_addr().unwrap().port();
+    let mut responses = Vec::new();
+    for method in ["GET", "HEAD"] {
+        let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = proxy.local_addr().unwrap();
+        let proxy_shared = shared.clone();
+        let worker = std::thread::spawn(move || {
+            let (stream, _) = proxy.accept().unwrap();
+            handle_conn(proxy_shared, stream);
+        });
+        let mut client = TcpStream::connect(address).unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        write!(client, "{method} http://127.0.0.1:{port}/admin-drop HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n").unwrap();
+        let mut response = Vec::new();
+        client.read_to_end(&mut response).unwrap();
+        worker.join().unwrap();
+        responses.push(response);
+    }
+    assert_extension_drop_page(&responses[0]);
+    let get_head_end = responses[0]
+        .windows(4)
+        .position(|w| w == b"\r\n\r\n")
+        .unwrap()
+        + 4;
+    assert_eq!(responses[1], responses[0][..get_head_end]);
+    assert_eq!(
+        origin.accept().unwrap_err().kind(),
+        std::io::ErrorKind::WouldBlock
+    );
+    assert!(shared.history.snapshot().is_empty());
+}
+
+#[test]
+fn extension_drop_returns_html_through_https_connect_without_contacting_origin() {
+    let shared = extension_drop_shared();
+    let origin = TcpListener::bind("127.0.0.1:0").unwrap();
+    origin.set_nonblocking(true).unwrap();
+    let port = origin.local_addr().unwrap().port();
+    let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = proxy.local_addr().unwrap();
+    let proxy_shared = shared.clone();
+    let worker = std::thread::spawn(move || {
+        let (stream, _) = proxy.accept().unwrap();
+        handle_conn(proxy_shared, stream);
+    });
+    let mut client = TcpStream::connect(address).unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    write!(
+        client,
+        "CONNECT localhost:{port} HTTP/1.1\r\nHost: localhost:{port}\r\n\r\n"
+    )
+    .unwrap();
+    let mut connect = Vec::new();
+    while !connect.ends_with(b"\r\n\r\n") {
+        let mut byte = [0];
+        client.read_exact(&mut byte).unwrap();
+        connect.push(byte[0]);
+    }
+    assert!(connect.starts_with(b"HTTP/1.1 200"));
+    let conn = ClientConnection::new(
+        browser_config(shared.mitm.ca_der()),
+        ServerName::try_from("localhost").unwrap(),
+    )
+    .unwrap();
+    let mut tls = StreamOwned::new(conn, client);
+    write!(
+        tls,
+        "GET /admin-drop HTTP/1.1\r\nHost: localhost:{port}\r\nConnection: close\r\n\r\n"
+    )
+    .unwrap();
+    let mut response = Vec::new();
+    tls.read_to_end(&mut response).unwrap();
+    worker.join().unwrap();
+    assert_extension_drop_page(&response);
+    assert_eq!(
+        origin.accept().unwrap_err().kind(),
+        std::io::ErrorKind::WouldBlock
+    );
+    assert!(shared.history.snapshot().is_empty());
+}
+
 #[test]
 fn browser_item_routes_show_and_repeat() {
     let shared = Shared::new();
