@@ -596,6 +596,12 @@ impl<S: Read + Write> Conn<S> {
             };
             if last {
                 flags |= FLAG_END_HEADERS;
+                // Conservative commitment: this write puts the last
+                // header-block bytes on the wire; write_frame can deliver
+                // them all and only fail at flush(). From here the peer may
+                // hold the whole request head, so the outcome of any later
+                // failure is unknown and the request must not be replayed.
+                self.committed = true;
             }
             write_frame(&mut self.io, ty, flags, id, &rest[..n])
                 .map_err(|e| StreamError::fatal(format!("h2 headers: {e}")))?;
@@ -605,9 +611,6 @@ impl<S: Read + Write> Conn<S> {
             rest = &rest[n..];
             first = false;
         }
-        // END_HEADERS is out: the peer now has the whole request head and
-        // may act on it. A later failure has an unknown outcome.
-        self.committed = true;
         self.streams
             .insert(id, StreamRx::new(self.peer_initial_window));
         Ok(id)
@@ -1920,6 +1923,53 @@ mod tests {
         let decoded = dec.decode(block).expect("decodes at table size 0");
         assert!(decoded.contains(&(b":method".to_vec(), b"GET".to_vec())));
         assert!(decoded.contains(&(b":path".to_vec(), b"/".to_vec())));
+    }
+
+    #[test]
+    fn flush_failure_after_the_header_block_still_counts_as_committed() {
+        // Regression guard: write_all delivers every HEADERS byte and only
+        // flush() fails, so the peer may hold the whole request head. The
+        // outcome is unknown: the request must count as committed, or the
+        // pooled-error branch would fresh-send a possibly processed request.
+        struct FlushFail {
+            buf: Vec<u8>,
+            flushes: usize,
+        }
+        impl Read for FlushFail {
+            fn read(&mut self, _b: &mut [u8]) -> std::io::Result<usize> {
+                Ok(0)
+            }
+        }
+        impl Write for FlushFail {
+            fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
+                self.buf.extend_from_slice(b);
+                Ok(b.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                self.flushes += 1;
+                if self.flushes >= 2 {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::BrokenPipe,
+                        "flush failed after write",
+                    ));
+                }
+                Ok(())
+            }
+        }
+        let mut conn = Conn::new(FlushFail {
+            buf: Vec::new(),
+            flushes: 0,
+        });
+        let err = conn.start_request(&get_request()).unwrap_err();
+        assert!(conn.committed(), "all head bytes were written: committed");
+        assert!(!err.retryable(), "unknown outcome is not a safe replay");
+        // The pool replay predicate is retryable || !committed: neither holds.
+        assert!(!(!conn.committed() || err.retryable()));
+        let written = conn.get_mut().buf.len();
+        assert!(
+            written > 24 + 9 + 9,
+            "preface + SETTINGS + HEADERS went out"
+        );
     }
 
     #[test]

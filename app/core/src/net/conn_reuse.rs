@@ -290,7 +290,7 @@ pub fn send_tls_raw_with(
 /// proxy with its settings), the TLS policy (shared upstream config
 /// identity, or the matching client-certificate rule), and the sender's
 /// protocol choice (ALPN override) all discriminate.
-pub(crate) type H2PoolKey = (String, u16, String, usize, Option<u64>, Option<bool>);
+pub(crate) type H2PoolKey = (String, u16, String, u64, Option<bool>);
 use crate::upstream::UpstreamConfig;
 
 pub(crate) fn h2_pool_key(
@@ -300,33 +300,48 @@ pub(crate) fn h2_pool_key(
     config: &UpstreamConfig,
     want_h2: Option<bool>,
 ) -> H2PoolKey {
-    let cert_rule = shared
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    // The EFFECTIVE TLS policy, mirroring tls_client::config_for: a matching
+    // client-certificate rule that builds wins with its full content (a key
+    // or cert change is a new identity); a rule that fails to build falls
+    // back to the shared upstream config, so the fallback's identity is what
+    // gets hashed. The root store feeds both paths.
+    let rule = shared
         .client_certs
         .lock()
         .unwrap()
         .iter()
         .find(|r| host_matches(&r.host_pattern, host))
-        .map(|r| {
-            use std::hash::{Hash, Hasher};
-            let mut h = std::collections::hash_map::DefaultHasher::new();
+        .cloned();
+    let roots = shared.tls_roots.lock().unwrap().clone();
+    let built = rule.and_then(|r| {
+        crate::tls::client_auth_config(&r.cert_pem, &r.key_pem, roots.clone())
+            .ok()
+            .map(|_| r)
+    });
+    match built {
+        Some(r) => {
             r.host_pattern.hash(&mut h);
             r.cert_pem.hash(&mut h);
-            h.finish()
-        });
-    // With a client-certificate rule the config is built per call, so the
-    // rule's content hash is the identity; otherwise the shared upstream
-    // config's allocation identity pins the TLS policy.
-    let tls_id = if cert_rule.is_some() {
-        0
-    } else {
-        std::sync::Arc::as_ptr(&shared.tls_upstream) as usize
-    };
+            r.key_pem.hash(&mut h);
+        }
+        None => {
+            (std::sync::Arc::as_ptr(&shared.tls_upstream) as usize).hash(&mut h);
+        }
+    }
+    let roots = shared.tls_roots.lock().unwrap();
+    roots.len().hash(&mut h);
+    for root in roots.roots.iter() {
+        root.subject.as_ref().hash(&mut h);
+        root.subject_public_key_info.as_ref().hash(&mut h);
+    }
+    drop(roots);
     (
         host.to_string(),
         port,
         format!("{config:?}"),
-        tls_id,
-        cert_rule,
+        h.finish(),
         want_h2,
     )
 }
