@@ -419,6 +419,11 @@ pub(crate) fn read_message<R: std::io::Read + webprobe_support::io_traits::Respo
             buffer.drain(..head_end);
             continue;
         }
+        if code == 101 {
+            // Switching Protocols: the socket now speaks the upgraded
+            // protocol. It must never re-enter the HTTP/1.x pool.
+            return Ok((buffer.drain(..head_end).collect(), false));
+        }
         break head_end;
     };
     let body_start = head_end;

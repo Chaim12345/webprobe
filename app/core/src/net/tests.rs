@@ -402,6 +402,77 @@ Host: x
     }
 }
 
+/// Regression guard (fails on the old head-only heuristic): a 101
+/// Switching Protocols reply upgrades the socket; it must never be pooled,
+/// or a later Repeater send would talk HTTP/1.1 into an upgraded socket.
+#[test]
+fn switching_protocols_retires_the_connection() {
+    let shared = Shared::new();
+    shared.keep_alive.store(true, Ordering::SeqCst);
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let t = std::thread::spawn(move || {
+        for i in 0..2 {
+            let (mut s, _) = listener.accept().unwrap();
+            s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+            let _ = read_request_head(&mut s);
+            if i == 0 {
+                s.write_all(
+                    b"HTTP/1.1 101 Switching Protocols
+Upgrade: websocket
+Connection: Upgrade
+
+",
+                )
+                .unwrap();
+            } else {
+                s.write_all(
+                    b"HTTP/1.1 200 OK
+Content-Length: 2
+
+hi",
+                )
+                .unwrap();
+            }
+        }
+    });
+    let one = send_raw(
+        &shared,
+        "127.0.0.1",
+        port,
+        b"GET /ws HTTP/1.1
+Host: x
+Upgrade: websocket
+Connection: Upgrade
+
+",
+    );
+    let two = send_raw(
+        &shared,
+        "127.0.0.1",
+        port,
+        b"GET /b HTTP/1.1
+Host: x
+
+",
+    );
+    t.join().unwrap();
+    assert!(
+        one.resp
+            .as_deref()
+            .unwrap_or_default()
+            .starts_with(b"HTTP/1.1 101"),
+        "{:?}",
+        one.error
+    );
+    assert!(
+        two.resp.as_deref().unwrap_or_default().ends_with(b"hi"),
+        "{:?}",
+        two.error
+    );
+    assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 2);
+}
+
 #[test]
 fn declined_h2c_upgrade_is_not_pooled() {
     let shared = Shared::new();
