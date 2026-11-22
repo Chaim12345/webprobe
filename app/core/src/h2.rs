@@ -702,8 +702,19 @@ impl<S: Read + Write> Conn<S> {
                 req.body.len().to_string().into_bytes(),
             ));
         }
-        self.enc
-            .encode(headers.iter().map(|(k, v)| (k.as_slice(), v.as_slice())))
+        if self.settings_seen {
+            self.enc
+                .encode(headers.iter().map(|(k, v)| (k.as_slice(), v.as_slice())))
+        } else {
+            // Before the peer's SETTINGS arrive its HPACK table size is
+            // unknown and may be smaller than the 4096 default (0 is
+            // legal). The hpack 0.3 encoder always uses incremental
+            // indexing, which would insert entries a small-table peer
+            // must evict on sight and later reference by an index the
+            // peer no longer holds. Encode without indexing or indexed
+            // dynamic references until the peer's table size is known.
+            encode_headers_no_index(&headers)
+        }
     }
 
     /// Send the active stream's body under flow control while consuming
@@ -1084,6 +1095,98 @@ fn window_increment(f: &Frame) -> Result<u32, StreamError> {
         return Err(StreamError::fatal("h2: zero WINDOW_UPDATE"));
     }
     Ok(inc)
+}
+
+/// Literal-without-indexing encoding (RFC 7541 §6.2.2) over static-table
+/// name indices only: inserts nothing into the peer's dynamic table and
+/// references nothing in it, so it decodes correctly at any advertised
+/// table size, including 0.
+fn encode_headers_no_index(headers: &[(Vec<u8>, Vec<u8>)]) -> Vec<u8> {
+    fn varint(out: &mut Vec<u8>, prefix_bits: u32, first_flags: u8, mut v: u64) {
+        let max = (1u64 << prefix_bits) - 1;
+        if v < max {
+            out.push(first_flags | v as u8);
+            return;
+        }
+        out.push(first_flags | max as u8);
+        v -= max;
+        while v >= 0x80 {
+            out.push((v as u8 & 0x7f) | 0x80);
+            v >>= 7;
+        }
+        out.push(v as u8);
+    }
+    fn string(out: &mut Vec<u8>, b: &[u8]) {
+        varint(out, 7, 0, b.len() as u64);
+        out.extend_from_slice(b);
+    }
+    // Static-table name indices (RFC 7541 Appendix A); first index per name.
+    const NAMES: &[(&[u8], u64)] = &[
+        (b":authority", 1),
+        (b":method", 2),
+        (b":path", 4),
+        (b":scheme", 6),
+        (b":status", 8),
+        (b"accept-charset", 15),
+        (b"accept-encoding", 16),
+        (b"accept-language", 17),
+        (b"accept-ranges", 18),
+        (b"accept", 19),
+        (b"access-control-allow-origin", 20),
+        (b"age", 21),
+        (b"allow", 22),
+        (b"authorization", 23),
+        (b"cache-control", 24),
+        (b"content-disposition", 25),
+        (b"content-encoding", 26),
+        (b"content-language", 27),
+        (b"content-length", 28),
+        (b"content-location", 29),
+        (b"content-range", 30),
+        (b"content-type", 31),
+        (b"cookie", 32),
+        (b"date", 33),
+        (b"etag", 34),
+        (b"expect", 35),
+        (b"expires", 36),
+        (b"from", 37),
+        (b"host", 38),
+        (b"if-match", 39),
+        (b"if-modified-since", 40),
+        (b"if-none-match", 41),
+        (b"if-range", 42),
+        (b"if-unmodified-since", 43),
+        (b"last-modified", 44),
+        (b"link", 45),
+        (b"location", 46),
+        (b"max-forwards", 47),
+        (b"proxy-authenticate", 48),
+        (b"proxy-authorization", 49),
+        (b"range", 50),
+        (b"referer", 51),
+        (b"refresh", 52),
+        (b"retry-after", 53),
+        (b"server", 54),
+        (b"set-cookie", 55),
+        (b"strict-transport-security", 56),
+        (b"transfer-encoding", 57),
+        (b"user-agent", 58),
+        (b"vary", 59),
+        (b"via", 60),
+        (b"www-authenticate", 61),
+    ];
+    let mut out = Vec::new();
+    for (name, value) in headers {
+        match NAMES.iter().find(|(n, _)| n == name) {
+            Some(&(_, idx)) => varint(&mut out, 4, 0, idx),
+            None => {
+                out.push(0);
+                string(&mut out, name);
+            }
+        }
+        string(&mut out, value);
+    }
+    out
 }
 
 /// Perform one request on a fresh connection. Equivalent to
@@ -1780,6 +1883,43 @@ mod tests {
             "{}",
             err.message()
         );
+    }
+
+    #[test]
+    fn pre_settings_header_blocks_never_touch_the_dynamic_table() {
+        // A peer advertising HEADER_TABLE_SIZE = 0 must still decode the
+        // first request block: HEADERS go out before the peer's SETTINGS
+        // arrive, so they are encoded literal-without-indexing over
+        // static-table names only.
+        let mut shrink = 1u16.to_be_bytes().to_vec();
+        shrink.extend_from_slice(&0u32.to_be_bytes());
+        let mut enc = Encoder::new();
+        let hb = enc.encode(vec![(b":status".as_ref(), b"200".as_ref())]);
+        let frames: [(u8, u8, u32, &[u8]); 3] = [
+            (FRAME_SETTINGS, 0, 0, &shrink),
+            (FRAME_SETTINGS, 0, 0, &[]),
+            (FRAME_HEADERS, FLAG_END_HEADERS | FLAG_END_STREAM, 1, &hb),
+        ];
+        let mut conn = Conn::new(scripted(&frames));
+        let resp = conn.exchange(&get_request(), None).expect("exchange");
+        assert!(resp.starts_with(b"HTTP/1.1 200"));
+        // Find the client's first HEADERS frame and decode its block with a
+        // zero-sized dynamic table: no indexing, no dynamic references.
+        let out = &conn.get_mut().out;
+        let mut pos = 24;
+        let block = loop {
+            let len = u32::from_be_bytes([0, out[pos], out[pos + 1], out[pos + 2]]) as usize;
+            let ty = out[pos + 3];
+            if ty == FRAME_HEADERS {
+                break &out[pos + 9..pos + 9 + len];
+            }
+            pos += 9 + len;
+        };
+        let mut dec = hpack::Decoder::new();
+        dec.set_max_table_size(0);
+        let decoded = dec.decode(block).expect("decodes at table size 0");
+        assert!(decoded.contains(&(b":method".to_vec(), b"GET".to_vec())));
+        assert!(decoded.contains(&(b":path".to_vec(), b"/".to_vec())));
     }
 
     #[test]
