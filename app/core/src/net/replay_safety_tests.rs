@@ -324,7 +324,7 @@ fn intruder_worker_does_not_replay_a_committed_post_after_response_loss() {
         }
         origin.finish();
         origin.assert_counts(1, 2, 1);
-        let rows = run.rows.lock().unwrap();
+        let rows = run.snapshot_rows();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].attempts, 1);
         assert!(
