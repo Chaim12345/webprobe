@@ -152,6 +152,7 @@ final class Bridge {
         return Api.obj()
                 .on("registerHttpHandler", a -> register(HTTP_HANDLERS, (HttpHandler) a[0]))
                 .on("cookieJar", a -> Engine.cookieJar())
+                .on("createResponseKeywordsAnalyzer", a -> keywordAnalyzer(a[0]))
                 .on("registerSessionHandlingAction", a -> Engine.reg(Engine.SESSION_ACTIONS, (burp.api.montoya.http.sessions.SessionHandlingAction) a[0]))
                 .on("sendRequest", a -> send((HttpRequest) a[0]))
                 .on("sendRequests", a -> {
@@ -160,6 +161,11 @@ final class Bridge {
                     return out;
                 })
                 .as(Http.class);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Object keywordAnalyzer(Object keywords) {
+        return new KeywordAnalysis((List<String>) keywords);
     }
 
     /** Http.sendRequest: through WebProbe's own sender (upstream proxy,

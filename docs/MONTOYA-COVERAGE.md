@@ -18,7 +18,7 @@ so WebProbe does not ship it.
 | comparer | full | |
 | decoder | full | |
 | extension | full | |
-| http | partial | response keyword / variation analyzers; `HttpMode` and `RequestOptions` are ignored |
+| http | partial | response variation analyzer; `HttpMode` and `RequestOptions` are ignored |
 | intruder | full | generator sees the first position's base value for every position; copy-other and recursive-grep sets are not processed; `sendToIntruder` replaces the current request and ignores the tab name |
 | logging | full | |
 | organizer | partial | status is always NEW |
@@ -50,3 +50,20 @@ can force or skip it), "to be sent" handlers after the user's edit. Calls into a
 | MCP Server | Loads with no unsupported call and listens on 127.0.0.1:9876; its tools were not exercised |
 
 The sample is four BApps, three of them JWT tools. Other BApps may hit the unsupported calls above.
+
+## R-20 keyword analysis slice (2026-11-22)
+
+`http().createResponseKeywordsAnalyzer` now tracks literal, case-sensitive,
+non-overlapping keyword counts across the complete response (headers and body).
+Before the first response, both result sets are empty. The first response seeds
+invariant keywords, including keywords with zero occurrences. Once a count
+changes, that keyword remains variant. Result sets are immutable snapshots and
+analyzers do not retain response bodies. Empty keywords are rejected.
+
+A purpose-built extension exercises the public Montoya API, loaded by the real
+sidecar JVM with JDK 21 and the published Montoya 2026.7 API jar. It checks count
+changes, absent keywords, headers, case sensitivity, repeated keywords,
+independent analyzers, immutable snapshots, and invalid inputs. This establishes
+WebProbe's behavior, not parity against a running Burp installation. The ten
+additional unmodified BApps required by R-20 have not been checked in this slice;
+R-20 remains open. Response variation analysis remains unsupported.

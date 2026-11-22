@@ -1416,6 +1416,25 @@ mod tests {
         Some(dir)
     }
 
+    /// R-20: the public Montoya keyword analyzer, exercised by a real JVM
+    /// extension. This checks our documented behavior, not Burp parity.
+    #[test]
+    fn montoya_response_keyword_analysis() {
+        let Some(dir) = stage_extension("KeywordAnalysisExtension") else {
+            eprintln!("skipping: no JDK or Montoya API jar");
+            return;
+        };
+        let sc = JavaSidecar::spawn(dir.to_str().unwrap()).expect("keyword extension loads");
+        sc.unload();
+        let log = sc.errors();
+        assert!(
+            log.iter()
+                .any(|line| line.contains("keyword analysis regression passed")),
+            "keyword checks did not finish: {log:#?}"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     /// R-03 stage 1: setName, the unloading handler, every logging()
     /// channel, burpSuite(), and Unsupported for what is not bridged.
     #[test]
