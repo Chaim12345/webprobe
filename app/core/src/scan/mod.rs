@@ -89,3 +89,6 @@ pub use request_builders::*;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod passive_library_tests;

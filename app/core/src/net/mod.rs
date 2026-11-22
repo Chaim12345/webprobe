@@ -110,4 +110,6 @@ mod cookie_jar_tests;
 mod session_rule_tests;
 
 #[cfg(test)]
+mod read_request_tests;
+#[cfg(test)]
 mod wake_tests;

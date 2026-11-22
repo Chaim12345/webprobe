@@ -37,9 +37,14 @@ pub fn read_request_pending<R: Read>(
     let mut buf: Vec<u8> = std::mem::take(pending);
     let mut chunk = [0u8; 8192];
     let head_len;
+    let mut from = 0usize;
     loop {
-        if let Some(h) = head_end(&buf) {
-            head_len = Some(h);
+        // Pending bytes can already hold a complete head; after a read only
+        // the new bytes (plus the 3 before them, in case a terminator
+        // straddles two reads) can hold a head end: rescanning the whole
+        // buffer on every read made a header flood quadratic.
+        if let Some(h) = head_end(&buf[from..]) {
+            head_len = Some(from + h);
             break;
         }
         if buf.len() > 4 * 1024 * 1024 {
@@ -48,6 +53,7 @@ pub fn read_request_pending<R: Read>(
                 "request too large",
             ));
         }
+        from = buf.len().saturating_sub(3);
         let n = stream.read(&mut chunk)?;
         if n == 0 {
             head_len = None;
