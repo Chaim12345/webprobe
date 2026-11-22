@@ -717,8 +717,9 @@ pub fn upstream_and_deliver<S: ProxyIo>(
     // Session rules run before match-and-replace, matching Burp's handling chain.
     let req_session = apply_session_rules(shared, &req, default_port);
     let mut req_out = crate::rules::apply_rules(&req_session, &shared.mr_request.lock().unwrap());
-    // Extension hooks run after the built-in chain (session rules, M&R);
-    // a Drop verdict closes the client connection without a response.
+    // Extension hooks run after the built-in chain (session rules, M&R).
+    // Burp returns a local HTML error page when an extension drops a request;
+    // this is not an origin success, and must not initiate an upstream request.
     let mut ann = webprobe_support::ext::Annotations::default();
     if !shared.ext_handle_request(
         &webprobe_support::ext::HttpService::new(&host, port, use_tls),
@@ -727,6 +728,13 @@ pub fn upstream_and_deliver<S: ProxyIo>(
         &mut req_out,
         &mut ann,
     ) {
+        let body = "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>WebProbe: request dropped</title></head><body><h1>Request dropped</h1><p>An extension dropped the request. It was not sent to the destination server.</p></body></html>";
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        let _ = stream.write_all(response.as_bytes());
+        let _ = stream.flush();
         shared.log("Request dropped by an extension hook");
         return;
     }
