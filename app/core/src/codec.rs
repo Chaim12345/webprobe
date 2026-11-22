@@ -79,6 +79,10 @@ pub enum FramingError {
     BadContentLength,
     /// `Transfer-Encoding` does not end in `chunked`, or lists it twice.
     BadTransferEncoding,
+    /// Both `Transfer-Encoding` and `Content-Length` are present, whatever
+    /// their values: the classic request-smuggling shape. Strict mode closes
+    /// the connection instead of picking a winner.
+    AmbiguousFraming,
 }
 
 /// Strict RFC 9112 §6.3 framing for a message head: the same decision as
@@ -113,6 +117,9 @@ pub fn response_body_kind_strict(head: &[u8], method: &str) -> Result<BodyKind, 
         } else {
             te.push(value.trim());
         }
+    }
+    if !te.is_empty() && !cl.is_empty() {
+        return Err(FramingError::AmbiguousFraming);
     }
     let lenient = response_body_kind(head, method);
     if lenient == BodyKind::None {

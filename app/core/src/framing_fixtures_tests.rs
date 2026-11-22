@@ -44,7 +44,25 @@ fn cases() -> Vec<Case> {
             "TE beats CL",
             "HTTP/1.1 200 OK\r\nContent-Length: 5\r\nTransfer-Encoding: chunked\r\n\r\n",
             Chunked,
-            Ok(Chunked),
+            Err(AmbiguousFraming),
+        ),
+        (
+            "TE with malformed CL",
+            "HTTP/1.1 200 OK\r\nContent-Length: abc\r\nTransfer-Encoding: chunked\r\n\r\n",
+            Chunked,
+            Err(AmbiguousFraming),
+        ),
+        (
+            "TE with agreeing duplicate CL",
+            "HTTP/1.1 200 OK\r\nContent-Length: 5\r\nContent-Length: 5\r\nTransfer-Encoding: chunked\r\n\r\n",
+            Chunked,
+            Err(AmbiguousFraming),
+        ),
+        (
+            "204 with TE and CL",
+            "HTTP/1.1 204 No Content\r\nContent-Length: 5\r\nTransfer-Encoding: chunked\r\n\r\n",
+            None,
+            Err(AmbiguousFraming),
         ),
         (
             "mixed-case names",
@@ -110,7 +128,7 @@ fn cases() -> Vec<Case> {
             "unknown TE falls to CL",
             "HTTP/1.1 200 OK\r\nTransfer-Encoding: xchunked\r\nContent-Length: 4\r\n\r\n",
             Length(4),
-            Err(BadTransferEncoding),
+            Err(AmbiguousFraming),
         ),
         (
             "bare LF head",
