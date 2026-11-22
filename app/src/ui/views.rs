@@ -681,20 +681,25 @@ pub(crate) fn logger_view(app: &mut App, ui: &mut Ui) {
                 // A proxy row shows the history item it mirrors; a tool row
                 // (Repeater, Intruder, Scanner, ...) carries its own messages.
                 let row = app.log_sel.and_then(|id| app.logger.get(id).cloned());
-                let (req, resp) = match &row {
+                // The history response is held as the stored Body (a cheap
+                // handle), never copied: the pane previews a bounded prefix.
+                let (req, hist_resp, tool_resp) = match &row {
                     Some(r) if r.hist_id.is_some() => {
                         let e = r.hist_id.and_then(|id| app.shared.history.get(id));
                         (
                             e.as_ref().map(|e| util::origin_form(&e.req_raw)),
-                            e.and_then(|e| e.resp_raw).map(|b| b.to_vec()),
+                            e.and_then(|e| e.resp_raw),
+                            None,
                         )
                     }
                     Some(r) => (
                         r.request.as_ref().map(|b| b.to_vec()),
-                        r.response.as_ref().map(|b| b.to_vec()),
+                        None,
+                        r.response.clone(),
                     ),
-                    None => (None, None),
+                    None => (None, None, None),
                 };
+                let resp = logger_response(&hist_resp, &tool_resp);
                 let h = ui.available_height().max(full * 0.5);
                 egui_extras::StripBuilder::new(ui)
                     .size(egui_extras::Size::remainder())
@@ -716,7 +721,7 @@ pub(crate) fn logger_view(app: &mut App, ui: &mut Ui) {
                                 ui,
                                 "log_resp",
                                 "Response",
-                                resp.as_deref(),
+                                resp,
                                 &mut app.log_resp_pane,
                                 true,
                                 h,
@@ -1408,5 +1413,32 @@ fn organizer_modals(app: &mut App, ctx: &egui::Context) {
         if !open || cancel {
             app.org_share_modal = None;
         }
+    }
+}
+
+/// The response the Logger pane shows: the mirrored history entry's stored
+/// body or the tool row's own copy, borrowed as is (no whole-body copy; the
+/// pane previews a bounded prefix).
+fn logger_response<'a>(
+    hist: &'a Option<webprobe_core::body::Body>,
+    tool: &'a Option<std::sync::Arc<[u8]>>,
+) -> Option<&'a [u8]> {
+    hist.as_deref().or(tool.as_deref())
+}
+
+#[cfg(test)]
+mod logger_selection_tests {
+    use super::*;
+
+    #[test]
+    fn logger_selection_borrows_the_response_instead_of_copying_it() {
+        let body: webprobe_core::body::Body = vec![7u8; 8 * 1024 * 1024].into();
+        let hist = Some(body.clone());
+        let shown = logger_response(&hist, &None).unwrap();
+        assert_eq!(shown.as_ptr(), body.as_ptr(), "same bytes, no copy");
+        assert_eq!(shown.len(), body.len());
+        let tool: Option<std::sync::Arc<[u8]>> = Some(vec![1u8, 2, 3].into());
+        assert_eq!(logger_response(&None, &tool), Some(&[1u8, 2, 3][..]));
+        assert_eq!(logger_response(&None, &None), None);
     }
 }
