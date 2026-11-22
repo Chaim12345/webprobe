@@ -2181,3 +2181,70 @@ fn pipelined_request_arriving_in_a_later_packet_is_served() {
     assert!(one < two, "responses in request order: {text}");
     assert_eq!(shared.history.snapshot().len(), 2);
 }
+
+#[test]
+fn hardening_host_header_takes_precedence_over_absolute_request_target() {
+    let parts = util::parse_http(
+        b"GET http://fallback.test:8080/a HTTP/1.1\r\nHost: preferred.test:9090\r\n\r\n",
+    );
+    assert_eq!(host_of(&parts, 80), ("preferred.test".into(), 9090));
+    assert_eq!(path_of(&parts), "/a");
+    let fallback = util::parse_http(b"GET http://fallback.test:8080/a?q=1 HTTP/1.0\r\n\r\n");
+    assert_eq!(host_of(&fallback, 80), ("fallback.test".into(), 8080));
+    assert_eq!(path_of(&fallback), "/a?q=1");
+}
+
+#[test]
+fn hardening_host_port_invalid_suffix_is_not_silently_removed() {
+    for authority in ["h.test:bad", "h.test:65536", "h.test:"] {
+        assert_eq!(
+            split_host_port(authority, 443),
+            (authority.to_string(), 443)
+        );
+    }
+    assert_eq!(split_host_port("h.test:0", 443), ("h.test".into(), 0));
+    assert_eq!(
+        split_host_port("h.test:65535", 443),
+        ("h.test".into(), 65535)
+    );
+    assert_eq!(
+        path_of(&util::parse_http(b"GET http://h.test HTTP/1.0\r\n\r\n")),
+        "/"
+    );
+}
+
+#[test]
+fn hardening_append_cookie_preserves_body_and_existing_session() {
+    let original =
+        b"POST / HTTP/1.1\r\nHost: h.test\r\ncOoKiE: sid=old\r\nContent-Length: 3\r\n\r\na=1";
+    let result = append_cookie(original, "csrf", "new");
+    let parsed = util::parse_http(&result);
+    assert_eq!(
+        util::get_header(&parsed.headers, "Cookie").as_deref(),
+        Some("sid=old; csrf=new")
+    );
+    assert_eq!(
+        parsed
+            .headers
+            .iter()
+            .filter(|(k, _)| k.eq_ignore_ascii_case("Cookie"))
+            .count(),
+        1
+    );
+    assert!(result.ends_with(b"\r\n\r\na=1"));
+    let fresh = append_cookie(b"GET / HTTP/1.1\r\nHost: h.test\r\n\r\n", "sid", "first");
+    assert_eq!(
+        util::get_header(&util::parse_http(&fresh).headers, "Cookie").as_deref(),
+        Some("sid=first")
+    );
+}
+
+#[test]
+fn hardening_pattern_matching_keeps_literal_and_regex_semantics_separate() {
+    assert!(pattern_matches("", true, "anything"));
+    assert!(pattern_matches("a.b", false, "prefix a.b suffix"));
+    assert!(!pattern_matches("a.b", false, "aXb"));
+    assert!(pattern_matches("^a.b$", true, "aXb"));
+    assert!(!pattern_matches("[", true, "["));
+    assert!(!pattern_matches("^a$", true, "ba"));
+}

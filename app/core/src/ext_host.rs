@@ -2369,3 +2369,191 @@ mod panic_policy_tests {
         assert!(run_response_hooks(&exts, &svc, "GET", "/", &mut resp));
     }
 }
+
+#[cfg(test)]
+mod hardening_hook_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct ResponseMarker(Arc<AtomicUsize>);
+    impl ProxyHooks for ResponseMarker {
+        fn extension_name(&self) -> &str {
+            "response-marker"
+        }
+        fn handle_response(
+            &self,
+            svc: &HttpService,
+            method: &str,
+            path: &str,
+            req: &[u8],
+            resp: &mut Vec<u8>,
+            ann: &mut Annotations,
+        ) -> ProxyAction {
+            assert_eq!(svc, &HttpService::new("h.test", 443, true));
+            assert_eq!(
+                (method, path, req),
+                ("POST", "/test", b"original request".as_slice())
+            );
+            self.0.fetch_add(1, Ordering::SeqCst);
+            resp.extend_from_slice(b"+marker");
+            ann.notes.push_str("marker");
+            ProxyAction::Continue
+        }
+    }
+    struct Stop;
+    impl ProxyHooks for Stop {
+        fn extension_name(&self) -> &str {
+            "stop"
+        }
+        fn handle_request_received(
+            &self,
+            _: &HttpService,
+            _: &str,
+            _: &str,
+            _: &mut Vec<u8>,
+        ) -> ProxyAction {
+            ProxyAction::Drop
+        }
+        fn handle_response_received(
+            &self,
+            _: &HttpService,
+            _: &str,
+            _: &str,
+            _: &mut Vec<u8>,
+        ) -> ProxyAction {
+            ProxyAction::Drop
+        }
+    }
+    struct CountCalls(Arc<AtomicUsize>);
+    impl ProxyHooks for CountCalls {
+        fn extension_name(&self) -> &str {
+            "count-calls"
+        }
+        fn handle_request_received(
+            &self,
+            _: &HttpService,
+            _: &str,
+            _: &str,
+            _: &mut Vec<u8>,
+        ) -> ProxyAction {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            ProxyAction::Continue
+        }
+        fn handle_response_received(
+            &self,
+            _: &HttpService,
+            _: &str,
+            _: &str,
+            _: &mut Vec<u8>,
+        ) -> ProxyAction {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            ProxyAction::Continue
+        }
+    }
+    struct PanicResponse;
+    impl ProxyHooks for PanicResponse {
+        fn extension_name(&self) -> &str {
+            "panic-response"
+        }
+        fn handle_response_received(
+            &self,
+            _: &HttpService,
+            _: &str,
+            _: &str,
+            _: &mut Vec<u8>,
+        ) -> ProxyAction {
+            panic!("response hook bug")
+        }
+    }
+
+    #[test]
+    fn response_panic_continues_with_original_context_and_shared_annotations() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let hooks: Vec<Arc<dyn ProxyHooks>> = vec![
+            Arc::new(PanicResponse),
+            Arc::new(ResponseMarker(calls.clone())),
+        ];
+        let mut response = b"response".to_vec();
+        let mut annotations = Annotations {
+            notes: "before:".into(),
+            highlight: Some(2),
+        };
+        assert!(run_response_hooks_annotated(
+            &hooks,
+            &HttpService::new("h.test", 443, true),
+            "POST",
+            "/test",
+            b"original request",
+            &mut response,
+            &mut annotations
+        ));
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert_eq!(response, b"response+marker");
+        assert_eq!(annotations.notes, "before:marker");
+        assert_eq!(annotations.highlight, Some(2));
+    }
+
+    #[test]
+    fn request_drop_stops_before_later_hooks() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let hooks: Vec<Arc<dyn ProxyHooks>> =
+            vec![Arc::new(Stop), Arc::new(CountCalls(calls.clone()))];
+        let mut request = b"request".to_vec();
+        assert!(!run_request_hooks(
+            &hooks,
+            &HttpService::default(),
+            "GET",
+            "/",
+            &mut request
+        ));
+        assert_eq!(request, b"request");
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn response_drop_stops_before_later_hooks() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let hooks: Vec<Arc<dyn ProxyHooks>> =
+            vec![Arc::new(Stop), Arc::new(CountCalls(calls.clone()))];
+        let mut response = b"response".to_vec();
+        assert!(!run_response_hooks(
+            &hooks,
+            &HttpService::default(),
+            "GET",
+            "/",
+            &mut response
+        ));
+        assert_eq!(response, b"response");
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn empty_hook_lists_preserve_messages_and_annotations() {
+        let service = HttpService::default();
+        let mut message = b"message".to_vec();
+        let mut annotations = Annotations {
+            notes: "keep".into(),
+            highlight: Some(1),
+        };
+        let before = annotations.clone();
+        assert!(run_request_hooks_annotated(
+            &[],
+            &service,
+            "GET",
+            "/",
+            &mut message,
+            &mut annotations
+        ));
+        assert!(run_response_hooks_annotated(
+            &[],
+            &service,
+            "GET",
+            "/",
+            b"request",
+            &mut message,
+            &mut annotations
+        ));
+        assert_eq!(message, b"message");
+        assert_eq!(annotations, before);
+    }
+}
