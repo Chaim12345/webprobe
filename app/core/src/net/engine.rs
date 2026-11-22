@@ -358,8 +358,17 @@ pub fn handle_conn(shared: Arc<Shared>, mut stream: TcpStream) {
             return;
         }
         // An extension drop page ends the exchange with Connection: close;
-        // buffered pipelined follow-ups must not be served after it.
+        // buffered pipelined follow-ups must not be served after it. Drain
+        // anything already in flight so the client sees a clean FIN, not a
+        // RST that could cost it the page.
         if upstream_and_deliver(&shared, &mut stream, req, 80, false, req_state) {
+            let _ = stream.shutdown(std::net::Shutdown::Write);
+            pending.clear();
+            // Drain bytes already delivered so the close is a clean FIN, not
+            // a RST that could cost the client the page; do not wait for more.
+            let _ = stream.set_nonblocking(true);
+            let mut sink = [0u8; 8192];
+            while stream.read(&mut sink).map(|n| n > 0).unwrap_or(false) {}
             return;
         }
         // Non-pipelined traffic keeps its one-exchange lifecycle: the loop
