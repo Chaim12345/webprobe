@@ -10,12 +10,12 @@ This is the index for sequencing, not permission to merge or change product beha
 - Single review stack: **#125**, observed head `2b756c1b37dae00d8f790f0b1f83471838e4060a`. Its body reports 845 passing checks on an earlier tested tree. Do not attach that count to a later SHA without new evidence.
 - **115 open WebProbe PRs**, all pages checked at 13:27. The register contains current exact heads; cross-repository ARTEX #2 is tracked in the review ledger.
 - **Latest #123 `f22016f` is absent from #125**, which still contains the earlier `db2cd8d` version. The queue-ID follow-up reopened the inclusion gap after the earlier warning was resolved.
-- #125 also trails parity `8beefa2`. Reconcile current parity and source heads before final acceptance. Current-head and review-state details for #134/#136/#139-#144 and artex-rs #2 are in the review ledger.
+- PR #125 also trails parity `8beefa2`. Reconcile current parity and source heads before final acceptance. Current-head and review-state details for #134/#136/#139-#144 and artex-rs #2 are in the review ledger.
 - [Milestone register](milestones.csv) preserves all 137 tasks from parity's `tasks.json`: 114 recorded done, 21 todo, 2 rejected. These are historical repository labels, not fresh verification. Open labels can describe work already present in review PRs. Map coverage before assigning builders.
 
 ## Landing sequence and stop/start calls
 
-1. **One parity writer: triage.** Finish the already reviewed, independently tested queue. #129/#105 has landed. Triage reports 832 passing tests on the exact merged resolution tree with both header-scan test modules preserved. #102 is the next independently reviewed/tested candidate; its combined 857-pass report is not yet a landing.
+1. **One parity writer: triage.** Finish the already reviewed, independently tested queue. #129/#105 has landed. Triage reports 832 passing tests on the exact merged resolution tree with both header-scan test modules preserved. The refreshed next queue is #138 after #96, #124 before #139, latest #123 before #134, then #126/docs/#140; each still needs its current combined gates.
 2. **Integration owns #125.** Latest #123 has changed again to f22016f; include it and reconcile current parity. Incorporate the new hash/h2 and crawl-ID heads when ready. Maintain an exact source-head manifest. No parallel landing of the same changes through individual source PRs.
 3. **Independent reviewer owns acceptance.** Review the final SHA, not a moving branch. Require clean check/fmt/clippy/full required-Java tests and current CI, applying only the owner's explicit Kilo waiver. Test count deltas alone are not coverage proof.
 4. **Cross-tool QA owns the release candidate.** Run project create/save/reopen, Logger to tools, Repeater extension hooks, extension Drop plus pipelining, constant-token Sequencer, Intruder baseline, Decoder bytes/Gzip, and Organizer persistence on one integrated build. #128 is separate-head evidence, not an integrated pass.
@@ -26,7 +26,7 @@ This is the index for sequencing, not permission to merge or change product beha
 
 | Lane | Accountable role | State / next checkpoint | Blocker or conflict boundary |
 | --- | --- | --- | --- |
-| Parity landing and PR cleanup | PR triage | Active; #129/#105 landed, #102 review, #49 follow-up held | Sole parity writer; no source-branch edits |
+| Parity landing and PR cleanup | PR triage | Active; #96 landed; #138 next; #49 replaced only after #140 lands | Sole parity writer; no source-branch edits |
 | Review stack #125 | Integration | Active; latest #123 absent; reconcile parity 8beefa2 | Conflicts with independent source landing if both proceed unchecked |
 | Independent review | Reviewer | Review exact final heads and combination fixes | Earlier approvals do not cover later diffs |
 | Hash-list and h2 multiplexing | Existing hash/h2 lane | Active per owner request; publish exact head + tests | Coordinate h2 boundaries with #124; no duplicate Decoder work |
@@ -59,7 +59,7 @@ Decision provenance: owner's authenticated WhatsApp messages were checked for AC
 
 | Program milestone | Exit evidence | Current state |
 | --- | --- | --- |
-| P0: recover and stabilize foundation | Exact merged tree and full required-Java suite per landing | #45/#51/#95/#100/#129 landed; #102 review and #49 follow-up remain |
+| P0: recover and stabilize foundation | Exact merged tree and full required-Java suite per landing | #96 now landed too; #138 and remaining lane gates continue |
 | P1: one reviewable integrated candidate | #125 manifest matches latest intended source heads; clean combined checks + independent review | In progress; latest #123 f22016f and current parity still needed |
 | P2: integrated workflow acceptance | One pinned build passes cross-tool regression with screenshots and traceable fixtures | Not established by separate-head reports |
 | P3: reconcile old roadmap | Each of 21 recorded todo tasks mapped to integrated code, residual gap or owner hold | PR board ready; avoid reopening already implemented milestones |

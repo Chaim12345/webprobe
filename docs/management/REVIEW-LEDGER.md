@@ -17,9 +17,9 @@ Snapshot: 2026-11-22 13:27 Asia/Jerusalem. Exact live heads were checked; verdic
 ## Sequencing
 
 1. Triage alone writes parity. #96 is now landed at `8beefa2`; refresh/retarget #138 and run exact combined gates.
-2. #141 and #142 are independent siblings on #138. Their API-only state must stay distinct from enabling strict parsing in existing callers.
-3. #124 before #139; latest #123 `f22016f` before #134; #140 before closing the original #49.
-4. #125 is still `2b756c1` and does not contain latest #123 `f22016f` or current parity. QA on 2b756c1 is useful evidence for that tree only, not final acceptance of the updated queue.
+2. PR #141 and #142 are independent siblings on #138. Their API-only state must stay distinct from enabling strict parsing in existing callers.
+3. PR #124 before #139; latest #123 `f22016f` before #134; #140 before closing the original #49.
+4. PR #125 is still `2b756c1` and does not contain latest #123 `f22016f` or current parity. QA on 2b756c1 is useful evidence for that tree only, not final acceptance of the updated queue.
 5. ARTEX isolated kernel can continue under D-CEO-05. Durable storage, arbitrary binary encoding, actual WebProbe adapter and current scope source are separate downstream gates, not features proved by the mock kernel tests.
 
 ## D-CEO-05 in one line
