@@ -1,6 +1,6 @@
 {
-  "as_of": "2026-11-22T23:06:00+02:00",
-  "open_pr_count": 113,
+  "as_of": "2026-11-22T23:28:00+02:00",
+  "open_pr_count": 114,
   "parity": "4ad2591e61f262e36b57965139bd429b3e9f0602",
   "candidate": "2c7ccdd87a4fe1be0ec1aea2837258932ad94474",
   "work_items": [
@@ -49,7 +49,7 @@
       "title": "PM board + cleanup plan",
       "owner": "Program Manager / Git expert",
       "gate": "Management work only",
-      "detail": "113 open PRs mapped. No mass close or source rewrite approved.",
+      "detail": "114 open PRs mapped. No mass close or source rewrite approved.",
       "next": "Keep exact-head gates and source accounting current."
     },
     {
@@ -89,8 +89,8 @@
       "title": "Large-body rendering",
       "owner": "Lane 15 / CTO / QA",
       "gate": "CTO acceptance BLOCKER",
-      "detail": "Selecting a 256MiB streamed entry aborts: ~5GB allocation on a 2GB host, reproduced 2/2.",
-      "next": "Separate bounded-preview PR; verify fix before batch acceptance."
+      "detail": "Crash reproduced 2/2. #171 caps previews at 1MiB and removes Logger response copy; GUI verification pending.",
+      "next": "#1711bb384a source approved; QA actual repro before clearance."
     },
     {
       "column": "blocked",
@@ -1068,8 +1068,8 @@
       "url": "https://github.com/Chaim12345/webprobe/pull/113",
       "head": "e071a1f8b8401d30d18e0c75c1eda1af0bcfc778",
       "owner": "PR triage",
-      "column": "queued",
-      "gate": "Consolidation plan only",
+      "column": "blocked",
+      "gate": "Held pending complete proof / remainder",
       "next": "After applicable reports/management batch lands, prove complete documents, decisions, evidence and supersession order retained",
       "blocker": "No license/Organizer/transport/safety decision may disappear in batching",
       "evidence": "Git ancestry checked; prior triage results are source-head evidence, not final combined-tree acceptance; CTO18:34 routing/correction adopted18:35; full own-plus-inherited proof and fresh live state required before triage closure"
@@ -1080,8 +1080,8 @@
       "url": "https://github.com/Chaim12345/webprobe/pull/114",
       "head": "10dece9f11b94e36703bd3348ca3797890185528",
       "owner": "Integration + independent review",
-      "column": "blocked",
-      "gate": "Held pending complete proof / remainder",
+      "column": "queued",
+      "gate": "Consolidation plan only",
       "next": "After actual #125+#155 landing, map complete source to landed SHAs; keep any remainder open",
       "blocker": "Batch freeze; carrier title/manifest is a lead, not complete equivalence proof",
       "evidence": "Git ancestry checked; prior triage results are source-head evidence, not final combined-tree acceptance; CTO18:34 routing/correction adopted18:35; full own-plus-inherited proof and fresh live state required before triage closure"
@@ -1203,7 +1203,7 @@
       "column": "blocked",
       "gate": "CTO BLOCKED: combined batch rendering crash",
       "next": "Hold reader-free359b139; final combination is #1552c7ccdd, no local merge result promoted",
-      "blocker": "CTO23:04 ACCEPTANCE BLOCKER: selecting stored256MiB streamed history aborts (allocation5368707940 on2GB,2/2). Separate bounded-preview fix by lane15 + review/QA required; remaining UI also open.",
+      "blocker": "CTO acceptance BLOCKER remains: bounded-preview #1711bb384a source-approved, actual256MiB GUI repro and integration/landing validation pending; remaining workflow UI open",
       "evidence": "Reviewer code-read approves 3108302..359b139, no cargo rerun by reviewer. Author reports support118/0 and app151/0, fmt/clippy clean; old core/Bambda counts not rerun. Fix moves items to Inbox and tests evidence/notes/IDs, unrelated items, repeated deletion and persistence"
     },
     {
@@ -1347,20 +1347,20 @@
       "column": "blocked",
       "gate": "CTO BLOCKED: large-body rendering crash",
       "next": "Wait separate bounded-preview PR and exact fix review/QA; finish remaining UI, then combined final verdict",
-      "blocker": "CTO23:04 ACCEPTANCE BLOCKER: selecting stored256MiB streamed history aborts (allocation5368707940 on2GB,2/2). Separate bounded-preview fix by lane15 + review/QA required; remaining UI also open.",
+      "blocker": "CTO acceptance BLOCKER remains: bounded-preview #1711bb384a source-approved, actual256MiB GUI repro and integration/landing validation pending; remaining workflow UI open",
       "evidence": "Live refs/ancestry and dc170b5..2c7ccdd 3-file production/test delta (+228/-21) verified by PM. Reviewer20:10 code-read approves original pre-edit wire bytes, real status/visible note, marker edge cases and untouched streaming. Author pipeline8/8 runs with7 tests each, core845/0/13, fmt/clippy clean. QA independently pipeline7/0 on exact2c7ccdd; full gate not done. Fixture JSON ProjectHistory roundtrip is NOT full save_project/restore_project UI proof. Complete/EOF-delimited unchanged; duplicate/conflicting CL strict warning intentional.; QA22:36 verifies workspace1184/0/27 across19 result lines, fmt/clippy clean, standalone pipeline7/7, JDK25 ext_host15/15 montoya4/4 bambda13/13. UI22:41/22:43 reports visible incomplete/strict-framing notes and original bytes retained through real project create/save/quit/reopen. Rest UI pending; PM has not inspected QA screenshots or rerun tests.; QA23:04 large-body rendering allocation abort2/2 on2GB host, CTO23:04 acceptance BLOCKER; bounded-preview fix separate PR required; storage and cut note correct. StreamingON/OFF and collection persistence PASS, delete action automation-blocked."
     },
     {
       "number": 160,
       "title": "Refresh program board after safety landings",
       "url": "https://github.com/Chaim12345/webprobe/pull/160",
-      "head": "903ad96ce01eb245474fef656179f1cfa96e77f3",
+      "head": "8a55f0f772071ab710992f61d291f895f04c06e2",
       "owner": "Program Manager",
       "column": "active",
       "gate": "New visual board needs docs review",
       "next": "Review current PR head; preserve timestamped inventory and source scopes",
       "blocker": "Prior cceeffd approval does not cover new refresh",
-      "evidence": "Self SHA blank; new visual kanban15 work items +113 per-PR cards added at owner request; current head needs docs review"
+      "evidence": "Self SHA blank; approved8a55f0f historical after #171 inventory/kanban refresh; current PR head authoritative"
     },
     {
       "number": 161,
@@ -1481,6 +1481,18 @@
       "next": "Author addresses review fixes first; require updated exact-head review/QA before release claims",
       "blocker": "Batch freeze; run/concurrency budget, direct-egress verification and evidence/confidence/body caps unresolved",
       "evidence": "64-request cap is per URL, not per run; request scope/session routing passed source review, speculative direct socket risk unverified. Author reports 787 core passes at 4 threads, all8 positive families across3 browser test functions plus cache test; earlier16-thread DOM lab miss unresolved; no GUI visual QA"
+    },
+    {
+      "number": 171,
+      "title": "History panes: bounded labeled preview for huge messages (fixes abort on 256 MiB entry)",
+      "url": "https://github.com/Chaim12345/webprobe/pull/171",
+      "head": "1bb384ae78258b3309224a25c77cfadb2a0e98ca",
+      "owner": "Lane15 / reviewer / QA",
+      "column": "review",
+      "gate": "Source APPROVE; actual crash repro QA pending",
+      "next": "QA retests actual256MiB stored history and Logger selection, preview banner and export fidelity; triage preserves batch freeze",
+      "blocker": "Combined batch CTO crash blocker remains until actual repro QA and final integration/landing proof",
+      "evidence": "Reviewer23:17 code-only approval and clean parity4ad2591 merge check.1MiB preview slice before pane views/hash/Inspector; Logger response borrowed Body/Arc, no full response clone. Small messages unchanged; full storage/capture/export retained. Author141 bin tests/0 failed fmt/clippy clean; headless96MiB smoke not actual GUI reproduction. Explicit whole-body Organizer/Comparer/AI actions remain copy-heavy and out of scope."
     }
   ]
 }

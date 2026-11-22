@@ -109,3 +109,7 @@ Canonical safety/release gating is now indexed in [RELEASE-CHECKLIST.md](RELEASE
 - 20:24: source marker/evidence gap is implemented and source-reviewed on 2c7ccdd, not a waived criterion. Earlier 21712de failed original-byte fidelity under edits and was replaced. Author 20:08 mutation check proves the new fixture detects the wrong post-edit storage; code restored clean. Independent complete workflow acceptance remains pending.
 
 - 22:57: QA suite/Java acceptance is now complete, not merely pipeline early signal. Remaining UI checks/final verdict still block release; no blanket transfer to future heads.
+
+## Large-body rendering prerequisite #171
+
+[PR #171](https://github.com/Chaim12345/webprobe/pull/171) at1bb384ae78258b3309224a25c77cfadb2a0e98ca: reviewer23:17 APPROVE, code-read only. Clean no-commit merge check on parity4ad2591.1MiB prefix slicing precedes view/hash/Inspector, Logger response borrows Body/Arc; capture/export unchanged, small messages unchanged. Author141 bin tests/fmt/clippy pass; headless96MiB smoke is not actual256MiB GUI reproduction. QA and final combination proof remain required to clear the CTO acceptance blocker. Explicit whole-body actions still copy and are out of scope.

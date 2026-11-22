@@ -1,6 +1,6 @@
 # WebProbe program board
 
-Snapshot: 2026-11-22 22:57 Asia/Jerusalem. Program owner: Program Manager. [Canonical release checklist](RELEASE-CHECKLIST.md). [Review and decision ledger](REVIEW-LEDGER.md). [Role charters](ROLES.md). [HR staffing register, PR #137](https://github.com/Chaim12345/webprobe/pull/137), proposed file `docs/management/STAFFING.md`.
+Snapshot: 2026-11-22 23:28 Asia/Jerusalem. Program owner: Program Manager. [Canonical release checklist](RELEASE-CHECKLIST.md). [Review and decision ledger](REVIEW-LEDGER.md). [Role charters](ROLES.md). [HR staffing register, PR #137](https://github.com/Chaim12345/webprobe/pull/137), proposed file `docs/management/STAFFING.md`.
 
 This is the index for sequencing, not permission to merge or change product behavior. Only the triage lane lands parity changes. Existing PR branches and master stay untouched. Refresh this board when a source head, landing, decision or verification result changes.
 
@@ -14,7 +14,7 @@ Selecting a stored256MiB streamed history entry aborts with a5368707940-byte all
 
 ## Current position
 
-- Live parity `4ad2591e61f262e36b57965139bd429b3e9f0602`; **113 open PRs**, full paginated refresh and exact ancestry recomputed. Management #160 remains open; previous 0220939 docs approval is historical once this refresh changes its head. Self-row SHA stays blank to avoid recursive staleness.
+- Live parity `4ad2591e61f262e36b57965139bd429b3e9f0602`; **114 open PRs**, full paginated refresh and exact ancestry recomputed. Management #160 remains open; previous8a55f0f docs approval is historical once this refresh changes its head. Self-row SHA stays blank to avoid recursive staleness.
 - PR #70 landed at 0c0dee7, #68 at f297951 and #159 at 5c15280. Live API confirms merges. Triage reports 1084 combined passes /14 ignored for #159. PR #67 is now closed after complete source-to-successor proof; this was not a title/ancestry-only closure. Original #139 remains open pending its own complete replacement proof.
 - **Final acceptance held on remaining UI/workflow gates.** QA 22:36 reports exact #155 2c7ccdd suite 1184 passed/0 failed/27 ignored, fmt/clippy clean and real-JDK25 ext_host 15/15, montoya 4/4, bambda 13/13. Standalone pipeline 7/7 is separate, not added again. Visible incomplete/strict-framing notes and real project save/quit/reopen retaining note/original bytes passed UI 22:41-22:43. Remaining streaming/storage/cross-tool UI and final verdict are open; unrelated landings stay frozen.
 - H2 #145 `a88dfe91feb7410d5ea8983da06823a9c5b9483e` **landed at 4ad2591**. Live API and exact ancestry confirm it. Independent QA accepted exact head1017/0/13 and 19/19 executed unique fixtures, then merged tree 1105/0/14, matching triage. Triage reports remote/local merged trees identical to saved tested tree, JDK25 no-run/fmt/clippy clean and non-Kilo CI green. The old24-selector list had 5 wrong-namespace duplicates; zero-match now fails. This closes the #145 semantic-overlap gate, not final #125/#155 release acceptance.
@@ -173,3 +173,5 @@ Primary evidence links: [#125](https://github.com/Chaim12345/webprobe/pull/125),
 - 22:57: live 113 open and source refs/parity unchanged. QA exact 2c7ccdd suite 1184/0/27 and real Java15/4/13 green 22:36; first three marker/framing/project UI checks passed 22:41-22:43. Remaining UI/final verdict held; no landing/closure permission from this milestone.
 
 - 23:05: owner-requested Monday-style kanban added:15 work items and113 individual open-PR cards, image plus filterable HTML. QA reports streaming storageON/OFF and Organizer collection persistence PASS; delete click-through remains automation-blocked. Large-body follow-up: selecting a stored256MiB entry aborts with allocation5368707940 bytes on2GB host, reproduced2/2 (QA app4.log, shots84/85). Storage/cut note correct; lazy/truncated rendering needed. SUPERSEDED23:04 by CTO: acceptance BLOCKER for the combined batch. Lane15 is preparing a bounded-preview fix on a separate PR; no batch acceptance until verified.
+
+- 23:28: live114 open; #1711bb384a separate bounded-preview fix source-approved by reviewer23:17, clean parity4ad2591 merge check. Caps pane/hash/Inspector at1MiB, Logger borrows stored response. Storage and full export unchanged, small messages unchanged. Author141 bin tests pass/fmt/clippy, headless96MiB smoke only. Actual256MiB GUI repro/combined integration proof still required, so CTO batch blocker stays open. Explicit whole-body Organizer/Comparer/AI actions remain a separate copy-heavy follow-up.
