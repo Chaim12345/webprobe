@@ -3,7 +3,7 @@ name: Workspace acceptance
 on:
   pull_request:
   push:
-    branches: ["parity/**", "team/ci-workspace-jvm-*"]
+    branches: ["parity/**"]
 
 permissions:
   contents: read
