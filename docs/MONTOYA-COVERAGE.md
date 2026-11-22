@@ -70,7 +70,14 @@ first response seeds each attribute's extracted value; a later difference
 marks the attribute variant permanently. Header, status and body metrics are
 direct; HTML-derived attributes come from a small deterministic tag scan.
 INITIAL_CONTENT (256 chars) and LIMITED_BODY_CONTENT (4096 chars) prefixes
-are WebProbe's documented choices, not measured Burp constants.
+are WebProbe's documented choices, not measured Burp constants. Body-derived
+analysis is limited to the first 1 MiB (1,048,576 bytes), decoded as ISO-8859-1.
+Changes beyond that prefix are ignored by body-derived attributes.
+CONTENT_LENGTH still compares the complete body byte length. HTML/comment
+extraction uses forward-only scans to avoid repeated suffix searches on
+hostile bodies. Regression cases include roughly one MiB of repeated comment
+openers, malformed quoted tags, and unterminated scripts, each required to
+finish within five seconds.
 
 Purpose-built extensions exercise both analyzers through the public Montoya
 API, loaded by the real sidecar JVM with JDK 21 and the published Montoya

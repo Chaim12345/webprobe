@@ -10,6 +10,7 @@ It does not modify that comparison or claim full Montoya parity.
 - Keyword counts are case-insensitive, so `token` and `TOKEN` vary together in the recorded three-response fixture. Configured spellings are preserved in result sets. Empty entries are accepted. WebProbe defines their count as the response string length plus one; only acceptance, not that counting rule, was measured against Burp.
 - The response-variations factory returns a stateful analyzer instead of throwing. It seeds all 33 API attributes on the first response, then permanently records changes. Returned sets are immutable snapshots and instances have independent state.
 - HTML-derived metrics use WebProbe's own extraction rules. They are not verified replicas of Burp's metrics. INITIAL_CONTENT and LIMITED_BODY_CONTENT use 256- and 4096-character body prefixes. The first extracted attribute values, including body content, are retained. No full HttpResponse objects are retained.
+- Body-derived analysis uses at most the first 1 MiB (1,048,576 bytes), decoded as ISO-8859-1. Tail changes are ignored by body-derived attributes; CONTENT_LENGTH still tracks the complete body byte length. Comment, element and attribute extraction use forward-only scans rather than repeated regex suffix searches. Three hostile roughly one-MiB inputs (comment openers, malformed quotes, and script openers) must each finish within five seconds in the JVM regression.
 - A long unquoted HTML attribute regression guards against recursive-regex stack exhaustion during tag scanning.
 
 ## Verification

@@ -22,8 +22,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 final class VariationAnalysis implements ResponseVariationsAnalyzer {
     /** Length of the INITIAL_CONTENT body prefix. */
@@ -31,18 +29,11 @@ final class VariationAnalysis implements ResponseVariationsAnalyzer {
     /** Length cap of the LIMITED_BODY_CONTENT value. */
     private static final int LIMITED_LEN = 4096;
 
-    private static final Pattern COMMENT = Pattern.compile("<!--(.*?)-->", Pattern.DOTALL);
-    private static final Pattern SCRIPT_STYLE = Pattern.compile("<\\s*(script|style)\\b.*?<\\s*/\\s*\\1\\s*>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
-    private static final Pattern ANY_TAG = Pattern.compile("<[^>]*>");
-    private static final Pattern ATTR = Pattern.compile("([a-zA-Z][a-zA-Z0-9-]*)\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s>]+))");
-    private static final Pattern TITLE = Pattern.compile("<\\s*title\\b[^>]*>(.*?)<\\s*/\\s*title\\s*>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
-    private static final Pattern HEADER_TAG = Pattern.compile("<\\s*h[1-6]\\b[^>]*>(.*?)<\\s*/\\s*h[1-6]\\s*>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
-    private static final Pattern ANCHOR = Pattern.compile("<\\s*a\\b[^>]*>(.*?)<\\s*/\\s*a\\s*>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
-    private static final Pattern BUTTON = Pattern.compile("<\\s*button\\b[^>]*>(.*?)<\\s*/\\s*button\\s*>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
-    private static final Pattern WORDS = Pattern.compile("\\s+");
+    /** Parse at most the first MiB of body bytes; length remains the full byte length. */
+    private static final int MAX_BODY_BYTES = 1024 * 1024;
 
-    /** One parsed start tag: lowercased name and lowercased-name attributes. */
-    private record Tag(String name, Map<String, String> attrs) {}
+    /** One parsed start tag and its end offset in the bounded body. */
+    private record Tag(String name, Map<String, String> attrs, int end) {}
 
     private final Map<AttributeType, Object> first = new EnumMap<>(AttributeType.class);
     private final Set<AttributeType> variants = EnumSet.noneOf(AttributeType.class);
@@ -67,18 +58,19 @@ final class VariationAnalysis implements ResponseVariationsAnalyzer {
         Map<String, List<String>> headers = new java.util.LinkedHashMap<>();
         for (HttpHeader h : response.headers())
             headers.computeIfAbsent(h.name().toLowerCase(Locale.ROOT), k -> new ArrayList<>()).add(h.value());
-        String body = response.bodyToString();
+        byte[] bodyBytes = response.body().getBytes();
+        String body = new String(bodyBytes, 0, Math.min(bodyBytes.length, MAX_BODY_BYTES), java.nio.charset.StandardCharsets.ISO_8859_1);
         List<Tag> tags = tags(body);
         for (AttributeType type : AttributeType.values()) {
             if (variants.contains(type)) continue;
-            Object value = extract(type, response.statusCode(), headers, body, tags);
+            Object value = extract(type, response.statusCode(), bodyBytes.length, headers, body, tags);
             if (!initialized) first.put(type, value);
             else if (!Objects.equals(first.get(type), value)) variants.add(type);
         }
         initialized = true;
     }
 
-    private static Object extract(AttributeType type, int status, Map<String, List<String>> headers, String body, List<Tag> tags) {
+    private static Object extract(AttributeType type, int status, int bodyLength, Map<String, List<String>> headers, String body, List<Tag> tags) {
         switch (type) {
             case STATUS_CODE: return status;
             case ETAG_HEADER: return header(headers, "etag");
@@ -88,7 +80,7 @@ final class VariationAnalysis implements ResponseVariationsAnalyzer {
                 int semi = v.indexOf(';');
                 return (semi < 0 ? v : v.substring(0, semi)).trim().toLowerCase(Locale.ROOT);
             }
-            case CONTENT_LENGTH: return body.length();
+            case CONTENT_LENGTH: return bodyLength;
             case CONTENT_LOCATION: return header(headers, "content-location");
             case LOCATION: return header(headers, "location");
             case COOKIE_NAMES: {
@@ -121,17 +113,12 @@ final class VariationAnalysis implements ResponseVariationsAnalyzer {
             case VISIBLE_TEXT: return visibleText(body);
             case WORD_COUNT: return wordCount(body);
             case VISIBLE_WORD_COUNT: return wordCount(visibleText(body));
-            case COMMENTS: {
-                List<String> out = new ArrayList<>();
-                Matcher m = COMMENT.matcher(body);
-                while (m.find()) out.add(m.group(1).trim());
-                return out;
-            }
-            case PAGE_TITLE: return firstGroup(TITLE, body);
-            case FIRST_HEADER_TAG: return firstGroup(HEADER_TAG, body);
-            case HEADER_TAGS: return allGroups(HEADER_TAG, body);
-            case ANCHOR_LABELS: return allGroups(ANCHOR, body);
-            case BUTTON_SUBMIT_LABELS: return allGroups(BUTTON, body);
+            case COMMENTS: return comments(body);
+            case PAGE_TITLE: return firstGroup("title", body, tags);
+            case FIRST_HEADER_TAG: return firstGroup("heading", body, tags);
+            case HEADER_TAGS: return allGroups("heading", body, tags);
+            case ANCHOR_LABELS: return allGroups("a", body, tags);
+            case BUTTON_SUBMIT_LABELS: return allGroups("button", body, tags);
             case INPUT_SUBMIT_LABELS: return inputLabels(tags, "submit");
             case INPUT_IMAGE_LABELS: return inputLabels(tags, "image");
             case NON_HIDDEN_FORM_INPUT_TYPES: {
@@ -209,27 +196,107 @@ final class VariationAnalysis implements ResponseVariationsAnalyzer {
         return out;
     }
 
+    private static List<String> comments(String body) {
+        List<String> out = new ArrayList<>();
+        int cursor = 0;
+        while (cursor < body.length()) {
+            int start = body.indexOf("<!--", cursor);
+            if (start < 0) break;
+            int end = body.indexOf("-->", start + 4);
+            if (end < 0) break;
+            out.add(body.substring(start + 4, end).trim());
+            cursor = end + 3;
+        }
+        return out;
+    }
+
     private static String visibleText(String body) {
-        String noComments = COMMENT.matcher(body).replaceAll(" ");
-        String noScripts = SCRIPT_STYLE.matcher(noComments).replaceAll(" ");
-        String noTags = ANY_TAG.matcher(noScripts).replaceAll(" ");
-        return noTags.replaceAll("\\s+", " ").trim();
+        String lower = body.toLowerCase(Locale.ROOT);
+        StringBuilder out = new StringBuilder();
+        int cursor = 0;
+        while (cursor < body.length()) {
+            if (body.startsWith("<!--", cursor)) {
+                int end = body.indexOf("-->", cursor + 4);
+                cursor = end < 0 ? body.length() : end + 3;
+                out.append(' ');
+            } else if (body.charAt(cursor) == '<') {
+                int end = body.indexOf('>', cursor + 1);
+                if (end < 0) break;
+                String name = lower.substring(cursor + 1, end).trim();
+                int boundary = 0;
+                while (boundary < name.length() && Character.isLetter(name.charAt(boundary))) boundary++;
+                name = name.substring(0, boundary);
+                if (name.equals("script") || name.equals("style")) {
+                    int close = lower.indexOf("</" + name, end + 1);
+                    if (close < 0) break;
+                    int closeEnd = body.indexOf('>', close);
+                    cursor = closeEnd < 0 ? body.length() : closeEnd + 1;
+                } else cursor = end + 1;
+                out.append(' ');
+            } else {
+                char c = body.charAt(cursor++);
+                if (Character.isWhitespace(c)) {
+                    if (out.length() > 0 && out.charAt(out.length() - 1) != ' ') out.append(' ');
+                } else out.append(c);
+            }
+        }
+        return out.toString().trim();
     }
 
     private static int wordCount(String text) {
-        String t = text.trim();
-        return t.isEmpty() ? 0 : WORDS.split(t).length;
+        int count = 0;
+        boolean inWord = false;
+        for (int i = 0; i < text.length(); i++) {
+            if (Character.isWhitespace(text.charAt(i))) inWord = false;
+            else if (!inWord) { count++; inWord = true; }
+        }
+        return count;
     }
 
-    private static String firstGroup(Pattern p, String body) {
-        Matcher m = p.matcher(body);
-        return m.find() ? m.group(1).trim() : "";
+    private static String firstGroup(String kind, String body, List<Tag> tags) {
+        List<String> groups = allGroups(kind, body, tags);
+        return groups.isEmpty() ? "" : groups.get(0);
     }
 
-    private static List<String> allGroups(Pattern p, String body) {
+    // Searches advance past every consumed element. A missing closer stops
+    // the scan instead of retrying every remaining opening tag.
+    private static List<String> allGroups(String kind, String body, List<Tag> tags) {
         List<String> out = new ArrayList<>();
-        Matcher m = p.matcher(body);
-        while (m.find()) out.add(m.group(1).trim());
+        String lower = body.toLowerCase(Locale.ROOT);
+        int cursor = 0;
+        for (Tag t : tags) {
+            if (t.end() < cursor) continue;
+            boolean heading = t.name().length() == 2 && t.name().charAt(0) == 'h'
+                    && t.name().charAt(1) >= '1' && t.name().charAt(1) <= '6';
+            if (!(kind.equals("heading") ? heading : t.name().equals(kind))) continue;
+            int close = lower.indexOf("</" + t.name(), t.end());
+            if (close < 0) break;
+            out.add(body.substring(t.end(), close).trim());
+            cursor = close + t.name().length() + 2;
+        }
+        return out;
+    }
+
+    private static Map<String, String> attributes(String body, int cursor, int end) {
+        Map<String, String> out = new java.util.LinkedHashMap<>();
+        while (cursor < end) {
+            while (cursor < end && (Character.isWhitespace(body.charAt(cursor)) || body.charAt(cursor) == '/')) cursor++;
+            int start = cursor;
+            while (cursor < end && !Character.isWhitespace(body.charAt(cursor)) && body.charAt(cursor) != '=') cursor++;
+            if (cursor == start) { cursor++; continue; }
+            String name = body.substring(start, cursor).toLowerCase(Locale.ROOT);
+            while (cursor < end && Character.isWhitespace(body.charAt(cursor))) cursor++;
+            if (cursor >= end || body.charAt(cursor) != '=') continue;
+            cursor++;
+            while (cursor < end && Character.isWhitespace(body.charAt(cursor))) cursor++;
+            char quote = cursor < end ? body.charAt(cursor) : 0;
+            boolean quoted = quote == '\'' || quote == '"';
+            if (quoted) cursor++;
+            start = cursor;
+            while (cursor < end && (quoted ? body.charAt(cursor) != quote : !Character.isWhitespace(body.charAt(cursor)))) cursor++;
+            out.put(name, body.substring(start, cursor));
+            if (quoted && cursor < end) cursor++;
+        }
         return out;
     }
 
@@ -260,13 +327,8 @@ final class VariationAnalysis implements ResponseVariationsAnalyzer {
                 else if (c == '>') break;
             }
             if (end == body.length()) break;
-            Map<String, String> attrs = new java.util.LinkedHashMap<>();
-            Matcher a = ATTR.matcher(body.substring(nameEnd, end));
-            while (a.find()) {
-                String v = a.group(2) != null ? a.group(2) : a.group(3) != null ? a.group(3) : a.group(4);
-                attrs.put(a.group(1).toLowerCase(Locale.ROOT), v == null ? "" : v);
-            }
-            out.add(new Tag(body.substring(start, nameEnd).toLowerCase(Locale.ROOT), attrs));
+            Map<String, String> attrs = attributes(body, nameEnd, end);
+            out.add(new Tag(body.substring(start, nameEnd).toLowerCase(Locale.ROOT), attrs, end + 1));
             cursor = end + 1;
         }
         return out;

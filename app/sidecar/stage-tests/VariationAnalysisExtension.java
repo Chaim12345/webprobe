@@ -61,6 +61,22 @@ public class VariationAnalysisExtension implements BurpExtension {
         large.updateWith(HttpResponse.httpResponse(largeResponse));
         large.updateWith(HttpResponse.httpResponse(largeResponse));
         check(large.variantAttributes().isEmpty(), "large attributes are stable and stack-safe");
+        for (String fragment : new String[] { "<!--", "<a '", "<script>" }) {
+            String hostile = fragment.repeat((1024 * 1024 / fragment.length()) + 1);
+            var bounded = api.http().createResponseVariationsAnalyzer();
+            long started = System.nanoTime();
+            bounded.updateWith(HttpResponse.httpResponse("HTTP/1.1 200 OK\r\n\r\n" + hostile));
+            check(System.nanoTime() - started < java.util.concurrent.TimeUnit.SECONDS.toNanos(5),
+                    "hostile one-MiB body must finish within five seconds");
+        }
+        var capped = api.http().createResponseVariationsAnalyzer();
+        String prefix = "x".repeat(1024 * 1024);
+        capped.updateWith(HttpResponse.httpResponse("HTTP/1.1 200 OK\r\n\r\n" + prefix + "one"));
+        capped.updateWith(HttpResponse.httpResponse("HTTP/1.1 200 OK\r\n\r\n" + prefix + "two"));
+        check(capped.variantAttributes().isEmpty(), "content beyond the body cap is not analyzed");
+        capped.updateWith(HttpResponse.httpResponse("HTTP/1.1 200 OK\r\n\r\n" + prefix + "longer"));
+        check(capped.variantAttributes().equals(java.util.Set.of(AttributeType.CONTENT_LENGTH)),
+                "content length remains the full body byte length after truncation");
         api.logging().logToOutput("variation analysis regression passed");
     }
 }
