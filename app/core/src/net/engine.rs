@@ -327,6 +327,64 @@ pub fn upstream_target(shared: &Shared, host: &str, port: u16) -> (String, u16) 
         .unwrap_or_else(|| (host.to_string(), port))
 }
 
+/// The narrow inbound guard at the forwarding boundary. A request whose
+/// framing is ambiguous (see `strict_request::inbound_ambiguity`) gets
+/// 400 and the connection closes before any upstream bytes are sent. The
+/// bytes received go to history verbatim with the reason as the note.
+fn refuse_ambiguous<W: Write>(
+    shared: &Shared,
+    client: &mut W,
+    captured: &[u8],
+    why: crate::strict_request::RequestFramingError,
+    default_port: u16,
+    https: bool,
+) {
+    let body = "WebProbe: ambiguous request framing.";
+    let resp = format!(
+        "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    )
+    .into_bytes();
+    let _ = client.write_all(&resp);
+    let _ = client.flush();
+    let ann = webprobe_support::ext::Annotations::default();
+    super::hist::record_entry_verbatim(
+        shared,
+        captured,
+        Some(crate::body::Body::from(resp)),
+        Some(format!("Rejected before forwarding: {why:?}")),
+        default_port,
+        https,
+        listener_port(shared),
+        false,
+        &ann,
+        false,
+    );
+    shared.log(&format!("Refused ambiguous request framing: {why:?}"));
+}
+
+/// An incomplete or malformed request is captured for history exactly as
+/// received, with the reason, and never forwarded.
+fn capture_unforwardable(shared: &Shared, bytes: &[u8], default_port: u16, https: bool, why: &str) {
+    if bytes.is_empty() {
+        return;
+    }
+    let ann = webprobe_support::ext::Annotations::default();
+    super::hist::record_entry_verbatim(
+        shared,
+        bytes,
+        None,
+        Some(why.to_string()),
+        default_port,
+        https,
+        listener_port(shared),
+        false,
+        &ann,
+        false,
+    );
+    shared.log(&format!("Not forwarded: {why}"));
+}
+
 pub fn handle_conn(shared: Arc<Shared>, mut stream: TcpStream) {
     LISTENER_PORT.with(|p| p.set(stream.local_addr().ok().map(|a| a.port())));
     let _ = stream.set_write_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)));
@@ -335,15 +393,35 @@ pub fn handle_conn(shared: Arc<Shared>, mut stream: TcpStream) {
     // already received are served in order (pipelining); after the last one
     // the connection closes as before. A CONNECT or WebSocket upgrade hands
     // the leftovers to the tunnel or relay only once it is set up.
-    let mut reader = RequestReader::new();
+    let mut reader = RequestReader::guarded();
     let mut served_one = false;
+    let mut keep = true;
     loop {
-        if served_one && reader.leftovers().is_empty() {
+        reader.discard_blank_leftovers();
+        if served_one && !keep {
             return;
         }
         served_one = true;
-        let req = match reader.read_next(&mut stream) {
-            Ok(r) if !r.is_empty() => r,
+        let req = match reader.read_message(&mut stream) {
+            Ok(ReadOutcome::Message(r)) => r,
+            Ok(ReadOutcome::Ambiguous(why, b)) => {
+                refuse_ambiguous(&shared, &mut stream, &b, why, 80, false);
+                return;
+            }
+            Ok(ReadOutcome::Incomplete(b)) => {
+                capture_unforwardable(
+                    &shared,
+                    &b,
+                    80,
+                    false,
+                    "Incomplete request: the client closed before the message ended",
+                );
+                return;
+            }
+            Ok(ReadOutcome::Malformed(b)) => {
+                capture_unforwardable(&shared, &b, 80, false, "Malformed chunked request body");
+                return;
+            }
             _ => return,
         };
         let parts = util::parse_http(&req);
@@ -363,7 +441,7 @@ pub fn handle_conn(shared: Arc<Shared>, mut stream: TcpStream) {
             handle_websocket(shared, stream, req, reader.take_leftovers());
             return;
         }
-        upstream_and_deliver(&shared, &mut stream, req, 80, false, req_state);
+        keep = upstream_and_deliver(&shared, &mut stream, req, 80, false, req_state);
     }
 }
 
@@ -485,20 +563,46 @@ pub fn handle_connect(
     }
     // Decrypted HTTP/1: the same reader, so pipelined requests inside the
     // tunnel are served in order and never merged or dropped.
-    let mut reader = RequestReader::new();
+    let mut reader = RequestReader::guarded();
     let mut served_one = false;
+    let mut keep = true;
     loop {
-        if served_one && reader.leftovers().is_empty() {
+        reader.discard_blank_leftovers();
+        if served_one && !keep {
             break;
         }
+        let first_request = !served_one;
         served_one = true;
-        let req = match reader.read_next(&mut tls) {
-            Ok(req) if !req.is_empty() => req,
-            Ok(_) => return,
+        let req = match reader.read_message(&mut tls) {
+            Ok(ReadOutcome::Message(req)) => req,
+            Ok(ReadOutcome::Eof) => return,
+            Ok(ReadOutcome::Ambiguous(why, b)) => {
+                refuse_ambiguous(&shared, &mut tls, &b, why, 443, true);
+                tls.conn.send_close_notify();
+                let _ = tls.flush();
+                return;
+            }
+            Ok(ReadOutcome::Incomplete(b)) => {
+                capture_unforwardable(
+                    &shared,
+                    &b,
+                    443,
+                    true,
+                    "Incomplete request: the client closed before the message ended",
+                );
+                return;
+            }
+            Ok(ReadOutcome::Malformed(b)) => {
+                capture_unforwardable(&shared, &b, 443, true, "Malformed chunked request body");
+                return;
+            }
             Err(e) => {
-                shared.log(&format!(
-                    "HTTPS client handshake/request for {host}:{port} failed: {e}"
-                ));
+                // An idle persistent connection timing out is not a failure.
+                if first_request {
+                    shared.log(&format!(
+                        "HTTPS client handshake/request for {host}:{port} failed: {e}"
+                    ));
+                }
                 return;
             }
         };
@@ -512,7 +616,7 @@ pub fn handle_connect(
             handle_tls_websocket(shared, tls, req, host, port, reader.take_leftovers());
             return;
         }
-        upstream_and_deliver(&shared, &mut tls, req, 443, true, req_state);
+        keep = upstream_and_deliver(&shared, &mut tls, req, 443, true, req_state);
     }
     tls.conn.send_close_notify();
     let _ = tls.flush();
@@ -581,6 +685,8 @@ pub struct Streamed {
     message: crate::body::Body,
     note: String,
     stored: bool,
+    /// The whole response reached the client intact.
+    clean: bool,
 }
 
 impl<'a, W: Write> ProxySink<'a, W> {
@@ -627,6 +733,7 @@ impl<'a, W: Write> ProxySink<'a, W> {
             message,
             note,
             stored,
+            clean: self.complete && !self.client_gone,
         })
     }
 }
@@ -715,6 +822,36 @@ pub fn report_stream_skips(shared: &Shared, host: &str, url: &str, head: &[u8], 
     }
 }
 
+/// Whether the client's request leaves the connection open (RFC 9112 §9.3).
+fn request_keeps_alive(req: &[u8]) -> bool {
+    let parts = util::parse_http(req);
+    let conn = util::get_header(&parts.headers, "Connection")
+        .map(|v| v.to_ascii_lowercase())
+        .unwrap_or_default();
+    if parts.first.trim_end().ends_with("HTTP/1.0") {
+        conn.contains("keep-alive")
+    } else {
+        !conn.contains("close")
+    }
+}
+
+/// A streamed response's head allows more requests after it: HTTP/1.1,
+/// self-delimited (not read-until-close), no `Connection: close`.
+fn stream_head_reusable(head: &[u8], method: &str) -> bool {
+    let parts = util::parse_http(head);
+    if !parts.first.starts_with("HTTP/1.1") {
+        return false;
+    }
+    let close = util::get_header(&parts.headers, "Connection")
+        .map(|v| v.to_ascii_lowercase().contains("close"))
+        .unwrap_or(false);
+    !close
+        && !matches!(
+            crate::codec::response_body_kind(head, method),
+            crate::codec::BodyKind::UntilEof
+        )
+}
+
 pub fn upstream_and_deliver<S: ProxyIo>(
     shared: &Shared,
     stream: &mut S,
@@ -722,8 +859,9 @@ pub fn upstream_and_deliver<S: ProxyIo>(
     default_port: u16,
     use_tls: bool,
     req_state: ReqState,
-) {
+) -> bool {
     let was_edited = req_state.edited;
+    let client_keeps = request_keeps_alive(&req);
     let parts = util::parse_http(&req);
     let (host, port) = host_of(&parts, default_port);
 
@@ -735,7 +873,7 @@ pub fn upstream_and_deliver<S: ProxyIo>(
             let _ = stream.write_all(&resp);
             let _ = stream.flush();
             shared.log(&format!("Served {} for the browser", path_of(&parts)));
-            return;
+            return false;
         }
     }
     // Burp answers `http://burpsuite` itself: the browser must already be
@@ -761,7 +899,7 @@ pub fn upstream_and_deliver<S: ProxyIo>(
         shared.log(&format!(
             "Served the local setup page for {host} -> {status}"
         ));
-        return;
+        return false;
     }
     // Session rules run before match-and-replace, matching Burp's handling chain.
     let req_session = apply_session_rules(shared, &req, default_port);
@@ -777,7 +915,7 @@ pub fn upstream_and_deliver<S: ProxyIo>(
         &mut ann,
     ) {
         shared.log("Request dropped by an extension hook");
-        return;
+        return false;
     }
     let (up_host, up_port) = upstream_target(shared, &host, port);
     let url = history_host(&HistEntry {
@@ -795,6 +933,8 @@ pub fn upstream_and_deliver<S: ProxyIo>(
         send_raw_with(shared, &up_host, up_port, &req_out, Some(&mut sink))
     };
     if let Some(done) = sink.finish() {
+        let reusable =
+            client_keeps && done.clean && stream_head_reusable(&done.head, &parts.method);
         report_stream_skips(shared, &host, &url, &done.head, req_state);
         let status = util::parse_http(&done.head)
             .first
@@ -819,7 +959,7 @@ pub fn upstream_and_deliver<S: ProxyIo>(
             parts.method,
             path_of(&parts)
         ));
-        return;
+        return reusable;
     }
     match up.resp {
         Some(resp) => {
@@ -833,12 +973,12 @@ pub fn upstream_and_deliver<S: ProxyIo>(
                 &mut ann,
             ) {
                 shared.log("Response dropped by an extension hook");
-                return;
+                return false;
             }
             let Some(resp) =
                 intercept_response(shared, resp, &host, port, use_tls, &url, req_state)
             else {
-                return;
+                return false;
             };
             let status = util::parse_http(&resp)
                 .first
@@ -846,8 +986,11 @@ pub fn upstream_and_deliver<S: ProxyIo>(
                 .nth(1)
                 .unwrap_or("")
                 .to_string();
-            let _ = stream.write_all(&resp);
-            let _ = stream.flush();
+            let wrote = stream.write_all(&resp).is_ok() && stream.flush().is_ok();
+            let reusable = wrote
+                && client_keeps
+                && stream_head_reusable(&resp, &parts.method)
+                && super::conn_reuse::response_allows_reuse(&resp);
             record(
                 shared,
                 &req_out,
@@ -870,6 +1013,7 @@ pub fn upstream_and_deliver<S: ProxyIo>(
                     ""
                 }
             ));
+            reusable
         }
         None => {
             let err = up.error.clone().unwrap_or_default();
@@ -888,6 +1032,7 @@ pub fn upstream_and_deliver<S: ProxyIo>(
                 &ann,
             );
             shared.log(&format!("Proxy error for {host}:{port}: {err}"));
+            false
         }
     }
 }

@@ -857,11 +857,19 @@ pub fn relay_ws_tls<C: ProxyIo, U: ProxyIo>(
             true,
             &|| true,
         );
-        if !out.forward.is_empty() {
-            let _ = write_nonblocking(upstream, &out.forward);
-        }
-        if !out.back.is_empty() {
-            let _ = write_nonblocking(client, &out.back);
+        // A failed (possibly partial) write leaves a frame half sent: abort
+        // the relay instead of retrying the whole frame or carrying on.
+        let forward_failed =
+            !out.forward.is_empty() && write_nonblocking(upstream, &out.forward).is_err();
+        let back_failed = !forward_failed
+            && !out.back.is_empty()
+            && write_nonblocking(client, &out.back).is_err();
+        if forward_failed || back_failed {
+            shared.log(&format!(
+                "WebSocket to {host}: initial frame write failed, closing"
+            ));
+            client_open = false;
+            upstream_open = false;
         }
     }
     while client_open || upstream_open {

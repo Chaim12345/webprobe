@@ -34,11 +34,23 @@ pub fn content_length(head: &[u8]) -> Option<usize> {
 #[derive(Default, Debug)]
 pub struct RequestReader {
     buf: Vec<u8>,
+    guard: bool,
 }
 
 impl RequestReader {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// A reader for the normal forwarding boundary: a head that
+    /// `strict_request::inbound_ambiguity` refuses comes back as
+    /// `ReadOutcome::Ambiguous` as soon as the head is complete, before any
+    /// body is waited for or framed.
+    pub fn guarded() -> Self {
+        RequestReader {
+            guard: true,
+            ..Self::default()
+        }
     }
 
     /// Bytes read from the client but not yet part of a returned message.
@@ -56,6 +68,29 @@ impl RequestReader {
     /// (or a malformed chunked body) comes back as everything buffered, as
     /// before, so the caller sees what the client sent.
     pub fn read_next<R: Read>(&mut self, stream: &mut R) -> std::io::Result<Vec<u8>> {
+        Ok(match self.read_message(stream)? {
+            ReadOutcome::Message(m)
+            | ReadOutcome::Incomplete(m)
+            | ReadOutcome::Malformed(m)
+            | ReadOutcome::Ambiguous(_, m) => m,
+            ReadOutcome::Eof => Vec::new(),
+        })
+    }
+
+    /// Drop leftovers that are only CR, LF or space (a harmless trailing
+    /// CRLF after a body). Returns true when anything was dropped.
+    pub fn discard_blank_leftovers(&mut self) -> bool {
+        if !self.buf.is_empty() && self.buf.iter().all(|b| matches!(b, b'\r' | b'\n' | b' ')) {
+            self.buf.clear();
+            return true;
+        }
+        false
+    }
+
+    /// The next request as a typed outcome. Only `Message` is a request to
+    /// forward; `Incomplete` (EOF inside a message) and `Malformed` (bad
+    /// chunked body) carry the captured bytes for history and nothing else.
+    pub fn read_message<R: Read>(&mut self, stream: &mut R) -> std::io::Result<ReadOutcome> {
         let mut chunk = [0u8; 8192];
         let mut scanned = 0usize;
         let head_len = loop {
@@ -79,8 +114,17 @@ impl RequestReader {
             self.buf.extend_from_slice(&chunk[..n]);
         };
         let Some(head_len) = head_len else {
-            return Ok(self.take_leftovers());
+            return Ok(if self.buf.is_empty() {
+                ReadOutcome::Eof
+            } else {
+                ReadOutcome::Incomplete(self.take_leftovers())
+            });
         };
+        if self.guard {
+            if let Some(why) = crate::strict_request::inbound_ambiguity(&self.buf[..head_len]) {
+                return Ok(ReadOutcome::Ambiguous(why, self.take_leftovers()));
+            }
+        }
         let too_large =
             || std::io::Error::new(std::io::ErrorKind::InvalidData, "request body too large");
         // Transfer-Encoding wins over Content-Length (RFC 9112 §6.3).
@@ -93,7 +137,9 @@ impl RequestReader {
             loop {
                 match crate::codec::scan_chunked(&self.buf[head_len..], &mut cur, |_| {}) {
                     crate::codec::Chunked::Complete(n) => break head_len + n,
-                    crate::codec::Chunked::Malformed => return Ok(self.take_leftovers()),
+                    crate::codec::Chunked::Malformed => {
+                        return Ok(ReadOutcome::Malformed(self.take_leftovers()))
+                    }
                     crate::codec::Chunked::Partial => {}
                 }
                 if self.buf.len() - head_len > crate::codec::MAX_BODY {
@@ -101,7 +147,7 @@ impl RequestReader {
                 }
                 let n = stream.read(&mut chunk)?;
                 if n == 0 {
-                    return Ok(self.take_leftovers());
+                    return Ok(ReadOutcome::Incomplete(self.take_leftovers()));
                 }
                 self.buf.extend_from_slice(&chunk[..n]);
             }
@@ -113,7 +159,7 @@ impl RequestReader {
             while self.buf.len() < end {
                 let n = stream.read(&mut chunk)?;
                 if n == 0 {
-                    return Ok(self.take_leftovers());
+                    return Ok(ReadOutcome::Incomplete(self.take_leftovers()));
                 }
                 self.buf.extend_from_slice(&chunk[..n]);
             }
@@ -122,8 +168,24 @@ impl RequestReader {
             head_len
         };
         let rest = self.buf.split_off(end);
-        Ok(std::mem::replace(&mut self.buf, rest))
+        Ok(ReadOutcome::Message(std::mem::replace(&mut self.buf, rest)))
     }
+}
+
+/// What [`RequestReader::read_message`] found.
+#[derive(Debug, PartialEq, Eq)]
+pub enum ReadOutcome {
+    /// One complete framed request.
+    Message(Vec<u8>),
+    /// The client closed with nothing buffered.
+    Eof,
+    /// The client closed inside a message; the bytes received so far.
+    Incomplete(Vec<u8>),
+    /// The chunked body is malformed; the bytes received so far.
+    Malformed(Vec<u8>),
+    /// The head is ambiguously framed (guarded readers only): everything
+    /// received so far, untouched, and why. Never forwarded.
+    Ambiguous(crate::strict_request::RequestFramingError, Vec<u8>),
 }
 
 /// One request from a connection that is then done with: the leftovers are

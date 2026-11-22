@@ -172,3 +172,62 @@ fn decide(head: &[u8]) -> Result<RequestBody, RequestFramingError> {
     }
     n.map(RequestBody::Length).ok_or(BadContentLength)
 }
+
+/// The narrow guard for the normal forwarding boundary (cleartext and
+/// decrypted h1). It does not enable strict parsing: only the shapes that
+/// let a front end and a back end disagree about where a request ends are
+/// refused, everything else keeps the tolerant behavior. The caller answers
+/// 400, closes the connection and sends nothing upstream. The request bytes
+/// are never normalized or stripped; this only reads them.
+///
+/// Refused: obs-fold, whitespace before the colon of Content-Length or
+/// Transfer-Encoding, more than one Content-Length line, a Content-Length
+/// list whose values differ, and Transfer-Encoding together with
+/// Content-Length (even when they agree). One header `Content-Length: 5, 5`
+/// stays accepted as 5.
+pub fn inbound_ambiguity(raw: &[u8]) -> Option<RequestFramingError> {
+    use RequestFramingError::*;
+    let end = raw
+        .windows(4)
+        .position(|w| w == b"\r\n\r\n")
+        .into_iter()
+        .chain(raw.windows(2).position(|w| w == b"\n\n"))
+        .min()
+        .unwrap_or(raw.len());
+    let head = &raw[..end];
+    let (mut cl_lines, mut te_lines) = (0usize, 0usize);
+    let mut cl_values: Vec<String> = Vec::new();
+    for line in head
+        .split(|&b| b == b'\n')
+        .skip(1)
+        .map(|l| l.strip_suffix(b"\r").unwrap_or(l))
+    {
+        if line.first().is_some_and(|&b| b == b' ' || b == b'\t') {
+            return Some(ObsFold);
+        }
+        let Some(colon) = line.iter().position(|&b| b == b':') else {
+            continue;
+        };
+        let raw_name = &line[..colon];
+        let name = raw_name.trim_ascii_end();
+        let is_cl = name.eq_ignore_ascii_case(b"content-length");
+        let is_te = name.eq_ignore_ascii_case(b"transfer-encoding");
+        if (is_cl || is_te) && name.len() != raw_name.len() {
+            return Some(SpaceBeforeColon);
+        }
+        if is_cl {
+            cl_lines += 1;
+            let v = String::from_utf8_lossy(&line[colon + 1..]).to_string();
+            cl_values.extend(v.split(',').map(|p| p.trim().to_string()));
+        } else if is_te {
+            te_lines += 1;
+        }
+    }
+    if cl_lines > 0 && te_lines > 0 {
+        return Some(AmbiguousFraming);
+    }
+    if cl_lines > 1 || cl_values.windows(2).any(|w| w[0] != w[1]) {
+        return Some(BadContentLength);
+    }
+    None
+}

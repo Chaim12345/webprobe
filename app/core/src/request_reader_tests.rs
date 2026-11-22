@@ -3,7 +3,7 @@
 //! `handle_conn` (pipelining, CONNECT with coalesced tunnel bytes, WebSocket
 //! with coalesced first frame).
 
-use crate::net::{handle_conn, ws_frame, RequestReader, Shared};
+use crate::net::{handle_conn, ws_frame, ReadOutcome, RequestReader, Shared};
 use std::io::{Cursor, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
@@ -196,64 +196,6 @@ fn read_head(s: &mut TcpStream) -> Vec<u8> {
 }
 
 #[test]
-fn proxy_serves_pipelined_requests_in_order_and_loses_none() {
-    let upstream = TcpListener::bind("127.0.0.1:0").unwrap();
-    let up_port = upstream.local_addr().unwrap().port();
-    let up = std::thread::spawn(move || {
-        let mut seen = Vec::new();
-        for _ in 0..3 {
-            let (mut s, _) = upstream.accept().unwrap();
-            s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
-            let head = read_head(&mut s);
-            let path = String::from_utf8_lossy(&head)
-                .split_whitespace()
-                .nth(1)
-                .unwrap_or("")
-                .to_string();
-            let body = format!("reply for {path}");
-            write!(
-                s,
-                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-                body.len()
-            )
-            .unwrap();
-            seen.push(path);
-        }
-        seen
-    });
-    let shared = Shared::new();
-    let (port, pt) = spawn_proxy(shared);
-    let mut c = client(port);
-    // Three requests in ONE write.
-    let mut wire = Vec::new();
-    for p in ["/one", "/two", "/three"] {
-        wire.extend_from_slice(
-            format!(
-                "GET http://127.0.0.1:{up_port}{p} HTTP/1.1\r\nHost: 127.0.0.1:{up_port}\r\n\r\n"
-            )
-            .as_bytes(),
-        );
-    }
-    c.write_all(&wire).unwrap();
-    let mut got = Vec::new();
-    c.read_to_end(&mut got).unwrap();
-    pt.join().unwrap();
-    let seen = up.join().unwrap();
-    assert_eq!(
-        seen,
-        ["/one", "/two", "/three"],
-        "upstream saw each request, in order"
-    );
-    let text = String::from_utf8_lossy(&got).to_string();
-    let (i1, i2, i3) = (
-        text.find("reply for /one").expect("first reply"),
-        text.find("reply for /two").expect("second reply"),
-        text.find("reply for /three").expect("third reply"),
-    );
-    assert!(i1 < i2 && i2 < i3, "{text}");
-}
-
-#[test]
 fn connect_passthrough_gets_the_coalesced_tunnel_bytes_after_the_200() {
     let upstream = TcpListener::bind("127.0.0.1:0").unwrap();
     let up_port = upstream.local_addr().unwrap().port();
@@ -402,4 +344,499 @@ fn mitm_connect_gets_the_coalesced_client_hello_and_the_handshake_completes() {
     }
     drop(c);
     pt.join().unwrap();
+}
+
+// ------------------------------------------- lifecycle, typed outcomes
+
+/// An upstream that serves every request it gets and records the paths. It
+/// stops listening after `wait` and returns what it saw.
+fn spawn_upstream(
+    make: fn(&str) -> Vec<u8>,
+    wait: Duration,
+) -> (u16, std::thread::JoinHandle<Vec<String>>) {
+    let l = TcpListener::bind("127.0.0.1:0").unwrap();
+    l.set_nonblocking(true).unwrap();
+    let port = l.local_addr().unwrap().port();
+    let t = std::thread::spawn(move || {
+        let end = std::time::Instant::now() + wait;
+        let mut seen = Vec::new();
+        while std::time::Instant::now() < end {
+            let Ok((mut s, _)) = l.accept() else {
+                std::thread::sleep(Duration::from_millis(5));
+                continue;
+            };
+            s.set_nonblocking(false).unwrap();
+            s.set_read_timeout(Some(Duration::from_millis(300)))
+                .unwrap();
+            loop {
+                let head = read_head(&mut s);
+                if head.is_empty() {
+                    break;
+                }
+                let path = String::from_utf8_lossy(&head)
+                    .split_whitespace()
+                    .nth(1)
+                    .unwrap_or("")
+                    .to_string();
+                let cl: usize = String::from_utf8_lossy(&head)
+                    .lines()
+                    .find_map(|l| l.strip_prefix("Content-Length: "))
+                    .and_then(|v| v.trim().parse().ok())
+                    .unwrap_or(0);
+                let mut body = vec![0u8; cl];
+                let _ = s.read_exact(&mut body);
+                let resp = make(&path);
+                let _ = s.write_all(&resp);
+                seen.push(path);
+                let t = String::from_utf8_lossy(&resp).to_string();
+                if !t.contains("Content-Length") || t.contains("Connection: close") {
+                    break;
+                }
+            }
+        }
+        seen
+    });
+    (port, t)
+}
+
+fn keep_alive_reply(path: &str) -> Vec<u8> {
+    let body = format!("reply for {path}");
+    format!(
+        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{body}",
+        body.len()
+    )
+    .into_bytes()
+}
+
+fn close_header_reply(path: &str) -> Vec<u8> {
+    let body = format!("reply for {path}");
+    format!(
+        "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{body}",
+        body.len()
+    )
+    .into_bytes()
+}
+
+fn until_eof_reply(path: &str) -> Vec<u8> {
+    format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nreply for {path}").into_bytes()
+}
+
+/// Read one response by its Content-Length. None at EOF.
+fn read_response(c: &mut TcpStream) -> Option<String> {
+    let head = read_head(c);
+    if head.is_empty() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&head).to_string();
+    let n: usize = text
+        .lines()
+        .find_map(|l| l.strip_prefix("Content-Length: "))
+        .and_then(|v| v.trim().parse().ok())
+        .unwrap_or(0);
+    let mut body = vec![0u8; n];
+    c.read_exact(&mut body).unwrap();
+    Some(String::from_utf8_lossy(&body).to_string())
+}
+
+fn get(up_port: u16, p: &str) -> Vec<u8> {
+    format!("GET http://127.0.0.1:{up_port}{p} HTTP/1.1\r\nHost: 127.0.0.1:{up_port}\r\n\r\n")
+        .into_bytes()
+}
+
+#[test]
+fn keep_alive_pipeline_is_served_in_order_with_response_boundaries_intact() {
+    let (up_port, up) = spawn_upstream(keep_alive_reply, Duration::from_millis(1500));
+    let (port, pt) = spawn_proxy(Shared::new());
+    let mut c = client(port);
+    let mut wire = Vec::new();
+    for p in ["/one", "/two", "/three"] {
+        wire.extend_from_slice(&get(up_port, p));
+    }
+    c.write_all(&wire).unwrap();
+    for p in ["/one", "/two", "/three"] {
+        assert_eq!(read_response(&mut c).unwrap(), format!("reply for {p}"));
+    }
+    c.shutdown(std::net::Shutdown::Write).unwrap();
+    assert!(
+        read_response(&mut c).is_none(),
+        "closed after the client closed"
+    );
+    pt.join().unwrap();
+    assert_eq!(up.join().unwrap(), ["/one", "/two", "/three"]);
+}
+
+fn assert_stops_after_first(make: fn(&str) -> Vec<u8>) {
+    let (up_port, up) = spawn_upstream(make, Duration::from_millis(1200));
+    let (port, pt) = spawn_proxy(Shared::new());
+    let mut c = client(port);
+    let mut wire = get(up_port, "/one");
+    wire.extend_from_slice(&get(up_port, "/two"));
+    c.write_all(&wire).unwrap();
+    let mut got = Vec::new();
+    c.read_to_end(&mut got).unwrap();
+    pt.join().unwrap();
+    let text = String::from_utf8_lossy(&got).to_string();
+    assert!(text.contains("reply for /one"), "{text}");
+    assert!(
+        !text.contains("reply for /two"),
+        "nothing appended after the first response: {text}"
+    );
+    assert_eq!(
+        up.join().unwrap(),
+        ["/one"],
+        "the queued request never goes upstream"
+    );
+}
+
+#[test]
+fn nothing_is_served_after_a_read_until_close_response() {
+    assert_stops_after_first(until_eof_reply);
+}
+
+#[test]
+fn nothing_is_served_after_a_response_with_connection_close() {
+    assert_stops_after_first(close_header_reply);
+}
+
+#[test]
+fn serving_does_not_depend_on_how_the_requests_were_segmented() {
+    for step in STEPS {
+        let (up_port, up) = spawn_upstream(keep_alive_reply, Duration::from_millis(1500));
+        let (port, pt) = spawn_proxy(Shared::new());
+        let mut c = client(port);
+        let mut wire = get(up_port, "/a");
+        wire.extend_from_slice(&get(up_port, "/b"));
+        for piece in wire.chunks(step) {
+            c.write_all(piece).unwrap();
+            c.flush().unwrap();
+            if step < 16_384 {
+                std::thread::sleep(Duration::from_millis(1));
+            }
+        }
+        assert_eq!(
+            read_response(&mut c).unwrap(),
+            "reply for /a",
+            "step {step}"
+        );
+        assert_eq!(
+            read_response(&mut c).unwrap(),
+            "reply for /b",
+            "step {step}"
+        );
+        // A third request long after the first two, in its own write.
+        std::thread::sleep(Duration::from_millis(50));
+        c.write_all(&get(up_port, "/c")).unwrap();
+        assert_eq!(
+            read_response(&mut c).unwrap(),
+            "reply for /c",
+            "step {step}"
+        );
+        drop(c);
+        pt.join().unwrap();
+        assert_eq!(up.join().unwrap(), ["/a", "/b", "/c"], "step {step}");
+    }
+}
+
+#[test]
+fn a_trailing_crlf_after_a_body_is_not_a_request() {
+    let (up_port, up) = spawn_upstream(keep_alive_reply, Duration::from_millis(1000));
+    let (port, pt) = spawn_proxy(Shared::new());
+    let mut c = client(port);
+    let mut wire = format!(
+        "POST http://127.0.0.1:{up_port}/post HTTP/1.1\r\nHost: 127.0.0.1:{up_port}\r\nContent-Length: 3\r\n\r\nabc"
+    )
+    .into_bytes();
+    wire.extend_from_slice(b"\r\n");
+    c.write_all(&wire).unwrap();
+    assert_eq!(read_response(&mut c).unwrap(), "reply for /post");
+    c.shutdown(std::net::Shutdown::Write).unwrap();
+    assert!(read_response(&mut c).is_none());
+    pt.join().unwrap();
+    assert_eq!(
+        up.join().unwrap(),
+        ["/post"],
+        "the CRLF was never forwarded"
+    );
+}
+
+fn drain_one(wire: &[u8]) -> ReadOutcome {
+    let mut r = RequestReader::new();
+    let mut s = script(wire, 7);
+    r.read_message(&mut s).unwrap()
+}
+
+#[test]
+fn incomplete_and_malformed_requests_are_typed_and_keep_their_bytes() {
+    let head = b"GET /x HTTP/1.1\r\nHost: h\r\n";
+    assert_eq!(drain_one(head), ReadOutcome::Incomplete(head.to_vec()));
+    let cl = b"POST /x HTTP/1.1\r\nHost: h\r\nContent-Length: 10\r\n\r\nabc";
+    assert_eq!(drain_one(cl), ReadOutcome::Incomplete(cl.to_vec()));
+    let ch = b"POST /x HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nab";
+    assert_eq!(drain_one(ch), ReadOutcome::Incomplete(ch.to_vec()));
+    let bad = b"POST /x HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\nZZ\r\n\r\n";
+    assert_eq!(drain_one(bad), ReadOutcome::Malformed(bad.to_vec()));
+    assert_eq!(drain_one(b""), ReadOutcome::Eof);
+}
+
+fn assert_nothing_goes_upstream(first: Vec<u8>, then_pipeline: bool) {
+    let (up_port, up) = spawn_upstream(keep_alive_reply, Duration::from_millis(800));
+    let (port, pt) = spawn_proxy(Shared::new());
+    let mut c = client(port);
+    let mut wire = first;
+    if then_pipeline {
+        wire.extend_from_slice(&get(up_port, "/two"));
+    }
+    c.write_all(&wire).unwrap();
+    c.shutdown(std::net::Shutdown::Write).unwrap();
+    let mut got = Vec::new();
+    c.read_to_end(&mut got).unwrap();
+    pt.join().unwrap();
+    assert!(got.is_empty(), "no response is invented: {got:?}");
+    assert!(up.join().unwrap().is_empty(), "zero upstream sends");
+}
+
+#[test]
+fn incomplete_requests_are_captured_and_never_forwarded() {
+    let host = "Host: 127.0.0.1:9";
+    assert_nothing_goes_upstream(
+        format!("GET http://127.0.0.1:9/ HTTP/1.1\r\n{host}\r\n").into_bytes(),
+        false,
+    );
+    assert_nothing_goes_upstream(
+        format!("POST http://127.0.0.1:9/ HTTP/1.1\r\n{host}\r\nContent-Length: 10\r\n\r\nabc")
+            .into_bytes(),
+        false,
+    );
+    assert_nothing_goes_upstream(
+        format!("POST http://127.0.0.1:9/ HTTP/1.1\r\n{host}\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nab").into_bytes(),
+        false,
+    );
+}
+
+#[test]
+fn a_malformed_chunk_plus_a_pipelined_request_goes_nowhere() {
+    let first = b"POST http://127.0.0.1:9/ HTTP/1.1\r\nHost: 127.0.0.1:9\r\nTransfer-Encoding: chunked\r\n\r\nZZ\r\n\r\n".to_vec();
+    assert_nothing_goes_upstream(first, true);
+}
+
+#[test]
+fn a_refused_upgrade_never_gets_the_early_frame() {
+    let upstream = TcpListener::bind("127.0.0.1:0").unwrap();
+    let up_port = upstream.local_addr().unwrap().port();
+    let up = std::thread::spawn(move || {
+        let (mut s, _) = upstream.accept().unwrap();
+        s.set_read_timeout(Some(Duration::from_millis(600)))
+            .unwrap();
+        let head = read_head(&mut s);
+        assert!(String::from_utf8_lossy(&head).contains("Upgrade: websocket"));
+        s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
+            .unwrap();
+        let mut rest = Vec::new();
+        let _ = s.read_to_end(&mut rest);
+        rest
+    });
+    let (port, pt) = spawn_proxy(Shared::new());
+    let mut c = client(port);
+    let mut wire = format!(
+        "GET http://127.0.0.1:{up_port}/ws HTTP/1.1\r\nHost: 127.0.0.1:{up_port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
+    )
+    .into_bytes();
+    wire.extend_from_slice(&ws_frame(0x81, b"early frame", true));
+    c.write_all(&wire).unwrap();
+    let _ = read_response(&mut c);
+    drop(c);
+    pt.join().unwrap();
+    let rest = up.join().unwrap();
+    assert!(
+        rest.is_empty(),
+        "upstream got bytes after the refusal: {rest:?}"
+    );
+}
+
+struct FailingWriter {
+    cap: usize,
+    written: usize,
+    calls_after_error: usize,
+    failed: bool,
+}
+
+impl Read for FailingWriter {
+    fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+        Ok(0)
+    }
+}
+
+impl Write for FailingWriter {
+    fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
+        if self.failed {
+            self.calls_after_error += 1;
+            return Err(std::io::ErrorKind::BrokenPipe.into());
+        }
+        let n = b.len().min(self.cap - self.written);
+        self.written += n;
+        if n == 0 {
+            self.failed = true;
+            return Err(std::io::ErrorKind::BrokenPipe.into());
+        }
+        Ok(n)
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl webprobe_support::io_traits::ProxyIo for FailingWriter {
+    fn set_nonblocking_io(&self, _: bool) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+#[test]
+fn a_failed_early_frame_write_aborts_without_retrying_the_frame() {
+    let shared = Shared::new();
+    let setup = {
+        let mut s =
+            crate::net::ws_setup(&shared, 1, "h", 80, false, b"GET / HTTP/1.1\r\n\r\n", b"");
+        s.client_leftover = ws_frame(0x81, b"early frame", true);
+        s
+    };
+    let mut client = FailingWriter {
+        cap: 1000,
+        written: 0,
+        calls_after_error: 0,
+        failed: false,
+    };
+    let mut upstream = FailingWriter {
+        cap: 4,
+        written: 0,
+        calls_after_error: 0,
+        failed: false,
+    };
+    crate::net::relay_ws_tls(&shared, &mut client, &mut upstream, "h".into(), setup);
+    assert_eq!(
+        upstream.written, 4,
+        "only the part the socket took was written"
+    );
+    assert_eq!(upstream.calls_after_error, 0, "no retry of the whole frame");
+}
+
+// ------------------------------------------------- inbound ambiguity guard
+
+use crate::strict_request::{inbound_ambiguity, RequestFramingError as E};
+
+fn req(extra: &str) -> Vec<u8> {
+    format!("POST /x HTTP/1.1\r\nHost: h\r\n{extra}\r\n\r\nabcde").into_bytes()
+}
+
+#[test]
+fn guard_refuses_only_the_ambiguous_shapes() {
+    assert_eq!(
+        inbound_ambiguity(&req("Content-Length : 5")),
+        Some(E::SpaceBeforeColon)
+    );
+    assert_eq!(
+        inbound_ambiguity(&req("Content-Length\t: 5")),
+        Some(E::SpaceBeforeColon)
+    );
+    assert_eq!(
+        inbound_ambiguity(&req("Transfer-Encoding : chunked")),
+        Some(E::SpaceBeforeColon)
+    );
+    assert_eq!(
+        inbound_ambiguity(&req("Content-Length: 5\r\nContent-Length: 5")),
+        Some(E::BadContentLength)
+    );
+    assert_eq!(
+        inbound_ambiguity(&req("Content-Length: 5\r\nContent-Length: 6")),
+        Some(E::BadContentLength)
+    );
+    assert_eq!(
+        inbound_ambiguity(&req("Content-Length: 5, 6")),
+        Some(E::BadContentLength)
+    );
+    assert_eq!(
+        inbound_ambiguity(&req("Content-Length:\r\n 5")),
+        Some(E::ObsFold)
+    );
+    assert_eq!(
+        inbound_ambiguity(&req("Transfer-Encoding: chunked\r\nContent-Length: 5")),
+        Some(E::AmbiguousFraming)
+    );
+    // Even when the values agree on nothing to disagree about.
+    assert_eq!(
+        inbound_ambiguity(&req("Content-Length: 0\r\nTransfer-Encoding: chunked")),
+        Some(E::AmbiguousFraming)
+    );
+    // Tolerant behavior kept: plain, "5, 5", odd casing, other headers with a space.
+    assert_eq!(inbound_ambiguity(&req("Content-Length: 5")), None);
+    assert_eq!(inbound_ambiguity(&req("Content-Length: 5, 5")), None);
+    assert_eq!(inbound_ambiguity(&req("content-LENGTH: 5")), None);
+    assert_eq!(
+        inbound_ambiguity(&req("X-Odd : yes\r\nContent-Length: 5")),
+        None
+    );
+    assert_eq!(inbound_ambiguity(&req("Transfer-Encoding: chunked")), None);
+    // The body is never inspected.
+    assert_eq!(
+        inbound_ambiguity(b"POST /x HTTP/1.1\r\nContent-Length: 5\r\n\r\nContent-Length : 9"),
+        None
+    );
+}
+
+#[test]
+fn ambiguous_request_gets_400_and_close_with_nothing_upstream_and_exact_bytes_in_history() {
+    for extra in [
+        "Content-Length : 5",
+        "Content-Length: 5\r\nContent-Length: 5",
+        "Content-Length: 5\r\nContent-Length: 6",
+        "Content-Length:\r\n 5",
+        "Content-Length: 5\r\nTransfer-Encoding: chunked",
+    ] {
+        let (up_port, up) = spawn_upstream(keep_alive_reply, Duration::from_millis(500));
+        let shared = Shared::new();
+        let (port, pt) = spawn_proxy(Arc::clone(&shared));
+        let mut c = client(port);
+        let wire = format!(
+            "POST http://127.0.0.1:{up_port}/x HTTP/1.1\r\nHost: 127.0.0.1:{up_port}\r\n{extra}\r\n\r\nabcde"
+        )
+        .into_bytes();
+        c.write_all(&wire).unwrap();
+        let mut got = Vec::new();
+        c.read_to_end(&mut got).unwrap();
+        pt.join().unwrap();
+        let text = String::from_utf8_lossy(&got).to_string();
+        assert!(text.starts_with("HTTP/1.1 400"), "{extra}: {text}");
+        let body = text.split("\r\n\r\n").nth(1).unwrap_or("");
+        assert!(text.contains("Connection: close"));
+        assert!(
+            text.contains(&format!("Content-Length: {}", body.len())),
+            "{text}"
+        );
+        assert!(up.join().unwrap().is_empty(), "{extra}: nothing upstream");
+        let h = shared.history.last().expect("captured in history");
+        assert_eq!(h.req_raw.to_vec(), wire, "{extra}: bytes verbatim");
+        assert!(
+            h.note
+                .as_deref()
+                .unwrap_or("")
+                .contains("Rejected before forwarding"),
+            "{:?}",
+            h.note
+        );
+    }
+}
+
+#[test]
+fn well_formed_requests_still_pass_the_guard() {
+    let (up_port, up) = spawn_upstream(keep_alive_reply, Duration::from_millis(800));
+    let (port, pt) = spawn_proxy(Shared::new());
+    let mut c = client(port);
+    let wire = format!(
+        "POST http://127.0.0.1:{up_port}/ok HTTP/1.1\r\nHost: 127.0.0.1:{up_port}\r\nContent-Length: 5, 5\r\n\r\nabcde"
+    );
+    c.write_all(wire.as_bytes()).unwrap();
+    assert_eq!(read_response(&mut c).unwrap(), "reply for /ok");
+    drop(c);
+    pt.join().unwrap();
+    assert_eq!(up.join().unwrap(), ["/ok"]);
 }

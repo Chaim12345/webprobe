@@ -232,6 +232,8 @@ fn proxy_decodes_chunked_gzip_response_for_history() {
         )
         .unwrap();
     let mut wire = Vec::new();
+    // The proxy keeps the connection open for the next request; the half-close ends it.
+    client.shutdown(std::net::Shutdown::Write).unwrap();
     client.read_to_end(&mut wire).unwrap();
     t.join().unwrap();
     pt.join().unwrap();
@@ -961,6 +963,8 @@ fn extra_listener_serves_traffic() {
     )
     .unwrap();
     let mut resp = Vec::new();
+    // The proxy keeps the connection open for the next request; the half-close ends it.
+    client.shutdown(std::net::Shutdown::Write).unwrap();
     client.read_to_end(&mut resp).unwrap();
     assert!(
         String::from_utf8_lossy(&resp).starts_with("HTTP/1.1 200"),
@@ -1673,6 +1677,8 @@ fn absolute_form_forwarded_as_origin_form() {
     )
     .unwrap();
     let mut resp = Vec::new();
+    // The proxy keeps the connection open for the next request; the half-close ends it.
+    client.shutdown(std::net::Shutdown::Write).unwrap();
     client.read_to_end(&mut resp).unwrap();
     assert!(String::from_utf8_lossy(&resp).starts_with("HTTP/1.1 200"));
     let upstream_req = ot.join().unwrap();
