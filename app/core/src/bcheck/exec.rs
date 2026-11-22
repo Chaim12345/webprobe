@@ -495,7 +495,8 @@ fn eval_call(cx: &mut Context, name: &str, args: &[Expr]) -> Result<String, Exec
         }
         "sha1" => {
             argc(1)?;
-            Ok(crate::decoder_ops::sha1_hex(&eval_expr(cx, &args[0])?))
+            crate::decoder_ops::apply(crate::decoder_ops::Op::Sha1, &eval_expr(cx, &args[0])?)
+                .map_err(ExecError)
         }
         "sha256" => {
             argc(1)?;
@@ -505,7 +506,8 @@ fn eval_call(cx: &mut Context, name: &str, args: &[Expr]) -> Result<String, Exec
         }
         "md5" => {
             argc(1)?;
-            Ok(crate::decoder_ops::md5_hex(&eval_expr(cx, &args[0])?))
+            crate::decoder_ops::apply(crate::decoder_ops::Op::Md5, &eval_expr(cx, &args[0])?)
+                .map_err(ExecError)
         }
         other => err(format!("unknown function `{other}`")),
     }
