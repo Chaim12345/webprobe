@@ -558,7 +558,11 @@ mod diagnostic_tests {
             .last()
             .unwrap()
             .ends_with("test.event: Test event n=502"));
-        assert_eq!(wakes.load(Ordering::SeqCst), 503);
+        // Wakes are coalesced (see `Shared::wake`): every event either woke the
+        // frontend or was counted as coalesced, and the first one always woke it.
+        let woke = wakes.load(Ordering::SeqCst) as u64;
+        assert!(woke >= 1);
+        assert_eq!(woke + shared.wakes_coalesced.load(Ordering::SeqCst), 503);
     }
 
     #[test]
