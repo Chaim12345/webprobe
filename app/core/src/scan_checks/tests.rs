@@ -618,7 +618,7 @@ fn host_probe_checks_use_expected_requests_and_reject_soft_errors() {
                     )
                 }
             } else {
-                ("200 OK", "text/plain", "ok")
+                ("200 OK", "text/x-component", "ok")
             };
             format!("HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
         });
@@ -647,6 +647,28 @@ fn host_probe_checks_use_expected_requests_and_reject_soft_errors() {
         assert!(post.2.contains("Next-Action:"));
         assert!(post.2.contains("[\"$1:a:a\"]"));
     }
+}
+
+#[test]
+fn react2shell_does_not_post_without_a_fingerprint() {
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    let count = Arc::new(AtomicUsize::new(0));
+    let seen = count.clone();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(listener, move |_, _, _| {
+        seen.fetch_add(1, Ordering::SeqCst);
+        "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok".into()
+    });
+    let req = format!("GET / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
+    let issues = lab_scan(port, &["active.react2shell"], "GET", "/", req);
+    assert!(issues.is_empty());
+    assert_eq!(count.load(Ordering::SeqCst), 1, "baseline only, no POST");
+    assert!(is_burp_issue(
+        "React Server Components remote code execution (React2Shell)"
+    ));
 }
 
 /// R-10 web cache poisoning (Zp22 / Zg1g rule): reported only when a

@@ -224,6 +224,17 @@ impl RequestCheck for OpenApiDefinition {
 /// The React2Shell signature: status 500 plus the specific flight-protocol
 /// marker. Burp's generic `Error`+`digest` word pair is deliberately not
 /// used here: it fires on ordinary error pages.
+fn nextjs_or_rsc_baseline(raw: &[u8]) -> bool {
+    let parsed = util::parse_http(raw);
+    let ct = util::get_header(&parsed.headers, "Content-Type").unwrap_or_default();
+    let powered = util::get_header(&parsed.headers, "X-Powered-By").unwrap_or_default();
+    let body = String::from_utf8_lossy(&raw[parsed.head_len.min(raw.len())..]);
+    ct.to_ascii_lowercase().contains("text/x-component")
+        || powered.eq_ignore_ascii_case("Next.js")
+        || body.contains("__NEXT_DATA__")
+        || body.contains("/_next/")
+}
+
 pub(crate) fn react2shell_hit(status: &str, body: &str) -> bool {
     status == "500" && body.contains("E{\"digest\"")
 }
@@ -642,6 +653,9 @@ impl RequestCheck for RobotsTxt {
 /// error digest marker (Zgn0.java:83-98; the stripped field-to-literal
 /// assignments read as `E{"digest"`). Burp's generic `Error`+`digest` pair
 /// is deliberately not used: it fires on ordinary error pages.
+/// Only runs after a Next.js/RSC baseline fingerprint. Sends one synthetic
+/// POST / per host, even if the audited path differs. This is a tentative
+/// signature, not confirmation of exploitable code execution.
 pub(crate) struct React2Shell;
 
 impl RequestCheck for React2Shell {
@@ -658,6 +672,9 @@ impl RequestCheck for React2Shell {
         Some(BURP_GROUP)
     }
     fn run(&self, cx: &ScanCtx) {
+        if cx.stopped() || !cx.runs(self.issue()) || !nextjs_or_rsc_baseline(&cx.baseline.raw) {
+            return;
+        }
         let (scheme, _) = origin_of(cx);
         let key = format!("{scheme}://{}:{}|react2shell", cx.host, cx.port);
         if cx.stopped() || !cx.state().openapi_hosts.lock().unwrap().insert(key.clone()) {
@@ -701,7 +718,7 @@ impl RequestCheck for React2Shell {
             &e,
             "The server answered the React Server Components probe with status 500 and a flight-protocol error digest, the React2Shell signature (CVE-2025-55182 class).".to_string(),
         );
-        i.confidence = "Firm".into();
+        i.confidence = "Tentative".into();
         cx.report(vec![i.with_evidence(vec![ScanEvidence::new(
             probe.as_bytes(),
             Some(&resp[..]),
