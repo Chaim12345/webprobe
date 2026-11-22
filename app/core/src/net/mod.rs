@@ -117,5 +117,3 @@ mod wake_tests;
 #[cfg(test)]
 mod read_response_head_tests;
 
-#[cfg(test)]
-mod wake_tests;

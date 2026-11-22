@@ -253,6 +253,7 @@ impl Shared {
                 result_line: String::new(),
                 history: Vec::new(),
                 hist_pos: 0,
+                response_sources: Vec::new(),
                 ws: None,
             }]),
             messages: std::sync::atomic::AtomicUsize::new(0),
