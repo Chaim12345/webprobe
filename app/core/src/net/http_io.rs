@@ -30,9 +30,13 @@ pub fn read_request<R: Read>(stream: &mut R) -> std::io::Result<Vec<u8>> {
             head_len = None;
             break;
         }
+        // Only the new bytes (plus the 3 before them, in case a terminator
+        // straddles two reads) can hold a head end: rescanning the whole
+        // buffer on every read made a header flood quadratic.
+        let from = buf.len().saturating_sub(3);
         buf.extend_from_slice(&chunk[..n]);
-        if let Some(h) = head_end(&buf) {
-            head_len = Some(h);
+        if let Some(h) = head_end(&buf[from..]) {
+            head_len = Some(from + h);
             break;
         }
         if buf.len() > 4 * 1024 * 1024 {
