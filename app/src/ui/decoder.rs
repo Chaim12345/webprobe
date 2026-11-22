@@ -40,7 +40,7 @@ pub(crate) fn decoder(app: &mut App, ui: &mut Ui) {
                     for (label, ops) in [
                         ("Decode as ...", vec![Op::UrlDecode, Op::HtmlDecode, Op::Base64Decode, Op::AsciiHexDecode, Op::HexDecode, Op::OctalDecode, Op::BinaryDecode, Op::GzipDecode]),
                         ("Encode as ...", vec![Op::UrlEncode, Op::HtmlEncode, Op::Base64Encode, Op::AsciiHexEncode, Op::HexEncode, Op::OctalEncode, Op::BinaryEncode, Op::GzipEncode]),
-                        ("Hash ...", vec![Op::Md5, Op::Sha1, Op::Sha256, Op::Sha512]),
+                        ("Hash ...", crate::decoder_ops::hash_menu_ops()),
                     ] {
                         egui::ComboBox::from_id_salt((label, k)).width(200.0).selected_text(label).show_ui(ui, |ui| {
                             for op in ops {
@@ -95,6 +95,7 @@ pub(crate) fn op_label(op: crate::decoder_ops::Op) -> &'static str {
         Sha1 => "SHA-1",
         Sha256 => "SHA-256",
         Sha512 => "SHA-512",
+        Hash(spec) => spec.label,
         SmartDecode => "Smart decode",
     }
 }
