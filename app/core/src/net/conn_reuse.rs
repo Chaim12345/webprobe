@@ -43,6 +43,13 @@ pub fn try_h2c_upgrade<S: Read + Write + ResponseRead>(
     stream: &mut S,
     routed: &[u8],
 ) -> Result<Option<(Vec<u8>, bool)>, String> {
+    #[cfg(test)]
+    if let Some(crate::scan_lifecycle::ExecutionContext::Budgeted(permit)) =
+        crate::scan_lifecycle::captured()
+    {
+        permit.mark_incomplete();
+        return Err("budgeted transport incomplete: unmanaged h2c unsupported".into());
+    }
     let parts = util::parse_http(routed);
     if parts.head_len == 0 || parts.head_len > routed.len() {
         return Ok(None);
@@ -173,6 +180,17 @@ pub fn send_inner(
 ) -> Result<Vec<u8>, String> {
     #[cfg(test)]
     scanner_send_admission(shared)?;
+    #[cfg(test)]
+    if let Some(permit) = scanner_io::permit(shared) {
+        scanner_io::supported(shared, host, sink.is_some())
+            .inspect_err(|_| permit.mark_incomplete())?;
+        let outcome = scanner_io::exchange(shared, &permit, host, port, req);
+        return if outcome.complete {
+            Ok(outcome.response)
+        } else {
+            Err(outcome.diagnostic.unwrap_or_else(|| "incomplete".into()))
+        };
+    }
     let config = shared.upstream_for(host);
     let req = util::origin_form(req);
     let routed = crate::upstream::absolute_form_request(&config, &req, host, port);
@@ -267,6 +285,14 @@ pub fn send_tls_raw_with(
             error: Some(error),
         };
     }
+    #[cfg(test)]
+    if let Some(permit) = scanner_io::permit(shared) {
+        permit.mark_incomplete();
+        return Upstream {
+            resp: None,
+            error: Some("budgeted transport incomplete: TLS unsupported".into()),
+        };
+    }
     let request = jar_request(shared, host, true, request);
     let request = match session_request(shared, port, true, request) {
         Ok(request) => request,
@@ -337,6 +363,12 @@ pub fn send_tls_inner(
 ) -> Result<Vec<u8>, String> {
     #[cfg(test)]
     scanner_send_admission(shared)?;
+    #[cfg(test)]
+    if let Some(permit) = scanner_io::permit(shared) {
+        permit.mark_incomplete();
+        return Err("budgeted transport incomplete: TLS unsupported".into());
+    }
+
     let config = shared.upstream_for(host);
     let req = util::origin_form(req);
     let keep_alive = shared.keep_alive.load(Ordering::SeqCst);
@@ -513,6 +545,15 @@ pub fn new_tls_conn(
     host: &str,
     port: u16,
 ) -> Result<UpstreamConn, NetError> {
+    #[cfg(test)]
+    if let Some(crate::scan_lifecycle::ExecutionContext::Budgeted(permit)) =
+        crate::scan_lifecycle::captured()
+    {
+        permit.mark_incomplete();
+        return Err(NetError::Upstream(
+            "budgeted transport incomplete: unmanaged TLS unsupported".into(),
+        ));
+    }
     let tcp =
         crate::upstream::connect_tls_target(config, host, port).map_err(NetError::Upstream)?;
     tcp.set_read_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)))
@@ -540,6 +581,13 @@ pub fn exchange<S: Read + Write + ResponseRead>(
     req: &[u8],
     sink: Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
 ) -> Result<(Vec<u8>, bool), String> {
+    #[cfg(test)]
+    if let Some(crate::scan_lifecycle::ExecutionContext::Budgeted(permit)) =
+        crate::scan_lifecycle::captured()
+    {
+        permit.mark_incomplete();
+        return Err("budgeted transport incomplete: unmanaged stream exchange unsupported".into());
+    }
     stream.write_all(req).map_err(|e| format!("write: {e}"))?;
     stream.flush().ok();
     let method = req
