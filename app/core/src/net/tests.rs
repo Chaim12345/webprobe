@@ -3594,7 +3594,7 @@ fn connect_tunnel_carrying_cleartext_get_is_served_and_recorded() {
     let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
     let proxy_port = proxy.local_addr().unwrap().port();
     let sh = shared.clone();
-    std::thread::spawn(move || {
+    let proxy_thread = std::thread::spawn(move || {
         let (s, _) = proxy.accept().unwrap();
         handle_conn(sh, s);
     });
@@ -3621,6 +3621,10 @@ fn connect_tunnel_carrying_cleartext_get_is_served_and_recorded() {
         String::from_utf8_lossy(&head)
     );
     server.join().unwrap();
+    // History is recorded on the proxy thread after the response is sent;
+    // the terminal-close exchange ends that thread, so joining it is the
+    // deterministic condition (a sleep would race the record).
+    proxy_thread.join().unwrap();
     assert_eq!(shared.history.len(), 1);
 }
 
@@ -3810,4 +3814,88 @@ fn ambiguous_framing_in_a_cleartext_tunnel_is_rejected() {
     );
     proxy_thread.join().unwrap();
     assert_eq!(shared.history.len(), 1, "the rejection is recorded");
+}
+
+#[test]
+fn connect_tunnel_two_pipelined_requests_keep_byte_exact_order() {
+    // Two cleartext requests over one keep-alive tunnel: both are served in
+    // order and recorded exactly once. The proxy chooses the upstream
+    // connection topology (pooled or per-request); the origin serves either.
+    let shared = Shared::new();
+    let origin = TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin_port = origin.local_addr().unwrap().port();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        for _ in 0..2 {
+            let Ok((mut s, _)) = origin.accept() else { break };
+            let tx = tx.clone();
+            std::thread::spawn(move || {
+                let _ = s.set_read_timeout(Some(Duration::from_secs(10)));
+                loop {
+                    let r = read_request_head(&mut s);
+                    if r.starts_with(b"GET /one HTTP/1.1") {
+                        s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\none")
+                            .unwrap();
+                        tx.send(1).unwrap();
+                    } else if r.starts_with(b"GET /two HTTP/1.1") {
+                        s.write_all(
+                            b"HTTP/1.1 200 OK\r\nContent-Length: 3\r\nConnection: close\r\n\r\ntwo",
+                        )
+                        .unwrap();
+                        tx.send(2).unwrap();
+                        break;
+                    } else {
+                        break;
+                    }
+                }
+            });
+        }
+    });
+    let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+    let proxy_port = proxy.local_addr().unwrap().port();
+    let sh = shared.clone();
+    let proxy_thread = std::thread::spawn(move || {
+        let (s, _) = proxy.accept().unwrap();
+        handle_conn(sh, s);
+    });
+    let mut client = TcpStream::connect(("127.0.0.1", proxy_port)).unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    // CONNECT head and the first tunnelled request leave in one write.
+    write!(
+        client,
+        "CONNECT 127.0.0.1:{origin_port} HTTP/1.1\r\nHost: 127.0.0.1:{origin_port}\r\n\r\nGET /one HTTP/1.1\r\nHost: 127.0.0.1:{origin_port}\r\n\r\n"
+    )
+    .unwrap();
+    let head = read_response_head(&mut client).unwrap();
+    assert!(String::from_utf8_lossy(&head).contains("Connection established"));
+    let head = read_response_head(&mut client).expect("first pipelined request not served");
+    assert!(
+        String::from_utf8_lossy(&head).starts_with("HTTP/1.1 200"),
+        "got: {}",
+        String::from_utf8_lossy(&head)
+    );
+    let mut body = [0u8; 3];
+    client.read_exact(&mut body).unwrap();
+    assert_eq!(&body, b"one");
+    write!(
+        client,
+        "GET /two HTTP/1.1\r\nHost: 127.0.0.1:{origin_port}\r\nConnection: close\r\n\r\n"
+    )
+    .unwrap();
+    let head = read_response_head(&mut client).expect("second pipelined request not served");
+    assert!(
+        String::from_utf8_lossy(&head).starts_with("HTTP/1.1 200"),
+        "got: {}",
+        String::from_utf8_lossy(&head)
+    );
+    let mut body = [0u8; 3];
+    client.read_exact(&mut body).unwrap();
+    assert_eq!(&body, b"two");
+    proxy_thread.join().unwrap();
+    let first = rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    let second = rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    assert_eq!([first, second], [1, 2], "origin saw the requests in order");
+    assert_eq!(shared.history.len(), 2, "each request recorded exactly once");
 }
