@@ -1,111 +1,111 @@
 {
-  "as_of": "2026-11-23T02:00:00+02:00",
-  "open_pr_count": 114,
-  "parity": "2c2aa124d4365e3edc0f8768634be5aa562935f2",
-  "candidate": "d405f33006c852a4ba59c364e0f21d294e56a180",
+  "as_of": "2026-11-23T06:36:00+02:00",
+  "open_pr_count": 113,
+  "parity": "cf28b6d982d7837921de1c759b27caf12d24a102",
+  "candidate": "3384d3c4abf364b427d9e6c45e45fc0c05dea813",
   "work_items": [
     {
       "column": "verified",
-      "title": "Full code rerun on d405f33",
+      "title": "Prior d405f33 code + UI",
       "owner": "QA / release",
-      "gate": "Reported PASS, not future-head acceptance",
-      "detail": "Clean rerun1187/0 across19 targets; Java15/4/13, fmt/clippy and pipeline7/7.",
-      "next": "Preserve exact-head evidence; refresh resets acceptance."
+      "gate": "Historical exact-head PASS",
+      "detail": "Clean1187/0 and full UI pass. Original1029/1 failure retained; no acceptance transfer.",
+      "next": "Use3384d3c new gates."
     },
     {
       "column": "verified",
-      "title": "Cross-tool proofs",
-      "owner": "QA / release",
-      "gate": "Reported PASS on d405f33",
-      "detail": "Entire UI sweep passed incl. Drop/pipelining, Decoder, Intruder and large-entry.",
-      "next": "Preserve scoped manual Xvfb evidence."
+      "title": "#172 fix landed",
+      "owner": "Triage / reviewer",
+      "gate": "Parity cf28b6d contains fix",
+      "detail": "Source0d2528e; standalone/merge1111/0/14 reported and tested/remote identity matched.",
+      "next": "Complete added source/parity local CI."
     },
     {
       "column": "verified",
-      "title": "Preview fix landed",
-      "owner": "QA / triage",
-      "gate": "#171 actual256MiB GUI PASS",
-      "detail": "Standalone select/switch/save-reload passed; landed parity2c2aa12.804MB peak follow-up.",
-      "next": "Repeat large-entry smoke on final combination."
+      "title": "New source approvals",
+      "owner": "Reviewer",
+      "gate": "Code-read only06:31/06:33",
+      "detail": "1256f6f654 /1553384d3c: only codec.rs+155/-2,172 verbatim; evidence functions kept.",
+      "next": "Wait independent final execution."
     },
     {
       "column": "active",
-      "title": "UI evidence + caveats",
+      "title": "Full workflow jobs locally",
       "owner": "QA / release",
-      "gate": "d405f33 mechanics only",
-      "detail": "All checks passed; first large-entry render944MB, flat on switching,481MB after reload.",
-      "next": "Keep screenshots and exact-head scope."
+      "gate": "Running on3384d3c",
+      "detail": "Fmt/clippy clean; workspace running. JDK21 workflow fidelity plus JDK25 extras.",
+      "next": "Finish workspace/JVM/core/Bambda/Repeater."
     },
     {
       "column": "active",
-      "title": "Prior failure retained",
+      "title": "Final UI + evidence fixture",
       "owner": "QA / release",
-      "gate": "Clean rerun does not erase failure",
-      "detail": "First run1029/1 aborted. QA later reports1187/0; CTO still requires172.",
-      "next": "Clean rerun cannot waive CTO blocker."
+      "gate": "Pending refreshed exact tree",
+      "detail": "172 changes read paths, not rendering. Old entire UI pass does not certify3384d3c.",
+      "next": "Run full UI incl large-entry and EINTR fixture."
     },
     {
       "column": "active",
       "title": "PM board + cleanup plan",
       "owner": "PM / Git expert",
-      "gate": "Management work only",
-      "detail": "114 open PRs mapped. No mass closure or source rewrite approved.",
-      "next": "Keep source accounting current."
+      "gate": "113 open PRs mapped",
+      "detail": "Management only. No mass closure or evidence/source rewrite approved.",
+      "next": "Keep exact accounting current."
     },
     {
       "column": "review",
-      "title": "#172 focused read retry",
-      "owner": "Request-reader / reviewer",
-      "gate": "Exact source APPROVE01:19",
-      "detail": "0d2528e; only Interrupted retries. Triage standalone/merge1111/0/14. Not landed.",
-      "next": "Resolve separate landing authority."
-    },
-    {
-      "column": "review",
-      "title": "#125 / #155 refresh",
+      "title": "#125 / #155 source pins",
       "owner": "Integration / reviewer",
-      "gate": "Current exact deltas approved",
-      "detail": "fb3d89f/d405f33 include171 but NOT172. Source approval is not acceptance.",
-      "next": "Include172, refresh and reverify."
+      "gate": "Refreshed, not landed",
+      "detail": "1256f6f654 +1553384d3c include171 and172; merges clean.",
+      "next": "Freeze pins for exact final gate."
+    },
+    {
+      "column": "review",
+      "title": "Hosted CI standing waiver",
+      "owner": "Owner / triage",
+      "gate": "Authenticated06:27 instruction",
+      "detail": "Land without hosted CI going forward; local CI requested immediately after.",
+      "next": "Retain local gates, no billing changes."
     },
     {
       "column": "review",
       "title": "Replacement slices",
       "owner": "Reviewer / triage",
-      "gate": "Scoped code approval only",
-      "detail": "#161,#163-#170 caveats remain; library/core-design is not unrestricted exposure.",
-      "next": "Wait freeze and exact gates."
+      "gate": "Scoped approval only",
+      "detail": "161,163-170 library/core-design/exposure caveats remain.",
+      "next": "Wait freeze and required proof."
     },
     {
       "column": "blocked",
-      "title": "EINTR production read bug",
-      "owner": "CTO / QA",
-      "gate": "Acceptance blocker01:15",
-      "detail": "Buffered502 or silent streaming/EOF cut. Failed d405f33 run is not green.",
-      "next": "Include172; evidence-edit + full combined gate."
+      "title": "Final acceptance verdict",
+      "owner": "CTO / QA / triage",
+      "gate": "Not yet accepted",
+      "detail": "EINTR fix included; final exact-tree local jobs/UI must close the blocker.",
+      "next": "Review results, then tested/remote equality."
     },
     {
       "column": "blocked",
-      "title": "Hosted CI + final identity",
-      "owner": "Triage / owner",
-      "gate": "No general CI waiver",
-      "detail": "#172 jobs did not start: account billing limit.171-only exception does not transfer.",
-      "next": "Separate authority; tested/remote tree equality."
+      "title": "Local CI fidelity gaps",
+      "owner": "QA / triage",
+      "gate": "Report non-reproducible portions",
+      "detail": "172 landed before local-CI expansion; source/parity exact job runs added.",
+      "next": "Identify missing hosted-only checks honestly."
     },
     {
       "column": "blocked",
       "title": "Whole-source closure proof",
       "owner": "CTO / triage",
       "gate": "No close-now batch",
-      "detail": "Scanner wiring and partial DOM remain.139 accounting-only, not rebuild.",
-      "next": "Map own+inherited code to landed SHAs."
+      "detail": "Scanner wiring/partialDOM remain;139 accounting-only.",
+      "next": "Map own+inherited content to landed SHAs."
     },
     {
       "column": "queued",
       "title": "Carrier + remainder audit",
       "owner": "Triage / Git expert",
-      "gate": "After actual landing",
-      "detail": "#99,#109-#111,#114-#120 and148; inspect carried docs/refactors first.",
+      "gate": "After actual batch landing",
+      "detail": "99,109-111,114-120 and148; inspect carried docs/refactors before new slices.",
       "next": "Build only proved missing remainder."
     },
     {
@@ -113,7 +113,7 @@
       "title": "Docs + artifacts grouping",
       "owner": "Git expert / PM",
       "gate": "Draft only",
-      "detail": "Keep decisions, evidence and license limits. No extraction push.",
+      "detail": "Keep decisions, evidence and license limits; no extraction push.",
       "next": "Prove retained content before closure."
     },
     {
@@ -121,7 +121,7 @@
       "title": "Edition / MSRV migration",
       "owner": "CTO / author",
       "gate": "Current-base work required",
-      "detail": "#46 stays open until landed replacement. Preserve patched hpack.",
+      "detail": "46 stays open until replacement landed. Preserve patched hpack.",
       "next": "Fresh migration and current-tree review."
     }
   ],
@@ -1198,13 +1198,13 @@
       "number": 125,
       "title": "Integration: reviewed 2026-11-22 fix lanes (#99, #109, #110, #111, #114-#120) on the #45 stack",
       "url": "https://github.com/Chaim12345/webprobe/pull/125",
-      "head": "fb3d89f4d7a43fbd8c15d2beaf08f9c14165b3db",
+      "head": "6f6f65490ee76778b78fe66b68057830ce041f90",
       "owner": "Integration + independent review",
       "column": "blocked",
-      "gate": "Source approved; EINTR blocker,172 absent",
-      "next": "Include172; refresh and independently verify exact combined tree",
-      "blocker": "Failed d405f33 run1029/1; #172 fix absent; current hosted-CI exception limited to171",
-      "evidence": "Reviewer code-read approves 3108302..359b139, no cargo rerun by reviewer. Author reports support118/0 and app151/0, fmt/clippy clean; old core/Bambda counts not rerun. Fix moves items to Inbox and tests evidence/notes/IDs, unrelated items, repeated deletion and persistence"
+      "gate": "Refreshed source approved; exact local CI and UI pending",
+      "next": "Finish3384d3c exact combined-tree local CI/JDK25/UI and tested-remote identity",
+      "blocker": "Local workflow jobs and full exact-tree UI pending",
+      "evidence": "Reviewer06:31/06:33 code-only APPROVE; author1251169/0 or1551203/0; independent QA06:34 fmt/clippy clean, suite running"
     },
     {
       "number": 127,
@@ -1342,19 +1342,19 @@
       "number": 155,
       "title": "Request reader reconcile on #125: typed outcomes, delivery lifecycle, persistence policy, inbound ambiguity guard",
       "url": "https://github.com/Chaim12345/webprobe/pull/155",
-      "head": "d405f33006c852a4ba59c364e0f21d294e56a180",
+      "head": "3384d3c4abf364b427d9e6c45e45fc0c05dea813",
       "owner": "Lane15 + integration + reviewer/CTO",
       "column": "blocked",
-      "gate": "Source approved; EINTR blocker,172 absent",
-      "next": "Include172; refresh and independently verify exact combined tree",
-      "blocker": "Failed d405f33 run1029/1; #172 fix absent; current hosted-CI exception limited to171",
-      "evidence": "Live ancestry: parity2c2aa12 -> #125fb3d89f -> #155d405f33. Reviewer23:39 code-only: both refresh deltas exactly msgpane.rs + views.rs +145/-7, approved171 changes retained, append-only conflict resolution keeps both sides. Author final1200/0 incl13 Bambda, fmt/clippy; not independent final acceptance. QA23:40 standalone pipeline7/7, full gate in progress; entire UI to rerun. Earlier2c7ccdd suite1184/0/27 Java15/4/13 and workflow passes are old-head evidence.171 actual256MiB GUI PASS/landed2c2aa12, not final combined rendering smoke."
+      "gate": "Refreshed source approved; exact local CI and UI pending",
+      "next": "Finish3384d3c exact combined-tree local CI/JDK25/UI and tested-remote identity",
+      "blocker": "Local workflow jobs and full exact-tree UI pending",
+      "evidence": "Reviewer06:31/06:33 code-only APPROVE; author1251169/0 or1551203/0; independent QA06:34 fmt/clippy clean, suite running"
     },
     {
       "number": 160,
       "title": "Refresh program board after safety landings",
       "url": "https://github.com/Chaim12345/webprobe/pull/160",
-      "head": "dcfdd4cc2feb4d793b649a587e4cfe9814659b64",
+      "head": "b0ac27275cf15a559f5ee6d2190f456d9a2c9442",
       "owner": "Program Manager",
       "column": "active",
       "gate": "New visual board needs docs review",
@@ -1481,18 +1481,6 @@
       "next": "Author addresses review fixes first; require updated exact-head review/QA before release claims",
       "blocker": "Batch freeze; run/concurrency budget, direct-egress verification and evidence/confidence/body caps unresolved",
       "evidence": "64-request cap is per URL, not per run; request scope/session routing passed source review, speculative direct socket risk unverified. Author reports 787 core passes at 4 threads, all8 positive families across3 browser test functions plus cache test; earlier16-thread DOM lab miss unresolved; no GUI visual QA"
-    },
-    {
-      "number": 172,
-      "title": "Retry ErrorKind::Interrupted in upstream response reads",
-      "url": "https://github.com/Chaim12345/webprobe/pull/172",
-      "head": "0d2528e8f0283183f2a7d5f23d6830b135340c34",
-      "owner": "Request-reader / reviewer / triage",
-      "column": "blocked",
-      "gate": "Held pending complete proof / remainder",
-      "next": "Include approved fix then refresh candidates and run exact combined-tree gates",
-      "blocker": "Hosted CI did not start; separate authority required; not included in candidates",
-      "evidence": "Reviewer01:19 code-only APPROVE; triage standalone/clean parity merge1111/0/14 plus required-Java no-run/fmt/clippy; no final batch acceptance"
     }
   ]
 }

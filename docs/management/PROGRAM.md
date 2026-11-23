@@ -1,6 +1,15 @@
 # WebProbe program board
 
-## QA completion 01:43 Nov23, CTO blocker still controls acceptance
+## Current gate reset, Nov23 06:36
+
+#172 is landed at parity `cf28b6d982d7837921de1c759b27caf12d24a102`. Exact fix head0d2528e was rechecked; triage06:28 reports recreated/remote tree equality and1111/0/14. The owner gave a standing instruction to land without hosted CI at06:27:32, then required local CI at06:27:37. Original authenticated WhatsApp messages recovered. This supersedes the earlier171-only limit, without waiving local verification, source approval or final combined-tree/UI acceptance. No billing changes.
+
+Current #125 `6f6f65490ee76778b78fe66b68057830ce041f90` and #155 `3384d3c4abf364b427d9e6c45e45fc0c05dea813` contain parity/#172 and #171. Live pagination06:36:113 open PRs. Reviewer06:31/06:33 code-read APPROVE both exact refreshed heads: only codec.rs+155/-2, approved172 delta kept verbatim,155 evidence functions preserved, no conflicts or other changes. Author reports1251169/0 and1551203/0, fmt/build/clippy clean. These are author checks, not independent acceptance.
+
+QA06:34 independently fetched and verified exact candidate3384d3c,125 ancestry and172 parity inclusion. Full workflow-local jobs running with pinned Rust1.100/JDK21, plus owner-gate JDK25 extras, evidence-edit/EINTR fixture and full UI sweep. Fmt/clippy passed, workspace suite running; JVM/core/Bambda/Repeater jobs and UI pending. #172 landing occurred before the local-CI expansion arrived; triage will also run exact source/parity workflow jobs and report non-reproducible portions separately. No final acceptance or candidate landing yet. Earlier d405f33 clean1187/0 and complete UI are historical evidence; original1029/1 failed run remains recorded. The production EINTR defect is addressed in source but final exact-tree gate closure is pending, not waived.
+
+
+## Historical d405f33 QA completion01:43, superseded by current gate reset
 
 QA reports the exact d405f33 clean workspace rerun completed19 targets,1187 passed/0 failed; fmt/clippy, real JDK25 ext_host15/Montoya4/Bambda13 and standalone pipeline7/7 twice passed. The entire manual Xvfb/software-rendered UI sweep passed, including Drop/pipelining, Decoder roundtrip/error path, Intruder substitution and large-entry select/switch/save-reload. Large entry first-render RSS944MB, flat944-946MB on switching,481MB after reload; no repeated growth observed. Intruder fixture returned200 for all paths, so status differentiation was not tested, while substitution/result rows were verified.
 
@@ -16,7 +25,7 @@ The d405f33 workspace run failed: 1029 passed / 1 failed, then remaining targets
 QA d405f33 scoped results01:13-01:26: fmt/clippy clean; standalone pipeline7/7 twice; JDK25 ext_host15/15, Montoya4/4, Bambda13/13. Aborted targets separately passed session25/support115/report12. No clean full workspace run yet. Actual final-head UI PASS reports: incomplete marker/strict-framing wording, real project save/reopen with notes and wire bytes, streaming store ON/OFF plus256MiB size cap, Organizer full cycle/delete-to-Inbox, Sequencer constant-token, live Logger-to-Repeater and Repeater extension hooks. Drop/pipelining, Intruder, Decoder and large-entry select/switch/save-reload remain uncompleted at this snapshot. These mechanics results do not certify a future refreshed tree. PM records attributed QA reports, not independently inspected QA screenshots.
 
 
-Snapshot: 2026-11-23 02:00 Asia/Jerusalem. Program owner: Program Manager. [Canonical release checklist](RELEASE-CHECKLIST.md). [Review and decision ledger](REVIEW-LEDGER.md). [Role charters](ROLES.md). [HR staffing register, PR #137](https://github.com/Chaim12345/webprobe/pull/137), proposed file `docs/management/STAFFING.md`.
+Snapshot: 2026-11-23 06:36 Asia/Jerusalem. Program owner: Program Manager. [Canonical release checklist](RELEASE-CHECKLIST.md). [Review and decision ledger](REVIEW-LEDGER.md). [Role charters](ROLES.md). [HR staffing register, PR #137](https://github.com/Chaim12345/webprobe/pull/137), proposed file `docs/management/STAFFING.md`.
 
 This is the index for sequencing, not permission to merge or change product behavior. Only the triage lane lands parity changes. Existing PR branches and master stay untouched. Refresh this board when a source head, landing, decision or verification result changes.
 
