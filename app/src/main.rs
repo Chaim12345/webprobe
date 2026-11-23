@@ -41,6 +41,7 @@ mod project_start;
 mod proxy_settings;
 mod recovery;
 mod repeater_groups;
+mod repeater_group_autosave;
 mod repeater_ops;
 mod report;
 use webprobe_core::rules;
@@ -131,6 +132,7 @@ pub struct App {
     /// repeaters) counts it saw, so it only writes after a change.
     pub autosave_at: std::time::Instant,
     pub autosave_sig: (usize, usize, usize),
+    autosave_groups: repeater_group_autosave::Snapshot,
     /// Shared table state for proxy history (sort, filter, columns).
     pub hist_table: table::TableState,
     /// Proxy HTTP history filter bar (B-01).
@@ -513,6 +515,21 @@ fn autosave_signature(app: &App) -> (usize, usize, usize) {
     )
 }
 
+impl App {
+    /// Same scheduled save path, with time supplied for deterministic tests.
+    fn autosave_if_due(&mut self, now: std::time::Instant) -> bool {
+        if now.saturating_duration_since(self.autosave_at) < std::time::Duration::from_secs(60) { return false; }
+        self.autosave_at = now;
+        let sig = autosave_signature(self);
+        let groups = repeater_group_autosave::capture(self);
+        if sig == self.autosave_sig && groups == self.autosave_groups { return false; }
+        self.autosave_sig = sig;
+        self.autosave_groups = groups;
+        tools::autosave_project(self);
+        true
+    }
+}
+
 impl eframe::App for App {
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw_input: &mut egui::RawInput) {
         self.mcp.inject(ctx, raw_input);
@@ -539,13 +556,8 @@ impl eframe::App for App {
         }
         theme::apply_current(ctx);
         // Autosave once a minute when the project changed.
-        if autosave_enabled() && self.autosave_at.elapsed() >= std::time::Duration::from_secs(60) {
-            self.autosave_at = std::time::Instant::now();
-            let sig = autosave_signature(self);
-            if sig != self.autosave_sig {
-                self.autosave_sig = sig;
-                tools::autosave_project(self);
-            }
+        if autosave_enabled() {
+            self.autosave_if_due(std::time::Instant::now());
         }
         tools::drain_save_results(self);
         tools::drain_tool_sends(self);
@@ -940,6 +952,7 @@ impl App {
             chooser: project_start::Chooser::default(),
             autosave_at: std::time::Instant::now(),
             autosave_sig: (0, 0, 0),
+            autosave_groups: repeater_group_autosave::Snapshot::default(),
             collab_state: collaborator::CollaboratorState::new(),
             macro_name: "Macro 1".to_string(),
             // Empty: a prefilled example host would get real traffic from Test macro.
@@ -1241,6 +1254,7 @@ fn main() {
     if autosave_enabled() && recovery::startup(&mut app) {
         tools::restore_project(&mut app, true);
         app.autosave_sig = autosave_signature(&app);
+        app.autosave_groups = repeater_group_autosave::capture(&app);
     }
     // Burp opens on its project chooser. Not when a recovery prompt is
     // already up, nor in scripted runs (no autosave, a fixed tab, or
