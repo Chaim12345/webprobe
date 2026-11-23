@@ -64,11 +64,7 @@ pub fn start_active_scan(
     // batch (task, crawl) it belongs to.
     if !shared.stored.in_batch() {
         shared.stored.clear();
-        crate::scan::scan_dedup_of(&shared)
-            .dom_hits
-            .lock()
-            .unwrap()
-            .clear();
+        crate::scan::scan_dedup_of(&shared).reset_dom();
     }
     let item = shared.stored.add_item(crate::stored::Item {
         entry: entry.clone(),
@@ -272,11 +268,7 @@ impl StoredBatch {
     pub fn open(shared: &Arc<Shared>) -> StoredBatch {
         let opened = shared.stored.open_batch();
         if opened {
-            crate::scan::scan_dedup_of(shared)
-                .dom_hits
-                .lock()
-                .unwrap()
-                .clear();
+            crate::scan::scan_dedup_of(shared).reset_dom();
         }
         StoredBatch {
             shared: shared.clone(),

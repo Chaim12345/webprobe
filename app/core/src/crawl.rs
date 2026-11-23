@@ -464,6 +464,15 @@ struct Cdp {
     dom_route: Option<DomRoute>,
 }
 
+/// Same-origin GET/HEAD requests one DOM probe may forward through the
+/// scanner transport; over budget fails closed.
+pub const DOM_MAX_REQUESTS_PER_PROBE: usize = 64;
+/// Response body bytes one DOM probe delivers to Chromium. Larger bodies
+/// are truncated: the page still runs, the CDP exchange stays bounded.
+pub const DOM_MAX_FULFILL_BODY: usize = 4 * 1024 * 1024;
+/// Total response header bytes one DOM probe delivers to Chromium.
+pub const DOM_MAX_FULFILL_HEADERS: usize = 32 * 1024;
+
 /// DOM requests never leave through Chromium's own HTTP stack. Fetch
 /// interception sends same-origin GET/HEAD through the scanner transport.
 struct DomRoute {
@@ -489,7 +498,7 @@ impl DomRoute {
         let url = req["url"].as_str().unwrap_or("");
         let method = req["method"].as_str().unwrap_or("");
         if self.shared.scan.stop.load(Ordering::SeqCst)
-            || self.sent >= 64
+            || self.sent >= DOM_MAX_REQUESTS_PER_PROBE
             || !same_origin(url, &self.origin)
             || !matches!(method, "GET" | "HEAD")
         {
@@ -557,21 +566,28 @@ impl DomRoute {
             .nth(1)
             .and_then(|x| x.parse::<u16>().ok())
             .unwrap_or(502);
-        let mut headers: Vec<_> = parsed
-            .headers
-            .iter()
-            .filter(|(k, _)| {
-                !["connection", "transfer-encoding", "content-length"]
-                    .contains(&k.to_ascii_lowercase().as_str())
-            })
-            .map(|(k, v)| serde_json::json!({"name":k,"value":v}))
-            .collect();
+        let mut headers: Vec<_> = Vec::new();
+        let mut header_bytes = 0usize;
+        for (k, v) in &parsed.headers {
+            if ["connection", "transfer-encoding", "content-length"]
+                .contains(&k.to_ascii_lowercase().as_str())
+            {
+                continue;
+            }
+            header_bytes += k.len() + v.len();
+            if header_bytes > DOM_MAX_FULFILL_HEADERS {
+                break;
+            }
+            headers.push(serde_json::json!({"name":k,"value":v}));
+        }
         // Disallow new workers and off-origin subdocuments/connections,
         // which would otherwise create uninstrumented targets.
         headers.push(serde_json::json!({"name":"Content-Security-Policy", "value":"worker-src 'none'; frame-src 'self'; connect-src 'self'"}));
         use base64::Engine;
+        let body_start = parsed.head_len.min(response.len());
+        let body_len = (response.len() - body_start).min(DOM_MAX_FULFILL_BODY);
         let body = base64::engine::general_purpose::STANDARD
-            .encode(&response[parsed.head_len.min(response.len())..]);
+            .encode(&response[body_start..body_start + body_len]);
         (
             "Fetch.fulfillRequest",
             serde_json::json!({"requestId":id,"responseCode":status,"responseHeaders":headers,"body":body}),
@@ -1865,7 +1881,7 @@ pub use webprobe_support::dedup::DomHit;
 /// (document.write, document.writeln, the innerHTML setter) and records
 /// every call whose argument carries the canary. `%CANARY%` is replaced
 /// by the probe's token.
-const DOM_INSTRUMENT_JS: &str = r#"
+pub(crate) const DOM_INSTRUMENT_JS: &str = r#"
 (function () {
   if (window.__wpDomAnalysis) return;
   window.__wpDomAnalysis = true;
@@ -1875,27 +1891,35 @@ const DOM_INSTRUMENT_JS: &str = r#"
     try {
       var s = String(value);
       if (s.indexOf(CANARY) >= 0 && window.__wpDomHits.length < 50) {
-        window.__wpDomHits.push({ source: "location.hash", sink: sink, sourceValue: String(location.hash), sinkValue: s.slice(0, 300), pageUrl: String(location.href) });
+        // Evidence caps: values and the page URL are bounded so a hostile
+        // page cannot grow a run's stored hits without limit.
+        window.__wpDomHits.push({ source: "location.hash", sink: sink, sourceValue: String(location.hash).slice(0, 300), sinkValue: s.slice(0, 300), pageUrl: String(location.href).slice(0, 500) });
       }
     } catch (e) {}
   }
-  ["write", "writeln"].forEach(function (name) {
-    var orig = document[name];
-    if (typeof orig === "function") {
-      document[name] = function (v) { record("document." + name, v); return orig.apply(document, arguments); };
-    }
-  });
-  ["innerHTML", "outerHTML"].forEach(function (prop) {
+  // Sink names are literals on purpose: a unit test pins this set against
+  // the Rust family tables so the two cannot drift apart.
+  if (typeof document.write === "function") {
+    var origWrite = document.write;
+    document.write = function (v) { record("document.write", v); return origWrite.apply(document, arguments); };
+  }
+  if (typeof document.writeln === "function") {
+    var origWriteln = document.writeln;
+    document.writeln = function (v) { record("document.writeln", v); return origWriteln.apply(document, arguments); };
+  }
+  function wrapHtmlProp(prop, recordFn) {
     var desc = Object.getOwnPropertyDescriptor(Element.prototype, prop);
     if (desc && desc.set) {
       Object.defineProperty(Element.prototype, prop, {
         configurable: true,
         enumerable: desc.enumerable,
         get: desc.get,
-        set: function (v) { record("element." + prop, v); return desc.set.call(this, v); }
+        set: function (v) { recordFn(v); return desc.set.call(this, v); }
       });
     }
-  });
+  }
+  wrapHtmlProp("innerHTML", function (v) { record("element.innerHTML", v); });
+  wrapHtmlProp("outerHTML", function (v) { record("element.outerHTML", v); });
   if (Element.prototype.insertAdjacentHTML) {
     var origIah = Element.prototype.insertAdjacentHTML;
     Element.prototype.insertAdjacentHTML = function (pos, html) { record("element.insertAdjacentHTML", html); return origIah.apply(this, arguments); };
@@ -1925,15 +1949,20 @@ const DOM_INSTRUMENT_JS: &str = r#"
       }
     });
   }
-  ["setTimeout", "setInterval"].forEach(function (name) {
-    var orig = window[name];
-    if (typeof orig === "function") {
-      window[name] = function (h, t) {
-        if (typeof h === "string") { record(name, h); return orig.call(window, h, t); }
-        return orig.apply(window, arguments);
-      };
-    }
-  });
+  if (typeof window.setTimeout === "function") {
+    var origSetTimeout = window.setTimeout;
+    window.setTimeout = function (h, t) {
+      if (typeof h === "string") { record("setTimeout", h); return origSetTimeout.call(window, h, t); }
+      return origSetTimeout.apply(window, arguments);
+    };
+  }
+  if (typeof window.setInterval === "function") {
+    var origSetInterval = window.setInterval;
+    window.setInterval = function (h, t) {
+      if (typeof h === "string") { record("setInterval", h); return origSetInterval.call(window, h, t); }
+      return origSetInterval.apply(window, arguments);
+    };
+  }
   // Navigation sinks that can be wrapped (location.href and friends are
   // non-configurable; javascript: URLs and execScript are not covered).
   // Navigation sinks: of burp.Zcwh's open-redirection family only
@@ -1957,9 +1986,16 @@ const DOM_INSTRUMENT_JS: &str = r#"
   if (typeof Storage !== "undefined" && Storage.prototype.setItem) {
     var origSetItem = Storage.prototype.setItem;
     Storage.prototype.setItem = function (k, v) {
-      var area = this === window.localStorage ? "localStorage" : this === window.sessionStorage ? "sessionStorage" : "storage";
-      record(area + ".setItem.name", k);
-      record(area + ".setItem.value", v);
+      if (this === window.localStorage) {
+        record("localStorage.setItem.name", k);
+        record("localStorage.setItem.value", v);
+      } else if (this === window.sessionStorage) {
+        record("sessionStorage.setItem.name", k);
+        record("sessionStorage.setItem.value", v);
+      } else {
+        record("storage.setItem.name", k);
+        record("storage.setItem.value", v);
+      }
       return origSetItem.apply(this, arguments);
     };
   }
@@ -2008,6 +2044,16 @@ pub fn dom_analysis_probe(
     port: u16,
     https: bool,
 ) -> Result<Vec<DomHit>, String> {
+    // Run budget first: over-budget probes fail closed without spawning
+    // a browser, and concurrent callers wait for a browser slot.
+    let budget = &crate::scan::scan_dedup_of(shared).dom_budget;
+    if !budget.spend_probe() {
+        return Err("DOM run probe budget spent".to_string());
+    }
+    let stop = shared.clone();
+    let _permit = budget
+        .acquire_browser(&move || stop.scan.stop.load(Ordering::SeqCst))
+        .ok_or("scan stopped while waiting for a DOM browser slot")?;
     let bin = crate::paths::chromium()
         .map_err(|m| m.to_string())?
         .display()
@@ -2025,6 +2071,17 @@ pub fn dom_analysis_probe(
         .map_err(|e| e.to_string())?
         .port();
     let profile = std::env::temp_dir().join(format!("webprobe-dom-{}-{dport}", std::process::id()));
+    // Egress blockade: every Chromium network stack connection must
+    // cross a loopback port nothing listens on. Fetch interception
+    // answers real page requests through the scanner transport, so the
+    // proxy is only ever reached by traffic that bypasses interception
+    // (speculative preconnect/prefetch, background services): it has no
+    // route out. DNS is likewise confined to the target host.
+    let dead_proxy = std::net::TcpListener::bind("127.0.0.1:0")
+        .map_err(|e| e.to_string())?
+        .local_addr()
+        .map_err(|e| e.to_string())?
+        .port();
     let mut cmd = std::process::Command::new(&bin);
     crate::util::own_process_group(&mut cmd);
     let mut child = cmd
@@ -2042,9 +2099,12 @@ pub fn dom_analysis_probe(
             "--disable-extensions",
             "--disable-domain-reliability",
             "--disable-client-side-phishing-detection",
+            "--dns-prefetch-disable",
+            "--no-pings",
             "--disable-features=Translate,OptimizationHints,MediaRouter,AutofillServerCommunication,CertificateTransparencyComponentUpdater,SafeBrowsing",
             "--metrics-recording-only",
             "--ignore-certificate-errors",
+            &format!("--proxy-server=http://127.0.0.1:{dead_proxy}"),
             &format!("--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE {target_host}"),
             &format!("--remote-debugging-port={dport}"),
             &format!("--user-data-dir={}", profile.display()),
@@ -2151,7 +2211,7 @@ mod dom_route_tests {
             assert_eq!(route.reply(&event).0, "Fetch.failRequest");
         }
         assert_eq!(route.sent, 0);
-        route.sent = 64;
+        route.sent = DOM_MAX_REQUESTS_PER_PROBE;
         let event = serde_json::json!({"requestId":"budget","request":{"url":"http://127.0.0.1:1/","method":"GET","headers":{}}});
         assert_eq!(route.reply(&event).0, "Fetch.failRequest");
     }
