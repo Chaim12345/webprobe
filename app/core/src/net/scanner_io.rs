@@ -3,6 +3,9 @@
 //! delivered bytes or ciphertext/IP traffic. Each <=4096-byte read/write is
 //! reserved irreversibly, including short I/O, errors and EOF. This can consume
 //! capacity faster than actual bytes, especially on trickle/short-read traffic.
+//! The per-response 64MiB cap counts raw headers plus body. At exact cap an
+//! UntilEOF response stays Incomplete, even if its peer closed: no further read
+//! is admitted just to establish EOF. This is a conservative capacity outcome.
 use super::*;
 use crate::scan_budget::Resource;
 use crate::scan_lifecycle::{BudgetedExecution, ExecutionContext};
@@ -389,7 +392,7 @@ impl RawParser {
                 }
             }
             if encoding {
-                return Err("compressed response unsupported before body growth".into());
+                return Err("compressed response unsupported after bounded head read".into());
             }
             if !lengths.is_empty() && !transfers.is_empty() {
                 return Err("TE plus CL".into());
@@ -411,7 +414,7 @@ impl RawParser {
             {
                 return Err("unsupported TE chain".into());
             }
-            if code == 204 && (length.is_some_and(|n| n != 0) || !transfers.is_empty()) {
+            if code == 204 && (!lengths.is_empty() || !transfers.is_empty()) {
                 return Err("204 illegal framing".into());
             }
             self.kind = Some(
@@ -914,6 +917,7 @@ mod tests {
         let shared = Shared::new();
         let other = Shared::new();
         let mut mismatch = None;
+        let mut nested_result = None;
         let result = finish(&shared, limits(), |first| {
             let other_result = finish(&other, limits(), |_| {
                 let denied = exact(&shared, first).is_err();
@@ -928,10 +932,11 @@ mod tests {
                 mismatch = Some((denied, out.status));
                 Finish::Complete
             });
-            assert_eq!(other_result, Finish::Complete);
+            nested_result = Some(other_result);
             Finish::Complete
         });
         assert_eq!(result, Finish::Incomplete);
+        assert_eq!(nested_result, Some(Finish::Complete));
         assert_eq!(mismatch, Some((true, ExchangeStatus::Incomplete)));
         let shared = Shared::new();
         let (port, t) = server(
@@ -961,6 +966,11 @@ mod tests {
     #[test]
     fn budgeted_h1_all_framing_validated_before_bodyless_wire_controls() {
         for (raw, method, complete) in [
+            (
+                b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n".as_slice(),
+                "GET",
+                false,
+            ),
             (
                 b"HTTP/1.1 204 No Content\r\nContent-Length: 1\r\n\r\n".as_slice(),
                 "GET",
