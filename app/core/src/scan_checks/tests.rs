@@ -1919,3 +1919,68 @@ fn actual_pair_partial_method_post_qualifies_head_does_not() {
         assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 1);
     }
 }
+
+#[test]
+fn required_limits_actual_engine_preserves_enabled_host_registry_finding() {
+    use crate::scan_lifecycle::{Finish, Handoff};
+    let wire = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let seen = wire.clone();
+    let port = lab_serve(
+        std::net::TcpListener::bind("127.0.0.1:0").unwrap(),
+        move |_, path, _| {
+            seen.fetch_add(1, Ordering::SeqCst);
+            let body = if path == "/robots.txt" {
+                "User-agent: *\nDisallow: /admin"
+            } else {
+                "ok"
+            };
+            format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len())
+        },
+    );
+    let shared = crate::net::Shared::new();
+    {
+        let config_slot = crate::scan_config::shared_config(&shared);
+        let mut cfg = config_slot.lock().unwrap();
+        for (id, ..) in crate::scan::check_catalogue() {
+            if id != "active.robots-txt" {
+                cfg.disabled_checks.insert(id.into());
+            }
+        }
+    }
+    let limits = crate::scan_budget::Limits {
+        duration: std::time::Duration::from_secs(5),
+        http_attempts: 100,
+        connection_attempts: 100,
+        outgoing: 65536,
+        response: 65536,
+        decompressed: 65536,
+        inputs: 65536,
+        evidence: 65536,
+        evidence_records: 100,
+        records: 100,
+    };
+    let engine = crate::scan::ExperimentalEngine::new(shared.clone(), limits).unwrap();
+    let entry = crate::net::HistEntry {
+        method: "GET".into(),
+        host: "127.0.0.1".into(),
+        port,
+        path: "/base".into(),
+        req_raw: format!("GET /base HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n")
+            .into_bytes()
+            .into(),
+        ..Default::default()
+    };
+    let accepted = engine.audit(entry).unwrap();
+    assert_eq!(accepted.completion, Finish::Complete);
+    let Handoff::Finalize(f) = accepted.handoff.unwrap() else {
+        panic!("standalone finalizer")
+    };
+    assert_eq!(
+        f.run(|p| run_stored_stage_budgeted(&shared, p, 10, 8192)),
+        Finish::Complete
+    );
+    assert_eq!(wire.load(Ordering::SeqCst), 2);
+    let issues = shared.issues.lock().unwrap();
+    assert_eq!(issues.len(), 1);
+    assert_eq!(issues[0].name, "Robots.txt file");
+}
