@@ -218,6 +218,14 @@ impl ExperimentalEngine {
         &self,
         entry: HistEntry,
     ) -> Result<AcceptedAudit, crate::scan_lifecycle::AdmissionError> {
+        self.audit_after_admission(entry, || {})
+    }
+    /// Deterministic fixture barrier, not a production callback hook.
+    pub(crate) fn audit_after_admission(
+        &self,
+        entry: HistEntry,
+        admitted: impl FnOnce(),
+    ) -> Result<AcceptedAudit, crate::scan_lifecycle::AdmissionError> {
         use crate::scan_lifecycle::{AdmissionError, ExecutionContext};
         let shared = &self.shared;
         let parts = util::parse_http(&entry.req_raw);
@@ -233,10 +241,21 @@ impl ExperimentalEngine {
             port,
             https: entry.https,
         })?;
+        admitted();
         // Admission succeeds before changing the accepted run's UI flags.
         shared.scan.done.store(0, Ordering::SeqCst);
         let context = ExecutionContext::Legacy(legacy.clone());
-        let _expected = net::scanner_io::ExpectedScanner.install();
+        let _expected = match net::scanner_io::ExpectedScanner.install() {
+            Ok(v) => v,
+            Err(_) => {
+                a.mark_incomplete();
+                return Ok(AcceptedAudit {
+                    completion: crate::scan_lifecycle::Finish::Incomplete,
+                    error: Some(AdmissionError::Internal),
+                    handoff: a.complete(),
+                });
+            }
+        };
         let installed = match context.enter(shared) {
             Ok(i) => i,
             Err(_) => {

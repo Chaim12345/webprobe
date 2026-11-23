@@ -1759,3 +1759,63 @@ fn actual_engine_accepted_baseline_and_install_failures_carry_incomplete_handoff
         ));
     }
 }
+
+#[test]
+fn actual_engine_cancel_after_registration_cannot_reset_owner_or_start_baseline() {
+    use crate::scan_lifecycle::{Finish, Handoff};
+    let shared = crate::net::Shared::new();
+    let limits = crate::scan_budget::Limits {
+        duration: std::time::Duration::from_secs(1),
+        http_attempts: 10,
+        connection_attempts: 10,
+        outgoing: 65536,
+        response: 65536,
+        decompressed: 65536,
+        inputs: 65536,
+        evidence: 65536,
+        evidence_records: 10,
+        records: 10,
+    };
+    let engine = Arc::new(crate::scan::ExperimentalEngine::new(shared.clone(), limits).unwrap());
+    let b = engine.open().unwrap();
+    let cancel = b.cancel_handle();
+    let (admitted_tx, admitted_rx) = std::sync::mpsc::sync_channel(1);
+    let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
+    let (done_tx, done_rx) = std::sync::mpsc::sync_channel(1);
+    let runner = engine.clone();
+    let worker = std::thread::spawn(move || {
+        let e = crate::net::HistEntry {
+            port: 9,
+            req_raw: b"GET / HTTP/1.1\r\nHost: 127.0.0.1:9\r\n\r\n"
+                .to_vec()
+                .into(),
+            ..Default::default()
+        };
+        let result = runner.audit_after_admission(e, || {
+            admitted_tx.send(()).unwrap();
+            release_rx
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .unwrap();
+        });
+        done_tx.send(result).unwrap();
+    });
+    admitted_rx
+        .recv_timeout(std::time::Duration::from_secs(2))
+        .unwrap();
+    cancel.cancel();
+    shared.scan.stop.store(true, Ordering::SeqCst);
+    release_tx.send(()).unwrap();
+    let result = done_rx
+        .recv_timeout(std::time::Duration::from_secs(2))
+        .unwrap()
+        .unwrap();
+    worker.join().unwrap();
+    assert_eq!(result.completion, Finish::Incomplete);
+    assert!(matches!(result.handoff, Ok(Handoff::Joined)));
+    assert!(shared.scan.stop.load(Ordering::SeqCst));
+    assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 0);
+    let Handoff::Finalize(f) = b.finish().unwrap() else {
+        panic!("finalizer")
+    };
+    assert_eq!(f.run(|_| Finish::Complete), Finish::Incomplete);
+}

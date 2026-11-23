@@ -88,6 +88,8 @@ pub(crate) struct PairCtx {
     g11_hit: std::cell::Cell<bool>,
     #[cfg(test)]
     incomplete: std::cell::Cell<bool>,
+    #[cfg(test)]
+    partial: std::cell::Cell<bool>,
 }
 
 impl PairCtx {
@@ -98,6 +100,8 @@ impl PairCtx {
             g11_hit: std::cell::Cell::new(false),
             #[cfg(test)]
             incomplete: std::cell::Cell::new(false),
+            #[cfg(test)]
+            partial: std::cell::Cell::new(false),
         }
     }
 
@@ -161,14 +165,20 @@ impl PairCtx {
                         // prefix may reach positive-only stored detectors. No
                         // redirect or completed-negative claim follows partial.
                         let raw = outcome.response;
-                        let qualified = host_response::assess(&raw, "GET")
+                        let method = req.split_whitespace().next().unwrap_or("");
+                        let headers =
+                            util::find_head_end(&raw).map(|end| util::parse_http(&raw[..end]));
+                        let qualified = host_response::assess(&raw, method)
                             .is_some_and(|a| a.status >= 200 && !a.body.is_empty())
-                            && !raw
-                                .windows(18)
-                                .any(|w| w.eq_ignore_ascii_case(b"Transfer-Encoding:"))
+                            && headers.is_some_and(|h| {
+                                !h.headers
+                                    .iter()
+                                    .any(|(name, _)| name.eq_ignore_ascii_case("Transfer-Encoding"))
+                            })
                             && !raw.starts_with(b"HTTP/1.1 1")
                             && !raw.starts_with(b"HTTP/1.0 1");
                         if qualified {
+                            self.partial.set(true);
                             Some(raw)
                         } else {
                             None
@@ -248,6 +258,13 @@ impl PairCtx {
             let cfg_slot = crate::scan_config::shared_config(&self.shared);
             let config = cfg_slot.lock().unwrap();
             issues.retain(|i| config.issue_allowed(&i.name, true));
+        }
+        #[cfg(test)]
+        if self.partial.get() {
+            for issue in &mut issues {
+                issue.detail.push_str("<p>Incomplete exchange: this finding uses only the received prefix of a strictly validated final identity response. The full response was not received or assessed; no complete-negative result is implied.</p>");
+                issue.confidence = "Tentative".into();
+            }
         }
         #[cfg(test)]
         if let Some(crate::scan_lifecycle::ExecutionContext::Budgeted(p)) =
