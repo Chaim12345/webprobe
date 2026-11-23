@@ -36,6 +36,7 @@ impl Resource {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Denied {
     InvalidLimits,
+    InvalidReservation,
     Expired,
     Exhausted(Resource),
 }
@@ -80,6 +81,14 @@ impl Ledger {
     /// cannot partially spend its multi-resource reservation. Already exposed
     /// bytes/attempts have no refund API. Cancellation is supplied by the owner.
     pub fn reserve(&self, charges: &[(Resource, u64)]) -> Result<(), Denied> {
+        // Retained evidence has one coupled writer. Generic I/O reservations
+        // cannot bypass its bytes-plus-record accounting.
+        if charges
+            .iter()
+            .any(|(r, _)| matches!(r, Resource::Evidence | Resource::EvidenceRecord))
+        {
+            return Err(Denied::InvalidReservation);
+        }
         let mut state = self.state.lock().unwrap();
         if let Some(reason) = state.denied {
             return Err(reason);
@@ -248,6 +257,22 @@ mod tests {
         assert_eq!(l.used(Resource::Evidence), 0);
         assert_eq!(l.remaining(Duration::ZERO), Err(Denied::InvalidLimits));
         assert!(l.reserve(&[(Resource::HttpAttempt, 1)]).is_ok());
+    }
+    #[test]
+    fn evidence_cannot_bypass_coupled_retention_via_generic_reservation() {
+        let l = Ledger::new(limits()).unwrap();
+        for r in [Resource::Evidence, Resource::EvidenceRecord] {
+            assert_eq!(
+                l.reserve(&[(Resource::HttpAttempt, 1), (r, 5)]),
+                Err(Denied::InvalidReservation)
+            );
+        }
+        assert_eq!(l.used(Resource::HttpAttempt), 0);
+        assert_eq!(l.used(Resource::Evidence), 0);
+        assert_eq!(l.used(Resource::EvidenceRecord), 0);
+        l.retain_proven(3).unwrap();
+        assert_eq!(l.used(Resource::Evidence), 3);
+        assert_eq!(l.used(Resource::EvidenceRecord), 1);
     }
     #[test]
     fn all_resource_domains_are_independent_and_finite() {
