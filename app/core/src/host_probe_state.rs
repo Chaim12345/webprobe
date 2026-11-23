@@ -149,7 +149,7 @@ pub(crate) fn open_batch(shared: &Arc<Shared>, fresh_crawl: bool) -> BatchOwner 
     } else {
         if fresh_crawl {
             *shared.scan_state.lock().unwrap() = Arc::new(ScanDedup::default());
-            admission.session = Arc::new(SessionClaims::default());
+            // Completed session claims survive new crawls. Only run attempts reset.
         }
         AttemptScope::new(
             crate::scan::scan_dedup_of(shared),
@@ -294,6 +294,23 @@ mod more_tests {
             .unwrap()
             .iter()
             .any(|e| e.contains("incomplete/deferred")));
+    }
+    #[test]
+    fn completed_session_claim_survives_a_later_fresh_crawl() {
+        let shared = Shared::new();
+        let (owner, scope) = admit(&shared).unwrap();
+        match scope.acquire("completed".into()) {
+            Acquire::Acquired(c) => c.complete(),
+            _ => panic!(),
+        }
+        drop(owner);
+        drop(scope);
+        let crawl = open_batch(&shared, true);
+        assert!(matches!(
+            crawl.scope.acquire("completed".into()),
+            Acquire::Complete
+        ));
+        close_batch(&shared, &crawl);
     }
     #[test]
     fn lease_overflow_pins_scope_instead_of_reopening() {

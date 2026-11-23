@@ -59,6 +59,57 @@ fn head_status(head: &[u8]) -> Option<u16> {
     }
     std::str::from_utf8(&status[9..12]).ok()?.parse().ok()
 }
+// Validate the chunk extension grammar before treating payload as decoded.
+fn chunk_extensions(mut bytes: &[u8]) -> bool {
+    while !bytes.is_empty() {
+        bytes = bytes.trim_ascii_start();
+        if bytes.first() != Some(&b';') {
+            return false;
+        }
+        bytes = bytes[1..].trim_ascii_start();
+        let n = bytes.iter().take_while(|b| token(**b)).count();
+        if n == 0 {
+            return false;
+        }
+        bytes = bytes[n..].trim_ascii_start();
+        if bytes.first() == Some(&b'=') {
+            bytes = bytes[1..].trim_ascii_start();
+            if bytes.first() == Some(&b'"') {
+                bytes = &bytes[1..];
+                let mut end = None;
+                let mut i = 0;
+                while i < bytes.len() {
+                    match bytes[i] {
+                        b'"' => {
+                            end = Some(i + 1);
+                            break;
+                        }
+                        b'\\' => {
+                            i += 1;
+                            if i >= bytes.len()
+                                || !(bytes[i] == b'\t' || bytes[i] >= 32 && bytes[i] != 127)
+                            {
+                                return false;
+                            }
+                        }
+                        b if b == b'\t' || b >= 32 && b != 127 => {}
+                        _ => return false,
+                    }
+                    i += 1;
+                }
+                let Some(end) = end else { return false };
+                bytes = &bytes[end..];
+            } else {
+                let n = bytes.iter().take_while(|b| token(**b)).count();
+                if n == 0 {
+                    return false;
+                }
+                bytes = &bytes[n..];
+            }
+        }
+    }
+    true
+}
 // Reject tolerant LF chunk framing before reusing the shared decoder.
 // Partial framing is allowed only as incomplete evidence, never complete.
 fn strict_chunk_prefix(body: &[u8]) -> (usize, bool) {
@@ -90,7 +141,11 @@ fn strict_chunk_prefix(body: &[u8]) -> (usize, bool) {
             }
             continue;
         }
-        let size = line.split(|b| *b == b';').next().unwrap_or_default();
+        let split = line.iter().position(|b| *b == b';').unwrap_or(line.len());
+        let size = &line[..split];
+        if !chunk_extensions(&line[split..]) {
+            return (safe, false);
+        }
         if size.is_empty() || size.len() > 16 || !size.iter().all(u8::is_ascii_hexdigit) {
             return (safe, false);
         }
@@ -170,6 +225,15 @@ pub(super) fn assess<'a>(raw: &'a [u8], method: &str) -> Option<Assessed<'a>> {
         let head = &bytes[..end];
         let status = head_status(head)?;
         if !supported_framing(head) {
+            return None;
+        }
+        let parsed_head = crate::util::parse_http(head);
+        if ((100..200).contains(&status) || status == 204)
+            && parsed_head.headers.iter().any(|(name, _)| {
+                name.eq_ignore_ascii_case("Content-Length")
+                    || name.eq_ignore_ascii_case("Transfer-Encoding")
+            })
+        {
             return None;
         }
         let kind = codec::response_body_kind_strict(head, method).ok()?;
@@ -283,6 +347,19 @@ mod hostile_tests {
         let malformed_tail=assess(b"HTTP/1.1 500 Error\r\nTransfer-Encoding: chunked\r\n\r\nf\r\nE{\"digest\":\"x\"}\r\nnope\r\n", "POST").unwrap();
         assert!(!malformed_tail.complete);
         assert_eq!(&*malformed_tail.body, b"E{\"digest\":\"x\"}");
+        for raw in [
+            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n1;=\r\nx\r\n0\r\n\r\n".as_slice(),
+            b"HTTP/1.1 100 Continue\r\nContent-Length: 0\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n",
+            b"HTTP/1.1 204 No Content\r\nContent-Length: 1\r\n\r\n",
+        ] { assert!(assess(raw,"GET").is_none()); }
+        assert!(
+            assess(
+                b"HTTP/1.1 304 Not Modified\r\nContent-Length: 999\r\n\r\n",
+                "GET"
+            )
+            .unwrap()
+            .complete
+        );
         let too_many = [
             b"HTTP/1.1 100 Continue\r\n\r\n".repeat(9),
             b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".to_vec(),

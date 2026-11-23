@@ -1190,73 +1190,77 @@ fn host_probe_incomplete_wire_attempts_wait_for_a_new_explicit_scan() {
         atomic::{AtomicUsize, Ordering},
         Arc,
     };
-    for (wire, complete) in [
-        ("", false),
-        ("HTTP/1.1 200 OK\r\nContent-Leng", false),
-        ("HTTP/1.1 100 Continue\r\n\r\n", false),
-        ("HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\nno", false),
-        ("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nno", true),
-    ] {
-        let attempts = Arc::new(AtomicUsize::new(0));
-        let seen = attempts.clone();
-        let port = lab_serve(
-            std::net::TcpListener::bind("127.0.0.1:0").unwrap(),
-            move |_, path, _| {
-                if path == "/robots.txt" {
-                    seen.fetch_add(1, Ordering::SeqCst);
-                    wire.to_string()
-                } else {
-                    "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".into()
+    for check in ["active.robots-txt", "active.react2shell"] {
+        for (wire, complete) in [
+            ("", false),
+            ("HTTP/1.1 200 OK\r\nContent-Leng", false),
+            ("HTTP/1.1 100 Continue\r\n\r\n", false),
+            ("HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\nno", false),
+            ("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nno", true),
+        ] {
+            let attempts = Arc::new(AtomicUsize::new(0));
+            let seen = attempts.clone();
+            let port = lab_serve(
+                std::net::TcpListener::bind("127.0.0.1:0").unwrap(),
+                move |method, path, _| {
+                    if (check == "active.robots-txt" && path == "/robots.txt")
+                        || (check == "active.react2shell" && method == "POST")
+                    {
+                        seen.fetch_add(1, Ordering::SeqCst);
+                        wire.to_string()
+                    } else {
+                        "HTTP/1.1 200 OK\r\nContent-Type: text/x-component\r\nContent-Length: 0\r\n\r\n".into()
+                    }
+                },
+            );
+            let shared = crate::net::Shared::new();
+            let mut cfg = crate::scan_config::ScanConfig::default();
+            for (id, ..) in crate::scan::check_catalogue() {
+                if id != check {
+                    cfg.disabled_checks.insert(id.into());
                 }
-            },
-        );
-        let shared = crate::net::Shared::new();
-        let mut cfg = crate::scan_config::ScanConfig::default();
-        for (id, ..) in crate::scan::check_catalogue() {
-            if id != "active.robots-txt" {
-                cfg.disabled_checks.insert(id.into());
             }
-        }
-        *crate::scan_config::shared_config(&shared).lock().unwrap() = cfg;
-        let run = || {
-            let e = crate::net::HistEntry {
-                method: "GET".into(),
-                host: "127.0.0.1".into(),
-                port,
-                path: "/start".into(),
-                req_raw: format!("GET /start HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n")
-                    .into_bytes()
-                    .into(),
-                ..Default::default()
+            *crate::scan_config::shared_config(&shared).lock().unwrap() = cfg;
+            let run = || {
+                let e = crate::net::HistEntry {
+                    method: "GET".into(),
+                    host: "127.0.0.1".into(),
+                    port,
+                    path: "/start".into(),
+                    req_raw: format!("GET /start HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n")
+                        .into_bytes()
+                        .into(),
+                    ..Default::default()
+                };
+                crate::scan::start_active_scan(shared.clone(), e, &[], &[]);
+                assert!(shared
+                    .scan
+                    .wait_idle(Some(std::time::Duration::from_secs(10))));
             };
-            crate::scan::start_active_scan(shared.clone(), e, &[], &[]);
-            assert!(shared
-                .scan
-                .wait_idle(Some(std::time::Duration::from_secs(10))));
-        };
-        let batch = crate::scan::StoredBatch::open(&shared);
-        run();
-        run();
-        assert_eq!(
-            attempts.load(Ordering::SeqCst),
-            1,
-            "same batch must not resend {wire:?}"
-        );
-        drop(batch);
-        run();
-        assert_eq!(
-            attempts.load(Ordering::SeqCst),
-            if complete { 1 } else { 2 },
-            "next explicit run {wire:?}"
-        );
-        assert!(shared.issues.lock().unwrap().is_empty());
-        if !complete {
-            assert!(shared
-                .events
-                .lock()
-                .unwrap()
-                .iter()
-                .any(|e| e.contains("incomplete")));
+            let batch = crate::scan::StoredBatch::open(&shared);
+            run();
+            run();
+            assert_eq!(
+                attempts.load(Ordering::SeqCst),
+                1,
+                "same batch must not resend {wire:?}"
+            );
+            drop(batch);
+            run();
+            assert_eq!(
+                attempts.load(Ordering::SeqCst),
+                if complete { 1 } else { 2 },
+                "next explicit run {wire:?}"
+            );
+            assert!(shared.issues.lock().unwrap().is_empty());
+            if !complete {
+                assert!(shared
+                    .events
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .any(|e| e.contains("incomplete")));
+            }
         }
     }
 }
