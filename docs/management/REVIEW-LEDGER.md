@@ -1,6 +1,42 @@
 # Review and decision ledger
 
-## Current local-CI findings, Nov23 08:39
+## Accepted and landed, Nov23 09:41
+
+CTO09:38 accepted exact #155 head3384d3c4abf364b427d9e6c45e45fc0c05dea813 for parity-only landing. QA09:37 reports clean full suite19 targets1190/0; workflow-local jobs1-5 passed, JDK25 extras and EINTR fixture passed, complete manual Xvfb UI12/12. #125 landed986fead1ca88175a6283660c8160f4b0085008f6 then #155 landed final parityb18fa29893a21597f7f1ae69a140c1821d9bccb0. Triage reports readback tracked treec99a1f8eb1331e094ece18662735cf1d00ff4dbc identical to accepted3384d3c, no conflict/content changes; master untouched. Live API confirms both merged, parity and93 open PRs. Post-landing smoke is running, not yet complete at this snapshot.
+
+Keep the3384d3c first1001/1 Intruder concurrency-bound failure visible: standalone3/3 and clean1190/0 do not erase it. CTO requests a focused load/concurrency investigation, not another acceptance hold. JVM JAVA_HOME harness corrected5/5. Montoya count reconciled: literal selector3 on both heads; fourth sidecar passes within ext_host15, not removed. JDK21 Bambda13, Repeater33; JDK25 ext_host15/Bambda13/pipeline7 plus evidence-edit1 pass.
+
+Logger caveats remain: pre-reload rows retain metadata only and cannot Send to Repeater; extension-dropped requests are absent from Logger. No claim of complete Logger body persistence or drop-event coverage. Large-entry preview is bounded at1MiB with complete stored256MiB capture; manual final-head smoke responsive at~763.5MB. PM records attributed QA/CTO/triage evidence, not independent test execution or QA screenshot inspection.
+
+The live open count fell113 to93:20 PRs are now merged, not20 manual cleanup closures. Their current heads are ancestors of accepted parity; API merged states are recorded below. #148 remains open until post-landing smoke and whole-source reconciliation. Other routing holds persist, including scanner wiring, partialDOM, #139 accounting-only, #46 fresh migration/patchedhpack, and draft-only docs extraction. Batch landing alone never permits blanket closure.
+
+### API-confirmed merged inventory delta
+
+| PR | Merge SHA | Observed state |
+|---|---|---|
+| [#99](https://github.com/Chaim12345/webprobe/pull/99) | `acc2b81849709837bfb2c097acc61d047afe7af6` | merged, not manual supersession closure |
+| [#104](https://github.com/Chaim12345/webprobe/pull/104) | `64568244805911c2bcd23f51f778fd9e3f6e121e` | merged, not manual supersession closure |
+| [#107](https://github.com/Chaim12345/webprobe/pull/107) | `8ac8dda9e533f11d13e174e148d7691c04cc5f1c` | merged, not manual supersession closure |
+| [#109](https://github.com/Chaim12345/webprobe/pull/109) | `67dd39453cf4bf804bd526bf311d0c350380d04f` | merged, not manual supersession closure |
+| [#110](https://github.com/Chaim12345/webprobe/pull/110) | `3458bbfad61aa1cc6c43cee96a3d6e95c9ef12fc` | merged, not manual supersession closure |
+| [#111](https://github.com/Chaim12345/webprobe/pull/111) | `579dd4a7d8d27022f0898e6173076040eab0c19b` | merged, not manual supersession closure |
+| [#114](https://github.com/Chaim12345/webprobe/pull/114) | `90000b9537afa9dded345ee4cb8cacf75c80ab0b` | merged, not manual supersession closure |
+| [#115](https://github.com/Chaim12345/webprobe/pull/115) | `6d723d18e751be1318000b1b733e78d1a40e61fc` | merged, not manual supersession closure |
+| [#116](https://github.com/Chaim12345/webprobe/pull/116) | `f631fd00708fb772e854fd9c145686254b2f56e3` | merged, not manual supersession closure |
+| [#117](https://github.com/Chaim12345/webprobe/pull/117) | `311887106ec89dfc53029bd6d9767ad7bcbf4e3f` | merged, not manual supersession closure |
+| [#118](https://github.com/Chaim12345/webprobe/pull/118) | `645ecff0317802ca53f7604cbeeb9bfb37ef8ece` | merged, not manual supersession closure |
+| [#119](https://github.com/Chaim12345/webprobe/pull/119) | `2acf6e557caac04a67a2ecae24866ffa0a791bb0` | merged, not manual supersession closure |
+| [#120](https://github.com/Chaim12345/webprobe/pull/120) | `331d1e7466fabca3a9f7092fe52230dc44a99c58` | merged, not manual supersession closure |
+| [#121](https://github.com/Chaim12345/webprobe/pull/121) | `b3ddedbcd11c5039d29f836f11665db268aa93ab` | merged, not manual supersession closure |
+| [#122](https://github.com/Chaim12345/webprobe/pull/122) | `1ff04adf76795b76c857a743063b535c4ab86a74` | merged, not manual supersession closure |
+| [#124](https://github.com/Chaim12345/webprobe/pull/124) | `41e916c513516de9e81d58f29db018d5ca6b6be3` | merged, not manual supersession closure |
+| [#125](https://github.com/Chaim12345/webprobe/pull/125) | `986fead1ca88175a6283660c8160f4b0085008f6` | merged, not manual supersession closure |
+| [#127](https://github.com/Chaim12345/webprobe/pull/127) | `7189f84abd121c23f25d89ff1ea7aa5e7ed4d0af` | merged, not manual supersession closure |
+| [#128](https://github.com/Chaim12345/webprobe/pull/128) | `91613cb9be01eb800bf4b449689c724765231cc8` | merged, not manual supersession closure |
+| [#155](https://github.com/Chaim12345/webprobe/pull/155) | `b18fa29893a21597f7f1ae69a140c1821d9bccb0` | merged, not manual supersession closure |
+
+
+## Historical local-CI findings08:39, superseded by accepted landing
 
 Candidate3384d3c remains unchanged. QA08:17 workspace first run:1001 passed/1 failed, then aborted. probe_pool_bounds_concurrency_and_rows_drain failed its in-flight bound assertion at intruder_run.rs:2068. This is not the earlier EINTR failure; cause is unverified. Standalone and clean full-suite reruns are required before disposition. Job2 JVM gate failed because the runner omitted JAVA_HOME despite JDK21 on PATH; harness error is separate from product failure and requires corrected rerun. Final UI has not started.
 
@@ -9,7 +45,7 @@ QA08:27-08:38 reports core check/no-run/clippy green, Montoya selector3 executed
 Triage06:42 reports exact172 source0d2528e and landed paritycf28b6d local workspace1111/0/14 each, core check/no-run/clippy and JVM validator12/12 plus5 required contracts each. Rust1.100/JDK21 pinned jar checksum verified; prior JDK25 gates also passed. Hosted checkout/cache/apt actions were not reproduced as hosted actions. This closes source/parity local test-command work, not final3384d3c acceptance.
 
 
-## Current gate reset, Nov23 06:36
+## Historical gate reset06:36, superseded by accepted landing
 
 #172 is landed at parity `cf28b6d982d7837921de1c759b27caf12d24a102`. Exact fix head0d2528e was rechecked; triage06:28 reports recreated/remote tree equality and1111/0/14. The owner gave a standing instruction to land without hosted CI at06:27:32, then required local CI at06:27:37. Original authenticated WhatsApp messages recovered. This supersedes the earlier171-only limit, without waiving local verification, source approval or final combined-tree/UI acceptance. No billing changes.
 

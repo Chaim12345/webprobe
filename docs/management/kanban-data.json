@@ -1,128 +1,128 @@
 {
-  "as_of": "2026-11-23T08:39:00+02:00",
-  "open_pr_count": 113,
-  "parity": "cf28b6d982d7837921de1c759b27caf12d24a102",
+  "as_of": "2026-11-23T09:41:00+02:00",
+  "open_pr_count": 93,
+  "parity": "b18fa29893a21597f7f1ae69a140c1821d9bccb0",
   "candidate": "3384d3c4abf364b427d9e6c45e45fc0c05dea813",
   "work_items": [
     {
       "column": "verified",
-      "title": "Prior d405f33 code + UI",
+      "title": "Final QA3384d3c",
       "owner": "QA / release",
-      "gate": "Historical exact-head PASS",
-      "detail": "Clean1187/0 and full UI pass. Original1029/1 failure retained; no acceptance transfer.",
-      "next": "Use3384d3c new gates."
+      "gate": "Exact-head1190/0 +UI12/12",
+      "detail": "Workflow-local jobs1-5 and JDK25 extras/EINTR passed. Manual Xvfb.",
+      "next": "Preserve honest failed-run history."
     },
     {
       "column": "verified",
-      "title": "#172 fix landed",
-      "owner": "Triage / reviewer",
-      "gate": "Parity cf28b6d contains fix",
-      "detail": "Source0d2528e; standalone/merge1111/0/14 reported and tested/remote identity matched.",
-      "next": "Source/parity local CI complete06:42."
+      "title": "CTO acceptance09:38",
+      "owner": "CTO / reviewer",
+      "gate": "Accepted exact3384d3c",
+      "detail": "171/172 gates satisfied. No independent CTO rerun; relies on exact reviewer/QA.",
+      "next": "Post-landing smoke required."
     },
     {
       "column": "verified",
-      "title": "New source approvals",
-      "owner": "Reviewer",
-      "gate": "Code-read only06:31/06:33",
-      "detail": "1256f6f654 /1553384d3c: only codec.rs+155/-2,172 verbatim; evidence functions kept.",
-      "next": "Wait independent final execution."
+      "title": "Parity landing verified",
+      "owner": "Triage / PM",
+      "gate": "125 then155 landed",
+      "detail": "Parityb18fa29; accepted treec99a1f8 matched readback per triage. API confirms merged.",
+      "next": "Finish agreed smoke."
     },
     {
       "column": "active",
-      "title": "Full workflow jobs locally",
-      "owner": "QA / release",
-      "gate": "Running on3384d3c",
-      "detail": "Workspace1001/1 aborted: concurrency-bound assertion. Cause unverified. Fmt/clippy clean.",
-      "next": "Standalone + full suite reruns; finish extras."
+      "title": "Post-landing smoke",
+      "owner": "Triage",
+      "gate": "Running, not complete",
+      "detail": "Terminal-close, incomplete evidence, preview and Intruder baseline/no replay.",
+      "next": "Report exact landed-tree checks."
     },
     {
       "column": "active",
-      "title": "Final UI + evidence fixture",
-      "owner": "QA / release",
-      "gate": "Pending refreshed exact tree",
-      "detail": "172 changes read paths, not rendering. Old entire UI pass does not certify3384d3c.",
-      "next": "Run full UI incl large-entry and EINTR fixture."
+      "title": "Load/concurrency follow-up",
+      "owner": "QA / focused author",
+      "gate": "1001/1 first-run retained",
+      "detail": "Intruder bound failure; standalone3/3 and rerun1190/0 do not erase it.",
+      "next": "Investigate under load; no flake-free claim."
     },
     {
       "column": "active",
-      "title": "PM board + cleanup plan",
+      "title": "PM board + inventory",
       "owner": "PM / Git expert",
-      "gate": "113 open PRs mapped",
-      "detail": "Management only. No mass closure or evidence/source rewrite approved.",
-      "next": "Keep exact accounting current."
+      "gate": "93 open PRs mapped",
+      "detail": "20 API-confirmed merged, not20 manual cleanup closures. No blanket closes.",
+      "next": "Keep retained-source accounting current."
     },
     {
       "column": "review",
-      "title": "#125 / #155 source pins",
-      "owner": "Integration / reviewer",
-      "gate": "Refreshed, not landed",
-      "detail": "1256f6f654 +1553384d3c include171 and172; merges clean.",
-      "next": "Freeze pins for exact final gate."
+      "title": "#148 supersession proof",
+      "owner": "Triage / Git expert",
+      "gate": "Still open, conditional",
+      "detail": "CTO permits close only after landing verification and full retained-source proof.",
+      "next": "Wait smoke; compare all own+inherited code."
     },
     {
       "column": "review",
-      "title": "Hosted CI standing waiver",
-      "owner": "Owner / triage",
-      "gate": "Authenticated06:27 instruction",
-      "detail": "Land without hosted CI going forward; local CI requested immediately after.",
-      "next": "Retain local gates, no billing changes."
+      "title": "Logger limitations",
+      "owner": "QA / product",
+      "gate": "Not new acceptance blockers",
+      "detail": "Pre-reload rows metadata-only; extension drops absent from Logger.",
+      "next": "Track expectations, do not claim full coverage."
     },
     {
       "column": "review",
       "title": "Replacement slices",
       "owner": "Reviewer / triage",
-      "gate": "Scoped approval only",
+      "gate": "Scoped code approval only",
       "detail": "161,163-170 library/core-design/exposure caveats remain.",
-      "next": "Wait freeze and required proof."
-    },
-    {
-      "column": "blocked",
-      "title": "Final acceptance verdict",
-      "owner": "CTO / QA / triage",
-      "gate": "Not yet accepted",
-      "detail": "EINTR fix included; final exact-tree local jobs/UI must close the blocker.",
-      "next": "Review results, then tested/remote equality."
-    },
-    {
-      "column": "blocked",
-      "title": "Local CI fidelity gaps",
-      "owner": "QA / triage",
-      "gate": "Report non-reproducible portions",
-      "detail": "172 source/parity local commands passed1111/0/14 each; final JVM JAVA_HOME harness error.",
-      "next": "Correct JAVA_HOME/rerun; reconcile Montoya3 vs prior4."
+      "next": "Resume after freeze disposition."
     },
     {
       "column": "blocked",
       "title": "Whole-source closure proof",
       "owner": "CTO / triage",
-      "gate": "No close-now batch",
-      "detail": "Scanner wiring/partialDOM remain;139 accounting-only.",
-      "next": "Map own+inherited content to landed SHAs."
+      "gate": "No blanket close permission",
+      "detail": "Landing is not proof every source/remainder is retained.",
+      "next": "Map code/docs/regressions to landed SHAs."
+    },
+    {
+      "column": "blocked",
+      "title": "Scanner + partialDOM",
+      "owner": "CTO / focused authors",
+      "gate": "Missing scope remains",
+      "detail": "Library164/executor166 not scanner wiring; eightDOMfamilies not all coverage.",
+      "next": "Prove end-to-end and family/source/sink matrix."
+    },
+    {
+      "column": "blocked",
+      "title": "Public Actions repo scope",
+      "owner": "Parent / user",
+      "gate": "Separate request in progress",
+      "detail": "User clarified public GitHub repo to run Actions, not a testing report.",
+      "next": "No code/docs/license disclosure by PM."
     },
     {
       "column": "queued",
-      "title": "Carrier + remainder audit",
+      "title": "Carrier/remainder audit",
       "owner": "Triage / Git expert",
-      "gate": "After actual batch landing",
-      "detail": "99,109-111,114-120 and148; inspect carried docs/refactors before new slices.",
-      "next": "Build only proved missing remainder."
+      "gate": "After post-landing smoke",
+      "detail": "20 sources API-merged. Preserve non-code, refactors and inherited safety content.",
+      "next": "Build only proven missing remainder."
     },
     {
       "column": "queued",
       "title": "Docs + artifacts grouping",
       "owner": "Git expert / PM",
       "gate": "Draft only",
-      "detail": "Keep decisions, evidence and license limits; no extraction push.",
-      "next": "Prove retained content before closure."
+      "detail": "Keep decisions,evidence,license limits. No extraction push or history deletion.",
+      "next": "Prove retained content before cleanup."
     },
     {
       "column": "queued",
       "title": "Edition / MSRV migration",
       "owner": "CTO / author",
-      "gate": "Current-base work required",
-      "detail": "46 stays open until replacement landed. Preserve patched hpack.",
-      "next": "Fresh migration and current-tree review."
+      "gate": "Fresh current-base work",
+      "detail": "46 stays open until replacement landed. Preserve patchedhpack.",
+      "next": "Current-tree migration and review."
     }
   ],
   "pull_requests": [
@@ -943,18 +943,6 @@
       "evidence": "Git ancestry checked; prior triage results are source-head evidence, not final combined-tree acceptance; CTO18:34 routing/correction adopted18:35; full own-plus-inherited proof and fresh live state required before triage closure"
     },
     {
-      "number": 99,
-      "title": "R-20: Montoya response keyword analysis and regression coverage",
-      "url": "https://github.com/Chaim12345/webprobe/pull/99",
-      "head": "cc7407d579046da45c84b7f2beb69982b3b388e5",
-      "owner": "Integration + independent review",
-      "column": "blocked",
-      "gate": "Held pending complete proof / remainder",
-      "next": "After actual #125+#155 landing, map complete source to landed SHAs; keep any remainder open",
-      "blocker": "Batch freeze; carrier title/manifest is a lead, not complete equivalence proof",
-      "evidence": "Git ancestry checked; prior triage results are source-head evidence, not final combined-tree acceptance; CTO18:34 routing/correction adopted18:35; full own-plus-inherited proof and fresh live state required before triage closure"
-    },
-    {
       "number": 101,
       "title": "test: HTTP/2 framing and HTTP codec boundary coverage (+26)",
       "url": "https://github.com/Chaim12345/webprobe/pull/101",
@@ -964,18 +952,6 @@
       "gate": "Held pending complete proof / remainder",
       "next": "Recheck final landed batch before building codec/h2 boundary vectors; then require landed replacement proof",
       "blocker": "Earlier lane audit predates final batch; avoid duplicate work",
-      "evidence": "Git ancestry checked; prior triage results are source-head evidence, not final combined-tree acceptance; CTO18:34 routing/correction adopted18:35; full own-plus-inherited proof and fresh live state required before triage closure"
-    },
-    {
-      "number": 104,
-      "title": "R-18: tool-owned Comparer, Decoder and Sequencer UI state",
-      "url": "https://github.com/Chaim12345/webprobe/pull/104",
-      "head": "64568244805911c2bcd23f51f778fd9e3f6e121e",
-      "owner": "Integration + independent review",
-      "column": "blocked",
-      "gate": "Held pending complete proof / remainder",
-      "next": "Check claimed carrier first; close only after complete landed equivalence, otherwise scope exact remainder",
-      "blocker": "Potential duplicate slice/docs work; no close without own and inherited accounting",
       "evidence": "Git ancestry checked; prior triage results are source-head evidence, not final combined-tree acceptance; CTO18:34 routing/correction adopted18:35; full own-plus-inherited proof and fresh live state required before triage closure"
     },
     {
@@ -991,18 +967,6 @@
       "evidence": "Git ancestry checked; prior triage results are source-head evidence, not final combined-tree acceptance; CTO18:34 routing/correction adopted18:35; full own-plus-inherited proof and fresh live state required before triage closure"
     },
     {
-      "number": 107,
-      "title": "R-16 backend: real Java Bambda filters and custom-column batches",
-      "url": "https://github.com/Chaim12345/webprobe/pull/107",
-      "head": "8ac8dda9e533f11d13e174e148d7691c04cc5f1c",
-      "owner": "Integration + independent review",
-      "column": "blocked",
-      "gate": "Held pending complete proof / remainder",
-      "next": "Check claimed carrier first; close only after complete landed equivalence, otherwise scope exact remainder",
-      "blocker": "Potential duplicate slice/docs work; no close without own and inherited accounting",
-      "evidence": "Git ancestry checked; prior triage results are source-head evidence, not final combined-tree acceptance; CTO18:34 routing/correction adopted18:35; full own-plus-inherited proof and fresh live state required before triage closure"
-    },
-    {
       "number": 108,
       "title": "UI QA B: isolate new projects and fix settings file path editing",
       "url": "https://github.com/Chaim12345/webprobe/pull/108",
@@ -1012,42 +976,6 @@
       "gate": "Held pending complete proof / remainder",
       "next": "Recheck final landed batch before building both project isolation and settings paths; then require landed replacement proof",
       "blocker": "Earlier lane audit predates final batch; avoid duplicate work",
-      "evidence": "Git ancestry checked; prior triage results are source-head evidence, not final combined-tree acceptance; CTO18:34 routing/correction adopted18:35; full own-plus-inherited proof and fresh live state required before triage closure"
-    },
-    {
-      "number": 109,
-      "title": "R-16: Bambda YAML library, editor and cancellable preview",
-      "url": "https://github.com/Chaim12345/webprobe/pull/109",
-      "head": "178717e4170db1fa922673c3bb44b140fafcd7fd",
-      "owner": "Integration + independent review",
-      "column": "blocked",
-      "gate": "Held pending complete proof / remainder",
-      "next": "After actual #125+#155 landing, map complete source to landed SHAs; keep any remainder open",
-      "blocker": "Batch freeze; carrier title/manifest is a lead, not complete equivalence proof",
-      "evidence": "Git ancestry checked; prior triage results are source-head evidence, not final combined-tree acceptance; CTO18:34 routing/correction adopted18:35; full own-plus-inherited proof and fresh live state required before triage closure"
-    },
-    {
-      "number": 110,
-      "title": "fix(proxy): serve pipelined HTTP/1.1 requests as separate exchanges",
-      "url": "https://github.com/Chaim12345/webprobe/pull/110",
-      "head": "f9e3ea38e08f947f6d21d0342397dea63189ebdb",
-      "owner": "Integration + independent review",
-      "column": "blocked",
-      "gate": "Held pending complete proof / remainder",
-      "next": "After actual #125+#155 landing, map complete source to landed SHAs; keep any remainder open",
-      "blocker": "Batch freeze; carrier title/manifest is a lead, not complete equivalence proof",
-      "evidence": "CTO source report at 14:34 names pipeline/drop-close/nonblocking-drain preservation; independent of unverified audit-briefing attribution; CTO18:34 routing/correction adopted18:35; full own-plus-inherited proof and fresh live state required before triage closure"
-    },
-    {
-      "number": 111,
-      "title": "R-18: own Repeater UI state without changing behavior",
-      "url": "https://github.com/Chaim12345/webprobe/pull/111",
-      "head": "c48bdd12d75239d36d3551484cdcc77cd9fa7f25",
-      "owner": "Integration + independent review",
-      "column": "blocked",
-      "gate": "Held pending complete proof / remainder",
-      "next": "After actual #125+#155 landing, map complete source to landed SHAs; keep any remainder open",
-      "blocker": "Batch freeze; carrier title/manifest is a lead, not complete equivalence proof",
       "evidence": "Git ancestry checked; prior triage results are source-head evidence, not final combined-tree acceptance; CTO18:34 routing/correction adopted18:35; full own-plus-inherited proof and fresh live state required before triage closure"
     },
     {
@@ -1072,162 +1000,6 @@
       "gate": "Consolidation plan only",
       "next": "After applicable reports/management batch lands, prove complete documents, decisions, evidence and supersession order retained",
       "blocker": "No license/Organizer/transport/safety decision may disappear in batching",
-      "evidence": "Git ancestry checked; prior triage results are source-head evidence, not final combined-tree acceptance; CTO18:34 routing/correction adopted18:35; full own-plus-inherited proof and fresh live state required before triage closure"
-    },
-    {
-      "number": 114,
-      "title": "fix(proxy): explain extension-dropped requests with a local HTML page",
-      "url": "https://github.com/Chaim12345/webprobe/pull/114",
-      "head": "10dece9f11b94e36703bd3348ca3797890185528",
-      "owner": "Integration + independent review",
-      "column": "blocked",
-      "gate": "Held pending complete proof / remainder",
-      "next": "After actual #125+#155 landing, map complete source to landed SHAs; keep any remainder open",
-      "blocker": "Batch freeze; carrier title/manifest is a lead, not complete equivalence proof",
-      "evidence": "Git ancestry checked; prior triage results are source-head evidence, not final combined-tree acceptance; CTO18:34 routing/correction adopted18:35; full own-plus-inherited proof and fresh live state required before triage closure"
-    },
-    {
-      "number": 115,
-      "title": "fix: Repeater Montoya HTTP handler dispatch with real-JVM proof",
-      "url": "https://github.com/Chaim12345/webprobe/pull/115",
-      "head": "de14370593e3a173c2578bb78ff801df9958fb47",
-      "owner": "Integration + independent review",
-      "column": "blocked",
-      "gate": "Held pending complete proof / remainder",
-      "next": "After actual #125+#155 landing, map complete source to landed SHAs; keep any remainder open",
-      "blocker": "Batch freeze; carrier title/manifest is a lead, not complete equivalence proof",
-      "evidence": "Git ancestry checked; prior triage results are source-head evidence, not final combined-tree acceptance; CTO18:34 routing/correction adopted18:35; full own-plus-inherited proof and fresh live state required before triage closure"
-    },
-    {
-      "number": 116,
-      "title": "fix(sequencer): constant tokens report zero effective bits, refresh manual analysis",
-      "url": "https://github.com/Chaim12345/webprobe/pull/116",
-      "head": "f733f4c10654cd4162905b8f286fc35f6644a6d8",
-      "owner": "Integration + independent review",
-      "column": "blocked",
-      "gate": "Held pending complete proof / remainder",
-      "next": "After actual #125+#155 landing, map complete source to landed SHAs; keep any remainder open",
-      "blocker": "Batch freeze; carrier title/manifest is a lead, not complete equivalence proof",
-      "evidence": "Git ancestry checked; prior triage results are source-head evidence, not final combined-tree acceptance; CTO18:34 routing/correction adopted18:35; full own-plus-inherited proof and fresh live state required before triage closure"
-    },
-    {
-      "number": 117,
-      "title": "fix(intruder): send and display baseline request 0 before payloads",
-      "url": "https://github.com/Chaim12345/webprobe/pull/117",
-      "head": "8cd730f9e4d5d7da8b465931f1b27d74e94f2be7",
-      "owner": "Integration + independent review",
-      "column": "blocked",
-      "gate": "Held pending complete proof / remainder",
-      "next": "After actual #125+#155 landing, map complete source to landed SHAs; keep any remainder open",
-      "blocker": "Batch freeze; carrier title/manifest is a lead, not complete equivalence proof",
-      "evidence": "Git ancestry checked; prior triage results are source-head evidence, not final combined-tree acceptance; CTO18:34 routing/correction adopted18:35; full own-plus-inherited proof and fresh live state required before triage closure"
-    },
-    {
-      "number": 118,
-      "title": "fix(montoya): keyword case parity and response variations analyzer",
-      "url": "https://github.com/Chaim12345/webprobe/pull/118",
-      "head": "5080e2175f85aa431959a0bf5222263545294b9e",
-      "owner": "Integration + independent review",
-      "column": "blocked",
-      "gate": "Held pending complete proof / remainder",
-      "next": "After actual #125+#155 landing, map complete source to landed SHAs; keep any remainder open",
-      "blocker": "Batch freeze; carrier title/manifest is a lead, not complete equivalence proof",
-      "evidence": "Git ancestry checked; prior triage results are source-head evidence, not final combined-tree acceptance; CTO18:34 routing/correction adopted18:35; full own-plus-inherited proof and fresh live state required before triage closure"
-    },
-    {
-      "number": 119,
-      "title": "Logger: right-click menu with Send to Organizer/Repeater/Intruder and more (Burp parity)",
-      "url": "https://github.com/Chaim12345/webprobe/pull/119",
-      "head": "eb00353905b4d691f635bf7973442b3e3496a929",
-      "owner": "Integration + independent review",
-      "column": "blocked",
-      "gate": "Held pending complete proof / remainder",
-      "next": "After actual #125+#155 landing, map complete source to landed SHAs; keep any remainder open",
-      "blocker": "Batch freeze; carrier title/manifest is a lead, not complete equivalence proof",
-      "evidence": "Git ancestry checked; prior triage results are source-head evidence, not final combined-tree acceptance; CTO18:34 routing/correction adopted18:35; full own-plus-inherited proof and fresh live state required before triage closure"
-    },
-    {
-      "number": 120,
-      "title": "Organizer: '+ New' creates a named collection (not an Inbox item)",
-      "url": "https://github.com/Chaim12345/webprobe/pull/120",
-      "head": "e5dc0b85f38377a36ee54db8b669e0bdd299b596",
-      "owner": "Integration + independent review",
-      "column": "blocked",
-      "gate": "Held pending complete proof / remainder",
-      "next": "After actual #125+#155 landing, map complete source to landed SHAs; keep any remainder open",
-      "blocker": "Batch freeze; carrier title/manifest is a lead, not complete equivalence proof",
-      "evidence": "Git ancestry checked; prior triage results are source-head evidence, not final combined-tree acceptance; CTO18:34 routing/correction adopted18:35; full own-plus-inherited proof and fresh live state required before triage closure"
-    },
-    {
-      "number": 121,
-      "title": "docs: future roadmap 2026-11-22 (scanner matrix finish, tool parity leftovers, beyond-Burp phases)",
-      "url": "https://github.com/Chaim12345/webprobe/pull/121",
-      "head": "6131c1d9f479a242809114fedda13c597b75218e",
-      "owner": "Integration + independent review",
-      "column": "blocked",
-      "gate": "Held pending complete proof / remainder",
-      "next": "Check claimed carrier first; close only after complete landed equivalence, otherwise scope exact remainder",
-      "blocker": "Potential duplicate slice/docs work; no close without own and inherited accounting",
-      "evidence": "Git ancestry checked; prior triage results are source-head evidence, not final combined-tree acceptance; CTO18:34 routing/correction adopted18:35; full own-plus-inherited proof and fresh live state required before triage closure"
-    },
-    {
-      "number": 122,
-      "title": "docs: native ARTEX agent integration design",
-      "url": "https://github.com/Chaim12345/webprobe/pull/122",
-      "head": "efd57d107a1dcc52dbed69ecf0cd994e87f94416",
-      "owner": "Integration + independent review",
-      "column": "blocked",
-      "gate": "Held pending complete proof / remainder",
-      "next": "Check claimed carrier first; close only after complete landed equivalence, otherwise scope exact remainder",
-      "blocker": "Potential duplicate slice/docs work; no close without own and inherited accounting",
-      "evidence": "Git ancestry checked; prior triage results are source-head evidence, not final combined-tree acceptance; CTO18:34 routing/correction adopted18:35; full own-plus-inherited proof and fresh live state required before triage closure"
-    },
-    {
-      "number": 124,
-      "title": "h2/codec parity: HEADERS fragmentation + Decoder Octal/Binary/GZIP (measured on Burp 2026.11.2)",
-      "url": "https://github.com/Chaim12345/webprobe/pull/124",
-      "head": "e421c8b22fdc654a287ccfa070e719452df05ea4",
-      "owner": "Integration + independent review",
-      "column": "blocked",
-      "gate": "Held pending complete proof / remainder",
-      "next": "Record h2 absorbed by #145 separately from deliberately rejected Decoder code; keep unretained remainder explicit",
-      "blocker": "Do not restore defective Decoder Octal/Binary/GZIP merely to claim equivalence",
-      "evidence": "Triage independently reproduced two failing cases; no landing until repaired/split; CTO18:34 routing/correction adopted18:35; full own-plus-inherited proof and fresh live state required before triage closure"
-    },
-    {
-      "number": 125,
-      "title": "Integration: reviewed 2026-11-22 fix lanes (#99, #109, #110, #111, #114-#120) on the #45 stack",
-      "url": "https://github.com/Chaim12345/webprobe/pull/125",
-      "head": "6f6f65490ee76778b78fe66b68057830ce041f90",
-      "owner": "Integration + independent review",
-      "column": "blocked",
-      "gate": "Refreshed source approved; exact local CI and UI pending",
-      "next": "Finish3384d3c exact combined-tree local CI/JDK25/UI and tested-remote identity",
-      "blocker": "Local workflow jobs and full exact-tree UI pending",
-      "evidence": "Reviewer06:31/06:33 code-only APPROVE; author1251169/0 or1551203/0; independent QA06:34 fmt/clippy clean, suite running"
-    },
-    {
-      "number": 127,
-      "title": "docs: ARTEX native integration implementation plan (M1 vertical slice, lanes, ACP option)",
-      "url": "https://github.com/Chaim12345/webprobe/pull/127",
-      "head": "0a7b77be408467642d7ed59775468fdba9adbb04",
-      "owner": "ARTEX planning / CTO",
-      "column": "blocked",
-      "gate": "Held pending complete proof / remainder",
-      "next": "Check claimed carrier first; close only after complete landed equivalence, otherwise scope exact remainder",
-      "blocker": "Potential duplicate slice/docs work; no close without own and inherited accounting",
-      "evidence": "Git ancestry checked; prior triage results are source-head evidence, not final combined-tree acceptance; CTO18:34 routing/correction adopted18:35; full own-plus-inherited proof and fresh live state required before triage closure"
-    },
-    {
-      "number": 128,
-      "title": "docs: real Burp fix-head rerun and remaining parity priorities",
-      "url": "https://github.com/Chaim12345/webprobe/pull/128",
-      "head": "b9968d1c4a12fc9c54803a7e13067a5792fff0cd",
-      "owner": "Integration + independent review",
-      "column": "blocked",
-      "gate": "Held pending complete proof / remainder",
-      "next": "Check claimed carrier first; close only after complete landed equivalence, otherwise scope exact remainder",
-      "blocker": "Potential duplicate slice/docs work; no close without own and inherited accounting",
       "evidence": "Git ancestry checked; prior triage results are source-head evidence, not final combined-tree acceptance; CTO18:34 routing/correction adopted18:35; full own-plus-inherited proof and fresh live state required before triage closure"
     },
     {
@@ -1334,27 +1106,15 @@
       "owner": "Lane15 + CTO + integration",
       "column": "blocked",
       "gate": "Held pending complete proof / remainder",
-      "next": "After actual #155 landing prove all own/inherited source and R1-R4/boundary/persistence/tunnel/drop/FIN retained",
-      "blocker": "Wait final d405f33 exact review/QA/UI and actual batch landing, then full own/inherited proof",
+      "next": "Triage verifies smoke and whole-source retained content before closure",
+      "blocker": "125155 landed; no automatic closure",
       "evidence": "CTO source acceptance for #155 73ff441 is conditional on exact resolved-tree review/QA; not closure permission by itself; CTO18:34 routing/correction adopted18:35; full own-plus-inherited proof and fresh live state required before triage closure"
-    },
-    {
-      "number": 155,
-      "title": "Request reader reconcile on #125: typed outcomes, delivery lifecycle, persistence policy, inbound ambiguity guard",
-      "url": "https://github.com/Chaim12345/webprobe/pull/155",
-      "head": "3384d3c4abf364b427d9e6c45e45fc0c05dea813",
-      "owner": "Lane15 + integration + reviewer/CTO",
-      "column": "blocked",
-      "gate": "Refreshed source approved; exact local CI and UI pending",
-      "next": "Finish3384d3c exact combined-tree local CI/JDK25/UI and tested-remote identity",
-      "blocker": "Local workflow jobs and full exact-tree UI pending",
-      "evidence": "Reviewer06:31/06:33 code-only APPROVE; author1251169/0 or1551203/0; independent QA06:34 fmt/clippy clean, suite running"
     },
     {
       "number": 160,
       "title": "Refresh program board after safety landings",
       "url": "https://github.com/Chaim12345/webprobe/pull/160",
-      "head": "d13ff72b46aabeba50a6ab4ca8e23f64cbbfc03e",
+      "head": "bb840f46000fb3129a1de0dc71aa894f6541ed32",
       "owner": "Program Manager",
       "column": "active",
       "gate": "New visual board needs docs review",
