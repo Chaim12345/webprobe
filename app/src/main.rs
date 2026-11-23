@@ -965,6 +965,59 @@ impl App {
 static TERMINATE: std::sync::LazyLock<Arc<std::sync::atomic::AtomicBool>> =
     std::sync::LazyLock::new(Default::default);
 
+/// All extension startup paths share this gate, including development hooks.
+/// The injected environment reader keeps the disabled-path test free of global
+/// environment mutation and proves that no startup source is inspected.
+fn load_startup_extensions(
+    shared: &Arc<net::Shared>,
+    disable_extensions: bool,
+    env: impl Fn(&str) -> Option<String>,
+) {
+    if disable_extensions {
+        return;
+    }
+    // Test hook: register the built-in example extension, e.g. WEBPROBE_EXT_TEST=1
+    if env("WEBPROBE_EXT_TEST").is_some() {
+        ext_host::with_host(shared, |h| {
+            h.extensions.push(ext_host::LoadedExtension::new(
+                ext_host::ExampleHeaderExtension,
+            ));
+        });
+        shared.log("Registered example extension: Example header add (ProxyRequestHandler)");
+    }
+    // Path B: load a real Montoya .jar extension through the sidecar JVM,
+    // e.g. WEBPROBE_EXT_JAR=app/sidecar/demo-ext/demo-ext.jar
+    if let Some(ext_jar) = env("WEBPROBE_EXT_JAR") {
+        let opts = ext_host::SidecarOptions {
+            startup: true,
+            ..ext_host::SidecarOptions::for_this_session()
+        };
+        match ext_host::JavaSidecar::spawn_opts(
+            &ext_jar,
+            Some(webprobe_core::ext_calls::host_link(shared)),
+            opts,
+        ) {
+            Ok(sidecar) => {
+                shared.log(&format!(
+                    "Sidecar JVM loaded Montoya extension: {} ({})",
+                    sidecar.extension_name(),
+                    sidecar.hooks_registered()
+                ));
+                ext_host::with_host(shared, |h| {
+                    h.extensions.push(ext_host::LoadedExtension::new(sidecar));
+                });
+            }
+            Err(e) => shared.log(&format!("Sidecar JVM failed to load {ext_jar}: {e}")),
+        }
+    }
+    // Extensions the user installed earlier (Extensions > Installed), loaded
+    // in the background. Burp's --disable-extensions skips them, and so does
+    // WEBPROBE_NO_EXTENSIONS=1 (QA runs).
+    if env("WEBPROBE_NO_EXTENSIONS").is_none() {
+        webprobe_core::ext_store::load_all(shared);
+    }
+}
+
 fn main() {
     webprobe_core::diagnostics::init_stderr();
     // Panic policy "contain and continue" (issue #32): worker panics are
@@ -1266,46 +1319,7 @@ fn main() {
             });
         }
     }
-    // Test hook: register the built-in example extension, e.g. WEBPROBE_EXT_TEST=1
-    if std::env::var("WEBPROBE_EXT_TEST").is_ok() {
-        ext_host::with_host(&shared, |h| {
-            h.extensions.push(ext_host::LoadedExtension::new(
-                ext_host::ExampleHeaderExtension,
-            ));
-        });
-        shared.log("Registered example extension: Example header add (ProxyRequestHandler)");
-    }
-    // Path B: load a real Montoya .jar extension through the sidecar JVM,
-    // e.g. WEBPROBE_EXT_JAR=app/sidecar/demo-ext/demo-ext.jar
-    if let Ok(ext_jar) = std::env::var("WEBPROBE_EXT_JAR") {
-        let opts = ext_host::SidecarOptions {
-            startup: true,
-            ..ext_host::SidecarOptions::for_this_session()
-        };
-        match ext_host::JavaSidecar::spawn_opts(
-            &ext_jar,
-            Some(webprobe_core::ext_calls::host_link(&shared)),
-            opts,
-        ) {
-            Ok(sidecar) => {
-                shared.log(&format!(
-                    "Sidecar JVM loaded Montoya extension: {} ({})",
-                    sidecar.extension_name(),
-                    sidecar.hooks_registered()
-                ));
-                ext_host::with_host(&shared, |h| {
-                    h.extensions.push(ext_host::LoadedExtension::new(sidecar));
-                });
-            }
-            Err(e) => shared.log(&format!("Sidecar JVM failed to load {ext_jar}: {e}")),
-        }
-    }
-    // Extensions the user installed earlier (Extensions > Installed), loaded
-    // in the background. Burp's --disable-extensions skips them, and so does
-    // WEBPROBE_NO_EXTENSIONS=1 (QA runs).
-    if !disable_extensions && std::env::var_os("WEBPROBE_NO_EXTENSIONS").is_none() {
-        webprobe_core::ext_store::load_all(&shared);
-    }
+    load_startup_extensions(&shared, disable_extensions, |k| std::env::var(k).ok());
     // This front end refills the Collaborator payload pool (refill_oob_pool).
     shared.oob.set_supplier(true);
     net::start_proxy(shared.clone());
@@ -1448,6 +1462,26 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn disable_extensions_blocks_all_startup_sources() {
+        let shared = net::Shared::new();
+        load_startup_extensions(&shared, true, |key| {
+            panic!("disabled extensions must not inspect startup source {key}")
+        });
+        ext_host::with_host(&shared, |host| assert!(host.extensions.is_empty()));
+        assert!(!shared.events.lock().unwrap().iter().any(|e| e.contains("extension")));
+    }
+
+    #[test]
+    fn enabled_startup_can_load_example_hook() {
+        let shared = net::Shared::new();
+        load_startup_extensions(&shared, false, |key| match key {
+            "WEBPROBE_EXT_TEST" | "WEBPROBE_NO_EXTENSIONS" => Some("1".into()),
+            _ => None,
+        });
+        ext_host::with_host(&shared, |host| assert_eq!(host.extensions.len(), 1));
+    }
 
     fn row(id: u64, path: &str) -> HistRow {
         (

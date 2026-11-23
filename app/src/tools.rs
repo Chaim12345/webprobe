@@ -3765,7 +3765,7 @@ fn burp_options_json(app: &mut App, ui: &mut Ui) {
                         match webprobe_core::rest_api::start(&app.shared, &api, defs) {
                             Ok(p) => toast(
                                 Level::Success,
-                                format!("REST API listening on 127.0.0.1:{p}"),
+                                format!("REST API listening on {}:{p}", api.address.as_deref().unwrap_or(if api.listen_mode == "all_interfaces" { "0.0.0.0" } else { "127.0.0.1" })),
                             ),
                             Err(e) => {
                                 app.shared.api_started.store(false, Ordering::SeqCst);
