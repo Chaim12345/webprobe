@@ -207,6 +207,7 @@ impl Coordinator {
         let mut state = self.state.lock().unwrap();
         if let Some(run) = state.as_mut() {
             if Arc::ptr_eq(&run.owner, owner) && !run.active {
+                *owner.terminal.lock().unwrap() = Some(outcome);
                 *self.terminal.lock().unwrap() = Some((owner.clone(), outcome));
                 run.owner.cancel();
                 run.phase = Phase::Closed;
@@ -347,7 +348,8 @@ impl Finalizer {
     /// Explicit execution, never invoked by Drop. Callback stands in for the
     /// forthcoming real budget-required A4 path, not acceptance evidence.
     pub fn run(mut self, body: impl FnOnce(&BudgetedExecution) -> Finish) -> Finish {
-        let result = if self.permit.owner.is_cancelled() {
+        let result = if self.permit.owner.is_cancelled() || self.permit.ledger.reserve(&[]).is_err()
+        {
             false
         } else {
             matches!(
@@ -365,7 +367,8 @@ impl Finalizer {
         let complete = result
             && !incomplete
             && !self.permit.owner.is_cancelled()
-            && self.permit.ledger.reserve(&[]).is_ok();
+            && self.permit.ledger.reserve(&[]).is_ok()
+            && !self.permit.ledger.retention_lost();
         drop(self.guard.take());
         let outcome = if complete {
             Finish::Complete
@@ -571,6 +574,39 @@ mod tests {
         assert!(!next.owner.is_cancelled());
         assert!(!Arc::ptr_eq(&retired, &next.owner));
         drop(next);
+    }
+    #[test]
+    fn delayed_finalizer_retention_loss_and_owner_held_result() {
+        let shared = Shared::new();
+        let mut short = limits();
+        short.duration = std::time::Duration::from_millis(10);
+        let c = Coordinator::new(shared, short).unwrap();
+        let b = c.open().unwrap();
+        let old = b.owner.clone();
+        let f = finalizer(b.finish().unwrap());
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        assert_eq!(f.run(|_| panic!("expired callback")), Finish::Incomplete);
+        assert_eq!(*old.terminal.lock().unwrap(), Some(Finish::Incomplete));
+        drop(c);
+        assert_eq!(*old.terminal.lock().unwrap(), Some(Finish::Incomplete));
+        let c = Coordinator::new(Shared::new(), limits()).unwrap();
+        let b = c.open().unwrap();
+        let retained = b.owner.clone();
+        assert_eq!(
+            finalizer(b.finish().unwrap()).run(|p| {
+                p.ledger.retain_proven(1).unwrap();
+                assert!(p.ledger.retain_proven(99999).is_err());
+                assert_eq!(p.ledger.used(crate::scan_budget::Resource::Evidence), 1);
+                Finish::Complete
+            }),
+            Finish::Incomplete
+        );
+        let b = c.open().unwrap();
+        assert_eq!(
+            finalizer(b.finish().unwrap()).run(|_| Finish::Complete),
+            Finish::Complete
+        );
+        assert_eq!(*retained.terminal.lock().unwrap(), Some(Finish::Incomplete));
     }
     #[test]
     fn permit_rejects_other_owner_and_cancel_prevents_callback() {

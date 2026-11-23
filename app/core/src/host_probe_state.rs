@@ -26,6 +26,8 @@ pub struct AttemptScope {
     /// new false value; resetting legacy UI state cannot revive this owner.
     #[cfg(test)] // Experimental token until unified production lifecycle wiring.
     cancelled: std::sync::atomic::AtomicBool,
+    #[cfg(test)]
+    pub(crate) terminal: Mutex<Option<crate::scan_lifecycle::Finish>>,
     pub(crate) dedup: Arc<ScanDedup>,
     attempted: Mutex<HashSet<String>>,
     session: Arc<SessionClaims>,
@@ -50,6 +52,8 @@ impl AttemptScope {
         Arc::new(Self {
             #[cfg(test)]
             cancelled: std::sync::atomic::AtomicBool::new(false),
+            #[cfg(test)]
+            terminal: Mutex::new(None),
             dedup,
             session,
             attempted: Mutex::new(HashSet::new()),

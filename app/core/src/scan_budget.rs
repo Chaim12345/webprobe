@@ -45,6 +45,7 @@ struct State {
     used: [u64; 9],
     denied: Option<Denied>,
     deadline: Option<Instant>,
+    retention_lost: bool,
 }
 pub(crate) struct Ledger {
     duration: Duration,
@@ -82,6 +83,7 @@ impl Ledger {
                 used: [0; 9],
                 denied: None,
                 deadline: None,
+                retention_lost: false,
             }),
         })
     }
@@ -141,16 +143,25 @@ impl Ledger {
     /// separate ceiling. This never admits further I/O or clears denial.
     pub fn retain_proven(&self, bytes: u64) -> Result<(), Denied> {
         let mut state = self.state.lock().unwrap();
+        if state.deadline.is_none() {
+            return Err(Denied::NotActivated);
+        }
         let at = Resource::Evidence.index();
-        let next = state.used[at]
+        let Some(next) = state.used[at]
             .checked_add(bytes)
             .filter(|v| *v <= self.ceilings[at])
-            .ok_or(Denied::Exhausted(Resource::Evidence))?;
+        else {
+            state.retention_lost = true;
+            return Err(Denied::Exhausted(Resource::Evidence));
+        };
         let records = Resource::EvidenceRecord.index();
-        let next_records = state.used[records]
+        let Some(next_records) = state.used[records]
             .checked_add(1)
             .filter(|v| *v <= self.ceilings[records])
-            .ok_or(Denied::Exhausted(Resource::EvidenceRecord))?;
+        else {
+            state.retention_lost = true;
+            return Err(Denied::Exhausted(Resource::EvidenceRecord));
+        };
         state.used[at] = next;
         state.used[records] = next_records;
         Ok(())
@@ -172,6 +183,9 @@ impl Ledger {
             return Err(Denied::Expired);
         }
         Ok(ordinary_limit.min(left))
+    }
+    pub fn retention_lost(&self) -> bool {
+        self.state.lock().unwrap().retention_lost
     }
     pub fn used(&self, resource: Resource) -> u64 {
         self.state.lock().unwrap().used[resource.index()]
