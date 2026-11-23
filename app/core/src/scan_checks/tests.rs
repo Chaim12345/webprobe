@@ -1,3 +1,204 @@
+/// R-13 (b) vertical slice: a page passing location.hash into
+/// document.write is DOM-based XSS; a page that never touches the
+/// hash is not. Skipped when no Chromium is available.
+#[test]
+fn dom_xss_hash_slice_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, _raw| {
+        let body = if path.starts_with("/xss") {
+            "<html><body><script>document.write('<p>' + location.hash.slice(1) + '</p>');</script></body></html>"
+        } else {
+            "<html><body><p>hello</p></body></html>"
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    let got = lab_scan(
+        port,
+        &["active.dom-xss"],
+        "GET",
+        "/xss",
+        format!("GET /xss HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(
+        got.iter()
+            .any(|(n, s, c)| n == "Cross-site scripting (DOM-based)" && s == "high" && c == "Firm"),
+        "{got:?}"
+    );
+    let got = lab_scan(
+        port,
+        &["active.dom-xss"],
+        "GET",
+        "/benign",
+        format!("GET /benign HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(
+        !got.iter()
+            .any(|(n, ..)| n == "Cross-site scripting (DOM-based)"),
+        "{got:?}"
+    );
+}
+
+/// R-13 batch 1: the JavaScript-injection, open-redirection and
+/// cookie-manipulation DOM families against live lab pages driven by a
+/// real browser. Skipped when no Chromium is available.
+#[test]
+fn dom_families_batch1_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, _raw| {
+        let body = if path.starts_with("/js-inj") {
+            "<html><body><script>eval(location.hash.slice(1));</script></body></html>"
+        } else if path.starts_with("/openredir") {
+            "<html><body><script>window.open(location.hash.slice(1));</script></body></html>"
+        } else if path.starts_with("/cookie") {
+            "<html><body><script>document.cookie = 'x=' + location.hash.slice(1);</script></body></html>"
+        } else {
+            "<html><body><p>hello</p></body></html>"
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    let expect = [
+        (
+            "/js-inj",
+            "active.dom-javascript-injection",
+            "JavaScript injection (DOM-based)",
+            "high",
+            "Firm",
+        ),
+        (
+            "/openredir",
+            "active.dom-open-redirection",
+            "Open redirection (DOM-based)",
+            "low",
+            "Tentative",
+        ),
+        (
+            "/cookie",
+            "active.dom-cookie-manipulation",
+            "Cookie manipulation (DOM-based)",
+            "low",
+            "Firm",
+        ),
+    ];
+    for (page, id, name, sev, conf) in expect {
+        let got = lab_scan(
+            port,
+            &[id],
+            "GET",
+            page,
+            format!("GET {page} HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+        );
+        assert!(
+            got.iter()
+                .any(|(n, s, c)| n == name && s == sev && c == conf),
+            "{name}: {got:?}"
+        );
+    }
+    // A benign page reports none of the three.
+    let got = lab_scan(
+        port,
+        &[
+            "active.dom-javascript-injection",
+            "active.dom-open-redirection",
+            "active.dom-cookie-manipulation",
+        ],
+        "GET",
+        "/benign2",
+        format!("GET /benign2 HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(got.is_empty(), "{got:?}");
+}
+
+/// R-13 batch 2: the storage, JSON-injection, XPath-injection and
+/// document-domain DOM families against live lab pages driven by a
+/// real browser. Skipped when no Chromium is available.
+#[test]
+fn dom_families_batch2_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, _raw| {
+        let body = if path.starts_with("/storage") {
+            "<html><body><script>localStorage.setItem('k', location.hash.slice(1));</script></body></html>"
+        } else if path.starts_with("/json") {
+            "<html><body><script>JSON.parse(location.hash.slice(1));</script></body></html>"
+        } else if path.starts_with("/xpath") {
+            "<html><body><script>document.evaluate(location.hash.slice(1), document, null, 0, null);</script></body></html>"
+        } else if path.starts_with("/domain") {
+            "<html><body><script>document.domain = location.hash.slice(1);</script></body></html>"
+        } else {
+            "<html><body><p>hello</p></body></html>"
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    let expect = [
+        (
+            "/storage",
+            "active.dom-storage-manipulation",
+            "HTML5 storage manipulation (DOM-based)",
+            "info",
+            "Firm",
+        ),
+        (
+            "/json",
+            "active.dom-json-injection",
+            "Client-side JSON injection (DOM-based)",
+            "low",
+            "Firm",
+        ),
+        (
+            "/xpath",
+            "active.dom-xpath-injection",
+            "Client-side XPath injection (DOM-based)",
+            "low",
+            "Firm",
+        ),
+        (
+            "/domain",
+            "active.dom-document-domain",
+            "Document domain manipulation (DOM-based)",
+            "medium",
+            "Firm",
+        ),
+    ];
+    for (page, id, name, sev, conf) in expect {
+        let got = lab_scan(
+            port,
+            &[id],
+            "GET",
+            page,
+            format!("GET {page} HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+        );
+        assert!(
+            got.iter()
+                .any(|(n, s, c)| n == name && s == sev && c == conf),
+            "{name}: {got:?}"
+        );
+    }
+    let got = lab_scan(
+        port,
+        &[
+            "active.dom-storage-manipulation",
+            "active.dom-json-injection",
+            "active.dom-xpath-injection",
+            "active.dom-document-domain",
+        ],
+        "GET",
+        "/benign3",
+        format!("GET /benign3 HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(got.is_empty(), "{got:?}");
+}
+
 use super::*;
 
 fn xpath_response(body: &str) -> Vec<u8> {
@@ -97,6 +298,42 @@ fn registry_order_is_pinned() {
     assert_eq!(
         requests,
         [
+            ("active.dom-xss", Scope::Request, Some(BURP_GROUP)),
+            (
+                "active.dom-javascript-injection",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-open-redirection",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-storage-manipulation",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-json-injection",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-xpath-injection",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-document-domain",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-cookie-manipulation",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
             ("active.cors", Scope::Request, Some(BURP_GROUP)),
             (
                 "active.path-relative-style-sheet-import",
@@ -928,4 +1165,201 @@ fn hardening_evidence_filter_preserves_order_and_empty_responses() {
         [first, second]
     );
     assert!(evidence([None, None]).is_empty());
+}
+
+#[test]
+fn dom_families_share_one_probe_and_refresh_on_the_next_run() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    use std::sync::{
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+        Arc,
+    };
+    let vulnerable = Arc::new(AtomicBool::new(true));
+    let enabled = vulnerable.clone();
+    let visits = Arc::new(AtomicUsize::new(0));
+    let count = visits.clone();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(listener, move |_, path, _| {
+        // The DOM navigation carries the probe payload in the query
+        // string ("/cache?..."); the baseline is the bare "/cache".
+        if path == "/cache" || path.starts_with("/cache?") {
+            count.fetch_add(1, Ordering::SeqCst);
+        }
+        let body = if enabled.load(Ordering::SeqCst) {
+            r#"<html><body><script>
+            var s=location.hash.slice(1);
+            document.body.innerHTML='<p>'+s+'</p>';
+            try { eval(s); } catch(e) {}
+            window.open(s); document.cookie='x='+s; localStorage.setItem('k',s);
+            try { JSON.parse(s); } catch(e) {}
+            try { document.evaluate(s,document,null,0,null); } catch(e) {}
+            try { document.domain=s; } catch(e) {}
+            </script></body></html>"#
+        } else {
+            "<html><body>benign<script>void 0</script></body></html>"
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len())
+    });
+    let shared = crate::net::Shared::new();
+    let mut config = crate::scan_config::ScanConfig::default();
+    for (id, ..) in crate::scan::check_catalogue() {
+        if !id.starts_with("active.dom-") {
+            config.disabled_checks.insert(id.into());
+        }
+    }
+    *crate::scan_config::shared_config(&shared).lock().unwrap() = config;
+    let entry = || crate::net::HistEntry {
+        method: "GET".into(),
+        host: "127.0.0.1".into(),
+        port,
+        path: "/cache".into(),
+        req_raw: format!("GET /cache HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n")
+            .into_bytes()
+            .into(),
+        ..Default::default()
+    };
+    let run = || {
+        crate::scan::start_active_scan(shared.clone(), entry(), &[], &[]);
+        let start = std::time::Instant::now();
+        while shared.scan.is_busy() && start.elapsed() < std::time::Duration::from_secs(60) {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        assert!(!shared.scan.is_busy());
+    };
+    run();
+    assert_eq!(
+        shared.issues.lock().unwrap().len(),
+        8,
+        "all families must share one browser result"
+    );
+    assert_eq!(
+        visits.load(Ordering::SeqCst),
+        2,
+        "one baseline and one DOM navigation"
+    );
+    vulnerable.store(false, Ordering::SeqCst);
+    shared.issues.lock().unwrap().clear();
+    run();
+    assert!(
+        shared.issues.lock().unwrap().is_empty(),
+        "previous run's hits must not leak"
+    );
+    assert_eq!(
+        visits.load(Ordering::SeqCst),
+        4,
+        "next run gets a fresh DOM probe"
+    );
+}
+
+/// Two-token source provenance matrix: hash-only
+/// evidence keeps the family confidence; search-only and mixed evidence
+/// are reported conservatively as Tentative; a reflected token that never
+/// reaches a wrapped sink, a pre-existing unrelated Object.prototype
+/// property and a benign page report nothing. Live Chromium, skipped when
+/// no browser is available.
+#[test]
+fn dom_source_provenance_matrix_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, _raw| {
+        let body = if path.starts_with("/hashonly") {
+            "<html><body><script>document.write('<p>' + location.hash.slice(1) + '</p>');</script></body></html>"
+        } else if path.starts_with("/searchonly") {
+            "<html><body><script>document.write('<p>' + location.search.slice(1) + '</p>');</script></body></html>"
+        } else if path.starts_with("/both") {
+            "<html><body><script>document.write('<p>' + location.search.slice(1) + '|' + location.hash.slice(1) + '</p>');</script></body></html>"
+        } else if path.starts_with("/reflect") {
+            // The tokens reach the page but no wrapped sink: no finding.
+            "<html><body><script>var d=document.createElement('div'); d.textContent=location.search+location.hash; document.body.appendChild(d);</script></body></html>"
+        } else if path.starts_with("/preexisting") {
+            // An unrelated pre-existing prototype property is not a finding.
+            "<html><body><script>Object.prototype.wpPreExisting123='x';</script></body></html>"
+        } else {
+            "<html><body><p>hello</p><script>void 0</script></body></html>"
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    let shared = crate::net::Shared::new();
+    let mut config = crate::scan_config::ScanConfig::default();
+    for (id, ..) in crate::scan::check_catalogue() {
+        if !id.starts_with("active.dom-") {
+            config.disabled_checks.insert(id.into());
+        }
+    }
+    *crate::scan_config::shared_config(&shared).lock().unwrap() = config;
+    let scan = |path: &str| {
+        shared.issues.lock().unwrap().clear();
+        let entry = crate::net::HistEntry {
+            method: "GET".into(),
+            host: "127.0.0.1".into(),
+            port,
+            path: path.into(),
+            req_raw: format!("GET {path} HTTP/1.1\r\nHost: {host}\r\n\r\n")
+                .into_bytes()
+                .into(),
+            ..Default::default()
+        };
+        crate::scan::start_active_scan(shared.clone(), entry, &[], &[]);
+        let start = std::time::Instant::now();
+        while shared.scan.is_busy() && start.elapsed() < std::time::Duration::from_secs(60) {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        assert!(!shared.scan.is_busy());
+        shared.issues.lock().unwrap().clone()
+    };
+    let names = |issues: &[webprobe_support::issues::ScanIssue]| {
+        issues
+            .iter()
+            .map(|i| format!("{}|{}|{}", i.name, i.sev, i.confidence))
+            .collect::<Vec<_>>()
+            .join("; ")
+    };
+    let xss = |issues: &[webprobe_support::issues::ScanIssue]| {
+        issues
+            .iter()
+            .filter(|i| i.name == "Cross-site scripting (DOM-based)")
+            .count()
+    };
+    let hit = |issues: &[webprobe_support::issues::ScanIssue]| {
+        assert_eq!(xss(issues), 1, "{}", names(issues));
+        issues
+            .iter()
+            .find(|i| i.name == "Cross-site scripting (DOM-based)")
+            .unwrap()
+            .clone()
+    };
+    let hash = scan("/hashonly");
+    let h = hit(&hash);
+    assert_eq!(h.confidence, "Firm", "{}", names(&hash));
+    assert!(
+        h.detail.contains("read from <b>location.hash</b>"),
+        "{}",
+        h.detail
+    );
+    let search = scan("/searchonly");
+    let h = hit(&search);
+    assert_eq!(h.confidence, "Tentative", "{}", names(&search));
+    assert!(
+        h.detail.contains("read from <b>location.search</b>"),
+        "{}",
+        h.detail
+    );
+    let both = scan("/both");
+    let h = hit(&both);
+    assert_eq!(h.confidence, "Tentative", "{}", names(&both));
+    assert!(
+        h.detail
+            .contains("read from <b>location.hash and location.search</b>"),
+        "{}",
+        h.detail
+    );
+    for page in ["/reflect", "/preexisting", "/benignp"] {
+        let got = scan(page);
+        assert!(got.is_empty(), "{page}: {}", names(&got));
+    }
 }

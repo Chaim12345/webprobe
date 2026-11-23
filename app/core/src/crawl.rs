@@ -461,6 +461,138 @@ struct Cdp {
     ws: tungstenite::WebSocket<std::net::TcpStream>,
     next: u64,
     seen: Vec<SeenRequest>,
+    dom_route: Option<DomRoute>,
+}
+
+/// Same-origin GET/HEAD requests one DOM probe may forward through the
+/// scanner transport; over budget fails closed.
+pub const DOM_MAX_REQUESTS_PER_PROBE: usize = 64;
+/// Response body bytes one DOM probe delivers to Chromium. Larger bodies
+/// are truncated: the page still runs, the CDP exchange stays bounded.
+pub const DOM_MAX_FULFILL_BODY: usize = 4 * 1024 * 1024;
+/// Total response header bytes one DOM probe delivers to Chromium.
+pub const DOM_MAX_FULFILL_HEADERS: usize = 32 * 1024;
+
+/// DOM requests never leave through Chromium's own HTTP stack. Fetch
+/// interception sends same-origin GET/HEAD through the scanner transport.
+struct DomRoute {
+    shared: Arc<Shared>,
+    origin: String,
+    host: String,
+    port: u16,
+    https: bool,
+    template: String,
+    sent: usize,
+}
+
+impl DomRoute {
+    fn reply(&mut self, event: &serde_json::Value) -> (&'static str, serde_json::Value) {
+        let id = &event["requestId"];
+        let blocked = || {
+            (
+                "Fetch.failRequest",
+                serde_json::json!({"requestId": id, "errorReason": "BlockedByClient"}),
+            )
+        };
+        let req = &event["request"];
+        let url = req["url"].as_str().unwrap_or("");
+        let method = req["method"].as_str().unwrap_or("");
+        if self.shared.scan.stop.load(Ordering::SeqCst)
+            || self.sent >= DOM_MAX_REQUESTS_PER_PROBE
+            || !same_origin(url, &self.origin)
+            || !matches!(method, "GET" | "HEAD")
+        {
+            return blocked();
+        }
+        let Some(path) = crate::scan::same_origin_path(
+            url,
+            self.https,
+            self.origin.split_once("://").unwrap().1,
+            "/",
+        ) else {
+            return blocked();
+        };
+        let mut raw = format!("{method} {path} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nAccept-Encoding: identity\r\n", self.origin.split_once("://").unwrap().1);
+        let mut copied = std::collections::HashSet::new();
+        if let Some(headers) = req["headers"].as_object() {
+            for (k, value) in headers {
+                let lower = k.to_ascii_lowercase();
+                if [
+                    "host",
+                    "connection",
+                    "content-length",
+                    "transfer-encoding",
+                    "accept-encoding",
+                    "proxy-authorization",
+                ]
+                .contains(&lower.as_str())
+                {
+                    continue;
+                }
+                let value = value.as_str().unwrap_or("");
+                if k.contains(['\r', '\n']) || value.contains(['\r', '\n']) {
+                    continue;
+                }
+                raw.push_str(&format!("{k}: {value}\r\n"));
+                copied.insert(lower);
+            }
+        }
+        let template = util::parse_http(self.template.as_bytes());
+        for name in ["Cookie", "Authorization", "User-Agent", "Accept-Language"] {
+            if !copied.contains(&name.to_ascii_lowercase()) {
+                if let Some(value) = util::get_header(&template.headers, name) {
+                    raw.push_str(&format!("{name}: {value}\r\n"));
+                }
+            }
+        }
+        raw.push_str("\r\n");
+        self.sent += 1;
+        let response = crate::scan::send_one(
+            &self.shared,
+            self.https,
+            &self.host,
+            self.port,
+            raw.as_bytes(),
+        );
+        crate::scan::checks::bump_progress(&self.shared);
+        let Some(response) = response else {
+            return blocked();
+        };
+        let response = crate::codec::normalize_response(&response);
+        let parsed = util::parse_http(&response);
+        let status = parsed
+            .first
+            .split_whitespace()
+            .nth(1)
+            .and_then(|x| x.parse::<u16>().ok())
+            .unwrap_or(502);
+        let mut headers: Vec<_> = Vec::new();
+        let mut header_bytes = 0usize;
+        for (k, v) in &parsed.headers {
+            if ["connection", "transfer-encoding", "content-length"]
+                .contains(&k.to_ascii_lowercase().as_str())
+            {
+                continue;
+            }
+            header_bytes += k.len() + v.len();
+            if header_bytes > DOM_MAX_FULFILL_HEADERS {
+                break;
+            }
+            headers.push(serde_json::json!({"name":k,"value":v}));
+        }
+        // Disallow new workers and off-origin subdocuments/connections,
+        // which would otherwise create uninstrumented targets.
+        headers.push(serde_json::json!({"name":"Content-Security-Policy", "value":"worker-src 'none'; frame-src 'self'; connect-src 'self'"}));
+        use base64::Engine;
+        let body_start = parsed.head_len.min(response.len());
+        let body_len = (response.len() - body_start).min(DOM_MAX_FULFILL_BODY);
+        let body = base64::engine::general_purpose::STANDARD
+            .encode(&response[body_start..body_start + body_len]);
+        (
+            "Fetch.fulfillRequest",
+            serde_json::json!({"requestId":id,"responseCode":status,"responseHeaders":headers,"body":body}),
+        )
+    }
 }
 
 /// The response as the browser saw it (Burp audits the crawl's own
@@ -504,10 +636,25 @@ impl Cdp {
             ws,
             next: 1,
             seen: Vec::new(),
+            dom_route: None,
         })
     }
 
     fn handle_event(&mut self, v: &serde_json::Value) {
+        if v["method"] == "Fetch.requestPaused" {
+            if let Some(route) = &mut self.dom_route {
+                let (method, params) = route.reply(&v["params"]);
+                let msg = serde_json::json!({"id": self.next, "method": method, "params": params});
+                self.next += 1;
+                let _ = self.ws.send(tungstenite::Message::text(msg.to_string()));
+            }
+            return;
+        }
+        // DOM does not collect crawl history; keep hostile event volume bounded.
+        if self.dom_route.is_some() {
+            return;
+        }
+
         if v["method"] == "Network.requestWillBeSent" {
             let r = &v["params"]["request"];
             let headers = r["headers"]
@@ -1720,5 +1867,400 @@ mod no_implicit_replay_tests {
         assert_eq!(e.status, "204");
         assert!(e.note.is_none(), "an empty body is not incomplete evidence");
         assert!(e.resp_raw.is_some());
+    }
+}
+
+// ================= R-13 dynamic DOM analysis (vertical slice) =================
+
+pub use webprobe_support::dedup::DomHit;
+
+/// The instrumentation evaluated on every new document before the page's
+/// own scripts (the shape of burp.Zel5's runAnalysis: an injected script,
+/// then navigation, then getVulns()). WebProbe's first slice wraps the
+/// XSS-family sinks the R-13 spec's delivery order starts with
+/// (document.write, document.writeln, the innerHTML setter) and records
+/// every call whose argument carries the canary. `%CANARY%` is replaced
+/// by the probe's token.
+pub(crate) const DOM_INSTRUMENT_JS: &str = r#"
+(function () {
+  if (window.__wpDomAnalysis) return;
+  window.__wpDomAnalysis = true;
+  window.__wpDomHits = [];
+  var CANARY = "%CANARY%";
+  // The canary is a qs-style payload (e.g. `__proto__[token]=token`);
+  // the random token inside it is what attributes a value to this probe.
+  var TOKEN = (function () { var m = /\[([^\]]+)\]/.exec(CANARY); return m ? m[1] : CANARY; })();
+  // The query-string payload carries its OWN run-owned token (the
+  // fragment payload carries TOKEN): a value carrying TOKEN came from
+  // location.hash, QTOKEN from location.search, both from both. A probe
+  // that runs one token in both URL parts cannot attribute: provenance
+  // is honestly "unknown", never guessed.
+  var QTOKEN = "%CANARY2%";
+  function provenance(s) {
+    var h = s.indexOf(TOKEN) >= 0;
+    var q = QTOKEN.length > 0 && s.indexOf(QTOKEN) >= 0;
+    if (!h && !q) { return null; }
+    if (TOKEN === QTOKEN) { return "unknown"; }
+    if (h && q) { return "location.hash+location.search"; }
+    return h ? "location.hash" : "location.search";
+  }
+  function record(sink, value) {
+    try {
+      var s = String(value);
+      var src = provenance(s);
+      if (src !== null && window.__wpDomHits.length < 50) {
+        // Evidence caps: values and the page URL are bounded so a hostile
+        // page cannot grow a run's stored hits without limit.
+        var sv = src === "location.hash" ? String(location.hash) : src === "location.search" ? String(location.search) : String(location.search) + " " + String(location.hash);
+        window.__wpDomHits.push({ source: src, sink: sink, sourceValue: sv.slice(0, 300), sinkValue: s.slice(0, 300), pageUrl: String(location.href).slice(0, 500) });
+      }
+    } catch (e) {}
+  }
+  // Sink names are literals on purpose: a unit test pins this set against
+  // the Rust family tables so the two cannot drift apart.
+  if (typeof document.write === "function") {
+    var origWrite = document.write;
+    document.write = function (v) { record("document.write", v); return origWrite.apply(document, arguments); };
+  }
+  if (typeof document.writeln === "function") {
+    var origWriteln = document.writeln;
+    document.writeln = function (v) { record("document.writeln", v); return origWriteln.apply(document, arguments); };
+  }
+  function wrapHtmlProp(prop, recordFn) {
+    var desc = Object.getOwnPropertyDescriptor(Element.prototype, prop);
+    if (desc && desc.set) {
+      Object.defineProperty(Element.prototype, prop, {
+        configurable: true,
+        enumerable: desc.enumerable,
+        get: desc.get,
+        set: function (v) { recordFn(v); return desc.set.call(this, v); }
+      });
+    }
+  }
+  wrapHtmlProp("innerHTML", function (v) { record("element.innerHTML", v); });
+  wrapHtmlProp("outerHTML", function (v) { record("element.outerHTML", v); });
+  if (Element.prototype.insertAdjacentHTML) {
+    var origIah = Element.prototype.insertAdjacentHTML;
+    Element.prototype.insertAdjacentHTML = function (pos, html) { record("element.insertAdjacentHTML", html); return origIah.apply(this, arguments); };
+  }
+  // JavaScript-execution sinks (the string arguments only).
+  // The record happens BEFORE the call, so detection does not depend on
+  // the call succeeding. Caveat: any wrapper turns a direct eval into an
+  // indirect one (global scope), so page code relying on local scope in
+  // the evaluated string behaves differently under the probe - direct-eval
+  // fidelity needs engine-level hooks (Burp patches Chromium); documented
+  // gap, coverage kept.
+  var origEval = window.eval;
+  if (typeof origEval === "function") {
+    window.eval = function (s) { record("eval", s); return origEval(s); };
+  }
+  var OrigFunction = window.Function;
+  if (typeof OrigFunction === "function") {
+    window.Function = function () {
+      for (var i = 0; i < arguments.length; i++) { record("Function", arguments[i]); }
+      return OrigFunction.apply(null, arguments);
+    };
+    window.Function.prototype = OrigFunction.prototype;
+    // keep the constructor's other properties reachable through the wrapper
+    Object.getOwnPropertyNames(OrigFunction).forEach(function (k) {
+      if (k !== "prototype" && k !== "length" && k !== "name" && k !== "arguments" && k !== "caller") {
+        try { window.Function[k] = OrigFunction[k]; } catch (e) {}
+      }
+    });
+  }
+  if (typeof window.setTimeout === "function") {
+    var origSetTimeout = window.setTimeout;
+    window.setTimeout = function (h, t) {
+      if (typeof h === "string") { record("setTimeout", h); return origSetTimeout.call(window, h, t); }
+      return origSetTimeout.apply(window, arguments);
+    };
+  }
+  if (typeof window.setInterval === "function") {
+    var origSetInterval = window.setInterval;
+    window.setInterval = function (h, t) {
+      if (typeof h === "string") { record("setInterval", h); return origSetInterval.call(window, h, t); }
+      return origSetInterval.apply(window, arguments);
+    };
+  }
+  // Navigation sinks that can be wrapped (location.href and friends are
+  // non-configurable; javascript: URLs and execScript are not covered).
+  // Navigation sinks: of burp.Zcwh's open-redirection family only
+  // window.open is wrappable - the Location members (href, assign,
+  // replace, host, hostname, protocol) are LegacyUnforgeable in Chromium
+  // (non-writable, non-configurable own properties). The popup is
+  // swallowed: the analysis must not leave the page, and a
+  // navigated-away document's hits are unreachable.
+  if (typeof window.open === "function") {
+    var origOpen = window.open;
+    // The swallowed popup must still look like a Window handle: a page
+    // that uses the return value would throw on null before reaching a
+    // later sink.
+    window.open = function (u) {
+      record("window.open", u);
+      return { closed: true, close: function () {}, focus: function () {}, blur: function () {}, postMessage: function () {} };
+    };
+  }
+  // Storage setters: burp.Zcwh splits name and value; `this` names the
+  // storage area.
+  if (typeof Storage !== "undefined" && Storage.prototype.setItem) {
+    var origSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (k, v) {
+      if (this === window.localStorage) {
+        record("localStorage.setItem.name", k);
+        record("localStorage.setItem.value", v);
+      } else if (this === window.sessionStorage) {
+        record("sessionStorage.setItem.name", k);
+        record("sessionStorage.setItem.value", v);
+      } else {
+        record("storage.setItem.name", k);
+        record("storage.setItem.value", v);
+      }
+      return origSetItem.apply(this, arguments);
+    };
+  }
+  if (typeof JSON !== "undefined" && JSON.parse) {
+    var origParse = JSON.parse;
+    JSON.parse = function (t) { record("JSON.parse", t); return origParse.apply(JSON, arguments); };
+  }
+  if (document.evaluate) {
+    var origEvalX = document.evaluate;
+    document.evaluate = function (expr) { record("document.evaluate", expr); return origEvalX.apply(document, arguments); };
+  }
+  var domainDesc = Object.getOwnPropertyDescriptor(Document.prototype, "domain");
+  if (domainDesc && domainDesc.set && domainDesc.configurable) {
+    Object.defineProperty(Document.prototype, "domain", {
+      configurable: true,
+      enumerable: domainDesc.enumerable,
+      get: domainDesc.get,
+      set: function (v) { record("document.domain", v); return domainDesc.set.call(this, v); }
+    });
+  }
+  // webdatabase.executeSql (burp.Zcwh's client-side SQL sink) is not
+  // wrapped: openDatabase is gone from current Chromium.
+  var cookieDesc = Object.getOwnPropertyDescriptor(Document.prototype, "cookie");
+  if (cookieDesc && cookieDesc.set) {
+    Object.defineProperty(Document.prototype, "cookie", {
+      configurable: true,
+      enumerable: cookieDesc.enumerable,
+      get: cookieDesc.get,
+      set: function (v) { record("document.cookie", v); return cookieDesc.set.call(this, v); }
+    });
+  }
+})();
+"#;
+
+/// The first `[...]` group's content, the token slot of the qs-style
+/// probe payloads.
+fn bracket_token(s: &str) -> Option<&str> {
+    let i = s.find('[')? + 1;
+    let j = s[i..].find(']')? + i;
+    (j > i).then(|| &s[i..j])
+}
+
+/// The instrumentation with both probe tokens substituted. TOKEN (from
+/// `canary`) marks the fragment payload; QTOKEN marks the query payload
+/// and is read back out of the probe URL's query string. A probe whose
+/// URL carries no query payload reuses the fragment token for both, and
+/// attribution then reports "unknown" rather than guessing a source.
+pub(crate) fn dom_instrument_js(url: &str, canary: &str) -> String {
+    let fragment_token = bracket_token(canary).unwrap_or(canary).to_string();
+    let query_token = url
+        .split_once('?')
+        .and_then(|(_, q)| bracket_token(q))
+        .unwrap_or(&fragment_token)
+        .to_string();
+    DOM_INSTRUMENT_JS
+        .replace("%CANARY%", canary)
+        .replace("%CANARY2%", &query_token)
+}
+
+/// R-13 option (b) vertical slice: navigate to `url` with `#{canary}` in a
+/// headless browser (locked to the target host, like the crawl) and
+/// return the source-to-sink hits the instrumentation recorded. The
+/// browser tree is killed and its profile removed on every path.
+#[allow(clippy::too_many_arguments)]
+pub fn dom_analysis_probe(
+    shared: &Arc<Shared>,
+    url: &str,
+    canary: &str,
+    template: &str,
+    host: &str,
+    port: u16,
+    https: bool,
+) -> Result<Vec<DomHit>, String> {
+    // Run budget first: over-budget probes fail closed without spawning
+    // a browser, and concurrent callers wait for a browser slot.
+    let budget = &crate::scan::scan_dedup_of(shared).dom_budget;
+    if !budget.spend_probe() {
+        return Err("DOM run probe budget spent".to_string());
+    }
+    let stop = shared.clone();
+    let _permit = budget
+        .acquire_browser(&move || stop.scan.stop.load(Ordering::SeqCst))
+        .ok_or("scan stopped while waiting for a DOM browser slot")?;
+    let bin = crate::paths::chromium()
+        .map_err(|m| m.to_string())?
+        .display()
+        .to_string();
+    let rest = url.split_once("://").map(|x| x.1).unwrap_or(url);
+    let authority = rest.split('/').next().unwrap_or("");
+    let target_host = if let Some(rest) = authority.strip_prefix('[') {
+        rest.split(']').next().unwrap_or(rest).to_string()
+    } else {
+        authority
+            .rsplit_once(':')
+            .map(|x| x.0)
+            .unwrap_or(authority)
+            .to_string()
+    };
+    let dport = std::net::TcpListener::bind("127.0.0.1:0")
+        .map_err(|e| e.to_string())?
+        .local_addr()
+        .map_err(|e| e.to_string())?
+        .port();
+    let profile = std::env::temp_dir().join(format!("webprobe-dom-{}-{dport}", std::process::id()));
+    // Egress blockade: every Chromium network stack connection must
+    // cross a loopback port nothing listens on. Fetch interception
+    // answers real page requests through the scanner transport, so the
+    // proxy is only ever reached by traffic that bypasses interception
+    // (speculative preconnect/prefetch, background services): it has no
+    // route out. DNS is likewise confined to the target host.
+    let dead_proxy = std::net::TcpListener::bind("127.0.0.1:0")
+        .map_err(|e| e.to_string())?
+        .local_addr()
+        .map_err(|e| e.to_string())?
+        .port();
+    let mut cmd = std::process::Command::new(&bin);
+    crate::util::own_process_group(&mut cmd);
+    let mut child = cmd
+        .args([
+            "--headless=new",
+            "--no-sandbox",
+            "--disable-gpu",
+            "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--disable-background-networking",
+            "--disable-component-update",
+            "--disable-sync",
+            "--disable-default-apps",
+            "--disable-extensions",
+            "--disable-domain-reliability",
+            "--disable-client-side-phishing-detection",
+            "--dns-prefetch-disable",
+            "--no-pings",
+            "--disable-features=Translate,OptimizationHints,MediaRouter,AutofillServerCommunication,CertificateTransparencyComponentUpdater,SafeBrowsing",
+            "--metrics-recording-only",
+            "--ignore-certificate-errors",
+            &format!("--proxy-server=http://127.0.0.1:{dead_proxy}"),
+            &format!("--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE {target_host}"),
+            &format!("--remote-debugging-port={dport}"),
+            &format!("--user-data-dir={}", profile.display()),
+            "about:blank",
+        ])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|e| format!("browser start: {e}"))?;
+    let result = (|| {
+        let mut ws_url = None;
+        for _ in 0..75 {
+            if shared.scan.stop.load(Ordering::SeqCst) {
+                return Err("scan stopped".to_string());
+            }
+            if let Some(list) = http_get_local(dport, "/json/list") {
+                let v: serde_json::Value = serde_json::from_str(&list).unwrap_or_default();
+                ws_url = v
+                    .as_array()
+                    .and_then(|a| a.iter().find(|t| t["type"] == "page"))
+                    .and_then(|t| t["webSocketDebuggerUrl"].as_str().map(str::to_string));
+                if ws_url.is_some() {
+                    break;
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        }
+        let mut cdp = Cdp::connect(&ws_url.ok_or("browser DevTools endpoint did not come up")?)?;
+        cdp.dom_route = Some(DomRoute {
+            shared: shared.clone(),
+            origin: origin_of(url).ok_or("invalid DOM origin")?,
+            host: host.into(),
+            port,
+            https,
+            template: template.into(),
+            sent: 0,
+        });
+        cdp.call("Page.enable", serde_json::json!({}))?;
+        cdp.call("Network.enable", serde_json::json!({}))?;
+        cdp.call(
+            "Network.setBypassServiceWorker",
+            serde_json::json!({"bypass":true}),
+        )?;
+        cdp.call(
+            "Network.setBlockedURLs",
+            serde_json::json!({"urls":["ws://*","wss://*","ftp://*"]}),
+        )?;
+        cdp.call(
+            "Fetch.enable",
+            serde_json::json!({"patterns":[{"urlPattern":"*","requestStage":"Request"}]}),
+        )?;
+        cdp.call(
+            "Page.addScriptToEvaluateOnNewDocument",
+            serde_json::json!({"source": dom_instrument_js(url, canary)}),
+        )?;
+        let base = url.split('#').next().unwrap_or(url);
+        cdp.call(
+            "Page.navigate",
+            serde_json::json!({"url": format!("{base}#{canary}")}),
+        )?;
+        for _ in 0..25 {
+            if shared.scan.stop.load(Ordering::SeqCst) {
+                break;
+            }
+            cdp.pump(100);
+        }
+        let hits: Vec<DomHit> =
+            eval_json(&mut cdp, "JSON.stringify(window.__wpDomHits || [])").unwrap_or_default();
+        Ok(hits)
+    })();
+    crate::util::kill_process_tree(
+        child.id(),
+        Some(&profile.display().to_string()),
+        std::time::Duration::from_secs(2),
+    );
+    let _ = child.wait();
+    let _ = std::fs::remove_dir_all(&profile);
+    result
+}
+
+#[cfg(test)]
+mod dom_route_tests {
+    use super::*;
+
+    #[test]
+    fn dom_interception_blocks_unsafe_methods_and_wrong_origins_before_sending() {
+        let mut route = DomRoute {
+            shared: Shared::new(),
+            origin: "http://127.0.0.1:1".into(),
+            host: "127.0.0.1".into(),
+            port: 1,
+            https: false,
+            template: String::new(),
+            sent: 0,
+        };
+        for (method, url) in [
+            ("POST", "http://127.0.0.1:1/"),
+            ("PUT", "http://127.0.0.1:1/"),
+            ("GET", "http://127.0.0.1:2/"),
+            ("GET", "http://127.0.0.1.evil.invalid:1/"),
+            ("GET", "https://127.0.0.1:1/"),
+        ] {
+            let event = serde_json::json!({"requestId":"test","request":{"url":url,"method":method,"headers":{}}});
+            assert_eq!(route.reply(&event).0, "Fetch.failRequest");
+        }
+        assert_eq!(route.sent, 0);
+        route.sent = DOM_MAX_REQUESTS_PER_PROBE;
+        let event = serde_json::json!({"requestId":"budget","request":{"url":"http://127.0.0.1:1/","method":"GET","headers":{}}});
+        assert_eq!(route.reply(&event).0, "Fetch.failRequest");
     }
 }

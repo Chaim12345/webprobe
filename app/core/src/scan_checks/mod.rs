@@ -25,6 +25,7 @@ pub(crate) mod cache;
 
 mod collaborator_everywhere;
 mod context;
+mod dom;
 mod evidence;
 mod graphql;
 mod interface;
@@ -34,6 +35,7 @@ mod stored_input;
 
 pub use collaborator_everywhere::*;
 pub(crate) use context::*;
+pub(crate) use dom::*;
 pub use evidence::*;
 pub use graphql::*;
 pub(crate) use interface::*;
