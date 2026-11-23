@@ -1012,7 +1012,7 @@ fn load_startup_extensions(
     }
     // Extensions the user installed earlier (Extensions > Installed), loaded
     // in the background. Burp's --disable-extensions skips them, and so does
-    // WEBPROBE_NO_EXTENSIONS=1 (QA runs).
+n    // WEBPROBE_NO_EXTENSIONS=1 (QA runs).
     if env("WEBPROBE_NO_EXTENSIONS").is_none() {
         webprobe_core::ext_store::load_all(shared);
     }
@@ -1023,6 +1023,7 @@ fn startup_settings_pane(value: &str) -> ui::SettingsPane {
         "hotkeys" => ui::SettingsPane::Hotkeys,
         "library" => ui::SettingsPane::ConfigurationLibrary,
         "suite" => ui::SettingsPane::Suite,
+        "library" => ui::SettingsPane::ConfigurationLibrary,
         _ => ui::SettingsPane::Appearance,
     }
 }
