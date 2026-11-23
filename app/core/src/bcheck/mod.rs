@@ -15,6 +15,7 @@ use std::fmt;
 
 pub mod exec;
 pub mod runner;
+pub(crate) mod scan;
 
 // Shared across the mutually recursive interpolation/expression parsers, so a
 // nested string cannot reset the budget. Each thread parses independently.
@@ -735,7 +736,23 @@ impl<'a> HoleParser<'a> {
 // Parser
 // ---------------------------------------------------------------------------
 
+/// The largest BCheck source accepted, in bytes. Definitions are kilobytes
+/// of text; an unbounded parse lets a hostile or mistyped source burn
+/// memory before any nesting or AST bound applies. 1 MiB matches the
+/// Extensions tab's file-load cap.
+pub const MAX_SOURCE_BYTES: usize = 1_048_576;
+
 pub fn parse(src: &str) -> Result<Definition, Vec<BcheckError>> {
+    if src.len() > MAX_SOURCE_BYTES {
+        return Err(vec![BcheckError {
+            line: 0,
+            message: format!(
+                "source is {} bytes, over the {} byte limit",
+                src.len(),
+                MAX_SOURCE_BYTES
+            ),
+        }]);
+    }
     let toks = match lex(src) {
         Ok(t) => t,
         Err(e) => return Err(vec![e]),
@@ -2161,6 +2178,23 @@ mod tests {
         assert_eq!(
             parse_hole_expr(&tokens, 1).unwrap(),
             Expr::Var(String::new())
+        );
+    }
+
+    #[test]
+    fn source_over_the_byte_cap_is_refused() {
+        let mut src = String::from("metadata:\n language: v2-beta\n name: \"t\"\ngiven response then\n report issue:\n  severity: info\n  confidence: certain\n");
+        assert!(parse(&src).is_ok(), "a normal definition parses");
+        // Pad past the cap with comment text: refused before lexing.
+        while src.len() <= MAX_SOURCE_BYTES {
+            src.push_str("# padding padding padding padding padding\n");
+        }
+        let errs = parse(&src).unwrap_err();
+        assert_eq!(errs.len(), 1);
+        assert!(
+            errs[0].message.contains("byte limit"),
+            "cap error, got: {}",
+            errs[0].message
         );
     }
 }

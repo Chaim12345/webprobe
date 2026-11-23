@@ -49,6 +49,9 @@ pub struct ProjectScanner {
     /// order.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub library_selection: Vec<String>,
+    /// R-14: BCheck definition sources loaded in the Extensions tab.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bchecks: Vec<String>,
 }
 
 /// One project library entry: its name and Burp's JSON for it.
@@ -80,6 +83,7 @@ impl Default for ProjectScanner {
             issues_reported: None,
             library: Vec::new(),
             library_selection: Vec::new(),
+            bchecks: Vec::new(),
         }
     }
 }
@@ -130,6 +134,12 @@ pub struct ScanConfig {
     /// "Issues reported" from the scan configuration library (R-11); None
     /// runs every check, as before the library existed.
     pub issues: Option<webprobe_support::scan_filter::IssueFilter>,
+    /// BCheck definition sources loaded in the Extensions tab (R-14);
+    /// parsed and validated when a scan starts. Every request a loaded
+    /// check sends is scope-gated to the audited origin, but a check's
+    /// request count is not budget-capped: `crawl_limits.
+    /// maximum_request_count` bounds the crawl, not BCheck traffic.
+    pub bchecks: Vec<String>,
 }
 
 /// Burp's crawl settings (CrawlDefaults.json): link depth, unique locations,
@@ -223,6 +233,7 @@ impl ScanConfig {
                     &serde_json::json!({"scanner": {"issues_reported": ir}}),
                 )
             }),
+            bchecks: s.bchecks.clone(),
         }
     }
 
@@ -237,6 +248,7 @@ impl ScanConfig {
         s.crawl_engine = Some(self.crawl.engine.clone()).filter(|e| !e.is_empty());
         s.crawl_max_minutes = Some(self.crawl.max_minutes);
         s.crawl_max_requests = Some(self.crawl.max_requests);
+        s.bchecks = self.bchecks.clone();
         s.issues_reported = self.issues.as_ref().and_then(|_| {
             webprobe_support::scan_filter::get_path(
                 &config_to_tree(self, 1, 1),
@@ -386,5 +398,31 @@ mod tests {
         let mut back = ProjectScanner::default();
         c.save_into(&mut back);
         assert_eq!(back.crawl_engine, None, "the default engine is not written");
+    }
+
+    #[test]
+    fn bchecks_round_trip_and_stay_optional_in_the_file() {
+        // Loaded BCheck sources survive a project save/load cycle.
+        let c = ScanConfig {
+            bchecks: vec![
+                "metadata:\n  language: v2-beta\n  name: check-a\n".to_string(),
+                "metadata:\n  language: v2-beta\n  name: check-b\n".to_string(),
+            ],
+            ..Default::default()
+        };
+        let mut saved = ProjectScanner::default();
+        c.save_into(&mut saved);
+        let json = serde_json::to_string(&saved).unwrap();
+        let back: ProjectScanner = serde_json::from_str(&json).unwrap();
+        assert_eq!(ScanConfig::from_saved(&back).bchecks, c.bchecks);
+
+        // Empty bchecks are skipped in the JSON, and a file without the
+        // key (a project from before R-14) loads with none.
+        let mut saved = ProjectScanner::default();
+        ScanConfig::default().save_into(&mut saved);
+        let json = serde_json::to_string(&saved).unwrap();
+        assert!(!json.contains("bchecks"), "empty bchecks are not written");
+        let old: ProjectScanner = serde_json::from_str(&json).unwrap();
+        assert!(ScanConfig::from_saved(&old).bchecks.is_empty());
     }
 }

@@ -25,6 +25,9 @@ pub(crate) struct Baseline {
 /// Count one finished scan request. The planned total is an estimate (it
 /// predates several check families), so it is raised whenever the count
 /// passes it: the UI never shows more done than total.
+/// BCheck active checks (R-14) run through the same scan context.
+pub(crate) use crate::bcheck::scan::run_bcheck_checks;
+
 pub(crate) fn bump_progress(shared: &Shared) {
     let done = shared.scan.done.fetch_add(1, Ordering::SeqCst) + 1;
     shared.scan.total.fetch_max(done, Ordering::SeqCst);
