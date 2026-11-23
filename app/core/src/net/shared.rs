@@ -68,6 +68,13 @@ pub struct Shared {
     pub oob: crate::oob::OobState,
     /// Stored input pairing of the current scan run (D-10).
     pub stored: crate::stored::StoredInputs,
+    /// BCheck host/path checks already run this scan (check|key), reset per scan claim.
+    pub bcheck_ran: Mutex<std::collections::HashSet<String>>,
+    /// Parsed BCheck definitions cached against the configured sources;
+    /// parsing every source per audited request was pure waste. Reset
+    /// per scan claim (config changes are picked up by the sources
+    /// comparison either way).
+    pub bcheck_defs: crate::bcheck::scan::BcheckDefsCache,
     /// Passive-scan state across responses (password fields and values
     /// per host); project-scoped, cleared on project load.
     pub passive: crate::passive_state::PassiveState,
@@ -280,6 +287,8 @@ impl Shared {
             scan_state: Default::default(),
             oob: Default::default(),
             stored: Default::default(),
+            bcheck_ran: Mutex::new(std::collections::HashSet::new()),
+            bcheck_defs: Mutex::new(None),
             passive: Default::default(),
             rep: Default::default(),
             scan_enabled: AtomicBool::new(true),

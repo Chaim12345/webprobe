@@ -1934,15 +1934,7 @@ pub fn extensions(app: &mut App, ui: &mut Ui) {
             );
             ui.label(RichText::new("WebProbe extension API v1: any program speaking JSON lines on stdin/stdout can edit or drop requests and responses, report issues of its own declared types and show a tab (docs/extensions.md; example: extensions/examples/marker_reflection.py). Montoya API: Java extensions run against Burp's own Montoya classes through the sidecar JVM (initialize, logging, request/response continue-or-drop). Rust extensions implement ProxyHooks in-process.").size(12.5).color(theme::ink_dim()));
         }
-        3 => {
-            ui.label(
-                RichText::new("Custom scan checks")
-                    .strong()
-                    .size(14.0)
-                    .color(theme::ink()),
-            );
-            ui.label(RichText::new("WebProbe's scan checks are built in (Dashboard > New scan, context menu > Scan). BCheck files are not supported.").size(12.5).color(theme::ink_dim()));
-        }
+        3 => bcheck_checks(app, ui),
         4 => crate::bambda_ui::show(app, ui),
         _ => {
             ui.label(
@@ -4082,4 +4074,151 @@ fn ext_ui_section(
                 .color(theme::ink_dim()),
         );
     }
+}
+/// Extensions > Custom scan checks: the loaded BChecks (R-14), each with
+/// its validation state, a file picker by path (the same pattern as
+/// Sequencer's load), and Remove. Loaded checks run in every audit.
+/// Cached BCheck parse summaries for the UI: (name, description) or the
+/// joined error string, recomputed only when the source list changes.
+#[derive(Default)]
+pub struct BcheckUiCache {
+    sources: Vec<String>,
+    summaries: Vec<Result<(String, Option<String>), String>>,
+}
+
+impl BcheckUiCache {
+    fn refresh(&mut self, sources: &[String]) {
+        if self.sources == sources {
+            return;
+        }
+        self.sources = sources.to_vec();
+        self.summaries = sources
+            .iter()
+            .map(|s| match webprobe_core::bcheck::parse(s) {
+                Ok(def) => Ok((def.metadata.name.clone(), def.metadata.description.clone())),
+                Err(errs) => Err(errs
+                    .iter()
+                    .map(|e| format!("line {}: {}", e.line, e.message))
+                    .collect::<Vec<_>>()
+                    .join("; ")),
+            })
+            .collect();
+    }
+}
+
+/// The largest BCheck file the UI loads: definitions are kilobytes of
+/// text, and an unbounded read lets a mistyped path stall the UI.
+const BCHECK_MAX_FILE_BYTES: u64 = 1_048_576;
+
+fn bcheck_checks(app: &mut App, ui: &mut Ui) {
+    ui.horizontal(|ui| {
+        ui.add_space(8.0);
+        ui.label(
+            RichText::new("Custom scan checks (BChecks)")
+                .strong()
+                .size(14.0)
+                .color(theme::ink()),
+        );
+    });
+    ui.horizontal(|ui| {
+        ui.add_space(8.0);
+        ui.label(RichText::new("BChecks are PortSwigger's definition language for custom scan checks (v2-beta). Loaded checks run in every audit: passive checks on the traffic, active checks per request, host, path and insertion point.").size(12.5).color(theme::ink_dim()));
+    });
+    ui.add_space(6.0);
+    // Copy the sources out and drop the lock immediately: the scanner
+    // threads take the same mutex, and parsing must never happen under it.
+    let sources = webprobe_core::scan_config::shared_config(&app.shared)
+        .lock()
+        .unwrap()
+        .bchecks
+        .clone();
+    app.bcheck_ui_cache.refresh(&sources);
+    let mut remove: Option<usize> = None;
+    {
+        if sources.is_empty() {
+            ui.horizontal(|ui| {
+                ui.add_space(8.0);
+                ui.label(
+                    RichText::new("No BChecks loaded.")
+                        .size(12.5)
+                        .color(theme::ink_dim()),
+                );
+            });
+        }
+        for (i, summary) in app.bcheck_ui_cache.summaries.iter().enumerate() {
+            ui.horizontal(|ui| {
+                ui.add_space(8.0);
+                match summary {
+                    Ok((name, description)) => {
+                        ui.label(RichText::new(name).strong().size(12.5).color(theme::ink()));
+                        if let Some(d) = description {
+                            ui.label(RichText::new(d).size(12.5).color(theme::ink_dim()));
+                        }
+                    }
+                    Err(msg) => {
+                        ui.label(
+                            RichText::new(format!("Invalid BCheck ({msg}); it does not run."))
+                                .size(12.5)
+                                .color(c(theme::BAD)),
+                        );
+                    }
+                }
+                if ui.small_button("Remove").clicked() {
+                    remove = Some(i);
+                }
+            });
+        }
+    }
+    if let Some(i) = remove {
+        webprobe_core::scan_config::shared_config(&app.shared)
+            .lock()
+            .unwrap()
+            .bchecks
+            .remove(i);
+    }
+    ui.add_space(6.0);
+    ui.horizontal(|ui| {
+        ui.add_space(8.0);
+        ui.label(RichText::new("File:").size(12.5).color(theme::ink()));
+        ui.add(
+            egui::TextEdit::singleline(&mut app.bcheck_load_path)
+                .desired_width(360.0)
+                .font(egui::TextStyle::Monospace),
+        );
+        if ui.button("Load").clicked() {
+            let path = app.bcheck_load_path.trim();
+            let too_big = std::fs::metadata(path)
+                .map(|m| m.len() > BCHECK_MAX_FILE_BYTES)
+                .unwrap_or(false);
+            if too_big {
+                app.shared
+                    .log("BCheck not loaded: the file is over the 1 MiB limit");
+            } else {
+                match std::fs::read_to_string(path) {
+                    Err(e) => app
+                        .shared
+                        .log(&format!("Could not read the BCheck file: {e}")),
+                    Ok(src) => match webprobe_core::bcheck::parse(&src) {
+                        Ok(def) => {
+                            app.shared
+                                .log(&format!("Loaded BCheck \"{}\"", def.metadata.name));
+                            webprobe_core::scan_config::shared_config(&app.shared)
+                                .lock()
+                                .unwrap()
+                                .bchecks
+                                .push(src);
+                        }
+                        Err(errs) => {
+                            let msg = errs
+                                .iter()
+                                .map(|e| format!("line {}: {}", e.line, e.message))
+                                .collect::<Vec<_>>()
+                                .join("; ");
+                            app.shared.log(&format!("BCheck not loaded: {msg}"));
+                        }
+                    },
+                }
+            }
+        }
+    });
 }

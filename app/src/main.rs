@@ -198,6 +198,10 @@ pub struct App {
     pub ext_add_done: std::sync::Arc<std::sync::atomic::AtomicBool>,
     /// A tab refresh is in flight / when the last one started (UI time).
     pub ext_tab_busy: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// Extensions > Custom scan checks: path of the BCheck file to load.
+    pub bcheck_load_path: String,
+    /// Extensions > Custom scan checks: cached parse summaries (R-14).
+    pub bcheck_ui_cache: crate::tools::BcheckUiCache,
     pub ext_tab_at: f64,
     /// Intercept: the held item being edited and its text.
     pub intercept_cur: Option<u64>,
@@ -847,6 +851,8 @@ impl App {
             ext_loading: Default::default(),
             ext_add_done: Default::default(),
             ext_tab_busy: Default::default(),
+            bcheck_load_path: String::new(),
+            bcheck_ui_cache: Default::default(),
             ext_tab_at: 0.0,
             intercept_cur: None,
             intercept_text: String::new(),

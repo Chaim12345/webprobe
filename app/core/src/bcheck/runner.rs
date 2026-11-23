@@ -310,18 +310,55 @@ fn apply_payload(
     ip: &InsertionPoint,
     combined: &str,
 ) -> Result<(), ExecError> {
+    // The combined value is decoded; it goes back through the insertion
+    // framework's URL encoding so a payload containing `&` or `=` stays
+    // inside its own parameter instead of corrupting the siblings
+    // (headers and whole-body replacements are not parameter-encoded).
     match ip.kind {
         InsertionPointKind::Query => {
-            set_query_param(req, &ip.name, combined);
+            set_query_param(
+                req,
+                &ip.name,
+                &crate::scan::insertion::encode_url_param(combined),
+            );
         }
         InsertionPointKind::Header => {
             set_header(req, &ip.name, combined);
         }
         InsertionPointKind::Cookie => {
-            set_cookie(req, &ip.name, combined);
+            set_cookie(
+                req,
+                &ip.name,
+                &crate::scan::insertion::encode_url_param(combined),
+            );
         }
         InsertionPointKind::Body => {
-            req.body = combined.to_string();
+            if ip.name.is_empty() {
+                // whole-body point (Burp's ENTIRE_BODY)
+                req.body = combined.to_string();
+            } else {
+                // a named body (form) parameter
+                let combined = crate::scan::insertion::encode_url_param(combined);
+                let mut pairs: Vec<(String, String)> = req
+                    .body
+                    .split('&')
+                    .filter(|p| !p.is_empty())
+                    .map(|p| match p.split_once('=') {
+                        Some((k, v)) => (k.to_string(), v.to_string()),
+                        None => (p.to_string(), String::new()),
+                    })
+                    .collect();
+                if let Some(pair) = pairs.iter_mut().find(|(k, _)| k == &ip.name) {
+                    pair.1 = combined.to_string();
+                } else {
+                    pairs.push((ip.name.clone(), combined.to_string()));
+                }
+                req.body = pairs
+                    .iter()
+                    .map(|(k, v)| format!("{k}={v}"))
+                    .collect::<Vec<_>>()
+                    .join("&");
+            }
         }
         InsertionPointKind::Any => {
             return Err(ExecError(
@@ -389,13 +426,27 @@ fn set_query_param(req: &mut RequestData, name: &str, value: &str) {
                 let rest = &url[i + 3..];
                 match rest.find('/') {
                     Some(j) => &url[i + 3 + j..],
-                    None => "/",
+                    // `http://host?x=1`: the query survives as path "/" + query
+                    None => match rest.find('?') {
+                        Some(q) => &url[i + 3 + q..],
+                        None => "/",
+                    },
                 }
             }
             None => url.as_str(),
         };
         match after.find('?') {
-            Some(i) => (after[..i].to_string(), after[i + 1..].to_string()),
+            Some(i) => {
+                let pth = &after[..i];
+                (
+                    if pth.is_empty() {
+                        "/".to_string()
+                    } else {
+                        pth.to_string()
+                    },
+                    after[i + 1..].to_string(),
+                )
+            }
             None => (after.to_string(), String::new()),
         }
     };
@@ -425,7 +476,10 @@ fn set_query_param(req: &mut RequestData, name: &str, value: &str) {
             let rest = &url[i + 3..];
             match rest.find('/') {
                 Some(j) => &url[..i + 3 + j],
-                None => url.as_str(),
+                None => match rest.find('?') {
+                    Some(q) => &url[..i + 3 + q],
+                    None => url.as_str(),
+                },
             }
         }
         None => "",
@@ -548,7 +602,7 @@ mod tests {
         fn generate_address(&mut self) -> Result<String, String> {
             Ok("xyz.oast.test".into())
         }
-        fn has_interaction(&self, kind: InteractionKind) -> bool {
+        fn has_interaction(&mut self, kind: InteractionKind) -> bool {
             match kind {
                 InteractionKind::Any => !self.kinds.is_empty(),
                 other => self.kinds.contains(&other),
@@ -656,13 +710,55 @@ mod tests {
         assert_eq!(issues.len(), 1);
         assert_eq!(issues[0].severity, "high");
         assert_eq!(issues[0].confidence, "tentative");
-        // payload was appended to the base value
+        // payload was appended to the base value, URL-encoded for the wire
+        // as Burp does; the receiving application decodes it
         let sent = lab.sent.lock().unwrap();
         assert!(
-            sent[0].url.contains("n=1{{1337*1337}}"),
+            sent[0].url.contains("n=1%7B%7B1337*1337%7D%7D"),
             "url: {}",
             sent[0].url
         );
+    }
+
+    #[test]
+    fn send_payload_with_specials_stays_inside_its_own_parameter() {
+        let src = "metadata:\n language: v2-beta\n name: \"t\"\ngiven insertion point then\n send payload:\n  appending: \"&z=9\"\n report issue and continue:\n  severity: low\n  confidence: firm\n";
+        let def = match parse(src) {
+            Ok(d) => d,
+            Err(e) => panic!("{e:?}"),
+        };
+        let lab = Lab {
+            sent: Mutex::new(Vec::new()),
+            responder: Box::new(ok200),
+        };
+        let mut b = base("http://lab.local/f", "", 200);
+        b.request.body = "q=base&keep=1".into();
+        let ip = InsertionPoint {
+            kind: InsertionPointKind::Body,
+            name: "q".into(),
+            base_value: "base".into(),
+        };
+        let _ = run_definition(&def, &b, Some(&ip), &lab, None).unwrap();
+        let sent = lab.sent.lock().unwrap();
+        assert_eq!(
+            sent[0].body, "q=base%26z%3D9&keep=1",
+            "siblings must survive"
+        );
+    }
+
+    #[test]
+    fn set_query_param_keeps_the_query_of_a_pathless_url() {
+        let mut req = RequestData {
+            method: "GET".into(),
+            url: "http://host?x=1".into(),
+            http_version: "HTTP/1.1".into(),
+            headers: Vec::new(),
+            body: String::new(),
+        };
+        set_query_param(&mut req, "p", "v");
+        assert_eq!(req.url, "http://host/?x=1&p=v");
+        set_query_param(&mut req, "x", "2");
+        assert_eq!(req.url, "http://host/?x=2&p=v");
     }
 
     #[test]

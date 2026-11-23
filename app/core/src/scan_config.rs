@@ -49,6 +49,9 @@ pub struct ProjectScanner {
     /// order.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub library_selection: Vec<String>,
+    /// R-14: BCheck definition sources loaded in the Extensions tab.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bchecks: Vec<String>,
 }
 
 /// One project library entry: its name and Burp's JSON for it.
@@ -80,6 +83,7 @@ impl Default for ProjectScanner {
             issues_reported: None,
             library: Vec::new(),
             library_selection: Vec::new(),
+            bchecks: Vec::new(),
         }
     }
 }
@@ -130,6 +134,9 @@ pub struct ScanConfig {
     /// "Issues reported" from the scan configuration library (R-11); None
     /// runs every check, as before the library existed.
     pub issues: Option<webprobe_support::scan_filter::IssueFilter>,
+    /// BCheck definition sources loaded in the Extensions tab (R-14);
+    /// parsed and validated when a scan starts.
+    pub bchecks: Vec<String>,
 }
 
 /// Burp's crawl settings (CrawlDefaults.json): link depth, unique locations,
@@ -223,6 +230,7 @@ impl ScanConfig {
                     &serde_json::json!({"scanner": {"issues_reported": ir}}),
                 )
             }),
+            bchecks: s.bchecks.clone(),
         }
     }
 
@@ -237,6 +245,7 @@ impl ScanConfig {
         s.crawl_engine = Some(self.crawl.engine.clone()).filter(|e| !e.is_empty());
         s.crawl_max_minutes = Some(self.crawl.max_minutes);
         s.crawl_max_requests = Some(self.crawl.max_requests);
+        s.bchecks = self.bchecks.clone();
         s.issues_reported = self.issues.as_ref().and_then(|_| {
             webprobe_support::scan_filter::get_path(
                 &config_to_tree(self, 1, 1),
