@@ -379,6 +379,16 @@ fn registry_order_is_pinned() {
             ("active.react2shell", Scope::Host, Some(BURP_GROUP)),
             ("active.tls-certificate", Scope::Host, Some(BURP_GROUP)),
             ("active.openapi-definition", Scope::Host, Some(BURP_GROUP)),
+            (
+                "active.flash-cross-domain-policy",
+                Scope::Host,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.silverlight-cross-domain-policy",
+                Scope::Host,
+                Some(BURP_GROUP)
+            ),
             ("active.collaborator-everywhere", Scope::Host, None),
             (
                 "active.server-trace-echo",
@@ -392,6 +402,11 @@ fn registry_order_is_pinned() {
             ),
             ("active.header-manipulation", Scope::Request, None),
             ("active.xxe-file-read", Scope::Request, None),
+            (
+                "active.xml-entity-expansion",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
             ("active.csrf", Scope::Request, None),
             ("active.http-put-enabled", Scope::Host, None),
             ("active.aspnet-tracing", Scope::Host, None),
@@ -401,6 +416,8 @@ fn registry_order_is_pinned() {
             ("active.graphql-content-type", Scope::Request, None),
             ("active.spoofable-client-ip", Scope::Request, None),
             ("active.broken-access-control", Scope::Request, None),
+            ("active.referer-dependent-response", Scope::Request, None),
+            ("active.user-agent-dependent-response", Scope::Request, None),
             ("active.backup-file", Scope::Request, None),
             ("active.graphql-endpoint-discovered", Scope::Host, None),
             ("active.web-cache-poisoning", Scope::Request, None),
@@ -731,6 +748,21 @@ fn lab_scan(
     path: &str,
     req_raw: String,
 ) -> Vec<(String, String, String)> {
+    lab_scan_full(port, keep, method, path, req_raw)
+        .into_iter()
+        .map(|(n, s, c, _)| (n, s, c))
+        .collect()
+}
+
+/// `lab_scan` with the issue detail included, for tests that assert on
+/// what the evidence text says.
+fn lab_scan_full(
+    port: u16,
+    keep: &[&str],
+    method: &str,
+    path: &str,
+    req_raw: String,
+) -> Vec<(String, String, String, String)> {
     let shared = crate::net::Shared::new();
     let mut cfg = crate::scan_config::ScanConfig::default();
     for (id, ..) in crate::scan::check_catalogue() {
@@ -756,7 +788,14 @@ fn lab_scan(
     let issues = shared.issues.lock().unwrap();
     issues
         .iter()
-        .map(|i| (i.name.clone(), i.sev.clone(), i.confidence.clone()))
+        .map(|i| {
+            (
+                i.name.clone(),
+                i.sev.clone(),
+                i.confidence.clone(),
+                i.detail.clone(),
+            )
+        })
         .collect()
 }
 
@@ -1801,6 +1840,277 @@ fn host_probe_claim_is_released_when_the_probe_transport_fails() {
     assert!(
         names.contains(&"React Server Components remote code execution (React2Shell)"),
         "{names:?}"
+    );
+}
+
+/// R-10 follow-up: File path manipulation demonstrates impact by pulling
+/// a known file (burp.Zsl1.java:111-128,179-203). The lab's `file`
+/// parameter reads from disk: dot segments resolve away, bogus names miss,
+/// and `img/Web.config` exists while its `X`-suffixed sibling does not.
+/// The issue detail must name the retrieved file; a lab without the known
+/// file still reports the differential, without the retrieval.
+fn file_param_lab(known_file: bool) -> u16 {
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    lab_serve(l, move |_method, target, _raw| {
+        let q = target
+            .split_once('?')
+            .map(|(_, q)| q.to_string())
+            .unwrap_or_default();
+        let v = q.split('&').find_map(|kv| kv.strip_prefix("file=")).unwrap_or("");
+        let v = util::url_decode(&v.replace('+', " "));
+        let resolved: Vec<&str> = v
+            .split(['/', '\\'])
+            .filter(|s| !s.is_empty() && *s != ".")
+            .collect();
+        let (status, body) = match resolved.as_slice() {
+            ["img", "logo.png"] => ("200 OK", "PNG image data ".repeat(20)),
+            ["img", "Web.config"] if known_file => (
+                "200 OK",
+                "<configuration><system.web><compilation/></system.web></configuration>".to_string(),
+            ),
+            _ => ("404 Not Found", "<h1>404 Not Found</h1>".to_string()),
+        };
+        format!("HTTP/1.1 {status}\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    })
+}
+
+#[test]
+fn r10_file_path_manip_pulls_a_known_file() {
+    let port = file_param_lab(true);
+    let host = format!("127.0.0.1:{port}");
+    let req = format!("GET /view?file=img/logo.png HTTP/1.1\r\nHost: {host}\r\n\r\n");
+    let got = lab_scan_full(
+        port,
+        &["active.file-path-manipulation"],
+        "GET",
+        "/view?file=img/logo.png",
+        req,
+    );
+    let Some((n, s, c, detail)) = got.iter().find(|(n, ..)| n == "File path manipulation") else {
+        panic!("differential must report: {got:?}");
+    };
+    assert_eq!((n.as_str(), s.as_str(), c.as_str()), ("File path manipulation", "high", "Firm"));
+    assert!(detail.contains("Web.config"), "retrieval named: {detail}");
+    assert!(detail.contains("<system.web"), "marker named: {detail}");
+
+    // Without the known file: the differential still reports, the detail
+    // names no retrieval.
+    let port = file_param_lab(false);
+    let host = format!("127.0.0.1:{port}");
+    let req = format!("GET /view?file=img/logo.png HTTP/1.1\r\nHost: {host}\r\n\r\n");
+    let got = lab_scan_full(
+        port,
+        &["active.file-path-manipulation"],
+        "GET",
+        "/view?file=img/logo.png",
+        req,
+    );
+    let Some((.., detail)) = got.iter().find(|(n, ..)| n == "File path manipulation") else {
+        panic!("differential must report: {got:?}");
+    };
+    assert!(!detail.contains("known file"), "no retrieval: {detail}");
+}
+
+/// R-10 follow-up: the cross-domain policy checks against a live lab.
+/// Flash's policy trusts everyone (reported, once per host); the
+/// Silverlight policy 404s (silent).
+#[test]
+fn r10_crossdomain_policy_against_a_live_lab() {
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, _raw| {
+        let (status, ct, body) = match path {
+            "/crossdomain.xml" => (
+                "200 OK",
+                "text/xml",
+                "<?xml version=\"1.0\"?><cross-domain-policy><allow-access-from domain=\"*\"/></cross-domain-policy>".to_string(),
+            ),
+            _ => ("404 Not Found", "text/html", "<h1>404</h1>".to_string()),
+        };
+        format!("HTTP/1.1 {status}\r\nContent-Type: {ct}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    let req = format!("GET /home HTTP/1.1\r\nHost: {host}\r\n\r\n");
+    let got = lab_scan(
+        port,
+        &[
+            "active.flash-cross-domain-policy",
+            "active.silverlight-cross-domain-policy",
+        ],
+        "GET",
+        "/home",
+        req,
+    );
+    let got: Vec<(&str, &str, &str)> = got
+        .iter()
+        .map(|(a, b, c)| (a.as_str(), b.as_str(), c.as_str()))
+        .collect();
+    assert_eq!(
+        got,
+        [("Flash cross-domain policy", "high", "Certain")],
+        "wildcard Flash policy only: {got:?}"
+    );
+
+    // A policy that trusts only unrelated domains: quiet.
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, _raw| {
+        let (status, ct, body) = match path {
+            "/crossdomain.xml" | "/clientaccesspolicy.xml" => (
+                "200 OK",
+                "text/xml",
+                "<cross-domain-policy><allow-access-from domain=\"unrelated.io\"/></cross-domain-policy>".to_string(),
+            ),
+            _ => ("404 Not Found", "text/html", "<h1>404</h1>".to_string()),
+        };
+        format!("HTTP/1.1 {status}\r\nContent-Type: {ct}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    let req = format!("GET /home HTTP/1.1\r\nHost: {host}\r\n\r\n");
+    let got = lab_scan(
+        port,
+        &[
+            "active.flash-cross-domain-policy",
+            "active.silverlight-cross-domain-policy",
+        ],
+        "GET",
+        "/home",
+        req,
+    );
+    assert!(got.is_empty(), "unrelated policy must stay quiet: {got:?}");
+}
+
+/// R-10 follow-up: the header-dependent response checks against a live
+/// lab. The lab serves a different page to a Google Referer and to an
+/// iPhone User-Agent; a header-independent lab stays silent.
+#[test]
+fn r10_header_dependent_response_against_a_live_lab() {
+    let dependent = |_method: &str, _path: &str, raw: &str| {
+        let referer = raw
+            .lines()
+            .find_map(|l| l.to_ascii_lowercase().strip_prefix("referer:").map(|v| v.trim().to_string()))
+            .unwrap_or_default();
+        let ua = raw
+            .lines()
+            .find_map(|l| l.to_ascii_lowercase().strip_prefix("user-agent:").map(|v| v.trim().to_string()))
+            .unwrap_or_default();
+        // NB: the header values above come from the lower-cased line.
+        let mut body = String::from("<html><body>home");
+        if referer.contains("google.com") {
+            body.push_str(" from-google");
+        }
+        if ua.contains("iphone") {
+            body.push_str(" mobile");
+        }
+        body.push_str("</body></html>");
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    };
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, dependent);
+    let host = format!("127.0.0.1:{port}");
+    let req = format!("GET /home HTTP/1.1\r\nHost: {host}\r\nUser-Agent: Mozilla/5.0 (X11; Linux x86_64) Gecko/20100101 Firefox/121.0\r\n\r\n");
+    let got = lab_scan(
+        port,
+        &[
+            "active.referer-dependent-response",
+            "active.user-agent-dependent-response",
+        ],
+        "GET",
+        "/home",
+        req,
+    );
+    let got: Vec<(&str, &str, &str)> = got
+        .iter()
+        .map(|(a, b, c)| (a.as_str(), b.as_str(), c.as_str()))
+        .collect();
+    assert!(
+        got.contains(&("Referer-dependent response", "info", "Tentative")),
+        "referer lab: {got:?}"
+    );
+    assert!(
+        got.contains(&("User agent-dependent response", "info", "Tentative")),
+        "ua lab: {got:?}"
+    );
+
+    // A header-independent page: neither check reports.
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_m, _p, _r| {
+        let body = "<html><body>home</body></html>";
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    let req = format!("GET /home HTTP/1.1\r\nHost: {host}\r\n\r\n");
+    let got = lab_scan(
+        port,
+        &[
+            "active.referer-dependent-response",
+            "active.user-agent-dependent-response",
+        ],
+        "GET",
+        "/home",
+        req,
+    );
+    assert!(got.is_empty(), "static page must stay quiet: {got:?}");
+}
+
+/// R-10 follow-up: the entity-expansion check end to end. The lab
+/// behaves like a quadratic parser, expanding whatever probe it gets;
+/// a plain lab that never expands must stay silent.
+#[test]
+fn r10_xml_entity_expansion_against_a_live_lab() {
+    let expander = |_method: &str, _path: &str, raw: &str| {
+        let body = raw.split("\r\n\r\n").nth(1).unwrap_or("");
+        let expanded = (|| {
+            let e0 = body.find("<!ENTITY ")? + "<!ENTITY ".len();
+            let name_end = body[e0..].find('0')? + e0;
+            let name = &body[e0..name_end];
+            let seed_start = body[name_end..].find('"')? + name_end + 1;
+            let seed_end = body[seed_start..].find('"')? + seed_start;
+            let seed = &body[seed_start..seed_end];
+            let depth = if body.contains(&format!("<!ENTITY {name}3")) {
+                3
+            } else if body.contains(&format!("<!ENTITY {name}2")) {
+                2
+            } else {
+                return None;
+            };
+            Some(seed.repeat(1 << depth))
+        })();
+        match expanded {
+            Some(b) => format!("HTTP/1.1 200 OK\r\nContent-Type: text/xml\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{b}", b.len()),
+            None => "HTTP/1.1 200 OK\r\nContent-Type: text/xml\r\nContent-Length: 4\r\nConnection: close\r\n\r\nnone".to_string(),
+        }
+    };
+    let audit = |host: &str| {
+        let body = r#"<?xml version="1.0"?><order><id>7</id></order>"#;
+        format!("POST /order HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/xml\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    };
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, expander);
+    let got = lab_scan(
+        port,
+        &["active.xml-entity-expansion"],
+        "POST",
+        "/order",
+        audit(&format!("127.0.0.1:{port}")),
+    );
+    assert!(
+        got.iter()
+            .any(|(n, s, c)| n == "XML entity expansion" && s == "medium" && c == "Firm"),
+        "expanding parser: {got:?}"
+    );
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_m, _p, _r| {
+        "HTTP/1.1 200 OK\r\nContent-Type: text/xml\r\nContent-Length: 4\r\nConnection: close\r\n\r\nnone".to_string()
+    });
+    let got = lab_scan(
+        port,
+        &["active.xml-entity-expansion"],
+        "POST",
+        "/order",
+        audit(&format!("127.0.0.1:{port}")),
+    );
+    assert!(
+        !got.iter().any(|(n, ..)| n == "XML entity expansion"),
+        "plain parser must stay quiet: {got:?}"
     );
 }
 

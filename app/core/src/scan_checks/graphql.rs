@@ -627,6 +627,118 @@ impl RequestCheck for BrokenAccessControl {
     }
 }
 
+/// burp.Zxly.java:34-45: does this User-Agent look mobile?
+pub(crate) fn ua_looks_mobile(ua: &str) -> bool {
+    let ua = ua.to_ascii_lowercase();
+    [
+        "iphone",
+        "android",
+        "blackberry",
+        "htc",
+        "symbian",
+        "nokia",
+        "samsung",
+        "mot",
+        "sonyericsson",
+    ]
+    .iter()
+    .any(|t| ua.contains(t))
+}
+
+/// burp.Zxly.java:29-46: the swapped User-Agent - a desktop request gets the
+/// iPhone string, a mobile request the IE9 string.
+pub(crate) fn ua_variant(existing: Option<&str>) -> &'static str {
+    match existing {
+        Some(ua) if ua_looks_mobile(ua) => {
+            "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Win64; x64; Trident/5.0)"
+        }
+        _ => "Mozilla/5.0 (iPhone; CPU iPhone OS 5_1 like Mac OS X) AppleWebKit/534.46 (KHTML, like Gecko) Version/5.1 Mobile/9B176 Safari/7534.48.3",
+    }
+}
+
+/// Referer-dependent and User agent-dependent response (per request),
+/// burp.Zxlg / burp.Zxly over the shared burp.Zxld/Zmaq comparison, the
+/// same shape as `SpoofableClientIp`: the request with the header swapped
+/// must stay distinguishable from the base request for the accuracy's
+/// rounds (4/6/10 - Zxld's counts). burp.Zg4d's removal variant is the
+/// base request itself when the header is absent. Bounded: two sends per
+/// round, no other traffic.
+pub(crate) struct HeaderDependent {
+    pub user_agent: bool,
+}
+
+impl RequestCheck for HeaderDependent {
+    fn id(&self) -> &'static str {
+        if self.user_agent {
+            "active.user-agent-dependent-response"
+        } else {
+            "active.referer-dependent-response"
+        }
+    }
+    fn issue(&self) -> &'static str {
+        if self.user_agent {
+            "User agent-dependent response"
+        } else {
+            "Referer-dependent response"
+        }
+    }
+    fn scope(&self) -> Scope {
+        Scope::Request
+    }
+    fn run(&self, cx: &ScanCtx) {
+        if cx.stopped() || !cx.runs(self.issue()) || cx.baseline.raw.is_empty() {
+            return;
+        }
+        let (header, swapped) = if self.user_agent {
+            let existing = util::get_header(&cx.parts.headers, "User-Agent");
+            ("User-Agent", ua_variant(existing.as_deref()).to_string())
+        } else {
+            // burp.Zxlg's static replacement is stripped from the readable
+            // source; its fragments are "http://" and ".com/". Any foreign
+            // origin serves the differential.
+            ("Referer", "http://www.google.com/".to_string())
+        };
+        let base = cx.req.as_bytes().to_vec();
+        let changed = crate::util::replace_or_add_header(&base, header, &swapped);
+        let fp = crate::variations::fingerprint;
+        let (Some(a0), Some(b0)) = (burp_send(cx, &base), burp_send(cx, &changed)) else {
+            return;
+        };
+        let mut c = crate::variations::Comparator::new(&fp(&a0), &fp(&b0));
+        c.add_a(&fp(&cx.baseline.raw));
+        if !c.distinguishable() {
+            return;
+        }
+        let (mut last_a, mut last_b) = (a0, b0);
+        for _ in 1..cx.settings.accuracy.rounds() {
+            if cx.stopped() {
+                return;
+            }
+            let (Some(a), Some(b)) = (burp_send(cx, &base), burp_send(cx, &changed)) else {
+                return;
+            };
+            c.add_a(&fp(&a));
+            c.add_b(&fp(&b));
+            if !c.distinguishable() {
+                return;
+            }
+            (last_a, last_b) = (a, b);
+        }
+        let mut i = mk(
+            "info",
+            self.issue(),
+            &cx.entry,
+            format!("The response changed consistently when the header <b>{header}</b> was swapped for <b>{swapped}</b> (attributes: {:?}).", c.attributes()),
+        )
+        .with_evidence(vec![
+            ScanEvidence::new(&base, Some(&last_a)),
+            ScanEvidence::new(&changed, Some(&last_b)),
+        ]);
+        i.confidence = "Tentative".into();
+        cx.report(vec![i]);
+    }
+}
+
 /// The backup-file names Burp tries for a file name (`stem` + `ext`, the
 /// extension with its dot), from the decoded literals of its four
 /// mutation families: burp.Zxc6 (prefixes), Zxfn (suffixes before the
@@ -1178,25 +1290,41 @@ impl PointCheck for FilePathManipulation {
         }
         let ip = pt.ip;
         let rec = Recorder::default();
-        let send = |payload: &str| -> Option<Vec<u8>> {
+        let mut send = |payload: &str| -> Option<Vec<u8>> {
             if cx.stopped() {
                 return None;
             }
             let new_req = inject_payload(&cx.req, ip, payload);
             rec.send(cx, payload, new_req.as_bytes())
         };
-        if let Some(hit) =
-            run_file_path_manip_check(&ip.value, &cx.baseline.raw, cx.settings.accuracy, send)
-        {
-            cx.report(vec![mk_point(
-                "File path manipulation",
-                "high",
-                "Firm",
-                &cx.entry,
-                ip,
-                format!("Same-file paths like {:?} and bogus paths like {:?} gave consistently different responses: the parameter selects a file (attributes: {:?}).", hit.valid, hit.invalid, hit.attributes),
-            )
-            .with_evidence(evidence([rec.last(&hit.valid), rec.last(&hit.invalid)]))]);
+        if let Some(hit) = run_file_path_manip_check(
+            &ip.value,
+            &cx.baseline.raw,
+            cx.settings.accuracy,
+            &mut send,
+        ) {
+            // burp.Zsl1.java:111-128,179-203: demonstrate impact by pulling
+            // one of Burp's known files from the selected directory.
+            let known = known_file_follow_up(&ip.value, &cx.baseline.raw, &mut send);
+            let detail = match &known {
+                Some(k) => format!(
+                    "Same-file paths like {:?} and bogus paths like {:?} gave consistently different responses: the parameter selects a file (attributes: {:?}). The known file {} was retrieved with {:?} (marker {:?}, absent from the {:?} control).",
+                    hit.valid, hit.invalid, hit.attributes, k.file, k.payload, k.marker, k.control
+                ),
+                None => format!(
+                    "Same-file paths like {:?} and bogus paths like {:?} gave consistently different responses: the parameter selects a file (attributes: {:?}).",
+                    hit.valid, hit.invalid, hit.attributes
+                ),
+            };
+            let mut ev = vec![rec.last(&hit.valid), rec.last(&hit.invalid)];
+            if let Some(k) = &known {
+                ev.push(rec.last(&k.payload));
+                ev.push(rec.last(&k.control));
+            }
+            cx.report(
+                vec![mk_point("File path manipulation", "high", "Firm", &cx.entry, ip, detail)
+                    .with_evidence(evidence(ev))],
+            );
         }
         cx.progress();
     }

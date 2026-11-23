@@ -24,6 +24,10 @@ pub struct ScanDedup {
     /// Chromium budget for dynamic DOM analysis in this run. Fresh with
     /// the run, so a new run gets the full budget again.
     pub dom_budget: DomRunBudget,
+    /// Hosts whose cross-domain policy files were already fetched by the
+    /// Flash/Silverlight policy checks (burp.Zm24 / Zbtu, once per host
+    /// and policy path).
+    pub crossdomain_hosts: Mutex<HashSet<String>>,
 }
 
 impl ScanDedup {

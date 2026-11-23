@@ -821,6 +821,30 @@ pub fn replace_or_add_header(raw: &[u8], name: &str, value: &str) -> Vec<u8> {
     bytes
 }
 
+/// `raw` without the header `name` (all occurrences), framing unchanged.
+/// The entity-expansion probe drops Content-Encoding / Transfer-Encoding
+/// this way before sending its raw XML body.
+pub fn remove_header(raw: &[u8], name: &str) -> Vec<u8> {
+    let p = parse_http(raw);
+    let body = &raw[p.head_len.min(raw.len())..];
+    let mut out = String::with_capacity(raw.len());
+    out.push_str(&p.first);
+    out.push_str("\r\n");
+    for (k, v) in &p.headers {
+        if k.eq_ignore_ascii_case(name) {
+            continue;
+        }
+        out.push_str(k);
+        out.push_str(": ");
+        out.push_str(v);
+        out.push_str("\r\n");
+    }
+    out.push_str("\r\n");
+    let mut bytes = out.into_bytes();
+    bytes.extend_from_slice(body);
+    bytes
+}
+
 /// A random id in the a-z0-9 alphabet (the id Burp's Zie.ZS hands out when
 /// no Collaborator rewrites it). Moved from core active_checks (L8, #38).
 pub fn rnd_id(n: usize) -> String {

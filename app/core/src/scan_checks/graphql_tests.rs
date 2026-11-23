@@ -178,3 +178,31 @@ fn backup_names_without_an_extension_still_mutate_the_stem() {
     assert!(n.contains(&"README_bak".to_string()));
     assert_eq!(n.last().map(String::as_str), Some("README~"));
 }
+
+#[test]
+fn user_agent_variant_follows_burps_mobile_token_list() {
+    // Desktop UAs (and a missing header) get the iPhone string.
+    let iphone = "Mozilla/5.0 (iPhone; CPU iPhone OS 5_1 like Mac OS X) AppleWebKit/534.46 (KHTML, like Gecko) Version/5.1 Mobile/9B176 Safari/7534.48.3";
+    let ie9 = "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Win64; x64; Trident/5.0)";
+    assert_eq!(ua_variant(None), iphone);
+    assert_eq!(
+        ua_variant(Some("Mozilla/5.0 (X11; Linux x86_64) Gecko/20100101 Firefox/121.0")),
+        iphone
+    );
+    // Every mobile token of burp.Zxly.java:34-45 flips to IE9.
+    for ua in [
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0)",
+        "Mozilla/5.0 (Linux; Android 14)",
+        "BlackBerry9700/5.0",
+        "HTC Desire",
+        "SymbianOS/9.4",
+        "NokiaN95",
+        "SAMSUNG-GT-S5230",
+        "MOT-V3",
+        "SonyEricssonK800i",
+    ] {
+        assert_eq!(ua_variant(Some(ua)), ie9, "{ua}");
+    }
+    // Case does not matter.
+    assert_eq!(ua_variant(Some("IPHONE")), ie9);
+}

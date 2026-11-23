@@ -731,6 +731,77 @@ fn file_path_manip_detects_a_file_selector() {
 }
 
 #[test]
+fn known_file_follow_up_retrieves_only_with_a_clean_control() {
+    // A server whose file parameter reads from disk: Web.config exists,
+    // its X-suffixed sibling does not.
+    let serve = |p: &str| -> Option<Vec<u8>> {
+        Some(match p {
+            "files/Web.config" => {
+                b"<configuration><system.web><compilation/></system.web></configuration>".to_vec()
+            }
+            _ => Vec::new(),
+        })
+    };
+    let hit = known_file_follow_up("files/page.html", b"<html>home</html>", serve).unwrap();
+    assert_eq!(hit.file, "Web.config");
+    assert_eq!(hit.payload, "files/Web.config");
+    assert_eq!(hit.control, "files/Web.configX");
+    assert_eq!(hit.marker, "<system.web");
+
+    // .htaccess hits on any of its three markers (here AddHandler).
+    let serve = |p: &str| -> Option<Vec<u8>> {
+        Some(match p {
+            "static/.htaccess" => b"AddHandler cgi-script .pl".to_vec(),
+            _ => Vec::new(),
+        })
+    };
+    let hit = known_file_follow_up("static/a.css", b"", serve).unwrap();
+    assert_eq!(hit.file, ".htaccess");
+    assert_eq!(hit.marker, "AddHandler");
+
+    // The marker in the control too: the server shows it regardless of
+    // the filename, so nothing was retrieved.
+    let fixed = |_: &str| -> Option<Vec<u8>> {
+        Some(b"<system.web>always</system.web>".to_vec())
+    };
+    assert!(known_file_follow_up("a/b.txt", b"", fixed).is_none());
+
+    // A control that errors out aborts the follow-up: no hit, not a
+    // false confirm on an empty body.
+    let flaky = |p: &str| -> Option<Vec<u8>> {
+        if p.ends_with('X') {
+            None
+        } else if p == "web.config" {
+            Some(b"<system.web>x</system.web>".to_vec())
+        } else {
+            Some(Vec::new())
+        }
+    };
+    assert!(known_file_follow_up("page", b"", flaky).is_none());
+
+    // The marker already on the baseline page: never reported.
+    let serve = |p: &str| -> Option<Vec<u8>> {
+        Some(if p == "web.config" {
+            b"<system.web>x</system.web>".to_vec()
+        } else {
+            Vec::new()
+        })
+    };
+    assert!(known_file_follow_up("page", b"<system.web>baseline</system.web>", serve).is_none());
+
+    // A value with no directory part probes the known files at the root.
+    let serve = |p: &str| -> Option<Vec<u8>> {
+        Some(if p == "WEB-INF/web.xml" {
+            b"<web-app><servlet/></web-app>".to_vec()
+        } else {
+            Vec::new()
+        })
+    };
+    let hit = known_file_follow_up("page", b"", serve).unwrap();
+    assert_eq!(hit.payload, "WEB-INF/web.xml");
+}
+
+#[test]
 fn ssi_check_detects_processed_directives() {
     let (payload, _expected) = ssi_payload("abc0123456");
     assert!(payload.starts_with("<!--#set var="));
@@ -4140,4 +4211,48 @@ fn hardening_binary_sniff_preserves_text_and_nul_window_contract() {
     assert!(!is_binary("text/plain", &body));
     body[1023] = 0;
     assert!(is_binary("text/plain", &body));
+}
+
+#[test]
+fn entity_expansion_depth2_confirmed_by_depth3() {
+    // The doctype: seed entity plus `depth` doublers (burp.Zgij.java:108-150).
+    let d2 = entity_expansion_doctype("ab", "SEEDSEED", 2);
+    assert_eq!(
+        d2,
+        "<!DOCTYPE foo [<!ENTITY ab0 \"SEEDSEED\"><!ENTITY ab1 \"&ab0;&ab0;\"><!ENTITY ab2 \"&ab1;&ab1;\"> ]>"
+    );
+    assert_eq!(
+        entity_expansion_marker("SEEDSEED", 2),
+        "SEEDSEED".repeat(4),
+        "depth 2 is 2^2 copies"
+    );
+    assert_eq!(entity_expansion_marker("SEEDSEED", 3).len(), 8 * 8);
+
+    // A lab parser that expands the entities of any probe it gets.
+    let expanding = |body: &str| -> Option<String> {
+        if body.contains("<!ENTITY ab3") {
+            Some(format!("OK {}", entity_expansion_marker("SEEDSEED", 3)))
+        } else if body.contains("<!ENTITY ab2") {
+            Some(format!("OK {}", entity_expansion_marker("SEEDSEED", 2)))
+        } else {
+            Some("OK".into())
+        }
+    };
+    let body = "<?xml version=\"1.0\"?><order><id>7</id></order>";
+    let hit = run_entity_expansion_check(body, "ab", "SEEDSEED", expanding).unwrap();
+    assert!(hit.0.contains("<!ENTITY ab3"), "the confirmation is at depth 3");
+    assert!(hit.0.contains("&ab3;"), "the insertion carries the top reference");
+
+    // A non-expanding parser never reports.
+    assert!(run_entity_expansion_check(body, "ab", "SEEDSEED", |_| Some("OK".into())).is_none());
+
+    // Depth 2 alone is not enough: without the depth-3 marker there is no report.
+    let half = |body: &str| -> Option<String> {
+        if body.contains("<!ENTITY ab2") && !body.contains("<!ENTITY ab3") {
+            Some(format!("OK {}", entity_expansion_marker("SEEDSEED", 2)))
+        } else {
+            Some("OK".into())
+        }
+    };
+    assert!(run_entity_expansion_check(body, "ab", "SEEDSEED", half).is_none());
 }
