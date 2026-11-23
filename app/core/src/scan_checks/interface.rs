@@ -90,6 +90,14 @@ pub(crate) static POINT_CHECKS: &[&dyn PointCheck] = &[
 
 /// Request-level and host-level checks, in run order.
 pub(crate) static REQUEST_CHECKS: &[&dyn RequestCheck] = &[
+    &DomXss,
+    &DomJsInjection,
+    &DomOpenRedirection,
+    &DomStorageManipulation,
+    &DomJsonInjection,
+    &DomXpathInjection,
+    &DomDocumentDomain,
+    &DomCookieManipulation,
     &Cors,
     &PathRelativeStyleSheet,
     &TraceEnabled,
