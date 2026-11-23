@@ -392,6 +392,16 @@ mod tests {
         assert!(l.available(Resource::Outgoing).is_err());
     }
     #[test]
+    fn bounded_cpu_evidence_copies_after_failure_do_not_reopen_io_or_grow_forever() {
+        let l = Ledger::new(limits()).unwrap();
+        l.mark_incomplete();
+        assert_eq!(l.reserve(&[]), Err(Denied::Failed));
+        assert_eq!(l.retain_input(10), Ok(()));
+        assert_eq!(l.retain_input(1), Err(Denied::Exhausted(Resource::Input)));
+        assert!(l.retention_lost());
+        assert_eq!(l.reserve(&[]), Err(Denied::Failed));
+    }
+    #[test]
     fn all_resource_domains_are_independent_and_finite() {
         let l = Ledger::new(limits()).unwrap();
         for r in [

@@ -1495,6 +1495,17 @@ fn real_a4_case(mode: u8) {
     if mode == 5 {
         assert_eq!(counts.3, 0);
     }
+    if mode == 6 {
+        let issues = shared.issues.lock().unwrap();
+        let issue = issues
+            .iter()
+            .find(|i| i.name == "Link manipulation (stored)")
+            .unwrap();
+        assert_eq!(issue.confidence, "Tentative");
+        assert!(issue.detail.contains("received prefix"));
+        assert!(issue.detail.contains("Incomplete exchange"));
+        assert!(!issue.evidence.is_empty());
+    }
     assert_eq!(
         mode == 0 || mode == 4 || mode == 6,
         shared
