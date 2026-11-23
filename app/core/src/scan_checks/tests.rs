@@ -887,16 +887,23 @@ fn host_probe_claim_is_released_when_the_probe_transport_fails() {
         }
         assert!(!shared.scan.is_busy(), "scan did not finish");
     };
-    // First scan: both probes die on the wire, so nothing is reported and
-    // both claims must be released.
+    // One task batch must never retry either uncertain attempt.
+    let batch = crate::scan::StoredBatch::open(&shared);
+    // First scan: both probes die on the wire, so nothing is reported.
     run_scan(&shared);
     assert_eq!(*attempts.lock().unwrap(), (1, 1), "one attempt each");
     assert!(
         shared.issues.lock().unwrap().is_empty(),
         "dropped probes report nothing"
     );
-    // Second scan of the same host: a retained claim would skip the probe;
-    // released claims mean both probes run again and both issues report.
+    run_scan(&shared);
+    assert_eq!(
+        *attempts.lock().unwrap(),
+        (1, 1),
+        "RST must not retry within batch"
+    );
+    drop(batch);
+    // Only a later explicit scan may retry uncertain probes.
     run_scan(&shared);
     assert_eq!(
         *attempts.lock().unwrap(),
@@ -1175,4 +1182,143 @@ fn hardening_evidence_filter_preserves_order_and_empty_responses() {
         [first, second]
     );
     assert!(evidence([None, None]).is_empty());
+}
+
+#[test]
+fn host_probe_incomplete_wire_attempts_wait_for_a_new_explicit_scan() {
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    for (wire, complete) in [
+        ("", false),
+        ("HTTP/1.1 200 OK\r\nContent-Leng", false),
+        ("HTTP/1.1 100 Continue\r\n\r\n", false),
+        ("HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\nno", false),
+        ("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nno", true),
+    ] {
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let seen = attempts.clone();
+        let port = lab_serve(
+            std::net::TcpListener::bind("127.0.0.1:0").unwrap(),
+            move |_, path, _| {
+                if path == "/robots.txt" {
+                    seen.fetch_add(1, Ordering::SeqCst);
+                    wire.to_string()
+                } else {
+                    "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".into()
+                }
+            },
+        );
+        let shared = crate::net::Shared::new();
+        let mut cfg = crate::scan_config::ScanConfig::default();
+        for (id, ..) in crate::scan::check_catalogue() {
+            if id != "active.robots-txt" {
+                cfg.disabled_checks.insert(id.into());
+            }
+        }
+        *crate::scan_config::shared_config(&shared).lock().unwrap() = cfg;
+        let run = || {
+            let e = crate::net::HistEntry {
+                method: "GET".into(),
+                host: "127.0.0.1".into(),
+                port,
+                path: "/start".into(),
+                req_raw: format!("GET /start HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n")
+                    .into_bytes()
+                    .into(),
+                ..Default::default()
+            };
+            crate::scan::start_active_scan(shared.clone(), e, &[], &[]);
+            assert!(shared
+                .scan
+                .wait_idle(Some(std::time::Duration::from_secs(10))));
+        };
+        let batch = crate::scan::StoredBatch::open(&shared);
+        run();
+        run();
+        assert_eq!(
+            attempts.load(Ordering::SeqCst),
+            1,
+            "same batch must not resend {wire:?}"
+        );
+        drop(batch);
+        run();
+        assert_eq!(
+            attempts.load(Ordering::SeqCst),
+            if complete { 1 } else { 2 },
+            "next explicit run {wire:?}"
+        );
+        assert!(shared.issues.lock().unwrap().is_empty());
+        if !complete {
+            assert!(shared
+                .events
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|e| e.contains("incomplete")));
+        }
+    }
+}
+
+#[test]
+fn host_probe_unknown_routed_batch_has_zero_direct_egress() {
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    let direct = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    direct.set_nonblocking(true).unwrap();
+    let target = direct.local_addr().unwrap().port();
+    let attempts = Arc::new(AtomicUsize::new(0));
+    let seen = attempts.clone();
+    let proxy_port = lab_serve(
+        std::net::TcpListener::bind("127.0.0.1:0").unwrap(),
+        move |_, path, _| {
+            if path.ends_with("/robots.txt") {
+                seen.fetch_add(1, Ordering::SeqCst);
+                String::new()
+            } else {
+                "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".into()
+            }
+        },
+    );
+    let shared = crate::net::Shared::new();
+    *shared.upstream.lock().unwrap() = crate::upstream::UpstreamConfig {
+        kind: crate::upstream::UpstreamKind::Http,
+        host: "127.0.0.1".into(),
+        port: proxy_port.to_string(),
+        ..Default::default()
+    };
+    let mut cfg = crate::scan_config::ScanConfig::default();
+    for (id, ..) in crate::scan::check_catalogue() {
+        if id != "active.robots-txt" {
+            cfg.disabled_checks.insert(id.into());
+        }
+    }
+    *crate::scan_config::shared_config(&shared).lock().unwrap() = cfg;
+    let run = || {
+        let e = crate::net::HistEntry {
+            method: "GET".into(),
+            host: "127.0.0.1".into(),
+            port: target,
+            path: "/start".into(),
+            req_raw: format!("GET /start HTTP/1.1\r\nHost: 127.0.0.1:{target}\r\n\r\n")
+                .into_bytes()
+                .into(),
+            ..Default::default()
+        };
+        crate::scan::start_active_scan(shared.clone(), e, &[], &[]);
+        assert!(shared
+            .scan
+            .wait_idle(Some(std::time::Duration::from_secs(10))));
+    };
+    let batch = crate::scan::StoredBatch::open(&shared);
+    run();
+    run();
+    assert_eq!(attempts.load(Ordering::SeqCst), 1);
+    drop(batch);
+    run();
+    assert_eq!(attempts.load(Ordering::SeqCst), 2);
+    assert!(matches!(direct.accept(),Err(e) if e.kind()==std::io::ErrorKind::WouldBlock));
 }

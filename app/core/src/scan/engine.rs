@@ -72,7 +72,7 @@ pub fn start_active_scan(
     }
     // Claim the scanner before touching its progress: a refused second
     // scan must not reset the running one's counters.
-    let Some(guard) = crate::scan_run::try_claim(&shared.scan) else {
+    let Some((guard, host_scope)) = crate::host_probe_state::admit(&shared) else {
         shared.event(
             Level::Warn,
             "scan.busy",
@@ -141,6 +141,7 @@ pub fn start_active_scan(
                     oob,
                     smtp,
                     item,
+                    host_scope,
                 );
                 checks::run_stored_seeding(&cx, &points);
                 checks::run_point_checks(&cx, &points);
@@ -296,11 +297,17 @@ pub fn run_stored_stage_claimed(shared: &Arc<Shared>) {
 pub struct StoredBatch {
     shared: Arc<Shared>,
     opened: bool,
+    host_owner: crate::host_probe_state::BatchOwner,
 }
 
 impl StoredBatch {
     pub fn open(shared: &Arc<Shared>) -> StoredBatch {
+        Self::open_with(shared, false)
+    }
+    fn open_with(shared: &Arc<Shared>, fresh_crawl: bool) -> StoredBatch {
+        let host_owner = crate::host_probe_state::open_batch(shared, fresh_crawl);
         StoredBatch {
+            host_owner,
             shared: shared.clone(),
             opened: shared.stored.open_batch(),
         }
@@ -710,15 +717,17 @@ pub(crate) fn run_form_action_reflected<F: FnMut(&str) -> Option<Vec<u8>>>(
 
 impl Drop for StoredBatch {
     fn drop(&mut self) {
+        // Host scope stays open through the stored stage; only its owner closes it.
         if self.opened {
             run_stored_stage_claimed(&self.shared);
             self.shared.stored.close_batch();
         }
+        crate::host_probe_state::close_batch(&self.shared, &self.host_owner);
     }
 }
 
 pub fn crawl_and_audit(shared: &Arc<Shared>, start_urls: &[String], audit_only: bool) {
-    let _stored = StoredBatch::open(shared);
+    let _stored = StoredBatch::open_with(shared, true);
     let _tool = crate::net::tool_scope("Scanner");
     // Ask the UI thread for Collaborator payloads for the whole run, so the
     // out-of-band checks work here as they do for a scan started on one item.
@@ -730,8 +739,7 @@ pub fn crawl_and_audit(shared: &Arc<Shared>, start_urls: &[String], audit_only: 
     }
     shared.oob.want(true);
     let _wanted = Wanted(shared);
-    // Fresh dedup sets for this run (reset by construction, #38).
-    *shared.scan_state.lock().unwrap() = Arc::new(webprobe_support::dedup::ScanDedup::default());
+    // Scope and dedup publication is atomic at batch admission above.
     for url in start_urls {
         let mut items = if audit_only {
             crate::crawl::crawl_single(shared, url)

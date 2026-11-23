@@ -52,6 +52,7 @@ pub(crate) struct ScanCtx {
     pub item: usize,
     /// "Input returned in response (stored)" is reported (scan config).
     pub stored_report: bool,
+    pub(crate) host_scope: Arc<crate::host_probe_state::AttemptScope>,
 }
 
 impl ScanCtx {
@@ -68,6 +69,7 @@ impl ScanCtx {
         oob: Vec<(String, String, String)>,
         smtp: Vec<SmtpOob>,
         item: usize,
+        host_scope: Arc<crate::host_probe_state::AttemptScope>,
     ) -> ScanCtx {
         let stored_report = crate::scan_config::shared_config(&shared)
             .lock()
@@ -92,6 +94,7 @@ impl ScanCtx {
             smtp,
             item,
             stored_report,
+            host_scope,
         };
         // The baseline request runs here, not on the caller's (UI) thread: a
         // slow or dead target used to freeze the window for the full read
@@ -114,7 +117,7 @@ impl ScanCtx {
 
     /// The current run's dedup sets (#38).
     pub(crate) fn state(&self) -> Arc<crate::scan::ScanDedup> {
-        crate::scan::scan_dedup_of(&self.shared)
+        self.host_scope.dedup.clone()
     }
 
     pub(crate) fn stopped(&self) -> bool {

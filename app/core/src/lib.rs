@@ -83,3 +83,5 @@ mod parser_fuzz_tests;
 mod strict_chunked_tests;
 #[cfg(test)]
 mod strict_request_tests;
+
+pub mod host_probe_state;

@@ -27,6 +27,7 @@ mod collaborator_everywhere;
 mod context;
 mod evidence;
 mod graphql;
+mod host_response;
 mod interface;
 mod point_checks;
 mod request_checks;
