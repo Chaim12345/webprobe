@@ -901,30 +901,56 @@ mod tests {
 
     /// Smoke check against the local Burp install (skipped when none):
     /// all 29 built-ins parse from the jar, and from an extracted tree.
+    /// WEBPROBE_BURP_JAR / WEBPROBE_BURP_BUILTINS point at a jar or an
+    /// extracted BuiltInConfigs tree elsewhere (CI, a downloaded
+    /// community jar).
     #[test]
     fn builtins_load_from_the_local_burp_install() {
-        for src in [
-            BurpResources::Jar("/opt/BurpSuite/burpsuite.jar".into()),
-            BurpResources::Dir("/root/burp-re/in/extract/resources/BuiltInConfigs".into()),
-        ] {
+        // Each source is labeled with where its path came from, so an env
+        // var pointing at the wrong file fails with the variable's name in
+        // the message instead of a bare "29 != 0".
+        let mut srcs = vec![
+            (
+                "default jar",
+                BurpResources::Jar("/opt/BurpSuite/burpsuite.jar".into()),
+            ),
+            (
+                "default tree",
+                BurpResources::Dir("/root/burp-re/in/extract/resources/BuiltInConfigs".into()),
+            ),
+        ];
+        if let Some(j) = std::env::var_os("WEBPROBE_BURP_JAR") {
+            srcs.push(("WEBPROBE_BURP_JAR", BurpResources::Jar(j.into())));
+        }
+        if let Some(d) = std::env::var_os("WEBPROBE_BURP_BUILTINS") {
+            srcs.push(("WEBPROBE_BURP_BUILTINS", BurpResources::Dir(d.into())));
+        }
+        for (label, src) in srcs {
             let present = match &src {
                 BurpResources::Jar(p) | BurpResources::Dir(p) => p.exists(),
             };
             if !present {
                 continue;
             }
-            let rep = load_builtin(&src).unwrap();
-            assert!(rep.errors.is_empty(), "{:?}", rep.errors);
-            assert_eq!(rep.configs.len(), 29, "{src:?}");
-            assert!(rep
-                .configs
-                .iter()
-                .any(|c| c.name == "Audit checks - passive"));
-            assert!(load_burp_defaults(&src).is_some_and(|d| get_path(
-                &d,
-                "crawler.crawl_limits.maximum_crawl_time"
-            )
-            .is_some()));
+            let rep = load_builtin(&src).unwrap_or_else(|e| panic!("{label} {src:?}: {e}"));
+            assert!(rep.errors.is_empty(), "{label} {src:?}: {:?}", rep.errors);
+            assert_eq!(
+                rep.configs.len(),
+                29,
+                "{label} {src:?}: not a Burp install's built-in configs"
+            );
+            assert!(
+                rep.configs.iter().any(|c| c.name == "Audit checks - passive"),
+                "{label} {src:?}"
+            );
+            assert!(
+                load_burp_defaults(&src).is_some_and(|d| get_path(
+                    &d,
+                    "crawler.crawl_limits.maximum_crawl_time"
+                )
+                .is_some()),
+                "{label} {src:?}"
+            );
         }
     }
 
