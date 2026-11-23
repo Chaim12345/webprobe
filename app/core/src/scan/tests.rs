@@ -3033,12 +3033,14 @@ fn collaborator_pending_issues_carry_their_probe() {
     let shared = net::Shared::new();
     let req = format!("GET /search?q=hello HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
     let slots = slots_for(req.as_bytes(), ScanSpeed::Normal, &Default::default());
-    assert_eq!(&slots[..3], ["#0:ext", "#0:xsd", "#0:xi"]);
+    // "hello" reads as a host name: the bare domain and http:// (burp.Zbxl.Zu).
+    assert_eq!(&slots[..4], ["#0:ext", "#0:ext1", "#0:xsd", "#0:xi"]);
     let oob: Vec<(String, String, String)> = slots
         .iter()
         .enumerate()
         .map(|(i, s)| (s.clone(), format!("tok{i}"), format!("tok{i}.oob.invalid")))
         .collect();
+    let tok = |slot: &str| format!("tok{}", slots.iter().position(|s| s == slot).unwrap());
     let smtp = vec![SmtpOob {
         param: "q".into(),
         simple: ("smtpa".into(), "smtpa.oob.invalid".into()),
@@ -3061,15 +3063,26 @@ fn collaborator_pending_issues_carry_their_probe() {
             .find(|(t, _, _)| t == token)
             .unwrap_or_else(|| panic!("{token} not pending"))
     };
+    let (ext, ext1, xsd, xi, cmd0, cmd3) = (
+        tok("#0:ext"),
+        tok("#0:ext1"),
+        tok("#0:xsd"),
+        tok("#0:xi"),
+        tok("#0:cmd0"),
+        tok("#0:cmd3"),
+    );
+    let needle = |t: &str| format!("{t}.oob.invalid");
     for (token, kind, needle) in [
-        ("tok0", None, "tok0.oob.invalid"),
-        ("tok1", Some("DNS"), "tok1.oob.invalid"),
-        ("tok2", Some("DNS"), "tok2.oob.invalid"),
-        ("smtpa", Some("SMTP"), "smtpa.oob.invalid"),
-        ("smtpb", Some("SMTP"), "smtpb.oob.invalid"),
-        ("tok3", Some("CNAME"), "tok3.oob.invalid"),
-        ("tok6", Some("CNAME"), "tok6.oob.invalid"),
+        (ext.as_str(), None, needle(&ext)),
+        (ext1.as_str(), None, format!("http://{}/?hello", needle(&ext1))),
+        (xsd.as_str(), Some("DNS"), needle(&xsd)),
+        (xi.as_str(), Some("DNS"), needle(&xi)),
+        ("smtpa", Some("SMTP"), "smtpa.oob.invalid".to_string()),
+        ("smtpb", Some("SMTP"), "smtpb.oob.invalid".to_string()),
+        (cmd0.as_str(), Some("CNAME"), needle(&cmd0)),
+        (cmd3.as_str(), Some("CNAME"), needle(&cmd3)),
     ] {
+        let needle = needle.as_str();
         let (_, k, issue) = get(token);
         assert_eq!(*k, kind, "{token}");
         assert_eq!(issue.evidence.len(), 1, "{token}");
@@ -3081,14 +3094,14 @@ fn collaborator_pending_issues_carry_their_probe() {
         );
         assert!(ev.response.is_some(), "{token}: response not attached");
     }
-    assert_eq!(get("tok1").2.type_id, issue_type_id("XML injection"));
+    assert_eq!(get(&xsd).2.type_id, issue_type_id("XML injection"));
     assert_eq!(
         get("smtpa").2.type_id,
         issue_type_id("SMTP header injection")
     );
     // burp.Zc99 at normal speed: replace, pipe, ampersand, combined.
-    assert_eq!(&slots[3..7], ["#0:cmd0", "#0:cmd1", "#0:cmd2", "#0:cmd3"]);
-    let cmd = &get("tok3").2;
+    assert_eq!(&slots[4..8], ["#0:cmd0", "#0:cmd1", "#0:cmd2", "#0:cmd3"]);
+    let cmd = &get(&cmd0).2;
     assert_eq!(
         (cmd.name.as_str(), cmd.sev.as_str(), cmd.confidence.as_str()),
         ("OS command injection", "high", "Firm")
@@ -3355,13 +3368,20 @@ fn oob_slots_cover_every_point_and_xml_oob_where_it_applies() {
     // q (query), the URL parameter name (no out-of-band check runs on
     // it: Zibp.ZU, Zx8l, Zp7s), Referer (header), filename "p" (path).
     let cmd = |i: usize| (0..4).map(move |k| format!("#{i}:cmd{k}"));
-    let want: Vec<String> = ["#0:ext", "#0:xsd", "#0:xi"]
+    // Each value gets the bare domain and http:// (burp.Zbxl.Zu at Normal).
+    let want: Vec<String> = ["#0:ext", "#0:ext1", "#0:xsd", "#0:xi"]
         .iter()
         .map(|s| s.to_string())
         .chain(cmd(0))
-        .chain(["#2:ext".to_string()])
+        // The synthesised Referer value is a URL, so its check runs
+        // Thorough (burp.Zxfo, Zibp.ZN): own scheme, http://, Http://.
+        .chain(["#2:ext".to_string(), "#2:ext1".to_string(), "#2:ext2".to_string()])
         .chain(cmd(2))
-        .chain(["#3:ext", "#3:xsd", "#3:xi"].iter().map(|s| s.to_string()))
+        .chain(
+            ["#3:ext", "#3:ext1", "#3:xsd", "#3:xi"]
+                .iter()
+                .map(|s| s.to_string()),
+        )
         .chain(cmd(3))
         // Collaborator everywhere (burp.Zc7h), once per request.
         .chain(
@@ -3379,6 +3399,23 @@ fn oob_slots_cover_every_point_and_xml_oob_where_it_applies() {
             .count(),
         3,
         "Fast: the combined payload only, one per point"
+    );
+    // Thorough adds Http:// and https:// (Zbxl.Zu); so does a URL-like
+    // value at any speed (burp.Zxfo: Zibp.ZN forces Thorough).
+    let ext = |r: &[u8], sp| {
+        slots_for(r, sp, &default)
+            .into_iter()
+            .filter(|s| s.starts_with("#0:ext"))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        ext(req, ScanSpeed::Thorough),
+        ["#0:ext", "#0:ext1", "#0:ext2", "#0:ext3"]
+    );
+    assert_eq!(
+        ext(b"GET /p?u=http://x.test/ HTTP/1.1\r\nHost: h\r\n\r\n", ScanSpeed::Normal),
+        ["#0:ext", "#0:ext1", "#0:ext2"],
+        "own scheme, Http://, https://"
     );
     let oob = vec![
         ("#0:xi".to_string(), "t1".to_string(), "h1".to_string()),

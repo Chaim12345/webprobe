@@ -59,6 +59,7 @@ pub mod stored;
 mod streaming_tests;
 pub mod tasks;
 pub mod upstream;
+pub(crate) mod url_payloads;
 mod util_tests;
 pub mod ws_history;
 pub mod ws_repeater;
