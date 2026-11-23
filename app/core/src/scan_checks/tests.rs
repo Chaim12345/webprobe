@@ -2029,6 +2029,15 @@ fn parameterized_actual_batch_caller_counts_only_complete_admissions_and_explici
             })
             .unwrap();
         assert_eq!(result.completed_items, if mode == 2 { 2 } else { 0 });
+        assert_eq!(result.shared_owner_cancelled, mode == 1);
+        assert_eq!(
+            result.outcome,
+            if mode == 1 {
+                crate::scan::BatchOutcome::Incomplete
+            } else {
+                crate::scan::BatchOutcome::PendingFinalization
+            }
+        );
         assert_eq!(
             result.error,
             if mode == 1 {
@@ -2114,6 +2123,12 @@ fn actual_batch_active_final_close_never_reports_complete() {
         })
         .unwrap();
     assert_eq!(result.outcome, crate::scan::BatchOutcome::Incomplete);
+    assert_eq!(
+        result.audit_phase_completion,
+        crate::scan_lifecycle::Finish::Incomplete
+    );
+    assert_eq!(result.error, Some(AdmissionError::IncompleteActive));
+    assert!(!result.shared_owner_cancelled);
     assert!(matches!(
         result.handoff,
         Err(AdmissionError::IncompleteActive)
