@@ -1018,6 +1018,19 @@ fn load_startup_extensions(
     }
 }
 
+fn startup_settings_pane(value: &str) -> ui::SettingsPane {
+    match value {
+        "hotkeys" => ui::SettingsPane::Hotkeys,
+        "library" => ui::SettingsPane::ConfigurationLibrary,
+        "suite" => ui::SettingsPane::Suite,
+        _ => ui::SettingsPane::Appearance,
+    }
+}
+
+fn startup_chooser_allowed(autosave: bool, project_file: Option<&str>) -> bool {
+    autosave && project_file.is_none()
+}
+
 fn main() {
     webprobe_core::diagnostics::init_stderr();
     // Panic policy "contain and continue" (issue #32): worker panics are
@@ -1379,17 +1392,10 @@ fn main() {
             .display()
             .to_string()
     });
-    // Debug hook: WEBPROBE_SETTINGS=hotkeys|appearance|library opens Burp's
-    // Settings window on that pane (used by the screenshot checks).
-    let settings_help = match std::env::var("WEBPROBE_SETTINGS")
-        .unwrap_or_default()
-        .as_str()
-    {
-        "hotkeys" => ui::SettingsPane::Hotkeys,
-        "library" => ui::SettingsPane::ConfigurationLibrary,
-        "suite" => ui::SettingsPane::Suite,
-        _ => ui::SettingsPane::Appearance,
-    };
+    // Debug hook: WEBPROBE_SETTINGS=hotkeys|appearance|library|suite opens
+    // Burp's Settings window on that pane (used by the screenshot checks).
+    let settings_help =
+        startup_settings_pane(&std::env::var("WEBPROBE_SETTINGS").unwrap_or_default());
     let settings_open = std::env::var("WEBPROBE_SETTINGS").is_ok();
     // Debug hook: WEBPROBE_PALETTE=<query> opens the command palette with that
     // text already typed (used by the screenshot checks).
@@ -1430,8 +1436,7 @@ fn main() {
     // Burp opens on its project chooser. Not when a recovery prompt is
     // already up, nor in scripted runs (no autosave, a fixed tab, or
     // WEBPROBE_NO_START_SCREEN).
-    if autosave_enabled()
-        && project_file.is_none()
+    if startup_chooser_allowed(autosave_enabled(), project_file.as_deref())
         && app.eng.recovery.is_none()
         && std::env::var_os("WEBPROBE_TAB").is_none()
         && std::env::var_os("WEBPROBE_NO_START_SCREEN").is_none()
@@ -1464,6 +1469,20 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn explicit_project_skips_startup_chooser() {
+        assert!(!startup_chooser_allowed(true, Some("chosen.json")));
+        assert!(startup_chooser_allowed(true, None));
+        assert!(!startup_chooser_allowed(false, None));
+    }
+
+    #[test]
+    fn suite_startup_hook_selects_suite() {
+        assert!(matches!(startup_settings_pane("suite"), ui::SettingsPane::Suite));
+        assert!(matches!(startup_settings_pane("hotkeys"), ui::SettingsPane::Hotkeys));
+        assert!(matches!(startup_settings_pane(""), ui::SettingsPane::Appearance));
+    }
 
     #[test]
     fn disable_extensions_blocks_all_startup_sources() {
