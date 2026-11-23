@@ -41,12 +41,15 @@ pub fn run_single_connection(
         if cancel.load(Ordering::SeqCst) {
             return SequenceEnd::Cancelled(n);
         }
+        let t0 = std::time::Instant::now();
         let (req, hook) = send_group::hooked(shared, item);
         let outcome = crate::h2::request_from_raw(&req, "https")
             .ok_or_else(|| "h2: request without Host header".to_string())
             .and_then(|h2req| conn.exchange(&h2req, None).map_err(|e| e.message()));
         let unknown = outcome.as_ref().err().is_some_and(|e| send_group::unknown_host(e));
-        on_result(n, send_group::finish_item(shared, item, &req, outcome.map(|r| (r, None)), hook));
+        let mut r = send_group::finish_item(shared, item, &req, outcome.map(|r| (r, None)), hook);
+        r.elapsed_ms = t0.elapsed().as_millis();
+        on_result(n, r);
         if unknown {
             return SequenceEnd::UnknownHost(n);
         }

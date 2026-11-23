@@ -263,16 +263,29 @@ pub struct GroupResult {
     pub error: Option<String>,
     /// For parallel sends: (arrival position, group size) once all are in.
     pub arrival: Option<(usize, usize)>,
+    /// The request as it went out (after jar/session rewriting): what the
+    /// tab's history and the tool log show.
+    pub sent: Vec<u8>,
+    /// "HTTP/2" or "HTTP/1.1", for the result line.
+    pub protocol: &'static str,
+    /// Send-to-response time; 0 where the burst makes it meaningless.
+    pub elapsed_ms: u128,
+}
+
+/// Drop groups whose tabs are gone (after tab closes); member lists
+/// follow the tab bar. Call after any close/reorder.
+pub fn prune(groups: &mut Vec<RepGroup>, order: &[u64]) {
+    for g in groups.iter_mut() {
+        g.tabs.retain(|t| order.contains(t));
+        g.tabs.sort_by_key(|t| order.iter().position(|o| o == t).unwrap_or(usize::MAX));
+    }
+    groups.retain(|g| !g.tabs.is_empty());
 }
 
 /// The error of a failed name lookup (dns::resolve), Burp's
 /// UnknownHostException: the sequence stops on it, other errors do not.
 pub(crate) fn unknown_host(error: &str) -> bool {
     error.starts_with("dns ") && !error.contains("timed out")
-}
-
-fn group_error(err: &str) -> GroupResult {
-    GroupResult { response: None, error: Some(err.into()), arrival: None }
 }
 
 /// Shared HTTP/2 group transport lives in h2_group (split out for the
@@ -324,18 +337,19 @@ pub(crate) fn finish_item(
     hooked: Option<Vec<u8>>,
 ) -> GroupResult {
     let shown = hooked.unwrap_or_else(|| request.to_vec());
+    let protocol = if item.http2 { "HTTP/2" } else { "HTTP/1.1" };
     match outcome {
         Ok((resp, arrival)) => {
             let up = Upstream { resp: Some(resp.clone()), error: None };
             net::jar_response(shared, &item.host, request, &up);
             net::session_after(shared, &item.host);
             net::log_tool_exchange(shared, &item.host, item.port, item.https, &shown, &up);
-            GroupResult { response: Some(resp), error: None, arrival }
+            GroupResult { response: Some(resp), error: None, arrival, sent: shown, protocol, elapsed_ms: 0 }
         }
         Err(e) => {
             let up = Upstream { resp: None, error: Some(e.clone()) };
             net::log_tool_exchange(shared, &item.host, item.port, item.https, &shown, &up);
-            group_error(&e)
+            GroupResult { response: None, error: Some(e), arrival: None, sent: shown, protocol, elapsed_ms: 0 }
         }
     }
 }
@@ -390,6 +404,7 @@ pub fn run_sequence(
         if n > 0 && cancel.load(Ordering::SeqCst) {
             return SequenceEnd::Cancelled(answered);
         }
+        let t0 = std::time::Instant::now();
         let (req, hook) = hooked(shared, item);
         let outcome = (|| -> Result<Vec<u8>, String> {
             if item.http2 {
@@ -417,7 +432,9 @@ pub fn run_sequence(
             out
         })();
         let unknown = outcome.as_ref().err().is_some_and(|e| unknown_host(e));
-        on_item(n, finish_item(shared, item, &req, outcome.map(|r| (r, None)), hook));
+        let mut r = finish_item(shared, item, &req, outcome.map(|r| (r, None)), hook);
+        r.elapsed_ms = t0.elapsed().as_millis();
+        on_item(n, r);
         answered += 1;
         if unknown {
             return SequenceEnd::UnknownHost(n);
@@ -453,6 +470,7 @@ pub fn run_parallel(
             let arrival = arrival.clone();
             s.spawn(move || {
                 let _tool = net::tool_scope("Repeater");
+                let t0 = std::time::Instant::now();
                 let (req, hook) = hooked(shared, item);
                 let outcome = (|| -> Result<Vec<u8>, String> {
                     if req.is_empty() {
@@ -506,6 +524,7 @@ pub fn run_parallel(
                 };
                 let mut r = finish_item(shared, item, &req, outcome.map(|resp| (resp, None)), hook);
                 r.arrival = Some((at, n_items));
+                r.elapsed_ms = t0.elapsed().as_millis();
                 on_item(n, r);
             });
         }
