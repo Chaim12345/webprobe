@@ -1,6 +1,9 @@
 //! Fixed-capacity resolver prototype. Experimental fixtures only.
 //! A timed-out OS lookup may finish inside a fixed worker, never a new thread
 //! per caller. Production integration must use one process-wide instance.
+//! OS/libc resolver allocation is outside the retained result bound. Two
+//! permanently hung OS calls exhaust the pool; fail closed, never replace
+//! workers and silently grow the resource budget.
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::Instant;
@@ -11,11 +14,13 @@ const ADDRESSES: usize = 16;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ResolveError {
     InvalidInput,
+    Cancelled,
     Busy,
     Expired,
     Unavailable,
 }
 struct Job {
+    owner: Arc<crate::host_probe_state::AttemptScope>,
     host: String,
     port: u16,
     deadline: Instant,
@@ -23,16 +28,18 @@ struct Job {
 }
 pub(crate) struct Resolver {
     tx: mpsc::SyncSender<Job>,
+    workers: Vec<std::thread::JoinHandle<()>>,
 }
 type Lookup = dyn Fn(&str, u16) -> Result<Vec<SocketAddr>, ResolveError> + Send + Sync;
 impl Resolver {
     fn with_lookup(lookup: Arc<Lookup>) -> Result<Self, ResolveError> {
         let (tx, rx) = mpsc::sync_channel::<Job>(QUEUED);
         let rx = Arc::new(Mutex::new(rx));
+        let mut workers = Vec::with_capacity(WORKERS);
         for _ in 0..WORKERS {
             let rx = rx.clone();
             let lookup = lookup.clone();
-            std::thread::Builder::new()
+            let worker = std::thread::Builder::new()
                 .name("scanner-dns".into())
                 .spawn(move || loop {
                     let job = {
@@ -40,6 +47,10 @@ impl Resolver {
                         guard.recv()
                     };
                     let Ok(job) = job else { break };
+                    if job.owner.is_cancelled() {
+                        let _ = job.response.try_send(Err(ResolveError::Cancelled));
+                        continue;
+                    }
                     if Instant::now() >= job.deadline {
                         let _ = job.response.try_send(Err(ResolveError::Expired));
                         continue;
@@ -48,7 +59,9 @@ impl Resolver {
                         lookup(&job.host, job.port)
                     }))
                     .unwrap_or(Err(ResolveError::Unavailable));
-                    let result = if Instant::now() >= job.deadline {
+                    let result = if job.owner.is_cancelled() {
+                        Err(ResolveError::Cancelled)
+                    } else if Instant::now() >= job.deadline {
                         Err(ResolveError::Expired)
                     } else {
                         result.and_then(|items| {
@@ -62,15 +75,29 @@ impl Resolver {
                     let _ = job.response.try_send(result);
                 })
                 .map_err(|_| ResolveError::Unavailable)?;
+            workers.push(worker);
         }
-        Ok(Self { tx })
+        Ok(Self { tx, workers })
+    }
+    // Only fixtures call this after releasing all fake lookups. Production
+    // lifecycle must never join a potentially blocked system resolver.
+    fn drain_and_join(self) {
+        let Self { tx, workers } = self;
+        drop(tx);
+        for worker in workers {
+            worker.join().unwrap();
+        }
     }
     pub fn resolve(
         &self,
+        owner: Arc<crate::host_probe_state::AttemptScope>,
         host: &str,
         port: u16,
         deadline: Instant,
     ) -> Result<Vec<SocketAddr>, ResolveError> {
+        if owner.is_cancelled() {
+            return Err(ResolveError::Cancelled);
+        }
         if host.is_empty() || host.len() > 253 || host.bytes().any(|b| b.is_ascii_control()) {
             return Err(ResolveError::InvalidInput);
         }
@@ -81,6 +108,7 @@ impl Resolver {
         let (tx, rx) = mpsc::sync_channel(1);
         self.tx
             .try_send(Job {
+                owner,
                 host: host.into(),
                 port,
                 deadline,
@@ -120,6 +148,10 @@ mod tests {
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::Duration;
+    fn owner() -> Arc<crate::host_probe_state::AttemptScope> {
+        let shared = crate::net::Shared::new();
+        crate::host_probe_state::admit(&shared).unwrap().1
+    }
     #[test]
     fn saturation_does_not_spawn_per_timeout_or_start_expired_queued_lookup() {
         let (release_tx, release_rx) = mpsc::channel();
@@ -137,6 +169,7 @@ mod tests {
         for _ in 0..WORKERS {
             assert_eq!(
                 pool.resolve(
+                    owner(),
                     "blocked.test",
                     80,
                     Instant::now() + Duration::from_millis(15)
@@ -147,19 +180,88 @@ mod tests {
         }
         for _ in 0..QUEUED {
             assert_eq!(
-                pool.resolve("queued.test", 80, Instant::now() + Duration::from_millis(2)),
+                pool.resolve(
+                    owner(),
+                    "queued.test",
+                    80,
+                    Instant::now() + Duration::from_millis(2)
+                ),
                 Err(ResolveError::Expired)
             );
         }
         assert_eq!(
-            pool.resolve("overflow.test", 80, Instant::now() + Duration::from_secs(1)),
+            pool.resolve(
+                owner(),
+                "overflow.test",
+                80,
+                Instant::now() + Duration::from_secs(1)
+            ),
             Err(ResolveError::Busy)
         );
         assert_eq!(count.load(Ordering::SeqCst), WORKERS);
         for _ in 0..WORKERS {
             release_tx.send(()).unwrap();
         }
-        drop(pool); // Workers drain expired jobs and then terminate.
+        pool.drain_and_join();
+        assert_eq!(
+            count.load(Ordering::SeqCst),
+            WORKERS,
+            "expired queued work must never enter lookup"
+        );
+    }
+    #[test]
+    fn cancelled_unexpired_queued_owner_never_starts_lookup() {
+        let (release_tx, release_rx) = mpsc::channel();
+        let release = Arc::new(Mutex::new(release_rx));
+        let (started_tx, started_rx) = mpsc::channel();
+        let count = Arc::new(AtomicUsize::new(0));
+        let c = count.clone();
+        let pool = Resolver::with_lookup(Arc::new(move |_, _| {
+            c.fetch_add(1, Ordering::SeqCst);
+            started_tx.send(()).unwrap();
+            release.lock().unwrap().recv().unwrap();
+            Ok(vec!["127.0.0.1:80".parse().unwrap()])
+        }))
+        .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        for _ in 0..WORKERS {
+            let (tx, _) = mpsc::sync_channel(1);
+            pool.tx
+                .try_send(Job {
+                    owner: owner(),
+                    host: "busy".into(),
+                    port: 80,
+                    deadline,
+                    response: tx,
+                })
+                .unwrap();
+            started_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        }
+        let cancelled = owner();
+        let (tx, rx) = mpsc::sync_channel(1);
+        pool.tx
+            .try_send(Job {
+                owner: cancelled.clone(),
+                host: "cancelled".into(),
+                port: 80,
+                deadline,
+                response: tx,
+            })
+            .unwrap();
+        cancelled.cancel();
+        assert_eq!(
+            pool.resolve(cancelled, "rejected", 80, deadline),
+            Err(ResolveError::Cancelled)
+        );
+        for _ in 0..WORKERS {
+            release_tx.send(()).unwrap();
+        }
+        assert_eq!(
+            rx.recv_timeout(Duration::from_secs(1)).unwrap(),
+            Err(ResolveError::Cancelled)
+        );
+        pool.drain_and_join();
+        assert_eq!(count.load(Ordering::SeqCst), WORKERS);
     }
     #[test]
     fn bounded_input_results_and_singleton_positive_control() {
@@ -167,16 +269,19 @@ mod tests {
         assert!(std::ptr::eq(pool, process_resolver().unwrap()));
         let deadline = Instant::now() + Duration::from_secs(1);
         assert_eq!(
-            pool.resolve("", 80, deadline),
+            pool.resolve(owner(), "", 80, deadline),
             Err(ResolveError::InvalidInput)
         );
         assert_eq!(
-            pool.resolve(&"a".repeat(254), 80, deadline),
+            pool.resolve(owner(), &"a".repeat(254), 80, deadline),
             Err(ResolveError::InvalidInput)
         );
-        assert!(!pool.resolve("127.0.0.1", 80, deadline).unwrap().is_empty());
+        assert!(!pool
+            .resolve(owner(), "127.0.0.1", 80, deadline)
+            .unwrap()
+            .is_empty());
         assert_eq!(
-            pool.resolve("127.0.0.1", 80, Instant::now()),
+            pool.resolve(owner(), "127.0.0.1", 80, Instant::now()),
             Err(ResolveError::Expired)
         );
     }
@@ -192,11 +297,12 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(
-            pool.resolve("test", 80, Instant::now() + Duration::from_secs(1)),
+            pool.resolve(owner(), "test", 80, Instant::now() + Duration::from_secs(1)),
             Err(ResolveError::Unavailable)
         );
         assert!(pool
-            .resolve("test", 80, Instant::now() + Duration::from_secs(1))
+            .resolve(owner(), "test", 80, Instant::now() + Duration::from_secs(1))
             .is_ok());
+        pool.drain_and_join();
     }
 }

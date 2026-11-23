@@ -13,6 +13,7 @@ pub(crate) struct Limits {
     pub decompressed: u64,
     pub inputs: u64,
     pub evidence: u64,
+    pub evidence_records: u64,
     pub records: u64,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -24,6 +25,7 @@ pub(crate) enum Resource {
     Decompressed,
     Input,
     Evidence,
+    EvidenceRecord,
     Record,
 }
 impl Resource {
@@ -38,12 +40,12 @@ pub(crate) enum Denied {
     Exhausted(Resource),
 }
 struct State {
-    used: [u64; 8],
+    used: [u64; 9],
     denied: Option<Denied>,
 }
 pub(crate) struct Ledger {
     deadline: Instant,
-    ceilings: [u64; 8],
+    ceilings: [u64; 9],
     state: Mutex<State>,
 }
 impl Ledger {
@@ -56,6 +58,7 @@ impl Ledger {
             limits.decompressed,
             limits.inputs,
             limits.evidence,
+            limits.evidence_records,
             limits.records,
         ];
         if limits.duration.is_zero() || ceilings.contains(&0) {
@@ -68,7 +71,7 @@ impl Ledger {
             deadline,
             ceilings,
             state: Mutex::new(State {
-                used: [0; 8],
+                used: [0; 9],
                 denied: None,
             }),
         })
@@ -112,10 +115,19 @@ impl Ledger {
             .checked_add(bytes)
             .filter(|v| *v <= self.ceilings[at])
             .ok_or(Denied::Exhausted(Resource::Evidence))?;
+        let records = Resource::EvidenceRecord.index();
+        let next_records = state.used[records]
+            .checked_add(1)
+            .filter(|v| *v <= self.ceilings[records])
+            .ok_or(Denied::Exhausted(Resource::EvidenceRecord))?;
         state.used[at] = next;
+        state.used[records] = next_records;
         Ok(())
     }
     pub fn remaining(&self, ordinary_limit: Duration) -> Result<Duration, Denied> {
+        if ordinary_limit.is_zero() {
+            return Err(Denied::InvalidLimits);
+        }
         self.reserve(&[])?;
         let left = self.deadline.saturating_duration_since(Instant::now());
         if left.is_zero() {
@@ -143,12 +155,13 @@ mod tests {
             decompressed: 10,
             inputs: 10,
             evidence: 10,
+            evidence_records: 2,
             records: 2,
         }
     }
     #[test]
     fn no_default_unlimited_or_zero_configuration() {
-        for n in 0..9 {
+        for n in 0..10 {
             let mut l = limits();
             match n {
                 0 => l.duration = Duration::ZERO,
@@ -159,6 +172,7 @@ mod tests {
                 5 => l.decompressed = 0,
                 6 => l.inputs = 0,
                 7 => l.evidence = 0,
+                8 => l.evidence_records = 0,
                 _ => l.records = 0,
             };
             assert!(matches!(Ledger::new(l), Err(Denied::InvalidLimits)));
@@ -221,6 +235,19 @@ mod tests {
         assert_eq!(l.remaining(Duration::from_secs(120)), Err(Denied::Expired));
         l.retain_proven(2).unwrap();
         assert_eq!(l.used(Resource::Evidence), 2);
+    }
+    #[test]
+    fn evidence_record_limit_applies_even_to_zero_byte_findings_and_timeout_zero_denied() {
+        let l = Ledger::new(limits()).unwrap();
+        l.retain_proven(0).unwrap();
+        l.retain_proven(0).unwrap();
+        assert_eq!(
+            l.retain_proven(0),
+            Err(Denied::Exhausted(Resource::EvidenceRecord))
+        );
+        assert_eq!(l.used(Resource::Evidence), 0);
+        assert_eq!(l.remaining(Duration::ZERO), Err(Denied::InvalidLimits));
+        assert!(l.reserve(&[(Resource::HttpAttempt, 1)]).is_ok());
     }
     #[test]
     fn all_resource_domains_are_independent_and_finite() {

@@ -19,13 +19,34 @@ pub(crate) struct Admission {
     session: Arc<SessionClaims>,
 }
 pub struct AttemptScope {
+    /// Sticky logical-run identity. Only accepted scope construction makes a
+    /// new false value; resetting legacy UI state cannot revive this owner.
+    #[cfg(test)] // Experimental token until unified production lifecycle wiring.
+    cancelled: std::sync::atomic::AtomicBool,
     pub(crate) dedup: Arc<ScanDedup>,
     attempted: Mutex<HashSet<String>>,
     session: Arc<SessionClaims>,
 }
 impl AttemptScope {
+    /// Cancel this exact logical owner. Safe to retain on bounded resolver
+    /// jobs and check both before enqueueing and before lookup starts.
+    #[cfg(test)]
+    pub(crate) fn cancel(&self) {
+        self.cancelled
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// Inherited-only check: callers must retain the accepted Arc, never
+    /// replace it by looking up whichever owner Shared publishes later.
+    #[cfg(test)]
+    pub(crate) fn is_cancelled(&self) -> bool {
+        self.cancelled.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
     fn new(dedup: Arc<ScanDedup>, session: Arc<SessionClaims>) -> Arc<Self> {
         Arc::new(Self {
+            #[cfg(test)]
+            cancelled: std::sync::atomic::AtomicBool::new(false),
             dedup,
             session,
             attempted: Mutex::new(HashSet::new()),
@@ -348,5 +369,27 @@ mod more_tests {
         assert!(
             matches!(new.session.0.lock().unwrap().get("key"),Some(Claim::Pending(w)) if w.ptr_eq(&Arc::downgrade(&new)))
         );
+    }
+}
+
+#[cfg(test)]
+mod cancellation_identity_tests {
+    use super::*;
+
+    #[test]
+    fn sticky_cancellation_belongs_to_the_exact_attempt_scope() {
+        let session = Arc::new(SessionClaims::default());
+        let old = AttemptScope::new(Arc::new(ScanDedup::default()), session.clone());
+        let queued_job_owner = old.clone();
+        assert!(!queued_job_owner.is_cancelled());
+        old.cancel();
+        let new = AttemptScope::new(Arc::new(ScanDedup::default()), session);
+        assert!(Arc::ptr_eq(&old, &queued_job_owner));
+        assert!(!Arc::ptr_eq(&old, &new));
+        assert!(queued_job_owner.is_cancelled());
+        assert!(!new.is_cancelled());
+        old.cancel();
+        assert!(old.is_cancelled());
+        assert!(!new.is_cancelled());
     }
 }
