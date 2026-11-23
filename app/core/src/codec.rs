@@ -402,7 +402,14 @@ pub(crate) fn read_message<R: std::io::Read + webprobe_support::io_traits::Respo
 ) -> std::io::Result<(Vec<u8>, bool)> {
     let read_more = |stream: &mut R, buffer: &mut Vec<u8>| -> std::io::Result<usize> {
         let mut chunk = [0u8; 16384];
-        let n = stream.read(&mut chunk)?;
+        // An interrupted read lost nothing: try again. Every other error,
+        // EOF and timeouts included, is the caller's to see.
+        let n = loop {
+            match stream.read(&mut chunk) {
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                other => break other?,
+            }
+        };
         buffer.extend_from_slice(&chunk[..n]);
         Ok(n)
     };
@@ -578,7 +585,15 @@ fn stream_body<R: std::io::Read + webprobe_support::io_traits::ResponseRead>(
             break false;
         }
         sink.flush();
-        match stream.read(&mut chunk) {
+        // An interrupted read lost nothing: read again without re-entering
+        // the loop (no repeated flush or empty write).
+        let read = loop {
+            match stream.read(&mut chunk) {
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                other => break other,
+            }
+        };
+        match read {
             Ok(0) => break left.is_none() && dechunk.is_none(),
             Ok(n) => pending.extend_from_slice(&chunk[..n]),
             Err(_) => break false,
@@ -731,6 +746,144 @@ mod tests {
             Ok(())
         }
     }
+    /// Delivers `wire` in small pieces and returns `Interrupted` before every
+    /// read (and again between pieces): an interrupted read loses nothing.
+    struct Flaky {
+        inner: Script,
+        interrupt_next: bool,
+        interrupts: std::rc::Rc<std::cell::Cell<usize>>,
+    }
+    impl Flaky {
+        fn new(wire: &[u8]) -> (Self, std::rc::Rc<std::cell::Cell<usize>>) {
+            let count = std::rc::Rc::new(std::cell::Cell::new(0));
+            (
+                Self {
+                    inner: Script(std::io::Cursor::new(wire.to_vec())),
+                    interrupt_next: true,
+                    interrupts: count.clone(),
+                },
+                count,
+            )
+        }
+    }
+    impl std::io::Read for Flaky {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            if self.interrupt_next {
+                self.interrupt_next = false;
+                self.interrupts.set(self.interrupts.get() + 1);
+                return Err(std::io::ErrorKind::Interrupted.into());
+            }
+            self.interrupt_next = true;
+            self.inner.read(buf)
+        }
+    }
+    impl webprobe_support::io_traits::ResponseRead for Flaky {
+        fn set_read_timeout_ms(&self, _ms: u64) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    /// Reads a response through `Flaky` and through the plain `Script`: the
+    /// bytes, reuse flag and leftover are identical, and interrupts did occur.
+    fn same_with_interrupts(wire: &[u8], method: &str) -> (Vec<u8>, bool) {
+        let plain = read_all(wire, method);
+        let (mut flaky, count) = Flaky::new(wire);
+        let mut buffer = Vec::new();
+        let (resp, reusable) = read_message(&mut flaky, &mut buffer, method, None).unwrap();
+        assert!(count.get() > 0, "interrupts were injected");
+        assert_eq!(
+            (resp.clone(), reusable, buffer),
+            plain,
+            "same result with interrupts"
+        );
+        (resp, reusable)
+    }
+
+    #[test]
+    fn interrupted_reads_do_not_change_buffered_responses() {
+        let cl = b"HTTP/1.1 200 OK\r\nContent-Length: 11\r\n\r\nhello world";
+        assert_eq!(same_with_interrupts(cl, "GET"), (cl.to_vec(), true));
+        let chunked = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n6\r\n world\r\n0\r\n\r\n";
+        assert_eq!(
+            same_with_interrupts(chunked, "GET"),
+            (chunked.to_vec(), true)
+        );
+        // EOF-delimited: the whole body arrives, not a prefix cut by an interrupt.
+        let eof = b"HTTP/1.1 200 OK\r\n\r\nread until close, all of it";
+        assert_eq!(same_with_interrupts(eof, "GET"), (eof.to_vec(), false));
+        // Truncated body: still incomplete, with the bytes that did arrive.
+        let cut = b"HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\nabc";
+        let (resp, reusable) = same_with_interrupts(cut, "GET");
+        assert_eq!((resp.as_slice(), reusable), (&cut[..], false));
+    }
+
+    /// Interrupted must not be mistaken for an error by the buffered reader.
+    #[test]
+    fn interrupted_alone_is_not_an_error() {
+        let wire = b"HTTP/1.1 204 No Content\r\n\r\n";
+        let (mut flaky, _) = Flaky::new(wire);
+        let mut buffer = Vec::new();
+        assert!(read_message(&mut flaky, &mut buffer, "GET", None).is_ok());
+    }
+
+    #[test]
+    fn interrupted_reads_do_not_change_streamed_responses() {
+        use crate::streaming::{BodyMode, ResponseSink};
+        #[derive(Default)]
+        struct Rec {
+            wire: Vec<u8>,
+            payload: Vec<u8>,
+            ended: Vec<bool>,
+        }
+        impl ResponseSink for Rec {
+            fn head(&mut self, _head: &[u8]) -> BodyMode {
+                BodyMode::Stream
+            }
+            fn wire(&mut self, b: &[u8]) -> std::io::Result<()> {
+                self.wire.extend_from_slice(b);
+                Ok(())
+            }
+            fn payload(&mut self, b: &[u8]) {
+                self.payload.extend_from_slice(b);
+            }
+            fn end(&mut self, complete: bool) {
+                self.ended.push(complete);
+            }
+        }
+        let cases: [(&[u8], &[u8], bool); 4] = [
+            (b"HTTP/1.1 200 OK\r\nContent-Length: 11\r\n\r\nhello world", b"hello world", true),
+            (
+                b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n6\r\n world\r\n0\r\n\r\n",
+                b"hello world",
+                true,
+            ),
+            (b"HTTP/1.1 200 OK\r\n\r\nuntil close, whole", b"until close, whole", true),
+            (b"HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\nabc", b"abc", false),
+        ];
+        for (wire, payload, complete) in cases {
+            let mut plain = Rec::default();
+            let mut buffer = Vec::new();
+            read_message(
+                &mut Script(std::io::Cursor::new(wire.to_vec())),
+                &mut buffer,
+                "GET",
+                Some(&mut plain),
+            )
+            .unwrap();
+            let (mut flaky, count) = Flaky::new(wire);
+            let mut got = Rec::default();
+            let mut buffer = Vec::new();
+            read_message(&mut flaky, &mut buffer, "GET", Some(&mut got)).unwrap();
+            assert!(count.get() > 0);
+            assert_eq!(got.wire, wire, "every wire byte exactly once");
+            assert_eq!(got.payload, payload);
+            assert_eq!(got.ended, vec![complete], "completion state unchanged");
+            assert_eq!(
+                (got.wire, got.payload, got.ended),
+                (plain.wire, plain.payload, plain.ended)
+            );
+        }
+    }
+
     fn read_all(wire: &[u8], method: &str) -> (Vec<u8>, bool, Vec<u8>) {
         let mut buffer = Vec::new();
         let (resp, reusable) = read_message(
