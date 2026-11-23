@@ -170,10 +170,11 @@ pub fn intruder_request_to_repeater(app: &mut App) {
         response: None,
         result_line: String::new(),
         history: Vec::new(),
+        response_sources: Vec::new(),
         hist_pos: 0,
         ws: None,
     });
-    app.rep_sel = reps.len() - 1;
+    app.repeater.sel = reps.len() - 1;
     drop(reps);
     app.tab = Tab::Repeater;
 }
@@ -197,7 +198,7 @@ pub fn target_parts(target: &str, https_default: bool) -> (String, u16, bool) {
 }
 
 pub fn repeater_menu(app: &mut App, ui: &mut Ui) {
-    ui.checkbox(&mut app.rep_update_cl, "Update Content-Length");
+    ui.checkbox(&mut app.repeater.update_cl, "Update Content-Length");
     // Responses are always shown decoded here; Burp's switch is on by default.
     let mut always = true;
     ui.add_enabled(

@@ -718,7 +718,7 @@ pub fn ws_setup(
 
 /// Capture and relay a plain-HTTP WebSocket upgrade; frames are recorded and
 /// held by `intercept_ws_stream` (the TLS path is `handle_tls_websocket`).
-pub fn handle_websocket(shared: Arc<Shared>, mut client: TcpStream, req: Vec<u8>) {
+pub fn handle_websocket<C: ProxyIo>(shared: Arc<Shared>, mut client: C, req: Vec<u8>) {
     let parts = util::parse_http(&req);
     let (host, port) = host_of(&parts, 80);
     let req_session = match apply_session_rules(&shared, &req, 80) {
@@ -922,15 +922,18 @@ pub fn relay_ws_tls<C: ProxyIo, U: ProxyIo>(
     shared.ws_live.lock().unwrap().remove(&socket);
 }
 
-pub fn handle_tls_websocket(
-    shared: Arc<Shared>,
-    mut client: rustls::StreamOwned<rustls::ServerConnection, TcpStream>,
+/// The client stream is borrowed: the caller keeps the concrete TLS
+/// connection so it can send close_notify when the relay ends. Frames read
+/// ahead of the upgrade arrive through a [`Preloaded`] wrapper.
+pub fn handle_tls_websocket<C: ProxyIo>(
+    shared: &Shared,
+    client: &mut C,
     req: Vec<u8>,
     host: String,
     port: u16,
 ) {
     let parts = util::parse_http(&req);
-    let req_session = match apply_session_rules(&shared, &req, 443) {
+    let req_session = match apply_session_rules(shared, &req, 443) {
         Ok(request) => request,
         Err(error) => {
             shared.log(&error);
@@ -990,16 +993,16 @@ pub fn handle_tls_websocket(
         return;
     }
     let socket = shared.next_ws_id.fetch_add(1, Ordering::SeqCst);
-    push_ws_in(&shared, socket, &host, "handshake", "request", &req_out);
-    push_ws_in(&shared, socket, &host, "handshake", "response", &response);
+    push_ws_in(shared, socket, &host, "handshake", "request", &req_out);
+    push_ws_in(shared, socket, &host, "handshake", "response", &response);
     record(
-        &shared,
+        shared,
         &req_out,
         Some(response.clone()),
         None,
         443,
         true,
-        listener_port(&shared),
+        listener_port(shared),
         false,
         &Default::default(),
     );
@@ -1009,9 +1012,8 @@ pub fn handle_tls_websocket(
     shared.log(&format!(
         "TLS WebSocket upgraded for {host}:{port}; capturing frames"
     ));
-    let setup = ws_setup(&shared, socket, &host, port, true, &req_out, &response);
-    relay_ws_tls(&shared, &mut client, &mut upstream, host, setup);
-    client.conn.send_close_notify();
+    let setup = ws_setup(shared, socket, &host, port, true, &req_out, &response);
+    relay_ws_tls(shared, client, &mut upstream, host, setup);
     upstream.conn.send_close_notify();
     let _ = client.flush();
     let _ = upstream.flush();

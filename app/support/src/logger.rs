@@ -19,6 +19,8 @@ pub struct LogEntry {
     pub method: String,
     pub host: String,
     pub port: u16,
+    /// Whether the request went over TLS (tool rows; proxy rows read it from history).
+    pub https: bool,
     pub path: String,
     pub status: String,
     pub req_len: usize,

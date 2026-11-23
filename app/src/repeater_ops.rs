@@ -466,8 +466,8 @@ pub fn next_redirect(
 
 /// Outcome of a send with redirections.
 pub struct FollowResult {
-    /// Last request sent and where: the tab shows these after a followed
-    /// chain (Burp's Zrr5 replaces the item's request with each hop).
+    /// Terminal wire request and target for response-bound redirect context.
+    /// The editor stays unchanged even when redirects are followed.
     pub request: String,
     pub service: Service,
     pub response: Option<Vec<u8>>,
@@ -482,10 +482,25 @@ pub struct FollowResult {
 fn send_once(
     shared: &net::Shared,
     service: &Service,
-    req: &str,
+    req: &mut String,
     cancelled: &dyn Fn() -> bool,
     progress: &dyn Fn(&[u8], bool),
 ) -> net::Upstream {
+    use webprobe_core::ext_host::{self, Annotations, HttpService};
+    // Snapshot without holding the registry while the extension runs.
+    let exts = ext_host::active_hooks(shared);
+    let svc = HttpService::new(&service.host, service.port, service.https);
+    let mut ann = Annotations::default();
+    let mut bytes = req.as_bytes().to_vec();
+    if !ext_host::run_http_request_hooks(&exts, "Repeater", &svc, &mut bytes, &mut ann) {
+        return net::Upstream {
+            resp: None,
+            error: Some("request dropped by extension".into()),
+        };
+    }
+    // Keep the exact bytes for transport and initiatingRequest, including
+    // binary bodies an extension might produce. The editor is text-based.
+    *req = String::from_utf8_lossy(&bytes).into_owned();
     let url = format!(
         "{}{}",
         service.origin(),
@@ -494,25 +509,19 @@ fn send_once(
     let settings = shared.streaming.lock().unwrap().clone();
     let mut sink = webprobe_core::streaming::LiveSink::new(&url, settings, cancelled, progress);
     let mut up = if service.https {
-        net::send_tls_raw_with(
-            shared,
-            &service.host,
-            service.port,
-            req.as_bytes(),
-            Some(&mut sink),
-        )
+        net::send_tls_raw_with(shared, &service.host, service.port, &bytes, Some(&mut sink))
     } else {
-        net::send_raw_with(
-            shared,
-            &service.host,
-            service.port,
-            req.as_bytes(),
-            Some(&mut sink),
-        )
+        net::send_raw_with(shared, &service.host, service.port, &bytes, Some(&mut sink))
     };
     if let Some(whole) = sink.into_response() {
         up.resp = Some(whole);
         up.error = None;
+    }
+    if let Some(resp) = up.resp.as_mut() {
+        if !ext_host::run_http_response_hooks(&exts, "Repeater", &svc, &bytes, resp, &mut ann) {
+            up.resp = None;
+            up.error = Some("response dropped by extension".into());
+        }
     }
     up
 }
@@ -532,7 +541,7 @@ pub fn send_following(
     let mut current = service.clone();
     let mut followed = 0;
     loop {
-        let up = send_once(shared, &current, &request, cancelled, progress);
+        let up = send_once(shared, &current, &mut request, cancelled, progress);
         let Some(resp) = up.resp else {
             return FollowResult {
                 request,
@@ -1075,6 +1084,7 @@ pub fn new_tab(id: u64, host: &str, port: u16, https: bool, request: String) -> 
         response: None,
         result_line: String::new(),
         history: Vec::new(),
+        response_sources: Vec::new(),
         hist_pos: 0,
         ws: None,
     }
@@ -1090,6 +1100,7 @@ pub struct ClosedTab {
     pub response: Option<Vec<u8>>,
     pub result_line: String,
     pub history: Vec<(String, Option<Vec<u8>>, String)>,
+    pub response_sources: Vec<Option<net::RepResponseSource>>,
 }
 
 impl ClosedTab {
@@ -1103,6 +1114,7 @@ impl ClosedTab {
             response: t.response,
             result_line: t.result_line,
             history: t.history,
+            response_sources: t.response_sources,
         }
     }
 
@@ -1118,6 +1130,7 @@ impl ClosedTab {
             response: self.response,
             result_line: self.result_line,
             history: self.history,
+            response_sources: self.response_sources,
             hist_pos,
             ws: None,
         }
@@ -1604,7 +1617,7 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
         for (i, (id, name)) in tabs.iter().enumerate() {
-            let sel = app.rep_sel == i;
+            let sel = app.repeater.sel == i;
             let dragging_this = app.rops.drag_from == Some(i);
             let frame = egui::Frame::NONE
                 .fill(if sel {
@@ -1650,7 +1663,7 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
                             .sense(egui::Sense::click_and_drag()),
                         );
                         // A tab to accessibility / UI automation, not a plain label.
-                        let selected = app.rep_sel == i;
+                        let selected = app.repeater.sel == i;
                         l.widget_info(|| {
                             egui::WidgetInfo::selected(
                                 egui::accesskit::Role::Tab,
@@ -1660,7 +1673,7 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
                             )
                         });
                         if l.clicked() {
-                            app.rep_sel = i;
+                            app.repeater.sel = i;
                         }
                         if l.double_clicked() {
                             app.rops.renaming = Some((*id, name.clone()));
@@ -1702,7 +1715,7 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
             let id = app.shared.rep.new_tab_id();
             let mut reps = app.shared.repeaters.lock().unwrap();
             reps.push(new_tab(id, "", 80, false, String::new()));
-            app.rep_sel = reps.len() - 1;
+            app.repeater.sel = reps.len() - 1;
         }
     });
     if cancel_rename {
@@ -1739,9 +1752,9 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
             app.rops.drag_from = None;
             if let Some(t) = target.filter(|t| *t != from) {
                 let mut reps = app.shared.repeaters.lock().unwrap();
-                let sel_id = reps.get(app.rep_sel).map(|r| r.id);
+                let sel_id = reps.get(app.repeater.sel).map(|r| r.id);
                 move_tab(&mut reps, from, t);
-                app.rep_sel = sel_id
+                app.repeater.sel = sel_id
                     .and_then(|id| reps.iter().position(|r| r.id == id))
                     .unwrap_or(t);
             }
@@ -1751,7 +1764,7 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
         if c == TabCommand::Rename {
             app.rops.rename_focus = true;
         }
-        app.rep_sel = apply_tab_command(&app.shared, &mut app.rops, i, app.rep_sel, c);
+        app.repeater.sel = apply_tab_command(&app.shared, &mut app.rops, i, app.repeater.sel, c);
     }
 }
 
@@ -1760,7 +1773,7 @@ pub fn settings_menu(ui: &mut Ui, app: &mut crate::App) {
     ui.set_min_width(300.0);
     ui.label(RichText::new("Repeater settings").strong().size(13.0));
     ui.separator();
-    ui.checkbox(&mut app.rep_update_cl, "Update Content-Length");
+    ui.checkbox(&mut app.repeater.update_cl, "Update Content-Length");
     ui.menu_button("Follow redirections", |ui| {
         for m in FollowMode::ALL {
             if ui.radio(app.rops.follow == m, m.label()).clicked() {
@@ -1778,15 +1791,38 @@ pub fn settings_menu(ui: &mut Ui, app: &mut crate::App) {
 /// The selected tab's request, target service and response.
 pub fn current_tab(app: &crate::App) -> Option<(String, Service, Option<Vec<u8>>)> {
     let reps = app.shared.repeaters.lock().unwrap();
-    let r = reps.get(app.rep_sel.min(reps.len().saturating_sub(1)))?;
+    let r = reps.get(app.repeater.sel.min(reps.len().saturating_sub(1)))?;
     let service = Service::of_tab(&r.host, r.port, r.https, &r.request)?;
     Some((r.request.clone(), service, r.response.clone()))
+}
+
+/// The response belongs to the terminal wire hop, not necessarily the
+/// request still shown in the editor. History navigation uses the same index.
+fn redirect_source(app: &crate::App) -> Option<(String, Service, Option<Vec<u8>>)> {
+    let reps = app.shared.repeaters.lock().unwrap();
+    let r = reps.get(app.repeater.sel.min(reps.len().saturating_sub(1)))?;
+    let (req, service) = if let Some(Some(source)) = r.response_sources.get(r.hist_pos) {
+        (
+            source.request.clone(),
+            Service::new(
+                &source.service.host,
+                source.service.port,
+                source.service.secure,
+            ),
+        )
+    } else {
+        (
+            r.request.clone(),
+            Service::of_tab(&r.host, r.port, r.https, &r.request)?,
+        )
+    };
+    Some((req, service, r.response.clone()))
 }
 
 /// Whether the shown response can be followed (Burp shows the "Follow
 /// redirection" button only then).
 pub fn can_follow(app: &crate::App) -> bool {
-    current_tab(app).is_some_and(|(req, svc, resp)| {
+    redirect_source(app).is_some_and(|(req, svc, resp)| {
         resp.is_some_and(|r| next_redirect(&req, &svc, &r, false).is_some())
     })
 }
@@ -1794,14 +1830,14 @@ pub fn can_follow(app: &crate::App) -> bool {
 /// "Follow redirection": load the follow-up request into the tab and point
 /// the target at it. The caller sends it.
 pub fn load_redirect(app: &mut crate::App) -> bool {
-    let Some((req, svc, Some(resp))) = current_tab(app) else {
+    let Some((req, svc, Some(resp))) = redirect_source(app) else {
         return false;
     };
     let Some((next, next_req)) = next_redirect(&req, &svc, &resp, app.rops.process_cookies) else {
         return false;
     };
     let mut reps = app.shared.repeaters.lock().unwrap();
-    let i = app.rep_sel.min(reps.len().saturating_sub(1));
+    let i = app.repeater.sel.min(reps.len().saturating_sub(1));
     let t = &mut reps[i];
     t.request = next_req;
     t.host = next.host;
@@ -1867,21 +1903,21 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
         }
         RepAction::ToSequencer => {
             if let Some(e) = tab_entry(app) {
-                app.seq_requests.push(e);
-                app.seq_req_sel = Some(app.seq_requests.len() - 1);
+                app.sequencer.requests.push(e);
+                app.sequencer.req_sel = Some(app.sequencer.requests.len() - 1);
                 app.tab = Tab::Sequencer;
             }
         }
         RepAction::ToComparerRequest => {
-            app.cmp_items.push(req);
+            app.comparer.items.push(req);
             toast(Level::Success, "Sent to Comparer");
         }
         RepAction::ToComparerResponse => {
-            app.cmp_items.push(resp_text);
+            app.comparer.items.push(resp_text);
             toast(Level::Success, "Sent to Comparer");
         }
         RepAction::ToDecoder => {
-            app.dec_input = req;
+            app.decoder.input = req;
             app.tab = Tab::Decoder;
         }
         RepAction::ToOrganizer => {
@@ -1897,7 +1933,7 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
         }
         RepAction::ChangeMethod => {
             let mut reps = app.shared.repeaters.lock().unwrap();
-            let i = app.rep_sel.min(reps.len().saturating_sub(1));
+            let i = app.repeater.sel.min(reps.len().saturating_sub(1));
             let changed = toggle_request_method(&reps[i].request);
             reps[i].request = changed;
         }
@@ -1913,7 +1949,7 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
                 format!("----WebKitFormBoundary{tail}")
             };
             let mut reps = app.shared.repeaters.lock().unwrap();
-            let i = app.rep_sel.min(reps.len().saturating_sub(1));
+            let i = app.repeater.sel.min(reps.len().saturating_sub(1));
             let changed = toggle_body_encoding(&reps[i].request, &boundary);
             if changed == reps[i].request {
                 toast(
@@ -1936,8 +1972,8 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
         }
         RepAction::CopyRaw => ctx.copy_text(req.clone()),
         RepAction::BothToComparer => {
-            app.cmp_items.push(req.clone());
-            app.cmp_items.push(resp_text);
+            app.comparer.items.push(req.clone());
+            app.comparer.items.push(resp_text);
             toast(Level::Success, "Request and response sent to Comparer");
         }
         RepAction::CompareWithPrevious => {
@@ -1948,13 +1984,14 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
                 .repeaters
                 .lock()
                 .unwrap()
-                .get(app.rep_sel)
+                .get(app.repeater.sel)
                 .and_then(|t| previous_response(&t.history));
             match previous {
                 Some(prev) => {
-                    app.cmp_items
+                    app.comparer
+                        .items
                         .push(String::from_utf8_lossy(&prev).into_owned());
-                    app.cmp_items.push(resp_text);
+                    app.comparer.items.push(resp_text);
                     app.tab = Tab::Comparer;
                     toast(
                         Level::Success,
@@ -1973,12 +2010,12 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
                 .repeaters
                 .lock()
                 .unwrap()
-                .get(app.rep_sel)
+                .get(app.repeater.sel)
                 .and_then(|t| previous_request(&t.history));
             match previous {
                 Some(prev) => {
-                    app.cmp_items.push(prev);
-                    app.cmp_items.push(req.clone());
+                    app.comparer.items.push(prev);
+                    app.comparer.items.push(req.clone());
                     app.tab = Tab::Comparer;
                     toast(
                         Level::Success,
@@ -2001,7 +2038,7 @@ pub fn apply_action(app: &mut crate::App, ctx: &egui::Context, action: RepAction
                 .repeaters
                 .lock()
                 .unwrap()
-                .get(app.rep_sel)
+                .get(app.repeater.sel)
                 .map(|t| t.id)
                 .unwrap_or(0);
             let path = dir.join(format!("repeater-{id}-{}.http", util::now_secs()));
@@ -2054,7 +2091,7 @@ pub fn poll_paste_url(app: &mut crate::App, ui: &mut Ui) {
     match paste_url_as_request(&text, keep_alive) {
         Ok((svc, req)) => {
             let mut reps = app.shared.repeaters.lock().unwrap();
-            let i = app.rep_sel.min(reps.len().saturating_sub(1));
+            let i = app.repeater.sel.min(reps.len().saturating_sub(1));
             let t = &mut reps[i];
             t.request = req;
             t.host = svc.host;
@@ -2507,6 +2544,7 @@ pub fn send_ws_to_repeater(shared: &std::sync::Arc<net::Shared>, e: &net::WsEntr
         response: None,
         result_line: String::new(),
         history: Vec::new(),
+        response_sources: Vec::new(),
         hist_pos: 0,
         ws: Some(session.id),
     });
@@ -2530,7 +2568,8 @@ pub fn ws_repeater_view(app: &mut crate::App, ui: &mut Ui, session_id: u64) {
         return;
     };
     let i = app
-        .rep_sel
+        .repeater
+        .sel
         .min(shared.repeaters.lock().unwrap().len().saturating_sub(1));
     let ui_state_id = ui.scope_id().with(("ws_rep_ui", session_id));
     // (to_server, binary)
@@ -2589,6 +2628,7 @@ pub fn ws_repeater_view(app: &mut crate::App, ui: &mut Ui, session_id: u64) {
                     response: None,
                     result_line: String::new(),
                     history: Vec::new(),
+                    response_sources: Vec::new(),
                     hist_pos: 0,
                     ws: Some(copy.id),
                 });
@@ -2884,6 +2924,204 @@ mod tests {
         assert!(
             !should_follow(FollowMode::Always, MAX_REDIRECTS, &a, &b, true),
             "Burp stops at 10"
+        );
+    }
+
+    /// Real Montoya extension, actual Repeater send path and TCP origin.
+    /// Also checks redirect hops and that proxy-only handlers stay excluded.
+    #[test]
+    fn repeater_montoya_http_handlers_reach_origin_and_response() {
+        use std::io::{Read, Write};
+        use std::sync::Arc;
+        use webprobe_core::ext_host::{self, JavaSidecar, LoadedExtension, ProxyHooks};
+        let api = webprobe_core::paths::montoya_jar();
+        let java = webprobe_core::paths::java();
+        let (Ok(api), Ok(java)) = (api, java) else {
+            assert!(
+                std::env::var_os("WEBPROBE_REQUIRE_JAVA").is_none(),
+                "required Repeater regression needs a JDK and Montoya API jar"
+            );
+            eprintln!(
+                "skipping: no JDK or Montoya API jar (WEBPROBE_REQUIRE_JAVA=1 makes this fatal)"
+            );
+            return;
+        };
+        let javac = std::fs::canonicalize(java).unwrap().with_file_name("javac");
+        let dir = std::env::temp_dir().join(format!("wp-repeater-http-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("META-INF/services")).unwrap();
+        std::fs::write(
+            dir.join("META-INF/services/burp.api.montoya.BurpExtension"),
+            "RepeaterHttpExtension\n",
+        )
+        .unwrap();
+        let out = std::process::Command::new(javac)
+            .args(["-nowarn", "-cp"])
+            .arg(api)
+            .arg("-d")
+            .arg(&dir)
+            .arg(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/sidecar/stage-tests/RepeaterHttpExtension.java"
+            ))
+            .output()
+            .expect("javac launches");
+        assert!(
+            out.status.success(),
+            "javac: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let shared = net::Shared::new();
+        let sc = Arc::new(
+            JavaSidecar::spawn_with(
+                dir.to_str().unwrap(),
+                Some(webprobe_core::ext_calls::host_link(&shared)),
+            )
+            .unwrap(),
+        );
+        ext_host::with_host(&shared, |h| {
+            h.extensions.push(LoadedExtension {
+                enabled: true,
+                hooks: sc.clone(),
+                source: None,
+            })
+        });
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        let origin = std::thread::spawn(move || {
+            let mut seen = Vec::new();
+            for hop in 0..2 {
+                let (mut stream, _) = l.accept().unwrap();
+                stream
+                    .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                    .unwrap();
+                let mut raw = Vec::new();
+                let mut buf = [0; 4096];
+                while !raw.windows(4).any(|w| w == b"\r\n\r\n") {
+                    let n = stream.read(&mut buf).unwrap();
+                    assert_ne!(n, 0);
+                    raw.extend_from_slice(&buf[..n]);
+                }
+                let req = String::from_utf8(raw).unwrap();
+                eprintln!(
+                    "origin hop {hop}: {} probe headers, proxy-only={}",
+                    req.matches("X-Parity-Probe: 1").count(),
+                    req.contains("X-Proxy-Only")
+                );
+                let resp = if hop == 0 {
+                    "HTTP/1.1 302 Found\r\nLocation: /final\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_string()
+                } else {
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        req.len(),
+                        req
+                    )
+                };
+                stream.write_all(resp.as_bytes()).unwrap();
+                seen.push(req);
+            }
+            seen
+        });
+        let req =
+            format!("GET /start HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n");
+        let result = send_following(
+            &shared,
+            &req,
+            &svc("127.0.0.1", port, false),
+            FollowMode::Always,
+            false,
+            &|| false,
+            &|_, _| {},
+        );
+        assert_eq!(result.error, None);
+        assert_eq!(result.followed, 1);
+        let seen = origin.join().unwrap();
+        // Same-site redirects retain custom headers, so the second hop
+        // should have one inherited and one newly added probe header.
+        // Independently measured in Burp Community 2026.11.2 on 2026-11-22:
+        // one callback per hop, with probe counts 1 then 2.
+        assert_eq!(seen[0].matches("X-Parity-Probe: 1").count(), 1);
+        assert_eq!(seen[1].matches("X-Parity-Probe: 1").count(), 2);
+        assert!(seen.iter().all(|q| !q.contains("X-Proxy-Only")));
+        assert_eq!(result.request, seen[1]);
+        let response = String::from_utf8(result.response.unwrap()).unwrap();
+        assert!(
+            response.contains("X-Handler-Tool: Repeater\r\n"),
+            "{response}"
+        );
+        assert!(response.contains("X-Initiating-Probe: 1\r\n"), "{response}");
+        sc.unload();
+        let log = sc.errors();
+        eprintln!("real JVM logs: {log:#?}");
+        for expected in [
+            "request Repeater /start",
+            "response Repeater /start",
+            "request Repeater /final",
+            "response Repeater /final",
+        ] {
+            assert_eq!(
+                log.iter().filter(|line| line.ends_with(expected)).count(),
+                1,
+                "{log:#?}"
+            );
+        }
+        assert!(
+            !log.iter()
+                .any(|line| line.contains("HANDLER RAN") || line.starts_with("[error]")),
+            "{log:#?}"
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn repeater_http_drop_stops_before_origin() {
+        use webprobe_core::ext_host::{
+            self, Annotations, HttpService, LoadedExtension, ProxyAction, ProxyHooks,
+        };
+        struct Dropper;
+        impl ProxyHooks for Dropper {
+            fn extension_name(&self) -> &str {
+                "drop tool send"
+            }
+            fn handle_http_request(
+                &self,
+                tool: &str,
+                _: &HttpService,
+                _: &mut Vec<u8>,
+                _: &mut Annotations,
+            ) -> ProxyAction {
+                assert_eq!(tool, "Repeater");
+                ProxyAction::Drop
+            }
+            fn handle_request_received(
+                &self,
+                _: &HttpService,
+                _: &str,
+                _: &str,
+                _: &mut Vec<u8>,
+            ) -> ProxyAction {
+                panic!("Repeater must not call proxy-only hooks")
+            }
+        }
+        let shared = net::Shared::new();
+        ext_host::with_host(&shared, |h| {
+            h.extensions.push(LoadedExtension::new(Dropper))
+        });
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        l.set_nonblocking(true).unwrap();
+        let r = send_following(
+            &shared,
+            "GET / HTTP/1.1\r\nHost: localhost\r\n\r\n",
+            &svc("127.0.0.1", l.local_addr().unwrap().port(), false),
+            FollowMode::Never,
+            false,
+            &|| false,
+            &|_, _| {},
+        );
+        assert!(r.response.is_none());
+        assert_eq!(r.error.as_deref(), Some("request dropped by extension"));
+        assert_eq!(
+            l.accept().unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
         );
     }
 

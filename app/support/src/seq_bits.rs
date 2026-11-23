@@ -166,13 +166,12 @@ pub fn long_runs(bits: &[bool]) -> f64 {
 /// The bit-level report for these token samples, or `None` with fewer than
 /// [`MIN_SAMPLES`] of them or when the shortest token is empty.
 pub fn analyze(samples: &[Vec<u8>]) -> Option<BitReport> {
-    if samples.len() < MIN_SAMPLES {
+    if samples.len() < MIN_SAMPLES || samples.iter().any(Vec::is_empty) {
         return None;
     }
     let columns = bit_columns(samples);
-    if columns.is_empty() {
-        return None;
-    }
+    // No variable positions is a valid result: the observed tokens are
+    // constant and have zero effective bits, not insufficient samples.
     let bits: Vec<BitResult> = columns
         .iter()
         .enumerate()
@@ -205,10 +204,10 @@ pub fn analyze(samples: &[Vec<u8>]) -> Option<BitReport> {
     })
 }
 
-/// Burp's two summary sentences.
+/// Summary of the implemented tests, not a claim of cryptographic security.
 pub fn summary(report: &BitReport) -> String {
     format!(
-        "The overall quality of randomness within the sample is estimated to be: {}. At a significance level of 1%, the amount of effective entropy is estimated to be: {} bits.",
+        "The overall quality of randomness within the sample is estimated to be: {}. At a significance level of 1%, the amount of effective entropy is estimated to be: {} bits. This is a test-pass estimate from monobit, poker (320+ samples), runs and approximate long-run tests. Spectral, correlation and compression tests are not implemented; passing does not prove unpredictability. Only the common token prefix is analyzed.",
         report.rating, report.effective_entropy[3]
     )
 }
@@ -257,6 +256,49 @@ mod tests {
         (0..count)
             .map(|_| (0..len).map(|_| (next() >> 24) as u8).collect())
             .collect()
+    }
+
+    #[test]
+    fn constant_manual_load_fixture_has_zero_effective_bits_at_every_level() {
+        // PR #112: the real Burp fixture contains 1,024 identical lines.
+        let text = "ABCD0123456789abcdef\n".repeat(1024);
+        let samples: Vec<Vec<u8>> = text.lines().map(|line| line.as_bytes().to_vec()).collect();
+        let report = analyze(&samples).expect("constant non-empty tokens must be analyzed");
+        assert_eq!(report.samples, 1024);
+        assert_eq!(report.token_bits, 0);
+        assert!(report.bits.is_empty());
+        assert_eq!(report.effective_entropy, [0; 5]);
+        assert_eq!(report.rating, "extremely poor");
+        assert!(summary(&report)
+            .contains("1%, the amount of effective entropy is estimated to be: 0 bits."));
+        println!(
+            "constant manual load: {} samples, {:?} effective bits, {}",
+            report.samples, report.effective_entropy, report.rating
+        );
+        let json: serde_json::Value = serde_json::from_str(&report_json(&report)).unwrap();
+        assert_eq!(
+            json["effective_entropy"],
+            serde_json::json!([0, 0, 0, 0, 0])
+        );
+    }
+
+    #[test]
+    fn constant_tokens_at_minimum_sample_boundary_are_valid() {
+        assert!(analyze(&vec![b"fixed".to_vec(); MIN_SAMPLES - 1]).is_none());
+        let report = analyze(&vec![b"fixed".to_vec(); MIN_SAMPLES]).unwrap();
+        assert_eq!(report.effective_entropy, [0; 5]);
+        assert!(analyze(&vec![Vec::new(); MIN_SAMPLES]).is_none());
+    }
+
+    #[test]
+    fn replacing_batch_with_same_count_recomputes_zero_entropy() {
+        let samples = random_tokens(1024, 16, 42);
+        let random = analyze(&samples).unwrap();
+        assert!(random.effective_entropy[3] > 80);
+        let constant = analyze(&vec![b"ABCD0123456789abcdef".to_vec(); samples.len()]).unwrap();
+        assert_eq!(random.samples, constant.samples);
+        assert_eq!(constant.effective_entropy, [0; 5]);
+        assert_ne!(random, constant);
     }
 
     #[test]

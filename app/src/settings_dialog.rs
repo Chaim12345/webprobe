@@ -129,7 +129,7 @@ fn page(app: &mut App, ui: &mut Ui, pane: SettingsPane) {
         }
         SettingsPane::Repeater => {
             title(ui, "Repeater");
-            ui.checkbox(&mut app.rep_update_cl, "Update Content-Length");
+            ui.checkbox(&mut app.repeater.update_cl, "Update Content-Length");
             ui.horizontal(|ui| {
                 ui.label(
                     RichText::new("Follow redirections:")
@@ -149,7 +149,7 @@ fn page(app: &mut App, ui: &mut Ui, pane: SettingsPane) {
             title(ui, "Sequencer");
             note(ui, "Token handling for live capture and manual load.");
             ui.checkbox(
-                &mut app.seq_ignore_abnormal,
+                &mut app.sequencer.ignore_abnormal,
                 "Ignore tokens whose length deviates by more than 5 characters",
             );
         }

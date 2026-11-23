@@ -297,6 +297,13 @@ pub struct Attack {
     pub rows: Mutex<Vec<AttackRow>>,
 }
 
+/// Actual request/target which produced one Repeater history response.
+#[derive(Clone)]
+pub struct RepResponseSource {
+    pub request: String,
+    pub service: webprobe_support::ext::HttpService,
+}
+
 pub struct RepTab {
     /// Stable identity: sends route by it, never by the (display) name.
     pub id: u64,
@@ -312,6 +319,10 @@ pub struct RepTab {
     pub history: Vec<(String, Option<Vec<u8>>, String)>,
     /// Position in `history` being shown (len = the live, editable item).
     pub hist_pos: usize,
+    /// Parallel to history; kept separate from the editable request so a
+    /// manual Follow resolves relative Locations against the last wire hop.
+    /// Session-only, like history itself. Older entries may have no source.
+    pub response_sources: Vec<Option<RepResponseSource>>,
     /// A WebSocket Repeater tab: its session (in `Shared::tool_state`).
     pub ws: Option<u64>,
 }

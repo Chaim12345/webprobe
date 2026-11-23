@@ -6,6 +6,7 @@ use webprobe_core::ai;
 use webprobe_core::analysis;
 use webprobe_core::codec;
 mod analysis_ui;
+mod bambda_ui;
 use webprobe_core::collaborator;
 use webprobe_core::compare;
 use webprobe_core::cookie_jar;
@@ -56,6 +57,7 @@ use webprobe_core::tasks;
 mod table;
 mod theme;
 use webprobe_core::tls;
+mod tool_state;
 mod tools;
 mod ui;
 use webprobe_core::upstream;
@@ -77,6 +79,7 @@ use crate::ext_host::ProxyHooks as _;
 pub type SiteCache = (Vec<net::HistEntry>, Vec<(String, String)>, Vec<bool>);
 
 pub struct App {
+    pub bambdas: bambda_ui::State,
     pub shared: Arc<net::Shared>,
     /// Cross-tool HTTP Logger, mirrored from proxy history every frame.
     pub logger: logger::Logger,
@@ -96,6 +99,8 @@ pub struct App {
     pub log_sel: Option<u64>,
     /// Selected Organizer item.
     pub org_sel: Option<u64>,
+    /// Selected Organizer collection; 0 is the Inbox.
+    pub org_coll: u64,
     /// Intruder sub-tab (0 = Positions, 1 = Payloads).
     pub intr_sub: usize,
     /// Intercept split buttons (burp.Zub8 / Zubj): true = "Forward all" /
@@ -115,8 +120,6 @@ pub struct App {
     pub mcp: mcp_hook::Mcp,
     /// Height of the Proxy message pane, dragged by the splitter (B-05).
     pub split_detail: f32,
-    /// Repeater request pane's share of the request|response width.
-    pub rep_split: f32,
     /// Site map tree's share of the Target width.
     pub map_split: f32,
     pub target_host_sel: Option<String>,
@@ -159,8 +162,6 @@ pub struct App {
     pub settings_help: ui::SettingsPane,
     /// First-run setup panel dismissed for this session (M-07).
     pub onboarding_hidden: bool,
-    /// Decoder: the input pane shows hex.
-    pub dec_hex: bool,
     pub intercept_edit: String,
     pub detail_sub: usize,
     /// Burp message panes and Inspector under the Proxy history.
@@ -198,43 +199,10 @@ pub struct App {
     /// A tab refresh is in flight / when the last one started (UI time).
     pub ext_tab_busy: std::sync::Arc<std::sync::atomic::AtomicBool>,
     pub ext_tab_at: f64,
-    /// Sequencer (Burp layout): sub-tab, requests sent here, token location
-    /// (0 cookie, 1 form field, 2 custom regex), live capture state.
-    pub seq_sub: usize,
-    pub seq_requests: Vec<net::HistEntry>,
-    pub seq_req_sel: Option<usize>,
-    pub seq_table: table::TableState,
-    pub seq_loc: usize,
-    pub seq_field: String,
-    pub seq_custom: String,
-    pub seq_load_path: String,
-    pub seq_live_buf: Option<Arc<Mutex<Vec<Vec<u8>>>>>,
-    pub seq_live_stop: Option<Arc<std::sync::atomic::AtomicBool>>,
     /// Intercept: the held item being edited and its text.
     pub intercept_cur: Option<u64>,
     pub intercept_text: String,
     pub intercept_pane: msgpane::PaneState,
-    /// Decoder stages after the input: (text, hex view).
-    pub dec_chain: Vec<(String, bool)>,
-    /// Comparer items (shown in both tables), selections, comparison window.
-    pub cmp_items: Vec<String>,
-    pub cmp_sel1: Option<usize>,
-    pub cmp_sel2: Option<usize>,
-    pub cmp_table1: table::TableState,
-    pub cmp_table2: table::TableState,
-    pub cmp_paste_pending: bool,
-    pub cmp_load_path: String,
-    pub cmp_window: Option<(usize, usize, bool)>,
-    /// The token-level comparison shown in the compare window, and the file
-    /// its Export button writes.
-    pub cmp_result: Option<compare::Comparison>,
-    /// Comparer result window: Hex view, Sync views, shared scroll offset.
-    pub cmp_hex: bool,
-    pub cmp_sync: bool,
-    pub cmp_scroll: egui::Vec2,
-    pub cmp_export_path: String,
-    /// Which Compare button opened the window (Words, Bytes, Characters).
-    pub cmp_unit_label: &'static str,
     /// Logger / Organizer (Burp layouts).
     pub log_on: bool,
     pub log_table: table::TableState,
@@ -244,6 +212,17 @@ pub struct App {
     pub org_table: table::TableState,
     pub org_req_pane: msgpane::PaneState,
     pub org_resp_pane: msgpane::PaneState,
+    /// Organizer right-pane tab (Inbox: 0 = Contents; custom: 0 = About,
+    /// 1 = Contents) and the collection it belongs to.
+    pub org_tab: usize,
+    pub org_tab_coll: u64,
+    /// Collection being renamed inline in the rail, with the edit buffer.
+    pub org_renaming: Option<u64>,
+    pub org_rename_buf: String,
+    /// Rename / delete-confirmation / share modal target collection.
+    pub org_rename_modal: Option<u64>,
+    pub org_delete_modal: Option<u64>,
+    pub org_share_modal: Option<u64>,
     /// Intruder (Burp 2026 layout): target, Host update, editor pane, right
     /// dock (0 Payloads, 1 Resource pool, 2 Settings, 3 closed), selected
     /// payload set, add/load fields, results window.
@@ -293,11 +272,6 @@ pub struct App {
     pub new_scan_type: usize,
     /// R-11: the scan configuration library and the New scan selection.
     pub scan_lib: scan_library_ui::LibraryState,
-    /// Repeater: message panes and the Configure-target dialog.
-    pub rep_req_pane: msgpane::PaneState,
-    pub rep_resp_pane: msgpane::PaneState,
-    pub rep_target_edit: bool,
-    pub rep_update_cl: bool,
     /// Burp's Search window and Event log window.
     pub search_open: bool,
     pub event_log_open: bool,
@@ -320,29 +294,7 @@ pub struct App {
     /// Per payload set: the extension payload processor its payloads go
     /// through (Montoya `registerPayloadProcessor`), "" for none.
     pub intr_ext_proc: Vec<String>,
-    pub dec_input: String,
-    pub dec_results: Vec<(String, String)>,
-    /// Latest Decoder output (P-07).
-    pub dec_output: String,
-    pub dec_sel_decode: Option<decoder_ops::Op>,
-    pub dec_sel_encode: Option<decoder_ops::Op>,
-    pub dec_sel_hash: Option<decoder_ops::Op>,
     pub scope_only: bool,
-    pub seq_mode: usize,
-    pub seq_ignore_abnormal: bool,
-    /// Live capture: stop after this many tokens; re-analyse as they arrive.
-    pub seq_capture_limit: usize,
-    pub seq_auto_analyze: bool,
-    pub seq_selector: String,
-    pub seq_manual: String,
-    pub seq_samples: Vec<Vec<u8>>,
-    pub seq_stats: Option<analysis::TokenStats>,
-    pub seq_report: Option<analysis::SequencerReport>,
-    /// Bit-level analysis of `seq_samples` (None below 100 tokens) and the
-    /// file its export buttons write to.
-    pub seq_bits: Option<seq_bits::BitReport>,
-    pub seq_export_path: String,
-    pub seq_status: String,
     pub comparer_state: analysis::ComparerState,
     pub search_query: String,
     pub search_case: bool,
@@ -354,13 +306,8 @@ pub struct App {
     pub collab_state: collaborator::CollaboratorState,
     pub macro_name: String,
     pub macro_request: String,
-    pub rep_sel: usize,
     /// Repeater/intercept/WebSockets state (E-02..E-06, P-06, B-09).
     pub rops: repeater_ops::State,
-    /// Repeater response view: 0 Raw, 1 Hex, 2 Pretty (P-04).
-    pub rep_view: usize,
-    /// Repeater request view: 0 Pretty, 1 Raw, 2 Hex (P-04).
-    pub rep_req_view: usize,
     pub port_txt: String,
     pub frames: usize,
     pub saved: bool,
@@ -370,6 +317,10 @@ pub struct App {
     pub screenshot: Option<PathBuf>,
     /// Reporting, engagement tools, content discovery, crash recovery.
     pub eng: engagement::State,
+    pub repeater: tool_state::RepeaterState,
+    pub comparer: tool_state::ComparerState,
+    pub decoder: tool_state::DecoderState,
+    pub sequencer: tool_state::SequencerState,
 }
 
 /// One proxy history row flattened for mirroring: `(id, ts, method, host,
@@ -474,6 +425,7 @@ fn mirror_tool_log(logger: &mut logger::Logger, sent: Vec<net::ToolExchange>) {
             method: t.method,
             host: t.host,
             port: t.port,
+            https: t.https,
             path: t.path,
             status: t.status,
             req_len: t.req_len,
@@ -630,7 +582,8 @@ impl eframe::App for App {
             || crate::intruder_ui::is_running(self)
             || fresh_traffic
             || self
-                .seq_live_stop
+                .sequencer
+                .live_stop
                 .as_ref()
                 .is_some_and(|s| !s.load(Ordering::SeqCst));
         ctx.request_repaint_after(std::time::Duration::from_millis(if busy {
@@ -808,6 +761,7 @@ impl App {
     pub fn new(shared: Arc<net::Shared>) -> Self {
         let port_txt = shared.proxy_port.load(Ordering::SeqCst).to_string();
         App {
+            bambdas: bambda_ui::State::default(),
             shared,
             logger: logger::Logger::new(5000),
             log_filter: logger::LogQuery::default(),
@@ -817,6 +771,7 @@ impl App {
             last_messages: 0,
             log_sel: None,
             org_sel: None,
+            org_coll: 0,
             intr_sub: 0,
             intercept_fwd_all: false,
             intercept_drop_all: false,
@@ -836,7 +791,6 @@ impl App {
             waker_installed: false,
             mcp: mcp_hook::Mcp::start(),
             split_detail: 260.0,
-            rep_split: 0.5,
             map_split: 0.24,
             target_host_sel: None,
             target_hosts: Vec::new(),
@@ -868,7 +822,6 @@ impl App {
             settings_open: false,
             settings_help: ui::SettingsPane::Appearance,
             onboarding_hidden: false,
-            dec_hex: false,
             intercept_edit: String::new(),
             detail_sub: 0,
             req_pane: msgpane::PaneState::default(),
@@ -895,40 +848,12 @@ impl App {
             ext_add_done: Default::default(),
             ext_tab_busy: Default::default(),
             ext_tab_at: 0.0,
-            seq_sub: 0,
-            seq_requests: Vec::new(),
-            seq_req_sel: None,
-            seq_table: table::TableState::default(),
-            seq_loc: 0,
-            seq_field: String::new(),
-            seq_custom: String::new(),
-            seq_load_path: String::new(),
-            seq_live_buf: None,
-            seq_live_stop: None,
             intercept_cur: None,
             intercept_text: String::new(),
             intercept_pane: msgpane::PaneState {
                 view: 1,
                 ..Default::default()
             },
-            dec_chain: Vec::new(),
-            cmp_items: Vec::new(),
-            cmp_sel1: None,
-            cmp_sel2: None,
-            cmp_table1: table::TableState::default(),
-            cmp_table2: table::TableState::default(),
-            cmp_paste_pending: false,
-            cmp_load_path: String::new(),
-            cmp_window: None,
-            cmp_result: None,
-            cmp_hex: false,
-            cmp_sync: false,
-            cmp_scroll: egui::Vec2::ZERO,
-            cmp_export_path: std::env::temp_dir()
-                .join("comparer.html")
-                .display()
-                .to_string(),
-            cmp_unit_label: "Words",
             log_on: true,
             log_table: table::TableState::default(),
             log_req_pane: msgpane::PaneState::default(),
@@ -937,6 +862,13 @@ impl App {
             org_table: table::TableState::default(),
             org_req_pane: msgpane::PaneState::default(),
             org_resp_pane: msgpane::PaneState::default(),
+            org_tab: 0,
+            org_tab_coll: u64::MAX,
+            org_renaming: None,
+            org_rename_buf: String::new(),
+            org_rename_modal: None,
+            org_delete_modal: None,
+            org_share_modal: None,
             intr_target: String::new(),
             intr_update_host: true,
             intr_pane: msgpane::PaneState {
@@ -975,13 +907,6 @@ impl App {
             new_scan_urls: String::new(),
             new_scan_type: 0,
             scan_lib: Default::default(),
-            rep_req_pane: msgpane::PaneState {
-                view: 1,
-                ..Default::default()
-            },
-            rep_resp_pane: msgpane::PaneState::default(),
-            rep_target_edit: false,
-            rep_update_cl: true,
             search_open: false,
             event_log_open: false,
             event_log_table: table::TableState::default(),
@@ -997,28 +922,7 @@ impl App {
             intr_sets: vec![String::new()],
             intr_sources: Vec::new(),
             intr_ext_proc: Vec::new(),
-            dec_input: String::new(),
-            dec_results: Vec::new(),
-            dec_output: String::new(),
-            dec_sel_decode: None,
-            dec_sel_encode: None,
-            dec_sel_hash: None,
             scope_only: false,
-            seq_mode: 0,
-            seq_ignore_abnormal: true,
-            seq_capture_limit: 20_000,
-            seq_auto_analyze: true,
-            seq_selector: "session".to_string(),
-            seq_manual: String::new(),
-            seq_samples: Vec::new(),
-            seq_stats: None,
-            seq_report: None,
-            seq_bits: None,
-            seq_export_path: std::env::temp_dir()
-                .join("sequencer-analysis.csv")
-                .display()
-                .to_string(),
-            seq_status: String::new(),
             comparer_state: analysis::ComparerState::default(),
             search_query: String::new(),
             search_case: false,
@@ -1032,10 +936,7 @@ impl App {
             macro_name: "Macro 1".to_string(),
             // Empty: a prefilled example host would get real traffic from Test macro.
             macro_request: String::new(),
-            rep_sel: 0,
             rops: repeater_ops::State::default(),
-            rep_view: 0,
-            rep_req_view: 1,
             port_txt,
             frames: 0,
             saved: false,
@@ -1044,6 +945,10 @@ impl App {
             grab_done: None,
             screenshot: None,
             eng: engagement::State::default(),
+            repeater: tool_state::RepeaterState::default(),
+            comparer: tool_state::ComparerState::default(),
+            decoder: tool_state::DecoderState::default(),
+            sequencer: tool_state::SequencerState::default(),
         }
     }
 }

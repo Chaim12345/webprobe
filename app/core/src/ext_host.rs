@@ -591,6 +591,7 @@ impl JavaSidecar {
     fn run(
         &self,
         kind: &str,
+        tool: &str,
         svc: &HttpService,
         msg: &mut Vec<u8>,
         req: Option<&[u8]>,
@@ -607,7 +608,7 @@ impl JavaSidecar {
             "host": svc.host,
             "port": svc.port,
             "secure": svc.secure,
-            "tool": "Proxy",
+            "tool": tool,
             "notes": ann.notes,
             "highlight": ann.colour_name(),
         });
@@ -1113,6 +1114,27 @@ impl ProxyHooks for JavaSidecar {
         self.tell(serde_json::json!({"type": "restore", "data": data}).to_string());
     }
 
+    fn handle_http_request(
+        &self,
+        tool: &str,
+        svc: &HttpService,
+        req: &mut Vec<u8>,
+        ann: &mut Annotations,
+    ) -> ProxyAction {
+        self.run("request", tool, svc, req, None, ann)
+    }
+
+    fn handle_http_response(
+        &self,
+        tool: &str,
+        svc: &HttpService,
+        req: &[u8],
+        resp: &mut Vec<u8>,
+        ann: &mut Annotations,
+    ) -> ProxyAction {
+        self.run("response", tool, svc, resp, Some(req), ann)
+    }
+
     fn handle_response_received(
         &self,
         svc: &crate::ext_host::HttpService,
@@ -1131,7 +1153,7 @@ impl ProxyHooks for JavaSidecar {
         req: &mut Vec<u8>,
         ann: &mut Annotations,
     ) -> ProxyAction {
-        self.run("request", svc, req, None, ann)
+        self.run("request", "Proxy", svc, req, None, ann)
     }
 
     fn handle_response(
@@ -1143,7 +1165,7 @@ impl ProxyHooks for JavaSidecar {
         resp: &mut Vec<u8>,
         ann: &mut Annotations,
     ) -> ProxyAction {
-        self.run("response", svc, resp, Some(req), ann)
+        self.run("response", "Proxy", svc, resp, Some(req), ann)
     }
 }
 
@@ -1414,6 +1436,93 @@ mod tests {
             .success();
         assert!(ok, "javac failed on {name}");
         Some(dir)
+    }
+
+    /// R-20: the public Montoya keyword analyzer, exercised by a real JVM
+    /// extension. Case-insensitive counts and empty keywords follow real Burp
+    /// 2026.11.2 (docs/parity/2026-11-22-real-burp); the extension asserts
+    /// that behavior.
+    #[test]
+    fn montoya_response_keyword_analysis() {
+        let Some(dir) = stage_extension("KeywordAnalysisExtension") else {
+            assert!(
+                std::env::var_os("WEBPROBE_REQUIRE_JAVA").is_none(),
+                "required Montoya regression cannot run: no JDK or Montoya API jar"
+            );
+            eprintln!("skipping: no JDK or Montoya API jar (set WEBPROBE_REQUIRE_JAVA=1 to fail)");
+            return;
+        };
+        let sc = JavaSidecar::spawn(dir.to_str().unwrap()).expect("keyword extension loads");
+        sc.unload();
+        let log = sc.errors();
+        assert!(
+            log.iter()
+                .any(|line| line.contains("keyword analysis regression passed")),
+            "keyword checks did not finish: {log:#?}"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// R-20: the public Montoya response-variations analyzer, exercised by a
+    /// real JVM extension. The factory used to throw
+    /// UnsupportedOperationException; real Burp 2026.11.2 returns an analyzer
+    /// (docs/parity/2026-11-22-real-burp).
+    #[test]
+    fn montoya_response_variation_analysis() {
+        let Some(dir) = stage_extension("VariationAnalysisExtension") else {
+            assert!(
+                std::env::var_os("WEBPROBE_REQUIRE_JAVA").is_none(),
+                "required Montoya regression cannot run: no JDK or Montoya API jar"
+            );
+            eprintln!("skipping: no JDK or Montoya API jar (set WEBPROBE_REQUIRE_JAVA=1 to fail)");
+            return;
+        };
+        let sc = JavaSidecar::spawn(dir.to_str().unwrap()).expect("variation extension loads");
+        sc.unload();
+        let log = sc.errors();
+        assert!(
+            log.iter()
+                .any(|line| line.contains("variation analysis regression passed")),
+            "variation checks did not finish: {log:#?}"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// R-20: payload options round-trip through the public Montoya API.
+    #[test]
+    fn montoya_payload_without_server_location() {
+        let Some(dir) = stage_extension("PayloadOptionsExtension") else {
+            assert!(
+                std::env::var_os("WEBPROBE_REQUIRE_JAVA").is_none(),
+                "required Montoya regression cannot run: no JDK or Montoya API jar"
+            );
+            eprintln!("skipping: no JDK or Montoya API jar (set WEBPROBE_REQUIRE_JAVA=1 to fail)");
+            return;
+        };
+        let counter = AtomicU64::new(0);
+        let link = Arc::new(HostLink {
+            send: Box::new(|_, _| Err("unused".into())),
+            event: Box::new(|_, _| {}),
+            call: Box::new(move |_, op, _| {
+                assert_eq!(op, "collab.payload");
+                let n = counter.fetch_add(1, Ordering::SeqCst) + 1;
+                Ok(serde_json::json!({
+                    "id": format!("option{n}"),
+                    "payload": format!("option{n}.oast.test"),
+                    "server": "oast.test",
+                }))
+            }),
+        });
+        let sc = JavaSidecar::spawn_with(dir.to_str().unwrap(), Some(link))
+            .expect("payload options extension loads");
+        sc.unload();
+        let log = sc.errors();
+        assert!(
+            log.iter()
+                .any(|line| line.contains("payload options regression passed")),
+            "payload checks did not finish: {log:#?}"
+        );
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     /// R-03 stage 1: setName, the unloading handler, every logging()
@@ -2082,6 +2191,7 @@ mod tests {
         assert_eq!(
             got,
             [
+                "GET /i?q=base HTTP/1.1",
                 "GET /i?q=base-1-1-pbase HTTP/1.1",
                 "GET /i?q=base-3-1-pbase HTTP/1.1"
             ],

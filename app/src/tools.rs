@@ -279,16 +279,16 @@ fn extract_token(response: &[u8], mode: usize, selector: &str) -> Option<Vec<u8>
 }
 
 fn add_sequencer_sample(app: &mut App, sample: Vec<u8>) {
-    if app.seq_ignore_abnormal {
-        if let Some(first) = app.seq_samples.first() {
+    if app.sequencer.ignore_abnormal {
+        if let Some(first) = app.sequencer.samples.first() {
             let deviation = sample.len().abs_diff(first.len());
             if deviation > SEQUENCER_MAX_LENGTH_DEVIATION {
-                app.seq_status = format!("ignored token with length deviation {deviation} (> {SEQUENCER_MAX_LENGTH_DEVIATION})");
+                app.sequencer.status = format!("ignored token with length deviation {deviation} (> {SEQUENCER_MAX_LENGTH_DEVIATION})");
                 return;
             }
         }
     }
-    app.seq_samples.push(sample);
+    app.sequencer.samples.push(sample);
 }
 
 /// Cookie names set by a response (Sequencer's "Cookie:" token locations).
@@ -320,40 +320,43 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
     // settings. Live capture lists requests sent here, then the token
     // location (Cookie / Form field / Custom location) and Start live capture.
     // Drain samples gathered by a running live capture.
-    if let Some(buf) = &app.seq_live_buf {
+    if let Some(buf) = &app.sequencer.live_buf {
         let got: Vec<Vec<u8>> = std::mem::take(&mut *buf.lock().unwrap());
-        let before = app.seq_samples.len();
+        let before = app.sequencer.samples.len();
         for t in got {
             add_sequencer_sample(app, t);
         }
         // Burp's "Auto analyze": refresh the results every 100 tokens while
         // the capture runs (from the 100 the bit-level tests need).
-        let after = app.seq_samples.len();
-        if app.seq_auto_analyze
+        let after = app.sequencer.samples.len();
+        if app.sequencer.auto_analyze
             && after >= crate::seq_bits::MIN_SAMPLES
             && after / 100 != before / 100
         {
-            app.seq_stats = Some(analysis::analyze_tokens(&app.seq_samples));
+            app.sequencer.bits = crate::seq_bits::analyze(&app.sequencer.samples);
+            app.sequencer.stats = Some(analysis::analyze_tokens(&app.sequencer.samples));
             let tokens: Vec<String> = app
-                .seq_samples
+                .sequencer
+                .samples
                 .iter()
                 .map(|s| String::from_utf8_lossy(s).into_owned())
                 .collect();
-            app.seq_report = Some(analysis::analyze_sequence(&tokens));
-            app.seq_status = format!("analyzed {after} sample(s)");
+            app.sequencer.report = Some(analysis::analyze_sequence(&tokens));
+            app.sequencer.status = format!("analyzed {after} sample(s)");
         }
     }
     let live_running = app
-        .seq_live_stop
+        .sequencer
+        .live_stop
         .as_ref()
         .map(|f| !f.load(std::sync::atomic::Ordering::SeqCst))
         .unwrap_or(false);
     if let Some(v) = crate::ui::sub_tabs_pub(
         ui,
         &["Live capture", "Manual load", "\u{E270} Sequencer settings"],
-        app.seq_sub,
+        app.sequencer.sub,
     ) {
-        app.seq_sub = v;
+        app.sequencer.sub = v;
     }
     ui.add_space(8.0);
     let section = |ui: &mut Ui, title: &str, sub: &str| {
@@ -371,7 +374,7 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
         });
         ui.add_space(6.0);
     };
-    match app.seq_sub {
+    match app.sequencer.sub {
         0 => {
             section(ui, "Select live capture request", "Send requests here from other tools to configure a live capture. Select the request to use, configure the other options below, then click \"Start live capture\".");
             ui.horizontal_top(|ui| {
@@ -385,9 +388,9 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
                         )
                         .clicked()
                     {
-                        if let Some(i) = app.seq_req_sel.take() {
-                            if i < app.seq_requests.len() {
-                                app.seq_requests.remove(i);
+                        if let Some(i) = app.sequencer.req_sel.take() {
+                            if i < app.sequencer.requests.len() {
+                                app.sequencer.requests.remove(i);
                             }
                         }
                     }
@@ -398,8 +401,8 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
                         )
                         .clicked()
                     {
-                        app.seq_requests.clear();
-                        app.seq_req_sel = None;
+                        app.sequencer.requests.clear();
+                        app.sequencer.req_sel = None;
                     }
                 });
                 let cols = [
@@ -408,10 +411,10 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
                     crate::table::Column::new("Request", 260.0),
                 ];
                 let rows: Vec<(usize, net::HistEntry)> =
-                    app.seq_requests.iter().cloned().enumerate().collect();
-                let mut st = app.seq_table.clone();
+                    app.sequencer.requests.iter().cloned().enumerate().collect();
+                let mut st = app.sequencer.table.clone();
                 let mut pick = None;
-                let sel = app.seq_req_sel;
+                let sel = app.sequencer.req_sel;
                 ui.allocate_ui(egui::vec2(500.0, 150.0), |ui| {
                     crate::table::table_body(
                         ui,
@@ -451,29 +454,30 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
                         },
                     );
                 });
-                app.seq_table = st;
+                app.sequencer.table = st;
                 if pick.is_some() {
-                    app.seq_req_sel = pick;
+                    app.sequencer.req_sel = pick;
                 }
             });
             ui.add_space(8.0);
             ui.horizontal(|ui| {
                 ui.add_space(28.0);
                 let chosen = app
-                    .seq_req_sel
-                    .and_then(|i| app.seq_requests.get(i).cloned());
+                    .sequencer
+                    .req_sel
+                    .and_then(|i| app.sequencer.requests.get(i).cloned());
                 if live_running {
                     if ui
                         .add(egui::Button::new(
                             RichText::new(format!(
                                 "Stop live capture ({} tokens)",
-                                app.seq_samples.len()
+                                app.sequencer.samples.len()
                             ))
                             .strong(),
                         ))
                         .clicked()
                     {
-                        if let Some(f) = &app.seq_live_stop {
+                        if let Some(f) = &app.sequencer.live_stop {
                             f.store(true, std::sync::atomic::Ordering::SeqCst);
                         }
                     }
@@ -495,31 +499,39 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
                         .color(theme::ink_dim()),
                 );
                 ui.add(
-                    egui::DragValue::new(&mut app.seq_capture_limit)
+                    egui::DragValue::new(&mut app.sequencer.capture_limit)
                         .range(100..=20_000)
                         .speed(50.0),
                 );
                 ui.label(RichText::new("tokens").size(12.5).color(theme::ink_dim()));
-                ui.checkbox(&mut app.seq_auto_analyze, "Auto analyze");
-                if !app.seq_samples.is_empty() {
+                ui.checkbox(&mut app.sequencer.auto_analyze, "Auto analyze");
+                if !app.sequencer.samples.is_empty() {
                     ui.add_space(10.0);
                     if ui
-                        .button(format!("Analyze now ({} tokens)", app.seq_samples.len()))
+                        .button(format!(
+                            "Analyze now ({} tokens)",
+                            app.sequencer.samples.len()
+                        ))
                         .clicked()
                     {
-                        app.seq_stats = Some(analysis::analyze_tokens(&app.seq_samples));
+                        app.sequencer.bits = crate::seq_bits::analyze(&app.sequencer.samples);
+                        app.sequencer.stats =
+                            Some(analysis::analyze_tokens(&app.sequencer.samples));
                         let tokens: Vec<String> = app
-                            .seq_samples
+                            .sequencer
+                            .samples
                             .iter()
                             .map(|s| String::from_utf8_lossy(s).into_owned())
                             .collect();
-                        app.seq_report = Some(analysis::analyze_sequence(&tokens));
-                        app.seq_status = format!("analyzed {} sample(s)", app.seq_samples.len());
+                        app.sequencer.report = Some(analysis::analyze_sequence(&tokens));
+                        app.sequencer.status =
+                            format!("analyzed {} sample(s)", app.sequencer.samples.len());
                     }
                     if ui.button("Clear tokens").clicked() {
-                        app.seq_samples.clear();
-                        app.seq_stats = None;
-                        app.seq_report = None;
+                        app.sequencer.samples.clear();
+                        app.sequencer.stats = None;
+                        app.sequencer.report = None;
+                        app.sequencer.bits = None;
                     }
                 }
             });
@@ -537,19 +549,20 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
                 "Select the location in the response where the token appears.",
             );
             let resp = app
-                .seq_req_sel
-                .and_then(|i| app.seq_requests.get(i))
+                .sequencer
+                .req_sel
+                .and_then(|i| app.sequencer.requests.get(i))
                 .and_then(|e| e.resp_raw.clone())
                 .unwrap_or_default();
             let cookies = set_cookie_names(&resp);
             let fields = form_field_names(&resp);
             // Like Burp, pick a token the selected response actually carries
             // instead of keeping a name it does not set.
-            if !cookies.is_empty() && !cookies.contains(&app.seq_selector) {
-                app.seq_selector = cookies[0].clone();
+            if !cookies.is_empty() && !cookies.contains(&app.sequencer.selector) {
+                app.sequencer.selector = cookies[0].clone();
             }
-            if !fields.is_empty() && !fields.contains(&app.seq_field) {
-                app.seq_field = fields[0].clone();
+            if !fields.is_empty() && !fields.contains(&app.sequencer.field) {
+                app.sequencer.field = fields[0].clone();
             }
             egui::Grid::new("seq_loc")
                 .num_columns(3)
@@ -557,22 +570,25 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.add_space(28.0);
-                        if ui.radio(app.seq_loc == 0, "Cookie:").clicked() {
-                            app.seq_loc = 0;
+                        if ui.radio(app.sequencer.loc == 0, "Cookie:").clicked() {
+                            app.sequencer.loc = 0;
                         }
                     });
                     egui::ComboBox::from_id_salt("seq_cookie")
                         .width(340.0)
-                        .selected_text(if app.seq_loc == 0 {
-                            app.seq_selector.clone()
+                        .selected_text(if app.sequencer.loc == 0 {
+                            app.sequencer.selector.clone()
                         } else {
                             String::new()
                         })
                         .show_ui(ui, |ui| {
                             for n in &cookies {
-                                if ui.selectable_label(*n == app.seq_selector, n).clicked() {
-                                    app.seq_loc = 0;
-                                    app.seq_selector = n.clone();
+                                if ui
+                                    .selectable_label(*n == app.sequencer.selector, n)
+                                    .clicked()
+                                {
+                                    app.sequencer.loc = 0;
+                                    app.sequencer.selector = n.clone();
                                 }
                             }
                         });
@@ -580,22 +596,22 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
                     ui.end_row();
                     ui.horizontal(|ui| {
                         ui.add_space(28.0);
-                        if ui.radio(app.seq_loc == 1, "Form field:").clicked() {
-                            app.seq_loc = 1;
+                        if ui.radio(app.sequencer.loc == 1, "Form field:").clicked() {
+                            app.sequencer.loc = 1;
                         }
                     });
                     egui::ComboBox::from_id_salt("seq_field")
                         .width(340.0)
-                        .selected_text(if app.seq_loc == 1 {
-                            app.seq_field.clone()
+                        .selected_text(if app.sequencer.loc == 1 {
+                            app.sequencer.field.clone()
                         } else {
                             String::new()
                         })
                         .show_ui(ui, |ui| {
                             for n in &fields {
-                                if ui.selectable_label(*n == app.seq_field, n).clicked() {
-                                    app.seq_loc = 1;
-                                    app.seq_field = n.clone();
+                                if ui.selectable_label(*n == app.sequencer.field, n).clicked() {
+                                    app.sequencer.loc = 1;
+                                    app.sequencer.field = n.clone();
                                 }
                             }
                         });
@@ -603,19 +619,22 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
                     ui.end_row();
                     ui.horizontal(|ui| {
                         ui.add_space(28.0);
-                        if ui.radio(app.seq_loc == 2, "Custom location:").clicked() {
-                            app.seq_loc = 2;
+                        if ui
+                            .radio(app.sequencer.loc == 2, "Custom location:")
+                            .clicked()
+                        {
+                            app.sequencer.loc = 2;
                         }
                     });
                     if ui
                         .add(
-                            egui::TextEdit::singleline(&mut app.seq_custom)
+                            egui::TextEdit::singleline(&mut app.sequencer.custom)
                                 .hint_text("regex with one capture group")
                                 .desired_width(340.0),
                         )
                         .changed()
                     {
-                        app.seq_loc = 2;
+                        app.sequencer.loc = 2;
                     }
                     if ui
                         .button(RichText::new("Configure").strong())
@@ -624,13 +643,13 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
                         )
                         .clicked()
                     {
-                        app.seq_loc = 2;
+                        app.sequencer.loc = 2;
                     }
                     ui.end_row();
                 });
-            if !app.seq_status.is_empty() {
+            if !app.sequencer.status.is_empty() {
                 ui.add_space(6.0);
-                hint(ui, &app.seq_status);
+                hint(ui, &app.sequencer.status);
             }
         }
         1 => {
@@ -649,8 +668,8 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
                         )
                         .clicked()
                     {
-                        match std::fs::read_to_string(app.seq_load_path.trim()) {
-                            Ok(t) => app.seq_manual.push_str(&t),
+                        match std::fs::read_to_string(app.sequencer.load_path.trim()) {
+                            Ok(t) => app.sequencer.manual.push_str(&t),
                             Err(_) => crate::feedback::toast(
                                 crate::feedback::Level::Error,
                                 "Could not read the token file",
@@ -658,7 +677,7 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
                         }
                     }
                     ui.add(
-                        egui::TextEdit::singleline(&mut app.seq_load_path)
+                        egui::TextEdit::singleline(&mut app.sequencer.load_path)
                             .hint_text("file")
                             .desired_width(92.0),
                     );
@@ -669,7 +688,7 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
                         )
                         .clicked()
                     {
-                        app.seq_manual.clear();
+                        app.sequencer.manual.clear();
                     }
                 });
                 // A loaded token file can run to thousands of lines: the box
@@ -680,7 +699,7 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
                     .max_height(170.0)
                     .show(ui, |ui| {
                         ui.add(
-                            egui::TextEdit::multiline(&mut app.seq_manual)
+                            egui::TextEdit::multiline(&mut app.sequencer.manual)
                                 .font(egui::TextStyle::Monospace)
                                 .desired_rows(10)
                                 .desired_width(500.0),
@@ -692,32 +711,36 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
                 ui.add_space(28.0);
                 if ui
                     .add_enabled(
-                        !app.seq_manual.trim().is_empty(),
+                        !app.sequencer.manual.trim().is_empty(),
                         egui::Button::new(RichText::new("Analyze now").strong()),
                     )
                     .clicked()
                 {
-                    app.seq_samples.clear();
+                    app.sequencer.samples.clear();
                     for line in app
-                        .seq_manual
+                        .sequencer
+                        .manual
                         .clone()
                         .lines()
                         .filter(|l| !l.trim().is_empty())
                     {
                         add_sequencer_sample(app, line.trim().as_bytes().to_vec());
                     }
-                    app.seq_stats = Some(analysis::analyze_tokens(&app.seq_samples));
+                    app.sequencer.bits = crate::seq_bits::analyze(&app.sequencer.samples);
+                    app.sequencer.stats = Some(analysis::analyze_tokens(&app.sequencer.samples));
                     let tokens: Vec<String> = app
-                        .seq_samples
+                        .sequencer
+                        .samples
                         .iter()
                         .map(|s| String::from_utf8_lossy(s).into_owned())
                         .collect();
-                    app.seq_report = Some(analysis::analyze_sequence(&tokens));
+                    app.sequencer.report = Some(analysis::analyze_sequence(&tokens));
                 }
                 ui.label(
                     RichText::new(format!(
                         "{} tokens",
-                        app.seq_manual
+                        app.sequencer
+                            .manual
                             .lines()
                             .filter(|l| !l.trim().is_empty())
                             .count()
@@ -732,13 +755,13 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
             ui.horizontal(|ui| {
                 ui.add_space(28.0);
                 ui.checkbox(
-                    &mut app.seq_ignore_abnormal,
+                    &mut app.sequencer.ignore_abnormal,
                     "Ignore tokens whose length deviates by more than 5 characters",
                 );
             });
         }
     }
-    if let Some(stats) = &app.seq_stats {
+    if let Some(stats) = &app.sequencer.stats {
         ui.add_space(10.0);
         ui.label(
             RichText::new("Summary")
@@ -754,12 +777,8 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
                     ("Samples", stats.sample_count.to_string()),
                     ("Token length", stats.token_length.to_string()),
                     (
-                        "Bits per character",
+                        "Pooled byte entropy (bits/byte)",
                         format!("{:.4}", stats.bits_per_character),
-                    ),
-                    (
-                        "Total entropy (bits)",
-                        format!("{:.2}", stats.total_entropy_bits),
                     ),
                 ] {
                     ui.label(RichText::new(k).size(12.5).color(theme::ink()));
@@ -768,63 +787,62 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
                 }
             });
     }
-    if let Some(report) = &app.seq_report {
+    if app.sequencer.stats.is_some() {
+        hint(ui, "Pooled character statistics describe the alphabet, not token unpredictability. See the bit-level result below.");
+    }
+    if let Some(report) = &app.sequencer.report {
         ui.add_space(8.0);
         crate::analysis_ui::show_sequencer_report(ui, report);
     }
-    // Bit-level analysis follows the character-level one and is redone when
-    // the analysed sample count changes.
-    match &app.seq_stats {
-        Some(stats) => {
-            if app.seq_bits.as_ref().map(|b| b.samples) != Some(stats.sample_count) {
-                app.seq_bits = crate::seq_bits::analyze(&app.seq_samples);
+    // Each Analyze action computes bit-level results from its exact samples;
+    // two unrelated manual batches may have the same sample count.
+    match &app.sequencer.stats {
+        Some(_) => match &app.sequencer.bits {
+            Some(bits) => crate::analysis_ui::show_bit_report(
+                ui,
+                bits,
+                &app.sequencer.samples,
+                &mut app.sequencer.export_path,
+            ),
+            None => {
+                ui.add_space(8.0);
+                ui.label(
+                    RichText::new(format!(
+                        "Bit-level analysis needs at least {} tokens of non-zero length.",
+                        crate::seq_bits::MIN_SAMPLES
+                    ))
+                    .size(12.5)
+                    .color(theme::ink_dim()),
+                );
             }
-            match &app.seq_bits {
-                Some(bits) => crate::analysis_ui::show_bit_report(
-                    ui,
-                    bits,
-                    &app.seq_samples,
-                    &mut app.seq_export_path,
-                ),
-                None => {
-                    ui.add_space(8.0);
-                    ui.label(
-                        RichText::new(format!(
-                            "Bit-level analysis needs at least {} tokens of non-zero length.",
-                            crate::seq_bits::MIN_SAMPLES
-                        ))
-                        .size(12.5)
-                        .color(theme::ink_dim()),
-                    );
-                }
-            }
-        }
-        None => app.seq_bits = None,
+        },
+        None => app.sequencer.bits = None,
     }
 }
 
 /// Burp's live capture: re-issue the request in the background and collect
 /// the token from each response until stopped (or 20,000 tokens).
 fn start_live_capture(app: &mut App, e: net::HistEntry) {
-    let (mode, selector) = match app.seq_loc {
-        0 => (1, app.seq_selector.clone()),
+    let (mode, selector) = match app.sequencer.loc {
+        0 => (1, app.sequencer.selector.clone()),
         1 => (
             2,
             format!(
                 r#"(?i)name=["']?{}["']?[^>]*value=["']?([^"' >]*)"#,
-                regex::escape(&app.seq_field)
+                regex::escape(&app.sequencer.field)
             ),
         ),
-        _ => (2, app.seq_custom.clone()),
+        _ => (2, app.sequencer.custom.clone()),
     };
     if selector.trim().is_empty() {
-        app.seq_status = "choose where the token is (cookie, form field or custom location)".into();
+        app.sequencer.status =
+            "choose where the token is (cookie, form field or custom location)".into();
         return;
     }
     let parts = crate::util::parse_http(&e.req_raw);
     let host = crate::util::get_header(&parts.headers, "Host").unwrap_or_default();
     if host.is_empty() {
-        app.seq_status = "request has no Host header".into();
+        app.sequencer.status = "request has no Host header".into();
         return;
     }
     let (h, p) = net::split_h_p(&host, e.port);
@@ -832,13 +850,13 @@ fn start_live_capture(app: &mut App, e: net::HistEntry) {
     let https = e.https;
     let buf = std::sync::Arc::new(crate::sync::Mutex::new(Vec::new()));
     let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-    app.seq_live_buf = Some(buf.clone());
-    app.seq_live_stop = Some(stop.clone());
-    app.seq_samples.clear();
-    app.seq_status = "live capture running".into();
+    app.sequencer.live_buf = Some(buf.clone());
+    app.sequencer.live_stop = Some(stop.clone());
+    app.sequencer.samples.clear();
+    app.sequencer.status = "live capture running".into();
     let shared = app.shared.clone();
     // Burp captures at most 20,000 tokens; fewer when the user asks.
-    let limit = app.seq_capture_limit.clamp(100, 20_000);
+    let limit = app.sequencer.capture_limit.clamp(100, 20_000);
     webprobe_core::util::spawn_contained("tools", move || {
         let _tool = net::tool_scope("Sequencer");
         let mut n = 0;
@@ -1925,15 +1943,7 @@ pub fn extensions(app: &mut App, ui: &mut Ui) {
             );
             ui.label(RichText::new("WebProbe's scan checks are built in (Dashboard > New scan, context menu > Scan). BCheck files are not supported.").size(12.5).color(theme::ink_dim()));
         }
-        4 => {
-            ui.label(
-                RichText::new("Bambda library")
-                    .strong()
-                    .size(14.0)
-                    .color(theme::ink()),
-            );
-            ui.label(RichText::new("Bambdas (Java filter snippets) are not supported; use the HTTP history filter settings and Logger search.").size(12.5).color(theme::ink_dim()));
-        }
+        4 => crate::bambda_ui::show(app, ui),
         _ => {
             ui.label(
                 RichText::new("Extensions settings")
@@ -2807,8 +2817,8 @@ pub fn drain_tool_sends(app: &mut App) {
                     "An extension sent a request to Intruder",
                 );
             }
-            webprobe_core::ext_calls::ToolSend::Comparer(item) => app.cmp_items.push(item),
-            webprobe_core::ext_calls::ToolSend::Decoder(data) => app.dec_input = data,
+            webprobe_core::ext_calls::ToolSend::Comparer(item) => app.comparer.items.push(item),
+            webprobe_core::ext_calls::ToolSend::Decoder(data) => app.decoder.input = data,
         }
     }
 }
@@ -2838,6 +2848,10 @@ pub fn drain_save_results(app: &mut App) {
 /// this is cheap): what a save writes and what Settings works on.
 pub fn project_snapshot(app: &mut App) -> project::ProjectData {
     let to_project_history = project::ProjectHistory::from_entry;
+    // One Organizer lock for both fields below: two lock() temporaries in a
+    // single struct expression keep the first guard alive until the end of
+    // the statement, so the second lock deadlocks the same thread.
+    let org = app.shared.organizer.lock().unwrap();
     let crawl_items: Vec<project::ProjectHistory> = app
         .shared
         .crawl_items
@@ -3058,11 +3072,7 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
                 mime: e.mime.clone(),
             })
             .collect(),
-        organizer: app
-            .shared
-            .organizer
-            .lock()
-            .unwrap()
+        organizer: org
             .items
             .iter()
             .map(|o| project::ProjectOrganizerItem {
@@ -3074,6 +3084,16 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
                 request: o.request.clone(),
                 response: Some(o.response.clone()),
                 comment: o.note.clone(),
+                collection: o.collection,
+            })
+            .collect(),
+        organizer_collections: org
+            .collections
+            .iter()
+            .map(|c| project::ProjectOrganizerCollection {
+                id: c.id,
+                name: c.name.clone(),
+                description: c.description.clone(),
             })
             .collect(),
         intruder: project::ProjectIntruder {
@@ -3086,8 +3106,8 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
             results: Vec::new(),
         },
         decoder: project::ProjectDecoder {
-            input: app.dec_input.clone(),
-            output: app.dec_output.clone(),
+            input: app.decoder.input.clone(),
+            output: app.decoder.output.clone(),
             steps: Vec::new(),
         },
         crawl_items,
@@ -3102,20 +3122,20 @@ pub fn project_snapshot(app: &mut App) -> project::ProjectData {
             target_sub: Some(app.target_sub),
             target_view: Some(app.target_view),
             intruder_sub: Some(app.intr_sub),
-            sequencer_sub: Some(app.seq_sub),
+            sequencer_sub: Some(app.sequencer.sub),
             dashboard_task: Some(app.dash_task),
             dock: Some(app.dock_sel),
             split_detail: Some(app.split_detail),
-            rep_split: Some(app.rep_split),
+            rep_split: Some(app.repeater.split),
             map_split: Some(app.map_split),
-            repeater_tab: Some(app.rep_sel),
+            repeater_tab: Some(app.repeater.sel),
         },
         editors: project::ProjectEditors {
             intruder_target: app.intr_target.clone(),
-            comparer_items: app.cmp_items.clone(),
+            comparer_items: app.comparer.items.clone(),
             macro_name: app.macro_name.clone(),
             macro_request: app.macro_request.clone(),
-            sequencer_manual: app.seq_manual.clone(),
+            sequencer_manual: app.sequencer.manual.clone(),
         },
         // Target rows are derived from history + crawl items. Collaborator
         // interactions belong to the server session; its settings are kept.
@@ -3242,6 +3262,7 @@ pub fn apply_project(app: &mut App, data: &project::ProjectData, content: bool) 
                 response: r.response_bytes(),
                 result_line: r.result_line.clone(),
                 history: Vec::new(),
+                response_sources: Vec::new(),
                 hist_pos: 0,
                 ws: None,
             })
@@ -3488,7 +3509,7 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData, content: boo
         app.intr_sub = v;
     }
     if let Some(v) = l.sequencer_sub {
-        app.seq_sub = v;
+        app.sequencer.sub = v;
     }
     if let Some(v) = l.dashboard_task {
         app.dash_task = v.min(2);
@@ -3500,24 +3521,24 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData, content: boo
         app.split_detail = v.clamp(80.0, 2000.0);
     }
     if let Some(v) = l.rep_split {
-        app.rep_split = v.clamp(0.15, 0.85);
+        app.repeater.split = v.clamp(0.15, 0.85);
     }
     if let Some(v) = l.map_split {
         app.map_split = v.clamp(0.15, 0.85);
     }
     if let Some(v) = l.repeater_tab {
-        app.rep_sel = v;
+        app.repeater.sel = v;
     }
     let ed = &data.editors;
     app.intr_target = ed.intruder_target.clone();
-    app.cmp_items = ed.comparer_items.clone();
+    app.comparer.items = ed.comparer_items.clone();
     if !ed.macro_name.is_empty() {
         app.macro_name = ed.macro_name.clone();
     }
     if !ed.macro_request.is_empty() {
         app.macro_request = ed.macro_request.clone();
     }
-    app.seq_manual = ed.sequencer_manual.clone();
+    app.sequencer.manual = ed.sequencer_manual.clone();
     // Intruder and Decoder buffers.
     if let Some(a) = attack_of(&data.intruder.attack) {
         app.intr_attack = a;
@@ -3530,8 +3551,8 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData, content: boo
         data.intruder.payload_sets.clone()
     };
     app.intr_set_sel = 0;
-    app.dec_input = data.decoder.input.clone();
-    app.dec_output = data.decoder.output.clone();
+    app.decoder.input = data.decoder.input.clone();
+    app.decoder.output = data.decoder.output.clone();
     // Organizer.
     let mut org = app.shared.organizer.lock().unwrap();
     org.items = data
@@ -3544,8 +3565,20 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData, content: boo
             request: o.request.clone(),
             response: o.response.clone().unwrap_or_default(),
             created: o.timestamp,
+            collection: o.collection,
         })
         .collect();
+    org.collections = data
+        .organizer_collections
+        .iter()
+        .map(|c| crate::organizer::Collection {
+            id: c.id,
+            name: c.name.clone(),
+            description: c.description.clone(),
+        })
+        .collect();
+    org.next_collection_id = org.collections.iter().map(|c| c.id).max().unwrap_or(0) + 1;
+    org.repair_collections();
     org.next_id = org.items.iter().map(|i| i.id).max().unwrap_or(0) + 1;
     drop(org);
     app.org_sel = None;
@@ -3860,6 +3893,108 @@ mod save_restore_tests {
         assert!(checks && points, "scanner settings restored ({status})");
         assert_eq!(poll, 9, "Collaborator poll interval restored");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Organizer collections and their items survive a save/restore round
+    /// trip (review finding: no round-trip test covered them).
+    #[test]
+    fn organizer_collections_round_trip() {
+        let dir = std::env::temp_dir().join(format!("wp-org-save-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("p.json").to_string_lossy().into_owned();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let p2 = path.clone();
+        std::thread::spawn(move || {
+            let mut app = crate::App::new(net::Shared::new());
+            app.project_path = p2;
+            let (coll, kept, moved) = {
+                let mut org = app.shared.organizer.lock().unwrap();
+                let coll = org.add_collection("Auth bugs");
+                org.set_collection_description(coll, "login flow notes");
+                let kept = org.add("Login", "auth flow", "POST /login HTTP/1.1", "200 OK", 10);
+                let moved = org.add("Upload", "", "POST /up HTTP/1.1", "201", 20);
+                org.move_item(moved, coll);
+                (coll, kept, moved)
+            };
+            save_project(&mut app, true);
+            let mut fresh = crate::App::new(net::Shared::new());
+            fresh.project_path = app.project_path.clone();
+            restore_project(&mut fresh, true);
+            let org = fresh.shared.organizer.lock().unwrap();
+            let _ = tx.send((
+                org.collections
+                    .iter()
+                    .find(|c| c.id == coll)
+                    .map(|c| (c.name.clone(), c.description.clone())),
+                org.get(kept).map(|i| i.collection),
+                org.get(moved).map(|i| i.collection),
+                org.next_collection_id,
+                coll,
+            ));
+        });
+        let (meta, kept_c, moved_c, next_id, coll) = rx
+            .recv_timeout(std::time::Duration::from_secs(60))
+            .expect("save/restore finished (no deadlock)");
+        assert_eq!(
+            meta,
+            Some(("Auth bugs".to_string(), "login flow notes".to_string())),
+            "collection name + About text restored"
+        );
+        assert_eq!(kept_c, Some(0), "Inbox item stays in the Inbox");
+        assert_eq!(moved_c, Some(coll), "moved item keeps its collection");
+        assert!(next_id > coll, "next collection id survives the restore");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// D-CEO-02: deleting a collection moves its items to the Inbox, and
+    /// the moved items (id, note, request/response evidence) survive a
+    /// save/restore round trip.
+    #[test]
+    fn organizer_delete_moves_items_to_inbox_and_they_persist() {
+        let dir = std::env::temp_dir().join(format!("wp-org-del-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("p.json").to_string_lossy().into_owned();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let p2 = path.clone();
+        std::thread::spawn(move || {
+            let mut app = crate::App::new(net::Shared::new());
+            app.project_path = p2;
+            let item_id = {
+                let mut org = app.shared.organizer.lock().unwrap();
+                let coll = org.add_collection("Auth bugs");
+                let id = org.add("Login", "auth flow", "POST /login HTTP/1.1", "200 OK", 10);
+                org.move_item(id, coll);
+                assert!(org.remove_collection(coll));
+                assert_eq!(org.get(id).unwrap().collection, 0);
+                id
+            };
+            save_project(&mut app, true);
+            let mut fresh = crate::App::new(net::Shared::new());
+            fresh.project_path = app.project_path.clone();
+            restore_project(&mut fresh, true);
+            let org = fresh.shared.organizer.lock().unwrap();
+            let _ = tx.send(org.get(item_id).map(|i| {
+                (
+                    i.collection,
+                    i.note.clone(),
+                    i.request.clone(),
+                    i.response.clone(),
+                )
+            }));
+        });
+        let item = rx
+            .recv_timeout(std::time::Duration::from_secs(60))
+            .expect("save/restore finished (no deadlock)");
+        let _ = std::fs::remove_dir_all(&dir);
+        let (collection, note, request, response) =
+            item.expect("item survives collection deletion and reload");
+        assert_eq!(collection, 0, "reloaded into the Inbox");
+        assert_eq!(note, "auth flow", "note preserved");
+        assert_eq!(
+            request, "POST /login HTTP/1.1",
+            "request evidence preserved"
+        );
+        assert_eq!(response, "200 OK", "response evidence preserved");
     }
 }
 

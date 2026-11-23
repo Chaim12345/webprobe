@@ -331,28 +331,96 @@ pub fn handle_conn(shared: Arc<Shared>, mut stream: TcpStream) {
     LISTENER_PORT.with(|p| p.set(stream.local_addr().ok().map(|a| a.port())));
     let _ = stream.set_write_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)));
     let _ = stream.set_read_timeout(Some(Duration::from_millis(READ_TIMEOUT_MS)));
-    let req = match read_request(&mut stream) {
-        Ok(r) if !r.is_empty() => r,
-        _ => return,
+    // Bytes read past one request belong to the next pipelined request: they
+    // are carried into the next read, not dropped or forwarded unmanaged.
+    let mut pending: Vec<u8> = Vec::new();
+    loop {
+        let req = match read_request_pending(&mut stream, &mut pending) {
+            Ok(r) if !r.is_empty() => r,
+            _ => return,
+        };
+        let parts = util::parse_http(&req);
+
+        if parts.method.eq_ignore_ascii_case("CONNECT") {
+            let (host, port) = split_host_port(parts.path.trim(), 443);
+            handle_connect_pending(shared, stream, host, port, pending);
+            return;
+        }
+
+        let (req, req_state) = intercept_request(&shared, req, 80);
+        let Some(req) = req else { return };
+        let is_ws = util::get_header(&parts.headers, "Upgrade")
+            .map(|v| v.eq_ignore_ascii_case("websocket"))
+            .unwrap_or(false);
+        if is_ws {
+            // Early frames read past the upgrade head replay before the relay.
+            handle_websocket(shared, Preloaded::new(pending, stream), req);
+            return;
+        }
+        // An extension drop page ends the exchange with Connection: close;
+        // buffered pipelined follow-ups must not be served after it. Drain
+        // anything already in flight so the client sees a clean FIN, not a
+        // RST that could cost it the page.
+        if upstream_and_deliver(&shared, &mut stream, req, 80, false, req_state) {
+            let _ = stream.shutdown(std::net::Shutdown::Write);
+            pending.clear();
+            // Drain bytes already delivered so the close is a clean FIN, not
+            // a RST that could cost the client the page; do not wait for more.
+            let _ = stream.set_nonblocking(true);
+            let mut sink = [0u8; 8192];
+            while stream.read(&mut sink).map(|n| n > 0).unwrap_or(false) {}
+            return;
+        }
+        // Non-pipelined traffic keeps its one-exchange lifecycle: the loop
+        // continues only while the client has more requests buffered.
+        if pending.is_empty() && !client_sent_more(&stream) {
+            return;
+        }
+    }
+}
+
+/// Plaintext rustls has decrypted but not yet handed out belongs to the next
+/// pipelined request: move it into `pending` so the exchange loop sees it.
+/// The reader only drains the internal buffer; it never touches the socket.
+fn drain_tls_plaintext<S: Read + Write>(
+    tls: &mut rustls::StreamOwned<rustls::ServerConnection, S>,
+    pending: &mut Vec<u8>,
+) {
+    let mut reader = tls.conn.reader();
+    let mut chunk = [0u8; 8192];
+    loop {
+        match reader.read(&mut chunk) {
+            Ok(0) => break,
+            Ok(n) => pending.extend_from_slice(&chunk[..n]),
+            Err(_) => break,
+        }
+    }
+}
+
+/// Pipelined bytes that arrived in a later packet than the first request: a
+/// non-blocking peek, so a single-request connection closes exactly as before.
+fn client_sent_more(stream: &TcpStream) -> bool {
+    let Some(_guard) = BlockingGuard::new(stream) else {
+        return false;
     };
-    let parts = util::parse_http(&req);
+    let mut b = [0u8; 1];
+    matches!(stream.peek(&mut b), Ok(n) if n > 0)
+}
 
-    if parts.method.eq_ignore_ascii_case("CONNECT") {
-        let (host, port) = split_host_port(parts.path.trim(), 443);
-        handle_connect(shared, stream, host, port);
-        return;
-    }
+/// Puts the socket in non-blocking mode for a peek and restores blocking mode
+/// on drop, on every exit path including panics.
+struct BlockingGuard<'a>(&'a TcpStream);
 
-    let (req, req_state) = intercept_request(&shared, req, 80);
-    let Some(req) = req else { return };
-    let is_ws = util::get_header(&parts.headers, "Upgrade")
-        .map(|v| v.eq_ignore_ascii_case("websocket"))
-        .unwrap_or(false);
-    if is_ws {
-        handle_websocket(shared, stream, req);
-        return;
+impl<'a> BlockingGuard<'a> {
+    fn new(stream: &'a TcpStream) -> Option<Self> {
+        stream.set_nonblocking(true).ok().map(|_| Self(stream))
     }
-    upstream_and_deliver(&shared, &mut stream, req, 80, false, req_state);
+}
+
+impl Drop for BlockingGuard<'_> {
+    fn drop(&mut self) {
+        let _ = self.0.set_nonblocking(false);
+    }
 }
 
 /// Copy bytes both ways until either direction closes (SSL pass-through tunnel).
@@ -383,7 +451,19 @@ pub fn relay_tunnel(client: &TcpStream, upstream: &mut TcpStream) {
     let _ = client.shutdown(std::net::Shutdown::Both);
 }
 
-pub fn handle_connect(shared: Arc<Shared>, mut stream: TcpStream, host: String, port: u16) {
+pub fn handle_connect(shared: Arc<Shared>, stream: TcpStream, host: String, port: u16) {
+    handle_connect_pending(shared, stream, host, port, Vec::new());
+}
+
+/// [`handle_connect`] with bytes already read past the CONNECT head (the
+/// start of the TLS handshake when the client did not wait for the 200).
+pub fn handle_connect_pending(
+    shared: Arc<Shared>,
+    mut stream: TcpStream,
+    host: String,
+    port: u16,
+    pending: Vec<u8>,
+) {
     // SSL pass-through: matching hosts get a byte-relay tunnel, not MITM.
     let bypassed = shared
         .tls_bypass
@@ -408,6 +488,12 @@ pub fn handle_connect(shared: Arc<Shared>, mut stream: TcpStream, host: String, 
             .is_err()
         {
             return;
+        }
+        if !pending.is_empty() {
+            // The client already sent the start of the TLS handshake.
+            if upstream.write_all(&pending).is_err() {
+                return;
+            }
         }
         shared.log(&format!("TLS pass-through tunnel to {host}:{port}"));
         relay_tunnel(&stream, &mut upstream);
@@ -437,34 +523,75 @@ pub fn handle_connect(shared: Arc<Shared>, mut stream: TcpStream, host: String, 
             return;
         }
     };
-    let mut tls = rustls::StreamOwned::new(conn, stream);
+    if pending.is_empty() {
+        serve_mitm_conn(shared, conn, stream, &host, port);
+    } else {
+        // Handshake bytes read ahead replay before the socket is touched.
+        serve_mitm_conn(shared, conn, Preloaded::new(pending, stream), &host, port);
+    }
+}
+
+/// HTTPS interception over the negotiated TLS connection: HTTP/2 when the
+/// client picked it by ALPN, otherwise one exchange per request, pipelined
+/// requests included.
+fn serve_mitm_conn<S: ProxyIo>(
+    shared: Arc<Shared>,
+    conn: rustls::ServerConnection,
+    sock: S,
+    host: &str,
+    port: u16,
+) {
+    let mut tls = rustls::StreamOwned::new(conn, sock);
     // The client chose HTTP/2 by ALPN: serve the connection's streams.
     let _ = tls.conn.complete_io(&mut tls.sock);
     if tls.conn.alpn_protocol() == Some(b"h2".as_slice()) {
-        serve_h2_client(shared, tls, host, port);
+        serve_h2_client(shared, tls, host.to_string(), port);
         return;
     }
-    let req = match read_request(&mut tls) {
-        Ok(req) if !req.is_empty() => req,
-        Ok(_) => return,
-        Err(e) => {
-            shared.log(&format!(
-                "HTTPS client handshake/request for {host}:{port} failed: {e}"
-            ));
+    // Pipelined HTTPS requests: bytes past one request carry into the next.
+    // Unlike handle_conn there is no peek for later packets here: a
+    // non-blocking probe read could consume a partially arrived request.
+    // Plaintext rustls has already decrypted is drained into `pending` after
+    // every read instead: at the 8192-byte chunk boundary the first request
+    // fills the last read exactly, and without the drain the next request
+    // would sit inside rustls while the connection closes.
+    let mut pending: Vec<u8> = Vec::new();
+    loop {
+        let req = match read_request_pending(&mut tls, &mut pending) {
+            Ok(req) if !req.is_empty() => req,
+            Ok(_) => return,
+            Err(e) => {
+                shared.log(&format!(
+                    "HTTPS client handshake/request for {host}:{port} failed: {e}"
+                ));
+                return;
+            }
+        };
+        drain_tls_plaintext(&mut tls, &mut pending);
+        let (req, req_state) = intercept_request(&shared, req, 443);
+        let Some(req) = req else { return };
+        let ws_parts = util::parse_http(&req);
+        let is_ws = util::get_header(&ws_parts.headers, "Upgrade")
+            .map(|v| v.eq_ignore_ascii_case("websocket"))
+            .unwrap_or(false);
+        if is_ws {
+            // Frames read past the upgrade head replay before the relay.
+            let mut client = Preloaded::new(std::mem::take(&mut pending), tls);
+            handle_tls_websocket(&shared, &mut client, req, host.to_string(), port);
+            let mut tls = client.into_inner();
+            tls.conn.send_close_notify();
+            let _ = tls.flush();
             return;
         }
-    };
-    let (req, req_state) = intercept_request(&shared, req, 443);
-    let Some(req) = req else { return };
-    let ws_parts = util::parse_http(&req);
-    let is_ws = util::get_header(&ws_parts.headers, "Upgrade")
-        .map(|v| v.eq_ignore_ascii_case("websocket"))
-        .unwrap_or(false);
-    if is_ws {
-        handle_tls_websocket(shared, tls, req, host, port);
-        return;
+        // An extension drop page ends the connection (Connection: close).
+        if upstream_and_deliver(&shared, &mut tls, req, 443, true, req_state) {
+            break;
+        }
+        // Non-pipelined traffic keeps its one-exchange lifecycle.
+        if pending.is_empty() {
+            break;
+        }
     }
-    upstream_and_deliver(&shared, &mut tls, req, 443, true, req_state);
     tls.conn.send_close_notify();
     let _ = tls.flush();
 }
@@ -472,13 +599,13 @@ pub fn handle_connect(shared: Arc<Shared>, mut stream: TcpStream, host: String, 
 /// An HTTPS client that negotiated h2: every stream runs the proxy's
 /// per-request pipeline (intercept, match and replace, extensions,
 /// history, streaming) on its own thread; `h2_server` frames the results.
-pub fn serve_h2_client(
+pub fn serve_h2_client<S: ProxyIo>(
     shared: Arc<Shared>,
-    mut tls: rustls::StreamOwned<rustls::ServerConnection, TcpStream>,
+    mut tls: rustls::StreamOwned<rustls::ServerConnection, S>,
     host: String,
     port: u16,
 ) {
-    if tls.get_ref().set_nonblocking(true).is_err() {
+    if tls.get_ref().set_nonblocking_io(true).is_err() {
         return;
     }
     shared.log(&format!("HTTP/2 client connection for {host}:{port}"));
@@ -489,12 +616,13 @@ pub fn serve_h2_client(
             LISTENER_PORT.with(|p| p.set(listener));
             let (req, state) = intercept_request(&pipeline_shared, req, 443);
             let Some(req) = req else { return };
-            upstream_and_deliver(&pipeline_shared, &mut out, req, 443, true, state);
+            // h2 frames each stream independently; the close flag is h1-only.
+            let _ = upstream_and_deliver(&pipeline_shared, &mut out, req, 443, true, state);
         },
     );
     crate::h2_server::serve(&mut tls, handler);
     tls.conn.send_close_notify();
-    let _ = tls.get_ref().set_nonblocking(false);
+    let _ = tls.get_ref().set_nonblocking_io(false);
     let _ = tls.flush();
 }
 
@@ -673,7 +801,7 @@ pub fn upstream_and_deliver<S: ProxyIo>(
     default_port: u16,
     use_tls: bool,
     req_state: ReqState,
-) {
+) -> bool {
     let was_edited = req_state.edited;
     let parts = util::parse_http(&req);
     let (host, port) = host_of(&parts, default_port);
@@ -686,7 +814,7 @@ pub fn upstream_and_deliver<S: ProxyIo>(
             let _ = stream.write_all(&resp);
             let _ = stream.flush();
             shared.log(&format!("Served {} for the browser", path_of(&parts)));
-            return;
+            return false;
         }
     }
     // Burp answers `http://burpsuite` itself: the browser must already be
@@ -712,19 +840,22 @@ pub fn upstream_and_deliver<S: ProxyIo>(
         shared.log(&format!(
             "Served the local setup page for {host} -> {status}"
         ));
-        return;
+        return false;
     }
     // Session rules run before match-and-replace, matching Burp's handling chain.
     let req_session = match apply_session_rules(shared, &req, default_port) {
         Ok(request) => request,
         Err(error) => {
             shared.log(&error);
-            return;
+            // The request never went upstream; close rather than keep a
+            // possibly desynced connection alive for pipelined follow-ups.
+            return true;
         }
     };
     let mut req_out = crate::rules::apply_rules(&req_session, &shared.mr_request.lock().unwrap());
-    // Extension hooks run after the built-in chain (session rules, M&R);
-    // a Drop verdict closes the client connection without a response.
+    // Extension hooks run after the built-in chain (session rules, M&R).
+    // Burp returns a local HTML error page when an extension drops a request;
+    // this is not an origin success, and must not initiate an upstream request.
     let mut ann = webprobe_support::ext::Annotations::default();
     if !shared.ext_handle_request(
         &webprobe_support::ext::HttpService::new(&host, port, use_tls),
@@ -733,8 +864,19 @@ pub fn upstream_and_deliver<S: ProxyIo>(
         &mut req_out,
         &mut ann,
     ) {
+        let body = "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>WebProbe: request dropped</title></head><body><h1>Request dropped</h1><p>An extension dropped the request. It was not sent to the destination server.</p></body></html>";
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
+            body.len()
+        );
+        let _ = stream.write_all(response.as_bytes());
+        // HEAD carries the same representation metadata as GET, but no body.
+        if !parts.method.eq_ignore_ascii_case("HEAD") {
+            let _ = stream.write_all(body.as_bytes());
+        }
+        let _ = stream.flush();
         shared.log("Request dropped by an extension hook");
-        return;
+        return true;
     }
     let (up_host, up_port) = upstream_target(shared, &host, port);
     let url = history_host(&HistEntry {
@@ -776,7 +918,7 @@ pub fn upstream_and_deliver<S: ProxyIo>(
             parts.method,
             path_of(&parts)
         ));
-        return;
+        return false;
     }
     match up.resp {
         Some(resp) => {
@@ -790,12 +932,12 @@ pub fn upstream_and_deliver<S: ProxyIo>(
                 &mut ann,
             ) {
                 shared.log("Response dropped by an extension hook");
-                return;
+                return false;
             }
             let Some(resp) =
                 intercept_response(shared, resp, &host, port, use_tls, &url, req_state)
             else {
-                return;
+                return false;
             };
             let status = util::parse_http(&resp)
                 .first
@@ -847,4 +989,5 @@ pub fn upstream_and_deliver<S: ProxyIo>(
             shared.log(&format!("Proxy error for {host}:{port}: {err}"));
         }
     }
+    false
 }

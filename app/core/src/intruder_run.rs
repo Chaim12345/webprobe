@@ -866,6 +866,16 @@ fn analyse(row: &mut ResultRow, settings: &AttackSettings) {
     }
 }
 
+/// Replay safety (CTO ruling): the automatic unmodified-template baseline
+/// runs only for safe methods. For POST/PUT/PATCH/DELETE and anything else
+/// the baseline is skipped, so an attack never issues an effect the operator
+/// did not ask for; attack rows keep their 1-based numbering either way.
+fn baseline_allowed(template: &Template) -> bool {
+    let request = template.render(&vec![None; template.positions()]);
+    let method = request.split_whitespace().next().unwrap_or("");
+    matches!(method, "GET" | "HEAD")
+}
+
 /// Start an attack against `target` (host, port, https). `specs` come from
 /// `intruder::resolve_specs`. Recursive grep runs one request at a time.
 pub fn start(
@@ -913,7 +923,13 @@ pub fn start(
                     attacks,
                     next: AtomicUsize::new(0),
                 },
-                Some(total),
+                // Requests planned, including the baseline (request 0) when
+                // the template's method allows one.
+                Some(if baseline_allowed(&template) {
+                    total + 1
+                } else {
+                    total
+                }),
                 workers,
             )
         }
@@ -1122,6 +1138,80 @@ struct Dispatch<'a> {
 
 impl Dispatch<'_> {
     async fn run(&self, source: &Source) {
+        // Request 0 is the unmodified baseline: finish it before any payload
+        // probe starts, so concurrent payloads cannot overtake it (#117).
+        // Effectful methods skip it entirely (replay safety ruling).
+        if !baseline_allowed(&self.state.template) {
+            let request = self
+                .state
+                .template
+                .render(&vec![None; self.state.template.positions()]);
+            let method = request.split_whitespace().next().unwrap_or("").to_string();
+            self.shared.log(&format!(
+                "Intruder baseline skipped for {method}: effectful methods are not replayed"
+            ));
+            match source {
+                Source::Matrix { attacks, next } => self.matrix(attacks, next).await,
+                Source::Recursive {
+                    template,
+                    walk,
+                    made,
+                } => self.recursive(template, walk, made).await,
+            }
+            return;
+        }
+        if self.paused_out().await {
+            return;
+        }
+        if self.napped(self.throttle_wait()).await {
+            return;
+        }
+        // The baseline's permit is released before payload probes start;
+        // holding it across the match would starve a size-1 pool.
+        let permit = self.pool.acquire().await;
+        if self.state.stop.load(Ordering::SeqCst) {
+            return;
+        }
+        let positions = self.state.template.positions();
+        let baseline = Attack {
+            request: self.state.template.render(&vec![None; positions]),
+            payloads: vec![None; positions],
+        };
+        let (shared, state, tx) = (self.shared.clone(), self.state.clone(), self.tx.clone());
+        let mut handle = tokio::task::spawn_blocking(move || {
+            let _tool = net::tool_scope("Intruder");
+            // The guard keeps the run claimed while the baseline's blocking
+            // I/O is in flight, even after Stop detaches the async wait.
+            let _outstanding = BlockingProbe::new(state.clone());
+            let row = execute_probe(&shared, &state, 0, baseline);
+            // Deliver inside the closure: aborting the wait never loses an
+            // in-flight baseline's result (issue #42 contract).
+            let _ = tx.send(row);
+            state.done.fetch_add(1, Ordering::SeqCst);
+        });
+        // Request 0 finishes before any payload probe starts, but Stop
+        // abandons the wait: queued payloads are aborted on Stop anyway.
+        loop {
+            if self.state.stop.load(Ordering::SeqCst) {
+                return;
+            }
+            tokio::select! {
+                r = &mut handle => {
+                    if let Err(e) = r {
+                        if e.is_panic() {
+                            crate::notice::toast(
+                                crate::notice::Level::Warn,
+                                "engine task 'intruder baseline' panicked; the attack ended, the session continues",
+                            );
+                        }
+                        return;
+                    }
+                    break;
+                }
+                _ = tokio::time::sleep(Duration::from_millis(25)) => {}
+            }
+        }
+        drop(permit);
         match source {
             Source::Matrix { attacks, next } => self.matrix(attacks, next).await,
             Source::Recursive {
@@ -1414,7 +1504,7 @@ mod tests {
             assert!(Instant::now() < until, "run drained");
             std::thread::yield_now();
         }
-        assert_eq!(run.progress(), (1, Some(10)));
+        assert_eq!(run.progress(), (1, Some(11)));
         assert_eq!(run.status_text(), "Stopped: 1 requests");
         let rows = run.snapshot_rows();
         assert_eq!(rows.len(), 1, "in-flight result retained");
@@ -1808,8 +1898,8 @@ mod tests {
         }
         assert!(!run.is_running(), "stopped");
         let (done, total) = run.progress();
-        assert_eq!(total, Some(200));
-        assert!(done < 200, "stopped early at {done}");
+        assert_eq!(total, Some(201));
+        assert!(done < 201, "stopped early at {done}");
     }
 
     #[test]
@@ -1831,8 +1921,10 @@ mod tests {
                     .unwrap_or("")
                     .to_string();
                 seen2.lock().unwrap().push(head);
-                let next = if i < 2 {
-                    format!("tok{}", i + 1)
+                let next = if i == 0 {
+                    "baseline-only".into()
+                } else if i < 3 {
+                    format!("tok{i}")
                 } else {
                     "tok2".into()
                 };
@@ -1901,12 +1993,15 @@ mod tests {
         let payloads: Vec<String> = rows.iter().map(|r| r.payload_text()).collect();
         assert_eq!(
             payloads,
-            ["start", "tok1", "tok2"],
+            ["", "start", "tok1", "tok2"],
             "tok2 repeats, so the walk stops"
         );
-        assert_eq!(rows[1].extracts, [Some("tok2".to_string())]);
-        assert_eq!(seen.lock().unwrap()[1], "GET /?t=tok1 HTTP/1.1");
-        assert_eq!(run.progress(), (3, None));
+        assert_eq!(rows[0].extracts, [Some("baseline-only".to_string())]);
+        assert_eq!(rows[2].extracts, [Some("tok2".to_string())]);
+        assert_eq!(seen.lock().unwrap()[0], "GET /?t=x HTTP/1.1");
+        assert_eq!(seen.lock().unwrap()[1], "GET /?t=start HTTP/1.1");
+        assert_eq!(seen.lock().unwrap()[2], "GET /?t=tok1 HTTP/1.1");
+        assert_eq!(run.progress(), (4, None));
     }
 
     /// Issue #42: the probe pool bounds in-flight requests at
@@ -1969,16 +2064,16 @@ mod tests {
         }
         assert!(!run.is_running(), "attack finished");
         let (done, total) = run.progress();
-        assert_eq!((done, total), (60, Some(60)));
+        assert_eq!((done, total), (61, Some(61)));
         assert!(
             max_seen.load(Ordering::SeqCst) <= 3,
             "probe pool bound held: max in-flight {}",
             max_seen.load(Ordering::SeqCst)
         );
         let rows = run.snapshot_rows();
-        assert_eq!(rows.len(), 60, "every row drained through the channel");
+        assert_eq!(rows.len(), 61, "every row drained through the channel");
         let mut numbers: Vec<usize> = rows.iter().map(|r| r.number).collect();
         numbers.sort_unstable();
-        assert_eq!(numbers, (1..=60).collect::<Vec<_>>(), "no row lost");
+        assert_eq!(numbers, (0..=60).collect::<Vec<_>>(), "no row lost");
     }
 }

@@ -1,0 +1,17 @@
+   Compiling webprobe-support v0.1.0 (/downloads/sequencer/work/app/support)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.01s
+     Running unittests src/lib.rs (target/debug/build/webprobe-support/243e3d406ff21a74/out/webprobe_support-243e3d406ff21a74)
+
+running 8 tests
+test seq_bits::tests::constant_tokens_at_minimum_sample_boundary_are_valid ... ok
+constant manual load: 1024 samples, [0, 0, 0, 0, 0] effective bits, extremely poor
+test seq_bits::tests::constant_manual_load_fixture_has_zero_effective_bits_at_every_level ... ok
+test seq_bits::tests::exports_list_every_bit_and_tokens_round_trip ... ok
+test seq_bits::tests::counters_rate_extremely_poor_and_small_samples_are_refused ... ok
+test seq_bits::tests::rating_uses_burps_thresholds ... ok
+test seq_bits::tests::replacing_batch_with_same_count_recomputes_zero_entropy ... ok
+test seq_bits::tests::single_tests_reject_the_patterns_they_are_for ... ok
+test seq_bits::tests::random_tokens_rate_excellent_and_fixed_parts_do_not_count ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 80 filtered out; finished in 0.04s
+

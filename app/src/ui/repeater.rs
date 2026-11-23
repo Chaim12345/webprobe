@@ -14,7 +14,7 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
     // A WebSocket Repeater tab has its own view.
     let ws_session = {
         let reps = app.shared.repeaters.lock().unwrap();
-        reps.get(app.rep_sel.min(reps.len().saturating_sub(1)))
+        reps.get(app.repeater.sel.min(reps.len().saturating_sub(1)))
             .and_then(|r| r.ws)
     };
     if let Some(id) = ws_session {
@@ -25,7 +25,7 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
     let busy = app.shared.rep.is_busy();
     let (target, result_line, https) = {
         let reps = app.shared.repeaters.lock().unwrap();
-        let i = app.rep_sel.min(reps.len().saturating_sub(1));
+        let i = app.repeater.sel.min(reps.len().saturating_sub(1));
         let r = &reps[i];
         let host = util::get_header(&util::parse_http(r.request.as_bytes()).headers, "Host")
             .unwrap_or_default();
@@ -92,7 +92,7 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
         // Burp's per-tab request history.
         let (pos, len) = {
             let reps = app.shared.repeaters.lock().unwrap();
-            let i = app.rep_sel.min(reps.len().saturating_sub(1));
+            let i = app.repeater.sel.min(reps.len().saturating_sub(1));
             (reps[i].hist_pos, reps[i].history.len())
         };
         let back = ui
@@ -103,7 +103,7 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
             .on_hover_text("Next request");
         if back.clicked() || fwd.clicked() {
             let mut reps = app.shared.repeaters.lock().unwrap();
-            let i = app.rep_sel.min(reps.len().saturating_sub(1));
+            let i = app.repeater.sel.min(reps.len().saturating_sub(1));
             let r = &mut reps[i];
             r.hist_pos = if back.clicked() {
                 r.hist_pos - 1
@@ -129,7 +129,7 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
                 )
                 .on_hover_text("Configure target details");
             if edit.clicked() {
-                app.rep_target_edit = !app.rep_target_edit;
+                app.repeater.target_edit = !app.repeater.target_edit;
             }
             ui.label(
                 RichText::new(format!("Target: {target}"))
@@ -139,7 +139,7 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
             );
         });
     });
-    if app.rep_target_edit {
+    if app.repeater.target_edit {
         let mut open = true;
         egui::Window::new("Configure target details")
             .default_pos(crate::theme::window_pos(ui.ctx()))
@@ -148,7 +148,8 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
             .resizable(false)
             .show(ui.ctx(), |ui| {
                 let i = app
-                    .rep_sel
+                    .repeater
+                    .sel
                     .min(app.shared.repeaters.lock().unwrap().len().saturating_sub(1));
                 let mut reps = app.shared.repeaters.lock().unwrap();
                 let r = &mut reps[i];
@@ -176,7 +177,7 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
                 });
             });
         if !open {
-            app.rep_target_edit = false;
+            app.repeater.target_edit = false;
         }
     }
     let _ = https;
@@ -189,7 +190,7 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
 
     let resp = {
         let reps = app.shared.repeaters.lock().unwrap();
-        let i = app.rep_sel.min(reps.len().saturating_sub(1));
+        let i = app.repeater.sel.min(reps.len().saturating_sub(1));
         reps[i].response.clone()
     };
     let status_h = 26.0;
@@ -200,7 +201,7 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
     // Request | response divider: draggable (Burp's split pane), kept in
     // the project layout as a fraction of the two panes' width.
     let panes_w = (ui.available_width() - side_w - dock_w).max(400.0);
-    let req_w = (panes_w * app.rep_split).clamp(200.0, panes_w - 200.0);
+    let req_w = (panes_w * app.repeater.split).clamp(200.0, panes_w - 200.0);
     let panes_top = ui.cursor().min;
     ui.allocate_ui(egui::vec2(ui.available_width(), body_h), |ui| {
         let mut sb = egui_extras::StripBuilder::new(ui)
@@ -216,13 +217,14 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
                     // could take the paste.
                     crate::repeater_ops::poll_paste_url(app, ui);
                     let i = app
-                        .rep_sel
+                        .repeater
+                        .sel
                         .min(app.shared.repeaters.lock().unwrap().len().saturating_sub(1));
                     let (mut text, has_resp) = {
                         let reps = app.shared.repeaters.lock().unwrap();
                         (reps[i].request.clone(), reps[i].response.is_some())
                     };
-                    app.rep_req_pane.live_url_encode = app.rops.url_encode_live;
+                    app.repeater.req_pane.live_url_encode = app.rops.url_encode_live;
                     // E-03: Burp's request-editor context menu.
                     let rops = &mut app.rops;
                     let ext_shared = app.shared.clone();
@@ -288,7 +290,7 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
                         "rep_req",
                         "Request",
                         &mut text,
-                        &mut app.rep_req_pane,
+                        &mut app.repeater.req_pane,
                         body_h,
                         Some(&mut menu),
                     ) {
@@ -312,7 +314,7 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
                         "rep_resp",
                         "Response",
                         resp.as_deref(),
-                        &mut app.rep_resp_pane,
+                        &mut app.repeater.resp_pane,
                         true,
                         body_h,
                     );
@@ -328,7 +330,7 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
                         );
                         let req = {
                             let reps = app.shared.repeaters.lock().unwrap();
-                            let i = app.rep_sel.min(reps.len().saturating_sub(1));
+                            let i = app.repeater.sel.min(reps.len().saturating_sub(1));
                             reps[i].request.clone()
                         };
                         let reqb = (!req.trim().is_empty()).then(|| req.into_bytes());
@@ -341,7 +343,7 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
                             true,
                         ) {
                             let mut reps = app.shared.repeaters.lock().unwrap();
-                            let i = app.rep_sel.min(reps.len().saturating_sub(1));
+                            let i = app.repeater.sel.min(reps.len().saturating_sub(1));
                             reps[i].request = String::from_utf8_lossy(&new).into_owned();
                         }
                     });
@@ -365,7 +367,7 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
         "rep_split",
         panes_top.x + req_w,
         panes_top.y..=panes_top.y + body_h,
-        &mut app.rep_split,
+        &mut app.repeater.split,
         panes_w,
     );
     if let Some(action) = rep_action {
@@ -414,14 +416,14 @@ pub(crate) fn update_content_length(req: &str) -> String {
 }
 
 pub(crate) fn repeater_send(app: &mut App) {
-    if app.rep_update_cl {
+    if app.repeater.update_cl {
         let mut reps = app.shared.repeaters.lock().unwrap();
-        let i = app.rep_sel.min(reps.len().saturating_sub(1));
+        let i = app.repeater.sel.min(reps.len().saturating_sub(1));
         let fixed = update_content_length(&reps[i].request);
         reps[i].request = fixed;
     }
     let reps_len = app.shared.repeaters.lock().unwrap().len();
-    let i = app.rep_sel.min(reps_len.saturating_sub(1));
+    let i = app.repeater.sel.min(reps_len.saturating_sub(1));
     // Burp sends to the tab's Target; the Host header is just a header (so
     // Host header attacks reach the real server). Only a tab without a
     // target falls back to the Host header, which then becomes its target.
@@ -500,11 +502,18 @@ pub(crate) fn repeater_send(app: &mut App) {
             error: fr.error,
         };
         let followed = fr.followed;
+        let source = net::RepResponseSource {
+            request: fr.request,
+            service: webprobe_core::ext_host::HttpService::new(
+                &fr.service.host,
+                fr.service.port,
+                fr.service.https,
+            ),
+        };
         let protocol = net::last_protocol();
-        // After followed redirections the tab shows the last request sent
-        // and its target, as Burp's item does (Zrr5.ZA), so the history
-        // entry and "Follow redirection" continue from the last hop.
-        let last = (followed > 0).then_some((fr.request, fr.service));
+        // Burp Community 2026.11.2, measured 2026-11-22: even after
+        // following redirects, Send leaves the editor byte-identical.
+        // Keep handler edits and redirect targets local to the send worker.
         let ms = t0.elapsed().as_millis();
         // Cancelled (or superseded) while in flight: nothing is written. The
         // check and the tab write happen under one lock (finish_with), so a
@@ -515,14 +524,7 @@ pub(crate) fn repeater_send(app: &mut App) {
             let target = reps.iter_mut().find(|r| r.id == tab_id);
             if let Some(r) = target {
                 r.response = up.resp.clone();
-                let mut sent_req = request.clone();
-                if let Some((req, svc)) = last {
-                    sent_req = req.clone();
-                    r.request = req;
-                    r.host = svc.host;
-                    r.port = svc.port;
-                    r.https = svc.https;
-                }
+                let sent_req = request.clone();
                 r.result_line = match &up.resp {
                     Some(resp) => {
                         // Burp's Repeater status line: "Done" ... "1,976 bytes | 21 millis".
@@ -542,6 +544,8 @@ pub(crate) fn repeater_send(app: &mut App) {
                     }
                     None => format!("error: {}", up.error.clone().unwrap_or_default()),
                 };
+                r.response_sources.resize_with(r.history.len(), || None);
+                r.response_sources.push(Some(source));
                 r.history.push((sent_req, r.response.clone(), r.result_line.clone()));
                 r.hist_pos = r.history.len() - 1;
             }

@@ -1,0 +1,5 @@
+    Checking webprobe-support v0.1.0 (/tmp/wt-montoya/app/support)
+    Checking webprobe-core v0.1.0 (/tmp/wt-montoya/app/core)
+    Checking webprobe-report v0.1.0 (/tmp/wt-montoya/app/report)
+    Checking webprobe v0.1.0 (/tmp/wt-montoya/app)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.88s

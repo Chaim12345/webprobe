@@ -1,0 +1,40 @@
+Intruder baseline verification, 2026-11-22
+Base: PR #45 4cddee0
+Compiler: rustc 1.100.0
+
+Real loopback regression output:
+running 3 tests
+test failed_baseline_is_reported_and_payload_still_runs_after_its_retries ... ok
+test stop_during_baseline_does_not_launch_payloads ... ok
+Sniper attack: origin requests=3, baseline exact=true, results=0..2, status=200, progress=(3, Some(3)), CSV/XML baseline included
+Sniper attack: origin requests=5, baseline exact=true, results=0..4, status=200, progress=(5, Some(5)), CSV/XML baseline included
+Battering ram attack: origin requests=3, baseline exact=true, results=0..2, status=200, progress=(3, Some(3)), CSV/XML baseline included
+Pitchfork attack: origin requests=3, baseline exact=true, results=0..2, status=200, progress=(3, Some(3)), CSV/XML baseline included
+Cluster bomb attack: origin requests=5, baseline exact=true, results=0..4, status=200, progress=(5, Some(5)), CSV/XML baseline included
+test request_zero_precedes_all_four_payload_matrices_and_is_exported ... ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.46s
+
+Full workspace test summaries:
+test result: ok. 136 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 550 passed; 0 failed; 11 ignored; 0 measured; 0 filtered out; finished in 24.38s
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.46s
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 84 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 2.91s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+cargo test --workspace --no-run: PASS
+cargo fmt --all -- --check: PASS
+cargo clippy --workspace --all-targets -- -D warnings: PASS (0 warnings)
+git diff --check: PASS
+
+Unmodified-base red regression:
+thread 'failed_baseline_is_reported_and_payload_still_runs_after_its_retries' (13807) panicked at core/tests/intruder_baseline.rs:186:5:
+assertion `left == right` failed
+  left: 1
+ right: 2
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test failed_baseline_is_reported_and_payload_still_runs_after_its_retries ... FAILED
+

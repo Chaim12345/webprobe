@@ -303,6 +303,57 @@ fn alpn_negotiates_h2_and_streams_are_multiplexed() {
 }
 
 #[test]
+fn extension_drop_is_framed_as_h2_html_and_keeps_other_streams_usable() {
+    struct DropRequest;
+    impl crate::ext_host::ProxyHooks for DropRequest {
+        fn extension_name(&self) -> &str {
+            "HTTP/2 drop regression"
+        }
+        fn handle_request_received(
+            &self,
+            _: &crate::ext_host::HttpService,
+            _: &str,
+            _: &str,
+            _: &mut Vec<u8>,
+        ) -> crate::ext_host::ProxyAction {
+            crate::ext_host::ProxyAction::Drop
+        }
+    }
+    let shared = proxy();
+    crate::ext_host::with_host(&shared, |host| {
+        host.extensions
+            .push(crate::ext_host::LoadedExtension::new(DropRequest));
+    });
+    let origin = TcpListener::bind("127.0.0.1:0").unwrap();
+    origin.set_nonblocking(true).unwrap();
+    let port = origin.local_addr().unwrap().port();
+    let tls = connect(&shared, port, &[b"h2"]);
+    assert_eq!(tls.conn.alpn_protocol(), Some(b"h2".as_slice()));
+    let mut client = Client::new(tls);
+    let authority = format!("localhost:{port}");
+    // ResponseWriter accepts HTTP/1.1-shaped bytes internally and turns them
+    // into HEADERS/DATA. A raw HTTP/1.1 wire reply would fail frame decoding.
+    for (stream, method) in [(1, "GET"), (3, "HEAD"), (5, "GET")] {
+        client.request(stream, method, "/admin-drop", &authority, None);
+        let response = client.responses(&[stream], |_, _| {});
+        assert_eq!(response[0].0, "200");
+        if method == "HEAD" {
+            assert!(response[0].1.is_empty(), "HEAD must not carry DATA bytes");
+            continue;
+        }
+        let html = std::str::from_utf8(&response[0].1).unwrap();
+        assert!(html.starts_with("<!doctype html>"));
+        assert!(html.contains("An extension dropped the request."));
+        assert!(!html.contains("HTTP/1.1"));
+    }
+    assert_eq!(
+        origin.accept().unwrap_err().kind(),
+        std::io::ErrorKind::WouldBlock
+    );
+    assert!(shared.history.snapshot().is_empty());
+}
+
+#[test]
 fn the_listener_option_off_keeps_https_clients_on_http1() {
     let shared = proxy();
     let port = upstream(&shared, Arc::new(Mutex::new(None)));

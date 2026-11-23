@@ -217,31 +217,37 @@ pub fn send_history_to_repeater(app: &mut App) {
     let Some(id) = app.history_sel else { return };
     let entry = app.shared.history.get(id);
     if let Some(e) = entry {
-        let mut reps = app.shared.repeaters.lock().unwrap();
-        let id = app.shared.rep.new_tab_id();
-        reps.push(net::RepTab {
-            id,
-            name: id.to_string(),
-            host: e.host.clone(),
-            port: e.port,
-            https: e.https,
-            request: request_for_tools(&e.req_raw),
-            // Burp opens a new Repeater tab with no response until Send.
-            response: None,
-            result_line: String::new(),
-            history: Vec::new(),
-            hist_pos: 0,
-            ws: None,
-        });
-        app.rep_sel = reps.len() - 1;
-        app.tab = Tab::Repeater;
+        send_entry_to_repeater(app, &e);
     }
+}
+
+/// Open a new Repeater tab holding `e`'s request (history and Logger menus).
+pub(crate) fn send_entry_to_repeater(app: &mut App, e: &net::HistEntry) {
+    let mut reps = app.shared.repeaters.lock().unwrap();
+    let id = app.shared.rep.new_tab_id();
+    reps.push(net::RepTab {
+        id,
+        name: id.to_string(),
+        host: e.host.clone(),
+        port: e.port,
+        https: e.https,
+        request: request_for_tools(&e.req_raw),
+        // Burp opens a new Repeater tab with no response until Send.
+        response: None,
+        result_line: String::new(),
+        history: Vec::new(),
+        response_sources: Vec::new(),
+        hist_pos: 0,
+        ws: None,
+    });
+    app.repeater.sel = reps.len() - 1;
+    app.tab = Tab::Repeater;
 }
 
 /// The selected Repeater tab's (request, https, host, port).
 pub(crate) fn current_repeater(app: &App) -> Option<(String, bool, String, u16)> {
     let reps = app.shared.repeaters.lock().unwrap();
-    let r = reps.get(app.rep_sel.min(reps.len().saturating_sub(1)))?;
+    let r = reps.get(app.repeater.sel.min(reps.len().saturating_sub(1)))?;
     Some((r.request.clone(), r.https, r.host.clone(), r.port))
 }
 
@@ -274,18 +280,120 @@ pub(crate) fn repeater_tab_to_new_tab(app: &mut App) {
         response: None,
         result_line: String::new(),
         history: Vec::new(),
+        response_sources: Vec::new(),
         hist_pos: 0,
         ws: None,
     });
-    app.rep_sel = reps.len() - 1;
+    app.repeater.sel = reps.len() - 1;
 }
 
 pub fn send_history_to_intruder(app: &mut App) {
     let Some(id) = app.history_sel else { return };
-    let entry = app.shared.history.get(id);
-    if let Some(e) = entry {
-        app.intr_req = request_for_tools(&e.req_raw);
-        app.intr_https = e.https;
-        app.tab = Tab::Intruder;
+    if let Some(e) = app.shared.history.get(id) {
+        send_entry_to_intruder(app, &e);
+    }
+}
+
+pub(crate) fn send_entry_to_intruder(app: &mut App, e: &net::HistEntry) {
+    app.intr_req = request_for_tools(&e.req_raw);
+    app.intr_https = e.https;
+    app.tab = Tab::Intruder;
+}
+
+/// Add `e` to the Organizer (history and Logger menus). Returns the toast-free
+/// result so tests can assert on the Organizer contents.
+pub(crate) fn send_entry_to_organizer(app: &mut App, e: &net::HistEntry) {
+    let req_text = String::from_utf8_lossy(&e.req_raw).into_owned();
+    let resp_text = e
+        .resp_raw
+        .as_ref()
+        .map(|r| String::from_utf8_lossy(r).into_owned())
+        .unwrap_or_default();
+    app.shared.organizer.lock().unwrap().add(
+        &format!("{} {}", e.method, e.path),
+        "",
+        &req_text,
+        &resp_text,
+        util::now_secs(),
+    );
+    app.shared
+        .log(&format!("Sent {} {} to Organizer", e.method, e.path));
+    feedback::toast(feedback::Level::Success, "Sent to Organizer");
+}
+
+/// The message a Logger row stands for, as a history-shaped entry so the
+/// Proxy history menu commands apply unchanged. A proxy row mirrors its
+/// history item; a tool row (Repeater, Intruder, Scanner...) carries its own
+/// bytes. `None` when the row's message is no longer retained.
+pub(crate) fn log_row_entry(
+    shared: &net::Shared,
+    r: &crate::logger::LogEntry,
+) -> Option<net::HistEntry> {
+    if let Some(h) = r.hist_id {
+        return shared.history.get(h);
+    }
+    let req = r.request.as_ref()?;
+    Some(net::HistEntry {
+        id: r.id,
+        ts: r.ts,
+        method: r.method.clone(),
+        host: r.host.clone(),
+        port: r.port,
+        https: r.https,
+        path: r.path.clone(),
+        status: r.status.clone(),
+        resp_len: r.resp_len,
+        req_raw: req.to_vec().into(),
+        resp_raw: r.response.as_ref().map(|b| b.to_vec().into()),
+        ..Default::default()
+    })
+}
+
+/// Apply a Logger context-menu command to one row. Same commands and labels
+/// as the Proxy history menu (Burp's Logger offers them too).
+pub(crate) fn logger_command(app: &mut App, e: &net::HistEntry, cmd: &str) {
+    match cmd {
+        "scope" => {
+            let rule = format!("{}://{}", if e.https { "https" } else { "http" }, e.host);
+            app.shared
+                .scope
+                .lock()
+                .unwrap()
+                .push(net::ScopeRule::include(rule, false));
+            app.shared.log(&format!("Added {} to target scope", e.host));
+        }
+        "scan" => run_active_scan_on(app, e),
+        "passive" => {
+            crate::scan::add_passive_issues(
+                &app.shared,
+                crate::scan::passive_check_for(&app.shared, e),
+            );
+            feedback::toast(
+                feedback::Level::Info,
+                "Passive scan of the selected message done",
+            );
+        }
+        "intruder" => send_entry_to_intruder(app, e),
+        "repeater" => send_entry_to_repeater(app, e),
+        "organizer" => send_entry_to_organizer(app, e),
+        "sequencer" => {
+            app.sequencer.requests.push(e.clone());
+            app.sequencer.req_sel = Some(app.sequencer.requests.len() - 1);
+            app.tab = Tab::Sequencer;
+        }
+        "cmp_req" => {
+            app.comparer.items.push(request_for_tools(&e.req_raw));
+            app.tab = Tab::Comparer;
+        }
+        "cmp_resp" => {
+            app.comparer.items.push(
+                e.resp_raw
+                    .as_ref()
+                    .map(|r| String::from_utf8_lossy(r).into_owned())
+                    .unwrap_or_default(),
+            );
+            app.tab = Tab::Comparer;
+        }
+        _ => {}
     }
 }

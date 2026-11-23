@@ -1,0 +1,11 @@
+   Compiling webprobe-support v0.1.0 (/tmp/wt-montoya/app/support)
+   Compiling webprobe-core v0.1.0 (/tmp/wt-montoya/app/core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.39s
+     Running unittests src/lib.rs (target/debug/build/webprobe-core/5a1080688a84f72f/out/webprobe_core-5a1080688a84f72f)
+
+running 2 tests
+test ext_host::tests::montoya_response_keyword_analysis ... ok
+test ext_host::tests::montoya_response_variation_analysis ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 562 filtered out; finished in 4.20s
+
