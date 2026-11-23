@@ -408,6 +408,18 @@ pub fn handle_conn(shared: Arc<Shared>, stream: TcpStream) {
 /// WebSocket upgrades. Bytes read past one request belong to the next
 /// pipelined request: they are carried into the next read, not dropped or
 /// forwarded unmanaged.
+///
+/// Forward-proxy policy: a CONNECT tunnel does not confine the requests it
+/// carries to the CONNECT authority. Each inner request resolves its own
+/// destination (Host header, then absolute-form authority; the CONNECT port
+/// only defaults a portless Host) and passes the same admission, redirect,
+/// upstream and extension controls as a direct request on this listener,
+/// and history records that request-resolved destination. There is no
+/// second-destination fallback after a failed send. This is distinct from
+/// the opaque byte relay for tls_bypass hosts, which forwards to the
+/// CONNECT authority without parsing inner traffic. The proxy has no
+/// destination ACL beyond this explicit-proxy trust model; target scope
+/// restricts scanner and other tool traffic, not proxy egress.
 fn serve_plain(shared: Arc<Shared>, mut stream: TcpStream, mut pending: Vec<u8>, port: u16) {
     loop {
         discard_blank(&mut pending);

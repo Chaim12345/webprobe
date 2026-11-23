@@ -4205,3 +4205,124 @@ fn connect_tunnel_requests_resolve_by_their_own_destination() {
         "the CONNECT authority is not the destination"
     );
 }
+
+#[test]
+fn connect_tunnel_inner_destination_follows_configured_listener_redirect() {
+    // Route selection applies to the inner effective destination: a request
+    // naming an undialable host is delivered by the listener's configured
+    // redirect with its Host header unchanged, and history records the
+    // request-resolved destination, exactly as for a direct request.
+    let shared = Shared::new();
+    let origin = TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin_port = origin.local_addr().unwrap().port();
+    let server = std::thread::spawn(move || {
+        let (mut s, _) = origin.accept().unwrap();
+        s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+        let head = String::from_utf8_lossy(&read_request_head(&mut s)).into_owned();
+        let host = head
+            .lines()
+            .find(|l| l.to_ascii_lowercase().starts_with("host:"))
+            .unwrap_or("Host: ?")
+            .to_string();
+        let body = format!("origin saw [{host}]");
+        s.write_all(
+            format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+    });
+    let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+    let proxy_port = proxy.local_addr().unwrap().port();
+    shared
+        .listener_redirects
+        .lock()
+        .unwrap()
+        .insert(proxy_port, ("127.0.0.1".to_string(), origin_port));
+    let sh = shared.clone();
+    let proxy_thread = std::thread::spawn(move || {
+        let (s, _) = proxy.accept().unwrap();
+        handle_conn(sh, s);
+    });
+    let mut client = TcpStream::connect(("127.0.0.1", proxy_port)).unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    // The CONNECT authority is a dead port: nothing can be dialed there, so
+    // any delivered response proves the inner destination was routed.
+    write!(client, "CONNECT 127.0.0.1:9 HTTP/1.1\r\nHost: 127.0.0.1:9\r\n\r\n").unwrap();
+    let head = read_response_head(&mut client).unwrap();
+    assert!(String::from_utf8_lossy(&head).starts_with("HTTP/1.1 200"));
+    write!(
+        client,
+        "GET http://no-such-host.invalid/y HTTP/1.1\r\nHost: no-such-host.invalid\r\nConnection: close\r\n\r\n"
+    )
+    .unwrap();
+    let head = read_response_head(&mut client).expect("redirected request not served");
+    assert!(
+        String::from_utf8_lossy(&head).starts_with("HTTP/1.1 200"),
+        "got: {}",
+        String::from_utf8_lossy(&head)
+    );
+    let mut body = String::new();
+    client.read_to_string(&mut body).unwrap();
+    assert!(
+        body.contains("origin saw [Host: no-such-host.invalid]"),
+        "the redirect target got the request with its Host unchanged: {body}"
+    );
+    proxy_thread.join().unwrap();
+    server.join().unwrap();
+    let history = shared.history.snapshot();
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].host, "no-such-host.invalid");
+    assert_eq!(history[0].status, "200");
+}
+
+#[test]
+fn connect_tunnel_inner_request_dropped_by_extension_has_zero_egress() {
+    // A denied inner destination (extension drop) gets the local drop page;
+    // no bytes leave toward any destination and nothing is recorded as an
+    // origin exchange, exactly as for a direct request.
+    let shared = extension_drop_shared();
+    let origin = TcpListener::bind("127.0.0.1:0").unwrap();
+    origin.set_nonblocking(true).unwrap();
+    let origin_port = origin.local_addr().unwrap().port();
+    let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+    let proxy_port = proxy.local_addr().unwrap().port();
+    let sh = shared.clone();
+    let proxy_thread = std::thread::spawn(move || {
+        let (s, _) = proxy.accept().unwrap();
+        handle_conn(sh, s);
+    });
+    let mut client = TcpStream::connect(("127.0.0.1", proxy_port)).unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    write!(
+        client,
+        "CONNECT 127.0.0.1:{origin_port} HTTP/1.1\r\nHost: 127.0.0.1:{origin_port}\r\n\r\n"
+    )
+    .unwrap();
+    let head = read_response_head(&mut client).unwrap();
+    assert!(String::from_utf8_lossy(&head).starts_with("HTTP/1.1 200"));
+    write!(
+        client,
+        "GET http://127.0.0.1:{origin_port}/admin-drop HTTP/1.1\r\nHost: 127.0.0.1:{origin_port}\r\nConnection: close\r\n\r\n"
+    )
+    .unwrap();
+    let mut response = Vec::new();
+    client.read_to_end(&mut response).unwrap();
+    proxy_thread.join().unwrap();
+    assert_extension_drop_page(&response);
+    assert_eq!(
+        origin.accept().unwrap_err().kind(),
+        std::io::ErrorKind::WouldBlock,
+        "a dropped inner request has zero egress"
+    );
+    assert!(
+        shared.history.snapshot().is_empty(),
+        "a dropped request is not an origin exchange"
+    );
+}
