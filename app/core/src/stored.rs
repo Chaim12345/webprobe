@@ -80,7 +80,10 @@ type StoredPoint = (usize, InsertionPoint, Vec<u8>, Option<Vec<u8>>);
 #[derive(Default)]
 struct Inner {
     #[cfg(test)]
-    generation: Option<std::sync::Weak<crate::host_probe_state::AttemptScope>>,
+    generation: Option<(
+        std::sync::Weak<crate::host_probe_state::AttemptScope>,
+        std::sync::Weak<()>,
+    )>,
     items: Vec<Item>,
     /// (item, point) of each injected token.
     tokens: HashMap<String, usize>,
@@ -675,6 +678,7 @@ impl Inner {
 pub(crate) struct StoreGeneration {
     shared: std::sync::Weak<crate::net::Shared>,
     owner: std::sync::Arc<crate::host_probe_state::AttemptScope>,
+    identity: std::sync::Arc<()>,
 }
 #[cfg(test)]
 impl StoreGeneration {
@@ -682,7 +686,10 @@ impl StoreGeneration {
         if inner
             .generation
             .as_ref()
-            .is_some_and(|w| w.ptr_eq(&std::sync::Arc::downgrade(&self.owner)))
+            .is_some_and(|(owner, generation)| {
+                owner.ptr_eq(&std::sync::Arc::downgrade(&self.owner))
+                    && generation.ptr_eq(&std::sync::Arc::downgrade(&self.identity))
+            })
         {
             Ok(())
         } else {
@@ -762,10 +769,15 @@ impl StoredInputs {
     ) -> StoreGeneration {
         let mut inner = self.inner.lock().unwrap();
         *inner = Inner::default();
-        inner.generation = Some(std::sync::Arc::downgrade(&owner));
+        let identity = std::sync::Arc::new(());
+        inner.generation = Some((
+            std::sync::Arc::downgrade(&owner),
+            std::sync::Arc::downgrade(&identity),
+        ));
         StoreGeneration {
             shared: std::sync::Arc::downgrade(shared),
             owner,
+            identity,
         }
     }
 }

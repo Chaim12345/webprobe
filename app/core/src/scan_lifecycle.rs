@@ -178,6 +178,7 @@ impl Drop for Installed {
 }
 
 pub(crate) struct Run {
+    strict: bool,
     ledger: Arc<Ledger>,
     owner: Arc<AttemptScope>,
     generation: crate::stored::StoreGeneration,
@@ -226,6 +227,9 @@ impl Coordinator {
             }
             return Ok(existing);
         }
+        if shared.host_admission.0.lock().unwrap().protocol.is_some() {
+            return Err(AdmissionError::Internal); // exceptional orphan requires explicit reconciliation
+        }
         let owner = Arc::new(Self {
             shared: shared.clone(),
             limits,
@@ -242,14 +246,16 @@ impl Coordinator {
     pub(crate) fn task_insert(
         &self,
         task: crate::tasks::ScanTask,
-    ) -> crate::owner_protocol::TaskIncarnation {
+    ) -> Result<crate::owner_protocol::TaskIncarnation, crate::owner_protocol::DispatchError> {
         let mut tasks = self.shared.tasks.lock().unwrap();
         let mut state = self.state.lock_on(&self.shared);
         let id = task.id;
-        tasks.retain(|t| t.id != id);
+        if tasks.iter().any(|t| t.id == id) {
+            return Err(crate::owner_protocol::DispatchError::Busy);
+        }
         let key = state.0.dispatch.create(id);
         tasks.push(task);
-        key
+        Ok(key)
     }
     pub(crate) fn task_remove(
         &self,
@@ -344,6 +350,7 @@ impl Coordinator {
                 return Err(DispatchError::Internal);
             }
         };
+        state.as_mut().unwrap().strict = true;
         let run = state.as_ref().unwrap();
         let control = Control {
             coordinator: Arc::downgrade(self),
@@ -366,8 +373,19 @@ impl Coordinator {
             .iter_mut()
             .find(|t| t.id == registration.id)
             .ok_or(DispatchError::Stale)?;
-        task.state = crate::tasks::TaskState::Cancelled;
         let control = registration.control.clone();
+        if !task.state.is_open() {
+            return Ok(ControlResult::Closed);
+        }
+        if let Some(c) = &control {
+            if !state
+                .as_ref()
+                .is_some_and(|r| Arc::ptr_eq(&r.owner, &c.owner) && r.phase != Phase::Closed)
+            {
+                return Ok(ControlResult::Closed);
+            }
+        }
+        task.state = crate::tasks::TaskState::Cancelled;
         let result = if let Some(c) = &control {
             c.owner.cancel();
             let mut p = c.pause.predicate.lock().unwrap_or_else(|e| e.into_inner());
@@ -446,7 +464,9 @@ impl Coordinator {
         if state.is_some() {
             return Err(AdmissionError::Busy);
         }
-        self.open_locked(&mut state)
+        let batch = self.open_locked(&mut state)?;
+        state.as_mut().unwrap().strict = true;
+        Ok(batch)
     }
     pub fn adopt(self: &Arc<Self>, lease: &Batch) -> Result<Batch, AdmissionError> {
         if !Arc::ptr_eq(self, &lease.coordinator)
@@ -466,6 +486,9 @@ impl Coordinator {
     }
     pub fn open(self: &Arc<Self>) -> Result<Batch, AdmissionError> {
         let mut state = self.state.lock_on(&self.shared);
+        if state.as_ref().is_some_and(|r| r.strict) {
+            return Err(AdmissionError::Busy);
+        }
         self.open_locked(&mut state)
     }
     fn open_locked(
@@ -489,6 +512,7 @@ impl Coordinator {
                 .stop
                 .store(false, std::sync::atomic::Ordering::SeqCst);
             **state = Some(Run {
+                strict: false,
                 ledger,
                 generation: self
                     .shared
@@ -518,7 +542,9 @@ impl Coordinator {
         if state.is_some() {
             return Err(AdmissionError::Busy);
         }
-        self.admit_locked(item, &mut state)
+        let accepted = self.admit_locked(item, &mut state)?;
+        state.as_mut().unwrap().strict = true;
+        Ok(accepted)
     }
     pub fn admit_in(
         self: &Arc<Self>,
@@ -547,7 +573,23 @@ impl Coordinator {
         item: Item,
     ) -> Result<(Audit, LegacyScanner, usize), AdmissionError> {
         let mut state = self.state.lock_on(&self.shared);
+        if state.as_ref().is_some_and(|r| r.strict) {
+            return Err(AdmissionError::Busy);
+        }
         self.admit_locked(item, &mut state)
+    }
+    pub(crate) fn fail_standalone_registration(
+        self: &Arc<Self>,
+        item: Item,
+    ) -> Result<(), AdmissionError> {
+        let lease = self.open_standalone()?;
+        lease
+            .generation()?
+            .close()
+            .map_err(|_| AdmissionError::Internal)?;
+        let result = self.admit_in(&lease, item).map(|_| ());
+        drop(lease); // abandoned exact owner cleans up Incomplete, no A4
+        result
     }
     fn admit_locked(
         self: &Arc<Self>,
@@ -571,6 +613,7 @@ impl Coordinator {
                 .stop
                 .store(false, std::sync::atomic::Ordering::SeqCst);
             **state = Some(Run {
+                strict: false,
                 ledger,
                 generation: self
                     .shared
@@ -585,10 +628,13 @@ impl Coordinator {
             });
         }
         let run = state.as_mut().unwrap();
-        let index = run
-            .generation
-            .add_item(item)
-            .map_err(|_| AdmissionError::Internal)?;
+        let index = match run.generation.add_item(item) {
+            Ok(index) => index,
+            Err(()) => {
+                run.incomplete = true;
+                return Err(AdmissionError::Internal);
+            }
+        };
         run.active = true;
         let owner = run.owner.clone();
         let lease = Arc::new(std::sync::atomic::AtomicBool::new(true));
@@ -616,14 +662,25 @@ impl Coordinator {
         owner: &Arc<AttemptScope>,
         outcome: Finish,
         mut guard: Option<ScanGuard>,
-    ) {
+    ) -> Finish {
         let mut state = self.state.lock_on(&self.shared);
         if let Some(run) = state.as_mut() {
             if Arc::ptr_eq(&run.owner, owner) && !run.active {
+                let store_valid = run.generation.close().is_ok();
+                let outcome = if outcome == Finish::Complete
+                    && !run.incomplete
+                    && !run.owner.is_cancelled()
+                    && run.ledger.reserve(&[]).is_ok()
+                    && !run.ledger.retention_lost()
+                    && store_valid
+                {
+                    Finish::Complete
+                } else {
+                    Finish::Incomplete
+                };
                 *owner.terminal.lock().unwrap() = Some(outcome);
                 *self.terminal.lock().unwrap() = Some((owner.clone(), outcome));
                 run.owner.cancel();
-                let _ = run.generation.close();
                 {
                     let mut p = run
                         .pause
@@ -643,8 +700,10 @@ impl Coordinator {
                 drop(state);
                 pause.changed.notify_all();
                 drop(retired);
+                return outcome;
             }
         }
+        Finish::Incomplete
     }
     fn make_finalizer(
         self: &Arc<Self>,
@@ -824,7 +883,14 @@ impl Drop for Audit {
 impl Finalizer {
     /// Explicit execution, never invoked by Drop. Callback stands in for the
     /// forthcoming real budget-required A4 path, not acceptance evidence.
-    pub fn run(mut self, body: impl FnOnce(&BudgetedExecution) -> Finish) -> Finish {
+    pub fn run(self, body: impl FnOnce(&BudgetedExecution) -> Finish) -> Finish {
+        self.run_before_commit(body, || {})
+    }
+    pub(crate) fn run_before_commit(
+        mut self,
+        body: impl FnOnce(&BudgetedExecution) -> Finish,
+        before_commit: impl FnOnce(),
+    ) -> Finish {
         let result = if self.permit.owner.is_cancelled() || self.permit.ledger.reserve(&[]).is_err()
         {
             false
@@ -856,10 +922,12 @@ impl Finalizer {
         } else {
             Finish::Incomplete
         };
-        self.coordinator
-            .cleanup_outcome(&self.permit.owner, outcome, self.guard.take());
+        before_commit(); // test barrier outside the authority critical section
+        let published =
+            self.coordinator
+                .cleanup_outcome(&self.permit.owner, outcome, self.guard.take());
         self.live = false;
-        outcome
+        published
     }
 }
 impl Drop for Finalizer {

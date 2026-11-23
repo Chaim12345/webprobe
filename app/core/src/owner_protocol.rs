@@ -35,10 +35,22 @@ impl Control {
         match self.coordinator.upgrade() {
             Some(c) => c.addressed_control(self, Some(true)),
             None => {
-                self.owner.cancel();
+                self.cancel_and_notify();
                 ControlResult::Closed
             }
         }
+    }
+    pub(crate) fn cancel_and_notify(&self) {
+        {
+            let mut p = self
+                .pause
+                .predicate
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            self.owner.cancel();
+            p.version = p.version.wrapping_add(1);
+        }
+        self.pause.changed.notify_all();
     }
     pub(crate) fn pause(&self) -> ControlResult {
         self.coordinator
@@ -241,6 +253,8 @@ mod tests {
         let shared = crate::net::Shared::new();
         let c = Coordinator::new(shared.clone(), limits()).unwrap();
         let b = c.open_standalone().unwrap();
+        assert!(matches!(c.open(), Err(AdmissionError::Busy)));
+        assert!(matches!(c.admit(item()), Err(AdmissionError::Busy)));
         assert!(matches!(
             c.admit_standalone(item()),
             Err(AdmissionError::Busy)
@@ -405,7 +419,7 @@ mod tests {
         for cancel_first in [true, false] {
             let shared = crate::net::Shared::new();
             let c = Coordinator::new(shared.clone(), limits()).unwrap();
-            let key = Arc::new(c.task_insert(task(9)));
+            let key = Arc::new(c.task_insert(task(9)).unwrap());
             let (go_tx, go_rx) = std::sync::mpsc::channel();
             let worker = c.clone();
             let child = key.clone();
@@ -449,6 +463,138 @@ mod tests {
         assert_eq!(Submission::receive(&rx), Completion::Joined);
         finish(b);
     }
+    #[test]
+    fn cancel_linearization_before_terminal_commit_normalizes_published_result() {
+        for cancel_before in [true, false] {
+            let shared = crate::net::Shared::new();
+            let c = Coordinator::new(shared.clone(), limits()).unwrap();
+            let b = c.open_standalone().unwrap();
+            let control = b.control().unwrap();
+            let Handoff::Finalize(f) = b.finish().unwrap() else {
+                panic!("finalizer")
+            };
+            let (at_tx, at_rx) = std::sync::mpsc::channel();
+            let (go_tx, go_rx) = std::sync::mpsc::channel();
+            let t = std::thread::spawn(move || {
+                f.run_before_commit(
+                    |_| Finish::Complete,
+                    || {
+                        at_tx.send(()).unwrap();
+                        go_rx
+                            .recv_timeout(std::time::Duration::from_secs(1))
+                            .unwrap();
+                    },
+                )
+            });
+            at_rx
+                .recv_timeout(std::time::Duration::from_secs(1))
+                .unwrap();
+            if cancel_before {
+                assert_eq!(control.cancel(), ControlResult::Applied);
+            }
+            go_tx.send(()).unwrap();
+            let published = t.join().unwrap();
+            assert_eq!(
+                published,
+                if cancel_before {
+                    Finish::Incomplete
+                } else {
+                    Finish::Complete
+                }
+            );
+            assert_eq!(*control.owner.terminal.lock().unwrap(), Some(published));
+            assert_eq!(control.cancel(), ControlResult::Closed);
+            assert_eq!(*control.owner.terminal.lock().unwrap(), Some(published));
+        }
+    }
+    #[test]
+    fn failed_registration_and_store_close_never_publish_complete() {
+        let shared = crate::net::Shared::new();
+        let c = Coordinator::new(shared.clone(), limits()).unwrap();
+        let b = c.open_standalone().unwrap();
+        let control = b.control().unwrap();
+        b.generation().unwrap().close().unwrap();
+        assert!(matches!(
+            c.admit_in(&b, item()),
+            Err(AdmissionError::Internal)
+        ));
+        assert!(!shared.scan.is_busy());
+        let Handoff::Finalize(f) = b.finish().unwrap() else {
+            panic!("finalizer")
+        };
+        assert_eq!(f.run(|_| Finish::Complete), Finish::Incomplete);
+        assert_eq!(
+            *control.owner.terminal.lock().unwrap(),
+            Some(Finish::Incomplete)
+        );
+        assert!(matches!(
+            c.fail_standalone_registration(item()),
+            Err(AdmissionError::Internal)
+        ));
+        assert!(!shared.scan.is_busy());
+        finish(c.open_standalone().unwrap());
+    }
+    #[test]
+    fn same_owner_new_generation_invalidates_old_generation_capability() {
+        let shared = crate::net::Shared::new();
+        let c = Coordinator::new(shared.clone(), limits()).unwrap();
+        let b = c.open_standalone().unwrap();
+        let old = b.generation().unwrap();
+        let control = b.control().unwrap();
+        let replacement = shared
+            .stored
+            .begin_generation(&shared, control.owner.clone());
+        assert!(old.add_item(item()).is_err());
+        assert!(old.close().is_err());
+        assert_eq!(replacement.add_item(item()).unwrap(), 0);
+        let Handoff::Finalize(f) = b.finish().unwrap() else {
+            panic!("finalizer")
+        };
+        assert_eq!(f.run(|_| Finish::Complete), Finish::Incomplete);
+    }
+    #[test]
+    fn duplicate_live_task_does_not_displace_paused_control_or_rewrite_terminal() {
+        let shared = crate::net::Shared::new();
+        let c = Coordinator::new(shared.clone(), limits()).unwrap();
+        let key = c.task_insert(task(11)).unwrap();
+        let b = c.dispatch(&key, true, false).unwrap();
+        let control = b.control().unwrap();
+        assert_eq!(control.pause(), ControlResult::Applied);
+        assert!(matches!(c.task_insert(task(11)), Err(DispatchError::Busy)));
+        assert_eq!(c.dispatch_cancel(&key), Ok(ControlResult::Applied));
+        assert_eq!(control.resume(), ControlResult::Cancelled);
+        let Handoff::Finalize(f) = b.finish().unwrap() else {
+            panic!("finalizer")
+        };
+        assert_eq!(f.run(|_| Finish::Complete), Finish::Incomplete);
+        shared.tasks.lock().unwrap()[0].state = crate::tasks::TaskState::Finished;
+        assert_eq!(c.dispatch_cancel(&key), Ok(ControlResult::Closed));
+        assert_eq!(
+            shared.tasks.lock().unwrap()[0].state,
+            crate::tasks::TaskState::Finished
+        );
+    }
+    #[test]
+    fn coordinator_gone_paused_handle_cancels_and_wakes_exceptional_waiter() {
+        let shared = crate::net::Shared::new();
+        let c = Coordinator::new(shared.clone(), limits()).unwrap();
+        let b = c.open_standalone().unwrap();
+        let mut control = b.control().unwrap();
+        assert_eq!(control.pause(), ControlResult::Applied);
+        // Simulated orphan weak link, not a claim normal capability Drop leaks.
+        control.coordinator = Weak::new();
+        let waiter = control.clone();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let t = std::thread::spawn(move || {
+            waiter.wait_before_sleep(Instant::now() + std::time::Duration::from_secs(1), || {
+                tx.send(()).unwrap()
+            })
+        });
+        rx.recv_timeout(std::time::Duration::from_secs(1)).unwrap();
+        assert_eq!(control.cancel(), ControlResult::Closed);
+        assert_eq!(t.join().unwrap(), Err(ControlResult::Cancelled));
+        drop(b);
+    }
     fn task(id: u64) -> crate::tasks::ScanTask {
         crate::tasks::ScanTask {
             id,
@@ -466,7 +612,7 @@ mod tests {
     fn task_incarnation_cancel_before_dispatch_rollback_and_reuse() {
         let shared = crate::net::Shared::new();
         let c = Coordinator::new(shared.clone(), limits()).unwrap();
-        let first = c.task_insert(task(7));
+        let first = c.task_insert(task(7)).unwrap();
         assert!(matches!(
             c.dispatch(&first, false, false),
             Err(DispatchError::Unavailable)
