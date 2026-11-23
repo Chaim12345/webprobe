@@ -37,9 +37,10 @@ pub fn send_raw_with(
                 error: Some(error),
             };
         }
-        let outcome = scanner_io::exchange(shared, &permit, host, port, request);
+        let outcome = scanner_io::send_budgeted(shared, &permit, false, host, port, request);
         return Upstream {
-            resp: outcome.complete.then_some(outcome.response),
+            resp: (outcome.status == scanner_io::ExchangeStatus::Complete)
+                .then_some(outcome.response),
             error: outcome.diagnostic,
         };
     }

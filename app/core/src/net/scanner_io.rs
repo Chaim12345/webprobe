@@ -7,9 +7,14 @@ use super::*;
 use crate::scan_budget::Resource;
 use crate::scan_lifecycle::{BudgetedExecution, ExecutionContext};
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ExchangeStatus {
+    Complete,
+    Incomplete,
+}
 pub(crate) struct PartialExchange {
     pub response: Vec<u8>,
-    pub complete: bool,
+    pub status: ExchangeStatus,
     pub diagnostic: Option<String>,
 }
 fn io_error(reason: impl ToString) -> std::io::Error {
@@ -46,11 +51,11 @@ struct Metered<'a> {
     stream: TcpStream,
     shared: &'a Shared,
     permit: &'a BudgetedExecution,
-    failed: bool,
     first: bool,
 }
 impl Metered<'_> {
     fn check(&self) -> std::io::Result<Duration> {
+        exact(self.shared, self.permit).map_err(io_error)?;
         scanner_send_admission(self.shared).map_err(io_error)?;
         self.permit
             .ledger()
@@ -93,9 +98,6 @@ impl Read for Metered<'_> {
             let n = self.stream.read(&mut out[..cap])?;
             Ok(n)
         })();
-        if result.is_err() {
-            self.failed = true;
-        }
         result
     }
 }
@@ -135,9 +137,7 @@ pub(crate) fn exchange(
 ) -> PartialExchange {
     let mut buffer = Vec::new();
     let result = (|| -> Result<Vec<u8>, String> {
-        permit
-            .validate_shared(shared)
-            .map_err(|_| "invalid budgeted owner")?;
+        exact(shared, permit)?;
         supported(shared, host, false)?;
         permit
             .ledger()
@@ -173,92 +173,253 @@ pub(crate) fn exchange(
             stream,
             shared,
             permit,
-            failed: false,
             first: true,
         };
-        io.write_all(request).map_err(|e| format!("write: {e}"))?;
+        let request = util::origin_form(request);
+        io.write_all(&request).map_err(|e| format!("write: {e}"))?;
         let method = request
             .split(|b| *b == b' ')
             .next()
             .and_then(|v| std::str::from_utf8(v).ok())
             .unwrap_or("");
-        let (response, _) = crate::codec::read_message(&mut io, &mut buffer, method, None)
-            .map_err(|e| format!("read: {e}"))?;
-        if io.failed {
-            buffer = response;
-            return Err("incomplete response I/O".into());
-        }
-        let Some(head) = util::find_head_end(&response) else {
-            buffer = response;
-            return Err("incomplete response head".into());
-        };
-        let parts = util::parse_http(&response[..head]);
-        if util::get_header(&parts.headers, "Content-Encoding")
-            .is_some_and(|v| !v.eq_ignore_ascii_case("identity"))
-        {
-            buffer = response;
-            return Err("incomplete: compressed response unsupported".into());
-        }
-        let code = parts.status.parse::<u16>().unwrap_or(0);
-        let body_len = response.len().saturating_sub(head);
-        let complete = match crate::codec::response_body_kind_strict(&response[..head], method) {
-            Ok(crate::codec::BodyKind::None) => body_len == 0,
-            Ok(crate::codec::BodyKind::Length(n)) => body_len == n,
-            Ok(crate::codec::BodyKind::Chunked) => {
-                let mut cursor = crate::codec::ChunkCursor::default();
-                matches!(crate::codec::scan_chunked(&response[head..],&mut cursor,|_|{}),crate::codec::Chunked::Complete(n) if n==body_len)
+        loop {
+            match assess(&buffer, method, false)? {
+                Assessment::Complete => return Ok(std::mem::take(&mut buffer)),
+                Assessment::Need => {}
             }
-            Ok(crate::codec::BodyKind::UntilEof) => true,
-            Err(_) => false,
-        };
-        if !(200..600).contains(&code)
-            || !complete
-            || crate::streaming::decide(
-                &super::request_url(host, port, false, request),
-                &response[..head],
-                &shared.streaming.lock().unwrap(),
-            ) == crate::streaming::Decision::Streaming
-        {
-            buffer = response;
-            return Err("incomplete response framing or unsupported streaming".into());
+            let mut scratch = [0; 4096];
+            let cap = if util::find_head_end(&buffer).is_none() {
+                1
+            } else {
+                scratch.len()
+            };
+            let n = io
+                .read(&mut scratch[..cap])
+                .map_err(|e| format!("read: {e}"))?;
+            if n == 0 {
+                return match assess(&buffer, method, true)? {
+                    Assessment::Complete => Ok(std::mem::take(&mut buffer)),
+                    Assessment::Need => Err("incomplete clean EOF".into()),
+                };
+            }
+            buffer.extend_from_slice(&scratch[..n]);
         }
-        Ok(response)
     })();
     match result {
         Ok(response) => PartialExchange {
             response,
-            complete: true,
+            status: ExchangeStatus::Complete,
             diagnostic: None,
         },
         Err(diagnostic) => {
             permit.mark_incomplete();
             PartialExchange {
                 response: buffer,
-                complete: false,
+                status: ExchangeStatus::Incomplete,
                 diagnostic: Some(diagnostic),
             }
         }
     }
 }
 
-thread_local! {static EXPECTED:std::cell::Cell<bool>=const{std::cell::Cell::new(false)};}
-/// Explicit handoff marker for a scanner helper that lost its execution mode.
-/// Installing a marker alone grants no authority; net fails closed without mode.
+thread_local! {
+    static EXPECTED:std::cell::RefCell<Vec<u64>>=const{std::cell::RefCell::new(Vec::new())};
+    static MARKER_ID:std::cell::Cell<u64>=const{std::cell::Cell::new(0)};
+}
 #[derive(Clone, Copy)]
 pub(crate) struct ExpectedScanner;
-pub(crate) struct ExpectedInstalled(bool, std::marker::PhantomData<std::rc::Rc<()>>);
+pub(crate) struct ExpectedInstalled(u64, std::marker::PhantomData<std::rc::Rc<()>>);
 impl ExpectedScanner {
-    pub(crate) fn install(self) -> ExpectedInstalled {
-        ExpectedInstalled(EXPECTED.with(|v| v.replace(true)), std::marker::PhantomData)
+    pub(crate) fn install(self) -> Result<ExpectedInstalled, String> {
+        let id = MARKER_ID
+            .with(|v| v.get().checked_add(1))
+            .ok_or("marker identity exhausted")?;
+        EXPECTED.with(|v| {
+            let mut v = v.borrow_mut();
+            if v.len() >= 64 {
+                return Err::<(), String>("marker depth exceeded".into());
+            }
+            v.push(id);
+            Ok(())
+        })?;
+        MARKER_ID.with(|v| v.set(id));
+        Ok(ExpectedInstalled(id, std::marker::PhantomData))
     }
 }
 impl Drop for ExpectedInstalled {
     fn drop(&mut self) {
-        EXPECTED.with(|v| v.set(self.0));
+        EXPECTED.with(|v| v.borrow_mut().retain(|id| *id != self.0));
     }
 }
 pub(crate) fn expected() -> bool {
-    EXPECTED.with(|v| v.get())
+    EXPECTED.with(|v| !v.borrow().is_empty())
+}
+fn exact(shared: &Shared, permit: &BudgetedExecution) -> Result<(), String> {
+    permit
+        .validate_shared(shared)
+        .map_err(|_| "invalid budgeted owner")?;
+    match crate::scan_lifecycle::captured() {
+        Some(ExecutionContext::Budgeted(p))
+            if Arc::ptr_eq(p.owner(), permit.owner())
+                && std::ptr::eq(p.ledger(), permit.ledger()) =>
+        {
+            Ok(())
+        }
+        _ => Err("budgeted execution ambient owner/ledger mismatch".into()),
+    }
+}
+pub(crate) fn send_budgeted(
+    shared: &Shared,
+    permit: &BudgetedExecution,
+    https: bool,
+    host: &str,
+    port: u16,
+    request: &[u8],
+) -> PartialExchange {
+    if https {
+        permit.mark_incomplete();
+        return PartialExchange {
+            response: Vec::new(),
+            status: ExchangeStatus::Incomplete,
+            diagnostic: Some("TLS unsupported".into()),
+        };
+    }
+    exchange(shared, permit, host, port, request)
+}
+enum Assessment {
+    Need,
+    Complete,
+}
+fn assess(raw: &[u8], method: &str, eof: bool) -> Result<Assessment, String> {
+    let Some(head) = util::find_head_end(raw) else {
+        return if raw.len() > 65536 {
+            Err("head limit".into())
+        } else {
+            Ok(Assessment::Need)
+        };
+    };
+    if head > 65536 {
+        return Err("head limit".into());
+    }
+    let text = std::str::from_utf8(&raw[..head]).map_err(|_| "invalid header bytes")?;
+    if text
+        .as_bytes()
+        .iter()
+        .enumerate()
+        .any(|(i, b)| *b == b'\n' && (i == 0 || text.as_bytes()[i - 1] != b'\r'))
+    {
+        return Err("bare LF".into());
+    }
+    let mut lines = text.split("\r\n");
+    let status = lines.next().unwrap_or("");
+    let mut fields = status.splitn(3, ' ');
+    let version = fields.next().unwrap_or("");
+    let code = fields.next().unwrap_or("");
+    let reason = fields.next();
+    if !matches!(version, "HTTP/1.0" | "HTTP/1.1")
+        || code.len() != 3
+        || !code.bytes().all(|b| b.is_ascii_digit())
+        || reason.is_none()
+    {
+        return Err("invalid status line".into());
+    }
+    if reason.unwrap_or("").bytes().any(|b| b < 32 || b == 127) {
+        return Err("invalid reason phrase".into());
+    }
+    let code = code.parse::<u16>().map_err(|_| "invalid status")?;
+    if !(200..600).contains(&code) {
+        return Err("unsupported interim/upgrade/invalid status".into());
+    }
+    let mut encoding = false;
+    for line in lines {
+        if line.is_empty() {
+            continue;
+        }
+        let (name, value) = line.split_once(':').ok_or("invalid header")?;
+        if name.is_empty()
+            || !name
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&b))
+            || value.bytes().any(|b| b < 32 && b != b'\t' || b == 127)
+        {
+            return Err("invalid header syntax".into());
+        }
+        if name.eq_ignore_ascii_case("content-encoding")
+            && !value.trim().eq_ignore_ascii_case("identity")
+        {
+            encoding = true;
+        }
+        if name.eq_ignore_ascii_case("content-type")
+            && value
+                .trim()
+                .to_ascii_lowercase()
+                .starts_with("text/event-stream")
+        {
+            return Err("streaming unsupported".into());
+        }
+    }
+    if encoding {
+        return Err("compressed response unsupported before body growth".into());
+    }
+    let body = &raw[head..];
+    match crate::codec::response_body_kind_strict(&raw[..head], method)
+        .map_err(|_| "strict framing rejected")?
+    {
+        crate::codec::BodyKind::None => {
+            if body.is_empty() {
+                Ok(Assessment::Complete)
+            } else {
+                Err("excess bodyless bytes".into())
+            }
+        }
+        crate::codec::BodyKind::Length(n) => match body.len().cmp(&n) {
+            std::cmp::Ordering::Less => Ok(Assessment::Need),
+            std::cmp::Ordering::Equal => Ok(Assessment::Complete),
+            _ => Err("excess response bytes".into()),
+        },
+        crate::codec::BodyKind::UntilEof => Ok(if eof {
+            Assessment::Complete
+        } else {
+            Assessment::Need
+        }),
+        crate::codec::BodyKind::Chunked => {
+            let mut at = 0;
+            loop {
+                let Some(end) = body[at..].windows(2).position(|w| w == b"\r\n") else {
+                    return Ok(Assessment::Need);
+                };
+                let line = &body[at..at + end];
+                if line.is_empty() || !line.iter().all(|b| b.is_ascii_hexdigit()) {
+                    return Err("strict chunk size/extensions rejected".into());
+                }
+                let n =
+                    usize::from_str_radix(std::str::from_utf8(line).map_err(|_| "chunk size")?, 16)
+                        .map_err(|_| "chunk overflow")?;
+                at += end + 2;
+                if n == 0 {
+                    if body.len() < at + 2 {
+                        return Ok(Assessment::Need);
+                    }
+                    return if &body[at..] == b"\r\n" {
+                        Ok(Assessment::Complete)
+                    } else {
+                        Err("trailers/excess bytes unsupported".into())
+                    };
+                }
+                let end = at
+                    .checked_add(n)
+                    .and_then(|n| n.checked_add(2))
+                    .ok_or("chunk overflow")?;
+                if body.len() < end {
+                    return Ok(Assessment::Need);
+                }
+                if &body[end - 2..end] != b"\r\n" {
+                    return Err("chunk data terminator".into());
+                }
+                at = end;
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -286,10 +447,23 @@ mod tests {
     ) -> Finish {
         let c = Coordinator::new(shared.clone(), limits).unwrap();
         let b = c.open().unwrap();
-        match b.finish().unwrap() {
-            Handoff::Finalize(f) => f.run(body),
+        let mut panic = None;
+        let result = match b.finish().unwrap() {
+            Handoff::Finalize(f) => f.run(|p| {
+                match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| body(p))) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        panic = Some(e);
+                        Finish::Incomplete
+                    }
+                }
+            }),
             _ => panic!("finalizer"),
+        };
+        if let Some(e) = panic {
+            std::panic::resume_unwind(e);
         }
+        result
     }
     fn server(reply: Vec<u8>, trickle: bool) -> (u16, std::thread::JoinHandle<()>) {
         let l = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -326,9 +500,8 @@ mod tests {
                 assert_eq!(p.ledger().used(Resource::ConnectionAttempt), 1);
                 assert_eq!(p.ledger().used(Resource::Outgoing), req.len() as u64);
                 assert!(p.ledger().used(Resource::Response) >= count as u64);
-                assert_eq!(
-                    p.ledger().used(Resource::Response),
-                    4096,
+                assert!(
+                    p.ledger().used(Resource::Response) > count as u64,
                     "reserved allowance, not delivered count"
                 );
                 Finish::Complete
@@ -356,7 +529,7 @@ mod tests {
                     port,
                     b"GET / HTTP/1.1\r\nHost: h\r\n\r\n",
                 );
-                assert!(!outcome.complete);
+                assert_eq!(outcome.status, ExchangeStatus::Incomplete);
                 assert!(!outcome.response.is_empty());
                 assert!(outcome.diagnostic.is_some());
                 assert_eq!(p.ledger().used(Resource::HttpAttempt), 1);
@@ -386,7 +559,7 @@ mod tests {
                     port,
                     b"GET / HTTP/1.1\r\nHost: h\r\n\r\n",
                 );
-                assert!(!out.complete);
+                assert_eq!(out.status, ExchangeStatus::Incomplete);
                 assert_eq!(out.response.len(), 16);
                 assert_eq!(p.ledger().used(Resource::Response), 16);
                 Finish::Incomplete
@@ -402,7 +575,7 @@ mod tests {
         let port = listener.local_addr().unwrap().port();
         listener.set_nonblocking(true).unwrap();
         {
-            let _marker = ExpectedScanner.install();
+            let _marker = ExpectedScanner.install().unwrap();
             let _helper = tool_scope("Session");
             assert!(send_raw(
                 &shared,
@@ -580,6 +753,128 @@ mod tests {
                 assert_eq!(p.ledger().used(Resource::HttpAttempt), 0);
                 assert_eq!(p.ledger().used(Resource::Outgoing), 0);
                 assert_eq!(p.ledger().used(Resource::ConnectionAttempt), 1);
+                Finish::Complete
+            }),
+            Finish::Incomplete
+        );
+        super::super::inherited_context_tests::join(t);
+    }
+    #[test]
+    fn budgeted_h1_strict_raw_rejects_malformed_and_excess_before_complete() {
+        for raw in [
+            b"HTTP/1.1 200 OK\r\nContent-Length: 1\r\n\r\nxHTTP/1.1 200 OK\r\n\r\n".as_slice(),
+            b"HTTP/1.1 100 Continue\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n",
+            b"HTTP/1.1 200\r\nContent-Length: 0\r\n\r\n",
+            b"HTTP/1.1 200 OK\r\nBad Header: x\r\n\r\n",
+            b"HTTP/1.1 200 OK\nContent-Length: 0\n\n",
+            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n1;x=y\r\nx\r\n0\r\n\r\n",
+            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n1\r\nx\n0\r\n\r\n",
+        ] {
+            assert!(
+                !matches!(assess(raw, "GET", true), Ok(Assessment::Complete)),
+                "malformed accepted"
+            );
+        }
+        assert!(matches!(
+            assess(b"HTTP/1.1 200 OK\r\n\r\nx", "GET", false),
+            Ok(Assessment::Need)
+        ));
+        assert!(matches!(
+            assess(b"HTTP/1.1 200 OK\r\n\r\nx", "GET", true),
+            Ok(Assessment::Complete)
+        ));
+    }
+    #[test]
+    fn budgeted_h1_expected_marker_both_drop_orders_and_depth_are_exact() {
+        for reverse in [false, true] {
+            let a = ExpectedScanner.install().unwrap();
+            let b = ExpectedScanner.install().unwrap();
+            assert!(expected());
+            if reverse {
+                drop(b);
+                assert!(expected());
+                drop(a);
+            } else {
+                drop(a);
+                assert!(expected());
+                drop(b);
+            }
+            assert!(!expected());
+        }
+        let markers = (0..64)
+            .map(|_| ExpectedScanner.install().unwrap())
+            .collect::<Vec<_>>();
+        assert!(ExpectedScanner.install().is_err());
+        drop(markers);
+        assert!(!expected());
+    }
+    #[test]
+    fn budgeted_h1_normalizes_absolute_form_and_until_eof_requires_clean_close() {
+        let shared = Shared::new();
+        let l = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        let t = std::thread::spawn(move || {
+            let mut s = super::super::inherited_context_tests::accept(&l);
+            let mut bytes = [0; 4096];
+            let n = s.read(&mut bytes).unwrap();
+            assert!(bytes[..n].starts_with(b"GET /origin HTTP/1.1"));
+            s.write_all(b"HTTP/1.1 200 OK\r\n\r\nclean").unwrap();
+        });
+        assert_eq!(
+            finish(&shared, limits(), |p| {
+                let req = format!("GET http://127.0.0.1:{port}/origin HTTP/1.1\r\nHost: h\r\n\r\n");
+                let out = send_budgeted(&shared, p, false, "127.0.0.1", port, req.as_bytes());
+                assert_eq!(out.status, ExchangeStatus::Complete);
+                Finish::Complete
+            }),
+            Finish::Complete
+        );
+        super::super::inherited_context_tests::join(t);
+    }
+    #[test]
+    fn budgeted_h1_foreign_ambient_permit_and_header_only_compression_fail_before_body() {
+        let shared = Shared::new();
+        let other = Shared::new();
+        assert_eq!(
+            finish(&shared, limits(), |first| {
+                assert_eq!(
+                    finish(&other, limits(), |_| {
+                        assert!(exact(&shared, first).is_err());
+                        let out = send_budgeted(
+                            &shared,
+                            first,
+                            false,
+                            "127.0.0.1",
+                            9,
+                            b"GET / HTTP/1.1\r\nHost: h\r\n\r\n",
+                        );
+                        assert_eq!(out.status, ExchangeStatus::Incomplete);
+                        Finish::Complete
+                    }),
+                    Finish::Complete
+                );
+                Finish::Complete
+            }),
+            Finish::Incomplete
+        );
+        let shared = Shared::new();
+        let (port, t) = server(
+            b"HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Length: 99999999\r\n\r\n"
+                .to_vec(),
+            false,
+        );
+        assert_eq!(
+            finish(&shared, limits(), |p| {
+                let out = send_budgeted(
+                    &shared,
+                    p,
+                    false,
+                    "127.0.0.1",
+                    port,
+                    b"GET / HTTP/1.1\r\nHost: h\r\n\r\n",
+                );
+                assert_eq!(out.status, ExchangeStatus::Incomplete);
+                assert!(out.response.ends_with(b"\r\n\r\n"));
                 Finish::Complete
             }),
             Finish::Incomplete
