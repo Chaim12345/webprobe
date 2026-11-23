@@ -90,7 +90,9 @@ fn fake_http_connect_proxy() -> FakeHttpProxy {
                     break;
                 }
             }
-            if s.write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n").is_err() {
+            if s.write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+                .is_err()
+            {
                 continue;
             }
             let hello = first_bytes(s, 5);
@@ -171,7 +173,10 @@ fn http_route(proxy: &FakeHttpProxy) -> UpstreamConfig {
 
 fn assert_no_direct_hit(endpoint: &FakeEndpoint) {
     assert!(
-        endpoint.hits.recv_timeout(Duration::from_millis(500)).is_err(),
+        endpoint
+            .hits
+            .recv_timeout(Duration::from_millis(500))
+            .is_err(),
         "a proxied or failed route must never open a direct connection to the control server"
     );
 }
@@ -188,7 +193,11 @@ fn direct_route_reaches_the_control_server() {
         .hits
         .recv_timeout(Duration::from_secs(5))
         .expect("a direct route must connect to the control server");
-    assert_eq!(hello.first(), Some(&TLS_HANDSHAKE), "expected a TLS ClientHello");
+    assert_eq!(
+        hello.first(),
+        Some(&TLS_HANDSHAKE),
+        "expected a TLS ClientHello"
+    );
 }
 
 /// HTTP upstream: registration CONNECTs to the control-server authority via
@@ -207,7 +216,11 @@ fn http_proxy_route_carries_registration_and_never_goes_direct() {
         head.starts_with(&format!("CONNECT 127.0.0.1:{}", endpoint.port)),
         "CONNECT authority must be the control server, got {head:?}"
     );
-    assert_eq!(hello.first(), Some(&TLS_HANDSHAKE), "the tunnel must carry TLS");
+    assert_eq!(
+        hello.first(),
+        Some(&TLS_HANDSHAKE),
+        "the tunnel must carry TLS"
+    );
     assert_no_direct_hit(&endpoint);
 }
 
@@ -252,8 +265,15 @@ fn socks5_proxy_route_carries_registration_and_never_goes_direct() {
     // ver=5, cmd=connect, rsv=0, atyp=IPv4, 127.0.0.1, port BE.
     let port = endpoint.port.to_be_bytes();
     let want = [5, 1, 0, 1, 127, 0, 0, 1, port[0], port[1]];
-    assert_eq!(request, want, "SOCKS5 CONNECT must target the control server");
-    assert_eq!(hello.first(), Some(&TLS_HANDSHAKE), "the tunnel must carry TLS");
+    assert_eq!(
+        request, want,
+        "SOCKS5 CONNECT must target the control server"
+    );
+    assert_eq!(
+        hello.first(),
+        Some(&TLS_HANDSHAKE),
+        "the tunnel must carry TLS"
+    );
     assert_no_direct_hit(&endpoint);
 }
 
