@@ -1210,8 +1210,11 @@ fn dom_search_source_reaches_all_families_against_a_live_lab() {
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let port = lab_serve(l, |_method, path, _raw| {
         let body = if path.starts_with("/qsrc") {
+            // The probe's query payload is `__proto__[tok_s]=tok_s`; reading
+            // location.search wholesale carries tok_s to the sinks.
             r#"<html><body><script>
-var s = new URLSearchParams(location.search).get('wpdom');
+var s = location.search.slice(1);
+document.write('<p>' + s + '</p>');
 localStorage.setItem('k', s);
 document.cookie = 'x=' + s;
 try { document.domain = s; } catch (e) {}
@@ -1227,6 +1230,7 @@ try { document.evaluate(s, document, null, 0, null); } catch (e) {}
     let got = lab_scan(
         port,
         &[
+            "active.dom-xss",
             "active.dom-storage-manipulation",
             "active.dom-cookie-manipulation",
             "active.dom-document-domain",
@@ -1237,14 +1241,20 @@ try { document.evaluate(s, document, null, 0, null); } catch (e) {}
         "/qsrc",
         format!("GET /qsrc HTTP/1.1\r\nHost: {host}\r\n\r\n"),
     );
+    // burp.Zwf8's confidence mapping is established for location.hash
+    // only: a location.search hit is the base issue at Tentative.
     for name in [
+        "Cross-site scripting (DOM-based)",
         "HTML5 storage manipulation (DOM-based)",
         "Cookie manipulation (DOM-based)",
         "Document domain manipulation (DOM-based)",
         "Client-side JSON injection (DOM-based)",
         "Client-side XPath injection (DOM-based)",
     ] {
-        assert!(got.iter().any(|(n, ..)| n == name), "{name}: {got:?}");
+        assert!(
+            got.iter().any(|(n, _, c)| n == name && c == "Tentative"),
+            "{name}: {got:?}"
+        );
     }
 }
 
@@ -1282,6 +1292,79 @@ fn dom_families_skip_non_get_and_non_html() {
         format!("GET /plain HTTP/1.1\r\nHost: {host}\r\n\r\n"),
     );
     assert!(got.is_empty(), "non-HTML must not be DOM-probed: {got:?}");
+}
+
+/// Property-assignment fixtures for the setter sinks (the wrapSetter
+/// and constructor-adjacent hooks): the page assigns the actual DOM
+/// properties, not setAttribute strings. anchor.href is link
+/// manipulation; input.value, document.title, window.name,
+/// anchor.target and script.text are data manipulation;
+/// button/input.formAction (camelCase IDL property) are link
+/// manipulation. Skipped when no Chromium is available.
+#[test]
+fn dom_property_assignment_fixtures_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, _raw| {
+        let body = if path.starts_with("/prop-data") {
+            r#"<html><body><script>
+var h = location.hash.slice(1);
+var i = document.createElement('input'); i.value = h;
+document.title = h;
+window.name = h;
+var a = document.createElement('a'); a.target = h;
+var s = document.createElement('script'); s.text = h;
+</script></body></html>"#
+        } else if path.starts_with("/prop-link") {
+            r#"<html><body><script>
+var a = document.createElement('a'); a.href = location.hash.slice(1);
+</script></body></html>"#
+        } else if path.starts_with("/prop-formaction-btn") {
+            // the IDL property is camelCase formAction: a lowercase
+            // `formaction` hook never sees this assignment
+            "<html><body><script>var b = document.createElement('button'); b.formAction = location.hash.slice(1);</script></body></html>"
+        } else if path.starts_with("/prop-formaction-input") {
+            "<html><body><script>var i = document.createElement('input'); i.formAction = location.hash.slice(1);</script></body></html>"
+        } else {
+            "<html><body><p>hello</p></body></html>"
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    let got = lab_scan(
+        port,
+        &["active.dom-data-manipulation"],
+        "GET",
+        "/prop-data",
+        format!("GET /prop-data HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(
+        got.iter()
+            .any(|(n, s, c)| n == "DOM data manipulation (DOM-based)"
+                && s == "info"
+                && c == "Firm"),
+        "property assignments: {got:?}"
+    );
+    for page in [
+        "/prop-link",
+        "/prop-formaction-btn",
+        "/prop-formaction-input",
+    ] {
+        let got = lab_scan(
+            port,
+            &["active.dom-link-manipulation"],
+            "GET",
+            page,
+            format!("GET {page} HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+        );
+        assert!(
+            got.iter()
+                .any(|(n, s, c)| n == "Link manipulation (DOM-based)" && s == "low" && c == "Firm"),
+            "{page}: {got:?}"
+        );
+    }
 }
 
 /// R-10 batch 2: the three GraphQL checks against a live endpoint.
