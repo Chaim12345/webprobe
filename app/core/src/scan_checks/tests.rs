@@ -665,6 +665,91 @@ fn bac_non_get_sends_no_requests_beyond_the_scanner_baseline() {
     }
 }
 
+#[test]
+fn host_probe_checks_use_expected_requests_and_reject_soft_errors() {
+    use std::sync::{Arc, Mutex};
+    for positive in [true, false] {
+        let captured = Arc::new(Mutex::new(Vec::<(String, String, String)>::new()));
+        let seen = captured.clone();
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = lab_serve(listener, move |method, path, raw| {
+            seen.lock()
+                .unwrap()
+                .push((method.into(), path.into(), raw.into()));
+            let (status, content_type, body) = if path == "/robots.txt" {
+                if positive {
+                    ("200 OK", "text/plain", "User-agent: *\nDisallow: /admin")
+                } else {
+                    ("200 OK", "text/html", "<html>User-agent: * Allow: /</html>")
+                }
+            } else if method == "POST" {
+                if positive {
+                    (
+                        "500 Internal Server Error",
+                        "text/x-component",
+                        "0:E{\"digest\":\"abc\"}",
+                    )
+                } else {
+                    (
+                        "500 Internal Server Error",
+                        "text/plain",
+                        "Error: invalid digest supplied",
+                    )
+                }
+            } else {
+                ("200 OK", "text/x-component", "ok")
+            };
+            format!("HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        });
+        let req = format!("GET /start HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
+        let issues = lab_scan(
+            port,
+            &["active.robots-txt", "active.react2shell"],
+            "GET",
+            "/start",
+            req,
+        );
+        assert_eq!(issues.len(), if positive { 2 } else { 0 }, "{issues:?}");
+        let captured = captured.lock().unwrap();
+        assert_eq!(captured.len(), 3, "one baseline and two probes");
+        assert_eq!(
+            captured
+                .iter()
+                .filter(|(m, p, _)| m == "GET" && p == "/robots.txt")
+                .count(),
+            1
+        );
+        let post = captured
+            .iter()
+            .find(|(m, p, _)| m == "POST" && p == "/")
+            .unwrap();
+        assert!(post.2.contains("Next-Action:"));
+        assert!(post.2.contains("[\"$1:a:a\"]"));
+    }
+}
+
+#[test]
+fn react2shell_does_not_post_without_a_fingerprint() {
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    let count = Arc::new(AtomicUsize::new(0));
+    let seen = count.clone();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(listener, move |_, _, _| {
+        seen.fetch_add(1, Ordering::SeqCst);
+        "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok".into()
+    });
+    let req = format!("GET / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
+    let issues = lab_scan(port, &["active.react2shell"], "GET", "/", req);
+    assert!(issues.is_empty());
+    assert_eq!(count.load(Ordering::SeqCst), 1, "baseline only, no POST");
+    assert!(is_burp_issue(
+        "React Server Components remote code execution (React2Shell)"
+    ));
+}
+
 /// R-10 web cache poisoning (Zp22 / Zg1g rule): reported only when a
 /// clean request with the probe's cache buster gets the poisoned page
 /// back. The lab reflects X-Forwarded-Host; with `cache` on it caches
