@@ -6,6 +6,9 @@ edition = "2021"
 [dependencies]
 webprobe-support = { path = "../support" }
 thiserror = "2"
+# Accept-loop readiness: wake the primary listener on OS readiness instead of
+# a fixed 50 ms sleep (perf: ~318 -> ~2200 conn/s; qa/accept-readiness).
+polling = "3"
 brotli = "7"
 flate2.workspace = true
 # RustSec RUSTSEC-2023-0085: same API, fallible dynamic table updates.

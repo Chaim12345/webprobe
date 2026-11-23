@@ -5114,6 +5114,7 @@ dependencies = [
  "flate2",
  "hpack-patched",
  "memmap2",
+ "polling",
  "rand 0.8.8",
  "rcgen",
  "regex",
