@@ -44,15 +44,14 @@ pub fn parse(text: &str) -> Vec<Step> {
     let mut plain = String::new();
     for line in text.replace("\r\n", "\n").split('\n') {
         if let Some(rest) = line.strip_prefix(STEP_MARK) {
-            if let Some((https, derive, body)) = current.take() {
-                if !body.trim().is_empty() {
+            if let Some((https, derive, body)) = current.take()
+                && !body.trim().is_empty() {
                     steps.push(Step {
                         request: normalise(&body),
                         https,
                         derive,
                     });
                 }
-            }
             let mut https = false;
             let mut derive = Vec::new();
             for word in rest.split_whitespace() {
@@ -76,15 +75,14 @@ pub fn parse(text: &str) -> Vec<Step> {
             plain.push('\n');
         }
     }
-    if let Some((https, derive, body)) = current {
-        if !body.trim().is_empty() {
+    if let Some((https, derive, body)) = current
+        && !body.trim().is_empty() {
             steps.push(Step {
                 request: normalise(&body),
                 https,
                 derive,
             });
         }
-    }
     if steps.is_empty() && !plain.trim().is_empty() {
         steps.push(Step {
             request: normalise(&plain),
@@ -124,13 +122,11 @@ pub fn step_text(request: &[u8], https: bool, derive: &[String]) -> String {
 pub fn extract_value(response: &[u8], name: &str) -> Option<String> {
     let parts = crate::util::parse_http(response);
     for (k, v) in &parts.headers {
-        if k.eq_ignore_ascii_case("Set-Cookie") {
-            if let Some((n, val)) = v.split(';').next().and_then(|nv| nv.split_once('=')) {
-                if n.trim() == name {
+        if k.eq_ignore_ascii_case("Set-Cookie")
+            && let Some((n, val)) = v.split(';').next().and_then(|nv| nv.split_once('='))
+                && n.trim() == name {
                     return Some(val.trim().to_string());
                 }
-            }
-        }
     }
     let body =
         String::from_utf8_lossy(&response[parts.head_len.min(response.len())..]).into_owned();
@@ -158,11 +154,10 @@ pub fn extract_value(response: &[u8], name: &str) -> Option<String> {
                 field_value = value;
             }
         }
-        if field_name.is_some_and(|n| n == name) {
-            if let Some(value) = field_value {
+        if field_name.is_some_and(|n| n == name)
+            && let Some(value) = field_value {
                 return Some(value.to_string());
             }
-        }
     }
     let n = regex::escape(name);
     let patterns = [
@@ -229,13 +224,10 @@ pub fn substitute_param(request: &[u8], name: &str, value: &str) -> Vec<u8> {
         let mut words = line.splitn(3, ' ');
         if let (Some(method), Some(target), Some(version)) =
             (words.next(), words.next(), words.next())
-        {
-            if let Some((path, query)) = target.split_once('?') {
-                if let Some(q) = replace_pair(query, name, value) {
+            && let Some((path, query)) = target.split_once('?')
+                && let Some(q) = replace_pair(query, name, value) {
                     head_out = format!("{method} {path}?{q} {version}{}", &head[line_end..]);
                 }
-            }
-        }
     }
     let ct = crate::util::get_header(&parts.headers, "Content-Type").unwrap_or_default();
     let media_type = ct
@@ -270,11 +262,10 @@ pub fn substitute_param(request: &[u8], name: &str, value: &str) -> Vec<u8> {
                         body = std::borrow::Cow::Owned(replaced.into_bytes());
                     }
                 }
-            } else if !body_text.is_empty() {
-                if let Some(replaced) = replace_pair(body_text, name, value) {
+            } else if !body_text.is_empty()
+                && let Some(replaced) = replace_pair(body_text, name, value) {
                     body = std::borrow::Cow::Owned(replaced.into_bytes());
                 }
-            }
         } else {
             eprintln!("macro body substitution skipped: eligible request body is not UTF-8");
         }

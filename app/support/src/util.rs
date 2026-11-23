@@ -159,8 +159,8 @@ pub fn html_decode(s: &str) -> String {
     let bytes = s.as_bytes();
     let mut i = 0;
     while i < bytes.len() {
-        if bytes[i] == b'&' {
-            if let Some(end) = s[i..].find(';') {
+        if bytes[i] == b'&'
+            && let Some(end) = s[i..].find(';') {
                 let entity = &s[i + 1..i + end];
                 let decoded = if let Some(num) = entity.strip_prefix('#') {
                     let (digits, radix) =
@@ -190,7 +190,6 @@ pub fn html_decode(s: &str) -> String {
                     continue;
                 }
             }
-        }
         let c = s[i..].chars().next().unwrap_or('\u{fffd}');
         out.push(c);
         i += c.len_utf8();
@@ -549,8 +548,8 @@ pub fn kill_process_tree(pid: u32, marker: Option<&str>, grace: std::time::Durat
         let _ = std::process::Command::new("kill")
             .args(["-KILL", "--", &group])
             .output();
-        if let Some(m) = marker {
-            if let Ok(entries) = std::fs::read_dir("/proc") {
+        if let Some(m) = marker
+            && let Ok(entries) = std::fs::read_dir("/proc") {
                 for e in entries.flatten() {
                     let Ok(p) = e.file_name().to_string_lossy().parse::<u32>() else {
                         continue;
@@ -566,7 +565,6 @@ pub fn kill_process_tree(pid: u32, marker: Option<&str>, grace: std::time::Durat
                     }
                 }
             }
-        }
     }
     #[cfg(not(unix))]
     {

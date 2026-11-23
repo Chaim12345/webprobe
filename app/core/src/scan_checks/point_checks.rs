@@ -72,8 +72,8 @@ impl PointCheck for ExternalInteraction {
             // burp.Zxfo.lambda$doCheck$0: the response itself may carry what the
             // Collaborator served for this id (Ze2n.Zt): the server fetched the
             // URL and returned its content in-band.
-            if let Some(r) = resp.as_deref() {
-                if inband_hit(r, token) {
+            if let Some(r) = resp.as_deref()
+                && inband_hit(r, token) {
                     cx.report(vec![oob_resource_load_issue(
                         &cx.entry,
                         &crate::oob::delivery_sentence("The payload", &shown, &point, ""),
@@ -81,7 +81,6 @@ impl PointCheck for ExternalInteraction {
                         r,
                     )]);
                 }
-            }
             cx.progress();
             cx.pace(50);
         }

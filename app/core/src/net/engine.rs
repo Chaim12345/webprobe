@@ -883,11 +883,10 @@ impl<W: Write> crate::streaming::ResponseSink for ProxySink<'_, W> {
         }
         self.wired += 1;
         // Without stripping, the stored copy is the body as it was framed.
-        if !self.settings.strip_chunked && self.wired > 1 {
-            if let Some(t) = self.tee.as_mut() {
+        if !self.settings.strip_chunked && self.wired > 1
+            && let Some(t) = self.tee.as_mut() {
                 t.push(bytes);
             }
-        }
         let sent = self
             .client
             .write_all(bytes)
@@ -897,11 +896,10 @@ impl<W: Write> crate::streaming::ResponseSink for ProxySink<'_, W> {
     }
 
     fn payload(&mut self, bytes: &[u8]) {
-        if self.settings.strip_chunked {
-            if let Some(t) = self.tee.as_mut() {
+        if self.settings.strip_chunked
+            && let Some(t) = self.tee.as_mut() {
                 t.push(bytes);
             }
-        }
     }
 
     fn end(&mut self, complete: bool) {
@@ -987,14 +985,13 @@ pub fn upstream_and_deliver<S: ProxyIo>(
     // Burp's "Show response in browser" / "Request in browser" URLs
     // (http://burpsuite/show/N, /repeat/N): WebProbe serves the same under
     // http://webprobe.
-    if host.eq_ignore_ascii_case("webprobe") {
-        if let Some(resp) = browser_item_response(shared, &path_of(&parts)) {
+    if host.eq_ignore_ascii_case("webprobe")
+        && let Some(resp) = browser_item_response(shared, &path_of(&parts)) {
             let _ = stream.write_all(&resp);
             let _ = stream.flush();
             shared.log(&format!("Served {} for the browser", path_of(&parts)));
             return true;
         }
-    }
     // Burp answers `http://burpsuite` itself: the browser must already be
     // proxying through the listener, and the page it returns is where the CA
     // certificate is downloaded. WebProbe does the same at http://webprobe.

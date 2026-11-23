@@ -205,11 +205,9 @@ impl Csp {
                 };
                 if attr("http-equiv")
                     .is_some_and(|h| h.eq_ignore_ascii_case("content-security-policy"))
-                {
-                    if let Some(content) = attr("content") {
+                    && let Some(content) = attr("content") {
                         c.parse(content.trim());
                     }
-                }
             }
         }
         for (k, v) in headers {
@@ -249,15 +247,14 @@ impl Csp {
                 self.err(format!("Invalid directive name: {name}"));
                 continue;
             }
-            if self.valid(&name, value.as_deref()) {
-                if let Some(v) = value {
+            if self.valid(&name, value.as_deref())
+                && let Some(v) = value {
                     if !map.iter().any(|(k, _)| *k == name) {
                         map.push((name, v));
                     } else if let Some(slot) = map.iter_mut().find(|(k, _)| *k == name) {
                         slot.1 = v;
                     }
                 }
-            }
         }
         self.policies.push(map);
     }

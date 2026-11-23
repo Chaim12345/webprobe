@@ -82,8 +82,8 @@ fn group_rss_kb(pgid: u32) -> u64 {
             .rsplit_once(')')
             .and_then(|(_, rest)| rest.split_whitespace().nth(2))
             .and_then(|p| p.parse::<u32>().ok());
-        if pgrp == Some(pgid) {
-            if let Ok(status) = std::fs::read_to_string(format!("/proc/{pid}/status")) {
+        if pgrp == Some(pgid)
+            && let Ok(status) = std::fs::read_to_string(format!("/proc/{pid}/status")) {
                 total += status
                     .lines()
                     .find_map(|l| l.strip_prefix("VmRSS:"))
@@ -91,7 +91,6 @@ fn group_rss_kb(pgid: u32) -> u64 {
                     .and_then(|v| v.parse::<u64>().ok())
                     .unwrap_or(0);
             }
-        }
     }
     total
 }

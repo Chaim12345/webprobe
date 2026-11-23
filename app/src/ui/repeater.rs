@@ -167,11 +167,10 @@ pub(crate) fn repeater(app: &mut App, ui: &mut Ui) {
                     ui.end_row();
                     ui.label("Port:");
                     let mut p = r.port.to_string();
-                    if ui.text_edit_singleline(&mut p).changed() {
-                        if let Ok(v) = p.trim().parse() {
+                    if ui.text_edit_singleline(&mut p).changed()
+                        && let Ok(v) = p.trim().parse() {
                             r.port = v;
                         }
-                    }
                     ui.end_row();
                     ui.label("");
                     let mut h = r.https;

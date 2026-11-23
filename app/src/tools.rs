@@ -279,15 +279,14 @@ fn extract_token(response: &[u8], mode: usize, selector: &str) -> Option<Vec<u8>
 }
 
 fn add_sequencer_sample(app: &mut App, sample: Vec<u8>) {
-    if app.sequencer.ignore_abnormal {
-        if let Some(first) = app.sequencer.samples.first() {
+    if app.sequencer.ignore_abnormal
+        && let Some(first) = app.sequencer.samples.first() {
             let deviation = sample.len().abs_diff(first.len());
             if deviation > SEQUENCER_MAX_LENGTH_DEVIATION {
                 app.sequencer.status = format!("ignored token with length deviation {deviation} (> {SEQUENCER_MAX_LENGTH_DEVIATION})");
                 return;
             }
         }
-    }
     app.sequencer.samples.push(sample);
 }
 
@@ -387,13 +386,10 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
                             egui::Button::new(RichText::new("Remove").strong()),
                         )
                         .clicked()
-                    {
-                        if let Some(i) = app.sequencer.req_sel.take() {
-                            if i < app.sequencer.requests.len() {
+                        && let Some(i) = app.sequencer.req_sel.take()
+                            && i < app.sequencer.requests.len() {
                                 app.sequencer.requests.remove(i);
                             }
-                        }
-                    }
                     if ui
                         .add_sized(
                             [92.0, 22.0],
@@ -476,22 +472,18 @@ pub fn sequencer(app: &mut App, ui: &mut Ui) {
                             .strong(),
                         ))
                         .clicked()
-                    {
-                        if let Some(f) = &app.sequencer.live_stop {
+                        && let Some(f) = &app.sequencer.live_stop {
                             f.store(true, std::sync::atomic::Ordering::SeqCst);
                         }
-                    }
                 } else if ui
                     .add_enabled(
                         chosen.is_some(),
                         egui::Button::new(RichText::new("Start live capture").strong()),
                     )
                     .clicked()
-                {
-                    if let Some(e) = chosen {
+                    && let Some(e) = chosen {
                         start_live_capture(app, e);
                     }
-                }
                 ui.add_space(10.0);
                 ui.label(
                     RichText::new("Stop after")
@@ -1329,8 +1321,7 @@ pub fn sessions(app: &mut App, ui: &mut Ui) {
             .add_enabled(selected.is_some(), egui::Button::new(label))
             .on_disabled_hover_text("Select a request in Proxy > HTTP history first")
             .clicked()
-        {
-            if let Some(e) = selected {
+            && let Some(e) = selected {
                 // An editor still holding a single plain request becomes step one.
                 if !app.macro_request.trim().is_empty() && !app.macro_request.contains("###") {
                     app.macro_request =
@@ -1342,7 +1333,6 @@ pub fn sessions(app: &mut App, ui: &mut Ui) {
                     &[],
                 ));
             }
-        }
         if ui.button("Test macro").clicked() {
             let lines: Vec<String> = net::run_macro_text(&app.shared, &app.macro_request)
                 .iter()
@@ -1817,14 +1807,13 @@ pub fn launch_preconfigured_browser(
         cmd.args(&args).stdout(std::process::Stdio::null());
         if let Some(h) = &home {
             // The X server cookie is found through HOME by default; keep it.
-            if std::env::var_os("XAUTHORITY").is_none() {
-                if let Some(real) = std::env::var_os("HOME") {
+            if std::env::var_os("XAUTHORITY").is_none()
+                && let Some(real) = std::env::var_os("HOME") {
                     let xa = std::path::PathBuf::from(real).join(".Xauthority");
                     if xa.exists() {
                         cmd.env("XAUTHORITY", xa);
                     }
                 }
-            }
             cmd.env("HOME", h);
         }
         match log {
@@ -2156,11 +2145,10 @@ fn extensions_installed(app: &mut App, ui: &mut Ui) {
             if ui.small_button("Retry").clicked() {
                 let shared = app.shared.clone();
                 ext_store::start_in_background(&app.shared, item.clone(), move |res| {
-                    if res.is_ok() {
-                        if let Err(e) = ext_store::save(&ext_store::current(&shared)) {
+                    if res.is_ok()
+                        && let Err(e) = ext_store::save(&ext_store::current(&shared)) {
                             shared.log(&format!("Could not save the extension list: {e}"));
                         }
-                    }
                 });
             }
             if ui.small_button("Forget").clicked() {
@@ -3472,12 +3460,11 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData, content: boo
             http2: l.http2,
         })
         .collect();
-    if specs != net::listener_specs(&app.shared) {
-        if let Err(e) = net::set_listeners(&app.shared, specs) {
+    if specs != net::listener_specs(&app.shared)
+        && let Err(e) = net::set_listeners(&app.shared, specs) {
             app.shared
                 .log(&format!("Project listeners not restored: {e}"));
         }
-    }
     app.shared
         .crawl_capture
         .store(data.tasks.live_passive_crawl, Ordering::SeqCst);
@@ -3507,16 +3494,14 @@ fn restore_j01_sections(app: &mut App, data: &project::ProjectData, content: boo
     project::ProjectScanTask::restore_all(&data.tasks.scans, &app.shared);
     let l = &data.layout;
     // QA launch hooks (main.rs) win over the saved layout.
-    if std::env::var_os("WEBPROBE_TAB").is_none() {
-        if let Some(t) = tab_of(&l.tab) {
+    if std::env::var_os("WEBPROBE_TAB").is_none()
+        && let Some(t) = tab_of(&l.tab) {
             app.tab = t;
         }
-    }
-    if std::env::var_os("WEBPROBE_PROXY_SUB").is_none() {
-        if let Some(v) = l.proxy_sub {
+    if std::env::var_os("WEBPROBE_PROXY_SUB").is_none()
+        && let Some(v) = l.proxy_sub {
             app.proxy_sub = v.min(4);
         }
-    }
     if let Some(v) = l.target_sub {
         app.target_sub = v.min(2);
     }

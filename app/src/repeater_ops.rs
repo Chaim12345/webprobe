@@ -401,7 +401,7 @@ pub fn redirect_request(
         );
     }
     // No Referer when an HTTPS page redirects to plain HTTP.
-    if !(origin.https && !target.https) {
+    if !origin.https || target.https {
         let referer = if cross_site {
             format!("{}/", origin.origin())
         } else {
@@ -537,12 +537,11 @@ fn send_once(
         up.resp = Some(whole);
         up.error = None;
     }
-    if let Some(resp) = up.resp.as_mut() {
-        if !ext_host::run_http_response_hooks(&exts, "Repeater", &svc, &bytes, resp, &mut ann) {
+    if let Some(resp) = up.resp.as_mut()
+        && !ext_host::run_http_response_hooks(&exts, "Repeater", &svc, &bytes, resp, &mut ann) {
             up.resp = None;
             up.error = Some("response dropped by extension".into());
         }
-    }
     up
 }
 
@@ -571,8 +570,8 @@ pub fn send_following(
                 followed,
             };
         };
-        if mode != FollowMode::Never && !cancelled() {
-            if let Some((next, next_req)) =
+        if mode != FollowMode::Never && !cancelled()
+            && let Some((next, next_req)) =
                 next_redirect(&request, &current, &resp, process_cookies)
             {
                 let path = next_req
@@ -588,7 +587,6 @@ pub fn send_following(
                     continue;
                 }
             }
-        }
         return FollowResult {
             request,
             service: current,
@@ -1755,8 +1753,8 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
                 .iter()
                 .position(|r| p.x >= r.left() && p.x <= r.right())
         });
-        if let (Some(t), Some(p)) = (target, pointer) {
-            if t != from {
+        if let (Some(t), Some(p)) = (target, pointer)
+            && t != from {
                 let r = rects[t];
                 let x = if t > from {
                     r.right() + 1.0
@@ -1770,7 +1768,6 @@ pub fn tab_strip(app: &mut crate::App, ui: &mut Ui) {
                     egui::Stroke::new(2.0_f32, c(theme::ORANGE_1)),
                 );
             }
-        }
         if ui.input(|i| i.pointer.any_released()) {
             app.rops.drag_from = None;
             if let Some(t) = target.filter(|t| *t != from) {

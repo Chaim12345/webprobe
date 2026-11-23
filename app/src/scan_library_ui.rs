@@ -246,8 +246,7 @@ pub fn library_page(app: &mut App, ui: &mut Ui) {
                 egui::Button::new("Edit"),
             )
             .clicked()
-        {
-            if let Some((s, c)) = &sel_entry {
+            && let Some((s, c)) = &sel_entry {
                 app.scan_lib.editing = Some(editing_for(
                     app,
                     *s,
@@ -256,12 +255,10 @@ pub fn library_page(app: &mut App, ui: &mut Ui) {
                     c,
                 ));
             }
-        }
         if ui
             .add_enabled(sel_entry.is_some(), egui::Button::new("Duplicate"))
             .clicked()
-        {
-            if let Some((s, c)) = &sel_entry {
+            && let Some((s, c)) = &sel_entry {
                 let name = app.scan_lib.unique_name(&format!("Copy of {}", c.name));
                 let target = if *s == Source::Project {
                     Source::Project
@@ -279,7 +276,6 @@ pub fn library_page(app: &mut App, ui: &mut Ui) {
                     Err(e) => app.scan_lib.status = e,
                 }
             }
-        }
         if ui
             .add_enabled(
                 sel_entry
@@ -288,8 +284,7 @@ pub fn library_page(app: &mut App, ui: &mut Ui) {
                 egui::Button::new("Delete"),
             )
             .clicked()
-        {
-            if let Some((s, c)) = &sel_entry {
+            && let Some((s, c)) = &sel_entry {
                 match app.scan_lib.remove(*s, &c.name) {
                     Ok(()) => {
                         app.scan_lib.status = format!("Deleted \"{}\".", c.name);
@@ -298,7 +293,6 @@ pub fn library_page(app: &mut App, ui: &mut Ui) {
                     Err(e) => app.scan_lib.status = e,
                 }
             }
-        }
         if ui.button("Reload").clicked() {
             app.scan_lib.loaded = false;
         }
@@ -326,8 +320,7 @@ pub fn library_page(app: &mut App, ui: &mut Ui) {
             .add_enabled(entry.is_some(), egui::Button::new("Export"))
             .on_hover_text("Write the selected configuration as Burp JSON")
             .clicked()
-        {
-            if let Some(c) = entry {
+            && let Some(c) = entry {
                 let path = app.scan_lib.path.trim().to_string();
                 app.scan_lib.status = if path.is_empty() {
                     "Enter a file path to export to.".into()
@@ -338,7 +331,6 @@ pub fn library_page(app: &mut App, ui: &mut Ui) {
                     }
                 };
             }
-        }
     });
     if !app.scan_lib.status.is_empty() {
         ui.label(

@@ -371,14 +371,13 @@ pub(crate) fn intruder(app: &mut App, ui: &mut Ui) {
                             ui.ctx().send_viewport_cmd(egui::ViewportCommand::RequestPaste);
                         }
                         let pasted: Option<String> = ui.input(|i| i.events.iter().find_map(|e| if let egui::Event::Paste(t) = e { Some(t.clone()) } else { None }));
-                        if let Some(t) = pasted {
-                            if !ui.ctx().egui_wants_keyboard_input() {
+                        if let Some(t) = pasted
+                            && !ui.ctx().egui_wants_keyboard_input() {
                                 let set_n = app.intr_set_sel.min(needed - 1);
                                 let set = &mut app.intr_sets[set_n];
                                 if !set.is_empty() && !set.ends_with('\n') { set.push('\n'); }
                                 set.push_str(&t);
                             }
-                        }
                     }
                     1 => crate::intruder_ui::resource_pool_panel(ui, &mut app.intr_x),
                     _ => {

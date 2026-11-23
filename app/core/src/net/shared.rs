@@ -430,12 +430,11 @@ impl Shared {
             // Claim the window under the lock: when two threads race, the
             // loser's event is already visible to the winner's frame.
             let mut last = self.last_wake_ms.lock().unwrap();
-            if let Some(prev) = *last {
-                if now.saturating_sub(prev) < WAKE_COALESCE_MS {
+            if let Some(prev) = *last
+                && now.saturating_sub(prev) < WAKE_COALESCE_MS {
                     self.wakes_coalesced.fetch_add(1, Ordering::SeqCst);
                     return;
                 }
-            }
             *last = Some(now);
         }
         f();

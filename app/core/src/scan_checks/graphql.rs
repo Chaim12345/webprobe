@@ -20,11 +20,10 @@ pub(crate) enum GqlStyle {
 pub(crate) fn graphql_query(req: &[u8]) -> Option<(String, GqlStyle)> {
     let p = util::parse_http(req);
     let body = &req[p.head_len.min(req.len())..];
-    if let Ok(serde_json::Value::Object(m)) = serde_json::from_slice::<serde_json::Value>(body) {
-        if let Some(q) = m.get("query").and_then(|q| q.as_str()) {
+    if let Ok(serde_json::Value::Object(m)) = serde_json::from_slice::<serde_json::Value>(body)
+        && let Some(q) = m.get("query").and_then(|q| q.as_str()) {
             return Some((q.to_string(), GqlStyle::Json));
         }
-    }
     let param = |text: &str| {
         text.split('&').find_map(|kv| {
             kv.split_once('=')
@@ -461,8 +460,8 @@ fn strip_auth_headers(raw: &[u8]) -> (Vec<u8>, Vec<String>) {
         if line.is_empty() {
             continue;
         }
-        if i > 0 {
-            if let Some((k, _)) = line.split_once(':') {
+        if i > 0
+            && let Some((k, _)) = line.split_once(':') {
                 let k = k.trim();
                 let drop = k.eq_ignore_ascii_case("authorization")
                     || k.eq_ignore_ascii_case("cookie")
@@ -473,7 +472,6 @@ fn strip_auth_headers(raw: &[u8]) -> (Vec<u8>, Vec<String>) {
                     continue;
                 }
             }
-        }
         out.push_str(line);
         out.push_str("\r\n");
     }
@@ -1899,8 +1897,8 @@ impl PointCheck for PhpCodeInjection {
             send,
             follow,
         );
-        if hit.is_none() {
-            if let Some((id, host)) = &collab {
+        if hit.is_none()
+            && let Some((id, host)) = &collab {
                 // Raised when the id sees a DNS lookup (burp.Zxvv.ZR).
                 let filename = active_checks::php_upload_filename(orig, &token);
                 let issue = mk_point(
@@ -1916,7 +1914,6 @@ impl PointCheck for PhpCodeInjection {
                 .with_evidence(rec.since_last(&filename).into_iter().take(1).collect());
                 cx.shared.oob.register(id.clone(), Some("DNS"), issue);
             }
-        }
         if let Some(hit) = hit {
             let mut ev = rec.since_last(&hit.filename);
             ev.truncate(hit.hop + 1);

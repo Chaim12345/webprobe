@@ -590,11 +590,10 @@ pub fn window(app: &mut App, ctx: &egui::Context) {
             let pages = visible_pages(&query, pill);
             // Keep the selected page while it is visible; otherwise show the
             // first match, so typing in the search box always lands on a page.
-            if !pages.iter().any(|p| p.pane == app.settings_help) {
-                if let Some(first) = pages.first() {
+            if !pages.iter().any(|p| p.pane == app.settings_help)
+                && let Some(first) = pages.first() {
                     app.settings_help = first.pane;
                 }
-            }
             ui.horizontal_top(|ui| {
                 ui.vertical(|ui| {
                     ui.set_width(190.0);

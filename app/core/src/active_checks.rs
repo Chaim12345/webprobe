@@ -291,11 +291,10 @@ pub(crate) fn angular_scopes(body: &str) -> ScopeSpans {
         }
         if closing {
             for (stack, out) in [(&mut app, &mut scopes), (&mut nb, &mut nonbind)] {
-                if let Some(start) = stack.pop() {
-                    if stack.is_empty() {
+                if let Some(start) = stack.pop()
+                    && stack.is_empty() {
                         out.push((start, lt));
                     }
-                }
             }
             continue;
         }

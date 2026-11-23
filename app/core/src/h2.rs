@@ -909,16 +909,15 @@ impl<S: Read + Write> Conn<S> {
         active: u32,
         sink: &mut Option<&mut (dyn crate::streaming::ResponseSink + '_)>,
     ) -> Result<(), StreamError> {
-        if let Some(cs) = self.cont_stream {
-            if !(f.ty == FRAME_CONTINUATION && f.stream == cs) {
+        if let Some(cs) = self.cont_stream
+            && !(f.ty == FRAME_CONTINUATION && f.stream == cs) {
                 return Err(StreamError::fatal(
                     "h2: header block interrupted before CONTINUATION",
                 ));
             }
-        }
         match f.ty {
-            FRAME_SETTINGS => {
-                if f.flags & FLAG_ACK == 0 {
+            FRAME_SETTINGS
+                if f.flags & FLAG_ACK == 0 => {
                     for chunk in f.payload.as_chunks::<6>().0 {
                         let id = u16::from_be_bytes([chunk[0], chunk[1]]);
                         let val = u32::from_be_bytes([chunk[2], chunk[3], chunk[4], chunk[5]]);
@@ -943,7 +942,7 @@ impl<S: Read + Write> Conn<S> {
                             SETTINGS_MAX_CONCURRENT_STREAMS => {
                                 self.peer_max_streams = Some(val);
                             }
-                            SETTINGS_HEADER_TABLE_SIZE => {
+                            SETTINGS_HEADER_TABLE_SIZE
                                 // The hpack 0.3 encoder cannot resize its
                                 // dynamic table, so a peer reduction below
                                 // the 4096 default cannot be honored on this
@@ -951,10 +950,9 @@ impl<S: Read + Write> Conn<S> {
                                 // then retire it (never pooled, no new
                                 // streams). A fresh connection re-encodes
                                 // with an empty dynamic table.
-                                if (val as usize) < 4096 {
+                                if (val as usize) < 4096 => {
                                     self.retired = true;
                                 }
-                            }
                             _ => {}
                         }
                     }
@@ -962,7 +960,6 @@ impl<S: Read + Write> Conn<S> {
                     write_frame(&mut self.io, FRAME_SETTINGS, FLAG_ACK, 0, &[])
                         .map_err(|e| StreamError::fatal(format!("h2 settings ack: {e}")))?;
                 }
-            }
             FRAME_PING => {
                 if f.payload.len() != 8 {
                     return Err(StreamError::fatal("h2: PING with wrong length"));
@@ -996,10 +993,10 @@ impl<S: Read + Write> Conn<S> {
                     return Err(StreamError::GoAway { code, last });
                 }
             }
-            FRAME_PUSH_PROMISE => {
+            FRAME_PUSH_PROMISE
                 // We advertised ENABLE_PUSH=0; refuse any promised stream
                 // instead of choking on it (a short payload must not panic).
-                if f.payload.len() >= 4 {
+                if f.payload.len() >= 4 => {
                     let promised = u32::from_be_bytes([
                         f.payload[0],
                         f.payload[1],
@@ -1017,7 +1014,6 @@ impl<S: Read + Write> Conn<S> {
                         .ok();
                     }
                 }
-            }
             FRAME_PRIORITY => {}
             FRAME_WINDOW_UPDATE => {
                 let inc = window_increment(&f)?;
@@ -1403,11 +1399,10 @@ pub fn request_from_raw(raw: &[u8], scheme: &str) -> Option<H2Request> {
     let chunked = crate::util::get_header(&parts.headers, "Transfer-Encoding")
         .map(|v| v.to_ascii_lowercase().contains("chunked"))
         .unwrap_or(false);
-    if chunked {
-        if let Some((decoded, _)) = crate::codec::decode_chunked(&body) {
+    if chunked
+        && let Some((decoded, _)) = crate::codec::decode_chunked(&body) {
             body = decoded;
         }
-    }
     Some(H2Request {
         method: parts.method.clone(),
         scheme: scheme.to_string(),
@@ -2212,7 +2207,7 @@ mod tests {
         assert!(conn.committed(), "all head bytes were written: committed");
         assert!(!err.retryable(), "unknown outcome is not a safe replay");
         // The pool replay predicate is retryable || !committed: neither holds.
-        assert!(!(!conn.committed() || err.retryable()));
+        assert!(conn.committed() && !err.retryable());
         let written = conn.get_mut().buf.len();
         assert!(
             written > 24 + 9 + 9,

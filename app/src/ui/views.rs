@@ -149,15 +149,14 @@ pub(crate) fn comparer(app: &mut App, ui: &mut Ui) {
                         .hint_text("file path")
                         .desired_width(btn_w),
                 );
-                if b(ui, "Remove") {
-                    if let Some(i) = app.comparer.sel1.or(app.comparer.sel2) {
+                if b(ui, "Remove")
+                    && let Some(i) = app.comparer.sel1.or(app.comparer.sel2) {
                         if i < app.comparer.items.len() {
                             app.comparer.items.remove(i);
                         }
                         app.comparer.sel1 = None;
                         app.comparer.sel2 = None;
                     }
-                }
                 if b(ui, "Clear") {
                     app.comparer.items.clear();
                     app.comparer.sel1 = None;
@@ -946,11 +945,9 @@ pub(crate) fn organizer_view(app: &mut App, ui: &mut Ui) {
                         if ui
                             .add_enabled(app.org_sel.is_some(), egui::Button::new("Delete"))
                             .clicked()
-                        {
-                            if let Some(id) = app.org_sel.take() {
+                            && let Some(id) = app.org_sel.take() {
                                 app.shared.organizer.lock().unwrap().remove(id);
                             }
-                        }
                     });
                 });
                 let tabs: &[&str] = if is_inbox {

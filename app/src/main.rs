@@ -486,14 +486,13 @@ fn response_mime(entry: &net::HistEntry) -> String {
         let head_end = util::find_head_end(resp).unwrap_or(resp.len());
         let head = String::from_utf8_lossy(&resp[..head_end]);
         for line in head.split("\r\n").flat_map(|l| l.split('\n')) {
-            if let Some((name, value)) = line.split_once(':') {
-                if name.trim().eq_ignore_ascii_case("content-type") {
+            if let Some((name, value)) = line.split_once(':')
+                && name.trim().eq_ignore_ascii_case("content-type") {
                     let essence = value.split(';').next().unwrap_or("").trim().to_lowercase();
                     if !essence.is_empty() {
                         return essence;
                     }
                 }
-            }
         }
     }
     entry.extension.clone()

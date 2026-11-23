@@ -197,15 +197,14 @@ pub fn csrf_static_token_hit(
     }
     let html = String::from_utf8_lossy(&resp[p.head_len.min(resp.len())..]);
     for (name, original) in &originals {
-        if let Some(fresh) = form_token_value(&html, name) {
-            if !fresh.is_empty() && fresh == *original {
+        if let Some(fresh) = form_token_value(&html, name)
+            && !fresh.is_empty() && fresh == *original {
                 return Some(StaticTokenHit {
                     param: name.clone(),
                     value: fresh,
                     exchange: ScanEvidence::new(get_req.as_bytes(), Some(&resp[..])),
                 });
             }
-        }
     }
     None
 }

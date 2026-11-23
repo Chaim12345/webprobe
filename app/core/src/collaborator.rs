@@ -1045,13 +1045,12 @@ fn parse_http_request(buf: &[u8]) -> Result<ParsedHttpRequest, HttpParseError> {
             let length: usize = value.parse().map_err(|_| {
                 HttpParseError::Malformed(format!("invalid Content-Length value: {value}"))
             })?;
-            if let Some(previous) = content_length {
-                if previous != length {
+            if let Some(previous) = content_length
+                && previous != length {
                     return Err(HttpParseError::Malformed(
                         "conflicting Content-Length headers".to_string(),
                     ));
                 }
-            }
             content_length = Some(length);
         }
     }

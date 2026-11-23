@@ -138,8 +138,8 @@ pub fn session_request<'a>(
 
 /// Post-request macros for the tool working on this thread.
 pub fn session_after(shared: &Shared, host: &str) {
-    if let Some(tool) = TOOL.with(|t| t.get()) {
-        if !shared.session_rules.lock().unwrap().is_empty() {
+    if let Some(tool) = TOOL.with(|t| t.get())
+        && !shared.session_rules.lock().unwrap().is_empty() {
             // Macros send requests on this thread; each exchange rewrites the
             // "last exchange was reusable" flag the proxy engine reads for the
             // OUTER response. Keep the outer result across them.
@@ -147,7 +147,6 @@ pub fn session_after(shared: &Shared, host: &str) {
             run_post_request_rules(shared, tool, host);
             LAST_EXCHANGE_REUSABLE.with(|c| c.set(outer));
         }
-    }
 }
 
 /// Feed a tool's response to the cookie jar when the jar monitors that tool.

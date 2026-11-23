@@ -985,14 +985,13 @@ pub fn start(
     {
         let (shared, state) = (shared.clone(), state.clone());
         crate::rt::engine().spawn(async move {
-            if let Err(e) = dispatcher.await {
-                if e.is_panic() {
+            if let Err(e) = dispatcher.await
+                && e.is_panic() {
                     crate::notice::toast(
                         crate::notice::Level::Warn,
                         "engine task 'intruder_run' panicked; the attack ended, the session continues",
                     );
                 }
-            }
             state.running.store(false, Ordering::SeqCst);
             // Aborting async probe wrappers does not stop their blocking
             // bodies. is_running() keeps the run claimed until they drain.

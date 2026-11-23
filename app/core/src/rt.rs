@@ -78,8 +78,8 @@ impl EngineRt {
             loop {
                 tokio::select! {
                     r = &mut body => {
-                        if let Err(e) = r {
-                            if e.is_panic() {
+                        if let Err(e) = r
+                            && e.is_panic() {
                                 crate::notice::toast(
                                     crate::notice::Level::Warn,
                                     format!(
@@ -87,7 +87,6 @@ impl EngineRt {
                                     ),
                                 );
                             }
-                        }
                         break;
                     }
                     _ = tokio::time::sleep(Duration::from_millis(25)) => {

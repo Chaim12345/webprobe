@@ -669,11 +669,10 @@ fn browser_recovery_window(app: &mut crate::App, ctx: &egui::Context) {
             ui.label("Log in again in the browser (its traffic goes through the proxy and refreshes the cookie jar), then click Done. The waiting request is then sent with the new session.");
             ui.add_space(8.0);
             ui.horizontal(|ui| {
-                if ui.button("Open browser").clicked() {
-                    if let Err(e) = crate::tools::launch_preconfigured_browser(&app.shared) {
+                if ui.button("Open browser").clicked()
+                    && let Err(e) = crate::tools::launch_preconfigured_browser(&app.shared) {
                         crate::feedback::toast(crate::feedback::Level::Error, e);
                     }
-                }
                 if ui.button("Done").clicked() {
                     app.shared.browser_recovery.answer(true);
                 }

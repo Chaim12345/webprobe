@@ -183,11 +183,9 @@ impl HistoryFilter {
             .chars()
             .next()
             .and_then(|c| c.to_digit(10))
-        {
-            if (2..=5).contains(&d) && !self.show_status[(d - 2) as usize] {
+            && (2..=5).contains(&d) && !self.show_status[(d - 2) as usize] {
                 return false;
             }
-        }
         if self.hide_without_response && entry.resp_raw.is_none() {
             return false;
         }
@@ -242,8 +240,8 @@ impl HistoryFilter {
         };
         let parts = crate::util::parse_http(resp);
         let value = crate::util::get_header(&parts.headers, "Content-Type").unwrap_or_default();
-        let essence = value.split(';').next().unwrap_or("").trim().to_lowercase();
-        essence
+        
+        value.split(';').next().unwrap_or("").trim().to_lowercase()
     }
 
     pub fn matches(&self, entry: &HistEntry, shared: &std::sync::Arc<net::Shared>) -> bool {

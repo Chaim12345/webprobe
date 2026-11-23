@@ -79,8 +79,8 @@ fn reviewer_live_get_post_chunked_and_single_request_matrix() {
             for h in handlers {
                 h.join().unwrap();
             }
-            let out = seen.lock().unwrap().clone();
-            out
+            
+            seen.lock().unwrap().clone()
         });
         let (pp, worker) = proxy(shared.clone());
         let mut c = client(pp);

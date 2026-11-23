@@ -1428,11 +1428,10 @@ pub fn save(path: &Path, data: &ProjectData) -> Result<(), ProjectError> {
     // First run: the default project lives in the per-user data directory,
     // which does not exist yet. Create it so autosave works instead of
     // failing with "No such file or directory" on every tick.
-    if let Some(dir) = path.parent().filter(|dir| !dir.as_os_str().is_empty()) {
-        if !dir.exists() {
+    if let Some(dir) = path.parent().filter(|dir| !dir.as_os_str().is_empty())
+        && !dir.exists() {
             let _ = std::fs::create_dir_all(dir);
         }
-    }
     // The temp file is deleted only after create_new succeeds; a failing open
     // must not remove an unrelated file that blocked the unique name.
     let file = match std::fs::OpenOptions::new()

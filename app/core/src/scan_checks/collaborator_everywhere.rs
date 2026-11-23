@@ -232,8 +232,8 @@ impl RequestCheck for CollaboratorEverywhere {
                 cx.shared
                     .oob
                     .register_delivered(token.clone(), None, issue, delivery);
-                if let Some(r) = resp.as_deref() {
-                    if inband_hit(r, &token) {
+                if let Some(r) = resp.as_deref()
+                    && inband_hit(r, &token) {
                         let mut i = oob_resource_load_issue(
                             &cx.entry,
                             &crate::oob::delivery_sentence("The payload", shown, label, ""),
@@ -243,7 +243,6 @@ impl RequestCheck for CollaboratorEverywhere {
                         i.path = "/".into();
                         cx.report(vec![i]);
                     }
-                }
             }
         }
     }

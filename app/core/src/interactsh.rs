@@ -234,11 +234,10 @@ fn https_request_with(
     let mut payload = resp[p.head_len.min(resp.len())..].to_vec();
     let chunked = crate::util::get_header(&p.headers, "Transfer-Encoding")
         .is_some_and(|v| v.to_ascii_lowercase().contains("chunked"));
-    if chunked {
-        if let Some((decoded, _)) = crate::codec::decode_chunked(&payload) {
+    if chunked
+        && let Some((decoded, _)) = crate::codec::decode_chunked(&payload) {
             payload = decoded;
         }
-    }
     Ok((status, payload))
 }
 

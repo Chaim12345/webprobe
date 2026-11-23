@@ -935,8 +935,7 @@ pub fn prssi(resp: &[u8]) -> Option<(u32, Vec<String>)> {
         if attr(tag_low, "rel")
             .map(|r| r.trim() == "stylesheet")
             .unwrap_or(false)
-        {
-            if let Some(h) = attr(tag, "href") {
+            && let Some(h) = attr(tag, "href") {
                 let v = h.trim().to_ascii_lowercase();
                 let relative = if v.starts_with("./") || v.starts_with("../") {
                     true
@@ -955,7 +954,6 @@ pub fn prssi(resp: &[u8]) -> Option<(u32, Vec<String>)> {
                     hrefs.push(h.trim().to_string());
                 }
             }
-        }
         i = e.max(s + 5);
     }
     if hrefs.is_empty() {

@@ -278,13 +278,12 @@ pub(crate) fn links(cx: &PassiveCtx) -> Vec<Link> {
             let Some(v) = attr(lt, t, a) else { continue };
             let v = util::html_decode(&v).trim().replace(' ', "%20");
             let head: String = v.chars().take(12).collect();
-            if let Some(colon) = head.find(':').filter(|&c| c > 0) {
-                if !["http", "https", "ws", "wss"]
+            if let Some(colon) = head.find(':').filter(|&c| c > 0)
+                && !["http", "https", "ws", "wss"]
                     .contains(&head[..colon].to_ascii_lowercase().as_str())
                 {
                     continue;
                 }
-            }
             if v == "." || v == ".." {
                 continue;
             }
@@ -1063,11 +1062,10 @@ fn decoded_param(p: &Param) -> Vec<u8> {
     } else {
         p.raw.as_bytes().to_vec()
     };
-    if is_base64(&b) {
-        if let Ok(d) = util::b64_decode(&latin1(&b)) {
+    if is_base64(&b)
+        && let Ok(d) = util::b64_decode(&latin1(&b)) {
             return d;
         }
-    }
     b
 }
 

@@ -589,14 +589,12 @@ fn parse_hole(
             c if c.is_ascii_alphanumeric() || c == '_' || c == '-' => {
                 // merge with previous ident-ish token when adjacent
                 let s = c.to_string();
-                if let Some(last) = depth_toks.last_mut() {
-                    if let Tok::Ident(prev) = &mut last.tok {
-                        if !prev.ends_with('.') && prev != "\\" && is_identish(prev) {
+                if let Some(last) = depth_toks.last_mut()
+                    && let Tok::Ident(prev) = &mut last.tok
+                        && !prev.ends_with('.') && prev != "\\" && is_identish(prev) {
                             prev.push_str(&s);
                             continue;
                         }
-                    }
-                }
                 depth_toks.push(Lexed {
                     tok: Tok::Ident(s),
                     line,
@@ -945,11 +943,10 @@ impl Parser {
                     {
                         break;
                     }
-                    if let Some(Tok::Ident(s)) = self.peek() {
-                        if is_block_keyword(s) {
+                    if let Some(Tok::Ident(s)) = self.peek()
+                        && is_block_keyword(s) {
                             break;
                         }
-                    }
                     if !matches!(
                         self.peek(),
                         Some(Tok::Str { .. }) | Some(Tok::LBrace) | Some(Tok::Ident(_))
@@ -1709,22 +1706,20 @@ pub fn validate(d: &Definition) -> Result<(), Vec<BcheckError>> {
                 }
                 Stmt::ReportIssue { fields, .. } => {
                     // bare and single-literal quoted spellings both checked
-                    if let Some(sev) = literal_text(&fields.severity) {
-                        if !SEVERITIES.contains(&sev.as_str()) {
+                    if let Some(sev) = literal_text(&fields.severity)
+                        && !SEVERITIES.contains(&sev.as_str()) {
                             errs.push(BcheckError {
                                 line: fields.line,
                                 message: format!("bad severity `{sev}`"),
                             });
                         }
-                    }
-                    if let Some(cf) = literal_text(&fields.confidence) {
-                        if !CONFIDENCES.contains(&cf.as_str()) {
+                    if let Some(cf) = literal_text(&fields.confidence)
+                        && !CONFIDENCES.contains(&cf.as_str()) {
                             errs.push(BcheckError {
                                 line: fields.line,
                                 message: format!("bad confidence `{cf}`"),
                             });
                         }
-                    }
                 }
                 Stmt::If { arms } => {
                     for (_, body) in arms {

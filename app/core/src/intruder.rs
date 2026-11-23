@@ -1836,11 +1836,10 @@ pub fn count_specs(kind: AttackType, positions: usize, specs: &[SetSpec]) -> Opt
 /// Fill copy positions from their source position.
 fn apply_copies(values: &mut [Option<&str>], specs: &[SetSpec]) {
     for (i, spec) in specs.iter().enumerate() {
-        if let SetSpec::Copy(src) = spec {
-            if i < values.len() {
+        if let SetSpec::Copy(src) = spec
+            && i < values.len() {
                 values[i] = values.get(*src).copied().flatten();
             }
-        }
     }
 }
 
@@ -2266,11 +2265,10 @@ pub fn process_set(set: &[String], rules: &[Processor]) -> Vec<String> {
             if !seen.insert(value.clone()) {
                 continue;
             }
-            if let Some(max) = unique.filter(|max| *max > 0) {
-                if out.len() >= max {
+            if let Some(max) = unique.filter(|max| *max > 0)
+                && out.len() >= max {
                     continue;
                 }
-            }
         }
         out.push(value);
     }
@@ -2418,7 +2416,7 @@ pub fn order_step(
     recent: bool,
     dirty: bool,
 ) -> OrderStep {
-    if new == old && !(dirty && !recent) {
+    if new == old && (!dirty || recent) {
         return OrderStep::Keep;
     }
     let (old_len, old_col, old_asc) = old;
