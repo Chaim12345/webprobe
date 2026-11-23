@@ -1,5 +1,14 @@
 # Review and decision ledger
 
+## Current local-CI findings, Nov23 08:39
+
+Candidate3384d3c remains unchanged. QA08:17 workspace first run:1001 passed/1 failed, then aborted. probe_pool_bounds_concurrency_and_rows_drain failed its in-flight bound assertion at intruder_run.rs:2068. This is not the earlier EINTR failure; cause is unverified. Standalone and clean full-suite reruns are required before disposition. Job2 JVM gate failed because the runner omitted JAVA_HOME despite JDK21 on PATH; harness error is separate from product failure and requires corrected rerun. Final UI has not started.
+
+QA08:27-08:38 reports core check/no-run/clippy green, Montoya selector3 executed, JDK21 Bambda13/0, Repeater33/0 plus fmt/no-run/clippy clean. JDK25 extras running. Prior Montoya4 report versus current3 needs reconciliation, not an inferred source removal, because candidate delta is codec-only. These partial passes are not full CI acceptance.
+
+Triage06:42 reports exact172 source0d2528e and landed paritycf28b6d local workspace1111/0/14 each, core check/no-run/clippy and JVM validator12/12 plus5 required contracts each. Rust1.100/JDK21 pinned jar checksum verified; prior JDK25 gates also passed. Hosted checkout/cache/apt actions were not reproduced as hosted actions. This closes source/parity local test-command work, not final3384d3c acceptance.
+
+
 ## Current gate reset, Nov23 06:36
 
 #172 is landed at parity `cf28b6d982d7837921de1c759b27caf12d24a102`. Exact fix head0d2528e was rechecked; triage06:28 reports recreated/remote tree equality and1111/0/14. The owner gave a standing instruction to land without hosted CI at06:27:32, then required local CI at06:27:37. Original authenticated WhatsApp messages recovered. This supersedes the earlier171-only limit, without waiving local verification, source approval or final combined-tree/UI acceptance. No billing changes.

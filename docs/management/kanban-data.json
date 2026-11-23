@@ -1,5 +1,5 @@
 {
-  "as_of": "2026-11-23T06:36:00+02:00",
+  "as_of": "2026-11-23T08:39:00+02:00",
   "open_pr_count": 113,
   "parity": "cf28b6d982d7837921de1c759b27caf12d24a102",
   "candidate": "3384d3c4abf364b427d9e6c45e45fc0c05dea813",
@@ -18,7 +18,7 @@
       "owner": "Triage / reviewer",
       "gate": "Parity cf28b6d contains fix",
       "detail": "Source0d2528e; standalone/merge1111/0/14 reported and tested/remote identity matched.",
-      "next": "Complete added source/parity local CI."
+      "next": "Source/parity local CI complete06:42."
     },
     {
       "column": "verified",
@@ -33,8 +33,8 @@
       "title": "Full workflow jobs locally",
       "owner": "QA / release",
       "gate": "Running on3384d3c",
-      "detail": "Fmt/clippy clean; workspace running. JDK21 workflow fidelity plus JDK25 extras.",
-      "next": "Finish workspace/JVM/core/Bambda/Repeater."
+      "detail": "Workspace1001/1 aborted: concurrency-bound assertion. Cause unverified. Fmt/clippy clean.",
+      "next": "Standalone + full suite reruns; finish extras."
     },
     {
       "column": "active",
@@ -89,8 +89,8 @@
       "title": "Local CI fidelity gaps",
       "owner": "QA / triage",
       "gate": "Report non-reproducible portions",
-      "detail": "172 landed before local-CI expansion; source/parity exact job runs added.",
-      "next": "Identify missing hosted-only checks honestly."
+      "detail": "172 source/parity local commands passed1111/0/14 each; final JVM JAVA_HOME harness error.",
+      "next": "Correct JAVA_HOME/rerun; reconcile Montoya3 vs prior4."
     },
     {
       "column": "blocked",
@@ -1354,7 +1354,7 @@
       "number": 160,
       "title": "Refresh program board after safety landings",
       "url": "https://github.com/Chaim12345/webprobe/pull/160",
-      "head": "b0ac27275cf15a559f5ee6d2190f456d9a2c9442",
+      "head": "d13ff72b46aabeba50a6ab4ca8e23f64cbbfc03e",
       "owner": "Program Manager",
       "column": "active",
       "gate": "New visual board needs docs review",
