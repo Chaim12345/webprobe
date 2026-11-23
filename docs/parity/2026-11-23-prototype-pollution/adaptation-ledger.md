@@ -74,3 +74,21 @@ response completeness and Scanner UI status records. Formatting-only changes
 to inherited runtime/status files are separated from semantic adaptation.
 No parser integration, UI-pixel verification, full-suite acceptance, parity
 landing or historical-source closure is claimed by this refresh.
+
+## Canonical-format replacement of #197
+
+Replacement base: 7b7483f58b63c4c3e7321e26c35c5f769b072d1b.
+Branch: team/proto-pollution-v2-20261123. The identity checkpoint
+3190ff991f25a91b9b53582fa828c11c14e78477 has exactly the same complete
+Git tree as original #197 head 38e8e8ae60d903e29c72700c049364a45d25685a:
+63de527177ec5f7523451be3651b5fd89fe0a24a. The original inherited-format
+commit is therefore not replayed. Semantic preparation commits are
+consolidated without changing their final source; this note is a separate
+documentation-only change after that identity checkpoint. The source #197
+and #180 histories remain unchanged. No #188 tests or parser integration
+are included. Triage owns composition and eventual closure.
+
+Refreshed verification on the identity checkpoint: fmt check and core-test
+clippy with warnings denied pass; six targeted tests pass, including both
+stopped-dispatch tests and live-browser pollution+XSS cancellation. Full
+suite and UI-pixel verification are still pending and not claimed here.
