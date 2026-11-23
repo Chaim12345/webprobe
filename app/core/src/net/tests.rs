@@ -3899,3 +3899,309 @@ fn connect_tunnel_two_pipelined_requests_keep_byte_exact_order() {
     assert_eq!([first, second], [1, 2], "origin saw the requests in order");
     assert_eq!(shared.history.len(), 2, "each request recorded exactly once");
 }
+
+#[test]
+fn connect_tunnel_malformed_chunked_body_is_captured_not_forwarded() {
+    // An undelimitable chunked body inside a tunnel is captured with the
+    // malformed note and never reaches the origin, like a direct connection.
+    let shared = Shared::new();
+    let origin = TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin_port = origin.local_addr().unwrap().port();
+    let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+    let proxy_port = proxy.local_addr().unwrap().port();
+    let sh = shared.clone();
+    let proxy_thread = std::thread::spawn(move || {
+        let (s, _) = proxy.accept().unwrap();
+        handle_conn(sh, s);
+    });
+    let mut client = TcpStream::connect(("127.0.0.1", proxy_port)).unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    write!(
+        client,
+        "CONNECT 127.0.0.1:{origin_port} HTTP/1.1\r\nHost: 127.0.0.1:{origin_port}\r\n\r\n"
+    )
+    .unwrap();
+    let head = read_response_head(&mut client).unwrap();
+    assert!(String::from_utf8_lossy(&head).starts_with("HTTP/1.1 200"));
+    write!(
+        client,
+        "POST /up HTTP/1.1\r\nHost: 127.0.0.1:{origin_port}\r\nTransfer-Encoding: chunked\r\n\r\nzz\r\n"
+    )
+    .unwrap();
+    // The capture path answers nothing and closes.
+    let mut sink = Vec::new();
+    let _ = client.read_to_end(&mut sink);
+    assert!(sink.is_empty(), "a captured request gets no response");
+    proxy_thread.join().unwrap();
+    assert_eq!(shared.history.len(), 1, "the capture is recorded");
+    let history = shared.history.snapshot();
+    assert_eq!(
+        history[0].note.as_deref(),
+        Some("Malformed chunked request body")
+    );
+    origin.set_nonblocking(true).unwrap();
+    assert!(
+        origin.accept().is_err(),
+        "a malformed request is never forwarded"
+    );
+}
+
+#[test]
+fn connect_tunnel_incomplete_request_is_captured_on_client_close() {
+    // A client that closes mid-request inside a tunnel leaves a captured
+    // entry with the incomplete note; nothing reaches the origin.
+    let shared = Shared::new();
+    let origin = TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin_port = origin.local_addr().unwrap().port();
+    let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+    let proxy_port = proxy.local_addr().unwrap().port();
+    let sh = shared.clone();
+    let proxy_thread = std::thread::spawn(move || {
+        let (s, _) = proxy.accept().unwrap();
+        handle_conn(sh, s);
+    });
+    let mut client = TcpStream::connect(("127.0.0.1", proxy_port)).unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    write!(
+        client,
+        "CONNECT 127.0.0.1:{origin_port} HTTP/1.1\r\nHost: 127.0.0.1:{origin_port}\r\n\r\n"
+    )
+    .unwrap();
+    let head = read_response_head(&mut client).unwrap();
+    assert!(String::from_utf8_lossy(&head).starts_with("HTTP/1.1 200"));
+    write!(
+        client,
+        "GET /part HTTP/1.1\r\nHost: 127.0.0.1:{origin_port}\r\n"
+    )
+    .unwrap();
+    client.shutdown(std::net::Shutdown::Write).unwrap();
+    let mut sink = Vec::new();
+    let _ = client.read_to_end(&mut sink);
+    proxy_thread.join().unwrap();
+    assert_eq!(shared.history.len(), 1, "the partial request is captured");
+    let history = shared.history.snapshot();
+    assert_eq!(
+        history[0].note.as_deref(),
+        Some("Incomplete request: the client closed before the message ended")
+    );
+    origin.set_nonblocking(true).unwrap();
+    assert!(
+        origin.accept().is_err(),
+        "an incomplete request is never forwarded"
+    );
+}
+
+#[test]
+fn connect_tunnel_terminal_close_drains_a_pipelined_follow_up() {
+    // A request with Connection: close ends the tunnel exchange: a pipelined
+    // follow-up is drained, not served, and records no history.
+    let shared = Shared::new();
+    let origin = TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin_port = origin.local_addr().unwrap().port();
+    let served = Arc::new(AtomicUsize::new(0));
+    let cnt = served.clone();
+    let server = std::thread::spawn(move || {
+        let (mut s, _) = origin.accept().unwrap();
+        s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+        loop {
+            let r = read_request_head(&mut s);
+            if r.is_empty() {
+                break;
+            }
+            cnt.fetch_add(1, Ordering::SeqCst);
+            s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 3\r\nConnection: close\r\n\r\none")
+                .unwrap();
+        }
+    });
+    let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+    let proxy_port = proxy.local_addr().unwrap().port();
+    let sh = shared.clone();
+    let proxy_thread = std::thread::spawn(move || {
+        let (s, _) = proxy.accept().unwrap();
+        handle_conn(sh, s);
+    });
+    let mut client = TcpStream::connect(("127.0.0.1", proxy_port)).unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    write!(
+        client,
+        "CONNECT 127.0.0.1:{origin_port} HTTP/1.1\r\nHost: 127.0.0.1:{origin_port}\r\n\r\n"
+    )
+    .unwrap();
+    let head = read_response_head(&mut client).unwrap();
+    assert!(String::from_utf8_lossy(&head).starts_with("HTTP/1.1 200"));
+    write!(
+        client,
+        "GET /one HTTP/1.1\r\nHost: 127.0.0.1:{origin_port}\r\nConnection: close\r\n\r\nGET /two HTTP/1.1\r\nHost: 127.0.0.1:{origin_port}\r\n\r\n"
+    )
+    .unwrap();
+    let head = read_response_head(&mut client).expect("terminal request not served");
+    assert!(
+        String::from_utf8_lossy(&head).starts_with("HTTP/1.1 200"),
+        "got: {}",
+        String::from_utf8_lossy(&head)
+    );
+    let mut body = [0u8; 3];
+    client.read_exact(&mut body).unwrap();
+    assert_eq!(&body, b"one");
+    // After the terminal-close response the tunnel closes: no second response.
+    let mut sink = Vec::new();
+    let _ = client.read_to_end(&mut sink);
+    assert!(sink.is_empty(), "the pipelined follow-up is not answered");
+    proxy_thread.join().unwrap();
+    server.join().unwrap();
+    assert_eq!(
+        served.load(Ordering::SeqCst),
+        1,
+        "the follow-up never reached the origin"
+    );
+    assert_eq!(shared.history.len(), 1, "only the served request is recorded");
+}
+
+#[test]
+fn connect_tunnel_websocket_refusal_is_relayed_recorded_and_closed() {
+    // An origin that refuses the in-tunnel upgrade owns the outcome: the
+    // refusal reaches the client, the handshake is recorded, and the proxy
+    // does not enter the frame relay.
+    let shared = Shared::new();
+    let origin = TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin_port = origin.local_addr().unwrap().port();
+    let server = std::thread::spawn(move || {
+        let (mut s, _) = origin.accept().unwrap();
+        s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+        let _ = read_request_head(&mut s);
+        s.write_all(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            .unwrap();
+    });
+    let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+    let proxy_port = proxy.local_addr().unwrap().port();
+    let sh = shared.clone();
+    let proxy_thread = std::thread::spawn(move || {
+        let (s, _) = proxy.accept().unwrap();
+        handle_conn(sh, s);
+    });
+    let mut client = TcpStream::connect(("127.0.0.1", proxy_port)).unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    write!(
+        client,
+        "CONNECT 127.0.0.1:{origin_port} HTTP/1.1\r\nHost: 127.0.0.1:{origin_port}\r\n\r\n"
+    )
+    .unwrap();
+    let head = read_response_head(&mut client).unwrap();
+    assert!(String::from_utf8_lossy(&head).starts_with("HTTP/1.1 200"));
+    write!(
+        client,
+        "GET /ws HTTP/1.1\r\nHost: 127.0.0.1:{origin_port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
+    )
+    .unwrap();
+    let head = read_response_head(&mut client).expect("refusal not relayed");
+    assert!(
+        String::from_utf8_lossy(&head).starts_with("HTTP/1.1 403"),
+        "got: {}",
+        String::from_utf8_lossy(&head)
+    );
+    let mut sink = Vec::new();
+    let _ = client.read_to_end(&mut sink);
+    proxy_thread.join().unwrap();
+    server.join().unwrap();
+    assert_eq!(shared.history.len(), 1, "the refused handshake is recorded");
+}
+
+#[test]
+fn connect_tunnel_requests_resolve_by_their_own_destination() {
+    // Cleartext in a tunnel resolves like a direct connection: the request's
+    // Host / absolute-form picks the destination, not the CONNECT authority
+    // (the authority only defaults the port). Both forms reach the named
+    // origin; the authority's server sees nothing.
+    let shared = Shared::new();
+    let authority_origin = TcpListener::bind("127.0.0.1:0").unwrap();
+    let authority_port = authority_origin.local_addr().unwrap().port();
+    let origin = TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin_port = origin.local_addr().unwrap().port();
+    let server = std::thread::spawn(move || {
+        for _ in 0..2 {
+            let Ok((mut s, _)) = origin.accept() else { break };
+            std::thread::spawn(move || {
+                let _ = s.set_read_timeout(Some(Duration::from_secs(10)));
+                loop {
+                    let r = read_request_head(&mut s);
+                    // The proxy converts absolute-form to origin-form upstream.
+                    if r.starts_with(b"GET /abs HTTP/1.1") {
+                        s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nabs")
+                            .unwrap();
+                    } else if r.starts_with(b"GET /other HTTP/1.1") {
+                        s.write_all(
+                            b"HTTP/1.1 200 OK\r\nContent-Length: 3\r\nConnection: close\r\n\r\norg",
+                        )
+                        .unwrap();
+                        break;
+                    } else {
+                        break;
+                    }
+                }
+            });
+        }
+    });
+    let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+    let proxy_port = proxy.local_addr().unwrap().port();
+    let sh = shared.clone();
+    let proxy_thread = std::thread::spawn(move || {
+        let (s, _) = proxy.accept().unwrap();
+        handle_conn(sh, s);
+    });
+    let mut client = TcpStream::connect(("127.0.0.1", proxy_port)).unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    write!(
+        client,
+        "CONNECT 127.0.0.1:{authority_port} HTTP/1.1\r\nHost: 127.0.0.1:{authority_port}\r\n\r\n"
+    )
+    .unwrap();
+    let head = read_response_head(&mut client).unwrap();
+    assert!(String::from_utf8_lossy(&head).starts_with("HTTP/1.1 200"));
+    write!(
+        client,
+        "GET http://127.0.0.1:{origin_port}/abs HTTP/1.1\r\nHost: 127.0.0.1:{origin_port}\r\n\r\n"
+    )
+    .unwrap();
+    let head = read_response_head(&mut client).expect("absolute-form request not served");
+    assert!(
+        String::from_utf8_lossy(&head).starts_with("HTTP/1.1 200"),
+        "got: {}",
+        String::from_utf8_lossy(&head)
+    );
+    let mut body = [0u8; 3];
+    client.read_exact(&mut body).unwrap();
+    assert_eq!(&body, b"abs");
+    write!(
+        client,
+        "GET /other HTTP/1.1\r\nHost: 127.0.0.1:{origin_port}\r\nConnection: close\r\n\r\n"
+    )
+    .unwrap();
+    let head = read_response_head(&mut client).expect("origin-form request not served");
+    assert!(String::from_utf8_lossy(&head).starts_with("HTTP/1.1 200"));
+    let mut body = [0u8; 3];
+    client.read_exact(&mut body).unwrap();
+    assert_eq!(&body, b"org");
+    proxy_thread.join().unwrap();
+    server.join().unwrap();
+    assert_eq!(shared.history.len(), 2);
+    let history = shared.history.snapshot();
+    assert_eq!(history[0].path, "/abs");
+    assert_eq!(history[0].port, origin_port);
+    assert_eq!(history[1].path, "/other");
+    assert_eq!(history[1].port, origin_port);
+    authority_origin.set_nonblocking(true).unwrap();
+    assert!(
+        authority_origin.accept().is_err(),
+        "the CONNECT authority is not the destination"
+    );
+}
