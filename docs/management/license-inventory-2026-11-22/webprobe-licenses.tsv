@@ -1,0 +1,746 @@
+ab_glyph	0.2.32	Apache-2.0	egui-mcp-client
+ab_glyph_rasterizer	0.1.10	Apache-2.0	egui-mcp-client
+accesskit	0.25.2	MIT OR Apache-2.0	app
+accesskit_atspi_common	0.21.1	MIT OR Apache-2.0	app
+accesskit_consumer	0.39.2	MIT OR Apache-2.0	app
+accesskit_ios	0.2.2	MIT OR Apache-2.0	app
+accesskit_macos	0.27.2	MIT OR Apache-2.0	app
+accesskit_unix	0.24.1	MIT OR Apache-2.0	app
+accesskit_windows	0.35.2	MIT OR Apache-2.0	app
+accesskit_winit	0.34.2	Apache-2.0	app
+adler2	2.0.1	0BSD OR MIT OR Apache-2.0	app,egui-mcp-client,egui-mcp-server
+aes	0.8.4	MIT OR Apache-2.0	app
+ahash	0.8.12	MIT OR Apache-2.0	app,egui-mcp-client
+aho-corasick	1.1.4	Unlicense OR MIT	egui-mcp-server
+aho-corasick	1.1.5	Unlicense OR MIT	app
+aligned	0.4.3	MIT OR Apache-2.0	app,egui-mcp-client,egui-mcp-server
+aligned-vec	0.6.4	MIT	app,egui-mcp-client,egui-mcp-server
+alloc-no-stdlib	2.0.4	BSD-3-Clause	app
+alloc-stdlib	0.2.4	BSD-3-Clause	app
+android-activity	0.6.1	MIT OR Apache-2.0	app
+android-properties	0.2.2	MIT	app
+android_system_properties	0.1.5	MIT/Apache-2.0	egui-mcp-server
+anstream	0.6.21	MIT OR Apache-2.0	egui-mcp-server
+anstyle	1.0.13	MIT OR Apache-2.0	egui-mcp-server
+anstyle-parse	0.2.7	MIT OR Apache-2.0	egui-mcp-server
+anstyle-query	1.1.5	MIT OR Apache-2.0	egui-mcp-server
+anstyle-wincon	3.0.11	MIT OR Apache-2.0	egui-mcp-server
+anyhow	1.0.100	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+anyhow	1.0.104	MIT OR Apache-2.0	app
+arbitrary	1.4.2	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+arbitrary	1.5.0	MIT OR Apache-2.0	app
+arboard	3.7.0	MIT OR Apache-2.0	app
+arg_enum_proc_macro	0.3.4	MIT	app,egui-mcp-client,egui-mcp-server
+arrayvec	0.7.6	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+arrayvec	0.7.8	MIT OR Apache-2.0	app
+as-raw-xcb-connection	1.0.1	MIT OR Apache-2.0	app
+as-slice	0.2.1	MIT OR Apache-2.0	app,egui-mcp-client,egui-mcp-server
+asn1-rs	0.6.2	MIT OR Apache-2.0	app
+asn1-rs-derive	0.5.1	MIT OR Apache-2.0	app
+asn1-rs-impl	0.2.0	MIT/Apache-2.0	app
+async-broadcast	0.7.2	MIT OR Apache-2.0	app,egui-mcp-server
+async-channel	2.5.0	Apache-2.0 OR MIT	app,egui-mcp-server
+async-executor	1.13.3	Apache-2.0 OR MIT	egui-mcp-server
+async-executor	1.14.1	Apache-2.0 OR MIT	app
+async-io	2.6.0	Apache-2.0 OR MIT	app,egui-mcp-server
+async-lock	3.4.2	Apache-2.0 OR MIT	egui-mcp-server
+async-lock	3.5.0	Apache-2.0 OR MIT	app
+async-process	2.5.0	Apache-2.0 OR MIT	app,egui-mcp-server
+async-recursion	1.1.1	MIT OR Apache-2.0	egui-mcp-server
+async-recursion	1.2.0	MIT OR Apache-2.0	app
+async-signal	0.2.13	Apache-2.0 OR MIT	egui-mcp-server
+async-signal	0.2.14	Apache-2.0 OR MIT	app
+async-task	4.7.1	Apache-2.0 OR MIT	app,egui-mcp-server
+async-trait	0.1.89	MIT OR Apache-2.0	egui-mcp-server
+async-trait	0.1.92	MIT OR Apache-2.0	app
+atomic-waker	1.1.2	Apache-2.0 OR MIT	app,egui-mcp-server
+atspi	0.29.0	Apache-2.0 OR MIT	app,egui-mcp-server
+atspi-common	0.13.0	Apache-2.0 OR MIT	app,egui-mcp-server
+atspi-connection	0.13.0	Apache-2.0 OR MIT	egui-mcp-server
+atspi-proxies	0.13.0	Apache-2.0 OR MIT	app,egui-mcp-server
+autocfg	1.5.0	Apache-2.0 OR MIT	egui-mcp-client,egui-mcp-server
+autocfg	1.5.1	Apache-2.0 OR MIT	app
+av-scenechange	0.14.1	MIT	app,egui-mcp-client,egui-mcp-server
+av1-grain	0.2.5	BSD-2-Clause	app,egui-mcp-client,egui-mcp-server
+avif-serialize	0.8.6	BSD-3-Clause	egui-mcp-client,egui-mcp-server
+avif-serialize	0.8.9	BSD-3-Clause	app
+base64	0.22.1	MIT OR Apache-2.0	app,egui-mcp-client,egui-mcp-server
+base64ct	1.8.3	Apache-2.0 OR MIT	app
+bit-set	0.10.0	Apache-2.0 OR MIT	app
+bit-vec	0.9.1	Apache-2.0 OR MIT	app
+bit_field	0.10.3	Apache-2.0/MIT	egui-mcp-client,egui-mcp-server
+bit_field	0.10.4	MIT OR Apache-2.0	app
+bitflags	1.3.2	MIT/Apache-2.0	app
+bitflags	2.10.0	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+bitflags	2.13.2	MIT OR Apache-2.0	app
+bitstream-io	4.10.0	MIT/Apache-2.0	app
+bitstream-io	4.9.0	MIT/Apache-2.0	egui-mcp-client,egui-mcp-server
+block-buffer	0.10.4	MIT OR Apache-2.0	app
+block2	0.5.1	MIT	app
+block2	0.6.2	MIT	app
+blocking	1.6.2	Apache-2.0 OR MIT	egui-mcp-server
+blocking	1.7.0	Apache-2.0 OR MIT	app
+brotli	7.0.0	BSD-3-Clause AND MIT	app
+brotli-decompressor	4.0.3	BSD-3-Clause/MIT	app
+built	0.8.0	MIT	egui-mcp-client,egui-mcp-server
+built	0.8.1	MIT	app
+bumpalo	3.19.1	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+bumpalo	3.20.3	MIT OR Apache-2.0	app
+bytemuck	1.24.0	Zlib OR Apache-2.0 OR MIT	egui-mcp-client,egui-mcp-server
+bytemuck	1.25.2	Zlib OR Apache-2.0 OR MIT	app
+bytemuck_derive	1.12.1	Zlib OR Apache-2.0 OR MIT	app
+byteorder	1.5.0	Unlicense OR MIT	app
+byteorder-lite	0.1.0	Unlicense OR MIT	app,egui-mcp-client,egui-mcp-server
+bytes	1.11.0	MIT	egui-mcp-client,egui-mcp-server
+bytes	1.12.1	MIT	app
+calloop	0.13.0	MIT	app
+calloop	0.14.5	MIT	app
+calloop-wayland-source	0.3.0	MIT	app
+calloop-wayland-source	0.4.1	MIT	app
+cc	1.11.1	MIT OR Apache-2.0	app
+cc	1.2.54	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+cfg-if	1.0.4	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+cfg-if	1.0.5	MIT OR Apache-2.0	app
+cfg_aliases	0.2.2	MIT	app
+cgl	0.3.2	MIT / Apache-2.0	app
+chrono	0.4.43	MIT OR Apache-2.0	egui-mcp-server
+cipher	0.4.4	MIT OR Apache-2.0	app
+clap	4.5.54	MIT OR Apache-2.0	egui-mcp-server
+clap_builder	4.5.54	MIT OR Apache-2.0	egui-mcp-server
+clap_derive	4.5.49	MIT OR Apache-2.0	egui-mcp-server
+clap_lex	0.7.7	MIT OR Apache-2.0	egui-mcp-server
+clipboard-win	5.4.3	BSL-1.0	app
+codespan-reporting	0.13.1	Apache-2.0	app
+color	0.3.3	Apache-2.0 OR MIT	app
+color_quant	1.1.0	MIT	app,egui-mcp-client,egui-mcp-server
+colorchoice	1.0.4	MIT OR Apache-2.0	egui-mcp-server
+combine	4.6.9	MIT	app
+concurrent-queue	2.5.0	Apache-2.0 OR MIT	app,egui-mcp-server
+const-oid	0.9.6	Apache-2.0 OR MIT	app
+core-foundation	0.9.4	MIT OR Apache-2.0	app
+core-foundation-sys	0.8.7	MIT OR Apache-2.0	app,egui-mcp-server
+core-graphics	0.23.2	MIT OR Apache-2.0	app
+core-graphics-types	0.1.3	MIT OR Apache-2.0	app
+core2	0.4.0	Apache-2.0 OR MIT	egui-mcp-client,egui-mcp-server
+cpufeatures	0.2.17	MIT OR Apache-2.0	app
+crc32fast	1.5.0	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+crc32fast	1.5.5	MIT OR Apache-2.0	app
+crossbeam-deque	0.8.6	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+crossbeam-deque	0.8.8	MIT OR Apache-2.0	app
+crossbeam-epoch	0.9.18	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+crossbeam-epoch	0.9.21	MIT OR Apache-2.0	app
+crossbeam-utils	0.8.21	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+crossbeam-utils	0.8.23	MIT OR Apache-2.0	app
+crunchy	0.2.4	MIT	app,egui-mcp-client,egui-mcp-server
+crypto-common	0.1.7	MIT OR Apache-2.0	app
+ctr	0.9.2	MIT OR Apache-2.0	app
+cursor-icon	1.2.0	MIT OR Apache-2.0 OR Zlib	app
+darling	0.23.0	MIT	egui-mcp-server
+darling_core	0.23.0	MIT	egui-mcp-server
+darling_macro	0.23.0	MIT	egui-mcp-server
+data-encoding	2.11.1	MIT	app
+der	0.7.10	Apache-2.0 OR MIT	app
+der-parser	9.0.0	MIT/Apache-2.0	app
+deranged	0.5.9	MIT OR Apache-2.0	app
+digest	0.10.7	MIT OR Apache-2.0	app
+dispatch	0.2.0	MIT	app
+dispatch2	0.3.1	Zlib OR Apache-2.0 OR MIT	app
+displaydoc	0.2.7	MIT OR Apache-2.0	app
+dlib	0.5.3	MIT	app
+document-features	0.2.12	MIT OR Apache-2.0	app
+downcast-rs	1.2.1	MIT/Apache-2.0	app
+dpi	0.1.2	Apache-2.0 AND MIT	app
+dyn-clone	1.0.20	MIT OR Apache-2.0	egui-mcp-server
+ecolor	0.33.3	MIT OR Apache-2.0	egui-mcp-client
+ecolor	0.37.0	MIT OR Apache-2.0	app
+eframe	0.37.0	MIT OR Apache-2.0	app
+egui	0.33.3	MIT OR Apache-2.0	egui-mcp-client
+egui	0.37.0	MIT OR Apache-2.0	app
+egui-mcp-client	0.0.5	MIT OR Apache-2.0	app,egui-mcp-client
+egui-mcp-protocol	0.0.5	MIT OR Apache-2.0	app,egui-mcp-client,egui-mcp-server
+egui-mcp-server	0.0.5	MIT OR Apache-2.0	egui-mcp-server
+egui-pop-phosphor	0.15.0	MIT OR Apache-2.0	app
+egui-wgpu	0.37.0	MIT OR Apache-2.0	app
+egui-winit	0.37.0	MIT OR Apache-2.0	app
+egui_extras	0.37.0	MIT OR Apache-2.0	app
+egui_glow	0.37.0	MIT OR Apache-2.0	app
+either	1.15.0	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+either	1.19.0	MIT OR Apache-2.0	app
+emath	0.33.3	MIT OR Apache-2.0	egui-mcp-client
+emath	0.37.0	MIT OR Apache-2.0	app
+endi	1.1.1	MIT	app,egui-mcp-server
+enum-map	3.1.0	MIT OR Apache-2.0	app
+enum-map-derive	1.0.1	MIT OR Apache-2.0	app
+enumflags2	0.7.12	MIT OR Apache-2.0	app,egui-mcp-server
+enumflags2_derive	0.7.12	MIT OR Apache-2.0	app,egui-mcp-server
+epaint	0.33.3	MIT OR Apache-2.0	egui-mcp-client
+epaint	0.37.0	MIT OR Apache-2.0	app
+epaint_default_fonts	0.33.3	(MIT OR Apache-2.0) AND OFL-1.1 AND Ubuntu-font-1.0	egui-mcp-client
+epaint_default_fonts	0.37.0	(MIT OR Apache-2.0) AND OFL-1.1 AND Ubuntu-font-1.0	app
+equator	0.4.2	MIT	app,egui-mcp-client,egui-mcp-server
+equator-macro	0.4.2	MIT	app,egui-mcp-client,egui-mcp-server
+equivalent	1.0.2	Apache-2.0 OR MIT	egui-mcp-server
+equivalent	1.0.3	Apache-2.0 OR MIT	app
+errno	0.3.14	MIT OR Apache-2.0	app,egui-mcp-client,egui-mcp-server
+error-code	3.4.0	BSL-1.0	app
+euclid	0.22.14	MIT OR Apache-2.0	app
+event-listener	5.4.1	Apache-2.0 OR MIT	egui-mcp-server
+event-listener	5.4.2	Apache-2.0 OR MIT	app
+event-listener-strategy	0.5.4	Apache-2.0 OR MIT	app,egui-mcp-server
+exr	1.74.0	BSD-3-Clause	egui-mcp-client,egui-mcp-server
+exr	1.74.3	BSD-3-Clause	app
+fastrand	2.3.0	Apache-2.0 OR MIT	egui-mcp-server
+fastrand	2.5.0	Apache-2.0 OR MIT	app
+fax	0.2.6	MIT	egui-mcp-client,egui-mcp-server
+fax	0.2.7	MIT	app
+fax_derive	0.2.0	MIT	egui-mcp-client,egui-mcp-server
+fdeflate	0.3.7	MIT OR Apache-2.0	app,egui-mcp-client,egui-mcp-server
+fearless_simd	0.4.1	Apache-2.0 OR MIT	app
+find-msvc-tools	0.1.15	MIT OR Apache-2.0	app
+find-msvc-tools	0.1.8	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+flate2	1.1.11	MIT OR Apache-2.0	app
+flate2	1.1.8	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+foldhash	0.2.0	Zlib	app
+font-types	0.12.7	MIT OR Apache-2.0	app
+foreign-types	0.5.0	MIT/Apache-2.0	app
+foreign-types-macros	0.2.4	MIT/Apache-2.0	app
+foreign-types-shared	0.3.1	MIT/Apache-2.0	app
+form_urlencoded	1.2.2	MIT OR Apache-2.0	app
+futf	0.1.5	MIT / Apache-2.0	app
+futures	0.3.31	MIT OR Apache-2.0	egui-mcp-server
+futures-channel	0.3.31	MIT OR Apache-2.0	egui-mcp-server
+futures-core	0.3.31	MIT OR Apache-2.0	egui-mcp-server
+futures-core	0.3.34	MIT OR Apache-2.0	app
+futures-executor	0.3.31	MIT OR Apache-2.0	egui-mcp-server
+futures-io	0.3.31	MIT OR Apache-2.0	egui-mcp-server
+futures-io	0.3.34	MIT OR Apache-2.0	app
+futures-lite	2.6.1	Apache-2.0 OR MIT	app,egui-mcp-server
+futures-macro	0.3.31	MIT OR Apache-2.0	egui-mcp-server
+futures-macro	0.3.34	MIT OR Apache-2.0	app
+futures-sink	0.3.31	MIT OR Apache-2.0	egui-mcp-server
+futures-task	0.3.31	MIT OR Apache-2.0	egui-mcp-server
+futures-task	0.3.34	MIT OR Apache-2.0	app
+futures-util	0.3.31	MIT OR Apache-2.0	egui-mcp-server
+futures-util	0.3.34	MIT OR Apache-2.0	app
+generic-array	0.14.7	MIT	app
+gethostname	1.1.0	Apache-2.0	app
+getrandom	0.2.17	MIT OR Apache-2.0	app
+getrandom	0.3.4	MIT OR Apache-2.0	app,egui-mcp-client,egui-mcp-server
+getrandom	0.4.3	MIT OR Apache-2.0	app
+gif	0.14.1	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+gif	0.14.2	MIT OR Apache-2.0	app
+gl_generator	0.14.0	Apache-2.0	app
+glifo	0.3.0	Apache-2.0 OR MIT	app
+glow	0.17.0	MIT OR Apache-2.0 OR Zlib	app
+glutin	0.32.3	Apache-2.0	app
+glutin-winit	0.5.0	MIT	app
+glutin_egl_sys	0.7.1	Apache-2.0	app
+glutin_glx_sys	0.6.1	Apache-2.0	app
+glutin_wgl_sys	0.6.1	Apache-2.0	app
+guillotiere	0.7.0	MIT/Apache-2.0	app
+half	2.7.1	MIT OR Apache-2.0	app,egui-mcp-client,egui-mcp-server
+harfrust	0.12.0	MIT	app
+hashbrown	0.16.1	MIT OR Apache-2.0	egui-mcp-server
+hashbrown	0.17.1	MIT OR Apache-2.0	app
+heck	0.5.0	MIT OR Apache-2.0	egui-mcp-server
+hermit-abi	0.5.2	MIT OR Apache-2.0	egui-mcp-server
+hermit-abi	0.5.3	MIT OR Apache-2.0	app
+hex	0.4.3	MIT OR Apache-2.0	app,egui-mcp-server
+hpack	0.3.0	MIT	app
+html2text	0.12.6	MIT	app
+html5ever	0.27.0	MIT OR Apache-2.0	app
+http	1.5.0	MIT OR Apache-2.0	app
+httparse	1.10.1	MIT OR Apache-2.0	app
+iana-time-zone	0.1.64	MIT OR Apache-2.0	egui-mcp-server
+iana-time-zone-haiku	0.1.2	MIT OR Apache-2.0	egui-mcp-server
+icu_collections	2.4.0	Unicode-3.0	app
+icu_locale_core	2.4.0	Unicode-3.0	app
+icu_normalizer	2.4.0	Unicode-3.0	app
+icu_normalizer_data	2.4.0	Unicode-3.0	app
+icu_properties	2.4.0	Unicode-3.0	app
+icu_properties_data	2.4.0	Unicode-3.0	app
+icu_provider	2.4.0	Unicode-3.0	app
+ident_case	1.0.1	MIT/Apache-2.0	egui-mcp-server
+idna	1.1.0	MIT OR Apache-2.0	app
+idna_adapter	1.2.2	Apache-2.0 OR MIT	app
+image	0.25.10	MIT OR Apache-2.0	app
+image	0.25.9	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+image-compare	0.4.2	MIT	egui-mcp-server
+image-webp	0.2.4	MIT OR Apache-2.0	app,egui-mcp-client,egui-mcp-server
+imgref	1.12.0	CC0-1.0 OR Apache-2.0	egui-mcp-client,egui-mcp-server
+imgref	1.12.3	CC0-1.0 OR Apache-2.0	app
+indexmap	2.13.0	Apache-2.0 OR MIT	egui-mcp-server
+indexmap	2.14.2	Apache-2.0 OR MIT	app
+inout	0.1.4	MIT OR Apache-2.0	app
+interpolate_name	0.2.4	MIT	app,egui-mcp-client,egui-mcp-server
+is_terminal_polyfill	1.70.2	MIT OR Apache-2.0	egui-mcp-server
+itertools	0.14.0	MIT OR Apache-2.0	app,egui-mcp-client,egui-mcp-server
+itertools	0.15.0	MIT OR Apache-2.0	app
+itoa	1.0.17	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+itoa	1.0.19	MIT OR Apache-2.0	app
+jni	0.22.4	MIT OR Apache-2.0	app
+jni-macros	0.22.4	MIT OR Apache-2.0	app
+jni-sys	0.3.1	MIT OR Apache-2.0	app
+jni-sys	0.4.1	MIT OR Apache-2.0	app
+jni-sys-macros	0.4.1	MIT OR Apache-2.0	app
+jobserver	0.1.34	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+jobserver	0.1.35	MIT OR Apache-2.0	app
+js-sys	0.3.107	MIT OR Apache-2.0	app
+js-sys	0.3.85	MIT OR Apache-2.0	egui-mcp-server
+khronos_api	3.1.0	Apache-2.0	app
+kurbo	0.13.1	Apache-2.0 OR MIT	app
+lazy_static	1.5.0	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+lazy_static	1.5.1	MIT OR Apache-2.0	app
+lebe	0.5.3	BSD-3-Clause	app,egui-mcp-client,egui-mcp-server
+libc	0.2.180	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+libc	0.2.191	MIT OR Apache-2.0	app
+libfuzzer-sys	0.4.10	(MIT OR Apache-2.0) AND NCSA	egui-mcp-client,egui-mcp-server
+libfuzzer-sys	0.4.13	(MIT OR Apache-2.0) AND NCSA	app
+libloading	0.8.9	ISC	app
+libm	0.2.16	MIT	app
+libredox	0.1.25	MIT	app
+linebender_resource_handle	0.1.1	Apache-2.0 OR MIT	app
+linux-raw-sys	0.11.0	Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT	egui-mcp-server
+linux-raw-sys	0.12.1	Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT	app
+linux-raw-sys	0.4.15	Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT	app
+litemap	0.8.3	Unicode-3.0	app
+litrs	1.0.1	MIT OR Apache-2.0	app
+lock_api	0.4.14	MIT OR Apache-2.0	app,egui-mcp-client,egui-mcp-server
+log	0.3.9	MIT/Apache-2.0	app
+log	0.4.29	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+log	0.4.35	MIT OR Apache-2.0	app
+loop9	0.1.5	MIT	app,egui-mcp-client,egui-mcp-server
+mac	0.1.1	MIT/Apache-2.0	app
+markup5ever	0.12.1	MIT OR Apache-2.0	app
+matchers	0.2.0	MIT	egui-mcp-server
+maybe-rayon	0.1.1	MIT	app,egui-mcp-client,egui-mcp-server
+memchr	2.7.6	Unlicense OR MIT	egui-mcp-client,egui-mcp-server
+memchr	2.8.3	Unlicense OR MIT	app
+memmap2	0.9.12	MIT OR Apache-2.0	app
+memoffset	0.9.1	MIT	app,egui-mcp-server
+minimal-lexical	0.2.1	MIT/Apache-2.0	app
+miniz_oxide	0.8.9	MIT OR Zlib OR Apache-2.0	app,egui-mcp-client,egui-mcp-server
+miniz_oxide	0.9.1	MIT OR Zlib OR Apache-2.0	app
+mio	1.1.1	MIT	egui-mcp-client,egui-mcp-server
+mio	1.2.5	MIT	app
+moxcms	0.7.11	BSD-3-Clause OR Apache-2.0	egui-mcp-client,egui-mcp-server
+moxcms	0.8.1	BSD-3-Clause OR Apache-2.0	app
+multiversion	0.8.1	MIT OR Apache-2.0	app
+multiversion-macros	0.8.1	MIT OR Apache-2.0	app
+naga	30.0.2	MIT OR Apache-2.0	app
+naga-types	30.0.2	MIT OR Apache-2.0	app
+ndk	0.9.0	MIT OR Apache-2.0	app
+ndk-context	0.1.1	MIT OR Apache-2.0	app
+ndk-sys	0.6.0+11769913	MIT OR Apache-2.0	app
+new_debug_unreachable	1.0.6	MIT	app,egui-mcp-client,egui-mcp-server
+no_std_io2	0.9.4	Apache-2.0 OR MIT	app
+nohash-hasher	0.2.0	Apache-2.0 OR MIT	app,egui-mcp-client
+nom	7.1.3	MIT	app
+nom	8.0.0	MIT	app,egui-mcp-client,egui-mcp-server
+noop_proc_macro	0.3.0	MIT	app,egui-mcp-client,egui-mcp-server
+ntapi	0.4.3	Apache-2.0 OR MIT	app
+nu-ansi-term	0.50.3	MIT	app,egui-mcp-client,egui-mcp-server
+num-bigint	0.4.6	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+num-bigint	0.4.8	MIT OR Apache-2.0	app
+num-bigint-dig	0.8.6	MIT/Apache-2.0	app
+num-conv	0.2.2	MIT OR Apache-2.0	app
+num-derive	0.4.2	MIT OR Apache-2.0	app,egui-mcp-client,egui-mcp-server
+num-integer	0.1.46	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+num-integer	0.1.47	MIT OR Apache-2.0	app
+num-iter	0.1.46	MIT OR Apache-2.0	app
+num-rational	0.4.2	MIT OR Apache-2.0	app,egui-mcp-client,egui-mcp-server
+num-traits	0.2.19	MIT OR Apache-2.0	app,egui-mcp-client,egui-mcp-server
+num_enum	0.7.6	BSD-3-Clause OR MIT OR Apache-2.0	app
+num_enum_derive	0.7.6	BSD-3-Clause OR MIT OR Apache-2.0	app
+objc-sys	0.3.5	MIT	app
+objc2	0.5.3	MIT	app
+objc2	0.6.5	MIT	app
+objc2-app-kit	0.2.2	MIT	app
+objc2-app-kit	0.3.2	Zlib OR Apache-2.0 OR MIT	app
+objc2-cloud-kit	0.2.2	MIT	app
+objc2-contacts	0.2.2	MIT	app
+objc2-core-data	0.2.2	MIT	app
+objc2-core-foundation	0.3.2	Zlib OR Apache-2.0 OR MIT	app
+objc2-core-graphics	0.3.2	Zlib OR Apache-2.0 OR MIT	app
+objc2-core-image	0.2.2	MIT	app
+objc2-core-location	0.2.2	MIT	app
+objc2-encode	4.1.0	MIT	app
+objc2-foundation	0.2.2	MIT	app
+objc2-foundation	0.3.2	MIT	app
+objc2-io-surface	0.3.2	Zlib OR Apache-2.0 OR MIT	app
+objc2-link-presentation	0.2.2	MIT	app
+objc2-metal	0.2.2	MIT	app
+objc2-quartz-core	0.2.2	MIT	app
+objc2-symbols	0.2.2	MIT	app
+objc2-ui-kit	0.2.2	MIT	app
+objc2-ui-kit	0.3.2	Zlib OR Apache-2.0 OR MIT	app
+objc2-uniform-type-identifiers	0.2.2	MIT	app
+objc2-user-notifications	0.2.2	MIT	app
+oid-registry	0.7.1	MIT OR Apache-2.0	app
+once_cell	1.21.3	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+once_cell	1.21.4	MIT OR Apache-2.0	app
+once_cell_polyfill	1.70.2	MIT OR Apache-2.0	egui-mcp-server
+orbclient	0.3.55	MIT	app
+ordered-stream	0.2.0	MIT OR Apache-2.0	app,egui-mcp-server
+owned_ttf_parser	0.25.1	Apache-2.0	egui-mcp-client
+parking	2.2.1	Apache-2.0 OR MIT	app,egui-mcp-server
+parking_lot	0.12.5	MIT OR Apache-2.0	app,egui-mcp-client,egui-mcp-server
+parking_lot_core	0.9.12	MIT OR Apache-2.0	app,egui-mcp-client,egui-mcp-server
+paste	1.0.15	MIT OR Apache-2.0	app,egui-mcp-client,egui-mcp-server
+pastey	0.1.1	MIT OR Apache-2.0	app,egui-mcp-client,egui-mcp-server
+pastey	0.2.1	MIT OR Apache-2.0	egui-mcp-server
+pem	3.0.6	MIT	app
+pem-rfc7468	0.7.0	Apache-2.0 OR MIT	app
+peniko	0.6.1	Apache-2.0 OR MIT	app
+percent-encoding	2.3.2	MIT OR Apache-2.0	app
+phf	0.11.3	MIT	app
+phf	0.14.0	MIT	app
+phf_codegen	0.11.3	MIT	app
+phf_generator	0.11.3	MIT	app
+phf_generator	0.14.0	MIT	app
+phf_macros	0.14.0	MIT	app
+phf_shared	0.11.3	MIT	app
+phf_shared	0.14.0	MIT	app
+pin-project	1.1.13	Apache-2.0 OR MIT	app
+pin-project-internal	1.1.13	Apache-2.0 OR MIT	app
+pin-project-lite	0.2.16	Apache-2.0 OR MIT	egui-mcp-client,egui-mcp-server
+pin-project-lite	0.2.17	Apache-2.0 OR MIT	app
+pin-utils	0.1.0	MIT OR Apache-2.0	egui-mcp-server
+piper	0.2.4	MIT OR Apache-2.0	egui-mcp-server
+piper	0.2.5	MIT OR Apache-2.0	app
+pkcs1	0.7.5	Apache-2.0 OR MIT	app
+pkcs8	0.10.2	Apache-2.0 OR MIT	app
+pkg-config	0.3.34	MIT OR Apache-2.0	app
+plain	0.2.3	MIT/Apache-2.0	app
+png	0.18.0	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+png	0.18.1	MIT OR Apache-2.0	app
+polling	3.11.0	Apache-2.0 OR MIT	app,egui-mcp-server
+polycool	0.4.0	MIT OR Apache-2.0	app
+portable-atomic	1.15.0	Apache-2.0 OR MIT	app
+portable-atomic-util	0.2.8	Apache-2.0 OR MIT	app
+potential_utf	0.1.6	Unicode-3.0	app
+powerfmt	0.2.1	MIT OR Apache-2.0	app
+ppv-lite86	0.2.21	MIT OR Apache-2.0	app,egui-mcp-client,egui-mcp-server
+precomputed-hash	0.1.1	MIT	app
+proc-macro-crate	3.4.0	MIT OR Apache-2.0	egui-mcp-server
+proc-macro-crate	3.5.0	MIT OR Apache-2.0	app
+proc-macro2	1.0.106	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+proc-macro2	1.0.107	MIT OR Apache-2.0	app
+profiling	1.0.17	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+profiling	1.0.18	MIT OR Apache-2.0	app
+profiling-procmacros	1.0.17	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+profiling-procmacros	1.0.18	MIT OR Apache-2.0	app
+pxfm	0.1.27	BSD-3-Clause OR Apache-2.0	egui-mcp-client,egui-mcp-server
+pxfm	0.1.30	BSD-3-Clause OR Apache-2.0	app
+qoi	0.4.1	MIT/Apache-2.0	app,egui-mcp-client,egui-mcp-server
+quick-error	2.0.1	MIT/Apache-2.0	app,egui-mcp-client,egui-mcp-server
+quick-xml	0.38.4	MIT	egui-mcp-server
+quick-xml	0.41.0	MIT	app
+quote	1.0.44	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+quote	1.0.47	MIT OR Apache-2.0	app
+r-efi	5.3.0	MIT OR Apache-2.0 OR LGPL-2.1-or-later	app,egui-mcp-client,egui-mcp-server
+r-efi	6.0.0	MIT OR Apache-2.0 OR LGPL-2.1-or-later	app
+rand	0.8.8	MIT OR Apache-2.0	app
+rand	0.9.2	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+rand	0.9.5	MIT OR Apache-2.0	app
+rand_chacha	0.3.1	MIT OR Apache-2.0	app
+rand_chacha	0.9.0	MIT OR Apache-2.0	app,egui-mcp-client,egui-mcp-server
+rand_core	0.6.4	MIT OR Apache-2.0	app
+rand_core	0.9.5	MIT OR Apache-2.0	app,egui-mcp-client,egui-mcp-server
+rav1e	0.8.1	BSD-2-Clause	app,egui-mcp-client,egui-mcp-server
+ravif	0.12.0	BSD-3-Clause	egui-mcp-client,egui-mcp-server
+ravif	0.13.0	BSD-3-Clause	app
+raw-window-handle	0.6.2	MIT OR Apache-2.0 OR Zlib	app
+rayon	1.11.0	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+rayon	1.12.0	MIT OR Apache-2.0	app
+rayon-core	1.13.0	MIT OR Apache-2.0	app,egui-mcp-client,egui-mcp-server
+rcgen	0.13.2	MIT OR Apache-2.0	app
+read-fonts	0.41.0	MIT OR Apache-2.0	app
+redox_syscall	0.4.1	MIT	app
+redox_syscall	0.5.18	MIT	app,egui-mcp-client,egui-mcp-server
+redox_syscall	0.9.5	MIT	app
+ref-cast	1.0.25	MIT OR Apache-2.0	egui-mcp-server
+ref-cast-impl	1.0.25	MIT OR Apache-2.0	egui-mcp-server
+regex	1.13.1	MIT OR Apache-2.0	app
+regex-automata	0.4.13	MIT OR Apache-2.0	egui-mcp-server
+regex-automata	0.4.18	MIT OR Apache-2.0	app
+regex-syntax	0.8.11	MIT OR Apache-2.0	app
+regex-syntax	0.8.8	MIT OR Apache-2.0	egui-mcp-server
+renderdoc-sys	1.1.0	MIT OR Apache-2.0	app
+rgb	0.8.52	MIT	egui-mcp-client,egui-mcp-server
+rgb	0.8.53	MIT	app
+ring	0.17.14	Apache-2.0 AND ISC	app
+rmcp	0.13.0	Apache-2.0	egui-mcp-server
+rmcp-macros	0.13.0	Apache-2.0	egui-mcp-server
+rsa	0.9.10	MIT OR Apache-2.0	app
+rustc-hash	1.1.0	Apache-2.0/MIT	app
+rustc-hash	2.1.3	Apache-2.0 OR MIT	app
+rustc_version	0.4.1	MIT OR Apache-2.0	app
+rusticata-macros	4.1.0	MIT/Apache-2.0	app
+rustix	0.38.44	Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT	app
+rustix	1.1.3	Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT	egui-mcp-server
+rustix	1.1.6	Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT	app
+rustls	0.23.46	Apache-2.0 OR ISC OR MIT	app
+rustls-pki-types	1.15.1	MIT OR Apache-2.0	app
+rustls-webpki	0.103.16	ISC	app
+rustversion	1.0.22	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+rustversion	1.0.23	MIT OR Apache-2.0	app
+same-file	1.0.6	Unlicense/MIT	app
+schemars	0.8.22	MIT	egui-mcp-server
+schemars	1.2.0	MIT	egui-mcp-server
+schemars_derive	0.8.22	MIT	egui-mcp-server
+schemars_derive	1.2.0	MIT	egui-mcp-server
+scoped-tls	1.0.1	MIT/Apache-2.0	app
+scopeguard	1.2.0	MIT OR Apache-2.0	app,egui-mcp-client,egui-mcp-server
+self_cell	1.3.0	Apache-2.0 OR GPL-2.0-only	app
+semver	1.0.28	MIT OR Apache-2.0	app
+send_wrapper	0.6.0	MIT/Apache-2.0	app
+serde	1.0.228	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+serde	1.0.229	MIT OR Apache-2.0	app
+serde_core	1.0.228	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+serde_core	1.0.229	MIT OR Apache-2.0	app
+serde_derive	1.0.228	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+serde_derive	1.0.229	MIT OR Apache-2.0	app
+serde_derive_internals	0.29.1	MIT OR Apache-2.0	egui-mcp-server
+serde_json	1.0.149	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+serde_json	1.0.154	MIT OR Apache-2.0	app
+serde_repr	0.1.20	MIT OR Apache-2.0	egui-mcp-server
+serde_repr	0.1.21	MIT OR Apache-2.0	app
+sha1	0.10.7	MIT OR Apache-2.0	app
+sha2	0.10.9	MIT OR Apache-2.0	app
+sharded-slab	0.1.7	MIT	app,egui-mcp-client,egui-mcp-server
+shlex	1.3.0	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+shlex	2.0.1	MIT OR Apache-2.0	app
+signal-hook	0.3.18	Apache-2.0/MIT	app
+signal-hook-registry	1.4.8	MIT OR Apache-2.0	app,egui-mcp-client,egui-mcp-server
+signature	2.2.0	Apache-2.0 OR MIT	app
+simd-adler32	0.3.10	MIT	app
+simd-adler32	0.3.8	MIT	egui-mcp-client,egui-mcp-server
+simd_cesu8	1.2.0	Apache-2.0 OR MIT	app
+simd_helpers	0.1.0	MIT	app,egui-mcp-client,egui-mcp-server
+simdutf8	0.1.5	MIT OR Apache-2.0	app
+siphasher	1.0.4	MIT OR Apache-2.0	app
+skrifa	0.44.0	MIT OR Apache-2.0	app
+slab	0.4.11	MIT	egui-mcp-server
+slab	0.4.12	MIT	app
+slotmap	1.1.1	Zlib	app
+smallvec	1.15.1	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+smallvec	1.16.5	MIT OR Apache-2.0	app
+smithay-client-toolkit	0.19.2	MIT	app
+smithay-client-toolkit	0.20.0	MIT	app
+smithay-clipboard	0.7.3	MIT	app
+smol_str	0.2.2	MIT OR Apache-2.0	app
+socket2	0.6.2	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+socket2	0.6.5	MIT OR Apache-2.0	app
+spin	0.9.9	MIT	app
+spki	0.7.3	Apache-2.0 OR MIT	app
+stable_deref_trait	1.2.1	MIT OR Apache-2.0	app,egui-mcp-client,egui-mcp-server
+static_assertions	1.1.0	MIT OR Apache-2.0	app,egui-mcp-server
+string_cache	0.8.9	MIT OR Apache-2.0	app
+string_cache_codegen	0.5.4	MIT OR Apache-2.0	app
+strsim	0.11.1	MIT	egui-mcp-server
+subtle	2.6.1	BSD-3-Clause	app
+syn	2.0.114	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+syn	2.0.119	MIT OR Apache-2.0	app
+syn	3.0.10	MIT OR Apache-2.0	app
+synstructure	0.13.2	MIT	app
+synstructure	0.14.0	MIT	app
+sysinfo	0.32.1	MIT	app
+target-features	0.1.6	MIT OR Apache-2.0	app
+tempfile	3.24.0	MIT OR Apache-2.0	egui-mcp-server
+tempfile	3.27.0	MIT OR Apache-2.0	app
+tendril	0.4.3	MIT/Apache-2.0	app
+thiserror	1.0.69	MIT OR Apache-2.0	app
+thiserror	2.0.18	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+thiserror	2.0.21	MIT OR Apache-2.0	app
+thiserror-impl	1.0.69	MIT OR Apache-2.0	app
+thiserror-impl	2.0.18	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+thiserror-impl	2.0.21	MIT OR Apache-2.0	app
+thread_local	1.1.10	MIT OR Apache-2.0	app
+thread_local	1.1.9	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+tiff	0.10.3	MIT	egui-mcp-client,egui-mcp-server
+tiff	0.11.3	MIT	app
+time	0.3.55	MIT OR Apache-2.0	app
+time-core	0.1.9	MIT OR Apache-2.0	app
+time-macros	0.2.32	MIT OR Apache-2.0	app
+tinystr	0.8.5	Unicode-3.0	app
+tokio	1.49.0	MIT	egui-mcp-client,egui-mcp-server
+tokio	1.54.1	MIT	app
+tokio-macros	2.6.0	MIT	egui-mcp-client,egui-mcp-server
+tokio-macros	2.7.2	MIT	app
+tokio-util	0.7.18	MIT	egui-mcp-server
+toml_datetime	0.7.5+spec-1.1.0	MIT OR Apache-2.0	egui-mcp-server
+toml_datetime	1.1.3+spec-1.1.0	MIT OR Apache-2.0	app
+toml_edit	0.23.10+spec-1.0.0	MIT OR Apache-2.0	egui-mcp-server
+toml_edit	0.25.19+spec-1.1.0	MIT OR Apache-2.0	app
+toml_parser	1.0.6+spec-1.1.0	MIT OR Apache-2.0	egui-mcp-server
+toml_parser	1.1.5+spec-1.1.0	MIT OR Apache-2.0	app
+tracing	0.1.44	MIT	app,egui-mcp-client,egui-mcp-server
+tracing-attributes	0.1.31	MIT	app,egui-mcp-client,egui-mcp-server
+tracing-core	0.1.36	MIT	app,egui-mcp-client,egui-mcp-server
+tracing-log	0.2.0	MIT	app,egui-mcp-client,egui-mcp-server
+tracing-subscriber	0.3.22	MIT	egui-mcp-client,egui-mcp-server
+tracing-subscriber	0.3.23	MIT	app
+ttf-parser	0.25.1	MIT OR Apache-2.0	egui-mcp-client
+tungstenite	0.24.0	MIT OR Apache-2.0	app
+type-map	0.5.1	MIT/Apache-2.0	app
+typenum	1.20.1	MIT OR Apache-2.0	app
+uds_windows	1.1.0	MIT	egui-mcp-server
+uds_windows	1.2.1	MIT	app
+unicode-general-category	1.1.0	Apache-2.0	app
+unicode-ident	1.0.22	(MIT OR Apache-2.0) AND Unicode-3.0	egui-mcp-client,egui-mcp-server
+unicode-ident	1.0.27	(MIT OR Apache-2.0) AND Unicode-3.0	app
+unicode-properties	0.1.5	(MIT OR Apache-2.0) AND Unicode-3.0	app
+unicode-segmentation	1.12.0	MIT OR Apache-2.0	egui-mcp-client
+unicode-segmentation	1.13.3	MIT OR Apache-2.0	app
+unicode-width	0.1.13	MIT OR Apache-2.0	app
+untrusted	0.9.0	ISC	app
+url	2.5.8	MIT OR Apache-2.0	app
+utf-8	0.7.6	MIT OR Apache-2.0	app
+utf8_iter	1.1.0	Apache-2.0 OR MIT	app
+utf8parse	0.2.2	Apache-2.0 OR MIT	egui-mcp-server
+utf_types	1.0.0	Apache-2.0 OR MIT	app
+uuid	1.19.0	Apache-2.0 OR MIT	egui-mcp-server
+uuid	1.29.2	Apache-2.0 OR MIT	app
+v_frame	0.3.9	BSD-2-Clause	app,egui-mcp-client,egui-mcp-server
+valuable	0.1.1	MIT	app,egui-mcp-client,egui-mcp-server
+vello_common	0.2.0	Apache-2.0 OR MIT	app
+vello_cpu	0.2.0	Apache-2.0 OR MIT	app
+version_check	0.9.5	MIT/Apache-2.0	app,egui-mcp-client
+walkdir	2.5.0	Unlicense/MIT	app
+wasi	0.11.1+wasi-snapshot-preview1	Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT	app,egui-mcp-client,egui-mcp-server
+wasip2	1.0.2+wasi-0.2.9	Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT	egui-mcp-client,egui-mcp-server
+wasip2	1.0.4+wasi-0.2.12	Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT	app
+wasm-bindgen	0.2.108	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+wasm-bindgen	0.2.130	MIT OR Apache-2.0	app
+wasm-bindgen-futures	0.4.80	MIT OR Apache-2.0	app
+wasm-bindgen-macro	0.2.108	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+wasm-bindgen-macro	0.2.130	MIT OR Apache-2.0	app
+wasm-bindgen-macro-support	0.2.108	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+wasm-bindgen-macro-support	0.2.130	MIT OR Apache-2.0	app
+wasm-bindgen-shared	0.2.108	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+wasm-bindgen-shared	0.2.130	MIT OR Apache-2.0	app
+wayland-backend	0.3.17	MIT	app
+wayland-client	0.31.15	MIT	app
+wayland-csd-frame	0.3.0	MIT	app
+wayland-cursor	0.31.14	MIT	app
+wayland-protocols	0.32.13	MIT	app
+wayland-protocols-experimental	20250721.0.1	MIT	app
+wayland-protocols-misc	0.3.12	MIT	app
+wayland-protocols-plasma	0.3.12	MIT	app
+wayland-protocols-wlr	0.3.12	MIT	app
+wayland-scanner	0.31.11	MIT	app
+wayland-sys	0.31.11	MIT	app
+web-sys	0.3.107	MIT OR Apache-2.0	app
+web-time	1.1.0	MIT OR Apache-2.0	app
+webbrowser	1.2.6	MIT OR Apache-2.0	app
+webpki-roots	0.26.11	CDLA-Permissive-2.0	app
+webpki-roots	1.0.11	CDLA-Permissive-2.0	app
+webprobe	0.1.0	NOT-ON-CRATES.IO	app
+webprobe-core	0.1.0	NOT-ON-CRATES.IO	app
+webprobe-report	0.1.0	NOT-ON-CRATES.IO	app
+webprobe-support	0.1.0	NOT-ON-CRATES.IO	app
+weezl	0.1.12	MIT OR Apache-2.0	app,egui-mcp-client,egui-mcp-server
+wgpu	30.0.2	MIT OR Apache-2.0	app
+wgpu-core	30.0.2	MIT OR Apache-2.0	app
+wgpu-core-deps-windows-linux-android	30.0.2	MIT OR Apache-2.0	app
+wgpu-hal	30.0.2	MIT OR Apache-2.0	app
+wgpu-naga-bridge	30.0.2	MIT OR Apache-2.0	app
+wgpu-types	30.0.2	MIT OR Apache-2.0	app
+winapi	0.3.9	MIT/Apache-2.0	app,egui-mcp-server
+winapi-i686-pc-windows-gnu	0.4.0	MIT/Apache-2.0	app,egui-mcp-server
+winapi-util	0.1.11	Unlicense OR MIT	app
+winapi-x86_64-pc-windows-gnu	0.4.0	MIT/Apache-2.0	app,egui-mcp-server
+windows	0.57.0	MIT OR Apache-2.0	app
+windows	0.62.2	MIT OR Apache-2.0	app
+windows-collections	0.3.2	MIT OR Apache-2.0	app
+windows-core	0.57.0	MIT OR Apache-2.0	app
+windows-core	0.62.2	MIT OR Apache-2.0	app,egui-mcp-server
+windows-future	0.3.2	MIT OR Apache-2.0	app
+windows-implement	0.57.0	MIT OR Apache-2.0	app
+windows-implement	0.60.2	MIT OR Apache-2.0	app,egui-mcp-server
+windows-interface	0.57.0	MIT OR Apache-2.0	app
+windows-interface	0.59.3	MIT OR Apache-2.0	app,egui-mcp-server
+windows-link	0.2.1	MIT OR Apache-2.0	app,egui-mcp-client,egui-mcp-server
+windows-numerics	0.3.1	MIT OR Apache-2.0	app
+windows-result	0.1.2	MIT OR Apache-2.0	app
+windows-result	0.4.1	MIT OR Apache-2.0	app,egui-mcp-server
+windows-strings	0.5.1	MIT OR Apache-2.0	app,egui-mcp-server
+windows-sys	0.52.0	MIT OR Apache-2.0	app
+windows-sys	0.59.0	MIT OR Apache-2.0	app
+windows-sys	0.60.2	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+windows-sys	0.61.2	MIT OR Apache-2.0	app,egui-mcp-client,egui-mcp-server
+windows-targets	0.52.6	MIT OR Apache-2.0	app
+windows-targets	0.53.5	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+windows-threading	0.2.1	MIT OR Apache-2.0	app
+windows_aarch64_gnullvm	0.52.6	MIT OR Apache-2.0	app
+windows_aarch64_gnullvm	0.53.1	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+windows_aarch64_msvc	0.52.6	MIT OR Apache-2.0	app
+windows_aarch64_msvc	0.53.1	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+windows_i686_gnu	0.52.6	MIT OR Apache-2.0	app
+windows_i686_gnu	0.53.1	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+windows_i686_gnullvm	0.52.6	MIT OR Apache-2.0	app
+windows_i686_gnullvm	0.53.1	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+windows_i686_msvc	0.52.6	MIT OR Apache-2.0	app
+windows_i686_msvc	0.53.1	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+windows_x86_64_gnu	0.52.6	MIT OR Apache-2.0	app
+windows_x86_64_gnu	0.53.1	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+windows_x86_64_gnullvm	0.52.6	MIT OR Apache-2.0	app
+windows_x86_64_gnullvm	0.53.1	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+windows_x86_64_msvc	0.52.6	MIT OR Apache-2.0	app
+windows_x86_64_msvc	0.53.1	MIT OR Apache-2.0	egui-mcp-client,egui-mcp-server
+winit	0.30.13	Apache-2.0	app
+winnow	0.7.14	MIT	egui-mcp-server
+winnow	1.0.5	MIT	app
+wit-bindgen	0.51.0	Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT	egui-mcp-client,egui-mcp-server
+wit-bindgen	0.57.1	Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT	app
+writeable	0.6.4	Unicode-3.0	app
+x11-dl	2.21.0	MIT	app
+x11rb	0.13.2	MIT OR Apache-2.0	app
+x11rb-protocol	0.13.2	MIT OR Apache-2.0	app
+x509-parser	0.16.0	MIT OR Apache-2.0	app
+xcursor	0.3.11	MIT	app
+xkbcommon-dl	0.4.2	MIT	app
+xkeysym	0.2.1	MIT OR Apache-2.0 OR Zlib	app
+xml-rs	0.8.29	MIT	app
+y4m	0.8.0	MIT	app,egui-mcp-client,egui-mcp-server
+yasna	0.5.2	MIT OR Apache-2.0	app
+yoke	0.8.4	Unicode-3.0	app
+yoke-derive	0.8.4	Unicode-3.0	app
+zbus	5.13.2	MIT	egui-mcp-server
+zbus	5.19.0	MIT	app
+zbus-lockstep	0.5.2	MIT	app,egui-mcp-server
+zbus-lockstep-macros	0.5.2	MIT	app,egui-mcp-server
+zbus_macros	5.13.2	MIT	egui-mcp-server
+zbus_macros	5.19.0	MIT	app
+zbus_names	4.3.1	MIT	egui-mcp-server
+zbus_names	4.3.5	MIT	app
+zbus_xml	5.1.0	MIT	egui-mcp-server
+zbus_xml	5.2.1	MIT	app
+zcheapstr	1.2.0	MIT	app
+zerocopy	0.8.33	BSD-2-Clause OR Apache-2.0 OR MIT	egui-mcp-client,egui-mcp-server
+zerocopy	0.8.63	BSD-2-Clause OR Apache-2.0 OR MIT	app
+zerocopy-derive	0.8.33	BSD-2-Clause OR Apache-2.0 OR MIT	egui-mcp-client,egui-mcp-server
+zerocopy-derive	0.8.63	BSD-2-Clause OR Apache-2.0 OR MIT	app
+zerofrom	0.1.8	Unicode-3.0	app
+zerofrom-derive	0.1.8	Unicode-3.0	app
+zeroize	1.9.1	Apache-2.0 OR MIT	app
+zerotrie	0.2.5	Unicode-3.0	app
+zerovec	0.11.9	Unicode-3.0	app
+zerovec-derive	0.11.7	Unicode-3.0	app
+zlib-rs	0.6.8	Zlib	app
+zmij	1.0.16	MIT	egui-mcp-client,egui-mcp-server
+zmij	1.0.23	MIT	app
+zune-core	0.4.12	MIT OR Apache-2.0 OR Zlib	egui-mcp-client,egui-mcp-server
+zune-core	0.5.1	MIT OR Apache-2.0 OR Zlib	egui-mcp-client,egui-mcp-server
+zune-core	0.5.3	MIT OR Apache-2.0 OR Zlib	app
+zune-inflate	0.2.54	MIT OR Apache-2.0 OR Zlib	app,egui-mcp-client,egui-mcp-server
+zune-jpeg	0.4.21	MIT OR Apache-2.0 OR Zlib	egui-mcp-client,egui-mcp-server
+zune-jpeg	0.5.11	MIT OR Apache-2.0 OR Zlib	egui-mcp-client,egui-mcp-server
+zune-jpeg	0.5.15	MIT OR Apache-2.0 OR Zlib	app
+zvariant	5.15.1	MIT	app
+zvariant	5.9.2	MIT	egui-mcp-server
+zvariant_derive	5.15.1	MIT	app
+zvariant_derive	5.9.2	MIT	egui-mcp-server
+zvariant_utils	3.3.0	MIT	egui-mcp-server
+zvariant_utils	4.2.0	MIT	app
