@@ -899,58 +899,31 @@ mod tests {
         assert_eq!(back, c.tree);
     }
 
-    /// Smoke check against the local Burp install (skipped when none):
-    /// all 29 built-ins parse from the jar, and from an extracted tree.
-    /// WEBPROBE_BURP_JAR / WEBPROBE_BURP_BUILTINS point at a jar or an
-    /// extracted BuiltInConfigs tree elsewhere (CI, a downloaded
-    /// community jar).
+    /// Optional real-application check. The Montoya API variable is unrelated.
     #[test]
     fn builtins_load_from_the_local_burp_install() {
-        // Each source is labeled with where its path came from, so an env
-        // var pointing at the wrong file fails with the variable's name in
-        // the message instead of a bare "29 != 0".
-        let mut srcs = vec![
-            (
-                "default jar",
-                BurpResources::Jar("/opt/BurpSuite/burpsuite.jar".into()),
-            ),
-            (
-                "default tree",
-                BurpResources::Dir("/root/burp-re/in/extract/resources/BuiltInConfigs".into()),
-            ),
-        ];
-        if let Some(j) = std::env::var_os("WEBPROBE_BURP_JAR") {
-            srcs.push(("WEBPROBE_BURP_JAR", BurpResources::Jar(j.into())));
+        let mut sources = Vec::new();
+        if let Some(path) = std::env::var_os("WEBPROBE_BURP_APP_JAR") {
+            sources.push(("WEBPROBE_BURP_APP_JAR", BurpResources::Jar(path.into())));
         }
-        if let Some(d) = std::env::var_os("WEBPROBE_BURP_BUILTINS") {
-            srcs.push(("WEBPROBE_BURP_BUILTINS", BurpResources::Dir(d.into())));
+        if let Some(path) = std::env::var_os("WEBPROBE_BURP_BUILTINS") {
+            sources.push(("WEBPROBE_BURP_BUILTINS", BurpResources::Dir(path.into())));
         }
-        for (label, src) in srcs {
-            let present = match &src {
-                BurpResources::Jar(p) | BurpResources::Dir(p) => p.exists(),
-            };
-            if !present {
-                continue;
-            }
-            let rep = load_builtin(&src).unwrap_or_else(|e| panic!("{label} {src:?}: {e}"));
-            assert!(rep.errors.is_empty(), "{label} {src:?}: {:?}", rep.errors);
-            assert_eq!(
-                rep.configs.len(),
-                29,
-                "{label} {src:?}: not a Burp install's built-in configs"
-            );
-            assert!(
-                rep.configs.iter().any(|c| c.name == "Audit checks - passive"),
-                "{label} {src:?}"
-            );
-            assert!(
-                load_burp_defaults(&src).is_some_and(|d| get_path(
-                    &d,
-                    "crawler.crawl_limits.maximum_crawl_time"
-                )
-                .is_some()),
-                "{label} {src:?}"
-            );
+        if sources.is_empty() {
+            assert!(std::env::var_os("WEBPROBE_REQUIRE_BURP_APP").is_none(),
+                "WEBPROBE_REQUIRE_BURP_APP requires WEBPROBE_BURP_APP_JAR or WEBPROBE_BURP_BUILTINS");
+            eprintln!("BURP_APP_SMOKE_NOT_RUN: no application resource configured");
+            return;
+        }
+        for (label, source) in sources {
+            let report = load_builtin(&source).unwrap_or_else(|e| panic!("{label}: {e}"));
+            assert!(report.errors.is_empty(), "{label}: {:?}", report.errors);
+            assert_eq!(report.configs.len(), 29, "{label}: expected 29 application built-ins");
+            assert!(report.configs.iter().any(|c| c.name == "Audit checks - passive"), "{label}: passive configuration missing");
+            assert!(load_burp_defaults(&source).is_some_and(|d|
+                get_path(&d, "crawler.crawl_limits.maximum_crawl_time").is_some()),
+                "{label}: application preferences missing");
+            eprintln!("BURP_APP_SMOKE_EXECUTED: {label}");
         }
     }
 

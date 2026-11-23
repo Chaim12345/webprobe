@@ -63,7 +63,7 @@ Small slices:
 
 ## M5 — R-11 scan configuration library
 
-**Status:** done. Implemented 2026-11-18 (aa490e8, 09e87f8); verified 2026-11-23 on `lane/r11-verify-leftovers` (PR #6's verification pass rebased): built-ins smoke test reads WEBPROBE_BURP_JAR / WEBPROBE_BURP_BUILTINS with per-source labeled failures, WEBPROBE_SETTINGS=library opens the Configuration library pane for screenshot checks, core suite green.
+**Status:** done. Implemented 2026-11-18 (aa490e8, 09e87f8); verified 2026-11-23 on `lane/r11-verify-leftovers` (PR #6's verification pass rebased): built-ins smoke test reads WEBPROBE_BURP_APP_JAR / WEBPROBE_BURP_BUILTINS with per-source labeled failures, WEBPROBE_SETTINGS=library opens the Configuration library pane for screenshot checks, 6 library tests and 5 subprocess gate scenarios pass; real-application smoke not run without configured resources; full-suite verification pending.
 
 Worktree: `.worktrees/r11`.
 
