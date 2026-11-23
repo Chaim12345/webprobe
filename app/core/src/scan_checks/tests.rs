@@ -1,5 +1,13 @@
 use super::*;
 
+#[test]
+fn react2shell_requires_the_specific_marker() {
+    assert!(react2shell_hit("500", r#"...E{"digest":"abc"}..."#));
+    // generic error words alone are just an error page, not React2Shell
+    assert!(!react2shell_hit("500", "Error: invalid digest supplied"));
+    assert!(!react2shell_hit("200", r#"E{"digest":"abc"}"#));
+}
+
 fn xpath_response(body: &str) -> Vec<u8> {
     format!(
         "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{body}",
