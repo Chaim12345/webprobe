@@ -46,7 +46,7 @@ External resources (`core/src/paths.rs`). Nothing of PortSwigger's is bundled; w
 feature that needs it says what is missing, where it looked and how to provide it.
 
 | Variable | Resource | Then tried |
-|---|---|
+|---|---|---|
 | `WEBPROBE_BURP_RESOURCES` | a `resources/` directory extracted from burpsuite.jar (`unzip burpsuite.jar 'resources/*'`) | — |
 | `WEBPROBE_KB_DIR` | issue texts for reports | `$WEBPROBE_BURP_RESOURCES/KnowledgeBase/Issues`, `~/.config/webprobe/KnowledgeBase/Issues`, `<data>/KnowledgeBase/Issues` |
 | `WEBPROBE_WORDLIST_DIR` | content discovery wordlists (`*.pay`) | `…/PayloadStrings` in the same places |
