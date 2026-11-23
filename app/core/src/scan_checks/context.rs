@@ -121,6 +121,10 @@ impl ScanCtx {
     }
 
     pub(crate) fn stopped(&self) -> bool {
+        #[cfg(test)]
+        if crate::scan_lifecycle::captured().is_some_and(|c| c.validate(&self.shared).is_err()) {
+            return true;
+        }
         self.shared.scan.stop.load(Ordering::SeqCst)
     }
 

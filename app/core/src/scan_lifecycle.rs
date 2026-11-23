@@ -216,7 +216,7 @@ impl Coordinator {
     pub fn open(self: &Arc<Self>) -> Result<Batch, AdmissionError> {
         let mut state = self.state.lock().unwrap();
         let owner = if let Some(run) = state.as_mut() {
-            if run.phase != Phase::Open {
+            if run.phase != Phase::Open || run.owner.is_cancelled() {
                 return Err(AdmissionError::Busy);
             }
             run.leases = run.leases.checked_add(1).ok_or(AdmissionError::Busy)?;
@@ -251,7 +251,7 @@ impl Coordinator {
         let mut state = self.state.lock().unwrap();
         if state
             .as_ref()
-            .is_some_and(|r| r.phase != Phase::Open || r.active)
+            .is_some_and(|r| r.phase != Phase::Open || r.active || r.owner.is_cancelled())
         {
             return Err(AdmissionError::Busy);
         }

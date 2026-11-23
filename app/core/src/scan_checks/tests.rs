@@ -1562,3 +1562,126 @@ fn required_limits_actual_engine_rejects_busy_without_reset_or_egress() {
         Finish::Complete
     );
 }
+
+#[test]
+fn required_limits_actual_engine_adopts_inflight_baseline_without_second_owner() {
+    use crate::scan_lifecycle::{Finish, Handoff};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (at_tx, at_rx) = std::sync::mpsc::sync_channel(1);
+    let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
+    let server = std::thread::spawn(move || {
+        use std::io::{Read, Write};
+        let (mut stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+            .unwrap();
+        let mut raw = [0u8; 4096];
+        assert!(stream.read(&mut raw).unwrap() > 0);
+        at_tx.send(()).unwrap();
+        release_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .unwrap();
+        stream
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+            .unwrap();
+    });
+    let shared = crate::net::Shared::new();
+    {
+        let config_slot = crate::scan_config::shared_config(&shared);
+        let mut cfg = config_slot.lock().unwrap();
+        for (id, ..) in crate::scan::check_catalogue() {
+            cfg.disabled_checks.insert(id.into());
+        }
+    }
+    let limits = crate::scan_budget::Limits {
+        duration: std::time::Duration::from_secs(5),
+        http_attempts: 100,
+        connection_attempts: 100,
+        outgoing: 65536,
+        response: 65536,
+        decompressed: 65536,
+        inputs: 65536,
+        evidence: 65536,
+        evidence_records: 100,
+        records: 100,
+    };
+    let engine = Arc::new(crate::scan::ExperimentalEngine::new(shared.clone(), limits).unwrap());
+    let running = engine.clone();
+    let entry = crate::net::HistEntry {
+        method: "GET".into(),
+        host: "127.0.0.1".into(),
+        port,
+        path: "/base".into(),
+        req_raw: format!("GET /base HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n")
+            .into_bytes()
+            .into(),
+        ..Default::default()
+    };
+    let (done_tx, done_rx) = std::sync::mpsc::sync_channel(1);
+    let worker = std::thread::spawn(move || {
+        done_tx.send(running.audit(entry)).unwrap();
+    });
+    at_rx
+        .recv_timeout(std::time::Duration::from_secs(2))
+        .unwrap();
+    let batch = engine.open().unwrap();
+    release_tx.send(()).unwrap();
+    assert!(matches!(
+        done_rx
+            .recv_timeout(std::time::Duration::from_secs(3))
+            .unwrap(),
+        Ok(Handoff::Joined)
+    ));
+    worker.join().unwrap();
+    server.join().unwrap();
+    let Handoff::Finalize(f) = batch.finish().unwrap() else {
+        panic!("finalizer")
+    };
+    assert_eq!(
+        f.run(|p| run_stored_stage_budgeted(&shared, p, 10, 8192)),
+        Finish::Complete
+    );
+    assert!(!shared.scan.is_busy());
+}
+
+#[test]
+fn cancelled_batch_actual_engine_admission_cannot_reset_shared_stop() {
+    use crate::scan_lifecycle::{AdmissionError, Finish, Handoff};
+    let shared = crate::net::Shared::new();
+    let limits = crate::scan_budget::Limits {
+        duration: std::time::Duration::from_secs(5),
+        http_attempts: 10,
+        connection_attempts: 10,
+        outgoing: 65536,
+        response: 65536,
+        decompressed: 65536,
+        inputs: 65536,
+        evidence: 65536,
+        evidence_records: 10,
+        records: 10,
+    };
+    let engine = crate::scan::ExperimentalEngine::new(shared.clone(), limits).unwrap();
+    let b = engine.open().unwrap();
+    b.cancel_handle().cancel();
+    shared.scan.stop.store(true, Ordering::SeqCst);
+    shared.scan.done.store(99, Ordering::SeqCst);
+    let e = crate::net::HistEntry {
+        method: "GET".into(),
+        host: "127.0.0.1".into(),
+        port: 9,
+        req_raw: b"GET / HTTP/1.1\r\nHost: 127.0.0.1:9\r\n\r\n"
+            .to_vec()
+            .into(),
+        ..Default::default()
+    };
+    assert!(matches!(engine.audit(e), Err(AdmissionError::Busy)));
+    assert!(matches!(engine.open(), Err(AdmissionError::Busy)));
+    assert!(shared.scan.stop.load(Ordering::SeqCst));
+    assert_eq!(shared.scan.done.load(Ordering::SeqCst), 99);
+    assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 0);
+    let Handoff::Finalize(f) = b.finish().unwrap() else {
+        panic!("finalizer")
+    };
+    assert_eq!(f.run(|_| Finish::Complete), Finish::Incomplete);
+}
