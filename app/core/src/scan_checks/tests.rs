@@ -347,6 +347,7 @@ fn registry_order_is_pinned() {
                 Scope::Request,
                 Some(BURP_GROUP)
             ),
+            ("active.dom-prototype-pollution", Scope::Request, Some(BURP_GROUP)),
             ("active.cors", Scope::Request, Some(BURP_GROUP)),
             (
                 "active.path-relative-style-sheet-import",
@@ -1550,5 +1551,363 @@ fn dom_form_action_real_properties_against_a_live_lab() {
         let got=lab_scan(port,&["active.dom-link-manipulation"],"GET",path,
             format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n"));
         assert!(got.iter().any(|(n,_,c)| n=="Link manipulation (DOM-based)" && c=="Firm"),"{path}: {got:?}");
+    }
+}
+
+/// R-13 prototype pollution on the shared DOM probe, under two-token
+/// source attribution: a page deep-merging the query string pollutes
+/// Object.prototype from __proto__[key] (location.search provenance,
+/// reported Tentative under the conservative rule); a page deep-merging
+/// the fragment does the same (location.hash, Firm); a page that only
+/// reflects the payload into a sink has NOT polluted (reflection is not
+/// pollution); a page filtering those keys is clean. Bounded fixtures:
+/// loopback-only lab, throwaway browser profile per probe, random inert
+/// tokens, so the pollution lives only inside the probe browser.
+/// Skipped when no Chromium is available.
+#[test]
+fn dom_prototype_pollution_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, _raw| {
+        let merge = r#"function setpath(o, parts, v) { var cur = o; for (var i = 0; i < parts.length - 1; i++) { if (typeof cur[parts[i]] !== 'object' || cur[parts[i]] === null) { cur[parts[i]] = {}; } cur = cur[parts[i]]; } cur[parts[parts.length - 1]] = v; }
+function parseqs(s, filter) { var cfg = {}; s.replace(/^[?#]/, '').split('&').forEach(function (p) { if (!p) { return; } var kv = p.split('='); var parts = kv[0].split('[').map(function (x) { return x.replace(/\]$/, ''); }); if (filter && (parts[0] === '__proto__' || parts[0] === 'constructor' || parts[0] === 'prototype')) { return; } setpath(cfg, parts, decodeURIComponent(kv[1] || '')); }); }"#;
+        let body = if path.starts_with("/vulnpp-hash") {
+            format!("<html><body><script>\n{merge}\nparseqs(location.hash, false);\n</script></body></html>")
+        } else if path.starts_with("/vulnpp") {
+            format!("<html><body><script>\n{merge}\nparseqs(location.search, false);\n</script></body></html>")
+        } else if path.starts_with("/reflectpp") {
+            "<html><body><script>document.write('<p>' + location.hash + '</p>');</script></body></html>".to_string()
+        } else if path.starts_with("/safepp") {
+            format!("<html><body><script>\n{merge}\nparseqs(location.search, true);\nparseqs(location.hash, true);\n</script></body></html>")
+        } else {
+            "<html><body><p>hello</p></body></html>".to_string()
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    for (page, confidence) in [
+        ("/vulnpp", Some("Tentative")),
+        ("/vulnpp-hash", Some("Firm")),
+        ("/reflectpp", None),
+        ("/safepp", None),
+    ] {
+        let got = lab_scan(
+            port,
+            &["active.dom-prototype-pollution"],
+            "GET",
+            page,
+            format!("GET {page} HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+        );
+        let hit = got
+            .iter()
+            .find(|(n, s, _)| n == "Client-side prototype pollution" && s == "info");
+        match confidence {
+            Some(c) => assert_eq!(hit.map(|(_, _, x)| x.as_str()), Some(c), "{page}: {got:?}"),
+            None => assert!(hit.is_none(), "{page}: {got:?}"),
+        }
+    }
+}
+
+/// Multi-family isolation regression, one navigation: a page that
+/// deep-merges the query string (query token) AND passes the fragment to
+/// an HTML sink (fragment token) must yield one pollution finding and
+/// one DOM-XSS finding, each keeping its own family, source and
+/// confidence - neither token may label the other family's finding. A
+/// page that only reflects the fragment (no new Object.prototype own
+/// key) yields the XSS finding and NO pollution finding, and a page that
+/// leaves the prototype unchanged yields neither. This coverage is
+/// ADDITION-ONLY: it pins detection and attribution of added properties
+/// and makes no overwrite-detection claim (tracked as a follow-up).
+/// Bounded: loopback lab, one throwaway browser profile per run, random
+/// inert tokens. Skipped when no Chromium is available.
+#[test]
+fn dom_prototype_pollution_multi_family_isolation_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    let visits = Arc::new(AtomicUsize::new(0));
+    let count = visits.clone();
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, move |_method, path, _raw| {
+        if path.starts_with("/mixed") {
+            count.fetch_add(1, Ordering::SeqCst);
+        }
+        let merge = r#"function setpath(o, parts, v) { var cur = o; for (var i = 0; i < parts.length - 1; i++) { if (typeof cur[parts[i]] !== 'object' || cur[parts[i]] === null) { cur[parts[i]] = {}; } cur = cur[parts[i]]; } cur[parts[parts.length - 1]] = v; }
+function parseqs(s) { var cfg = {}; s.replace(/^[?#]/, '').split('&').forEach(function (p) { if (!p) { return; } var kv = p.split('='); var parts = kv[0].split('[').map(function (x) { return x.replace(/\]$/, ''); }); setpath(cfg, parts, decodeURIComponent(kv[1] || '')); }); }"#;
+        let body = if path.starts_with("/mixed") {
+            // Query token pollutes the prototype; fragment token reaches
+            // an HTML sink. One navigation, two families.
+            format!("<html><body><script>\n{merge}\nparseqs(location.search);\ndocument.body.innerHTML = '<p>' + location.hash + '</p>';\n</script></body></html>")
+        } else if path.starts_with("/reflectonly") {
+            "<html><body><script>document.body.innerHTML = '<p>' + location.hash + '</p>';</script></body></html>".to_string()
+        } else if path.starts_with("/unchanged") {
+            "<html><body><script>var x = 1 + 1; document.title = 't' + x;</script></body></html>"
+                .to_string()
+        } else {
+            "<html><body><p>hello</p></body></html>".to_string()
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let run = |path: &str| {
+        let shared = crate::net::Shared::new();
+        let mut config = crate::scan_config::ScanConfig::default();
+        for (id, ..) in crate::scan::check_catalogue() {
+            if !["active.dom-prototype-pollution", "active.dom-xss"].contains(&id) {
+                config.disabled_checks.insert(id.into());
+            }
+        }
+        *crate::scan_config::shared_config(&shared).lock().unwrap() = config;
+        let e = crate::net::HistEntry {
+            method: "GET".into(),
+            host: "127.0.0.1".into(),
+            port,
+            path: path.into(),
+            req_raw: format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n")
+                .into_bytes()
+                .into(),
+            ..Default::default()
+        };
+        crate::scan::start_active_scan(shared.clone(), e, &[], &[]);
+        let start = std::time::Instant::now();
+        while shared.scan.is_busy() && start.elapsed() < std::time::Duration::from_secs(60) {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        assert!(!shared.scan.is_busy(), "scan did not finish");
+        let issues = shared.issues.lock().unwrap();
+        (issues
+            .iter()
+            .map(|i| {
+                (
+                    i.name.clone(),
+                    i.sev.clone(),
+                    i.confidence.clone(),
+                    i.detail.clone(),
+                )
+            })
+            .collect::<Vec<_>>(),)
+    };
+    let (mixed,) = run("/mixed");
+    let pp: Vec<_> = mixed
+        .iter()
+        .filter(|(n, ..)| n == "Client-side prototype pollution")
+        .collect();
+    let xss: Vec<_> = mixed
+        .iter()
+        .filter(|(n, ..)| n == "Cross-site scripting (DOM-based)")
+        .collect();
+    assert_eq!(pp.len(), 1, "one pollution finding: {mixed:?}");
+    assert_eq!(xss.len(), 1, "one DOM-XSS finding: {mixed:?}");
+    // The pollution finding belongs to the query token: search
+    // provenance, conservative Tentative, and no hash labeling.
+    assert_eq!(pp[0].1, "info");
+    assert_eq!(pp[0].2, "Tentative", "{:?}", pp[0].3);
+    assert!(pp[0].3.contains("location.search"), "{:?}", pp[0].3);
+    assert!(!pp[0].3.contains("location.hash"), "{:?}", pp[0].3);
+    // The XSS finding belongs to the fragment token: hash provenance,
+    // Firm, and no search labeling.
+    assert_eq!(xss[0].1, "high");
+    assert_eq!(xss[0].2, "Firm", "{:?}", xss[0].3);
+    assert!(xss[0].3.contains("location.hash"), "{:?}", xss[0].3);
+    assert!(!xss[0].3.contains("location.search"), "{:?}", xss[0].3);
+    assert_eq!(
+        visits.load(Ordering::SeqCst),
+        3,
+        "one baseline, one submission and one shared DOM navigation served both families"
+    );
+    // A reflected token with no new Object.prototype own key: XSS yes,
+    // pollution no.
+    let (reflect,) = run("/reflectonly");
+    assert!(
+        reflect
+            .iter()
+            .any(|(n, ..)| n == "Cross-site scripting (DOM-based)"),
+        "{reflect:?}"
+    );
+    assert!(
+        !reflect
+            .iter()
+            .any(|(n, ..)| n == "Client-side prototype pollution"),
+        "reflection must not be reported as pollution: {reflect:?}"
+    );
+    // Unchanged prototype: neither family reports.
+    let (unchanged,) = run("/unchanged");
+    assert!(unchanged.is_empty(), "{unchanged:?}");
+}
+
+/// Combined #186/pollution contract, addition-only. Stored-only prototype
+/// additions are deliberately not covered. One admitted operation serves
+/// both families, including separate hash/query pollution and stored DOM
+/// evidence. No overwrite-detection claim.
+#[test]
+fn dom_pollution_stored_exclusion_and_combined_budget_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    use std::sync::{Arc, Mutex};
+    let wire = Arc::new(Mutex::new(Vec::<String>::new()));
+    let captured = wire.clone();
+    let previous = Arc::new(Mutex::new(
+        std::collections::HashMap::<String, String>::new(),
+    ));
+    let store = previous.clone();
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, move |_, path, raw| {
+        if raw.is_empty() {
+            return String::new();
+        }
+        captured.lock().unwrap().push(path.to_string());
+        let (route, query) = path.split_once('?').unwrap_or((path, ""));
+        let prior = store
+            .lock()
+            .unwrap()
+            .get(route)
+            .cloned()
+            .unwrap_or_default();
+        if !query.is_empty() {
+            store.lock().unwrap().insert(route.into(), query.into());
+        }
+        let merge = r#"function merge(s) { s.replace(/^[?#]/,'').split('&').forEach(function(p) {var m=/^__proto__\[([^\]]+)\]=(.*)$/.exec(p);if(m) Object.prototype[m[1]]=decodeURIComponent(m[2]);}); }"#;
+        let script = match route {
+            "/ppmixed" | "/ppcap" => format!("{merge} merge('{prior}');merge(location.search);merge(location.hash);document.write('<p>{prior}</p>');document.write('<p>{prior}</p>');"),
+            "/ppstored" => format!("{merge} merge('{prior}');document.write('<p>{prior}</p>');"),
+            "/ppreflect" => "document.write('<p>'+location.hash+'</p>');".into(),
+            _ => "void 0".into(),
+        };
+        let resources = if route == "/ppcap" {
+            (0..100)
+                .map(|i| format!("<img src='/ppresource/{i}'>"))
+                .collect::<String>()
+        } else {
+            String::new()
+        };
+        let body = format!("<html><head><link rel='icon' href='data:,'></head><body><script>{script}</script>{resources}</body></html>");
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len())
+    });
+    for route in [
+        "/ppmixed",
+        "/ppstored",
+        "/ppreflect",
+        "/ppunchanged",
+        "/ppcap",
+    ] {
+        wire.lock().unwrap().clear();
+        let shared = crate::net::Shared::new();
+        let mut config = crate::scan_config::ScanConfig::default();
+        for (id, ..) in crate::scan::check_catalogue() {
+            if !["active.dom-prototype-pollution", "active.dom-xss"].contains(&id) {
+                config.disabled_checks.insert(id.into());
+            }
+        }
+        *crate::scan_config::shared_config(&shared).lock().unwrap() = config;
+        let e = crate::net::HistEntry {
+            method: "GET".into(),
+            host: "127.0.0.1".into(),
+            port,
+            path: route.into(),
+            req_raw: format!("GET {route} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n")
+                .into_bytes()
+                .into(),
+            ..Default::default()
+        };
+        crate::scan::start_active_scan(shared.clone(), e, &[], &[]);
+        let start = std::time::Instant::now();
+        while shared.scan.is_busy() && start.elapsed() < std::time::Duration::from_secs(60) {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        assert!(!shared.scan.is_busy(), "scan timeout: {route}");
+        let issues = shared.issues.lock().unwrap();
+        let summary = issues
+            .iter()
+            .map(|i| (&i.name, &i.confidence, &i.detail))
+            .collect::<Vec<_>>();
+        let pollution: Vec<_> = issues
+            .iter()
+            .filter(|i| i.name == "Client-side prototype pollution")
+            .collect();
+        let stored: Vec<_> = issues
+            .iter()
+            .filter(|i| i.name == "Cross-site scripting (stored DOM-based)")
+            .collect();
+        let requests = wire.lock().unwrap();
+        let expected = if route == "/ppcap" {
+            1 + crate::crawl::DOM_MAX_REQUESTS_PER_PROBE
+        } else {
+            3
+        };
+        assert_eq!(
+            requests.len(),
+            expected,
+            "shared operation count: {route}: {requests:?}"
+        );
+        let submission = requests[1].split_once('?').unwrap().1;
+        let stored_token = submission
+            .split_once('[')
+            .unwrap()
+            .1
+            .split(']')
+            .next()
+            .unwrap();
+        let query = requests[2].split_once('?').unwrap().1;
+        let query_token = query.split_once('[').unwrap().1.split(']').next().unwrap();
+        assert_ne!(stored_token, query_token);
+        match route {
+            "/ppmixed" | "/ppcap" => {
+                assert_eq!(pollution.len(), 2, "separate query/hash dedup: {summary:?}");
+                for (source, confidence) in
+                    [("location.search", "Tentative"), ("location.hash", "Firm")]
+                {
+                    let found: Vec<_> = pollution
+                        .iter()
+                        .filter(|i| i.detail.contains(&format!("read from <b>{source}</b>")))
+                        .collect();
+                    assert_eq!(found.len(), 1, "{source}: {summary:?}");
+                    assert_eq!(found[0].confidence, confidence);
+                    assert_eq!(found[0].sev, "info");
+                    assert!(
+                        !found[0].detail.contains(stored_token),
+                        "stored must not label pollution"
+                    );
+                    assert_eq!(
+                        found[0].detail.contains(query_token),
+                        source == "location.search",
+                        "token isolation"
+                    );
+                }
+                assert_eq!(stored.len(), 1, "stored XSS dedup: {summary:?}");
+                assert_eq!(issues.len(), 3, "no extra variants: {summary:?}");
+            }
+            "/ppstored" => {
+                assert!(
+                    pollution.is_empty(),
+                    "stored pollution must not be reported: {summary:?}"
+                );
+                assert_eq!(stored.len(), 1);
+                assert_eq!(issues.len(), 1);
+            }
+            "/ppreflect" => {
+                assert!(
+                    pollution.is_empty(),
+                    "reflection is not pollution: {summary:?}"
+                );
+                assert_eq!(issues.len(), 1);
+                assert_eq!(issues[0].name, "Cross-site scripting (DOM-based)");
+                assert_eq!(issues[0].confidence, "Firm");
+            }
+            _ => assert!(issues.is_empty(), "unchanged prototype: {summary:?}"),
+        }
+        for hit in stored {
+            assert_eq!(hit.confidence, "Tentative");
+            assert_eq!(hit.sev, "high");
+            assert!(hit.detail.contains(stored_token));
+            assert!(!hit.detail.contains(query_token));
+            assert!(!hit.detail.contains("location.hash"));
+            assert!(!hit.detail.contains("location.search"));
+        }
     }
 }

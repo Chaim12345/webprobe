@@ -71,6 +71,61 @@ pub(crate) const DOM_DOCUMENT_DOMAIN_SINKS: &[&str] = &["document.domain"];
 pub(crate) const DOM_COOKIE_MANIPULATION_SINKS: &[&str] = &["document.cookie"];
 pub(crate) const DOM_WEB_MESSAGE_SINKS: &[&str] = &["postMessage"];
 
+/// Addition-only Object.prototype evidence. Stored pollution is not covered.
+pub(crate) const DOM_PROTOTYPE_POLLUTION_SINKS: &[&str] = &["Object.prototype"];
+
+/// Only dedicated URL-part tokens plus new own-key evidence are admitted.
+/// Reflection into a DOM sink is not pollution; stored pollution and overwrites
+/// of existing prototype properties are outside this milestone.
+pub(crate) struct DomPrototypePollution;
+impl RequestCheck for DomPrototypePollution {
+    fn id(&self) -> &'static str {
+        "active.dom-prototype-pollution"
+    }
+    fn issue(&self) -> &'static str {
+        "Client-side prototype pollution"
+    }
+    fn scope(&self) -> Scope {
+        Scope::Request
+    }
+    fn group(&self) -> Option<&'static str> {
+        Some(BURP_GROUP)
+    }
+    fn run(&self, cx: &ScanCtx) {
+        if cx.stopped() || !cx.runs(self.issue()) {
+            return;
+        }
+        let outcome = dom_analysis_hits(cx);
+        let mut seen = std::collections::HashSet::new();
+        for hit in &outcome.hits {
+            if !DOM_PROTOTYPE_POLLUTION_SINKS.contains(&hit.sink.as_str())
+                || !matches!(
+                    hit.source.as_str(),
+                    "location.hash" | "location.search" | "location.hash+location.search"
+                )
+                || (!outcome.stored.is_empty() && hit.sink_value.contains(&outcome.stored))
+                || !seen.insert((hit.sink.as_str(), hit.source.as_str()))
+            {
+                continue;
+            }
+            let source = match hit.source.as_str() {
+                "location.hash+location.search" => "location.hash and location.search",
+                s => s,
+            };
+            let mut issue = mk("info", self.issue(), &cx.entry, format!(
+                "The application may be vulnerable to client-side prototype pollution. Data is read from <b>{}</b> and a new own property was observed on <b>Object.prototype</b>.<br><br>The source value <b>{}</b> reached the prototype as <b>{}</b>.<br><br>Addition-only evidence: existing-property overwrites and stored pollution are not covered.",
+                util::html_encode(source), util::html_encode(&hit.source_value), util::html_encode(&hit.sink_value)));
+            issue.confidence = if hit.source == "location.hash" {
+                "Firm"
+            } else {
+                "Tentative"
+            }
+            .into();
+            cx.report(vec![issue]);
+        }
+    }
+}
+
 /// A GET over the audited session (cookie/session headers of the template
 /// request, minus framing and hop-by-hop fields): the stored submission
 /// carries the same identity as the audited
@@ -586,6 +641,7 @@ fn dom_sink_sets_match_the_instrumentation() {
         DOM_DOCUMENT_DOMAIN_SINKS,
         DOM_COOKIE_MANIPULATION_SINKS,
         DOM_WEB_MESSAGE_SINKS,
+        DOM_PROTOTYPE_POLLUTION_SINKS,
     ];
     let mut rust: Vec<&str> = families.iter().flat_map(|f| f.iter().copied()).collect();
     rust.sort_unstable();
@@ -660,6 +716,7 @@ fn dom_family_sinks_are_wrapped() {
         ("document-domain", DOM_DOCUMENT_DOMAIN_SINKS),
         ("cookie", DOM_COOKIE_MANIPULATION_SINKS),
         ("web-message", DOM_WEB_MESSAGE_SINKS),
+        ("prototype-pollution", DOM_PROTOTYPE_POLLUTION_SINKS),
     ] {
         for sink in sinks {
             // Dynamic-name sinks are pinned by the prefix assertion in

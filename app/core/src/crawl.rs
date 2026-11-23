@@ -2114,6 +2114,40 @@ pub(crate) const DOM_INSTRUMENT_JS: &str = r#"
       set: function (v) { record("document.domain", v); return domainDesc.set.call(this, v); }
     });
   }
+  // Client-side prototype pollution (KB 00200316): a page deep-merging
+  // a URL part walks obj["__proto__"] into Object.prototype, which shows
+  // up as a NEW own property there. There is no hookable call for the
+  // merge itself, so the detector baselines the prototype's own keys and
+  // polls: a later own key whose name or value carries either run-owned
+  // URL-part token is pollution this page caused - not a pre-existing
+  // property (baseline) and not a reflection (a reflected string reaches
+  // a sink, never the prototype). Pollution in place, no executable
+  // payload. The stored-submission token is deliberately NOT pollution
+  // evidence this milestone: a key or value whose provenance is "stored"
+  // (or "unknown") is skipped, so stored-provenance pollution has no
+  // coverage and is never relabeled as query/hash pollution.
+  var protoKnown = Object.getOwnPropertyNames(Object.prototype);
+  var qhProvenance = function (p) {
+    return p === "location.hash" || p === "location.search" || p === "location.hash+location.search";
+  };
+  window.setInterval(function () {
+    try {
+      var now = Object.getOwnPropertyNames(Object.prototype);
+      for (var i = 0; i < now.length; i++) {
+        var k = now[i];
+        if (protoKnown.indexOf(k) < 0) {
+          var v = "";
+          try { v = String(Object.prototype[k]); } catch (e) {}
+          var pk = provenance(k);
+          var pv = provenance(v);
+          if ((qhProvenance(pk) || qhProvenance(pv)) && pk !== "stored" && pv !== "stored" && pk !== "unknown" && pv !== "unknown") {
+            record("Object.prototype", k + "=" + v);
+          }
+        }
+      }
+      protoKnown = now;
+    } catch (e) {}
+  }, 25);
   // webdatabase.executeSql (burp.Zcwh's client-side SQL sink) is not
   // wrapped: openDatabase is gone from current Chromium.
   var cookieDesc = Object.getOwnPropertyDescriptor(Document.prototype, "cookie");
