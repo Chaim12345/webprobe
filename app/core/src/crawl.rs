@@ -622,6 +622,20 @@ pub(crate) fn dom_complete_final_response(response: &[u8]) -> bool {
     }
 }
 
+/// Monotonic bounded evidence union: later successful empty/reset snapshots
+/// cannot erase independently confirmed evidence. Stable fields form the key.
+pub(crate) fn dom_merge_confirmed_hits(hits: &mut Vec<DomHit>, snapshot: impl IntoIterator<Item=DomHit>,
+    origin: &str, hash: &str, query: &str, stored: &str) {
+    for hit in snapshot.into_iter().take(50) {
+        if hits.len()>=50 { break; }
+        if !dom_confirmed_hit(&hit,origin,hash,query,stored) { continue; }
+        let duplicate=hits.iter().any(|old| old.source==hit.source && old.sink==hit.sink
+            && old.source_value==hit.source_value && old.sink_value==hit.sink_value
+            && old.page_url==hit.page_url);
+        if !duplicate { hits.push(hit); }
+    }
+}
+
 /// Independently confirmed snapshots require bounded source-to-sink token
 /// evidence. Missing source/provenance is withheld, not upgraded on failure.
 fn dom_confirmed_hit(hit: &DomHit, origin: &str, hash: &str, query: &str, stored: &str) -> bool {
@@ -2468,8 +2482,8 @@ fn dom_probe_with_binary(
                 Some(snapshot) => {
                     let hash=bracket_token(canary).unwrap_or(canary);
                     let query=url.split_once('?').and_then(|(_,q)|bracket_token(q)).unwrap_or(hash);
-                    hits=snapshot.into_iter().take(50).filter(|h|
-                        dom_confirmed_hit(h,&origin_of(url).unwrap_or_default(),hash,query,stored)).collect();
+                    dom_merge_confirmed_hits(&mut hits,snapshot,
+                        &origin_of(url).unwrap_or_default(),hash,query,stored);
                 },
                 None => { evaluation_failed=true; break; }
             }
@@ -2576,6 +2590,21 @@ mod dom_route_tests {
         let text = String::from_utf8(evidence).unwrap();
         assert_eq!(text, "HTTP/1.1 201\r\nContent-Type: text/html\r\nContent-Security-Policy: worker-src 'none'\r\nContent-Length: 22\r\n\r\n<script>probe</script>");
         assert!(!text.contains("Transfer-Encoding"));
+    }
+
+    #[test]
+    fn dom_confirmed_union_survives_successful_shorter_and_empty_snapshots() {
+        let make=|sink:&str|DomHit {source:"location.hash".into(),sink:sink.into(),
+            source_value:"hash".into(),sink_value:"hash".into(),page_url:"http://h/".into()};
+        let mut hits=Vec::new();
+        dom_merge_confirmed_hits(&mut hits,[make("document.write"),make("document.cookie")],"http://h","hash","query","stored");
+        dom_merge_confirmed_hits(&mut hits,[make("document.write")],"http://h","hash","query","stored");
+        dom_merge_confirmed_hits(&mut hits,Vec::new(),"http://h","hash","query","stored");
+        assert_eq!(hits.len(),2,"shorter/empty successful evaluations must not erase proof");
+        for _ in 0..60 {dom_merge_confirmed_hits(&mut hits,[make("document.write")],"http://h","hash","query","stored");}
+        assert_eq!(hits.len(),2,"stable-field dedup");
+        for n in 0..60 {dom_merge_confirmed_hits(&mut hits,[make(&format!("sink{n}"))],"http://h","hash","query","stored");}
+        assert_eq!(hits.len(),50,"bounded union");
     }
 
     #[test]

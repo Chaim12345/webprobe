@@ -724,7 +724,15 @@ fn dom_cancelled_dispatch_preserves_cross_family_cached_findings_without_egress(
     let hits=["document.write","document.cookie"].into_iter().map(|sink| crate::crawl::DomHit {
         source:"location.hash".into(),sink:sink.into(),source_value:"proven".into(),sink_value:"proven".into(),page_url:url.clone()
     }).collect::<Vec<_>>();
-    let outcome=webprobe_support::dedup::DomProbeOutcome {hits:hits.clone(),reflected:None,stored:"stored".into(),
+    // Deterministic production merge sequence: confirmed snapshot, a shorter
+    // successful snapshot, then an empty successful evaluation, then stop.
+    let mut retained=Vec::new();
+    let origin=crate::crawl::origin_of(&url).unwrap();
+    crate::crawl::dom_merge_confirmed_hits(&mut retained,hits.clone(),&origin,"proven","query","stored");
+    crate::crawl::dom_merge_confirmed_hits(&mut retained,[hits[0].clone()],&origin,"proven","query","stored");
+    crate::crawl::dom_merge_confirmed_hits(&mut retained,Vec::new(),&origin,"proven","query","stored");
+    assert_eq!(retained.len(),2);
+    let outcome=webprobe_support::dedup::DomProbeOutcome {hits:retained,reflected:None,stored:"stored".into(),
         complete:false,cancelled:true,diagnostic:"cancelled after confirmed snapshot".into()};
     let cell=std::sync::OnceLock::new();cell.set(outcome).unwrap();
     cx.state().dom_hits.lock().unwrap().insert(url.clone(),std::sync::Arc::new(cell));
