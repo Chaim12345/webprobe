@@ -4256,3 +4256,32 @@ fn entity_expansion_depth2_confirmed_by_depth3() {
     };
     assert!(run_entity_expansion_check(body, "ab", "SEEDSEED", half).is_none());
 }
+
+#[test]
+fn entity_expansion_probe_is_internal_and_finite() {
+    // The DOCTYPE asks the parser for a finite, tiny expansion: an 8-byte
+    // seed doubled `depth` times (2^depth copies, 64 bytes at depth 3).
+    assert_eq!(entity_expansion_marker("12345678", 3).len(), 8 * 8);
+    // Internal general entities only: no external entities, no parameter
+    // entities, no external DTD subset, no timing anywhere in the probe.
+    for depth in [2, 3] {
+        let d = entity_expansion_doctype("xeeabcde", "12345678", depth);
+        assert_eq!(d.matches("<!ENTITY ").count(), depth + 1);
+        for banned in ["SYSTEM", "PUBLIC", "%", "<!ATTLIST", "<!ELEMENT", "http"] {
+            assert!(!d.contains(banned), "depth {depth} must not contain {banned:?}: {d}");
+        }
+        // The real doc start and the <id>7</id> value range.
+        let probe = expansion_probe_at(
+            "<?xml version=\"1.0\"?><order><id>7</id></order>",
+            21,
+            (32, 33),
+            "xeeabcde",
+            "12345678",
+            depth,
+        );
+        assert!(probe.contains(&format!("&xeeabcde{depth};")));
+        for banned in ["SYSTEM", "PUBLIC", "%"] {
+            assert!(!probe.contains(banned), "probe must not contain {banned:?}");
+        }
+    }
+}

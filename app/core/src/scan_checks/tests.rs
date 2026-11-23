@@ -1849,7 +1849,7 @@ fn host_probe_claim_is_released_when_the_probe_transport_fails() {
 /// and `img/Web.config` exists while its `X`-suffixed sibling does not.
 /// The issue detail must name the retrieved file; a lab without the known
 /// file still reports the differential, without the retrieval.
-fn file_param_lab(known_file: bool) -> u16 {
+fn file_param_lab(known_file: bool, seen: std::sync::Arc<std::sync::Mutex<Vec<String>>>) -> u16 {
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     lab_serve(l, move |_method, target, _raw| {
         let q = target
@@ -1858,6 +1858,7 @@ fn file_param_lab(known_file: bool) -> u16 {
             .unwrap_or_default();
         let v = q.split('&').find_map(|kv| kv.strip_prefix("file=")).unwrap_or("");
         let v = util::url_decode(&v.replace('+', " "));
+        seen.lock().unwrap().push(v.clone());
         let resolved: Vec<&str> = v
             .split(['/', '\\'])
             .filter(|s| !s.is_empty() && *s != ".")
@@ -1876,7 +1877,8 @@ fn file_param_lab(known_file: bool) -> u16 {
 
 #[test]
 fn r10_file_path_manip_pulls_a_known_file() {
-    let port = file_param_lab(true);
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let port = file_param_lab(true, seen.clone());
     let host = format!("127.0.0.1:{port}");
     let req = format!("GET /view?file=img/logo.png HTTP/1.1\r\nHost: {host}\r\n\r\n");
     let got = lab_scan_full(
@@ -1892,10 +1894,18 @@ fn r10_file_path_manip_pulls_a_known_file() {
     assert_eq!((n.as_str(), s.as_str(), c.as_str()), ("File path manipulation", "high", "Firm"));
     assert!(detail.contains("Web.config"), "retrieval named: {detail}");
     assert!(detail.contains("<system.web"), "marker named: {detail}");
+    // The follow-up stops at the first retrieved file: exactly one probe
+    // and one control, and the later known files are never fetched.
+    let seen = seen.lock().unwrap();
+    assert_eq!(seen.iter().filter(|v| v.as_str() == "img/Web.config").count(), 1, "{seen:?}");
+    assert_eq!(seen.iter().filter(|v| v.as_str() == "img/Web.configX").count(), 1, "{seen:?}");
+    assert!(!seen.iter().any(|v| v.contains("web.xml") || v.contains(".htaccess")), "early stop: {seen:?}");
 
     // Without the known file: the differential still reports, the detail
-    // names no retrieval.
-    let port = file_param_lab(false);
+    // names no retrieval, and the follow-up spends exactly one probe per
+    // known file (controls are only sent after a marker hit, so none here).
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let port = file_param_lab(false, seen.clone());
     let host = format!("127.0.0.1:{port}");
     let req = format!("GET /view?file=img/logo.png HTTP/1.1\r\nHost: {host}\r\n\r\n");
     let got = lab_scan_full(
@@ -1909,6 +1919,15 @@ fn r10_file_path_manip_pulls_a_known_file() {
         panic!("differential must report: {got:?}");
     };
     assert!(!detail.contains("known file"), "no retrieval: {detail}");
+    let seen = seen.lock().unwrap();
+    for f in ["img/Web.config", "img/WEB-INF/web.xml", "img/.htaccess"] {
+        assert_eq!(seen.iter().filter(|v| v.as_str() == f).count(), 1, "{f}: {seen:?}");
+        assert_eq!(
+            seen.iter().filter(|v| v.as_str() == format!("{f}X")).count(),
+            0,
+            "no marker hit, no control: {f}X: {seen:?}"
+        );
+    }
 }
 
 /// R-10 follow-up: the cross-domain policy checks against a live lab.
@@ -1916,8 +1935,11 @@ fn r10_file_path_manip_pulls_a_known_file() {
 /// Silverlight policy 404s (silent).
 #[test]
 fn r10_crossdomain_policy_against_a_live_lab() {
+    let paths = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let paths2 = paths.clone();
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let port = lab_serve(l, |_method, path, _raw| {
+    let port = lab_serve(l, move |_method, path, _raw| {
+        paths2.lock().unwrap().push(path.to_string());
         let (status, ct, body) = match path {
             "/crossdomain.xml" => (
                 "200 OK",
@@ -1948,6 +1970,14 @@ fn r10_crossdomain_policy_against_a_live_lab() {
         got,
         [("Flash cross-domain policy", "high", "Certain")],
         "wildcard Flash policy only: {got:?}"
+    );
+    // The per-host budget: each policy file fetched exactly once.
+    let paths = paths.lock().unwrap();
+    assert_eq!(paths.iter().filter(|p| p.as_str() == "/crossdomain.xml").count(), 1, "{paths:?}");
+    assert_eq!(
+        paths.iter().filter(|p| p.as_str() == "/clientaccesspolicy.xml").count(),
+        1,
+        "{paths:?}"
     );
 
     // A policy that trusts only unrelated domains: quiet.
@@ -2003,8 +2033,13 @@ fn r10_header_dependent_response_against_a_live_lab() {
         body.push_str("</body></html>");
         format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
     };
+    let count = std::sync::Arc::new(std::sync::Mutex::new(0usize));
+    let count2 = count.clone();
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let port = lab_serve(l, dependent);
+    let port = lab_serve(l, move |m, p, r| {
+        *count2.lock().unwrap() += 1;
+        dependent(m, p, r)
+    });
     let host = format!("127.0.0.1:{port}");
     let req = format!("GET /home HTTP/1.1\r\nHost: {host}\r\nUser-Agent: Mozilla/5.0 (X11; Linux x86_64) Gecko/20100101 Firefox/121.0\r\n\r\n");
     let got = lab_scan(
@@ -2029,6 +2064,9 @@ fn r10_header_dependent_response_against_a_live_lab() {
         got.contains(&("User agent-dependent response", "info", "Tentative")),
         "ua lab: {got:?}"
     );
+    // The pinned budget: the baseline fetch plus two checks x two sends x
+    // the accuracy's rounds (Normal = 6), no retries on top.
+    assert_eq!(*count.lock().unwrap(), 1 + 2 * 2 * 6);
 
     // A header-independent page: neither check reports.
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
@@ -2083,8 +2121,13 @@ fn r10_xml_entity_expansion_against_a_live_lab() {
         let body = r#"<?xml version="1.0"?><order><id>7</id></order>"#;
         format!("POST /order HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/xml\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
     };
+    let count = std::sync::Arc::new(std::sync::Mutex::new(0usize));
+    let count2 = count.clone();
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let port = lab_serve(l, expander);
+    let port = lab_serve(l, move |m, p, r| {
+        *count2.lock().unwrap() += 1;
+        expander(m, p, r)
+    });
     let got = lab_scan(
         port,
         &["active.xml-entity-expansion"],
@@ -2097,8 +2140,14 @@ fn r10_xml_entity_expansion_against_a_live_lab() {
             .any(|(n, s, c)| n == "XML entity expansion" && s == "medium" && c == "Firm"),
         "expanding parser: {got:?}"
     );
+    // The pinned budget: the baseline, the depth-2 probe and the depth-3
+    // confirmation, exactly once each.
+    assert_eq!(*count.lock().unwrap(), 3);
+    let count = std::sync::Arc::new(std::sync::Mutex::new(0usize));
+    let count2 = count.clone();
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let port = lab_serve(l, |_m, _p, _r| {
+    let port = lab_serve(l, move |_m, _p, _r| {
+        *count2.lock().unwrap() += 1;
         "HTTP/1.1 200 OK\r\nContent-Type: text/xml\r\nContent-Length: 4\r\nConnection: close\r\n\r\nnone".to_string()
     });
     let got = lab_scan(
@@ -2112,6 +2161,8 @@ fn r10_xml_entity_expansion_against_a_live_lab() {
         !got.iter().any(|(n, ..)| n == "XML entity expansion"),
         "plain parser must stay quiet: {got:?}"
     );
+    // No marker at depth 2: no confirmation send either (baseline + 1).
+    assert_eq!(*count.lock().unwrap(), 2);
 }
 
 /// R-10 web cache poisoning (Zp22 / Zg1g rule): reported only when a
@@ -2925,4 +2976,39 @@ fn dom_form_action_real_properties_against_a_live_lab() {
             "{path}: {got:?}"
         );
     }
+}
+
+/// The XML probe request is always validly framed: a base request that
+/// carried Content-Encoding / Transfer-Encoding loses them, exactly one
+/// Content-Length remains and it matches the body byte count.
+#[test]
+fn xml_body_request_framing_is_always_valid() {
+    let base = "POST /order HTTP/1.1\r\nHost: h\r\nContent-Type: application/xml\r\nContent-Encoding: gzip\r\nTransfer-Encoding: chunked\r\nContent-Length: 99\r\n\r\n".as_bytes();
+    let body = "<?xml version=\"1.0\"?><order><id>7</id></order>";
+    let req = xml_body_request(base, body);
+    let p = util::parse_http(&req);
+    assert_eq!(
+        util::get_header(&p.headers, "Content-Length").as_deref(),
+        Some(body.len().to_string().as_str())
+    );
+    assert_eq!(
+        p.headers
+            .iter()
+            .filter(|(k, _)| k.eq_ignore_ascii_case("content-length"))
+            .count(),
+        1
+    );
+    assert!(util::get_header(&p.headers, "Content-Encoding").is_none());
+    assert!(util::get_header(&p.headers, "Transfer-Encoding").is_none());
+    // The body follows the head exactly.
+    assert_eq!(&req[p.head_len..], body.as_bytes());
+    // A base without those headers frames the same way.
+    let base = "POST /order HTTP/1.1\r\nHost: h\r\n\r\n".as_bytes();
+    let req = xml_body_request(base, body);
+    let p = util::parse_http(&req);
+    assert_eq!(&req[p.head_len..], body.as_bytes());
+    assert_eq!(
+        util::get_header(&p.headers, "Content-Length").as_deref(),
+        Some(body.len().to_string().as_str())
+    );
 }

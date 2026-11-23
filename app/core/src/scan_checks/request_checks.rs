@@ -279,8 +279,11 @@ impl RequestCheck for CrossDomainPolicy {
     }
     fn run(&self, cx: &ScanCtx) {
         let (scheme, _) = origin_of(cx);
+        // Once per scheme/host/port and policy file per run: a fetched
+        // policy (found or clean) stays claimed; a failed fetch releases
+        // the claim so a later item of the same host can retry.
         let key = format!("{scheme}://{}:{}|xdp|{}", cx.host, cx.port, self.path());
-        if !cx.state().crossdomain_hosts.lock().unwrap().insert(key) || cx.stopped() {
+        if !cx.state().crossdomain_hosts.lock().unwrap().insert(key.clone()) || cx.stopped() {
             return;
         }
         let probe = format!(
@@ -288,7 +291,11 @@ impl RequestCheck for CrossDomainPolicy {
             self.path(),
             server_host_hdr(cx)
         );
-        let Some(resp) = burp_send(cx, probe.as_bytes()) else { return };
+        // One send, no resend on a lost response.
+        let Some(resp) = burp_send(cx, probe.as_bytes()) else {
+            cx.state().crossdomain_hosts.lock().unwrap().remove(&key);
+            return;
+        };
         let found = crate::burp_checks::crossdomain_findings(&resp, &cx.host, self.kind);
         if found.is_empty() {
             return;
@@ -516,12 +523,30 @@ impl RequestCheck for XxeFileRead {
     }
 }
 
+/// Rebuild a request whose head is `head` (the base request up to the
+/// header/body split) around a raw XML probe `body`: any Content-Encoding
+/// and Transfer-Encoding the original carried are dropped (the probe is
+/// raw bytes) and Content-Length is set to the body's exact length, so the
+/// result is always validly framed.
+pub(crate) fn xml_body_request(head: &[u8], body: &str) -> Vec<u8> {
+    let req = crate::util::remove_header(head, "Content-Encoding");
+    let req = crate::util::remove_header(&req, "Transfer-Encoding");
+    let mut req =
+        crate::util::replace_or_add_header(&req, "Content-Length", &body.len().to_string());
+    req.extend_from_slice(body.as_bytes());
+    req
+}
+
 /// XML entity expansion (burp.Zgij), Burp's two scopes folded into the
 /// request check: the per-request XML base (burp.Ze3z) and the per-insertion
 /// points (burp.Zin9) are the element-value points of `xxe_points`. A
 /// quadratic DOCTYPE with random entity names and seed, depth 2 confirmed by
-/// depth 3; the exponentially repeated seed in the response is the evidence
-/// (no timing, no external entities). XML request bodies only.
+/// depth 3; the exponentially repeated seed in the response is the evidence.
+/// XML request bodies only. Budgets: at most 2 sends per value point, the
+/// points themselves capped by `xxe_points` (10); the expansion asked of the
+/// parser is finite and tiny (an 8-byte seed doubled 3 times = 64 bytes),
+/// internal general entities only - no external entities, no parameter
+/// entities, no external DTD, no timing. A lost response is never resent.
 pub(crate) struct XmlEntityExpansion;
 
 impl RequestCheck for XmlEntityExpansion {
@@ -554,15 +579,9 @@ impl RequestCheck for XmlEntityExpansion {
         };
         let rec = Recorder::default();
         let send = |body: &str| -> Option<String> {
-            let mut req = cx.req.as_bytes().to_vec();
-            req.truncate(cx.parts.head_len.min(cx.req.len()));
-            req.extend_from_slice(body.as_bytes());
-            // The probe body is raw XML: drop any Content-Encoding /
-            // Transfer-Encoding the original carried, then set the length.
-            let req = crate::util::remove_header(&req, "Content-Encoding");
-            let req = crate::util::remove_header(&req, "Transfer-Encoding");
-            let req =
-                crate::util::replace_or_add_header(&req, "Content-Length", &body.len().to_string());
+            let mut head = cx.req.as_bytes().to_vec();
+            head.truncate(cx.parts.head_len.min(cx.req.len()));
+            let req = xml_body_request(&head, body);
             let resp = rec.send(cx, body, &req)?;
             let rp = util::parse_http(&resp);
             Some(String::from_utf8_lossy(&resp[rp.head_len.min(resp.len())..]).into_owned())
