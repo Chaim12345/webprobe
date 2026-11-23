@@ -1387,6 +1387,7 @@ fn main() {
     {
         "hotkeys" => ui::SettingsPane::Hotkeys,
         "library" => ui::SettingsPane::ConfigurationLibrary,
+        "suite" => ui::SettingsPane::Suite,
         _ => ui::SettingsPane::Appearance,
     };
     let settings_open = std::env::var("WEBPROBE_SETTINGS").is_ok();
@@ -1430,6 +1431,7 @@ fn main() {
     // already up, nor in scripted runs (no autosave, a fixed tab, or
     // WEBPROBE_NO_START_SCREEN).
     if autosave_enabled()
+        && project_file.is_none()
         && app.eng.recovery.is_none()
         && std::env::var_os("WEBPROBE_TAB").is_none()
         && std::env::var_os("WEBPROBE_NO_START_SCREEN").is_none()
