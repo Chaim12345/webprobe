@@ -182,22 +182,24 @@ pub(crate) fn exchange(
             .next()
             .and_then(|v| std::str::from_utf8(v).ok())
             .unwrap_or("");
+        let mut parser = RawParser::default();
         loop {
-            match assess(&buffer, method, false)? {
+            match parser.assess(&buffer, method, false)? {
                 Assessment::Complete => return Ok(std::mem::take(&mut buffer)),
                 Assessment::Need => {}
             }
             let mut scratch = [0; 4096];
-            let cap = if util::find_head_end(&buffer).is_none() {
-                1
-            } else {
-                scratch.len()
-            };
+            let cap = scratch
+                .len()
+                .min(crate::codec::MAX_BODY.saturating_sub(buffer.len()));
+            if cap == 0 {
+                return Err("per-response 64MiB cap reached, not EOF".into());
+            }
             let n = io
                 .read(&mut scratch[..cap])
                 .map_err(|e| format!("read: {e}"))?;
             if n == 0 {
-                return match assess(&buffer, method, true)? {
+                return match parser.assess(&buffer, method, true)? {
                     Assessment::Complete => Ok(std::mem::take(&mut buffer)),
                     Assessment::Need => Err("incomplete clean EOF".into()),
                 };
@@ -290,136 +292,212 @@ enum Assessment {
     Need,
     Complete,
 }
-fn assess(raw: &[u8], method: &str, eof: bool) -> Result<Assessment, String> {
-    let Some(head) = util::find_head_end(raw) else {
-        return if raw.len() > 65536 {
-            Err("head limit".into())
+#[derive(Default)]
+struct RawParser {
+    searched: usize,
+    head: Option<usize>,
+    kind: Option<crate::codec::BodyKind>,
+    chunk_at: usize,
+    chunk_end: Option<usize>,
+    zero: bool,
+}
+impl RawParser {
+    fn assess(&mut self, raw: &[u8], method: &str, eof: bool) -> Result<Assessment, String> {
+        let head = if let Some(head) = self.head {
+            head
         } else {
-            Ok(Assessment::Need)
-        };
-    };
-    if head > 65536 {
-        return Err("head limit".into());
-    }
-    let text = std::str::from_utf8(&raw[..head]).map_err(|_| "invalid header bytes")?;
-    if text
-        .as_bytes()
-        .iter()
-        .enumerate()
-        .any(|(i, b)| *b == b'\n' && (i == 0 || text.as_bytes()[i - 1] != b'\r'))
-    {
-        return Err("bare LF".into());
-    }
-    let mut lines = text.split("\r\n");
-    let status = lines.next().unwrap_or("");
-    let mut fields = status.splitn(3, ' ');
-    let version = fields.next().unwrap_or("");
-    let code = fields.next().unwrap_or("");
-    let reason = fields.next();
-    if !matches!(version, "HTTP/1.0" | "HTTP/1.1")
-        || code.len() != 3
-        || !code.bytes().all(|b| b.is_ascii_digit())
-        || reason.is_none()
-    {
-        return Err("invalid status line".into());
-    }
-    if reason.unwrap_or("").bytes().any(|b| b < 32 || b == 127) {
-        return Err("invalid reason phrase".into());
-    }
-    let code = code.parse::<u16>().map_err(|_| "invalid status")?;
-    if !(200..600).contains(&code) {
-        return Err("unsupported interim/upgrade/invalid status".into());
-    }
-    let mut encoding = false;
-    for line in lines {
-        if line.is_empty() {
-            continue;
-        }
-        let (name, value) = line.split_once(':').ok_or("invalid header")?;
-        if name.is_empty()
-            || !name
-                .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&b))
-            || value.bytes().any(|b| b < 32 && b != b'\t' || b == 127)
-        {
-            return Err("invalid header syntax".into());
-        }
-        if name.eq_ignore_ascii_case("content-encoding")
-            && !value.trim().eq_ignore_ascii_case("identity")
-        {
-            encoding = true;
-        }
-        if name.eq_ignore_ascii_case("content-type")
-            && value
-                .trim()
-                .to_ascii_lowercase()
-                .starts_with("text/event-stream")
-        {
-            return Err("streaming unsupported".into());
-        }
-    }
-    if encoding {
-        return Err("compressed response unsupported before body growth".into());
-    }
-    let body = &raw[head..];
-    match crate::codec::response_body_kind_strict(&raw[..head], method)
-        .map_err(|_| "strict framing rejected")?
-    {
-        crate::codec::BodyKind::None => {
-            if body.is_empty() {
-                Ok(Assessment::Complete)
-            } else {
-                Err("excess bodyless bytes".into())
+            let from = self.searched.saturating_sub(3);
+            let Some(found) = util::find_head_end(&raw[from..]) else {
+                self.searched = raw.len();
+                return if raw.len() > 65536 {
+                    Err("head limit".into())
+                } else {
+                    Ok(Assessment::Need)
+                };
+            };
+            let head = from + found;
+            if head > 65536 {
+                return Err("head limit".into());
             }
+            self.head = Some(head);
+            head
+        };
+        if self.kind.is_none() {
+            let text = std::str::from_utf8(&raw[..head]).map_err(|_| "invalid header bytes")?;
+            if text
+                .as_bytes()
+                .iter()
+                .enumerate()
+                .any(|(i, b)| *b == b'\n' && (i == 0 || text.as_bytes()[i - 1] != b'\r'))
+            {
+                return Err("bare LF".into());
+            }
+            let mut lines = text.split("\r\n");
+            let status = lines.next().unwrap_or("");
+            let mut fields = status.splitn(3, ' ');
+            let version = fields.next().unwrap_or("");
+            let code = fields.next().unwrap_or("");
+            let reason = fields.next();
+            if !matches!(version, "HTTP/1.0" | "HTTP/1.1")
+                || code.len() != 3
+                || !code.bytes().all(|b| b.is_ascii_digit())
+                || reason.is_none()
+            {
+                return Err("invalid status line".into());
+            }
+            if reason.unwrap_or("").bytes().any(|b| b < 32 || b == 127) {
+                return Err("invalid reason phrase".into());
+            }
+            let code = code.parse::<u16>().map_err(|_| "invalid status")?;
+            if !(200..600).contains(&code) {
+                return Err("unsupported interim/upgrade/invalid status".into());
+            }
+            let mut encoding = false;
+            let mut lengths = Vec::new();
+            let mut transfers = Vec::new();
+            for line in lines {
+                if line.is_empty() {
+                    continue;
+                }
+                let (name, value) = line.split_once(':').ok_or("invalid header")?;
+                if name.is_empty()
+                    || !name
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&b))
+                    || value.bytes().any(|b| b < 32 && b != b'\t' || b == 127)
+                {
+                    return Err("invalid header syntax".into());
+                }
+                if name.eq_ignore_ascii_case("content-length") {
+                    lengths.push(value.trim());
+                }
+                if name.eq_ignore_ascii_case("transfer-encoding") {
+                    transfers.push(value.trim());
+                }
+                if name.eq_ignore_ascii_case("content-encoding")
+                    && !value.trim().eq_ignore_ascii_case("identity")
+                {
+                    encoding = true;
+                }
+                if name.eq_ignore_ascii_case("content-type")
+                    && value
+                        .trim()
+                        .to_ascii_lowercase()
+                        .starts_with("text/event-stream")
+                {
+                    return Err("streaming unsupported".into());
+                }
+            }
+            if encoding {
+                return Err("compressed response unsupported before body growth".into());
+            }
+            if !lengths.is_empty() && !transfers.is_empty() {
+                return Err("TE plus CL".into());
+            }
+            let mut length = None;
+            for value in lengths.iter().flat_map(|v| v.split(',')) {
+                let value = value.trim();
+                if value.is_empty() || !value.bytes().all(|b| b.is_ascii_digit()) {
+                    return Err("bad CL".into());
+                }
+                let n = value.parse::<usize>().map_err(|_| "CL overflow")?;
+                if length.is_some_and(|old| old != n) {
+                    return Err("conflicting CL".into());
+                }
+                length = Some(n);
+            }
+            if !transfers.is_empty()
+                && (transfers.len() != 1 || !transfers[0].eq_ignore_ascii_case("chunked"))
+            {
+                return Err("unsupported TE chain".into());
+            }
+            if code == 204 && (length.is_some_and(|n| n != 0) || !transfers.is_empty()) {
+                return Err("204 illegal framing".into());
+            }
+            self.kind = Some(
+                if method.eq_ignore_ascii_case("HEAD") || code == 204 || code == 304 {
+                    crate::codec::BodyKind::None
+                } else if !transfers.is_empty() {
+                    crate::codec::BodyKind::Chunked
+                } else if let Some(n) = length {
+                    crate::codec::BodyKind::Length(n)
+                } else {
+                    crate::codec::BodyKind::UntilEof
+                },
+            );
         }
-        crate::codec::BodyKind::Length(n) => match body.len().cmp(&n) {
-            std::cmp::Ordering::Less => Ok(Assessment::Need),
-            std::cmp::Ordering::Equal => Ok(Assessment::Complete),
-            _ => Err("excess response bytes".into()),
-        },
-        crate::codec::BodyKind::UntilEof => Ok(if eof {
-            Assessment::Complete
-        } else {
-            Assessment::Need
-        }),
-        crate::codec::BodyKind::Chunked => {
-            let mut at = 0;
-            loop {
+        let body = &raw[head..];
+        match self.kind.unwrap() {
+            crate::codec::BodyKind::None => {
+                if body.is_empty() {
+                    Ok(Assessment::Complete)
+                } else {
+                    Err("excess bodyless bytes".into())
+                }
+            }
+            crate::codec::BodyKind::Length(n) => match body.len().cmp(&n) {
+                std::cmp::Ordering::Less => Ok(Assessment::Need),
+                std::cmp::Ordering::Equal => Ok(Assessment::Complete),
+                _ => Err("excess response bytes".into()),
+            },
+            crate::codec::BodyKind::UntilEof => Ok(if eof {
+                Assessment::Complete
+            } else {
+                Assessment::Need
+            }),
+            crate::codec::BodyKind::Chunked => loop {
+                if let Some(end) = self.chunk_end {
+                    if body.len() < end {
+                        return Ok(Assessment::Need);
+                    }
+                    if &body[end - 2..end] != b"\r\n" {
+                        return Err("chunk terminator".into());
+                    }
+                    self.chunk_at = end;
+                    self.chunk_end = None;
+                }
+                if self.zero {
+                    return if body.len() < self.chunk_at + 2 {
+                        Ok(Assessment::Need)
+                    } else if &body[self.chunk_at..] == b"\r\n" {
+                        Ok(Assessment::Complete)
+                    } else {
+                        Err("trailers/excess unsupported".into())
+                    };
+                }
+                let at = self.chunk_at;
                 let Some(end) = body[at..].windows(2).position(|w| w == b"\r\n") else {
+                    if body.len() - at > 32 {
+                        return Err("chunk line limit".into());
+                    }
                     return Ok(Assessment::Need);
                 };
                 let line = &body[at..at + end];
-                if line.is_empty() || !line.iter().all(|b| b.is_ascii_hexdigit()) {
+                if line.is_empty() || line.len() > 32 || !line.iter().all(|b| b.is_ascii_hexdigit())
+                {
                     return Err("strict chunk size/extensions rejected".into());
                 }
                 let n =
                     usize::from_str_radix(std::str::from_utf8(line).map_err(|_| "chunk size")?, 16)
                         .map_err(|_| "chunk overflow")?;
-                at += end + 2;
+                self.chunk_at = at + end + 2;
                 if n == 0 {
-                    if body.len() < at + 2 {
-                        return Ok(Assessment::Need);
-                    }
-                    return if &body[at..] == b"\r\n" {
-                        Ok(Assessment::Complete)
-                    } else {
-                        Err("trailers/excess bytes unsupported".into())
-                    };
+                    self.zero = true;
+                } else {
+                    self.chunk_end = Some(
+                        self.chunk_at
+                            .checked_add(n)
+                            .and_then(|n| n.checked_add(2))
+                            .ok_or("chunk overflow")?,
+                    );
                 }
-                let end = at
-                    .checked_add(n)
-                    .and_then(|n| n.checked_add(2))
-                    .ok_or("chunk overflow")?;
-                if body.len() < end {
-                    return Ok(Assessment::Need);
-                }
-                if &body[end - 2..end] != b"\r\n" {
-                    return Err("chunk data terminator".into());
-                }
-                at = end;
-            }
+            },
         }
     }
+}
+#[cfg(test)]
+fn assess(raw: &[u8], method: &str, eof: bool) -> Result<Assessment, String> {
+    RawParser::default().assess(raw, method, eof)
 }
 
 #[cfg(test)]
@@ -835,50 +913,154 @@ mod tests {
     fn budgeted_h1_foreign_ambient_permit_and_header_only_compression_fail_before_body() {
         let shared = Shared::new();
         let other = Shared::new();
-        assert_eq!(
-            finish(&shared, limits(), |first| {
-                assert_eq!(
-                    finish(&other, limits(), |_| {
-                        assert!(exact(&shared, first).is_err());
-                        let out = send_budgeted(
-                            &shared,
-                            first,
-                            false,
-                            "127.0.0.1",
-                            9,
-                            b"GET / HTTP/1.1\r\nHost: h\r\n\r\n",
-                        );
-                        assert_eq!(out.status, ExchangeStatus::Incomplete);
-                        Finish::Complete
-                    }),
-                    Finish::Complete
+        let mut mismatch = None;
+        let result = finish(&shared, limits(), |first| {
+            let other_result = finish(&other, limits(), |_| {
+                let denied = exact(&shared, first).is_err();
+                let out = send_budgeted(
+                    &shared,
+                    first,
+                    false,
+                    "127.0.0.1",
+                    9,
+                    b"GET / HTTP/1.1\r\nHost: h\r\n\r\n",
                 );
+                mismatch = Some((denied, out.status));
                 Finish::Complete
-            }),
-            Finish::Incomplete
-        );
+            });
+            assert_eq!(other_result, Finish::Complete);
+            Finish::Complete
+        });
+        assert_eq!(result, Finish::Incomplete);
+        assert_eq!(mismatch, Some((true, ExchangeStatus::Incomplete)));
         let shared = Shared::new();
         let (port, t) = server(
             b"HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Length: 99999999\r\n\r\n"
                 .to_vec(),
             false,
         );
-        assert_eq!(
-            finish(&shared, limits(), |p| {
-                let out = send_budgeted(
-                    &shared,
-                    p,
-                    false,
-                    "127.0.0.1",
-                    port,
-                    b"GET / HTTP/1.1\r\nHost: h\r\n\r\n",
+        let mut observed = None;
+        let result = finish(&shared, limits(), |p| {
+            let out = send_budgeted(
+                &shared,
+                p,
+                false,
+                "127.0.0.1",
+                port,
+                b"GET / HTTP/1.1\r\nHost: h\r\n\r\n",
+            );
+            observed = Some((out.status, out.response.len()));
+            Finish::Complete
+        });
+        assert_eq!(result, Finish::Incomplete);
+        let (status, len) = observed.unwrap();
+        assert_eq!(status, ExchangeStatus::Incomplete);
+        assert!(len <= 4096);
+        super::super::inherited_context_tests::join(t);
+    }
+    #[test]
+    fn budgeted_h1_all_framing_validated_before_bodyless_wire_controls() {
+        for (raw, method, complete) in [
+            (
+                b"HTTP/1.1 204 No Content\r\nContent-Length: 1\r\n\r\n".as_slice(),
+                "GET",
+                false,
+            ),
+            (
+                b"HTTP/1.1 204 No Content\r\nContent-Length: x\r\n\r\n",
+                "GET",
+                false,
+            ),
+            (
+                b"HTTP/1.1 200 OK\r\nContent-Length: x\r\n\r\n",
+                "HEAD",
+                false,
+            ),
+            (
+                b"HTTP/1.1 200 OK\r\nTransfer-Encoding: gzip, chunked\r\n\r\n0\r\n\r\n",
+                "GET",
+                false,
+            ),
+            (b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n", "GET", true),
+            (
+                b"HTTP/1.1 304 Not Modified\r\nContent-Length: 123\r\n\r\n",
+                "GET",
+                true,
+            ),
+            (
+                b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n1\r\nx\r\n0\r\n\r\n",
+                "GET",
+                true,
+            ),
+        ] {
+            let shared = Shared::new();
+            let (port, t) = server(raw.to_vec(), false);
+            let mut observed = None;
+            let outcome = finish(&shared, limits(), |p| {
+                let req = format!("{method} / HTTP/1.1\r\nHost: h\r\n\r\n");
+                observed = Some(
+                    send_budgeted(&shared, p, false, "127.0.0.1", port, req.as_bytes()).status,
                 );
-                assert_eq!(out.status, ExchangeStatus::Incomplete);
-                assert!(out.response.ends_with(b"\r\n\r\n"));
                 Finish::Complete
-            }),
-            Finish::Incomplete
-        );
+            });
+            assert_eq!(
+                observed,
+                Some(if complete {
+                    ExchangeStatus::Complete
+                } else {
+                    ExchangeStatus::Incomplete
+                })
+            );
+            assert_eq!(
+                outcome,
+                if complete {
+                    Finish::Complete
+                } else {
+                    Finish::Incomplete
+                }
+            );
+            super::super::inherited_context_tests::join(t);
+        }
+    }
+    #[test]
+    fn budgeted_h1_actual_wire_per_response_cap_is_incomplete_not_eof() {
+        let shared = Shared::new();
+        let l = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        let t = std::thread::spawn(move || {
+            let mut stream = super::super::inherited_context_tests::accept(&l);
+            let mut req = [0; 4096];
+            let _ = stream.read(&mut req).unwrap();
+            stream.write_all(b"HTTP/1.1 200 OK\r\n\r\n").unwrap();
+            let chunk = [b'x'; 4096];
+            for _ in 0..(crate::codec::MAX_BODY / 4096 + 1) {
+                if stream.write_all(&chunk).is_err() {
+                    break;
+                }
+            }
+        });
+        let mut config = limits();
+        config.duration = Duration::from_secs(10);
+        config.response = 128 * 1024 * 1024;
+        config.decompressed = config.response;
+        let mut observed = None;
+        let outcome = finish(&shared, config, |p| {
+            let out = send_budgeted(
+                &shared,
+                p,
+                false,
+                "127.0.0.1",
+                port,
+                b"GET / HTTP/1.1\r\nHost: h\r\n\r\n",
+            );
+            observed = Some((out.status, out.response.len(), out.diagnostic));
+            Finish::Complete
+        });
+        assert_eq!(outcome, Finish::Incomplete);
+        let (status, len, reason) = observed.unwrap();
+        assert_eq!(status, ExchangeStatus::Incomplete);
+        assert_eq!(len, crate::codec::MAX_BODY);
+        assert!(reason.unwrap().contains("not EOF"));
         super::super::inherited_context_tests::join(t);
     }
 }
