@@ -117,6 +117,7 @@ fn registry_order_is_pinned() {
             ("active.graphql-suggestions", Scope::Request, None),
             ("active.graphql-content-type", Scope::Request, None),
             ("active.spoofable-client-ip", Scope::Request, None),
+            ("active.broken-access-control", Scope::Request, None),
             ("active.backup-file", Scope::Request, None),
             ("active.graphql-endpoint-discovered", Scope::Host, None),
             ("active.web-cache-poisoning", Scope::Request, None),
@@ -574,6 +575,85 @@ fn r10_spoofable_ip_and_backup_file_against_a_live_lab() {
         "{got:?}"
     );
     assert!(got.contains(&("Backup file", "info", "Certain")), "{got:?}");
+}
+
+/// R-10 G.15: the lab serves the same page with or without the
+/// session cookie on /open (broken access control) and 403s without
+/// it on /guarded (enforced). The check must report /open only.
+#[test]
+fn r10_broken_access_control_against_a_live_lab() {
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, target, raw| {
+        let authed = raw.to_ascii_lowercase().contains("\r\ncookie:");
+        let (status, body) = match (target.split('?').next().unwrap_or(""), authed) {
+            ("/open", _) => (
+                "200 OK",
+                "<html><head><title>account</title></head><body>same</body></html>".to_string(),
+            ),
+            ("/guarded", true) => (
+                "200 OK",
+                "<html><head><title>account</title></head><body>same</body></html>".to_string(),
+            ),
+            ("/guarded", false) => (
+                "403 Forbidden",
+                "<html><head><title>denied</title></head></html>".to_string(),
+            ),
+            _ => ("404 Not Found", String::new()),
+        };
+        format!("HTTP/1.1 {status}\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    // Session material removed (cookie + x-*) and the page unchanged:
+    // reported.
+    let req = format!("GET /open HTTP/1.1\r\nHost: {host}\r\nCookie: sid=abc\r\nX-Csrf: t\r\n\r\n");
+    let got = lab_scan(port, &["active.broken-access-control"], "GET", "/open", req);
+    assert!(
+        got.iter()
+            .any(|(i, s, c)| i == "Broken access control" && s == "info" && c == "Tentative"),
+        "{got:?}"
+    );
+    // The response changes without the session: not reported.
+    let req = format!("GET /guarded HTTP/1.1\r\nHost: {host}\r\nCookie: sid=abc\r\n\r\n");
+    let got = lab_scan(
+        port,
+        &["active.broken-access-control"],
+        "GET",
+        "/guarded",
+        req,
+    );
+    assert!(got.is_empty(), "{got:?}");
+    // Nothing to remove: not reported.
+    let req = format!("GET /open HTTP/1.1\r\nHost: {host}\r\n\r\n");
+    let got = lab_scan(port, &["active.broken-access-control"], "GET", "/open", req);
+    assert!(got.is_empty(), "{got:?}");
+}
+
+#[test]
+fn bac_non_get_sends_no_requests_beyond_the_scanner_baseline() {
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    let requests = Arc::new(AtomicUsize::new(0));
+    let seen = requests.clone();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(listener, move |_, _, _| {
+        seen.fetch_add(1, Ordering::SeqCst);
+        "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok".into()
+    });
+    for method in ["POST", "HEAD"] {
+        requests.store(0, Ordering::SeqCst);
+        let req = format!(
+            "{method} / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nCookie: sid=abc\r\nContent-Length: 0\r\n\r\n"
+        );
+        let issues = lab_scan(port, &["active.broken-access-control"], method, "/", req);
+        assert!(issues.is_empty(), "{method} must be skipped");
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            1,
+            "{method}: only the scanner baseline is allowed"
+        );
+    }
 }
 
 /// R-10 web cache poisoning (Zp22 / Zg1g rule): reported only when a
