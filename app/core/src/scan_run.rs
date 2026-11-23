@@ -7,9 +7,20 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar};
 use std::time::{Duration, Instant};
 
+/// Bounded per-URL DOM operation result exposed in the scan record.
+#[derive(Clone, Debug)]
+pub struct DomScanRecord {
+    pub url: String,
+    pub complete: bool,
+    pub cancelled: bool,
+    pub proven_hits: Vec<webprobe_support::dedup::DomHit>,
+    pub diagnostic: String,
+}
+
 #[derive(Default)]
 pub struct ScanRun {
     busy: Mutex<bool>,
+    pub dom_outcomes: Mutex<Vec<DomScanRecord>>,
     idle: Condvar,
     /// Stop the running scan at the next check.
     pub stop: AtomicBool,
@@ -26,6 +37,17 @@ pub struct ScanRun {
 }
 
 impl ScanRun {
+    pub fn record_dom(&self, mut record: DomScanRecord) {
+        record.url = record.url.chars().take(500).collect();
+        record.diagnostic = record.diagnostic.chars().take(500).collect();
+        record.proven_hits.truncate(50);
+        let mut records = self.dom_outcomes.lock().unwrap();
+        if let Some(old) = records.iter_mut().find(|r| r.url == record.url) {
+            *old = record;
+        } else if records.len() < 100 {
+            records.push(record);
+        }
+    }
     pub fn is_busy(&self) -> bool {
         *self.busy.lock().unwrap()
     }
@@ -59,6 +81,7 @@ impl ScanRun {
             return false;
         }
         *busy = true;
+        self.dom_outcomes.lock().unwrap().clear();
         true
     }
 

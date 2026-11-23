@@ -135,8 +135,24 @@ pub struct DomHit {
     pub page_url: String,
 }
 
+/// One URL's dynamic DOM-analysis outcome for this run: the source-to-sink
+/// hits, the reflected-variant query token (`Some` only when the server
+/// contains the query token in script text of the fulfilled navigation
+/// response; this does not prove a string-literal data flow), and
+/// the stored token submitted before the probe (a hit holding it came from
+/// application-stored content: the stored variant).
+#[derive(Clone, Debug, Default)]
+pub struct DomProbeOutcome {
+    pub hits: Vec<DomHit>,
+    pub reflected: Option<String>,
+    pub stored: String,
+    pub complete: bool,
+    pub cancelled: bool,
+    pub diagnostic: String,
+}
+
 pub type DomCache =
-    std::collections::HashMap<String, std::sync::Arc<std::sync::OnceLock<Vec<DomHit>>>>;
+    std::collections::HashMap<String, std::sync::Arc<std::sync::OnceLock<DomProbeOutcome>>>;
 
 #[cfg(test)]
 mod tests {
