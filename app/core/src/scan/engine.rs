@@ -413,3 +413,212 @@ pub fn crawl_and_audit(shared: &Arc<Shared>, start_urls: &[String], audit_only: 
     }
     shared.log("Crawl and audit finished");
 }
+
+// ---------------------------------------------------------------- G.11 reflection contexts
+// Verbatim from the G.11 lane's parser (#167/#168, scan/engine.rs): the
+// reflected-DOM variant classifies the wpdom canary's echo contexts with
+// it (JsText only). `G11Context::describe` is the G.11 checks' report
+// wording and is not ported here; when the G.11 lane lands, keep its copy
+// of this block (identical text, plus describe).
+
+// Attr's fields are read by the G.11 checks' describe(), which this port
+// does not carry (see the block comment above); the reflected-DOM variant
+// only matches on the JsText variant.
+#[allow(dead_code)]
+pub(crate) enum G11Context {
+    /// Inside the value of `attr` on `tag`; `attrs` carries every
+    /// attribute of that tag (names lowercased).
+    Attr {
+        tag: String,
+        attr: String,
+        attrs: Vec<(String, String)>,
+    },
+    /// Text inside a <style> element.
+    StyleText,
+    /// Text inside a <script> element.
+    JsText,
+    /// In the response head (a header value).
+    Head,
+    /// Anything else (HTML text, comments, tag names).
+    Other,
+}
+
+/// HTML elements with no end tag; they are never pushed onto the
+/// open-tag stack.
+const VOID_TAGS: [&str; 14] = [
+    "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source",
+    "track", "wbr",
+];
+
+/// The context of one body position: the open-tag stack at `pos`, and an
+/// attribute match when `pos` is inside a quoted or unquoted value.
+fn g11_body_context(body: &str, pos: usize) -> G11Context {
+    let b = body.as_bytes();
+    let mut open: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i < pos && i < b.len() {
+        // Raw-text elements: everything up to their close tag is text,
+        // never markup, so a '<' in script or style text is not a tag.
+        if let Some(top) = open.last() {
+            if top == "script" || top == "style" {
+                let close = format!("</{top}");
+                match body[i..].to_ascii_lowercase().find(&close) {
+                    // Already at the close tag: parse it normally below.
+                    Some(0) => {}
+                    // Re-check the loop condition: the jump may pass pos.
+                    Some(rel) => {
+                        i += rel;
+                        continue;
+                    }
+                    None => break,
+                }
+            }
+        }
+        if b[i] != b'<' {
+            i += 1;
+            continue;
+        }
+        if body[i..].starts_with("<!--") {
+            i = body[i + 4..]
+                .find("-->")
+                .map(|x| x + i + 7)
+                .unwrap_or(b.len());
+            continue;
+        }
+        let gt_scan = &body[i..];
+        let mut gt = b.len();
+        // A tag's '>' can hide inside a quoted attribute value.
+        let mut q: Option<u8> = None;
+        for (off, ch) in gt_scan.bytes().enumerate().skip(1) {
+            match (q, ch) {
+                (None, b'"') => q = Some(b'"'),
+                (None, b'\'') => q = Some(b'\''),
+                (Some(qc), c) if c == qc => q = None,
+                (None, b'>') => {
+                    gt = i + off;
+                    break;
+                }
+                _ => {}
+            }
+        }
+        if gt == b.len() {
+            break;
+        }
+        let closing = body.get(i + 1..i + 2) == Some("/");
+        let name_start = i + 1 + usize::from(closing);
+        let name_len = body[name_start..gt]
+            .find(|c: char| c.is_ascii_whitespace() || c == '/' || c == '>')
+            .unwrap_or(gt - name_start);
+        let tag = body[name_start..name_start + name_len].to_ascii_lowercase();
+        // Walk the attributes in one pass, then match the position: the
+        // Attr result must carry the tag's full attribute list whichever
+        // order they appear in.
+        let mut j = name_start + name_len;
+        let mut spans: Vec<(String, usize, usize)> = Vec::new();
+        while j < gt {
+            while j < gt && (b[j].is_ascii_whitespace() || b[j] == b'/') {
+                j += 1;
+            }
+            let ns = j;
+            while j < gt && !b[j].is_ascii_whitespace() && b[j] != b'=' && b[j] != b'/' {
+                j += 1;
+            }
+            let name = body[ns..j].to_ascii_lowercase();
+            while j < gt && b[j].is_ascii_whitespace() {
+                j += 1;
+            }
+            if j < gt && b[j] == b'=' {
+                j += 1;
+                while j < gt && b[j].is_ascii_whitespace() {
+                    j += 1;
+                }
+                let (vs, ve) = if j < gt && (b[j] == b'"' || b[j] == b'\'') {
+                    let qc = b[j];
+                    let vs = j + 1;
+                    let mut ve = vs;
+                    // HTML attribute values have no escape mechanism: the
+                    // next matching quote closes the value, backslash or
+                    // not.
+                    while ve < gt && b[ve] != qc {
+                        ve += 1;
+                    }
+                    j = (ve + 1).min(gt);
+                    (vs, ve)
+                } else {
+                    let vs = j;
+                    while j < gt && !b[j].is_ascii_whitespace() {
+                        j += 1;
+                    }
+                    (vs, j)
+                };
+                if !name.is_empty() {
+                    spans.push((name, vs, ve));
+                }
+            } else if !name.is_empty() {
+                spans.push((name, 0, 0));
+            }
+        }
+        if let Some((name, _, _)) = spans.iter().find(|(_, vs, ve)| pos >= *vs && pos < *ve) {
+            let attrs = spans
+                .iter()
+                .map(|(k, vs, ve)| (k.clone(), body[*vs..*ve].to_string()))
+                .collect();
+            return G11Context::Attr {
+                tag,
+                attr: name.clone(),
+                attrs,
+            };
+        }
+        if closing {
+            if let Some(k) = open.iter().rposition(|t| *t == tag) {
+                open.truncate(k);
+            }
+        } else if !tag.is_empty()
+            && !VOID_TAGS.contains(&tag.as_str())
+            && !body[i..gt].trim_end().ends_with('/')
+        {
+            open.push(tag);
+        }
+        i = gt + 1;
+    }
+    if open.iter().any(|t| t == "style") {
+        G11Context::StyleText
+    } else if open.iter().any(|t| t == "script") {
+        G11Context::JsText
+    } else {
+        G11Context::Other
+    }
+}
+
+/// Classify at most 32 occurrences of `probe` (burp.Zcpt).
+/// Each body classification scans its prefix, so bound target-controlled work.
+/// Later reflections may be missed rather than allowing quadratic amplification.
+pub(crate) fn g11_contexts(resp: &[u8], probe: &str) -> Vec<G11Context> {
+    if probe.is_empty() {
+        return Vec::new();
+    }
+    let text = String::from_utf8_lossy(resp);
+    // Locate the head/body split in the lossy string, not the raw bytes:
+    // invalid UTF-8 before it would otherwise shift every body offset.
+    // Both the CRLF and the LF-only form split the head, as
+    // util::find_head_end does.
+    let head_end = text
+        .find("\r\n\r\n")
+        .map(|x| x + 4)
+        .or_else(|| text.find("\n\n").map(|x| x + 2))
+        .unwrap_or(0);
+    let mut out = Vec::new();
+    let mut start = 0;
+    while out.len() < 32 && start + probe.len() <= text.len() {
+        let Some(at) = text[start..].find(probe).map(|p| p + start) else {
+            break;
+        };
+        out.push(if at < head_end {
+            G11Context::Head
+        } else {
+            g11_body_context(&text[head_end..], at - head_end)
+        });
+        start = at + probe.len();
+    }
+    out
+}

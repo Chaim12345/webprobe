@@ -295,13 +295,40 @@ fn registry_order_is_pinned() {
                 Scope::Request,
                 Some(BURP_GROUP)
             ),
+            ("active.dom-open-redirection", Scope::Request, Some(BURP_GROUP)),
             (
-                "active.dom-open-redirection",
+                "active.dom-cookie-manipulation",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-data-manipulation",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-link-manipulation",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-websocket-poisoning",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            ("active.dom-dos", Scope::Request, Some(BURP_GROUP)),
+            (
+                "active.dom-ajax-header-manipulation",
                 Scope::Request,
                 Some(BURP_GROUP)
             ),
             (
                 "active.dom-storage-manipulation",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-web-message-manipulation",
                 Scope::Request,
                 Some(BURP_GROUP)
             ),
@@ -317,11 +344,6 @@ fn registry_order_is_pinned() {
             ),
             (
                 "active.dom-document-domain",
-                Scope::Request,
-                Some(BURP_GROUP)
-            ),
-            (
-                "active.dom-cookie-manipulation",
                 Scope::Request,
                 Some(BURP_GROUP)
             ),
@@ -1147,8 +1169,8 @@ fn dom_families_share_one_probe_and_refresh_on_the_next_run() {
     );
     assert_eq!(
         visits.load(Ordering::SeqCst),
-        2,
-        "one baseline and one DOM navigation"
+        4,
+        "one baseline, one stored-token submission, one DOM navigation and one reflected re-request"
     );
     vulnerable.store(false, Ordering::SeqCst);
     shared.issues.lock().unwrap().clear();
@@ -1159,7 +1181,7 @@ fn dom_families_share_one_probe_and_refresh_on_the_next_run() {
     );
     assert_eq!(
         visits.load(Ordering::SeqCst),
-        4,
+        8,
         "next run gets a fresh DOM probe"
     );
 }
@@ -1185,7 +1207,7 @@ fn dom_source_provenance_matrix_against_a_live_lab() {
             "<html><body><script>document.write('<p>' + location.search.slice(1) + '|' + location.hash.slice(1) + '</p>');</script></body></html>"
         } else if path.starts_with("/reflect") {
             // The tokens reach the page but no wrapped sink: no finding.
-            "<html><body><script>var d=document.createElement('div'); d.textContent=location.search+location.hash; document.body.appendChild(d);</script></body></html>"
+            "<html><body><script>var d=document.createElement('div'); d.appendChild(document.createTextNode(location.search+location.hash)); document.body.appendChild(d);</script></body></html>"
         } else if path.starts_with("/preexisting") {
             // An unrelated pre-existing prototype property is not a finding.
             "<html><body><script>Object.prototype.wpPreExisting123='x';</script></body></html>"
@@ -1273,4 +1295,116 @@ fn dom_source_provenance_matrix_against_a_live_lab() {
         let got = scan(page);
         assert!(got.is_empty(), "{page}: {}", names(&got));
     }
+}
+
+/// R-13 reflected-DOM variant: a page whose response copies the query
+/// payload's token into a JavaScript string literal and passes it to a
+/// sink is the reflected variant; the plain location.hash page stays the
+/// DOM variant. Under the conservative confidence mapping the reflected
+/// variant is Tentative (burp.Zwf8's mapping is established for
+/// location.hash only). Skipped when no Chromium is available.
+#[test]
+fn dom_xss_reflected_variant_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, _raw| {
+        let body = if path.starts_with("/reflxss") {
+            let q = path.split('?').nth(1).unwrap_or("");
+            format!("<html><body><script>var t = '{q}'; document.write('<p>' + t + '</p>');</script></body></html>")
+        } else if path.starts_with("/xss") {
+            "<html><body><script>document.write('<p>' + location.hash.slice(1) + '</p>');</script></body></html>".to_string()
+        } else {
+            "<html><body><p>hello</p></body></html>".to_string()
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    let got = lab_scan(
+        port,
+        &["active.dom-xss"],
+        "GET",
+        "/reflxss",
+        format!("GET /reflxss HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(
+        got.iter().any(
+            |(n, s, c)| n == "Cross-site scripting (reflected DOM-based)"
+                && s == "high"
+                && c == "Tentative"
+        ),
+        "reflected variant: {got:?}"
+    );
+    assert!(
+        !got.iter()
+            .any(|(n, ..)| n == "Cross-site scripting (DOM-based)"),
+        "not the plain variant: {got:?}"
+    );
+    let got = lab_scan(
+        port,
+        &["active.dom-xss"],
+        "GET",
+        "/xss",
+        format!("GET /xss HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(
+        got.iter()
+            .any(|(n, s, c)| n == "Cross-site scripting (DOM-based)" && s == "high" && c == "Firm"),
+        "plain variant: {got:?}"
+    );
+}
+
+/// R-13 stored-DOM variant: the lab remembers the previous request's
+/// query payload and embeds it in a JavaScript string literal of the next
+/// page, which passes it to document.write: the stored variant, not the
+/// plain or reflected ones (Tentative, like every non-location.hash
+/// provenance). Skipped when no Chromium is available.
+#[test]
+fn dom_xss_stored_variant_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let stored = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+    let st = stored.clone();
+    let port = lab_serve(l, move |_method, path, _raw| {
+        // Render the value stored BEFORE this request, then store this
+        // request's query payload: the stored token can only reach a page
+        // through an earlier request.
+        let embed = st.lock().unwrap().clone();
+        if let Some(q) = path.split('?').nth(1) {
+            if q.contains("__proto__") {
+                *st.lock().unwrap() = q.to_string();
+            }
+        }
+        let body = if path.starts_with("/storexss") {
+            format!("<html><body><script>var t = '{embed}'; document.write('<p>' + t + '</p>');</script></body></html>")
+        } else {
+            "<html><body><p>hello</p></body></html>".to_string()
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    let got = lab_scan(
+        port,
+        &["active.dom-xss"],
+        "GET",
+        "/storexss",
+        format!("GET /storexss HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(
+        got.iter().any(
+            |(n, s, c)| n == "Cross-site scripting (stored DOM-based)"
+                && s == "high"
+                && c == "Tentative"
+        ),
+        "stored variant: {got:?}"
+    );
+    assert!(
+        !got.iter()
+            .any(|(n, ..)| n == "Cross-site scripting (DOM-based)"
+                || n == "Cross-site scripting (reflected DOM-based)"),
+        "not the other variants: {got:?}"
+    );
 }

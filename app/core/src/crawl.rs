@@ -1896,7 +1896,13 @@ pub(crate) const DOM_INSTRUMENT_JS: &str = r#"
   // that runs one token in both URL parts cannot attribute: provenance
   // is honestly "unknown", never guessed.
   var QTOKEN = "%CANARY2%";
+  // A third run-owned token marks the STORED variant (burp.Zf24): it was
+  // submitted in an earlier request and can reach a sink only through
+  // application storage, so its provenance is honestly "stored". Empty
+  // when no stored submission ran.
+  var STOKEN = "%CANARY3%";
   function provenance(s) {
+    if (STOKEN.length > 0 && s.indexOf(STOKEN) >= 0) { return "stored"; }
     var h = s.indexOf(TOKEN) >= 0;
     var q = QTOKEN.length > 0 && s.indexOf(QTOKEN) >= 0;
     if (!h && !q) { return null; }
@@ -1911,7 +1917,7 @@ pub(crate) const DOM_INSTRUMENT_JS: &str = r#"
       if (src !== null && window.__wpDomHits.length < 50) {
         // Evidence caps: values and the page URL are bounded so a hostile
         // page cannot grow a run's stored hits without limit.
-        var sv = src === "location.hash" ? String(location.hash) : src === "location.search" ? String(location.search) : String(location.search) + " " + String(location.hash);
+        var sv = src === "location.hash" ? String(location.hash) : src === "location.search" ? String(location.search) : src === "stored" ? s : String(location.search) + " " + String(location.hash);
         window.__wpDomHits.push({ source: src, sink: sink, sourceValue: sv.slice(0, 300), sinkValue: s.slice(0, 300), pageUrl: String(location.href).slice(0, 500) });
       }
     } catch (e) {}
@@ -2046,6 +2052,146 @@ pub(crate) const DOM_INSTRUMENT_JS: &str = r#"
       set: function (v) { record("document.cookie", v); return cookieDesc.set.call(this, v); }
     });
   }
+  // Setter-heavy sinks (burp.Zcwh's data-manipulation and
+  // link-manipulation families, plus setAttribute's per-attribute split).
+  function wrapSetter(proto, prop, sink) {
+    try {
+      var d = Object.getOwnPropertyDescriptor(proto, prop);
+      if (d && d.set && d.configurable) {
+        Object.defineProperty(proto, prop, {
+          configurable: true,
+          enumerable: d.enumerable,
+          get: d.get,
+          set: function (v) { record(sink, v); return d.set.call(this, v); }
+        });
+      }
+    } catch (e) {}
+  }
+  wrapSetter(Node.prototype, "textContent", "element.textContent");
+  wrapSetter(HTMLElement.prototype, "innerText", "element.innerText");
+  wrapSetter(HTMLInputElement.prototype, "value", "input.value");
+  wrapSetter(Document.prototype, "title", "document.title");
+  wrapSetter(HTMLScriptElement.prototype, "text", "script.text");
+  wrapSetter(HTMLAnchorElement.prototype, "target", "anchor.target");
+  wrapSetter(HTMLFormElement.prototype, "action", "form.action");
+  wrapSetter(HTMLAnchorElement.prototype, "href", "anchor.href");
+  wrapSetter(HTMLButtonElement.prototype, "formaction", "button.formaction");
+  wrapSetter(HTMLInputElement.prototype, "formaction", "input.formaction");
+  try {
+    var wnd = Object.getOwnPropertyDescriptor(window, "name");
+    if (wnd && wnd.set && wnd.configurable) {
+      Object.defineProperty(window, "name", {
+        configurable: true,
+        enumerable: wnd.enumerable,
+        get: wnd.get,
+        set: function (v) { record("window.name", v); return wnd.set.call(window, v); }
+      });
+    }
+  } catch (e) {}
+  ["pushState", "replaceState"].forEach(function (name) {
+    if (window.history && history[name]) {
+      var origH = history[name];
+      // the URL is the third argument; the state object is not a sink value
+      history[name] = function (data, title, url) { if (url !== undefined) record("history." + name, url); return origH.apply(history, arguments); };
+    }
+  });
+  if (Element.prototype.setAttribute) {
+    var origSetAttr = Element.prototype.setAttribute;
+    Element.prototype.setAttribute = function (n, v) {
+      // Fires on every attribute set on the page: bail before building the
+      // sink name unless the value can possibly hold the canary.
+      if (provenance(String(v)) === null) { return origSetAttr.apply(this, arguments); }
+      record("element.setAttribute." + String(n).toLowerCase(), v);
+      return origSetAttr.apply(this, arguments);
+    };
+  }
+  // jQuery sinks: jQuery loads after this script, so poll for it once.
+  // jQuery-dependent results are Tentative in burp.Zwf8.Zd; the jQuery.*
+  // sink names carry that signal.
+  var jqDone = false;
+  // Wrap the moment jQuery arrives, not on the next poll tick: a setter on
+  // window.jQuery catches the assignment. The fast poll stays: jQuery.fn is
+  // often attached a tick after the assignment, and some pages define the
+  // property themselves.
+  try {
+    var jqVal = window.jQuery;
+    Object.defineProperty(window, "jQuery", {
+      configurable: true,
+      enumerable: true,
+      get: function () { return jqVal; },
+      set: function (v) { jqVal = v; wrapJQuery(); }
+    });
+  } catch (e) {}
+  function wrapJQuery() {
+    if (jqDone || !window.jQuery || !window.jQuery.fn) { return; }
+    jqDone = true;
+    var jq = window.jQuery;
+    ["html", "append", "prepend", "before", "after", "wrap", "replaceWith"].forEach(function (m) {
+      if (typeof jq.fn[m] === "function") {
+        var orig = jq.fn[m];
+        jq.fn[m] = function (v) { record("jQuery." + m, v); return orig.apply(this, arguments); };
+      }
+    });
+    if (typeof jq.parseHTML === "function") {
+      var origPh = jq.parseHTML;
+      jq.parseHTML = function (v) { record("jQuery.parseHTML", v); return origPh.apply(jq, arguments); };
+    }
+    if (typeof jq.globalEval === "function") {
+      var origGe = jq.globalEval;
+      jq.globalEval = function (v) { record("jQuery.globalEval", v); return origGe.apply(jq, arguments); };
+    }
+    ["attr", "prop"].forEach(function (m) {
+      if (typeof jq.fn[m] === "function") {
+        var orig = jq.fn[m];
+        jq.fn[m] = function (n, v) { record("jQuery." + m + "." + String(n).toLowerCase(), v); return orig.apply(this, arguments); };
+      }
+    });
+  }
+  var jqTimer = setInterval(function () {
+    wrapJQuery();
+    if (jqDone) { clearInterval(jqTimer); }
+  }, 25);
+  // webdatabase.executeSql (burp.Zcwh's client-side SQL sink) is not
+  // wrapped: openDatabase is gone from current Chromium.
+  // Constructors need Reflect.construct (`new` semantics).
+  if (typeof WebSocket === "function") {
+    var OrigWs = window.WebSocket;
+    window.WebSocket = function (u) { record("websocket", u); return Reflect.construct(OrigWs, arguments); };
+    window.WebSocket.prototype = OrigWs.prototype;
+    // pages read the readyState constants off the constructor
+    ["CONNECTING", "OPEN", "CLOSING", "CLOSED"].forEach(function (k) { window.WebSocket[k] = OrigWs[k]; });
+  }
+  if (typeof RegExp === "function") {
+    var OrigRe = window.RegExp;
+    window.RegExp = function (pt) { record("RegExp", pt); return Reflect.construct(OrigRe, arguments); };
+    window.RegExp.prototype = OrigRe.prototype;
+  }
+  if (typeof XMLHttpRequest === "function" && XMLHttpRequest.prototype.setRequestHeader) {
+    var origSrh = XMLHttpRequest.prototype.setRequestHeader;
+    XMLHttpRequest.prototype.setRequestHeader = function (n, v) {
+      record("xhr.setRequestHeader.name", n);
+      record("xhr.setRequestHeader.value", v);
+      return origSrh.apply(this, arguments);
+    };
+  }
+  // (writable, configurable) property of the window instance, not
+  // Window.prototype. Objects are stringified so a canary nested in the
+  // message still shows up.
+  try {
+    var origPM = window.postMessage;
+    window.postMessage = function (message) {
+      try {
+        var mv = typeof message === "string" ? message : JSON.stringify(message);
+        // The page URL itself is not controllable data entering a message:
+        // iframe resize, analytics and auth flows post location.href, and
+        // the probe URL always carries the canary.
+        if (mv !== String(location.href)) {
+          record("postMessage", mv);
+        }
+      } catch (e) {}
+      return origPM.apply(this, arguments);
+    };
+  } catch (e) {}
 })();
 "#;
 
@@ -2062,7 +2208,7 @@ fn bracket_token(s: &str) -> Option<&str> {
 /// and is read back out of the probe URL's query string. A probe whose
 /// URL carries no query payload reuses the fragment token for both, and
 /// attribution then reports "unknown" rather than guessing a source.
-pub(crate) fn dom_instrument_js(url: &str, canary: &str) -> String {
+pub(crate) fn dom_instrument_js(url: &str, canary: &str, stored: &str) -> String {
     let fragment_token = bracket_token(canary).unwrap_or(canary).to_string();
     let query_token = url
         .split_once('?')
@@ -2072,6 +2218,7 @@ pub(crate) fn dom_instrument_js(url: &str, canary: &str) -> String {
     DOM_INSTRUMENT_JS
         .replace("%CANARY%", canary)
         .replace("%CANARY2%", &query_token)
+        .replace("%CANARY3%", stored)
 }
 
 /// R-13 option (b) vertical slice: navigate to `url` with `#{canary}` in a
@@ -2087,6 +2234,7 @@ pub fn dom_analysis_probe(
     host: &str,
     port: u16,
     https: bool,
+    stored: &str,
 ) -> Result<Vec<DomHit>, String> {
     // Run budget first: over-budget probes fail closed without spawning
     // a browser, and concurrent callers wait for a browser slot.
@@ -2206,7 +2354,7 @@ pub fn dom_analysis_probe(
         )?;
         cdp.call(
             "Page.addScriptToEvaluateOnNewDocument",
-            serde_json::json!({"source": dom_instrument_js(url, canary)}),
+            serde_json::json!({"source": dom_instrument_js(url, canary, stored)}),
         )?;
         let base = url.split('#').next().unwrap_or(url);
         cdp.call(
