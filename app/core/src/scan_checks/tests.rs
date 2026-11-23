@@ -739,6 +739,551 @@ fn lab_scan(
         .collect()
 }
 
+/// R-13 batch 3: the WebSocket-poisoning, denial-of-service and
+/// Ajax-header DOM families against live lab pages driven by a real
+/// browser. Skipped when no Chromium is available.
+#[test]
+fn dom_families_batch3_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, _raw| {
+        let body = if path.starts_with("/ws-statics") {
+            // the sink only runs when the constructor kept its constants
+            "<html><body><script>if (WebSocket.OPEN === 1) { new WebSocket(location.hash.slice(1)); }</script></body></html>"
+        } else if path.starts_with("/ws") {
+            "<html><body><script>new WebSocket(location.hash.slice(1));</script></body></html>"
+        } else if path.starts_with("/dos") {
+            "<html><body><script>new RegExp(location.hash.slice(1));</script></body></html>"
+        } else if path.starts_with("/ajax") {
+            "<html><body><script>new XMLHttpRequest().setRequestHeader('X-T', location.hash.slice(1));</script></body></html>"
+        } else {
+            "<html><body><p>hello</p></body></html>"
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    let expect = [
+        (
+            "/ws",
+            "active.dom-websocket-poisoning",
+            "WebSocket URL poisoning (DOM-based)",
+            "high",
+            "Firm",
+        ),
+        (
+            "/ws-statics",
+            "active.dom-websocket-poisoning",
+            "WebSocket URL poisoning (DOM-based)",
+            "high",
+            "Firm",
+        ),
+        (
+            "/dos",
+            "active.dom-dos",
+            "Denial of service (DOM-based)",
+            "info",
+            "Firm",
+        ),
+        (
+            "/ajax",
+            "active.dom-ajax-header-manipulation",
+            "Ajax request header manipulation (DOM-based)",
+            "low",
+            "Firm",
+        ),
+    ];
+    for (page, id, name, sev, conf) in expect {
+        let got = lab_scan(
+            port,
+            &[id],
+            "GET",
+            page,
+            format!("GET {page} HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+        );
+        assert!(
+            got.iter()
+                .any(|(n, s, c)| n == name && s == sev && c == conf),
+            "{name}: {got:?}"
+        );
+    }
+    let got = lab_scan(
+        port,
+        &[
+            "active.dom-websocket-poisoning",
+            "active.dom-dos",
+            "active.dom-ajax-header-manipulation",
+        ],
+        "GET",
+        "/benign4",
+        format!("GET /benign4 HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(got.is_empty(), "{got:?}");
+}
+
+/// R-13 batch 4: the setter-heavy DOM families (data manipulation,
+/// link manipulation, setAttribute onclick as XSS) against live lab
+/// pages driven by a real browser. Skipped when no Chromium is
+/// available.
+#[test]
+fn dom_families_batch4_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, _raw| {
+        let body = if path.starts_with("/datamanip") {
+            "<html><body><script>document.body.textContent = location.hash.slice(1);</script></body></html>"
+        } else if path.starts_with("/linkmanip") {
+            "<html><body><script>var f = document.createElement('form'); f.action = location.hash.slice(1);</script></body></html>"
+        } else if path.starts_with("/xss-setattr") {
+            "<html><body><script>document.body.setAttribute('onclick', location.hash.slice(1));</script></body></html>"
+        } else if path.starts_with("/pushstate-state") {
+            // only the state object (argument 0) carries it: not a sink hit
+            "<html><body><script>history.pushState({x: location.hash}, '', '/clean');</script></body></html>"
+        } else if path.starts_with("/pushstate") {
+            // the URL argument carries the source value: a hit
+            "<html><body><script>history.pushState({}, '', '/p' + location.hash);</script></body></html>"
+        } else {
+            "<html><body><p>hello</p></body></html>"
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    let expect = [
+        (
+            "/datamanip",
+            "active.dom-data-manipulation",
+            "DOM data manipulation (DOM-based)",
+            "info",
+            "Firm",
+        ),
+        (
+            "/linkmanip",
+            "active.dom-link-manipulation",
+            "Link manipulation (DOM-based)",
+            "low",
+            "Firm",
+        ),
+        (
+            "/xss-setattr",
+            "active.dom-xss",
+            "Cross-site scripting (DOM-based)",
+            "high",
+            "Firm",
+        ),
+    ];
+    for (page, id, name, sev, conf) in expect {
+        let got = lab_scan(
+            port,
+            &[id],
+            "GET",
+            page,
+            format!("GET {page} HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+        );
+        assert!(
+            got.iter()
+                .any(|(n, s, c)| n == name && s == sev && c == conf),
+            "{name}: {got:?}"
+        );
+    }
+    let got = lab_scan(
+        port,
+        &[
+            "active.dom-data-manipulation",
+            "active.dom-link-manipulation",
+            "active.dom-xss",
+        ],
+        "GET",
+        "/benign5",
+        format!("GET /benign5 HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(got.is_empty(), "{got:?}");
+    // history.pushState/replaceState: the URL argument is the sink
+    let got = lab_scan(
+        port,
+        &["active.dom-data-manipulation"],
+        "GET",
+        "/pushstate",
+        format!("GET /pushstate HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(
+        got.iter()
+            .any(|(n, ..)| n == "DOM data manipulation (DOM-based)"),
+        "URL argument: {got:?}"
+    );
+    let got = lab_scan(
+        port,
+        &["active.dom-data-manipulation"],
+        "GET",
+        "/pushstate-state",
+        format!("GET /pushstate-state HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(
+        !got.iter()
+            .any(|(n, ..)| n == "DOM data manipulation (DOM-based)"),
+        "state object must not be recorded: {got:?}"
+    );
+}
+
+/// Tentative confidence (burp.Zwf8.Zd flag 4). The lab inlines a
+/// minimal window.jQuery (no network). Skipped when no Chromium is
+/// available.
+#[test]
+fn dom_jquery_sinks_are_tentative_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, _raw| {
+        let body = if path.starts_with("/jquery") {
+            r#"<html><body><script>
+window.jQuery = window.$ = function () { return Object.create(jQuery.fn); };
+jQuery.fn = jQuery.prototype = {
+  html: function (v) { this.v = v; return this; },
+  attr: function (n, v) { return this; }
+};
+setTimeout(function () { jQuery('<p>x</p>').html(location.hash.slice(1)); }, 50);
+</script></body></html>"#
+        } else {
+            "<html><body><p>hello</p></body></html>"
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    let got = lab_scan(
+        port,
+        &["active.dom-xss"],
+        "GET",
+        "/jquery",
+        format!("GET /jquery HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(
+        got.iter()
+            .any(|(n, s, c)| n == "Cross-site scripting (DOM-based)"
+                && s == "high"
+                && c == "Tentative"),
+        "jQuery sink: {got:?}"
+    );
+}
+
+/// R-13 web-message family: a page passing location.hash into
+/// window.postMessage is HTML5 web message manipulation (DOM-based).
+/// Skipped when no Chromium is available.
+#[test]
+fn dom_web_message_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, _raw| {
+        let body = if path.starts_with("/webmsg-url") {
+            "<html><body><script>window.postMessage(location.href, '*');</script></body></html>"
+        } else if path.starts_with("/webmsg") {
+            "<html><body><script>window.postMessage(location.hash.slice(1), '*');</script></body></html>"
+        } else {
+            "<html><body><p>hello</p></body></html>"
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    let got = lab_scan(
+        port,
+        &["active.dom-web-message-manipulation"],
+        "GET",
+        "/webmsg",
+        format!("GET /webmsg HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(
+        got.iter().any(
+            |(n, s, c)| n == "HTML5 web message manipulation (DOM-based)"
+                && s == "info"
+                && c == "Firm"
+        ),
+        "postMessage sink: {got:?}"
+    );
+    let got = lab_scan(
+        port,
+        &["active.dom-web-message-manipulation"],
+        "GET",
+        "/benign",
+        format!("GET /benign HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(
+        !got.iter()
+            .any(|(n, ..)| n == "HTML5 web message manipulation (DOM-based)"),
+        "{got:?}"
+    );
+    // posting the page URL itself (iframe resize, analytics) is not
+    // web message manipulation even though the probe URL carries the
+    // canary
+    let got = lab_scan(
+        port,
+        &["active.dom-web-message-manipulation"],
+        "GET",
+        "/webmsg-url",
+        format!("GET /webmsg-url HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(
+        !got.iter()
+            .any(|(n, ..)| n == "HTML5 web message manipulation (DOM-based)"),
+        "whole-URL post must not report: {got:?}"
+    );
+}
+
+/// Ajax header name as sink: setRequestHeader's first argument is
+/// recorded as xhr.setRequestHeader.name. Skipped when no Chromium is
+/// available.
+#[test]
+fn dom_ajax_header_name_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, _raw| {
+        let body = if path.starts_with("/ajax-name") {
+            "<html><body><script>new XMLHttpRequest().setRequestHeader(location.hash.slice(1), 'v');</script></body></html>"
+        } else {
+            "<html><body><p>hello</p></body></html>"
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    let got = lab_scan(
+        port,
+        &["active.dom-ajax-header-manipulation"],
+        "GET",
+        "/ajax-name",
+        format!("GET /ajax-name HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(
+        got.iter().any(
+            |(n, s, c)| n == "Ajax request header manipulation (DOM-based)"
+                && s == "low"
+                && c == "Firm"
+        ),
+        "header name sink: {got:?}"
+    );
+}
+
+/// setAttribute per-attribute split: action/src/data/formaction map to
+/// DOM data manipulation, href to link manipulation, onclick to XSS.
+/// Skipped when no Chromium is available.
+#[test]
+fn dom_setattribute_variants_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, _raw| {
+        let body = if path.starts_with("/setattr-data") {
+            "<html><body><form id=f></form><script>var f=document.getElementById('f'); f.setAttribute('action', location.hash.slice(1));</script></body></html>"
+        } else if path.starts_with("/setattr-src") {
+            "<html><body><script>var i=document.createElement('img'); i.setAttribute('src', location.hash.slice(1));</script></body></html>"
+        } else if path.starts_with("/setattr-href") {
+            "<html><body><a id=a>x</a><script>document.getElementById('a').setAttribute('href', location.hash.slice(1));</script></body></html>"
+        } else if path.starts_with("/replacestate") {
+            "<html><body><script>history.replaceState({}, '', '/r' + location.hash);</script></body></html>"
+        } else {
+            "<html><body><p>hello</p></body></html>"
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    for (page, id, name) in [
+        (
+            "/setattr-data",
+            "active.dom-data-manipulation",
+            "DOM data manipulation (DOM-based)",
+        ),
+        (
+            "/setattr-src",
+            "active.dom-data-manipulation",
+            "DOM data manipulation (DOM-based)",
+        ),
+        (
+            "/setattr-href",
+            "active.dom-link-manipulation",
+            "Link manipulation (DOM-based)",
+        ),
+        (
+            "/replacestate",
+            "active.dom-data-manipulation",
+            "DOM data manipulation (DOM-based)",
+        ),
+    ] {
+        let got = lab_scan(
+            port,
+            &[id],
+            "GET",
+            page,
+            format!("GET {page} HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+        );
+        assert!(
+            got.iter().any(|(n, ..)| n == name),
+            "{name} on {page}: {got:?}"
+        );
+    }
+}
+
+/// jQuery attr/prop and helper sinks: attr href/action are link
+/// manipulation, parseHTML is XSS, globalEval is JavaScript injection,
+/// all Tentative (jQuery-dependent, burp.Zwf8.Zd flag 4). The lab
+/// inlines a minimal window.jQuery. Skipped when no Chromium is
+/// available.
+#[test]
+fn dom_jquery_attr_and_helpers_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, _raw| {
+        let jq = r#"window.jQuery = window.$ = function () { return Object.create(jQuery.fn); };
+jQuery.fn = jQuery.prototype = {
+  attr: function (n, v) { return this; },
+  prop: function (n, v) { return this; }
+};
+jQuery.parseHTML = function (v) { return []; };
+jQuery.globalEval = function (v) {};
+"#;
+        let body: String = if path.starts_with("/jq-attr") {
+            format!(
+                r#"<html><body><script>{jq}setTimeout(function () {{ jQuery('a').attr('href', location.hash.slice(1)); jQuery('form').prop('action', location.hash.slice(1)); }}, 50);</script></body></html>"#
+            )
+        } else if path.starts_with("/jq-parse") {
+            format!(
+                r#"<html><body><script>{jq}setTimeout(function () {{ jQuery.parseHTML(location.hash.slice(1)); jQuery.globalEval(location.hash.slice(1)); }}, 50);</script></body></html>"#
+            )
+        } else {
+            "<html><body><p>hello</p></body></html>".to_string()
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    let got = lab_scan(
+        port,
+        &["active.dom-link-manipulation"],
+        "GET",
+        "/jq-attr",
+        format!("GET /jq-attr HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(
+        got.iter()
+            .any(|(n, s, c)| n == "Link manipulation (DOM-based)"
+                && s == "low"
+                && c == "Tentative"),
+        "jQuery attr/prop: {got:?}"
+    );
+    let got = lab_scan(
+        port,
+        &["active.dom-xss", "active.dom-javascript-injection"],
+        "GET",
+        "/jq-parse",
+        format!("GET /jq-parse HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(
+        got.iter()
+            .any(|(n, s, c)| n == "Cross-site scripting (DOM-based)"
+                && s == "high"
+                && c == "Tentative"),
+        "jQuery.parseHTML: {got:?}"
+    );
+    assert!(
+        got.iter()
+            .any(|(n, s, c)| n == "JavaScript injection (DOM-based)"
+                && s == "high"
+                && c == "Tentative"),
+        "jQuery.globalEval: {got:?}"
+    );
+}
+
+/// The location.search source reaches every family, not only the XSS
+/// sinks: the wpdom query canary into storage, cookie, document.domain,
+/// JSON.parse and document.evaluate. Skipped when no Chromium is
+/// available.
+#[test]
+fn dom_search_source_reaches_all_families_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, _raw| {
+        let body = if path.starts_with("/qsrc") {
+            r#"<html><body><script>
+var s = new URLSearchParams(location.search).get('wpdom');
+localStorage.setItem('k', s);
+document.cookie = 'x=' + s;
+try { document.domain = s; } catch (e) {}
+try { JSON.parse(s); } catch (e) {}
+try { document.evaluate(s, document, null, 0, null); } catch (e) {}
+</script></body></html>"#
+        } else {
+            "<html><body><p>hello</p></body></html>"
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    let got = lab_scan(
+        port,
+        &[
+            "active.dom-storage-manipulation",
+            "active.dom-cookie-manipulation",
+            "active.dom-document-domain",
+            "active.dom-json-injection",
+            "active.dom-xpath-injection",
+        ],
+        "GET",
+        "/qsrc",
+        format!("GET /qsrc HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    for name in [
+        "HTML5 storage manipulation (DOM-based)",
+        "Cookie manipulation (DOM-based)",
+        "Document domain manipulation (DOM-based)",
+        "Client-side JSON injection (DOM-based)",
+        "Client-side XPath injection (DOM-based)",
+    ] {
+        assert!(got.iter().any(|(n, ..)| n == name), "{name}: {got:?}");
+    }
+}
+
+/// DOM family scope: a POST history entry is never navigated (only GET
+/// can be replayed faithfully), and a non-HTML baseline is never
+/// probed. Neither launches a browser nor reports.
+#[test]
+fn dom_families_skip_non_get_and_non_html() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, _raw| {
+        let (body, ct) = if path.starts_with("/plain") {
+            ("plain text, no script context", "text/plain")
+        } else {
+            ("<html><body><script>document.write(location.hash.slice(1));</script></body></html>", "text/html")
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: {ct}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    let got = lab_scan(
+        port,
+        &["active.dom-xss"],
+        "POST",
+        "/xss",
+        format!("POST /xss HTTP/1.1\r\nHost: {host}\r\nContent-Length: 0\r\n\r\n"),
+    );
+    assert!(got.is_empty(), "POST must not be DOM-probed: {got:?}");
+    let got = lab_scan(
+        port,
+        &["active.dom-xss"],
+        "GET",
+        "/plain",
+        format!("GET /plain HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(got.is_empty(), "non-HTML must not be DOM-probed: {got:?}");
+}
+
 /// R-10 batch 2: the three GraphQL checks against a live endpoint.
 /// The lab answers the introspection query with a schema, the
 /// `query{__type}` probe with a suggestion error, and the query in
