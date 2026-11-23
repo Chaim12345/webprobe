@@ -108,6 +108,10 @@ pub struct Shared {
     /// Burp scan configuration "Audit accuracy" (burp.Zgnf): 0 minimise false
     /// negatives, 1 normal, 2 minimise false positives.
     pub scan_accuracy: AtomicU8,
+    /// The REST API settings (user_options.misc.api, R-15) and whether the
+    /// server was started.
+    pub api_config: Mutex<crate::burp_config::ApiConfig>,
+    pub api_started: AtomicBool,
     /// unique locations already passively audited (CrawlDefaults.json max 1500)
     pub scan_locations: Mutex<std::collections::BTreeSet<String>>,
     /// Match and replace rule lists (Proxy options; separate request/response sets)
@@ -304,6 +308,8 @@ impl Shared {
             // AuditDefaults.json: scan_speed / scan_accuracy "normal"
             scan_speed: AtomicU8::new(1),
             scan_accuracy: AtomicU8::new(1),
+            api_config: Mutex::new(crate::burp_config::ApiConfig::default()),
+            api_started: AtomicBool::new(false),
             scan_locations: Mutex::new(std::collections::BTreeSet::new()),
             mr_request: Mutex::new(Vec::new()),
             mr_response: Mutex::new(Vec::new()),

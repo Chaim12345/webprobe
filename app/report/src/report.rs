@@ -273,6 +273,23 @@ impl KnowledgeBase {
         Self::discover_checked().unwrap_or_default()
     }
 
+    /// The entries as R-15 REST API issue definitions (core carries them
+    /// as plain data; webprobe-report is downstream of core, so the
+    /// conversion lives here).
+    pub fn rest_api_definitions(&self) -> Vec<webprobe_core::rest_api::IssueDefinition> {
+        self.entries
+            .values()
+            .map(|e| webprobe_core::rest_api::IssueDefinition {
+                type_index: e.type_index,
+                name: e.name.clone(),
+                description: e.background.clone(),
+                remediation: e.remediation.clone(),
+                references: e.references.clone(),
+                vulnerability_classifications: e.classifications.clone(),
+            })
+            .collect()
+    }
+
     /// Definition for an issue name. Names with a qualifier in parentheses
     /// ("External service interaction (DNS)") fall back to the bare name.
     pub fn lookup(&self, name: &str) -> Option<&KbEntry> {

@@ -1391,8 +1391,8 @@
       "title": "Burp CLI flags, config JSON and REST API",
       "acceptance": "--project-file, --config-file, --user-config-file, --unpause-spider-and-scanner and friends; project/user options import/export as Burp JSON; /v0.1 REST API (scan start, status, issues) on a local port.",
       "effort": "M",
-      "status": "todo",
-      "evidence": "src/main.rs:949-960 reads only --screenshot; headless has proxy and scan only."
+      "status": "done",
+      "evidence": "Burp CLI flags on webprobe-headless and the desktop app: --project-file (alias of --project), --config-file / --user-config-file (repeatable, last wins, flags may precede the command), --unpause-spider-and-scanner, --disable-extensions, --temporary-project, --data-dir, --diagnostics, --version, --help. Project options JSON (proxy.request_listeners) and user options JSON (user_options.misc.api) import/export in core/src/burp_config.rs; scan-configuration keys route through R-11's scan_library overlay with not-applied notes. /v0.1 REST API in core/src/rest_api.rs: POST /scan (201 + Location), GET /scan/{id} (scan_status + issue_events), GET /knowledge_base/issue_definitions; API key as path prefix, never logged; refuses to start keyless without insecure_mode; loopback 127.0.0.1:1337 default. Desktop: Project/User options save/load in Suite > Project (tools.rs burp_options_json). Ported from PR #5 (64aa1b0) onto the post-refactor tree (report now the webprobe-report crate; scan config via scan_config::shared_config)."
     },
     {
       "id": "R-16",
