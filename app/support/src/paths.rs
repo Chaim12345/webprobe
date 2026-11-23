@@ -492,6 +492,55 @@ pub fn payload_strings() -> Result<PathBuf, Missing> {
     Lookup::process().payload_strings()
 }
 
+/// The predefined Intruder payload lists (Burp's "Add from list..." menu,
+/// burp.Zckm): the *.pay files of the resolved PayloadStrings directory as
+/// display names, sorted. Empty where no directory resolves; the lists are
+/// PortSwigger's, resolved at runtime and never copied into this repository.
+pub fn predefined_payload_lists() -> Vec<String> {
+    let Ok(dir) = payload_strings() else {
+        return Vec::new();
+    };
+    payload_list_names(&dir)
+}
+
+/// One predefined list's entries, from the resolved directory.
+pub fn predefined_payload_list(name: &str) -> Result<Vec<String>, String> {
+    let dir = payload_strings().map_err(|m| m.to_string())?;
+    payload_list(&dir, name)
+}
+
+/// The display names of the *.pay lists in `dir`: the file stems (burp.Zckm
+/// strips a trailing ".pay"), sorted.
+pub fn payload_list_names(dir: &Path) -> Vec<String> {
+    let mut out: Vec<String> = std::fs::read_dir(dir)
+        .map(|rd| {
+            rd.flatten()
+                .map(|e| e.path())
+                .filter(|p| p.extension().is_some_and(|x| x == "pay"))
+                .filter_map(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
+                .collect()
+        })
+        .unwrap_or_default();
+    out.sort();
+    out
+}
+
+/// One predefined list's entries: one per line, CRs stripped, blank lines
+/// dropped. `name` is a display name from [`payload_list_names`].
+pub fn payload_list(dir: &Path, name: &str) -> Result<Vec<String>, String> {
+    if name.is_empty() || name.contains(['/', '\\']) {
+        return Err(format!("not a payload list name: {name:?}"));
+    }
+    let text = std::fs::read_to_string(dir.join(format!("{name}.pay")))
+        .map_err(|e| format!("could not read {name}.pay: {e}"))?;
+    Ok(text
+        .lines()
+        .map(|l| l.trim_end_matches('\r'))
+        .filter(|l| !l.is_empty())
+        .map(str::to_string)
+        .collect())
+}
+
 /// [`Lookup::retirejs_repository`] in the process environment.
 pub fn retirejs_repository() -> Result<PathBuf, Missing> {
     Lookup::process().retirejs_repository()
@@ -665,6 +714,35 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
+    }
+
+    #[test]
+    fn predefined_payload_lists_are_the_pay_stems() {
+        let dir = scratch("paylists");
+        std::fs::write(dir.join("Passwords.pay"), "a\nb\r\n\nc\n").unwrap();
+        std::fs::write(dir.join("A-Z .pay"), "A\nB\n").unwrap();
+        std::fs::write(dir.join("notes.txt"), "nope").unwrap();
+        std::fs::write(dir.join("empty.pay"), "").unwrap();
+        assert_eq!(
+            payload_list_names(&dir),
+            vec![
+                "A-Z ".to_string(),
+                "Passwords".to_string(),
+                "empty".to_string()
+            ]
+        );
+        assert_eq!(
+            payload_list(&dir, "Passwords").unwrap(),
+            vec!["a", "b", "c"]
+        );
+        assert_eq!(
+            payload_list(&dir, "A-Z ").unwrap(),
+            vec!["A", "B"],
+            "the trailing space is part of the name"
+        );
+        assert!(payload_list(&dir, "../etc").is_err());
+        assert!(payload_list(&dir, "missing").is_err());
+        assert!(payload_list(&dir, "").is_err());
     }
 
     /// Every resource resolves from an override directory, and with
