@@ -39,6 +39,7 @@ pub(crate) enum Denied {
     InvalidReservation,
     Expired,
     NotActivated,
+    Failed,
     Exhausted(Resource),
 }
 struct State {
@@ -183,6 +184,15 @@ impl Ledger {
             return Err(Denied::Expired);
         }
         Ok(ordinary_limit.min(left))
+    }
+    /// Sticky operational failure, not a resource exhaustion or cancellation.
+    /// It forbids further admission and cannot erase an earlier denial.
+    pub fn mark_incomplete(&self) {
+        self.state
+            .lock()
+            .unwrap()
+            .denied
+            .get_or_insert(Denied::Failed);
     }
     pub fn retention_lost(&self) -> bool {
         self.state.lock().unwrap().retention_lost
