@@ -3,7 +3,7 @@
 use crate::sync::Mutex;
 use std::time::{Duration, Instant};
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Limits {
     pub duration: Duration,
     pub http_attempts: u64,
@@ -38,19 +38,26 @@ pub(crate) enum Denied {
     InvalidLimits,
     InvalidReservation,
     Expired,
+    NotActivated,
     Exhausted(Resource),
 }
 struct State {
     used: [u64; 9],
     denied: Option<Denied>,
+    deadline: Option<Instant>,
 }
 pub(crate) struct Ledger {
-    deadline: Instant,
+    duration: Duration,
     ceilings: [u64; 9],
     state: Mutex<State>,
 }
 impl Ledger {
     pub fn new(limits: Limits) -> Result<Self, Denied> {
+        let ledger = Self::pending(limits)?;
+        ledger.activate()?;
+        Ok(ledger)
+    }
+    pub fn pending(limits: Limits) -> Result<Self, Denied> {
         let ceilings = [
             limits.http_attempts,
             limits.connection_attempts,
@@ -65,17 +72,31 @@ impl Ledger {
         if limits.duration.is_zero() || ceilings.contains(&0) {
             return Err(Denied::InvalidLimits);
         }
-        let deadline = Instant::now()
+        Instant::now()
             .checked_add(limits.duration)
             .ok_or(Denied::InvalidLimits)?;
         Ok(Self {
-            deadline,
+            duration: limits.duration,
             ceilings,
             state: Mutex::new(State {
                 used: [0; 9],
                 denied: None,
+                deadline: None,
             }),
         })
+    }
+    /// Idempotent activation never restarts the clock. Pending identity can
+    /// be captured at admission without spending stage time before A4.
+    pub fn activate(&self) -> Result<(), Denied> {
+        let mut state = self.state.lock().unwrap();
+        if state.deadline.is_none() {
+            state.deadline = Some(
+                Instant::now()
+                    .checked_add(self.duration)
+                    .ok_or(Denied::InvalidLimits)?,
+            );
+        }
+        Ok(())
     }
     /// All resource reservations are atomic and irreversible. A denied attempt
     /// cannot partially spend its multi-resource reservation. Already exposed
@@ -93,7 +114,8 @@ impl Ledger {
         if let Some(reason) = state.denied {
             return Err(reason);
         }
-        if Instant::now() >= self.deadline {
+        let deadline = state.deadline.ok_or(Denied::NotActivated)?;
+        if Instant::now() >= deadline {
             state.denied = Some(Denied::Expired);
             return Err(Denied::Expired);
         }
@@ -138,7 +160,13 @@ impl Ledger {
             return Err(Denied::InvalidLimits);
         }
         self.reserve(&[])?;
-        let left = self.deadline.saturating_duration_since(Instant::now());
+        let left = self
+            .state
+            .lock()
+            .unwrap()
+            .deadline
+            .ok_or(Denied::NotActivated)?
+            .saturating_duration_since(Instant::now());
         if left.is_zero() {
             self.reserve(&[])?;
             return Err(Denied::Expired);
@@ -273,6 +301,19 @@ mod tests {
         l.retain_proven(3).unwrap();
         assert_eq!(l.used(Resource::Evidence), 3);
         assert_eq!(l.used(Resource::EvidenceRecord), 1);
+    }
+    #[test]
+    fn pending_identity_requires_explicit_activation_and_never_restarts() {
+        let mut limits = limits();
+        limits.duration = Duration::from_millis(20);
+        let l = Ledger::pending(limits).unwrap();
+        std::thread::sleep(Duration::from_millis(30));
+        assert_eq!(l.reserve(&[]), Err(Denied::NotActivated));
+        l.activate().unwrap();
+        assert!(l.reserve(&[]).is_ok());
+        std::thread::sleep(Duration::from_millis(30));
+        l.activate().unwrap();
+        assert_eq!(l.reserve(&[]), Err(Denied::Expired));
     }
     #[test]
     fn all_resource_domains_are_independent_and_finite() {

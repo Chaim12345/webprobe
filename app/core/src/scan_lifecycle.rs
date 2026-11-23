@@ -14,6 +14,7 @@ use std::sync::Arc;
 pub(crate) enum AdmissionError {
     Busy,
     InvalidLimits,
+    ConfigurationMismatch,
     IncompleteActive,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -29,10 +30,13 @@ pub(crate) enum Finish {
     Incomplete,
 }
 /// Legacy mode is structurally different from a budget-required A4 permit.
+#[derive(Clone)]
 pub(crate) struct LegacyScanner {
     pub owner: Arc<AttemptScope>,
 }
+#[derive(Clone)]
 pub(crate) struct BudgetedExecution {
+    coordinator: std::sync::Weak<Coordinator>,
     owner: Arc<AttemptScope>,
     ledger: Arc<Ledger>,
 }
@@ -43,8 +47,25 @@ impl BudgetedExecution {
     pub fn ledger(&self) -> &Ledger {
         &self.ledger
     }
+    pub fn validate_shared(&self, shared: &Arc<Shared>) -> Result<(), AdmissionError> {
+        let c = self.coordinator.upgrade().ok_or(AdmissionError::Busy)?;
+        if !Arc::ptr_eq(&c.shared, shared) {
+            return Err(AdmissionError::Busy);
+        }
+        self.validate(&self.owner)
+    }
     pub fn validate(&self, owner: &Arc<AttemptScope>) -> Result<(), AdmissionError> {
-        if !Arc::ptr_eq(owner, &self.owner) || self.owner.is_cancelled() {
+        let Some(c) = self.coordinator.upgrade() else {
+            return Err(AdmissionError::Busy);
+        };
+        let state = c.state.lock().unwrap();
+        if !state.as_ref().is_some_and(|r| {
+            r.phase == Phase::Finalizing
+                && Arc::ptr_eq(&r.owner, &self.owner)
+                && Arc::ptr_eq(&r.ledger, &self.ledger)
+        }) || !Arc::ptr_eq(owner, &self.owner)
+            || self.owner.is_cancelled()
+        {
             Err(AdmissionError::Busy)
         } else {
             Ok(())
@@ -63,6 +84,7 @@ pub(crate) struct Coordinator {
     shared: Arc<Shared>,
     limits: Limits,
     state: Mutex<Option<Run>>,
+    terminal: Mutex<Option<(Arc<AttemptScope>, Finish)>>,
 }
 pub(crate) struct Batch {
     coordinator: Arc<Coordinator>,
@@ -90,12 +112,16 @@ impl Coordinator {
         Ledger::new(limits).map_err(|_| AdmissionError::InvalidLimits)?;
         let mut published = shared.host_admission.1.lock().unwrap();
         if let Some(existing) = published.upgrade() {
+            if existing.limits != limits {
+                return Err(AdmissionError::ConfigurationMismatch);
+            }
             return Ok(existing);
         }
         let owner = Arc::new(Self {
             shared: shared.clone(),
             limits,
             state: Mutex::new(None),
+            terminal: Mutex::new(None),
         });
         *published = Arc::downgrade(&owner);
         Ok(owner)
@@ -114,7 +140,7 @@ impl Coordinator {
         } else {
             // The mutex binds actual stored clear/publication to owner creation.
             let ledger =
-                Arc::new(Ledger::new(self.limits).map_err(|_| AdmissionError::InvalidLimits)?);
+                Arc::new(Ledger::pending(self.limits).map_err(|_| AdmissionError::InvalidLimits)?);
             self.shared.stored.open_batch();
             let owner = self.fresh();
             *state = Some(Run {
@@ -147,7 +173,7 @@ impl Coordinator {
         let guard = crate::scan_run::try_claim(&self.shared.scan).ok_or(AdmissionError::Busy)?;
         if state.is_none() {
             let ledger =
-                Arc::new(Ledger::new(self.limits).map_err(|_| AdmissionError::InvalidLimits)?);
+                Arc::new(Ledger::pending(self.limits).map_err(|_| AdmissionError::InvalidLimits)?);
             self.shared.stored.clear();
             let owner = self.fresh();
             *state = Some(Run {
@@ -175,9 +201,14 @@ impl Coordinator {
         ))
     }
     fn cleanup(&self, owner: &Arc<AttemptScope>) {
+        self.cleanup_outcome(owner, Finish::Incomplete);
+    }
+    fn cleanup_outcome(&self, owner: &Arc<AttemptScope>, outcome: Finish) {
         let mut state = self.state.lock().unwrap();
         if let Some(run) = state.as_mut() {
             if Arc::ptr_eq(&run.owner, owner) && !run.active {
+                *self.terminal.lock().unwrap() = Some((owner.clone(), outcome));
+                run.owner.cancel();
                 run.phase = Phase::Closed;
                 self.shared.stored.close_batch();
                 *state = None;
@@ -190,10 +221,15 @@ impl Coordinator {
         state: &mut Run,
     ) -> Result<Finalizer, AdmissionError> {
         let guard = crate::scan_run::try_claim(&self.shared.scan).ok_or(AdmissionError::Busy)?;
+        state
+            .ledger
+            .activate()
+            .map_err(|_| AdmissionError::InvalidLimits)?;
         state.phase = Phase::Finalizing;
         Ok(Finalizer {
             coordinator: self.clone(),
             permit: BudgetedExecution {
+                coordinator: Arc::downgrade(self),
                 owner,
                 ledger: state.ledger.clone(),
             },
@@ -310,11 +346,14 @@ impl Drop for Audit {
 impl Finalizer {
     /// Explicit execution, never invoked by Drop. Callback stands in for the
     /// forthcoming real budget-required A4 path, not acceptance evidence.
-    pub fn run(mut self, body: impl FnOnce(&BudgetedExecution)) -> Finish {
+    pub fn run(mut self, body: impl FnOnce(&BudgetedExecution) -> Finish) -> Finish {
         let result = if self.permit.owner.is_cancelled() {
             false
         } else {
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| body(&self.permit))).is_ok()
+            matches!(
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| body(&self.permit))),
+                Ok(Finish::Complete)
+            )
         };
         let incomplete = self
             .coordinator
@@ -323,14 +362,20 @@ impl Finalizer {
             .unwrap()
             .as_ref()
             .is_none_or(|r| r.incomplete);
+        let complete = result
+            && !incomplete
+            && !self.permit.owner.is_cancelled()
+            && self.permit.ledger.reserve(&[]).is_ok();
         drop(self.guard.take());
-        self.coordinator.cleanup(&self.permit.owner);
-        self.live = false;
-        if result && !incomplete && !self.permit.owner.is_cancelled() {
+        let outcome = if complete {
             Finish::Complete
         } else {
             Finish::Incomplete
-        }
+        };
+        self.coordinator
+            .cleanup_outcome(&self.permit.owner, outcome);
+        self.live = false;
+        outcome
     }
 }
 impl Drop for Finalizer {
@@ -394,7 +439,9 @@ mod tests {
         assert_eq!(
             f.run(|permit| {
                 permit.validate(&legacy.owner).unwrap();
+                permit.validate_shared(&shared).unwrap();
                 permit.ledger().reserve(&[]).unwrap();
+                Finish::Complete
             }),
             Finish::Complete
         );
@@ -412,6 +459,7 @@ mod tests {
             assert_eq!(
                 finalizer(last.finish().unwrap()).run(|_| {
                     calls.fetch_add(1, Ordering::SeqCst);
+                    Finish::Complete
                 }),
                 Finish::Complete
             );
@@ -422,7 +470,7 @@ mod tests {
         let b = c.open().unwrap();
         drop(a);
         assert_eq!(
-            finalizer(b.finish().unwrap()).run(|_| {}),
+            finalizer(b.finish().unwrap()).run(|_| Finish::Complete),
             Finish::Incomplete
         );
     }
@@ -468,7 +516,7 @@ mod tests {
         release_tx.send(()).unwrap();
         t.join().unwrap();
         assert_eq!(
-            finalizer(batch.finish().unwrap()).run(|_| {}),
+            finalizer(batch.finish().unwrap()).run(|_| Finish::Complete),
             Finish::Complete
         );
     }
@@ -480,9 +528,10 @@ mod tests {
         assert!(Arc::ptr_eq(&c, &other));
         let a = c.open().unwrap();
         let ledger = c.state.lock().unwrap().as_ref().unwrap().ledger.clone();
-        ledger
-            .reserve(&[(crate::scan_budget::Resource::HttpAttempt, 1)])
-            .unwrap();
+        assert_eq!(
+            ledger.reserve(&[]),
+            Err(crate::scan_budget::Denied::NotActivated)
+        );
         let b = other.open().unwrap();
         assert!(matches!(a.finish(), Ok(Handoff::Joined)));
         let f = finalizer(b.finish().unwrap());
@@ -491,9 +540,37 @@ mod tests {
             f.permit
                 .ledger
                 .used(crate::scan_budget::Resource::HttpAttempt),
-            1
+            0
         );
-        assert_eq!(f.run(|_| {}), Finish::Complete);
+        assert_eq!(f.run(|_| Finish::Complete), Finish::Complete);
+    }
+    #[test]
+    fn mismatch_retired_owner_and_budget_exhaustion_never_claim_complete() {
+        let shared = Shared::new();
+        let c = Coordinator::new(shared.clone(), limits()).unwrap();
+        let mut changed = limits();
+        changed.http_attempts += 1;
+        assert!(matches!(
+            Coordinator::new(shared, changed),
+            Err(AdmissionError::ConfigurationMismatch)
+        ));
+        let b = c.open().unwrap();
+        let retired = b.owner.clone();
+        assert_eq!(
+            finalizer(b.finish().unwrap()).run(|p| {
+                assert!(p
+                    .ledger
+                    .reserve(&[(crate::scan_budget::Resource::HttpAttempt, 100)])
+                    .is_err());
+                Finish::Complete
+            }),
+            Finish::Incomplete
+        );
+        assert!(retired.is_cancelled());
+        let next = c.open().unwrap();
+        assert!(!next.owner.is_cancelled());
+        assert!(!Arc::ptr_eq(&retired, &next.owner));
+        drop(next);
     }
     #[test]
     fn permit_rejects_other_owner_and_cancel_prevents_callback() {
