@@ -34,7 +34,7 @@ pub(crate) enum Finish {
 pub(crate) struct LegacyScanner {
     coordinator: std::sync::Weak<Coordinator>,
     pub owner: Arc<AttemptScope>,
-    lease: Option<std::sync::Weak<std::sync::atomic::AtomicBool>>,
+    lease: std::sync::Weak<std::sync::atomic::AtomicBool>,
 }
 #[derive(Clone)]
 pub(crate) struct BudgetedExecution {
@@ -111,12 +111,9 @@ impl ExecutionContext {
                 if state.as_ref().is_some_and(|r| {
                     r.phase == Phase::Open
                         && Arc::ptr_eq(&r.owner, &l.owner)
-                        && match &l.lease {
-                            Some(w) => w
-                                .upgrade()
-                                .is_some_and(|v| v.load(std::sync::atomic::Ordering::SeqCst)),
-                            None => r.active,
-                        }
+                        && l.lease
+                            .upgrade()
+                            .is_some_and(|v| v.load(std::sync::atomic::Ordering::SeqCst))
                 }) {
                     Ok(())
                 } else {
@@ -127,6 +124,9 @@ impl ExecutionContext {
     }
     pub fn enter(&self, shared: &Shared) -> Result<Installed, AdmissionError> {
         self.validate(shared)?;
+        if INSTALLED.with(|slot| slot.borrow().len() >= 64) {
+            return Err(AdmissionError::Busy);
+        }
         let id = NEXT.with(|next| {
             let id = next.get().checked_add(1).ok_or(AdmissionError::Busy)?;
             next.set(id);
@@ -280,7 +280,7 @@ impl Coordinator {
             LegacyScanner {
                 coordinator: Arc::downgrade(self),
                 owner,
-                lease: Some(Arc::downgrade(&lease)),
+                lease: Arc::downgrade(&lease),
             },
             index,
         ))
@@ -329,7 +329,7 @@ impl Batch {
         ExecutionContext::Legacy(LegacyScanner {
             coordinator: Arc::downgrade(&self.coordinator),
             owner: self.owner.clone(),
-            lease: Some(Arc::downgrade(&self.lease)),
+            lease: Arc::downgrade(&self.lease),
         })
     }
     pub fn cancel_handle(&self) -> CancelHandle {
@@ -609,11 +609,15 @@ mod tests {
         let (accepted_tx, accepted_rx) = std::sync::mpsc::channel();
         let (release_tx, release_rx) = std::sync::mpsc::channel();
         let worker = c.clone();
+        let (finished_tx, finished_rx) = std::sync::mpsc::channel();
         let t = std::thread::spawn(move || {
             let (audit, legacy, index) = worker.admit(item("/barrier")).unwrap();
             accepted_tx.send((legacy.owner, index)).unwrap();
-            release_rx.recv().unwrap();
+            release_rx
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .unwrap();
             assert!(matches!(audit.complete(), Ok(Handoff::Joined)));
+            finished_tx.send(()).unwrap();
         });
         let (owner, index) = accepted_rx
             .recv_timeout(std::time::Duration::from_secs(1))
@@ -622,6 +626,9 @@ mod tests {
         assert!(Arc::ptr_eq(&owner, &batch.owner));
         assert!(shared.stored.item(index).unwrap().req.contains("/barrier"));
         release_tx.send(()).unwrap();
+        finished_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .unwrap();
         t.join().unwrap();
         assert_eq!(
             finalizer(batch.finish().unwrap()).run(|_| Finish::Complete),
@@ -843,6 +850,22 @@ mod tests {
             panic!("unwind guard");
         }));
         assert!(captured().is_none());
+        drop(b);
+    }
+    #[test]
+    fn inherited_installation_depth_has_finite_ceiling_and_recovers_after_drop() {
+        let shared = Shared::new();
+        let c = Coordinator::new(shared.clone(), limits()).unwrap();
+        let b = c.open().unwrap();
+        let context = b.context();
+        let mut guards = Vec::new();
+        for _ in 0..64 {
+            guards.push(context.enter(&shared).unwrap());
+        }
+        assert!(context.enter(&shared).is_err());
+        drop(guards);
+        assert!(captured().is_none());
+        assert!(context.enter(&shared).is_ok());
         drop(b);
     }
     #[test]
