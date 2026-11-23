@@ -95,6 +95,18 @@ impl Resolver {
         port: u16,
         deadline: Instant,
     ) -> Result<Vec<SocketAddr>, ResolveError> {
+        self.resolve_with_receipt(owner, host, port, deadline, || {})
+    }
+    // Fixture seam runs only after the worker result was received, before
+    // caller-side validation. Never a production callback boundary.
+    fn resolve_with_receipt(
+        &self,
+        owner: Arc<crate::host_probe_state::AttemptScope>,
+        host: &str,
+        port: u16,
+        deadline: Instant,
+        receipt: impl FnOnce(),
+    ) -> Result<Vec<SocketAddr>, ResolveError> {
         if owner.is_cancelled() {
             return Err(ResolveError::Cancelled);
         }
@@ -108,7 +120,7 @@ impl Resolver {
         let (tx, rx) = mpsc::sync_channel(1);
         self.tx
             .try_send(Job {
-                owner,
+                owner: owner.clone(),
                 host: host.into(),
                 port,
                 deadline,
@@ -122,10 +134,18 @@ impl Resolver {
         if left.is_zero() {
             return Err(ResolveError::Expired);
         }
-        rx.recv_timeout(left).map_err(|e| match e {
+        let result = rx.recv_timeout(left).map_err(|e| match e {
             mpsc::RecvTimeoutError::Timeout => ResolveError::Expired,
             mpsc::RecvTimeoutError::Disconnected => ResolveError::Unavailable,
-        })?
+        })?;
+        receipt();
+        if owner.is_cancelled() {
+            return Err(ResolveError::Cancelled);
+        }
+        if Instant::now() >= deadline {
+            return Err(ResolveError::Expired);
+        }
+        result
     }
 }
 pub(crate) fn process_resolver() -> Result<&'static Resolver, ResolveError> {
@@ -262,6 +282,36 @@ mod tests {
         );
         pool.drain_and_join();
         assert_eq!(count.load(Ordering::SeqCst), WORKERS);
+    }
+    #[test]
+    fn completed_lookup_cancelled_before_caller_receipt_never_returns_addresses() {
+        let pool =
+            Resolver::with_lookup(Arc::new(|_, _| Ok(vec!["127.0.0.1:80".parse().unwrap()])))
+                .unwrap();
+        let scope = owner();
+        let cancel = scope.clone();
+        assert_eq!(
+            pool.resolve_with_receipt(
+                scope,
+                "test",
+                80,
+                Instant::now() + Duration::from_secs(1),
+                move || cancel.cancel()
+            ),
+            Err(ResolveError::Cancelled)
+        );
+        let scope = owner();
+        assert_eq!(
+            pool.resolve_with_receipt(
+                scope,
+                "test",
+                80,
+                Instant::now() + Duration::from_millis(20),
+                || std::thread::sleep(Duration::from_millis(30))
+            ),
+            Err(ResolveError::Expired)
+        );
+        pool.drain_and_join();
     }
     #[test]
     fn bounded_input_results_and_singleton_positive_control() {
