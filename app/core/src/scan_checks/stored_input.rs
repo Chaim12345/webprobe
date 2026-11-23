@@ -168,13 +168,12 @@ impl PairCtx {
                         let method = req.split_whitespace().next().unwrap_or("");
                         let headers =
                             util::find_head_end(&raw).map(|end| util::parse_http(&raw[..end]));
-                        let qualified = host_response::assess(&raw, method)
+                        let qualified = headers.is_some_and(|h| {
+                            !h.headers
+                                .iter()
+                                .any(|(name, _)| name.eq_ignore_ascii_case("Transfer-Encoding"))
+                        }) && host_response::assess(&raw, method)
                             .is_some_and(|a| a.status >= 200 && !a.body.is_empty())
-                            && headers.is_some_and(|h| {
-                                !h.headers
-                                    .iter()
-                                    .any(|(name, _)| name.eq_ignore_ascii_case("Transfer-Encoding"))
-                            })
                             && !raw.starts_with(b"HTTP/1.1 1")
                             && !raw.starts_with(b"HTTP/1.0 1");
                         if qualified {

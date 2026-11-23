@@ -1355,6 +1355,18 @@ fn real_a4_retention_exhaustion_never_claims_complete() {
 fn real_a4_truncated_valid_payload_preserves_positive_incomplete() {
     real_a4_case(6);
 }
+#[test]
+fn real_a4_compressed_partial_not_plain_positive() {
+    real_a4_case(7);
+}
+#[test]
+fn real_a4_malformed_partial_header_not_plain_positive() {
+    real_a4_case(8);
+}
+#[test]
+fn real_a4_partial_body_header_words_do_not_hide_proven_positive() {
+    real_a4_case(9);
+}
 fn real_a4_case(mode: u8) {
     use crate::scan_lifecycle::{Coordinator, Finish, Handoff};
     let remembered = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
@@ -1372,8 +1384,28 @@ fn real_a4_case(mode: u8) {
                     .unwrap_or_default();
                 *saved.lock().unwrap() = value;
             }
-            let body = format!("<a href=\"{}\">saved</a>", saved.lock().unwrap());
-            format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()+if mode==6 && path=="/retrieve"{20}else{0})
+            let body = format!(
+                "<a href=\"{}\">saved</a>{}",
+                saved.lock().unwrap(),
+                if mode == 9 {
+                    "Transfer-Encoding: identity"
+                } else {
+                    ""
+                }
+            );
+            if path == "/retrieve" && mode == 7 {
+                return format!(
+                    "HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Length: {}\r\n\r\n{body}",
+                    body.len() + 20
+                );
+            }
+            if path == "/retrieve" && mode == 8 {
+                return format!(
+                    "HTTP/1.1 200 OK\r\nBad : syntax\r\nContent-Length: {}\r\n\r\n{body}",
+                    body.len() + 20
+                );
+            }
+            format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()+if (mode==6 || mode==9) && path=="/retrieve"{20}else{0})
         },
     );
     let port = if mode == 2 { 0 } else { port };
@@ -1489,13 +1521,13 @@ fn real_a4_case(mode: u8) {
         assert_eq!(wire.load(Ordering::SeqCst), 0);
         assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 0);
     }
-    if mode == 0 || mode == 4 || mode == 6 {
+    if mode == 0 || mode == 4 || mode == 6 || mode == 9 {
         assert!(counts.3 > 0);
     }
     if mode == 5 {
         assert_eq!(counts.3, 0);
     }
-    if mode == 6 {
+    if mode == 6 || mode == 9 {
         let issues = shared.issues.lock().unwrap();
         let issue = issues
             .iter()
@@ -1507,7 +1539,7 @@ fn real_a4_case(mode: u8) {
         assert!(!issue.evidence.is_empty());
     }
     assert_eq!(
-        mode == 0 || mode == 4 || mode == 6,
+        mode == 0 || mode == 4 || mode == 6 || mode == 9,
         shared
             .issues
             .lock()
@@ -1829,4 +1861,61 @@ fn actual_engine_cancel_after_registration_cannot_reset_owner_or_start_baseline(
         panic!("finalizer")
     };
     assert_eq!(f.run(|_| Finish::Complete), Finish::Incomplete);
+}
+
+#[test]
+fn actual_pair_partial_method_post_qualifies_head_does_not() {
+    use crate::scan_lifecycle::{Coordinator, Finish, Handoff};
+    for method in ["POST", "HEAD"] {
+        let port = lab_serve(
+            std::net::TcpListener::bind("127.0.0.1:0").unwrap(),
+            |_, _, _| {
+                "HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\n<a href=\"https://probe.invalid/\">saved</a>".into()
+            },
+        );
+        let shared = crate::net::Shared::new();
+        let limits = crate::scan_budget::Limits {
+            duration: std::time::Duration::from_secs(1),
+            http_attempts: 10,
+            connection_attempts: 10,
+            outgoing: 65536,
+            response: 65536,
+            decompressed: 65536,
+            inputs: 65536,
+            evidence: 65536,
+            evidence_records: 10,
+            records: 10,
+        };
+        let c = Coordinator::new(shared.clone(), limits).unwrap();
+        let b = c.open().unwrap();
+        let item = crate::stored::Item {
+            entry: Default::default(),
+            req: format!(
+                "{method} / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 0\r\n\r\n"
+            ),
+            host: "127.0.0.1".into(),
+            port,
+            https: false,
+        };
+        let pair = crate::stored::Pair {
+            item: item.clone(),
+            retrieval: item.clone(),
+            point: InsertionPoint::new(IpKind::Query, "x", "old"),
+            injection: (vec![], None),
+        };
+        let cx = PairCtx::new(shared.clone(), pair);
+        let mut observed = None;
+        let Handoff::Finalize(f) = b.finish().unwrap() else {
+            panic!("finalizer")
+        };
+        let outcome = f.run(|_| {
+            observed = Some(cx.send_following(&item, &item.req));
+            Finish::Complete
+        });
+        assert_eq!(outcome, Finish::Incomplete);
+        let result = observed.unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].1.is_some(), method == "POST");
+        assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 1);
+    }
 }
