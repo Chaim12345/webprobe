@@ -29,3 +29,21 @@ snapshot, with explicit incomplete/cancelled status and diagnostic in the
 scan record and Scanner UI. Missing source/provenance or missing confirmed
 navigation evidence is withheld. Stop prevents new sends but does not
 interrupt synchronous in-flight transport I/O; no latency bound is claimed.
+## Client-side prototype pollution addition
+
+A fifteenth family shares the same browser operation: client-side prototype
+pollution (KB 00200316, Information). It observes new own properties on
+Object.prototype whose key or value carries a dedicated run-owned query or
+fragment token. Hash-only evidence is Firm; query or mixed evidence is
+Tentative. Findings use the base pollution name only, never reflected/stored
+pollution variants. A reflected string without new own-key evidence is not
+pollution.
+
+Coverage is addition-only. Existing-property overwrites and stored pollution
+are not covered. The generic stored-submission token is explicitly excluded
+from pollution evidence, including values mixing that token with URL tokens.
+Polling can miss short-lived additions. The loopback labs use inert random
+tokens and temporary browser profiles. A combined fixture proves independent
+query/hash pollution alongside stored DOM-XSS, source/family dedup, negative
+cases, a shared three-request simple-page count, and the shared 64-request
+operation cap (plus baseline).
