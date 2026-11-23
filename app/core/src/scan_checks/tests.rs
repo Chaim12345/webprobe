@@ -1335,3 +1335,133 @@ function parseqs(s, filter) { var cfg = {}; s.replace(/^[?#]/, '').split('&').fo
         }
     }
 }
+
+/// Multi-family isolation regression, one navigation: a page that
+/// deep-merges the query string (query token) AND passes the fragment to
+/// an HTML sink (fragment token) must yield one pollution finding and
+/// one DOM-XSS finding, each keeping its own family, source and
+/// confidence - neither token may label the other family's finding. A
+/// page that only reflects the fragment (no new Object.prototype own
+/// key) yields the XSS finding and NO pollution finding, and a page that
+/// leaves the prototype unchanged yields neither. This coverage is
+/// ADDITION-ONLY: it pins detection and attribution of added properties
+/// and makes no overwrite-detection claim (tracked as a follow-up).
+/// Bounded: loopback lab, one throwaway browser profile per run, random
+/// inert tokens. Skipped when no Chromium is available.
+#[test]
+fn dom_prototype_pollution_multi_family_isolation_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    let visits = Arc::new(AtomicUsize::new(0));
+    let count = visits.clone();
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, move |_method, path, _raw| {
+        if path.starts_with("/mixed") {
+            count.fetch_add(1, Ordering::SeqCst);
+        }
+        let merge = r#"function setpath(o, parts, v) { var cur = o; for (var i = 0; i < parts.length - 1; i++) { if (typeof cur[parts[i]] !== 'object' || cur[parts[i]] === null) { cur[parts[i]] = {}; } cur = cur[parts[i]]; } cur[parts[parts.length - 1]] = v; }
+function parseqs(s) { var cfg = {}; s.replace(/^[?#]/, '').split('&').forEach(function (p) { if (!p) { return; } var kv = p.split('='); var parts = kv[0].split('[').map(function (x) { return x.replace(/\]$/, ''); }); setpath(cfg, parts, decodeURIComponent(kv[1] || '')); }); }"#;
+        let body = if path.starts_with("/mixed") {
+            // Query token pollutes the prototype; fragment token reaches
+            // an HTML sink. One navigation, two families.
+            format!("<html><body><script>\n{merge}\nparseqs(location.search);\ndocument.body.innerHTML = '<p>' + location.hash + '</p>';\n</script></body></html>")
+        } else if path.starts_with("/reflectonly") {
+            "<html><body><script>document.body.innerHTML = '<p>' + location.hash + '</p>';</script></body></html>".to_string()
+        } else if path.starts_with("/unchanged") {
+            "<html><body><script>var x = 1 + 1; document.title = 't' + x;</script></body></html>"
+                .to_string()
+        } else {
+            "<html><body><p>hello</p></body></html>".to_string()
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let run = |path: &str| {
+        let shared = crate::net::Shared::new();
+        let mut config = crate::scan_config::ScanConfig::default();
+        for (id, ..) in crate::scan::check_catalogue() {
+            if !["active.dom-prototype-pollution", "active.dom-xss"].contains(&id) {
+                config.disabled_checks.insert(id.into());
+            }
+        }
+        *crate::scan_config::shared_config(&shared).lock().unwrap() = config;
+        let e = crate::net::HistEntry {
+            method: "GET".into(),
+            host: "127.0.0.1".into(),
+            port,
+            path: path.into(),
+            req_raw: format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n")
+                .into_bytes()
+                .into(),
+            ..Default::default()
+        };
+        crate::scan::start_active_scan(shared.clone(), e, &[], &[]);
+        let start = std::time::Instant::now();
+        while shared.scan.is_busy() && start.elapsed() < std::time::Duration::from_secs(60) {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        assert!(!shared.scan.is_busy(), "scan did not finish");
+        let issues = shared.issues.lock().unwrap();
+        (issues
+            .iter()
+            .map(|i| {
+                (
+                    i.name.clone(),
+                    i.sev.clone(),
+                    i.confidence.clone(),
+                    i.detail.clone(),
+                )
+            })
+            .collect::<Vec<_>>(),)
+    };
+    let (mixed,) = run("/mixed");
+    let pp: Vec<_> = mixed
+        .iter()
+        .filter(|(n, ..)| n == "Client-side prototype pollution")
+        .collect();
+    let xss: Vec<_> = mixed
+        .iter()
+        .filter(|(n, ..)| n == "Cross-site scripting (DOM-based)")
+        .collect();
+    assert_eq!(pp.len(), 1, "one pollution finding: {mixed:?}");
+    assert_eq!(xss.len(), 1, "one DOM-XSS finding: {mixed:?}");
+    // The pollution finding belongs to the query token: search
+    // provenance, conservative Tentative, and no hash labeling.
+    assert_eq!(pp[0].1, "info");
+    assert_eq!(pp[0].2, "Tentative", "{:?}", pp[0].3);
+    assert!(pp[0].3.contains("location.search"), "{:?}", pp[0].3);
+    assert!(!pp[0].3.contains("location.hash"), "{:?}", pp[0].3);
+    // The XSS finding belongs to the fragment token: hash provenance,
+    // Firm, and no search labeling.
+    assert_eq!(xss[0].1, "high");
+    assert_eq!(xss[0].2, "Firm", "{:?}", xss[0].3);
+    assert!(xss[0].3.contains("location.hash"), "{:?}", xss[0].3);
+    assert!(!xss[0].3.contains("location.search"), "{:?}", xss[0].3);
+    assert_eq!(
+        visits.load(Ordering::SeqCst),
+        2,
+        "one baseline and one shared DOM navigation served both families"
+    );
+    // A reflected token with no new Object.prototype own key: XSS yes,
+    // pollution no.
+    let (reflect,) = run("/reflectonly");
+    assert!(
+        reflect
+            .iter()
+            .any(|(n, ..)| n == "Cross-site scripting (DOM-based)"),
+        "{reflect:?}"
+    );
+    assert!(
+        !reflect
+            .iter()
+            .any(|(n, ..)| n == "Client-side prototype pollution"),
+        "reflection must not be reported as pollution: {reflect:?}"
+    );
+    // Unchanged prototype: neither family reports.
+    let (unchanged,) = run("/unchanged");
+    assert!(unchanged.is_empty(), "{unchanged:?}");
+}
