@@ -183,6 +183,96 @@ pub fn start_active_scan(
     );
 }
 
+/// Required-Limits synchronous engine adapter for isolated lifecycle fixtures.
+/// No production caller or default policy selects it. Returns the exact
+/// finalization obligation to the caller rather than hiding A4 in Drop.
+#[cfg(test)]
+pub(crate) struct ExperimentalEngine {
+    shared: Arc<Shared>,
+    coordinator: Arc<crate::scan_lifecycle::Coordinator>,
+}
+#[cfg(test)]
+impl ExperimentalEngine {
+    pub fn new(
+        shared: Arc<Shared>,
+        limits: crate::scan_budget::Limits,
+    ) -> Result<Self, crate::scan_lifecycle::AdmissionError> {
+        let coordinator = crate::scan_lifecycle::Coordinator::new(shared.clone(), limits)?;
+        Ok(Self {
+            shared,
+            coordinator,
+        })
+    }
+    pub fn open(
+        &self,
+    ) -> Result<crate::scan_lifecycle::Batch, crate::scan_lifecycle::AdmissionError> {
+        self.coordinator.open()
+    }
+    pub fn audit(
+        &self,
+        entry: HistEntry,
+    ) -> Result<crate::scan_lifecycle::Handoff, crate::scan_lifecycle::AdmissionError> {
+        use crate::scan_lifecycle::{AdmissionError, ExecutionContext};
+        let shared = &self.shared;
+        let parts = util::parse_http(&entry.req_raw);
+        let host_header = util::get_header(&parts.headers, "Host")
+            .filter(|h| !h.is_empty())
+            .ok_or(AdmissionError::InvalidLimits)?;
+        let (host, port) = net::split_h_p(&host_header, entry.port);
+        let req = String::from_utf8_lossy(&entry.req_raw).into_owned();
+        let (a, legacy, item) = self.coordinator.admit(crate::stored::Item {
+            entry: entry.clone(),
+            req: req.clone(),
+            host: host.clone(),
+            port,
+            https: entry.https,
+        })?;
+        // Admission succeeds before changing the accepted run's UI flags.
+        shared.scan.stop.store(false, Ordering::SeqCst);
+        shared.scan.done.store(0, Ordering::SeqCst);
+        let context = ExecutionContext::Legacy(legacy.clone());
+        let _expected = net::scanner_io::ExpectedScanner.install();
+        let installed = context.enter(shared)?;
+        let _tool = net::tool_scope("Scanner");
+        let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let config = crate::scan_config::shared_config(shared)
+                .lock()
+                .unwrap()
+                .clone();
+            let points = audit_points(&req, &config);
+            let settings = checks::Settings {
+                speed: ScanSpeed::from_u8(shared.scan_speed.load(Ordering::SeqCst)),
+                accuracy: crate::variations::Accuracy::from_u8(
+                    shared.scan_accuracy.load(Ordering::SeqCst),
+                ),
+            };
+            let cx = checks::ScanCtx::start(
+                shared.clone(),
+                entry,
+                req,
+                parts,
+                host,
+                port,
+                settings,
+                Vec::new(),
+                Vec::new(),
+                item,
+                legacy.owner,
+            );
+            checks::run_stored_seeding(&cx, &points);
+            checks::run_point_checks(&cx, &points);
+            checks::run_request_checks(&cx);
+            checks::run_extension_checks(&cx, &points);
+        }));
+        drop(installed);
+        if run.is_err() {
+            drop(a);
+            return Err(AdmissionError::Internal);
+        }
+        a.complete()
+    }
+}
+
 /// The progress bar's total for a scan: fifteen probes per insertion point,
 /// one baseline, one oob probe per payload, the scan-level probes, the
 /// stored-echo pass, up to eight CORS origins and the per-host OpenAPI

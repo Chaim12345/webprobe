@@ -13,6 +13,7 @@ use std::sync::Arc;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum AdmissionError {
     Busy,
+    Internal,
     InvalidLimits,
     ConfigurationMismatch,
     IncompleteActive,

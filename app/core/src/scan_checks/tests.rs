@@ -1483,6 +1483,7 @@ fn real_a4_case(mode: u8) {
     if mode == 3 {
         assert_eq!(counts.2, 0);
         assert_eq!(wire.load(Ordering::SeqCst), 0);
+        assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 0);
     }
     if mode == 0 || mode == 4 {
         assert!(counts.3 > 0);
@@ -1498,5 +1499,66 @@ fn real_a4_case(mode: u8) {
             .unwrap()
             .iter()
             .any(|i| i.name == "Link manipulation (stored)")
+    );
+}
+
+#[test]
+fn required_limits_actual_engine_rejects_busy_without_reset_or_egress() {
+    use crate::scan_lifecycle::{AdmissionError, Finish, Handoff};
+    let wire = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let seen = wire.clone();
+    let port = lab_serve(
+        std::net::TcpListener::bind("127.0.0.1:0").unwrap(),
+        move |_, _, _| {
+            seen.fetch_add(1, Ordering::SeqCst);
+            "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok".into()
+        },
+    );
+    let shared = crate::net::Shared::new();
+    {
+        let config_slot = crate::scan_config::shared_config(&shared);
+        let mut cfg = config_slot.lock().unwrap();
+        for (id, ..) in crate::scan::check_catalogue() {
+            cfg.disabled_checks.insert(id.into());
+        }
+    }
+    let limits = crate::scan_budget::Limits {
+        duration: std::time::Duration::from_secs(5),
+        http_attempts: 100,
+        connection_attempts: 100,
+        outgoing: 65536,
+        response: 65536,
+        decompressed: 65536,
+        inputs: 65536,
+        evidence: 65536,
+        evidence_records: 100,
+        records: 100,
+    };
+    let engine = crate::scan::ExperimentalEngine::new(shared.clone(), limits).unwrap();
+    let batch = engine.open().unwrap();
+    let entry = crate::net::HistEntry {
+        method: "GET".into(),
+        host: "127.0.0.1".into(),
+        port,
+        path: "/base".into(),
+        req_raw: format!("GET /base HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n")
+            .into_bytes()
+            .into(),
+        ..Default::default()
+    };
+    assert!(matches!(engine.audit(entry.clone()), Ok(Handoff::Joined)));
+    assert_eq!(wire.load(Ordering::SeqCst), 1);
+    let Handoff::Finalize(finalizer) = batch.finish().unwrap() else {
+        panic!("finalizer")
+    };
+    shared.scan.stop.store(true, Ordering::SeqCst);
+    shared.scan.done.store(77, Ordering::SeqCst);
+    assert!(matches!(engine.audit(entry), Err(AdmissionError::Busy)));
+    assert!(shared.scan.stop.load(Ordering::SeqCst));
+    assert_eq!(shared.scan.done.load(Ordering::SeqCst), 77);
+    assert_eq!(wire.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        finalizer.run(|p| run_stored_stage_budgeted(&shared, p, 10, 8192)),
+        Finish::Complete
     );
 }
