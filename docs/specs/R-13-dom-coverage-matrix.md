@@ -38,7 +38,7 @@ not reported.
 | Ajax request header manipulation (DOM-based) | 00500c00 | Low | Firm | `xhr.setRequestHeader` name and value | - |
 | Cookie manipulation (DOM-based) | 00500b00 | Low | Firm | `document.cookie` setter | - |
 | HTML5 storage manipulation (DOM-based) | 00500f00 | Information | Firm | `localStorage.setItem` name and value, `sessionStorage.setItem` name and value | - |
-| Client-side JSON injection (DOM-based) | 00200370 | Low | Firm | `JSON.parse` | `jQuery.parseJSON` is wrapped and reported under this family |
+| Client-side JSON injection (DOM-based) | 00200370 | Low | Firm | `JSON.parse` | `jQuery.parseJSON` not covered |
 | Client-side XPath injection (DOM-based) | 00200360 | Low | Firm | `document.evaluate` | `jQuery.parseXML` |
 | Document domain manipulation (DOM-based) | 00501100 | Medium | Firm | `document.domain` setter | - |
 | HTML5 web message manipulation (DOM-based) | 00500e00 | Information | Firm | `postMessage` (the message argument) | - |
@@ -51,32 +51,40 @@ local nor the session area) are recorded but reported by no family.
 
 - One browser probe per URL per run; all families read the same result
   (`dom_families_share_one_probe_and_refresh_on_the_next_run`: 8 issues,
-  4 requests per URL per run - 1 baseline fetch, 1 stored-token
-  submission, 1 DOM navigation, 1 reflected re-request; a fresh run
+  3 requests per simple page per run: 1 baseline outside the DOM
+  operation budget, 1 stored-token submission, 1 DOM navigation; a fresh run
   re-probes).
 - Source provenance: `dom_source_provenance_matrix_against_a_live_lab`
   proves hash-only (Firm), search-only (Tentative), mixed (Tentative),
   and the negatives: reflected token without a sink, a pre-existing
   unrelated Object.prototype property, and a benign page.
 - Variants (burp.Zf24), attributed per hit in the order stored, then
-  reflected, then base: `dom_xss_stored_variant_against_a_live_lab`
-  (a token submitted in an earlier request and re-embedded by the
-  application into a JavaScript string literal reports the stored
-  variant) and `dom_xss_reflected_variant_against_a_live_lab` (the query
-  token echoed into script text and reaching a sink reports the
-  reflected variant). Variant detection adds two session-carrying GETs
-  per probed URL (the submission and the re-request); the reflection
-  context is classified with the G.11 parser, JsText approximating Zhp's
-  JavaScript-string-literal template.
+  reflected, then base: a token submitted in an earlier request and later
+  observed at a sink selects the stored label. The query token present in
+  script text of the exact navigation response fulfilled to Chromium and
+  also observed at a sink selects the reflected label. This is token
+  co-occurrence, not proof of JavaScript string-literal origin or the path
+  from response text to sink. Both variants are Tentative. The G.11 parser
+  classifies response context only; no later re-request supplies evidence.
+- Admission and failures: the stored submission runs only after probe
+  allowance, browser slot, binary startup and DevTools setup succeed.
+  Stop is checked before sends and navigation. An absent/invalid HTTP
+  response leaves submission outcome unknown: no retry, navigation or
+  further request. That failed result is cached for the URL for this run.
+- New labs pin denied admission with zero target connections; cancellation
+  before navigation; effect-then-drop with no replay; safe session headers
+  on captured wire; stored and plain variants through the same sink; and
+  classification from the actual fulfilled response without later traffic.
 - `dom_probe_tokens_are_distinct_and_substituted` pins the two-token
   substitution (drift test).
 - Budgets: at most `DOM_MAX_CONCURRENT_BROWSERS` (2) live Chromium
   instances per run and `DOM_MAX_PROBES_PER_RUN` (100) navigations; over
   budget fails closed (no browser, no hits). Unit-tested in
   webprobe-support (`dedup::tests`).
-- Per-probe request budget: `DOM_MAX_REQUESTS_PER_PROBE` (64) same-origin
-  GET/HEAD through the scanner transport; everything else fails closed
-  (`dom_route_tests`).
+- Per-operation request budget: `DOM_MAX_REQUESTS_PER_PROBE` (64) covers
+  the outer stored submission plus every intercepted GET/HEAD through the
+  same counter, consumed before sends. Baseline is outside this operation.
+  A resource-heavy live lab pins exactly 1 baseline + 64 operation requests.
 - Egress isolation: Fetch interception answers every page request; a
   dead-loopback `--proxy-server` removes the route for anything that
   bypasses interception (speculative preconnect/prefetch, background
@@ -86,8 +94,8 @@ local nor the session area) are recorded but reported by no family.
 - Evidence caps: 50 hits per page, 300 chars per recorded value, 500 chars
   page URL (instrumentation), 4 MiB fulfilled body, 32 KiB fulfilled
   response headers (`crawl.rs` constants).
-- Hits kept only on the exact probed origin; one report per sink
-  (burp.Zwf8.identityOf merge rule).
+- Hits kept only on the exact probed origin; one report per sink, variant
+  and source so a stored hit cannot hide a plain hit through the same sink.
 - Sink-set drift: `dom_sink_sets_match_the_instrumentation` and
   `dom_family_sinks_are_wrapped` pin the JS sink names to the Rust
   family tables, including the runtime-built name prefixes

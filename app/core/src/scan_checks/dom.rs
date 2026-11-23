@@ -28,9 +28,7 @@ pub(crate) const DOM_JS_INJECTION_SINKS: &[&str] = &[
     "setInterval",
     "jQuery.globalEval",
 ];
-pub(crate) const DOM_OPEN_REDIRECTION_SINKS: &[&str] = &[
-    "window.open",
-];
+pub(crate) const DOM_OPEN_REDIRECTION_SINKS: &[&str] = &["window.open"];
 pub(crate) const DOM_DATA_MANIPULATION_SINKS: &[&str] = &[
     "element.textContent",
     "element.innerText",
@@ -57,56 +55,42 @@ pub(crate) const DOM_LINK_MANIPULATION_SINKS: &[&str] = &[
     "jQuery.attr.action",
     "jQuery.prop.action",
 ];
-pub(crate) const DOM_WEBSOCKET_POISONING_SINKS: &[&str] = &[
-    "websocket",
-];
-pub(crate) const DOM_DOS_SINKS: &[&str] = &[
-    "RegExp",
-];
-pub(crate) const DOM_AJAX_HEADER_SINKS: &[&str] = &[
-    "xhr.setRequestHeader.name",
-    "xhr.setRequestHeader.value",
-];
+pub(crate) const DOM_WEBSOCKET_POISONING_SINKS: &[&str] = &["websocket"];
+pub(crate) const DOM_DOS_SINKS: &[&str] = &["RegExp"];
+pub(crate) const DOM_AJAX_HEADER_SINKS: &[&str] =
+    &["xhr.setRequestHeader.name", "xhr.setRequestHeader.value"];
 pub(crate) const DOM_STORAGE_MANIPULATION_SINKS: &[&str] = &[
     "localStorage.setItem.name",
     "localStorage.setItem.value",
     "sessionStorage.setItem.name",
     "sessionStorage.setItem.value",
 ];
-pub(crate) const DOM_JSON_INJECTION_SINKS: &[&str] = &[
-    "JSON.parse",
-];
-pub(crate) const DOM_XPATH_INJECTION_SINKS: &[&str] = &[
-    "document.evaluate",
-];
-pub(crate) const DOM_DOCUMENT_DOMAIN_SINKS: &[&str] = &[
-    "document.domain",
-];
-pub(crate) const DOM_COOKIE_MANIPULATION_SINKS: &[&str] = &[
-    "document.cookie",
-];
-pub(crate) const DOM_WEB_MESSAGE_SINKS: &[&str] = &[
-    "postMessage",
-];
-
+pub(crate) const DOM_JSON_INJECTION_SINKS: &[&str] = &["JSON.parse"];
+pub(crate) const DOM_XPATH_INJECTION_SINKS: &[&str] = &["document.evaluate"];
+pub(crate) const DOM_DOCUMENT_DOMAIN_SINKS: &[&str] = &["document.domain"];
+pub(crate) const DOM_COOKIE_MANIPULATION_SINKS: &[&str] = &["document.cookie"];
+pub(crate) const DOM_WEB_MESSAGE_SINKS: &[&str] = &["postMessage"];
 
 /// A GET over the audited session (cookie/session headers of the template
-/// request, minus hop-by-hop and host): the stored-variant submission and
-/// the reflected-variant re-request ride the same identity as the audited
+/// request, minus framing and hop-by-hop fields): the stored submission
+/// carries the same identity as the audited
 /// request, like the browser probe's forwarded requests.
 fn authed_get(cx: &ScanCtx, path_query: &str) -> Vec<u8> {
     let mut raw = format!("GET {path_query} HTTP/1.1\r\nHost: {}\r\n", cx.host_hdr);
+    let connection = cx
+        .parts
+        .headers
+        .iter()
+        .filter(|(k, _)| k.eq_ignore_ascii_case("connection"))
+        .map(|(_, v)| v.as_str())
+        .collect::<Vec<_>>()
+        .join(",");
     for (k, v) in &cx.parts.headers {
-        let kl = k.to_ascii_lowercase();
-        if matches!(
-            kl.as_str(),
-            "host" | "connection" | "content-length" | "content-type" | "accept-encoding"
-        ) {
-            continue;
+        if crate::crawl::dom_safe_header(k, v, &connection) {
+            raw.push_str(&format!("{k}: {v}\r\n"));
         }
-        raw.push_str(&format!("{k}: {v}\r\n"));
     }
-    raw.push_str("Connection: close\r\n\r\n");
+    raw.push_str("Connection: close\r\nAccept-Encoding: identity\r\n\r\n");
     raw.into_bytes()
 }
 
@@ -119,7 +103,7 @@ fn authed_get(cx: &ScanCtx, path_query: &str) -> Vec<u8> {
 /// probe token reaching a sink is reported under the sink's family. One
 /// browser run per URL serves every family check; hits are kept only on
 /// the probed origin (the browser's own chrome-error pages run the
-/// wrapped sinks too) and merged per sink (burp.Zwf8.identityOf).
+/// wrapped sinks too) and merged per sink, variant and source.
 /// Skipped when no Chromium is available.
 /// Results belong to the current run's ScanDedup. A per-URL OnceLock
 /// shares one browser probe across the fourteen families and concurrent
@@ -201,7 +185,6 @@ fn dom_analysis_hits(cx: &ScanCtx) -> webprobe_support::dedup::DomProbeOutcome {
         let tok_st = format!("wp{}", rnd_letters(10));
         let sep0 = if path.contains('?') { "&" } else { "?" };
         let submit = authed_get(cx, &format!("{path}{sep0}__proto__[{tok_st}]={tok_st}"));
-        let _ = cx.send(&submit);
         let probe = crate::crawl::dom_analysis_probe(
             &cx.shared,
             &probe_url,
@@ -211,6 +194,30 @@ fn dom_analysis_hits(cx: &ScanCtx) -> webprobe_support::dedup::DomProbeOutcome {
             cx.port,
             cx.entry.https,
             &tok_st,
+            || {
+                crate::tasks::wait_while_paused(&cx.shared);
+                if cx.stopped() {
+                    return Err("scan stopped before stored submission".into());
+                }
+                let response = cx.send(&submit);
+                let confirmed = response.as_ref().is_some_and(|r| {
+                    let p = util::parse_http(r);
+                    p.first.starts_with("HTTP/")
+                        && p.first
+                            .split_whitespace()
+                            .nth(1)
+                            .and_then(|v| v.parse::<u16>().ok())
+                            .is_some_and(|v| (100..600).contains(&v))
+                });
+                if confirmed {
+                    Ok(())
+                } else {
+                    Err(
+                        "stored submission outcome unknown; not retried; DOM operation stopped"
+                            .into(),
+                    )
+                }
+            },
         );
         if let Err(e) = &probe {
             // A crashed/timed-out probe is not a clean bill of health: say so
@@ -219,31 +226,25 @@ fn dom_analysis_hits(cx: &ScanCtx) -> webprobe_support::dedup::DomProbeOutcome {
             cx.shared
                 .log(&format!("DOM analysis probe failed for {url}: {e}"));
         }
-        let hits: Vec<crate::crawl::DomHit> = probe
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|h| crate::crawl::same_origin(&h.page_url, &origin))
-            .collect();
-        // The reflected-DOM variant (burp.Zf24's REFLECTED; Zhp's template has
-        // the value "copied into a JavaScript string literal"): re-request the
-        // URL the browser navigated to (the query payload, no fragment) and
-        // classify the query token's reflection contexts. JsText approximates
-        // the string-literal requirement with <script> text, the granularity
-        // the G.11 context parser has. The query token is returned, not a
-        // bare flag: the reflected variant is per HIT - only a hit whose sink
-        // value carries the query token can have come from the reflected
-        // value, so a hash-flow hit on a page that also reflects the query
-        // stays plain DOM-based.
-        let raw = authed_get(cx, &format!("{path}{sep}__proto__[{tok_s}]={tok_s}"));
-        let reflected = cx
-            .send(&raw)
-            .map(|r| {
-                crate::scan::g11_contexts(&r, &tok_s)
+        let Ok(probe) = probe else {
+            return Default::default();
+        };
+        // Only the exact navigation response fulfilled to Chromium is evidence.
+        // Script-text co-occurrence is not a proven string-literal data flow.
+        let reflected = probe
+            .document_response
+            .as_ref()
+            .is_some_and(|r| {
+                crate::scan::g11_contexts(r, &tok_s)
                     .iter()
                     .any(|c| matches!(c, crate::scan::G11Context::JsText))
             })
-            .unwrap_or(false)
             .then_some(tok_s);
+        let hits = probe
+            .hits
+            .into_iter()
+            .filter(|h| crate::crawl::same_origin(&h.page_url, &origin))
+            .collect();
         webprobe_support::dedup::DomProbeOutcome {
             hits,
             reflected,
@@ -284,11 +285,8 @@ macro_rules! dom_family_check {
                     reflected: reflected_token,
                     stored: stored_token,
                 } = dom_analysis_hits(cx);
-                let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
+                let mut seen: std::collections::HashSet<(&str, &str, &str)> = std::collections::HashSet::new();
                 for hit in hits.iter().filter(|h| $sinks.contains(&h.sink.as_str())) {
-                    if !seen.insert(hit.sink.as_str()) {
-                        continue;
-                    }
                     // burp.Zf24.Zw: a hit holding the stored token was
                     // embedded by the application from an earlier request
                     // (the stored variant); otherwise a hit whose sink
@@ -299,7 +297,7 @@ macro_rules! dom_family_check {
                         (
                             $stored_issue,
                             format!(
-                                "The application may be vulnerable to stored {}. The source value was submitted in an earlier request, stored by the application, and is copied into a JavaScript string literal of this response, then passed to <b>{}</b>.<br><br>The stored value <b>{}</b> reached the sink as <b>{}</b>.",
+                                "The application may be vulnerable to stored {}. A probe token submitted in an earlier request was later observed at <b>{}</b>. This suggests persistence but does not establish the storage mechanism or a JavaScript string-literal origin.<br><br>The stored value <b>{}</b> reached the sink as <b>{}</b>.",
                                 $family,
                                 util::html_encode(&hit.sink),
                                 util::html_encode(&hit.source_value),
@@ -310,7 +308,7 @@ macro_rules! dom_family_check {
                         (
                             $reflected_issue,
                             format!(
-                                "The application may be vulnerable to reflected {}. The source value is copied into a JavaScript string literal in the response and passed to <b>{}</b>.<br><br>The source value <b>{}</b> reached the sink as <b>{}</b>.",
+                                "The application may be vulnerable to reflected {}. The query probe token appeared in script text of the navigation response fulfilled to the browser and was also observed at <b>{}</b>. These observations do not prove that the sink value came from that script text or from a JavaScript string literal.<br><br>The source value <b>{}</b> reached the sink as <b>{}</b>.",
                                 $family,
                                 util::html_encode(&hit.sink),
                                 util::html_encode(&hit.source_value),
@@ -336,6 +334,7 @@ macro_rules! dom_family_check {
                             ),
                         )
                     };
+                    if !seen.insert((hit.sink.as_str(), issue, hit.source.as_str())) { continue; }
                     let mut i = mk($severity, issue, &cx.entry, detail);
                     // burp.Zwf8's confidence mapping is established for a
                     // location.hash source only: a base-variant hit with
@@ -531,7 +530,6 @@ dom_family_check!(
     "HTML5 web message manipulation (DOM-based), KB 00500e00, Information: controllable data sent as a web message to another document (window.postMessage; no literal Zcwh sink mapping - the family is established by the KB resource). Confidence Firm (burp.Zwf8.Zd)."
 );
 
-
 /// Sink-set drift, both directions (burp.Zcwh's family tables drive the
 /// reports): drift between the JS wrappers and the Rust checks would
 /// silently drop or orphan hits.
@@ -635,8 +633,7 @@ fn dom_family_sinks_are_wrapped() {
             }
             let js = crate::crawl::DOM_INSTRUMENT_JS;
             assert!(
-                js.contains(&format!("record(\"{sink}\""))
-                    || js.contains(&format!("\"{sink}\")")),
+                js.contains(&format!("record(\"{sink}\"")) || js.contains(&format!("\"{sink}\")")),
                 "{family} sink {sink} not wrapped"
             );
         }
@@ -659,8 +656,11 @@ fn dom_probe_tokens_are_distinct_and_substituted() {
     ] {
         assert!(js.contains(needle), "instrumentation lost {needle}");
     }
-    let out =
-        crate::crawl::dom_instrument_js("http://h/p?__proto__[wpSs]=wpSs", "__proto__[wpHh]=wpHh", "");
+    let out = crate::crawl::dom_instrument_js(
+        "http://h/p?__proto__[wpSs]=wpSs",
+        "__proto__[wpHh]=wpHh",
+        "",
+    );
     assert!(!out.contains("%CANARY%") && !out.contains("%CANARY2%"));
     assert!(out.contains("wpSs") && out.contains("wpHh"));
     // A probe URL without a query payload falls back to one token, which

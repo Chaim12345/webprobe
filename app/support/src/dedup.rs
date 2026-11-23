@@ -137,7 +137,8 @@ pub struct DomHit {
 
 /// One URL's dynamic DOM-analysis outcome for this run: the source-to-sink
 /// hits, the reflected-variant query token (`Some` only when the server
-/// echoes the query payload's token into a JavaScript string context), and
+/// contains the query token in script text of the fulfilled navigation
+/// response; this does not prove a string-literal data flow), and
 /// the stored token submitted before the probe (a hit holding it came from
 /// application-stored content: the stored variant).
 #[derive(Clone, Debug, Default)]

@@ -475,6 +475,18 @@ pub const DOM_MAX_FULFILL_HEADERS: usize = 32 * 1024;
 
 /// DOM requests never leave through Chromium's own HTTP stack. Fetch
 /// interception sends same-origin GET/HEAD through the scanner transport.
+/// Bodyless forwarded requests never inherit framing, proxy credentials,
+/// hop-by-hop fields, or fields nominated by Connection.
+pub(crate) fn dom_safe_header(name: &str, value: &str, connection: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    !name.contains(['\r', '\n']) && !value.contains(['\r', '\n'])
+        && !["host", "connection", "content-length", "transfer-encoding",
+             "accept-encoding", "proxy-authorization", "proxy-connection",
+             "keep-alive", "te", "trailer", "upgrade", "expect", "content-type"]
+            .contains(&lower.as_str())
+        && !connection.split(',').any(|n| n.trim().eq_ignore_ascii_case(name))
+}
+
 struct DomRoute {
     shared: Arc<Shared>,
     origin: String,
@@ -483,6 +495,8 @@ struct DomRoute {
     https: bool,
     template: String,
     sent: usize,
+    document_url: String,
+    document_response: Option<Vec<u8>>,
 }
 
 impl DomRoute {
@@ -517,35 +531,28 @@ impl DomRoute {
         if let Some(headers) = req["headers"].as_object() {
             for (k, value) in headers {
                 let lower = k.to_ascii_lowercase();
-                if [
-                    "host",
-                    "connection",
-                    "content-length",
-                    "transfer-encoding",
-                    "accept-encoding",
-                    "proxy-authorization",
-                ]
-                .contains(&lower.as_str())
-                {
-                    continue;
-                }
                 let value = value.as_str().unwrap_or("");
-                if k.contains(['\r', '\n']) || value.contains(['\r', '\n']) {
-                    continue;
-                }
+                let connection = headers.iter().filter(|(k, _)| k.eq_ignore_ascii_case("connection"))
+                    .filter_map(|(_, v)| v.as_str()).collect::<Vec<_>>().join(",");
+                if !dom_safe_header(k, value, &connection) { continue; }
                 raw.push_str(&format!("{k}: {value}\r\n"));
                 copied.insert(lower);
             }
         }
         let template = util::parse_http(self.template.as_bytes());
+        let template_connection = template.headers.iter().filter(|(k, _)| k.eq_ignore_ascii_case("connection"))
+            .map(|(_, v)| v.as_str()).collect::<Vec<_>>().join(",");
         for name in ["Cookie", "Authorization", "User-Agent", "Accept-Language"] {
             if !copied.contains(&name.to_ascii_lowercase()) {
                 if let Some(value) = util::get_header(&template.headers, name) {
+                    if !dom_safe_header(name, &value, &template_connection) { continue; }
                     raw.push_str(&format!("{name}: {value}\r\n"));
                 }
             }
         }
         raw.push_str("\r\n");
+        crate::tasks::wait_while_paused(&self.shared);
+        if self.shared.scan.stop.load(Ordering::SeqCst) { return blocked(); }
         self.sent += 1;
         let response = crate::scan::send_one(
             &self.shared,
@@ -586,6 +593,9 @@ impl DomRoute {
         use base64::Engine;
         let body_start = parsed.head_len.min(response.len());
         let body_len = (response.len() - body_start).min(DOM_MAX_FULFILL_BODY);
+        if event["resourceType"] == "Document" && url == self.document_url {
+            self.document_response = Some(response[..body_start + body_len].to_vec());
+        }
         let body = base64::engine::general_purpose::STANDARD
             .encode(&response[body_start..body_start + body_len]);
         (
@@ -2075,8 +2085,8 @@ pub(crate) const DOM_INSTRUMENT_JS: &str = r#"
   wrapSetter(HTMLAnchorElement.prototype, "target", "anchor.target");
   wrapSetter(HTMLFormElement.prototype, "action", "form.action");
   wrapSetter(HTMLAnchorElement.prototype, "href", "anchor.href");
-  wrapSetter(HTMLButtonElement.prototype, "formaction", "button.formaction");
-  wrapSetter(HTMLInputElement.prototype, "formaction", "input.formaction");
+  wrapSetter(HTMLButtonElement.prototype, "formAction", "button.formaction");
+  wrapSetter(HTMLInputElement.prototype, "formAction", "input.formaction");
   try {
     var wnd = Object.getOwnPropertyDescriptor(window, "name");
     if (wnd && wnd.set && wnd.configurable) {
@@ -2225,6 +2235,11 @@ pub(crate) fn dom_instrument_js(url: &str, canary: &str, stored: &str) -> String
 /// headless browser (locked to the target host, like the crawl) and
 /// return the source-to-sink hits the instrumentation recorded. The
 /// browser tree is killed and its profile removed on every path.
+pub struct DomProbeResult {
+    pub hits: Vec<DomHit>,
+    pub document_response: Option<Vec<u8>>,
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn dom_analysis_probe(
     shared: &Arc<Shared>,
@@ -2235,7 +2250,25 @@ pub fn dom_analysis_probe(
     port: u16,
     https: bool,
     stored: &str,
-) -> Result<Vec<DomHit>, String> {
+    submit: impl FnOnce() -> Result<(), String>,
+) -> Result<DomProbeResult, String> {
+    dom_probe_with_binary(shared, url, canary, template, host, port, https, stored, submit,
+        crate::paths::chromium().map(|p| p.display().to_string()).map_err(|e| e.to_string()))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn dom_probe_with_binary(
+    shared: &Arc<Shared>,
+    url: &str,
+    canary: &str,
+    template: &str,
+    host: &str,
+    port: u16,
+    https: bool,
+    stored: &str,
+    submit: impl FnOnce() -> Result<(), String>,
+    binary: Result<String, String>,
+) -> Result<DomProbeResult, String> {
     // Run budget first: over-budget probes fail closed without spawning
     // a browser, and concurrent callers wait for a browser slot.
     let budget = &crate::scan::scan_dedup_of(shared).dom_budget;
@@ -2246,10 +2279,7 @@ pub fn dom_analysis_probe(
     let _permit = budget
         .acquire_browser(&move || stop.scan.stop.load(Ordering::SeqCst))
         .ok_or("scan stopped while waiting for a DOM browser slot")?;
-    let bin = crate::paths::chromium()
-        .map_err(|m| m.to_string())?
-        .display()
-        .to_string();
+    let bin = binary?;
     let rest = url.split_once("://").map(|x| x.1).unwrap_or(url);
     let authority = rest.split('/').next().unwrap_or("");
     let target_host = if let Some(rest) = authority.strip_prefix('[') {
@@ -2337,6 +2367,8 @@ pub fn dom_analysis_probe(
             https,
             template: template.into(),
             sent: 0,
+            document_url: url.split('#').next().unwrap_or(url).into(),
+            document_response: None,
         });
         cdp.call("Page.enable", serde_json::json!({}))?;
         cdp.call("Network.enable", serde_json::json!({}))?;
@@ -2356,6 +2388,17 @@ pub fn dom_analysis_probe(
             "Page.addScriptToEvaluateOnNewDocument",
             serde_json::json!({"source": dom_instrument_js(url, canary, stored)}),
         )?;
+        if shared.scan.stop.load(Ordering::SeqCst) {
+            return Err("scan stopped before stored submission".into());
+        }
+        // Consume from the same counter used by every intercepted request,
+        // before attempting the outer stored submission (unknown outcomes
+        // still spent the request and are never replayed).
+        cdp.dom_route.as_mut().expect("DOM route installed").sent += 1;
+        submit()?;
+        if shared.scan.stop.load(Ordering::SeqCst) {
+            return Err("scan stopped after stored submission".into());
+        }
         let base = url.split('#').next().unwrap_or(url);
         cdp.call(
             "Page.navigate",
@@ -2369,7 +2412,13 @@ pub fn dom_analysis_probe(
         }
         let hits: Vec<DomHit> =
             eval_json(&mut cdp, "JSON.stringify(window.__wpDomHits || [])").unwrap_or_default();
-        Ok(hits)
+        if shared.scan.stop.load(Ordering::SeqCst) {
+            return Err("scan stopped during DOM navigation".into());
+        }
+        Ok(DomProbeResult {
+            hits,
+            document_response: cdp.dom_route.as_ref().and_then(|r| r.document_response.clone()),
+        })
     })();
     crate::util::kill_process_tree(
         child.id(),
@@ -2386,6 +2435,60 @@ mod dom_route_tests {
     use super::*;
 
     #[test]
+    fn dom_denied_admission_never_submits_or_opens_target_connection() {
+        use std::sync::atomic::AtomicUsize;
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let url = format!("http://127.0.0.1:{port}/");
+        for mode in ["budget", "missing", "cancelled", "broken"] {
+            let shared = Shared::new();
+            if mode == "budget" {
+                let state = crate::scan::scan_dedup_of(&shared);
+                for _ in 0..webprobe_support::dedup::DOM_MAX_PROBES_PER_RUN {
+                    assert!(state.dom_budget.spend_probe());
+                }
+            }
+            if mode == "cancelled" { shared.scan.stop.store(true, Ordering::SeqCst); }
+            let calls = AtomicUsize::new(0);
+            let binary = if mode == "missing" { Err("no browser".into()) }
+                else { Ok("/definitely/missing/chromium".into()) };
+            let result = dom_probe_with_binary(&shared, &url, "token", "", "127.0.0.1", port,
+                false, "stored", || { calls.fetch_add(1, Ordering::SeqCst); Ok(()) }, binary);
+            assert!(result.is_err(), "{mode}");
+            assert_eq!(calls.load(Ordering::SeqCst), 0, "{mode}");
+            assert!(listener.accept().is_err(), "unexpected target egress: {mode}");
+        }
+    }
+
+    #[test]
+    fn dom_cancellation_after_admitted_submission_prevents_navigation() {
+        if chromium_binary().is_none() { return; }
+        let listener=std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let port=listener.local_addr().unwrap().port();
+        let shared=Shared::new();
+        let result=dom_analysis_probe(&shared,&format!("http://127.0.0.1:{port}/"),
+            "token","","127.0.0.1",port,false,"stored",|| {
+                shared.scan.stop.store(true,Ordering::SeqCst); Ok(())
+            });
+        assert!(result.is_err());
+        assert!(listener.accept().is_err(),"navigation must not start after stop");
+    }
+
+    #[test]
+    fn dom_bodyless_header_filter_preserves_session_not_framing() {
+        for name in ["Connection", "Content-Length", "Transfer-Encoding", "Proxy-Authorization",
+            "Proxy-Connection", "Keep-Alive", "TE", "Trailer", "Upgrade", "Expect", "Content-Type", "X-Remove"] {
+            assert!(!dom_safe_header(name, "value", "X-Remove"), "{name}");
+        }
+        for name in ["Cookie", "Authorization", "X-Session", "Accept-Language"] {
+            assert!(dom_safe_header(name, "value", "X-Remove"), "{name}");
+        }
+        assert!(!dom_safe_header("X-Test", "value\r\nInjected: yes", ""));
+    }
+
+    #[test]
     fn dom_interception_blocks_unsafe_methods_and_wrong_origins_before_sending() {
         let mut route = DomRoute {
             shared: Shared::new(),
@@ -2395,6 +2498,8 @@ mod dom_route_tests {
             https: false,
             template: String::new(),
             sent: 0,
+            document_url: String::new(),
+            document_response: None,
         };
         for (method, url) in [
             ("POST", "http://127.0.0.1:1/"),
