@@ -25,10 +25,42 @@ pub(crate) fn run_stored_seeding(cx: &ScanCtx, points: &[InsertionPoint]) {
         if cx.stopped() {
             break;
         }
+        #[cfg(test)]
+        let token = if let Some(generation) = &cx.store_generation {
+            match generation.token(cx.item, ip) {
+                Ok(token) => token,
+                Err(_) => {
+                    cx.host_scope
+                        .record_reason(crate::owner_protocol::Reason::InternalOrStoreFailure);
+                    cx.host_scope.cancel();
+                    break;
+                }
+            }
+        } else {
+            cx.shared.stored.token(cx.item, ip)
+        };
+        #[cfg(not(test))]
         let token = cx.shared.stored.token(cx.item, ip);
         let req = inject_payload(&cx.req, ip, &token);
         let chain = cx.send_following(&req);
         if let Some((r, resp)) = chain.first() {
+            #[cfg(test)]
+            if let Some(generation) = &cx.store_generation {
+                if generation
+                    .note_injection(&token, r.as_bytes(), resp.as_deref())
+                    .is_err()
+                {
+                    cx.host_scope
+                        .record_reason(crate::owner_protocol::Reason::InternalOrStoreFailure);
+                    cx.host_scope.cancel();
+                    break;
+                }
+            } else {
+                cx.shared
+                    .stored
+                    .note_injection(&token, r.as_bytes(), resp.as_deref());
+            }
+            #[cfg(not(test))]
             cx.shared
                 .stored
                 .note_injection(&token, r.as_bytes(), resp.as_deref());
@@ -384,7 +416,14 @@ pub(crate) fn run_stored_stage_budgeted(
         if permit.validate_shared(shared).is_err() || permit.ledger().reserve(&[]).is_err() {
             return Finish::Incomplete;
         }
-        if !shared.stored.has_pair(index) {
+        let has_pair = match permit.generation().has_pair(index) {
+            Ok(v) => v,
+            Err(_) => {
+                permit.mark_reason(crate::owner_protocol::Reason::InternalOrStoreFailure);
+                return Finish::Incomplete;
+            }
+        };
+        if !has_pair {
             return if incomplete {
                 Finish::Incomplete
             } else {
@@ -394,12 +433,14 @@ pub(crate) fn run_stored_stage_budgeted(
         if permit.ledger().reserve(&[(Resource::Record, 1)]).is_err() {
             return Finish::Incomplete;
         }
-        let pair = shared.stored.pair_bounded(index, max_pair_bytes, |bytes| {
-            permit
-                .ledger()
-                .reserve(&[(Resource::Input, bytes as u64)])
-                .is_ok()
-        });
+        let pair = permit
+            .generation()
+            .pair_bounded_admit(index, max_pair_bytes, |bytes| {
+                permit
+                    .ledger()
+                    .reserve(&[(Resource::Input, bytes as u64)])
+                    .is_ok()
+            });
         let pair = match pair {
             Ok(Some(p)) => p,
             Ok(None) => {
@@ -409,7 +450,7 @@ pub(crate) fn run_stored_stage_budgeted(
                     Finish::Complete
                 }
             }
-            Err(()) => {
+            Err(_) => {
                 incomplete = true;
                 continue;
             }
@@ -431,7 +472,7 @@ pub(crate) fn run_stored_stage_budgeted(
             }
         }
     }
-    if incomplete || shared.stored.has_pair(max_pairs) {
+    if incomplete || permit.generation().has_pair(max_pairs).unwrap_or(true) {
         Finish::Incomplete
     } else {
         Finish::Complete

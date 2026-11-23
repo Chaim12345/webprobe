@@ -80,6 +80,8 @@ type StoredPoint = (usize, InsertionPoint, Vec<u8>, Option<Vec<u8>>);
 #[derive(Default)]
 struct Inner {
     #[cfg(test)]
+    strict: bool,
+    #[cfg(test)]
     generation: Option<(
         std::sync::Weak<crate::host_probe_state::AttemptScope>,
         std::sync::Weak<()>,
@@ -112,43 +114,88 @@ fn point_key(p: &InsertionPoint) -> String {
 }
 
 impl StoredInputs {
+    fn raw_inner(&self) -> std::sync::MutexGuard<'_, Inner> {
+        let inner = self.inner.lock().unwrap();
+        #[cfg(test)]
+        if inner.strict {
+            drop(inner);
+            panic!("prohibited raw StoredInputs access during strict generation");
+        }
+        inner
+    }
+    #[cfg(test)]
+    pub(crate) fn set_generation_strict(&self, generation: &StoreGeneration) -> Result<(), ()> {
+        let mut inner = self.inner.lock().unwrap();
+        generation.validate(&inner).map_err(|_| ())?;
+        inner.strict = true;
+        Ok(())
+    }
+
     /// Forget everything (a new scan run).
     pub fn clear(&self) {
-        *self.inner.lock().unwrap() = Inner::default();
+        *self.raw_inner() = Inner::default();
     }
 
     /// Start a batch: cleared once here, kept across its items. False when
     /// a batch is already open (the caller then neither clears nor closes).
     pub fn open_batch(&self) -> bool {
-        if self.batch.swap(true, Ordering::SeqCst) {
-            return false;
+        #[cfg(test)]
+        {
+            let mut inner = self.raw_inner();
+            if self.batch.swap(true, Ordering::SeqCst) {
+                return false;
+            }
+            *inner = Inner::default();
+            true
         }
-        self.clear();
-        true
+        #[cfg(not(test))]
+        {
+            if self.batch.swap(true, Ordering::SeqCst) {
+                return false;
+            }
+            self.clear();
+            true
+        }
     }
 
     pub fn close_batch(&self) {
-        self.batch.store(false, Ordering::SeqCst);
+        #[cfg(test)]
+        {
+            let _inner = self.raw_inner();
+            self.batch.store(false, Ordering::SeqCst);
+        }
+        #[cfg(not(test))]
+        {
+            self.batch.store(false, Ordering::SeqCst);
+        }
     }
 
     pub fn in_batch(&self) -> bool {
-        self.batch.load(Ordering::SeqCst)
+        #[cfg(test)]
+        {
+            let _inner = self.raw_inner();
+            self.batch.load(Ordering::SeqCst)
+        }
+        #[cfg(not(test))]
+        {
+            self.batch.load(Ordering::SeqCst)
+        }
     }
 
     /// Register an audited item; its index names it from now on.
     pub fn add_item(&self, item: Item) -> usize {
-        let mut g = self.inner.lock().unwrap();
+        let mut g = self.raw_inner();
         g.items.push(item);
         g.items.len() - 1
     }
 
     pub fn item(&self, idx: usize) -> Option<Item> {
-        self.inner.lock().unwrap().items.get(idx).cloned()
+        self.raw_inner().items.get(idx).cloned()
     }
 
     /// The token of `point` of item `item` (the same one each time).
     pub(crate) fn token(&self, item: usize, point: &InsertionPoint) -> String {
-        let mut g = self.inner.lock().unwrap();
+        let mut g = self.raw_inner();
         let key = (item, point_key(point));
         if let Some(t) = g.by_point.get(&key) {
             return t.clone();
@@ -172,7 +219,7 @@ impl StoredInputs {
     /// Keep the exchange that first carried `token` (evidence for the
     /// stored-input issue).
     pub(crate) fn note_injection(&self, token: &str, request: &[u8], response: Option<&[u8]>) {
-        let mut g = self.inner.lock().unwrap();
+        let mut g = self.raw_inner();
         if let Some(&idx) = g.tokens.get(token) {
             if g.points[idx].2.is_empty() {
                 g.points[idx].2 = request.to_vec();
@@ -186,12 +233,15 @@ impl StoredInputs {
     /// Tokens the request itself carries are not stored input (burp.Zp0f).
     /// Returns the pairs seen for the first time.
     pub(crate) fn observe(&self, retrieval: usize, request: &[u8], response: &[u8]) -> Vec<Pair> {
+        #[cfg(test)]
+        drop(self.raw_inner());
+
         let found = find_tokens(response);
         if found.is_empty() {
             return Vec::new();
         }
         let own = find_tokens(request);
-        let mut g = self.inner.lock().unwrap();
+        let mut g = self.raw_inner();
         let mut new = Vec::new();
         for t in found {
             if own.contains(&t) {
@@ -217,7 +267,7 @@ impl StoredInputs {
 
     /// Every recorded pair, in the order found.
     pub(crate) fn pairs(&self) -> Vec<Pair> {
-        let g = self.inner.lock().unwrap();
+        let g = self.raw_inner();
         g.pairs
             .iter()
             .map(|&(pidx, r)| {
@@ -287,7 +337,7 @@ impl StoredInputs {
                     None => 0,
                 })
         }
-        let g = self.inner.lock().unwrap();
+        let g = self.raw_inner();
         let Some(&(pidx, retrieval)) = g.pairs.get(index) else {
             return Ok(None);
         };
@@ -319,11 +369,11 @@ impl StoredInputs {
 
     #[cfg(test)]
     pub(crate) fn has_pair(&self, index: usize) -> bool {
-        self.inner.lock().unwrap().pairs.get(index).is_some()
+        self.raw_inner().pairs.get(index).is_some()
     }
 
     pub fn is_empty(&self) -> bool {
-        let g = self.inner.lock().unwrap();
+        let g = self.raw_inner();
         g.items.is_empty() && g.pairs.is_empty()
     }
 }
@@ -674,6 +724,13 @@ impl Inner {
 }
 
 #[cfg(test)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum StoreAccessError {
+    StaleGeneration,
+    InvalidItem,
+    PairLimitOrAdmission,
+}
+#[cfg(test)]
 #[derive(Clone)]
 pub(crate) struct StoreGeneration {
     shared: std::sync::Weak<crate::net::Shared>,
@@ -682,7 +739,7 @@ pub(crate) struct StoreGeneration {
 }
 #[cfg(test)]
 impl StoreGeneration {
-    fn validate(&self, inner: &Inner) -> Result<(), ()> {
+    fn validate(&self, inner: &Inner) -> Result<(), StoreAccessError> {
         if inner
             .generation
             .as_ref()
@@ -693,27 +750,40 @@ impl StoreGeneration {
         {
             Ok(())
         } else {
-            Err(())
+            Err(StoreAccessError::StaleGeneration)
         }
     }
-    pub(crate) fn add_item(&self, item: Item) -> Result<usize, ()> {
-        let shared = self.shared.upgrade().ok_or(())?;
+    pub(crate) fn add_item(&self, item: Item) -> Result<usize, StoreAccessError> {
+        let shared = self
+            .shared
+            .upgrade()
+            .ok_or(StoreAccessError::StaleGeneration)?;
         let mut inner = shared.stored.inner.lock().unwrap();
         self.validate(&inner)?;
         Ok(inner.add_item(item))
     }
-    pub(crate) fn item(&self, idx: usize) -> Result<Option<Item>, ()> {
-        let shared = self.shared.upgrade().ok_or(())?;
+    pub(crate) fn item(&self, idx: usize) -> Result<Option<Item>, StoreAccessError> {
+        let shared = self
+            .shared
+            .upgrade()
+            .ok_or(StoreAccessError::StaleGeneration)?;
         let mut inner = shared.stored.inner.lock().unwrap();
         self.validate(&inner)?;
         Ok(inner.item(idx))
     }
-    pub(crate) fn token(&self, item: usize, point: &InsertionPoint) -> Result<String, ()> {
-        let shared = self.shared.upgrade().ok_or(())?;
+    pub(crate) fn token(
+        &self,
+        item: usize,
+        point: &InsertionPoint,
+    ) -> Result<String, StoreAccessError> {
+        let shared = self
+            .shared
+            .upgrade()
+            .ok_or(StoreAccessError::StaleGeneration)?;
         let mut inner = shared.stored.inner.lock().unwrap();
         self.validate(&inner)?;
         if item >= inner.items.len() {
-            return Err(());
+            return Err(StoreAccessError::InvalidItem);
         }
         Ok(inner.token(item, point))
     }
@@ -722,8 +792,11 @@ impl StoreGeneration {
         token: &str,
         request: &[u8],
         response: Option<&[u8]>,
-    ) -> Result<(), ()> {
-        let shared = self.shared.upgrade().ok_or(())?;
+    ) -> Result<(), StoreAccessError> {
+        let shared = self
+            .shared
+            .upgrade()
+            .ok_or(StoreAccessError::StaleGeneration)?;
         let mut inner = shared.stored.inner.lock().unwrap();
         self.validate(&inner)?;
         inner.note_injection(token, request, response);
@@ -734,29 +807,88 @@ impl StoreGeneration {
         retrieval: usize,
         request: &[u8],
         response: &[u8],
-    ) -> Result<Vec<Pair>, ()> {
-        let shared = self.shared.upgrade().ok_or(())?;
+    ) -> Result<Vec<Pair>, StoreAccessError> {
+        let shared = self
+            .shared
+            .upgrade()
+            .ok_or(StoreAccessError::StaleGeneration)?;
         let mut inner = shared.stored.inner.lock().unwrap();
         self.validate(&inner)?;
         Ok(inner.observe(retrieval, request, response))
     }
-    pub(crate) fn pairs(&self) -> Result<Vec<Pair>, ()> {
-        let shared = self.shared.upgrade().ok_or(())?;
+    pub(crate) fn pairs(&self) -> Result<Vec<Pair>, StoreAccessError> {
+        let shared = self
+            .shared
+            .upgrade()
+            .ok_or(StoreAccessError::StaleGeneration)?;
         let mut inner = shared.stored.inner.lock().unwrap();
         self.validate(&inner)?;
         Ok(inner.pairs())
     }
-    pub(crate) fn pair_bounded(&self, index: usize, max_bytes: usize) -> Result<Option<Pair>, ()> {
-        let shared = self.shared.upgrade().ok_or(())?;
+    pub(crate) fn pair_bounded(
+        &self,
+        index: usize,
+        max_bytes: usize,
+    ) -> Result<Option<Pair>, StoreAccessError> {
+        let shared = self
+            .shared
+            .upgrade()
+            .ok_or(StoreAccessError::StaleGeneration)?;
         let inner = shared.stored.inner.lock().unwrap();
         self.validate(&inner)?;
-        inner.pair_bounded(index, max_bytes, |_| true)
+        inner
+            .pair_bounded(index, max_bytes, |_| true)
+            .map_err(|_| StoreAccessError::PairLimitOrAdmission)
     }
-    pub(crate) fn close(&self) -> Result<(), ()> {
-        let shared = self.shared.upgrade().ok_or(())?;
+    pub(crate) fn has_pair(&self, index: usize) -> Result<bool, StoreAccessError> {
+        let shared = self
+            .shared
+            .upgrade()
+            .ok_or(StoreAccessError::StaleGeneration)?;
+        let inner = shared.stored.inner.lock().unwrap();
+        self.validate(&inner)?;
+        Ok(inner.pairs.get(index).is_some())
+    }
+    pub(crate) fn pair_bounded_admit(
+        &self,
+        index: usize,
+        max_bytes: usize,
+        admit: impl FnOnce(usize) -> bool,
+    ) -> Result<Option<Pair>, StoreAccessError> {
+        let shared = self
+            .shared
+            .upgrade()
+            .ok_or(StoreAccessError::StaleGeneration)?;
+        let inner = shared.stored.inner.lock().unwrap();
+        self.validate(&inner)?;
+        inner
+            .pair_bounded(index, max_bytes, admit)
+            .map_err(|_| StoreAccessError::PairLimitOrAdmission)
+    }
+    pub(crate) fn retire_owner(&self) {
+        let Some(shared) = self.shared.upgrade() else {
+            return;
+        };
+        let mut inner = shared.stored.inner.lock().unwrap();
+        if inner
+            .generation
+            .as_ref()
+            .is_some_and(|(owner, _)| owner.ptr_eq(&std::sync::Arc::downgrade(&self.owner)))
+        {
+            inner.generation = None;
+            inner.strict = false;
+            shared.stored.batch.store(false, Ordering::SeqCst);
+        }
+    }
+    pub(crate) fn close(&self) -> Result<(), StoreAccessError> {
+        let shared = self
+            .shared
+            .upgrade()
+            .ok_or(StoreAccessError::StaleGeneration)?;
         let mut inner = shared.stored.inner.lock().unwrap();
         self.validate(&inner)?;
         inner.generation = None;
+        inner.strict = false;
         Ok(())
     }
 }
@@ -768,7 +900,9 @@ impl StoredInputs {
         owner: std::sync::Arc<crate::host_probe_state::AttemptScope>,
     ) -> StoreGeneration {
         let mut inner = self.inner.lock().unwrap();
+        let strict = inner.strict;
         *inner = Inner::default();
+        inner.strict = strict;
         let identity = std::sync::Arc::new(());
         inner.generation = Some((
             std::sync::Arc::downgrade(&owner),

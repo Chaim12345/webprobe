@@ -58,15 +58,26 @@ pub(crate) enum Finish {
 pub(crate) struct LegacyScanner {
     coordinator: std::sync::Weak<Coordinator>,
     pub owner: Arc<AttemptScope>,
+    pub(crate) generation: crate::stored::StoreGeneration,
     lease: std::sync::Weak<std::sync::atomic::AtomicBool>,
 }
 #[derive(Clone)]
 pub(crate) struct BudgetedExecution {
     coordinator: std::sync::Weak<Coordinator>,
     owner: Arc<AttemptScope>,
+    generation: crate::stored::StoreGeneration,
     ledger: Arc<Ledger>,
 }
 impl BudgetedExecution {
+    pub(crate) fn mark_reason(&self, reason: crate::owner_protocol::Reason) {
+        self.owner.record_reason(reason);
+        self.mark_incomplete();
+    }
+
+    pub(crate) fn generation(&self) -> crate::stored::StoreGeneration {
+        self.generation.clone()
+    }
+
     /// Exact permit's shared failure latch. Survives swallowed return values
     /// and cloned cross-thread handoffs; proved evidence remains retainable.
     pub fn mark_incomplete(&self) {
@@ -112,7 +123,20 @@ pub(crate) enum ExecutionContext {
 #[derive(Clone)]
 pub(crate) struct CancelHandle(Arc<AttemptScope>);
 impl CancelHandle {
+    pub(crate) fn stop_incomplete(&self, reason: crate::owner_protocol::Reason) {
+        self.0.record_reason(reason);
+        self.0.cancel();
+    }
+    pub(crate) fn aggregate(&self) -> Option<crate::owner_protocol::Aggregate> {
+        let outcome = (*self.0.terminal.lock().unwrap())?;
+        Some(crate::owner_protocol::Aggregate {
+            outcome,
+            reasons: self.0.reasons(),
+        })
+    }
     pub fn cancel(&self) {
+        self.0
+            .record_reason(crate::owner_protocol::Reason::UserCancelled);
         self.0.cancel();
     }
 }
@@ -122,6 +146,13 @@ pub(crate) struct Installed {
     _thread_bound: std::marker::PhantomData<std::rc::Rc<()>>,
 }
 impl ExecutionContext {
+    pub(crate) fn generation(&self) -> crate::stored::StoreGeneration {
+        match self {
+            Self::Legacy(l) => l.generation.clone(),
+            Self::Budgeted(b) => b.generation.clone(),
+        }
+    }
+
     pub fn cancel_handle(&self) -> CancelHandle {
         CancelHandle(match self {
             Self::Legacy(l) => l.owner.clone(),
@@ -351,6 +382,10 @@ impl Coordinator {
             }
         };
         state.as_mut().unwrap().strict = true;
+        self.shared
+            .stored
+            .set_generation_strict(&state.as_ref().unwrap().generation)
+            .map_err(|_| DispatchError::Internal)?;
         let run = state.as_ref().unwrap();
         let control = Control {
             coordinator: Arc::downgrade(self),
@@ -428,6 +463,8 @@ impl Coordinator {
         }
         task.state = crate::tasks::TaskState::Cancelled;
         let result = if let Some(c) = &control {
+            c.owner
+                .record_reason(crate::owner_protocol::Reason::UserCancelled);
             c.owner.cancel();
             let mut p = c.pause.predicate.lock().unwrap_or_else(|e| e.into_inner());
             p.version = p.version.wrapping_add(1);
@@ -461,6 +498,9 @@ impl Coordinator {
             }
             ControlResult::Closed
         } else if operation == Some(true) {
+            handle
+                .owner
+                .record_reason(crate::owner_protocol::Reason::UserCancelled);
             handle.owner.cancel();
             ControlResult::Applied
         } else if handle.owner.is_cancelled() {
@@ -507,6 +547,10 @@ impl Coordinator {
         }
         let batch = self.open_locked(&mut state)?;
         state.as_mut().unwrap().strict = true;
+        self.shared
+            .stored
+            .set_generation_strict(&state.as_ref().unwrap().generation)
+            .map_err(|_| AdmissionError::Internal)?;
         Ok(batch)
     }
     pub fn adopt(self: &Arc<Self>, lease: &Batch) -> Result<Batch, AdmissionError> {
@@ -585,6 +629,10 @@ impl Coordinator {
         }
         let accepted = self.admit_locked(item, &mut state)?;
         state.as_mut().unwrap().strict = true;
+        self.shared
+            .stored
+            .set_generation_strict(&state.as_ref().unwrap().generation)
+            .map_err(|_| AdmissionError::Internal)?;
         Ok(accepted)
     }
     pub fn admit_in(
@@ -671,8 +719,10 @@ impl Coordinator {
         let run = state.as_mut().unwrap();
         let index = match run.generation.add_item(item) {
             Ok(index) => index,
-            Err(()) => {
+            Err(_) => {
                 run.incomplete = true;
+                run.owner
+                    .record_reason(crate::owner_protocol::Reason::InternalOrStoreFailure);
                 return Err(AdmissionError::Internal);
             }
         };
@@ -690,6 +740,7 @@ impl Coordinator {
             LegacyScanner {
                 coordinator: Arc::downgrade(self),
                 owner,
+                generation: run.generation.clone(),
                 lease: Arc::downgrade(&lease),
             },
             index,
@@ -708,6 +759,16 @@ impl Coordinator {
         if let Some(run) = state.as_mut() {
             if Arc::ptr_eq(&run.owner, owner) && !run.active {
                 let store_valid = run.generation.close().is_ok();
+                if !store_valid {
+                    owner.record_reason(crate::owner_protocol::Reason::InternalOrStoreFailure);
+                }
+                if let Err(denied) = run.ledger.reserve(&[]) {
+                    owner.record_reason(crate::owner_protocol::Reason::from_denied(denied));
+                }
+                if run.ledger.retention_lost() {
+                    owner.record_reason(crate::owner_protocol::Reason::RetentionLoss);
+                }
+
                 let outcome = if outcome == Finish::Complete
                     && !run.incomplete
                     && !run.owner.is_cancelled()
@@ -733,7 +794,7 @@ impl Coordinator {
                 }
                 let pause = run.pause.clone();
                 run.phase = Phase::Closed;
-                self.shared.stored.close_batch();
+                run.generation.retire_owner();
                 if let Some(guard) = guard.as_mut() {
                     guard.release_explicit();
                 }
@@ -766,6 +827,7 @@ impl Coordinator {
             permit: BudgetedExecution {
                 coordinator: Arc::downgrade(self),
                 owner,
+                generation: state.generation.clone(),
                 ledger: state.ledger.clone(),
             },
             guard: Some(guard),
@@ -789,6 +851,7 @@ impl Batch {
         ExecutionContext::Legacy(LegacyScanner {
             coordinator: Arc::downgrade(&self.coordinator),
             owner: self.owner.clone(),
+            generation: self.generation().expect("live lease generation"),
             lease: Arc::downgrade(&self.lease),
         })
     }
@@ -814,6 +877,8 @@ impl Batch {
         run.phase = Phase::Closing;
         if run.active {
             run.incomplete = true;
+            run.owner
+                .record_reason(crate::owner_protocol::Reason::ActiveAtFinish);
             return Err(AdmissionError::IncompleteActive);
         }
         match c.make_finalizer(self.owner.clone(), run, None) {
@@ -832,6 +897,8 @@ impl Drop for Batch {
         if !self.live {
             return;
         }
+        self.owner
+            .record_reason(crate::owner_protocol::Reason::Abandoned);
         self.live = false;
         self.lease.store(false, std::sync::atomic::Ordering::SeqCst);
         let mut state = self.coordinator.state.lock_on(&self.coordinator.shared);
@@ -901,6 +968,8 @@ impl Drop for Audit {
         if !self.live {
             return;
         }
+        self.owner
+            .record_reason(crate::owner_protocol::Reason::Abandoned);
         self.live = false;
         self.lease.store(false, std::sync::atomic::Ordering::SeqCst);
         let mut state = self.coordinator.state.lock_on(&self.coordinator.shared);
@@ -974,6 +1043,9 @@ impl Finalizer {
 impl Drop for Finalizer {
     fn drop(&mut self) {
         if self.live {
+            self.permit
+                .owner
+                .record_reason(crate::owner_protocol::Reason::Abandoned);
             self.coordinator.cleanup_outcome(
                 &self.permit.owner,
                 Finish::Incomplete,

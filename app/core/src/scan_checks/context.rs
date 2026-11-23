@@ -52,6 +52,8 @@ pub(crate) struct ScanCtx {
     pub item: usize,
     /// "Input returned in response (stored)" is reported (scan config).
     pub stored_report: bool,
+    #[cfg(test)]
+    pub(crate) store_generation: Option<crate::stored::StoreGeneration>,
     pub(crate) host_scope: Arc<crate::host_probe_state::AttemptScope>,
 }
 
@@ -94,6 +96,8 @@ impl ScanCtx {
             smtp,
             item,
             stored_report,
+            #[cfg(test)]
+            store_generation: crate::scan_lifecycle::captured().map(|c| c.generation()),
             host_scope,
         };
         // The baseline request runs here, not on the caller's (UI) thread: a
@@ -132,9 +136,36 @@ impl ScanCtx {
     /// choke point: every response is searched for other points' stored
     /// input tokens here (burp.Zhqw.detectAndReport), not in the checks.
     pub(crate) fn send(&self, raw: &[u8]) -> Option<Vec<u8>> {
+        #[cfg(test)]
+        if self
+            .store_generation
+            .as_ref()
+            .is_some_and(|g| g.item(self.item).is_err())
+        {
+            self.host_scope
+                .record_reason(crate::owner_protocol::Reason::InternalOrStoreFailure);
+            self.host_scope.cancel();
+            return None;
+        }
         let resp = send_one(&self.shared, self.entry.https, &self.host, self.port, raw);
         if let Some(r) = &resp {
-            for pair in self.shared.stored.observe(self.item, raw, r) {
+            #[cfg(test)]
+            let pairs = if let Some(generation) = &self.store_generation {
+                match generation.observe(self.item, raw, r) {
+                    Ok(p) => p,
+                    Err(_) => {
+                        self.host_scope
+                            .record_reason(crate::owner_protocol::Reason::InternalOrStoreFailure);
+                        self.host_scope.cancel();
+                        return None;
+                    }
+                }
+            } else {
+                self.shared.stored.observe(self.item, raw, r)
+            };
+            #[cfg(not(test))]
+            let pairs = self.shared.stored.observe(self.item, raw, r);
+            for pair in pairs {
                 if self.stored_report {
                     self.report(vec![stored_input_issue(&pair, raw, r)]);
                 }

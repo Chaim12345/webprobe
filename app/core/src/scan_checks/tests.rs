@@ -1438,7 +1438,8 @@ fn real_a4_case(mode: u8) {
         records: 100,
     };
     let c = Coordinator::new(shared.clone(), limits).unwrap();
-    let batch = c.open().unwrap();
+    let batch = c.open_standalone().unwrap();
+    let generation = batch.generation().unwrap();
     let make = |path: &str| crate::stored::Item {
         entry: crate::net::HistEntry {
             method: "GET".into(),
@@ -1452,26 +1453,26 @@ fn real_a4_case(mode: u8) {
         port,
         https: false,
     };
-    let (a, _, injection) = c.admit(make("/inject?x=old")).unwrap();
+    let (a, _, injection) = c.admit_in(&batch, make("/inject?x=old")).unwrap();
     assert!(matches!(a.complete(), Ok(Handoff::Joined)));
     let point = InsertionPoint::new(IpKind::Query, "x", "old");
-    let token = shared.stored.token(injection, &point);
-    shared
-        .stored
-        .note_injection(&token, b"injected", Some(b"saved"));
-    let (a, _, retrieval) = c.admit(make("/retrieve")).unwrap();
+    let token = generation.token(injection, &point).unwrap();
+    generation
+        .note_injection(&token, b"injected", Some(b"saved"))
+        .unwrap();
+    let (a, _, retrieval) = c.admit_in(&batch, make("/retrieve")).unwrap();
     assert!(matches!(a.complete(), Ok(Handoff::Joined)));
     if mode == 4 {
         let oversized = InsertionPoint::new(IpKind::Json(vec![String::new(); 10000]), "x", "old");
-        let huge = shared.stored.token(injection, &oversized);
-        shared
-            .stored
-            .observe(retrieval, b"GET /retrieve", huge.as_bytes());
+        let huge = generation.token(injection, &oversized).unwrap();
+        generation
+            .observe(retrieval, b"GET /retrieve", huge.as_bytes())
+            .unwrap();
     }
     assert_eq!(
-        shared
-            .stored
+        generation
             .observe(retrieval, b"GET /retrieve", token.as_bytes())
+            .unwrap()
             .len(),
         1
     );
@@ -1582,7 +1583,7 @@ fn required_limits_actual_engine_rejects_busy_without_reset_or_egress() {
         records: 100,
     };
     let engine = crate::scan::ExperimentalEngine::new(shared.clone(), limits).unwrap();
-    let batch = engine.open().unwrap();
+    let batch = engine.open_strict().unwrap();
     let entry = crate::net::HistEntry {
         method: "GET".into(),
         host: "127.0.0.1".into(),
@@ -1593,7 +1594,7 @@ fn required_limits_actual_engine_rejects_busy_without_reset_or_egress() {
             .into(),
         ..Default::default()
     };
-    let accepted = engine.audit(entry.clone()).unwrap();
+    let accepted = engine.audit_in(&batch, entry.clone()).unwrap();
     assert_eq!(accepted.audit_phase_completion, Finish::Complete);
     assert_eq!(accepted.error, None);
     assert!(matches!(accepted.handoff, Ok(Handoff::Joined)));
@@ -1716,7 +1717,7 @@ fn cancelled_batch_actual_engine_admission_cannot_reset_shared_stop() {
         records: 10,
     };
     let engine = crate::scan::ExperimentalEngine::new(shared.clone(), limits).unwrap();
-    let b = engine.open().unwrap();
+    let b = engine.open_strict().unwrap();
     b.cancel_handle().cancel();
     shared.scan.stop.store(true, Ordering::SeqCst);
     shared.scan.done.store(99, Ordering::SeqCst);
@@ -1729,8 +1730,8 @@ fn cancelled_batch_actual_engine_admission_cannot_reset_shared_stop() {
             .into(),
         ..Default::default()
     };
-    assert!(matches!(engine.audit(e), Err(AdmissionError::Busy)));
-    assert!(matches!(engine.open(), Err(AdmissionError::Busy)));
+    assert!(matches!(engine.audit_in(&b, e), Err(AdmissionError::Busy)));
+    assert!(matches!(engine.open_strict(), Err(AdmissionError::Busy)));
     assert!(shared.scan.stop.load(Ordering::SeqCst));
     assert_eq!(shared.scan.done.load(Ordering::SeqCst), 99);
     assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 0);
@@ -1765,7 +1766,7 @@ fn actual_engine_accepted_baseline_and_install_failures_carry_incomplete_handoff
             records: 10,
         };
         let engine = crate::scan::ExperimentalEngine::new(shared.clone(), limits).unwrap();
-        let b = engine.open().unwrap();
+        let b = engine.open_strict().unwrap();
         let context = b.context();
         let mut guards = Vec::new();
         if install_failure {
@@ -1780,7 +1781,7 @@ fn actual_engine_accepted_baseline_and_install_failures_carry_incomplete_handoff
                 .into(),
             ..Default::default()
         };
-        let accepted = engine.audit(e).unwrap();
+        let accepted = engine.audit_in(&b, e).unwrap();
         assert_eq!(accepted.audit_phase_completion, Finish::Incomplete);
         assert!(matches!(accepted.handoff, Ok(Handoff::Joined)));
         assert_eq!(
@@ -1970,10 +1971,12 @@ fn required_limits_actual_engine_preserves_enabled_host_registry_finding() {
             .into(),
         ..Default::default()
     };
-    let accepted = engine.audit(entry).unwrap();
+    let batch = engine.open_strict().unwrap();
+    let accepted = engine.audit_in(&batch, entry).unwrap();
     assert_eq!(accepted.audit_phase_completion, Finish::Complete);
-    let Handoff::Finalize(f) = accepted.handoff.unwrap() else {
-        panic!("standalone finalizer")
+    assert!(matches!(accepted.handoff, Ok(Handoff::Joined)));
+    let Handoff::Finalize(f) = batch.finish().unwrap() else {
+        panic!("strict finalizer")
     };
     assert_eq!(
         f.run(|p| run_stored_stage_budgeted(&shared, p, 10, 8192)),
@@ -2143,4 +2146,75 @@ fn actual_batch_active_final_close_never_reports_complete() {
         engine.open().unwrap().finish(),
         Ok(Handoff::Finalize(_))
     ));
+}
+
+#[test]
+fn strict_engine_rejects_same_owner_generation_replacement_before_dependent_send() {
+    use crate::scan_lifecycle::{Finish, Handoff};
+    let shared = crate::net::Shared::new();
+    let limits = crate::scan_budget::Limits {
+        duration: std::time::Duration::from_secs(2),
+        http_attempts: 10,
+        connection_attempts: 10,
+        outgoing: 65536,
+        response: 65536,
+        decompressed: 65536,
+        inputs: 65536,
+        evidence: 65536,
+        evidence_records: 10,
+        records: 10,
+    };
+    let engine = crate::scan::ExperimentalEngine::new(shared.clone(), limits).unwrap();
+    let batch = engine.open_strict().unwrap();
+    let old = batch.generation().unwrap();
+    let owner = batch.context().cancel_handle();
+    let execution = batch.context();
+    let entry = crate::net::HistEntry {
+        req_raw: b"GET / HTTP/1.1\r\nHost: 127.0.0.1:9\r\n\r\n"
+            .to_vec()
+            .into(),
+        port: 9,
+        ..Default::default()
+    };
+    let accepted = engine
+        .audit_in_after_admission(&batch, entry, || {
+            let crate::scan_lifecycle::ExecutionContext::Legacy(legacy) = execution.clone() else {
+                panic!("legacy")
+            };
+            shared.stored.begin_generation(&shared, legacy.owner);
+        })
+        .unwrap();
+    assert_eq!(accepted.audit_phase_completion, Finish::Incomplete);
+    assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 0);
+    assert!(old.observe(0, b"late request", b"late response").is_err());
+    let Handoff::Finalize(f) = batch.finish().unwrap() else {
+        panic!("finalizer")
+    };
+    assert_eq!(
+        f.run(|p| run_stored_stage_budgeted(&shared, p, 10, 8192)),
+        Finish::Incomplete
+    );
+    let fresh = engine.open_strict().unwrap();
+    let current = fresh.generation().unwrap();
+    assert!(old
+        .observe(0, b"delayed A request", b"delayed A response")
+        .is_err());
+    assert!(current.item(0).unwrap().is_none());
+    assert!(current.pairs().unwrap().is_empty());
+    let Handoff::Finalize(f) = fresh.finish().unwrap() else {
+        panic!("finalizer")
+    };
+    assert_eq!(
+        f.run(|p| run_stored_stage_budgeted(&shared, p, 10, 8192)),
+        Finish::Complete
+    );
+    let report = owner.aggregate().unwrap();
+    assert_eq!(report.outcome, Finish::Incomplete);
+    assert!(report
+        .reasons
+        .contains(&crate::owner_protocol::Reason::InternalOrStoreFailure));
+    assert!(!report
+        .reasons
+        .contains(&crate::owner_protocol::Reason::UserCancelled));
+    drop(owner);
 }

@@ -6,6 +6,30 @@ use std::sync::{Arc, Condvar, Mutex, Weak};
 use std::time::Instant;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Reason {
+    UserCancelled,
+    BudgetExhausted(crate::scan_budget::Denied),
+    AdmissionRejected,
+    Abandoned,
+    InternalOrStoreFailure,
+    RetentionLoss,
+    ActiveAtFinish,
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Aggregate {
+    pub(crate) outcome: Finish,
+    pub(crate) reasons: Vec<Reason>,
+}
+impl Reason {
+    pub(crate) fn from_denied(denied: crate::scan_budget::Denied) -> Self {
+        use crate::scan_budget::Denied;
+        match denied {
+            Denied::Exhausted(_) | Denied::Expired => Self::BudgetExhausted(denied),
+            _ => Self::InternalOrStoreFailure,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ControlResult {
     Applied,
     Closed,
@@ -780,6 +804,71 @@ mod tests {
         assert!(Instant::now() >= deadline);
         assert_eq!(control.resume(), ControlResult::Applied);
         finish(b);
+    }
+    #[test]
+    fn raw_strict_access_rejects_before_mutation_and_multiple_reasons_survive() {
+        let shared = crate::net::Shared::new();
+        let c = Coordinator::new(shared.clone(), limits()).unwrap();
+        let b = c.open_standalone().unwrap();
+        let g = b.generation().unwrap();
+        let control = b.control().unwrap();
+        let index = g.add_item(item()).unwrap();
+        let point = crate::scan::insertion::InsertionPoint::new(
+            crate::scan::insertion::IpKind::Query,
+            "x",
+            "y",
+        );
+        let token = g.token(index, &point).unwrap();
+        for access in 0..13 {
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match access {
+                0 => shared.stored.clear(),
+                1 => {
+                    shared.stored.add_item(item());
+                }
+                2 => {
+                    shared.stored.open_batch();
+                }
+                3 => shared.stored.close_batch(),
+                4 => {
+                    shared.stored.observe(index, b"x", b"y");
+                }
+                5 => {
+                    shared.stored.item(index);
+                }
+                6 => {
+                    shared.stored.token(index, &point);
+                }
+                7 => shared.stored.note_injection(&token, b"r", None),
+                8 => {
+                    shared.stored.pairs();
+                }
+                9 => {
+                    let _ = shared.stored.pair_bounded(0, 8192, |_| true);
+                }
+                10 => {
+                    shared.stored.has_pair(0);
+                }
+                11 => {
+                    shared.stored.is_empty();
+                }
+                _ => {
+                    shared.stored.in_batch();
+                }
+            }));
+            assert!(result.is_err());
+            assert!(g.item(index).unwrap().is_some());
+        }
+        control.owner.record_reason(Reason::InternalOrStoreFailure);
+        control.owner.record_reason(Reason::AdmissionRejected);
+        assert_eq!(control.cancel(), ControlResult::Applied);
+        let Handoff::Finalize(f) = b.finish().unwrap() else {
+            panic!("finalizer")
+        };
+        assert_eq!(f.run(|_| Finish::Complete), Finish::Incomplete);
+        let reasons = control.owner.reasons();
+        assert!(reasons.contains(&Reason::UserCancelled));
+        assert!(reasons.contains(&Reason::InternalOrStoreFailure));
+        assert!(reasons.contains(&Reason::AdmissionRejected));
     }
     fn task(id: u64) -> crate::tasks::ScanTask {
         crate::tasks::ScanTask {

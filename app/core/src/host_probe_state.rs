@@ -26,6 +26,8 @@ pub(crate) struct Admission {
     pub(crate) dispatch: crate::owner_protocol::DispatchState,
 }
 pub struct AttemptScope {
+    #[cfg(test)]
+    reasons: Mutex<Vec<crate::owner_protocol::Reason>>,
     /// Sticky logical-run identity. Only accepted scope construction makes a
     /// new false value; resetting legacy UI state cannot revive this owner.
     #[cfg(test)] // Experimental token until unified production lifecycle wiring.
@@ -37,6 +39,18 @@ pub struct AttemptScope {
     session: Arc<SessionClaims>,
 }
 impl AttemptScope {
+    #[cfg(test)]
+    pub(crate) fn record_reason(&self, reason: crate::owner_protocol::Reason) {
+        let mut r = self.reasons.lock().unwrap();
+        if !r.contains(&reason) {
+            r.push(reason);
+        }
+    }
+    #[cfg(test)]
+    pub(crate) fn reasons(&self) -> Vec<crate::owner_protocol::Reason> {
+        self.reasons.lock().unwrap().clone()
+    }
+
     /// Cancel this exact logical owner. Safe to retain on bounded resolver
     /// jobs and check both before enqueueing and before lookup starts.
     #[cfg(test)]
@@ -54,6 +68,8 @@ impl AttemptScope {
 
     fn new(dedup: Arc<ScanDedup>, session: Arc<SessionClaims>) -> Arc<Self> {
         Arc::new(Self {
+            #[cfg(test)]
+            reasons: Mutex::new(Vec::new()),
             #[cfg(test)]
             cancelled: std::sync::atomic::AtomicBool::new(false),
             #[cfg(test)]

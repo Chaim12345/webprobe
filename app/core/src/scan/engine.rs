@@ -293,7 +293,19 @@ impl ExperimentalEngine {
         }
         if result.audit_phase_completion == Finish::Incomplete {
             result.shared_owner_cancelled = true;
-            batch.context().cancel_handle().cancel();
+            batch.context().cancel_handle().stop_incomplete(
+                if matches!(
+                    result.error,
+                    Some(
+                        crate::scan_lifecycle::AdmissionError::Busy
+                            | crate::scan_lifecycle::AdmissionError::InvalidRequest
+                    )
+                ) {
+                    crate::owner_protocol::Reason::AdmissionRejected
+                } else {
+                    crate::owner_protocol::Reason::InternalOrStoreFailure
+                },
+            );
             self.shared.log("Experimental batch incomplete: cancelling the shared logical owner, including all adopted leases");
         }
         if result.audit_phase_completion == Finish::Incomplete {
@@ -308,6 +320,26 @@ impl ExperimentalEngine {
         }
         Ok(result)
     }
+    pub(crate) fn open_strict(
+        &self,
+    ) -> Result<crate::scan_lifecycle::Batch, crate::scan_lifecycle::AdmissionError> {
+        self.coordinator.open_standalone()
+    }
+    pub(crate) fn audit_in(
+        &self,
+        batch: &crate::scan_lifecycle::Batch,
+        entry: HistEntry,
+    ) -> Result<AcceptedAudit, crate::scan_lifecycle::AdmissionError> {
+        self.audit_with_lease(Some(batch), entry, || {})
+    }
+    pub(crate) fn audit_in_after_admission(
+        &self,
+        batch: &crate::scan_lifecycle::Batch,
+        entry: HistEntry,
+        admitted: impl FnOnce(),
+    ) -> Result<AcceptedAudit, crate::scan_lifecycle::AdmissionError> {
+        self.audit_with_lease(Some(batch), entry, admitted)
+    }
     pub fn audit(
         &self,
         entry: HistEntry,
@@ -320,6 +352,14 @@ impl ExperimentalEngine {
         entry: HistEntry,
         admitted: impl FnOnce(),
     ) -> Result<AcceptedAudit, crate::scan_lifecycle::AdmissionError> {
+        self.audit_with_lease(None, entry, admitted)
+    }
+    fn audit_with_lease(
+        &self,
+        batch: Option<&crate::scan_lifecycle::Batch>,
+        entry: HistEntry,
+        admitted: impl FnOnce(),
+    ) -> Result<AcceptedAudit, crate::scan_lifecycle::AdmissionError> {
         use crate::scan_lifecycle::{AdmissionError, ExecutionContext};
         let shared = &self.shared;
         let parts = util::parse_http(&entry.req_raw);
@@ -328,13 +368,17 @@ impl ExperimentalEngine {
             .ok_or(AdmissionError::InvalidRequest)?;
         let (host, port) = net::split_h_p(&host_header, entry.port);
         let req = String::from_utf8_lossy(&entry.req_raw).into_owned();
-        let (a, legacy, item) = self.coordinator.admit(crate::stored::Item {
+        let stored_item = crate::stored::Item {
             entry: entry.clone(),
             req: req.clone(),
             host: host.clone(),
             port,
             https: entry.https,
-        })?;
+        };
+        let (a, legacy, item) = match batch {
+            Some(batch) => self.coordinator.admit_in(batch, stored_item),
+            None => self.coordinator.admit(stored_item),
+        }?;
         admitted();
         // Admission succeeds before changing the accepted run's UI flags.
         shared.scan.done.store(0, Ordering::SeqCst);
