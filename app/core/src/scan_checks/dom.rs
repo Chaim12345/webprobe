@@ -25,6 +25,9 @@ pub(crate) const DOM_JSON_INJECTION_SINKS: &[&str] = &["JSON.parse"];
 pub(crate) const DOM_XPATH_INJECTION_SINKS: &[&str] = &["document.evaluate"];
 pub(crate) const DOM_DOCUMENT_DOMAIN_SINKS: &[&str] = &["document.domain"];
 pub(crate) const DOM_COOKIE_MANIPULATION_SINKS: &[&str] = &["document.cookie"];
+/// Client-side prototype pollution: no wrappable sink call - the
+/// instrumentation watches Object.prototype for new own properties.
+pub(crate) const DOM_PROTOTYPE_POLLUTION_SINKS: &[&str] = &["Object.prototype"];
 
 /// Dynamic DOM analysis, R-13 option (b) (burp.Zel5's runAnalysis shape;
 /// the injected script body is not established, so WebProbe's
@@ -249,6 +252,17 @@ dom_family_check!(
 );
 
 dom_family_check!(
+    DomPrototypePollution,
+    "active.dom-prototype-pollution",
+    "Client-side prototype pollution",
+    "info",
+    "Firm",
+    "client-side prototype pollution",
+    DOM_PROTOTYPE_POLLUTION_SINKS,
+    "Client-side prototype pollution, KB 00200316 (issue 2097942), Information: a query-string or fragment parameter converted to an object and merged, landing __proto__ keys on Object.prototype (burp.Zcwm's decoder, scheduled by burp.Zfk8). Confidence Firm for a location.hash source, Tentative otherwise (the macro's conservative rule: Zwf8's mapping is established for location.hash only). Paired with a gadget this may lead to issues such as DOM XSS; Burp's DOM Invader can confirm and scan for gadgets."
+);
+
+dom_family_check!(
     DomCookieManipulation,
     "active.dom-cookie-manipulation",
     "Cookie manipulation (DOM-based)",
@@ -274,6 +288,7 @@ fn dom_sink_sets_match_the_instrumentation() {
         DOM_XPATH_INJECTION_SINKS,
         DOM_DOCUMENT_DOMAIN_SINKS,
         DOM_COOKIE_MANIPULATION_SINKS,
+        DOM_PROTOTYPE_POLLUTION_SINKS,
     ];
     let mut rust: Vec<&str> = families.iter().flat_map(|f| f.iter().copied()).collect();
     rust.sort_unstable();
@@ -308,6 +323,7 @@ fn dom_family_sinks_are_wrapped() {
         ("xpath", DOM_XPATH_INJECTION_SINKS),
         ("document-domain", DOM_DOCUMENT_DOMAIN_SINKS),
         ("cookie", DOM_COOKIE_MANIPULATION_SINKS),
+        ("prototype-pollution", DOM_PROTOTYPE_POLLUTION_SINKS),
     ] {
         for sink in sinks {
             assert!(

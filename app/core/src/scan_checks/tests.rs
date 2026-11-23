@@ -325,6 +325,11 @@ fn registry_order_is_pinned() {
                 Scope::Request,
                 Some(BURP_GROUP)
             ),
+            (
+                "active.dom-prototype-pollution",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
             ("active.cors", Scope::Request, Some(BURP_GROUP)),
             (
                 "active.path-relative-style-sheet-import",
@@ -1272,5 +1277,61 @@ fn dom_source_provenance_matrix_against_a_live_lab() {
     for page in ["/reflect", "/preexisting", "/benignp"] {
         let got = scan(page);
         assert!(got.is_empty(), "{page}: {}", names(&got));
+    }
+}
+
+/// R-13 prototype pollution on the shared DOM probe, under two-token
+/// source attribution: a page deep-merging the query string pollutes
+/// Object.prototype from __proto__[key] (location.search provenance,
+/// reported Tentative under the conservative rule); a page deep-merging
+/// the fragment does the same (location.hash, Firm); a page that only
+/// reflects the payload into a sink has NOT polluted (reflection is not
+/// pollution); a page filtering those keys is clean. Bounded fixtures:
+/// loopback-only lab, throwaway browser profile per probe, random inert
+/// tokens, so the pollution lives only inside the probe browser.
+/// Skipped when no Chromium is available.
+#[test]
+fn dom_prototype_pollution_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, _raw| {
+        let merge = r#"function setpath(o, parts, v) { var cur = o; for (var i = 0; i < parts.length - 1; i++) { if (typeof cur[parts[i]] !== 'object' || cur[parts[i]] === null) { cur[parts[i]] = {}; } cur = cur[parts[i]]; } cur[parts[parts.length - 1]] = v; }
+function parseqs(s, filter) { var cfg = {}; s.replace(/^[?#]/, '').split('&').forEach(function (p) { if (!p) { return; } var kv = p.split('='); var parts = kv[0].split('[').map(function (x) { return x.replace(/\]$/, ''); }); if (filter && (parts[0] === '__proto__' || parts[0] === 'constructor' || parts[0] === 'prototype')) { return; } setpath(cfg, parts, decodeURIComponent(kv[1] || '')); }); }"#;
+        let body = if path.starts_with("/vulnpp-hash") {
+            format!("<html><body><script>\n{merge}\nparseqs(location.hash, false);\n</script></body></html>")
+        } else if path.starts_with("/vulnpp") {
+            format!("<html><body><script>\n{merge}\nparseqs(location.search, false);\n</script></body></html>")
+        } else if path.starts_with("/reflectpp") {
+            "<html><body><script>document.write('<p>' + location.hash + '</p>');</script></body></html>".to_string()
+        } else if path.starts_with("/safepp") {
+            format!("<html><body><script>\n{merge}\nparseqs(location.search, true);\nparseqs(location.hash, true);\n</script></body></html>")
+        } else {
+            "<html><body><p>hello</p></body></html>".to_string()
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    for (page, confidence) in [
+        ("/vulnpp", Some("Tentative")),
+        ("/vulnpp-hash", Some("Firm")),
+        ("/reflectpp", None),
+        ("/safepp", None),
+    ] {
+        let got = lab_scan(
+            port,
+            &["active.dom-prototype-pollution"],
+            "GET",
+            page,
+            format!("GET {page} HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+        );
+        let hit = got
+            .iter()
+            .find(|(n, s, _)| n == "Client-side prototype pollution" && s == "info");
+        match confidence {
+            Some(c) => assert_eq!(hit.map(|(_, _, x)| x.as_str()), Some(c), "{page}: {got:?}"),
+            None => assert!(hit.is_none(), "{page}: {got:?}"),
+        }
     }
 }
