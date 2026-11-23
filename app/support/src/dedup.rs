@@ -146,6 +146,9 @@ pub struct DomProbeOutcome {
     pub hits: Vec<DomHit>,
     pub reflected: Option<String>,
     pub stored: String,
+    pub complete: bool,
+    pub cancelled: bool,
+    pub diagnostic: String,
 }
 
 pub type DomCache =

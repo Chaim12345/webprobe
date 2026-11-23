@@ -54,6 +54,9 @@ pub(crate) trait RequestCheck: Sync {
     fn group(&self) -> Option<&'static str> {
         None
     }
+    /// May read already-proven cached DOM outcomes after stop; must not
+    /// initialize probes or send requests in that mode.
+    fn consumes_cached_dom_after_stop(&self) -> bool { false }
     fn run(&self, cx: &ScanCtx);
 }
 

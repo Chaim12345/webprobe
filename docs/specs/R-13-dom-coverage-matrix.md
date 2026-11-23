@@ -68,7 +68,7 @@ local nor the session area) are recorded but reported by no family.
   classifies response context only; no later re-request supplies evidence.
 - Admission and failures: the stored submission runs only after probe
   allowance, browser slot, binary startup and DevTools setup succeed.
-  Stop is checked before sends and navigation. An absent/invalid HTTP
+  Stop is checked before sends and navigation. An incomplete/invalid HTTP
   response leaves submission outcome unknown: no retry, navigation or
   further request. That failed result is cached for the URL for this run.
 - New labs pin denied admission with zero target connections; cancellation
@@ -109,3 +109,17 @@ local nor the session area) are recorded but reported by no family.
 - A canary reaching a sink proves data flow, not an exploitable breakout.
 - Only GET history entries with executable HTML baselines are probed;
   inert HTML is skipped.
+
+Submission acknowledgement requires a complete, strictly self-delimited final
+2xx-5xx response. Short Content-Length bodies, incomplete chunked bodies,
+interim-only responses and EOF-delimited responses without a reliable
+completion signal remain unknown, with no replay or navigation.
+Retained navigation evidence is a fulfilled view reconstructed from actual
+status, bounded filtered headers including injected CSP and capped body.
+Original upstream headers are not retained. Response completeness is checked
+before normalization; unconfirmed navigation evidence is withheld.
+Cancellation/evaluation failure retains a previously confirmed bounded hit
+snapshot, with explicit incomplete/cancelled status and diagnostic in the
+scan record and Scanner UI. Missing source/provenance or missing confirmed
+navigation evidence is withheld. Stop prevents new sends but does not
+interrupt synchronous in-flight transport I/O; no latency bound is claimed.

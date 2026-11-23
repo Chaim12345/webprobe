@@ -213,6 +213,19 @@ pub(crate) fn scanner(app: &mut App, ui: &mut Ui) {
     });
     ui.add_space(2.0);
 
+    {
+        let records=app.shared.scan.dom_outcomes.lock().unwrap();
+        let incomplete: Vec<_>=records.iter().filter(|r|!r.complete).collect();
+        if !incomplete.is_empty() {
+            ui.collapsing(format!("DOM: {} incomplete operation(s)",incomplete.len()),|ui| {
+                for r in incomplete {
+                    ui.label(format!("{}: {} ({} proven hits retained; cancelled: {})",
+                        r.url,r.diagnostic,r.proven_hits.len(),r.cancelled));
+                }
+            });
+        }
+    }
+
     // D-07: "Report issues" (the rows shown) / "Report selected issues".
     let mut report_ids: Option<Vec<u64>> = None;
     let mut issue_action: Option<(u64, crate::issue_view::IssueAction)> = None;

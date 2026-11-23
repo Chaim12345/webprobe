@@ -15,3 +15,17 @@ Requires an available Chromium binary. The family labs, the source-provenance ma
 Coverage boundary: docs/specs/R-13-dom-coverage-matrix.md lists the proved source/sink/family cells and the known gaps. Fourteen wrapped families is not blanket DOM analysis.
 
 Variant labels describe token observations, not proven storage mechanisms or JavaScript string-literal origins. Response/sink co-occurrence does not prove the sink read that response text. Both variants are Tentative. Failed/unknown outcomes are logged and cached for this run, not treated as successful clean probes.
+
+Submission acknowledgement requires a complete, strictly self-delimited final
+2xx-5xx response. Short Content-Length bodies, incomplete chunked bodies,
+interim-only responses and EOF-delimited responses without a reliable
+completion signal remain unknown, with no replay or navigation.
+Retained navigation evidence is a fulfilled view reconstructed from actual
+status, bounded filtered headers including injected CSP and capped body.
+Original upstream headers are not retained. Response completeness is checked
+before normalization; unconfirmed navigation evidence is withheld.
+Cancellation/evaluation failure retains a previously confirmed bounded hit
+snapshot, with explicit incomplete/cancelled status and diagnostic in the
+scan record and Scanner UI. Missing source/provenance or missing confirmed
+navigation evidence is withheld. Stop prevents new sends but does not
+interrupt synchronous in-flight transport I/O; no latency bound is claimed.

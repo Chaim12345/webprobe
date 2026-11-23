@@ -565,6 +565,7 @@ impl DomRoute {
         let Some(response) = response else {
             return blocked();
         };
+        let response_complete=dom_complete_final_response(&response);
         let response = crate::codec::normalize_response(&response);
         let parsed = util::parse_http(&response);
         let status = parsed
@@ -574,27 +575,28 @@ impl DomRoute {
             .and_then(|x| x.parse::<u16>().ok())
             .unwrap_or(502);
         let mut headers: Vec<_> = Vec::new();
-        let mut header_bytes = 0usize;
+        let csp="worker-src 'none'; frame-src 'self'; connect-src 'self'";
+        let mut header_bytes = "Content-Security-Policy".len()+csp.len()+4;
         for (k, v) in &parsed.headers {
             if ["connection", "transfer-encoding", "content-length"]
                 .contains(&k.to_ascii_lowercase().as_str())
             {
                 continue;
             }
-            header_bytes += k.len() + v.len();
-            if header_bytes > DOM_MAX_FULFILL_HEADERS {
-                break;
-            }
+            let size=k.len().saturating_add(v.len()).saturating_add(4);
+            if size > DOM_MAX_FULFILL_HEADERS.saturating_sub(header_bytes) { break; }
+            header_bytes += size;
             headers.push(serde_json::json!({"name":k,"value":v}));
         }
         // Disallow new workers and off-origin subdocuments/connections,
         // which would otherwise create uninstrumented targets.
-        headers.push(serde_json::json!({"name":"Content-Security-Policy", "value":"worker-src 'none'; frame-src 'self'; connect-src 'self'"}));
+        headers.push(serde_json::json!({"name":"Content-Security-Policy", "value":csp}));
         use base64::Engine;
         let body_start = parsed.head_len.min(response.len());
         let body_len = (response.len() - body_start).min(DOM_MAX_FULFILL_BODY);
-        if event["resourceType"] == "Document" && url == self.document_url {
-            self.document_response = Some(response[..body_start + body_len].to_vec());
+        if response_complete && event["resourceType"] == "Document" && url == self.document_url {
+            self.document_response = Some(dom_fulfilled_evidence(
+                status, &headers, &response[body_start..body_start + body_len]));
         }
         let body = base64::engine::general_purpose::STANDARD
             .encode(&response[body_start..body_start + body_len]);
@@ -603,6 +605,53 @@ impl DomRoute {
             serde_json::json!({"requestId":id,"responseCode":status,"responseHeaders":headers,"body":body}),
         )
     }
+}
+
+pub(crate) fn dom_complete_final_response(response: &[u8]) -> bool {
+    let Some(end) = response.windows(4).position(|w| w == b"\r\n\r\n").map(|i| i+4) else { return false; };
+    let head=&response[..end]; let body=&response[end..];
+    let p=util::parse_http(head);
+    if !p.first.starts_with("HTTP/") || !p.first.split_whitespace().nth(1)
+        .and_then(|v|v.parse::<u16>().ok()).is_some_and(|v|(200..600).contains(&v)) { return false; }
+    match crate::codec::response_body_kind_strict(head,"GET") {
+        Ok(crate::codec::BodyKind::None) => body.is_empty(),
+        Ok(crate::codec::BodyKind::Length(n)) => body.len()==n,
+        Ok(crate::codec::BodyKind::Chunked) => crate::codec::decode_chunked(body)
+            .is_some_and(|(_,n)|n==body.len()),
+        _ => false,
+    }
+}
+
+/// Independently confirmed snapshots require bounded source-to-sink token
+/// evidence. Missing source/provenance is withheld, not upgraded on failure.
+fn dom_confirmed_hit(hit: &DomHit, origin: &str, hash: &str, query: &str, stored: &str) -> bool {
+    if hit.sink.is_empty() || hit.sink.len()>100 || hit.source_value.len()>1200
+        || hit.sink_value.len()>1200 || hit.page_url.len()>2000 || !same_origin(&hit.page_url,origin) { return false; }
+    let has=|t:&str| !t.is_empty() && hit.sink_value.contains(t);
+    match hit.source.as_str() {
+        "location.hash" => has(hash) && !has(query) && !has(stored),
+        "location.search" => has(query) && !has(hash) && !has(stored),
+        "location.hash+location.search" => has(hash) && has(query) && !has(stored),
+        "stored" => has(stored),
+        "unknown" => hash==query && has(hash),
+        _ => false,
+    }
+}
+
+/// Reconstruct retained evidence from the exact status, bounded filtered
+/// header list (including injected CSP), and capped body sent to Fetch.
+/// Content-Length is a local serialization aid, not an upstream claim.
+fn dom_fulfilled_evidence(status: u16, headers: &[serde_json::Value], body: &[u8]) -> Vec<u8> {
+    let mut head = format!("HTTP/1.1 {status}\r\n");
+    for h in headers {
+        if let (Some(name), Some(value)) = (h["name"].as_str(), h["value"].as_str()) {
+            head.push_str(&format!("{name}: {value}\r\n"));
+        }
+    }
+    head.push_str(&format!("Content-Length: {}\r\n\r\n", body.len()));
+    let mut out = head.into_bytes();
+    out.extend_from_slice(body);
+    out
 }
 
 /// The response as the browser saw it (Burp audits the crawl's own
@@ -2238,6 +2287,9 @@ pub(crate) fn dom_instrument_js(url: &str, canary: &str, stored: &str) -> String
 pub struct DomProbeResult {
     pub hits: Vec<DomHit>,
     pub document_response: Option<Vec<u8>>,
+    pub complete: bool,
+    pub cancelled: bool,
+    pub diagnostic: String,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2404,21 +2456,34 @@ fn dom_probe_with_binary(
             "Page.navigate",
             serde_json::json!({"url": format!("{base}#{canary}")}),
         )?;
+        // Snapshot evidence while running. If later evaluation fails or stop
+        // arrives, retain only the previously confirmed bounded snapshot.
+        let mut hits=Vec::<DomHit>::new();
+        let mut evaluation_failed=false;
         for _ in 0..25 {
-            if shared.scan.stop.load(Ordering::SeqCst) {
-                break;
-            }
+            if shared.scan.stop.load(Ordering::SeqCst) { break; }
             cdp.pump(100);
+            if shared.scan.stop.load(Ordering::SeqCst) { break; }
+            match eval_json::<Vec<DomHit>>(&mut cdp,"JSON.stringify(window.__wpDomHits || [])") {
+                Some(snapshot) => {
+                    let hash=bracket_token(canary).unwrap_or(canary);
+                    let query=url.split_once('?').and_then(|(_,q)|bracket_token(q)).unwrap_or(hash);
+                    hits=snapshot.into_iter().take(50).filter(|h|
+                        dom_confirmed_hit(h,&origin_of(url).unwrap_or_default(),hash,query,stored)).collect();
+                },
+                None => { evaluation_failed=true; break; }
+            }
         }
-        let hits: Vec<DomHit> =
-            eval_json(&mut cdp, "JSON.stringify(window.__wpDomHits || [])").unwrap_or_default();
-        if shared.scan.stop.load(Ordering::SeqCst) {
-            return Err("scan stopped during DOM navigation".into());
-        }
-        Ok(DomProbeResult {
-            hits,
-            document_response: cdp.dom_route.as_ref().and_then(|r| r.document_response.clone()),
-        })
+        let cancelled=shared.scan.stop.load(Ordering::SeqCst);
+        let response=cdp.dom_route.as_ref().and_then(|r|r.document_response.clone());
+        // Without a navigation response, provenance confirmation is unfinished.
+        if response.is_none() { hits.clear(); }
+        let complete=!cancelled && !evaluation_failed && response.is_some();
+        let diagnostic=if cancelled { "cancelled; retained only independently confirmed hit snapshot" }
+            else if evaluation_failed { "browser evaluation failed; retained only confirmed prior snapshot" }
+            else if response.is_none() { "navigation response unavailable; unconfirmed hits withheld" }
+            else { "" }.to_string();
+        Ok(DomProbeResult { hits, document_response:response, complete, cancelled, diagnostic })
     })();
     crate::util::kill_process_tree(
         child.id(),
@@ -2474,6 +2539,82 @@ mod dom_route_tests {
             });
         assert!(result.is_err());
         assert!(listener.accept().is_err(),"navigation must not start after stop");
+    }
+
+    #[test]
+    fn dom_retained_head_drops_unfulfilled_oversized_upstream_headers() {
+        use std::io::{Read, Write};
+        let listener=std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port=listener.local_addr().unwrap().port();
+        let server=std::thread::spawn(move || {
+            let (mut stream,_)=listener.accept().unwrap();
+            let mut raw=[0;4096]; let _=stream.read(&mut raw);
+            let huge="x".repeat(DOM_MAX_FULFILL_HEADERS+1024);
+            write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nX-Oversized: {huge}\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok").unwrap();
+        });
+        let url=format!("http://127.0.0.1:{port}/");
+        let mut route=DomRoute { shared:Shared::new(),origin:url.trim_end_matches('/').into(),
+            host:"127.0.0.1".into(),port,https:false,template:String::new(),sent:0,
+            document_url:url.clone(),document_response:None };
+        let (method,params)=route.reply(&serde_json::json!({"requestId":"head",
+            "resourceType":"Document","request":{"url":url,"method":"GET","headers":{}}}));
+        server.join().unwrap();
+        assert_eq!(method,"Fetch.fulfillRequest");
+        let evidence=route.document_response.unwrap();
+        assert!(evidence.len()<DOM_MAX_FULFILL_HEADERS+1024);
+        assert!(!String::from_utf8_lossy(&evidence).contains("X-Oversized"));
+        use base64::Engine;
+        let body=base64::engine::general_purpose::STANDARD.decode(params["body"].as_str().unwrap()).unwrap();
+        assert_eq!(evidence,dom_fulfilled_evidence(200,params["responseHeaders"].as_array().unwrap(),&body));
+    }
+
+    #[test]
+    fn dom_retained_response_is_fulfilled_status_headers_and_body() {
+        let headers = vec![serde_json::json!({"name":"Content-Type","value":"text/html"}),
+            serde_json::json!({"name":"Content-Security-Policy","value":"worker-src 'none'"})];
+        let evidence = dom_fulfilled_evidence(201, &headers, b"<script>probe</script>");
+        let text = String::from_utf8(evidence).unwrap();
+        assert_eq!(text, "HTTP/1.1 201\r\nContent-Type: text/html\r\nContent-Security-Policy: worker-src 'none'\r\nContent-Length: 22\r\n\r\n<script>probe</script>");
+        assert!(!text.contains("Transfer-Encoding"));
+    }
+
+    #[test]
+    fn dom_unconfirmed_snapshot_is_withheld_on_failure() {
+        let hit=DomHit { source:"".into(),sink:"document.write".into(),source_value:"hash".into(),
+            sink_value:"hash".into(),page_url:"http://h/".into() };
+        assert!(!dom_confirmed_hit(&hit,"http://h","hash","query","stored"));
+        let mut hit=hit; hit.source="location.search".into();
+        assert!(!dom_confirmed_hit(&hit,"http://h","hash","query","stored"));
+        hit.source="location.hash".into();
+        assert!(dom_confirmed_hit(&hit,"http://h","hash","query","stored"));
+    }
+
+    #[test]
+    fn dom_proven_hit_survives_later_cancellation_against_live_browser() {
+        if chromium_binary().is_none() { return; }
+        use std::io::{Read,Write};
+        let l=std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port=l.local_addr().unwrap().port();
+        let shared=Shared::new(); let stop=shared.clone();
+        let server=std::thread::spawn(move || {
+            let mut stream=loop {
+                let (mut stream,_)=l.accept().unwrap();
+                stream.set_read_timeout(Some(std::time::Duration::from_secs(2))).unwrap();
+                let mut raw=[0;4096];
+                if stream.read(&mut raw).unwrap_or(0)>0 { break stream; }
+            };
+            let body="<html><head><link rel='icon' href='data:,'></head><script>document.write(location.hash)</script></html>";
+            write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).unwrap();
+            drop(stream);
+            std::thread::sleep(std::time::Duration::from_millis(700));
+            stop.scan.stop.store(true,Ordering::SeqCst);
+        });
+        let result=dom_analysis_probe(&shared,&format!("http://127.0.0.1:{port}/?__proto__[query]=query"),
+            "__proto__[hash]=hash","","127.0.0.1",port,false,"stored",||Ok(())).unwrap();
+        server.join().unwrap();
+        assert!(result.cancelled); assert!(!result.complete);
+        assert!(!result.hits.is_empty(),"confirmed snapshot must survive cancellation");
+        assert!(result.diagnostic.contains("confirmed"));
     }
 
     #[test]

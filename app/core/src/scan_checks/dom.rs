@@ -94,6 +94,28 @@ fn authed_get(cx: &ScanCtx, path_query: &str) -> Vec<u8> {
     raw.into_bytes()
 }
 
+/// Only self-delimited complete final responses acknowledge a submission.
+/// The transport's Option<Vec<u8>> does not prove clean EOF, so an EOF-
+/// delimited response is conservatively unknown, never replayed.
+fn dom_submission_acknowledged(response: &[u8]) -> bool {
+    crate::crawl::dom_complete_final_response(response)
+}
+
+#[test]
+fn dom_submission_requires_complete_final_response_head() {
+    for raw in [b"".as_slice(), b"HTTP/1.1 200", b"HTTP/1.1 100 Continue\r\n\r\n",
+        b"HTTP/1.1 200 OK\r\nContent-Length: 99\r\n\r\nshort",
+        b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nab",
+        b"HTTP/1.1 200 OK\r\n\r\nunknown EOF"] {
+        assert!(!dom_submission_acknowledged(raw),"{raw:?}");
+    }
+    for raw in [b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok".as_slice(),
+        b"HTTP/1.1 204 No Content\r\n\r\n",
+        b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nok\r\n0\r\n\r\n"] {
+        assert!(dom_submission_acknowledged(raw),"{raw:?}");
+    }
+}
+
 /// Dynamic DOM analysis, R-13 option (b) (burp.Zel5's runAnalysis shape;
 /// the injected script body is not established, so WebProbe's
 /// instrumentation is its own): each HTML page is opened once in a
@@ -111,7 +133,7 @@ fn authed_get(cx: &ScanCtx, path_query: &str) -> Vec<u8> {
 /// and the stored token: burp.Zf24's REFLECTED and STORED variants are
 /// per HIT (see dom_family_check!), so the tokens must be cached with
 /// the hits.
-fn dom_analysis_hits(cx: &ScanCtx) -> webprobe_support::dedup::DomProbeOutcome {
+pub(crate) fn dom_analysis_hits(cx: &ScanCtx) -> webprobe_support::dedup::DomProbeOutcome {
     // Only GET history can be navigated faithfully as a browser GET.
     if !matches!(cx.req.split_whitespace().next(), Some("GET")) {
         return Default::default();
@@ -149,6 +171,11 @@ fn dom_analysis_hits(cx: &ScanCtx) -> webprobe_support::dedup::DomProbeOutcome {
     };
     let url = format!("{scheme}://{host}{port}{path}");
     let state = cx.state();
+    // Cancellation is cache-only: never create or initialize a cell.
+    if cx.stopped() {
+        return state.dom_hits.lock().unwrap().get(&url)
+            .and_then(|cell|cell.get()).cloned().unwrap_or_default();
+    }
     let cell = state
         .dom_hits
         .lock()
@@ -157,6 +184,7 @@ fn dom_analysis_hits(cx: &ScanCtx) -> webprobe_support::dedup::DomProbeOutcome {
         .or_default()
         .clone();
     cell.get_or_init(|| {
+        if cx.stopped() { return Default::default(); }
         // Two distinct run-owned tokens: the query-string payload
         // (tok_s) and the fragment payload (tok_h) ride the SAME single
         // navigation, so one probe covers both URL-part sources with no
@@ -200,15 +228,7 @@ fn dom_analysis_hits(cx: &ScanCtx) -> webprobe_support::dedup::DomProbeOutcome {
                     return Err("scan stopped before stored submission".into());
                 }
                 let response = cx.send(&submit);
-                let confirmed = response.as_ref().is_some_and(|r| {
-                    let p = util::parse_http(r);
-                    p.first.starts_with("HTTP/")
-                        && p.first
-                            .split_whitespace()
-                            .nth(1)
-                            .and_then(|v| v.parse::<u16>().ok())
-                            .is_some_and(|v| (100..600).contains(&v))
-                });
+                let confirmed = response.as_ref().is_some_and(|r| dom_submission_acknowledged(r));
                 if confirmed {
                     Ok(())
                 } else {
@@ -220,6 +240,10 @@ fn dom_analysis_hits(cx: &ScanCtx) -> webprobe_support::dedup::DomProbeOutcome {
             },
         );
         if let Err(e) = &probe {
+            cx.shared.scan.record_dom(crate::scan_run::DomScanRecord {
+                url:url.chars().take(500).collect(), complete:false,
+                cancelled:cx.stopped(), proven_hits:Vec::new(), diagnostic:e.chars().take(500).collect(),
+            });
             // A crashed/timed-out probe is not a clean bill of health: say so
             // in the scan log (the cached empty hit set only avoids
             // re-probing this URL for every family check in this run).
@@ -231,6 +255,10 @@ fn dom_analysis_hits(cx: &ScanCtx) -> webprobe_support::dedup::DomProbeOutcome {
         };
         // Only the exact navigation response fulfilled to Chromium is evidence.
         // Script-text co-occurrence is not a proven string-literal data flow.
+        cx.shared.scan.record_dom(crate::scan_run::DomScanRecord {
+            url:url.chars().take(500).collect(), complete:probe.complete,
+            cancelled:probe.cancelled, proven_hits:probe.hits.clone(), diagnostic:probe.diagnostic.clone(),
+        });
         let reflected = probe
             .document_response
             .as_ref()
@@ -249,6 +277,9 @@ fn dom_analysis_hits(cx: &ScanCtx) -> webprobe_support::dedup::DomProbeOutcome {
             hits,
             reflected,
             stored: tok_st,
+            complete:probe.complete,
+            cancelled:probe.cancelled,
+            diagnostic:probe.diagnostic,
         }
     })
     .clone()
@@ -276,14 +307,18 @@ macro_rules! dom_family_check {
             fn group(&self) -> Option<&'static str> {
                 Some(BURP_GROUP)
             }
+            fn consumes_cached_dom_after_stop(&self) -> bool { true }
             fn run(&self, cx: &ScanCtx) {
-                if cx.stopped() || !cx.runs(self.issue()) {
+                if !cx.runs(self.issue()) {
                     return;
                 }
                 let webprobe_support::dedup::DomProbeOutcome {
                     hits,
                     reflected: reflected_token,
                     stored: stored_token,
+                    complete,
+                    diagnostic,
+                    ..
                 } = dom_analysis_hits(cx);
                 let mut seen: std::collections::HashSet<(&str, &str, &str)> = std::collections::HashSet::new();
                 for hit in hits.iter().filter(|h| $sinks.contains(&h.sink.as_str())) {
@@ -335,6 +370,7 @@ macro_rules! dom_family_check {
                         )
                     };
                     if !seen.insert((hit.sink.as_str(), issue, hit.source.as_str())) { continue; }
+                    let detail=if complete { detail } else { format!("{}<br><br>DOM operation incomplete: {}. This finding retains independently observed evidence only.",detail,util::html_encode(&diagnostic)) };
                     let mut i = mk($severity, issue, &cx.entry, detail);
                     // burp.Zwf8's confidence mapping is established for a
                     // location.hash source only: a base-variant hit with
@@ -669,4 +705,45 @@ fn dom_probe_tokens_are_distinct_and_substituted() {
     assert!(
         legacy.contains("var QTOKEN = \"wpT0k\";") && legacy.contains("var CANARY = \"wpT0k\";")
     );
+}
+
+#[test]
+fn dom_cancelled_dispatch_preserves_cross_family_cached_findings_without_egress() {
+    use std::sync::atomic::Ordering;
+    let listener=std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let port=listener.local_addr().unwrap().port();
+    let shared=crate::net::Shared::new();
+    let raw=format!("GET /cached HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
+    let baseline=b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<script>void 0</script>".to_vec();
+    let cx=ScanCtx { shared:shared.clone(),entry:HistEntry { method:"GET".into(),host:"127.0.0.1".into(),port,path:"/cached".into(),..Default::default() },
+        req:raw.clone(),parts:util::parse_http(raw.as_bytes()),host:"127.0.0.1".into(),port,
+        host_hdr:format!("127.0.0.1:{port}"),settings:Settings {speed:ScanSpeed::from_u8(0),accuracy:crate::variations::Accuracy::from_u8(0)},
+        baseline:Baseline {resp:Some(baseline.clone()),raw:baseline,body:"<script>void 0</script>".into()},oob:vec![],smtp:vec![],item:0,stored_report:false };
+    let url=format!("http://127.0.0.1:{port}/cached");
+    let hits=["document.write","document.cookie"].into_iter().map(|sink| crate::crawl::DomHit {
+        source:"location.hash".into(),sink:sink.into(),source_value:"proven".into(),sink_value:"proven".into(),page_url:url.clone()
+    }).collect::<Vec<_>>();
+    let outcome=webprobe_support::dedup::DomProbeOutcome {hits:hits.clone(),reflected:None,stored:"stored".into(),
+        complete:false,cancelled:true,diagnostic:"cancelled after confirmed snapshot".into()};
+    let cell=std::sync::OnceLock::new();cell.set(outcome).unwrap();
+    cx.state().dom_hits.lock().unwrap().insert(url.clone(),std::sync::Arc::new(cell));
+    shared.scan.record_dom(crate::scan_run::DomScanRecord {url,complete:false,cancelled:true,proven_hits:hits,diagnostic:"cancelled".into()});
+    let mut config=crate::scan_config::ScanConfig::default();
+    for (id,..) in crate::scan::check_catalogue() {
+        if !["active.dom-xss","active.dom-cookie-manipulation"].contains(&id) { config.disabled_checks.insert(id.into()); }
+    }
+    *crate::scan_config::shared_config(&shared).lock().unwrap()=config;
+    shared.scan.stop.store(true,Ordering::SeqCst);
+    run_request_checks(&cx);
+    let issues=shared.issues.lock().unwrap();
+    for name in ["Cross-site scripting (DOM-based)","Cookie manipulation (DOM-based)"] {
+        assert!(issues.iter().any(|i|i.name==name && i.detail.contains("incomplete")),"missing {name}");
+    }
+    assert_eq!(shared.scan.dom_outcomes.lock().unwrap()[0].proven_hits.len(),2);
+    assert!(listener.accept().is_err(),"cache-only dispatch must not send");
+    cx.state().dom_hits.lock().unwrap().clear();
+    assert!(dom_analysis_hits(&cx).hits.is_empty());
+    assert!(cx.state().dom_hits.lock().unwrap().is_empty(),"stopped cache miss must not initialize a cell");
+    assert!(listener.accept().is_err());
 }
