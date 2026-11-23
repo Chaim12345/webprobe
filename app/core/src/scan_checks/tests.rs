@@ -1127,11 +1127,13 @@ fn dom_setattribute_variants_against_a_live_lab() {
     }
 }
 
-/// jQuery attr/prop and helper sinks: attr href/action are link
-/// manipulation, parseHTML is XSS, globalEval is JavaScript injection,
-/// all Tentative (jQuery-dependent, burp.Zwf8.Zd flag 4). The lab
-/// inlines a minimal window.jQuery. Skipped when no Chromium is
-/// available.
+/// jQuery attr/prop and helper sinks, all Tentative (jQuery-dependent,
+/// burp.Zwf8.Zd flag 4): the /jq-attr page aggregates attr href and
+/// prop action to establish the link family, and /jq-parse establishes
+/// the XSS and JavaScript-injection families via parseHTML and
+/// globalEval. Per-API attribution inside a family is not asserted.
+/// The lab inlines a minimal window.jQuery. Skipped when no Chromium
+/// is available.
 #[test]
 fn dom_jquery_attr_and_helpers_against_a_live_lab() {
     if crate::crawl::chromium_binary().is_none() {
@@ -1198,12 +1200,14 @@ jQuery.globalEval = function (v) {};
     );
 }
 
-/// The location.search source reaches every family, not only the XSS
-/// sinks: the wpdom query canary into storage, cookie, document.domain,
-/// JSON.parse and document.evaluate. Skipped when no Chromium is
+/// The location.search source reaches six selected families beyond the
+/// XSS sinks: the wpdom query canary into storage, cookie,
+/// document.domain, JSON.parse and document.evaluate. Coverage is
+/// these six, not all fourteen families; the rest are exercised for
+/// location.hash in their own fixtures. Skipped when no Chromium is
 /// available.
 #[test]
-fn dom_search_source_reaches_all_families_against_a_live_lab() {
+fn dom_search_source_reaches_selected_families_against_a_live_lab() {
     if crate::crawl::chromium_binary().is_none() {
         return;
     }
@@ -1258,9 +1262,9 @@ try { document.evaluate(s, document, null, 0, null); } catch (e) {}
     }
 }
 
-/// DOM family scope: a POST history entry is never navigated (only GET
-/// can be replayed faithfully), and a non-HTML baseline is never
-/// probed. Neither launches a browser nor reports.
+/// DOM family scope: a POST history entry and a non-HTML baseline each
+/// produce empty findings. Only the findings are asserted here;
+/// browser launch and request traffic are not.
 #[test]
 fn dom_families_skip_non_get_and_non_html() {
     if crate::crawl::chromium_binary().is_none() {
@@ -1283,7 +1287,7 @@ fn dom_families_skip_non_get_and_non_html() {
         "/xss",
         format!("POST /xss HTTP/1.1\r\nHost: {host}\r\nContent-Length: 0\r\n\r\n"),
     );
-    assert!(got.is_empty(), "POST must not be DOM-probed: {got:?}");
+    assert!(got.is_empty(), "POST entry produced DOM findings: {got:?}");
     let got = lab_scan(
         port,
         &["active.dom-xss"],
@@ -1291,16 +1295,20 @@ fn dom_families_skip_non_get_and_non_html() {
         "/plain",
         format!("GET /plain HTTP/1.1\r\nHost: {host}\r\n\r\n"),
     );
-    assert!(got.is_empty(), "non-HTML must not be DOM-probed: {got:?}");
+    assert!(
+        got.is_empty(),
+        "non-HTML baseline produced DOM findings: {got:?}"
+    );
 }
 
 /// Property-assignment fixtures for the setter sinks (the wrapSetter
-/// and constructor-adjacent hooks): the page assigns the actual DOM
-/// properties, not setAttribute strings. anchor.href is link
-/// manipulation; input.value, document.title, window.name,
-/// anchor.target and script.text are data manipulation;
-/// button/input.formAction (camelCase IDL property) are link
-/// manipulation. Skipped when no Chromium is available.
+/// and constructor-adjacent hooks): the pages assign the actual DOM
+/// properties, not setAttribute strings. The aggregate /prop-data page
+/// (input.value, document.title, window.name, anchor.target,
+/// script.text) establishes the data family from property assignment;
+/// per-setter attribution is not asserted. The link sinks are split
+/// per case: anchor.href, button.formAction and input.formAction (the
+/// camelCase IDL property). Skipped when no Chromium is available.
 #[test]
 fn dom_property_assignment_fixtures_against_a_live_lab() {
     if crate::crawl::chromium_binary().is_none() {
