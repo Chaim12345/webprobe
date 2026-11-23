@@ -93,6 +93,8 @@ pub(crate) static REQUEST_CHECKS: &[&dyn RequestCheck] = &[
     &Cors,
     &PathRelativeStyleSheet,
     &TraceEnabled,
+    &RobotsTxt,
+    &React2Shell,
     &OpenApiDefinition,
     &CollaboratorEverywhere,
     &ServerTrace,

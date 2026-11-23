@@ -1,5 +1,13 @@
 use super::*;
 
+#[test]
+fn react2shell_requires_the_specific_marker() {
+    assert!(react2shell_hit("500", r#"...E{"digest":"abc"}..."#));
+    // generic error words alone are just an error page, not React2Shell
+    assert!(!react2shell_hit("500", "Error: invalid digest supplied"));
+    assert!(!react2shell_hit("200", r#"E{"digest":"abc"}"#));
+}
+
 fn xpath_response(body: &str) -> Vec<u8> {
     format!(
         "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{body}",
@@ -104,6 +112,8 @@ fn registry_order_is_pinned() {
                 Some(BURP_GROUP)
             ),
             ("active.http-trace-enabled", Scope::Host, Some(BURP_GROUP)),
+            ("active.robots-txt", Scope::Host, Some(BURP_GROUP)),
+            ("active.react2shell", Scope::Host, Some(BURP_GROUP)),
             ("active.openapi-definition", Scope::Host, Some(BURP_GROUP)),
             ("active.collaborator-everywhere", Scope::Host, None),
             (
@@ -663,6 +673,243 @@ fn bac_non_get_sends_no_requests_beyond_the_scanner_baseline() {
             "{method}: only the scanner baseline is allowed"
         );
     }
+}
+
+#[test]
+fn host_probe_checks_use_expected_requests_and_reject_soft_errors() {
+    use std::sync::{Arc, Mutex};
+    for positive in [true, false] {
+        let captured = Arc::new(Mutex::new(Vec::<(String, String, String)>::new()));
+        let seen = captured.clone();
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = lab_serve(listener, move |method, path, raw| {
+            seen.lock()
+                .unwrap()
+                .push((method.into(), path.into(), raw.into()));
+            let (status, content_type, body) = if path == "/robots.txt" {
+                if positive {
+                    ("200 OK", "text/plain", "User-agent: *\nDisallow: /admin")
+                } else {
+                    ("200 OK", "text/html", "<html>User-agent: * Allow: /</html>")
+                }
+            } else if method == "POST" {
+                if positive {
+                    (
+                        "500 Internal Server Error",
+                        "text/x-component",
+                        "0:E{\"digest\":\"abc\"}",
+                    )
+                } else {
+                    (
+                        "500 Internal Server Error",
+                        "text/plain",
+                        "Error: invalid digest supplied",
+                    )
+                }
+            } else {
+                ("200 OK", "text/x-component", "ok")
+            };
+            format!("HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+        });
+        let req = format!("GET /start HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
+        let issues = lab_scan(
+            port,
+            &["active.robots-txt", "active.react2shell"],
+            "GET",
+            "/start",
+            req,
+        );
+        assert_eq!(issues.len(), if positive { 2 } else { 0 }, "{issues:?}");
+        let captured = captured.lock().unwrap();
+        assert_eq!(captured.len(), 3, "one baseline and two probes");
+        assert_eq!(
+            captured
+                .iter()
+                .filter(|(m, p, _)| m == "GET" && p == "/robots.txt")
+                .count(),
+            1
+        );
+        let post = captured
+            .iter()
+            .find(|(m, p, _)| m == "POST" && p == "/")
+            .unwrap();
+        assert!(post.2.contains("Next-Action:"));
+        assert!(post.2.contains("[\"$1:a:a\"]"));
+    }
+}
+
+#[test]
+fn react2shell_does_not_post_without_a_fingerprint() {
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    let count = Arc::new(AtomicUsize::new(0));
+    let seen = count.clone();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(listener, move |_, _, _| {
+        seen.fetch_add(1, Ordering::SeqCst);
+        "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok".into()
+    });
+    let req = format!("GET / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
+    let issues = lab_scan(port, &["active.react2shell"], "GET", "/", req);
+    assert!(issues.is_empty());
+    assert_eq!(count.load(Ordering::SeqCst), 1, "baseline only, no POST");
+    assert!(is_burp_issue(
+        "React Server Components remote code execution (React2Shell)"
+    ));
+}
+
+/// Host-probe dedupe claims must be released when the probe's transport
+/// fails, so a later scan of the same host retries instead of treating
+/// the host as done. The lab drops the first /robots.txt GET and the
+/// first React2Shell POST (accepted, then closed without a response)
+/// and answers the retries; a second scan of the same entry must send
+/// both probes again and report both issues.
+#[test]
+fn host_probe_claim_is_released_when_the_probe_transport_fails() {
+    use std::io::{Read, Write};
+    use std::sync::{Arc, Mutex};
+    // (robots GET attempts, react2shell POST attempts), across both scans.
+    let attempts = Arc::new(Mutex::new((0usize, 0usize)));
+    let seen = attempts.clone();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for s in listener.incoming().flatten() {
+            let seen = seen.clone();
+            std::thread::spawn(move || {
+                let mut s = s;
+                let _ = s.set_read_timeout(Some(std::time::Duration::from_secs(2)));
+                // Peek (without consuming) until the request head classifies.
+                // For a "dropped" probe the socket is then closed with the
+                // request still unread, which makes the kernel RST the
+                // connection: a real transport failure, not a clean EOF.
+                let mut buf = [0u8; 8192];
+                let head_len = loop {
+                    match s.peek(&mut buf) {
+                        Ok(0) => return,
+                        Ok(m) => {
+                            if String::from_utf8_lossy(&buf[..m])
+                                .find("\r\n\r\n")
+                                .is_some()
+                            {
+                                break m;
+                            }
+                        }
+                        Err(_) => return,
+                    }
+                };
+                let head = String::from_utf8_lossy(&buf[..head_len]).to_string();
+                let method = head.split_whitespace().next().unwrap_or("").to_string();
+                let path = head.split_whitespace().nth(1).unwrap_or("/").to_string();
+                let probe = if path == "/robots.txt" {
+                    let mut a = seen.lock().unwrap();
+                    a.0 += 1;
+                    Some((a.0, false))
+                } else if method == "POST" {
+                    let mut a = seen.lock().unwrap();
+                    a.1 += 1;
+                    Some((a.1, true))
+                } else {
+                    None
+                };
+                if let Some((1, _)) = probe {
+                    // First probe of each kind: drop with the request unread.
+                    return;
+                }
+                // Answered request: consume it fully, then respond.
+                let mut raw = Vec::new();
+                loop {
+                    let n = s.read(&mut buf).unwrap_or(0);
+                    raw.extend_from_slice(&buf[..n]);
+                    let done = String::from_utf8_lossy(&raw)
+                        .find("\r\n\r\n")
+                        .is_some_and(|h| {
+                            let cl = String::from_utf8_lossy(&raw[..h])
+                                .lines()
+                                .find_map(|l| {
+                                    l.to_ascii_lowercase()
+                                        .strip_prefix("content-length:")
+                                        .map(|v| v.trim().parse::<usize>().unwrap_or(0))
+                                })
+                                .unwrap_or(0);
+                            raw.len() >= h + 4 + cl
+                        });
+                    if n == 0 || done {
+                        break;
+                    }
+                }
+                let resp = match probe {
+                    Some((_, false)) => {
+                        let body = "User-agent: *\nDisallow: /admin";
+                        format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+                    }
+                    Some((_, true)) => {
+                        let body = "0:E{\"digest\":\"abc\"}";
+                        format!("HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/x-component\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+                    }
+                    None => {
+                        // Baseline: Next.js/RSC fingerprint so React2Shell arms.
+                        "HTTP/1.1 200 OK\r\nContent-Type: text/x-component\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok".to_string()
+                    }
+                };
+                let _ = s.write_all(resp.as_bytes());
+            });
+        }
+    });
+    // One Shared for both scans: start_active_scan does not reset
+    // scan_state (only crawl_and_audit does), so a claim that survives
+    // the first scan would suppress the retry in the second.
+    let shared = crate::net::Shared::new();
+    let mut cfg = crate::scan_config::ScanConfig::default();
+    for (id, ..) in crate::scan::check_catalogue() {
+        if !["active.robots-txt", "active.react2shell"].contains(&id) {
+            cfg.disabled_checks.insert(id.into());
+        }
+    }
+    *crate::scan_config::shared_config(&shared).lock().unwrap() = cfg;
+    let run_scan = |shared: &Arc<crate::net::Shared>| {
+        let mut e = crate::net::HistEntry {
+            method: "GET".into(),
+            host: "127.0.0.1".into(),
+            port,
+            path: "/start".into(),
+            ..Default::default()
+        };
+        e.req_raw = format!("GET /start HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n")
+            .into_bytes()
+            .into();
+        crate::scan::start_active_scan(shared.clone(), e, &[], &[]);
+        let t0 = std::time::Instant::now();
+        while shared.scan.is_busy() && t0.elapsed() < std::time::Duration::from_secs(60) {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        assert!(!shared.scan.is_busy(), "scan did not finish");
+    };
+    // First scan: both probes die on the wire, so nothing is reported and
+    // both claims must be released.
+    run_scan(&shared);
+    assert_eq!(*attempts.lock().unwrap(), (1, 1), "one attempt each");
+    assert!(
+        shared.issues.lock().unwrap().is_empty(),
+        "dropped probes report nothing"
+    );
+    // Second scan of the same host: a retained claim would skip the probe;
+    // released claims mean both probes run again and both issues report.
+    run_scan(&shared);
+    assert_eq!(
+        *attempts.lock().unwrap(),
+        (2, 2),
+        "released claims are retried"
+    );
+    let issues = shared.issues.lock().unwrap();
+    let names: Vec<&str> = issues.iter().map(|i| i.name.as_str()).collect();
+    assert!(names.contains(&"Robots.txt file"), "{names:?}");
+    assert!(
+        names.contains(&"React Server Components remote code execution (React2Shell)"),
+        "{names:?}"
+    );
 }
 
 /// R-10 web cache poisoning (Zp22 / Zg1g rule): reported only when a
