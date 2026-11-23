@@ -291,7 +291,6 @@ pub(crate) fn dom_analysis_hits(cx: &ScanCtx) -> webprobe_support::dedup::DomPro
         // payloads can mutate server-side state. Keep the instrumentation token
         // empty so no stored-token provenance is attributed during passive DOM analysis.
         let tok_st = String::new();
-        let submit = Vec::new();
         let probe = crate::crawl::dom_analysis_probe(
             &cx.shared,
             &probe_url,
@@ -308,7 +307,6 @@ pub(crate) fn dom_analysis_hits(cx: &ScanCtx) -> webprobe_support::dedup::DomPro
                 }
                 // Stored-variant submission is intentionally disabled. No
                 // authenticated state-changing request is sent by default.
-                let _ = &submit;
                 Ok(())
             },
         );
