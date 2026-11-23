@@ -27,7 +27,7 @@ For: CEO decision record (interim position in PR #133). From: security/complianc
 | B. Distribute with process separation | artex stays its own binary talking ACP/stdio; webprobe keeps its current unlicensed/private status or picks a permissive license. | Engineering discipline at the boundary; some legal gray area, low practical risk. |
 | C. License webprobe AGPL-3.0 and integrate freely | In-process linking allowed; whole combination AGPL-3.0. Owner can do this unilaterally (fact 4). Precedent: owner moved sdrstream to AGPL-3.0 ("license is irrelevant", 2026-10-21). | webprobe source becomes AGPL on distribution — including the RE/parity data problem (below). |
 
-**Blocker for option C today:** the webprobe repo contains PortSwigger-derived RE data (SECURITY-COMPLIANCE-2026-11-22.md §5). Releasing webprobe under AGPL — or making the repo public — publishes that data. Option C requires first removing `re/`, `graphify-out/`, `investigation.cany/`, `strings/map_merged.tsv` and related Burp-derived content from the tree *and* from history, and accepting that Burp-parity knowledge then lives only in private notes.
+**Blocker for option C today:** the webprobe repo contains PortSwigger-derived RE data (SECURITY-COMPLIANCE-2026-11-22.md §5). Releasing webprobe under AGPL — or making the repo public — publishes that data. Option C requires first removing `re/`, `graphify-out/`, `investigation.cany/` and related Burp-derived content from the tree *and* from history, and accepting that Burp-parity knowledge then lives only in private notes.
 
 ## Recommendations to the CEO
 
@@ -43,3 +43,5 @@ For: CEO decision record (interim position in PR #133). From: security/complianc
 - Exact line-level code overlap between artex-rs and upstream ARTEX (the NOTICE says design and pipeline semantics were "ported"; whether Go source was transliterated is not established here). Material only to how strong the derivative claim is; the declared NOTICE already binds our practical position.
 - Whether the owner holds a Burp Suite license covering the RE activity; affects §5 of the audit, not this position.
 - Autumn-27/ARTEX original repo state could not be fetched directly (withdrawn); continuation repo used as evidence.
+
+Assembly correction (2026-11-23): strings/map_merged.tsv is absent from the inspected source bases and parity b18fa298; it is not part of the confirmed current-tree inventory. This corrects the path inventory only and grants no removal, history-rewrite, licensing or publication authority.
