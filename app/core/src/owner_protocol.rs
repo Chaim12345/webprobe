@@ -204,6 +204,13 @@ impl DispatchState {
         });
         TaskIncarnation(key)
     }
+    pub(crate) fn remove(&mut self, key: &TaskIncarnation) -> Option<TaskRegistration> {
+        let index = self
+            .registrations
+            .iter()
+            .position(|r| r.incarnation.ptr_eq(&Arc::downgrade(&key.0)))?;
+        Some(self.registrations.remove(index))
+    }
     pub(crate) fn invalidate(&mut self, key: &TaskIncarnation) {
         self.registrations
             .retain(|r| !r.incarnation.ptr_eq(&Arc::downgrade(&key.0)));
@@ -212,6 +219,32 @@ impl DispatchState {
         self.registrations
             .iter_mut()
             .find(|r| r.incarnation.ptr_eq(&Arc::downgrade(&key.0)))
+    }
+}
+
+/// Task-side observer carries immutable incarnation, never a fresh id lookup.
+pub(crate) struct TaskCompletion {
+    coordinator: Weak<Coordinator>,
+    incarnation: TaskIncarnation,
+    control: Control,
+}
+impl TaskCompletion {
+    pub(crate) fn new(
+        coordinator: &Arc<Coordinator>,
+        incarnation: &TaskIncarnation,
+        control: Control,
+    ) -> Self {
+        Self {
+            coordinator: Arc::downgrade(coordinator),
+            incarnation: TaskIncarnation(incarnation.0.clone()),
+            control,
+        }
+    }
+    pub(crate) fn publish(&self, completion: Completion) -> Result<ControlResult, DispatchError> {
+        self.coordinator
+            .upgrade()
+            .ok_or(DispatchError::Stale)?
+            .task_terminal(&self.incarnation, &self.control, completion)
     }
 }
 
@@ -528,7 +561,7 @@ mod tests {
             Some(Finish::Incomplete)
         );
         assert!(matches!(
-            c.fail_standalone_registration(item()),
+            c.fail_published_batch_child_registration(item()),
             Err(AdmissionError::Internal)
         ));
         assert!(!shared.scan.is_busy());
@@ -594,6 +627,135 @@ mod tests {
         assert_eq!(control.cancel(), ControlResult::Closed);
         assert_eq!(t.join().unwrap(), Err(ControlResult::Cancelled));
         drop(b);
+    }
+    #[test]
+    fn concurrent_idle_observer_sees_terminal_before_replacement_and_old_progress_is_settled() {
+        let shared = crate::net::Shared::new();
+        let c = Coordinator::new(shared.clone(), limits()).unwrap();
+        let (audit, legacy, _) = c.admit_standalone(item()).unwrap();
+        shared
+            .scan
+            .done
+            .store(7, std::sync::atomic::Ordering::SeqCst);
+        let Handoff::Finalize(f) = audit.complete().unwrap() else {
+            panic!("finalizer")
+        };
+        let (at_tx, at_rx) = std::sync::mpsc::channel();
+        let (go_tx, go_rx) = std::sync::mpsc::channel();
+        let terminal = legacy.owner.clone();
+        let scanner = shared.clone();
+        let observer_c = c.clone();
+        let (observer_ready_tx, observer_ready_rx) = std::sync::mpsc::channel();
+        let observer = std::thread::spawn(move || {
+            observer_ready_tx.send(()).unwrap();
+            assert!(scanner
+                .scan
+                .wait_idle(Some(std::time::Duration::from_secs(3))));
+            assert_eq!(*terminal.terminal.lock().unwrap(), Some(Finish::Complete));
+            let new = observer_c.open_standalone().unwrap();
+            scanner
+                .scan
+                .done
+                .store(99, std::sync::atomic::Ordering::SeqCst);
+            new
+        });
+        let runner = std::thread::spawn(move || {
+            f.run_before_commit(
+                |_| Finish::Complete,
+                || {
+                    at_tx.send(()).unwrap();
+                    go_rx
+                        .recv_timeout(std::time::Duration::from_secs(2))
+                        .unwrap();
+                },
+            )
+        });
+        at_rx
+            .recv_timeout(std::time::Duration::from_secs(1))
+            .unwrap();
+        observer_ready_rx
+            .recv_timeout(std::time::Duration::from_secs(1))
+            .unwrap();
+        assert!(matches!(c.open_standalone(), Err(AdmissionError::Busy)));
+        assert!(!shared.scan.wait_idle(Some(std::time::Duration::ZERO)));
+        go_tx.send(()).unwrap();
+        assert_eq!(runner.join().unwrap(), Finish::Complete);
+        let new = observer.join().unwrap();
+        assert_eq!(
+            shared.scan.done.load(std::sync::atomic::Ordering::SeqCst),
+            99
+        );
+        assert_eq!(
+            shared.scan.total.load(std::sync::atomic::Ordering::SeqCst),
+            7
+        );
+        finish(new);
+    }
+    #[test]
+    fn task_terminal_derives_aggregate_and_retires_exact_incarnation() {
+        for abandoned in [false, true] {
+            let shared = crate::net::Shared::new();
+            let c = Coordinator::new(shared.clone(), limits()).unwrap();
+            let key = c.task_insert(task(17)).unwrap();
+            let batch = c.dispatch(&key, true, false).unwrap();
+            let control = batch.control().unwrap();
+            let completion = TaskCompletion::new(&c, &key, control.clone());
+            let (audit, _, _) = c.admit_in(&batch, item()).unwrap();
+            let (submitted, rx) = Submission::new(audit);
+            submitted.run(|| Finish::Complete);
+            assert_eq!(Submission::receive(&rx), Completion::Joined);
+            assert_eq!(
+                completion.publish(Completion::Joined),
+                Ok(ControlResult::Applied)
+            );
+            assert_eq!(
+                shared.tasks.lock().unwrap()[0].state,
+                crate::tasks::TaskState::Running
+            );
+            if abandoned {
+                drop(batch);
+            } else {
+                finish(batch);
+            }
+            let terminal = if abandoned {
+                Completion::Abandoned
+            } else {
+                Completion::Terminal(Finish::Complete)
+            };
+            assert_eq!(completion.publish(terminal), Ok(ControlResult::Applied));
+            assert_eq!(
+                shared.tasks.lock().unwrap()[0].state,
+                if abandoned {
+                    crate::tasks::TaskState::Cancelled
+                } else {
+                    crate::tasks::TaskState::Finished
+                }
+            );
+            assert_eq!(completion.publish(terminal), Err(DispatchError::Stale));
+            let keys = c.tasks_reload(vec![task(17)]);
+            let new = &keys[0];
+            let next = c.dispatch(new, true, false).unwrap();
+            assert_eq!(completion.publish(terminal), Err(DispatchError::Stale));
+            assert_eq!(
+                shared.tasks.lock().unwrap()[0].state,
+                crate::tasks::TaskState::Running
+            );
+            finish(next);
+        }
+    }
+    #[test]
+    fn paused_wait_expires_at_absolute_deadline_without_resume() {
+        let shared = crate::net::Shared::new();
+        let c = Coordinator::new(shared.clone(), limits()).unwrap();
+        let b = c.open_standalone().unwrap();
+        let control = b.control().unwrap();
+        assert_eq!(control.pause(), ControlResult::Applied);
+        let start = Instant::now();
+        let deadline = start + std::time::Duration::from_millis(25);
+        assert_eq!(control.wait(deadline), Err(ControlResult::Closed));
+        assert!(Instant::now() >= deadline);
+        assert_eq!(control.resume(), ControlResult::Applied);
+        finish(b);
     }
     fn task(id: u64) -> crate::tasks::ScanTask {
         crate::tasks::ScanTask {

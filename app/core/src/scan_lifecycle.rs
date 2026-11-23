@@ -361,6 +361,47 @@ impl Coordinator {
         task.state = TaskState::Running;
         Ok(batch)
     }
+    pub(crate) fn task_terminal(
+        &self,
+        key: &crate::owner_protocol::TaskIncarnation,
+        control: &crate::owner_protocol::Control,
+        completion: crate::owner_protocol::Completion,
+    ) -> Result<crate::owner_protocol::ControlResult, crate::owner_protocol::DispatchError> {
+        use crate::owner_protocol::{Completion, ControlResult, DispatchError};
+        let mut tasks = self.shared.tasks.lock().unwrap();
+        let mut state = self.state.lock_on(&self.shared);
+        let registration = state.0.dispatch.get(key).ok_or(DispatchError::Stale)?;
+        if !registration
+            .control
+            .as_ref()
+            .is_some_and(|c| Arc::ptr_eq(&c.owner, &control.owner))
+        {
+            return Err(DispatchError::Stale);
+        }
+        let task = tasks
+            .iter_mut()
+            .find(|t| t.id == registration.id)
+            .ok_or(DispatchError::Stale)?;
+        if completion == Completion::Joined {
+            return Ok(ControlResult::Applied);
+        }
+        let terminal = *control.owner.terminal.lock().unwrap();
+        let Some(outcome) = terminal else {
+            return Err(DispatchError::Busy);
+        };
+        // The retained aggregate truth wins over an untrusted/stale receipt label.
+        task.state = if outcome == Finish::Complete {
+            crate::tasks::TaskState::Finished
+        } else {
+            crate::tasks::TaskState::Cancelled
+        };
+        task.finished = Some(crate::util::now_secs());
+        let retired = state.0.dispatch.remove(key).ok_or(DispatchError::Stale)?;
+        drop(state);
+        drop(tasks);
+        drop(retired);
+        Ok(ControlResult::Applied)
+    }
     pub(crate) fn dispatch_cancel(
         &self,
         key: &crate::owner_protocol::TaskIncarnation,
@@ -578,7 +619,7 @@ impl Coordinator {
         }
         self.admit_locked(item, &mut state)
     }
-    pub(crate) fn fail_standalone_registration(
+    pub(crate) fn fail_published_batch_child_registration(
         self: &Arc<Self>,
         item: Item,
     ) -> Result<(), AdmissionError> {
