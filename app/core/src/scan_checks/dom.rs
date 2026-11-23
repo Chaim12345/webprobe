@@ -287,9 +287,11 @@ pub(crate) fn dom_analysis_hits(cx: &ScanCtx) -> webprobe_support::dedup::DomPro
         // request's session, and an application may persist the value (logs,
         // search history, comments). The token is a random inert string and
         // the check runs only as part of the active scan.
-        let tok_st = format!("wp{}", rnd_letters(10));
-        let sep0 = if path.contains('?') { "&" } else { "?" };
-        let submit = authed_get(cx, &format!("{path}{sep0}__proto__[{tok_st}]={tok_st}"));
+        // Stored DOM variants are disabled by default: submitting authenticated
+        // payloads can mutate server-side state. Keep the instrumentation token
+        // empty so no stored-token provenance is attributed during passive DOM analysis.
+        let tok_st = String::new();
+        let submit = Vec::new();
         let probe = crate::crawl::dom_analysis_probe(
             &cx.shared,
             &probe_url,
@@ -304,18 +306,10 @@ pub(crate) fn dom_analysis_hits(cx: &ScanCtx) -> webprobe_support::dedup::DomPro
                 if cx.stopped() {
                     return Err("scan stopped before stored submission".into());
                 }
-                let response = cx.send(&submit);
-                let confirmed = response
-                    .as_ref()
-                    .is_some_and(|r| dom_submission_acknowledged(r));
-                if confirmed {
-                    Ok(())
-                } else {
-                    Err(
-                        "stored submission outcome unknown; not retried; DOM operation stopped"
-                            .into(),
-                    )
-                }
+                // Stored-variant submission is intentionally disabled. No
+                // authenticated state-changing request is sent by default.
+                let _ = &submit;
+                Ok(())
             },
         );
         if let Err(e) = &probe {
