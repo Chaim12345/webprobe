@@ -28,6 +28,21 @@ pub fn send_raw_with(
             error: Some(error),
         };
     }
+    #[cfg(test)]
+    if let Some(permit) = scanner_io::permit(shared) {
+        if let Err(error) = scanner_io::supported(shared, host, sink.is_some()) {
+            permit.mark_incomplete();
+            return Upstream {
+                resp: None,
+                error: Some(error),
+            };
+        }
+        let outcome = scanner_io::exchange(shared, &permit, host, port, request);
+        return Upstream {
+            resp: outcome.complete.then_some(outcome.response),
+            error: outcome.diagnostic,
+        };
+    }
     let request = jar_request(shared, host, false, request);
     let request = match session_request(shared, port, false, request) {
         Ok(request) => request,

@@ -144,7 +144,7 @@ mod tool_state_tests;
 pub(crate) fn scanner_send_admission(shared: &Shared) -> Result<(), String> {
     use crate::scan_lifecycle::{captured, ExecutionContext};
     let inherited = captured();
-    if inherited.is_none() && TOOL.with(|t| t.get()) != Some("Scanner") {
+    if inherited.is_none() && !scanner_io::expected() && TOOL.with(|t| t.get()) != Some("Scanner") {
         return Ok(());
     }
     let context = inherited.ok_or("scanner execution context missing")?;
@@ -166,3 +166,6 @@ pub(crate) fn scanner_send_admission(shared: &Shared) -> Result<(), String> {
 }
 #[cfg(test)]
 mod inherited_context_tests;
+
+#[cfg(test)]
+pub(crate) mod scanner_io;

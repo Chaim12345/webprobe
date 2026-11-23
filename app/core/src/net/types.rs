@@ -51,6 +51,10 @@ pub use webprobe_support::hist::HistEntry;
 /// Host -> resolved-IP cache backing the history "IP" column, so repeated
 /// requests to the same host do not re-resolve.
 pub fn resolve_ip(shared: &Shared, host: &str) -> String {
+    #[cfg(test)]
+    if crate::scan_lifecycle::captured().is_some() || super::scanner_io::expected() {
+        return String::new();
+    }
     if host.is_empty() {
         return String::new();
     }
