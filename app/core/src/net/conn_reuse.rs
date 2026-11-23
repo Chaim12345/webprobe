@@ -185,7 +185,7 @@ pub fn send_inner(
         scanner_io::supported(shared, host, sink.is_some())
             .inspect_err(|_| permit.mark_incomplete())?;
         let outcome = scanner_io::exchange(shared, &permit, host, port, req);
-        return if outcome.complete {
+        return if outcome.status == scanner_io::ExchangeStatus::Complete {
             Ok(outcome.response)
         } else {
             Err(outcome.diagnostic.unwrap_or_else(|| "incomplete".into()))

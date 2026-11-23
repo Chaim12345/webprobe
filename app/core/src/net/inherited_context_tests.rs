@@ -48,6 +48,7 @@ fn inherited_net_missing_and_wrong_shared_fail_closed_other_tools_unchanged() {
     let l = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = l.local_addr().unwrap().port();
     let _scanner = tool_scope("Scanner");
+    let expected = scanner_io::ExpectedScanner.install().unwrap();
     assert!(send_raw(
         &shared,
         "127.0.0.1",
@@ -64,6 +65,7 @@ fn inherited_net_missing_and_wrong_shared_fail_closed_other_tools_unchanged() {
     let wrong = Shared::new();
     assert!(scanner_send_admission(&wrong).is_err());
     drop(_installed);
+    drop(expected);
     let _other = tool_scope("Repeater");
     assert!(scanner_send_admission(&wrong).is_ok());
 }

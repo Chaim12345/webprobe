@@ -144,7 +144,10 @@ mod tool_state_tests;
 pub(crate) fn scanner_send_admission(shared: &Shared) -> Result<(), String> {
     use crate::scan_lifecycle::{captured, ExecutionContext};
     let inherited = captured();
-    if inherited.is_none() && !scanner_io::expected() && TOOL.with(|t| t.get()) != Some("Scanner") {
+    // TOOL is a display/session label, not experimental admission evidence.
+    // Unmigrated production callers retain legacy behavior in cfg(test) builds.
+    // Migrated callers must carry the explicit expected-scanner marker.
+    if inherited.is_none() && !scanner_io::expected() {
         return Ok(());
     }
     let context = inherited.ok_or("scanner execution context missing")?;
