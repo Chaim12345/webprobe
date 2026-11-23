@@ -9,7 +9,10 @@ use std::sync::{Arc, Weak};
 const MAX_KEYS: usize = 4096;
 
 #[derive(Default)]
-pub struct HostAdmission(pub(crate) Mutex<Admission>);
+pub struct HostAdmission(
+    pub(crate) Mutex<Admission>,
+    #[cfg(test)] pub(crate) Mutex<Weak<crate::scan_lifecycle::Coordinator>>,
+);
 #[derive(Default)]
 pub(crate) struct Admission {
     batch: Option<Arc<AttemptScope>>,
@@ -392,4 +395,10 @@ mod cancellation_identity_tests {
         assert!(old.is_cancelled());
         assert!(!new.is_cancelled());
     }
+}
+
+#[cfg(test)]
+pub(crate) fn experimental_scope(shared: &Arc<Shared>) -> Arc<AttemptScope> {
+    let state = shared.host_admission.0.lock().unwrap();
+    AttemptScope::new(crate::scan::scan_dedup_of(shared), state.session.clone())
 }

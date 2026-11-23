@@ -92,3 +92,6 @@ mod scan_budget;
 
 #[cfg(test)]
 mod scan_resolver;
+
+#[cfg(test)]
+mod scan_lifecycle;
