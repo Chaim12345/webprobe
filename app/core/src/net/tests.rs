@@ -4373,6 +4373,7 @@ fn inherited_net_refused_h2_retry_retains_old_cancelled_context_after_reset() {
     let port = listener.local_addr().unwrap().port();
     let sh = shared.clone();
     let co = c.clone();
+    let (returned_tx, returned_rx) = std::sync::mpsc::channel();
     let server = std::thread::spawn(move || {
         let stream = accept(&listener);
         let mut tls = StreamOwned::new(ServerConnection::new(config).unwrap(), stream);
@@ -4397,6 +4398,9 @@ fn inherited_net_refused_h2_retry_retains_old_cancelled_context_after_reset() {
         tls.write_all(&[0, 0, 4, 3, 0, 0, 0, 0, 1, 0, 0, 0, 7])
             .unwrap();
         tls.flush().unwrap();
+        // Keep the peer alive until the client has processed the refusal.
+        // Closing with unread client frames can RST before refusal delivery.
+        returned_rx.recv_timeout(Duration::from_secs(5)).unwrap();
         listener
     });
     let response = send_tls_raw(
@@ -4405,6 +4409,7 @@ fn inherited_net_refused_h2_retry_retains_old_cancelled_context_after_reset() {
         port,
         b"GET /refused HTTP/1.1\r\nHost: localhost\r\n\r\n",
     );
+    returned_tx.send(()).unwrap();
     assert!(
         response.resp.is_none(),
         "unexpected H2 response: {:?}",
