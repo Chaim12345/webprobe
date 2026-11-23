@@ -38,12 +38,15 @@ pub struct ScanRun {
 
 impl ScanRun {
     pub fn record_dom(&self, mut record: DomScanRecord) {
-        record.url=record.url.chars().take(500).collect();
-        record.diagnostic=record.diagnostic.chars().take(500).collect();
+        record.url = record.url.chars().take(500).collect();
+        record.diagnostic = record.diagnostic.chars().take(500).collect();
         record.proven_hits.truncate(50);
-        let mut records=self.dom_outcomes.lock().unwrap();
-        if let Some(old)=records.iter_mut().find(|r|r.url==record.url) { *old=record; }
-        else if records.len()<100 { records.push(record); }
+        let mut records = self.dom_outcomes.lock().unwrap();
+        if let Some(old) = records.iter_mut().find(|r| r.url == record.url) {
+            *old = record;
+        } else if records.len() < 100 {
+            records.push(record);
+        }
     }
     pub fn is_busy(&self) -> bool {
         *self.busy.lock().unwrap()
