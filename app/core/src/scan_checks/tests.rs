@@ -1984,3 +1984,82 @@ fn required_limits_actual_engine_preserves_enabled_host_registry_finding() {
     assert_eq!(issues.len(), 1);
     assert_eq!(issues[0].name, "Robots.txt file");
 }
+
+#[test]
+fn parameterized_actual_batch_caller_counts_only_complete_admissions_and_explicitly_finishes() {
+    use crate::scan_lifecycle::{AdmissionError, Finish, Handoff};
+    for mode in [0, 1, 2] {
+        let shared = crate::net::Shared::new();
+        let port = lab_serve(
+            std::net::TcpListener::bind("127.0.0.1:0").unwrap(),
+            |_, _, _| "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok".into(),
+        );
+        {
+            let slot = crate::scan_config::shared_config(&shared);
+            let mut cfg = slot.lock().unwrap();
+            for (id, ..) in crate::scan::check_catalogue() {
+                cfg.disabled_checks.insert(id.into());
+            }
+        }
+        let limits = crate::scan_budget::Limits {
+            duration: std::time::Duration::from_secs(1),
+            http_attempts: 10,
+            connection_attempts: 10,
+            outgoing: 65536,
+            response: 65536,
+            decompressed: 65536,
+            inputs: 65536,
+            evidence: 65536,
+            evidence_records: 10,
+            records: 10,
+        };
+        let engine = crate::scan::ExperimentalEngine::new(shared.clone(), limits).unwrap();
+        let entry = crate::net::HistEntry {
+            port,
+            req_raw: format!("GET / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n")
+                .into_bytes()
+                .into(),
+            ..Default::default()
+        };
+        let result = engine
+            .audit_batch(match mode {
+                1 => vec![Default::default()],
+                2 => vec![entry.clone(), entry],
+                _ => vec![],
+            })
+            .unwrap();
+        assert_eq!(result.completed_items, if mode == 2 { 2 } else { 0 });
+        assert_eq!(
+            result.error,
+            if mode == 1 {
+                Some(AdmissionError::InvalidRequest)
+            } else {
+                None
+            }
+        );
+        assert_eq!(
+            result.completion,
+            if mode == 1 {
+                Finish::Incomplete
+            } else {
+                Finish::Complete
+            }
+        );
+        let Handoff::Finalize(f) = result.handoff.unwrap() else {
+            panic!("batch finalizer")
+        };
+        assert_eq!(
+            f.run(|p| run_stored_stage_budgeted(&shared, p, 10, 8192)),
+            if mode == 1 {
+                Finish::Incomplete
+            } else {
+                Finish::Complete
+            }
+        );
+        assert!(!shared.scan.is_busy());
+        assert_eq!(
+            shared.conns_opened.load(Ordering::SeqCst),
+            if mode == 2 { 2 } else { 0 }
+        );
+    }
+}

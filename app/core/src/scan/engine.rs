@@ -198,6 +198,13 @@ pub(crate) struct AcceptedAudit {
     pub handoff: Result<crate::scan_lifecycle::Handoff, crate::scan_lifecycle::AdmissionError>,
 }
 #[cfg(test)]
+pub(crate) struct AcceptedBatch {
+    pub completed_items: usize,
+    pub completion: crate::scan_lifecycle::Finish,
+    pub error: Option<crate::scan_lifecycle::AdmissionError>,
+    pub handoff: Result<crate::scan_lifecycle::Handoff, crate::scan_lifecycle::AdmissionError>,
+}
+#[cfg(test)]
 impl ExperimentalEngine {
     pub fn new(
         shared: Arc<Shared>,
@@ -213,6 +220,61 @@ impl ExperimentalEngine {
         &self,
     ) -> Result<crate::scan_lifecycle::Batch, crate::scan_lifecycle::AdmissionError> {
         self.coordinator.open()
+    }
+    /// Explicit parameterized batch caller. Every accepted path discharges
+    /// its lease through finish; no Item rejection is counted as successful.
+    pub fn audit_batch(
+        &self,
+        entries: Vec<HistEntry>,
+    ) -> Result<AcceptedBatch, crate::scan_lifecycle::AdmissionError> {
+        use crate::scan_lifecycle::{Finish, Handoff};
+        let batch = self.open()?;
+        let mut result = AcceptedBatch {
+            completed_items: 0,
+            completion: Finish::Complete,
+            error: None,
+            handoff: Ok(Handoff::Joined),
+        };
+        for entry in entries {
+            match self.audit(entry) {
+                Ok(accepted) => {
+                    if accepted.completion == Finish::Complete {
+                        result.completed_items += 1
+                    } else {
+                        result.completion = Finish::Incomplete;
+                    }
+                    if let Some(error) = accepted.error {
+                        result.error = Some(error);
+                    }
+                    match accepted.handoff {
+                        Ok(Handoff::Joined) => {}
+                        Ok(Handoff::Finalize(_)) => {
+                            result.completion = Finish::Incomplete;
+                            result.error = Some(crate::scan_lifecycle::AdmissionError::Internal);
+                            break;
+                        }
+                        Err(error) => {
+                            result.error = Some(error);
+                            result.completion = Finish::Incomplete;
+                            break;
+                        }
+                    }
+                    if result.completion == Finish::Incomplete {
+                        break;
+                    }
+                }
+                Err(error) => {
+                    result.error = Some(error);
+                    result.completion = Finish::Incomplete;
+                    break;
+                }
+            }
+        }
+        if result.completion == Finish::Incomplete {
+            batch.context().cancel_handle().cancel();
+        }
+        result.handoff = batch.finish();
+        Ok(result)
     }
     pub fn audit(
         &self,
