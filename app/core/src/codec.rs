@@ -663,9 +663,75 @@ pub fn body_complete(raw: &[u8], method: &str) -> bool {
     }
 }
 
+/// Why a response read to its end is not a complete message, for the history
+/// note: the body is shorter than the head declared, a chunked body never
+/// ended, the Content-Length cannot be trusted, or no final response arrived
+/// (interim-only or empty). `None` for a complete message. The caller decides
+/// from the authoritative exchange outcome whether to ask at all.
+pub fn response_incompleteness(raw: &[u8], method: &str) -> Option<String> {
+    let parts = util::parse_http(raw);
+    if parts.head_len == 0 || util::find_head_end(raw).is_none() {
+        return Some(format!(
+            "No final response: no complete response head received ({} bytes)",
+            raw.len()
+        ));
+    }
+    let head = &raw[..parts.head_len];
+    let received = raw.len().saturating_sub(parts.head_len);
+    match response_body_kind(head, method) {
+        BodyKind::Length(n) if received < n => Some(format!(
+            "Incomplete response: Content-Length declared {n}, received {received} body bytes; stored as received"
+        )),
+        BodyKind::Chunked if decode_chunked(&raw[parts.head_len..]).is_none() => Some(format!(
+            "Incomplete response: chunked body did not end ({received} body bytes received); stored as received"
+        )),
+        BodyKind::UntilEof => {
+            let head_text = String::from_utf8_lossy(head);
+            let declared = header_values(&head_text, "Content-Length")
+                .next()
+                .map(|v| v.trim().to_string());
+            declared.map(|v| {
+                format!(
+                    "Response framing not trusted: Content-Length {v:?} unusable; body read until close ({received} bytes); stored as received"
+                )
+            })
+        }
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn incompleteness_marks_only_messages_that_did_not_end() {
+        let ok = b"HTTP/1.1 200 OK\r\nContent-Length: 3\r\n\r\nabc";
+        assert_eq!(response_incompleteness(ok, "GET"), None);
+        assert_eq!(
+            response_incompleteness(b"HTTP/1.1 200 OK\r\n\r\nbody", "GET"),
+            None,
+            "EOF-delimited is complete"
+        );
+        assert_eq!(
+            response_incompleteness(b"HTTP/1.1 204 No Content\r\n\r\n", "GET"),
+            None
+        );
+        assert!(response_incompleteness(
+            b"HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\nabc",
+            "GET"
+        )
+        .unwrap()
+        .contains("declared 10, received 3"));
+        assert!(response_incompleteness(b"", "GET")
+            .unwrap()
+            .starts_with("No final response"));
+        assert!(
+            response_incompleteness(b"HTTP/1.1 200 OK\r\nContent-Len", "GET")
+                .unwrap()
+                .starts_with("No final response")
+        );
+    }
 
     /// A byte script read in small pieces, as a socket would deliver it.
     struct Script(std::io::Cursor<Vec<u8>>);

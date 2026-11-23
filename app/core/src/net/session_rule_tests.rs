@@ -337,3 +337,56 @@ fn proxy_rules_need_proxy_in_their_tool_scope() {
         b"GET / HTTP/1.1\r\nHost: h\r\nCookie: a=1\r\n\r\n".to_vec()
     );
 }
+
+/// Post-request macros send on the same thread as the outer request. Their
+/// exchanges must not change the outer "reusable" outcome the proxy engine
+/// reads (outer non-reusable stays false; outer reusable survives a failing
+/// or successful macro).
+#[test]
+fn post_request_macros_do_not_change_the_outer_reusable_outcome() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for mut stream in listener.incoming().flatten() {
+            let mut buf = [0u8; 4096];
+            let n = stream.read(&mut buf).unwrap_or(0);
+            let req = String::from_utf8_lossy(&buf[..n]).into_owned();
+            let resp = if req.starts_with("POST /login") || req.starts_with("GET /ka") {
+                "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok".to_string()
+            } else {
+                // read-until-close: never reusable
+                "HTTP/1.1 200 OK\r\n\r\nbody".to_string()
+            };
+            let _ = stream.write_all(resp.as_bytes());
+        }
+    });
+    let dead = {
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        l.local_addr().unwrap().port()
+    };
+    let flag = || LAST_EXCHANGE_REUSABLE.with(|c| c.get());
+    for (macro_port, outer_path, expect) in [
+        (port, "/close", false), // inner succeeds (reusable), outer is not
+        (dead, "/ka", true),     // inner fails, outer is reusable
+        (port, "/ka", true),
+    ] {
+        let shared = Shared::new();
+        shared.macros.lock().unwrap().push(Macro {
+            name: "login".into(),
+            request: format!(
+                "POST /login HTTP/1.1\nHost: 127.0.0.1:{macro_port}\nContent-Length: 2\n\n{{}}"
+            ),
+        });
+        shared.session_rules.lock().unwrap().push(rule(
+            "post-request macro",
+            "login",
+            &["Repeater"],
+        ));
+        let _t = tool_scope("Repeater");
+        let req = format!("GET {outer_path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
+        LAST_EXCHANGE_REUSABLE.with(|c| c.set(!expect));
+        let up = send_raw(&shared, "127.0.0.1", port, req.as_bytes());
+        assert!(up.resp.is_some());
+        assert_eq!(flag(), expect, "outer {outer_path} macro port {macro_port}");
+    }
+}

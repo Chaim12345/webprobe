@@ -172,3 +172,99 @@ fn decide(head: &[u8]) -> Result<RequestBody, RequestFramingError> {
     }
     n.map(RequestBody::Length).ok_or(BadContentLength)
 }
+
+/// The narrow guard for the normal forwarding boundary (cleartext and
+/// decrypted h1). It does not enable strict parsing: only the shapes that
+/// let a front end and a back end disagree about where a request ends are
+/// refused, everything else keeps the tolerant behavior. The caller answers
+/// 400, closes the connection and sends nothing upstream. The request bytes
+/// are never normalized or stripped; this only reads them.
+///
+/// Refused: obs-fold, whitespace before the colon of Content-Length or
+/// Transfer-Encoding, more than one Content-Length line, a Content-Length
+/// list whose values differ, and Transfer-Encoding together with
+/// Content-Length (even when they agree). One header `Content-Length: 5, 5`
+/// stays accepted as 5.
+pub fn inbound_ambiguity(raw: &[u8]) -> Option<RequestFramingError> {
+    // The head ends at the earliest blank line under any terminator, the
+    // same boundary the guarded reader frames, however the bytes arrive.
+    let end = earliest_head_end(raw).unwrap_or(raw.len());
+    // The bytes up to the head end a CRLFCRLF-first parser would find (what
+    // `util::find_head_end` returns) are scanned too: a header hidden after
+    // an earlier bare-LF blank line is still a header to such a parser.
+    let wide = webprobe_support::util::find_head_end(raw).unwrap_or(raw.len());
+    scan_head(&raw[..end]).or_else(|| {
+        if wide > end {
+            scan_head(&raw[..wide])
+        } else {
+            None
+        }
+    })
+}
+
+fn scan_head(head: &[u8]) -> Option<RequestFramingError> {
+    use RequestFramingError::*;
+    // A bare LF anywhere in the head is refused at ingress, whatever the
+    // terminator and however the bytes were split across reads: a head that
+    // ends at a bare-LF blank line and is followed by CRLF header lines
+    // parses differently in a CRLFCRLF-first parser, and which one the
+    // reader picks would otherwise depend on read boundaries. LF-only
+    // requests are therefore not accepted through the guarded boundary
+    // (raw Repeater/test traffic does not use it).
+    let bare_lf = head
+        .iter()
+        .enumerate()
+        .any(|(i, &b)| b == b'\n' && (i == 0 || head[i - 1] != b'\r'));
+    if bare_lf {
+        return Some(BareLineEnding);
+    }
+    let (mut cl_lines, mut te_lines) = (0usize, 0usize);
+    let mut cl_values: Vec<String> = Vec::new();
+    for line in head
+        .split(|&b| b == b'\n')
+        .skip(1)
+        .map(|l| l.strip_suffix(b"\r").unwrap_or(l))
+    {
+        if line.first().is_some_and(|&b| b == b' ' || b == b'\t') {
+            return Some(ObsFold);
+        }
+        let Some(colon) = line.iter().position(|&b| b == b':') else {
+            continue;
+        };
+        let raw_name = &line[..colon];
+        let name = raw_name.trim_ascii_end();
+        let is_cl = name.eq_ignore_ascii_case(b"content-length");
+        let is_te = name.eq_ignore_ascii_case(b"transfer-encoding");
+        if (is_cl || is_te) && name.len() != raw_name.len() {
+            return Some(SpaceBeforeColon);
+        }
+        if is_cl {
+            cl_lines += 1;
+            let v = String::from_utf8_lossy(&line[colon + 1..]).to_string();
+            cl_values.extend(v.split(',').map(|p| p.trim().to_string()));
+        } else if is_te {
+            te_lines += 1;
+        }
+    }
+    if cl_lines > 0 && te_lines > 0 {
+        return Some(AmbiguousFraming);
+    }
+    if cl_lines > 1 || cl_values.windows(2).any(|w| w[0] != w[1]) {
+        return Some(BadContentLength);
+    }
+    None
+}
+
+/// End of the head at the earliest blank line: LF LF, or LF CRLF (which also
+/// covers CRLF CRLF). Unlike `util::find_head_end` (CRLFCRLF anywhere wins
+/// over an earlier LFLF) the answer does not depend on how the bytes were
+/// split across reads.
+pub fn earliest_head_end(raw: &[u8]) -> Option<usize> {
+    [
+        raw.windows(2).position(|w| w == b"\n\n").map(|i| i + 2),
+        raw.windows(3).position(|w| w == b"\n\r\n").map(|i| i + 3),
+    ]
+    .into_iter()
+    .flatten()
+    .min()
+}
