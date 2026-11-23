@@ -397,3 +397,124 @@ fn source_registry_import_validation_and_settings_export_invariants() {
 }
 
 include!("send_group_route_tests.rs");
+
+#[test]
+fn exchange_error_retires_group_socket_without_second_send_or_reconnect() {
+    for response in [
+        b"HTTP/1.1 200 OK\r\nContent-Length: 8\r\n\r\nabc".as_slice(),
+        b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\nXYZ\r\n".as_slice(),
+    ] {
+        let l = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            let (mut socket, _) = l.accept().unwrap();
+            socket
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .unwrap();
+            assert!(read_head(&mut socket).starts_with(b"GET /resource HTTP/1.1"));
+            socket.write_all(response).unwrap();
+            // End the response without completing its declared framing while
+            // leaving the server read side available to detect another send.
+            socket.shutdown(std::net::Shutdown::Write).unwrap();
+            let mut second = Vec::new();
+            socket.read_to_end(&mut second).unwrap();
+            assert!(
+                second.is_empty(),
+                "second request followed a failed exchange"
+            );
+            l.set_nonblocking(true).unwrap();
+            assert_eq!(
+                l.accept().unwrap_err().kind(),
+                std::io::ErrorKind::WouldBlock,
+                "single-connection group must not reconnect"
+            );
+        });
+        let shared = Shared::new();
+        let first = request(port);
+        let mut got = Vec::new();
+        assert_eq!(
+            run_sequence(
+                &shared,
+                &[first.clone(), first],
+                true,
+                &AtomicBool::new(false),
+                |n, r| got.push((n, r))
+            ),
+            SequenceEnd::Completed
+        );
+        assert_eq!(got.iter().map(|(n, _)| *n).collect::<Vec<_>>(), vec![0, 1]);
+        assert!(
+            got[0].1.response.is_some(),
+            "parity codec preserves partial bytes"
+        );
+        assert!(got[1]
+            .1
+            .error
+            .as_deref()
+            .unwrap()
+            .contains("closed the group's connection"));
+        assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 1);
+        server.join().unwrap();
+    }
+}
+
+#[test]
+fn singleton_readd_is_idempotent_and_import_deduplicates_within_group() {
+    let mut groups = vec![RepGroup {
+        id: 9,
+        name: "only".into(),
+        colour: 2,
+        tabs: vec![1],
+    }];
+    let mut order = vec![1, 2];
+    add_to_group(&mut groups, &mut order, 9, 1);
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0].tabs, vec![1]);
+    assert_eq!(order, vec![1, 2]);
+    let saved = vec![crate::project::ProjectRepeaterGroup {
+        name: "saved".into(),
+        colour: 3,
+        tabs: vec![0, 0, 1, 1],
+    }];
+    let loaded = from_project(&saved, &order, || 10);
+    assert_eq!(loaded[0].tabs, vec![1, 2]);
+}
+
+#[test]
+fn timed_out_partial_response_poisons_socket_and_next_item_cannot_write_or_reconnect() {
+    let l = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = l.local_addr().unwrap().port();
+    let server = std::thread::spawn(move || {
+        let (mut s, _) = l.accept().unwrap();
+        s.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+        read_head(&mut s);
+        s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\nabc")
+            .unwrap();
+        // Keep the incomplete response open until client retirement. A second
+        // request would appear here; retiring the socket produces EOF.
+        let mut rest = Vec::new();
+        s.read_to_end(&mut rest).unwrap();
+        assert!(rest.is_empty());
+        l.set_nonblocking(true).unwrap();
+        assert_eq!(
+            l.accept().unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
+    });
+    let shared = Shared::new();
+    let item = request(port);
+    let socket = open_conn(&shared, &item.host, item.port, false, false).unwrap();
+    if let UpstreamConn::Plain(tcp) = &socket {
+        tcp.set_read_timeout(Some(Duration::from_millis(80)))
+            .unwrap();
+    }
+    let mut connection = Some(Ok(socket));
+    let wire = http1_wire(&shared, &item, &item.request);
+    let first = exchange_single(&mut connection, &shared, &item, &wire).unwrap_err();
+    assert!(first.starts_with("read:"), "{first}");
+    assert!(connection.as_ref().unwrap().is_err());
+    let second = exchange_single(&mut connection, &shared, &item, &wire).unwrap_err();
+    assert!(second.contains("unavailable after an exchange error"));
+    assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 1);
+    server.join().unwrap();
+}

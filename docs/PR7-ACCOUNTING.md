@@ -35,7 +35,7 @@ The source delta spans 16 paths and 11 commits, including inherited work, not on
 
 Focused author tests, no full workspace rerun:
 
-- Group tests: original eight plus eleven new regression cases, 19 passing.
+- Group tests: original eight plus fourteen new regression cases, 22 passing.
 - New cases cover HTTPS proxy CONNECT followed by TLS/origin form; SOCKS remote target/origin form; HTTP proxy sequence/parallel exact absolute HTTP/1.1 wire without CONNECT; direct origin form and cleartext HTTP/2 display normalization; HTTP/1 ALPN pin and h2 refusal before application bytes; TLS four-sender prefix barrier; initial cancellation with zero connections/callbacks; no second send on a closed group connection; post-error macro invocation; session-validation failure without original-request fallback; registry/import/validation/settings-export invariants.
 - TLS fixture withholds the last handshake until other senders' prefixes have been checked. An early last byte fails the test. Replacing prefix writes with whole-request writes makes this test fail. Mutations dropping the first cancellation check and routing cleartext via CONNECT also fail their targeted tests. All mutations are reverted.
 - Existing h2 tests: 25 passing; custom-SNI lab: one passing; h2 single-packet lab: one passing; desktop test compilation passes.
@@ -46,3 +46,11 @@ The 20-sender barrier test proves prefix-before-tail ordering, not a measured 5 
 ## Pending acceptance
 
 Independent review of corrected source and error/callback contracts; exact-head QA for route/ALPN/TLS/sequential/h2/custom-SNI behavior; actual group UI and project save/restore inspection; then-current parity integration with review of reconciliation and combined gate; CTO acceptance of that exact candidate; sole-writer landing and source-head revalidation/retained-tree proof. #7 stays open until those conditions are satisfied. Existing source approvals and old author suite totals are historical evidence only.
+
+## Review follow-up: failed exchange retirement
+
+Review found that the initial correction retired successful nonreusable responses but retained a socket when exchange returned an error. The new exchange_single helper poisons the group connection on every exchange error before returning that item's error. Later items receive connection-unavailable errors without another write, connection or replay. Truncated length/chunk framing still follows parity codec semantics: partial evidence is returned with reusable=false, and the group socket is dropped. The port does not redefine the codec's partial-evidence behavior.
+
+Tests cover both incomplete length/malformed chunk response followed by a second item, and an open partial response whose socket timeout is set to 80 ms in the fixture. The latter exercises the exact shared helper used by run_sequence, confirms error poisoning, zero second-request bytes and no new accept/connection, and fails when the poison assignment is removed. Separate singleton-readd and duplicate saved-index assertions pass.
+
+Cancellation coverage is initial/between-item only, not mid-flight interruption or bounded cancellation completion. Configured post-request macros can still send their own traffic after a preparation refusal under the source hook contract; no zero-total-effects claim is made for a configured hook workflow. TLS barrier evidence remains ordering evidence, not a 5 ms or one-packet result.

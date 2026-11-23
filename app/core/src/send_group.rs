@@ -84,6 +84,9 @@ pub fn add_to_group(groups: &mut Vec<RepGroup>, order: &mut Vec<u64>, group: u64
     if !order.contains(&tab) || !groups.iter().any(|g| g.id == group) {
         return;
     }
+    if group_of(groups, tab).is_some_and(|g| g.id == group) {
+        return;
+    }
     remove_from_group(groups, tab);
     if let Some(g) = groups.iter_mut().find(|g| g.id == group) {
         g.tabs.push(tab);
@@ -203,12 +206,12 @@ pub fn from_project(
 ) -> Vec<RepGroup> {
     let mut out: Vec<RepGroup> = Vec::new();
     for s in saved {
-        let tabs: Vec<u64> = s
-            .tabs
-            .iter()
-            .filter_map(|i| order.get(*i).copied())
-            .filter(|t| group_of(&out, *t).is_none())
-            .collect();
+        let mut tabs = Vec::new();
+        for tab in s.tabs.iter().filter_map(|i| order.get(*i).copied()) {
+            if group_of(&out, tab).is_none() && !tabs.contains(&tab) {
+                tabs.push(tab);
+            }
+        }
         if !tabs.is_empty() && !s.name.trim().is_empty() {
             out.push(RepGroup {
                 id: next_id(),
@@ -507,6 +510,34 @@ fn h2_exchange(shared: &Shared, item: &GroupItem, req: &[u8]) -> Result<Vec<u8>,
     crate::h2::exchange(tls.as_mut(), &h2req, None)
 }
 
+/// Keep the group's socket poisoned after any exchange error or incomplete framing.
+/// A later item can report unavailability but must not reconnect or write again.
+fn exchange_single(
+    conn: &mut Option<Result<UpstreamConn, String>>,
+    shared: &Shared,
+    item: &GroupItem,
+    wire: &[u8],
+) -> Result<Vec<u8>, String> {
+    let c = conn.get_or_insert_with(|| open_conn(shared, &item.host, item.port, item.https, false));
+    let c = c.as_mut().map_err(|e| e.clone())?;
+    let (resp, reusable) = match net::exchange(c, wire, None) {
+        Ok(response) => response,
+        Err(error) => {
+            // A partial write or response has an unknown outcome.
+            // Drop the socket; neither this item nor later items may
+            // be replayed or sent on a potentially desynchronized stream.
+            *conn = Some(Err(
+                "the group's connection is unavailable after an exchange error".into(),
+            ));
+            return Err(error);
+        }
+    };
+    if !reusable || !net::response_headers_allow_reuse(&resp) {
+        *conn = Some(Err("the server closed the group's connection".into()));
+    }
+    Ok(resp)
+}
+
 /// Zr4d's ordered modes. Returns how it ended; per-item results go to
 /// `on_item` with the item's position.
 pub fn run_sequence(
@@ -536,15 +567,7 @@ pub fn run_sequence(
             }
             let wire = http1_wire(shared, item, &req);
             if single_connection {
-                let c = conn.get_or_insert_with(|| {
-                    open_conn(shared, &item.host, item.port, item.https, false)
-                });
-                let c = c.as_mut().map_err(|e| e.clone())?;
-                let (resp, reusable) = net::exchange(c, &wire, None)?;
-                if !reusable || !net::response_headers_allow_reuse(&resp) {
-                    conn = Some(Err("the server closed the group's connection".into()));
-                }
-                Ok(resp)
+                exchange_single(&mut conn, shared, item, &wire)
             } else {
                 let mut c = open_conn(shared, &item.host, item.port, item.https, false)?;
                 net::exchange(&mut c, &wire, None).map(|(r, _)| r)
