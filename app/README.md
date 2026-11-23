@@ -80,3 +80,17 @@ WP_APP_DIR=$PWD wp-queue test                    # engine + desktop suites
 The suites include parser fuzzing (3000 seeded cases) and a live-proxy test with hostile connections.
 
 [egui-mcp]: https://github.com/dijdzv/egui-mcp
+
+### Real Burp application smoke test
+
+`WEBPROBE_BURP_JAR` remains the Montoya extension API source. The library
+smoke uses only `WEBPROBE_BURP_APP_JAR` (the full application jar) or
+`WEBPROBE_BURP_BUILTINS` (an extracted BuiltInConfigs tree with sibling
+Preferences). Explicit missing or wrong paths fail. Without either source,
+the optional smoke prints `BURP_APP_SMOKE_NOT_RUN`. Set
+`WEBPROBE_REQUIRE_BURP_APP=1` for a required gate; it fails if no source is
+configured and prints `BURP_APP_SMOKE_EXECUTED` only after loading succeeds.
+
+Run `python3 scripts/test-burp-app-smoke.py PATH_TO_CORE_TEST_BINARY` to
+exercise variable isolation and valid/invalid resource fixtures. Synthetic
+fixtures test the harness, not compatibility with an actual Burp release.

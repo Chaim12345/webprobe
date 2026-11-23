@@ -1352,7 +1352,7 @@
       "acceptance": "Burp's 29 BuiltInConfigs load and can be selected/combined for a scan; 'Audit checks - passive' runs only passive checks; custom configs can be saved and imported from Burp JSON.",
       "effort": "M",
       "status": "todo",
-      "evidence": "src/settings_dialog.rs:172-173 ('not available yet'); /root/burp-re/in/extract/resources/BuiltInConfigs/. Needs R-04. Progress 2026-11-18 (aa490e8, 09e87f8): library implemented (core/src/scan_library.rs, src/scan_library_ui.rs): 29 built-ins load from the user's Burp jar, per-key overlay in load order as Burp, issue selection enforced at dispatch and report, crawl time/request limits, 'not applied by WebProbe' list, Settings > Configuration library, ordered 'Select from library'; live passive auditing keeps its own issue selection. Compiled, 18 smoke tests; full suite and UI NOT yet run. Known gap: one global scan config (per-scan config with AR-02)."
+      "evidence": "Implemented; replacement PR #194 awaits independent QA. Local verification at 35bd538: full core 848 passed, 0 failed, 13 ignored; six library tests and five subprocess gate scenarios passed; core all-targets clippy clean. Actual Burp application-resource smoke NOT_RUN without a configured jar/tree. WEBPROBE_BURP_APP_JAR is separate from Montoya WEBPROBE_BURP_JAR; explicit invalid sources fail; WEBPROBE_REQUIRE_BURP_APP requires configured resources. WEBPROBE_SETTINGS=library hook retained. Synthetic harness fixtures do not prove real application compatibility."
     },
     {
       "id": "R-12",
