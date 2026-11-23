@@ -370,7 +370,7 @@ pub(crate) fn run_request_checks(cx: &ScanCtx) {
                     o
                 }
             };
-            if !gate {
+            if !gate && !check.consumes_cached_dom_after_stop() {
                 continue;
             }
         }

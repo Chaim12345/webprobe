@@ -310,7 +310,38 @@ fn registry_order_is_pinned() {
                 Some(BURP_GROUP)
             ),
             (
+                "active.dom-cookie-manipulation",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-data-manipulation",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-link-manipulation",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-websocket-poisoning",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            ("active.dom-dos", Scope::Request, Some(BURP_GROUP)),
+            (
+                "active.dom-ajax-header-manipulation",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
                 "active.dom-storage-manipulation",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
+            (
+                "active.dom-web-message-manipulation",
                 Scope::Request,
                 Some(BURP_GROUP)
             ),
@@ -326,11 +357,6 @@ fn registry_order_is_pinned() {
             ),
             (
                 "active.dom-document-domain",
-                Scope::Request,
-                Some(BURP_GROUP)
-            ),
-            (
-                "active.dom-cookie-manipulation",
                 Scope::Request,
                 Some(BURP_GROUP)
             ),
@@ -1236,8 +1262,8 @@ fn dom_families_share_one_probe_and_refresh_on_the_next_run() {
     );
     assert_eq!(
         visits.load(Ordering::SeqCst),
-        2,
-        "one baseline and one DOM navigation"
+        3,
+        "one baseline outside DOM budget, one stored-token submission and one DOM navigation"
     );
     vulnerable.store(false, Ordering::SeqCst);
     shared.issues.lock().unwrap().clear();
@@ -1248,7 +1274,7 @@ fn dom_families_share_one_probe_and_refresh_on_the_next_run() {
     );
     assert_eq!(
         visits.load(Ordering::SeqCst),
-        4,
+        6,
         "next run gets a fresh DOM probe"
     );
 }
@@ -1274,7 +1300,7 @@ fn dom_source_provenance_matrix_against_a_live_lab() {
             "<html><body><script>document.write('<p>' + location.search.slice(1) + '|' + location.hash.slice(1) + '</p>');</script></body></html>"
         } else if path.starts_with("/reflect") {
             // The tokens reach the page but no wrapped sink: no finding.
-            "<html><body><script>var d=document.createElement('div'); d.textContent=location.search+location.hash; document.body.appendChild(d);</script></body></html>"
+            "<html><body><script>var d=document.createElement('div'); d.appendChild(document.createTextNode(location.search+location.hash)); document.body.appendChild(d);</script></body></html>"
         } else if path.starts_with("/preexisting") {
             // An unrelated pre-existing prototype property is not a finding.
             "<html><body><script>Object.prototype.wpPreExisting123='x';</script></body></html>"
@@ -1361,5 +1387,356 @@ fn dom_source_provenance_matrix_against_a_live_lab() {
     for page in ["/reflect", "/preexisting", "/benignp"] {
         let got = scan(page);
         assert!(got.is_empty(), "{page}: {}", names(&got));
+    }
+}
+
+/// R-13 reflected-DOM variant: a page whose response copies the query
+/// payload's token into a JavaScript string literal and passes it to a
+/// sink is the reflected variant; the plain location.hash page stays the
+/// DOM variant. Under the conservative confidence mapping the reflected
+/// variant is Tentative (burp.Zwf8's mapping is established for
+/// location.hash only). Skipped when no Chromium is available.
+#[test]
+fn dom_xss_reflected_variant_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, |_method, path, _raw| {
+        let body = if path.starts_with("/reflxss") {
+            let q = path.split('?').nth(1).unwrap_or("");
+            format!("<html><body><script>var t = '{q}'; document.write('<p>' + t + '</p>');</script></body></html>")
+        } else if path.starts_with("/xss") {
+            "<html><body><script>document.write('<p>' + location.hash.slice(1) + '</p>');</script></body></html>".to_string()
+        } else {
+            "<html><body><p>hello</p></body></html>".to_string()
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    let got = lab_scan(
+        port,
+        &["active.dom-xss"],
+        "GET",
+        "/reflxss",
+        format!("GET /reflxss HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(
+        got.iter().any(
+            |(n, s, c)| n == "Cross-site scripting (reflected DOM-based)"
+                && s == "high"
+                && c == "Tentative"
+        ),
+        "reflected variant: {got:?}"
+    );
+    assert!(
+        !got.iter()
+            .any(|(n, ..)| n == "Cross-site scripting (DOM-based)"),
+        "not the plain variant: {got:?}"
+    );
+    let got = lab_scan(
+        port,
+        &["active.dom-xss"],
+        "GET",
+        "/xss",
+        format!("GET /xss HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(
+        got.iter()
+            .any(|(n, s, c)| n == "Cross-site scripting (DOM-based)" && s == "high" && c == "Firm"),
+        "plain variant: {got:?}"
+    );
+}
+
+/// R-13 stored-DOM variant: the lab remembers the previous request's
+/// query payload and embeds it in a JavaScript string literal of the next
+/// page, which passes it to document.write: the stored variant, not the
+/// plain or reflected ones (Tentative, like every non-location.hash
+/// provenance). Skipped when no Chromium is available.
+#[test]
+fn dom_xss_stored_variant_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let stored = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+    let st = stored.clone();
+    let port = lab_serve(l, move |_method, path, _raw| {
+        // Render the value stored BEFORE this request, then store this
+        // request's query payload: the stored token can only reach a page
+        // through an earlier request.
+        let embed = st.lock().unwrap().clone();
+        if let Some(q) = path.split('?').nth(1) {
+            if q.contains("__proto__") {
+                *st.lock().unwrap() = q.to_string();
+            }
+        }
+        let body = if path.starts_with("/storexss") {
+            format!("<html><body><script>var t = '{embed}'; document.write('<p>' + t + '</p>');</script></body></html>")
+        } else {
+            "<html><body><p>hello</p></body></html>".to_string()
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    });
+    let host = format!("127.0.0.1:{port}");
+    let got = lab_scan(
+        port,
+        &["active.dom-xss"],
+        "GET",
+        "/storexss",
+        format!("GET /storexss HTTP/1.1\r\nHost: {host}\r\n\r\n"),
+    );
+    assert!(
+        got.iter()
+            .any(|(n, s, c)| n == "Cross-site scripting (stored DOM-based)"
+                && s == "high"
+                && c == "Tentative"),
+        "stored variant: {got:?}"
+    );
+    assert!(
+        !got.iter()
+            .any(|(n, ..)| n == "Cross-site scripting (DOM-based)"
+                || n == "Cross-site scripting (reflected DOM-based)"),
+        "not the other variants: {got:?}"
+    );
+}
+
+/// Session-preserving wire evidence for all DOM requests, with a mixed
+/// stored/hash flow through the SAME sink. The baseline is counted apart
+/// from the two-request admitted DOM operation.
+#[test]
+fn dom_session_headers_and_mixed_same_sink_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let captured = seen.clone();
+    let stored = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+    let st = stored.clone();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(listener, move |_, path, raw| {
+        let prior = st.lock().unwrap().clone();
+        if let Some(q) = path.split('?').nth(1) {
+            *st.lock().unwrap() = q.into();
+        }
+        if !raw.is_empty() {
+            captured.lock().unwrap().push(raw.into());
+        }
+        let body = format!("<html><head><link rel='icon' href='data:,'></head><body><script>document.write('<p>'+location.hash+'</p>');document.write('<p>{prior}</p>');</script></body></html>");
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len())
+    });
+    let got = lab_scan(port, &["active.dom-xss"], "GET", "/mixed",
+        format!("GET /mixed HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nCookie: session=kept\r\nAuthorization: Bearer lab-only\r\nConnection: X-Remove\r\nX-Remove: unsafe\r\nProxy-Authorization: lab-proxy\r\n\r\n"));
+    for name in [
+        "Cross-site scripting (DOM-based)",
+        "Cross-site scripting (stored DOM-based)",
+    ] {
+        assert!(
+            got.iter().any(|(n, _, _)| n == name),
+            "missing {name}: {got:?}"
+        );
+    }
+    let wire = seen.lock().unwrap();
+    assert_eq!(
+        wire.len(),
+        3,
+        "baseline + submission + navigation: {wire:?}"
+    );
+    for raw in wire.iter().skip(1) {
+        let lower = raw.to_ascii_lowercase();
+        assert!(lower.contains("cookie: session=kept"), "{raw}");
+        assert!(lower.contains("authorization: bearer lab-only"), "{raw}");
+        assert!(!lower.contains("proxy-authorization:"), "{raw}");
+        assert!(!lower.contains("x-remove:"), "{raw}");
+        assert!(!lower.contains("transfer-encoding:"), "{raw}");
+        assert!(raw.ends_with("\r\n\r\n"), "{raw}");
+    }
+}
+
+/// The server applies the submission then drops the connection. The
+/// submission is not replayed, no browser navigation follows, and the
+/// per-URL cache prevents every other family from trying again.
+#[test]
+fn dom_unknown_submission_outcome_is_not_replayed_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    use std::io::{Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    listener.set_nonblocking(true).unwrap();
+    let requests = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let capture = requests.clone();
+    let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let end = done.clone();
+    let server = std::thread::spawn(move || {
+        while !end.load(std::sync::atomic::Ordering::SeqCst) {
+            match listener.accept() {
+                Ok((mut stream, _)) => {
+                    stream
+                        .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+                        .unwrap();
+                    let mut data = Vec::new();
+                    let mut b = [0; 4096];
+                    while let Ok(n) = stream.read(&mut b) {
+                        if n == 0 {
+                            break;
+                        }
+                        data.extend_from_slice(&b[..n]);
+                        if data.windows(4).any(|w| w == b"\r\n\r\n") {
+                            break;
+                        }
+                    }
+                    let raw = String::from_utf8_lossy(&data).to_string();
+                    let is_submission = raw.split_whitespace().nth(1).unwrap_or("").contains('?');
+                    if raw.is_empty() {
+                        continue;
+                    }
+                    capture.lock().unwrap().push(raw);
+                    if !is_submission {
+                        let body = "<html><script>document.write(location.hash)</script></html>";
+                        let _=write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len());
+                    }
+                }
+                Err(_) => std::thread::sleep(std::time::Duration::from_millis(10)),
+            }
+        }
+    });
+    let got = lab_scan(
+        port,
+        &["active.dom-xss", "active.dom-javascript-injection"],
+        "GET",
+        "/drop",
+        format!("GET /drop HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n"),
+    );
+    done.store(true, std::sync::atomic::Ordering::SeqCst);
+    server.join().unwrap();
+    assert!(
+        got.is_empty(),
+        "unknown outcome is not clean evidence: {got:?}"
+    );
+    let wire = requests.lock().unwrap();
+    assert_eq!(
+        wire.len(),
+        2,
+        "baseline + exactly one effect-then-drop submission: {wire:?}"
+    );
+}
+
+/// Reflection classification uses the actual navigation response, even
+/// when a hypothetical subsequent query fetch would contain script text.
+#[test]
+fn dom_reflection_uses_only_fulfilled_navigation_response_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let n = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let count = n.clone();
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, move |_, path, raw| {
+        if raw.is_empty() {
+            return String::new();
+        }
+        let q = path.split('?').nth(1).unwrap_or("");
+        let attempt = count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let body = if attempt >= 3 {
+            format!("<html><script>var reflected='{q}';</script></html>")
+        } else {
+            "<html><head><link rel='icon' href='data:,'></head><script>document.write(location.search)</script></html>".into()
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len())
+    });
+    let got = lab_scan(
+        port,
+        &["active.dom-xss"],
+        "GET",
+        "/response",
+        format!("GET /response HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n"),
+    );
+    assert!(
+        got.iter()
+            .any(|(name, _, _)| name == "Cross-site scripting (DOM-based)"),
+        "{got:?}"
+    );
+    assert!(
+        !got.iter()
+            .any(|(name, _, _)| name == "Cross-site scripting (reflected DOM-based)"),
+        "{got:?}"
+    );
+    assert_eq!(
+        n.load(std::sync::atomic::Ordering::SeqCst),
+        3,
+        "no later query repetition"
+    );
+}
+
+/// The outer stored submission and every resource request consume the
+/// same 64-request operation cap. Baseline is outside that operation.
+#[test]
+fn dom_outer_submission_and_resources_share_request_cap_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let n = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let count = n.clone();
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, move |_, path, raw| {
+        if raw.is_empty() {
+            return String::new();
+        }
+        count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let body = if path.starts_with("/cap") {
+            let imgs = (0..100)
+                .map(|i| format!("<img src='/resource/{i}'>"))
+                .collect::<String>();
+            format!("<html><head><link rel='icon' href='data:,'></head><script>void 0</script>{imgs}</html>")
+        } else {
+            String::new()
+        };
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len())
+    });
+    let got = lab_scan(
+        port,
+        &["active.dom-xss"],
+        "GET",
+        "/cap",
+        format!("GET /cap HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n"),
+    );
+    assert!(got.is_empty(), "{got:?}");
+    assert_eq!(
+        n.load(std::sync::atomic::Ordering::SeqCst),
+        1 + crate::crawl::DOM_MAX_REQUESTS_PER_PROBE,
+        "one baseline plus 64 admitted-operation requests including submission"
+    );
+}
+
+#[test]
+fn dom_form_action_real_properties_against_a_live_lab() {
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, move |_, path, _| {
+        let tag = if path.starts_with("/button") {
+            "button"
+        } else {
+            "input"
+        };
+        let body=format!("<html><head><link rel='icon' href='data:,'></head><script>var e=document.createElement('{tag}');e.formAction=location.hash;</script></html>");
+        format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len())
+    });
+    for path in ["/button", "/input"] {
+        let got = lab_scan(
+            port,
+            &["active.dom-link-manipulation"],
+            "GET",
+            path,
+            format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n"),
+        );
+        assert!(
+            got.iter()
+                .any(|(n, _, c)| n == "Link manipulation (DOM-based)" && c == "Firm"),
+            "{path}: {got:?}"
+        );
     }
 }
