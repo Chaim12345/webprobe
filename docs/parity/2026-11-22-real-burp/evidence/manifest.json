@@ -1,0 +1,95 @@
+{
+  "date": "2026-11-22",
+  "webprobe_commit": "cc7407d579046da45c84b7f2beb69982b3b388e5",
+  "burp_version": "Community Edition 2026.11.2",
+  "burp_jar_sha256": "ddd11e506bbbee7491c120901722a8bbd79d64d1298afceee1d334d27981516b",
+  "parity_probe_jar_sha256": "d32aa3b03c196785d6c20da378f8b60f334cb9cf0a55711c79200b2e15e3dfe7",
+  "existing_demo_jar_sha256": "46e06a6d9cf776e184a54fe14af696646797ef8093ae3bb372d12c78000c0b30",
+  "craft_release": "v0.6.1",
+  "craft_api_subset_sha256": "99bb5ca1a28a8f144a57607629e1ad991a19f93570eef0c1bc38e9cde1babbfe",
+  "craft_mcp_evidence": [
+    {
+      "id": "ev_07668f61bb0b6a06f7fae34237b7fd14f66a4102a8792d3b5f0afba8aa4e1a9e",
+      "operation": "java_archive_show",
+      "confidence": "observed",
+      "coverage": {
+        "examined": 282,
+        "status": "complete",
+        "total": 282
+      },
+      "summary": "burp-montoya-api-only.jar (JAR): 282 classes in 52 package(s), main class (none declared), 0 nested jar(s), 0 native lib(s), 0 resource(s)."
+    },
+    {
+      "id": "ev_579a674d88201a2aed893e80a0f5f1ccf602304dc1efaf49622033cc16187026",
+      "operation": "java_class_show",
+      "confidence": "observed",
+      "coverage": {
+        "examined": 1,
+        "status": "complete",
+        "total": 1
+      },
+      "summary": "burp.api.montoya.http.message.responses.analysis.ResponseKeywordsAnalyzer (Java 17) extends Object: 0 fields, 3 methods, from ResponseKeywordsAnalyzer.java."
+    },
+    {
+      "id": "ev_037dbeab62c2553f97d81dba45cddb166b499747ee34c940afd327b21e94d578",
+      "operation": "java_class_show",
+      "confidence": "observed",
+      "coverage": {
+        "examined": 1,
+        "status": "complete",
+        "total": 1
+      },
+      "summary": "burp.api.montoya.http.handler.HttpHandler (Java 17) extends Object: 0 fields, 2 methods, from HttpHandler.java."
+    },
+    {
+      "id": "ev_672267695d2930a42b460e501edf8b6b057aeb922b87266800a478e48e209ae7",
+      "operation": "java_archive_show",
+      "confidence": "observed",
+      "coverage": {
+        "examined": 64993,
+        "status": "complete",
+        "total": 64993
+      },
+      "summary": "burpsuite.jar (JAR): 58021 classes in 1719 package(s), main class burp.StartBurp, 35 nested jar(s), 33 native lib(s), 4571 resource(s)."
+    }
+  ],
+  "vendor_binaries_included": false,
+  "files": {
+    "README.md": "155092e276e56110641d57b0b9c20ae222cfde091a4108f19c760c8a1c8a54ee",
+    "evidence/ParityProbe.java": "61936253b5996c6850876de18467fa9981e6627ac91f3bb6df35be2252ce99be",
+    "evidence/demo-burp.body": "f61bed56d4d696f637ef42b648dac31a905569ab00371c4ffb78ece2e25d438f",
+    "evidence/demo-burp.headers": "79fb7b1c7c8f73e061619bca4768e85e1f2b1e601c5ec80ce1e92de580b8beb7",
+    "evidence/demo-webprobe.body": "f61bed56d4d696f637ef42b648dac31a905569ab00371c4ffb78ece2e25d438f",
+    "evidence/demo-webprobe.headers": "79fb7b1c7c8f73e061619bca4768e85e1f2b1e601c5ec80ce1e92de580b8beb7",
+    "evidence/drop-summary.json": "953a7a7be3b19938522231258af04239a23177506fac08eef1b6179476e691f1",
+    "evidence/fixture-demo.py": "15562e0ace5e997f9ed7729ff149d99cc0b0df6d44839166a3fb84e078515a81",
+    "evidence/fixture.py": "a7e02a9d0e57f0c862e4a026a3d6dae99f24faceca553a584c2d4396ae09b1f9",
+    "evidence/probe-BurpSuiteCommunityEdition.txt": "42309d9323f73e827a4b359f1a9202eeb6f922ffc8108110cc12d13ed9fcbc49",
+    "evidence/probe-WebProbe.txt": "619f93f3306390f610397fa107c83cec6f8c6c0018a4942cad6ba30d4b295fe1",
+    "evidence/proxy-burp.body": "00dba817601cc581fde6fbfc34a4f0b3179b7966ff037d504b5a5b72cfc688d5",
+    "evidence/proxy-webprobe.body": "00dba817601cc581fde6fbfc34a4f0b3179b7966ff037d504b5a5b72cfc688d5",
+    "evidence/tokens.txt": "f598dfd236bb112650de972f24a5caafe72340a3bbbc9e0083d50840b6b988cb",
+    "screenshots/01-proxy.png": "bb504f58470a81e66fbb22b5da6911287e05564af574dac3413c9940d088dcc8",
+    "screenshots/02-repeater.png": "a63f6dcd63eb8cac2e3a131abdf92c1bd733e95ab06d5b7820227640b76bd2c9",
+    "screenshots/03-decoder.png": "2169712244084f08e00ac394fa95625ea387cac361c360b143ce8b687de9f4d3",
+    "screenshots/04-comparer.png": "48fed6e77949ad17577fbc5d304da2c3059c23aa2dbe3d829199b17d76201e87",
+    "screenshots/05-intruder.png": "ab4e2036da5170e4a73327f04f097abf0af3c9933ddcf8a9f05649c01b0655f8",
+    "screenshots/06-sequencer.png": "53f3287fb29cd227dbc668283b198b0e1b54aee66030e2b7763cdfa6d2a49aa1",
+    "screenshots/07-montoya.png": "63bf2fc8cee1d3bf11009828a554e597ce31e8bac8c368882c73d193708fe46f",
+    "screenshots/08-demo-extension.png": "188cbe9b747d8251e476772bb01ce76514404e71d13e766894c15231d60f929a"
+  },
+  "craft_full_archive_memory": {
+    "max_rss_kib": 1496676,
+    "max_vms_kib": 1838468,
+    "address_space_cap_bytes": 1900000000,
+    "native_stack_cap_bytes": 1048576,
+    "duration_seconds": 1.264,
+    "process_returncode": -15,
+    "termination_note": "Successful MCP result received; server then intentionally terminated."
+  },
+  "craft_native_environment": {
+    "MALLOC_ARENA_MAX": "1",
+    "TOKIO_WORKER_THREADS": "1",
+    "RUST_MIN_STACK": "262144"
+  }
+}

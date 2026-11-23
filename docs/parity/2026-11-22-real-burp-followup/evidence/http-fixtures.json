@@ -1,0 +1,62 @@
+[
+  {
+    "proxy_port": 18080,
+    "path": "/echo?value=target",
+    "body": {
+      "demo_header": "",
+      "method": "GET",
+      "path": "/echo?value=target",
+      "probe_header": ""
+    }
+  },
+  {
+    "proxy_port": 18080,
+    "path": "/api/items?id=1",
+    "body": {
+      "demo_header": "",
+      "method": "GET",
+      "path": "/api/items?id=1",
+      "probe_header": ""
+    }
+  },
+  {
+    "proxy_port": 18080,
+    "path": "/static/example.js",
+    "body": {
+      "demo_header": "",
+      "method": "GET",
+      "path": "/static/example.js",
+      "probe_header": ""
+    }
+  },
+  {
+    "proxy_port": 18081,
+    "path": "/echo?value=target",
+    "body": {
+      "demo_header": "",
+      "method": "GET",
+      "path": "/echo?value=target",
+      "probe_header": ""
+    }
+  },
+  {
+    "proxy_port": 18081,
+    "path": "/api/items?id=1",
+    "body": {
+      "demo_header": "",
+      "method": "GET",
+      "path": "/api/items?id=1",
+      "probe_header": ""
+    }
+  },
+  {
+    "proxy_port": 18081,
+    "path": "/static/example.js",
+    "body": {
+      "demo_header": "",
+      "method": "GET",
+      "path": "/static/example.js",
+      "probe_header": ""
+    }
+  }
+]
