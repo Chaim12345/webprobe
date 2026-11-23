@@ -515,3 +515,6 @@ mod tests {
         assert_eq!(u.as_bytes()[14], b'4');
     }
 }
+
+#[cfg(test)]
+mod interactsh_route_tests;
