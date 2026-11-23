@@ -2681,6 +2681,60 @@ mod dom_route_tests {
     }
 
     #[test]
+    fn dom_pollution_and_xss_survive_later_cancellation_against_live_browser() {
+        if chromium_binary().is_none() {
+            return;
+        }
+        use std::io::{Read, Write};
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        let shared = Shared::new();
+        let stop = shared.clone();
+        let server = std::thread::spawn(move || {
+            let mut stream = loop {
+                let (mut stream, _) = l.accept().unwrap();
+                stream
+                    .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+                    .unwrap();
+                let mut raw = [0; 4096];
+                if stream.read(&mut raw).unwrap_or(0) > 0 {
+                    break stream;
+                }
+            };
+            let body = r#"<html><head><link rel='icon' href='data:,'></head><script>var m=/__proto__\[([^\]]+)\]=(.*)/.exec(location.hash);if(m)Object.prototype[m[1]]=m[2];document.write(location.hash)</script></html>"#;
+            write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).unwrap();
+            drop(stream);
+            std::thread::sleep(std::time::Duration::from_millis(700));
+            stop.scan.stop.store(true, Ordering::SeqCst);
+        });
+        let result = dom_analysis_probe(
+            &shared,
+            &format!("http://127.0.0.1:{port}/?__proto__[query]=query"),
+            "__proto__[hash]=hash",
+            "",
+            "127.0.0.1",
+            port,
+            false,
+            "stored",
+            || Ok(()),
+        )
+        .unwrap();
+        server.join().unwrap();
+        assert!(result.cancelled);
+        assert!(!result.complete);
+        for sink in ["Object.prototype", "document.write"] {
+            assert!(
+                result
+                    .hits
+                    .iter()
+                    .any(|h| h.sink == sink && h.source == "location.hash"),
+                "missing proven {sink}"
+            );
+        }
+        assert!(result.diagnostic.contains("confirmed"));
+    }
+
+    #[test]
     fn dom_bodyless_header_filter_preserves_session_not_framing() {
         for name in ["Connection", "Content-Length", "Transfer-Encoding", "Proxy-Authorization",
             "Proxy-Connection", "Keep-Alive", "TE", "Trailer", "Upgrade", "Expect", "Content-Type", "X-Remove"] {

@@ -1,6 +1,6 @@
 # Prototype-pollution adaptation ledger
 
-Local preparation on #186 b448c70473820f9c69f4021b3b32c898b41c8863.
+Local preparation on #186 94eb2a9f8fe603526256fe5c2b72c068442c550f.
 This is not a landing or closure approval. The final reviewed #186 pin,
 combined exact-source review, independent QA and Triage landing remain pending.
 
@@ -49,3 +49,15 @@ profile contains inert random-token pollution; it is not the user's profile.
 Cross-family consumption of already-proven cached hits after cancellation
 must be tested on #186's final partial-outcome implementation. UI status
 pixels are outside this local preparation and remain unverified here.
+
+## Partial-outcome adaptation on 94eb2a9 (local, not accepted)
+
+The dedicated check opts into stopped cached-DOM dispatch and its only probe
+access is dom_analysis_hits, which after stop reads existing cells only.
+Incomplete pollution findings retain source/confidence and explicitly display
+the bounded diagnostic. A stopped-dispatch regression preserves pollution,
+XSS and cookie findings plus their structured hits with zero connections and
+no new cache cell. A live-browser regression retains both pollution and XSS
+snapshots after cancellation. These targeted tests pass locally, but 94eb2a9
+is not accepted: the runtime must retain a monotonic union across shrinking
+or empty later snapshots. The corrected reviewed pin remains awaited.

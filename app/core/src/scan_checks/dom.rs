@@ -91,8 +91,13 @@ impl RequestCheck for DomPrototypePollution {
     fn group(&self) -> Option<&'static str> {
         Some(BURP_GROUP)
     }
+    // This check sends only through dom_analysis_hits, which after stop
+    // reads existing cache cells only and never initializes a miss.
+    fn consumes_cached_dom_after_stop(&self) -> bool {
+        true
+    }
     fn run(&self, cx: &ScanCtx) {
-        if cx.stopped() || !cx.runs(self.issue()) {
+        if !cx.runs(self.issue()) {
             return;
         }
         let outcome = dom_analysis_hits(cx);
@@ -115,6 +120,9 @@ impl RequestCheck for DomPrototypePollution {
             let mut issue = mk("info", self.issue(), &cx.entry, format!(
                 "The application may be vulnerable to client-side prototype pollution. Data is read from <b>{}</b> and a new own property was observed on <b>Object.prototype</b>.<br><br>The source value <b>{}</b> reached the prototype as <b>{}</b>.<br><br>Addition-only evidence: existing-property overwrites and stored pollution are not covered.",
                 util::html_encode(source), util::html_encode(&hit.source_value), util::html_encode(&hit.sink_value)));
+            if !outcome.complete {
+                issue.detail.push_str(&format!("<br><br>DOM operation incomplete: {}. This finding retains independently observed evidence only.", util::html_encode(&outcome.diagnostic)));
+            }
             issue.confidence = if hit.source == "location.hash" {
                 "Firm"
             } else {
@@ -810,5 +818,123 @@ fn dom_cancelled_dispatch_preserves_cross_family_cached_findings_without_egress(
     cx.state().dom_hits.lock().unwrap().clear();
     assert!(dom_analysis_hits(&cx).hits.is_empty());
     assert!(cx.state().dom_hits.lock().unwrap().is_empty(),"stopped cache miss must not initialize a cell");
+    assert!(listener.accept().is_err());
+}
+
+#[test]
+fn dom_cancelled_dispatch_preserves_pollution_and_other_families_without_egress() {
+    use std::sync::atomic::Ordering;
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let shared = crate::net::Shared::new();
+    let raw = format!("GET /cached HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
+    let baseline =
+        b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<script>void 0</script>".to_vec();
+    let cx = ScanCtx {
+        shared: shared.clone(),
+        entry: HistEntry {
+            method: "GET".into(),
+            host: "127.0.0.1".into(),
+            port,
+            path: "/cached".into(),
+            ..Default::default()
+        },
+        req: raw.clone(),
+        parts: util::parse_http(raw.as_bytes()),
+        host: "127.0.0.1".into(),
+        port,
+        host_hdr: format!("127.0.0.1:{port}"),
+        settings: Settings {
+            speed: ScanSpeed::from_u8(0),
+            accuracy: crate::variations::Accuracy::from_u8(0),
+        },
+        baseline: Baseline {
+            resp: Some(baseline.clone()),
+            raw: baseline,
+            body: "<script>void 0</script>".into(),
+        },
+        oob: vec![],
+        smtp: vec![],
+        item: 0,
+        stored_report: false,
+    };
+    let url = format!("http://127.0.0.1:{port}/cached");
+    let hits = ["document.write", "document.cookie", "Object.prototype"]
+        .into_iter()
+        .map(|sink| crate::crawl::DomHit {
+            source: "location.hash".into(),
+            sink: sink.into(),
+            source_value: "proven".into(),
+            sink_value: "proven".into(),
+            page_url: url.clone(),
+        })
+        .collect::<Vec<_>>();
+    let outcome = webprobe_support::dedup::DomProbeOutcome {
+        hits: hits.clone(),
+        reflected: None,
+        stored: "stored".into(),
+        complete: false,
+        cancelled: true,
+        diagnostic: "cancelled after confirmed snapshot".into(),
+    };
+    let cell = std::sync::OnceLock::new();
+    cell.set(outcome).unwrap();
+    cx.state()
+        .dom_hits
+        .lock()
+        .unwrap()
+        .insert(url.clone(), std::sync::Arc::new(cell));
+    shared.scan.record_dom(crate::scan_run::DomScanRecord {
+        url,
+        complete: false,
+        cancelled: true,
+        proven_hits: hits,
+        diagnostic: "cancelled".into(),
+    });
+    let mut config = crate::scan_config::ScanConfig::default();
+    for (id, ..) in crate::scan::check_catalogue() {
+        if ![
+            "active.dom-xss",
+            "active.dom-cookie-manipulation",
+            "active.dom-prototype-pollution",
+        ]
+        .contains(&id)
+        {
+            config.disabled_checks.insert(id.into());
+        }
+    }
+    *crate::scan_config::shared_config(&shared).lock().unwrap() = config;
+    shared.scan.stop.store(true, Ordering::SeqCst);
+    run_request_checks(&cx);
+    let issues = shared.issues.lock().unwrap();
+    for name in [
+        "Cross-site scripting (DOM-based)",
+        "Cookie manipulation (DOM-based)",
+        "Client-side prototype pollution",
+    ] {
+        assert!(
+            issues
+                .iter()
+                .any(|i| i.name == name && i.detail.contains("incomplete")),
+            "missing {name}"
+        );
+    }
+    assert_eq!(
+        shared.scan.dom_outcomes.lock().unwrap()[0]
+            .proven_hits
+            .len(),
+        3
+    );
+    assert!(
+        listener.accept().is_err(),
+        "cache-only dispatch must not send"
+    );
+    cx.state().dom_hits.lock().unwrap().clear();
+    assert!(dom_analysis_hits(&cx).hits.is_empty());
+    assert!(
+        cx.state().dom_hits.lock().unwrap().is_empty(),
+        "stopped cache miss must not initialize a cell"
+    );
     assert!(listener.accept().is_err());
 }
