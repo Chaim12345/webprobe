@@ -11,6 +11,37 @@ pub fn send_one(
     port: u16,
     raw: &[u8],
 ) -> Option<Vec<u8>> {
+    #[cfg(test)]
+    if let Some(context) = crate::scan_lifecycle::captured() {
+        // Check the inherited owner before entering legacy pause machinery.
+        // Never allow a reset shared stop flag to revive a retired owner.
+        loop {
+            if context.validate(shared).is_err() {
+                return None;
+            }
+            let wait = match &context {
+                crate::scan_lifecycle::ExecutionContext::Budgeted(p) => {
+                    match p.ledger().remaining(std::time::Duration::from_millis(10)) {
+                        Ok(wait) => wait,
+                        Err(_) => return None,
+                    }
+                }
+                crate::scan_lifecycle::ExecutionContext::Legacy(_) => {
+                    std::time::Duration::from_millis(10)
+                }
+            };
+            if shared.scan.stop.load(Ordering::SeqCst) {
+                return None;
+            }
+            if !shared.scan.paused.load(Ordering::SeqCst) {
+                break;
+            }
+            std::thread::sleep(wait);
+        }
+    } else {
+        crate::tasks::wait_while_paused(shared);
+    }
+    #[cfg(not(test))]
     crate::tasks::wait_while_paused(shared);
     let up = if https {
         net::send_tls_raw(shared, host, port, raw)

@@ -43,6 +43,11 @@ pub(crate) struct BudgetedExecution {
     ledger: Arc<Ledger>,
 }
 impl BudgetedExecution {
+    /// Exact permit's shared failure latch. Survives swallowed return values
+    /// and cloned cross-thread handoffs; proved evidence remains retainable.
+    pub fn mark_incomplete(&self) {
+        self.ledger.mark_incomplete();
+    }
     pub fn owner(&self) -> &Arc<AttemptScope> {
         &self.owner
     }
@@ -633,6 +638,27 @@ mod tests {
         assert_eq!(
             finalizer(batch.finish().unwrap()).run(|_| Finish::Complete),
             Finish::Complete
+        );
+    }
+    #[test]
+    fn swallowed_failure_is_sticky_across_clones_and_preserves_proven_evidence() {
+        let c = Coordinator::new(Shared::new(), limits()).unwrap();
+        let b = c.open().unwrap();
+        let f = finalizer(b.finish().unwrap());
+        assert_eq!(
+            f.run(|p| {
+                let child = p.clone();
+                std::thread::spawn(move || child.mark_incomplete())
+                    .join()
+                    .unwrap();
+                assert_eq!(
+                    p.ledger().reserve(&[]),
+                    Err(crate::scan_budget::Denied::Failed)
+                );
+                p.ledger().retain_proven(1).unwrap();
+                Finish::Complete
+            }),
+            Finish::Incomplete
         );
     }
     #[test]

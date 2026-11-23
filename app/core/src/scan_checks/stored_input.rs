@@ -86,6 +86,8 @@ pub(crate) struct PairCtx {
     pub shared: Arc<Shared>,
     pub pair: crate::stored::Pair,
     g11_hit: std::cell::Cell<bool>,
+    #[cfg(test)]
+    incomplete: std::cell::Cell<bool>,
 }
 
 impl PairCtx {
@@ -94,6 +96,8 @@ impl PairCtx {
             shared,
             pair,
             g11_hit: std::cell::Cell::new(false),
+            #[cfg(test)]
+            incomplete: std::cell::Cell::new(false),
         }
     }
 
@@ -140,6 +144,15 @@ impl PairCtx {
                 item.port,
                 req.as_bytes(),
             );
+            #[cfg(test)]
+            if resp.is_none() {
+                if let Some(crate::scan_lifecycle::ExecutionContext::Budgeted(p)) =
+                    crate::scan_lifecycle::captured()
+                {
+                    p.mark_incomplete();
+                    self.incomplete.set(true);
+                }
+            }
             bump_progress(&self.shared);
             let next = resp
                 .as_deref()
@@ -227,7 +240,12 @@ pub(crate) fn run_stored_stage_budgeted(
 ) -> crate::scan_lifecycle::Finish {
     use crate::scan_budget::Resource;
     use crate::scan_lifecycle::{captured, ExecutionContext, Finish};
-    if max_pairs == 0 || max_pair_bytes == 0 || permit.validate_shared(shared).is_err() {
+    if max_pairs == 0
+        || max_pairs > 65536
+        || max_pair_bytes == 0
+        || max_pair_bytes > 64 * 1024 * 1024
+        || permit.validate_shared(shared).is_err()
+    {
         return Finish::Incomplete;
     }
     let Some(ExecutionContext::Budgeted(inherited)) = captured() else {
@@ -238,19 +256,35 @@ pub(crate) fn run_stored_stage_budgeted(
     {
         return Finish::Incomplete;
     }
-    let config = crate::scan_config::shared_config(shared)
-        .lock()
-        .unwrap()
-        .clone();
+    // Only the fixed registry selection crosses the configuration lock.
+    // Do not clone arbitrary project sets/strings into the bounded stage.
+    let enabled: [bool; 5] = {
+        let config_slot = crate::scan_config::shared_config(shared);
+        let config = config_slot.lock().unwrap();
+        std::array::from_fn(|i| {
+            config.issue_allowed(STORED_CHECKS[i].issue(), true)
+                && config.check_enabled(STORED_CHECKS[i].id())
+        })
+    };
     let mut incomplete = false;
     for index in 0..max_pairs {
         if permit.validate_shared(shared).is_err() || permit.ledger().reserve(&[]).is_err() {
             return Finish::Incomplete;
         }
+        if !shared.stored.has_pair(index) {
+            return if incomplete {
+                Finish::Incomplete
+            } else {
+                Finish::Complete
+            };
+        }
+        if permit.ledger().reserve(&[(Resource::Record, 1)]).is_err() {
+            return Finish::Incomplete;
+        }
         let pair = shared.stored.pair_bounded(index, max_pair_bytes, |bytes| {
             permit
                 .ledger()
-                .reserve(&[(Resource::Record, 1), (Resource::Input, bytes as u64)])
+                .reserve(&[(Resource::Input, bytes as u64)])
                 .is_ok()
         });
         let pair = match pair {
@@ -268,19 +302,25 @@ pub(crate) fn run_stored_stage_budgeted(
             }
         };
         let cx = PairCtx::new(shared.clone(), pair);
-        for check in STORED_CHECKS {
+        for (check, enabled) in STORED_CHECKS.iter().zip(enabled) {
             if permit.validate_shared(shared).is_err() || permit.ledger().reserve(&[]).is_err() {
                 return Finish::Incomplete;
             }
             if (is_burp_issue(check.issue()) || shared.extra_checks.load(Ordering::SeqCst))
-                && config.issue_allowed(check.issue(), true)
+                && enabled
                 && check.applies_to(&cx.pair.point)
-                && config.check_enabled(check.id())
                 && !(check.server_side() && cx.pair.point.skips_server_side())
             {
                 check.run(&cx);
+                if cx.incomplete.get() {
+                    incomplete = true;
+                }
             }
         }
     }
-    Finish::Incomplete // Reaching traversal ceiling is never a complete negative.
+    if incomplete || shared.stored.has_pair(max_pairs) {
+        Finish::Incomplete
+    } else {
+        Finish::Complete
+    }
 }

@@ -252,7 +252,7 @@ impl StoredInputs {
                 e.ip.len(),
             ]
             .into_iter()
-            .try_fold(0usize, usize::checked_add)
+            .try_fold(std::mem::size_of::<Item>(), usize::checked_add)
         }
         fn point_size(p: &InsertionPoint, depth: usize) -> Option<usize> {
             if depth >= 16 {
@@ -260,15 +260,21 @@ impl StoredInputs {
             }
             let kind = match &p.kind {
                 webprobe_support::insertion::IpKind::Json(v) => {
-                    v.iter().try_fold(0usize, |n, s| n.checked_add(s.len()))?
+                    if v.len() > 256 {
+                        return None;
+                    }
+                    v.iter().try_fold(
+                        v.len().checked_mul(std::mem::size_of::<String>())?,
+                        |n, s| n.checked_add(s.len()),
+                    )?
                 }
                 webprobe_support::insertion::IpKind::Multipart { filename, .. } => {
                     filename.as_ref().map_or(0, String::len)
                 }
                 _ => 0,
             };
-            p.name
-                .len()
+            std::mem::size_of::<InsertionPoint>()
+                .checked_add(p.name.len())?
                 .checked_add(p.value.len())?
                 .checked_add(kind)?
                 .checked_add(match &p.parent {
@@ -304,6 +310,11 @@ impl StoredInputs {
             retrieval: retrieval_item.clone(),
             injection: (req.clone(), resp.clone()),
         }))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn has_pair(&self, index: usize) -> bool {
+        self.inner.lock().unwrap().pairs.get(index).is_some()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -375,6 +386,29 @@ mod tests {
         }
     }
 
+    #[test]
+    fn bounded_pair_rejects_many_empty_json_elements_before_clone_and_preserves_next() {
+        let s = StoredInputs::default();
+        let injection = s.add_item(item("/inject"));
+        let retrieval = s.add_item(item("/retrieve"));
+        let point = InsertionPoint::new(
+            webprobe_support::insertion::IpKind::Json(vec![String::new(); 10000]),
+            "x",
+            "",
+        );
+        let token = s.token(injection, &point);
+        s.observe(retrieval, b"GET /retrieve", token.as_bytes());
+        let admitted = std::cell::Cell::new(false);
+        assert!(s
+            .pair_bounded(0, 1024 * 1024, |_| {
+                admitted.set(true);
+                true
+            })
+            .is_err());
+        assert!(!admitted.get());
+        assert!(s.has_pair(0));
+        assert!(!s.has_pair(1));
+    }
     #[test]
     fn tokens_pair_once_and_never_with_their_own_request() {
         let s = StoredInputs::default();

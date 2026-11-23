@@ -1329,6 +1329,21 @@ fn host_probe_unknown_routed_batch_has_zero_direct_egress() {
 
 #[test]
 fn parameterized_real_a4_link_registry_retains_meaningful_finding() {
+    real_a4_case(0);
+}
+#[test]
+fn real_a4_oversize_charges_record_before_skip() {
+    real_a4_case(1);
+}
+#[test]
+fn real_a4_failed_send_is_incomplete_not_negative() {
+    real_a4_case(2);
+}
+#[test]
+fn real_a4_paused_caller_expires_without_net_entry() {
+    real_a4_case(3);
+}
+fn real_a4_case(mode: u8) {
     use crate::scan_lifecycle::{Coordinator, Finish, Handoff};
     let remembered = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
     let saved = remembered.clone();
@@ -1346,7 +1361,12 @@ fn parameterized_real_a4_link_registry_retains_meaningful_finding() {
             format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len())
         },
     );
+    let port = if mode == 2 { 0 } else { port };
     let shared = crate::net::Shared::new();
+    if mode == 3 {
+        shared.scan.paused.store(true, Ordering::SeqCst);
+    }
+
     let mut cfg = crate::scan_config::ScanConfig::default();
     for check in STORED_CHECKS {
         if check.id() != "active.link-manipulation-stored" {
@@ -1355,7 +1375,11 @@ fn parameterized_real_a4_link_registry_retains_meaningful_finding() {
     }
     *crate::scan_config::shared_config(&shared).lock().unwrap() = cfg;
     let limits = crate::scan_budget::Limits {
-        duration: std::time::Duration::from_secs(5),
+        duration: if mode == 3 {
+            std::time::Duration::from_millis(30)
+        } else {
+            std::time::Duration::from_secs(5)
+        },
         http_attempts: 100,
         connection_attempts: 100,
         outgoing: 65536,
@@ -1400,12 +1424,37 @@ fn parameterized_real_a4_link_registry_retains_meaningful_finding() {
     let Handoff::Finalize(f) = batch.finish().unwrap() else {
         panic!("finalizer")
     };
-    let outcome = f.run(|permit| run_stored_stage_budgeted(&shared, permit, 10, 8192));
-    assert_eq!(outcome, Finish::Complete);
-    assert!(shared
-        .issues
-        .lock()
-        .unwrap()
-        .iter()
-        .any(|i| i.name == "Link manipulation (stored)"));
+    let began = std::time::Instant::now();
+    let outcome = f.run(|permit| {
+        let result =
+            run_stored_stage_budgeted(&shared, permit, 1, if mode == 1 { 1 } else { 8192 });
+        assert_eq!(
+            permit.ledger().used(crate::scan_budget::Resource::Record),
+            1
+        );
+        if mode == 1 {
+            assert_eq!(permit.ledger().used(crate::scan_budget::Resource::Input), 0);
+        }
+        result
+    });
+    assert_eq!(
+        outcome,
+        if mode == 0 {
+            Finish::Complete
+        } else {
+            Finish::Incomplete
+        }
+    );
+    if mode == 3 {
+        assert!(began.elapsed() < std::time::Duration::from_secs(2));
+    }
+    assert_eq!(
+        mode == 0,
+        shared
+            .issues
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|i| i.name == "Link manipulation (stored)")
+    );
 }
