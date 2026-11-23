@@ -32,6 +32,7 @@ pub(crate) enum Finish {
 /// Legacy mode is structurally different from a budget-required A4 permit.
 #[derive(Clone)]
 pub(crate) struct LegacyScanner {
+    coordinator: std::sync::Weak<Coordinator>,
     pub owner: Arc<AttemptScope>,
 }
 #[derive(Clone)]
@@ -70,6 +71,69 @@ impl BudgetedExecution {
         } else {
             Ok(())
         }
+    }
+}
+/// Owned inherited context has an exact, nonoptional execution mode.
+#[derive(Clone)]
+pub(crate) enum ExecutionContext {
+    Legacy(LegacyScanner),
+    Budgeted(BudgetedExecution),
+}
+#[derive(Clone)]
+pub(crate) struct CancelHandle(Arc<AttemptScope>);
+impl CancelHandle {
+    pub fn cancel(&self) {
+        self.0.cancel();
+    }
+}
+thread_local! {static INSTALLED:std::cell::RefCell<Option<ExecutionContext>>=const{std::cell::RefCell::new(None)};}
+pub(crate) struct Installed {
+    previous: Option<ExecutionContext>,
+    _thread_bound: std::marker::PhantomData<std::rc::Rc<()>>,
+}
+impl ExecutionContext {
+    pub fn cancel_handle(&self) -> CancelHandle {
+        CancelHandle(match self {
+            Self::Legacy(l) => l.owner.clone(),
+            Self::Budgeted(p) => p.owner.clone(),
+        })
+    }
+    pub fn validate(&self, shared: &Arc<Shared>) -> Result<(), AdmissionError> {
+        match self {
+            Self::Budgeted(p) => p.validate_shared(shared),
+            Self::Legacy(l) => {
+                let c = l.coordinator.upgrade().ok_or(AdmissionError::Busy)?;
+                if !Arc::ptr_eq(shared, &c.shared) || l.owner.is_cancelled() {
+                    return Err(AdmissionError::Busy);
+                }
+                let state = c.state.lock().unwrap();
+                if state.as_ref().is_some_and(|r| {
+                    r.phase == Phase::Open && r.active && Arc::ptr_eq(&r.owner, &l.owner)
+                }) {
+                    Ok(())
+                } else {
+                    Err(AdmissionError::Busy)
+                }
+            }
+        }
+    }
+    pub fn enter(&self, shared: &Arc<Shared>) -> Result<Installed, AdmissionError> {
+        self.validate(shared)?;
+        let previous = INSTALLED.with(|slot| slot.replace(Some(self.clone())));
+        Ok(Installed {
+            previous,
+            _thread_bound: std::marker::PhantomData,
+        })
+    }
+}
+pub(crate) fn captured() -> Option<ExecutionContext> {
+    INSTALLED.with(|slot| slot.borrow().clone())
+}
+impl Drop for Installed {
+    fn drop(&mut self) {
+        INSTALLED.with(|slot| {
+            slot.replace(self.previous.take());
+        });
     }
 }
 struct Run {
@@ -196,7 +260,10 @@ impl Coordinator {
                 guard: Some(guard),
                 live: true,
             },
-            LegacyScanner { owner },
+            LegacyScanner {
+                coordinator: Arc::downgrade(self),
+                owner,
+            },
             index,
         ))
     }
@@ -585,7 +652,15 @@ mod tests {
         let old = b.owner.clone();
         let f = finalizer(b.finish().unwrap());
         std::thread::sleep(std::time::Duration::from_millis(20));
-        assert_eq!(f.run(|_| panic!("expired callback")), Finish::Incomplete);
+        let calls = AtomicUsize::new(0);
+        assert_eq!(
+            f.run(|_| {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Finish::Complete
+            }),
+            Finish::Incomplete
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
         assert_eq!(*old.terminal.lock().unwrap(), Some(Finish::Incomplete));
         drop(c);
         assert_eq!(*old.terminal.lock().unwrap(), Some(Finish::Incomplete));
@@ -609,6 +684,79 @@ mod tests {
         assert_eq!(*retained.terminal.lock().unwrap(), Some(Finish::Incomplete));
     }
     #[test]
+    fn preexhausted_callback_zero_positive_one_and_record_loss_finalization() {
+        let c = Coordinator::new(Shared::new(), limits()).unwrap();
+        let b = c.open().unwrap();
+        let f = finalizer(b.finish().unwrap());
+        assert!(f
+            .permit
+            .ledger
+            .reserve(&[(crate::scan_budget::Resource::HttpAttempt, 999)])
+            .is_err());
+        let calls = AtomicUsize::new(0);
+        assert_eq!(
+            f.run(|_| {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Finish::Complete
+            }),
+            Finish::Incomplete
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        let b = c.open().unwrap();
+        assert_eq!(
+            finalizer(b.finish().unwrap()).run(|_| {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Finish::Complete
+            }),
+            Finish::Complete
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        let b = c.open().unwrap();
+        assert_eq!(
+            finalizer(b.finish().unwrap()).run(|p| {
+                for _ in 0..10 {
+                    p.ledger.retain_proven(0).unwrap();
+                }
+                assert!(p.ledger.retain_proven(0).is_err());
+                assert!(p.ledger.retention_lost());
+                assert_eq!(
+                    p.ledger.used(crate::scan_budget::Resource::EvidenceRecord),
+                    10
+                );
+                Finish::Complete
+            }),
+            Finish::Incomplete
+        );
+    }
+    #[test]
+    fn inherited_mode_context_is_exact_phase_bound_and_restored_without_shared_fallback() {
+        let shared = Shared::new();
+        let c = Coordinator::new(shared.clone(), limits()).unwrap();
+        assert!(captured().is_none());
+        let (audit, legacy, _) = c.admit(item("/context")).unwrap();
+        let context = ExecutionContext::Legacy(legacy);
+        let cancellation = context.cancel_handle();
+        assert_eq!(context.validate(&Shared::new()), Err(AdmissionError::Busy));
+        {
+            let _installed = context.enter(&shared).unwrap();
+            assert!(matches!(captured(), Some(ExecutionContext::Legacy(_))));
+        }
+        assert!(captured().is_none());
+        let f = finalizer(audit.complete().unwrap());
+        assert!(context.enter(&shared).is_err());
+        let budgeted = ExecutionContext::Budgeted(f.permit.clone());
+        {
+            let _installed = budgeted.enter(&shared).unwrap();
+            assert!(matches!(captured(), Some(ExecutionContext::Budgeted(_))));
+        }
+        assert_eq!(f.run(|_| Finish::Complete), Finish::Complete);
+        assert!(budgeted.enter(&shared).is_err());
+        let b = c.open().unwrap();
+        assert!(!b.owner.is_cancelled());
+        cancellation.cancel();
+        assert!(!b.owner.is_cancelled());
+    }
+    #[test]
     fn permit_rejects_other_owner_and_cancel_prevents_callback() {
         let c = Coordinator::new(Shared::new(), limits()).unwrap();
         let b = c.open().unwrap();
@@ -618,9 +766,14 @@ mod tests {
         assert_eq!(f.permit.validate(&ob.owner), Err(AdmissionError::Busy));
         assert!(Arc::ptr_eq(f.permit.owner(), &f.permit.owner));
         f.permit.owner.cancel();
+        let calls = AtomicUsize::new(0);
         assert_eq!(
-            f.run(|_| panic!("cancelled callback must never run")),
+            f.run(|_| {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Finish::Complete
+            }),
             Finish::Incomplete
         );
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
     }
 }
