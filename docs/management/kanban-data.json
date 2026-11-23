@@ -1,15 +1,15 @@
 {
-  "as_of": "2026-11-23T01:29:00+02:00",
+  "as_of": "2026-11-23T02:00:00+02:00",
   "open_pr_count": 114,
   "parity": "2c2aa124d4365e3edc0f8768634be5aa562935f2",
   "candidate": "d405f33006c852a4ba59c364e0f21d294e56a180",
   "work_items": [
     {
       "column": "verified",
-      "title": "Java + scoped UI on d405f33",
+      "title": "Full code rerun on d405f33",
       "owner": "QA / release",
       "gate": "Reported PASS, not future-head acceptance",
-      "detail": "Java15/4/13; markers, real reopen, streaming/size cap and Organizer cycle passed.",
+      "detail": "Clean rerun1187/0 across19 targets; Java15/4/13, fmt/clippy and pipeline7/7.",
       "next": "Preserve exact-head evidence; refresh resets acceptance."
     },
     {
@@ -17,8 +17,8 @@
       "title": "Cross-tool proofs",
       "owner": "QA / release",
       "gate": "Reported PASS on d405f33",
-      "detail": "Sequencer constant-token, live Logger-to-Repeater and Repeater extension hooks.",
-      "next": "Finish remaining workflows."
+      "detail": "Entire UI sweep passed incl. Drop/pipelining, Decoder, Intruder and large-entry.",
+      "next": "Preserve scoped manual Xvfb evidence."
     },
     {
       "column": "verified",
@@ -30,18 +30,18 @@
     },
     {
       "column": "active",
-      "title": "Remaining UI sweep",
+      "title": "UI evidence + caveats",
       "owner": "QA / release",
       "gate": "d405f33 mechanics only",
-      "detail": "Drop/pipelining, Intruder, Decoder and large-entry smoke remain.",
+      "detail": "All checks passed; first large-entry render944MB, flat on switching,481MB after reload.",
       "next": "Keep screenshots and exact-head scope."
     },
     {
       "column": "active",
-      "title": "Independent suite rerun",
+      "title": "Prior failure retained",
       "owner": "QA / release",
-      "gate": "Earlier failed run is retained",
-      "detail": "1029 passed /1 failed, targets aborted. Standalone7/7 twice and separate targets pass.",
+      "gate": "Clean rerun does not erase failure",
+      "detail": "First run1029/1 aborted. QA later reports1187/0; CTO still requires172.",
       "next": "Clean rerun cannot waive CTO blocker."
     },
     {
@@ -1354,7 +1354,7 @@
       "number": 160,
       "title": "Refresh program board after safety landings",
       "url": "https://github.com/Chaim12345/webprobe/pull/160",
-      "head": "64af5202ead2f5070e9d9fa4f1c64809c2ec6ac1",
+      "head": "dcfdd4cc2feb4d793b649a587e4cfe9814659b64",
       "owner": "Program Manager",
       "column": "active",
       "gate": "New visual board needs docs review",

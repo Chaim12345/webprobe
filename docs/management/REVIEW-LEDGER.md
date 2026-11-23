@@ -1,6 +1,13 @@
 # Review and decision ledger
 
-## EINTR acceptance blocker, CTO 01:15 Nov23
+## QA completion 01:43 Nov23, CTO blocker still controls acceptance
+
+QA reports the exact d405f33 clean workspace rerun completed19 targets,1187 passed/0 failed; fmt/clippy, real JDK25 ext_host15/Montoya4/Bambda13 and standalone pipeline7/7 twice passed. The entire manual Xvfb/software-rendered UI sweep passed, including Drop/pipelining, Decoder roundtrip/error path, Intruder substitution and large-entry select/switch/save-reload. Large entry first-render RSS944MB, flat944-946MB on switching,481MB after reload; no repeated growth observed. Intruder fixture returned200 for all paths, so status differentiation was not tested, while substitution/result rows were verified.
+
+QA's release-ready verdict is a lane report, not overall acceptance: CTO01:15 requires the EINTR correction in the final tested tree. First run1029/1 remains a failed run. #172 is absent from current d405f33. A clean rerun and UI success do not supersede the CTO blocker or transfer to a future refreshed tree. Hosted-CI authority and final tested/remote identity remain separate.
+
+
+## EINTR acceptance blocker, CTO 01:15 Nov23, original checkpoint
 
 The d405f33 workspace run failed: 1029 passed / 1 failed, then remaining targets aborted. The evidence-edit fixture received a synthetic 502 after upstream ErrorKind::Interrupted. Later standalone passes and separately completed targets do not erase this failed run. Reviewer01:14 diagnosed a real pre-existing read-path bug: buffered reads can fail, streaming/EOF reads can truncate. CTO01:15 makes this an acceptance blocker for #125+#155, not unrelated work. No network replay is authorized.
 
