@@ -193,14 +193,25 @@ pub(crate) struct ExperimentalEngine {
 }
 #[cfg(test)]
 pub(crate) struct AcceptedAudit {
-    pub completion: crate::scan_lifecycle::Finish,
+    /// Audit phase only, never finalization or overall scan success.
+    pub audit_phase_completion: crate::scan_lifecycle::Finish,
     pub error: Option<crate::scan_lifecycle::AdmissionError>,
     pub handoff: Result<crate::scan_lifecycle::Handoff, crate::scan_lifecycle::AdmissionError>,
 }
 #[cfg(test)]
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum BatchOutcome {
+    PendingFinalization,
+    Incomplete,
+}
+#[cfg(test)]
 pub(crate) struct AcceptedBatch {
     pub completed_items: usize,
-    pub completion: crate::scan_lifecycle::Finish,
+    /// Explicit conservative policy: failure cancels every adopted lease of
+    /// the same logical owner, not only this batch's work.
+    pub shared_owner_cancelled: bool,
+    pub audit_phase_completion: crate::scan_lifecycle::Finish,
+    pub outcome: BatchOutcome,
     pub error: Option<crate::scan_lifecycle::AdmissionError>,
     pub handoff: Result<crate::scan_lifecycle::Handoff, crate::scan_lifecycle::AdmissionError>,
 }
@@ -227,21 +238,31 @@ impl ExperimentalEngine {
         &self,
         entries: Vec<HistEntry>,
     ) -> Result<AcceptedBatch, crate::scan_lifecycle::AdmissionError> {
+        self.audit_batch_before_finish(entries, || {})
+    }
+    /// Fixture-only close barrier, not a runtime callback boundary.
+    pub(crate) fn audit_batch_before_finish(
+        &self,
+        entries: Vec<HistEntry>,
+        before_finish: impl FnOnce(),
+    ) -> Result<AcceptedBatch, crate::scan_lifecycle::AdmissionError> {
         use crate::scan_lifecycle::{Finish, Handoff};
         let batch = self.open()?;
         let mut result = AcceptedBatch {
             completed_items: 0,
-            completion: Finish::Complete,
+            shared_owner_cancelled: false,
+            audit_phase_completion: Finish::Complete,
+            outcome: BatchOutcome::PendingFinalization,
             error: None,
             handoff: Ok(Handoff::Joined),
         };
         for entry in entries {
             match self.audit(entry) {
                 Ok(accepted) => {
-                    if accepted.completion == Finish::Complete {
+                    if accepted.audit_phase_completion == Finish::Complete {
                         result.completed_items += 1
                     } else {
-                        result.completion = Finish::Incomplete;
+                        result.audit_phase_completion = Finish::Incomplete;
                     }
                     if let Some(error) = accepted.error {
                         result.error = Some(error);
@@ -249,31 +270,42 @@ impl ExperimentalEngine {
                     match accepted.handoff {
                         Ok(Handoff::Joined) => {}
                         Ok(Handoff::Finalize(_)) => {
-                            result.completion = Finish::Incomplete;
+                            result.audit_phase_completion = Finish::Incomplete;
                             result.error = Some(crate::scan_lifecycle::AdmissionError::Internal);
                             break;
                         }
                         Err(error) => {
                             result.error = Some(error);
-                            result.completion = Finish::Incomplete;
+                            result.audit_phase_completion = Finish::Incomplete;
                             break;
                         }
                     }
-                    if result.completion == Finish::Incomplete {
+                    if result.audit_phase_completion == Finish::Incomplete {
                         break;
                     }
                 }
                 Err(error) => {
                     result.error = Some(error);
-                    result.completion = Finish::Incomplete;
+                    result.audit_phase_completion = Finish::Incomplete;
                     break;
                 }
             }
         }
-        if result.completion == Finish::Incomplete {
+        if result.audit_phase_completion == Finish::Incomplete {
+            result.shared_owner_cancelled = true;
             batch.context().cancel_handle().cancel();
+            self.shared.log("Experimental batch incomplete: cancelling the shared logical owner, including all adopted leases");
         }
+        if result.audit_phase_completion == Finish::Incomplete {
+            result.outcome = BatchOutcome::Incomplete;
+        }
+        before_finish();
         result.handoff = batch.finish();
+        if let Err(error) = result.handoff {
+            result.audit_phase_completion = Finish::Incomplete;
+            result.error = Some(error);
+            result.outcome = BatchOutcome::Incomplete;
+        }
         Ok(result)
     }
     pub fn audit(
@@ -312,7 +344,7 @@ impl ExperimentalEngine {
             Err(_) => {
                 a.mark_incomplete();
                 return Ok(AcceptedAudit {
-                    completion: crate::scan_lifecycle::Finish::Incomplete,
+                    audit_phase_completion: crate::scan_lifecycle::Finish::Incomplete,
                     error: Some(AdmissionError::Internal),
                     handoff: a.complete(),
                 });
@@ -323,7 +355,7 @@ impl ExperimentalEngine {
             Err(_) => {
                 a.mark_incomplete();
                 return Ok(AcceptedAudit {
-                    completion: crate::scan_lifecycle::Finish::Incomplete,
+                    audit_phase_completion: crate::scan_lifecycle::Finish::Incomplete,
                     error: Some(AdmissionError::Internal),
                     handoff: a.complete(),
                 });
@@ -373,7 +405,7 @@ impl ExperimentalEngine {
             crate::scan_lifecycle::Finish::Incomplete
         };
         Ok(AcceptedAudit {
-            completion,
+            audit_phase_completion: completion,
             error: if run.is_err() {
                 Some(AdmissionError::Internal)
             } else {

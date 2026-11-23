@@ -1594,7 +1594,7 @@ fn required_limits_actual_engine_rejects_busy_without_reset_or_egress() {
         ..Default::default()
     };
     let accepted = engine.audit(entry.clone()).unwrap();
-    assert_eq!(accepted.completion, Finish::Complete);
+    assert_eq!(accepted.audit_phase_completion, Finish::Complete);
     assert_eq!(accepted.error, None);
     assert!(matches!(accepted.handoff, Ok(Handoff::Joined)));
     assert_eq!(wire.load(Ordering::SeqCst), 1);
@@ -1682,7 +1682,7 @@ fn required_limits_actual_engine_adopts_inflight_baseline_without_second_owner()
             .recv_timeout(std::time::Duration::from_secs(3))
             .unwrap(),
         Ok(crate::scan::AcceptedAudit {
-            completion: Finish::Complete,
+            audit_phase_completion: Finish::Complete,
             handoff: Ok(Handoff::Joined),
             ..
         })
@@ -1781,7 +1781,7 @@ fn actual_engine_accepted_baseline_and_install_failures_carry_incomplete_handoff
             ..Default::default()
         };
         let accepted = engine.audit(e).unwrap();
-        assert_eq!(accepted.completion, Finish::Incomplete);
+        assert_eq!(accepted.audit_phase_completion, Finish::Incomplete);
         assert!(matches!(accepted.handoff, Ok(Handoff::Joined)));
         assert_eq!(
             accepted.error,
@@ -1853,7 +1853,7 @@ fn actual_engine_cancel_after_registration_cannot_reset_owner_or_start_baseline(
         .unwrap()
         .unwrap();
     worker.join().unwrap();
-    assert_eq!(result.completion, Finish::Incomplete);
+    assert_eq!(result.audit_phase_completion, Finish::Incomplete);
     assert!(matches!(result.handoff, Ok(Handoff::Joined)));
     assert!(shared.scan.stop.load(Ordering::SeqCst));
     assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 0);
@@ -1971,7 +1971,7 @@ fn required_limits_actual_engine_preserves_enabled_host_registry_finding() {
         ..Default::default()
     };
     let accepted = engine.audit(entry).unwrap();
-    assert_eq!(accepted.completion, Finish::Complete);
+    assert_eq!(accepted.audit_phase_completion, Finish::Complete);
     let Handoff::Finalize(f) = accepted.handoff.unwrap() else {
         panic!("standalone finalizer")
     };
@@ -2038,7 +2038,7 @@ fn parameterized_actual_batch_caller_counts_only_complete_admissions_and_explici
             }
         );
         assert_eq!(
-            result.completion,
+            result.audit_phase_completion,
             if mode == 1 {
                 Finish::Incomplete
             } else {
@@ -2062,4 +2062,70 @@ fn parameterized_actual_batch_caller_counts_only_complete_admissions_and_explici
             if mode == 2 { 2 } else { 0 }
         );
     }
+}
+
+#[test]
+fn actual_batch_active_final_close_never_reports_complete() {
+    use crate::scan_lifecycle::{AdmissionError, Handoff};
+    let shared = crate::net::Shared::new();
+    let limits = crate::scan_budget::Limits {
+        duration: std::time::Duration::from_secs(1),
+        http_attempts: 10,
+        connection_attempts: 10,
+        outgoing: 65536,
+        response: 65536,
+        decompressed: 65536,
+        inputs: 65536,
+        evidence: 65536,
+        evidence_records: 10,
+        records: 10,
+    };
+    let engine = Arc::new(crate::scan::ExperimentalEngine::new(shared.clone(), limits).unwrap());
+    let runner = engine.clone();
+    let (admitted_tx, admitted_rx) = std::sync::mpsc::sync_channel(1);
+    let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
+    let (start_tx, start_rx) = std::sync::mpsc::sync_channel(1);
+    let worker = std::thread::spawn(move || {
+        start_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .unwrap();
+        runner.audit_after_admission(
+            crate::net::HistEntry {
+                req_raw: b"GET / HTTP/1.1\r\nHost: 127.0.0.1:0\r\n\r\n"
+                    .to_vec()
+                    .into(),
+                ..Default::default()
+            },
+            || {
+                admitted_tx.send(()).unwrap();
+                release_rx
+                    .recv_timeout(std::time::Duration::from_secs(2))
+                    .unwrap();
+            },
+        )
+    });
+    // Separate batch starts before audit so final close owns the obligation.
+    let result = engine
+        .audit_batch_before_finish(vec![], || {
+            start_tx.send(()).unwrap();
+            admitted_rx
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .unwrap();
+        })
+        .unwrap();
+    assert_eq!(result.outcome, crate::scan::BatchOutcome::Incomplete);
+    assert!(matches!(
+        result.handoff,
+        Err(AdmissionError::IncompleteActive)
+    ));
+    release_tx.send(()).unwrap();
+    let audit = worker.join().unwrap().unwrap();
+    assert!(matches!(
+        audit.handoff,
+        Err(AdmissionError::IncompleteActive)
+    ));
+    assert!(matches!(
+        engine.open().unwrap().finish(),
+        Ok(Handoff::Finalize(_))
+    ));
 }
