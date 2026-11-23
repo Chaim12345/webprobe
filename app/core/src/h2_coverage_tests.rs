@@ -250,7 +250,32 @@ fn ping_ack_echoes_payload_and_does_not_ack_an_ack() {
 
 // GOAWAY/RST_STREAM retry classification is covered by h2.rs's own tests:
 // resets_are_typed_and_scoped_to_their_stream (Reset(7) retryable, Reset(8)
-// not) and goaway_marks_unprocessed_streams_retryable_and_closes_the_conn.
+// not) and goaway_marks_unprocessed_streams_retryable_and_closes_the_conn
+// (active > Last-Stream-ID is retryable). The remaining case, an accepted
+// stream (id <= last) draining instead of erroring retryable, is below.
+
+#[test]
+fn goaway_at_or_below_the_active_stream_drains_instead_of_retrying() {
+    // RFC 9113 §6.8: only a stream ABOVE Last-Stream-ID was certainly never
+    // processed. An accepted stream (id <= last) drains; its outcome is not
+    // retryable, whatever the GOAWAY error code says.
+    let mut enc = Encoder::new();
+    let hb = enc.encode(vec![(b":status".as_ref(), b"200".as_ref())]);
+    let mut goaway = 1u32.to_be_bytes().to_vec(); // last_stream_id = 1
+    goaway.extend_from_slice(&7u32.to_be_bytes()); // error code 7: no help
+    let input = server_frames(&[
+        (FRAME_SETTINGS, 0, 0, &[]),
+        (FRAME_GOAWAY, 0, 0, &goaway),
+        (FRAME_HEADERS, FLAG_END_HEADERS | FLAG_END_STREAM, 1, &hb),
+    ]);
+    let mut conn = Conn::new(Duplex::new(input));
+    // The accepted stream completes normally; no retryable error surfaces.
+    let resp = conn.exchange(&request(), None).unwrap();
+    assert!(String::from_utf8_lossy(&resp).starts_with("HTTP/1.1 200"));
+    // The connection is still spent: new streams are refused.
+    let err = conn.start_request(&request()).unwrap_err();
+    assert!(matches!(err, StreamError::GoAway { last: 1, .. }));
+}
 
 #[test]
 fn continuation_cannot_be_interrupted_by_control_or_other_stream() {
