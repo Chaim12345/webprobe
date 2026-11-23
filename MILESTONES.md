@@ -78,14 +78,13 @@ Small slices:
 
 ## M6 — D-12 and R-12 network features
 
-**Status:** paused 2026-11-18 by the user. Branch `wp-m6` (pushed): D-12a SNI probe done (97b41bd); D-12b and R-12 send groups partial (9d7de42, compiles, untested). Unclaimed; resume from that branch.
+**Status:** ported to parity (2026-11-23, branch `lane/pr7-d12-r12`, PR open against parity/2026-11-17). The Instinct lane completed the paused `wp-m6` scope on the parity tree.
 
-Worktree: `.worktrees/r07` after M2 integration.
-
-- D-12: custom-SNI sender and traced scheme payload variants with loopback TLS tests.
-- R-12: Repeater group model and sequential single/separate-connection sending.
-- R-12: HTTP/1 last-byte and HTTP/2 single-packet synchronization with deterministic barriers, not timing-only assertions.
-- Verify UI persistence and 20-request synchronization at a local lab.
+- D-12: custom-SNI sender (sni_scope/TLS lab) and burp.Zbxl scheme payload variants with loopback TLS tests (387ceb7).
+- R-12: Repeater group model, project persistence (Zsch round trip by tab position) and sequential single/separate-connection sending (042ef06).
+- R-12: HTTP/1 last-byte and HTTP/2 single-packet synchronization with deterministic barriers, not timing-only assertions; the h2 burst rides parity's restructured Conn API via burst_frames/pump_all/finish_stream (042ef06).
+- R-12 desktop: tab-strip group chips, create/edit dialog, context-menu send modes, background group-send worker, project save/restore (1de9f91).
+- Verified: 20-sender H1 lab with a server-mirrored barrier, error-releases-barrier, unknown-host-stops-sequence, and a one-connection barrier-gated h2 lab; 866/866 core lib + 56/56 core integration + 154/154 desktop.
 
 ## M7 — R-15 CLI, configuration and REST
 
