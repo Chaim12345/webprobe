@@ -3688,7 +3688,11 @@ fn fragmented_client_hello_prefix_still_selects_tls() {
         handle_conn(sh, s);
     });
     let mut client = TcpStream::connect(("127.0.0.1", proxy_port)).unwrap();
-    write!(client, "CONNECT localhost:443 HTTP/1.1\r\nHost: localhost:443\r\n\r\n").unwrap();
+    write!(
+        client,
+        "CONNECT localhost:443 HTTP/1.1\r\nHost: localhost:443\r\n\r\n"
+    )
+    .unwrap();
     client
         .set_read_timeout(Some(Duration::from_secs(5)))
         .unwrap();
@@ -3827,7 +3831,9 @@ fn connect_tunnel_two_pipelined_requests_keep_byte_exact_order() {
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         for _ in 0..2 {
-            let Ok((mut s, _)) = origin.accept() else { break };
+            let Ok((mut s, _)) = origin.accept() else {
+                break;
+            };
             let tx = tx.clone();
             std::thread::spawn(move || {
                 let _ = s.set_read_timeout(Some(Duration::from_secs(10)));
@@ -3897,7 +3903,11 @@ fn connect_tunnel_two_pipelined_requests_keep_byte_exact_order() {
     let first = rx.recv_timeout(Duration::from_secs(10)).unwrap();
     let second = rx.recv_timeout(Duration::from_secs(10)).unwrap();
     assert_eq!([first, second], [1, 2], "origin saw the requests in order");
-    assert_eq!(shared.history.len(), 2, "each request recorded exactly once");
+    assert_eq!(
+        shared.history.len(),
+        2,
+        "each request recorded exactly once"
+    );
 }
 
 #[test]
@@ -4060,7 +4070,11 @@ fn connect_tunnel_terminal_close_drains_a_pipelined_follow_up() {
         1,
         "the follow-up never reached the origin"
     );
-    assert_eq!(shared.history.len(), 1, "only the served request is recorded");
+    assert_eq!(
+        shared.history.len(),
+        1,
+        "only the served request is recorded"
+    );
 }
 
 #[test]
@@ -4127,7 +4141,9 @@ fn connect_tunnel_requests_resolve_by_their_own_destination() {
     let origin_port = origin.local_addr().unwrap().port();
     let server = std::thread::spawn(move || {
         for _ in 0..2 {
-            let Ok((mut s, _)) = origin.accept() else { break };
+            let Ok((mut s, _)) = origin.accept() else {
+                break;
+            };
             std::thread::spawn(move || {
                 let _ = s.set_read_timeout(Some(Duration::from_secs(10)));
                 loop {
@@ -4254,7 +4270,11 @@ fn connect_tunnel_inner_destination_follows_configured_listener_redirect() {
         .unwrap();
     // The CONNECT authority is a dead port: nothing can be dialed there, so
     // any delivered response proves the inner destination was routed.
-    write!(client, "CONNECT 127.0.0.1:9 HTTP/1.1\r\nHost: 127.0.0.1:9\r\n\r\n").unwrap();
+    write!(
+        client,
+        "CONNECT 127.0.0.1:9 HTTP/1.1\r\nHost: 127.0.0.1:9\r\n\r\n"
+    )
+    .unwrap();
     let head = read_response_head(&mut client).unwrap();
     assert!(String::from_utf8_lossy(&head).starts_with("HTTP/1.1 200"));
     write!(
