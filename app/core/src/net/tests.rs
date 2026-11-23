@@ -3623,3 +3623,191 @@ fn connect_tunnel_carrying_cleartext_get_is_served_and_recorded() {
     server.join().unwrap();
     assert_eq!(shared.history.len(), 1);
 }
+
+#[test]
+fn connect_tunnel_serves_read_ahead_bytes_exactly_once() {
+    // The request bytes read ahead with the CONNECT head are served once:
+    // not dropped, not duplicated.
+    let shared = Shared::new();
+    let origin = TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin_port = origin.local_addr().unwrap().port();
+    let server = std::thread::spawn(move || {
+        let (mut s, _) = origin.accept().unwrap();
+        s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+        let req = read_request_head(&mut s);
+        assert!(req.starts_with(b"GET /early HTTP/1.1"));
+        s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nearly")
+            .unwrap();
+    });
+    let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+    let proxy_port = proxy.local_addr().unwrap().port();
+    let sh = shared.clone();
+    let proxy_thread = std::thread::spawn(move || {
+        let (s, _) = proxy.accept().unwrap();
+        let pending = format!(
+            "GET /early HTTP/1.1\r\nHost: 127.0.0.1:{origin_port}\r\nConnection: close\r\n\r\n"
+        )
+        .into_bytes();
+        handle_connect_pending(sh, s, "127.0.0.1".to_string(), origin_port, pending);
+    });
+    let mut client = TcpStream::connect(("127.0.0.1", proxy_port)).unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    let head = read_response_head(&mut client).unwrap();
+    assert!(String::from_utf8_lossy(&head).contains("Connection established"));
+    let head = read_response_head(&mut client).expect("read-ahead request was not served");
+    assert!(
+        String::from_utf8_lossy(&head).starts_with("HTTP/1.1 200"),
+        "got: {}",
+        String::from_utf8_lossy(&head)
+    );
+    let mut body = [0u8; 5];
+    client.read_exact(&mut body).unwrap();
+    assert_eq!(&body, b"early");
+    server.join().unwrap();
+    proxy_thread.join().unwrap();
+    assert_eq!(shared.history.len(), 1);
+}
+
+#[test]
+fn fragmented_client_hello_prefix_still_selects_tls() {
+    // Only the first byte of the ClientHello has arrived: 0x16 selects the
+    // TLS path, so the proxy waits for the handshake instead of answering
+    // cleartext, and an abandoned tunnel closes without recording anything.
+    let shared = Shared::new();
+    let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+    let proxy_port = proxy.local_addr().unwrap().port();
+    let sh = shared.clone();
+    let proxy_thread = std::thread::spawn(move || {
+        let (s, _) = proxy.accept().unwrap();
+        handle_conn(sh, s);
+    });
+    let mut client = TcpStream::connect(("127.0.0.1", proxy_port)).unwrap();
+    write!(client, "CONNECT localhost:443 HTTP/1.1\r\nHost: localhost:443\r\n\r\n").unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    let head = read_response_head(&mut client).unwrap();
+    assert!(String::from_utf8_lossy(&head).starts_with("HTTP/1.1 200"));
+    client.write_all(&[0x16]).unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_millis(700)))
+        .unwrap();
+    let mut buf = [0u8; 1];
+    match client.read(&mut buf) {
+        Err(e)
+            if e.kind() == std::io::ErrorKind::WouldBlock
+                || e.kind() == std::io::ErrorKind::TimedOut => {}
+        other => panic!("expected silence while the handshake completes, got {other:?}"),
+    }
+    drop(client);
+    proxy_thread.join().unwrap();
+    assert_eq!(shared.history.len(), 0);
+}
+
+#[test]
+fn cleartext_tunnel_delayed_request_is_served_and_eof_closes_cleanly() {
+    let shared = Shared::new();
+    let origin = TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin_port = origin.local_addr().unwrap().port();
+    let server = std::thread::spawn(move || {
+        let (mut s, _) = origin.accept().unwrap();
+        s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+        let _ = read_request_head(&mut s);
+        s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+            .unwrap();
+    });
+    let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+    let proxy_port = proxy.local_addr().unwrap().port();
+    let sh = shared.clone();
+    let proxy_thread = std::thread::spawn(move || {
+        let (s, _) = proxy.accept().unwrap();
+        handle_conn(sh, s);
+    });
+    let mut client = TcpStream::connect(("127.0.0.1", proxy_port)).unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    write!(
+        client,
+        "CONNECT 127.0.0.1:{origin_port} HTTP/1.1\r\nHost: 127.0.0.1:{origin_port}\r\n\r\n"
+    )
+    .unwrap();
+    let head = read_response_head(&mut client).unwrap();
+    assert!(String::from_utf8_lossy(&head).starts_with("HTTP/1.1 200"));
+    // The client speaks only after a delay: the peek waits for it.
+    std::thread::sleep(Duration::from_millis(300));
+    write!(
+        client,
+        "GET /delayed HTTP/1.1\r\nHost: 127.0.0.1:{origin_port}\r\nConnection: close\r\n\r\n"
+    )
+    .unwrap();
+    let head = read_response_head(&mut client).expect("delayed cleartext request was not served");
+    assert!(String::from_utf8_lossy(&head).starts_with("HTTP/1.1 200"));
+    server.join().unwrap();
+    proxy_thread.join().unwrap();
+    assert_eq!(shared.history.len(), 1);
+
+    // A tunnel whose client closes after the 200 without speaking ends
+    // cleanly: no hang, no history.
+    let proxy2 = TcpListener::bind("127.0.0.1:0").unwrap();
+    let proxy2_port = proxy2.local_addr().unwrap().port();
+    let sh = shared.clone();
+    let proxy_thread = std::thread::spawn(move || {
+        let (s, _) = proxy2.accept().unwrap();
+        handle_conn(sh, s);
+    });
+    let mut client = TcpStream::connect(("127.0.0.1", proxy2_port)).unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    write!(
+        client,
+        "CONNECT 127.0.0.1:{origin_port} HTTP/1.1\r\nHost: 127.0.0.1:{origin_port}\r\n\r\n"
+    )
+    .unwrap();
+    let head = read_response_head(&mut client).unwrap();
+    assert!(String::from_utf8_lossy(&head).starts_with("HTTP/1.1 200"));
+    client.shutdown(std::net::Shutdown::Write).unwrap();
+    proxy_thread.join().unwrap();
+    assert_eq!(shared.history.len(), 1);
+}
+
+#[test]
+fn ambiguous_framing_in_a_cleartext_tunnel_is_rejected() {
+    // The tunnel path refuses TE+CL requests exactly like a direct
+    // connection: 400, recorded as rejected, never forwarded.
+    let shared = Shared::new();
+    let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+    let proxy_port = proxy.local_addr().unwrap().port();
+    let sh = shared.clone();
+    let proxy_thread = std::thread::spawn(move || {
+        let (s, _) = proxy.accept().unwrap();
+        handle_conn(sh, s);
+    });
+    let mut client = TcpStream::connect(("127.0.0.1", proxy_port)).unwrap();
+    client
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    write!(
+        client,
+        "CONNECT 127.0.0.1:80 HTTP/1.1\r\nHost: 127.0.0.1:80\r\n\r\n"
+    )
+    .unwrap();
+    let head = read_response_head(&mut client).unwrap();
+    assert!(String::from_utf8_lossy(&head).starts_with("HTTP/1.1 200"));
+    write!(
+        client,
+        "POST / HTTP/1.1\r\nHost: 127.0.0.1\r\nTransfer-Encoding: chunked\r\nContent-Length: 4\r\n\r\n5\r\nabcd\r\n0\r\n\r\n"
+    )
+    .unwrap();
+    let head = read_response_head(&mut client).expect("ambiguous request got no 400");
+    assert!(
+        String::from_utf8_lossy(&head).starts_with("HTTP/1.1 400"),
+        "got: {}",
+        String::from_utf8_lossy(&head)
+    );
+    proxy_thread.join().unwrap();
+    assert_eq!(shared.history.len(), 1, "the rejection is recorded");
+}
