@@ -158,7 +158,14 @@ impl Submission {
             rx,
         )
     }
-    pub(crate) fn run(mut self, body: impl FnOnce() -> Finish) {
+    pub(crate) fn run(self, body: impl FnOnce() -> Finish) {
+        self.run_with_finalizer(body, |_| Finish::Complete);
+    }
+    pub(crate) fn run_with_finalizer(
+        mut self,
+        body: impl FnOnce() -> Finish,
+        finalizer: impl FnOnce(&crate::scan_lifecycle::BudgetedExecution) -> Finish,
+    ) {
         let phase = std::panic::catch_unwind(std::panic::AssertUnwindSafe(body))
             .unwrap_or(Finish::Incomplete);
         let audit = self.audit.take().unwrap();
@@ -167,7 +174,14 @@ impl Submission {
         }
         let outcome = match audit.complete() {
             Ok(crate::scan_lifecycle::Handoff::Finalize(f)) => {
-                Completion::Terminal(f.run(|_| phase))
+                Completion::Terminal(f.run(|permit| {
+                    let final_phase = finalizer(permit);
+                    if phase == Finish::Complete {
+                        final_phase
+                    } else {
+                        Finish::Incomplete
+                    }
+                }))
             }
             Ok(crate::scan_lifecycle::Handoff::Joined) => Completion::Joined,
             Err(_) => Completion::Terminal(Finish::Incomplete),
