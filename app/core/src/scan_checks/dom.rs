@@ -103,16 +103,22 @@ fn dom_submission_acknowledged(response: &[u8]) -> bool {
 
 #[test]
 fn dom_submission_requires_complete_final_response_head() {
-    for raw in [b"".as_slice(), b"HTTP/1.1 200", b"HTTP/1.1 100 Continue\r\n\r\n",
+    for raw in [
+        b"".as_slice(),
+        b"HTTP/1.1 200",
+        b"HTTP/1.1 100 Continue\r\n\r\n",
         b"HTTP/1.1 200 OK\r\nContent-Length: 99\r\n\r\nshort",
         b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nab",
-        b"HTTP/1.1 200 OK\r\n\r\nunknown EOF"] {
-        assert!(!dom_submission_acknowledged(raw),"{raw:?}");
+        b"HTTP/1.1 200 OK\r\n\r\nunknown EOF",
+    ] {
+        assert!(!dom_submission_acknowledged(raw), "{raw:?}");
     }
-    for raw in [b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok".as_slice(),
+    for raw in [
+        b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok".as_slice(),
         b"HTTP/1.1 204 No Content\r\n\r\n",
-        b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nok\r\n0\r\n\r\n"] {
-        assert!(dom_submission_acknowledged(raw),"{raw:?}");
+        b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nok\r\n0\r\n\r\n",
+    ] {
+        assert!(dom_submission_acknowledged(raw), "{raw:?}");
     }
 }
 
@@ -173,8 +179,14 @@ pub(crate) fn dom_analysis_hits(cx: &ScanCtx) -> webprobe_support::dedup::DomPro
     let state = cx.state();
     // Cancellation is cache-only: never create or initialize a cell.
     if cx.stopped() {
-        return state.dom_hits.lock().unwrap().get(&url)
-            .and_then(|cell|cell.get()).cloned().unwrap_or_default();
+        return state
+            .dom_hits
+            .lock()
+            .unwrap()
+            .get(&url)
+            .and_then(|cell| cell.get())
+            .cloned()
+            .unwrap_or_default();
     }
     let cell = state
         .dom_hits
@@ -184,7 +196,9 @@ pub(crate) fn dom_analysis_hits(cx: &ScanCtx) -> webprobe_support::dedup::DomPro
         .or_default()
         .clone();
     cell.get_or_init(|| {
-        if cx.stopped() { return Default::default(); }
+        if cx.stopped() {
+            return Default::default();
+        }
         // Two distinct run-owned tokens: the query-string payload
         // (tok_s) and the fragment payload (tok_h) ride the SAME single
         // navigation, so one probe covers both URL-part sources with no
@@ -228,7 +242,9 @@ pub(crate) fn dom_analysis_hits(cx: &ScanCtx) -> webprobe_support::dedup::DomPro
                     return Err("scan stopped before stored submission".into());
                 }
                 let response = cx.send(&submit);
-                let confirmed = response.as_ref().is_some_and(|r| dom_submission_acknowledged(r));
+                let confirmed = response
+                    .as_ref()
+                    .is_some_and(|r| dom_submission_acknowledged(r));
                 if confirmed {
                     Ok(())
                 } else {
@@ -241,8 +257,11 @@ pub(crate) fn dom_analysis_hits(cx: &ScanCtx) -> webprobe_support::dedup::DomPro
         );
         if let Err(e) = &probe {
             cx.shared.scan.record_dom(crate::scan_run::DomScanRecord {
-                url:url.chars().take(500).collect(), complete:false,
-                cancelled:cx.stopped(), proven_hits:Vec::new(), diagnostic:e.chars().take(500).collect(),
+                url: url.chars().take(500).collect(),
+                complete: false,
+                cancelled: cx.stopped(),
+                proven_hits: Vec::new(),
+                diagnostic: e.chars().take(500).collect(),
             });
             // A crashed/timed-out probe is not a clean bill of health: say so
             // in the scan log (the cached empty hit set only avoids
@@ -256,8 +275,11 @@ pub(crate) fn dom_analysis_hits(cx: &ScanCtx) -> webprobe_support::dedup::DomPro
         // Only the exact navigation response fulfilled to Chromium is evidence.
         // Script-text co-occurrence is not a proven string-literal data flow.
         cx.shared.scan.record_dom(crate::scan_run::DomScanRecord {
-            url:url.chars().take(500).collect(), complete:probe.complete,
-            cancelled:probe.cancelled, proven_hits:probe.hits.clone(), diagnostic:probe.diagnostic.clone(),
+            url: url.chars().take(500).collect(),
+            complete: probe.complete,
+            cancelled: probe.cancelled,
+            proven_hits: probe.hits.clone(),
+            diagnostic: probe.diagnostic.clone(),
         });
         let reflected = probe
             .document_response
@@ -277,9 +299,9 @@ pub(crate) fn dom_analysis_hits(cx: &ScanCtx) -> webprobe_support::dedup::DomPro
             hits,
             reflected,
             stored: tok_st,
-            complete:probe.complete,
-            cancelled:probe.cancelled,
-            diagnostic:probe.diagnostic,
+            complete: probe.complete,
+            cancelled: probe.cancelled,
+            diagnostic: probe.diagnostic,
         }
     })
     .clone()
@@ -710,48 +732,139 @@ fn dom_probe_tokens_are_distinct_and_substituted() {
 #[test]
 fn dom_cancelled_dispatch_preserves_cross_family_cached_findings_without_egress() {
     use std::sync::atomic::Ordering;
-    let listener=std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
-    let port=listener.local_addr().unwrap().port();
-    let shared=crate::net::Shared::new();
-    let raw=format!("GET /cached HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
-    let baseline=b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<script>void 0</script>".to_vec();
-    let cx=ScanCtx { shared:shared.clone(),entry:HistEntry { method:"GET".into(),host:"127.0.0.1".into(),port,path:"/cached".into(),..Default::default() },
-        req:raw.clone(),parts:util::parse_http(raw.as_bytes()),host:"127.0.0.1".into(),port,
-        host_hdr:format!("127.0.0.1:{port}"),settings:Settings {speed:ScanSpeed::from_u8(0),accuracy:crate::variations::Accuracy::from_u8(0)},
-        baseline:Baseline {resp:Some(baseline.clone()),raw:baseline,body:"<script>void 0</script>".into()},oob:vec![],smtp:vec![],item:0,stored_report:false };
-    let url=format!("http://127.0.0.1:{port}/cached");
-    let hits=["document.write","document.cookie"].into_iter().map(|sink| crate::crawl::DomHit {
-        source:"location.hash".into(),sink:sink.into(),source_value:"proven".into(),sink_value:"proven".into(),page_url:url.clone()
-    }).collect::<Vec<_>>();
+    let port = listener.local_addr().unwrap().port();
+    let shared = crate::net::Shared::new();
+    let raw = format!("GET /cached HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
+    let baseline =
+        b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<script>void 0</script>".to_vec();
+    let cx = ScanCtx {
+        shared: shared.clone(),
+        entry: HistEntry {
+            method: "GET".into(),
+            host: "127.0.0.1".into(),
+            port,
+            path: "/cached".into(),
+            ..Default::default()
+        },
+        req: raw.clone(),
+        parts: util::parse_http(raw.as_bytes()),
+        host: "127.0.0.1".into(),
+        port,
+        host_hdr: format!("127.0.0.1:{port}"),
+        settings: Settings {
+            speed: ScanSpeed::from_u8(0),
+            accuracy: crate::variations::Accuracy::from_u8(0),
+        },
+        baseline: Baseline {
+            resp: Some(baseline.clone()),
+            raw: baseline,
+            body: "<script>void 0</script>".into(),
+        },
+        oob: vec![],
+        smtp: vec![],
+        item: 0,
+        stored_report: false,
+    };
+    let url = format!("http://127.0.0.1:{port}/cached");
+    let hits = ["document.write", "document.cookie"]
+        .into_iter()
+        .map(|sink| crate::crawl::DomHit {
+            source: "location.hash".into(),
+            sink: sink.into(),
+            source_value: "proven".into(),
+            sink_value: "proven".into(),
+            page_url: url.clone(),
+        })
+        .collect::<Vec<_>>();
     // Deterministic production merge sequence: confirmed snapshot, a shorter
     // successful snapshot, then an empty successful evaluation, then stop.
-    let mut retained=Vec::new();
-    let origin=crate::crawl::origin_of(&url).unwrap();
-    crate::crawl::dom_merge_confirmed_hits(&mut retained,hits.clone(),&origin,"proven","query","stored");
-    crate::crawl::dom_merge_confirmed_hits(&mut retained,[hits[0].clone()],&origin,"proven","query","stored");
-    crate::crawl::dom_merge_confirmed_hits(&mut retained,Vec::new(),&origin,"proven","query","stored");
-    assert_eq!(retained.len(),2);
-    let outcome=webprobe_support::dedup::DomProbeOutcome {hits:retained,reflected:None,stored:"stored".into(),
-        complete:false,cancelled:true,diagnostic:"cancelled after confirmed snapshot".into()};
-    let cell=std::sync::OnceLock::new();cell.set(outcome).unwrap();
-    cx.state().dom_hits.lock().unwrap().insert(url.clone(),std::sync::Arc::new(cell));
-    shared.scan.record_dom(crate::scan_run::DomScanRecord {url,complete:false,cancelled:true,proven_hits:hits,diagnostic:"cancelled".into()});
-    let mut config=crate::scan_config::ScanConfig::default();
-    for (id,..) in crate::scan::check_catalogue() {
-        if !["active.dom-xss","active.dom-cookie-manipulation"].contains(&id) { config.disabled_checks.insert(id.into()); }
+    let mut retained = Vec::new();
+    let origin = crate::crawl::origin_of(&url).unwrap();
+    crate::crawl::dom_merge_confirmed_hits(
+        &mut retained,
+        hits.clone(),
+        &origin,
+        "proven",
+        "query",
+        "stored",
+    );
+    crate::crawl::dom_merge_confirmed_hits(
+        &mut retained,
+        [hits[0].clone()],
+        &origin,
+        "proven",
+        "query",
+        "stored",
+    );
+    crate::crawl::dom_merge_confirmed_hits(
+        &mut retained,
+        Vec::new(),
+        &origin,
+        "proven",
+        "query",
+        "stored",
+    );
+    assert_eq!(retained.len(), 2);
+    let outcome = webprobe_support::dedup::DomProbeOutcome {
+        hits: retained,
+        reflected: None,
+        stored: "stored".into(),
+        complete: false,
+        cancelled: true,
+        diagnostic: "cancelled after confirmed snapshot".into(),
+    };
+    let cell = std::sync::OnceLock::new();
+    cell.set(outcome).unwrap();
+    cx.state()
+        .dom_hits
+        .lock()
+        .unwrap()
+        .insert(url.clone(), std::sync::Arc::new(cell));
+    shared.scan.record_dom(crate::scan_run::DomScanRecord {
+        url,
+        complete: false,
+        cancelled: true,
+        proven_hits: hits,
+        diagnostic: "cancelled".into(),
+    });
+    let mut config = crate::scan_config::ScanConfig::default();
+    for (id, ..) in crate::scan::check_catalogue() {
+        if !["active.dom-xss", "active.dom-cookie-manipulation"].contains(&id) {
+            config.disabled_checks.insert(id.into());
+        }
     }
-    *crate::scan_config::shared_config(&shared).lock().unwrap()=config;
-    shared.scan.stop.store(true,Ordering::SeqCst);
+    *crate::scan_config::shared_config(&shared).lock().unwrap() = config;
+    shared.scan.stop.store(true, Ordering::SeqCst);
     run_request_checks(&cx);
-    let issues=shared.issues.lock().unwrap();
-    for name in ["Cross-site scripting (DOM-based)","Cookie manipulation (DOM-based)"] {
-        assert!(issues.iter().any(|i|i.name==name && i.detail.contains("incomplete")),"missing {name}");
+    let issues = shared.issues.lock().unwrap();
+    for name in [
+        "Cross-site scripting (DOM-based)",
+        "Cookie manipulation (DOM-based)",
+    ] {
+        assert!(
+            issues
+                .iter()
+                .any(|i| i.name == name && i.detail.contains("incomplete")),
+            "missing {name}"
+        );
     }
-    assert_eq!(shared.scan.dom_outcomes.lock().unwrap()[0].proven_hits.len(),2);
-    assert!(listener.accept().is_err(),"cache-only dispatch must not send");
+    assert_eq!(
+        shared.scan.dom_outcomes.lock().unwrap()[0]
+            .proven_hits
+            .len(),
+        2
+    );
+    assert!(
+        listener.accept().is_err(),
+        "cache-only dispatch must not send"
+    );
     cx.state().dom_hits.lock().unwrap().clear();
     assert!(dom_analysis_hits(&cx).hits.is_empty());
-    assert!(cx.state().dom_hits.lock().unwrap().is_empty(),"stopped cache miss must not initialize a cell");
+    assert!(
+        cx.state().dom_hits.lock().unwrap().is_empty(),
+        "stopped cache miss must not initialize a cell"
+    );
     assert!(listener.accept().is_err());
 }

@@ -295,7 +295,11 @@ fn registry_order_is_pinned() {
                 Scope::Request,
                 Some(BURP_GROUP)
             ),
-            ("active.dom-open-redirection", Scope::Request, Some(BURP_GROUP)),
+            (
+                "active.dom-open-redirection",
+                Scope::Request,
+                Some(BURP_GROUP)
+            ),
             (
                 "active.dom-cookie-manipulation",
                 Scope::Request,
@@ -1394,11 +1398,10 @@ fn dom_xss_stored_variant_against_a_live_lab() {
         format!("GET /storexss HTTP/1.1\r\nHost: {host}\r\n\r\n"),
     );
     assert!(
-        got.iter().any(
-            |(n, s, c)| n == "Cross-site scripting (stored DOM-based)"
+        got.iter()
+            .any(|(n, s, c)| n == "Cross-site scripting (stored DOM-based)"
                 && s == "high"
-                && c == "Tentative"
-        ),
+                && c == "Tentative"),
         "stored variant: {got:?}"
     );
     assert!(
@@ -1414,7 +1417,9 @@ fn dom_xss_stored_variant_against_a_live_lab() {
 /// from the two-request admitted DOM operation.
 #[test]
 fn dom_session_headers_and_mixed_same_sink_against_a_live_lab() {
-    if crate::crawl::chromium_binary().is_none() { return; }
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
     let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
     let captured = seen.clone();
     let stored = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
@@ -1422,26 +1427,40 @@ fn dom_session_headers_and_mixed_same_sink_against_a_live_lab() {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let port = lab_serve(listener, move |_, path, raw| {
         let prior = st.lock().unwrap().clone();
-        if let Some(q) = path.split('?').nth(1) { *st.lock().unwrap() = q.into(); }
-        if !raw.is_empty() { captured.lock().unwrap().push(raw.into()); }
+        if let Some(q) = path.split('?').nth(1) {
+            *st.lock().unwrap() = q.into();
+        }
+        if !raw.is_empty() {
+            captured.lock().unwrap().push(raw.into());
+        }
         let body = format!("<html><head><link rel='icon' href='data:,'></head><body><script>document.write('<p>'+location.hash+'</p>');document.write('<p>{prior}</p>');</script></body></html>");
         format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len())
     });
     let got = lab_scan(port, &["active.dom-xss"], "GET", "/mixed",
         format!("GET /mixed HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nCookie: session=kept\r\nAuthorization: Bearer lab-only\r\nConnection: X-Remove\r\nX-Remove: unsafe\r\nProxy-Authorization: lab-proxy\r\n\r\n"));
-    for name in ["Cross-site scripting (DOM-based)", "Cross-site scripting (stored DOM-based)"] {
-        assert!(got.iter().any(|(n,_,_)| n == name), "missing {name}: {got:?}");
+    for name in [
+        "Cross-site scripting (DOM-based)",
+        "Cross-site scripting (stored DOM-based)",
+    ] {
+        assert!(
+            got.iter().any(|(n, _, _)| n == name),
+            "missing {name}: {got:?}"
+        );
     }
     let wire = seen.lock().unwrap();
-    assert_eq!(wire.len(),3,"baseline + submission + navigation: {wire:?}");
+    assert_eq!(
+        wire.len(),
+        3,
+        "baseline + submission + navigation: {wire:?}"
+    );
     for raw in wire.iter().skip(1) {
-        let lower=raw.to_ascii_lowercase();
-        assert!(lower.contains("cookie: session=kept"),"{raw}");
-        assert!(lower.contains("authorization: bearer lab-only"),"{raw}");
-        assert!(!lower.contains("proxy-authorization:"),"{raw}");
-        assert!(!lower.contains("x-remove:"),"{raw}");
-        assert!(!lower.contains("transfer-encoding:"),"{raw}");
-        assert!(raw.ends_with("\r\n\r\n"),"{raw}");
+        let lower = raw.to_ascii_lowercase();
+        assert!(lower.contains("cookie: session=kept"), "{raw}");
+        assert!(lower.contains("authorization: bearer lab-only"), "{raw}");
+        assert!(!lower.contains("proxy-authorization:"), "{raw}");
+        assert!(!lower.contains("x-remove:"), "{raw}");
+        assert!(!lower.contains("transfer-encoding:"), "{raw}");
+        assert!(raw.ends_with("\r\n\r\n"), "{raw}");
     }
 }
 
@@ -1450,31 +1469,43 @@ fn dom_session_headers_and_mixed_same_sink_against_a_live_lab() {
 /// per-URL cache prevents every other family from trying again.
 #[test]
 fn dom_unknown_submission_outcome_is_not_replayed_against_a_live_lab() {
-    if crate::crawl::chromium_binary().is_none() { return; }
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
     use std::io::{Read, Write};
-    let listener=std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let port=listener.local_addr().unwrap().port();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
     listener.set_nonblocking(true).unwrap();
-    let requests=std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
-    let capture=requests.clone();
-    let done=std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let end=done.clone();
-    let server=std::thread::spawn(move || {
+    let requests = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let capture = requests.clone();
+    let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let end = done.clone();
+    let server = std::thread::spawn(move || {
         while !end.load(std::sync::atomic::Ordering::SeqCst) {
             match listener.accept() {
-                Ok((mut stream,_)) => {
-                    stream.set_read_timeout(Some(std::time::Duration::from_secs(2))).unwrap();
-                    let mut data=Vec::new(); let mut b=[0;4096];
-                    while let Ok(n)=stream.read(&mut b) {
-                        if n==0 { break; } data.extend_from_slice(&b[..n]);
-                        if data.windows(4).any(|w| w==b"\r\n\r\n") { break; }
+                Ok((mut stream, _)) => {
+                    stream
+                        .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+                        .unwrap();
+                    let mut data = Vec::new();
+                    let mut b = [0; 4096];
+                    while let Ok(n) = stream.read(&mut b) {
+                        if n == 0 {
+                            break;
+                        }
+                        data.extend_from_slice(&b[..n]);
+                        if data.windows(4).any(|w| w == b"\r\n\r\n") {
+                            break;
+                        }
                     }
-                    let raw=String::from_utf8_lossy(&data).to_string();
-                    let is_submission=raw.split_whitespace().nth(1).unwrap_or("").contains('?');
-                    if raw.is_empty() { continue; }
+                    let raw = String::from_utf8_lossy(&data).to_string();
+                    let is_submission = raw.split_whitespace().nth(1).unwrap_or("").contains('?');
+                    if raw.is_empty() {
+                        continue;
+                    }
                     capture.lock().unwrap().push(raw);
                     if !is_submission {
-                        let body="<html><script>document.write(location.hash)</script></html>";
+                        let body = "<html><script>document.write(location.hash)</script></html>";
                         let _=write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len());
                     }
                 }
@@ -1482,73 +1513,141 @@ fn dom_unknown_submission_outcome_is_not_replayed_against_a_live_lab() {
             }
         }
     });
-    let got=lab_scan(port,&["active.dom-xss","active.dom-javascript-injection"],"GET","/drop",
-        format!("GET /drop HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n"));
-    done.store(true,std::sync::atomic::Ordering::SeqCst); server.join().unwrap();
-    assert!(got.is_empty(),"unknown outcome is not clean evidence: {got:?}");
-    let wire=requests.lock().unwrap();
-    assert_eq!(wire.len(),2,"baseline + exactly one effect-then-drop submission: {wire:?}");
+    let got = lab_scan(
+        port,
+        &["active.dom-xss", "active.dom-javascript-injection"],
+        "GET",
+        "/drop",
+        format!("GET /drop HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n"),
+    );
+    done.store(true, std::sync::atomic::Ordering::SeqCst);
+    server.join().unwrap();
+    assert!(
+        got.is_empty(),
+        "unknown outcome is not clean evidence: {got:?}"
+    );
+    let wire = requests.lock().unwrap();
+    assert_eq!(
+        wire.len(),
+        2,
+        "baseline + exactly one effect-then-drop submission: {wire:?}"
+    );
 }
 
 /// Reflection classification uses the actual navigation response, even
 /// when a hypothetical subsequent query fetch would contain script text.
 #[test]
 fn dom_reflection_uses_only_fulfilled_navigation_response_against_a_live_lab() {
-    if crate::crawl::chromium_binary().is_none() { return; }
-    let n=std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let count=n.clone();
-    let l=std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let port=lab_serve(l,move |_,path,raw| {
-        if raw.is_empty() { return String::new(); }
-        let q=path.split('?').nth(1).unwrap_or("");
-        let attempt=count.fetch_add(1,std::sync::atomic::Ordering::SeqCst);
-        let body=if attempt>=3 { format!("<html><script>var reflected='{q}';</script></html>") }
-        else { "<html><head><link rel='icon' href='data:,'></head><script>document.write(location.search)</script></html>".into() };
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let n = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let count = n.clone();
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, move |_, path, raw| {
+        if raw.is_empty() {
+            return String::new();
+        }
+        let q = path.split('?').nth(1).unwrap_or("");
+        let attempt = count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let body = if attempt >= 3 {
+            format!("<html><script>var reflected='{q}';</script></html>")
+        } else {
+            "<html><head><link rel='icon' href='data:,'></head><script>document.write(location.search)</script></html>".into()
+        };
         format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len())
     });
-    let got=lab_scan(port,&["active.dom-xss"],"GET","/response",
-        format!("GET /response HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n"));
-    assert!(got.iter().any(|(name,_,_)| name=="Cross-site scripting (DOM-based)"),"{got:?}");
-    assert!(!got.iter().any(|(name,_,_)| name=="Cross-site scripting (reflected DOM-based)"),"{got:?}");
-    assert_eq!(n.load(std::sync::atomic::Ordering::SeqCst),3,"no later query repetition");
+    let got = lab_scan(
+        port,
+        &["active.dom-xss"],
+        "GET",
+        "/response",
+        format!("GET /response HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n"),
+    );
+    assert!(
+        got.iter()
+            .any(|(name, _, _)| name == "Cross-site scripting (DOM-based)"),
+        "{got:?}"
+    );
+    assert!(
+        !got.iter()
+            .any(|(name, _, _)| name == "Cross-site scripting (reflected DOM-based)"),
+        "{got:?}"
+    );
+    assert_eq!(
+        n.load(std::sync::atomic::Ordering::SeqCst),
+        3,
+        "no later query repetition"
+    );
 }
 
 /// The outer stored submission and every resource request consume the
 /// same 64-request operation cap. Baseline is outside that operation.
 #[test]
 fn dom_outer_submission_and_resources_share_request_cap_against_a_live_lab() {
-    if crate::crawl::chromium_binary().is_none() { return; }
-    let n=std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let count=n.clone();
-    let l=std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let port=lab_serve(l,move |_,path,raw| {
-        if raw.is_empty() { return String::new(); }
-        count.fetch_add(1,std::sync::atomic::Ordering::SeqCst);
-        let body=if path.starts_with("/cap") {
-            let imgs=(0..100).map(|i|format!("<img src='/resource/{i}'>")).collect::<String>();
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let n = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let count = n.clone();
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, move |_, path, raw| {
+        if raw.is_empty() {
+            return String::new();
+        }
+        count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let body = if path.starts_with("/cap") {
+            let imgs = (0..100)
+                .map(|i| format!("<img src='/resource/{i}'>"))
+                .collect::<String>();
             format!("<html><head><link rel='icon' href='data:,'></head><script>void 0</script>{imgs}</html>")
-        } else { String::new() };
+        } else {
+            String::new()
+        };
         format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len())
     });
-    let got=lab_scan(port,&["active.dom-xss"],"GET","/cap",
-        format!("GET /cap HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n"));
-    assert!(got.is_empty(),"{got:?}");
-    assert_eq!(n.load(std::sync::atomic::Ordering::SeqCst),1+crate::crawl::DOM_MAX_REQUESTS_PER_PROBE,
-        "one baseline plus 64 admitted-operation requests including submission");
+    let got = lab_scan(
+        port,
+        &["active.dom-xss"],
+        "GET",
+        "/cap",
+        format!("GET /cap HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n"),
+    );
+    assert!(got.is_empty(), "{got:?}");
+    assert_eq!(
+        n.load(std::sync::atomic::Ordering::SeqCst),
+        1 + crate::crawl::DOM_MAX_REQUESTS_PER_PROBE,
+        "one baseline plus 64 admitted-operation requests including submission"
+    );
 }
 
 #[test]
 fn dom_form_action_real_properties_against_a_live_lab() {
-    if crate::crawl::chromium_binary().is_none() { return; }
-    let l=std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let port=lab_serve(l,move |_,path,_| {
-        let tag=if path.starts_with("/button") { "button" } else { "input" };
+    if crate::crawl::chromium_binary().is_none() {
+        return;
+    }
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = lab_serve(l, move |_, path, _| {
+        let tag = if path.starts_with("/button") {
+            "button"
+        } else {
+            "input"
+        };
         let body=format!("<html><head><link rel='icon' href='data:,'></head><script>var e=document.createElement('{tag}');e.formAction=location.hash;</script></html>");
         format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len())
     });
-    for path in ["/button","/input"] {
-        let got=lab_scan(port,&["active.dom-link-manipulation"],"GET",path,
-            format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n"));
-        assert!(got.iter().any(|(n,_,c)| n=="Link manipulation (DOM-based)" && c=="Firm"),"{path}: {got:?}");
+    for path in ["/button", "/input"] {
+        let got = lab_scan(
+            port,
+            &["active.dom-link-manipulation"],
+            "GET",
+            path,
+            format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n"),
+        );
+        assert!(
+            got.iter()
+                .any(|(n, _, c)| n == "Link manipulation (DOM-based)" && c == "Firm"),
+            "{path}: {got:?}"
+        );
     }
 }
