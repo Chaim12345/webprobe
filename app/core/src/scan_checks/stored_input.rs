@@ -1,3 +1,4 @@
+use crate::diagnostics::Field;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
@@ -159,10 +160,12 @@ pub(crate) fn run_stored_stage(shared: &Arc<Shared>) {
         .lock()
         .unwrap()
         .clone();
-    shared.log(&format!(
-        "Scanner: stored input stage, {} pair(s)",
-        pairs.len()
-    ));
+    shared.event(
+        crate::diagnostics::Level::Info,
+        "scan.stored.started",
+        "Scanner: stored input stage",
+        &[Field::Count("pairs", pairs.len() as u64)],
+    );
     for pair in pairs {
         if shared.scan.stop.load(Ordering::SeqCst) {
             break;

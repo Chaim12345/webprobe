@@ -248,8 +248,8 @@ pub(crate) fn repository() -> Result<Arc<Repository>, String> {
         .map_err(|m| m.to_string())
         .and_then(|p| Repository::load(&p))
         .map(Arc::new);
-    if let Err(e) = &loaded {
-        eprintln!("webprobe: {e}");
+    if loaded.is_err() {
+        tracing::warn!(target: "webprobe", event_code = "retirejs.load_failed", "RetireJS repository unavailable");
     }
     REPOSITORY.write().unwrap().get_or_insert(loaded).clone()
 }

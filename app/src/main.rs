@@ -661,7 +661,7 @@ impl eframe::App for App {
                     finished = *done.lock().unwrap();
                 }
                 if !finished && self.frames > 400 {
-                    eprintln!("screenshot: paint callback never completed for {path:?}");
+                    tracing::warn!(target: "webprobe", event_code = "ui.screenshot.timeout", "Screenshot paint callback timed out");
                 }
                 if finished || self.frames > 400 {
                     self.saved = finished;
@@ -958,6 +958,7 @@ static TERMINATE: std::sync::LazyLock<Arc<std::sync::atomic::AtomicBool>> =
     std::sync::LazyLock::new(Default::default);
 
 fn main() {
+    webprobe_core::diagnostics::init_stderr();
     // Panic policy "contain and continue" (issue #32): worker panics are
     // contained per thread (catch_unwind at spawn boundaries, poison-tolerant
     // locks). This hook makes every panic loud - stderr plus a UI notice.
@@ -970,7 +971,7 @@ fn main() {
             .map(|l| format!("{}:{}", l.file(), l.line()))
             .unwrap_or_else(|| "unknown".to_string());
         let payload = info.payload_as_str().unwrap_or("panic");
-        eprintln!("webprobe: panic at {loc}: {payload}");
+        tracing::error!(target: "webprobe", event_code = "worker.panic", location = %loc, "Worker panicked (payload omitted)");
         webprobe_core::notice::toast(
             webprobe_core::notice::Level::Error,
             format!("a worker thread panicked at {loc}: {payload}"),
@@ -1254,7 +1255,7 @@ fn main() {
             Ok(Box::new(app) as Box<dyn eframe::App>)
         }),
     ) {
-        eprintln!("webprobe: failed to start the window: {e}");
+        tracing::error!(target: "webprobe", event_code = "ui.start_failed", "Failed to start the window");
         // Nothing ran yet: leave no crash marker for the restarted copy.
         if let Some(m) = &marker {
             recovery::remove_marker(m, std::process::id());

@@ -34,8 +34,8 @@ pub mod strict_request;
 // Stage A (#37): acyclic leaf modules extracted to the webprobe-support crate.
 // Re-exported so `webprobe_core::<module>` paths are unchanged.
 pub use webprobe_support::{
-    analysis, body, compare, decoder_ops, hash_list, intercept_rules, jwt, logger, mime, notice,
-    organizer, paths, rules, seq_bits, streaming, sync, tls, util, variations, xss,
+    analysis, body, compare, decoder_ops, diagnostics, hash_list, intercept_rules, jwt, logger,
+    mime, notice, organizer, paths, rules, seq_bits, streaming, sync, tls, util, variations, xss,
 };
 
 pub mod macros;
