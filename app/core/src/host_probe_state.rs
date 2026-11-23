@@ -24,7 +24,6 @@ pub(crate) struct Admission {
 pub struct AttemptScope {
     /// Sticky logical-run identity. Only accepted scope construction makes a
     /// new false value; resetting legacy UI state cannot revive this owner.
-    #[cfg(test)] // Experimental token until unified production lifecycle wiring.
     cancelled: std::sync::atomic::AtomicBool,
     #[cfg(test)]
     pub(crate) terminal: Mutex<Option<crate::scan_lifecycle::Finish>>,
@@ -35,7 +34,7 @@ pub struct AttemptScope {
 impl AttemptScope {
     /// Cancel this exact logical owner. Safe to retain on bounded resolver
     /// jobs and check both before enqueueing and before lookup starts.
-    #[cfg(test)]
+    #[allow(dead_code)] // Preparatory primitive; production callers are not migrated.
     pub(crate) fn cancel(&self) {
         self.cancelled
             .store(true, std::sync::atomic::Ordering::SeqCst);
@@ -43,14 +42,13 @@ impl AttemptScope {
 
     /// Inherited-only check: callers must retain the accepted Arc, never
     /// replace it by looking up whichever owner Shared publishes later.
-    #[cfg(test)]
+    #[allow(dead_code)] // Preparatory primitive; production callers are not migrated.
     pub(crate) fn is_cancelled(&self) -> bool {
         self.cancelled.load(std::sync::atomic::Ordering::SeqCst)
     }
 
     fn new(dedup: Arc<ScanDedup>, session: Arc<SessionClaims>) -> Arc<Self> {
         Arc::new(Self {
-            #[cfg(test)]
             cancelled: std::sync::atomic::AtomicBool::new(false),
             #[cfg(test)]
             terminal: Mutex::new(None),
@@ -152,6 +150,14 @@ pub(crate) fn admit(shared: &Arc<Shared>) -> Option<(AuditOwner, Arc<AttemptScop
 pub(crate) struct BatchOwner {
     scope: Arc<AttemptScope>,
     closed: std::sync::atomic::AtomicBool,
+}
+impl BatchOwner {
+    /// Retain this exact logical owner, including after this lease closes.
+    /// This accessor neither admits work nor changes cancellation or lease state.
+    #[allow(dead_code)] // Preparatory primitive; production callers are not migrated.
+    pub(crate) fn scope(&self) -> &Arc<AttemptScope> {
+        &self.scope
+    }
 }
 pub(crate) fn open_batch(shared: &Arc<Shared>, fresh_crawl: bool) -> BatchOwner {
     let mut admission = shared.host_admission.0.lock().unwrap();
@@ -382,6 +388,63 @@ mod more_tests {
 #[cfg(test)]
 mod cancellation_identity_tests {
     use super::*;
+
+    #[test]
+    fn batch_scope_accessor_is_read_only_and_nested_leases_share_identity() {
+        let shared = Shared::new();
+        let outer = open_batch(&shared, false);
+        let captured = outer.scope().clone();
+        assert!(!captured.is_cancelled());
+        let nested = open_batch(&shared, true);
+        assert!(Arc::ptr_eq(outer.scope(), nested.scope()));
+        assert!(Arc::ptr_eq(outer.scope(), &captured));
+        assert_eq!(shared.host_admission.0.lock().unwrap().batch_leases, 2);
+        captured.cancel();
+        assert!(outer.scope().is_cancelled());
+        assert!(nested.scope().is_cancelled());
+        assert_eq!(shared.host_admission.0.lock().unwrap().batch_leases, 2);
+        close_batch(&shared, &outer);
+        assert_eq!(shared.host_admission.0.lock().unwrap().batch_leases, 1);
+        assert!(Arc::ptr_eq(outer.scope(), &captured));
+        assert!(outer.scope().is_cancelled());
+        close_batch(&shared, &nested);
+        assert!(shared.host_admission.0.lock().unwrap().batch.is_none());
+        assert!(captured.is_cancelled());
+    }
+
+    #[test]
+    fn cancelled_closed_batch_does_not_poison_or_reset_next_owner() {
+        let shared = Shared::new();
+        let old = open_batch(&shared, false);
+        let retained = old.scope().clone();
+        retained.cancel();
+        close_batch(&shared, &old);
+        let fresh = open_batch(&shared, true);
+        assert!(!Arc::ptr_eq(&retained, fresh.scope()));
+        for _ in 0..3 {
+            assert!(old.scope().is_cancelled());
+            assert!(retained.is_cancelled());
+            assert!(!fresh.scope().is_cancelled());
+            // Repeated old cancellation and stale lease cleanup cannot affect fresh.
+            retained.cancel();
+            close_batch(&shared, &old);
+        }
+        assert_eq!(shared.host_admission.0.lock().unwrap().batch_leases, 1);
+        assert!(Arc::ptr_eq(
+            shared
+                .host_admission
+                .0
+                .lock()
+                .unwrap()
+                .batch
+                .as_ref()
+                .unwrap(),
+            fresh.scope()
+        ));
+        close_batch(&shared, &fresh);
+        assert!(retained.is_cancelled());
+        assert!(!fresh.scope().is_cancelled());
+    }
 
     #[test]
     fn sticky_cancellation_belongs_to_the_exact_attempt_scope() {
