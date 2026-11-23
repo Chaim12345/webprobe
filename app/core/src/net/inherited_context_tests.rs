@@ -115,7 +115,10 @@ fn inherited_net_old_cancel_new_owner_reset_blocks_plain_tls_helpers_and_macro()
         join(worker);
         assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 0);
         l.set_nonblocking(true).unwrap();
-        assert!(l.accept().is_err());
+        assert_eq!(
+            l.accept().unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
         let server = std::thread::spawn(move || {
             let mut s = accept(&l);
             let mut bytes = [0; 4096];
@@ -195,6 +198,9 @@ fn inherited_net_macro_continuation_keeps_cancelled_owner_after_reset() {
     assert!(results[1].response.is_none());
     let l = join(server);
     l.set_nonblocking(true).unwrap();
-    assert!(l.accept().is_err());
+    assert_eq!(
+        l.accept().unwrap_err().kind(),
+        std::io::ErrorKind::WouldBlock
+    );
     assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 1);
 }

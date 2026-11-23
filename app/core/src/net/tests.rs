@@ -4409,6 +4409,9 @@ fn inherited_net_refused_h2_retry_retains_old_cancelled_context_after_reset() {
     assert!(response.error.unwrap_or_default().contains("context"));
     let listener = join(server);
     listener.set_nonblocking(true).unwrap();
-    assert!(listener.accept().is_err());
+    assert_eq!(
+        listener.accept().unwrap_err().kind(),
+        std::io::ErrorKind::WouldBlock
+    );
     assert_eq!(shared.conns_opened.load(Ordering::SeqCst), 1);
 }

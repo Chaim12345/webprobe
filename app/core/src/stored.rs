@@ -227,6 +227,85 @@ impl StoredInputs {
             .collect()
     }
 
+    /// Experimental A4 indexed retrieval. Reject before cloning input-owned
+    /// bytes. Body handles are Arc-backed; string/point/evidence clones count.
+    #[cfg(test)]
+    pub(crate) fn pair_bounded(
+        &self,
+        index: usize,
+        max_bytes: usize,
+        admit: impl FnOnce(usize) -> bool,
+    ) -> Result<Option<Pair>, ()> {
+        fn item_size(item: &Item) -> Option<usize> {
+            let e = &item.entry;
+            [
+                item.req.len(),
+                item.host.len(),
+                e.method.len(),
+                e.host.len(),
+                e.path.len(),
+                e.status.len(),
+                e.note.as_ref().map_or(0, String::len),
+                e.extension.len(),
+                e.title.len(),
+                e.cookies.len(),
+                e.ip.len(),
+            ]
+            .into_iter()
+            .try_fold(0usize, usize::checked_add)
+        }
+        fn point_size(p: &InsertionPoint, depth: usize) -> Option<usize> {
+            if depth >= 16 {
+                return None;
+            }
+            let kind = match &p.kind {
+                webprobe_support::insertion::IpKind::Json(v) => {
+                    v.iter().try_fold(0usize, |n, s| n.checked_add(s.len()))?
+                }
+                webprobe_support::insertion::IpKind::Multipart { filename, .. } => {
+                    filename.as_ref().map_or(0, String::len)
+                }
+                _ => 0,
+            };
+            p.name
+                .len()
+                .checked_add(p.value.len())?
+                .checked_add(kind)?
+                .checked_add(match &p.parent {
+                    Some(p) => point_size(p, depth + 1)?,
+                    None => 0,
+                })
+        }
+        let g = self.inner.lock().unwrap();
+        let Some(&(pidx, retrieval)) = g.pairs.get(index) else {
+            return Ok(None);
+        };
+        let Some((item, point, req, resp)) = g.points.get(pidx) else {
+            return Err(());
+        };
+        let Some(injection_item) = g.items.get(*item) else {
+            return Err(());
+        };
+        let Some(retrieval_item) = g.items.get(retrieval) else {
+            return Err(());
+        };
+        let bytes = item_size(injection_item)
+            .and_then(|n| n.checked_add(item_size(retrieval_item)?))
+            .and_then(|n| n.checked_add(point_size(point, 0)?))
+            .and_then(|n| n.checked_add(req.len()))
+            .and_then(|n| n.checked_add(resp.as_ref().map_or(0, Vec::len)))
+            .ok_or(())?;
+        if bytes > max_bytes || !admit(bytes) {
+            return Err(());
+        }
+        Ok(Some(Pair {
+            item: injection_item.clone(),
+            point: point.clone(),
+            retrieval: retrieval_item.clone(),
+            injection: (req.clone(), resp.clone()),
+        }))
+    }
+
     pub fn is_empty(&self) -> bool {
         let g = self.inner.lock().unwrap();
         g.items.is_empty() && g.pairs.is_empty()

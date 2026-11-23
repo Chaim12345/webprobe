@@ -1326,3 +1326,86 @@ fn host_probe_unknown_routed_batch_has_zero_direct_egress() {
     assert_eq!(attempts.load(Ordering::SeqCst), 2);
     assert!(matches!(direct.accept(),Err(e) if e.kind()==std::io::ErrorKind::WouldBlock));
 }
+
+#[test]
+fn parameterized_real_a4_link_registry_retains_meaningful_finding() {
+    use crate::scan_lifecycle::{Coordinator, Finish, Handoff};
+    let remembered = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+    let saved = remembered.clone();
+    let port = lab_serve(
+        std::net::TcpListener::bind("127.0.0.1:0").unwrap(),
+        move |_, path, _| {
+            if path.starts_with("/inject?") {
+                let value = path
+                    .split_once("?x=")
+                    .map(|(_, v)| crate::util::url_decode(v))
+                    .unwrap_or_default();
+                *saved.lock().unwrap() = value;
+            }
+            let body = format!("<a href=\"{}\">saved</a>", saved.lock().unwrap());
+            format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len())
+        },
+    );
+    let shared = crate::net::Shared::new();
+    let mut cfg = crate::scan_config::ScanConfig::default();
+    for check in STORED_CHECKS {
+        if check.id() != "active.link-manipulation-stored" {
+            cfg.disabled_checks.insert(check.id().into());
+        }
+    }
+    *crate::scan_config::shared_config(&shared).lock().unwrap() = cfg;
+    let limits = crate::scan_budget::Limits {
+        duration: std::time::Duration::from_secs(5),
+        http_attempts: 100,
+        connection_attempts: 100,
+        outgoing: 65536,
+        response: 65536,
+        decompressed: 65536,
+        inputs: 65536,
+        evidence: 65536,
+        evidence_records: 100,
+        records: 100,
+    };
+    let c = Coordinator::new(shared.clone(), limits).unwrap();
+    let batch = c.open().unwrap();
+    let make = |path: &str| crate::stored::Item {
+        entry: crate::net::HistEntry {
+            method: "GET".into(),
+            host: "127.0.0.1".into(),
+            port,
+            path: path.into(),
+            ..Default::default()
+        },
+        req: format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n"),
+        host: "127.0.0.1".into(),
+        port,
+        https: false,
+    };
+    let (a, _, injection) = c.admit(make("/inject?x=old")).unwrap();
+    assert!(matches!(a.complete(), Ok(Handoff::Joined)));
+    let point = InsertionPoint::new(IpKind::Query, "x", "old");
+    let token = shared.stored.token(injection, &point);
+    shared
+        .stored
+        .note_injection(&token, b"injected", Some(b"saved"));
+    let (a, _, retrieval) = c.admit(make("/retrieve")).unwrap();
+    assert!(matches!(a.complete(), Ok(Handoff::Joined)));
+    assert_eq!(
+        shared
+            .stored
+            .observe(retrieval, b"GET /retrieve", token.as_bytes())
+            .len(),
+        1
+    );
+    let Handoff::Finalize(f) = batch.finish().unwrap() else {
+        panic!("finalizer")
+    };
+    let outcome = f.run(|permit| run_stored_stage_budgeted(&shared, permit, 10, 8192));
+    assert_eq!(outcome, Finish::Complete);
+    assert!(shared
+        .issues
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|i| i.name == "Link manipulation (stored)"));
+}

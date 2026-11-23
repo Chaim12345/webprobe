@@ -215,3 +215,72 @@ pub(crate) fn run_stored_stage(shared: &Arc<Shared>) {
         }
     }
 }
+
+/// Experimental real A4 registry path. Explicit limits/permit only, no legacy
+/// fallback. Network accounting/deadline integration remains a separate gate.
+#[cfg(test)]
+pub(crate) fn run_stored_stage_budgeted(
+    shared: &Arc<Shared>,
+    permit: &crate::scan_lifecycle::BudgetedExecution,
+    max_pairs: usize,
+    max_pair_bytes: usize,
+) -> crate::scan_lifecycle::Finish {
+    use crate::scan_budget::Resource;
+    use crate::scan_lifecycle::{captured, ExecutionContext, Finish};
+    if max_pairs == 0 || max_pair_bytes == 0 || permit.validate_shared(shared).is_err() {
+        return Finish::Incomplete;
+    }
+    let Some(ExecutionContext::Budgeted(inherited)) = captured() else {
+        return Finish::Incomplete;
+    };
+    if !std::ptr::eq(inherited.ledger(), permit.ledger())
+        || !Arc::ptr_eq(inherited.owner(), permit.owner())
+    {
+        return Finish::Incomplete;
+    }
+    let config = crate::scan_config::shared_config(shared)
+        .lock()
+        .unwrap()
+        .clone();
+    let mut incomplete = false;
+    for index in 0..max_pairs {
+        if permit.validate_shared(shared).is_err() || permit.ledger().reserve(&[]).is_err() {
+            return Finish::Incomplete;
+        }
+        let pair = shared.stored.pair_bounded(index, max_pair_bytes, |bytes| {
+            permit
+                .ledger()
+                .reserve(&[(Resource::Record, 1), (Resource::Input, bytes as u64)])
+                .is_ok()
+        });
+        let pair = match pair {
+            Ok(Some(p)) => p,
+            Ok(None) => {
+                return if incomplete {
+                    Finish::Incomplete
+                } else {
+                    Finish::Complete
+                }
+            }
+            Err(()) => {
+                incomplete = true;
+                continue;
+            }
+        };
+        let cx = PairCtx::new(shared.clone(), pair);
+        for check in STORED_CHECKS {
+            if permit.validate_shared(shared).is_err() || permit.ledger().reserve(&[]).is_err() {
+                return Finish::Incomplete;
+            }
+            if (is_burp_issue(check.issue()) || shared.extra_checks.load(Ordering::SeqCst))
+                && config.issue_allowed(check.issue(), true)
+                && check.applies_to(&cx.pair.point)
+                && config.check_enabled(check.id())
+                && !(check.server_side() && cx.pair.point.skips_server_side())
+            {
+                check.run(&cx);
+            }
+        }
+    }
+    Finish::Incomplete // Reaching traversal ceiling is never a complete negative.
+}
