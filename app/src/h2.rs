@@ -549,6 +549,27 @@ mod tests {
     use std::io::Cursor;
 
     #[test]
+    fn hpack_dependency_valid_headers_round_trip() {
+        // Benign compatibility control for the patched package alias. Reuse
+        // each codec to exercise connection-local dynamic table state.
+        let mut encoder = Encoder::new();
+        let mut decoder = Decoder::new();
+        let headers = vec![
+            (b":status".to_vec(), b"200".to_vec()),
+            (b"content-type".to_vec(), b"text/plain".to_vec()),
+            (b"x-webprobe-check".to_vec(), b"normal-response".to_vec()),
+        ];
+        for _ in 0..2 {
+            let block = encoder.encode(
+                headers
+                    .iter()
+                    .map(|(name, value)| (name.as_slice(), value.as_slice())),
+            );
+            assert_eq!(decoder.decode(&block).unwrap(), headers);
+        }
+    }
+
+    #[test]
     fn base64url_matches_rfc7540_example() {
         // Empty SETTINGS payload encodes to an empty string; ENABLE_PUSH=0 (00 02 00 00 00 00) to "AAIAAAAA".
         assert_eq!(base64url(&[]), "");
