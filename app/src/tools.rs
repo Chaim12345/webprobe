@@ -3635,6 +3635,30 @@ mod tests {
     use super::*;
 
     #[test]
+    fn bcheck_ui_cache_summarizes_valid_and_invalid_sources() {
+        let valid = "metadata:\n language: v2-beta\n name: \"git-exposed\"\n description: \"finds .git\"\ngiven response then\n if {latest.response} matches \".git\" then\n  report issue:\n   severity: high\n   confidence: certain\n end if\n";
+        let invalid = "this is not a bcheck";
+        let mut cache = BcheckUiCache::default();
+        cache.refresh(&[valid.to_string(), invalid.to_string()]);
+        assert_eq!(cache.summaries.len(), 2);
+        match &cache.summaries[0] {
+            Ok((name, desc)) => {
+                assert_eq!(name, "git-exposed");
+                assert_eq!(desc.as_deref(), Some("finds .git"));
+            }
+            Err(e) => panic!("valid source summarized as error: {e}"),
+        }
+        match &cache.summaries[1] {
+            Err(e) => assert!(e.starts_with("line "), "error carries its line: {e}"),
+            Ok(_) => panic!("invalid source summarized as loaded"),
+        }
+        // Unchanged sources keep the cached summaries (no reparse).
+        let before = format!("{:?}", cache.summaries);
+        cache.refresh(&[valid.to_string(), invalid.to_string()]);
+        assert_eq!(format!("{:?}", cache.summaries), before);
+    }
+
+    #[test]
     fn browser_launch_configuration_is_grounded() {
         // Burp's own bundled Chromium leads the preference order when the Burp
         // installation is present (that is the real embedded browser); the

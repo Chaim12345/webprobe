@@ -135,7 +135,10 @@ pub struct ScanConfig {
     /// runs every check, as before the library existed.
     pub issues: Option<webprobe_support::scan_filter::IssueFilter>,
     /// BCheck definition sources loaded in the Extensions tab (R-14);
-    /// parsed and validated when a scan starts.
+    /// parsed and validated when a scan starts. Every request a loaded
+    /// check sends is scope-gated to the audited origin, but a check's
+    /// request count is not budget-capped: `crawl_limits.
+    /// maximum_request_count` bounds the crawl, not BCheck traffic.
     pub bchecks: Vec<String>,
 }
 
@@ -395,5 +398,31 @@ mod tests {
         let mut back = ProjectScanner::default();
         c.save_into(&mut back);
         assert_eq!(back.crawl_engine, None, "the default engine is not written");
+    }
+
+    #[test]
+    fn bchecks_round_trip_and_stay_optional_in_the_file() {
+        // Loaded BCheck sources survive a project save/load cycle.
+        let c = ScanConfig {
+            bchecks: vec![
+                "metadata:\n  language: v2-beta\n  name: check-a\n".to_string(),
+                "metadata:\n  language: v2-beta\n  name: check-b\n".to_string(),
+            ],
+            ..Default::default()
+        };
+        let mut saved = ProjectScanner::default();
+        c.save_into(&mut saved);
+        let json = serde_json::to_string(&saved).unwrap();
+        let back: ProjectScanner = serde_json::from_str(&json).unwrap();
+        assert_eq!(ScanConfig::from_saved(&back).bchecks, c.bchecks);
+
+        // Empty bchecks are skipped in the JSON, and a file without the
+        // key (a project from before R-14) loads with none.
+        let mut saved = ProjectScanner::default();
+        ScanConfig::default().save_into(&mut saved);
+        let json = serde_json::to_string(&saved).unwrap();
+        assert!(!json.contains("bchecks"), "empty bchecks are not written");
+        let old: ProjectScanner = serde_json::from_str(&json).unwrap();
+        assert!(ScanConfig::from_saved(&old).bchecks.is_empty());
     }
 }

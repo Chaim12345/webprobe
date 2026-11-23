@@ -289,7 +289,15 @@ impl Collaborator for ScanCollab {
             }
             // No wait when nothing was minted or the scan is stopping:
             // there is nothing to arrive.
-            if found || self.tokens.is_empty() || std::time::Instant::now() >= deadline {
+            if found
+                || self.tokens.is_empty()
+                || self
+                    .shared
+                    .scan
+                    .stop
+                    .load(std::sync::atomic::Ordering::SeqCst)
+                || std::time::Instant::now() >= deadline
+            {
                 return found;
             }
             std::thread::sleep(Duration::from_millis(250));
