@@ -34,6 +34,7 @@ pub(crate) enum Finish {
 pub(crate) struct LegacyScanner {
     coordinator: std::sync::Weak<Coordinator>,
     pub owner: Arc<AttemptScope>,
+    lease: Option<std::sync::Weak<std::sync::atomic::AtomicBool>>,
 }
 #[derive(Clone)]
 pub(crate) struct BudgetedExecution {
@@ -48,9 +49,9 @@ impl BudgetedExecution {
     pub fn ledger(&self) -> &Ledger {
         &self.ledger
     }
-    pub fn validate_shared(&self, shared: &Arc<Shared>) -> Result<(), AdmissionError> {
+    pub fn validate_shared(&self, shared: &Shared) -> Result<(), AdmissionError> {
         let c = self.coordinator.upgrade().ok_or(AdmissionError::Busy)?;
-        if !Arc::ptr_eq(&c.shared, shared) {
+        if !std::ptr::eq(c.shared.as_ref(), shared) {
             return Err(AdmissionError::Busy);
         }
         self.validate(&self.owner)
@@ -86,9 +87,9 @@ impl CancelHandle {
         self.0.cancel();
     }
 }
-thread_local! {static INSTALLED:std::cell::RefCell<Option<ExecutionContext>>=const{std::cell::RefCell::new(None)};}
+thread_local! {static INSTALLED:std::cell::RefCell<Vec<(u64,ExecutionContext)>>=const{std::cell::RefCell::new(Vec::new())};static NEXT:std::cell::Cell<u64>=const{std::cell::Cell::new(0)};}
 pub(crate) struct Installed {
-    previous: Option<ExecutionContext>,
+    id: u64,
     _thread_bound: std::marker::PhantomData<std::rc::Rc<()>>,
 }
 impl ExecutionContext {
@@ -98,17 +99,24 @@ impl ExecutionContext {
             Self::Budgeted(p) => p.owner.clone(),
         })
     }
-    pub fn validate(&self, shared: &Arc<Shared>) -> Result<(), AdmissionError> {
+    pub fn validate(&self, shared: &Shared) -> Result<(), AdmissionError> {
         match self {
             Self::Budgeted(p) => p.validate_shared(shared),
             Self::Legacy(l) => {
                 let c = l.coordinator.upgrade().ok_or(AdmissionError::Busy)?;
-                if !Arc::ptr_eq(shared, &c.shared) || l.owner.is_cancelled() {
+                if !std::ptr::eq(shared, c.shared.as_ref()) || l.owner.is_cancelled() {
                     return Err(AdmissionError::Busy);
                 }
                 let state = c.state.lock().unwrap();
                 if state.as_ref().is_some_and(|r| {
-                    r.phase == Phase::Open && r.active && Arc::ptr_eq(&r.owner, &l.owner)
+                    r.phase == Phase::Open
+                        && Arc::ptr_eq(&r.owner, &l.owner)
+                        && match &l.lease {
+                            Some(w) => w
+                                .upgrade()
+                                .is_some_and(|v| v.load(std::sync::atomic::Ordering::SeqCst)),
+                            None => r.active,
+                        }
                 }) {
                     Ok(())
                 } else {
@@ -117,25 +125,29 @@ impl ExecutionContext {
             }
         }
     }
-    pub fn enter(&self, shared: &Arc<Shared>) -> Result<Installed, AdmissionError> {
+    pub fn enter(&self, shared: &Shared) -> Result<Installed, AdmissionError> {
         self.validate(shared)?;
-        let previous = INSTALLED.with(|slot| slot.replace(Some(self.clone())));
+        let id = NEXT.with(|next| {
+            let id = next.get().checked_add(1).ok_or(AdmissionError::Busy)?;
+            next.set(id);
+            Ok(id)
+        })?;
+        INSTALLED.with(|slot| slot.borrow_mut().push((id, self.clone())));
         Ok(Installed {
-            previous,
+            id,
             _thread_bound: std::marker::PhantomData,
         })
     }
 }
 pub(crate) fn captured() -> Option<ExecutionContext> {
-    INSTALLED.with(|slot| slot.borrow().clone())
+    INSTALLED.with(|slot| slot.borrow().last().map(|(_, c)| c.clone()))
 }
 impl Drop for Installed {
     fn drop(&mut self) {
-        INSTALLED.with(|slot| {
-            slot.replace(self.previous.take());
-        });
+        INSTALLED.with(|slot| slot.borrow_mut().retain(|(id, _)| *id != self.id));
     }
 }
+
 struct Run {
     ledger: Arc<Ledger>,
     owner: Arc<AttemptScope>,
@@ -151,11 +163,13 @@ pub(crate) struct Coordinator {
     terminal: Mutex<Option<(Arc<AttemptScope>, Finish)>>,
 }
 pub(crate) struct Batch {
+    lease: Arc<std::sync::atomic::AtomicBool>,
     coordinator: Arc<Coordinator>,
     owner: Arc<AttemptScope>,
     live: bool,
 }
 pub(crate) struct Audit {
+    lease: Arc<std::sync::atomic::AtomicBool>,
     coordinator: Arc<Coordinator>,
     owner: Arc<AttemptScope>,
     guard: Option<ScanGuard>,
@@ -218,6 +232,7 @@ impl Coordinator {
             owner
         };
         Ok(Batch {
+            lease: Arc::new(std::sync::atomic::AtomicBool::new(true)),
             coordinator: self.clone(),
             owner,
             live: true,
@@ -252,9 +267,11 @@ impl Coordinator {
         let run = state.as_mut().unwrap();
         run.active = true;
         let owner = run.owner.clone();
+        let lease = Arc::new(std::sync::atomic::AtomicBool::new(true));
         let index = self.shared.stored.add_item(item);
         Ok((
             Audit {
+                lease: lease.clone(),
                 coordinator: self.clone(),
                 owner: owner.clone(),
                 guard: Some(guard),
@@ -263,6 +280,7 @@ impl Coordinator {
             LegacyScanner {
                 coordinator: Arc::downgrade(self),
                 owner,
+                lease: Some(Arc::downgrade(&lease)),
             },
             index,
         ))
@@ -307,6 +325,16 @@ impl Coordinator {
     }
 }
 impl Batch {
+    pub fn context(&self) -> ExecutionContext {
+        ExecutionContext::Legacy(LegacyScanner {
+            coordinator: Arc::downgrade(&self.coordinator),
+            owner: self.owner.clone(),
+            lease: Some(Arc::downgrade(&self.lease)),
+        })
+    }
+    pub fn cancel_handle(&self) -> CancelHandle {
+        self.context().cancel_handle()
+    }
     pub fn finish(mut self) -> Result<Handoff, AdmissionError> {
         let c = self.coordinator.clone();
         let mut state = c.state.lock().unwrap();
@@ -318,6 +346,7 @@ impl Batch {
             return Err(AdmissionError::Busy);
         }
         self.live = false;
+        self.lease.store(false, std::sync::atomic::Ordering::SeqCst);
         run.leases -= 1;
         if run.leases > 0 {
             return Ok(Handoff::Joined);
@@ -344,6 +373,7 @@ impl Drop for Batch {
             return;
         }
         self.live = false;
+        self.lease.store(false, std::sync::atomic::Ordering::SeqCst);
         let mut state = self.coordinator.state.lock().unwrap();
         if let Some(run) = state.as_mut() {
             if Arc::ptr_eq(&run.owner, &self.owner) && run.phase == Phase::Open {
@@ -371,6 +401,7 @@ impl Audit {
         run.active = false;
         drop(self.guard.take());
         self.live = false;
+        self.lease.store(false, std::sync::atomic::Ordering::SeqCst);
         if run.phase == Phase::Closing {
             drop(state);
             c.cleanup(&self.owner);
@@ -396,6 +427,7 @@ impl Drop for Audit {
             return;
         }
         self.live = false;
+        self.lease.store(false, std::sync::atomic::Ordering::SeqCst);
         let mut state = self.coordinator.state.lock().unwrap();
         if let Some(run) = state.as_mut() {
             if Arc::ptr_eq(&run.owner, &self.owner) {
@@ -420,7 +452,13 @@ impl Finalizer {
             false
         } else {
             matches!(
-                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| body(&self.permit))),
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let context = ExecutionContext::Budgeted(self.permit.clone());
+                    let Ok(_installed) = context.enter(&self.coordinator.shared) else {
+                        return Finish::Incomplete;
+                    };
+                    body(&self.permit)
+                })),
                 Ok(Finish::Complete)
             )
         };
@@ -755,6 +793,57 @@ mod tests {
         assert!(!b.owner.is_cancelled());
         cancellation.cancel();
         assert!(!b.owner.is_cancelled());
+    }
+    #[test]
+    fn lease_context_before_between_items_and_mandatory_budgeted_finish_installation() {
+        let shared = Shared::new();
+        let c = Coordinator::new(shared.clone(), limits()).unwrap();
+        let b = c.open().unwrap();
+        let legacy = b.context();
+        legacy.validate(shared.as_ref()).unwrap();
+        let (audit, _, _) = c.admit(item("/one")).unwrap();
+        assert!(matches!(audit.complete(), Ok(Handoff::Joined)));
+        legacy.validate(shared.as_ref()).unwrap();
+        let other = c.open().unwrap();
+        let stale = other.context();
+        assert!(matches!(other.finish(), Ok(Handoff::Joined)));
+        assert!(stale.validate(shared.as_ref()).is_err());
+        let cancel = b.cancel_handle();
+        let f = finalizer(b.finish().unwrap());
+        assert!(legacy.validate(shared.as_ref()).is_err());
+        assert_eq!(
+            f.run(|_| {
+                assert!(matches!(captured(), Some(ExecutionContext::Budgeted(_))));
+                Finish::Complete
+            }),
+            Finish::Complete
+        );
+        assert!(captured().is_none());
+        cancel.cancel();
+    }
+    #[test]
+    fn old_audit_does_not_revive_and_non_lifo_guards_never_restore_detached_context() {
+        let shared = Shared::new();
+        let c = Coordinator::new(shared.clone(), limits()).unwrap();
+        let b = c.open().unwrap();
+        let (a, legacy, _) = c.admit(item("/a")).unwrap();
+        let old = ExecutionContext::Legacy(legacy);
+        let first = old.enter(&shared).unwrap();
+        let second = b.context().enter(&shared).unwrap();
+        drop(first);
+        drop(second);
+        assert!(captured().is_none());
+        assert!(matches!(a.complete(), Ok(Handoff::Joined)));
+        let (next, _, _) = c.admit(item("/b")).unwrap();
+        assert!(old.enter(&shared).is_err());
+        assert!(matches!(next.complete(), Ok(Handoff::Joined)));
+        let context = b.context();
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = context.enter(&shared).unwrap();
+            panic!("unwind guard");
+        }));
+        assert!(captured().is_none());
+        drop(b);
     }
     #[test]
     fn permit_rejects_other_owner_and_cancel_prevents_callback() {
